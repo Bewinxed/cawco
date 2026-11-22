@@ -108,6 +108,7 @@ import { closeUnderWay, isStarting } from "./boundary/state";
 import { closeBoundary } from "./boundary/stop";
 import { heldBy, runsIn } from "./boundary/watch";
 import {
+  type CarrySource,
   carryFolder,
   carryReadme,
   carrySteps,
@@ -2399,24 +2400,34 @@ const carryAway = async (
   const words = holdingWords({ ...held, bytes: 0 });
   // A folder's carry is its change set; `strays` is read only in a copy that
   // is no git clone any more: no git writes either, their entries are copied.
-  const folder = access.layer.kind === "folder" || held.strays !== undefined;
+  const { layer } = access;
   let written: { carry: string; left: string[] };
-  if (access.layer.kind === "folder") {
-    written = await carryChanged(request.id, access.layer);
+  let checkout: CarrySource;
+  if (layer.kind === "folder" && layer.form !== "clone") {
+    written = await carryChanged(request.id, layer);
+    checkout = {
+      id: request.id,
+      form: layer.form,
+      folder: layer.folder,
+      path: layer.path,
+    };
   } else if (held.strays === undefined) {
     written = await writeCarry(workspace, access, held, skip);
+    checkout = "clone";
   } else {
     written = await carryStrays(request.id, workspace.path);
+    checkout = "folder";
   }
   const { carry, left } = written;
-  const head = folder
-    ? undefined
-    : await carriedFrom(workspace, access, request.base);
+  const head =
+    checkout === "clone"
+      ? await carriedFrom(workspace, access, request.base)
+      : undefined;
   await writeFile(
     join(carry, "README.md"),
     await carryReadme({
       title: `Workspace ${request.id}, saved before it was archived`,
-      checkout: folder ? "folder" : "clone",
+      checkout,
       path: workspace.path,
       words,
       folder: carry,

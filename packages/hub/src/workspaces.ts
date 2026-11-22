@@ -18,6 +18,7 @@ import {
 } from "@cawco/core/stage";
 import { WorkspaceCheckoutSchema } from "@cawco/core/stored-shapes";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
+import { carryWords, type FolderCopy } from "@cawco/core/words/carry";
 import { workWords } from "@cawco/core/words/work";
 import { holdingWords, sizeWords } from "@cawco/core/words/workspace-holding";
 import { isWorkspaceNeedsRefusal } from "@cawco/core/words/workspace-needs";
@@ -182,6 +183,20 @@ const SETTLE_FAILS_LASTING = 3;
  */
 export const ownCopy = (workspace: WorkspaceRow): boolean =>
   workspace.path !== workspace.repoRoot;
+
+/**
+ * A folder workspace's view or copy of the folder it was made from, read
+ * from its row: a view at the folder's own path (Linux), or a copy at a path
+ * of its own ({@link ownCopy}, macOS). None for a repository's clone.
+ */
+const folderCopyOf = (workspace: WorkspaceRow): FolderCopy | undefined =>
+  workspace.kind === "folder"
+    ? {
+        form: ownCopy(workspace) ? "copy" : "overlay",
+        folder: workspace.repoRoot,
+        path: workspace.path,
+      }
+    : undefined;
 
 /**
  * What a workspace is, one member per lifecycle, read from its row:
@@ -664,20 +679,38 @@ export const createWorkspaces = ({
    */
   const carryNotice = (workspace: WorkspaceRow, carry: string): void => {
     const machine = machineName(db, workspace.machineId);
-    workspaceNotice(workspace, (latest) => ({
-      text: workWords.carriedNotice(
-        handle(workspace.id),
-        latest.title,
-        carry,
-        machine,
-        workspace.path
-      ),
-      headline: workWords.carriedHeadline(
-        workspace.id.slice(0, 8),
-        carry,
-        machine
-      ),
-    }));
+    const copy = folderCopyOf(workspace);
+    workspaceNotice(workspace, (latest) =>
+      copy
+        ? {
+            text: carryWords.folderNotice(
+              handle(workspace.id),
+              latest.title,
+              carry,
+              machine,
+              copy
+            ),
+            headline: carryWords.folderHeadline(
+              workspace.id.slice(0, 8),
+              carry,
+              machine
+            ),
+          }
+        : {
+            text: workWords.carriedNotice(
+              handle(workspace.id),
+              latest.title,
+              carry,
+              machine,
+              workspace.path
+            ),
+            headline: workWords.carriedHeadline(
+              workspace.id.slice(0, 8),
+              carry,
+              machine
+            ),
+          }
+    );
   };
   /**
    * What a workspace's `$TMPDIR/outputs/` holds, copied into the project's
@@ -1308,8 +1341,9 @@ export const createWorkspaces = ({
     if (closed.carry && !noOne) {
       carryNotice(closed.workspace, closed.carry);
     }
+    const copy = folderCopyOf(workspace);
     console.log(
-      `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: retired, its work over and nothing of it anywhere but on its remote${closed.carry ? ` or in its carry ${closed.carry}` : ""}; ${workspace.path} and what it owned there are gone`
+      `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: retired, its work over and nothing of it anywhere but ${copy ? "where it landed" : "on its remote"}${closed.carry ? ` or in its carry ${closed.carry}` : ""}; ${copy ? carryWords.folderGone(copy) : `${workspace.path} and what it owned there are gone`}`
     );
     const retired: Settled = { kind: "retired", carry: closed.carry };
     return retired;
