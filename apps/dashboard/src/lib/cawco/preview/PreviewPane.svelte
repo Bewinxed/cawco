@@ -516,22 +516,30 @@
   {/if}
 {/snippet}
 
-<!-- A version that can't come back fills again only as its session makes
-     it again (The Empty Starts Work Rule): asked in that session's composer
-     where it stands beside this pane, unsent; else its session opened. -->
-{#snippet goneAsk()}
+<!-- A version that can't come back, or an unrecorded preview whose server
+     stopped, fills again only as its session makes it again (The Empty
+     Starts Work Rule): asked in that session's composer where it stands
+     beside this pane, unsent, in `words`; else its session opened. -->
+{#snippet askAgain(words: string)}
   {@const composer = paneSubject.fleet.composer?.(instanceId)}
   <EmptyAsk
     byHand={sessionOpen}
     canStart={!!composer}
     label={previewWords.goneAskLabel(composer?.agent ?? paneSubject.ownerName)}
-    onask={() =>
-      composer?.ask(
-        previewWords.goneAskWords(paneSubject.artifact?.title ?? "")
-      )}
+    onask={() => composer?.ask(words)}
     reason={previewWords.goneCantAsk}
     size="sm"
   />
+{/snippet}
+{#snippet goneAsk()}
+  {@render askAgain(
+    previewWords.goneAskWords(paneSubject.artifact?.title ?? "")
+  )}
+{/snippet}
+{#snippet unrecordedAsk()}
+  {@render askAgain(
+    previewWords.unrecordedAskWords(paneSubject.artifact?.title ?? "")
+  )}
 {/snippet}
 
 <!-- A stage that went down or never drew: Try again, and its own words
@@ -1384,7 +1392,27 @@
       </EmptyState>
     </div>
   {/if}
-  {#if previewFrame.down && stageCover.staged?.status !== "error" && !stageCover.neverDrawn}
+  {#if stageCover.unrecordedDown}
+    <!-- Its server stopped, and no command to start it was kept: no Try again, only its session making it again. -->
+    <div
+      data-slot="down"
+      data-down="unrecorded"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
+      role="alert"
+      transition:appear
+    >
+      <EmptyState
+        icon={IconArchive}
+        title={previewWords.unrecordedTitle}
+        action={unrecordedAsk}
+      >
+        {#snippet line()}
+          {previewWords.unrecordedLine}
+        {/snippet}
+      </EmptyState>
+    </div>
+  {/if}
+  {#if previewFrame.down && !stageCover.unrecordedDown && stageCover.staged?.status !== "error" && !stageCover.neverDrawn}
     <!-- What happened, why and the way back, where the page would be; a stage in error says it above. -->
     <div
       data-slot="down"
@@ -1438,7 +1466,7 @@
       </EmptyState>
     </div>
   {/if}
-  {#if previewFrame.notLoaded && !previewFrame.down && stageCover.staged?.status !== "error" && !stageCover.neverDrawn}
+  {#if previewFrame.notLoaded && !previewFrame.down && !stageCover.unrecordedDown && stageCover.staged?.status !== "error" && !stageCover.neverDrawn}
     <!-- The browser's own error page stands in the frame: said in words, with the way back. -->
     <div
       data-slot="down"

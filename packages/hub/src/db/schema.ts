@@ -5712,8 +5712,9 @@ export const artifacts = sqliteTable(
       onDelete: "set null",
     }),
     /**
-     * A sheet's place instead (core workspace-id.ts `place`): the boundary over the
-     * folder of a session with no workspace, whose stage runs there. No
+     * A sheet's or a port preview's place instead (core workspace-id.ts
+     * `place`): the boundary over the folder of a session with no
+     * workspace, whose stage or server runs in that place's stage clone. No
      * workspace row is ever made for a place (archiving one deletes its
      * folder), so it is no key: the hub finds it through the session that
      * names it (artifact-events.ts `stageWhere`). Or a design folder's
@@ -5724,7 +5725,7 @@ export const artifacts = sqliteTable(
     /** A sheet's: the stage's toolchain root and its story file, from the clone's root. */
     sourceStageDir: text("source_stage_dir"),
     sourceStageFile: text("source_stage_file"),
-    /** A workspace preview's: the command the workspace's stage runs and keeps up on the port, and its folder from the clone's root. */
+    /** A port preview's: the command its workspace's or place's stage runs and keeps up on the port, and its folder from that tree's root. Null on a port preview made before 2026-11-22, which nothing starts again. */
     sourceServeCommand: text("source_serve_command"),
     sourceServeCwd: text("source_serve_cwd"),
     /**

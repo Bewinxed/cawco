@@ -375,7 +375,6 @@ import {
   pinFolderOf,
   pinTreeOf,
   renderStage,
-  StageRefusal,
   stageComponents,
   tellStages,
   unpin,
@@ -407,7 +406,7 @@ import {
   workspaceOutputs,
   worktreeFolders,
 } from "./workspace";
-import { cloneHolding, workspaceRefs } from "./workspace-records";
+import { cloneHolding } from "./workspace-records";
 
 /** How often the machine's interfaces are compared, for a network change (our call: a minute's stale address is a minute's wrong relay candidate). */
 const NETWORK_CHECK_MS = 30_000;
@@ -3867,18 +3866,13 @@ const startDaemon = (rediscover = false) =>
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : stageComponents(ports, ref, query ?? {})
     );
-    // A workspace preview's server, started or woken and kept up there (stage.ts).
+    // A preview's server, started or woken and kept up in its workspace or place (stage.ts).
     // With a pin, the server of the version the person is served (core `PreviewSource.pin`).
-    supervisor.declareControl(STAGE_SERVE, async (workspace, serve, pin) => {
-      if (fenced()) {
-        throw new Error(AGENT_RESTARTING);
-      }
-      const ref = (await workspaceRefs()).find((one) => one.id === workspace);
-      if (!ref) {
-        throw new StageRefusal(`No workspace ${workspace} is on this machine.`);
-      }
-      return ensureServed(ports, ref, serve, undefined, pin ?? undefined);
-    });
+    supervisor.declareControl(STAGE_SERVE, (ref, serve, pin) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : ensureServed(ports, ref, serve, undefined, pin ?? undefined)
+    );
     // A check that names another machine: the commit leaves here, and arrives there.
     supervisor.declareControl(
       CONTROL_WORKSPACE_BUNDLE,

@@ -208,12 +208,10 @@ import {
   STAGE_DESIGN,
   STAGE_ENSURE,
   STAGE_IDLE_MS,
-  STAGE_INSTALL_MS,
   STAGE_PICTURE,
   STAGE_PIN,
   STAGE_PIN_MS,
   STAGE_PINS,
-  STAGE_READY_MS,
   STAGE_RENDER,
   STAGE_SERVE,
   STAGE_UNPIN,
@@ -5274,38 +5272,10 @@ export const createServer = (
           ),
       };
     },
-    // A workspace preview's server, run and kept up on the workspace's machine, in the pin of the version the person is served.
-    serve: async (machineId, workspace, serve, pin) => {
-      const asked = await callAgent(
-        machineId,
-        STAGE_SERVE,
-        [workspace, serve, pin],
-        // Its project installed first when its lockfile moved (agent stage-install.ts).
-        STAGE_READY_MS + STAGE_INSTALL_MS + 15_000
-      );
-      switch (asked.kind) {
-        case "unanswered":
-          return asked.reason === "dead"
-            ? awayProblem(
-                machineId,
-                "The workspace's machine isn't connected to the hub, so its server can't start."
-              )
-            : silentProblem(
-                `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the server's state is unknown.`
-              );
-        case "answered":
-          break;
-        default:
-          throw unreachable(asked);
-      }
-      const answer = asked.value;
-      if (!answer.ok) {
-        return problem(502, {
-          code: "artifact-serve-unstarted",
-          detail: answer.error ?? "The server didn't start.",
-        });
-      }
-      return answer.result;
+    // A preview's server, run and kept up in its workspace or place on that tree's machine, in the pin of the version the person is served.
+    serve: async (at, serve, pin) => {
+      const staged = await onStage(at, STAGE_SERVE, (ref) => [ref, serve, pin]);
+      return staged instanceof ElysiaStatus ? staged : staged.result;
     },
     // A folder preview's weight and its start page's desk captures, from its folder on the machine that serves it.
     folderWeight: async (machineId, dir, path) => {
