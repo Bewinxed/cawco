@@ -23,7 +23,7 @@ export const PullRequestsCardOpen = { args: { open: "pulls-answered" } };
 /** The hub stopped answering at 14:02: the last reading stands and nothing can be answered. */
 export const HubAway = { args: { live: false } };
 
-/** Everything I asked for holds, and is still watched. */
+/** Everything I asked for is true now, one quiet line each, still being checked. */
 export const AllClear = { args: { record: COCKPIT_ALL_CLEAR } };
 
 interface Play {
@@ -39,7 +39,8 @@ interface Play {
 }
 
 const ANSWER = /^Answer the question$/u;
-const OPEN_PULLS = /^Open Every open pull request has our answer$/u;
+const OPEN_PULLS =
+  /^Every open pull request has our answer: false\. Show why$/u;
 
 /** Longer than a card takes to hang and a press to land. */
 const SETTLED_MS = 500;
@@ -69,7 +70,7 @@ const answerStaging = async ({ canvas, userEvent }: Play): Promise<void> => {
   await userEvent.wait(HUB_MS);
 };
 
-/** Every outcome spelled out, Staging waiting on me. */
+/** Staging's question first, the outcomes that are not true next, the rest at the foot. */
 export const Arrived = {};
 
 /** I answered Restart it from Staging's tile: the hub took it, and the tile no longer waits on me. */

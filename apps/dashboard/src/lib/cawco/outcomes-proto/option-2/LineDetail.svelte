@@ -10,8 +10,8 @@
    */
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import OpenControl from "../OpenControl.svelte";
   import AskBlock, { type AnswerState } from "./AskBlock.svelte";
-  import OpenControl from "./OpenControl.svelte";
   import type { OutcomeLine } from "./outcomes";
   import WorkList from "./WorkList.svelte";
 

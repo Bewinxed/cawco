@@ -94,7 +94,7 @@
 
   <section aria-labelledby="why-{line.id}" class="flex flex-col gap-space-2">
     <h3 id="why-{line.id}" class="m-0 type-meta text-ink-muted">
-      {outcomesWords.why}
+      {outcomesWords.whyHead}
     </h3>
     {#if line.why.kind === "said"}
       <p class="m-0 type-body text-pretty text-ink-strong">

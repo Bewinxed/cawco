@@ -1042,9 +1042,9 @@
   --spacing-c-menu-item-h: 32px;
   /* A sheet's height cap (DESIGN.md Drawer: "It is as tall as its content, up to 85vh"). */
   --spacing-c-sheet-max-h: 85vh;
-  /* An outcome line's answer column (Outcomes, the bento): "Does not hold" and "Held on 12 Nov" on one line beside the line's sentence, so the words line up down a tile; a little narrower in a phone's column. */
-  --spacing-c-line-answer-w: 120px;
-  --spacing-c-line-answer-w-narrow: 112px;
+  /* An outcome line's answer column (Outcomes option 1, the bento): its glyph and "Was false 12 Nov" on one line beside the line's sentence, so the words line up down a tile; a little narrower in a phone's column. */
+  --spacing-c-line-answer-w: 132px;
+  --spacing-c-line-answer-w-narrow: 128px;
   /* A line opened as a sheet from the foot (Outcomes under 640): at most this share of the screen, the line it opened kept in the part above it. */
   --spacing-c-line-sheet-h: 70dvh;
   /* The peek sheet's height on a touch screen: fixed, so it holds its size from the first frame. */

@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * The open control: a thing opens from this button at its row's end,
+   * The open control both Outcomes prototypes share: a thing opens from this button at its row's end,
    * never from its title or the whole row (the owner's rule). Its glyph is
    * the house's open arrow, the Peek glyph the Needs you rows carry; its
    * name says what it opens, in its tooltip and to a screen reader. On a

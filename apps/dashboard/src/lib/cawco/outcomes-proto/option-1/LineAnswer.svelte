@@ -1,11 +1,16 @@
 <script lang="ts">
   /**
    * A line's answer, read by glyph, then word, then hue (DESIGN.md, State),
-   * in quiet weight: a check for Holds, a cross for Does not hold, the
-   * dotted ring for Not known, and the history glyph for an answer nothing
-   * checks any more, said in the past with its day. None of them is loud:
-   * only the Needs you mark competes for attention.
+   * in quiet weight: a check for True, a cross for False, the dotted ring
+   * for Not known, and the history glyph for an answer nothing checks any
+   * more, said in the past with its day. None of them is loud: only the
+   * Needs you mark competes for attention.
+   *
+   * With `onopen` it is the line's one way in: a quiet button whose words
+   * are the answer, opening the card that explains it (its name says the
+   * line, the answer and "Show why").
    */
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     IconError,
     IconHistory,
@@ -15,7 +20,19 @@
   import type { Answer } from "./outcomes";
   import { outcomesWords } from "./words";
 
-  let { answer }: { answer: Answer } = $props();
+  let {
+    answer,
+    sentence = "",
+    open = false,
+    onopen,
+  }: {
+    answer: Answer;
+    /** The line's sentence, for the button's name. */
+    sentence?: string;
+    /** Its card hangs open now. */
+    open?: boolean;
+    onopen?: () => void;
+  } = $props();
 
   const GLYPH = {
     holds: IconSuccess,
@@ -32,14 +49,41 @@
     failed: "text-status-fail-glyph",
   } as const;
   const Glyph = $derived(GLYPH[answer.kind]);
+  const INK = $derived(
+    answer.kind === "fails" || answer.kind === "failed"
+      ? "text-status-fail-ink"
+      : "text-ink-muted"
+  );
 </script>
 
-<span
-  data-answer={answer.kind}
-  class="mark-line inline-flex min-w-0 items-start gap-space-2 type-label text-ink-muted data-[answer=fails]:text-status-fail-ink data-[answer=failed]:text-status-fail-ink"
->
+{#snippet word()}
   <span class="mark-cell">
     <Glyph aria-hidden="true" class="size-icon-md {TONE[answer.kind]}" />
   </span>
-  <span class="min-w-0">{outcomesWords.answer(answer)}</span>
-</span>
+  <span class="min-w-0 text-start {INK}">{outcomesWords.answer(answer)}</span>
+{/snippet}
+
+{#if onopen}
+  <Button
+    aria-expanded={open}
+    aria-label={outcomesWords.why(sentence, answer)}
+    class="-mx-space-2 max-w-full"
+    data-answer={answer.kind}
+    data-line-open
+    fit="word"
+    onclick={onopen}
+    press="pressable"
+    size="xs"
+    tone="muted"
+    variant="ghost"
+  >
+    {@render word()}
+  </Button>
+{:else}
+  <span
+    data-answer={answer.kind}
+    class="mark-line inline-flex min-w-0 items-start gap-space-2 type-label"
+  >
+    {@render word()}
+  </span>
+{/if}

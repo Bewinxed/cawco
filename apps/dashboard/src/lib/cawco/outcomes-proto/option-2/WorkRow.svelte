@@ -7,7 +7,7 @@
    */
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconRepeat, IconTaskList } from "#lib/icons.js";
-  import OpenControl from "./OpenControl.svelte";
+  import OpenControl from "../OpenControl.svelte";
 
   let {
     kind,

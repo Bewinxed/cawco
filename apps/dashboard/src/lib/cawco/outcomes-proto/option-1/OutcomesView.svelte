@@ -10,25 +10,35 @@
 
 <script lang="ts">
   /**
-   * Outcomes, the project's view (option 1, "the bento holds still"): one
-   * tile per outcome, in the order they were said, then Caw's suggestion and
-   * "Not under an outcome". Its columns follow the view's own width (three
-   * from 1025, two from 640, one under it), and each tile goes, in order,
-   * into the column that is shortest so far, ties to the left, by its
-   * sentence and lines alone: an ask arriving or leaving moves nothing
-   * between columns, only the tiles under it slide.
+   * Outcomes, the project's view (option 1, "holds still"): the first view
+   * says where to look by what each outcome needs, in three bands.
    *
-   * The bento never scrolls. When its tiles are taller than its room, the
-   * Room rule (shared part S11) folds the whole bento at once, a step at a
-   * time, until it fits: Caw's suggestion to one line; a met outcome's
-   * lines to "All 3 hold"; every outcome's lines that hold to "and 2 that
-   * hold"; the met outcomes gathered into one last tile. An outcome that
-   * waits on him, and an unsettled line, never fold.
+   * - An outcome something under it waits on comes first, the one tile on
+   *   the needs ground, its ask under the line it concerns.
+   * - Outcomes with a line that is not true come next, as plain tiles,
+   *   their true lines in quieter ink; then Caw's suggestion, a dashed
+   *   offer.
+   * - Outcomes where every line is true fold to one quiet line each,
+   *   gathered at the foot with "Not under an outcome".
    *
-   * A line opens as a card hanging from its row, beside the tile on the
-   * side with more room, the bento live around it; one card at a time,
-   * gliding to the next line opened. Under 640 it is a sheet from the foot.
-   * His pick in a card's ask stays when it closes.
+   * Within a band, the order the outcomes were said in, so the view holds
+   * still between looks: an outcome moves only when its answer does.
+   *
+   * The tiles' columns follow the view's own width (three from 1025, two
+   * from 640, one under it); each tile goes, in order, into the column that
+   * is shortest so far, ties to the left. The foot takes the same columns.
+   *
+   * The view never scrolls. When it is taller than its room, the Room rule
+   * (shared part S11) folds it a step at a time until it fits: Caw's
+   * suggestion to one line; then, in outcomes that wait on nothing, the
+   * true lines to "2 others are true"; then the same in the outcome that
+   * waits, the line its ask concerns kept. A line that is not true never
+   * folds.
+   *
+   * A line opens from its answer word, as a card hanging from its row,
+   * beside the tile on the side with more room, the view live around it;
+   * one card at a time, gliding to the next line opened. Under 640 it is a
+   * sheet from the foot. His pick in a card's ask stays when it closes.
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { untrack } from "svelte";
@@ -42,10 +52,11 @@
   import { track } from "#lib/platform/track.js";
   import type { AnswerState } from "./AskBlock.svelte";
   import LineCard from "./LineCard.svelte";
+  import MetLine from "./MetLine.svelte";
   import OutcomeTile, { type Fold } from "./OutcomeTile.svelte";
   import {
+    bandOf,
     type Line,
-    met,
     type Outcome,
     type OutcomesRecord,
     unsettled,
@@ -104,10 +115,12 @@
     };
   });
 
-  /** The Room rule's step the bento stands at: 0 spells everything out. */
+  /** The Room rule's step the view stands at: 0 spells everything out. */
   let step = $state(0);
-  /** Folded tiles he spelled out again by their open control. */
+  /** Tiles he spelled out again: their true lines, or the suggestion. */
   let unfolded = $state<string[]>([]);
+  /** Met outcomes at the foot whose lines he spelled out in place. */
+  let spelled = $state<string[]>([]);
 
   const said = $derived(
     record.outcomes
@@ -116,7 +129,9 @@
           `${outcome.id}:${outcome.asks.length}:${outcome.lines.map((line) => line.answer.kind).join(",")}`
       )
       .join("|")
-      .concat(`|${record.suggestion?.sentence}|${unfolded.join(",")}`)
+      .concat(
+        `|${record.suggestion?.sentence}|${unfolded.join(",")}|${spelled.join(",")}`
+      )
   );
   const shape = $derived(`${view.width}x${room.height}|${said}`);
   // Whatever changes the room or the words starts again from everything
@@ -130,14 +145,14 @@
   $effect(() => {
     track(step, shape);
     const frame = requestAnimationFrame(() => {
-      // The tiles against the room, its foot's air included; never the
-      // room a phone's sheet adds under them.
+      // The view against the room, its foot's air included; never the
+      // room a phone's sheet adds under it.
       const foot = narrow ? 0 : steps.s5;
       if (
         box &&
         bento &&
         bento.offsetHeight + foot > box.clientHeight + 1 &&
-        step < 4
+        step < 3
       ) {
         step += 1;
       }
@@ -145,38 +160,31 @@
     return () => cancelAnimationFrame(frame);
   });
 
-  // --- tiles --------------------------------------------------------------
+  // --- bands --------------------------------------------------------------
 
   type Tile =
     | { id: string; kind: "outcome"; outcome: Outcome; fold: Fold }
-    | { id: string; kind: "suggestion"; folded: boolean }
-    | { id: string; kind: "unplaced" }
-    | { id: string; kind: "met"; outcomes: Outcome[] };
+    | { id: string; kind: "suggestion"; folded: boolean };
 
-  const waits = (outcome: Outcome) => outcome.asks.length > 0;
   const foldOf = (outcome: Outcome): Fold => {
-    if (waits(outcome) || unfolded.includes(outcome.id)) {
+    if (unfolded.includes(outcome.id)) {
       return "none";
     }
-    if (step >= 2 && met(outcome)) {
-      return "met";
-    }
-    return step >= 3 ? "holding" : "none";
+    const reach = bandOf(outcome) === "waits" ? 3 : 2;
+    return step >= reach ? "holding" : "none";
   };
 
+  const tileOf = (outcome: Outcome): Tile => ({
+    id: outcome.id,
+    kind: "outcome",
+    outcome,
+    fold: foldOf(outcome),
+  });
+
   const tiles = $derived.by((): Tile[] => {
-    const gather = step >= 4;
-    const gathered = record.outcomes.filter(
-      (outcome) => gather && met(outcome) && !waits(outcome)
-    );
-    const list: Tile[] = record.outcomes
-      .filter((outcome) => !gathered.includes(outcome))
-      .map((outcome) => ({
-        id: outcome.id,
-        kind: "outcome",
-        outcome,
-        fold: foldOf(outcome),
-      }));
+    const waits = record.outcomes.filter((each) => bandOf(each) === "waits");
+    const open = record.outcomes.filter((each) => bandOf(each) === "unsettled");
+    const list: Tile[] = [...waits, ...open].map(tileOf);
     if (record.suggestion) {
       list.push({
         id: "suggestion",
@@ -184,43 +192,49 @@
         folded: step >= 1 && !unfolded.includes("suggestion"),
       });
     }
-    if (record.unplaced) {
-      list.push({ id: "unplaced", kind: "unplaced" });
-    }
-    if (gathered.length > 0) {
-      list.push({ id: "met", kind: "met", outcomes: gathered });
-    }
     return list;
   });
+  const metOnes = $derived(
+    record.outcomes.filter((each) => bandOf(each) === "met")
+  );
+  const hasFoot = $derived(metOnes.length > 0 || record.unplaced !== null);
 
   /**
-   * A tile's height as its words make it, in px, without its Needs you
-   * line: read from its sentence and lines at the column's width, so an
-   * ask's arrival never moves a tile to another column.
+   * A tile's height as its words make it, in px, read from its sentence,
+   * its lines and its ask at the column's width.
    */
   function weightOf(tile: Tile, columnWidth: number): number {
-    const PAD = 28;
+    const PAD = 34;
     const GAP = 11;
     const rows = (text: string, width: number, perChar: number) =>
       Math.max(1, Math.ceil((text.length * perChar) / Math.max(width, 80)));
     const sentenceRoom = columnWidth - PAD - 32;
-    const lineRoom = columnWidth - PAD - 120 - 24 - 2 * GAP;
+    const lineRoom = columnWidth - PAD - 120 - GAP;
     if (tile.kind === "outcome") {
       const { outcome, fold } = tile;
-      const shownOf = (): Line[] => {
-        if (fold === "met") {
-          return [];
-        }
-        return fold === "holding"
-          ? outcome.lines.filter((line) => unsettled(line.answer))
+      const [waiting] = outcome.asks;
+      const shown: Line[] =
+        fold === "holding"
+          ? outcome.lines.filter(
+              (line) => unsettled(line.answer) || line.id === waiting?.line
+            )
           : outcome.lines;
-      };
-      const shown = shownOf();
       const folded = outcome.lines.length - shown.length;
+      const ask = waiting
+        ? Math.min(
+            3,
+            rows(
+              `${waiting.ask.from} asks: ${waiting.ask.ask}`,
+              sentenceRoom,
+              7.6
+            )
+          ) *
+            22 +
+          52
+        : 0;
       return (
         PAD +
         rows(outcome.sentence, sentenceRoom, 8.6) * 24 +
-        (met(outcome) ? 20 : 0) +
         GAP +
         16 +
         shown.reduce(
@@ -228,17 +242,12 @@
             sum + Math.min(2, rows(line.sentence, lineRoom, 7.4)) * 20 + 8,
           0
         ) +
+        ask +
         (folded > 0 ? 28 : 0)
       );
     }
-    if (tile.kind === "suggestion") {
-      const lines = record.suggestion?.lines.length ?? 0;
-      return tile.folded ? 84 : 84 + GAP + 16 + lines * 28 + 2 * (30 + GAP);
-    }
-    if (tile.kind === "met") {
-      return 50 + tile.outcomes.length * 28;
-    }
-    return 50;
+    const lines = record.suggestion?.lines.length ?? 0;
+    return tile.folded ? 44 : 84 + GAP + 16 + lines * 28 + 2 * (30 + GAP);
   }
 
   const placed = $derived.by(() => {
@@ -374,57 +383,84 @@
   >
     <div
       bind:this={bento}
-      class="grid grid-cols-(--cols) items-start gap-space-5 @max-phone/view:gap-0"
-      style:--cols="repeat({columns}, minmax(0, 1fr))"
+      class="flex flex-col gap-space-5 @max-phone/view:gap-space-2"
     >
-      {#each placed as column, index (index)}
-        <div class="flex min-w-0 flex-col gap-space-5 @max-phone/view:gap-0">
-          {#each column as tile (tile.id)}
-            {#if tile.kind === "outcome"}
-              <OutcomeTile
-                fold={tile.fold}
-                {live}
-                onanswer={(line) => {
-                  if (line) {
-                    openAt(line);
-                  }
-                }}
-                onopenline={(line) => openAt(line)}
-                onopenoutcome={() => onopen("outcome", tile.outcome.id)}
-                {openLine}
-                outcome={tile.outcome}
-              />
-            {:else if tile.kind === "suggestion" && record.suggestion}
-              <SuggestionTile
-                folded={tile.folded}
-                onchange={() => onopen("change-suggestion", null)}
-                ondismiss={() => onopen("dismiss-suggestion", null)}
-                onnext={() => onopen("next-suggestion", null)}
-                ontake={() => onopen("take-suggestion", null)}
-                onunfold={() => {
-                  unfolded = [...unfolded, "suggestion"];
-                }}
-                suggestion={record.suggestion}
-              />
-            {:else if tile.kind === "unplaced" && record.unplaced}
-              <PlainTile
-                kind="unplaced"
-                note={record.unplaced.holds}
-                onopen={() => onopen("unplaced", null)}
-              />
-            {:else if tile.kind === "met"}
-              <PlainTile
-                kind="met"
-                onopen={(id) => onopen("outcome", id)}
-                sentences={tile.outcomes.map((outcome) => ({
-                  id: outcome.id,
-                  sentence: outcome.sentence,
-                }))}
-              />
-            {/if}
+      {#if tiles.length > 0}
+        <div
+          class="grid grid-cols-(--cols) items-start gap-space-5 @max-phone/view:gap-0"
+          style:--cols="repeat({columns}, minmax(0, 1fr))"
+        >
+          {#each placed as column, index (index)}
+            <div
+              class="flex min-w-0 flex-col gap-space-5 @max-phone/view:gap-0"
+            >
+              {#each column as tile (tile.id)}
+                {#if tile.kind === "outcome"}
+                  <OutcomeTile
+                    fold={tile.fold}
+                    {live}
+                    onanswer={(line) => {
+                      if (line) {
+                        openAt(line);
+                      }
+                    }}
+                    onopenline={(line) => openAt(line)}
+                    onopenoutcome={() => onopen("outcome", tile.outcome.id)}
+                    onunfold={() => {
+                      unfolded = [...unfolded, tile.outcome.id];
+                    }}
+                    {openLine}
+                    outcome={tile.outcome}
+                  />
+                {:else if tile.kind === "suggestion" && record.suggestion}
+                  <SuggestionTile
+                    folded={tile.folded}
+                    onchange={() => onopen("change-suggestion", null)}
+                    ondismiss={() => onopen("dismiss-suggestion", null)}
+                    onnext={() => onopen("next-suggestion", null)}
+                    ontake={() => onopen("take-suggestion", null)}
+                    onunfold={() => {
+                      unfolded = [...unfolded, "suggestion"];
+                    }}
+                    suggestion={record.suggestion}
+                  />
+                {/if}
+              {/each}
+            </div>
           {/each}
         </div>
-      {/each}
+      {/if}
+      {#if hasFoot}
+        <!-- The foot: what is fine, one quiet line each, in the tiles'
+             columns, under a hairline when tiles stand above it. -->
+        <div
+          data-slot="foot"
+          data-under={tiles.length > 0 || undefined}
+          class="grid grid-cols-(--cols) items-start gap-x-space-5 gap-y-space-2 data-under:border-t data-under:border-border-hairline data-under:pt-space-4 @max-phone/view:gap-y-space-3 @max-phone/view:data-under:pt-space-3"
+          style:--cols="repeat({columns}, minmax(0, 1fr))"
+        >
+          {#each metOnes as outcome (outcome.id)}
+            <MetLine
+              onopenline={(line) => openAt(line)}
+              onopenoutcome={() => onopen("outcome", outcome.id)}
+              ontoggle={() => {
+                spelled = spelled.includes(outcome.id)
+                  ? spelled.filter((id) => id !== outcome.id)
+                  : [...spelled, outcome.id];
+              }}
+              {openLine}
+              {outcome}
+              spelled={spelled.includes(outcome.id)}
+            />
+          {/each}
+          {#if record.unplaced}
+            <PlainTile
+              note={record.unplaced.holds}
+              onopen={() => onopen("unplaced", null)}
+            />
+          {/if}
+        </div>
+      {/if}
     </div>
   </div>
 </div>

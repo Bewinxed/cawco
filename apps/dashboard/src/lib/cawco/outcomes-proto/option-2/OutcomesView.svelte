@@ -35,11 +35,11 @@
    */
   import { tick, untrack } from "svelte";
   import { frameSize } from "#lib/platform/frame-observer.js";
+  import OpenControl from "../OpenControl.svelte";
   import type { AnswerState } from "./AskBlock.svelte";
   import type { LeadFace } from "./FaceSwitch.svelte";
   import LeadTile from "./LeadTile.svelte";
   import LinePage from "./LinePage.svelte";
-  import OpenControl from "./OpenControl.svelte";
   import OutcomeTile from "./OutcomeTile.svelte";
   import {
     met,

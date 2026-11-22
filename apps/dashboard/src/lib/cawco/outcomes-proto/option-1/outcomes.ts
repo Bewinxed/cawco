@@ -117,5 +117,18 @@ export interface OutcomesRecord {
 }
 
 /** Every line holds. */
-export const met = (outcome: Outcome): boolean =>
+const met = (outcome: Outcome): boolean =>
   outcome.lines.every((line) => !unsettled(line.answer));
+
+/**
+ * Where an outcome stands on the first view, by what it needs: something
+ * under it waits on him; a line is unsettled; or every line holds.
+ */
+export type Band = "waits" | "unsettled" | "met";
+
+export const bandOf = (outcome: Outcome): Band => {
+  if (outcome.asks.length > 0) {
+    return "waits";
+  }
+  return met(outcome) ? "met" : "unsettled";
+};

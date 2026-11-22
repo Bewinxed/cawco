@@ -31,8 +31,8 @@
    * open control both make the outcome the lead.
    */
   import { IconNeedsYou } from "#lib/icons.js";
+  import OpenControl from "../OpenControl.svelte";
   import AnswerWord from "./AnswerWord.svelte";
-  import OpenControl from "./OpenControl.svelte";
   import { met, type RunQuestion } from "./outcomes";
 
   let {

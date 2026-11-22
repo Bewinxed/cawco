@@ -15,8 +15,8 @@
    * whose ask the lead already shows above it, which says it.
    */
   import { IconNeedsYou } from "#lib/icons.js";
+  import OpenControl from "../OpenControl.svelte";
   import AnswerWord from "./AnswerWord.svelte";
-  import OpenControl from "./OpenControl.svelte";
   import { type OutcomeLine, unsettled } from "./outcomes";
 
   let {

@@ -12,8 +12,8 @@
    */
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import OpenControl from "../OpenControl.svelte";
   import LeadHead from "./LeadHead.svelte";
-  import OpenControl from "./OpenControl.svelte";
   import type { SuggestedOutcome } from "./outcomes";
 
   let {

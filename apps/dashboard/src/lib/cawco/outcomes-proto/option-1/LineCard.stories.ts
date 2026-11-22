@@ -73,7 +73,7 @@ export const NothingChecks = {
   args: { line: lineOf("docs-settings"), ask: null },
 };
 
-/** The demo sign-in held on 12 Nov, and its check has ended since. */
+/** The demo sign-in was true on 12 Nov, and its check has ended since. */
 export const NoLongerChecked = {
   args: { line: lineOf("staging-demo-account"), ask: null },
 };

@@ -1,11 +1,10 @@
 <script lang="ts">
   /**
-   * The Needs you line (shared part S2): on an outcome with something under
-   * it that waits on the person, above its sentence. The house Needs you
-   * mark (the attention glyph and ink, never a filled surface), who asks
-   * and the first of the ask in the asker's words, two lines at most, and
-   * one control named for the act and its object. Several asks: the oldest,
-   * then "and 1 more".
+   * The Needs you line (shared part S2), standing directly under the line
+   * it concerns (or under the outcome's sentence when it names none): the
+   * house Needs you mark (the attention glyph and ink), who asks and the
+   * ask in the asker's words, two lines at most, and one control named for
+   * the act and its object. Several asks: the oldest, then "and 1 more".
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconNeedsYou } from "#lib/icons.js";
@@ -31,7 +30,7 @@
 
 <div
   data-slot="needs"
-  class="flex flex-col items-start gap-space-3 border-b border-border-hairline pb-space-4 @max-phone/view:gap-space-2 @max-phone/view:pb-space-3"
+  class="flex flex-col items-start gap-space-2 pt-space-1 pb-space-2"
 >
   <p class="m-0 mark-line flex min-w-0 items-start gap-space-2 type-body">
     <span class="mark-cell">
@@ -40,7 +39,7 @@
         class="size-icon-md text-status-attn-glyph"
       />
     </span>
-    <span data-box class="line-clamp-2 min-w-0 text-pretty">
+    <span data-box class="line-clamp-3 min-w-0 text-pretty">
       <span class="font-medium text-status-attn-ink"
         >{outcomesWords.asks(ask.from)}</span
       >
@@ -52,6 +51,7 @@
       {disabled}
       label={ask.act}
       onclick={onact}
+      press="pressable"
       size="sm"
       title={disabled ? reason : undefined}
       variant="outline"

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import OpenControl from "../OpenControl.svelte";
   /**
    * "Not under an outcome" (option 2, decision 9): the work that serves no
    * outcome, together. As a tile it carries its name, how much it holds and
@@ -6,7 +7,6 @@
    * routines in place of lines, each opening as tasks open everywhere.
    */
   import LeadHead from "./LeadHead.svelte";
-  import OpenControl from "./OpenControl.svelte";
   import type { UnplacedRow } from "./outcomes";
   import WorkList from "./WorkList.svelte";
 
