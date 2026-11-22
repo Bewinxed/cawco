@@ -11,6 +11,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lt,
   or,
   type SQL,
   sql,
@@ -680,12 +681,17 @@ export const artifactsDb = (
         or(
           eq(artifacts.sourceWorkspace, id),
           eq(artifacts.sourcePlace, id),
+          // The folder, or one inside it: every text from `path/` up to
+          // `path0` (the character after "/") starts `path/`. Each of the
+          // four is its own seek, `artifacts_machine_dir` the last two.
           and(
             eq(artifacts.machineId, machineId),
-            or(
-              eq(artifacts.sourceDir, path),
-              sql`substr(${artifacts.sourceDir}, 1, ${path.length + 1}) = ${`${path}/`}`
-            )
+            eq(artifacts.sourceDir, path)
+          ),
+          and(
+            eq(artifacts.machineId, machineId),
+            gte(artifacts.sourceDir, `${path}/`),
+            lt(artifacts.sourceDir, `${path}0`)
           )
         )
       )
