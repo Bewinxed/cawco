@@ -70,13 +70,12 @@
      * way the segmented control's thumb slides. `true` draws it as the
      * chip's own picked edge over the recess (`look: "card"`), the options
      * standing over it with no fill or edge of their own while chosen;
-     * `"fill"` as the house's selected fill (`selected-bg`, as a Select's
-     * trigger, a menu's radio and ChoiceChip show a pick) on the control's
-     * neutral edge, drawn over the options' own raised rest and under their
-     * words (highlight `look: "fill"`), the chosen one taking the selected
-     * ink.
+     * `"mark"` as the pick's strong coral edge, twice the border's width
+     * with no fill (highlight `look: "mark"`), over the chosen option's own
+     * raised rest and under its words: every option keeps its raised rest
+     * and dark ink, picked or not, and tiles wear a radio mark (OptionTiles).
      */
-    glide?: boolean | "fill";
+    glide?: boolean | "mark";
     layout?: OptionGroupLayout;
     /** Enter on an option: the host's own act (continue, send, answer). */
     onenter?: (event: KeyboardEvent) => void;
@@ -87,7 +86,7 @@
     multiple: () => multiple,
     disabled: () => disabled,
     glide: () => glide !== false && !multiple,
-    fill: () => glide === "fill",
+    mark: () => glide === "mark",
     layout: () => layout ?? "chips",
     setValue: (next) => {
       value = next;
@@ -204,7 +203,7 @@
         selected: '[data-slot="option"][aria-checked="true"]',
         axis: "xy",
         ghost: false,
-        look: glide === "fill" ? "fill" : "card",
+        look: glide === "mark" ? "mark" : "card",
       })
     : undefined}
 >

@@ -11,15 +11,14 @@
 
 <script lang="ts">
   /**
-   * Step 3 ("What needs you"): the project's Who decides, in this view's
-   * own parts. The step's head names it and holds what acts on all of it
-   * (HowItRuns: the reset arrow while a kind is custom, Manage defaults),
-   * so the roster stands straight under it: the Who decides roster
-   * (Roster, brief), every decider a card holding the kinds it decides by
-   * name, each one's line in its tooltip, a kind this project set told by
-   * its deeper fill alone, a press on a tile handing it to another. Then
-   * who marks tasks done, as two of the house's tiles under their own
-   * sub-head, as the account's limit is picked.
+   * What needs you: the project's Who decides as its page draws it,
+   * fitted in its section's card. The section's heading holds what acts on
+   * all of it (HowItRuns: the reset arrow while a kind is custom, Manage
+   * defaults), so the roster stands straight under it: the Who decides
+   * roster (Roster, brief), every decider a card holding the kinds it
+   * decides by name, each one's line in its tooltip, a press on a tile
+   * handing it to another. Then who marks tasks done, as the house's
+   * option tiles under its own label.
    *
    * Every hand-over, put-back and the review pick move at the press
    * (changes.ts `withAsked`): the tile flies to its new card at once; a
@@ -39,11 +38,10 @@
   import Roster from "#lib/cawco/decides/Roster.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { OptionTiles } from "#lib/components/ui/option-group/index.js";
-  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { IconAgent, IconEye } from "#lib/icons.js";
   import type { StageSends } from "./changes";
   import { CHOICE_KINDS, type ChoiceKind, type Decider } from "./records";
-  import { STEP_BODY } from "./step-body";
+  import { CARD_GROUP, GROUP_LABEL } from "./section-card";
   import { howItRunsWords as words } from "./words";
 
   let {
@@ -154,7 +152,7 @@
 
 <section
   aria-label={words.waits.heading}
-  class="@container/deciders flex min-w-0 flex-col gap-space-3"
+  class="@container/deciders flex min-w-0 flex-col gap-space-5"
 >
   {#if !record.whoDecides.ok}
     <RowFault
@@ -182,12 +180,11 @@
     said={words.waits.roster}
   />
 
-  <!-- Its own part, in the step's body as every other step's parts
-       stand (STEP_BODY), under the members' cards. -->
-  <div class={["flex min-w-0 flex-col gap-space-2", STEP_BODY]}>
-    <h3 class={sectionHeadVariants({ inset: "flush" })} id="work-path-review">
+  <!-- Its own group in the section's card, under the members' cards. -->
+  <div class={CARD_GROUP}>
+    <p class={GROUP_LABEL} id="work-path-review">
       {words.waits.reviewHeading}
-    </h3>
+    </p>
     <OptionTiles
       bind:value={
         () => (record.reviewBeforeDone ? "review" : "agents"),
@@ -200,9 +197,9 @@
           }
         }
       }
-      cols={2}
+      cols={1}
       disabled={!record.hubReachable}
-      glide="fill"
+      glide="mark"
       glyph={reviewGlyph}
       label={words.waits.reviewHeading}
       options={[

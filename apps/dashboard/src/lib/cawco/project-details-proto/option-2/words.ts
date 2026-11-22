@@ -24,11 +24,13 @@ export const howItRunsWords = {
   hubOutOfReach: (age: string) =>
     `Server is offline, leaving settings from ${age} read-only.`,
 
-  stages: {
-    tasks: "Where tasks live",
-    sessions: "Where agents run",
+  /** The settings' sections, in the order they stand. */
+  sections: {
+    tasks: "Task sync",
+    places: "Run environments",
+    git: "Repository & Git",
+    account: "Account & usage limits",
     waits: "What needs you",
-    lands: "Where code goes",
   },
 
   stageState: {
@@ -38,8 +40,8 @@ export const howItRunsWords = {
     fault: "Needs fixing",
   } satisfies Record<StageState, string>,
 
-  readFailedTitle: (stageTitle: string) => `Could not load ${stageTitle}`,
-  stageLoading: (stageTitle: string) => `Loading ${stageTitle}`,
+  readFailedTitle: (section: string) => `Could not load ${section}`,
+  sectionLoading: (section: string) => `Loading ${section}`,
 
   tasks: {
     groupLabel: "Where tasks live",
@@ -108,6 +110,8 @@ export const howItRunsWords = {
       "Not added because temporary folders get deleted after runs.",
     startsHere: "Runs here",
     hub: "CawCo server",
+    /** The hub's own copy, said beside its row: why it has no menu. */
+    hubOwn: "The hub's own copy",
     missing: "Not found",
     missingTip: "Folder not found here, so agents cannot start.",
     away: "Offline",
