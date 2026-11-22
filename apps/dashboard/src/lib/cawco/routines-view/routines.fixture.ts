@@ -42,6 +42,7 @@ const routine = (
   lastRun: RoutineRunView | null,
   rest: Partial<TaskRoutine> = {}
 ): TaskRoutine => ({
+  check: null,
   deadline: null,
   disabledReason: null,
   enabled: true,
@@ -126,8 +127,7 @@ export const ROUTINES: RoutineItem[] = [
         10 * MINUTE_MS,
         MINUTE_MS,
         "Staging answered in 180 ms."
-      ),
-      { target: "command" }
+      )
     ),
   },
   {
