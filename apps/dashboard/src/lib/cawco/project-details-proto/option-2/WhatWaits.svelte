@@ -11,16 +11,15 @@
 
 <script lang="ts">
   /**
-   * Stage 3 ("What waits for you"): the project's Who decides, in this
-   * view's own parts. Its head is the sub-head every step's parts wear
-   * (sectionHeadVariants), on one line with how the project stands (using
-   * the defaults, or how many kinds it set itself), the quiet button that
-   * puts them all back, and the link to the fleet's defaults. Under it the
-   * Who decides roster (Roster, brief): every decider a card holding the
-   * kinds it decides by name, each one's line in its tooltip, a kind this
-   * project set told by its deeper fill alone, a press on a tile handing it
-   * to another; the head's Reset to defaults puts them all back. Then who marks tasks done, as two of the house's tiles
-   * under their own sub-head, as the account's limit is picked.
+   * Step 3 ("What needs you"): the project's Who decides, in this view's
+   * own parts. The step's head names it and holds what acts on all of it
+   * (HowItRuns: the reset arrow while a kind is custom, Manage defaults),
+   * so the roster stands straight under it: the Who decides roster
+   * (Roster, brief), every decider a card holding the kinds it decides by
+   * name, each one's line in its tooltip, a kind this project set told by
+   * its deeper fill alone, a press on a tile handing it to another. Then
+   * who marks tasks done, as two of the house's tiles under their own
+   * sub-head, as the account's limit is picked.
    *
    * Every hand-over, put-back and the review pick move at the press
    * (changes.ts `withAsked`): the tile flies to its new card at once; a
@@ -39,11 +38,10 @@
   import type { Fault } from "#lib/cawco/decides/decides.svelte.js";
   import Roster from "#lib/cawco/decides/Roster.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
-  import { Button } from "#lib/components/ui/button/index.js";
   import { OptionTiles } from "#lib/components/ui/option-group/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { IconAgent, IconEye } from "#lib/icons.js";
-  import type { HrefOf, StageSends } from "./changes";
+  import type { StageSends } from "./changes";
   import { CHOICE_KINDS, type ChoiceKind, type Decider } from "./records";
   import { howItRunsWords as words } from "./words";
 
@@ -53,11 +51,9 @@
     onchange,
     onretry,
     onreread,
-    hrefOf,
   }: StageSends & {
     /** Re-read Who decides when its rule file could not be read. */
     onreread: () => void;
-    hrefOf: HrefOf;
   } = $props();
 
   const DECIDERS: readonly Decider[] = ["you", "caw", "advisor", "practice"];
@@ -156,50 +152,9 @@
 {/snippet}
 
 <section
-  aria-labelledby="work-path-deciders"
+  aria-label={words.waits.heading}
   class="@container/deciders flex min-w-0 flex-col gap-space-2"
 >
-  <!-- The section head every step's parts wear, its hairline under the
-       whole line: the heading at its start, what to do
-       about the project's own rules pushed to its end (each tile marks its
-       own). -->
-  <div
-    class={[
-      sectionHeadVariants({ inset: "flush" }),
-      "flex-wrap gap-x-space-3 gap-y-space-1",
-    ]}
-  >
-    <h3 class="m-0 type-label" id="work-path-deciders">
-      {words.waits.heading}
-    </h3>
-    <span
-      class="ms-auto flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
-      data-box
-    >
-      {#if own.length > 0}
-        <Button
-          disabled={!record.hubReachable}
-          label={words.waits.putAllBack}
-          onclick={() => {
-            for (const kind of own) {
-              putBack(kind);
-            }
-          }}
-          size="xs"
-          tone="quiet"
-          variant="ghost"
-        />
-      {/if}
-      <Button
-        href={hrefOf("fleetDecides")}
-        label={words.waits.fleetDefaults}
-        size="xs"
-        tone="quiet"
-        variant="ghost"
-      />
-    </span>
-  </div>
-
   {#if !record.whoDecides.ok}
     <RowFault
       again={onreread}

@@ -26,7 +26,6 @@
     OptionGroupItem,
     OptionTiles,
   } from "#lib/components/ui/option-group/index.js";
-  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import {
     IconDocument,
     IconExternalLinear,
@@ -37,6 +36,7 @@
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import type { Change, ChangeKey } from "./changes";
+  import { FORM_FIELD, FORM_LABEL, OPENED_FORM } from "./opened-form";
   import type { HowItRunsRecord, TaskHome } from "./records";
   import {
     GITHUB_CONNECTIONS,
@@ -69,6 +69,7 @@
     opening?: "github" | "linear" | null;
   } = $props();
 
+  const uid = $props.id();
   const HOMES: readonly TaskHome[] = ["files", "github", "linear"];
   const NONE_PROJECT = "__none__";
 
@@ -305,25 +306,44 @@
   />
 
   {#if setupHome !== null}
-    <div
-      class="flex min-w-0 flex-col gap-space-5 pt-space-4"
+    <!-- The tie's setup, unfolding from its tile: the house's opened form
+         (opened-form.ts), its head the service it ties to. -->
+    <section
+      aria-labelledby="{uid}-setup"
+      class={OPENED_FORM}
       data-slot="setup-asks"
       transition:unfold
     >
-      <div class="flex flex-col gap-space-1">
-        <h3 class={sectionHeadVariants({ inset: "flush" })}>
-          {words.tasks.setupTitle(setupHome)}
-        </h3>
+      <div class="flex min-w-0 flex-col gap-space-1">
+        <p
+          class="mark-line m-0 flex items-center gap-space-2 type-label text-ink-strong"
+          id="{uid}-setup"
+        >
+          <ProviderLogo class="flex-none" provider={setupHome} />
+          <span>{words.tasks.setupTitle(setupHome)}</span>
+        </p>
         <p class="m-0 type-meta text-pretty text-ink-muted">
           {words.tasks.setupFieldsNote}
         </p>
       </div>
 
-      <!-- Connection picker (or alert when none can serve). -->
-      <div class="flex flex-col gap-space-2">
-        <p class="m-0 type-meta text-ink-muted">
-          {words.tasks.connectionLabel}
-        </p>
+      <!-- Sign-in: its label's row holds the way to manage them, trailing. -->
+      <div class={FORM_FIELD}>
+        <div class="flex min-w-0 items-center justify-between gap-space-2">
+          <p class={FORM_LABEL} id="{uid}-connection">
+            {words.tasks.connectionLabel}
+          </p>
+          {#if setupConnections.length > 0}
+            <Button
+              class="-my-space-1"
+              href={hrefOf("connections")}
+              label={words.tasks.openConnections}
+              size="xs"
+              tone="quiet"
+              variant="ghost"
+            />
+          {/if}
+        </div>
         {#if setupConnections.length === 0}
           <Alert layout="row" variant="default">
             <IconInfo aria-hidden="true" />
@@ -340,34 +360,25 @@
             </AlertAction>
           </Alert>
         {:else}
-          <div class="flex flex-wrap items-center gap-space-2">
-            <OptionGroup
-              glide="fill"
-              aria-label={words.tasks.connectionLabel}
-              {disabled}
-              value={activeConnectionId ? [activeConnectionId] : []}
-            >
-              {#each setupConnections as conn (conn.id)}
-                <OptionGroupItem
-                  onclick={(event) => {
-                    event.preventDefault();
-                    connectionPick = conn.id;
-                  }}
-                  value={conn.id}
-                >
-                  <span>{conn.name}</span>
-                  <span class="type-meta text-ink-muted">{conn.account}</span>
-                </OptionGroupItem>
-              {/each}
-            </OptionGroup>
-            <Button
-              href={hrefOf("connections")}
-              label={words.tasks.openConnections}
-              size="xs"
-              tone="quiet"
-              variant="ghost"
-            />
-          </div>
+          <OptionGroup
+            aria-labelledby="{uid}-connection"
+            {disabled}
+            glide="fill"
+            value={activeConnectionId ? [activeConnectionId] : []}
+          >
+            {#each setupConnections as conn (conn.id)}
+              <OptionGroupItem
+                onclick={(event) => {
+                  event.preventDefault();
+                  connectionPick = conn.id;
+                }}
+                value={conn.id}
+              >
+                <span>{conn.name}</span>
+                <span class="type-meta text-ink-muted">{conn.account}</span>
+              </OptionGroupItem>
+            {/each}
+          </OptionGroup>
         {/if}
       </div>
 
@@ -375,8 +386,8 @@
            the connection's account; Team (Linear): its few teams as one pick. -->
       {#if setupConnections.length > 0}
         {#if setupHome === "github" && activeConnection}
-          <div class="flex min-w-0 flex-col gap-space-2" inert={disabled}>
-            <p class="m-0 type-meta text-ink-muted">{words.tasks.repoLabel}</p>
+          <div class={FORM_FIELD} inert={disabled}>
+            <p class={FORM_LABEL}>{words.tasks.repoLabel}</p>
             <RepoPicker
               machineId={activeConnection.id}
               machineName={activeConnection.name}
@@ -388,12 +399,12 @@
             />
           </div>
         {:else if setupHome === "linear"}
-          <div class="flex flex-col gap-space-2">
-            <p class="m-0 type-meta text-ink-muted">{words.tasks.teamLabel}</p>
+          <div class={FORM_FIELD}>
+            <p class={FORM_LABEL} id="{uid}-team">{words.tasks.teamLabel}</p>
             <OptionGroup
-              glide="fill"
-              aria-label={words.tasks.teamLabel}
+              aria-labelledby="{uid}-team"
               {disabled}
+              glide="fill"
               value={activeTeamId ? [activeTeamId] : []}
             >
               {#each LINEAR_TEAMS as team (team.id)}
@@ -414,39 +425,37 @@
         <!-- The GitHub Project its columns come from (GitHub only): linked,
              the hub matches the board's columns to the Project's statuses. -->
         {#if setupHome === "github"}
-          <div class="flex flex-col gap-space-5">
-            <div class="flex flex-col gap-space-2">
-              <p class="m-0 type-meta text-ink-muted">
-                {words.tasks.githubProjectLabel}
-              </p>
-              <OptionGroup
-                glide="fill"
-                aria-label={words.tasks.githubProjectLabel}
-                {disabled}
-                value={[githubProjectPick]}
+          <div class={FORM_FIELD}>
+            <p class={FORM_LABEL} id="{uid}-board">
+              {words.tasks.githubProjectLabel}
+            </p>
+            <OptionGroup
+              aria-labelledby="{uid}-board"
+              {disabled}
+              glide="fill"
+              value={[githubProjectPick]}
+            >
+              <OptionGroupItem
+                onclick={(event) => {
+                  event.preventDefault();
+                  githubProjectPick = NONE_PROJECT;
+                }}
+                value={NONE_PROJECT}
               >
+                {words.tasks.githubProjectNone}
+              </OptionGroupItem>
+              {#each GITHUB_PROJECTS as proj (proj.id)}
                 <OptionGroupItem
                   onclick={(event) => {
                     event.preventDefault();
-                    githubProjectPick = NONE_PROJECT;
+                    githubProjectPick = proj.id;
                   }}
-                  value={NONE_PROJECT}
+                  value={proj.id}
                 >
-                  {words.tasks.githubProjectNone}
+                  {proj.name}
                 </OptionGroupItem>
-                {#each GITHUB_PROJECTS as proj (proj.id)}
-                  <OptionGroupItem
-                    onclick={(event) => {
-                      event.preventDefault();
-                      githubProjectPick = proj.id;
-                    }}
-                    value={proj.id}
-                  >
-                    {proj.name}
-                  </OptionGroupItem>
-                {/each}
-              </OptionGroup>
-            </div>
+              {/each}
+            </OptionGroup>
           </div>
         {/if}
       {/if}
@@ -466,6 +475,6 @@
           variant="ghost"
         />
       </div>
-    </div>
+    </section>
   {/if}
 </div>
