@@ -123,10 +123,10 @@
   aria-label="Output of {titleOf(install)}"
   style:--output-head="{headHeight}px"
   class={[
-    "fixed z-(--layer-float) flex flex-col bg-surface-raised shadow-drawer timeline-scope-transcript-head transition-[translate,opacity] duration-(--duration-panel) ease-drawer",
+    "fixed z-(--layer-float) flex flex-col bg-surface-raised shadow-lg timeline-scope-transcript-head transition-[translate,opacity] duration-(--duration-panel) ease-drawer",
     phone.current
       ? "inset-0 data-[state=closed]:translate-y-full"
-      : "inset-y-0 end-0 w-c-connect-w border-s border-s-border-hairline data-[state=closed]:translate-x-full",
+      : "inset-y-0 end-0 w-120 border-s border-s-border-hairline data-[state=closed]:translate-x-full",
     "motion-reduce:translate-none motion-reduce:data-[state=closed]:opacity-0",
   ]}
 >
@@ -135,7 +135,7 @@
      beneath it, clearing it at rest by its top padding (`--output-head`,
      the stack's height) and blurring and fading under it as it scrolls
      (HeadFade; DESIGN.md, The Title Bars Follow Liquid Glass Rule). -->
-  <HeadFade band="var(--output-head)" tint="bg-code-bg" />
+  <HeadFade band="var(--output-head)" tint="bg-surface-recess" />
   <div
     class="absolute inset-x-0 top-0 z-2 flex flex-col"
     data-slot="output-head"
@@ -152,7 +152,7 @@
        first line, in its content. -->
     <header
       data-slot="bar"
-      class="flex h-c-top-bar-h flex-none items-center gap-space-2 ps-space-5 pe-space-2"
+      class="flex h-control-lg flex-none items-center gap-space-2 ps-space-5 pe-space-2"
     >
       <h2
         class="m-0 min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
@@ -193,7 +193,7 @@
   </div>
   <div
     bind:this={scroller}
-    class="kit-edge-fade-block min-h-0 flex-1 overflow-y-auto bg-code-bg px-space-5 pt-(--output-head) pb-space-3 scroll-timeline-transcript-head"
+    class="kit-edge-fade-block min-h-0 flex-1 overflow-y-auto bg-surface-recess px-space-5 pt-(--output-head) pb-space-3 scroll-timeline-transcript-head"
   >
     {#if failed}
       <p class="m-0 type-meta text-status-fail-ink">

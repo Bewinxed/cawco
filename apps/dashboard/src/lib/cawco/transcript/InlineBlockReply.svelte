@@ -45,7 +45,7 @@
 
 <div
   data-slot="transcript"
-  class="tx-columns min-h-0 ps-space-7 pe-space-6 pt-space-2 pb-space-6 max-desk:ps-space-5 max-desk:pe-space-5"
+  class="tx-columns min-h-0 ps-space-6 pe-space-6 pt-space-2 pb-space-6 max-desk:ps-space-5 max-desk:pe-space-5"
 >
   <Turn you>
     <Who name="You" timestamp="2026-11-11T14:02:00Z" you />

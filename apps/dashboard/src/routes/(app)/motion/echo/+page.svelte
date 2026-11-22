@@ -28,7 +28,7 @@
 <svelte:head><title>Echo bench · CawCo</title></svelte:head>
 
 <main
-  class="type-body grid min-h-dvh place-items-center bg-surface-recess p-space-7 text-ink-muted"
+  class="type-body grid min-h-dvh place-items-center bg-surface-recess p-space-6 text-ink-muted"
 >
   <ul class="m-0 grid list-none gap-space-5 p-0" {@attach echoBeat()}>
     {#each marks as status, row (row)}

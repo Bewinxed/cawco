@@ -75,7 +75,7 @@ const formMove: Clip[] = [
     "--press-by",
     24,
     180,
-    "--duration-morph"
+    "--duration-fade"
   ),
   clip(
     button,
@@ -84,7 +84,7 @@ const formMove: Clip[] = [
     "opacity",
     24,
     180,
-    "--duration-morph"
+    "--duration-fade"
   ),
   clip(
     button,
@@ -93,7 +93,7 @@ const formMove: Clip[] = [
     "--press-by",
     626,
     180,
-    "--duration-morph"
+    "--duration-fade"
   ),
   clip(
     button,
@@ -102,7 +102,7 @@ const formMove: Clip[] = [
     "opacity",
     626,
     180,
-    "--duration-morph"
+    "--duration-fade"
   ),
   clip(
     failure,
@@ -111,7 +111,7 @@ const formMove: Clip[] = [
     "height, opacity",
     626,
     260,
-    "--duration-pop"
+    "--duration-panel"
   ),
 ];
 const ready = (clips: Clip[], to = "Hub didn't answer"): MoveState => ({
@@ -155,7 +155,7 @@ const springMove: Clip[] = [
     curve: "Spring",
     easing: "linear(0, 0.24, 0.55, 0.78, 0.91, 0.97, 0.99, 1)",
   }),
-  clip(spring, "Sheet", "fades", "opacity", 0, 160, "--duration-exit"),
+  clip(spring, "Sheet", "fades", "opacity", 0, 160, "--duration-fade"),
 ];
 
 const meter = thing();
@@ -172,11 +172,11 @@ const card = thing();
 const badge = thing();
 /** A mockup's own choreography, written in its play: a header of two under the agent's group, a card of two legs, a badge going back and forth. */
 const authoredMove: Clip[] = [
-  clip(heading, "Title", "moves", "transform", 0, 260, "--duration-pop", {
+  clip(heading, "Title", "moves", "transform", 0, 260, "--duration-panel", {
     group: "Header",
     values: [{ property: "transform", from: "translateY(24px)", to: "none" }],
   }),
-  clip(heading, "Title", "fades", "opacity", 0, 260, "--duration-pop", {
+  clip(heading, "Title", "fades", "opacity", 0, 260, "--duration-panel", {
     group: "Header",
     values: [{ property: "opacity", from: "0", to: "1" }],
   }),
@@ -184,7 +184,7 @@ const authoredMove: Clip[] = [
     legs: [0.4],
     values: [{ property: "scale", from: "0.9", to: "1" }],
   }),
-  clip(badge, "Badge", "fades", "opacity", 200, 300, "--duration-glide", {
+  clip(badge, "Badge", "fades", "opacity", 200, 300, "--duration-panel", {
     iterations: 3,
     values: [{ property: "opacity", from: "0.4", to: "1" }],
   }),

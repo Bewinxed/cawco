@@ -223,7 +223,7 @@
           <li>
             <a
               data-slot="item"
-              class="h-c-nav-h transition-[background-color] duration-(--duration-control) ease-out flex items-center gap-space-2 px-space-3 py-0 text-ink-strong no-underline hover:bg-surface-hover"
+              class="h-row transition-[background-color] duration-(--duration-control) ease-out flex items-center gap-space-2 px-space-3 py-0 text-ink-strong no-underline hover:bg-surface-hover"
               data-session-link={session.id}
               href={conversationHref(session.id, boardStore.instanceIndex)}
               onclick={opened}

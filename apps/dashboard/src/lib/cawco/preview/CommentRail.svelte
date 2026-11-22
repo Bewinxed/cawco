@@ -47,7 +47,7 @@
    *
    * Until the pane holds the doc nothing is counted or claimed empty (The
    * Claim Of Nothing Rule): the rows' plain surface inside
-   * `--duration-wait-grace` (The Real Wait Rule), then skeleton rows, which the
+   * `--duration-loop` (The Real Wait Rule), then skeleton rows, which the
    * first read replaces in one cross-fade; or the read's fault on its line
    * with Try again (RowFault). While a link of the comments' stands lost the
    * same fault line stands over the rows, which keep their last read.
@@ -443,7 +443,7 @@
 
   /**
    * A row leaving the tab in front of him folds shut as it fades, over
-   * `--duration-exit` on `--ease-out`; with less motion it fades. One that goes
+   * `--duration-fade` on `--ease-out`; with less motion it fades. One that goes
    * with its tab (another tab chosen) goes at once.
    */
   function rowOut(node: HTMLElement) {
@@ -452,7 +452,7 @@
     }
     const height = node.offsetHeight;
     return {
-      duration: dur("--duration-exit"),
+      duration: dur("--duration-fade"),
       easing: easeOut,
       css: motionOk.current
         ? (t: number) =>
@@ -657,7 +657,7 @@
       aria-current={chosen || undefined}
       data-focused={pin.id === focused || undefined}
       data-moved={gone || undefined}
-      class="flex items-start gap-space-2 w-full min-h-c-artifact-row-h px-space-2 py-space-2 border-none rounded-sm bg-transparent text-start transition-[background-color] duration-(--duration-control) ease-out not-active:not-aria-current:group-hover/row:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-surface-hover aria-current:not-focus-visible:outline-1 aria-current:not-focus-visible:-outline-offset-1 aria-current:not-focus-visible:outline-solid aria-current:not-focus-visible:outline-border-control focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
+      class="flex items-start gap-space-2 w-full min-h-control-lg px-space-2 py-space-2 border-none rounded-sm bg-transparent text-start transition-[background-color] duration-(--duration-control) ease-out not-active:not-aria-current:group-hover/row:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-surface-hover aria-current:not-focus-visible:outline-1 aria-current:not-focus-visible:-outline-offset-1 aria-current:not-focus-visible:outline-solid aria-current:not-focus-visible:outline-border-control focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
       data-pin-row={pin.number}
       onblur={() => onhover(null)}
       onclick={(event) =>
@@ -706,7 +706,7 @@
             data-line="words"
             class={[
               "mt-space-row line-clamp-2 type-body text-pretty wrap-anywhere",
-              "text-ink-row",
+              "text-ink-strong",
             ]}
             >{#each segments(wordsOf(pin, firstWords)) as part, at (at)}{#if part.hit}<mark
                   class="bg-selection text-inherit rounded-xs">{part.text}</mark
@@ -850,7 +850,7 @@
   data-slot="comment-rail"
   aria-label={said.comments}
   data-layout={layout}
-  class="relative flex flex-col min-h-0 w-c-comments-w max-w-full timeline-scope-transcript-head data-[layout=beside]:h-full data-[layout=beside]:pb-space-3 data-[layout=sheet]:flex-1 data-[layout=sheet]:w-full"
+  class="relative flex flex-col min-h-0 w-xs max-w-full timeline-scope-transcript-head data-[layout=beside]:h-full data-[layout=beside]:pb-space-3 data-[layout=sheet]:flex-1 data-[layout=sheet]:w-full"
   style:--rail-head="{headHeight}px"
 >
   <!-- The bar and what stands under it (the lists, a composer or note
@@ -861,7 +861,7 @@
        Title Bars Follow Liquid Glass Rule). -->
   <HeadFade
     band="var(--rail-head)"
-    tint={layout === "beside" ? "bg-material-panel" : "bg-surface-raised"}
+    tint={layout === "beside" ? "bg-surface-glass" : "bg-surface-raised"}
   />
   <div
     class="absolute inset-x-0 top-0 z-2 flex flex-col"
@@ -881,7 +881,7 @@
     <header
       data-slot="head"
       data-searching={searching || undefined}
-      class="relative grid flex-none grid-cols-1 items-center h-c-btn-h-lg px-space-2 hit-gap-x-space-1 coarse:hit-gap-x-space-5 data-[layout=beside]:mt-space-2 [&>*]:col-start-1 [&>*]:row-start-1"
+      class="relative grid flex-none grid-cols-1 items-center h-control-lg px-space-2 hit-gap-x-space-1 coarse:hit-gap-x-space-5 data-[layout=beside]:mt-space-2 [&>*]:col-start-1 [&>*]:row-start-1"
       data-layout={layout}
     >
       {#if searching}
@@ -1200,7 +1200,7 @@
              so the list holds still as it lands. -->
         {#each [0, 1, 2] as skeleton (skeleton)}
           <span
-            class="flex items-start gap-space-2 min-h-c-artifact-row-h px-space-2 py-space-2"
+            class="flex items-start gap-space-2 min-h-control-lg px-space-2 py-space-2"
             data-slot="skeleton-row"
           >
             <span class="w-(--status-dot-size) flex-none"></span>

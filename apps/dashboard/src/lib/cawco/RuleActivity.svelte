@@ -49,7 +49,7 @@
   );
 </script>
 
-<p data-slot="note" class="max-w-c-measure type-meta text-ink-muted">
+<p data-slot="note" class="max-w-measure type-meta text-ink-muted">
   Sessions see the reply but never this rule's history, so this is the only
   place it is visible.
 </p>
@@ -61,7 +61,7 @@
   {#if loading}
     <p
       data-slot="note"
-      class="mark-line flex max-w-c-measure items-center gap-space-2 type-meta text-ink-muted"
+      class="mark-line flex max-w-measure items-center gap-space-2 type-meta text-ink-muted"
       role="status"
     >
       <LiveDot /><span>Loading…</span>
@@ -69,7 +69,7 @@
   {:else if failed}
     <p class="type-meta text-status-attn-ink" role="alert">{failed}</p>
   {:else if rows.length === 0}
-    <p data-slot="note" class="max-w-c-measure type-meta text-ink-muted">
+    <p data-slot="note" class="max-w-measure type-meta text-ink-muted">
       It has not caught anything yet. Nothing to see is the good outcome.
     </p>
   {:else}
@@ -101,12 +101,12 @@
                 >{row.where}</span
               >
               {#if row.harness}
-                <span class="max-w-c-measure type-meta text-ink-muted"
+                <span class="max-w-measure type-meta text-ink-muted"
                   >{row.harness}</span
                 >
               {/if}
             </span>
-            <span class="max-w-c-measure type-meta text-ink-muted">
+            <span class="max-w-measure type-meta text-ink-muted">
               {times(row.totalFires)}, last {since(row.lastFiredAt)}
             </span>
           </div>

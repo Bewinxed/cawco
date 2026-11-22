@@ -37,7 +37,7 @@
 
   /**
    * A section's fault badge pops in from the pop scale as it fades
-   * (--duration-menu) and leaves the same way on the exit tier; its figure ticks
+   * (--duration-control) and leaves the same way on the exit tier; its figure ticks
    * over through MorphText. With reduced motion, a fade.
    */
   /**
@@ -64,7 +64,7 @@
     const scale = popScale();
     return {
       duration: dur(
-        direction === "out" ? "--duration-exit" : "--duration-menu"
+        direction === "out" ? "--duration-fade" : "--duration-control"
       ),
       easing: easeOut,
       css: (t: number) =>
@@ -104,12 +104,12 @@
               data-slot="row"
               aria-busy={section.counted && count === null ? "true" : undefined}
               aria-current={current === section.slug ? "page" : undefined}
-              class="group/row relative flex items-center gap-space-3 h-c-rail-row-h pl-space-2 pr-space-3 rounded-sm text-ink-row no-underline transition-control aria-current-page:text-selected-ink group-variant-list/rail:h-c-row-h focus-inset press-tint"
+              class="group/row relative flex items-center gap-space-3 h-row pl-space-2 pr-space-3 rounded-sm text-ink-strong no-underline transition-control aria-current-page:text-brand-ink group-variant-list/rail:h-control-lg focus-inset press-tint"
               href="/config/{section.slug}"
             >
               <span
                 data-slot="tile"
-                class="inline-flex items-center justify-center flex-none size-space-6 rounded-xs bg-surface-lift shadow-tile [&>*]:size-space-4"
+                class="inline-flex items-center justify-center flex-none size-space-6 rounded-xs bg-surface-raised shadow-sm [&>*]:size-space-4"
                 style:color={section.hue}><section.icon /></span
               >
               <span
@@ -149,7 +149,7 @@
                 {#if count !== null && count > 0}
                   <span
                     data-slot="count"
-                    class="flex-none min-w-c-rail-count-min text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink"
+                    class="flex-none min-w-ch-3 text-end type-meta num text-ink-muted group-aria-current-page/row:text-brand-ink"
                     >{count}</span
                   >
                 {/if}

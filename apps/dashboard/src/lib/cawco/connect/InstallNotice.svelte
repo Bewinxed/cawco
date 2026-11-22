@@ -33,7 +33,7 @@
   <button
     type="button"
     data-slot="name"
-    class="select-none pe-(--x-room) min-w-0 overflow-clip text-start text-ellipsis whitespace-nowrap rounded-xs type-label text-ink-row focus-inset"
+    class="select-none pe-(--x-room) min-w-0 overflow-clip text-start text-ellipsis whitespace-nowrap rounded-xs type-label text-ink-strong focus-inset"
     onclick={() => {
       onchoose();
       connect.openInstall(install.id, null);

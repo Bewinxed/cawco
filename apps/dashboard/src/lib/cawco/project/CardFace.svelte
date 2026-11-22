@@ -31,11 +31,11 @@
 
 <span
   data-slot="head"
-  class="relative z-2 mb-space-2 flex min-h-c-mark items-center gap-space-2"
+  class="relative z-2 mb-space-2 flex min-h-6.5 items-center gap-space-2"
 >
   <span
     data-slot="tile"
-    class="inline-grid size-c-mark flex-none place-items-center rounded-sm bg-surface-lift shadow-tile [&>*]:size-icon-md"
+    class="inline-grid size-6.5 flex-none place-items-center rounded-sm bg-surface-raised shadow-sm [&>*]:size-icon-md"
     style:color={hue}><Icon /></span
   >
   {@render aside?.()}

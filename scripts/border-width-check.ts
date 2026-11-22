@@ -14,7 +14,7 @@
  *    shorthand (`1.5px solid …`) at a fractional px;
  *  - a class that sets a border's or an outline's width fractional: a
  *    literal (`border-[1.5px]`, `border-t-[length:0.5px]`, `border-1.5`) or a
- *    token that resolves fractional (`border-s-(length:--spacing-c-corner-grip-stroke)`,
+ *    token that resolves fractional (`border-s-(length:--corner-grip-stroke)`,
  *    `outline-[length:var(--x)]`);
  *  - a CSS declaration of the same (`border-width: 1.5px`, `border-top:
  *    var(--x) solid …`, `outline: 0.5px solid`), in a stylesheet, a `<style>`

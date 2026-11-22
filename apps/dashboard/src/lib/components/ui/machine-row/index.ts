@@ -30,4 +30,4 @@ const MACHINE_HUES = [
 export const machineHue = (index: number, online: boolean): string =>
   online
     ? MACHINE_HUES[index % MACHINE_HUES.length]
-    : "var(--color-machine-offline)";
+    : "var(--color-ink-subtle)";

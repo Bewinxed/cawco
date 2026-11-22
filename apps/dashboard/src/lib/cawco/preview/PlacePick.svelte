@@ -172,7 +172,7 @@
     />
     <Button label={words.cancel} onclick={oncancel} size="sm" variant="ghost" />
     {#if problem}
-      <span class="type-label text-error-9" role="alert" in:appear
+      <span class="type-label text-status-fail-glyph" role="alert" in:appear
         >{problem}</span
       >
     {/if}

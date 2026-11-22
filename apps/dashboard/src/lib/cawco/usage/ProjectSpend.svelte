@@ -217,16 +217,24 @@
     <Table.Row variant="band">
       <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
       <Table.Head variant="band" scope="col">{title}</Table.Head>
-      <Table.Head class="w-c-ledger-count-w" variant="band" scope="col"
-        >{count}</Table.Head
+      <Table.Head
+        class="w-(--w)"
+        style="--w: calc(var(--spacing) * 32)"
+        variant="band"
+        scope="col">{count}</Table.Head
       >
-      <Table.Head edge="end" class="w-c-ledger-usd-w" variant="band" scope="col"
-        >Spent</Table.Head
+      <Table.Head
+        edge="end"
+        class="w-(--w)"
+        style="--w: calc(var(--spacing) * 24)"
+        variant="band"
+        scope="col">Spent</Table.Head
       >
       <Table.Head
         data-col-last
         edge="end"
-        class="w-c-ledger-when-w"
+        class="w-(--w)"
+        style="--w: calc(var(--spacing) * 24)"
         variant="band"
         scope="col">{last}</Table.Head
       >
@@ -237,14 +245,14 @@
 
 <section
   aria-label="{projectName}'s spend"
-  class="flex flex-col gap-space-group"
+  class="flex flex-col gap-space-5"
 >
   {#if refused && !spend}
     <p data-slot="note" class="type-meta text-ink-muted" role="alert">
       The spend for {projectName} could not be read: {refused}
     </p>
   {:else if !spend}
-    <div class="flex flex-col gap-space-group" out:revealOut>
+    <div class="flex flex-col gap-space-5" out:revealOut>
       <div class="grid grid-cols-stat-tiles gap-space-3">
         {#each [0, 1, 2, 3, 4] as i (i)}
           <Skeleton height="stat" radius="tile" />
@@ -254,7 +262,7 @@
     </div>
   {:else}
     <!-- What the skeleton stood for, in its reveal. -->
-    <div class="flex flex-col gap-space-group" in:reveal>
+    <div class="flex flex-col gap-space-5" in:reveal>
       <div class="grid grid-cols-stat-tiles gap-space-3">
         <StatTile label="Today" value={usd(spend.todayUsd)} />
         <StatTile label="This month" value={usd(spend.monthUsd)} />
@@ -361,7 +369,7 @@
                   {#if capRefused}
                     <p
                       data-slot="refused"
-                      class="type-meta text-error-11"
+                      class="type-meta text-status-fail-ink"
                       role="alert"
                       in:appear
                     >
@@ -451,7 +459,7 @@
                   {#if budgetRefused}
                     <p
                       data-slot="refused"
-                      class="type-meta text-error-11"
+                      class="type-meta text-status-fail-ink"
                       role="alert"
                       in:appear
                     >
@@ -479,7 +487,7 @@
              the This month tile. -->
         <div
           data-slot="ledger"
-          class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+          class="overflow-hidden rounded-lg bg-surface-raised shadow-sm"
         >
           <!-- Under 640px each row is a card: its name across it, then its
                count, spend and last word; each band stays as its section's
@@ -504,7 +512,7 @@
                     >
                       <a
                         data-slot="name"
-                        class="type-label block truncate text-ink-row no-underline after:absolute after:inset-0"
+                        class="type-label block truncate text-ink-strong no-underline after:absolute after:inset-0"
                         href="/project/{encodeURIComponent(
                           projectId
                         )}?task={attempt.taskId}"
@@ -518,7 +526,8 @@
                     <Table.Cell
                       data-num
                       variant="ledger-stacks"
-                      class="w-c-ledger-count-w"
+                      class="w-(--w)"
+                      style="--w: calc(var(--spacing) * 32)"
                       >{attempt.attempts}
                       {attempt.attempts === 1
                         ? "attempt"
@@ -528,13 +537,16 @@
                       data-num
                       edge="end"
                       variant="ledger-stacks"
-                      class="w-c-ledger-usd-w">{usd(attempt.usd)}</Table.Cell
+                      class="w-(--w)"
+                      style="--w: calc(var(--spacing) * 24)"
+                      >{usd(attempt.usd)}</Table.Cell
                     >
                     <Table.Cell
                       data-col-last
                       edge="end"
                       variant="ledger-stacks"
-                      class="w-c-ledger-when-w"
+                      class="w-(--w)"
+                      style="--w: calc(var(--spacing) * 24)"
                       >{STATE_WORD[attempt.state] ?? attempt.state}</Table.Cell
                     >
                   </Table.Row>
@@ -553,24 +565,29 @@
                     class="@max-phone/table:col-span-full"
                     ><span
                       data-slot="name"
-                      class="type-label block truncate text-ink-row no-underline"
+                      class="type-label block truncate text-ink-strong no-underline"
                       >Conversations</span
                     ></Table.Cell
                   >
-                  <Table.Cell variant="ledger-stacks" class="w-c-ledger-count-w"
+                  <Table.Cell
+                    variant="ledger-stacks"
+                    class="w-(--w)"
+                    style="--w: calc(var(--spacing) * 32)"
                   ></Table.Cell>
                   <Table.Cell
                     data-num
                     edge="end"
                     variant="ledger-stacks"
-                    class="w-c-ledger-usd-w"
+                    class="w-(--w)"
+                    style="--w: calc(var(--spacing) * 24)"
                     >{usd(spend.caw.monthUsd)}</Table.Cell
                   >
                   <Table.Cell
                     data-col-last
                     edge="end"
                     variant="ledger-stacks"
-                    class="w-c-ledger-when-w"
+                    class="w-(--w)"
+                    style="--w: calc(var(--spacing) * 24)"
                   ></Table.Cell>
                 </Table.Row>
               {/if}
@@ -585,24 +602,29 @@
                     class="@max-phone/table:col-span-full"
                     ><span
                       data-slot="name"
-                      class="type-label block truncate text-ink-row no-underline"
+                      class="type-label block truncate text-ink-strong no-underline"
                       >Other sessions</span
                     ></Table.Cell
                   >
-                  <Table.Cell variant="ledger-stacks" class="w-c-ledger-count-w"
+                  <Table.Cell
+                    variant="ledger-stacks"
+                    class="w-(--w)"
+                    style="--w: calc(var(--spacing) * 32)"
                   ></Table.Cell>
                   <Table.Cell
                     data-num
                     edge="end"
                     variant="ledger-stacks"
-                    class="w-c-ledger-usd-w"
+                    class="w-(--w)"
+                    style="--w: calc(var(--spacing) * 24)"
                     >{usd(spend.others.monthUsd)}</Table.Cell
                   >
                   <Table.Cell
                     data-col-last
                     edge="end"
                     variant="ledger-stacks"
-                    class="w-c-ledger-when-w"
+                    class="w-(--w)"
+                    style="--w: calc(var(--spacing) * 24)"
                   ></Table.Cell>
                 </Table.Row>
               {/if}
@@ -616,23 +638,29 @@
                   class="@max-phone/table:col-span-full"
                   ><span
                     data-slot="name"
-                    class="type-label block truncate text-ink-row no-underline"
+                    class="type-label block truncate text-ink-strong no-underline"
                     >This month</span
                   ></Table.Cell
                 >
-                <Table.Cell variant="ledger-stacks" class="w-c-ledger-count-w"
+                <Table.Cell
+                  variant="ledger-stacks"
+                  class="w-(--w)"
+                  style="--w: calc(var(--spacing) * 32)"
                 ></Table.Cell>
                 <Table.Cell
                   data-num
                   edge="end"
                   variant="ledger-stacks"
-                  class="w-c-ledger-usd-w">{usd(spend.monthUsd)}</Table.Cell
+                  class="w-(--w)"
+                  style="--w: calc(var(--spacing) * 24)"
+                  >{usd(spend.monthUsd)}</Table.Cell
                 >
                 <Table.Cell
                   data-col-last
                   edge="end"
                   variant="ledger-stacks"
-                  class="w-c-ledger-when-w"
+                  class="w-(--w)"
+                  style="--w: calc(var(--spacing) * 24)"
                 ></Table.Cell>
               </Table.Row>
             </Table.Body>

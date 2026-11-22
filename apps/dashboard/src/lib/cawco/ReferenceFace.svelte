@@ -57,7 +57,7 @@
     data-slot="mark"
     aria-hidden="true"
     class={cn(
-      "grid size-c-row-mark flex-none place-items-center",
+      "grid size-4.5 flex-none place-items-center",
       hue ? "rounded-xs bg-(--mark-bg) bg-mark-overlay" : tone
     )}
     style:--mark-bg={hue ? `var(--color-mark-${hue})` : undefined}
@@ -66,7 +66,7 @@
     {#if mark}
       {@render mark()}
     {:else if Glyph}
-      <Glyph class={cn("block size-icon-sm", hue && "text-mark-glyph")} />
+      <Glyph class={cn("block size-icon-sm", hue && "text-on-ink")} />
     {/if}
   </span>
 {/if}

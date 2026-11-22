@@ -35,7 +35,7 @@ export const Away = {
 /** A machine switched off. */
 export const Off = {
   args: {
-    hue: "var(--color-machine-offline)",
+    hue: "var(--color-ink-subtle)",
     name: "nimbus-build-02",
     meta: "Linux · off since Tuesday",
     presence: "off",

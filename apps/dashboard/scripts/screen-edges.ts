@@ -139,12 +139,12 @@ function literal(value: string): string {
  * hex, where the browser, mixing the tokens, keeps full precision.
  */
 const scrimmed = (under: string): string =>
-  `color-mix(in srgb, ${literal("var(--background)")} calc(${literal("var(--scrim-mix)")}), ${literal(`var(${under})`)})`;
+  `color-mix(in srgb, ${literal("var(--color-surface-page)")} calc(${literal("var(--scrim-mix)")}), ${literal(`var(${under})`)})`;
 
 const RAISED = "--color-surface-raised";
 const RECESS = "--color-surface-recess";
 const SHELF = "--color-surface-shelf";
-const SIDEBAR = "--sidebar";
+const SIDEBAR = "--color-surface-page";
 const BAR_UNDER = ':where([data-bar~="floating"], [data-bar~="hosting"])';
 const SCRIM = ['[data-scrim~="open"]', '[data-scrim~="lightbox"]'];
 const NARROW =

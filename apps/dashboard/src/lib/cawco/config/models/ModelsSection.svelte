@@ -404,7 +404,7 @@
     detach(readImage(), "readImage");
   });
   /** A status line's swap: each line blurs in over the panel tier and out over the exit's. */
-  const lineBlur = (tier: "--duration-panel" | "--duration-exit") => ({
+  const lineBlur = (tier: "--duration-panel" | "--duration-fade") => ({
     duration: dur(tier),
     easing: easeOut,
     amount: 2,
@@ -466,11 +466,11 @@
         {/if}
       {/snippet}
     </SectionHeader>
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
       One way to reach Jev. A TypeSafe key held in Jev below takes over from it.
     </p>
     <div
-      class="overflow-hidden motion-safe:transition-[block-size] motion-safe:duration-(--duration-morph) motion-safe:ease-drawer"
+      class="overflow-hidden motion-safe:transition-[block-size] motion-safe:duration-(--duration-fade) motion-safe:ease-drawer"
       style:block-size={openrouterHeight ? `${openrouterHeight}px` : undefined}
     >
       <!-- A status line that swaps: the lines cross-fade over each other in one grid cell. -->
@@ -482,7 +482,7 @@
             class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-space-2 text-ink-muted tone-ok:text-ink-strong"
             data-tone={phase === "connected" ? "ok" : "off"}
             in:blur={lineBlur("--duration-panel")}
-            out:blur={lineBlur("--duration-exit")}
+            out:blur={lineBlur("--duration-fade")}
           >
             {#if phase === "exchanging"}
               <LiveDot data-pulse data-slot="dot" size="row" tone="muted" />
@@ -550,7 +550,7 @@
         </div>
       {/snippet}
     </SectionHeader>
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
       Answers the hub's yes/no questions: meaning rules, fleet watch,
       suggestions and its own judgments. It goes straight to TypeSafe while a
       key is held here, otherwise through OpenRouter.
@@ -581,7 +581,7 @@
       />
     </Field>
     <div
-      class="overflow-hidden motion-safe:transition-[block-size] motion-safe:duration-(--duration-morph) motion-safe:ease-drawer"
+      class="overflow-hidden motion-safe:transition-[block-size] motion-safe:duration-(--duration-fade) motion-safe:ease-drawer"
       style:block-size={keyHeight ? `${keyHeight}px` : undefined}
     >
       <div data-slot="stack" class="grid" {@attach measureKey}>
@@ -593,7 +593,7 @@
             data-testid="typesafe-key-state"
             data-tone={keyPhase === "held" ? "ok" : "off"}
             in:blur={lineBlur("--duration-panel")}
-            out:blur={lineBlur("--duration-exit")}
+            out:blur={lineBlur("--duration-fade")}
           >
             {#if jev?.typesafe}
               {@render doneCheck()}
@@ -637,7 +637,7 @@
     class="flex flex-col gap-space-2 border-t border-border-hairline pt-space-5"
   >
     <SectionHeader level={2} hue={HUE} icon={IconRules} label="Fleet watch" />
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
       Reads every session's stream for a loop or a stall. A yes from Jev, or a
       second signal while Jev is off, starts one triage that tells the session's
       lead. In a project whose Caw is off, it tells you instead.

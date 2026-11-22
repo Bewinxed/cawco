@@ -64,12 +64,12 @@
        and a way to put the card away. -->
   <section
     aria-label={offerWords.joinedLabel}
-    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-border-control rounded-lg bg-surface-raised p-space-3 shadow-hairline motion-safe:animate-offer-settle"
+    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-border-control rounded-lg bg-surface-raised p-space-3 shadow-sm motion-safe:animate-rise-in"
     data-offer={instanceId}
     role="status"
   >
     <p
-      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-c-offer-line type-body text-ink-strong"
+      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-ch-24 type-body text-ink-strong"
     >
       <IconFolder
         data-project-offer-glyph
@@ -97,11 +97,11 @@
 {:else if offer}
   <section
     aria-label={offerWords.offerLabel}
-    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-border-control rounded-lg bg-surface-raised p-space-3 shadow-hairline motion-safe:animate-offer-settle"
+    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-border-control rounded-lg bg-surface-raised p-space-3 shadow-sm motion-safe:animate-rise-in"
     data-offer={instanceId}
   >
     <p
-      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-c-offer-line type-body text-ink-strong"
+      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-ch-24 type-body text-ink-strong"
     >
       <IconFolder
         data-project-offer-glyph

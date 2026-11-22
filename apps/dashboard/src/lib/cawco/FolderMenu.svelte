@@ -110,7 +110,7 @@
           {#if pickedHue !== undefined}
             <button
               class="select-none rounded-full px-2 py-0.5 type-label text-ink-muted
-                     transition-colors duration-(--duration-control) hover:bg-accent hover:text-ink-strong"
+                     transition-colors duration-(--duration-control) hover:bg-surface-hover hover:text-ink-strong"
               onclick={() => folderPrefs.setHue(cwd, undefined)}
               type="button"
             >

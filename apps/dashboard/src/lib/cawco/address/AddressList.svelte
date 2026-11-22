@@ -50,7 +50,7 @@
 
 <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list). -->
 <ul
-  class="m-0 grid list-none overflow-hidden rounded-well border border-border-well bg-surface-well p-0"
+  class="m-0 grid list-none overflow-hidden rounded-sm border border-border-control bg-surface-sunk p-0"
   data-slot="address-list"
   role="list"
 >

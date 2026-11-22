@@ -91,7 +91,7 @@
       return "bg-surface-raised inset-ring-2 inset-ring-brand-solid";
     }
     return own
-      ? "bg-(--wash,var(--color-surface-recess-deep))"
+      ? "bg-(--wash,var(--color-surface-sunk))"
       : "bg-surface-recess";
   });
   const scopeTip = $derived.by(() => {
@@ -124,7 +124,7 @@
       : undefined}
   >
     <span
-      class="grid size-8 flex-none place-items-center rounded-xs bg-surface-raised text-ink-strong shadow-tile"
+      class="grid size-8 flex-none place-items-center rounded-xs bg-surface-raised text-ink-strong shadow-sm"
     >
       <Glyph aria-hidden="true" class="size-icon-sm" />
     </span>
@@ -235,7 +235,7 @@
   </div>
   {#if own && !brief}
     <button
-      class="self-center type-meta text-brand-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-brand-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid aria-disabled:text-ink-muted"
+      class="self-center type-meta text-brand-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid aria-disabled:text-ink-muted"
       aria-disabled={asking !== null || undefined}
       onclick={() => {
         if (asking === null) {

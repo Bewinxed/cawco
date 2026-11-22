@@ -3,15 +3,15 @@
   import { tv } from "#lib/utils.js";
 
   const sidebarMenuButtonVariants = tv({
-    base: "peer/menu-button group/menu-button mark-line focus-inset press-tint flex w-full select-none items-center gap-2 overflow-hidden rounded-sm px-3 py-2 text-left type-label transition-[width,height,padding,color,background-color] duration-(--duration-toggle) ease-out hover:text-ink-strong active:text-ink-strong disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:font-medium data-active:text-selected-ink data-open:hover:text-ink-strong [&>span:last-child]:min-w-0 [&>span:last-child]:overflow-clip [&>span:last-child]:text-ellipsis [&>span:last-child]:whitespace-nowrap [&>svg]:size-icon-md [&>svg]:shrink-0 data-active:[&_svg]:text-selected-icon",
+    base: "peer/menu-button group/menu-button mark-line focus-inset press-tint flex w-full select-none items-center gap-2 overflow-hidden rounded-sm px-3 py-2 text-left type-label transition-[width,height,padding,color,background-color] duration-(--duration-fade) ease-out hover:text-ink-strong active:text-ink-strong disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:font-medium data-active:text-brand-ink data-open:hover:text-ink-strong [&>span:last-child]:min-w-0 [&>span:last-child]:overflow-clip [&>span:last-child]:text-ellipsis [&>span:last-child]:whitespace-nowrap [&>svg]:size-icon-md [&>svg]:shrink-0 data-active:[&_svg]:text-brand-ink",
     variants: {
       variant: {
         default: "hover:text-ink-strong",
         outline:
-          "bg-surface-page shadow-[0_0_0_1px_var(--color-border)] hover:text-ink-strong hover:shadow-[0_0_0_1px_var(--color-border-control)]",
+          "bg-surface-page shadow-[0_0_0_1px_var(--color-border-control)] hover:text-ink-strong hover:shadow-[0_0_0_1px_var(--color-border-control)]",
       },
       size: {
-        default: "h-c-nav-h type-label",
+        default: "h-row type-label",
         sm: "h-space-8 type-meta",
         lg: "h-14 px-3 type-label",
       },
@@ -24,8 +24,8 @@
           area reaching 44px past its box (The 44 Touch Rule). */
       row: {
         nav: "gap-2.5 px-2.5 type-body",
-        list: "h-(--row-compact-h) gap-(--row-compact-gap) py-0 pr-(--row-compact-pad-end) pl-(--row-compact-gap)",
-        avatar: "touch-hit size-c-btn-h-sm justify-center overflow-visible p-0",
+        list: "h-row-compact gap-space-2 py-0 pr-space-2 pl-space-2",
+        avatar: "touch-hit size-control-sm justify-center overflow-visible p-0",
       },
     },
     defaultVariants: {

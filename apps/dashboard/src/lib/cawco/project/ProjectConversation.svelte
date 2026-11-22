@@ -465,7 +465,7 @@
    * instead.
    */
   const reserved = $derived(
-    `calc(var(--spacing-space-4) + var(--safe-bottom) + ${composerFoot > 0 ? `${composerFoot}px` : "var(--spacing-c-composer-panel)"} + var(--spacing-space-2))`
+    `calc(var(--spacing-space-4) + var(--safe-bottom) + ${composerFoot > 0 ? `${composerFoot}px` : "var(--composer-panel)"} + var(--spacing-space-2))`
   );
 </script>
 
@@ -503,7 +503,7 @@
   class="relative flex h-full min-h-0 flex-auto flex-col timeline-scope-transcript-head"
   data-caw-panel
   data-caw-tab={onPreview ? "preview" : "assistant"}
-  style:--bar-room={shown || sheet ? "var(--spacing-c-top-bar-h)" : undefined}
+  style:--bar-room={shown || sheet ? "var(--spacing-control-lg)" : undefined}
 >
   {#if (shown || sheet) && !onPreview}
     <BarFloat tint="bg-surface-recess">
@@ -594,7 +594,7 @@
             browsingHarness={undefined}
             docked={{
               draft: lead.draft,
-              headRoom: "var(--spacing-c-top-bar-h)",
+              headRoom: "var(--spacing-control-lg)",
             }}
             focused={!onPreview}
             afterRows={setup ? setupTail : atWorkTail}
@@ -676,7 +676,7 @@
                true, and the one thing that changes it, the machines, where
                the composer stands when there is one. -->
             <div
-              class="absolute inset-x-0 bottom-(--off-bottom) z-(--layer-dock) mx-auto w-c-composer-w"
+              class="absolute inset-x-0 bottom-(--off-bottom) z-(--layer-dock) mx-auto w-(--composer-w)"
               data-safe-bottom
               style:--off-bottom={"calc(var(--spacing-space-4) + var(--safe-bottom))"}
               in:crossIn
@@ -748,7 +748,7 @@
       height="room"
       overflow="clip"
       pad="none"
-      style="--lead-w: min(var(--spacing-c-lead-card-w), calc(100vw - var(--spacing-space-7))); --pop-max-h: min(calc(var(--spacing) * 190), var(--bits-popover-content-available-height, var(--spacing-c-sheet-max-h)))"
+      style="--lead-w: min(calc(var(--spacing) * 104), calc(100vw - var(--spacing-space-6))); --pop-max-h: min(calc(var(--spacing) * 190), var(--bits-popover-content-available-height, var(--sheet-max-h)))"
       collisionPadding={12}
       customAnchor={cardAnchor}
       onfocusin={() => {

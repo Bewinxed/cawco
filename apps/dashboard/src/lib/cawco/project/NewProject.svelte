@@ -188,7 +188,7 @@
   const footBox = $derived(
     footHeight > 0
       ? `calc(${footHeight}px + var(--spacing-space-4))`
-      : "calc(var(--spacing-c-composer-panel) + var(--spacing-space-4))"
+      : "calc(var(--composer-panel) + var(--spacing-space-4))"
   );
 
   /** The prompt a start that did not go through carried, and its id: the same prompt again is the same project. */
@@ -223,7 +223,7 @@
 </script>
 
 <main
-  class="mx-auto flex w-full max-w-288 flex-col items-center gap-space-8 px-space-6 pt-(--pad-top) pb-space-8 max-phone:gap-space-6 max-phone:px-space-4 max-phone:pt-space-7 max-phone:pb-space-6"
+  class="mx-auto flex w-full max-w-288 flex-col items-center gap-space-8 px-space-6 pt-(--pad-top) pb-space-8 max-phone:gap-space-6 max-phone:px-space-4 max-phone:pt-space-6 max-phone:pb-space-6"
   style:--pad-top="calc(var(--spacing-space-8) * 2)"
 >
   <!-- His slot goes with him when he peeks over a card, and comes back
@@ -245,7 +245,7 @@
            is `CAW_SIZE`; keep them equal. -->
       <div
         data-slot="caw-80"
-        class="grid min-h-c-caw-hero place-items-center"
+        class="grid min-h-20 place-items-center"
         data-share={made ? `caw:${made}` : undefined}
       >
         <Caw ongone={gone} present={!leaving} size={CAW_SIZE} status="ready" />

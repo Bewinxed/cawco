@@ -148,7 +148,7 @@
     {:else}
       <IconCheck
         aria-hidden="true"
-        class="size-icon-md text-selected-icon opacity-0 group-aria-checked:opacity-100 group-aria-selected:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out"
+        class="size-icon-md text-brand-ink opacity-0 group-aria-checked:opacity-100 group-aria-selected:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out"
       />
     {/if}
   </span>

@@ -32,7 +32,7 @@
 
 <div
   data-slot="finder-field"
-  class="group/field flex items-center flex-none gap-space-2 h-c-row-h ps-space-3 pe-space-1 border-b border-b-border-hairline data-phone:h-c-find-phone-h data-phone:border-b-none data-phone:border-t data-phone:border-t-border-hairline"
+  class="group/field flex items-center flex-none gap-space-2 h-control-lg ps-space-3 pe-space-1 border-b border-b-border-hairline data-phone:h-13 data-phone:border-b-none data-phone:border-t data-phone:border-t-border-hairline"
   data-phone={phone || undefined}
 >
   <SearchIcon
@@ -49,7 +49,7 @@
   {#if value}
     <button
       data-slot="clear"
-      class="select-none grid place-items-center flex-none size-c-btn-h border-none border-current rounded-md bg-transparent text-ink-muted hover:not-active:bg-surface-hover active:bg-surface-fill group-data-phone/field:size-c-btn-h-lg"
+      class="select-none grid place-items-center flex-none size-control-md border-none border-current rounded-md bg-transparent text-ink-muted hover:not-active:bg-surface-hover active:bg-surface-hover group-data-phone/field:size-control-lg"
       aria-label="Clear the words"
       onclick={onclear}
       type="button"

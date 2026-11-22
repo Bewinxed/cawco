@@ -55,11 +55,11 @@
 
   /** The app's own ramp, by position — the SDK's `color` is not a CSS colour. */
   const SWATCH = [
-    "var(--color-chart-2)",
-    "var(--color-chart-3)",
-    "var(--color-chart-4)",
-    "var(--color-chart-5)",
-    "var(--color-chart-1)",
+    "var(--color-status-live-glyph)",
+    "var(--color-mark-7)",
+    "var(--color-status-attn-glyph)",
+    "var(--color-ink-subtle)",
+    "var(--color-ink-strong)",
   ];
   const swatch = (index: number): string => SWATCH[index % SWATCH.length];
 
@@ -134,7 +134,7 @@
 
   <Popover.Content align="end" frame="panel" pad="none" side="top">
     <div
-      class="mark-line flex items-center gap-2 border-b border-border px-3 py-2.5"
+      class="mark-line flex items-center gap-2 border-b border-border-control px-3 py-2.5"
     >
       <IconWindow class="size-icon-md text-ink-muted" />
       <span class="type-label">Context window</span>
@@ -142,8 +142,8 @@
         <span
           class={[
             "ml-auto type-label tabular-nums",
-            band === "critical" && "text-error-9",
-            band === "warn" && "text-warning-9",
+            band === "critical" && "text-status-fail-glyph",
+            band === "warn" && "text-status-attn-glyph",
             band !== "critical" && band !== "warn" && "text-ink-muted",
           ]}>{usage.percentage}%</span
         >
@@ -174,7 +174,7 @@
         </p>
       </div>
 
-      <ul class="max-h-56 overflow-y-auto border-t border-border px-3 py-2">
+      <ul class="max-h-56 overflow-y-auto border-t border-border-control px-3 py-2">
         {#each usage.categories as category, index (category.name)}
           <li class="flex items-center gap-2 py-space-1 type-label">
             <span
@@ -192,7 +192,7 @@
 
     {#if compacting}
       <p
-        class="mark-line flex items-center gap-2 border-t border-border px-3 py-2 type-label"
+        class="mark-line flex items-center gap-2 border-t border-border-control px-3 py-2 type-label"
       >
         <span class="breathe loops inline-flex" data-box {@attach loopInStep}
           ><IconCompact class="size-space-4" /></span
@@ -200,7 +200,7 @@
         <span>Compacting now — the session is rewriting its own context.</span>
       </p>
     {:else if compaction}
-      <p class="border-t border-border px-3 py-2 type-label text-ink-muted">
+      <p class="border-t border-border-control px-3 py-2 type-label text-ink-muted">
         {#if compaction.result === "failed"}
           Last compaction failed{compaction.error
             ? `: ${compaction.error}`

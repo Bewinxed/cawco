@@ -65,7 +65,7 @@
      .mark-text, centred on the lead mark (the rows under it hold other things) -->
 <div
   data-slot="row"
-  class="group/row relative grid min-h-c-row-h grid-cols-(--row-cols) items-baseline gap-x-space-3 concentric-sm px-space-3 py-space-2 data-stale:opacity-55"
+  class="group/row relative grid min-h-control-lg grid-cols-(--row-cols) items-baseline gap-x-space-3 concentric-sm px-space-3 py-space-2 data-stale:opacity-55"
   data-flip
   data-artifact={artifact}
   data-kind={kind}
@@ -73,12 +73,12 @@
   data-share={share}
   data-stale={held || undefined}
   style:--peek-glyph={artifact === undefined
-    ? "var(--spacing-c-peek-glyph)"
+    ? "var(--spacing-icon-md)"
     : "var(--spacing-icon-sm)"}
   style:--peek-ink={artifact === undefined
-    ? "calc((var(--spacing-c-btn-h-xs) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24)"
-    : "calc((var(--spacing-c-btn-h-xs) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 5.25 / 24)"}
-  style:--peek-room={"calc(var(--spacing-c-btn-h-xs) - var(--peek-ink) + var(--spacing-space-2))"}
+    ? "calc((var(--spacing-control-xs) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24)"
+    : "calc((var(--spacing-control-xs) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 5.25 / 24)"}
+  style:--peek-room={"calc(var(--spacing-control-xs) - var(--peek-ink) + var(--spacing-space-2))"}
   style:--row-cols="auto minmax(0, 1fr) auto"
 >
   <!-- The whole row opens it; the panel closes. A choice opens nothing:
@@ -100,7 +100,7 @@
        wide (NoticeRow), so both groups' words start on one line. -->
   <span
     data-slot="lead"
-    class="pointer-events-none relative col-1 row-1 grid h-c-row-mark w-c-row-lead place-items-center self-center text-ink-muted"
+    class="pointer-events-none relative col-1 row-1 grid h-4.5 w-row-compact place-items-center self-center text-ink-muted"
   >
     {@render lead()}
   </span>

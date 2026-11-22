@@ -3,7 +3,7 @@
  * jumping: when the content inside it changes (a popover's list arrives, an
  * error line appears, a card switches what it shows), the container is held
  * at the size it is drawn at and animated to its new natural size on the
- * Web Animations API, over --duration-morph on --ease-drawer. Attach to the container:
+ * Web Animations API, over --duration-fade on --ease-drawer. Attach to the container:
  * `{@attach morph()}`.
  *
  * The tween starts before the frame is laid out, never from a
@@ -326,7 +326,7 @@ export function morph({
         frames,
         clock
           ? { duration: clock.ms, easing: clock.easing }
-          : { duration: ms ?? dur("--duration-morph"), easing: CURVE.drawer }
+          : { duration: ms ?? dur("--duration-fade"), easing: CURVE.drawer }
       );
     };
 

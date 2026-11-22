@@ -778,8 +778,8 @@ function conflict(a, b) {
  * a kit root's `data-[direction=vertical]:after:left-0`). At equal
  * specificity it holds each chain's states, so it is a contained pair with
  * each, which this rule already leaves to the sort: Tailwind 4.3.3 sorts
- * `max-phone:@max-decisions-900px:hidden` after both `max-phone:block` and
- * `@max-decisions-900px:hidden`.
+ * `max-phone:@max-desk:hidden` after both `max-phone:block` and
+ * `@max-desk:hidden`.
  */
 function covered(a, b, property, others) {
   const both = new Set([...a.states, ...b.states].map((s) => s.key));

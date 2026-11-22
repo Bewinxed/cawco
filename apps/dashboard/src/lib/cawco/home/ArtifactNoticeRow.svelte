@@ -97,7 +97,7 @@
     <a
       data-slot="name"
       data-artifact-notice={notice.artifactId}
-      class="select-none pe-(--x-room) min-w-0 rounded-xs type-label wrap-anywhere text-ink-row no-underline focus-inset hover:text-ink-strong"
+      class="select-none pe-(--x-room) min-w-0 rounded-xs type-label wrap-anywhere text-ink-strong no-underline focus-inset hover:text-ink-strong"
       href={needLinkOf(notice.href)}
       onclick={opened}>{words}</a
     >
@@ -105,7 +105,7 @@
     <span
       data-slot="name"
       data-artifact-notice={notice.artifactId}
-      class="pe-(--x-room) min-w-0 type-label wrap-anywhere text-ink-row"
+      class="pe-(--x-room) min-w-0 type-label wrap-anywhere text-ink-strong"
       >{words}</span
     >
   {/if}

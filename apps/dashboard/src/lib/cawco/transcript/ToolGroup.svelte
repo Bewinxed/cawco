@@ -316,7 +316,7 @@
       return { duration: 0 };
     }
     return {
-      duration: dur("--duration-menu"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
@@ -484,7 +484,7 @@
                over it. -->
           <span
             data-slot="glyph"
-            class="col-start-1 row-start-1 grid place-items-center {d.color} data-err:text-error-9"
+            class="col-start-1 row-start-1 grid place-items-center {d.color} data-err:text-status-fail-glyph"
             data-err={failed || undefined}
             in:glyphIn
             out:glyphOut
@@ -563,7 +563,7 @@
           >{#each factParts(d.fact) as part, i (i)}
             <span
               data-add={part.add || undefined}
-              class="not-data-del:data-add:text-success-9 data-del:text-error-9"
+              class="not-data-del:data-add:text-status-done-glyph data-del:text-status-fail-glyph"
               data-del={part.del || undefined}>{part.text}</span
             >
           {/each}</span
@@ -626,7 +626,7 @@
                  stands in. -->
             <div
               data-slot="preview-tool"
-              class="relative flex items-center gap-space-2 max-w-(--tx-preview-max) min-h-(--tx-preview-min) p-space-2 my-space-2 border border-border-hairline rounded-md bg-surface-raised shadow-tile not-has-[[data-slot=page-thumb]]:w-fit has-hover:bg-surface-hover has-focus-visible:outline-(length:--focus-ring-width) has-focus-visible:outline-focus-ring has-focus-visible:outline-offset-(--focus-ring-inset)"
+              class="relative flex items-center gap-space-2 max-w-(--tx-preview-max) min-h-(--tx-preview-min) p-space-2 my-space-2 border border-border-hairline rounded-md bg-surface-raised shadow-sm not-has-[[data-slot=page-thumb]]:w-fit has-hover:bg-surface-hover has-focus-visible:outline-(length:--focus-ring-width) has-focus-visible:outline-focus-ring has-focus-visible:outline-offset-(--focus-ring-inset)"
               data-artifact={called?.id}
               data-share="preview:{m.instanceId}"
               data-share-ttl="10000"
@@ -640,7 +640,7 @@
                 aria-disabled={busy || !called || undefined}
                 aria-label={preview?.title || name}
                 data-slot="artifact-open"
-                class="select-none flex items-center gap-space-2 flex-1 min-w-0 border-none border-current p-space-2 bg-transparent text-ink-strong text-size-label font-medium text-start coarse:min-h-c-btn-h-lg after:absolute after:inset-0 after:rounded-md focus-visible:outline-off"
+                class="select-none flex items-center gap-space-2 flex-1 min-w-0 border-none border-current p-space-2 bg-transparent text-ink-strong text-size-label font-medium text-start coarse:min-h-control-lg after:absolute after:inset-0 after:rounded-md focus-visible:outline-off"
                 onclick={whileIdle(
                   () => busy || !called,
                   () => {
@@ -655,7 +655,7 @@
               >
                 <span
                   data-slot="mark"
-                  class="size-c-row-mark shrink-0 grid place-items-center rounded-xs text-mark-glyph bg-mark-overlay bg-mark-6"
+                  class="size-4.5 shrink-0 grid place-items-center rounded-xs text-on-ink bg-mark-overlay bg-mark-6"
                   ><IconWindow class="size-icon-sm" /></span
                 >
                 <!-- The name wraps, whole, and breaks inside a word only
@@ -690,7 +690,7 @@
               <!-- What happened and the way back, under the row that asked;
                    the row itself is still the way to open it. -->
               <p
-                class="max-w-(--tx-preview-max) mb-space-2 text-error-9 text-size-meta font-normal"
+                class="max-w-(--tx-preview-max) mb-space-2 text-status-fail-glyph text-size-meta font-normal"
                 role="alert"
               >
                 Couldn't open {name}: {openFailed.get(callId(m))}
@@ -711,7 +711,7 @@
               aria-controls={opened.has(callId(m)) ? body : undefined}
               aria-expanded={disclosed.get()}
               data-slot="trow"
-              class="select-none group/trow rail-line press-tint w-full min-h-(--tx-line) coarse:min-h-(--tx-line-touch) text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
+              class="select-none group/trow rail-line press-tint w-full min-h-(--tx-line) coarse:min-h-control-lg text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
               data-state={disclosed.get() ? "open" : "closed"}
               onclick={() => disclosed.set(!disclosed.get())}
               type="button"
@@ -779,7 +779,7 @@
                                 <p class="flex flex-wrap gap-space-1 m-0">
                                   {#each said.files as file, i (i)}
                                     <code
-                                      class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-code-bg type-code"
+                                      class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-surface-recess type-code"
                                       >{file}</code
                                     >
                                   {/each}
@@ -795,16 +795,16 @@
                        it attempted, under the harness's reason. The file path
                        in each header reads at the text column, the diff's
                        frame reaching out past it by its 1px border and its
-                       header's inset (`--tx-diff-head-inline`). -->
+                       header's inset (`--spacing-space-3`). -->
                       <div
                         class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ms-(--diffs-start)"
-                        style:--diffs-inset={"calc(var(--tx-diff-head-inline) + 1px)"}
+                        style:--diffs-inset={"calc(var(--spacing-space-3) + 1px)"}
                         style:--diffs-start={"calc(var(--x-hang) - var(--diffs-inset))"}
                       >
                         {#if refusal}
                           <p
                             data-slot="refusal"
-                            class="ms-(--diffs-inset) text-size-label text-error-9 wrap-anywhere"
+                            class="ms-(--diffs-inset) text-size-label text-status-fail-glyph wrap-anywhere"
                           >
                             {refusal}
                           </p>
@@ -850,7 +850,7 @@
                            it: prose at the text column, with no well around
                            them. -->
                       <div
-                        class="mt-space-1 mb-space-3 ms-(--x-hang) max-w-c-measure"
+                        class="mt-space-1 mb-space-3 ms-(--x-hang) max-w-measure"
                       >
                         <ToolProse source={proseOf(toolInput)} />
                       </div>
@@ -901,7 +901,7 @@
           {:else}
             <div
               data-slot="trow"
-              class="rail-line w-full min-h-(--tx-line) coarse:min-h-(--tx-line-touch) text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
+              class="rail-line w-full min-h-(--tx-line) coarse:min-h-control-lg text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
             >
               {@render line()}
             </div>

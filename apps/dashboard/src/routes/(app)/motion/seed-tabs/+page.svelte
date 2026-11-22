@@ -65,7 +65,7 @@
     {/snippet}
     {#snippet action()}
       <form
-        class="flex w-c-bench-field-w max-w-full gap-space-2"
+        class="flex w-120 max-w-full gap-space-2"
         data-sveltekit-reload
         method="get"
       >

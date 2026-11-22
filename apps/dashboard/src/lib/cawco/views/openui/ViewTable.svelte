@@ -55,7 +55,7 @@
 <div
   data-block-wide={wide || undefined}
   data-slot="ledger"
-  class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+  class="overflow-hidden rounded-lg bg-surface-raised shadow-sm"
   {@attach needsRoom}
 >
   <Table.Root fadeEdges stacks="phone" style="--card-cols: minmax(0, 1fr)">
@@ -72,7 +72,8 @@
         <Table.Row variant="stacks">
           {#each row as cell, i (i)}
             <Table.Cell
-              class={i === 0 ? "@phone/table:min-w-c-view-lead-min" : undefined}
+              class={i === 0 ? "@phone/table:min-w-(--min-w)" : undefined}
+              style={i === 0 ? "--min-w: calc(var(--spacing) * 36)" : undefined}
               variant={i === 0 ? "view-lead" : "view-wraps"}
             >
               {#if i > 0 && columns[i]}
@@ -83,7 +84,7 @@
                 >
               {/if}
               {#if typeof cell === "string" || typeof cell === "number"}
-                <span class={i === 0 ? "type-label text-ink-row" : undefined}
+                <span class={i === 0 ? "type-label text-ink-strong" : undefined}
                   >{cell}</span
                 >
               {:else}

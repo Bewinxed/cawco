@@ -212,7 +212,7 @@
      the title across the card, then id, stage, to-dos and age. -->
 <div
   data-slot="ledger"
-  class="group/ledger overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+  class="group/ledger overflow-hidden rounded-lg bg-surface-raised shadow-sm"
   data-pickable={onpick ? "" : undefined}
   style:--card-cols={onpick ? "auto auto auto 1fr auto" : "auto auto 1fr auto"}
 >
@@ -339,7 +339,7 @@
                 >
                   <span
                     data-slot="name"
-                    class="min-w-0 type-label text-ink-row truncate"
+                    class="min-w-0 type-label text-ink-strong truncate"
                     >{task.title}</span
                   >
                 </a>

@@ -184,7 +184,7 @@
   </Collapsible.Trigger>
 
   <Collapsible.Content>
-    <div class="mt-2 flex flex-col gap-2 border-t border-border pt-2">
+    <div class="mt-2 flex flex-col gap-2 border-t border-border-control pt-2">
       <div class="flex items-center gap-2">
         <Button
           aria-label="Parent directory"
@@ -207,7 +207,7 @@
               <div aria-label="Reading directory" role="status" out:revealOut>
                 {#each SKELETON_WIDTHS as width (width)}
                   <div
-                    class="flex h-c-btn-h-sm items-center gap-space-2 px-space-3"
+                    class="flex h-control-sm items-center gap-space-2 px-space-3"
                   >
                     <Skeleton cell="glyph" class="shrink-0" />
                     <Skeleton
@@ -222,7 +222,7 @@
             {:else if errorMessage}
               <span
                 data-slot="block"
-                class="block px-2 py-space-1 type-meta text-error-9"
+                class="block px-2 py-space-1 type-meta text-status-fail-glyph"
                 >{errorMessage}</span
               >
             {:else}

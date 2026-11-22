@@ -113,7 +113,18 @@ export interface RingAccount {
   week: RingWindow | null;
 }
 
-const hueToken = (hue: AccountHue): string => `var(--color-account-${hue})`;
+const ACCOUNT_MARK: Record<AccountHue, number> = {
+  orange: 2,
+  amber: 3,
+  green: 4,
+  cyan: 5,
+  blue: 6,
+  violet: 7,
+  rose: 8,
+};
+
+const hueToken = (hue: AccountHue): string =>
+  `var(--color-mark-${ACCOUNT_MARK[hue]})`;
 
 /**
  * The hues a set of accounts shown together are drawn in, in their order:

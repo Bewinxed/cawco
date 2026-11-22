@@ -113,7 +113,7 @@
   data-turn-who
   data-grouped={grouped || undefined}
   class={[
-    "flex items-center gap-space-2 text-size-label text-ink-muted font-medium mb-space-2 data-grouped:float-end data-grouped:items-baseline data-grouped:justify-end data-grouped:text-size-meta data-grouped:min-w-c-turn-clock-w data-grouped:min-h-(--who-line-h) data-grouped:mb-0 data-grouped:ms-space-3",
+    "flex items-center gap-space-2 text-size-label text-ink-muted font-medium mb-space-2 data-grouped:float-end data-grouped:items-baseline data-grouped:justify-end data-grouped:text-size-meta data-grouped:min-w-ch-9 data-grouped:min-h-(--who-line-h) data-grouped:mb-0 data-grouped:ms-space-3",
     !grouped && "mark-line",
   ]}
   style:--who-line-h={LINE_H}

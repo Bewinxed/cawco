@@ -325,7 +325,7 @@ function Empty({ onDraw }: { onDraw: () => void }) {
 
 /**
  * A file the canvas wouldn't take, said over its grid in the error formula:
- * it fades in, stands for `--duration-hold`, and fades out (canvas.css); a new
+ * it fades in, stands for `--duration-loop`, and fades out (canvas.css); a new
  * refusal replaces it.
  */
 function Refusal({ refusal, gone }: { refusal: Said; gone: () => void }) {
@@ -377,7 +377,7 @@ const unlinkedBecause = (hold: CanvasHold | null): string =>
 /**
  * Whether the refusal line shows over the grid. The pen is off whenever the
  * canvas is refused; the line waits. Before the doc first syncs it shows
- * once the refusal has stood `--duration-wait-grace` (DESIGN.md, The Real Wait
+ * once the refusal has stood `--duration-loop` (DESIGN.md, The Real Wait
  * Rule: no feedback is needed under 1 s), counted from the host mounting
  * or its doc being replaced, so a good link that syncs in tens of ms shows
  * nothing. A
@@ -397,7 +397,7 @@ function useUnlinkedShown(hold: CanvasHold | null): boolean {
     }
     const timer = setTimeout(
       () => setGraced(generation),
-      tokenMs("--duration-wait-grace")
+      tokenMs("--duration-loop")
     );
     return () => clearTimeout(timer);
   }, [waiting, generation]);

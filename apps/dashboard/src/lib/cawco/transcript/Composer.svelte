@@ -382,7 +382,7 @@
   }
   /**
    * A minimized question's bar comes into the tray row once the card's
-   * fold (--duration-panel-exit) has landed, so the two never stand in one place
+   * fold (--duration-panel) has landed, so the two never stand in one place
    * at once: the fold speeds up as it goes and only crosses the tray row in
    * its last frames (measured at 390: 210 of its 220ms). It comes up --pop-rise
    * out of a --part-blur blur over --duration-control, as the card's own parts come up
@@ -391,7 +391,7 @@
   function askedIn(_node: Element): TransitionConfig {
     const still = !motionOk.current;
     return {
-      delay: still ? 0 : dur("--duration-panel-exit"),
+      delay: still ? 0 : dur("--duration-panel"),
       duration: dur("--duration-control"),
       easing: easeOut,
       css: (t, u) =>
@@ -400,10 +400,10 @@
           : `opacity: ${t}; translate: 0 calc(var(--pop-rise) * ${u}); filter: blur(calc(var(--part-blur) * ${u}))`,
     };
   }
-  /** The bar gives way to the card growing over it: a fade over --duration-exit. */
+  /** The bar gives way to the card growing over it: a fade over --duration-fade. */
   function askedOut(_node: Element): TransitionConfig {
     return {
-      duration: dur("--duration-exit"),
+      duration: dur("--duration-fade"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
@@ -789,7 +789,7 @@
   const GROUND_H =
     "calc(var(--dock-foot, 0px) + var(--layer-foot) + var(--spacing-space-8))";
   const LAYER_GROUND =
-    "linear-gradient(to top, var(--color-surface-recess) calc(var(--dock-foot, 0px) + var(--layer-foot)), var(--color-surface-recess-clear))";
+    "linear-gradient(to top, var(--color-surface-recess) calc(var(--dock-foot, 0px) + var(--layer-foot)), var(--surface-recess-clear))";
   /** The offers standing on the tray row: each conversation's, built, the one written to seen. */
   const offerStack = new OfferStack({
     showing: () => showing,
@@ -846,8 +846,8 @@
   style:--dock-foot={flush
     ? undefined
     : "calc(var(--spacing-space-4) + var(--safe-bottom))"}
-  style:--spacing-c-composer-w={flush ? "100%" : undefined}
-  style:--layer-foot="calc({dockFoot.panel}px + var(--spacing-c-tray-row) +
+  style:--composer-w={flush ? "100%" : undefined}
+  style:--layer-foot="calc({dockFoot.panel}px + var(--tray-row) +
   var(--spacing-space-2))"
 >
   <!-- The ground under an open layer (the plan, the tray's shelf, the list
@@ -885,7 +885,7 @@
          the desktop's step off the panel. -->
     <div
       data-slot="prompts"
-      class="grow shrink basis-0 min-h-0 w-c-composer-w not-group-data-flush/dock:desk:ms-c-composer-nudge flex flex-col justify-end pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto max-desk:mb-(--prompts-step)"
+      class="grow shrink basis-0 min-h-0 w-(--composer-w) not-group-data-flush/dock:desk:ms-space-1 flex flex-col justify-end pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto max-desk:mb-(--prompts-step)"
       inert={grown.askRaised}
       bind:this={offerStack.offers}
       {@attach reflow({ on: ["data-open", "data-railed"] })}
@@ -926,7 +926,7 @@
     </div>
   {/if}
   <!-- The row standing on the composer, outside its box: the delegate
-       tray's fixed row (app.css `--spacing-c-tray-row`), which a transcript keeps
+       tray's fixed row (app.css `--tray-row`), which a transcript keeps
        clear at its foot while something stands in it (SessionPane
        `trayStands`), and the suggestion chips standing on it (out of flow),
        over the transcript's foot. An offer stands on top of both. -->
@@ -934,7 +934,7 @@
        the positioned box the suggestion chips stand on. -->
   <div
     data-slot="lift"
-    class="relative flex-none w-c-composer-w not-group-data-flush/dock:desk:ms-c-composer-nudge pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
+    class="relative flex-none w-(--composer-w) not-group-data-flush/dock:desk:ms-space-1 pointer-events-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
     inert={grown.askRaised}
     {@attach dockFoot.measureLift}
   >
@@ -958,7 +958,7 @@
            the bar as it fades. -->
       {@const summary = askSummaryOf(ask)}
       <div
-        class="absolute inset-0 flex items-box-end pb-c-tray-gap pe-(--ring-room,0px) pointer-events-none opacity-(--waiting-shown,1)"
+        class="absolute inset-0 flex items-box-end pb-space-2 pe-(--ring-room,0px) pointer-events-none opacity-(--waiting-shown,1)"
         data-minimized-bar
         style:--ring-room={planRing
           ? `calc(${dockFoot.ringWidth}px + var(--spacing-space-2))`
@@ -1024,7 +1024,7 @@
            container its chips fold their words by. -->
       <div
         data-slot="progress-slot"
-        class="@container/tray absolute bottom-0 inset-x-0 z-1 flex justify-end items-end h-c-tray-row pb-c-tray-gap pointer-events-none"
+        class="@container/tray absolute bottom-0 inset-x-0 z-1 flex justify-end items-end h-(--tray-row) pb-space-2 pointer-events-none"
       >
         <div
           class="flex items-end gap-space-2 pointer-events-auto"
@@ -1038,14 +1038,14 @@
       <!-- One conversation's tray over the next while they cross-fade, in a
            column the composer's width: an auto column grew to the chips' own
            width. The slot is the tray's one row from the composer's first
-           render, chips or none (app.css `--spacing-c-tray-row`; a transcript keeps
+           render, chips or none (app.css `--tray-row`; a transcript keeps
            it clear while a chip stands, SessionPane `trayStands`), with the
            tray standing on its foot: a chip arriving late fills room already
            laid out, and the suggestion row standing on the slot never moves. The tray's shelf and panel
            float over it, in none of its flow. -->
       <div
         data-slot="tray-slot"
-        class="relative grid grid-cols-1 items-box-end min-h-c-tray-row transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
+        class="relative grid grid-cols-1 items-box-end min-h-(--tray-row) transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
         style:--ring-room={planRing
           ? `calc(${dockFoot.ringWidth}px + var(--spacing-space-2))`
           : undefined}
@@ -1059,7 +1059,7 @@
           <div
             data-slot="tray"
             data-composer-away={row.id !== showing || undefined}
-            class="row-start-1 col-start-1 transition-exit-show data-composer-away:opacity-0 data-composer-away:invisible data-composer-away:transition-exit-hide"
+            class="row-start-1 col-start-1 transition-fade-show data-composer-away:opacity-0 data-composer-away:invisible data-composer-away:transition-fade-hide"
           >
             <fleet.DelegateTray {held} parentId={row.delegatesOf} />
           </div>
@@ -1072,7 +1072,7 @@
   <div
     data-slot="composer"
     data-composer-holding={press.holding || undefined}
-    class="relative flex-none w-c-composer-w not-group-data-flush/dock:desk:ms-c-composer-nudge flex flex-col gap-space-3 pointer-events-none not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
+    class="relative flex-none w-(--composer-w) not-group-data-flush/dock:desk:ms-space-1 flex flex-col gap-space-3 pointer-events-none not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
     bind:this={canvas.column}
     {@attach dockFoot.measurePanel}
     in:rise
@@ -1244,7 +1244,7 @@
         <div
           data-composer-shown={queued.edit.shown || undefined}
           data-slot="edit-row"
-          class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-size-meta font-medium text-ink-muted pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:blur-(--part-blur) [&_[data-keep]]:transition-fade-blur [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-(--pop-rise) motion-safe:[&_[data-keep]]:transition-fade-slide-blur coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:filter-none data-composer-shown:[&_[data-keep]]:delay-(--duration-stagger)"
+          class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-size-meta font-medium text-ink-muted pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:blur-(--part-blur) [&_[data-keep]]:transition-fade-blur [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-(--pop-rise) motion-safe:[&_[data-keep]]:transition-fade-slide-blur coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:filter-none data-composer-shown:[&_[data-keep]]:delay-(--duration-step)"
           bind:this={queued.editRow}
           style:--edit-inset="{queued.edit.inset}px"
           style:bottom="{queued.edit.base}px"
@@ -1252,14 +1252,14 @@
         >
           <span
             data-slot="what"
-            class="inline-flex items-center gap-space-2 me-auto text-ink-row opacity-0 blur-(--part-blur) transition-fade-blur before:size-(--status-dot-size) before:rounded-pill before:bg-selected-icon motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none"
+            class="inline-flex items-center gap-space-2 me-auto text-ink-strong opacity-0 blur-(--part-blur) transition-fade-blur before:size-(--status-dot-size) before:rounded-pill before:bg-brand-ink motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none"
             >Editing your queued message</span
           >
           <!-- A touch screen has no Esc: a button keeps the message as it
              was, and the keys are not shown. -->
           <span
             data-slot="hint"
-            class="inline-flex items-center gap-space-1 whitespace-nowrap coarse:hidden max-phone:hidden opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none group-data-composer-shown/edit:delay-(--duration-stagger)"
+            class="inline-flex items-center gap-space-1 whitespace-nowrap coarse:hidden max-phone:hidden opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none group-data-composer-shown/edit:delay-(--duration-step)"
           >
             <Kbd>Enter</Kbd>
             replaces it · <Kbd>Esc</Kbd> keeps it
@@ -1369,8 +1369,8 @@
         onsubmit={(e) => e.preventDefault()}
         ontouchend={press.onholdnative}
         bind:this={pill}
-        style:--cin-pad="var(--spacing-c-composer-inset)"
-        style:--cin-ctl="var(--spacing-c-composer-field)"
+        style:--cin-pad="var(--spacing-space-2)"
+        style:--cin-ctl="var(--spacing-control-md)"
       >
         {#if menu.open}
           <!-- Above the input, not over it: the sentence being written stays legible
@@ -1393,7 +1393,7 @@
             data-slot="menu"
             class={floatingSurface({
               class:
-                "absolute inset-x-0 bottom-(--menu-foot) max-h-80 overflow-hidden p-0 origin-bottom [&_[data-slot=command]]:bg-transparent [&_[data-slot=command-list]]:max-h-80 [&_[data-slot=command-list]]:overflow-y-auto [&_[data-slot=command-list]]:overscroll-contain [&_[data-slot=command-list]]:p-space-1 [&_[data-slot=command-group]]:py-space-1 [&_[data-slot=command-group]]:px-0 [&_[data-slot=command-group]+[data-slot=command-group]]:border-t [&_[data-slot=command-group]+[data-slot=command-group]]:border-t-border-hairline [&_[data-slot=command-item]]:flex [&_[data-slot=command-item]]:items-baseline [&_[data-slot=command-item]]:gap-space-2 [&_[data-slot=command-item]]:min-h-c-btn-h-sm [&_[data-slot=command-item]]:py-space-1 [&_[data-slot=command-item]]:px-space-2 [&_[data-slot=command-item]]:rounded-sm [&_[data-slot=command-item]]:text-ink-strong coarse:[&_[data-slot=command-item]]:min-h-c-row-h",
+                "absolute inset-x-0 bottom-(--menu-foot) max-h-80 overflow-hidden p-0 origin-bottom [&_[data-slot=command]]:bg-transparent [&_[data-slot=command-list]]:max-h-80 [&_[data-slot=command-list]]:overflow-y-auto [&_[data-slot=command-list]]:overscroll-contain [&_[data-slot=command-list]]:p-space-1 [&_[data-slot=command-group]]:py-space-1 [&_[data-slot=command-group]]:px-0 [&_[data-slot=command-group]+[data-slot=command-group]]:border-t [&_[data-slot=command-group]+[data-slot=command-group]]:border-t-border-hairline [&_[data-slot=command-item]]:flex [&_[data-slot=command-item]]:items-baseline [&_[data-slot=command-item]]:gap-space-2 [&_[data-slot=command-item]]:min-h-control-sm [&_[data-slot=command-item]]:py-space-1 [&_[data-slot=command-item]]:px-space-2 [&_[data-slot=command-item]]:rounded-sm [&_[data-slot=command-item]]:text-ink-strong coarse:[&_[data-slot=command-item]]:min-h-control-lg",
             })}
             data-side="top"
             data-state="open"
@@ -1510,10 +1510,10 @@
           style:--roll-move="0 var(--roll-y)"
           style:--roll-clip={"inset(calc(var(--roll-reach) * -1) calc(var(--roll-reach) * -1) var(--roll-y))"}
           style:--fold-clip={"inset(calc(var(--roll-reach) * -1) calc(var(--roll-reach) * -1) calc(var(--field-pad) + var(--roll-y, 0px)))"}
-          style:--cue-top-fade={"linear-gradient(to bottom, transparent, var(--color-mask-opaque) var(--cue-run))"}
-          style:--cue-bottom-fade={"linear-gradient(to top, transparent, var(--color-mask-opaque) var(--cue-run))"}
-          style:--cue-both-fade={"linear-gradient(to bottom, transparent, var(--color-mask-opaque) var(--cue-run), var(--color-mask-opaque) calc(100% - var(--cue-run)), transparent)"}
-          style:--fold-fade={"linear-gradient(to right, var(--color-mask-opaque) calc(100% - calc(var(--spacing) * 18) - var(--spacing-space-8)), transparent calc(100% - calc(var(--spacing) * 18)))"}
+          style:--cue-top-fade={"linear-gradient(to bottom, transparent, var(--color-ink-strong) var(--cue-run))"}
+          style:--cue-bottom-fade={"linear-gradient(to top, transparent, var(--color-ink-strong) var(--cue-run))"}
+          style:--cue-both-fade={"linear-gradient(to bottom, transparent, var(--color-ink-strong) var(--cue-run), var(--color-ink-strong) calc(100% - var(--cue-run)), transparent)"}
+          style:--fold-fade={"linear-gradient(to right, var(--color-ink-strong) calc(100% - calc(var(--spacing) * 18) - var(--spacing-space-8)), transparent calc(100% - calc(var(--spacing) * 18)))"}
           style:--field-pad="calc((var(--cin-ctl) - 1lh) / 2)"
           style:--cue-run="1lh"
           onclick={(event) => {
@@ -1615,7 +1615,7 @@
             <span
               data-slot="flight"
               aria-hidden="true"
-              class="absolute inset-0 z-2 grid grid-cols-1 content-unsafe-end items-unsafe-end py-(--field-pad) px-0 font-sans text-(length:--text-field-floor) leading-ui text-ink-strong whitespace-pre-wrap wrap-break-word pointer-events-none clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
+              class="absolute inset-0 z-2 grid grid-cols-1 content-unsafe-end items-unsafe-end py-(--field-pad) px-0 font-sans text-row leading-ui text-ink-strong whitespace-pre-wrap wrap-break-word pointer-events-none clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
               style:--flight-clip={"inset(0 calc(-1 * var(--spacing-space-2)) 0 calc(-1 * var(--spacing-space-3)))"}
             >
               <span

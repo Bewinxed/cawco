@@ -42,12 +42,12 @@
   {#each made as task (task.id)}
     <li
       data-slot="tile"
-      class="flex min-w-0 flex-col gap-space-2 rounded-lg bg-surface-raised p-space-2 shadow-tile data-open:inset-ring data-open:inset-ring-border-control"
+      class="flex min-w-0 flex-col gap-space-2 rounded-lg bg-surface-raised p-space-2 shadow-sm data-open:inset-ring data-open:inset-ring-border-control"
       data-open={task.id === open || undefined}
     >
       <a
         data-slot="head"
-        class="press-tint focus-inset grid min-h-c-btn-h-sm grid-cols-(--head-cols) items-center gap-space-2 rounded-sm px-space-2 text-inherit no-underline hover:bg-surface-hover"
+        class="press-tint focus-inset grid min-h-control-sm grid-cols-(--head-cols) items-center gap-space-2 rounded-sm px-space-2 text-inherit no-underline hover:bg-surface-hover"
         style:--head-cols="auto minmax(0, 1fr) auto"
         href={hrefOf(task.id)}
         onclick={(event) => {

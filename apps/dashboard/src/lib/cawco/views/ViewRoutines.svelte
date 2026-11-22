@@ -30,7 +30,7 @@
    * count and the needs-you mark when something in it waits on you (a
    * failing routine or source, an action awaiting you). Side by side on a
    * wide screen, stacked on a phone; on a desk a block's rows scroll inside
-   * it past --spacing-c-block-body-max, so forty routines never push the other two
+   * it past --block-body-max, so forty routines never push the other two
    * out of view.
    *
    * Routines is a ledger, one shape for every row (Hex, Snowflake, Cursor):
@@ -781,7 +781,7 @@
       meta: routinesMeta,
       action: routinesAction,
       content: routinesBody,
-      measure: "--spacing-c-block-routines",
+      measure: "--block-routines",
       hideable: true,
       body: "capped",
       card: true,
@@ -792,7 +792,7 @@
       meta: sourcesMeta,
       action: sourcesAction,
       content: sourcesBody,
-      measure: "--spacing-c-block-ledger",
+      measure: "--block-ledger",
       hideable: true,
       body: "capped",
       card: true,
@@ -802,7 +802,7 @@
       glyph: IconShield,
       meta: actionsMeta,
       content: actionsBody,
-      measure: "--spacing-c-block-ledger",
+      measure: "--block-ledger",
       hideable: true,
       body: "capped",
       card: true,
@@ -827,7 +827,7 @@
   <Table.Cell class="w-(--col-state)" {rule} variant="list"
     ><span
       data-slot="lead"
-      class="grid w-c-row-lead place-items-center text-ink-muted"
+      class="grid w-row-compact place-items-center text-ink-muted"
       ><ProviderLogo provider={service} /></span
     ></Table.Cell
   >
@@ -975,7 +975,7 @@
             <span
               data-slot="lead"
               aria-label={rowLead.said}
-              class="grid w-c-row-lead place-items-center text-ink-muted lead-expiring:text-status-attn-glyph lead-paused:text-ink-subtle"
+              class="grid w-row-compact place-items-center text-ink-muted lead-expiring:text-status-attn-glyph lead-paused:text-ink-subtle"
               data-lead={leadOf(routine)}
               role="img"><rowLead.glyph class="size-icon-md" /></span
             >
@@ -984,7 +984,7 @@
             <Collapsible.Trigger data-opener class="max-w-full" look="opener">
               <span
                 data-slot="name"
-                class="block truncate type-label text-ink-muted group-data-enabled:text-ink-row group-data-enabled:group-state-open:text-ink-strong"
+                class="block truncate type-label text-ink-muted group-data-enabled:text-ink-strong group-data-enabled:group-state-open:text-ink-strong"
                 >{routine.name}</span
               >
             </Collapsible.Trigger>
@@ -1023,7 +1023,7 @@
               <!-- On a narrow ledger, Last and Next in the same order. -->
               <span
                 data-slot="folded"
-                class="hidden @max-table-34rem/table:inline"
+                class="hidden @max-md/table:inline"
               >
                 {lineHasLead ? "· " : ""}{words.lastShort}
                 <RunStatus
@@ -1079,7 +1079,7 @@
         {#if refusal}
           <!-- What the hub refused of an act on it, under it, until acted on. -->
           <tr data-routine-refusal>
-            <td class="p-0 group-state-open:bg-surface-well" colspan={span}>
+            <td class="p-0 group-state-open:bg-surface-sunk" colspan={span}>
               <RowFault
                 again={() => again(routine, refusal.act)}
                 end="var(--spacing-space-3)"
@@ -1091,7 +1091,7 @@
         {/if}
         {#if deleting === routine.id}
           <tr>
-            <td class="p-0 group-state-open:bg-surface-well" colspan={span}>
+            <td class="p-0 group-state-open:bg-surface-sunk" colspan={span}>
               <fieldset
                 data-slot="row-ask"
                 aria-label={words.removeLabel(routine.name)}
@@ -1118,7 +1118,7 @@
           </tr>
         {/if}
         <tr>
-          <td class="p-0 group-state-open:bg-surface-well" colspan={span}>
+          <td class="p-0 group-state-open:bg-surface-sunk" colspan={span}>
             <Collapsible.Content fade reveal>
               <RoutineDetail
                 actions={actionsOf(routine)}
@@ -1150,13 +1150,13 @@
         <span
           data-slot="suggestion-edge"
           aria-hidden="true"
-          class="pointer-events-none absolute inset-0 outline-1 -outline-offset-1 outline-border-row-outline outline-dashed data-card-last:rounded-b-lg"
+          class="pointer-events-none absolute inset-0 outline-1 -outline-offset-1 outline-border-strong outline-dashed data-card-last:rounded-b-lg"
           data-card-last={trimRefused ? undefined : ""}
         ></span>
         <span
           data-slot="lead"
           aria-label={words.trimLabel}
-          class="grid w-c-row-lead place-items-center text-ink-muted"
+          class="grid w-row-compact place-items-center text-ink-muted"
           role="img"><SuggestionGlyph class="size-icon-md" /></span
         >
       </Table.Cell>
@@ -1170,7 +1170,7 @@
           data-slot="name-line"
           class="flex flex-wrap items-center gap-x-space-2 gap-y-space-1 type-label"
         >
-          <span data-slot="name" class="min-w-0 truncate text-ink-row"
+          <span data-slot="name" class="min-w-0 truncate text-ink-strong"
             >{words.trimName}</span
           >
           <span data-slot="trim-chip" class="flex h-lh shrink-0 items-center"
@@ -1186,7 +1186,7 @@
         <!-- On a narrow ledger, Turn on under why, on the name's edge. -->
         <span
           data-slot="folded"
-          class="hidden pt-space-2 @max-table-34rem/table:block"
+          class="hidden pt-space-2 @max-md/table:block"
           >{@render turnOn(busy)}</span
         >
       </Table.Cell>
@@ -1258,13 +1258,13 @@
     <div data-slot="starters" class="w-full p-space-3">
       {#if making}
         <!-- Create routine: the form in the empty state's place. -->
-        <div class="max-w-c-starters-w">{@render routineForm()}</div>
+        <div class="max-w-(--starters-w)">{@render routineForm()}</div>
       {:else if canTalk}
         <!-- Caw stands as the mark, centred over what is drawn under him
              (EmptyState's `centre="mark"`, DESIGN.md's The Alignment Rule);
              the title, the line, the chips and his composer start on the
              column's one left edge, as on the empty board and Decisions. -->
-        <div data-slot="caw-empty" class="mx-auto w-full max-w-c-starters-w">
+        <div data-slot="caw-empty" class="mx-auto w-full max-w-(--starters-w)">
           <EmptyState
             centre="mark"
             line={words.emptyCaw(project.name)}
@@ -1318,7 +1318,7 @@
              Rule's second sentence): the line says what the page is for, his
              reason stands in its own line over the way by hand, the routine
              form in this place, as every can't-start empty state has it. -->
-        <div class="max-w-c-starters-w">
+        <div class="max-w-(--starters-w)">
           <EmptyState
             icon={IconClock}
             line={words.emptyWhat(project.name)}
@@ -1344,8 +1344,8 @@
     {/if}
     <div
       data-slot="ledger"
-      style:--col-state={"calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"}
-      style:--col-menu={"calc(var(--spacing-c-btn-h-sm) + var(--spacing-space-3) * 2)"}
+      style:--col-state={"calc(var(--spacing-row-compact) + var(--spacing-space-3))"}
+      style:--col-menu={"calc(var(--spacing-control-sm) + var(--spacing-space-3) * 2)"}
       {@attach countColumns}
     >
       <Table.Root
@@ -1361,13 +1361,15 @@
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               data-col-last
-              class="z-2 w-c-routine-time-w"
+              class="z-2 w-(--w)"
+              style="--w: calc(var(--spacing) * 36)"
               fold="measure"
               scope="col"
               variant="band">{words.columnLastRun}</Table.Head
             >
             <Table.Head
-              class="z-2 w-c-routine-time-w"
+              class="z-2 w-(--w)"
+              style="--w: calc(var(--spacing) * 36)"
               fold="measure"
               scope="col"
               variant="band">{words.columnNextRun}</Table.Head
@@ -1452,7 +1454,7 @@
   {:else}
     <div
       data-slot="ledger"
-      style:--col-state={"calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"}
+      style:--col-state={"calc(var(--spacing-row-compact) + var(--spacing-space-3))"}
     >
       <Table.Root aria-label={words.sources} layout="ledger" stickyBand>
         <Table.Header>
@@ -1461,7 +1463,8 @@
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               data-col-last
-              class="z-2 w-c-routine-time-w"
+              class="z-2 w-(--w)"
+              style="--w: calc(var(--spacing) * 36)"
               scope="col"
               variant="band">{words.columnLastRead}</Table.Head
             >
@@ -1480,7 +1483,7 @@
               <Table.Cell {rule} variant="list">
                 <span
                   data-slot="name"
-                  class="block truncate type-label text-ink-row"
+                  class="block truncate type-label text-ink-strong"
                   >{routines.find((each) => each.id === route.routineId)
                     ?.name ?? route.routineId}</span
                 >
@@ -1516,7 +1519,7 @@
               <Table.Cell {rule} variant="list">
                 <span
                   data-slot="name"
-                  class="block truncate type-label text-ink-row"
+                  class="block truncate type-label text-ink-strong"
                   >{poll.what}</span
                 >
                 <span
@@ -1558,7 +1561,7 @@
 {#snippet actionsBody()}
   {#if actions.length === 0}
     <p
-      class="m-0 max-w-c-measure p-space-3 type-meta text-pretty text-ink-muted"
+      class="m-0 max-w-measure p-space-3 type-meta text-pretty text-ink-muted"
     >
       {words.noActions}
     </p>
@@ -1588,7 +1591,7 @@
 <!-- Held as a skeleton until the hub's first read. -->
 <div bind:this={place} class="flex min-h-0 flex-auto flex-col">
   {#if page === null && problem !== null}
-    <div class="max-w-c-measure" in:reveal>
+    <div class="max-w-measure" in:reveal>
       <EmptyState
         icon={IconClock}
         line={words.unavailableLine(project.name, problem)}

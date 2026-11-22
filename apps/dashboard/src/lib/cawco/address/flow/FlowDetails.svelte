@@ -54,7 +54,7 @@
         <div class="grid min-w-0 gap-space-1">
           <span class="type-label text-ink-muted">What came back</span>
           <pre
-            class="focus-inset m-0 max-h-c-address-raw-h overflow-auto overscroll-contain rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong select-all"
+            class="focus-inset m-0 max-h-48 overflow-auto overscroll-contain rounded-sm border border-border-control bg-surface-sunk px-space-3 py-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong select-all"
             data-slot="raw">{rawFor(flow)}</pre>
           {#if clipboard}
             <span class="flex justify-end">

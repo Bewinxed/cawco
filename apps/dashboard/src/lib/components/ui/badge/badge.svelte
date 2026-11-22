@@ -26,10 +26,10 @@
            `note-new-*` with stars, Improved in `note-improved-*` with a
            rising graph, Fixed in `note-fixed-*` with a bug; each ink holds
            4.5:1 on its fill in both themes"). */
-        "note-new": "bg-note-new-bg text-note-new-ink",
-        "note-improved": "bg-note-improved-bg text-note-improved-ink",
-        "note-fixed": "bg-note-fixed-bg text-note-fixed-ink",
-        link: "bg-transparent text-link-ink underline-offset-4 hover:underline",
+        "note-new": "bg-status-done-bg text-status-done-ink",
+        "note-improved": "bg-status-live-bg text-status-live-ink",
+        "note-fixed": "bg-status-attn-bg text-status-attn-ink",
+        link: "bg-transparent text-brand-ink underline-offset-4 hover:underline",
         /* A count of what is set in its control's own hue (a filter's
            active count): the brand wash under brand ink. */
         brand: "bg-brand-wash text-brand-ink",
@@ -86,12 +86,12 @@
       figures: { tabular: "tabular-nums" },
       /** Its ink, alone or with its edge in the same ink (an outline badge). */
       tone: {
-        success: "text-success-9",
+        success: "text-status-done-glyph",
         muted: "text-ink-muted",
         subtle: "text-ink-subtle",
-        "success-edge": "border-success-9 text-success-9",
-        "warning-edge": "border-warning-9 text-warning-9",
-        "muted-edge": "border-border text-ink-muted",
+        "success-edge": "border-status-done-glyph text-status-done-glyph",
+        "warning-edge": "border-status-attn-glyph text-status-attn-glyph",
+        "muted-edge": "border-border-control text-ink-muted",
       },
       /** Its glyph and words a hairline apart. */
       gap: { tight: "gap-space-row" },

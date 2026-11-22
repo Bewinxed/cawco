@@ -63,9 +63,9 @@ export interface Plan {
  * - Between two sidebar spokes: vertical, ±8%, the way the sidebar runs.
  * - Configure on a phone is a stack: a deeper page pushes in from the inline
  *   end over the one it leaves, which falls back 30% and dims to 0.6
- *   (--duration-panel); back pops it off the same way, on the shorter --duration-pop.
+ *   (--duration-panel); back pops it off the same way, on the shorter --duration-panel.
  * - Between two Configure sections on a wide screen: the section rises or
- *   drops in 4% the way the rail runs (--duration-menu) while the rail holds
+ *   drops in 4% the way the rail runs (--duration-control) while the rail holds
  *   still.
  * - Anything else deeper or shallower: a horizontal ±8% nudge
  *   (--duration-control).
@@ -114,7 +114,7 @@ function configTravel(
     return {
       leave: { x: 100 * side, y: 0, opacity: 1 },
       enter: { x: -30 * side, y: 0, opacity: 0.6 },
-      over: "--duration-pop",
+      over: "--duration-panel",
       leavingOnTop: true,
     };
   }
@@ -125,7 +125,7 @@ function configTravel(
   return {
     leave: { x: 0, y: 0, opacity: 0 },
     enter: { x: 0, y: section(to) > section(from) ? 4 : -4, opacity: 0 },
-    over: "--duration-menu",
+    over: "--duration-control",
     leavingOnTop: false,
   };
 }

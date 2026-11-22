@@ -232,7 +232,7 @@
           </CardFace>
           {#if acted}
             <!-- The room its action stands in, under its notice. -->
-            <span aria-hidden="true" class="mt-space-2 h-c-btn-h-sm"></span>
+            <span aria-hidden="true" class="mt-space-2 h-control-sm"></span>
           {/if}
         </RadioGroup.Item>
         {#if acted}

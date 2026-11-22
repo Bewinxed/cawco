@@ -74,7 +74,8 @@
       data-slot="task-labels-field"
       aria-label="New label"
       autocomplete="off"
-      class="w-c-task-label-field-w"
+      class="w-(--w)"
+      style="--w: calc(var(--spacing) * 32)"
       list={listId}
       text="label"
       onblur={add}

@@ -426,7 +426,7 @@
     },
   };
   /** The mark cell every field and row of the popover leads with: one column, so marks and words start on shared edges. */
-  const LEAD = "grid w-c-row-lead flex-none place-items-center self-stretch";
+  const LEAD = "grid w-row-compact flex-none place-items-center self-stretch";
 </script>
 
 <section class="grid min-w-0 gap-space-4 p-space-1">
@@ -624,7 +624,7 @@
                 {#if listingFolders}
                   <div
                     data-slot="location-section-empty"
-                    class="type-meta px-space-2 py-space-7 text-center wrap-anywhere text-ink-subtle"
+                    class="type-meta px-space-2 py-space-6 text-center wrap-anywhere text-ink-subtle"
                     role="status"
                   >
                     {spawnWords.location.loadingFolders}

@@ -407,7 +407,7 @@
     {/if}
     <span
       data-slot="reach"
-      class="max-w-c-measure-meta truncate"
+      class="max-w-ch-32 truncate"
       title={reach.map((m) => machineLabel(m.hostname)).join(", ")}
       >{reach.length > 0
         ? reach.map((m) => machineLabel(m.hostname)).join(", ")
@@ -433,7 +433,7 @@
   <ReadingWell text={hookSentence(draft)} />
 
   <EditorSection hue={HUE} icon={IconClock} label="When it runs">
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
       One lifecycle event. The events with a matcher are the ones Claude Code
       lets you narrow further.
     </p>
@@ -459,7 +459,7 @@
     {#if shown("event")}
       <p class="type-meta text-status-fail-ink" in:appear>{wrong.event}</p>
     {:else if eventInfo}
-      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
         Runs {eventInfo.blurb}.
       </p>
     {/if}
@@ -502,7 +502,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconPlay} label="What it runs">
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
       CawCo writes this to every machine it applies to and registers it — no
       prompt, no approval, every time the event fires.
     </p>
@@ -513,10 +513,10 @@
       value={draft.handler.type}
     />
     <!-- One handler's fields cross-fade into the next's (--duration-control) in
-         one box, whose height follows over --duration-pop on --ease-drawer. -->
+         one box, whose height follows over --duration-panel on --ease-drawer. -->
     <div
       class="relative flex flex-col"
-      {@attach morph({ ms: dur("--duration-pop") })}
+      {@attach morph({ ms: dur("--duration-panel") })}
     >
       {#if draft.handler.type === "command"}
         <div
@@ -731,7 +731,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
       Every machine in the fleet unless you narrow it to one project.
     </p>
     <Field id="hook-scope" label="Scope">
@@ -762,7 +762,7 @@
         />
       {:else}
         {#if applied.length > 0}
-          <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+          <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
             In sync on
             {applied.length}
             machine{applied.length === 1 ? "" : "s"}.

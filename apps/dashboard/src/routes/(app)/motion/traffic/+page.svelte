@@ -448,7 +448,7 @@
        stand on one x. The controls are the kit's xs outline buttons, one
        height, wrapping whole. -->
   <header
-    class="flex flex-col gap-space-2 border-b border-b-border-hairline py-space-4 ps-space-7 pe-space-6 max-desk:px-space-5"
+    class="flex flex-col gap-space-2 border-b border-b-border-hairline py-space-4 ps-space-6 pe-space-6 max-desk:px-space-5"
   >
     <h1 class="type-title text-ink-strong">Arrival traffic</h1>
     <p class="type-body text-pretty text-ink-muted">

@@ -9,17 +9,13 @@
  *
  * The values are the declarations of the dashboard's theme.css (its
  * `@theme static` block, and the dark scheme's block where a value differs),
- * read by the evaluator (packages/design-tokens/src/design-css.ts, on colorjs.io), which resolves
- * `light-dark()`, `color-mix()` and relative `oklch(from …)` as the cascade
- * does. Over that this check only paints: a colour with alpha (a wash, a
- * glyph at its breath floor) is laid over what stands under it, source-over
- * in sRGB as the browser composites, each layer clipped into sRGB as the
- * browser clips it (WCAG's luminance is defined there).
- *
- * Each row of PAIRS names the rule (DESIGN.md or a surface brief, by name) or token it comes from.
- * A row that fails today is marked `known` with its measured ratio, so it
- * reports without blocking; it fails the day it falls further, and says so
- * the day it holds (take the mark off then).
+ * plus the component-local paints in design.css and libraries.css,
+ * read by the evaluator (packages/design-tokens/src/design-css.ts, on colorjs.io),
+ * which resolves `light-dark()`, `color-mix()` and relative `oklch(from …)` as
+ * the cascade does. Over that this check only paints: a colour with alpha (a
+ * wash, a glyph at its breath floor) is laid over what stands under it,
+ * source-over in sRGB as the browser composites, each layer clipped into sRGB
+ * as the browser clips it (WCAG's luminance is defined there).
  *
  *   bun scripts/token-contrast-check.ts           failing pairs only
  *   bun scripts/token-contrast-check.ts --table   every pair, both themes
@@ -28,7 +24,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import Color from "colorjs.io";
 import postcss from "postcss";
-import { ACCOUNT_HUES } from "../packages/core/src/accounts/kinds";
+import { ACCOUNT_HUES, type AccountHue } from "../packages/core/src/accounts/kinds";
 import { STATUS_PAIRS } from "../packages/core/src/views";
 import {
   CssEvaluator,
@@ -39,9 +35,18 @@ const THEME = join(
   import.meta.dir,
   "../apps/dashboard/src/lib/tokens/theme.css"
 );
+const DESIGN = join(import.meta.dir, "../apps/dashboard/src/design.css");
+const LIBRARIES = join(
+  import.meta.dir,
+  "../apps/dashboard/src/lib/tokens/libraries.css"
+);
 
 // Read at run time beyond its imports; check.ts keys the check on them.
-export const checkReads = ["apps/dashboard/src/lib/tokens/theme.css"];
+export const checkReads = [
+  "apps/dashboard/src/lib/tokens/theme.css",
+  "apps/dashboard/src/design.css",
+  "apps/dashboard/src/lib/tokens/libraries.css",
+];
 const TEXT = 4.5;
 const UI = 3;
 
@@ -69,41 +74,59 @@ interface Pair {
 }
 
 const IDENTITY_HUES = [55, 85, 115, 145, 175, 205, 235, 265, 295, 330];
+const ACCOUNT_MARK: Record<AccountHue, number> = {
+  orange: 2,
+  amber: 3,
+  green: 4,
+  cyan: 5,
+  blue: 6,
+  violet: 7,
+  rose: 8,
+};
 const CODE_INKS = [
-  "code-ink",
-  "code-keyword",
-  "code-fn",
-  "code-string",
-  "code-number",
-  "code-comment",
+  "code-syntax-foreground",
+  "code-syntax-token-keyword",
+  "code-syntax-token-function",
+  "code-syntax-token-string",
+  "code-syntax-token-constant",
+  "code-syntax-token-comment",
 ];
 const CODE_GROUNDS: [string, string[]][] = [
-  ["code-bg", ["code-bg"]],
-  ["diff-add-bg", ["code-bg", "diff-add-bg"]],
-  ["diff-del-bg", ["code-bg", "diff-del-bg"]],
-  ["diff-add-emphasis", ["code-bg", "diff-add-bg", "diff-add-emphasis"]],
-  ["diff-del-emphasis", ["code-bg", "diff-del-bg", "diff-del-emphasis"]],
+  ["surface-recess", ["surface-recess"]],
+  ["diff-add", ["surface-recess", "diffs-bg-addition-override"]],
+  ["diff-del", ["surface-recess", "diffs-bg-deletion-override"]],
+  [
+    "diff-add-emphasis",
+    [
+      "surface-recess",
+      "diffs-bg-addition-override",
+      "diffs-bg-addition-emphasis-override",
+    ],
+  ],
+  [
+    "diff-del-emphasis",
+    [
+      "surface-recess",
+      "diffs-bg-deletion-override",
+      "diffs-bg-deletion-emphasis-override",
+    ],
+  ],
 ];
-const weekRim = (hue: string) =>
-  `color-mix(in oklch, {color.account-${hue}}, {color.account-week-toward} calc({motion.account-week-mix} * 100%))`;
+const weekRim = (mark: number) =>
+  `color-mix(in oklch, {color.mark-${mark}}, {color.account-week-toward} calc({motion.account-week-mix} * 100%))`;
 
 const S = {
-  action: "DESIGN.md, Colour, focus and type: coral is the act",
-  brandInk: "DESIGN.md, Colour, focus and type: coral ink and wash",
-  selected: "DESIGN.md, Colour, focus and type: coral marks what is selected",
-  chosen:
-    "DESIGN.md, Colour, focus and type: the option chip; tokens chip-chosen-ink, action-solid",
-  inkSolid: "the ink-solid fill (theme.css)",
-  chips: "DESIGN.md, Colour, focus and type: status hues (each chip 4.5:1)",
-  syntax: "syntax colours (theme.css); token code-ink",
-  contrastEdge: "token border-contrast (theme.css)",
+  action: "DESIGN.md, Colour: coral is the act",
+  brandInk: "DESIGN.md, Colour: coral ink and wash",
+  selected: "DESIGN.md, Colour: coral marks what is selected",
+  inkSolid: "the ink-strong fill (theme.css)",
+  chips: "DESIGN.md, Colour: status hues (each chip 4.5:1)",
+  syntax: "syntax colours (libraries.css + design.css diff washes)",
+  strongEdge: "token border-strong (theme.css, non-text 3:1 WCAG 2.2 SC 1.4.11)",
   inks: "the text inks (theme.css)",
   subtle: "token ink-subtle (theme.css)",
-  identity:
-    "DESIGN.md, Colour, focus and type: identity hues; token identity-ink",
-  rowOutline:
-    "token border-row-outline, a form field's edge (non-text 3:1, WCAG 2.2 SC 1.4.11)",
-  rim: "session tabs' surface brief (PaneTabs), Status rim; token tab-rim-mix-chosen/-idle",
+  identity: "DESIGN.md, Colour: identity hues; token identity-ink",
+  rim: "session tabs' status rim (design.css tab-rim-mix-chosen/-idle)",
   recall: "the recall wheel's rows (Composer), text 4.5:1 (WCAG 2.2 SC 1.4.3)",
   hairline:
     "Caw's panel section rule; token brand-solid (non-text 3:1, WCAG 2.2 SC 1.4.11)",
@@ -111,10 +134,9 @@ const S = {
   dial: "usage dial (UsageMeter); token account-week-mix",
   week: "usage week mark (UsageMeter)",
   spent: "usage cell at its limit (UsageMeter); token ring-track-spent",
-  notes: "release-note labels (UpdateCard); token note-new-ink",
-  ring: "DESIGN.md, Colour, focus and type: the focus ring (non-text 3:1, WCAG 2.2 SC 1.4.11)",
-  glyphs: "token status-live-glyph",
-  breath: "DESIGN.md, State: live marks breathe; token breath-floor",
+  ring: "DESIGN.md, Colour: the focus ring (non-text 3:1, WCAG 2.2 SC 1.4.11)",
+  glyphs: "status glyphs (theme.css)",
+  breath: "DESIGN.md, Motion: live marks breathe; token breath-floor",
   nest: "token nest-ink ('about 2.3:1 to 2.5:1')",
 };
 
@@ -133,52 +155,30 @@ const PAIRS: Pair[] = [
       fg: ink,
       bg: [bg],
       floor: TEXT,
-      source: S.inks,
-    }))
+      source: S.subtle,
+    })
   ),
-  ...["surface-fill", "surface-hover", "surface-raised"].map((bg) => ({
-    label: `ink-subtle on ${bg}`,
-    fg: "ink-subtle",
-    bg: [bg],
-    floor: TEXT,
-    source: S.subtle,
-  })),
-  // A board column's head on its band (TaskColumn: the stage's name in
-  // ink-strong, its count and kind word in ink-subtle, a muted line).
-  ...(
-    [
-      ["ink-strong", S.inks],
-      ["ink-muted", S.inks],
-      ["ink-subtle", S.subtle],
-    ] as const
-  ).map(([ink, source]) => ({
-    label: `${ink} on surface-recess (a board column's head)`,
-    fg: ink,
-    bg: ["surface-recess"],
-    floor: TEXT,
-    source,
-  })),
-  // A picked task card's quiet words (TaskCard on selected-bg: its id, its
-  // problem glyph, its "attempt working" line and its foot) take
-  // selected-ink, as the open row's words do (The Row Dress Rule): ink-subtle
-  // measured 4.24 / 4.22:1 there, ink-muted 4.51 by day.
-  {
-    label: "selected-ink on selected-bg (a picked task card's quiet words)",
-    fg: "selected-ink",
-    bg: ["selected-bg"],
-    floor: TEXT,
-    source:
-      "a picked task card (TaskCard); DESIGN.md, Colour, focus and type: coral marks what is selected",
-  },
-  // White on coral: the action, every gradient stop, hover, the chosen chip.
+  // White on coral: the action, its gradient stops, and hover.
   ...(
     [
       ["action-solid", "action-solid"],
-      ["action-surface top stop (action-top)", "action-top"],
-      ["action-surface bottom stop (action-bottom)", "action-bottom"],
+      [
+        "action-surface top stop",
+        "oklch(from {color.action-solid} calc(l + 0.03) c h)",
+      ],
+      [
+        "action-surface bottom stop",
+        "oklch(from {color.action-solid} calc(l - 0.03) c h)",
+      ],
       ["action-hover", "action-hover"],
-      ["action-hover top stop (action-hover-top)", "action-hover-top"],
-      ["action-hover bottom stop (action-hover-bottom)", "action-hover-bottom"],
+      [
+        "action-hover top stop",
+        "oklch(from {color.action-hover} calc(l + 0.03) c h)",
+      ],
+      [
+        "action-hover bottom stop",
+        "oklch(from {color.action-hover} calc(l - 0.03) c h)",
+      ],
     ] as const
   ).map(([name, bg]) => ({
     label: `on-action on ${name}`,
@@ -187,34 +187,20 @@ const PAIRS: Pair[] = [
     floor: TEXT,
     source: S.action,
   })),
-  {
-    label: "chip-chosen-ink on action-solid",
-    fg: "chip-chosen-ink",
-    bg: ["action-solid"],
+  // Brand and selection inks on surfaces they sit on.
+  ...["surface-page", "surface-raised", "selected-bg"].map((bg) => ({
+    label: `brand-ink on ${bg}`,
+    fg: "brand-ink",
+    bg: [bg],
     floor: TEXT,
-    source: S.chosen,
-  },
-  // Brand and selection inks.
-  ...["brand-ink", "link-ink"].map((ink) => ({
-    label: `${ink} on surface-raised`,
-    fg: ink,
-    bg: ["surface-raised"],
-    floor: TEXT,
-    source: S.brandInk,
+    source: bg === "selected-bg" ? S.selected : S.brandInk,
   })),
   {
-    label: "brand-ink-strong on surface-page",
-    fg: "brand-ink-strong",
-    bg: ["surface-page"],
+    label: "brand-ink on brand-wash (over surface-raised)",
+    fg: "brand-ink",
+    bg: ["surface-raised", "brand-wash"],
     floor: TEXT,
     source: S.brandInk,
-  },
-  {
-    label: "selected-ink on selected-bg",
-    fg: "selected-ink",
-    bg: ["selected-bg"],
-    floor: TEXT,
-    source: S.selected,
   },
   {
     label: "on-ink on ink-strong",
@@ -229,13 +215,6 @@ const PAIRS: Pair[] = [
     bg: [`status-${s}-bg`],
     floor: TEXT,
     source: S.chips,
-  })),
-  ...(["new", "improved", "fixed"] as const).map((n) => ({
-    label: `note-${n}-ink on note-${n}-bg`,
-    fg: `note-${n}-ink`,
-    bg: [`note-${n}-bg`],
-    floor: TEXT,
-    source: S.notes,
   })),
   ...CODE_INKS.flatMap((ink) =>
     CODE_GROUNDS.map(([name, bg]) => ({
@@ -254,20 +233,15 @@ const PAIRS: Pair[] = [
     source: S.identity,
   })),
   // Non-text: edges, rings, rims, marks.
-  {
-    label: "border-contrast on surface-raised",
-    fg: "border-contrast",
-    bg: ["surface-raised"],
-    floor: UI,
-    source: S.contrastEdge,
-  },
-  {
-    label: "border-contrast on surface-shelf (the bar holding the tabs)",
-    fg: "border-contrast",
-    bg: ["surface-shelf"],
-    floor: UI,
-    source: S.contrastEdge,
-  },
+  ...["surface-page", "surface-raised", "surface-recess", "surface-shelf"].map(
+    (bg) => ({
+      label: `border-strong on ${bg}`,
+      fg: "border-strong",
+      bg: [bg],
+      floor: UI,
+      source: S.strongEdge,
+    })
+  ),
   // The quiet control edge: no 3:1 floor, held to its shipped figures.
   {
     label: "border-control on surface-raised",
@@ -276,14 +250,7 @@ const PAIRS: Pair[] = [
     floor: { light: 1.36, dark: 1.43 },
     source: "token border-control (theme.css)",
   },
-  ...["surface-page", "surface-raised", "surface-recess"].map((bg) => ({
-    label: `border-row-outline on ${bg}`,
-    fg: "border-row-outline",
-    bg: [bg],
-    floor: UI,
-    source: S.rowOutline,
-  })),
-  ...["surface-page", "surface-raised", "surface-recess", "surface-fill"].map(
+  ...["surface-page", "surface-raised", "surface-recess", "surface-hover"].map(
     (bg) => ({
       label: `focus-ring on ${bg}`,
       fg: "focus-ring",
@@ -303,7 +270,6 @@ const PAIRS: Pair[] = [
     [
       ["surface-raised"],
       ["surface-page"],
-      ["surface-fill"],
       ["surface-hover"],
       ["selected-bg"],
       ["status-attn-bg"],
@@ -326,32 +292,30 @@ const PAIRS: Pair[] = [
   ...[
     "status-live-glyph",
     "ink-muted",
-    ...["mark-2", "mark-5", "mark-6", "mark-7", "mark-8"],
+    "mark-2",
+    "mark-3",
+    "mark-4",
+    "mark-5",
+    "mark-6",
+    "mark-7",
+    "mark-8",
   ].flatMap((ink) =>
-    [
-      "surface-page",
-      "surface-raised",
-      "surface-recess",
-      "surface-recess-deep",
-      "surface-well",
-    ].map((bg) => ({
-      label: `${ink} at breath-floor on ${bg}`,
-      fg: ink,
-      fgOpacity: "motion.breath-floor",
-      bg: [bg],
-      floor: UI,
-      source: S.breath,
-    }))
+    ["surface-page", "surface-raised", "surface-recess", "surface-sunk"].map(
+      (bg) => ({
+        label: `${ink} at breath-floor on ${bg}`,
+        fg: ink,
+        fgOpacity: "motion.breath-floor",
+        bg: [bg],
+        floor: UI,
+        source: S.breath,
+      })
+    )
   ),
-  // The chosen session tab's rim: its stroke over the tab's own sheet, read
-  // against the shelf above its top and against the fills either side of its
-  // sides (its sheet, and a receded neighbour's). Painted so, it measures the
-  // stated 4.1 / 5.7 working and 3.2 / 3.8 idle at the top, 4.5 / 5.0
-  // working and 3.5 / 3.4 idle at the sides.
+  // The chosen session tab's rim over surface-recess, read against shelf and neighbours.
   ...(
     [
       ["status-live-glyph", "effect.tab-rim-mix-chosen"],
-      ["tab-rim-attn", "effect.tab-rim-mix-chosen"],
+      ["status-attn-glyph", "effect.tab-rim-mix-chosen"],
       ["status-fail-glyph", "effect.tab-rim-mix-chosen"],
       ["ink-muted", "effect.tab-rim-mix-idle"],
     ] as const
@@ -359,21 +323,20 @@ const PAIRS: Pair[] = [
     (
       [
         ["top, against surface-shelf", "surface-shelf"],
-        ["side, against tab-sheet", "tab-sheet"],
-        ["side, against tab-recede-1", "tab-recede-1"],
+        ["side, against surface-recess", "surface-recess"],
+        ["side, against surface-sunk", "surface-sunk"],
       ] as const
     ).map(([where, against]) => ({
       label: `${ink} rim at ${mix.split(".")[1]}: ${where}`,
       fg: ink,
       fgOpacity: mix,
-      bg: ["tab-sheet"],
+      bg: ["surface-recess"],
       against: [against],
       floor: UI,
       source: S.rim,
     }))
   ),
-  // The recall wheel's rows on the grown shape (surface-raised, grown.ts),
-  // the topmost faded furthest: 94% on a wide window, 95.5% on a compact one.
+  // The recall wheel's rows on the grown shape (surface-raised, grown.ts).
   ...(
     [
       ["ink-strong", "a row's words"],
@@ -389,7 +352,7 @@ const PAIRS: Pair[] = [
   })),
   ...(
     [
-      ["selected-ink", "the pick"],
+      ["brand-ink", "the pick"],
       ["ink-subtle", "an empty draft's hint"],
     ] as const
   ).map(([ink, what]) => ({
@@ -399,38 +362,41 @@ const PAIRS: Pair[] = [
     floor: TEXT,
     source: S.recall,
   })),
-  // Accounts: disc, rim and week sector on the border-control track.
-  ...ACCOUNT_HUES.flatMap((hue) => [
-    {
-      label: `account-${hue} disc on border-control`,
-      fg: `account-${hue}`,
-      bg: ["border-control"],
-      floor: 3.9,
-      source: S.dial,
-    },
-    {
-      label: `account-${hue} week rim on border-control`,
-      fg: weekRim(hue),
-      bg: ["border-control"],
-      floor: 7.8,
-      source: `${S.dial}; ${S.week}`,
-    },
-    {
-      label: `account-${hue} week rim against its disc`,
-      fg: weekRim(hue),
-      bg: [`account-${hue}`],
-      floor: { light: 1.9, dark: 1.8 },
-      source: S.dial,
-    },
-    {
-      label: `account-${hue} at account-stale-opacity on border-control`,
-      fg: `account-${hue}`,
-      fgOpacity: "motion.account-stale-opacity",
-      bg: ["border-control"],
-      floor: UI,
-      source: S.stale,
-    },
-  ]),
+  // Accounts (mapped to categorical marks 2..8): disc, rim and week sector on border-control.
+  ...ACCOUNT_HUES.flatMap((hue) => {
+    const mark = ACCOUNT_MARK[hue];
+    return [
+      {
+        label: `account ${hue} (mark-${mark}) disc on border-control`,
+        fg: `mark-${mark}`,
+        bg: ["border-control"],
+        floor: 3.9,
+        source: S.dial,
+      },
+      {
+        label: `account ${hue} (mark-${mark}) week rim on border-control`,
+        fg: weekRim(mark),
+        bg: ["border-control"],
+        floor: 7.8,
+        source: `${S.dial}; ${S.week}`,
+      },
+      {
+        label: `account ${hue} (mark-${mark}) week rim against its disc`,
+        fg: weekRim(mark),
+        bg: [`mark-${mark}`],
+        floor: { light: 1.9, dark: 1.8 },
+        source: S.dial,
+      },
+      {
+        label: `account ${hue} (mark-${mark}) at account-stale-opacity on border-control`,
+        fg: `mark-${mark}`,
+        fgOpacity: "motion.account-stale-opacity",
+        bg: ["border-control"],
+        floor: UI,
+        source: S.stale,
+      },
+    ];
+  }),
   {
     label: "ring-track-spent on meter-wash-over (over surface-raised)",
     fg: "ring-track-spent",
@@ -438,39 +404,42 @@ const PAIRS: Pair[] = [
     floor: { light: 1.6, dark: 2 },
     source: S.spent,
   },
-  ...["sidebar", "surface-page"].map((bg) => ({
-    label: `nest-ink on ${bg}`,
+  {
+    label: "nest-ink on surface-page",
     fg: "nest-ink",
-    bg: [bg],
+    bg: ["surface-page"],
     floor: 2.3,
     source: S.nest,
-  })),
+  },
 ];
 
 /** A value with each `var(--x)` written `{x}`, as the evaluator reads a reference. */
 const refs = (value: string) => value.replace(/var\(--([\w-]+)\)/gu, "{$1}");
-/** The theme's variables by name: the `@theme static` block's, and the dark scheme's own where it differs. */
+/** Variables declared in theme.css, design.css, and libraries.css (:root + dark overrides). */
 const themeLight = new Map<string, string>();
 const themeDark = new Map<string, string>();
-postcss.parse(readFileSync(THEME, "utf8")).walkDecls((decl) => {
-  const rule = decl.parent;
-  if (!decl.prop.startsWith("--")) {
-    return;
-  }
-  if (
-    rule?.type === "atrule" &&
-    rule.name === "theme" &&
-    rule.params === "static"
-  ) {
-    themeLight.set(decl.prop.slice(2), refs(decl.value));
-  } else if (
-    rule?.type === "rule" &&
-    rule.selectors.includes('[data-scheme="dark"]')
-  ) {
-    themeDark.set(decl.prop.slice(2), refs(decl.value));
-  }
-});
-/** A token path (`color.surface-page`) as the theme names it: its last segment, under `--color-` or as it stands. */
+for (const file of [THEME, LIBRARIES, DESIGN]) {
+  postcss.parse(readFileSync(file, "utf8")).walkDecls((decl) => {
+    const rule = decl.parent;
+    if (!decl.prop.startsWith("--")) {
+      return;
+    }
+    if (
+      (rule?.type === "atrule" &&
+        rule.name === "theme" &&
+        rule.params === "static") ||
+      (rule?.type === "rule" && rule.selectors.includes(":root"))
+    ) {
+      themeLight.set(decl.prop.slice(2), refs(decl.value));
+    } else if (
+      rule?.type === "rule" &&
+      rule.selectors.includes('[data-scheme="dark"]')
+    ) {
+      themeDark.set(decl.prop.slice(2), refs(decl.value));
+    }
+  });
+}
+/** A token path (`color.surface-page`) as the stylesheets name it: its last segment, under `--color-` or as it stands. */
 const lookup = (path: string): CssToken | undefined => {
   const leaf = path.split(".").at(-1) ?? path;
   for (const name of [`color-${leaf}`, leaf]) {

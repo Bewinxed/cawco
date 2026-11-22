@@ -64,7 +64,7 @@ export interface Glide {
  * The glide of `row`'s sideways scroll: a spring that each notch of a wheel
  * pushes the target of, the row gliding after it and carrying its speed
  * into the next notch, instead of jumping 100px a click. Critically damped
- * at --duration-glide's response, so it lands without overshoot.
+ * at --duration-panel's response, so it lands without overshoot.
  */
 export function glide(row: HTMLElement): Glide {
   let stiffness = 0;
@@ -122,7 +122,7 @@ export function glide(row: HTMLElement): Glide {
       stop();
     }
     if (frame === null) {
-      const response = dur("--duration-glide") / 1000;
+      const response = dur("--duration-panel") / 1000;
       stiffness = ((2 * Math.PI) / response) ** 2;
       damping = (4 * Math.PI) / response;
       at = row.scrollLeft;

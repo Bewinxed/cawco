@@ -102,7 +102,7 @@
   const height = $derived(
     tall
       ? "calc(2 * var(--spacing-space-5) + 2 * var(--spacing-space-1))"
-      : "var(--row-compact-h)"
+      : "var(--spacing-row-compact)"
   );
 
   /** Asked for and not yet drawn. */
@@ -265,9 +265,9 @@
     class="kit-tree kit-tree-rail flex flex-col max-h-(--older-max) mt-(--tree-gap) overflow-y-auto overscroll-contain scrollbar-thin not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)"
     data-flip-anchor
     style:--fade="var(--spacing-space-4)"
-    style:--fade-above={"linear-gradient(transparent, var(--color-mask-opaque) var(--fade))"}
-    style:--fade-below={"linear-gradient(var(--color-mask-opaque) calc(100% - var(--fade)), transparent)"}
-    style:--fade-both={"linear-gradient(transparent, var(--color-mask-opaque) var(--fade), var(--color-mask-opaque) calc(100% - var(--fade)), transparent)"}
+    style:--fade-above={"linear-gradient(transparent, var(--color-ink-strong) var(--fade))"}
+    style:--fade-below={"linear-gradient(var(--color-ink-strong) calc(100% - var(--fade)), transparent)"}
+    style:--fade-both={"linear-gradient(transparent, var(--color-ink-strong) var(--fade), var(--color-ink-strong) calc(100% - var(--fade)), transparent)"}
     style:--line-root-gap="calc(var(--tree-gap) / 2)"
     style:--older-max="calc(6 * {height} + 5 * var(--line-root-gap))"
     data-keep-scroll="{list}:{id}"

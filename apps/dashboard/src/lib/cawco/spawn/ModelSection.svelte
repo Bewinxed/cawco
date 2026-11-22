@@ -149,7 +149,7 @@
    * pair to glide from, they cross-fade in place.
    */
   const [send, receive] = crossfade({
-    duration: () => dur("--duration-toggle"),
+    duration: () => dur("--duration-fade"),
     easing: easeInOut,
     fallback: (node) => crossIn(node),
   });
@@ -298,17 +298,17 @@
   {/if}
   <div
     data-slot="picker"
-    class="field-edge transition-control relative grid rounded-md border bg-surface-raised shadow-xs rail-step-(--rail-step-fine) coarse:rail-step-(--spacing-c-row-h) data-railed:grid-cols-(--cols)"
+    class="field-edge transition-control relative grid rounded-md border bg-surface-raised shadow-xs rail-step-(--rail-step-fine) coarse:rail-step-(--spacing-control-lg) data-railed:grid-cols-(--cols)"
     data-railed={!runtime || undefined}
     style:--cols="auto minmax(0, 1fr)"
-    style:--rail-gap="calc(var(--rail-step) - var(--spacing-c-btn-h))"
-    style:--rail-step-fine={"calc(var(--spacing-c-btn-h) + var(--spacing-space-1))"}
+    style:--rail-gap="calc(var(--rail-step) - var(--spacing-control-md))"
+    style:--rail-step-fine={"calc(var(--spacing-control-md) + var(--spacing-space-1))"}
   >
     {#if !runtime}
       <Rail
         axis="y"
         class="grid content-box-start gap-(--rail-gap) hit-gap-x-(--rail-gap) hit-gap-y-(--rail-gap) rounded-s-md concentric-in r-outer-md r-inset-space-2 border-e border-e-border-hairline bg-surface-recess p-space-2"
-        itemClass="ns-in touch-hit press-tint grid size-c-btn-h place-items-center"
+        itemClass="ns-in touch-hit press-tint grid size-control-md place-items-center"
         stagger
         items={railItems}
         label={spawnWords.model.harness}
@@ -341,7 +341,7 @@
     <div data-slot="pick" class="grid min-w-0">
       <label
         data-slot="search"
-        class="flex h-c-row-h items-center gap-space-2 border-b border-b-border-hairline px-space-3"
+        class="flex h-control-lg items-center gap-space-2 border-b border-b-border-hairline px-space-3"
       >
         <Search
           data-model-section-lead
@@ -465,7 +465,7 @@
                    rows after it glide; the chips glide between rows in it. -->
               <div
                 data-slot="tools"
-                class="flex h-c-row-h flex-none items-center justify-end ps-space-1 pe-space-2"
+                class="flex h-control-lg flex-none items-center justify-end ps-space-1 pe-space-2"
                 in:line
                 out:line
               >

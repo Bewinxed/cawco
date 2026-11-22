@@ -34,8 +34,8 @@
     "surface-page": "bg-surface-page",
     "surface-raised": "bg-surface-raised",
     "surface-recess": "bg-surface-recess",
-    "surface-recess-deep": "bg-surface-recess-deep",
-    "surface-well": "bg-surface-well",
+    "surface-recess-deep": "bg-surface-sunk",
+    "surface-well": "bg-surface-sunk",
   } as const satisfies Record<(typeof SURFACES)[number], string>;
   /** The transcript's tool inks (tool-cards/descriptors.ts INKS), written out whole. */
   const INKS = [
@@ -44,7 +44,7 @@
     "text-mark-7",
     "text-mark-5",
     "text-mark-8",
-    "text-muted-foreground",
+    "text-ink-muted",
   ] as const;
 
   /**

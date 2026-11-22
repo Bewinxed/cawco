@@ -11,10 +11,10 @@
       },
       size: {
         default:
-          "h-c-btn-h min-w-c-btn-h px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5",
-        xs: "h-c-btn-h-xs min-w-c-btn-h-xs gap-1.5 px-2 type-meta has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
-        sm: "h-c-btn-h-sm min-w-c-btn-h-sm glass-item:h-c-bar-item glass-item:min-w-c-bar-item px-2.5 glass-item:px-space-1 glass-item:[&_svg:not([class*='size-'])]:size-c-bar-symbol has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        lg: "h-c-btn-h-lg min-w-c-btn-h-lg px-4 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+          "h-control-md min-w-control-md px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5",
+        xs: "h-control-xs min-w-control-xs gap-1.5 px-2 type-meta has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
+        sm: "h-control-sm min-w-control-sm glass-item:h-row-compact glass-item:min-w-row-compact px-2.5 glass-item:px-space-1 glass-item:[&_svg:not([class*='size-'])]:size-4.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        lg: "h-control-lg min-w-control-lg px-4 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
       },
     },
     defaultVariants: {

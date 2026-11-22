@@ -153,7 +153,7 @@
         {:else if copies.peeking[at]}
           <p
             data-slot="note"
-            class="mark-line flex items-center gap-space-2 type-meta max-w-c-measure text-ink-muted"
+            class="mark-line flex items-center gap-space-2 type-meta max-w-measure text-ink-muted"
             role="status"
             in:crossIn
             out:crossOut
@@ -172,7 +172,7 @@
         {:else if copies.copies[at] === null}
           <p
             data-slot="note"
-            class="type-meta max-w-c-measure text-ink-muted"
+            class="type-meta max-w-measure text-ink-muted"
             in:crossIn
             out:crossOut
           >

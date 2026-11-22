@@ -775,10 +775,10 @@
 
   /* ── Tabs arriving and leaving ────────────────────────────────────
      A tab that opens grows from nothing at its place in the strip while
-     the tabs after it slide over to make room (--duration-morph, --ease-out),
+     the tabs after it slide over to make room (--duration-fade, --ease-out),
      unless it flies in from the row that opened it (share.svelte.ts). A
      tab that closes is taken out of the flow where it stands and narrows
-     to nothing as it fades (--duration-exit), while the tabs after it slide
+     to nothing as it fades (--duration-fade), while the tabs after it slide
      into the gap (--duration-fade, --ease-in-out). A tab dropped at another
      place in its strip slides there with its neighbours on the flight's
      own curve (--duration-panel, --ease-drawer). A tab whose id changes in
@@ -886,7 +886,7 @@
       duration = dur("--duration-fade");
       easing = ease("--ease-in-out");
     } else if (added) {
-      duration = dur("--duration-morph");
+      duration = dur("--duration-fade");
       easing = ease("--ease-out");
     }
     const tabsNow = leaf.tabs.flatMap((id) => {
@@ -956,7 +956,7 @@
                 { clipPath: `inset(${REACH} 100% ${REACH} ${REACH})` },
                 { clipPath: `inset(${REACH} ${REACH} ${REACH} ${REACH})` },
               ],
-              { duration: dur("--duration-morph"), easing: ease("--ease-out") }
+              { duration: dur("--duration-fade"), easing: ease("--ease-out") }
             );
           }
         });
@@ -1014,7 +1014,7 @@
       node,
       pinnedOut(node, () => ({ "z-index": "var(--z, 1)" })),
       {
-        duration: dur("--duration-exit"),
+        duration: dur("--duration-fade"),
         easing: easeOut,
         css: (t) =>
           narrow
@@ -1420,7 +1420,7 @@
         data-drop-after={(dropHint.tabIndexIn(leaf.id) === i + 1 &&
           i === tabs.length - 1) ||
           undefined}
-        class="group/tab pane-tab-pads pane-tab-rims pane-tab-needs relative flex max-w-c-tab-max-w min-w-0 flex-none touch-pan-x data-drop-after:z-(--drop-z) data-drop-before:z-(--drop-z) motion-safe:reordering:not-data-following:transition-[translate] motion-safe:reordering:not-data-following:duration-(--duration-panel) motion-safe:reordering:not-data-following:ease-drawer data-drop-before:before:absolute data-drop-before:before:inset-y-space-row data-drop-before:before:-start-space-row data-drop-before:before:z-4 data-drop-before:before:w-space-row data-drop-before:before:rounded-pill data-drop-before:before:bg-ink-strong data-drop-after:after:absolute data-drop-after:after:inset-y-space-row data-drop-after:after:-end-space-row data-drop-after:after:z-4 data-drop-after:after:w-space-row data-drop-after:after:rounded-pill data-drop-after:after:bg-ink-strong"
+        class="group/tab pane-tab-pads pane-tab-rims pane-tab-needs relative flex max-w-60 min-w-0 flex-none touch-pan-x data-drop-after:z-(--drop-z) data-drop-before:z-(--drop-z) motion-safe:reordering:not-data-following:transition-[translate] motion-safe:reordering:not-data-following:duration-(--duration-panel) motion-safe:reordering:not-data-following:ease-drawer data-drop-before:before:absolute data-drop-before:before:inset-y-space-row data-drop-before:before:-start-space-row data-drop-before:before:z-4 data-drop-before:before:w-space-row data-drop-before:before:rounded-pill data-drop-before:before:bg-ink-strong data-drop-after:after:absolute data-drop-after:after:inset-y-space-row data-drop-after:after:-end-space-row data-drop-after:after:z-4 data-drop-after:after:w-space-row data-drop-after:after:rounded-pill data-drop-after:after:bg-ink-strong"
         style:--drop-z="calc(var(--stack-top) + 1)"
         data-chosen={chosen ? "" : undefined}
         data-flush={hungFlush(cardHere, menuHere)}
@@ -1506,16 +1506,16 @@
           data-slot="shade"
           aria-hidden="true"
           class="pointer-events-none absolute inset-x-(--shade-x) inset-y-0 z-0 mask-(--shade-mask)"
-          style:--shade-mask={"linear-gradient(to bottom, var(--color-mask-opaque) calc(100% - 2 * var(--flare)), transparent calc(100% - var(--flare)))"}
+          style:--shade-mask={"linear-gradient(to bottom, var(--color-ink-strong) calc(100% - 2 * var(--flare)), transparent calc(100% - var(--flare)))"}
           style:--shade-x="calc(-1 * var(--flare))"
           style:--cast-start="calc(var(--flare) + var(--slope-start))"
           style:--cast-end="calc(var(--flare) + var(--slope-end))"
           style:--cast-r="var(--radius) var(--radius) 0 0"
           ><span
-            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-recess-deep opacity-(--cast-op) shadow-tab-start group-data-chosen/tab:shadow-tab-start-chosen group-data-lifted/tab:opacity-100 motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
+            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-sunk opacity-(--cast-op) shadow-tab-start group-data-chosen/tab:shadow-tab-start-chosen group-data-lifted/tab:opacity-100 motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
             style:--cast-op="calc(1 - var(--lone-start, 0))"
           ></span><span
-            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-recess-deep opacity-(--cast-op) shadow-tab-end group-data-chosen/tab:shadow-tab-end-chosen group-data-lifted/tab:opacity-100 motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
+            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-sunk opacity-(--cast-op) shadow-tab-end group-data-chosen/tab:shadow-tab-end-chosen group-data-lifted/tab:opacity-100 motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
             style:--cast-op="calc(1 - var(--lone-end, 0))"
           ></span></span
         >
@@ -1915,7 +1915,7 @@
     >
       <div
         data-slot="details-morph"
-        class="max-h-inherit w-full overflow-hidden motion-safe:details-gliding:transition-[height] motion-safe:details-gliding:duration-(--duration-pop) motion-safe:details-gliding:ease-drawer"
+        class="max-h-inherit w-full overflow-hidden motion-safe:details-gliding:transition-[height] motion-safe:details-gliding:duration-(--duration-panel) motion-safe:details-gliding:ease-drawer"
         style:height={detailsHeight ? `${detailsHeight}px` : undefined}
       >
         <div

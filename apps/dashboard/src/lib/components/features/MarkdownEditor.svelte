@@ -106,7 +106,7 @@
 {#if failed}
   <div
     data-slot="failed"
-    class="flex flex-wrap items-center gap-space-3 py-space-3 px-space-7 type-label text-status-fail-ink"
+    class="flex flex-wrap items-center gap-space-3 py-space-3 px-space-6 type-label text-status-fail-ink"
     role="alert"
     in:crossIn
   >

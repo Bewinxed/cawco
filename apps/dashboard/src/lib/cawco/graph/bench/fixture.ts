@@ -2,7 +2,7 @@
  * The dials an agent puts on the routine form for its design run's pages:
  * one of each kind, each on a value the form reads (the controls' radius
  * and height, its fields' fill (every field reads it; no one ink token
- * carries all the form's text: labels read `--color-ink-row`, values `--color-ink-strong`), an arg that has every blank field show
+ * carries all the form's text: labels read `--color-ink-strong`, values `--color-ink-strong`), an arg that has every blank field show
  * its error).
  */
 import type { GraphDial } from "../dials";
@@ -23,7 +23,7 @@ export const ROUTINE_DIALS: GraphDial[] = [
     name: "height",
     label: "Field height",
     options: ["30px", "36px", "44px"],
-    target: { cssVar: "--spacing-c-input-h" },
+    target: { cssVar: "--spacing-control-md" },
   },
   {
     kind: "color",

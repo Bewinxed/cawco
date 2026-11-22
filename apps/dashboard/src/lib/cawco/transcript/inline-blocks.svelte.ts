@@ -235,7 +235,7 @@ export class ConversationBlocks {
           this.marked = null;
         }
       );
-    }, dur("--duration-hold"));
+    }, dur("--duration-loop"));
   }
 }
 

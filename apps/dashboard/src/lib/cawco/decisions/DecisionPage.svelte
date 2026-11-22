@@ -312,7 +312,7 @@
               <span class="text-ink-muted">{group.label}</span>
               {#each group.to as link, index (link.name)}
                 <a
-                  class="rounded-xs text-ink-strong underline decoration-border-control underline-offset-(--underline-offset) wrap-anywhere hover:decoration-ink-muted focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring"
+                  class="rounded-xs text-ink-strong underline decoration-border-control underline-offset-3 wrap-anywhere hover:decoration-ink-muted focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring"
                   data-link-to={link.name}
                   href={pageHref(link.name)}
                   onclick={(event) => {
@@ -366,7 +366,7 @@
   <form
     data-slot="dock"
     data-safe-bottom
-    class="absolute inset-x-0 bottom-(--dock-bottom) z-(--layer-dock) mx-auto flex w-c-composer-w max-w-full flex-col gap-space-2 max-desk:w-full"
+    class="absolute inset-x-0 bottom-(--dock-bottom) z-(--layer-dock) mx-auto flex w-(--composer-w) max-w-full flex-col gap-space-2 max-desk:w-full"
     style:--dock-bottom="calc(var(--spacing-space-4) + var(--safe-bottom))"
     onsubmit={(event) => {
       event.preventDefault();
@@ -377,7 +377,7 @@
     {#if refusal}
       <p
         data-slot="feedback"
-        class="type-meta m-0 px-space-3 text-error-11"
+        class="type-meta m-0 px-space-3 text-status-fail-ink"
         role="alert"
         in:appear
       >
@@ -394,7 +394,7 @@
       bind:this={shell}
       data-slot="cin"
       class={dockShellVariants({
-        class: "flex items-end gap-space-2 p-c-composer-inset ps-space-3",
+        class: "flex items-end gap-space-2 p-space-2 ps-space-3",
       })}
       style:--note-leading="var(--leading-ui)"
       style:--note-fs="var(--text-body)"

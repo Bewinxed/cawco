@@ -81,7 +81,7 @@
         bind:value={draft}
       />
       {#if problem}
-        <p class="type-meta text-error-11" role="alert">{problem}</p>
+        <p class="type-meta text-status-fail-ink" role="alert">{problem}</p>
       {/if}
       <div data-slot="actions" class="flex justify-end gap-space-1">
         <Button

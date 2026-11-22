@@ -1,7 +1,7 @@
 /**
  * New project's placeholder typing its examples once, then resting
  * (decision page `onboarding-design`, card `describe-hint`, the person's
- * pick): each example types in a letter every `--duration-type`, holds for one
+ * pick): each example types in a letter every `--duration-step`, holds for one
  * `--duration-breath`, and erases at half the pace (exits run faster than
  * entrances), then the next types in; after the last it types the resting
  * placeholder and lands there, and nothing moves after (DESIGN.md: "Nothing
@@ -59,7 +59,7 @@ export class TypedExamples {
       this.text = this.#rest;
       return stop;
     }
-    const letter = dur("--duration-type");
+    const letter = dur("--duration-step");
     const hold = breathMs();
     const type = (words: string, then: () => void, at = 0) => {
       this.text = words.slice(0, at);

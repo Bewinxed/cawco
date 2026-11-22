@@ -526,7 +526,7 @@
   <div
     class="flow-root"
     data-slot="later"
-    style:--who-lead="var(--leading-prose-sm)"
+    style:--who-lead="var(--leading-body)"
   >
     <Who grouped name={who} shown timestamp={at} {you} />
     {#if text.trim()}
@@ -551,7 +551,7 @@
   class="flex shrink-0 flex-col gap-space-2"
   data-slot="pin-top"
 >
-  <div class="flex min-h-c-top-bar-h items-center gap-space-2" data-slot="bar">
+  <div class="flex min-h-control-lg items-center gap-space-2" data-slot="bar">
     {#if sheet}
       <BarGlass form="group">
         <BarItem
@@ -791,7 +791,7 @@
               <p class="flex flex-wrap gap-space-1 mt-space-1 mx-0 mb-0">
                 {#each entry.files as file (file)}
                   <code
-                    class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-code-bg type-code"
+                    class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-surface-recess type-code"
                     >{file}</code
                   >
                 {/each}

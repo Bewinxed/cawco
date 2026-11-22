@@ -255,11 +255,11 @@
   >
     <div
       class={[
-        "min-h-0 flex-auto overflow-hidden px-space-7 max-desk:px-space-5",
-        caw && "pbs-c-top-bar-h",
+        "min-h-0 flex-auto overflow-hidden px-space-6 max-desk:px-space-5",
+        caw && "pbs-control-lg",
       ]}
     >
-      <div class="mx-auto max-w-c-measure">
+      <div class="mx-auto max-w-measure">
         {#each TURNS as turn, n (n)}
           <Turn>
             <Who name={caw ? "Caw" : "Claude Code"} />
@@ -335,9 +335,9 @@
       </p>
     </div>
     <div
-      class="relative m-space-2 flex w-c-panel-w flex-none flex-col overflow-clip rounded-lg bg-surface-raised shadow-tile max-desk:m-0 max-desk:w-full max-desk:rounded-none"
+      class="relative m-space-2 flex w-95 flex-none flex-col overflow-clip rounded-lg bg-surface-raised shadow-sm max-desk:m-0 max-desk:w-full max-desk:rounded-none"
       data-caw-panel
-      style:--bar-room="var(--spacing-c-top-bar-h)"
+      style:--bar-room="var(--spacing-control-lg)"
     >
       <div class="absolute inset-x-0 top-0 z-2">
         <BarFloat tint="bg-surface-raised">
@@ -381,7 +381,7 @@
     <!-- The shelf: the session's tab, then the bar's trailing glass, a
          step of room above it for the glass's corner counts. -->
     <div
-      class="relative z-2 box-content flex h-c-top-bar-h flex-none items-end gap-space-3 pbs-space-3 ps-space-3 pe-space-2"
+      class="relative z-2 box-content flex h-control-lg flex-none items-end gap-space-3 pbs-space-3 ps-space-3 pe-space-2"
     >
       <div class="relative min-w-0 flex-auto">
         <Tabs value="this" variant="folder">

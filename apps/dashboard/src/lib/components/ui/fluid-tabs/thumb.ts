@@ -25,7 +25,7 @@ import { tv } from "#lib/utils.js";
  * track's ghost.
  */
 export const SEGMENTED_TRACK =
-  "rounded-(--radius) bg-surface-recess-deep p-(--pad) [--ghost:var(--color-groove-hover)] [--item:var(--spacing-c-btn-h-sm)] [--pad:calc(var(--spacing)_*_0.75)] [--radius:var(--radius-md)] [--shape:max(0px,calc(var(--radius)_-_var(--pad)))]";
+  "rounded-(--radius) bg-surface-sunk p-(--pad) [--ghost:var(--color-surface-pressed)] [--item:var(--spacing-control-sm)] [--pad:calc(var(--spacing)_*_0.75)] [--radius:var(--radius-md)] [--shape:max(0px,calc(var(--radius)_-_var(--pad)))]";
 
 /**
  * The kit's segmented parts: the groove (its recipe above), the thumb that
@@ -43,7 +43,7 @@ export const segmentedVariants = tv({
     thumb:
       "pointer-events-none absolute start-0 top-0 origin-top-left rounded-(--shape) bg-surface-lift opacity-0 shadow-raised loops group-data-pending/segmented:breathe",
     segment:
-      "relative inline-flex h-(--item) items-center justify-center gap-1.5 rounded-(--shape) px-c-segment-pad-x mark-line py-0 font-sans text-size-label leading-none font-medium whitespace-nowrap text-ink-muted transition-control hover:not-data-[state=active]:not-data-[state=on]:bg-groove-hover data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
+      "relative inline-flex h-(--item) items-center justify-center gap-1.5 rounded-(--shape) px-space-3 mark-line py-0 font-sans text-size-label leading-none font-medium whitespace-nowrap text-ink-muted transition-control hover:not-data-[state=active]:not-data-[state=on]:bg-surface-pressed data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
   },
   variants: {
     /**
@@ -52,7 +52,7 @@ export const segmentedVariants = tv({
      * parts the scale's smallest step apart.
      */
     compact: {
-      true: { segment: "gap-space-1 px-c-segment-pad-x-compact" },
+      true: { segment: "gap-space-1 px-space-2" },
     },
   },
 });
@@ -60,7 +60,7 @@ export const segmentedVariants = tv({
 /**
  * Slides the thumb of a segmented group (single toggle group) under
  * its selected item, gliding its position and its size together over
- * --duration-pop on --ease-in-out, the way the new-session ghost follows the
+ * --duration-panel on --ease-in-out, the way the new-session ghost follows the
  * hover. A change caught mid-glide starts from where the thumb is on
  * screen, not from where it was headed (a resize of the group mid-glide
  * included), and width and height tween rather
@@ -136,7 +136,7 @@ export function slideThumb(
           },
         ],
         {
-          duration: dur("--duration-pop"),
+          duration: dur("--duration-panel"),
           easing: ease("--ease-in-out"),
         }
       );

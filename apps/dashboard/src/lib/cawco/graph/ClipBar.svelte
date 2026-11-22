@@ -324,21 +324,21 @@
 
   /** Each kind's bar: its wash and its edge, as whole classes. */
   const BAR: Record<ClipKind, string> = {
-    size: "bg-c-clip-size-wash border-c-clip-size",
-    move: "bg-c-clip-move-wash border-c-clip-move",
-    fade: "bg-c-clip-fade-wash border-c-clip-fade",
-    tint: "bg-c-clip-tint-wash border-c-clip-tint",
-    effect: "bg-c-clip-effect-wash border-c-clip-effect",
-    other: "bg-c-clip-other-wash border-c-clip-other",
+    size: "bg-mark-6/22 border-mark-6",
+    move: "bg-mark-7/22 border-mark-7",
+    fade: "bg-mark-3/22 border-mark-3",
+    tint: "bg-mark-8/22 border-mark-8",
+    effect: "bg-mark-5/22 border-mark-5",
+    other: "bg-ink-muted/22 border-ink-muted",
   };
   /** Each kind's ink: an end's mark. */
   const INK: Record<ClipKind, string> = {
-    size: "bg-c-clip-size",
-    move: "bg-c-clip-move",
-    fade: "bg-c-clip-fade",
-    tint: "bg-c-clip-tint",
-    effect: "bg-c-clip-effect",
-    other: "bg-c-clip-other",
+    size: "bg-mark-6",
+    move: "bg-mark-7",
+    fade: "bg-mark-3",
+    tint: "bg-mark-8",
+    effect: "bg-mark-5",
+    other: "bg-ink-muted",
   };
   const ring =
     "focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2";
@@ -353,11 +353,11 @@
    */
   const GRIPS = 3;
   let grip = $state(0);
-  const POINTER_FLOOR = browser ? numberOf("--spacing-c-pointer-floor") : 0;
+  const POINTER_FLOOR = browser ? numberOf("--spacing-control-xs") : 0;
 </script>
 
 <div
-  class="relative h-c-badge-h w-full select-none"
+  class="relative h-icon-lg w-full select-none"
   data-slot="run-lane"
   {@attach frameSize(
     (node: HTMLElement) =>
@@ -460,7 +460,7 @@
               (end === "start"
                 ? "-translate-x-full rtl:translate-x-full"
                 : "translate-x-full rtl:-translate-x-full"),
-            "coarse:-inset-y-space-3 coarse:w-space-7",
+            "coarse:-inset-y-space-3 coarse:w-space-6",
             end === "start"
               ? "coarse:-translate-x-full coarse:justify-items-end coarse:rtl:translate-x-full"
               : "coarse:translate-x-full coarse:justify-items-start coarse:rtl:-translate-x-full",

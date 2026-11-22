@@ -107,7 +107,7 @@
    * at 390 thirteen lines took the stage above the drawer.
    */
   const listShown = $derived(
-    listOpen ?? panel >= (browser ? numberOf("--spacing-c-graph-stage-min") : 0)
+    listOpen ?? panel >= (browser ? numberOf("--graph-stage-min") : 0)
   );
   const uid = $props.id();
   $effect(() => {
@@ -254,7 +254,7 @@
       <li class="min-w-0">
         <button
           type="button"
-          class="mark-line pointer-hit touch-hit flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 rounded-sm px-space-1 text-start type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
+          class="mark-line pointer-hit touch-hit flex min-h-control-sm min-w-0 items-center gap-space-2 rounded-sm px-space-1 text-start type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover"
           data-kind={line.kind}
           data-slot="difference"
           onclick={() => ondifference(at)}
@@ -263,7 +263,7 @@
             aria-hidden="true"
             data-box
             class={[
-              "inline-block size-space-3 flex-none rounded-xs border-(length:--spacing-c-change-ring-width) border-c-change-ring",
+              "inline-block size-space-3 flex-none rounded-xs border-(length:--focus-ring-width) border-status-done-glyph",
               line.kind === "went" && "border-dashed",
             ]}
           ></span>
@@ -285,7 +285,7 @@
   <div
     class={[
       floatingSurface({ motion: "pop" }),
-      "max-h-80 max-w-c-measure min-w-0 overflow-y-auto overscroll-contain ps-space-3",
+      "max-h-80 max-w-measure min-w-0 overflow-y-auto overscroll-contain ps-space-3",
     ]}
     data-slot="differences-card"
   >
@@ -298,7 +298,7 @@
   <span
     aria-hidden="true"
     data-box
-    class="inline-block size-space-3 flex-none rounded-xs border-(length:--spacing-c-change-ring-width) border-c-change-ring"
+    class="inline-block size-space-3 flex-none rounded-xs border-(length:--focus-ring-width) border-status-done-glyph"
   ></span>
   <span class="num"
     >{words.differenceCount(found.length, figureOf(found.length, lang))}</span

@@ -37,7 +37,7 @@
 </script>
 
 <div
-  class="flex h-c-btn-h min-w-0 items-center gap-space-2 rounded-md border border-border-control bg-surface-hover pe-space-1 ps-space-3 data-wrap:h-auto data-wrap:min-h-c-btn-h data-wrap:flex-wrap data-wrap:gap-y-space-1 data-wrap:py-space-1"
+  class="flex h-control-md min-w-0 items-center gap-space-2 rounded-md border border-border-control bg-surface-hover pe-space-1 ps-space-3 data-wrap:h-auto data-wrap:min-h-control-md data-wrap:flex-wrap data-wrap:gap-y-space-1 data-wrap:py-space-1"
   data-wrap={wrap || undefined}
 >
   <span class="sr-only">{label}:</span>

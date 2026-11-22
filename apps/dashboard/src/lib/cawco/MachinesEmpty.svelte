@@ -51,7 +51,7 @@
 </script>
 
 <div
-  class="group mx-auto flex w-full max-w-c-page-column-w flex-col items-center gap-space-4"
+  class="group mx-auto flex w-full max-w-136 flex-col items-center gap-space-4"
   data-leaving={!present || undefined}
 >
   <div data-slot="caw-80" class="grid min-h-20 place-items-center">
@@ -89,7 +89,7 @@
           >
             {shellWords.noMachines}
           </h1>
-          <p class="m-0 max-w-c-page-line type-body text-pretty text-ink-muted">
+          <p class="m-0 max-w-104 type-body text-pretty text-ink-muted">
             Sessions run on your own machines. Install CawCo on one and it joins
             this fleet.
           </p>
@@ -135,7 +135,7 @@
             {shellWords.noneOnline}
           </h1>
           <p
-            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
+            class="m-0 max-w-104 type-body text-center text-pretty text-ink-muted"
           >
             Sessions run on a machine that is online. See which ones dropped and
             why.

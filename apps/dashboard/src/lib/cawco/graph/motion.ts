@@ -80,26 +80,18 @@ export interface Clip {
   was: Clip | null;
 }
 
-/** The duration ladder a clip may name (DESIGN.md, Motion grammar). */
+/** The duration ladder a clip may name (DESIGN.md, Motion). */
 const LADDER = [
-  "--duration-toggle",
+  "--duration-step",
   "--duration-control",
-  "--duration-exit",
-  "--duration-menu",
-  "--duration-morph",
   "--duration-fade",
-  "--duration-pop",
   "--duration-panel",
-  "--duration-panel-exit",
-  "--duration-glide",
   "--duration-settle",
 ] as const;
 
 /**
  * The design system's durations, shortest first, one per length: what the
- * Length setting offers. Tokens of one length stand as one choice under
- * both names (`--duration-toggle` and `--duration-exit` are both 160 ms; listed apart,
- * the list's two rows of one key threw and the page went to a 500).
+ * Length setting offers.
  */
 export const durationTokens = (): { tokens: string[]; ms: number }[] => {
   const by = new Map<number, string[]>();
@@ -150,11 +142,7 @@ export function curveTokenOf(easing: string): string | null {
     return "linear";
   }
   const shape = shapeOf(easing);
-  return (
-    ([...CURVES, "--ease-goo"] as const).find(
-      (name) => shapeOf(ease(name)) === shape
-    ) ?? null
-  );
+  return CURVES.find((name) => shapeOf(ease(name)) === shape) ?? null;
 }
 
 /** A curve in words. */

@@ -55,7 +55,7 @@
     {:else}
       <span data-box></span>
     {/if}
-    <span data-slot="rings-key-label" class="font-medium text-ink-row"
+    <span data-slot="rings-key-label" class="font-medium text-ink-strong"
       >{row.label}</span
     >
     <span

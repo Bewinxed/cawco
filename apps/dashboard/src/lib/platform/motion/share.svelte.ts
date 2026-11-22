@@ -766,7 +766,7 @@ export function regroup(
       easing: ease("--ease-out"),
     };
     const fadeOut = {
-      duration: dur("--duration-exit"),
+      duration: dur("--duration-fade"),
       easing: ease("--ease-out"),
       fill: "forwards" as const,
     };

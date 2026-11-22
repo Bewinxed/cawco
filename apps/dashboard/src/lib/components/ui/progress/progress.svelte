@@ -13,7 +13,7 @@
 
 <ProgressPrimitive.Root
   class={cn(
-    "relative flex h-1.5 w-full items-center overflow-x-hidden rounded-pill bg-surface-recess-deep",
+    "relative flex h-1.5 w-full items-center overflow-x-hidden rounded-pill bg-surface-sunk",
     className
   )}
   data-slot="progress"

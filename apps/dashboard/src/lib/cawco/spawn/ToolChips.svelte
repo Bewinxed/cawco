@@ -115,14 +115,14 @@
       tone: fullSend ? "grant" : undefined,
     })
   );
-  /** Apply the level now, but keep the picker open while the chip settles on it (--duration-pop). */
+  /** Apply the level now, but keep the picker open while the chip settles on it (--duration-panel). */
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
   function commitEffort(level: EffortLevel) {
     tools.oneffort(level);
     clearTimeout(closeTimer);
     closeTimer = setTimeout(() => {
       pop = null;
-    }, dur("--duration-pop"));
+    }, dur("--duration-panel"));
   }
   $effect(() => () => clearTimeout(closeTimer));
 </script>

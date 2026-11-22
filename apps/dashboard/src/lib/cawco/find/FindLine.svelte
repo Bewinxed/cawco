@@ -81,14 +81,14 @@
   <div class="flex flex-wrap items-center gap-x-space-1 gap-y-(--cin-pad)">
     <!-- mark-line: the glyph leads a field, not words; the field sets its own line. -->
     <div
-      class="flex flex-auto basis-full min-w-0 items-center @find-line:basis-0"
+      class="flex flex-auto basis-full min-w-0 items-center @sm:basis-0"
     >
       <IconSearch
         class="flex-none size-icon-md me-space-2 text-ink-muted"
         aria-hidden="true"
       />
       <input
-        class="flex-1 min-w-0 h-c-composer-field appearance-none border-none p-0 [&::-webkit-search-cancel-button]:hidden bg-transparent font-sans text-(length:--text-field-floor) text-ink-strong caret-brand-solid placeholder:text-ink-subtle outline-none"
+        class="flex-1 min-w-0 h-control-md appearance-none border-none p-0 [&::-webkit-search-cancel-button]:hidden bg-transparent font-sans text-row text-ink-strong caret-brand-solid placeholder:text-ink-subtle outline-none"
         aria-activedescendant={find.listOpen && find.index !== null
           ? placeId(find.viewId, find.index)
           : undefined}
@@ -107,7 +107,7 @@
       />
     </div>
     <div
-      class="flex flex-auto basis-full items-center gap-space-1 @find-line:flex-none @find-line:basis-auto"
+      class="flex flex-auto basis-full items-center gap-space-1 @sm:flex-none @sm:basis-auto"
     >
       <!-- The place, and the control that opens and folds the places
            rising out of the composer: the list's glyph says it opens
@@ -128,7 +128,7 @@
         title={find.listOpen ? findInWords.hidePlaces : findInWords.showPlaces}
         variant="ghost"
       />
-      <span class="flex-auto @find-line:hidden" aria-hidden="true"></span>
+      <span class="flex-auto @sm:hidden" aria-hidden="true"></span>
       <Button
         aria-label={findInWords.previous}
         class="flex-none"

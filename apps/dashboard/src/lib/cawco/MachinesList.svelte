@@ -64,7 +64,7 @@
   /** A row with a bare glyph: the card's 7px pads, or the sheet's nav row's. */
   const bareRow = $derived(
     rail
-      ? "gap-c-row-inset ps-c-row-inset pe-space-2"
+      ? "gap-space-3 ps-space-3 pe-space-2"
       : "gap-space-2 px-space-2"
   );
   /** A row led by a machine's tile: in the sheet, the tile on the glyph's box's centre. */
@@ -76,7 +76,7 @@
   /** The glyph's box: the sheet's nav row's (space-5), or the glyph's own. */
   const glyphBox = $derived(rail ? "w-space-5" : "w-icon-md");
   const TILE_LEAD =
-    "calc(var(--spacing-c-row-inset) - (var(--spacing-c-mark) - var(--spacing-space-5)) / 2)";
+    "calc(var(--spacing-space-3) - (var(--mark-box) - var(--spacing-space-5)) / 2)";
 
   /** Each machine the fleet lists that an install is bringing back: its row is that install's. */
   const returning = $derived(
@@ -239,7 +239,7 @@
       <li
         data-slot="row"
         class={[
-          "flex w-full min-h-space-8 items-center rounded-sm py-space-1 text-ink-strong transition-control coarse:min-h-c-row-h hover:bg-surface-hover",
+          "flex w-full min-h-space-8 items-center rounded-sm py-space-1 text-ink-strong transition-control coarse:min-h-control-lg hover:bg-surface-hover",
           tileRow,
         ]}
         data-waiting={machine.machineId}
@@ -300,7 +300,7 @@
   <p
     class={[
       "m-0 pt-space-1 pb-space-2 type-meta text-ink-muted",
-      rail ? "ps-c-row-inset pe-space-2" : "px-space-2",
+      rail ? "ps-space-3 pe-space-2" : "px-space-2",
     ]}
   >
     Connect a machine to run sessions
@@ -313,7 +313,7 @@
           data-slot="row"
           aria-haspopup="dialog"
           class={[
-            "select-none flex w-full min-h-space-8 items-center rounded-sm py-space-1 text-start text-ink-strong transition-control coarse:min-h-c-row-h hover:bg-surface-hover press-tint focus-inset",
+            "select-none flex w-full min-h-space-8 items-center rounded-sm py-space-1 text-start text-ink-strong transition-control coarse:min-h-control-lg hover:bg-surface-hover press-tint focus-inset",
             bareRow,
           ]}
           onclick={(event) => connect.openNew(event.currentTarget, way.route)}
@@ -365,7 +365,7 @@
             <div
               data-slot="row"
               class={[
-                "flex w-full min-h-space-8 items-center rounded-sm py-space-1 text-ink-strong transition-control coarse:min-h-c-row-h hover:bg-surface-hover press-tint focus-inset",
+                "flex w-full min-h-space-8 items-center rounded-sm py-space-1 text-ink-strong transition-control coarse:min-h-control-lg hover:bg-surface-hover press-tint focus-inset",
                 tileRow,
               ]}
               style:--tile-lead={rail ? TILE_LEAD : undefined}
@@ -418,7 +418,7 @@
     data-slot="row"
     data-add
     class={[
-      "select-none mark-line press-tint focus-inset mt-space-1 flex w-full min-h-space-8 items-center rounded-ee-sm rounded-es-sm border-t border-t-border-hairline py-space-1 text-start type-label text-ink-muted transition-control coarse:min-h-c-row-h hover:bg-surface-hover",
+      "select-none mark-line press-tint focus-inset mt-space-1 flex w-full min-h-space-8 items-center rounded-ee-sm rounded-es-sm border-t border-t-border-hairline py-space-1 text-start type-label text-ink-muted transition-control coarse:min-h-control-lg hover:bg-surface-hover",
       bareRow,
     ]}
     onclick={(event) => connect.openNew(event.currentTarget)}

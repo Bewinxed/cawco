@@ -714,12 +714,12 @@
 
   /** Each kind's swatch in the key: its bar's wash and edge. */
   const BAR: Record<ClipKind, string> = {
-    size: "bg-c-clip-size-wash border-c-clip-size",
-    move: "bg-c-clip-move-wash border-c-clip-move",
-    fade: "bg-c-clip-fade-wash border-c-clip-fade",
-    tint: "bg-c-clip-tint-wash border-c-clip-tint",
-    effect: "bg-c-clip-effect-wash border-c-clip-effect",
-    other: "bg-c-clip-other-wash border-c-clip-other",
+    size: "bg-mark-6/22 border-mark-6",
+    move: "bg-mark-7/22 border-mark-7",
+    fade: "bg-mark-3/22 border-mark-3",
+    tint: "bg-mark-8/22 border-mark-8",
+    effect: "bg-mark-5/22 border-mark-5",
+    other: "bg-ink-muted/22 border-ink-muted",
   };
   /** The drawer's head line while the move has no rows to play. */
   const peekLine = $derived.by(() => {
@@ -738,7 +738,7 @@
       .length
   );
   const bare =
-    "pointer-hit touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-md text-ink-strong transition-control can-hover:hover:bg-surface-hover";
+    "pointer-hit touch-hit grid size-control-sm flex-none place-items-center rounded-md text-ink-strong transition-control can-hover:hover:bg-surface-hover";
 </script>
 
 {#snippet title()}
@@ -753,7 +753,7 @@
           aria-label={move.kind === "none"
             ? words.chooseMove
             : `${words.moves}: ${words.move(move.from, move.to)}`}
-          class="mark-line pointer-hit touch-hit -ms-space-2 inline-flex h-c-btn-h-sm max-w-full min-w-0 items-center gap-space-1 rounded-md px-space-2 type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover"
+          class="mark-line pointer-hit touch-hit -ms-space-2 inline-flex h-control-sm max-w-full min-w-0 items-center gap-space-1 rounded-md px-space-2 type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover"
           data-slot="move-title"
           type="button"
         >
@@ -919,10 +919,10 @@
        animation's row says what it changes in words, its run and its
        parts; open, all in selected ink. -->
   {@const name = {
-    open: "text-selected-ink",
-    rest: "text-ink-row",
+    open: "text-brand-ink",
+    rest: "text-ink-strong",
   }[tone]}
-  {@const rest = tone === "open" ? "text-selected-ink" : "text-ink-muted"}
+  {@const rest = tone === "open" ? "text-brand-ink" : "text-ink-muted"}
   <span class="min-w-0 truncate">
     {#if line.part}
       <span class={name}>{propertyName(line.part.property)}</span>
@@ -945,7 +945,7 @@
   <div
     bind:this={overview}
     aria-label={words.overview}
-    class="relative h-space-2 w-full cursor-ew-resize touch-none rounded-pill bg-surface-fill"
+    class="relative h-space-2 w-full cursor-ew-resize touch-none rounded-pill bg-surface-hover"
     data-slot="overview"
     onpointerdown={overviewDrag}
     role="presentation"
@@ -976,7 +976,7 @@
     <!-- The drawer at its head stop: Play, the time and the move on one
        line over the stage, so the move plays in sight of the stage. -->
     {#if move.kind === "ready" && clips.length > 0}
-      <div class="flex min-h-c-btn-h min-w-0 items-center gap-space-3">
+      <div class="flex min-h-control-md min-w-0 items-center gap-space-3">
         {@render transport()}
         <span class="min-w-0 flex-1 truncate type-label text-ink-strong"
           >{words.move(move.from, move.to)}</span
@@ -998,7 +998,7 @@
          move as it comes and goes. The title gives way first, its whole
          name in its menu. -->
     <header
-      class="flex h-c-btn-h min-w-0 flex-none items-center gap-x-space-3"
+      class="flex h-control-md min-w-0 flex-none items-center gap-x-space-3"
       data-slot="move-head"
     >
       <div class="flex min-w-0 flex-1 items-center">
@@ -1035,7 +1035,7 @@
     </header>
 
     {#if move.kind === "none"}
-      <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
+      <p class="m-0 max-w-measure type-body text-ink-muted text-pretty">
         {words.noMove(move.state)}
       </p>
     {:else if move.kind === "reading"}
@@ -1072,15 +1072,15 @@
       >
         <div
           data-slot="timeline"
-          class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 @max-timeline/move:grid-cols-1"
-          style:--cols={"minmax(var(--spacing-c-graph-move-name-w), 38%) minmax(0, 1fr)"}
+          class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 @max-sm/move:grid-cols-1"
+          style:--cols={"minmax(var(--graph-move-name-w), 38%) minmax(0, 1fr)"}
           {@attach (node: HTMLElement) => {
             // Not passive: a pinch or a Ctrl-wheel zooms the lanes, never the page.
             return on(node, "wheel", wheel, { passive: false });
           }}
         >
           <div
-            class="sticky top-0 z-2 col-span-full grid min-h-c-btn-h grid-cols-subgrid bg-surface-raised"
+            class="sticky top-0 z-2 col-span-full grid min-h-control-md grid-cols-subgrid bg-surface-raised"
           >
             <div class="flex min-w-0 items-center">
               {@render transport()}
@@ -1093,7 +1093,7 @@
                    playhead's flag (at its foot) never meet: at 25px the
                    flag ran 3px into a figure standing over it. -->
               <Slider.Root
-                class="relative block h-space-8 w-full cursor-ew-resize touch-none select-none coarse:h-c-btn-h-lg"
+                class="relative block h-space-8 w-full cursor-ew-resize touch-none select-none coarse:h-control-lg"
                 max={Math.max(viewTo, viewFrom + 1)}
                 min={viewFrom}
                 onValueChange={(next: number) => onseek(Math.min(next, length))}
@@ -1183,18 +1183,18 @@
               {@const open = !folded.includes(entry.group)}
               <!-- The agent's group: the house section head over its rows, its chevron folding them. -->
               <div
-                class="col-span-full flex min-h-c-btn-h min-w-0 items-center border-t border-border-hairline"
+                class="col-span-full flex min-h-control-md min-w-0 items-center border-t border-border-hairline"
                 data-slot="clip-group"
               >
                 <button
                   aria-expanded={open}
                   aria-label={words.groupFold(entry.group, open)}
-                  class="mark-line pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 items-center rounded-sm pe-space-2 type-meta text-ink-muted transition-control can-hover:hover:bg-surface-hover"
+                  class="mark-line pointer-hit touch-hit flex h-control-sm min-w-0 items-center rounded-sm pe-space-2 type-meta text-ink-muted transition-control can-hover:hover:bg-surface-hover"
                   onclick={() => foldGroup(entry.group)}
                   type="button"
                 >
                   <span
-                    class="grid w-c-btn-h-xs flex-none place-items-center"
+                    class="grid w-control-xs flex-none place-items-center"
                     data-box
                   >
                     <IconChevronRight
@@ -1230,8 +1230,8 @@
               >
                 <div
                   class={[
-                    "flex min-h-c-btn-h-lg min-w-0 items-center",
-                    line.part && "ps-c-btn-h-xs",
+                    "flex min-h-control-lg min-w-0 items-center",
+                    line.part && "ps-control-xs",
                   ]}
                 >
                   <!-- The row's one press: it opens or closes the row, its
@@ -1240,13 +1240,13 @@
                     type="button"
                     aria-expanded={open}
                     aria-label={name}
-                    class="pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 flex-1 items-center rounded-sm pe-space-1 text-start type-label transition-control data-chosen:bg-selected-bg can-hover:not-data-chosen:hover:bg-surface-hover"
+                    class="pointer-hit touch-hit flex h-control-sm min-w-0 flex-1 items-center rounded-sm pe-space-1 text-start type-label transition-control data-chosen:bg-selected-bg can-hover:not-data-chosen:hover:bg-surface-hover"
                     data-chosen={chosen || undefined}
                     onclick={() => press(line)}
                     title={name}
                   >
                     <span
-                      class="grid w-c-btn-h-xs flex-none place-items-center"
+                      class="grid w-control-xs flex-none place-items-center"
                       data-box
                     >
                       <IconChevronRight
@@ -1254,7 +1254,7 @@
                         class={[
                           "size-icon-sm transition-transform duration-(--duration-control) ease-out rtl:-scale-x-100",
                           open && "rotate-90 rtl:-rotate-90",
-                          chosen ? "text-selected-ink" : "text-ink-muted",
+                          chosen ? "text-brand-ink" : "text-ink-muted",
                         ]}
                       />
                     </span>
@@ -1265,7 +1265,7 @@
                        keep one width as the glyph comes and goes, and the
                        lanes never move. -->
                   <span
-                    class="flex h-c-btn-h-sm w-c-btn-h-xs flex-none items-center justify-center"
+                    class="flex h-control-sm w-control-xs flex-none items-center justify-center"
                   >
                     {#if edited}
                       {@const said = words.resetRow(name)}
@@ -1293,7 +1293,7 @@
                   </span>
                 </div>
                 <div
-                  class="relative flex min-w-0 items-center px-space-2 @max-timeline/move:min-h-c-btn-h"
+                  class="relative flex min-w-0 items-center px-space-2 @max-sm/move:min-h-control-md"
                   data-slot="lane"
                 >
                   <!-- A press on its empty part scrubs, as the ruler does; with Shift, a press on a bar too. -->
@@ -1330,7 +1330,7 @@
                 </div>
                 {#if chosen}
                   <div
-                    class="col-span-full min-w-0 ps-c-btn-h-xs pt-space-2 pb-space-3"
+                    class="col-span-full min-w-0 ps-control-xs pt-space-2 pb-space-3"
                     in:unfold
                     out:unfold
                   >

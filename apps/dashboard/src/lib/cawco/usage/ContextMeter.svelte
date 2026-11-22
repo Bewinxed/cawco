@@ -63,10 +63,10 @@
             data-state={reading.state}
           >
             <span
-              class="absolute inset-y-0 start-0 w-(--fill-w) rounded-pill bg-meter-calm group-state-near/bar:bg-warning-9 group-state-over/bar:bg-error-9 group-state-reached/bar:bg-error-9 group-state-stale/bar:bg-meter-stale motion-safe:transition-[inline-size] motion-safe:duration-(--duration-morph) motion-safe:ease-drawer"
+              class="absolute inset-y-0 start-0 w-(--fill-w) rounded-pill bg-ink-muted group-state-near/bar:bg-status-attn-glyph group-state-over/bar:bg-status-fail-glyph group-state-reached/bar:bg-status-fail-glyph group-state-stale/bar:bg-ink-subtle motion-safe:transition-[inline-size] motion-safe:duration-(--duration-fade) motion-safe:ease-drawer"
               data-slot="fill"
               style:--fill-w={share > 0
-                ? `max(${share}%, var(--spacing-x-height))`
+                ? `max(${share}%, 1ex)`
                 : "0px"}
             ></span>
           </span>

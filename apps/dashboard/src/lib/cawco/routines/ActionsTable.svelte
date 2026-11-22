@@ -91,8 +91,8 @@
      status. -->
 <div
   data-slot="actions-ledger"
-  style:--card-cols="var(--spacing-c-row-lead) minmax(0, 1fr) auto"
-  style:--lead-w="calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"
+  style:--card-cols="var(--spacing-row-compact) minmax(0, 1fr) auto"
+  style:--lead-w="calc(var(--spacing-row-compact) + var(--spacing-space-3))"
 >
   <Table.Root
     data-actions
@@ -109,12 +109,14 @@
         <Table.Head variant="band">{words.columnAction}</Table.Head>
         <Table.Head
           data-slot="actions-table-col-status"
-          class="w-c-routine-time-w"
+          class="w-(--w)"
+          style="--w: calc(var(--spacing) * 36)"
           variant="band">{words.columnStatus}</Table.Head
         >
         <Table.Head
           data-slot="actions-table-col-when"
-          class="w-c-ledger-when-w"
+          class="w-(--w)"
+          style="--w: calc(var(--spacing) * 24)"
           variant="band">{words.columnWhen}</Table.Head
         >
       </Table.Row>
@@ -131,10 +133,10 @@
           variant="stacks"
         >
           <Table.Cell
-            class="@max-table-424px/table:row-span-2 @max-table-424px/table:self-start"
+            class="@max-sm/table:row-span-2 @max-sm/table:self-start"
             {rule}
             variant="ledger"
-            ><span data-slot="mark" class="grid w-c-row-lead place-items-center"
+            ><span data-slot="mark" class="grid w-row-compact place-items-center"
               ><ProviderLogo
                 provider={action.service.toLowerCase()}
                 size="control"
@@ -144,7 +146,7 @@
           <Table.Cell {rule} variant="ledger">
             <span
               data-slot="what"
-              class="block truncate type-label text-ink-row"
+              class="block truncate type-label text-ink-strong"
               title="{action.service} · {action.tool}">{action.reason}</span
             >
             {#if from}
@@ -156,7 +158,7 @@
             {/if}
           </Table.Cell>
           <Table.Cell
-            class="@max-table-424px/table:col-span-2 @max-table-424px/table:col-start-2 @max-table-424px/table:row-start-2"
+            class="@max-sm/table:col-span-2 @max-sm/table:col-start-2 @max-sm/table:row-start-2"
             data-cell="status"
             {rule}
             variant="ledger"
@@ -164,7 +166,7 @@
             <RunStatus status={said.status} text={said.word} />
           </Table.Cell>
           <Table.Cell
-            class="@max-table-424px/table:col-start-3 @max-table-424px/table:row-start-1"
+            class="@max-sm/table:col-start-3 @max-sm/table:row-start-1"
             data-cell="when"
             {rule}
             variant="ledger"

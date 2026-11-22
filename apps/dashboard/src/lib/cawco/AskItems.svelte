@@ -36,7 +36,7 @@
 {#snippet row(item: AskItem, kids: number)}
   <div
     data-slot="row"
-    class="mark-line flex min-h-(--row-compact-h) items-center gap-(--row-compact-gap) py-0 pe-(--row-compact-pad-end) ps-(--row-compact-gap) text-ink-strong"
+    class="mark-line flex min-h-row-compact items-center gap-space-2 py-0 pe-space-2 ps-space-2 text-ink-strong"
   >
     {#if item.lead.kind === "session"}
       <SessionMark
@@ -82,7 +82,7 @@
   aria-label={label}
   class="kit-tree flex flex-col -mx-space-2 my-0 max-h-(--reach-max) justify-self-stretch overflow-y-auto overflow-x-clip overscroll-contain px-space-2 py-space-1"
   data-roots="touch"
-  style:--reach-max="calc(var(--row-compact-h) * 8)"
+  style:--reach-max="calc(var(--spacing-row-compact) * 8)"
   {@attach echoBeat()}
 >
   {#each rows as { key, line, node } (key)}

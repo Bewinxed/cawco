@@ -100,7 +100,7 @@
       {/if}
       {#if figure.href}
         <a
-          class="text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+          class="text-brand-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
           href={figure.href}>{figure.text}</a
         >
       {:else}

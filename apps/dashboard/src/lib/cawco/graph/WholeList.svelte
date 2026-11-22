@@ -76,7 +76,7 @@
                     onclick={() => onmove(move.from, move.to)}
                   >
                     {#if move.label}
-                      <span class="text-ink-row">{move.label}</span>
+                      <span class="text-ink-strong">{move.label}</span>
                     {/if}
                     <span class="min-w-0 text-ink-muted wrap-anywhere"
                       >{words.move(nameOf(move.from), nameOf(move.to))}</span

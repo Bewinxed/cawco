@@ -145,7 +145,7 @@
     }
     const hold = setTimeout(
       () => connectSignIns.forget(id),
-      dur("--duration-hold")
+      dur("--duration-loop")
     );
     return () => clearTimeout(hold);
   });
@@ -332,7 +332,7 @@
         aria-label={connect.again
           ? askWords.reconnectAskFrom(asker)
           : askWords.connectAskFrom(asker)}
-        class="rail-hang mt-space-1 mb-space-2 flex flex-col gap-space-2 min-w-0 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised scroll-my-space-4"
+        class="rail-hang mt-space-1 mb-space-2 flex flex-col gap-space-2 min-w-0 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-sm scroll-my-space-4"
       >
         <!-- Who connects to what: Caw&Co, the arrow between, the service. -->
         <div
@@ -366,12 +366,12 @@
             role="alert"
           >
             <p
-              class="m-0 max-w-c-measure text-size-body font-medium leading-body text-ink-strong text-balance wrap-anywhere"
+              class="m-0 max-w-measure text-size-body font-medium leading-body text-ink-strong text-balance wrap-anywhere"
             >
               {failed.happened}
             </p>
             <p
-              class="m-0 max-w-c-measure text-size-label text-ink-muted text-pretty wrap-anywhere"
+              class="m-0 max-w-measure text-size-label text-ink-muted text-pretty wrap-anywhere"
             >
               {failed.next}
             </p>
@@ -404,7 +404,7 @@
           {#if reach}
             <p
               data-slot="connect-reach"
-              class="m-0 max-w-c-measure text-size-body leading-body text-ink-strong text-pretty wrap-anywhere"
+              class="m-0 max-w-measure text-size-body leading-body text-ink-strong text-pretty wrap-anywhere"
             >
               {reach}
             </p>
@@ -413,7 +413,7 @@
             <ConnectAddress url={connect.url} />
           </p>
           <p
-            class="m-0 max-w-c-measure text-size-label text-ink-muted text-pretty"
+            class="m-0 max-w-measure text-size-label text-ink-muted text-pretty"
           >
             {askWords.connectReach(connect.server)}
           </p>

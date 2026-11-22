@@ -49,7 +49,7 @@
 >
   {#if open || readOnly}
     <div
-      class="grid min-w-0 grid-cols-(--row-open) gap-x-space-3 gap-y-space-2 @max-member-setup/member-setup:grid-cols-1"
+      class="grid min-w-0 grid-cols-(--row-open) gap-x-space-3 gap-y-space-2 @max-md/member-setup:grid-cols-1"
     >
       <h3
         class={[
@@ -66,17 +66,17 @@
     </div>
   {:else}
     <div
-      class="grid min-w-0 grid-cols-(--row-folded) items-center gap-x-space-3 gap-y-space-1 @max-member-setup/member-setup:grid-cols-(--row-narrow)"
+      class="grid min-w-0 grid-cols-(--row-folded) items-center gap-x-space-3 gap-y-space-1 @max-md/member-setup:grid-cols-(--row-narrow)"
     >
       <h3
-        class="m-0 type-label text-ink-muted @max-member-setup/member-setup:col-start-1"
+        class="m-0 type-label text-ink-muted @max-md/member-setup:col-start-1"
         id="{uid}-label"
       >
         {label}
       </h3>
       <p
         class={[
-          "m-0 min-w-0 truncate type-label @max-member-setup/member-setup:col-start-1 @max-member-setup/member-setup:row-start-2",
+          "m-0 min-w-0 truncate type-label @max-md/member-setup:col-start-1 @max-md/member-setup:row-start-2",
           problem ? "text-status-fail-ink" : "text-ink-strong",
         ]}
       >
@@ -84,7 +84,7 @@
       </p>
       <Button
         aria-label={decidesWords.changeRow(label)}
-        class="@max-member-setup/member-setup:col-start-2 @max-member-setup/member-setup:row-span-2 @max-member-setup/member-setup:row-start-1 @max-member-setup/member-setup:self-center"
+        class="@max-md/member-setup:col-start-2 @max-md/member-setup:row-span-2 @max-md/member-setup:row-start-1 @max-md/member-setup:self-center"
         label={decidesWords.change}
         onclick={onopen}
         size="sm"

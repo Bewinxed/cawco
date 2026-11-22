@@ -455,7 +455,7 @@ export class QueuedEdit {
     if (this.edit) {
       this.edit.shown = false;
     }
-    await shape.morphTo(0, shape.ext, dur("--duration-panel-exit"));
+    await shape.morphTo(0, shape.ext, dur("--duration-panel"));
     // Grown again while it folded: it stays.
     if (this.#editShape === shape && !this.#parts.draft().lifted) {
       shape.remove();

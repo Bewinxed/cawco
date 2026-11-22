@@ -111,13 +111,13 @@
 >
   {#if !phone}
     <header
-      class="flex h-c-top-bar-h flex-none items-center justify-between border-b border-b-border-hairline bg-surface-raised ps-space-6 pe-space-1"
+      class="flex h-control-lg flex-none items-center justify-between border-b border-b-border-hairline bg-surface-raised ps-space-6 pe-space-1"
     >
       <span data-slot="title" class="type-label text-ink-muted"
         >Finder bench</span
       >
       <button
-        class="select-none inline-flex h-c-btn-h items-center gap-space-2 rounded-md border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
+        class="select-none inline-flex h-control-md items-center gap-space-2 rounded-md border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
         data-jump
         onclick={() => (open ? hide() : show())}
         type="button"
@@ -141,7 +141,7 @@
          centred, and full width with 11px margins under 900px. -->
     <div
       data-slot="composer"
-      class="relative mx-auto mb-(--dock-foot) flex w-c-composer-w flex-none items-end gap-space-2 rounded-lg border border-border-control bg-surface-raised py-space-2 pr-space-2 pl-space-3 shadow-tile max-desk:mx-space-3 max-desk:w-auto"
+      class="relative mx-auto mb-(--dock-foot) flex w-(--composer-w) flex-none items-end gap-space-2 rounded-lg border border-border-control bg-surface-raised py-space-2 pr-space-2 pl-space-3 shadow-sm max-desk:mx-space-3 max-desk:w-auto"
       data-composer
       data-safe-bottom
       style:--dock-foot="calc(var(--spacing-space-4) + var(--safe-bottom))"
@@ -156,12 +156,12 @@
       />
       <div data-slot="controls" class="flex gap-space-1">
         <button
-          class="select-none h-c-btn-h rounded-xs border border-border-control bg-surface-raised px-space-3 type-label text-ink-strong"
+          class="select-none h-control-md rounded-xs border border-border-control bg-surface-raised px-space-3 type-label text-ink-strong"
           type="button">Attach</button
         >
         <button
           data-slot="send"
-          class="select-none h-c-btn-h rounded-xs border-none border-current bg-action-solid px-space-3 type-label text-on-action"
+          class="select-none h-control-md rounded-xs border-none border-current bg-action-solid px-space-3 type-label text-on-action"
           data-send
           onclick={() => send(message)}
           type="button">Send</button
@@ -170,7 +170,7 @@
     </div>
     {#if phone}
       <button
-        class="select-none absolute top-space-3 end-space-3 inline-flex h-c-btn-h items-center gap-space-2 rounded-md border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
+        class="select-none absolute top-space-3 end-space-3 inline-flex h-control-md items-center gap-space-2 rounded-md border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
         data-jump
         onclick={() => show()}
         type="button">Jump</button
@@ -205,12 +205,12 @@
       <!-- The glass's card, as it hangs: right-aligned under the bar, the page live under it. -->
       <div
         data-slot="finder-page-card"
-        class="absolute end-0 top-c-top-bar-h z-(--layer-float) flex max-h-(--card-max-h) w-c-find-w flex-col overflow-hidden rounded-b-lg border border-border-control border-t-none bg-surface-raised shadow-overlay-hung"
+        class="absolute end-0 top-control-lg z-(--layer-float) flex max-h-(--card-max-h) w-130 flex-col overflow-hidden rounded-b-lg border border-border-control border-t-none bg-surface-raised shadow-overlay-hung"
         data-finder-card
         role="dialog"
         aria-label="Jump"
         aria-modal="false"
-        style:--card-max-h={"calc(100dvh - var(--spacing-c-top-bar-h) - var(--spacing-space-6))"}
+        style:--card-max-h={"calc(100dvh - var(--spacing-control-lg) - var(--spacing-space-6))"}
       >
         <Finder
           bind:field

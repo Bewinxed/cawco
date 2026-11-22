@@ -75,9 +75,9 @@ export class PaneClose {
       height: `${rect.height}px`,
       borderRadius: "var(--radius-lg)",
       background: "var(--color-surface-raised)",
-      boxShadow: "var(--shadow-drawer)",
+      boxShadow: "var(--shadow-lg)",
       pointerEvents: "none",
-      zIndex: "var(--layer-flight)",
+      zIndex: "calc(var(--layer-float) + 10)",
     });
     document.body.append(stand);
     const done = () => stand.remove();

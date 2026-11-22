@@ -117,9 +117,9 @@
 
   /** The ledger's columns: mark, name, what it brings, when, the actions. */
   const COLUMNS =
-    "var(--spacing-c-row-lead) minmax(0, 1fr) calc(var(--spacing) * 48) calc(var(--spacing) * 30) auto";
+    "var(--spacing-row-compact) minmax(0, 1fr) calc(var(--spacing) * 48) calc(var(--spacing) * 30) auto";
   /** Under the container width: mark, then everything else under the name. */
-  const COLUMNS_NARROW = "var(--spacing-c-row-lead) minmax(0, 1fr)";
+  const COLUMNS_NARROW = "var(--spacing-row-compact) minmax(0, 1fr)";
   /** Three rows stand in while the list is read. */
   const SKELETON_ROWS = [0, 1, 2];
 
@@ -327,13 +327,13 @@
 {#snippet columns(brings: string, forgot: string)}
   <span
     data-slot="brings"
-    class="overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted @max-forgotten/forgotten:hidden"
+    class="overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted @max-desk/forgotten:hidden"
     title={brings}>{brings}</span
   >
   <span
     data-box
     data-slot="when"
-    class="num overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted @max-forgotten/forgotten:hidden"
+    class="num overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted @max-desk/forgotten:hidden"
     ><span class="sr-only">{projectEndWords.forgottenAt(forgot)}</span><span
       aria-hidden="true">{forgot}</span
     ></span
@@ -366,7 +366,7 @@
       <span class="grid place-items-center text-ink-muted" data-box>
         <IconArchive aria-hidden="true" class="size-icon-md" />
       </span>
-      <span class="block min-w-0 type-label text-ink-row"
+      <span class="block min-w-0 type-label text-ink-strong"
         >{projectEndWords.noneTitle}</span
       >
       <p class="col-start-2 m-0 min-w-0 type-meta text-pretty text-ink-muted">
@@ -375,7 +375,7 @@
     </div>
   {:else}
     <ul
-      class="m-0 grid list-none grid-cols-(--wide-cols) gap-x-space-3 p-0 @max-forgotten/forgotten:grid-cols-(--narrow-cols)"
+      class="m-0 grid list-none grid-cols-(--wide-cols) gap-x-space-3 p-0 @max-desk/forgotten:grid-cols-(--narrow-cols)"
       style:--wide-cols={COLUMNS}
       style:--narrow-cols={COLUMNS_NARROW}
       {@attach reflow()}
@@ -385,7 +385,7 @@
            reader hears each cell's own words instead. -->
       <li
         aria-hidden="true"
-        class="col-span-full grid grid-cols-subgrid border-b border-border-hairline py-space-2 type-label tracking-caps text-ink-muted uppercase @max-forgotten/forgotten:hidden"
+        class="col-span-full grid grid-cols-subgrid border-b border-border-hairline py-space-2 type-label tracking-caps text-ink-muted uppercase @max-desk/forgotten:hidden"
         data-forgotten-heads
       >
         <span class="col-start-2">{projectEndWords.headProject}</span>
@@ -407,11 +407,11 @@
           >
             <div
               data-slot="row"
-              class="mark-line col-span-full grid min-h-c-row-h grid-cols-subgrid items-center gap-y-space-1 py-space-1 @max-forgotten/forgotten:py-space-2"
+              class="mark-line col-span-full grid min-h-control-lg grid-cols-subgrid items-center gap-y-space-1 py-space-1 @max-desk/forgotten:py-space-2"
             >
               <span
                 data-slot="mark"
-                class="grid place-items-center self-center text-status-attn-ink @max-forgotten/forgotten:row-span-3 @max-forgotten/forgotten:self-start @max-forgotten/forgotten:pt-space-2"
+                class="grid place-items-center self-center text-status-attn-ink @max-desk/forgotten:row-span-3 @max-desk/forgotten:self-start @max-desk/forgotten:pt-space-2"
                 data-box
               >
                 <IconWarningTriangle aria-hidden="true" class="size-icon-md" />
@@ -422,13 +422,13 @@
                 {#if one.live}
                   <a
                     aria-label={projectTrashWords.heldOpenProject(one.name)}
-                    class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-row no-underline hover:text-link-hover"
+                    class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong no-underline hover:text-brand-ink"
                     href={`/project/${encodeURIComponent(one.id)}`}
                     title={one.name}>{one.name}</a
                   >
                 {:else}
                   <span
-                    class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-row"
+                    class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong"
                     title={one.name}>{one.name}</span
                   >
                   <span
@@ -441,13 +441,13 @@
               {@render columns(count, forgot)}
               <span
                 data-slot="facts"
-                class="col-start-2 hidden type-meta text-pretty text-ink-muted @max-forgotten/forgotten:block"
+                class="col-start-2 hidden type-meta text-pretty text-ink-muted @max-desk/forgotten:block"
                 >{projectTrashWords.heldFacts(one.rows.length, forgot)}</span
               >
               <div
                 data-box
                 data-slot="actions"
-                class="flex items-center justify-end gap-space-2 @max-forgotten/forgotten:col-start-2 @max-forgotten/forgotten:justify-start"
+                class="flex items-center justify-end gap-space-2 @max-desk/forgotten:col-start-2 @max-desk/forgotten:justify-start"
               >
                 <Button
                   aria-label={projectTrashWords.heldRetryOne(one.name)}
@@ -477,7 +477,7 @@
                  or why the hub did not try them. -->
             <RowFault
               class="col-span-full"
-              indent="calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"
+              indent="calc(var(--spacing-row-compact) + var(--spacing-space-3))"
               reason={said}
             />
             <!-- Each row held back, and why, under the entry; a long list
@@ -495,7 +495,7 @@
               {asker}
               at={item.key}
               class="col-span-full pb-space-2"
-              indent="calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"
+              indent="calc(var(--spacing-row-compact) + var(--spacing-space-3))"
             />
           </li>
         {:else}
@@ -514,11 +514,11 @@
           >
             <div
               data-slot="row"
-              class="mark-line col-span-full grid min-h-c-row-h grid-cols-subgrid items-center gap-y-space-1 py-space-1 @max-forgotten/forgotten:py-space-2"
+              class="mark-line col-span-full grid min-h-control-lg grid-cols-subgrid items-center gap-y-space-1 py-space-1 @max-desk/forgotten:py-space-2"
             >
               <span
                 data-slot="mark"
-                class="grid place-items-center self-center text-ink-muted @max-forgotten/forgotten:row-span-3 @max-forgotten/forgotten:self-start @max-forgotten/forgotten:pt-space-2"
+                class="grid place-items-center self-center text-ink-muted @max-desk/forgotten:row-span-3 @max-desk/forgotten:self-start @max-desk/forgotten:pt-space-2"
                 data-box
               >
                 <IconFolder aria-hidden="true" class="size-icon-md" />
@@ -526,7 +526,7 @@
               <div data-box data-slot="name" class="min-w-0">
                 {#if named}
                   <span
-                    class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-row"
+                    class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong"
                     title={one.name}>{one.name}</span
                   >
                 {:else if !isNaming(one)}
@@ -536,7 +536,7 @@
                   <span
                     class={[
                       "block overflow-clip type-label text-ellipsis whitespace-nowrap",
-                      one.hints?.heading ? "text-ink-row" : "text-ink-muted",
+                      one.hints?.heading ? "text-ink-strong" : "text-ink-muted",
                     ]}>{one.hints?.heading ?? projectEndWords.unnamed}</span
                   >
                 {:else}
@@ -544,7 +544,8 @@
                     {@attach takeFocus}
                     data-box
                     aria-label={projectEndWords.nameLabel(one.id)}
-                    class="max-w-c-page-column-w"
+                    class="max-w-(--max-w)"
+                    style="--max-w: calc(var(--spacing) * 136)"
                     disabled={busy}
                     maxlength={PROJECT_NAME_LENGTH}
                     oninput={(event) => {
@@ -587,13 +588,13 @@
                  named, since the heads are gone. -->
               <span
                 data-slot="facts"
-                class="col-start-2 hidden type-meta text-pretty text-ink-muted @max-forgotten/forgotten:block"
+                class="col-start-2 hidden type-meta text-pretty text-ink-muted @max-desk/forgotten:block"
                 >{projectEndWords.factsLine(facts, forgot)}</span
               >
               <div
                 data-box
                 data-slot="actions"
-                class="flex items-center justify-end gap-space-2 @max-forgotten/forgotten:col-start-2 @max-forgotten/forgotten:justify-start"
+                class="flex items-center justify-end gap-space-2 @max-desk/forgotten:col-start-2 @max-desk/forgotten:justify-start"
               >
                 <Button
                   aria-label={projectEndWords.bringBackOne(rowName(one))}
@@ -630,14 +631,14 @@
                     label: projectEndWords.openHolder(holder.name),
                   }
                 : undefined}
-              indent="calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"
+              indent="calc(var(--spacing-row-compact) + var(--spacing-space-3))"
               reason={refusal?.reason ?? null}
             />
             <AskHere
               {asker}
               at={keyOf(one)}
               class="col-span-full pb-space-2"
-              indent="calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"
+              indent="calc(var(--spacing-row-compact) + var(--spacing-space-3))"
             >
               <!-- The same choice as a live project's delete, said the same:
                  its checkouts by machine and path, its transcripts. -->

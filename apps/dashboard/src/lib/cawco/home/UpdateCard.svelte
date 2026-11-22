@@ -36,7 +36,7 @@
    * The notes fold in the row with what it says machine by machine and its
    * closing line: transitions-dev's Accordion expand, a grid row going 0fr
    * to 1fr while the notes cross-blur in (`--fold-blur`), open over
-   * --duration-panel and shut over --duration-exit (exits faster than entrances), on
+   * --duration-panel and shut over --duration-fade (exits faster than entrances), on
    * --ease-out, the chevron flipping from ⌄ to ⌃. They stand open from the
    * start when the notice is all the panel holds (`alone`), until the reader
    * folds them; a fold the reader chose holds for that notice until it is
@@ -238,7 +238,7 @@
            motion nothing travels: the notes only fade. -->
       <div
         data-slot="fold"
-        class="group/fold -mt-space-row grid grid-rows-shut transition-[grid-template-rows,margin-top] duration-(--duration-exit) ease-out data-open:mt-0 data-open:grid-rows-open motion-safe:data-open:duration-(--duration-panel) motion-reduce:transition-off"
+        class="group/fold -mt-space-row grid grid-rows-shut transition-[grid-template-rows,margin-top] duration-(--duration-fade) ease-out data-open:mt-0 data-open:grid-rows-open motion-safe:data-open:duration-(--duration-panel) motion-reduce:transition-off"
         data-open={open || undefined}
         id="update-notes"
         inert={!open}
@@ -252,7 +252,7 @@
           class="fold-item opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:duration-(--duration-panel) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--duration-fade) motion-reduce:group-data-open/fold:duration-(--duration-panel)"
         >
           <div class="flex flex-col gap-space-1 pt-space-1">
-            <div class="type-body text-ink-row">
+            <div class="type-body text-ink-strong">
               <ReleaseNotes source={notes.full} />
             </div>
             {#if said}

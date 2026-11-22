@@ -323,7 +323,8 @@
 <!-- Over the shell: a conversation's group as the workspace lays one out
      (PaneLeaf `.leaf`, `.stack`, `.dock`), over the whole window. -->
 <div
-  class="fixed inset-0 z-(--layer-bench) flex flex-col text-ink-strong"
+  class="fixed inset-0 z-(--z) flex flex-col text-ink-strong"
+  style:--z="calc(var(--layer-sheet) + 20)"
   data-delegate-tray
 >
   <div
@@ -368,7 +369,7 @@
       <div class="pointer-events-none absolute inset-x-space-3 top-space-3 z-2">
         <div
           data-slot="details-card"
-          class="pointer-events-auto w-c-lead-card-w max-w-full overflow-hidden rounded-lg border border-border-control bg-surface-raised shadow-overlay"
+          class="pointer-events-auto w-104 max-w-full overflow-hidden rounded-lg border border-border-control bg-surface-raised shadow-lg"
         >
           <SessionDetails
             dir={1}

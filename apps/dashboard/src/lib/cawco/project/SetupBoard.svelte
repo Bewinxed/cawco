@@ -168,7 +168,7 @@
 {#snippet overDraft()}
   {#if also.length > 0 && pageHref}
     <p
-      class="mark-line m-0 flex max-w-c-measure flex-wrap items-center gap-x-space-3 gap-y-space-1 type-body text-ink-muted"
+      class="mark-line m-0 flex max-w-measure flex-wrap items-center gap-x-space-3 gap-y-space-1 type-body text-ink-muted"
       data-slot="setup-also"
     >
       <span>{setupWords.alsoOnPage(also)}</span>
@@ -195,7 +195,7 @@
   >
     {#each asks as ask (ask.request.requestId)}
       <div
-        class="rounded-lg bg-surface-raised shadow-overlay"
+        class="rounded-lg bg-surface-raised shadow-lg"
         data-flip
         data-slot="setup-ask"
       >

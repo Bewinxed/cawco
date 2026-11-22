@@ -122,6 +122,7 @@ export default {
         "scripts/codemods/theme-prune.ts",
         "scripts/codemods/theme-unify.ts",
         "scripts/codemods/theme-audit.ts",
+        "scripts/codemods/distill-design-system.ts",
         "scripts/codemods/type-roles.ts",
         "scripts/codemods/style-spaces.ts",
         "scripts/codemods/move-exports.ts",

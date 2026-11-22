@@ -25,12 +25,12 @@
           max-height keeps it inside the visible area (app.css). */
       height: {
         shrink: "min-h-0",
-        cap: "vaul-drawer-direction-bottom:h-(--drawer-max-height) [--drawer-max-height:var(--spacing-c-sheet-max-h)]",
+        cap: "vaul-drawer-direction-bottom:h-(--drawer-max-height) [--drawer-max-height:var(--sheet-max-h)]",
       },
       /** A side sheet as wide as the room the page gives it (the peek's,
           `c-peek-sheet-w`, the Shell's trailing pad while it stands open). */
       width: {
-        peek: "data-[vaul-drawer-direction=right]:w-c-peek-sheet-w",
+        peek: "data-[vaul-drawer-direction=right]:w-96",
       },
       /** The new-session card: the dialog's theme, no outline or margin,
           and under reduced motion none of vaul's settling transform (its
@@ -60,7 +60,7 @@
       both schemes, WCAG 1.4.11): `neutral-2` on the raised sheet was about
       1.05:1 and read as no control at all (the review of 7 November). */
   export const grabberVariants = tv({
-    base: "mx-auto mt-4 mb-3 h-c-grabber-h w-c-grabber-w shrink-0 rounded-pill bg-border-contrast",
+    base: "mx-auto mt-4 mb-3 h-1.5 w-25 shrink-0 rounded-pill bg-border-strong",
   });
 </script>
 
@@ -266,7 +266,7 @@
        (vite.config.ts, vendorComponentSheets). -->
   <DrawerPrimitive.Content
     class={cn(
-      "motion-reduce:sheet-fade group/drawer-content fixed z-(--layer-float) flex h-auto flex-col bg-transparent p-4 text-ink-strong type-label before:absolute before:inset-2 before:-z-1 before:rounded-lg before:border before:border-border before:bg-surface-raised data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=left]:phone:max-w-96 data-[vaul-drawer-direction=right]:phone:max-w-96 data-[vaul-drawer-direction=bottom]:pb-[calc(--spacing(4)+var(--safe-bottom))] data-[vaul-drawer-direction=bottom]:before:inset-x-0 data-[vaul-drawer-direction=bottom]:before:bottom-0 data-[vaul-drawer-direction=bottom]:before:rounded-b-none data-[vaul-drawer-direction=bottom]:before:border-x-0 data-[vaul-drawer-direction=bottom]:before:border-b-0",
+      "motion-reduce:sheet-fade group/drawer-content fixed z-(--layer-float) flex h-auto flex-col bg-transparent p-4 text-ink-strong type-label before:absolute before:inset-2 before:-z-1 before:rounded-lg before:border before:border-border-control before:bg-surface-raised data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=left]:phone:max-w-96 data-[vaul-drawer-direction=right]:phone:max-w-96 data-[vaul-drawer-direction=bottom]:pb-[calc(--spacing(4)+var(--safe-bottom))] data-[vaul-drawer-direction=bottom]:before:inset-x-0 data-[vaul-drawer-direction=bottom]:before:bottom-0 data-[vaul-drawer-direction=bottom]:before:rounded-b-none data-[vaul-drawer-direction=bottom]:before:border-x-0 data-[vaul-drawer-direction=bottom]:before:border-b-0",
       drawerContentVariants({ pad, height, width, closed, look }),
       hosted &&
         "absolute inset-0 z-1 m-0 h-full max-h-none w-full p-0 outline-off before:hidden data-[vaul-drawer-direction=bottom]:pb-0",
@@ -317,7 +317,7 @@
       type="button"
       aria-label={grabber.label}
       data-slot="drawer-grabber"
-      class="touch-hit mx-auto mt-space-2 mb-space-1 coarse:mb-space-4 hidden h-space-5 w-c-grabber-w shrink-0 place-items-center rounded-pill group-data-[vaul-drawer-direction=bottom]/drawer-content:grid"
+      class="touch-hit mx-auto mt-space-2 mb-space-1 coarse:mb-space-4 hidden h-space-5 w-25 shrink-0 place-items-center rounded-pill group-data-[vaul-drawer-direction=bottom]/drawer-content:grid"
       onclick={() => {
         setTimeout(grabber.onpress);
       }}

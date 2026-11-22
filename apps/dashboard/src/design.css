@@ -180,112 +180,92 @@
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-space-7 {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
 @property --spacing-space-8 {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-bar-item {
+@property --spacing-row-compact {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-block-ledger {
+@property --spacing-control-xs {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-block-routines {
+@property --spacing-control-sm {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-block-view {
+@property --spacing-control-md {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-btn-h {
+@property --spacing-control-lg {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-btn-h-lg {
+@property --container-xs {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-composer-field {
+@property --block-ledger {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-decision-page-max {
+@property --block-routines {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-deck-peek {
+@property --block-view {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-graph-label {
+@property --decision-page-max {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-graph-node-w {
+@property --graph-label {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-graph-stage-min {
+@property --graph-node-w {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-grid-2 {
+@property --graph-stage-min {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-grid-4 {
+@property --grid-2 {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-head-fade-blur {
+@property --grid-4 {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-hover-panel-room {
+@property --pin-card-w {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-c-pin-card-w {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --spacing-c-pointer-floor {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --spacing-c-screen-margin {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --spacing-c-sidebar-w {
+@property --sidebar-w {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
@@ -463,7 +443,7 @@
 
     /* Inherited, so it is set once here rather than worked out on every
        element. */
-    scrollbar-color: var(--color-scrollbar-thumb) transparent;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
     /* The seam's inset (the home's seam between one machine's rows and the
        next, and the transcript's user-message hairline): the text column's
        own padding. */
@@ -506,20 +486,271 @@
     }
 
     /* A diff's added, removed and changed lines (@pierre/diffs), on the
-       grounds the syntax tokens are measured against (tokens: code-ink). The
+       grounds the syntax tokens are measured against (libraries.css). The
        library reads its line colours from a theme's git colours, which a
        CSS-palette theme does not carry, so everything is set where it
        documents overrides. Line numbers are text: each
        ramp's text step, not its fill. */
-    --diffs-addition-color-override: var(--color-success-9);
-    --diffs-deletion-color-override: var(--color-error-9);
-    --diffs-modified-color-override: var(--color-code-fn);
-    --diffs-bg-addition-override: var(--color-diff-add-bg);
-    --diffs-bg-deletion-override: var(--color-diff-del-bg);
-    --diffs-bg-addition-emphasis-override: var(--color-diff-add-emphasis);
-    --diffs-bg-deletion-emphasis-override: var(--color-diff-del-emphasis);
-    --diffs-fg-number-addition-override: var(--color-success-11);
-    --diffs-fg-number-deletion-override: var(--color-error-11);
+    --diffs-addition-color-override: var(--color-status-done-glyph);
+    --diffs-deletion-color-override: var(--color-status-fail-glyph);
+    --diffs-modified-color-override: var(--code-syntax-token-function);
+    --diffs-bg-addition-override: oklch(
+      from var(--color-status-done-glyph) l c h / 0.11
+    );
+    --diffs-bg-deletion-override: oklch(
+      from var(--color-status-fail-glyph) l c h / 0.11
+    );
+    --diffs-bg-addition-emphasis-override: oklch(
+      from var(--color-status-done-glyph) l c h / 0.08
+    );
+    --diffs-bg-deletion-emphasis-override: oklch(
+      from var(--color-status-fail-glyph) l c h / 0.08
+    );
+    --diffs-fg-number-addition-override: var(--color-status-done-ink);
+    --diffs-fg-number-deletion-override: var(--color-status-fail-ink);
+
+    /* Component-local paints, derived strictly from system tokens. */
+    --nest-ink: light-dark(
+      color-mix(in oklch, var(--color-neutral-8) 85%, var(--color-neutral-9)),
+      color-mix(in oklch, var(--color-neutral-7) 50%, var(--color-neutral-8))
+    );
+    --account-week-toward: light-dark(
+      oklch(from var(--color-neutral-12) 0% 0 0),
+      oklch(from var(--color-neutral-1) 100% 0 0)
+    );
+    --account-week-mix: 0.32;
+    --account-stale-opacity: 0.82;
+    --ring-track-spent: light-dark(
+      oklch(from var(--color-neutral-7) 80.5% 0.016 80),
+      var(--color-neutral-8)
+    );
+    --meter-wash-over: light-dark(
+      color-mix(in oklch, var(--color-status-fail-ink) 6%, transparent),
+      color-mix(in oklch, var(--color-status-fail-ink) 10%, transparent)
+    );
+    --mark-deck-shade: oklch(from var(--color-neutral-12) 14% 0.01 60);
+    --mark-deck-cast: oklch(from var(--color-neutral-12) 0 0 0 / 0.16);
+    --scrollbar-thumb: oklch(from var(--color-ink-muted) l c h / 0.35);
+    --prose-bullet: oklch(from var(--color-ink-muted) l c h / 0.55);
+    --tab-shade: light-dark(
+      oklch(from var(--color-neutral-12) l c h / 0.24),
+      oklch(from var(--color-neutral-12) l c h / 0.14)
+    );
+    --tab-shade-chosen: light-dark(var(--tab-shade), transparent);
+    --shadow-tint-2: light-dark(
+      oklch(from var(--color-neutral-12) l c h / 0.14),
+      oklch(from var(--color-neutral-1) l c h / 0.66)
+    );
+    --shadow-tint-3: light-dark(
+      oklch(from var(--color-neutral-12) l c h / 0.2),
+      oklch(from var(--color-neutral-1) l c h / 0.76)
+    );
+    --mark-overlay: linear-gradient(
+      oklch(from var(--color-neutral-1) l c h / 0.22),
+      oklch(from var(--color-neutral-12) l c h / 0.06)
+    );
+    --rail: linear-gradient(
+      oklch(from var(--color-neutral-11) l c h / 0.4),
+      oklch(from var(--color-neutral-11) l c h / 0.4)
+    );
+    --head-tint-ramp: linear-gradient(
+      oklch(from var(--color-ink-strong) l c h / 1),
+      oklch(from var(--color-ink-strong) l c h / 0.996),
+      oklch(from var(--color-ink-strong) l c h / 0.968),
+      oklch(from var(--color-ink-strong) l c h / 0.892),
+      oklch(from var(--color-ink-strong) l c h / 0.744),
+      oklch(from var(--color-ink-strong) l c h / 0.5),
+      oklch(from var(--color-ink-strong) l c h / 0.256),
+      oklch(from var(--color-ink-strong) l c h / 0.108),
+      oklch(from var(--color-ink-strong) l c h / 0.032),
+      oklch(from var(--color-ink-strong) l c h / 0.004),
+      oklch(from var(--color-ink-strong) l c h / 0)
+    );
+    --surface-recess-clear: oklch(from var(--color-surface-recess) l c h / 0);
+    --shadow-overlay-hung:
+      0 calc(var(--spacing) * 4.5) calc(var(--spacing) * 12) var(--shadow-tint-3),
+      0 2px calc(var(--spacing) * 1.5) var(--color-shadow-tint);
+
+    /* Component-local motion and rim mechanics. */
+    --ghost-presence: 0.7;
+    --tab-rim-mix-chosen: 0.97;
+    --tab-rim-mix-idle: 0.86;
+    --tab-rim-mix-subtle: 0.5;
+    --tab-rim-width: 1;
+    --tab-rim-taper: 32;
+    --tab-rim-taper-ease: 6;
+    --tab-rim-glow: calc(var(--spacing) * 1.5);
+    --tab-rim-glow-room: var(--spacing-space-6);
+    --leave-scale: 0.97;
+    --deck-step: calc(var(--spacing-space-1) * 0.3125);
+    --deck-shrink: 0.11;
+    --deck-shade-step: 0.2;
+    --c-deck-scale: 0.94;
+    --echo-scale: 1.45;
+    --echo-opacity: 0.45;
+    --ride-fade: calc(var(--spacing) * 3.5);
+    --tip-rise: 2px;
+    --swap-nudge: calc(var(--spacing) * 10);
+    --fold-blur: 2px;
+    --part-blur: var(--spacing-space-1);
+    --goo-join: var(--radius-lg);
+    --skeleton-pulse-floor: 0.5;
+    --skeleton-reveal-blur: 2px;
+    --roll-reach: 100vmax;
+    --optical-nudge: calc(1px / 2);
+    --hit-nudge: calc(1px / 2);
+    --figure-bearing: calc(1em * 0.07);
+    --c-ask-diff-share: 0.4;
+    --blur-fade-transition:
+      opacity var(--duration-fade) var(--ease-out),
+      filter var(--duration-fade) var(--ease-out);
+    --blur-slide-fade-transition:
+      opacity var(--duration-fade) var(--ease-out),
+      translate var(--duration-panel) var(--ease-drawer),
+      filter var(--duration-fade) var(--ease-out);
+
+    /* Component-local geometry, expressed on the 4px spacing unit. */
+    --caw-peek: calc(var(--spacing) * 40);
+    --caw-peek-rise: calc(var(--spacing) * 22.75);
+    --channel-card-max: calc(var(--spacing) * 70);
+    --row-mark: calc(var(--spacing) * 4.25);
+    --row-mark-glyph: calc(var(--spacing) * 2.75);
+    --row-mark-box: calc(var(--spacing) * 4.5);
+    --well-x: calc((var(--row-mark-box) - var(--row-mark)) / 2);
+    --tx-x-rail: var(--spacing-space-2);
+    --tx-x-rail-narrow: 0px;
+    --tx-w-glyph: var(--spacing-icon-md);
+    --hover-panel-max: calc(var(--spacing) * 110);
+    --hover-panel-inset: var(--spacing-space-2);
+    --tx-line: calc(var(--spacing) * 6.5);
+    --tx-compact-caw: calc(var(--spacing) * 4.5);
+    --tx-compact-wave: calc(var(--spacing) * 1.5);
+    --tx-diff-cap: calc(var(--spacing) * 100);
+    --tx-field-cap: calc(var(--spacing) * 75);
+    --tx-shot: calc(var(--spacing) * 60);
+    --tx-shot-thumb: calc(var(--spacing) * 12);
+    --tx-preview-max: calc(var(--spacing) * 110);
+    --tx-preview-min: calc(var(--spacing) * 20);
+    --tx-preview-thumb-w: calc(var(--spacing) * 22.5);
+    --tx-preview-thumb-h: calc(var(--spacing) * 16);
+    --status-dot-size: calc(var(--spacing) * 1.5);
+    --status-dot-cut: calc(var(--spacing) * 0.375);
+    --row-tall-h: calc(
+      2 * var(--spacing-space-5) + 2 * var(--spacing-space-1)
+    );
+    --fig-pad: var(--spacing-space-3);
+    --fig-chip: calc(var(--spacing) * 2.5);
+    --fig-cap-line: var(--spacing-space-4);
+    --fig-cap-foot: var(--spacing-space-2);
+    --composer-field: calc(var(--spacing) * 8.5);
+    --composer-panel: calc(
+      var(--composer-field) + var(--spacing-space-2) * 2 + 2px
+    );
+    --composer-w: min(
+      calc(var(--spacing) * 180),
+      calc(100% - var(--spacing) * 13)
+    );
+    --inset-composer: calc(var(--spacing-space-2) + var(--border-width));
+    --inset-floating: calc(var(--border-width) + var(--spacing) * 1.5);
+    --suggest-chip: calc(
+      var(--spacing-space-5) + var(--spacing-space-1) * 2 + 2px
+    );
+    --suggest-row: calc(
+      var(--spacing-space-4) + var(--spacing-space-1) * 2 + var(--suggest-chip)
+    );
+    --suggest-room: calc(var(--suggest-row) + var(--spacing-space-2));
+    --starter-w: calc(var(--spacing) * 44);
+    --starters-w: calc(var(--starter-w) * 4 + var(--spacing-space-2) * 3);
+    --tray-chip: var(--spacing-row-compact);
+    --tray-gap: var(--spacing-space-2);
+    --tray-row: calc(var(--tray-chip) + var(--tray-gap));
+    --ledger-text-inset: calc(var(--spacing-icon-md) + var(--spacing-space-2));
+    --field-inline-inset: calc(var(--spacing-space-3) - var(--border-width));
+    --draft-col-h: calc(
+      5 * var(--spacing-space-1) + var(--spacing-space-2) +
+        var(--spacing-control-sm) + 2 * var(--text-meta) * var(--leading-label)
+    );
+    --usage-strip-row: calc(
+      var(--spacing-icon-md) + var(--spacing-space-1) + var(--spacing) * 3.75
+    );
+    --usage-strip-clip: calc(var(--usage-strip-row) + var(--spacing-space-1));
+    --pin-card-reading-w: clamp(
+      calc(var(--spacing) * 70),
+      40cqi,
+      calc(var(--spacing) * 120)
+    );
+    --step-rail-x: calc(var(--spacing-icon-md) / 2);
+    --step-rail-top: calc(
+      (var(--spacing-control-sm) + var(--spacing-icon-md)) / 2
+    );
+    --step-rail-gap: calc(
+      (var(--spacing-control-sm) - var(--spacing-icon-md)) / 2
+    );
+    --head-room: calc(var(--spacing-control-md) + 2 * var(--spacing-space-2));
+    --edge-fade-len: var(--spacing-row);
+    --decision-page-max: calc(var(--spacing) * 337);
+    --picture-min: calc(var(--spacing) * 40);
+    --usage-tile-min: calc(var(--spacing) * 62);
+    --stat-tile-min: calc(var(--spacing) * 38);
+    --model-list-max: calc(var(--spacing) * 58);
+    --drag-dots-tile: calc(var(--spacing) * 1.25);
+    --drag-dots-edge: calc(var(--spacing) * 0.375);
+    --corner-grip-stroke: calc(var(--spacing) * 0.375);
+    --graph-edge: calc(var(--spacing) * 0.375);
+    --tree-mark-hole-edge: calc(1px / 4);
+    --tip-arrow-nudge: calc(var(--spacing) * 0.375);
+    --hang-shadow-room: calc(var(--spacing) * 30);
+    --tab-strip-uncapped: 100vw;
+    --compaction-word-bleed: calc(1em / 2);
+    --sidebar-w: calc(var(--spacing) * 57);
+    --pin-card-w: calc(var(--spacing) * 70);
+    --graph-node-w: calc(var(--spacing) * 52);
+    --graph-label: calc(var(--spacing) * 40);
+    --graph-stage-min: calc(var(--spacing) * 150);
+    --graph-move-name-w: calc(var(--spacing) * 48);
+    --graph-control-w: calc(var(--spacing) * 64);
+    --signin-pop-w: calc(var(--spacing) * 85);
+    --panel-w: calc(var(--spacing) * 95);
+    --find-w: calc(var(--spacing) * 130);
+    --connect-w: calc(var(--spacing) * 120);
+    --caw-panel-h: calc(var(--spacing) * 160);
+    --board-col-min: calc(var(--spacing) * 60);
+    --board-col-max: calc(var(--spacing) * 88);
+    --roster-card-min: calc(var(--spacing) * 70);
+    --line-answer-w: calc(var(--spacing) * 33);
+    --line-answer-w-narrow: calc(var(--spacing) * 32);
+    --answer-w: calc(var(--spacing) * 28);
+    --foot-fade: calc(var(--spacing) * 24);
+    --session-hover-room: calc(var(--spacing) * 90);
+    --block-body-max: calc(var(--spacing) * 120);
+    --grid-4: calc(var(--spacing) * 240);
+    --grid-2: calc(var(--spacing) * 184);
+    --block-routines: calc(var(--spacing) * 136);
+    --block-ledger: calc(var(--spacing) * 75);
+    --block-view: calc(var(--spacing) * 62);
+    --sheet-max-h: 85vh;
+    --peek-sheet-h: 80dvh;
+    --line-sheet-h: 70dvh;
+    --grabber-w: calc(var(--spacing) * 25);
+    --grabber-h: calc(var(--spacing) * 1.5);
+    --decision-meter-w: calc(var(--spacing) * 30);
+    --decision-option-min: calc(var(--spacing) * 47.5);
+    --decision-code: calc(1em * 0.9);
+    --canvas-skeleton-w: calc(var(--spacing) * 60);
+    --address-qr: calc(var(--spacing) * 28);
+    --address-caw: calc(var(--spacing) * 16);
+    --address-phone-h: calc(var(--spacing) * 195);
+    --caw-hero: calc(var(--spacing) * 20);
+    --pose-tile: calc(var(--spacing) * 16);
+    --roster-face: calc(var(--spacing) * 12);
+    --bench-phone-h: calc(var(--spacing) * 211);
+    --mark-box: calc(var(--spacing) * 6.5);
+    --bar-symbol: calc(var(--spacing) * 4.5);
+    --context-bar-min: calc(var(--spacing) * 12);
+    --context-bar-max: calc(var(--spacing) * 24);
+    --lightbox-sheet-w: min(100%, calc(var(--spacing) * 240));
+    --lightbox-sheet-max-h: min(86dvh, 100%);
+    --doc-max: min(100%, calc(var(--spacing) * 64));
 
     /* A native checkbox, radio, range or progress takes the act colour, never
        the browser's blue (DESIGN.md, Coral Action: "checked checkboxes and
@@ -528,8 +759,28 @@
     accent-color: var(--color-action-solid);
   }
 
+  :root.dark,
+  [data-scheme="dark"] {
+    --account-week-mix: 0.63;
+    --tab-rim-mix-chosen: 0.78;
+    --tab-rim-mix-idle: 0.54;
+  }
+
+  [data-scheme="light"] {
+    --account-week-mix: 0.32;
+    --tab-rim-mix-chosen: 0.97;
+    --tab-rim-mix-idle: 0.86;
+  }
+
+  @media (pointer: coarse) {
+    :root {
+      --tray-chip: calc(var(--spacing) * 8.5);
+      --tray-gap: var(--spacing-space-3);
+    }
+  }
+
   * {
-    @apply border-border;
+    @apply border-border-control;
     scrollbar-width: thin;
   }
 
@@ -625,12 +876,12 @@
     &::-webkit-slider-runnable-track {
       block-size: var(--spacing-space-1);
       border-radius: var(--radius-pill);
-      background: var(--color-surface-recess-deep);
+      background: var(--color-surface-sunk);
     }
     &::-moz-range-track {
       block-size: var(--spacing-space-1);
       border-radius: var(--radius-pill);
-      background: var(--color-surface-recess-deep);
+      background: var(--color-surface-sunk);
     }
     &::-moz-range-progress {
       block-size: var(--spacing-space-1);
@@ -796,10 +1047,10 @@
   textarea,
   select {
     @variant max-phone {
-      font-size: max(var(--text-field-floor), 1em);
+      font-size: max(var(--text-row), 1em);
     }
     @variant coarse {
-      font-size: max(var(--text-field-floor), 1em);
+      font-size: max(var(--text-row), 1em);
     }
   }
 
@@ -904,9 +1155,8 @@
   }
   :root:not(.dark) [data-holding] {
     --color-ink-muted: var(--color-ink-strong);
-    --color-text-muted: var(--color-ink-strong);
     --color-ink-subtle: var(--color-ink-strong);
-    --color-selected-ink: var(--color-ink-strong);
+    --color-brand-ink: var(--color-ink-strong);
   }
 }
 
@@ -916,8 +1166,8 @@
    less than the field's own inset). Its hover fill is the whole box. */
 @utility pe-measure {
   padding-inline-end: max(
-    var(--spacing-c-field-inline-inset),
-    calc(100% - var(--spacing-c-measure))
+    var(--field-inline-inset),
+    calc(100% - var(--spacing-measure))
   );
 }
 
@@ -932,7 +1182,7 @@
 
 /* The Concentric Rule as one mechanism. A rounded container a highlight
    stands in declares its outer radius and the inset to the rows, controls or
-   parts it holds (`concentric-in r-outer-lg r-inset-c-inset-floating`), and
+   parts it holds (`concentric-in r-outer-lg r-inset-(--inset-floating)`), and
    works out the inner radius once: outer less inset, never under 0. Its
    rows take it (`concentric-<own radius>`), corner by corner, and keep their
    own radius token where no rounded container holds them. A nested
@@ -948,7 +1198,7 @@
   --r-outer: --value(--radius-*);
 }
 @utility r-inset-* {
-  --r-inset: --value(--spacing-*);
+  --r-inset: --value(--spacing-*, [*]);
 }
 @utility concentric-* {
   border-radius: var(--r-inner, --value(--radius-*));
@@ -959,7 +1209,7 @@
    outer radius as a length (`--r-outer`, never the pill's 999px, which a
    box with a small corner beside it scales to nothing), its inset and the
    one small radius its items show each other (`concentric-row
-   r-inset-c-bar-group-pad r-join-xs`). BarGlass marks each item it shows
+   r-inset-space-1 r-join-xs`). BarGlass marks each item it shows
    with where it stands (`data-glass-at`: leading, middle, trailing, only);
    the corners facing the row's ends take the outer radius less the inset,
    the corners facing a neighbour the join. An item takes them on its own
@@ -1271,9 +1521,9 @@
    beat instead of sliding (DESIGN.md Sheet: "with reduced motion it fades
    over 120ms"), the sheet's own fade animations. */
 @utility sheet-fade {
-  animation: --theme(--animate-sheet-fade-in);
+  animation: fade-in var(--duration-control) var(--ease-out) backwards;
   &[data-state="closed"] {
-    animation: --theme(--animate-sheet-fade-out);
+    animation: fade-out var(--duration-control) var(--ease-out) both;
   }
 }
 
@@ -1286,7 +1536,7 @@
   mask-image: linear-gradient(
     90deg,
     transparent 35%,
-    var(--color-mask-opaque) 50%,
+    var(--color-ink-strong) 50%,
     transparent 65%
   );
 }
@@ -1342,7 +1592,7 @@
 /* Caw's attention rim: round-capped arcs of the ring's width, each a dash of
    its own path (pathLength="1"). */
 @utility rim-arc {
-  stroke-width: var(--spacing-c-caw-ring);
+  stroke-width: var(--spacing-space-row);
   stroke-linecap: round;
   stroke-dasharray: 1;
   stroke-dashoffset: 0;
@@ -1353,10 +1603,10 @@
   background-image: radial-gradient(
     circle,
     var(--color-ink-subtle) 1px,
-    transparent var(--spacing-c-drag-dots-edge)
+    transparent var(--drag-dots-edge)
   );
-  background-size: var(--spacing-c-drag-dots-tile)
-    var(--spacing-c-drag-dots-tile);
+  background-size: var(--drag-dots-tile)
+    var(--drag-dots-tile);
 }
 
 /* A row's ghost controls rest on the strong fill under a resting pointer by
@@ -1364,7 +1614,7 @@
 @utility ghost-rest-fill {
   @media (hover: hover) and (pointer: fine) {
     :root:not(.dark) & [data-ghost]:hover:not(:disabled) {
-      background-color: var(--color-surface-fill-strong);
+      background-color: var(--color-surface-pressed);
     }
   }
 }
@@ -1405,7 +1655,7 @@
 }
 /* A row's 28px lead column, its mark centred there, before words that take the rest. */
 @utility grid-cols-lead-fluid {
-  grid-template-columns: var(--spacing-c-row-lead) minmax(0, 1fr);
+  grid-template-columns: var(--spacing-row-compact) minmax(0, 1fr);
 }
 /* The artifact masonry's row unit: one pixel, each card spanning its height. */
 @utility auto-rows-line {
@@ -1414,10 +1664,10 @@
 /* The connection band's rows: at least a small button's height; on a phone,
    room for two lines. */
 @utility auto-rows-band {
-  grid-auto-rows: minmax(var(--spacing-c-btn-h-sm), auto);
+  grid-auto-rows: minmax(var(--spacing-control-sm), auto);
 }
 @utility auto-rows-band-phone {
-  grid-auto-rows: minmax(max(var(--spacing-c-btn-h-sm), 2lh), auto);
+  grid-auto-rows: minmax(max(var(--spacing-control-sm), 2lh), auto);
 }
 /* A box clipped at its block-start edge only: a hanging card's wrapper, which
    cuts what slides in from behind it while its shadow spills past its sides
@@ -1490,7 +1740,7 @@
     color-mix(
       in oklab,
       var(--sheet) calc(var(--pick) * 100%),
-      var(--tab-fill, var(--color-surface-recess-deep))
+      var(--tab-fill, var(--color-surface-sunk))
     )
   );
 }
@@ -1549,17 +1799,21 @@
   grid-template-columns: auto minmax(0, 1fr);
 }
 /* As many equal columns as fit at a least width each (never wider than
-   the grid), the rest shared: `grid-cols-fit-c-decision-option-min`. */
+   the grid), the rest shared: `grid-cols-fit-48`. */
 @utility grid-cols-fit-* {
   grid-template-columns: repeat(
     auto-fit,
     minmax(min(100%, --value(--spacing-*)), 1fr)
   );
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, calc(--value(integer) * var(--spacing))), 1fr)
+  );
 }
 /* A decision page's insets (decisions/host Decisions.svelte's root): the page's own and a card's
    (21px and 18px at a desk, 14px each under a finger),
    what a piece of media reaches past to the screen's edges on a phone (`--bleed`),
-   and the column's cap: the room's width up to `--spacing-c-decision-page-max`, until
+   and the column's cap: the room's width up to `--decision-page-max`, until
    a pictured page sets its own (`--page-w`, set inline on the page), or the
    room's whole width where a piece fills its card (`data-fills`). The column
    and the foot's row both stand at `--column-w`, this one width, so their
@@ -1568,7 +1822,7 @@
   --page-in: var(--spacing-space-6);
   --card-in: var(--spacing-space-5);
   --bleed: calc(var(--page-in) + var(--card-in));
-  --page-w: var(--spacing-c-decision-page-max);
+  --page-w: var(--decision-page-max);
   --column-w: var(--page-w);
 
   &:has([data-fills]) {
@@ -1602,7 +1856,7 @@
 }
 /* A picture in a Row (decisions/host Image.svelte): it asks the
    width that stands the Row's narrowest picture (`--ratio-min`, Row.svelte)
-   at `--spacing-c-picture-min` with every picture at one height, and grows by its
+   at `--picture-min` with every picture at one height, and grows by its
    own width over its height (`--ratio`), so the Row's pictures share a line
    at one height. A line that can't give them that wraps them, one to a
    line, each shrunk to fit it. Pressed to its full size, it takes the Row's
@@ -1612,7 +1866,7 @@
     flex: var(--ratio) 1
       calc(
         var(--ratio) / var(--ratio-min, var(--ratio)) *
-          var(--spacing-c-picture-min)
+          var(--picture-min)
       );
   }
   [data-axis="row"] > &:has([data-full]) {
@@ -1663,8 +1917,8 @@
    selection pill under it on the ghost's own clock. */
 @utility transition-well-surface {
   transition:
-    border-color var(--duration-pop) var(--ease-out),
-    border-radius var(--duration-pop) var(--ease-out),
+    border-color var(--duration-panel) var(--ease-out),
+    border-radius var(--duration-panel) var(--ease-out),
     opacity var(--duration-panel) var(--ease-drawer),
     background-color var(--duration-control) var(--ease-out);
 }
@@ -1673,13 +1927,13 @@
 @utility grid-cols-usage-tiles {
   grid-template-columns: repeat(
     auto-fill,
-    minmax(min(100%, var(--spacing-c-usage-tile-min)), 1fr)
+    minmax(min(100%, var(--usage-tile-min)), 1fr)
   );
 }
 @utility grid-cols-stat-tiles {
   grid-template-columns: repeat(
     auto-fit,
-    minmax(min(100%, var(--spacing-c-stat-tile-min)), 1fr)
+    minmax(min(100%, var(--stat-tile-min)), 1fr)
   );
 }
 /* The reserve's hatch on a usage meter. */
@@ -1697,7 +1951,7 @@
   stroke: color-mix(
     in oklch,
     var(--c),
-    var(--color-account-week-toward) calc(var(--account-week-mix) * 100%)
+    var(--account-week-toward) calc(var(--account-week-mix) * 100%)
   );
 }
 @utility arc-ground {
@@ -1760,7 +2014,7 @@
 @utility edge-mask-top {
   mask-image: linear-gradient(
     to bottom,
-    var(--color-mask-opaque)
+    var(--color-ink-strong)
       calc(var(--spacing-space-2) + env(safe-area-inset-top)),
     transparent 0
   );
@@ -1809,9 +2063,9 @@
 /* A transcript head's layer coming in over the first c-head-fade of scroll,
    on the transcript's scroll timeline (HeadFade). */
 @utility head-fade-scrub {
-  animation: var(--animate-head-fade);
+  animation: head-fade linear both;
   animation-timeline: --transcript-head;
-  animation-range: 0 var(--spacing-c-head-fade);
+  animation-range: 0 var(--spacing-space-6);
 }
 @utility will-change-opacity {
   will-change: opacity;
@@ -1841,7 +2095,7 @@
   }
   & [data-slot="list"] {
     height: auto;
-    max-height: var(--spacing-c-model-list-max);
+    max-height: var(--model-list-max);
     overflow: hidden auto;
     scroll-snap-type: y mandatory;
     /* The row gap, so a snapped row's neighbour shows none of itself. */
@@ -1876,7 +2130,7 @@
   --px-end: calc(var(--px) - var(--border-width));
 
   @media (width < --theme(--breakpoint-desk)) {
-    --px-start: calc(var(--overlap) + var(--spacing-c-tab-lead));
+    --px-start: calc(var(--overlap) + var(--spacing-space-3));
     --px-end: calc(var(--overlap) + var(--radius-lg) - var(--border-width));
   }
 }
@@ -1907,15 +2161,15 @@
   /* In for keyboard focus and while the brief is open. */
   &:is(:focus-visible, [aria-expanded="true"]) {
     --chev: 1;
-    --chev-dur: var(--duration-toggle);
+    --chev-dur: var(--duration-fade);
   }
   /* Under the pointer the line and word step to the stronger vermillion and
      the chevron comes in. */
   @media (hover: hover) and (pointer: fine) {
     &:hover:not(:disabled) {
-      --line: var(--color-brand-ink-strong);
+      --line: var(--color-brand-ink);
       --chev: 1;
-      --chev-dur: var(--duration-toggle);
+      --chev-dur: var(--duration-fade);
     }
   }
   /* A finger has no hover: what opens always shows that it does. */
@@ -1939,7 +2193,7 @@
     translate var(--chev-dur) var(--chev-ease),
     scale var(--chev-dur) var(--chev-ease),
     filter var(--chev-dur) var(--chev-ease),
-    rotate var(--duration-toggle) var(--ease-in-out);
+    rotate var(--duration-fade) var(--ease-in-out);
 }
 /* A turn's pad (the transcript skeleton's reader well), a step down at the
    narrow breakpoint. */
@@ -2071,7 +2325,7 @@
   mask-image: linear-gradient(
     to right,
     transparent,
-    var(--color-mask-opaque) 30%
+    var(--color-ink-strong) 30%
   );
 }
 
@@ -2121,14 +2375,518 @@
 @import "./lib/cawco/spawn/ns-theme.css";
 /* biome-ignore-end lint/correctness/noInvalidPositionAtImportRule: the import above */
 
+/* ---- Component sizing, paint, shadow, transition, and animation utilities
+   built exclusively on the system's scales and roles in theme.css. */
+@utility w-ch-* {
+  width: calc(--value(integer) * 1ch);
+}
+@utility min-w-ch-* {
+  min-width: calc(--value(integer) * 1ch);
+}
+@utility max-w-ch-* {
+  max-width: calc(--value(integer) * 1ch);
+}
+@utility basis-ch-* {
+  flex-basis: calc(--value(integer) * 1ch);
+}
+@utility max-h-dvh-* {
+  max-height: calc(--value(integer) * 1dvh);
+}
+@utility max-h-vh-* {
+  max-height: calc(--value(integer) * 1vh);
+}
+@utility max-h-vb-* {
+  max-height: calc(--value(integer) * 1vb);
+}
+@utility w-vw-* {
+  width: calc(--value(integer) * 1vw);
+}
+@utility pb-dvh-* {
+  padding-bottom: calc(--value(integer) * 1dvh);
+}
+@utility pb-vh-* {
+  padding-bottom: calc(--value(integer) * 1vh);
+}
+@utility scroll-pb-dvh-* {
+  scroll-padding-bottom: calc(--value(integer) * 1dvh);
+}
+@utility h-x-height {
+  height: 1ex;
+}
+@utility size-glyph {
+  width: 1em;
+  height: 1em;
+}
+@utility ms-word {
+  margin-inline-start: calc(1em * 0.25);
+}
+@utility gap-word {
+  gap: calc(1em * 0.25);
+}
+@utility translate-y-cap-lift {
+  --tw-translate-y: calc(1em * 0.1);
+  translate: var(--tw-translate-x) var(--tw-translate-y);
+}
+@utility -translate-y-cap-lift {
+  --tw-translate-y: calc(1em * -0.1);
+  translate: var(--tw-translate-x) var(--tw-translate-y);
+}
+
+@utility bg-mark-overlay {
+  background-image: var(--mark-overlay);
+}
+@utility bg-rail {
+  background-image: var(--rail);
+}
+@utility bg-head-tint-ramp {
+  background-image: var(--head-tint-ramp);
+}
+@utility action-stops {
+  --tw-gradient-from: oklch(from var(--color-action-solid) calc(l + 0.03) c h);
+  --tw-gradient-to: oklch(from var(--color-action-solid) calc(l - 0.03) c h);
+}
+@utility action-stops-hover {
+  --tw-gradient-from: oklch(from var(--color-action-hover) calc(l + 0.03) c h);
+  --tw-gradient-to: oklch(from var(--color-action-hover) calc(l - 0.03) c h);
+}
+
+@utility shadow-overlay-hung {
+  box-shadow: var(--shadow-overlay-hung);
+}
+@utility shadow-tab-start {
+  box-shadow: -2px 0 calc(var(--spacing) * 1.25) -1px var(--tab-shade);
+}
+@utility shadow-tab-end {
+  box-shadow: 2px 0 calc(var(--spacing) * 1.25) -1px var(--tab-shade);
+}
+@utility shadow-tab-start-chosen {
+  box-shadow: -2px 0 calc(var(--spacing) * 1.25) -1px var(--tab-shade-chosen);
+}
+@utility shadow-tab-end-chosen {
+  box-shadow: 2px 0 calc(var(--spacing) * 1.25) -1px var(--tab-shade-chosen);
+}
+@utility drop-shadow-near {
+  filter: drop-shadow(0 2px var(--spacing-space-1) var(--color-shadow-tint));
+}
+
+/* Component transitions composed from the seven durations and four curves. */
+@utility transition-fade-blur {
+  transition: var(--blur-fade-transition);
+}
+@utility transition-fade-slide-blur {
+  transition: var(--blur-slide-fade-transition);
+}
+@utility transition-fold-fade {
+  transition: var(--blur-fade-transition);
+}
+@utility transition-tint-press {
+  transition:
+    background-color var(--duration-control) var(--ease-out),
+    color var(--duration-control) var(--ease-out),
+    transform var(--duration-fade) var(--ease-out);
+}
+@utility transition-control-press {
+  transition:
+    background-color var(--duration-control) var(--ease-out),
+    border-color var(--duration-control) var(--ease-out),
+    color var(--duration-control) var(--ease-out),
+    --tw-gradient-from var(--duration-control) var(--ease-out),
+    --tw-gradient-to var(--duration-control) var(--ease-out),
+    transform var(--duration-fade) var(--ease-out);
+}
+@utility transition-control-slide {
+  transition:
+    background-color var(--duration-control) var(--ease-out),
+    border-color var(--duration-control) var(--ease-out),
+    color var(--duration-control) var(--ease-out),
+    translate var(--duration-fade) var(--ease-out);
+}
+@utility transition-control-ring {
+  transition:
+    background-color var(--duration-control) var(--ease-out),
+    border-color var(--duration-control) var(--ease-out),
+    color var(--duration-control) var(--ease-out),
+    box-shadow var(--duration-control) var(--ease-out);
+}
+@utility transition-chip-settle {
+  transition:
+    background-color var(--duration-panel) var(--ease-out),
+    color var(--duration-panel) var(--ease-out),
+    transform var(--duration-fade) var(--ease-out);
+}
+@utility transition-pick-card {
+  transition:
+    border-color var(--duration-fade) var(--ease-out),
+    background-color var(--duration-fade) var(--ease-out),
+    transform var(--duration-control) var(--ease-out);
+}
+@utility transition-frame-end-first {
+  transition:
+    inset-inline-end var(--duration-fade) var(--ease-in-out) 0ms,
+    inset-inline-start var(--duration-fade) var(--ease-in-out)
+      var(--duration-control);
+}
+@utility transition-frame-start-first {
+  transition:
+    inset-inline-start var(--duration-fade) var(--ease-in-out) 0ms,
+    inset-inline-end var(--duration-fade) var(--ease-in-out)
+      var(--duration-control);
+}
+@utility transition-split-surface {
+  transition:
+    opacity var(--duration-panel) var(--ease-out),
+    transform var(--duration-panel) var(--ease-out),
+    padding var(--duration-panel) var(--ease-drawer);
+}
+@utility transition-ring-arc {
+  transition:
+    stroke-dashoffset var(--duration-panel) var(--ease-in-out),
+    stroke var(--duration-fade) var(--ease-out),
+    opacity var(--duration-fade) var(--ease-out);
+}
+@utility transition-rail-tip {
+  transition:
+    transform var(--duration-fade) var(--ease-in-out),
+    width var(--duration-fade) var(--ease-in-out),
+    opacity var(--duration-control) var(--ease-out);
+}
+@utility transition-suggest-chip {
+  transition:
+    scale var(--duration-fade) var(--ease-out),
+    background-color var(--duration-panel) var(--ease-out),
+    border-color var(--duration-panel) var(--ease-out),
+    color var(--duration-control) var(--ease-out);
+}
+@utility transition-segment {
+  transition:
+    transform var(--duration-fade) var(--ease-out),
+    width var(--duration-fade) var(--ease-out),
+    height var(--duration-fade) var(--ease-out),
+    opacity var(--duration-control) var(--ease-out);
+}
+@utility transition-band-hide {
+  transition:
+    opacity var(--duration-fade) var(--ease-out),
+    visibility var(--duration-fade) linear,
+    background-color var(--duration-control) var(--ease-out),
+    color var(--duration-control) var(--ease-out);
+}
+@utility transition-band-show {
+  transition:
+    opacity var(--duration-panel) var(--ease-drawer),
+    visibility var(--duration-panel) linear,
+    background-color var(--duration-control) var(--ease-out),
+    color var(--duration-control) var(--ease-out);
+}
+@utility transition-band-slide-hide {
+  transition:
+    translate var(--duration-fade) var(--ease-out),
+    opacity var(--duration-fade) var(--ease-out),
+    visibility var(--duration-fade) linear,
+    background-color var(--duration-control) var(--ease-out),
+    color var(--duration-control) var(--ease-out);
+}
+@utility transition-band-slide-show {
+  transition:
+    translate var(--duration-panel) var(--ease-drawer),
+    opacity var(--duration-panel) var(--ease-drawer),
+    visibility var(--duration-panel) linear,
+    background-color var(--duration-control) var(--ease-out),
+    color var(--duration-control) var(--ease-out);
+}
+@utility transition-band-row-shut {
+  transition: grid-template-rows var(--duration-fade) var(--ease-out);
+}
+@utility transition-band-row-open {
+  transition: grid-template-rows var(--duration-panel) var(--ease-drawer);
+}
+
+/* Component animations composed from the seven durations and four curves. */
+@utility animate-check-draw {
+  animation: check-draw var(--duration-fade) var(--ease-out) both;
+}
+@utility animate-rail-label-in {
+  animation: rail-label-in var(--duration-fade) var(--ease-out) both;
+}
+@utility animate-thinking-word {
+  animation: thinking-word calc(var(--duration-breath) * 8) var(--ease-out)
+    var(--word-delay, 0s) infinite both;
+}
+@utility animate-thinking-circle {
+  animation: thinking-circle calc(var(--duration-breath) * 3) var(--ease-in-out)
+    infinite both;
+}
+@utility animate-thinking-lemniscate {
+  animation: thinking-lemniscate calc(var(--duration-breath) * 3)
+    var(--ease-in-out) infinite both;
+}
+@utility animate-thinking-sheen {
+  animation: thinking-sheen var(--duration-breath) var(--ease-in-out) infinite;
+}
+@utility animate-thinking-sheen-hold {
+  animation: thinking-sheen-hold var(--duration-breath) var(--ease-in-out)
+    infinite;
+}
+@utility animate-step-shimmer {
+  animation: step-shimmer var(--duration-breath) var(--ease-in-out) infinite;
+}
+@utility animate-row-flash {
+  animation: row-flash calc(var(--duration-fade) * 3) var(--ease-out) both;
+}
+@utility animate-mention-tip-in {
+  animation: mention-tip-in var(--duration-control) var(--ease-out);
+}
+@utility animate-mark-in {
+  animation: mark-in var(--duration-panel) var(--ease-out) both;
+}
+@utility animate-sheet-in {
+  animation: sheet-in var(--duration-panel) var(--ease-drawer);
+}
+@utility animate-sheet-out {
+  animation: sheet-out var(--duration-fade) var(--ease-drawer) forwards;
+}
+@utility animate-ns-sec {
+  animation: ns-in var(--duration-panel) var(--ease-out) var(--delay, 0s)
+    backwards;
+}
+@utility animate-ns-pop-in {
+  animation: ns-pop-in var(--duration-panel) var(--ease-drawer) both;
+}
+@utility animate-ns-pop-out {
+  animation: ns-pop-out var(--duration-fade) var(--ease-out) both;
+}
+@utility animate-wave-arrive {
+  animation: wave-draw var(--duration-panel) var(--ease-out)
+    calc(var(--duration-fade) + var(--lead)) backwards;
+}
+@utility animate-wave-draw {
+  animation: wave-draw var(--duration-panel) var(--ease-out) backwards;
+}
+@utility animate-wave-breathe {
+  animation:
+    wave-breath-draw calc(var(--duration-breath) * 2) var(--ease-out) infinite,
+    wave-breath-fade calc(var(--duration-breath) * 2) var(--ease-in-out)
+      infinite;
+}
+@utility animate-icon-swap {
+  animation: icon-swap var(--duration-control) var(--ease-out) both;
+}
+@utility animate-icon-swap-still {
+  animation: icon-swap-still var(--duration-control) var(--ease-out) both;
+}
+@utility animate-cell-swap {
+  animation: cell-swap var(--duration-control) var(--ease-out);
+}
+@utility animate-arrive-late {
+  animation: fade-in var(--duration-control) var(--ease-out)
+    var(--duration-control) both;
+}
+@utility animate-finish {
+  animation: finish calc(var(--duration-fade) * 2) var(--ease-out);
+}
+@utility animate-tip-in {
+  animation: kit-tip-in var(--duration-fade) var(--ease-out) both;
+}
+
 /* ---- Motion is opt-in: every travelling transition and keyframe animation
    in this sheet and in the components sits under
    `@media (prefers-reduced-motion: no-preference)`, and motion driven from
    JavaScript asks `motionOk` (motion/curves.svelte.ts). Opacity and colour
-   fades that carry state run either way. The kit's keyframes: */
-@keyframes kit-tip-fade {
+   fades that carry state run either way. Component keyframes: */
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes thinking-word {
+  0% {
+    opacity: 0;
+    transform: translateY(80%);
+  }
+  1.5%,
+  25% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  26%,
+  100% {
+    opacity: 0;
+    transform: translateY(-80%);
+  }
+}
+@keyframes thinking-circle {
+  0%,
+  50%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+  25%,
+  75% {
+    opacity: 0;
+    transform: scale(1.15, 0.8);
+  }
+}
+@keyframes thinking-lemniscate {
+  0%,
+  50%,
+  100% {
+    opacity: 0;
+    transform: scale(0.7, 1.1);
+  }
+  25%,
+  75% {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes thinking-sheen {
+  to {
+    transform: translateX(-66.6667%);
+  }
+}
+@keyframes thinking-sheen-hold {
+  to {
+    transform: translateX(200%);
+  }
+}
+@keyframes step-shimmer {
+  from {
+    background-position: 0% 0;
+  }
+  to {
+    background-position: 100% 0;
+  }
+}
+@keyframes row-flash {
+  from {
+    opacity: 0.35;
+  }
+}
+@keyframes mention-tip-in {
   from {
     opacity: 0;
+    scale: var(--press-scale);
+  }
+}
+@keyframes mark-in {
+  from {
+    opacity: 0;
+    scale: 0.25;
+    filter: blur(var(--spacing-space-1));
+  }
+}
+@keyframes icon-swap {
+  from {
+    opacity: 0;
+    transform: scale(0.25);
+    filter: blur(var(--spacing-space-1));
+  }
+}
+@keyframes icon-swap-still {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes sheet-in {
+  from {
+    transform: var(--sheet-away);
+  }
+}
+@keyframes sheet-out {
+  to {
+    transform: var(--sheet-away);
+  }
+}
+@keyframes ns-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--pop-rise));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ns-check {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ns-panel {
+  from {
+    opacity: 0;
+    transform: translateY(var(--pop-rise));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ns-pop-out {
+  to {
+    opacity: 0;
+    scale: var(--pop-scale);
+  }
+}
+@keyframes ns-pop-in {
+  from {
+    opacity: 0;
+    scale: var(--pop-scale);
+    translate: 0 calc(-1 * var(--pop-rise));
+  }
+}
+@keyframes wave-draw {
+  from {
+    stroke-dashoffset: var(--run);
+  }
+}
+@keyframes wave-breath-draw {
+  0% {
+    stroke-dashoffset: var(--run);
+  }
+  50%,
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes wave-breath-fade {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes cell-swap {
+  from {
+    opacity: 0;
+    scale: var(--pop-scale);
+  }
+}
+@keyframes finish {
+  35% {
+    background-color: var(--color-status-done-bg);
+  }
+}
+@keyframes head-fade {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes kit-tip-in {
+  from {
+    opacity: 0;
+    translate: var(--kit-tip-from);
   }
 }
 /* The list swap (motion/list-swap): the model list's harness change and the
@@ -2172,26 +2930,7 @@
 @keyframes rail-label-in {
   from {
     opacity: 0;
-    transform: translateY(calc(var(--spacing) _ * _2));
-  }
-}
-@keyframes kit-fade-in {
-  from {
-    opacity: 0;
-  }
-}
-@keyframes kit-fade-out {
-  to {
-    opacity: 0;
-  }
-}
-/* Live work breathes (DESIGN.md): one loop of `--duration-breath` on ease-in-out,
-   down to `--breath-floor` half a breath in, the lowest opacity at which the
-   live glyph still holds 3:1 on every surface. Every breather runs this one:
-   `animation: breath var(--duration-breath) var(--ease-in-out) infinite`. */
-@keyframes breath {
-  50% {
-    opacity: var(--breath-floor);
+    transform: translateY(var(--spacing-space-2));
   }
 }
 
@@ -2276,20 +3015,20 @@
       inset-inline: max(
         min(
           0px,
-          calc(50% - var(--spacing-c-touch-floor) / 2 / var(--hit-scale, 1))
+          calc(50% - var(--spacing-control-lg) / 2 / var(--hit-scale, 1))
         ),
         calc(
-          var(--hit-gap-x, var(--spacing-c-touch-floor) / var(--hit-scale, 1)) /
+          var(--hit-gap-x, var(--spacing-control-lg) / var(--hit-scale, 1)) /
             -2 - var(--hit-edge, 0px)
         )
       );
       inset-block: max(
         min(
           0px,
-          calc(50% - var(--spacing-c-touch-floor) / 2 / var(--hit-scale, 1))
+          calc(50% - var(--spacing-control-lg) / 2 / var(--hit-scale, 1))
         ),
         calc(
-          var(--hit-gap-y, var(--spacing-c-touch-floor) / var(--hit-scale, 1)) /
+          var(--hit-gap-y, var(--spacing-control-lg) / var(--hit-scale, 1)) /
             -2 - var(--hit-edge, 0px)
         )
       );
@@ -2315,20 +3054,20 @@
       inset-inline: max(
         min(
           0px,
-          calc(50% - var(--spacing-c-touch-floor) / 2 / var(--hit-scale, 1))
+          calc(50% - var(--spacing-control-lg) / 2 / var(--hit-scale, 1))
         ),
         calc(
-          var(--hit-gap-x, var(--spacing-c-touch-floor) / var(--hit-scale, 1)) /
+          var(--hit-gap-x, var(--spacing-control-lg) / var(--hit-scale, 1)) /
             -2 - var(--hit-edge, 0px)
         )
       );
       inset-block: max(
         min(
           0px,
-          calc(50% - var(--spacing-c-touch-floor) / 2 / var(--hit-scale, 1))
+          calc(50% - var(--spacing-control-lg) / 2 / var(--hit-scale, 1))
         ),
         calc(
-          var(--hit-gap-y, var(--spacing-c-touch-floor) / var(--hit-scale, 1)) /
+          var(--hit-gap-y, var(--spacing-control-lg) / var(--hit-scale, 1)) /
             -2 - var(--hit-edge, 0px)
         )
       );
@@ -2368,12 +3107,12 @@
       inset-inline: max(
         min(
           0px,
-          calc(50% - var(--spacing-c-pointer-floor) / 2 / var(--hit-scale, 1))
+          calc(50% - var(--spacing-control-xs) / 2 / var(--hit-scale, 1))
         ),
         calc(
           var(
               --hit-gap-x,
-              var(--spacing-c-pointer-floor) / var(--hit-scale, 1)
+              var(--spacing-control-xs) / var(--hit-scale, 1)
             ) /
             -2 - var(--hit-edge, 0px)
         )
@@ -2381,12 +3120,12 @@
       inset-block: max(
         min(
           0px,
-          calc(50% - var(--spacing-c-pointer-floor) / 2 / var(--hit-scale, 1))
+          calc(50% - var(--spacing-control-xs) / 2 / var(--hit-scale, 1))
         ),
         calc(
           var(
               --hit-gap-y,
-              var(--spacing-c-pointer-floor) / var(--hit-scale, 1)
+              var(--spacing-control-xs) / var(--hit-scale, 1)
             ) /
             -2 - var(--hit-edge, 0px)
         )
@@ -2476,7 +3215,7 @@
     display: inline-flex;
     grid-area: 1 / 1;
     transition-property: opacity, scale;
-    transition-duration: var(--icon-swap-dur, var(--duration-pop));
+    transition-duration: var(--icon-swap-dur, var(--duration-panel));
     transition-timing-function: var(--icon-swap-ease, var(--ease-out));
   }
   :where(&) > :where([data-active="false"]) {
@@ -2507,7 +3246,7 @@
    brings it back with `swap-shown`. */
 @utility swap-move {
   transition-property: opacity, scale;
-  transition-duration: var(--icon-swap-dur, var(--duration-pop));
+  transition-duration: var(--icon-swap-dur, var(--duration-panel));
   transition-timing-function: var(--icon-swap-ease, var(--ease-out));
 }
 @utility swap-gone {
@@ -2526,7 +3265,7 @@
    and the raised surface, a step a tile (a colour control's swatch). */
 @utility checker {
   background: repeating-conic-gradient(
-      var(--color-surface-recess-deep) 0 25%,
+      var(--color-surface-sunk) 0 25%,
       var(--color-surface-raised) 0 50%
     )
     0 0 / var(--spacing-space-2) var(--spacing-space-2);
@@ -2550,7 +3289,7 @@
 @utility pressable {
   --tw-sort: transition-property;
   transition:
-    transform var(--duration-toggle) var(--ease-out),
+    transform var(--duration-fade) var(--ease-out),
     box-shadow var(--duration-control) var(--ease-out);
 
   @media (prefers-reduced-motion: no-preference) {
@@ -2574,9 +3313,8 @@
   @variant light {
     &:is(:active, [data-pressed]):not(:disabled, [aria-disabled="true"]) {
       --color-ink-muted: var(--color-ink-strong);
-      --color-text-muted: var(--color-ink-strong);
       --color-ink-subtle: var(--color-ink-strong);
-      --color-selected-ink: var(--color-ink-strong);
+      --color-brand-ink: var(--color-ink-strong);
     }
   }
 }
@@ -2634,13 +3372,18 @@
     to right,
     transparent,
     transparent calc(var(--fade-run-start) * 0.375),
-    var(--color-mask-opaque-a15) calc(var(--fade-run-start) * 0.75),
-    var(--color-mask-opaque-a60) calc(var(--fade-run-start) * 1.125),
-    var(--color-mask-opaque) calc(var(--fade-run-start) * 1.5),
-    var(--color-mask-opaque) calc(100% - var(--fade-run-end)),
-    var(--color-mask-opaque-a90) calc(100% - var(--fade-run-end) * 0.75),
-    var(--color-mask-opaque-a50) calc(100% - var(--fade-run-end) * 0.5),
-    var(--color-mask-opaque-a10) calc(100% - var(--fade-run-end) * 0.25),
+    oklch(from var(--color-ink-strong) l c h / 0.15)
+      calc(var(--fade-run-start) * 0.75),
+    oklch(from var(--color-ink-strong) l c h / 0.6)
+      calc(var(--fade-run-start) * 1.125),
+    var(--color-ink-strong) calc(var(--fade-run-start) * 1.5),
+    var(--color-ink-strong) calc(100% - var(--fade-run-end)),
+    oklch(from var(--color-ink-strong) l c h / 0.9)
+      calc(100% - var(--fade-run-end) * 0.75),
+    oklch(from var(--color-ink-strong) l c h / 0.5)
+      calc(100% - var(--fade-run-end) * 0.5),
+    oklch(from var(--color-ink-strong) l c h / 0.1)
+      calc(100% - var(--fade-run-end) * 0.25),
     transparent
   );
 }
@@ -2703,7 +3446,7 @@
   /* The depth-0 rows' glyph centre from a row's start: the column every
      level steps in from. */
   --line-root: calc(
-    var(--tree-inset, var(--row-compact-gap)) +
+    var(--tree-inset, var(--spacing-space-2)) +
       var(--tree-glyph, var(--mark-size, var(--spacing-space-5))) / 2
   );
   /* A rail to the edge of the glyph one level in: a tree mark's step less
@@ -2736,7 +3479,7 @@
      column, whatever inset its own recipe keeps before it. */
   padding-inline-start: calc(
     var(--line-depth) * var(--line-step) + var(--line-root) -
-      var(--tree-inset, var(--row-compact-gap)) -
+      var(--tree-inset, var(--spacing-space-2)) -
       var(--tree-glyph, var(--mark-size, var(--spacing-space-5))) / 2
   );
   &[data-line-depth="0"] {
@@ -2750,15 +3493,15 @@
    and an "N older" box in them): their rows the compact row, the touch
    floor tall under a finger (SessionRow, GroupParent, a project's row). */
 @utility kit-tree-rail {
-  --tree-y: calc(var(--row-compact-h) / 2);
+  --tree-y: calc(var(--spacing-row-compact) / 2);
   @variant coarse {
-    --tree-y: calc(var(--spacing-c-btn-h-lg) / 2);
+    --tree-y: calc(var(--spacing-control-lg) / 2);
   }
 }
 /* A row the compact row's height under a finger too (an "N older" row,
    OlderRows). */
 @utility kit-tree-compact {
-  --tree-y: calc(var(--row-compact-h) / 2);
+  --tree-y: calc(var(--spacing-row-compact) / 2);
 }
 /* A two-line session row (SessionRow not compact: Recent with no project
    level): its lead the space ladder's 11px in, its glyph on the middle of
@@ -2782,7 +3525,7 @@
   --tree-y: calc(var(--mark-size, var(--spacing-space-5)) / 2);
 }
 @utility kit-tree-line {
-  --line-y: var(--tree-y, calc(var(--row-compact-h) / 2));
+  --line-y: var(--tree-y, calc(var(--spacing-row-compact) / 2));
   --line-foot: var(
     --tree-foot,
     calc(var(--tree-glyph, var(--mark-size, var(--spacing-space-5))) / 2)
@@ -2812,7 +3555,7 @@
       ),
       var(--dpx, 1px)
     );
-    border-color: var(--color-nest-ink);
+    border-color: var(--nest-ink);
     border-style: solid;
     border-width: 0;
     border-inline-start-width: var(--tree-line);

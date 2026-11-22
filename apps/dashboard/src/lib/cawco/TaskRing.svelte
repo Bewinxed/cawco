@@ -61,11 +61,11 @@
     width={box}
   >
     <g
-      class="transform-fill origin-center transition-[opacity,scale] duration-(--duration-exit) ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:duration-(--duration-control) motion-reduce:shown-false:scale-100"
+      class="transform-fill origin-center transition-[opacity,scale] duration-(--duration-fade) ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:duration-(--duration-control) motion-reduce:shown-false:scale-100"
       data-shown={!finished}
     >
       <circle
-        class="stroke-border"
+        class="stroke-border-control"
         cx={box / 2}
         cy={box / 2}
         fill="none"
@@ -74,7 +74,7 @@
       />
       <!-- Wound from the top, as a clock is read. -->
       <circle
-        class="transform-view origin-center -rotate-90 transition-[stroke-dasharray] duration-(--duration-pop) ease-out motion-reduce:duration-(--duration-control)"
+        class="transform-view origin-center -rotate-90 transition-[stroke-dasharray] duration-(--duration-panel) ease-out motion-reduce:duration-(--duration-control)"
         cx={box / 2}
         cy={box / 2}
         fill="none"
@@ -86,7 +86,7 @@
       />
     </g>
     <g
-      class="transform-fill origin-center text-success-9 transition-[opacity,scale] duration-(--duration-exit) ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:duration-(--duration-control) motion-reduce:shown-false:scale-100"
+      class="transform-fill origin-center text-status-done-glyph transition-[opacity,scale] duration-(--duration-fade) ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:duration-(--duration-control) motion-reduce:shown-false:scale-100"
       data-shown={finished}
     >
       <polyline

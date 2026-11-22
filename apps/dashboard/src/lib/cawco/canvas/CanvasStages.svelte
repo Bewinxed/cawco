@@ -154,7 +154,9 @@
       data-standing={stage.at === "composer" || undefined}
       data-canvas-stages-docked={stage.at === "panel" || undefined}
       data-slot="canvas-stage"
-      class="fixed z-(--layer-stage) overflow-hidden bg-surface-raised data-canvas-stages-docked:rounded-sm data-over-sheet:z-(--layer-sheet-stage) data-standing:border-b data-standing:border-b-border-hairline"
+      class="fixed z-(--z) overflow-hidden bg-surface-raised data-canvas-stages-docked:rounded-sm data-over-sheet:z-(--z-sheet) data-standing:border-b data-standing:border-b-border-hairline"
+      style:--z="calc(var(--layer-dock) - 10)"
+      style:--z-sheet="calc(var(--layer-sheet) + 10)"
       data-artifact={stage.id}
       hidden
       bind:this={stage.el}
@@ -189,7 +191,7 @@
           role="alert"
         >
           <p
-            class="flex-1 basis-c-draft-line min-w-0 m-0 text-size-body text-error-9 text-pretty"
+            class="flex-1 basis-56 min-w-0 m-0 text-size-body text-status-fail-glyph text-pretty"
           >
             {stage.unreached}
           </p>

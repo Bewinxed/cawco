@@ -46,7 +46,7 @@
   <ul class="m-0 flex min-w-0 list-none flex-col gap-space-2 p-0">
     {#each each as place (`${place.machine}\0${place.path}`)}
       <li class="flex min-w-0 flex-col gap-space-row">
-        <span class="type-label text-ink-row">{place.machine}</span>
+        <span class="type-label text-ink-strong">{place.machine}</span>
         <!-- The path reads from its end: the folder's tail stays when
              it is cut, and one that fits starts under its machine's
              name (the end of a right-to-left line). -->
@@ -100,7 +100,7 @@
       {/if}
       {#if checked && kept.length > 0}
         <div class="grid min-w-0 grid-cols-1 gap-space-2" data-stays>
-          <span class="type-label text-ink-row"
+          <span class="type-label text-ink-strong"
             >{projectEndWords.staysOnDisk}</span
           >
           {@render listed(kept)}

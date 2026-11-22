@@ -4,7 +4,7 @@
    * The kit highlight's hover ghost in each place it glides, for its glide's
    * proof in one Chromium session over the DevTools protocol: the Animation
    * domain's runs as the pointer goes down the rail (each a `transform` on
-   * --duration-ghost and --ease-in-out, the fade an `opacity` on --duration-control),
+   * --duration-step and --ease-in-out, the fade an `opacity` on --duration-control),
    * a Performance trace of that hover at 4x CPU (no non-composited run of
    * the highlight's, no forced layout from it), and the glide paused at its
    * midpoint across the widest change of size, the tabs'. The rail is the
@@ -100,7 +100,7 @@
     </Tabs>
   </section>
 
-  <section class="w-c-pin-card-w max-w-full" data-part="command">
+  <section class="w-70 max-w-full" data-part="command">
     <Command.Root>
       <Command.List>
         <Command.Group heading="Models">

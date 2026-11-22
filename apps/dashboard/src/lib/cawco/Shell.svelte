@@ -124,7 +124,7 @@
   const tokenWidth = () =>
     Number.parseFloat(
       getComputedStyle(document.documentElement).getPropertyValue(
-        "--spacing-c-sidebar-w"
+        "--sidebar-w"
       )
     );
 
@@ -371,7 +371,7 @@
    * `translateX(-100%)` and its place (mirrored right to left) and the page
    * slides from where it was drawn to its own place, on one curve both
    * ways, `--ease-drawer`: showing is an entrance, over `--duration-panel`;
-   * hiding is the rail's exit, over the shorter `--duration-panel-exit`
+   * hiding is the rail's exit, over the shorter `--duration-panel`
    * (DESIGN.md, The Fast Exit Rule). A press
    * mid-slide turns both back from where they are drawn, never from the
    * slide's start (The Interruptible Rule). The rail's width and the page's
@@ -471,7 +471,7 @@
   const railClock = (hide: boolean) =>
     hide
       ? {
-          duration: dur("--duration-panel-exit"),
+          duration: dur("--duration-panel"),
           easing: ease("--ease-drawer"),
         }
       : { duration: dur("--duration-panel"), easing: ease("--ease-drawer") };
@@ -1456,7 +1456,8 @@
 
 <a
   data-slot="skip"
-  class="sr-only z-(--layer-skip) rounded-sm bg-surface-raised px-space-4 py-space-2 shadow-tile focus:not-sr-only focus:absolute focus:start-space-4 focus:top-space-4"
+  class="sr-only z-(--z) rounded-sm bg-surface-raised px-space-4 py-space-2 shadow-sm focus:not-sr-only focus:absolute focus:start-space-4 focus:top-space-4"
+  style:--z="calc(var(--layer-top) - 10)"
   href="#main-content">Skip to content</a
 >
 
@@ -1491,9 +1492,9 @@
       data-full={full || undefined}
       data-away={(railHidden && !railLeaving) || undefined}
       data-leaving={railLeaving || undefined}
-      class="hidden desk:flex data-full:hidden data-away:hidden relative data-leaving:absolute data-leaving:inset-y-0 data-leaving:start-0 data-leaving:z-10 w-(--sidebar-width) grow-0 shrink-0 basis-(--sidebar-width) min-w-0 ps-(--rail-inset) bg-(--sidebar) border-e border-e-border-hairline"
+      class="hidden desk:flex data-full:hidden data-away:hidden relative data-leaving:absolute data-leaving:inset-y-0 data-leaving:start-0 data-leaving:z-10 w-(--sidebar-width) grow-0 shrink-0 basis-(--sidebar-width) min-w-0 ps-(--rail-inset) bg-surface-page border-e border-e-border-hairline"
       style="--sidebar-width: var(--rail-w, {firstWidth === null
-        ? 'var(--spacing-c-sidebar-w)'
+        ? 'var(--sidebar-w)'
         : `${firstWidth}px`})"
       style:--rail-inset="env(safe-area-inset-left, 0px)"
       bind:this={railBox}
@@ -1514,7 +1515,7 @@
         aria-valuemax={RAIL_MAX}
         aria-valuemin={RAIL_MIN}
         aria-valuenow={railWidth}
-        class="pointer-hit hit-gap-x-space-1 absolute inset-y-0 end-0 w-c-side-grip-w translate-x-1/2 cursor-col-resize touch-none select-none z-5 hover:bg-border-control"
+        class="pointer-hit hit-gap-x-space-1 absolute inset-y-0 end-0 w-1.5 translate-x-1/2 cursor-col-resize touch-none select-none z-5 hover:bg-border-control"
         onkeydown={resizeKey}
         onpointerdown={startDrag}
         role="slider"
@@ -1539,7 +1540,8 @@
            Close as its last control, after Start session (Sidebar). -->
       <Sheet.Content
         data-rail-sheet
-        class="w-c-rail-sheet-w"
+        class="w-(--w)"
+        style="--w: calc(var(--spacing) * 71)"
         keep
         narrow
         pad="none"
@@ -1576,12 +1578,12 @@
          (the peek's surface brief, Peek), never cut under it. -->
     <div
       data-slot="shell-main"
-      class="relative flex-auto min-w-0 flex flex-col overflow-hidden data-peek-beside:pe-c-peek-sheet-w data-under:timeline-scope-transcript-head"
+      class="relative flex-auto min-w-0 flex flex-col overflow-hidden data-peek-beside:pe-96 data-under:timeline-scope-transcript-head"
       data-peek-beside={peekBeside() || undefined}
       data-under={under || undefined}
       bind:this={mainBox}
     >
-      <!-- The bar: the comp's height (`--spacing-c-top-bar-h`, so what floats under
+      <!-- The bar: the comp's height (`--spacing-control-lg`, so what floats under
            it lands under it); hosted folder tabs stand on its floor. The
            right inset is the content's right pad, so the cluster's edge
            stands over the page's; the left inset is the crumb's own, so the
@@ -1618,11 +1620,11 @@
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
         data-under={under || undefined}
-        class="group/top peer/top h-c-top-bar-h shrink-0 flex data-full:hidden data-under:relative data-under:-mbe-c-top-bar-h data-under:z-(--layer-bar) data-under:pointer-events-none items-center gap-space-2 py-0 ps-0 pe-(--top-end) desk:not-coarse:data-hosting:pe-(--shelf-end) desk:not-portrait:data-hosting:pe-(--shelf-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
+        class="group/top peer/top h-control-lg shrink-0 flex data-full:hidden data-under:relative data-under:-mbe-control-lg data-under:z-(--layer-bar) data-under:pointer-events-none items-center gap-space-2 py-0 ps-0 pe-(--top-end) desk:not-coarse:data-hosting:pe-(--shelf-end) desk:not-portrait:data-hosting:pe-(--shelf-end) coarse:portrait:desk:ps-space-6 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-control-lg max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
         style:--top-end={"calc(var(--spacing-space-6) + env(safe-area-inset-right, 0px))"}
         style:--shelf-end={"calc(var(--radius-sm) + env(safe-area-inset-right, 0px))"}
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
-        style:--top-inset-end={"calc(var(--spacing-c-bar-phone-edge) + env(safe-area-inset-right, 0px))"}
+        style:--top-inset-end={"calc(var(--spacing-space-3) + env(safe-area-inset-right, 0px))"}
         {@attach reflow()}
         bind:this={topBar}
       >
@@ -1640,15 +1642,15 @@
         <button
           data-slot="burger"
           aria-label={sidebarWords.openNavigation}
-          class="select-none desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--duration-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-c-bar-phone-edge max-desk:justify-items-start max-desk:focus-inset max-desk:pt-(--burger-drop) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto group-data-under/top:pointer-events-auto"
+          class="select-none desk:hidden size-control-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--duration-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-space-3 max-desk:justify-items-start max-desk:focus-inset max-desk:pt-(--burger-drop) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto group-data-under/top:pointer-events-auto"
           onclick={() => {
             railOpen = true;
           }}
-          style:--burger-drop={"calc(2 * (var(--spacing-c-top-bar-h) - var(--spacing-c-tab-row-h) / 2 - var(--spacing-c-btn-h-lg) / 2))"}
+          style:--burger-drop={"calc(2 * (var(--spacing-control-lg) - var(--spacing-control-md) / 2 - var(--spacing-control-lg) / 2))"}
           type="button"
           bind:this={burger}
         >
-          <IconSidebar class="size-icon-lg max-desk:size-c-bar-toggle-glyph" />
+          <IconSidebar class="size-icon-lg max-desk:size-4.5" />
         </button>
         {#if railed && railHidden}
           <!-- The sidebar is put away on a desk: the bar keeps the room
@@ -1660,7 +1662,7 @@
           <div
             data-slot="rail-show"
             aria-hidden="true"
-            class="box-content flex-none w-c-btn-h h-c-btn-h ps-space-2 coarse:portrait:desk:-ms-space-7"
+            class="box-content flex-none w-control-md h-control-md ps-space-2 coarse:portrait:desk:-ms-space-6"
           ></div>
         {/if}
         <!-- The one "where am I" label, now visible at every width — the brand
@@ -1759,7 +1761,7 @@
             <span
               data-slot="crumb"
               data-led={(railed && railHidden) || undefined}
-              class="min-w-0 truncate ps-space-7 data-led:ps-space-1 me-space-3 max-desk:ps-0 coarse:portrait:ps-0"
+              class="min-w-0 truncate ps-space-6 data-led:ps-space-1 me-space-3 max-desk:ps-0 coarse:portrait:ps-0"
               in:riseIn
               out:crossOut
             >
@@ -1847,7 +1849,7 @@
         <!-- The scroll edge effect under the bar floating over the page:
              what scrolls beneath it blurs and fades into the shell's ground,
              from the first scroll (HeadFade, as BarFloat draws it). -->
-        <HeadFade band="var(--spacing-c-top-bar-h)" tint="bg-surface-recess" />
+        <HeadFade band="var(--spacing-control-lg)" tint="bg-surface-recess" />
       {/if}
       <HubBand />
 
@@ -1870,14 +1872,14 @@
         data-slot="shell-content"
         data-floating={floating || undefined}
         data-under={under || undefined}
-        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto data-under:pt-c-top-bar-h data-under:scroll-timeline-transcript-head pe-(--content-end) max-desk:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-desk:data-floating:bg-linear-to-b max-desk:data-floating:from-surface-shelf max-desk:data-floating:to-surface-shelf max-desk:data-floating:bg-top max-desk:data-floating:bg-size-(--shelf-band-size) max-desk:data-floating:bg-no-repeat"
+        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto data-under:pt-control-lg data-under:scroll-timeline-transcript-head pe-(--content-end) max-desk:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-desk:data-floating:bg-linear-to-b max-desk:data-floating:from-surface-shelf max-desk:data-floating:to-surface-shelf max-desk:data-floating:bg-top max-desk:data-floating:bg-size-(--shelf-band-size) max-desk:data-floating:bg-no-repeat"
         data-safe={!onSession || undefined}
         data-safe-bottom
         id="main-content"
         bind:this={content}
         style:--content-end="env(safe-area-inset-right, 0px)"
         style:--content-start="env(safe-area-inset-left, 0px)"
-        style:--shelf-band-size="100% var(--spacing-c-top-bar-h)"
+        style:--shelf-band-size="100% var(--spacing-control-lg)"
       >
         <!-- The page is keyed on its route, so a navigation swaps one page for
            the next through their own transitions (motion/route.svelte.ts):
@@ -1936,9 +1938,9 @@
       <div
         data-slot="rail-toggle"
         data-away={railHidden || undefined}
-        class="absolute top-0 start-0 z-(--layer-bar) flex items-center h-c-top-bar-h ps-space-2 pointer-events-none [&>*]:pointer-events-auto [&>[data-slot=tools]]:before:transition-[opacity] [&>[data-slot=tools]]:before:duration-(--turn-dur) [&>[data-slot=tools]]:before:ease-drawer not-data-away:[&>[data-slot=tools]]:before:opacity-0"
+        class="absolute top-0 start-0 z-(--layer-bar) flex items-center h-control-lg ps-space-2 pointer-events-none [&>*]:pointer-events-auto [&>[data-slot=tools]]:before:transition-[opacity] [&>[data-slot=tools]]:before:duration-(--turn-dur) [&>[data-slot=tools]]:before:ease-drawer not-data-away:[&>[data-slot=tools]]:before:opacity-0"
         style:--turn-dur={railHidden
-          ? "var(--duration-panel-exit)"
+          ? "var(--duration-panel)"
           : "var(--duration-panel)"}
         bind:this={railCorner}
       >
@@ -1973,7 +1975,8 @@
        the session card's outline (hang-outline), at the window's origin, so
        their place is the window's. -->
   <div
-    class="@container/shell hang-layer-screen fixed inset-x-0 top-0 z-(--layer-hang)"
+    class="@container/shell hang-layer-screen fixed inset-x-0 top-0 z-(--z)"
+    style:--z="calc(var(--layer-float) - 6)"
     data-hang-layer={hangLayerOf.id}
   >
     <GlassCard />

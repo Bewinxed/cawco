@@ -259,11 +259,11 @@
     class="absolute inset-0 flex justify-end bg-surface-shelf text-ink-strong"
   >
     <div
-      class="relative flex min-h-0 w-c-panel-w m-space-6 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile max-phone:m-0 max-phone:w-full max-phone:rounded-none"
+      class="relative flex min-h-0 w-95 m-space-6 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-sm max-phone:m-0 max-phone:w-full max-phone:rounded-none"
     >
       <div
         class="relative flex h-full min-h-0 flex-auto flex-col"
-        style:--bar-room="var(--spacing-c-top-bar-h)"
+        style:--bar-room="var(--spacing-control-lg)"
       >
         <BarFloat tint="bg-surface-recess">
           {#snippet trailing()}
@@ -283,7 +283,7 @@
             browsing={null}
             browsingCwd=""
             browsingHarness={undefined}
-            docked={{ draft, headRoom: "var(--spacing-c-top-bar-h)" }}
+            docked={{ draft, headRoom: "var(--spacing-control-lg)" }}
             focused
             viewId={MAIN}
             visible

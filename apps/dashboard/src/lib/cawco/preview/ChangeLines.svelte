@@ -126,7 +126,7 @@
   data-slot="change-lines"
 >
   {#if inset === "rail"}
-    <span aria-hidden="true" class="w-c-pin flex-none"></span>
+    <span aria-hidden="true" class="w-row-compact flex-none"></span>
   {/if}
   <div class="flex min-w-0 flex-1 flex-col gap-space-1">
     {#if unanswered}
@@ -149,7 +149,7 @@
               onclick={() => step(anchor)}
               type="button"
             >
-              <span aria-hidden="true" class="mark-cell text-c-change-ring"
+              <span aria-hidden="true" class="mark-cell text-status-done-glyph"
                 ><IconRefresh class="size-icon-sm" /></span
               >
               {@render said(line, at)}
@@ -158,7 +158,7 @@
             <span
               class="flex min-w-0 items-start gap-space-1 type-meta mark-line"
             >
-              <span aria-hidden="true" class="mark-cell text-c-change-ring"
+              <span aria-hidden="true" class="mark-cell text-status-done-glyph"
                 ><IconRefresh class="size-icon-sm" /></span
               >
               {@render said(line, at)}

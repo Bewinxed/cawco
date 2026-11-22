@@ -3,7 +3,7 @@
    * Configure › Devices with the Word address row beside Require paired
    * devices (SettingsRow): Set up before it starts, Open after. Its button
    * opens into the same tray, floating over it at the panel's width
-   * (--spacing-c-panel-w), no scrim, the page live (Open Page Rule), by a clip from
+   * (--panel-w), no scrim, the page live (Open Page Rule), by a clip from
    * the button's box (motion.ts `openFrom`); the page keeps room under it.
    * The only way in on a network that can't carry the word.
    */
@@ -51,7 +51,7 @@
 <section
   bind:this={desk.frame}
   aria-labelledby="flow-settings-head"
-  class="grid w-full max-w-c-measure min-w-0 content-start gap-space-2 pb-(--float-room)"
+  class="grid w-full max-w-measure min-w-0 content-start gap-space-2 pb-(--float-room)"
   data-frame="settings"
   style:--float-room={flow.open.settings ? `${floatHeight}px` : "0px"}
 >
@@ -75,7 +75,7 @@
               floatHeight = value;
             }
           )}
-          class="absolute end-0 top-0 z-1 w-c-panel-w max-w-full"
+          class="absolute end-0 top-0 z-1 w-95 max-w-full"
           data-slot="address-float"
         >
           <FlowTray bind:ref={desk.tray} form="desk" onpark={park} {flow} />

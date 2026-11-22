@@ -102,10 +102,10 @@
    * SETTLING. Answered, the card becomes its summary: each option picked is
    * the one chip left, and the options not picked go. The picked chip travels
    * from where it stood among the options to its place in the summary
-   * (`share`, --duration-pop on the drawer curve); the others fade where they
+   * (`share`, --duration-panel on the drawer curve); the others fade where they
    * stood (--duration-control), out of the flow from the start, so nothing else
    * waits on them. Dismissed, every option fades and their row folds shut
-   * toward the question (--duration-exit). Only a card that settles while it is
+   * toward the question (--duration-fade). Only a card that settles while it is
    * drawn plays this; one that is drawn settled is simply its summary.
    */
   const settled = $derived(answered || dismissed);
@@ -180,7 +180,7 @@
     fold(
       row,
       !dismissed,
-      { ms: dur("--duration-exit"), easing: CURVE.out },
+      { ms: dur("--duration-fade"), easing: CURVE.out },
       was
     );
   }
@@ -236,7 +236,7 @@
 <section
   data-slot="hitl"
   aria-label="Question from {asker}"
-  class="mt-space-4 ms-(--x-rail) py-space-3 pe-space-3 ps-(--hitl-start) border border-border-control rounded-lg bg-surface-raised shadow-hairline"
+  class="mt-space-4 ms-(--x-rail) py-space-3 pe-space-3 ps-(--hitl-start) border border-border-control rounded-lg bg-surface-raised shadow-sm"
   data-frame
   bind:this={section}
   style:--hitl-start="calc(var(--x-glyph) - var(--x-rail) - var(--border-width))"
@@ -313,7 +313,7 @@
   {#each questions as q, index (index)}
     <p
       data-slot="lede"
-      class="rail-hang type-body text-ink-strong mb-space-2 max-w-c-measure"
+      class="rail-hang type-body text-ink-strong mb-space-2 max-w-measure"
     >
       {q.question}
     </p>
@@ -339,7 +339,7 @@
             class={chipVariants()}
             data-chosen
             {@attach land(() => shareKey(index, at), {
-              ms: dur("--duration-pop"),
+              ms: dur("--duration-panel"),
             })}
           >
             <Kbd data-box look="keycap">{at + 1}</Kbd><span>{opt.label}</span>
@@ -349,7 +349,7 @@
     </div>
     {#if otherText(q)}
       <p
-        class="rail-hang type-body text-ink-strong max-w-c-measure flex gap-space-2 items-baseline"
+        class="rail-hang type-body text-ink-strong max-w-measure flex gap-space-2 items-baseline"
         in:crossIn
       >
         <span
@@ -362,7 +362,7 @@
 
   {#if freeform}
     <p
-      class="rail-hang type-body text-ink-strong max-w-c-measure flex gap-space-2 items-baseline"
+      class="rail-hang type-body text-ink-strong max-w-measure flex gap-space-2 items-baseline"
       in:crossIn
     >
       <span

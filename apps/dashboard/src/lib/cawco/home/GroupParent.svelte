@@ -65,7 +65,7 @@
   /** Whether its rail is the phone's sheet, where its link is followed. */
   const inSheet = inRailSheet();
   const rowClass =
-    "select-none mark-line press-tint focus-inset m-0 flex w-full min-w-0 h-(--row-compact-h) coarse:h-c-btn-h-lg items-center gap-(--row-compact-gap) rounded-sm border-none border-current bg-transparent py-0 ps-(--row-compact-gap) pe-(--row-compact-pad-end) text-start type-label text-ink-row no-underline";
+    "select-none mark-line press-tint focus-inset m-0 flex w-full min-w-0 h-row-compact coarse:h-control-lg items-center gap-space-2 rounded-sm border-none border-current bg-transparent py-0 ps-space-2 pe-space-2 text-start type-label text-ink-strong no-underline";
 </script>
 
 {#snippet name()}
@@ -88,7 +88,7 @@
       data-regroup-parent
       href={projectHref(project.id)}
       onclick={(event) => openProjectPress(event, project.id, inSheet())}
-      style:--mark-hit-gap="var(--row-compact-gap)"
+      style:--mark-hit-gap="var(--spacing-space-2)"
       {@attach landRegroup(() => regroupKey)}
     >
       <ProjectMark

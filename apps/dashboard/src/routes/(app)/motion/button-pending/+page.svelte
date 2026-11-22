@@ -29,7 +29,7 @@
   });
 </script>
 
-<div class="flex flex-wrap items-box-start gap-space-4 p-space-7">
+<div class="flex flex-wrap items-box-start gap-space-4 p-space-6">
   <Button
     data-specimen
     data-case="label-cycle"
@@ -72,7 +72,7 @@
     variant="outline"
   />
 </div>
-<div class="flex flex-wrap items-box-start gap-space-4 p-space-7">
+<div class="flex flex-wrap items-box-start gap-space-4 p-space-6">
   <Button
     data-specimen
     data-site="lib/cawco/HubBand.svelte:268"

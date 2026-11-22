@@ -103,12 +103,12 @@
     aria-label={spawnWords.account.name}
     class="flex flex-col p-space-2"
     role="listbox"
-    style:--ring-ground="var(--color-surface-lift)"
+    style:--ring-ground="var(--color-surface-raised)"
   >
     <button
       data-slot="option"
       aria-selected={tool.value === null}
-      class="group press-tint transition-control select-none grid min-h-c-row-h w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong"
+      class="group press-tint transition-control select-none grid min-h-control-lg w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong"
       data-account-option="auto"
       onclick={() => pick(null)}
       role="option"
@@ -125,14 +125,14 @@
         {/if}
       </span>
       <Check
-        class="size-icon-md text-selected-icon opacity-0 transition-[opacity] duration-(--duration-control) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
+        class="size-icon-md text-brand-ink opacity-0 transition-[opacity] duration-(--duration-control) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
       />
     </button>
     {#each tool.options as option (option.id)}
       <button
         data-slot="option"
         aria-selected={tool.value === option.id}
-        class="group press-tint transition-control select-none grid min-h-c-row-h w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong"
+        class="group press-tint transition-control select-none grid min-h-control-lg w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong"
         data-account-option={option.id}
         disabled={option.disabled}
         onclick={() => pick(option.id)}
@@ -166,7 +166,7 @@
           {/if}
         </span>
         <Check
-          class="size-icon-md text-selected-icon opacity-0 transition-[opacity] duration-(--duration-control) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
+          class="size-icon-md text-brand-ink opacity-0 transition-[opacity] duration-(--duration-control) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
         />
       </button>
     {/each}

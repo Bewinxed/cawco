@@ -181,7 +181,7 @@
     <section
       aria-labelledby="{uid}-add"
       bind:this={steps}
-      class="@container/member-setup mb-space-2 flex min-w-0 flex-col rounded-well bg-surface-recess px-space-3 pt-space-3"
+      class="@container/member-setup mb-space-2 flex min-w-0 flex-col rounded-sm bg-surface-recess px-space-3 pt-space-3"
     >
       <h3 class="m-0 type-label font-medium text-ink-strong" id="{uid}-add">
         {decidesWords.addKind}
@@ -251,7 +251,7 @@
         <h2 class="m-0 type-title text-balance text-ink-strong" id={headId}>
           {decidesWords.kindsHead}
         </h2>
-        <p class="m-0 max-w-c-measure type-meta text-ink-muted text-pretty">
+        <p class="m-0 max-w-measure type-meta text-ink-muted text-pretty">
           {decidesWords.kindsIntro}
         </p>
         <p
@@ -283,7 +283,7 @@
       {:else}
         {@render adding()}
         <ul
-          class="m-0 grid list-none grid-cols-(--kind-cols) gap-x-space-3 p-0 @max-kinds/kinds:grid-cols-(--kind-cols-narrow)"
+          class="m-0 grid list-none grid-cols-(--kind-cols) gap-x-space-3 p-0 @max-sm/kinds:grid-cols-(--kind-cols-narrow)"
           style:--kind-cols="auto minmax(0, 1fr) auto auto"
           style:--kind-cols-narrow="auto minmax(0, 1fr) auto"
         >

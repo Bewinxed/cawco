@@ -9,17 +9,32 @@
        palette names (the --code-syntax- prefix), on the syntax token
        DESIGN.md gives it. On the root because every code surface reads them:
        a transcript's well, and a diff, whose shadow root inherits them. */
-    --code-syntax-foreground: var(--color-code-ink);
-    --code-syntax-background: var(--color-code-bg);
-    --code-syntax-token-keyword: var(--color-code-keyword);
-    --code-syntax-token-function: var(--color-code-fn);
-    --code-syntax-token-link: var(--color-code-fn);
-    --code-syntax-token-string: var(--color-code-string);
-    --code-syntax-token-string-expression: var(--color-code-string);
-    --code-syntax-token-constant: var(--color-code-number);
-    --code-syntax-token-comment: var(--color-code-comment);
-    --code-syntax-token-parameter: var(--color-code-ink);
-    --code-syntax-token-punctuation: var(--color-code-ink);
+    --code-syntax-foreground: var(--color-ink-strong);
+    --code-syntax-background: var(--color-surface-recess);
+    --code-syntax-token-keyword: light-dark(
+      oklch(from var(--color-mark-7) 44% c h),
+      oklch(from var(--color-mark-7) 75% c h)
+    );
+    --code-syntax-token-function: light-dark(
+      oklch(from var(--color-mark-6) 44% c h),
+      oklch(from var(--color-mark-6) 75% c h)
+    );
+    --code-syntax-token-link: var(--code-syntax-token-function);
+    --code-syntax-token-string: light-dark(
+      oklch(from var(--color-mark-4) 43% c h),
+      oklch(from var(--color-mark-4) 75% c h)
+    );
+    --code-syntax-token-string-expression: var(--code-syntax-token-string);
+    --code-syntax-token-constant: light-dark(
+      oklch(from var(--color-mark-2) 44% c h),
+      oklch(from var(--color-mark-2) 75% c h)
+    );
+    --code-syntax-token-comment: light-dark(
+      oklch(from var(--color-ink-subtle) 43% c h),
+      oklch(from var(--color-ink-muted) 72% c h)
+    );
+    --code-syntax-token-parameter: var(--color-ink-strong);
+    --code-syntax-token-punctuation: var(--color-ink-strong);
   }
 }
 
@@ -53,14 +68,14 @@
     --pele-heading-weight: var(--font-weight-medium);
     --pele-bold-weight: var(--font-weight-medium);
     --pele-radius: var(--radius-sm);
-    --pele-series-1: var(--color-chart-1);
-    --pele-series-2: var(--color-chart-2);
-    --pele-series-3: var(--color-chart-3);
-    --pele-series-4: var(--color-chart-4);
-    --pele-series-5: var(--color-chart-5);
-    --pele-series-6: var(--color-chart-brand);
+    --pele-series-1: var(--color-ink-strong);
+    --pele-series-2: var(--color-status-live-glyph);
+    --pele-series-3: var(--color-mark-7);
+    --pele-series-4: var(--color-status-attn-glyph);
+    --pele-series-5: var(--color-ink-subtle);
+    --pele-series-6: var(--color-brand-solid);
     --pele-series-7: var(--color-ink-muted);
-    --pele-series-8: var(--color-border-contrast);
+    --pele-series-8: var(--color-border-strong);
 
     & > svg {
       display: block;

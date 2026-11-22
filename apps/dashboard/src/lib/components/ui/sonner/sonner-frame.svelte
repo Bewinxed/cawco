@@ -40,7 +40,7 @@
 </script>
 
 <div
-  class="relative h-(--frame-h) w-field-group max-w-full overflow-clip contain-layout"
+  class="relative h-(--frame-h) w-sm max-w-full overflow-clip contain-layout"
   style:--frame-h={`${height}px`}
 >
   <Toaster expand {id} position="bottom-right" />

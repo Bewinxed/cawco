@@ -42,7 +42,7 @@ export async function loadPhotoSwipe(): Promise<
       bgOpacity: 1,
       showHideAnimationType: motionOk.current ? "zoom" : "none",
       showAnimationDuration: dur("--duration-panel"),
-      hideAnimationDuration: dur("--duration-exit"),
+      hideAnimationDuration: dur("--duration-fade"),
       easing: ease("--ease-drawer"),
       closeTitle: "Close image",
       closeSVG: markup(IconClose),

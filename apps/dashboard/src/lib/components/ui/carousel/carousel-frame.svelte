@@ -13,7 +13,7 @@
   } = $props();
 </script>
 
-<div class="w-field-group max-w-full rounded-lg bg-surface-recess">
+<div class="w-sm max-w-full rounded-lg bg-surface-recess">
   <Carousel.Root aria-label={`${slides.length} slides`}>
     <Carousel.Content>
       {#each slides as slide, index (slide)}

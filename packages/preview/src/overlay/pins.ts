@@ -1,7 +1,7 @@
 /**
  * The person's comments on a page, as their pins (Projects spec §5.7,
  * §5.10; core comments.ts; the artifact panel's surface brief, A pin's pill). A pin is a pill with a
- * tail corner: `--spacing-c-pin` tall, as wide as its number needs, three corners
+ * tail corner: `--spacing-row-compact` tall, as wide as its number needs, three corners
  * round and the fourth, the tail, a 2px corner standing on the point the
  * person pressed on its element. It stands up and after that point, before
  * it where the viewport's edge leaves no room after, below where none is
@@ -745,7 +745,7 @@ export function startPins(deps: PinsDeps): Pins {
       action: ["--color-action-solid"],
       onAction: ["--color-on-action"],
       raised: ["--color-surface-raised"],
-      recessed: ["--color-surface-fill-strong"],
+      recessed: ["--color-surface-pressed"],
       strong: ["--color-ink-strong"],
       focus: ["--color-focus-ring"],
       shadow: ["--color-shadow-tint"],
@@ -756,14 +756,13 @@ export function startPins(deps: PinsDeps): Pins {
       pad: ["--spacing-c-pin-pad", "width"],
       gap: ["--spacing-space-1", "width"],
       inset: ["--spacing-space-2", "width"],
-      dotSize: ["--status-dot-size", "width"],
-      dotCut: ["--status-dot-cut", "width"],
       loop: ["--duration-loop", "transition-duration"],
       breath: ["--duration-breath", "transition-duration"],
       breathFloor: ["--breath-floor", "opacity"],
       breathEase: ["--ease-in-out", "transition-timing-function"],
       ease: ["--ease-out", "transition-timing-function"],
     });
+    const gap = Number.parseFloat(read.gap) || 4;
     return {
       action: read.action,
       onAction: read.onAction,
@@ -779,8 +778,8 @@ export function startPins(deps: PinsDeps): Pins {
       pad: Number.parseFloat(read.pad) || 8,
       gap: Number.parseFloat(read.gap) || 4,
       inset: Number.parseFloat(read.inset) || 8,
-      dotSize: Number.parseFloat(read.dotSize) || 6,
-      dotCut: Number.parseFloat(read.dotCut) || 1.5,
+      dotSize: gap * 1.5,
+      dotCut: gap * 0.375,
       loop: durationMs(read.loop),
       breath: durationMs(read.breath),
       breathFloor: Number.parseFloat(read.breathFloor),

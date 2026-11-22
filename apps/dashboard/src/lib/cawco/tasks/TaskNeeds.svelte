@@ -165,7 +165,7 @@
       <section
         data-slot="needs"
         aria-label="Its session asks"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-needs-ground"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-status-attn-bg/45"
       >
         <h3
           data-slot="head"
@@ -198,7 +198,7 @@
       <section
         data-slot="needs"
         aria-label="An approved action"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-needs-ground"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-status-attn-bg/45"
       >
         <h3
           data-slot="head"
@@ -239,7 +239,7 @@
         {#if proposed}
           <pre
             data-slot="args"
-            class="max-h-48 m-0 py-space-2 px-space-3 overflow-auto border border-border-well rounded-sm bg-surface-well type-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere">{action.args}</pre>
+            class="max-h-48 m-0 py-space-2 px-space-3 overflow-auto border border-border-control rounded-sm bg-surface-sunk type-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere">{action.args}</pre>
         {/if}
         <RowFault reason={actionProblem[action.id] ?? null} />
         <div
@@ -293,7 +293,7 @@
       <section
         data-slot="needs"
         aria-label={commonWords.itsSession}
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-needs-ground"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-status-attn-bg/45"
         data-reason="failed"
       >
         <h3

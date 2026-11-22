@@ -38,22 +38,15 @@ const CURVE_NAMES: Record<string, string> = {
   "--ease-in-out": "Ease-in-out",
   "--ease-drawer": "Drawer",
   "--ease-crossfade": "Crossfade",
-  "--ease-goo": "Goo",
   linear: "Linear",
 };
 
 /** {@link graphWords}`.durations`, by its key: any other key reads as none. */
 const DURATION_NAMES: Record<string, string> = {
+  "--duration-step": "Step",
   "--duration-control": "Control",
-  "--duration-menu": "Menu",
-  "--duration-toggle": "Toggle",
-  "--duration-exit": "Exit",
-  "--duration-morph": "Morph",
   "--duration-fade": "Fade",
-  "--duration-panel-exit": "Panel exit",
-  "--duration-pop": "Pop",
   "--duration-panel": "Panel",
-  "--duration-glide": "Glide",
   "--duration-settle": "Settle",
 };
 

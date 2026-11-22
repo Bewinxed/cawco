@@ -176,7 +176,8 @@
 <!-- Over the shell and anything it draws (a hub banner): the strip on its
      shelf, and the page its chosen tab opens into. -->
 <div
-  class="fixed inset-0 z-(--layer-bench) flex flex-col bg-surface-recess text-ink-strong"
+  class="fixed inset-0 z-(--z) flex flex-col bg-surface-recess text-ink-strong"
+  style:--z="calc(var(--layer-sheet) + 20)"
   data-folder-proof
   bind:this={proofEl}
   style:--tab-rim-mix-subtle={subtle === null
@@ -187,21 +188,21 @@
 >
   <div
     data-slot="group"
-    class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-shelf pt-space-7"
+    class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-shelf pt-space-6"
     data-strip="session"
     onclickcapture={benchClick(leaf)}
   >
     <PaneTabs {leaf} />
-    <div class="h-space-7 bg-surface-recess"></div>
+    <div class="h-space-6 bg-surface-recess"></div>
   </div>
   <div
     data-slot="group"
-    class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-shelf pt-space-7"
+    class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-shelf pt-space-6"
     data-strip="session-idle"
     onclickcapture={benchClick(idleLeaf)}
   >
     <PaneTabs leaf={idleLeaf} />
-    <div class="h-space-7 bg-surface-recess"></div>
+    <div class="h-space-6 bg-surface-recess"></div>
   </div>
   <!-- The rims' tokens, tuned live. The bench's own controls, at the foot,
        clear of every strip. -->
@@ -222,7 +223,7 @@
           }
         }
       />
-      <output class="num min-w-c-bench-readout-w text-ink-strong"
+      <output class="num min-w-ch-4 text-ink-strong"
         >{taper ?? "–"}px</output
       >
     </label>
@@ -240,7 +241,7 @@
           }
         }
       />
-      <output class="num min-w-c-bench-readout-w text-ink-strong"
+      <output class="num min-w-ch-4 text-ink-strong"
         >{subtle ?? "–"}%</output
       >
     </label>
@@ -258,7 +259,7 @@
           }
         }
       />
-      <output class="num min-w-c-bench-readout-w text-ink-strong"
+      <output class="num min-w-ch-4 text-ink-strong"
         >{width ?? "–"}px</output
       >
     </label>

@@ -42,22 +42,22 @@
     }
     timer = setTimeout(() => {
       copied = false;
-    }, dur("--duration-hold"));
+    }, dur("--duration-loop"));
   }
 </script>
 
 <Dialog.Root bind:open={dialogOpen}>
   <Dialog.Content width="report">
-    <div class="flex flex-col gap-space-7">
+    <div class="flex flex-col gap-space-6">
       <Dialog.Header foot="report">
         <Dialog.Title lead="glyph">
-          <IconAlert class="size-icon-md shrink-0 text-error-9" />
+          <IconAlert class="size-icon-md shrink-0 text-status-fail-glyph" />
           <span>{title}</span>
         </Dialog.Title>
       </Dialog.Header>
 
       <pre
-        class="m-0 max-h-c-report-text-max min-w-0 overflow-auto wrap-anywhere whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-size-meta leading-prose text-ink-strong select-text"
+        class="m-0 max-h-vh-60 min-w-0 overflow-auto wrap-anywhere whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-size-meta leading-body text-ink-strong select-text"
         data-error-text>{message}</pre>
 
       <RowFault again={copy} data-copy-refused reason={refusals.reason(key)} />

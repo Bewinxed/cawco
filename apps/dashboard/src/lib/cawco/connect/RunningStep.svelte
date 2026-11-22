@@ -96,14 +96,14 @@
             aria-hidden="true"
             data-box
             class={[
-              "pointer-events-none absolute start-c-step-rail-x top-c-step-rail-top -bottom-c-step-rail-gap w-px -translate-x-1/2 origin-top bg-border-hairline transition-[scale] duration-(--duration-toggle) ease-out",
+              "pointer-events-none absolute start-(--step-rail-x) top-(--step-rail-top) -bottom-(--step-rail-gap) w-px -translate-x-1/2 origin-top bg-border-hairline transition-[scale] duration-(--duration-fade) ease-out",
               row.state === "done" ? "scale-y-100" : "scale-y-0",
             ]}
           ></span>
         {/if}
         <div
           data-slot="step-row"
-          class="relative mark-line flex h-c-btn-h-sm items-center gap-space-2"
+          class="relative mark-line flex h-control-sm items-center gap-space-2"
         >
           <StepMark state={row.state} />
           <span
@@ -131,7 +131,7 @@
               <li
                 data-check={check.check}
                 data-state={check.state}
-                class="mark-line flex h-c-badge-h items-center gap-space-2"
+                class="mark-line flex h-icon-lg items-center gap-space-2"
                 {@attach land(() => checkKey(check.check))}
               >
                 <StepMark state={check.state} size="sm" />

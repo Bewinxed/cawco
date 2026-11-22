@@ -80,7 +80,7 @@
   <BarGlass form="group">
     <div
       aria-label={name}
-      class="mark-line flex h-c-bar-item min-w-0 max-w-80 items-center gap-space-1 ps-space-2 pe-space-3 type-meta text-ink-strong"
+      class="mark-line flex h-row-compact min-w-0 max-w-80 items-center gap-space-1 ps-space-2 pe-space-3 type-meta text-ink-strong"
       data-mine={mine || undefined}
       data-slot="browser-address"
       role="status"

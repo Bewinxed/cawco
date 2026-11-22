@@ -52,8 +52,8 @@
    * HangCard `glass`) the glass is one shape with the card (Caw's panel's surface brief, Caw's
    * panel): its join takes the card's `surface-raised` and `border-control`
    * edge over its top, down its flanks and up a `radius-lg` flare at its
-   * leading foot, with no edge across the foot, fading in over `--duration-pop`
-   * and out over `--duration-exit`; a card a key opened or shut changes it at
+   * leading foot, with no edge across the foot, fading in over `--duration-panel`
+   * and out over `--duration-fade`; a card a key opened or shut changes it at
    * once (motion/keyed lands it). On the phone the join runs on down through the neck, square
    * on its trailing side, which goes straight on down into the card's.
    */
@@ -148,15 +148,15 @@
   {...attributes}
   data-slot="tools"
   class={[
-    "group/tools relative isolate flex items-center gap-c-bar-group-pad p-c-bar-group-pad rounded-pill concentric-row r-inset-c-bar-group-pad r-join-xs hit-gap-x-c-bar-group-pad coarse:gap-space-5 coarse:hit-gap-x-space-5 before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:bg-material-panel before:shadow-tile before:glass-backdrop before:pointer-events-none contrast-more:before:border-border-contrast contrast-more:before:bg-surface-raised contrast-more:before:backdrop-filter-none reduced-transparency:before:border-border-contrast reduced-transparency:before:bg-surface-raised reduced-transparency:before:backdrop-filter-none",
+    "group/tools relative isolate flex items-center gap-space-1 p-space-1 rounded-pill concentric-row r-inset-space-1 r-join-xs hit-gap-x-space-1 coarse:gap-space-5 coarse:hit-gap-x-space-5 before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:bg-surface-glass before:shadow-sm before:glass-backdrop before:pointer-events-none contrast-more:before:border-border-strong contrast-more:before:bg-surface-raised contrast-more:before:backdrop-filter-none reduced-transparency:before:border-border-strong reduced-transparency:before:bg-surface-raised reduced-transparency:before:backdrop-filter-none",
     // A title's words may take two lines on a phone (ArtifactMenu): its
     // ground grows with them.
-    form === "title" ? "before:hidden min-h-c-btn-h" : "h-c-btn-h",
+    form === "title" ? "before:hidden min-h-control-md" : "h-control-md",
     // The top bar's glass says the room above it to the window's top
     // (`--bar-room`: centred in the bar on a desk, `--tools-top` down on a
     // phone), where a counted item's badge stops its lift (BarItem).
     form === "bar" &&
-      "[--bar-room:calc((var(--spacing-c-top-bar-h)_-_var(--spacing-c-btn-h))_/_2)] @max-desk/shell:[--bar-room:var(--tools-top)] @max-desk/shell:self-start @max-desk/shell:h-c-bar-caw-glass-phone @max-desk/shell:mt-(--tools-top) @max-desk/shell:p-0 @max-desk/shell:rounded-s-(--tools-round) @max-desk/shell:rounded-e-none @max-desk/shell:caw-neck-(--tools-neck) @max-desk/shell:[--r-inner:var(--tools-round)] @max-desk/shell:[&_[data-bar-item]]:rounded-e-none @max-desk/shell:[&_[data-bar-item]]:w-c-bar-caw-glass-phone @max-desk/shell:[&_[data-bar-item]]:min-w-c-bar-caw-glass-phone @max-desk/shell:[&_[data-bar-item]]:h-c-bar-caw-glass-phone",
+      "[--bar-room:calc((var(--spacing-control-lg)_-_var(--spacing-control-md))_/_2)] @max-desk/shell:[--bar-room:var(--tools-top)] @max-desk/shell:self-start @max-desk/shell:h-control-sm @max-desk/shell:mt-(--tools-top) @max-desk/shell:p-0 @max-desk/shell:rounded-s-(--tools-round) @max-desk/shell:rounded-e-none @max-desk/shell:caw-neck-(--tools-neck) @max-desk/shell:[--r-inner:var(--tools-round)] @max-desk/shell:[&_[data-bar-item]]:rounded-e-none @max-desk/shell:[&_[data-bar-item]]:w-control-sm @max-desk/shell:[&_[data-bar-item]]:min-w-control-sm @max-desk/shell:[&_[data-bar-item]]:h-control-sm",
   ]}
   bind:this={node}
   {@attach (glass) => (form === "title" ? undefined : placeItems(glass))}
@@ -165,10 +165,10 @@
   data-flare={flare}
   data-joined={drawnOut ? "" : undefined}
   style:--flare="var(--radius-lg)"
-  style:--r-outer="calc(var(--spacing-c-btn-h) / 2)"
-  style:--tools-top={"calc(var(--spacing-c-top-bar-h) - var(--spacing-c-tab-row-h) / 2 - var(--spacing-c-bar-caw-glass-phone) / 2)"}
-  style:--tools-round="calc(var(--spacing-c-bar-caw-glass-phone) / 2)"
-  style:--tools-neck={"calc((var(--spacing-c-tab-row-h) - var(--spacing-c-bar-caw-glass-phone)) / 2)"}
+  style:--r-outer="calc(var(--spacing-control-md) / 2)"
+  style:--tools-top={"calc(var(--spacing-control-lg) - var(--spacing-control-md) / 2 - var(--spacing-control-sm) / 2)"}
+  style:--tools-round="calc(var(--spacing-control-sm) / 2)"
+  style:--tools-neck={"calc((var(--spacing-control-md) - var(--spacing-control-sm)) / 2)"}
 >
   <!-- The join: a layer one flare wider than the glass on its leading side
        and 1px under its foot, into the card's top edge. The layer is the
@@ -184,7 +184,7 @@
     data-slot="join"
     aria-hidden="true"
     class={[
-      "absolute pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--duration-exit) ease-out [--r:var(--r-outer)] group-data-joined/tools:opacity-100 group-data-joined/tools:duration-(--duration-pop) before:absolute before:inset-0 before:bg-surface-raised before:clip-join",
+      "absolute pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--duration-fade) ease-out [--r:var(--r-outer)] group-data-joined/tools:opacity-100 group-data-joined/tools:duration-(--duration-panel) before:absolute before:inset-0 before:bg-surface-raised before:clip-join",
       flare === "start"
         ? "-start-(--f) end-0"
         : "start-0 -end-(--f) -scale-x-100",

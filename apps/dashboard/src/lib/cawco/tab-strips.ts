@@ -29,10 +29,10 @@ import type { TabsStrip } from "#lib/components/ui/fluid-tabs/index.js";
  * toggle and Caw's glass.
  */
 export const SESSION_STRIP: TabsStrip = {
-  root: "coarse:relative coarse:z-1 flex min-w-0 flex-none items-end bg-surface-shelf desk:@max-leaf/leaf:ps-space-4 ps-space-7 pe-space-4 pt-space-1 pb-0 [--strip-fade:calc(var(--spacing)_*_4)] [--strip-flare:var(--radius-sm)] [--strip-item-rest:var(--spacing-space-8)] [--strip-item:var(--strip-item-rest)] [--strip-px:var(--spacing-space-3)] [--strip-reach:var(--spacing-space-3)] [--strip-uncapped:var(--spacing-c-tab-strip-uncapped)] max-desk:min-h-c-top-bar-h max-desk:ps-[calc(var(--spacing-c-bar-phone-edge)_+_var(--spacing-c-bar-toggle-glyph))] max-desk:pe-[calc(calc(var(--spacing)_*_2)_+_var(--spacing-c-bar-caw-glass-phone)_+_var(--spacing-c-bar-phone-edge)_+_env(safe-area-inset-right,0px))] max-desk:pt-0 max-desk:[--strip-flare:var(--radius-lg)] max-desk:[--strip-item:var(--spacing-c-tab-row-h)]",
-  list: "[--item:var(--strip-item)] [--px:var(--strip-px)] tab-rim-w [--sheet:var(--color-tab-sheet)] [--tab-hover:light-dark(var(--color-surface-recess),var(--color-surface-hover))] coarse:[--item:var(--strip-item)]",
+  root: "coarse:relative coarse:z-1 flex min-w-0 flex-none items-end bg-surface-shelf desk:@max-phone/leaf:ps-space-4 ps-space-6 pe-space-4 pt-space-1 pb-0 [--strip-fade:calc(var(--spacing)_*_4)] [--strip-flare:var(--radius-sm)] [--strip-item-rest:var(--spacing-space-8)] [--strip-item:var(--strip-item-rest)] [--strip-px:var(--spacing-space-3)] [--strip-reach:var(--spacing-space-3)] [--strip-uncapped:var(--tab-strip-uncapped)] max-desk:min-h-control-lg max-desk:ps-[calc(var(--spacing-space-3)_+_var(--bar-symbol))] max-desk:pe-[calc(calc(var(--spacing)_*_2)_+_var(--spacing-control-sm)_+_var(--spacing-space-3)_+_env(safe-area-inset-right,0px))] max-desk:pt-0 max-desk:[--strip-flare:var(--radius-lg)] max-desk:[--strip-item:var(--spacing-control-md)]",
+  list: "[--item:var(--strip-item)] [--px:var(--strip-px)] tab-rim-w [--sheet:var(--color-surface-recess)] [--tab-hover:light-dark(var(--color-surface-recess),var(--color-surface-hover))] coarse:[--item:var(--strip-item)]",
   scrolled:
-    "max-desk:strip-edge-mask desk:coarse:-mt-(--strip-reach) coarse:-mb-(--strip-reach) desk:coarse:pt-[calc(var(--pad)_+_var(--strip-reach))] coarse:pb-(--strip-reach) max-desk:mt-0 max-desk:pt-[calc(var(--spacing-c-top-bar-h)_-_var(--spacing-c-tab-row-h))] max-desk:[--edge-room-start:calc(var(--fade-len)_*_1.5)] max-desk:[--fade-len:var(--strip-fade)] max-desk:[--overlap:var(--radius-sm)] max-desk:not-glass-item:[--pad:0px] max-desk:[--radius:var(--radius-lg)]",
+    "max-desk:strip-edge-mask desk:coarse:-mt-(--strip-reach) coarse:-mb-(--strip-reach) desk:coarse:pt-[calc(var(--pad)_+_var(--strip-reach))] coarse:pb-(--strip-reach) max-desk:mt-0 max-desk:pt-[calc(var(--spacing-control-lg)_-_var(--spacing-control-md))] max-desk:[--edge-room-start:calc(var(--fade-len)_*_1.5)] max-desk:[--fade-len:var(--strip-fade)] max-desk:[--overlap:var(--radius-sm)] max-desk:not-glass-item:[--pad:0px] max-desk:[--radius:var(--radius-lg)]",
 };
 
 /**
@@ -40,8 +40,8 @@ export const SESSION_STRIP: TabsStrip = {
  * filling the host's row and drawing nothing of its own.
  */
 export const HOSTED_STRIP: TabsStrip = {
-  root: "coarse:relative coarse:z-1 flex min-w-0 flex-[1_1_0] items-end self-stretch bg-transparent p-0 [--strip-fade:calc(var(--spacing)_*_4)] [--strip-flare:var(--radius-sm)] [--strip-item-rest:var(--spacing-space-8)] [--strip-item:var(--strip-item-rest)] [--strip-px:var(--spacing-space-3)] [--strip-reach:var(--spacing-space-3)] [--strip-uncapped:var(--spacing-c-tab-strip-uncapped)]",
-  list: "[--item:var(--strip-item)] [--px:var(--strip-px)] tab-rim-w [--sheet:var(--color-tab-sheet)] [--tab-hover:light-dark(var(--color-surface-recess),var(--color-surface-hover))] coarse:[--item:var(--strip-item)]",
+  root: "coarse:relative coarse:z-1 flex min-w-0 flex-[1_1_0] items-end self-stretch bg-transparent p-0 [--strip-fade:calc(var(--spacing)_*_4)] [--strip-flare:var(--radius-sm)] [--strip-item-rest:var(--spacing-space-8)] [--strip-item:var(--strip-item-rest)] [--strip-px:var(--spacing-space-3)] [--strip-reach:var(--spacing-space-3)] [--strip-uncapped:var(--tab-strip-uncapped)]",
+  list: "[--item:var(--strip-item)] [--px:var(--strip-px)] tab-rim-w [--sheet:var(--color-surface-recess)] [--tab-hover:light-dark(var(--color-surface-recess),var(--color-surface-hover))] coarse:[--item:var(--strip-item)]",
   scrolled:
     "coarse:-my-(--strip-reach) coarse:pt-[calc(var(--pad)_+_var(--strip-reach))] coarse:pb-(--strip-reach)",
 };

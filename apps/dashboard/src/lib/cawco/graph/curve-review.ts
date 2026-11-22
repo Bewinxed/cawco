@@ -14,7 +14,7 @@ const HOUSE = [
   "--ease-in-out",
   "--ease-drawer",
   "--ease-crossfade",
-  "--ease-goo",
+  "--ease-drawer",
   "linear",
 ] as const;
 

@@ -856,7 +856,7 @@
         <span
           data-slot="end"
           class="absolute end-(--end-x) top-(--end-top) flex type-label"
-          style:--end-top={"calc(var(--spacing-space-2) + (1lh - var(--spacing-c-btn-h-xs)) / 2)"}
+          style:--end-top={"calc(var(--spacing-space-2) + (1lh - var(--spacing-control-xs)) / 2)"}
           style:--end-x="calc(var(--spacing-space-3) - var(--peek-ink))"
         >
           <Tip disabled={peekTipOff()} label="Peek">
@@ -869,11 +869,11 @@
                 data-needs-card-peek
                 {...tip}
                 aria-label="Peek {item.title}"
-                class="select-none touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press) coarse:after:start-(--peek-hit-start) coarse:after:end-(--peek-hit-end)"
+                class="select-none touch-hit pointer-hit focus-inset grid size-control-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press) coarse:after:start-(--peek-hit-start) coarse:after:end-(--peek-hit-end)"
                 onclick={peekAsk}
                 {onkeydown}
-                style:--peek-hit-end={"calc((var(--spacing-c-btn-h-xs) - var(--spacing-c-btn-h-lg)) / 2 + var(--peek-ink))"}
-                style:--peek-hit-start={"calc((var(--spacing-c-btn-h-xs) - var(--spacing-c-btn-h-lg)) / 2 - var(--peek-ink))"}
+                style:--peek-hit-end={"calc((var(--spacing-control-xs) - var(--spacing-control-lg)) / 2 + var(--peek-ink))"}
+                style:--peek-hit-start={"calc((var(--spacing-control-xs) - var(--spacing-control-lg)) / 2 - var(--peek-ink))"}
                 style:--peek-press="scale(var(--press-scale))"
                 type="button"
               >
@@ -890,7 +890,7 @@
         <span
           data-slot="end"
           class="absolute end-(--end-x) top-(--end-top) flex type-label"
-          style:--end-top={"calc(var(--spacing-space-2) + (1lh - var(--spacing-c-btn-h-xs)) / 2)"}
+          style:--end-top={"calc(var(--spacing-space-2) + (1lh - var(--spacing-control-xs)) / 2)"}
           style:--end-x="calc(var(--spacing-space-3) - var(--peek-ink))"
         >
           <Tip disabled={peekTipOff()} label={artifactWords.notNow}>
@@ -899,10 +899,10 @@
                 data-needs-card-not-now
                 {...tip}
                 aria-label={artifactWords.notNowNamed(item.title)}
-                class="select-none touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--x-press) coarse:after:start-(--x-hit-start) coarse:after:end-(--x-hit-end)"
+                class="select-none touch-hit pointer-hit focus-inset grid size-control-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--x-press) coarse:after:start-(--x-hit-start) coarse:after:end-(--x-hit-end)"
                 onclick={notNow}
-                style:--x-hit-end={"calc((var(--spacing-c-btn-h-xs) - var(--spacing-c-btn-h-lg)) / 2 + var(--peek-ink))"}
-                style:--x-hit-start={"calc((var(--spacing-c-btn-h-xs) - var(--spacing-c-btn-h-lg)) / 2 - var(--peek-ink))"}
+                style:--x-hit-end={"calc((var(--spacing-control-xs) - var(--spacing-control-lg)) / 2 + var(--peek-ink))"}
+                style:--x-hit-start={"calc((var(--spacing-control-xs) - var(--spacing-control-lg)) / 2 - var(--peek-ink))"}
                 style:--x-press="scale(var(--press-scale))"
                 type="button"
               >
@@ -1065,7 +1065,7 @@
            pointer and the keyboard can scroll, over the row's cover. -->
         <pre
           data-slot="args"
-          class="focus-inset relative col-start-2 col-end-4 row-4 mx-0 my-space-2 max-h-48 overflow-auto overscroll-contain rounded-xs border border-border-well bg-surface-well px-space-3 py-space-2 type-code whitespace-pre text-ink-strong">{call.args}</pre>
+          class="focus-inset relative col-start-2 col-end-4 row-4 mx-0 my-space-2 max-h-48 overflow-auto overscroll-contain rounded-xs border border-border-control bg-surface-sunk px-space-3 py-space-2 type-code whitespace-pre text-ink-strong">{call.args}</pre>
         <span
           data-where
           data-slot="meta"

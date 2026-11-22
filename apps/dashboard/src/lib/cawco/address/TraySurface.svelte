@@ -15,8 +15,8 @@
   class={[
     "relative min-w-0",
     form === "desk"
-      ? "rounded-modal bg-surface-recess p-(--tray-pad) shadow-overlay"
-      : "rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-drawer",
+      ? "rounded-modal bg-surface-recess p-(--tray-pad) shadow-lg"
+      : "rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-lg",
   ]}
   data-slot="surface"
 >

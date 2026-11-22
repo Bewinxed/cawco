@@ -37,13 +37,13 @@
 </script>
 
 <div
-  class="group flex h-full min-h-c-stat-h flex-col rounded-md bg-surface-raised p-space-2 shadow-hairline"
+  class="group flex h-full min-h-22 flex-col rounded-md bg-surface-raised p-space-2 shadow-sm"
   data-tone={tone}
   {...rest}
 >
   <div
     data-slot="well"
-    class="flex min-w-0 flex-auto flex-col justify-between gap-space-1 rounded-well bg-surface-recess p-2.5 inset-ring inset-ring-border-hairline"
+    class="flex min-w-0 flex-auto flex-col justify-between gap-space-1 rounded-sm bg-surface-recess p-2.5 inset-ring inset-ring-border-hairline"
   >
     <span class="min-w-0 type-label text-ink-muted">{label}</span>
     <span class="flex flex-wrap items-baseline gap-x-space-2">
@@ -51,7 +51,7 @@
       <span
         data-slot="num"
         data-stat-value
-        class="num min-h-lh type-kpi text-ink-row group-tone-live:text-status-live-ink group-tone-attn:text-status-attn-ink group-tone-done:text-status-done-ink group-tone-fail:text-status-fail-ink group-tone-caution:text-warning-9 group-tone-bad:text-error-9 max-desk:type-title"
+        class="num min-h-lh type-kpi text-ink-strong group-tone-live:text-status-live-ink group-tone-attn:text-status-attn-ink group-tone-done:text-status-done-ink group-tone-fail:text-status-fail-ink group-tone-caution:text-status-attn-glyph group-tone-bad:text-status-fail-glyph max-desk:type-title"
         ><MorphText text={String(value)} /></span
       >
       {#if unit}

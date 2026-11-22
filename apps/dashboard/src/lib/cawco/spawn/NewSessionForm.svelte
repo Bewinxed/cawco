@@ -98,6 +98,7 @@
   } from "#lib/platform/storage.js";
   import { track } from "#lib/platform/track.js";
   import { goto } from "$app/navigation";
+  import { hueVar } from "../accounts/model.svelte";
   import Choice from "../config/Choice.svelte";
   import {
     type ContinueSource,
@@ -653,7 +654,7 @@
           name: accountNameAmong(one, accountsStore.accounts?.accounts ?? []),
           nick: one.label,
           email: one.email,
-          color: `var(--color-account-${one.hue})`,
+          color: hueVar(one.hue),
           ring,
           line,
           disabled: ring?.state === "limit",
@@ -2763,7 +2764,7 @@
       {#if placementFix}
         <AlertDescription>
           <a
-            class="rounded-xs text-link-ink no-underline hover:text-link-hover"
+            class="rounded-xs text-brand-ink no-underline hover:text-brand-ink"
             href={placementFix.href}
             onclick={() => close()}>Open {configurePage(placementFix.slug)}</a
           >

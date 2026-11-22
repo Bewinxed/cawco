@@ -404,7 +404,7 @@
         {@render tabItems(views, false)}
       </TabsList>
     </Tabs>
-    <span class="block size-c-btn-h-sm" data-ruler-more></span>
+    <span class="block size-control-sm" data-ruler-more></span>
     {#if total > 0}
       <span class="inline-flex w-max" data-ruler-more-counted>
         <Button size="sm" variant="ghost">

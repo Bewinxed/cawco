@@ -29,7 +29,7 @@ import { tv } from "#lib/utils.js";
  * `popoverRoom`).
  */
 export const glidePopoverVariants = tv({
-  base: "relative z-(--layer-float) grid max-h-[min(calc(var(--spacing)_*_110),var(--ns-pop-room,var(--bits-popover-content-available-height)))] w-[min(var(--ns-pop-width,calc(var(--spacing)_*_80)),calc(100vw-var(--spacing-space-8)))] origin-[var(--bits-popover-content-transform-origin,top_left)] translate-0 scale-100 grid-cols-1 content-start gap-(--ns-pop-gap,0px) overflow-auto rounded-lg border border-border-control bg-surface-raised p-space-2 opacity-100 shadow-overlay outline-off transition-[opacity] duration-(--duration-pop) ease-drawer not-data-fit:has-[[data-slot=perms][data-embedded=true]]:w-max not-data-fit:has-[[data-slot=perms][data-embedded=true]]:max-w-[calc(100vw-var(--spacing-space-8))] data-fit:max-h-none data-fit:w-max data-fit:max-w-[calc(100vw-2*var(--spacing-c-screen-margin))] data-fit:min-w-[min(var(--ns-pop-width,calc(var(--spacing)_*_80)),calc(100vw-2*var(--spacing-c-screen-margin)))] data-fit:overflow-visible motion-safe:transition-[opacity,scale,translate] motion-safe:data-[state=closed]:animate-ns-pop-out motion-safe:data-[state=open]:animate-ns-pop-in max-phone:not-data-fit:max-h-[min(calc(var(--spacing)_*_105),55dvh,var(--ns-pop-room,var(--bits-popover-content-available-height,55dvh)))] max-phone:not-data-fit:not-has-[[data-slot=perms][data-embedded=true]]:w-[calc(100vw-2*var(--spacing-c-screen-margin))] coarse:[:where(&_button:not([data-slot=button]))]:min-h-c-nav-h",
+  base: "relative z-(--layer-float) grid max-h-[min(calc(var(--spacing)_*_110),var(--ns-pop-room,var(--bits-popover-content-available-height)))] w-[min(var(--ns-pop-width,calc(var(--spacing)_*_80)),calc(100vw-var(--spacing-space-8)))] origin-[var(--bits-popover-content-transform-origin,top_left)] translate-0 scale-100 grid-cols-1 content-start gap-(--ns-pop-gap,0px) overflow-auto rounded-lg border border-border-control bg-surface-raised p-space-2 opacity-100 shadow-lg outline-off transition-[opacity] duration-(--duration-panel) ease-drawer not-data-fit:has-[[data-slot=perms][data-embedded=true]]:w-max not-data-fit:has-[[data-slot=perms][data-embedded=true]]:max-w-[calc(100vw-var(--spacing-space-8))] data-fit:max-h-none data-fit:w-max data-fit:max-w-[calc(100vw-2*var(--spacing-space-3))] data-fit:min-w-[min(var(--ns-pop-width,calc(var(--spacing)_*_80)),calc(100vw-2*var(--spacing-space-3)))] data-fit:overflow-visible motion-safe:transition-[opacity,scale,translate] motion-safe:data-[state=closed]:animate-ns-pop-out motion-safe:data-[state=open]:animate-ns-pop-in max-phone:not-data-fit:max-h-[min(calc(var(--spacing)_*_105),55dvh,var(--ns-pop-room,var(--bits-popover-content-available-height,55dvh)))] max-phone:not-data-fit:not-has-[[data-slot=perms][data-embedded=true]]:w-[calc(100vw-2*var(--spacing-space-3))] coarse:[:where(&_button:not([data-slot=button]))]:min-h-row",
   variants: {
     /**
      * Its inset: the sheet's own (`roomy`), or the ladder's 4px round a menu
@@ -125,7 +125,7 @@ const placedAt = (transform: string | null) => {
  * group's surface moving to a sibling's trigger): attached to the wrapper
  * bits-ui renders, it hears floating-ui write a new `transform` and plays
  * the wrapper from where it is drawn to there on a Web Animation
- * (`translate`, which composes with that transform), over --duration-pop
+ * (`translate`, which composes with that transform), over --duration-panel
  * on the drawer curve: the clock and curve the surface's size tween runs
  * on (motion/morph), started in the same frame, so the box's edges and
  * its place land together. A placement that comes mid-glide starts again
@@ -159,7 +159,7 @@ export function placementGlide(gliding: () => boolean) {
           { translate: `${was.x + dx - now.x}px ${was.y + dy - now.y}px` },
           { translate: "0px 0px" },
         ],
-        { duration: dur("--duration-pop"), easing: CURVE.drawer }
+        { duration: dur("--duration-panel"), easing: CURVE.drawer }
       );
     });
     watch.observe(node, {

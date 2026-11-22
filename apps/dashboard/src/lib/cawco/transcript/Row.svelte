@@ -107,10 +107,10 @@
    *
    * THE ARRIVAL: THE RAIL FIRST, THEN WHAT STANDS ON IT. Every row that
    * arrives opens its place first — from nothing, or from the height of the
-   * row it took over, to its own measured height over --duration-morph on
+   * row it took over, to its own measured height over --duration-fade on
    * --ease-out — and a rail row's rail, being its own background, draws down
    * with that opening as one stroke. Only once the place is open does the
-   * content fade up into it (--duration-menu, --pop-rise). A rail row's content is what
+   * content fade up into it (--duration-control, --pop-rise). A rail row's content is what
    * stands on the rail — its children — so the rail is never faded with it;
    * any other row's content is the row. The rows above make room on that one
    * clock instead of jumping by the row's height in the frame it lands: the
@@ -319,7 +319,7 @@
     /** The height the place opens from. */
     from: number;
     /** The duration token the place opens over. */
-    over: "--duration-morph" | "--duration-control";
+    over: "--duration-fade" | "--duration-control";
     /** The row's own height, as the frame laid it out (`onFirstLayout`). */
     own: number;
   }
@@ -398,7 +398,7 @@
     const after = place ? delay + opening : Math.max(delay, 0);
     for (const element of contentOf(row)) {
       last = element.animate(frames, {
-        duration: dur(moving ? "--duration-menu" : "--duration-control"),
+        duration: dur(moving ? "--duration-control" : "--duration-control"),
         easing,
         delay: moving ? after : 0,
         fill: "backwards",
@@ -429,7 +429,7 @@
     };
     ghost
       .animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: dur("--duration-exit"),
+        duration: dur("--duration-fade"),
         easing,
         fill: "forwards",
       })
@@ -457,7 +457,7 @@
       delay: 0,
       content: arrives,
       clip: true,
-      over: "--duration-morph",
+      over: "--duration-fade",
     });
     if (!arrives) {
       return;
@@ -478,7 +478,7 @@
       delay: lead,
       content: !emerges,
       clip: !emerges,
-      over: emerges ? "--duration-control" : "--duration-morph",
+      over: emerges ? "--duration-control" : "--duration-fade",
     });
     if (played) {
       played.finished.then(spent, () => {
@@ -599,15 +599,15 @@
 <div
   data-slot="row"
   data-continues={continues || undefined}
-  class="flow-root data-marked:relative data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-x-space-2 data-marked:before:inset-y-0 data-marked:before:rounded-well data-marked:before:bg-selection motion-safe:data-marked:before:animate-(--mark-in) marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--duration-panel) motion-safe:data-marked:before:ease-out"
+  class="flow-root data-marked:relative data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-x-space-2 data-marked:before:inset-y-0 data-marked:before:rounded-sm data-marked:before:bg-selection motion-safe:data-marked:before:animate-(--mark-in) marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--duration-panel) motion-safe:data-marked:before:ease-out"
   data-marked={marked}
   data-row={rowKey}
   bind:this={node}
   {@attach measured}
   style:--mark-in={marked
-    ? "kit-fade-in var(--duration-panel) var(--ease-out)"
+    ? "fade-in var(--duration-panel) var(--ease-out)"
     : undefined}
-  style:--rail-head={continues ? "var(--rail-body)" : undefined}
+  style:--rail-head={continues ? "var(--rail)" : undefined}
   style:--rail-gap={continues ? "0" : undefined}
 >
   {@render children(ticket)}

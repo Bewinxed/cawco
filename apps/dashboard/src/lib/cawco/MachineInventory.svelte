@@ -109,7 +109,7 @@
     icon={IconLaptop}
     label={words.onEachMachine}
   />
-  <p data-slot="note" class="max-w-c-measure type-meta text-ink-muted">
+  <p data-slot="note" class="max-w-measure type-meta text-ink-muted">
     {words.inventoryNote}
   </p>
 
@@ -128,7 +128,7 @@
           <button
             data-slot="head"
             aria-expanded={open[machine.machineId] === true}
-            class="select-none mark-line focus-inset press-tint flex min-h-c-row-h items-center gap-space-2 rounded-sm px-space-2 py-space-2 text-start transition-control hover:enabled:bg-surface-hover"
+            class="select-none mark-line focus-inset press-tint flex min-h-control-lg items-center gap-space-2 rounded-sm px-space-2 py-space-2 text-start transition-control hover:enabled:bg-surface-hover"
             disabled={machine.status !== "online" && !open[machine.machineId]}
             onclick={() => expand(machine)}
             type="button"
@@ -147,7 +147,7 @@
             >
             <span
               data-slot="note"
-              class="max-w-c-measure type-meta text-ink-muted"
+              class="max-w-measure type-meta text-ink-muted"
             >
               {#if open[machine.machineId]}
                 {words.hide}
@@ -164,7 +164,7 @@
             {:else if reading[machine.machineId]}
               <p
                 data-slot="note"
-                class="mark-line flex max-w-c-measure items-center gap-space-2 type-meta text-ink-muted"
+                class="mark-line flex max-w-measure items-center gap-space-2 type-meta text-ink-muted"
                 role="status"
               >
                 <Spinner class="shrink-0" /><span>{words.asking}</span>
@@ -176,7 +176,7 @@
             {:else if rows.length === 0}
               <p
                 data-slot="note"
-                class="max-w-c-measure type-meta text-ink-muted"
+                class="max-w-measure type-meta text-ink-muted"
               >
                 {kind === "mcp" ? words.noMcpAtAll : words.noSkillsAtAll}
               </p>
@@ -215,7 +215,7 @@
                       {#if "description" in row && row.description}
                         <span
                           data-slot="note"
-                          class="line-clamp-2 max-w-c-measure type-meta text-ink-muted"
+                          class="line-clamp-2 max-w-measure type-meta text-ink-muted"
                           >{row.description}</span
                         >
                       {/if}
@@ -236,7 +236,7 @@
                     {:else if taken.includes(row.name) && !row.managed}
                       <span
                         data-slot="note"
-                        class="max-w-c-measure type-meta text-ink-muted"
+                        class="max-w-measure type-meta text-ink-muted"
                         >{words.inTheFleet}</span
                       >
                     {/if}

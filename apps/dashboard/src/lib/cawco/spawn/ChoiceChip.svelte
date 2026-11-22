@@ -74,7 +74,7 @@
     <button
       data-slot="row"
       aria-pressed={on}
-      class="select-none ns-in press-tint transition-control relative flex min-h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
+      class="select-none ns-in press-tint transition-control relative flex min-h-control-lg w-full items-center gap-space-3 rounded-xs border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-pressed:bg-selected-bg aria-pressed:text-brand-ink"
       data-fh="1"
       onclick={() => {
         onpick(option.value);
@@ -90,12 +90,12 @@
         <span data-slot="name" class="type-label block">{option.name}</span>
         <span
           data-slot="meta"
-          class="type-meta block text-pretty text-ink-subtle in-aria-pressed:text-selected-ink"
+          class="type-meta block text-pretty text-ink-subtle in-aria-pressed:text-brand-ink"
           >{option.desc}</span
         >
       </span>
       {#if on}
-        <Check class="ns-check size-icon-md flex-none text-selected-icon" />
+        <Check class="ns-check size-icon-md flex-none text-brand-ink" />
       {/if}
     </button>
   {/each}

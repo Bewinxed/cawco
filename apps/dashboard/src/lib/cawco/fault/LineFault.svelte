@@ -94,7 +94,7 @@
   {#if shown}
     <div
       data-strip={strip || undefined}
-      class="pb-space-2 data-strip:absolute data-strip:start-0 data-strip:top-full data-strip:z-1 data-strip:w-full data-strip:max-w-c-measure data-strip:pt-space-1"
+      class="pb-space-2 data-strip:absolute data-strip:start-0 data-strip:top-full data-strip:z-1 data-strip:w-full data-strip:max-w-measure data-strip:pt-space-1"
     >
       <FaultDetails {details} floating={strip} id={detailsId} />
     </div>

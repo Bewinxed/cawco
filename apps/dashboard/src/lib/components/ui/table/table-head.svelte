@@ -27,13 +27,13 @@
           "sticky start-0 bg-surface-raised px-space-4 py-space-3 align-top text-ink-muted",
         /** A matrix's column heading, ruled on the left. */
         "matrix-column":
-          "border-border border-l px-space-4 py-space-3 align-top text-ink-muted",
+          "border-border-control border-l px-space-4 py-space-3 align-top text-ink-muted",
         /** A wide matrix column's heading. */
         "matrix-column-wide":
-          "min-w-c-matrix-col-w border-border border-l px-space-4 py-space-3 align-top text-ink-muted",
+          "min-w-56 border-border-control border-l px-space-4 py-space-3 align-top text-ink-muted",
         /** A wide matrix column's heading whose content sets its own text, and wraps. */
         "matrix-column-wide-plain":
-          "min-w-c-matrix-col-w whitespace-normal border-border border-l px-space-4 py-space-3 align-top",
+          "min-w-56 whitespace-normal border-border-control border-l px-space-4 py-space-3 align-top",
         /** A matrix's row heading on the raised surface. */
         "matrix-row": "bg-surface-raised px-space-4 py-space-2",
         /** A matrix's row heading pinned to the inline start as it scrolls. */

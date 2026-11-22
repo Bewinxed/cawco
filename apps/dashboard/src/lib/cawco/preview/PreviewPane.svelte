@@ -1111,7 +1111,7 @@
     bind:this={paneLayout.section}
   >
     <div
-      class="relative flex flex-col flex-1 min-h-0 overflow-hidden border border-border-well rounded-sm bg-surface-well"
+      class="relative flex flex-col flex-1 min-h-0 overflow-hidden border border-border-control rounded-sm bg-surface-sunk"
       bind:this={paneLayout.well}
     >
       {@render framed()}
@@ -1221,7 +1221,7 @@
     <div
       data-slot="down"
       data-unopened
-      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-sunk"
       role="alert"
       transition:appear
     >
@@ -1249,7 +1249,7 @@
          own cause, its fix, and where to switch how previews are reached. -->
     <div
       data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-sunk"
       role="alert"
       transition:appear
     >
@@ -1360,12 +1360,12 @@
         }
       }}
     >
-      <!-- Unseen until the wait has lasted --duration-wait-grace, then fading up
+      <!-- Unseen until the wait has lasted --duration-loop, then fading up
            (The Real Wait Rule); held still, pulse and all, once the cover is
            ready and fading out. The wrapper carries the wait, so the
            skeleton's own opacity is its pulse's. -->
       <div
-        class="animate-wait-grace-in group-data-ready/cover:animation-paused"
+        class="animate-fade-in anim-delay-loop group-data-ready/cover:animation-paused"
       >
         <Skeleton
           class="w-2/5"
@@ -1385,7 +1385,7 @@
     <!-- The stage or the server didn't start, or failed its restarts: where the page would be. -->
     <div
       data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-sunk"
       role="alert"
       transition:appear
     >
@@ -1417,7 +1417,7 @@
     <!-- On its way past the time its stage is given: never an endless cover. -->
     <div
       data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-sunk"
       data-never-drawn
       role="alert"
       transition:appear
@@ -1454,7 +1454,7 @@
     <div
       data-slot="down"
       data-down="unrecorded"
-      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-sunk"
       role="alert"
       transition:appear
     >
@@ -1487,7 +1487,7 @@
     <!-- The browser's own error page stands in the frame: said in words, with the way back. -->
     <div
       data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-sunk"
       data-not-loaded
       role="alert"
       transition:appear
@@ -1552,7 +1552,7 @@
   <!-- What stands over the page beside a pill, in the frame's box:
        the composer while a comment is written, and the thread once it is,
        open or uncommitted while the pointer rests on its pill. -->
-  <!-- The size container a card's width reads (`--spacing-c-pin-card-reading-w`, two fifths of the well).
+  <!-- The size container a card's width reads (`--pin-card-reading-w`, two fifths of the well).
        It stands where the frame stands (a component artifact's stage, a page under the head's room), so a place the page says is a place on it. -->
   <div
     data-slot="pin-room"
@@ -1672,7 +1672,7 @@
       transition:appear
     >
       <p
-        class="flex-1 basis-c-draft-line min-w-0 m-0 text-error-9 text-size-body font-normal text-pretty wrap-anywhere"
+        class="flex-1 basis-56 min-w-0 m-0 text-status-fail-glyph text-size-body font-normal text-pretty wrap-anywhere"
       >
         {paneNotice.failure
           ? paneNotice.failure.message

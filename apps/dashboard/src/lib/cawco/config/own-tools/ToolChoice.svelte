@@ -70,7 +70,7 @@
   </SectionHeader>
 
   <div
-    class="grid min-w-0 grid-cols-1 items-start gap-space-5 @images/tools:grid-cols-2 @images/tools:gap-space-6"
+    class="grid min-w-0 grid-cols-1 items-start gap-space-5 @phone/tools:grid-cols-2 @phone/tools:gap-space-6"
   >
     <div class="flex min-w-0 flex-col gap-space-3">
       <ToolOptions
@@ -93,11 +93,11 @@
       >
         {#each shown as line (line.harness)}
           <li
-            class="flex min-h-c-row-h-two items-center gap-x-space-3 border-b border-border-hairline py-space-1 last:border-b-0"
+            class="flex min-h-14 items-center gap-x-space-3 border-b border-border-hairline py-space-1 last:border-b-0"
             data-state={line.state}
           >
             <span
-              class="grid w-c-row-lead flex-none place-items-center text-ink-muted"
+              class="grid w-row-compact flex-none place-items-center text-ink-muted"
             >
               <HarnessLogo harness={line.harness} />
             </span>
@@ -114,7 +114,7 @@
                 <span
                   {...tip}
                   aria-label={words.states[line.state]}
-                  class="mark-line grid min-w-c-row-lead flex-none place-items-center"
+                  class="mark-line grid min-w-row-compact flex-none place-items-center"
                   role="img"
                 >
                   {#if line.state === "allowed"}

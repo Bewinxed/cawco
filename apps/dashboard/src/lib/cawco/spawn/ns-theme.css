@@ -14,14 +14,14 @@
 @utility ns-theme {
   :where(&) {
     --ns-check-ms: var(--duration-fade);
-    --ns-fill-ms: var(--duration-toggle);
+    --ns-fill-ms: var(--duration-fade);
     --ns-row-ms: var(--duration-fade);
 
     font: var(--type-body);
     color: var(--color-ink-strong);
   }
   /* E1: the drawer card (vaul's on a phone) keeps the body role and ink
-     over the kit's own `text-foreground text-label`. */
+     over the kit's own `text-ink-strong text-label`. */
   &[data-slot="drawer-content"] {
     font: var(--type-body);
     color: var(--color-ink-strong);
@@ -36,8 +36,8 @@
     scrollbar-color: var(--color-neutral-5) transparent;
   }
   :where(.ns-theme &)::-webkit-scrollbar {
-    width: var(--spacing-c-scrollbar-thin);
-    height: var(--spacing-c-scrollbar-thin);
+    width: var(--spacing-space-2);
+    height: var(--spacing-space-2);
   }
   :where(.ns-theme &)::-webkit-scrollbar-thumb {
     background: var(--color-neutral-5);
@@ -65,7 +65,7 @@
   @variant motion-safe {
     /* biome-ignore lint/suspicious/noDuplicateSelectors: `&` here is this @utility's own class; the rule reads every utility's `&` as one selector. */
     :where(.ns-theme &) {
-      animation: --theme(--animate-ns-in inline);
+      animation: ns-in var(--ns-row-ms) var(--ease-out) backwards;
       animation-delay: var(--delay, 0ms);
     }
   }
@@ -75,7 +75,7 @@
   @variant motion-safe {
     /* biome-ignore lint/suspicious/noDuplicateSelectors: `&` here is this @utility's own class; the rule reads every utility's `&` as one selector. */
     :where(.ns-theme &) {
-      animation: --theme(--animate-ns-check inline);
+      animation: ns-check var(--ns-check-ms) var(--ease-out) both;
     }
   }
 }
@@ -84,7 +84,7 @@
   @variant motion-safe {
     /* biome-ignore lint/suspicious/noDuplicateSelectors: `&` here is this @utility's own class; the rule reads every utility's `&` as one selector. */
     :where(.ns-theme &) {
-      animation: --theme(--animate-ns-panel inline);
+      animation: ns-panel var(--duration-fade) var(--ease-out) both;
     }
   }
 }

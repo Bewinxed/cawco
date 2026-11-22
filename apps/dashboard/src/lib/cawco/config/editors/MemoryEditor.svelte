@@ -545,11 +545,11 @@
     {#if historyError}
       <p class="type-meta text-status-attn-ink" role="alert">{historyError}</p>
     {:else if versions === null}
-      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
         {words.loading}
       </p>
     {:else if versions.length === 0}
-      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
         {words.nothingReplaced}
       </p>
     {:else}
@@ -569,22 +569,22 @@
               >
                 <span
                   data-slot="memory-editor-label"
-                  class="type-meta max-w-c-measure text-ink-strong"
+                  class="type-meta max-w-measure text-ink-strong"
                   >{formatDistanceToNow(new Date(row.createdAt))}</span
                 >
                 <span
                   data-slot="note"
-                  class="type-meta max-w-c-measure text-ink-muted"
+                  class="type-meta max-w-measure text-ink-muted"
                   >{words.from(versionSource(row.source))}</span
                 >
                 <span
                   data-slot="note"
-                  class="type-meta max-w-c-measure text-ink-muted"
+                  class="type-meta max-w-measure text-ink-muted"
                   title={row.hash}>{row.hash.slice(0, 8)}</span
                 >
                 <span
                   data-slot="note"
-                  class="type-meta max-w-c-measure text-ink-muted"
+                  class="type-meta max-w-measure text-ink-muted"
                   >{formatBytes(row.bytes)}</span
                 >
                 <Button
@@ -608,7 +608,7 @@
                     {#if reading[row.id]}
                       <p
                         data-slot="note"
-                        class="mark-line flex items-center gap-space-2 type-meta max-w-c-measure text-ink-muted"
+                        class="mark-line flex items-center gap-space-2 type-meta max-w-measure text-ink-muted"
                         role="status"
                         in:crossIn
                         out:crossOut
@@ -674,7 +674,7 @@
         />
       {:else}
         {#if applied.length > 0}
-          <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+          <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
             {words.inSyncOn(applied.length)}
             {#if asleep.length > 0}
               {words.offlineSync(

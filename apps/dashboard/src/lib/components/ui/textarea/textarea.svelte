@@ -23,7 +23,7 @@
       fill: { page: "bg-surface-page" },
       /** Its line length held to the reading measure (DESIGN.md: running text 60 to 72ch). */
       measure: {
-        reading: "max-w-c-measure",
+        reading: "max-w-measure",
         /** The column's width, its words still at the reading measure
             (design.css `pe-measure`): its box ends where the rows beside
             it end. */
@@ -38,8 +38,8 @@
             stand a boxed row's inset in (`c-field-inline-inset`, space-3
             less its edge), on the text column of the rows beside it. */
         prose:
-          "min-h-0 border-transparent bg-transparent px-c-field-inline-inset py-space-1 shadow-none hover:bg-surface-hover",
-        note: "max-h-c-textarea-max-h min-h-c-composer-field min-w-0 border-transparent bg-transparent px-0 py-space-2 leading-ui shadow-none placeholder-shown:truncate",
+          "min-h-0 border-transparent bg-transparent px-(--field-inline-inset) py-space-1 shadow-none hover:bg-surface-hover",
+        note: "max-h-50 min-h-control-md min-w-0 border-transparent bg-transparent px-0 py-space-2 leading-ui shadow-none placeholder-shown:truncate",
       },
     },
   });
@@ -122,8 +122,8 @@
       "bg-surface-raised px-3 text-ink-strong",
       "type-body placeholder:text-ink-muted",
       "disabled:cursor-not-allowed disabled:opacity-50",
-      "aria-invalid:border-error-9",
-      "dark:aria-invalid:border-error-9/50",
+      "aria-invalid:border-status-fail-glyph",
+      "dark:aria-invalid:border-status-fail-glyph/50",
       textareaVariants({ face, text, height, resize, fill, look, measure }),
       placement
     )}

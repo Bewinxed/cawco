@@ -130,11 +130,11 @@
                 aria-hidden="true"
                 class={[
                   "absolute -end-px -bottom-px size-(--status-dot-size) rounded-pill ring-2 ring-surface-page transition-[background-color,box-shadow] duration-(--duration-control) ease-out",
-                  dot === "here" && "bg-presence-online",
+                  dot === "here" && "bg-status-done-glyph",
                   dot === "away" &&
-                    "bg-surface-page inset-ring-1 inset-ring-presence-off",
+                    "bg-surface-page inset-ring-1 inset-ring-ink-subtle",
                   dot === "appearing" &&
-                    "bg-surface-page inset-ring-1 inset-ring-presence-away",
+                    "bg-surface-page inset-ring-1 inset-ring-status-attn-glyph",
                 ]}
               ></span>
             </span>

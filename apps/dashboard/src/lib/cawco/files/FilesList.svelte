@@ -12,7 +12,7 @@
    * into view.
    *
    * Both lists are the hub's (files.svelte.ts): until one answers it claims
-   * nothing (no count, no "nothing" line); past `--duration-wait-grace` its
+   * nothing (no count, no "nothing" line); past `--duration-loop` its
    * skeleton stands at the real layout's size, and the read arrives over one
    * `--duration-fade` cross-fade. A read refused says so in its region's place
    * (RowFault), with Try again and the hub's own words.
@@ -199,7 +199,7 @@
   );
 
   /**
-   * The Claim Of Nothing Rule: inside `--duration-wait-grace` a list still read
+   * The Claim Of Nothing Rule: inside `--duration-loop` a list still read
    * shows nothing of its own; past it, its skeleton stands, and what the
    * read brings (the list, or its "nothing" line) takes its place in one
    * reveal (motion/curves `reveal`, `revealOut`). Started again for each
@@ -213,7 +213,7 @@
     waited = false;
     const timer = setTimeout(() => {
       waited = true;
-    }, dur("--duration-wait-grace"));
+    }, dur("--duration-loop"));
     return () => clearTimeout(timer);
   });
   const artifactsGhost = $derived(
@@ -475,8 +475,8 @@
      filling what its card or its drawer gives it. -->
 <div
   class="relative flex min-h-0 flex-1 flex-col"
-  style:--lead-pad={"calc(var(--spacing-c-row-inset) - (var(--spacing-c-row-lead) - var(--spacing-icon-md)) / 2)"}
-  style:--row-end="calc(var(--spacing-c-btn-h-xs) + var(--spacing-space-2))"
+  style:--lead-pad={"calc(var(--spacing-space-3) - (var(--spacing-row-compact) - var(--spacing-icon-md)) / 2)"}
+  style:--row-end="calc(var(--spacing-control-xs) + var(--spacing-space-2))"
 >
   {#if nothing}
     <!-- What the skeleton stood in for, in its reveal (reveal). -->
@@ -579,7 +579,7 @@
               <!-- The segment is the region's head: its switch stands over
                    the list at the same trailing edge. -->
               <div
-                class="flex min-h-c-section-head-h flex-none items-center justify-end pe-c-row-inset"
+                class="flex min-h-control-sm flex-none items-center justify-end pe-space-3"
                 data-files-head
               >
                 {@render viewSwitch()}
@@ -606,17 +606,17 @@
              alone, so both heads stay in sight and the rows scroll under
              them. A card's height: a landscape thumbnail and its two lines. -->
         <div
-          class="grid min-h-0 flex-1 grid-rows-(--region-rows) content-box-start short-window:artifacts-floor-cards:artifacts-min-(--spacing-c-section-head-h) short-window:artifacts-floor-one:artifacts-min-(--spacing-c-section-head-h) short-window:artifacts-floor-two:artifacts-min-(--spacing-c-section-head-h) short-window:attachments-floor-one:attachments-min-(--seam-head-floor) short-window:attachments-floor-two:attachments-min-(--seam-head-floor) tall-window:artifacts-floor-cards:artifacts-min-(--cards-floor) tall-window:artifacts-floor-one:artifacts-min-(--row-floor) tall-window:artifacts-floor-two:artifacts-min-(--rows-floor) tall-window:attachments-floor-one:attachments-min-(--one-floor) tall-window:attachments-floor-two:attachments-min-(--two-floor)"
+          class="grid min-h-0 flex-1 grid-rows-(--region-rows) content-box-start short-window:artifacts-floor-cards:artifacts-min-(--spacing-control-sm) short-window:artifacts-floor-one:artifacts-min-(--spacing-control-sm) short-window:artifacts-floor-two:artifacts-min-(--spacing-control-sm) short-window:attachments-floor-one:attachments-min-(--seam-head-floor) short-window:attachments-floor-two:attachments-min-(--seam-head-floor) tall-window:artifacts-floor-cards:artifacts-min-(--cards-floor) tall-window:artifacts-floor-one:artifacts-min-(--row-floor) tall-window:artifacts-floor-two:artifacts-min-(--rows-floor) tall-window:attachments-floor-one:attachments-min-(--one-floor) tall-window:attachments-floor-two:attachments-min-(--two-floor)"
           data-artifacts-floor={artifactsFloor}
           data-attachments-floor={attachmentsFloor}
           style:--region-rows={"minmax(var(--artifacts-min, min-content), auto) minmax(var(--attachments-min, min-content), auto)"}
           style:--region-seam="calc(1px + 2 * var(--spacing-space-2))"
-          style:--seam-head-floor={"calc(var(--spacing-c-section-head-h) + var(--region-seam))"}
-          style:--cards-floor={"calc(var(--spacing-c-section-head-h) + 4 * var(--spacing-c-artifact-row-h))"}
-          style:--rows-floor={"calc(var(--spacing-c-section-head-h) + 2 * var(--spacing-c-artifact-row-h))"}
-          style:--row-floor={"calc(var(--spacing-c-section-head-h) + var(--spacing-c-artifact-row-h))"}
-          style:--two-floor={"calc(var(--spacing-c-section-head-h) + 2 * var(--spacing-c-artifact-row-h) + var(--region-seam))"}
-          style:--one-floor={"calc(var(--spacing-c-section-head-h) + var(--spacing-c-artifact-row-h) + var(--region-seam))"}
+          style:--seam-head-floor={"calc(var(--spacing-control-sm) + var(--region-seam))"}
+          style:--cards-floor={"calc(var(--spacing-control-sm) + 4 * var(--spacing-control-lg))"}
+          style:--rows-floor={"calc(var(--spacing-control-sm) + 2 * var(--spacing-control-lg))"}
+          style:--row-floor={"calc(var(--spacing-control-sm) + var(--spacing-control-lg))"}
+          style:--two-floor={"calc(var(--spacing-control-sm) + 2 * var(--spacing-control-lg) + var(--region-seam))"}
+          style:--one-floor={"calc(var(--spacing-control-sm) + var(--spacing-control-lg) + var(--region-seam))"}
         >
           <section
             aria-labelledby="{uid}-artifacts"
@@ -630,15 +630,15 @@
                  the count, outside the heading, so the heading's name is its
                  own words. -->
             <div
-              class="flex min-h-c-section-head-h flex-none items-center gap-c-row-inset ps-(--lead-pad) pe-c-row-inset"
+              class="flex min-h-control-sm flex-none items-center gap-space-3 ps-(--lead-pad) pe-space-3"
               data-files-head
             >
               <h3
-                class="type-label mark-line flex min-w-0 flex-auto items-center gap-c-row-inset text-ink-strong"
+                class="type-label mark-line flex min-w-0 flex-auto items-center gap-space-3 text-ink-strong"
                 id="{uid}-artifacts"
               >
                 <span
-                  class="grid w-c-row-lead flex-none place-items-center text-ink-muted"
+                  class="grid w-row-compact flex-none place-items-center text-ink-muted"
                   data-box
                   ><IconLayers aria-hidden="true" class="size-icon-md" /></span
                 >
@@ -667,12 +667,12 @@
             data-files-rule
           >
             <h3
-              class="type-label mark-line flex min-h-c-section-head-h flex-none items-center gap-c-row-inset ps-(--lead-pad) pe-c-row-inset text-ink-strong"
+              class="type-label mark-line flex min-h-control-sm flex-none items-center gap-space-3 ps-(--lead-pad) pe-space-3 text-ink-strong"
               data-files-head
               id="{uid}-attachments"
             >
               <span
-                class="grid w-c-row-lead flex-none place-items-center text-ink-muted"
+                class="grid w-row-compact flex-none place-items-center text-ink-muted"
                 data-box
                 ><IconPaperclip aria-hidden="true" class="size-icon-md" /></span
               >
@@ -703,8 +703,8 @@
   {#if artifacts && artifacts.length > 0}
     <Rail
       axis="x"
-      class="flex flex-none gap-space-row rounded-md concentric-in r-outer-md r-inset-space-row bg-surface-recess-deep p-space-row"
-      itemClass="touch-hit press-tint grid size-c-btn-h-xs place-items-center"
+      class="flex flex-none gap-space-row rounded-md concentric-in r-outer-md r-inset-space-row bg-surface-sunk p-space-row"
+      itemClass="touch-hit press-tint grid size-control-xs place-items-center"
       items={VIEWS}
       label={filesWords.artifactsView}
       onpick={(id) => {
@@ -793,7 +793,7 @@
         <!-- A region with nothing made offers to ask for it, on the same
              line, wrapping under the words when the line is short. -->
         <div
-          class="type-meta flex min-h-c-section-head-h flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1 px-c-row-inset wrap-anywhere text-ink-muted"
+          class="type-meta flex min-h-control-sm flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1 px-space-3 wrap-anywhere text-ink-muted"
           in:reveal
         >
           <span>Nothing made yet</span>
@@ -807,7 +807,7 @@
         </div>
       {:else if shownHits && cards.length === 0}
         <p
-          class="type-meta flex min-h-c-section-head-h items-center px-c-row-inset wrap-anywhere text-ink-muted"
+          class="type-meta flex min-h-control-sm items-center px-space-3 wrap-anywhere text-ink-muted"
           data-files-none
           in:crossIn
         >
@@ -824,7 +824,7 @@
              card's edge, never past it. -->
         <div
           aria-busy={searching || undefined}
-          class="kit-edge-fade-block fade-len-c-edge-fade-len min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
+          class="kit-edge-fade-block fade-len-(--edge-fade-len) min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
           data-files-scroll
           id="{uid}-artifacts-scroll"
           in:reveal
@@ -862,10 +862,10 @@
                  skeleton at the real layout's size). -->
             {#each [0.46, 0.34] as share (share)}
               <div
-                class="flex min-h-c-artifact-row-h items-center gap-c-row-inset ps-(--lead-pad) pe-c-row-inset"
+                class="flex min-h-control-lg items-center gap-space-3 ps-(--lead-pad) pe-space-3"
               >
                 <span
-                  class="grid w-c-row-lead flex-none place-items-center text-ink-muted"
+                  class="grid w-row-compact flex-none place-items-center text-ink-muted"
                   data-box><Skeleton cell="glyph" radius="text" /></span
                 >
                 <Skeleton
@@ -890,7 +890,7 @@
         <!-- The Empty Starts Work Rule's by-hand way: a person sends
              attachments, so the composer's own Attach is offered. -->
         <div
-          class="type-meta flex min-h-c-section-head-h flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1 px-c-row-inset wrap-anywhere text-ink-muted"
+          class="type-meta flex min-h-control-sm flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1 px-space-3 wrap-anywhere text-ink-muted"
           in:reveal
         >
           <span>Nothing attached yet</span>
@@ -904,7 +904,7 @@
         </div>
       {:else if attachmentHits.length === 0}
         <p
-          class="type-meta flex min-h-c-section-head-h items-center px-c-row-inset wrap-anywhere text-ink-muted"
+          class="type-meta flex min-h-control-sm items-center px-space-3 wrap-anywhere text-ink-muted"
           data-files-none
           in:crossIn
         >
@@ -912,7 +912,7 @@
         </p>
       {:else}
         <div
-          class="kit-edge-fade-block fade-len-c-edge-fade-len min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
+          class="kit-edge-fade-block fade-len-(--edge-fade-len) min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
           data-files-scroll
           id="{uid}-attachments-scroll"
           in:reveal
@@ -934,7 +934,7 @@
                     <a
                       class={menuItemVariants({
                         class:
-                          "relative flex min-h-c-artifact-row-h w-full items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset",
+                          "relative flex min-h-control-lg w-full items-center gap-space-3 border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset",
                       })}
                       data-menu-item
                       download={file.name}
@@ -951,7 +951,7 @@
                     <span
                       class={menuItemVariants({
                         class:
-                          "relative flex min-h-c-artifact-row-h w-full cursor-default items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset",
+                          "relative flex min-h-control-lg w-full cursor-default items-center gap-space-3 border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset",
                       })}
                       data-menu-item
                       title={file.name}
@@ -963,7 +963,7 @@
                   <button
                     class={menuItemVariants({
                       class:
-                        "relative flex min-h-c-artifact-row-h w-full items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset",
+                        "relative flex min-h-control-lg w-full items-center gap-space-3 border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset",
                     })}
                     data-menu-item
                     onclick={(event) =>
@@ -1001,13 +1001,13 @@
 
 {#snippet attachmentFace(file: AttachmentRow)}
   <span
-    class="grid size-c-row-lead flex-none place-items-center overflow-clip text-ink-muted"
+    class="grid size-row-compact flex-none place-items-center overflow-clip text-ink-muted"
     data-box
   >
     {#if file.picture}
       <img
         alt=""
-        class="size-c-row-lead max-w-none rounded-sm bg-surface-well object-cover -outline-offset-1 outline-1 outline-image-outline"
+        class="size-row-compact max-w-none rounded-sm bg-surface-sunk object-cover -outline-offset-1 outline-1 outline-image-outline"
         decoding="async"
         loading="lazy"
         src={file.picture}

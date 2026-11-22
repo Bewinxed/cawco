@@ -59,7 +59,7 @@
   <div
     data-slot="trow"
     data-connect={kind}
-    class="rail-line w-full min-h-(--tx-line) coarse:min-h-(--tx-line-touch) text-size-label font-medium text-ink-strong"
+    class="rail-line w-full min-h-(--tx-line) coarse:min-h-control-lg text-size-label font-medium text-ink-strong"
   >
     <span data-slot="rail-cell" class="rail-cell">
       <span

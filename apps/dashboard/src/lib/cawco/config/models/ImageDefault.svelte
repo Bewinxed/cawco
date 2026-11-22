@@ -148,7 +148,7 @@
 <!-- The way to put something right: a link in the meta line it follows. -->
 {#snippet fixLink(fix: ImageFix)}
   <a
-    class="mark-line touch-hit pointer-hit inline-flex items-center gap-space-row type-meta whitespace-nowrap text-link-ink no-underline transition-[opacity] duration-(--duration-control) ease-out hover:text-link-hover active:opacity-72"
+    class="mark-line touch-hit pointer-hit inline-flex items-center gap-space-row type-meta whitespace-nowrap text-brand-ink no-underline transition-[opacity] duration-(--duration-control) ease-out hover:text-brand-ink active:opacity-72"
     href={fixHref(fix)}
   >
     <span>{fix.label}</span>
@@ -166,12 +166,12 @@
       <SaveLine {phase} {words} />
     {/snippet}
   </SectionHeader>
-  <p data-slot="note" class="m-0 type-meta max-w-c-measure text-ink-muted">
+  <p data-slot="note" class="m-0 type-meta max-w-measure text-ink-muted">
     {words.note}
   </p>
 
   <div
-    class="grid min-w-0 grid-cols-1 items-start gap-space-5 @images/images:grid-cols-2 @images/images:gap-space-6"
+    class="grid min-w-0 grid-cols-1 items-start gap-space-5 @phone/images:grid-cols-2 @phone/images:gap-space-6"
     data-slot="split"
   >
     <div class="flex min-w-0 flex-col gap-space-2" data-slot="providers">
@@ -292,12 +292,12 @@
               {@const fix = lack ? words.fix(lack) : null}
               {@const state = stateOf(machine)}
               <li
-                class="flex min-h-c-row-h-two items-center gap-x-space-3 border-b border-border-hairline py-space-1 last:border-b-0"
+                class="flex min-h-14 items-center gap-x-space-3 border-b border-border-hairline py-space-1 last:border-b-0"
                 data-lack={lack?.kind}
                 data-state={state}
               >
                 <span
-                  class="grid w-c-row-lead flex-none place-items-center text-ink-muted"
+                  class="grid w-row-compact flex-none place-items-center text-ink-muted"
                 >
                   <OsMark class="size-icon-md" os={machine.os} />
                 </span>
@@ -332,7 +332,7 @@
                     <span
                       {...tip}
                       aria-label={STATE_WORDS[state]}
-                      class="mark-line grid w-c-row-lead flex-none place-items-center"
+                      class="mark-line grid w-row-compact flex-none place-items-center"
                       data-slot="state"
                       role="img"
                     >
@@ -346,7 +346,7 @@
                       {:else if state === "offline"}
                         <!-- The machine list's offline mark: a still dot in the presence-off ink. -->
                         <span
-                          class="size-(--status-dot-size) rounded-pill bg-presence-off"
+                          class="size-(--status-dot-size) rounded-pill bg-ink-subtle"
                           data-box
                         ></span>
                       {:else}

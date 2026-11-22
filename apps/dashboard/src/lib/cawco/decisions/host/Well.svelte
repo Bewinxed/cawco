@@ -91,7 +91,7 @@
       class={[
         "relative flex min-w-0 flex-1 items-center-safe justify-center-safe",
         picture !== undefined &&
-          "kit-edge-fade fade-len-c-edge-fade-len no-scrollbar contain-inline-size overflow-x-auto overscroll-x-contain",
+          "kit-edge-fade fade-len-(--edge-fade-len) no-scrollbar contain-inline-size overflow-x-auto overscroll-x-contain",
       ]}
       data-slot="media-stage"
     >

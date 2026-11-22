@@ -1330,7 +1330,7 @@
 
 <section
   aria-label={browserWords.view}
-  class="absolute inset-x-0 top-0 bottom-(--keyboard-lift,0px) flex flex-col min-h-0 pt-(--side-room,0px) bg-surface-well"
+  class="absolute inset-x-0 top-0 bottom-(--keyboard-lift,0px) flex flex-col min-h-0 pt-(--side-room,0px) bg-surface-sunk"
   data-browser-host={host ?? undefined}
   data-browser-mine={mine || undefined}
   data-slot="browser-view"
@@ -1390,7 +1390,7 @@
            last picture leaves as the wait comes in, so the wait's line
            never stands over a page that is no longer there. -->
       <div
-        class="absolute start-0 top-0 h-(--page-h) w-(--page-w) translate-x-(--page-x) translate-y-(--page-y) data-waiting:animate-wait-grace-out"
+        class="absolute start-0 top-0 h-(--page-h) w-(--page-w) translate-x-(--page-x) translate-y-(--page-y) data-waiting:animate-fade-out data-waiting:anim-delay-loop"
         data-slot="browser-page"
         data-waiting={shown?.kind === "wait" || undefined}
         style:--page-h="{pageBox.h}px"
@@ -1455,7 +1455,7 @@
              then the screen to come as a skeleton, the live mark and what
              it waits on in its middle, where the eye already is. -->
         <div
-          class="absolute inset-0 grid place-items-center animate-wait-grace-in"
+          class="absolute inset-0 grid place-items-center animate-fade-in anim-delay-loop"
           data-slot="browser-wait"
           role="status"
         >
@@ -1471,7 +1471,7 @@
              pressed, or a step at a time by the arrow keys. -->
         <button
           aria-label={browserWords.overview}
-          class="absolute end-space-3 top-space-3 z-1 aspect-(--page-ratio) w-22 touch-none overflow-hidden rounded-xs border border-border-contrast bg-surface-raised p-0 shadow-raised"
+          class="absolute end-space-3 top-space-3 z-1 aspect-(--page-ratio) w-22 touch-none overflow-hidden rounded-xs border border-border-strong bg-surface-raised p-0 shadow-sm"
           data-slot="browser-overview"
           onkeydown={overviewKey}
           onpointerdown={overviewAt}
@@ -1578,7 +1578,7 @@
     {/if}
     {#if refusal}
       <p
-        class="absolute inset-x-0 bottom-0 m-0 px-space-3 py-space-2 border-t border-border-hairline bg-surface-raised text-error-9 text-size-body text-pretty wrap-anywhere"
+        class="absolute inset-x-0 bottom-0 m-0 px-space-3 py-space-2 border-t border-border-hairline bg-surface-raised text-status-fail-glyph text-size-body text-pretty wrap-anywhere"
         data-slot="browser-refusal"
         role="alert"
       >
@@ -1602,12 +1602,12 @@
          under it, Show details last. It runs to the card's top under the
          head and takes its room on its own scroller. -->
     <div
-      class="absolute inset-0 z-1 grid place-items-center overflow-y-auto overscroll-contain px-space-5 pt-(--side-room,0px) pb-space-5 bg-surface-well max-phone:px-space-3"
+      class="absolute inset-0 z-1 grid place-items-center overflow-y-auto overscroll-contain px-space-5 pt-(--side-room,0px) pb-space-5 bg-surface-sunk max-phone:px-space-3"
       data-slot="browser-down"
       role="alert"
       transition:appear
     >
-      <div class="flex w-full max-w-c-panel-w min-w-0 flex-col items-center">
+      <div class="flex w-full max-w-95 min-w-0 flex-col items-center">
         <div class="mb-space-4 flex-none" data-slot="browser-down-caw">
           {@render animatedCaw({ again: false, head: false, size: CAW_SIZE })}
         </div>

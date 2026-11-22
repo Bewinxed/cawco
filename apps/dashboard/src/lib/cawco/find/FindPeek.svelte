@@ -65,7 +65,7 @@
 <div
   data-slot="peek"
   {id}
-  class="group/peek grid grid-cols-(--peek-cols) gap-x-space-3 gap-y-space-row ms-(--peek-ms) mt-0 mb-space-2 py-space-1 pe-0 ps-space-3 border-s border-s-border-control type-meta leading-icon-lg data-phone:type-label data-phone:font-normal data-phone:leading-c-row-lead"
+  class="group/peek grid grid-cols-(--peek-cols) gap-x-space-3 gap-y-space-row ms-(--peek-ms) mt-0 mb-space-2 py-space-1 pe-0 ps-space-3 border-s border-s-border-control type-meta leading-icon-lg data-phone:type-label data-phone:font-normal data-phone:leading-row-compact"
   data-phone={phone || undefined}
   style:--peek-cols="max-content minmax(0, 1fr)"
   style:--peek-ms={"calc(var(--spacing-space-3) + var(--spacing-icon-md) + var(--spacing-space-2))"}
@@ -74,7 +74,7 @@
     <span data-slot="find-peek-label" class="text-ink-subtle">purpose</span>
     <span
       data-slot="value"
-      class="min-w-0 text-ink-row"
+      class="min-w-0 text-ink-strong"
       {@attach said(
         ownParts(conversation, "purpose", conversation.purpose),
         shown
@@ -83,7 +83,7 @@
   {/if}
   {#if conversation?.lastReport}
     <span data-slot="find-peek-label" class="text-ink-subtle">last</span>
-    <span data-slot="value" class="min-w-0 text-ink-row"
+    <span data-slot="value" class="min-w-0 text-ink-strong"
       ><span
         {@attach said(
           ownParts(conversation, "report", conversation.lastReport.headline),
@@ -102,7 +102,7 @@
         {@const key = keyOf(i)}
         <button
           id={idOf(key)}
-          class="group/moment relative flex select-none items-center gap-space-2 w-(--moment-w) min-w-0 mx-(--moment-mx) px-space-1 border-none border-current rounded-xs bg-transparent text-start text-ink-row cursor-default active:bg-surface-fill group-data-phone/peek:min-h-c-btn-h-lg"
+          class="group/moment relative flex select-none items-center gap-space-2 w-(--moment-w) min-w-0 mx-(--moment-mx) px-space-1 border-none border-current rounded-xs bg-transparent text-start text-ink-strong cursor-default active:bg-surface-hover group-data-phone/peek:min-h-control-lg"
           style:--moment-w="calc(100% + 2 * var(--spacing-space-1))"
           style:--moment-mx="calc(-1 * var(--spacing-space-1))"
           aria-selected={activeKey === key}
@@ -153,7 +153,7 @@
     <span data-slot="value" class="min-w-0 text-ink-muted"
       >{momentsState.machine} didn't answer<span class="px-space-1">·</span
       ><button
-        class="select-none border-none border-current p-0 bg-transparent text-link-ink"
+        class="select-none border-none border-current p-0 bg-transparent text-brand-ink"
         onclick={onretry}
         type="button">Retry</button
       ></span
@@ -161,7 +161,7 @@
   {/if}
   {#if conversation && conversation.children.count > 0}
     <span data-slot="find-peek-label" class="text-ink-subtle">delegates</span>
-    <span data-slot="value" class="min-w-0 text-ink-row"
+    <span data-slot="value" class="min-w-0 text-ink-strong"
       ><span data-slot="num" class="num">{conversation.children.count}</span
       >{#if conversation.children.needsYou > 0}<span class="px-space-1">·</span
         ><span class="text-status-attn-ink font-medium"

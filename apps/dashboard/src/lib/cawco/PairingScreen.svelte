@@ -49,7 +49,7 @@
   >
     <Caw next={["ready", "idle"]} size={CAW_SIZE} status="idle" />
   </div>
-  <div data-slot="body" class="relative w-full max-w-c-page-column-w">
+  <div data-slot="body" class="relative w-full max-w-136">
     {#key stage.kind}
       <div
         data-slot="words"
@@ -65,7 +65,7 @@
             Pair this browser
           </h1>
           <p
-            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
+            class="m-0 max-w-104 type-body text-center text-pretty text-ink-muted"
           >
             This hub requires paired devices. Approve this code on a paired
             device, in Needs you or Configure › Devices.
@@ -73,7 +73,7 @@
           <p
             data-num
             data-slot="code"
-            class="num m-0 rounded-well bg-surface-recess px-space-5 py-space-3 type-kpi font-(family-name:--font-mono) text-ink-row select-all"
+            class="num m-0 rounded-sm bg-surface-recess px-space-5 py-space-3 type-kpi font-(family-name:--font-mono) text-ink-strong select-all"
           >
             <span class="sr-only">Pairing code </span>{stage.userCode}
           </p>
@@ -96,7 +96,7 @@
             Pairing was denied
           </h1>
           <p
-            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
+            class="m-0 max-w-104 type-body text-center text-pretty text-ink-muted"
           >
             A paired device denied this browser. If that was a mistake, start
             again and approve the new code.
@@ -110,7 +110,7 @@
             The code expired
           </h1>
           <p
-            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
+            class="m-0 max-w-104 type-body text-center text-pretty text-ink-muted"
           >
             Nobody approved it within 10 minutes. Start again for a new code.
           </p>
@@ -136,7 +136,7 @@
           </h1>
           <p
             aria-live="polite"
-            class="mark-line m-0 flex max-w-c-page-line items-start justify-center gap-space-2 type-body text-center text-pretty text-ink-muted"
+            class="mark-line m-0 flex max-w-104 items-start justify-center gap-space-2 type-body text-center text-pretty text-ink-muted"
           >
             <span class="mark-cell"><LiveDot /></span><span
               >Asking the hub for a code…</span

@@ -105,15 +105,15 @@
 {:else}
   <div class="bg-surface-page p-space-5">
     <div
-      class="relative flex w-(--frame-w) flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile"
+      class="relative flex w-(--frame-w) flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-sm"
       style:--frame-w={`${width}px`}
     >
       <div
-        class="absolute inset-x-0 top-0 z-2 flex h-c-head-room min-w-0 items-center ps-space-4 pe-space-2"
+        class="absolute inset-x-0 top-0 z-2 flex h-(--head-room) min-w-0 items-center ps-space-4 pe-space-2"
       >
         {@render switcher()}
       </div>
-      <div class="h-space-8 mt-c-head-room"></div>
+      <div class="h-space-8 mt-(--head-room)"></div>
     </div>
   </div>
 {/if}

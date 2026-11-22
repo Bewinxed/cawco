@@ -125,14 +125,14 @@
 <svelte:document {onpointerdown} />
 
 <div
-  class="grid min-h-c-address-phone-h content-start gap-space-5 bg-surface-page p-space-5"
+  class="grid min-h-195 content-start gap-space-5 bg-surface-page p-space-5"
   data-address-desk={direction}
 >
   <!-- The floating tray stands over the page, not in its flow: the page
        keeps room under it for as tall as it is, so its foot never falls
        past the page's. -->
   <main
-    class="mx-auto grid w-full max-w-c-measure content-start gap-space-5 pb-(--float-room)"
+    class="mx-auto grid w-full max-w-measure content-start gap-space-5 pb-(--float-room)"
     style:--float-room={tray.open && tray.source === "settings"
       ? `${floatHeight}px`
       : "0px"}
@@ -211,7 +211,7 @@
     {/if}
   </main>
   <!-- The story's control stands under the design, folded until pressed. -->
-  <div bind:this={controlEl} class="mx-auto w-full max-w-c-measure">
+  <div bind:this={controlEl} class="mx-auto w-full max-w-measure">
     <JumpControl {tray} />
   </div>
 </div>

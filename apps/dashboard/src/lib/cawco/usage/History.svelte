@@ -220,7 +220,7 @@
 <section
   data-slot="history-card"
   aria-labelledby="history-title"
-  class="flex flex-col gap-space-4 rounded-lg bg-surface-raised p-space-5 shadow-tile max-phone:p-space-4"
+  class="flex flex-col gap-space-4 rounded-lg bg-surface-raised p-space-5 shadow-sm max-phone:p-space-4"
 >
   <header
     data-slot="head"
@@ -324,7 +324,7 @@
             data-slot="slot"
             class="group flex h-full min-w-0 flex-1 items-end"
             ><span
-              class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-meter-share group-hover:bg-ink-strong motion-safe:transition-[block-size] motion-safe:duration-(--duration-morph) motion-safe:ease-drawer"
+              class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-ink-muted group-hover:bg-ink-strong motion-safe:transition-[block-size] motion-safe:duration-(--duration-fade) motion-safe:ease-drawer"
               style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
               style:--bar-h="calc(var(--h) * 100%)"
             ></span></span
@@ -343,7 +343,7 @@
                   role="img"
                 >
                   <span
-                    class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-meter-share group-hover:bg-ink-strong motion-safe:transition-[block-size] motion-safe:duration-(--duration-morph) motion-safe:ease-drawer"
+                    class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-ink-muted group-hover:bg-ink-strong motion-safe:transition-[block-size] motion-safe:duration-(--duration-fade) motion-safe:ease-drawer"
                     style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
                     style:--bar-h="calc(var(--h) * 100%)"
                   ></span>

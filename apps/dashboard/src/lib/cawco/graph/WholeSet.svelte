@@ -101,7 +101,7 @@
   const insets = $derived({
     top: headRoom,
     bottom: browser
-      ? numberOf("--spacing-c-btn-h") + 2 * numberOf("--spacing-space-4")
+      ? numberOf("--spacing-control-md") + 2 * numberOf("--spacing-space-4")
       : 0,
   });
 
@@ -116,10 +116,10 @@
   const lengths = $derived(
     browser
       ? {
-          card: numberOf("--spacing-c-graph-node-w"),
-          head: numberOf("--spacing-space-7"),
+          card: numberOf("--graph-node-w"),
+          head: numberOf("--spacing-space-6"),
           pad: numberOf("--spacing-space-3"),
-          label: numberOf("--spacing-c-graph-label"),
+          label: numberOf("--graph-label"),
           labelLine: numberOf("--spacing-space-5"),
         }
       : { card: 0, head: 0, pad: 0, label: 0, labelLine: 0 }
@@ -257,7 +257,7 @@
           ),
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: "var(--color-border-contrast)",
+            color: "var(--color-border-strong)",
           },
           data,
         },
@@ -411,8 +411,8 @@
         }
       })}
     class="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-surface-raised"
-    style:--xy-edge-stroke="var(--color-border-contrast)"
-    style:--xy-edge-stroke-width="var(--spacing-c-graph-edge)"
+    style:--xy-edge-stroke="var(--color-border-strong)"
+    style:--xy-edge-stroke-width="var(--graph-edge)"
   >
     <SvelteFlowProvider>
       <div
@@ -509,7 +509,7 @@
     <span
       bind:this={ruler}
       aria-hidden="true"
-      class="pointer-events-none invisible absolute start-0 top-0 max-w-c-graph-label border px-space-1 type-meta"
+      class="pointer-events-none invisible absolute start-0 top-0 max-w-40 border px-space-1 type-meta"
     ></span>
   </div>
 {/if}

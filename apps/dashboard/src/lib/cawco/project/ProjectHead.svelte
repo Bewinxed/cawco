@@ -247,7 +247,7 @@
 
 <header
   data-slot="project-head"
-  class="flex flex-none flex-nowrap items-center gap-x-space-4 min-h-12 pt-space-6 pe-space-6 pb-space-4 ps-space-7 max-desk:pt-space-5 max-desk:pe-space-5 max-desk:pb-space-3 max-desk:ps-space-5"
+  class="flex flex-none flex-nowrap items-center gap-x-space-4 min-h-12 pt-space-6 pe-space-6 pb-space-4 ps-space-6 max-desk:pt-space-5 max-desk:pe-space-5 max-desk:pb-space-3 max-desk:ps-space-5"
 >
   <!-- Leading: the name, then the place. The pair is as wide as it holds
        and gives way first: the name ends in its ellipsis before anything
@@ -468,7 +468,7 @@
      words: a rename. -->
 <div
   data-slot="head-faults"
-  class="ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5"
+  class="ps-space-6 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5"
 >
   <RowFault again={commitName} reason={renameFault} />
 </div>
@@ -490,6 +490,6 @@
     at={endAt}
     opener={() => more}
     projectId={project.id}
-    class="tray-indent-space-7 max-w-128 max-desk:tray-indent-space-5"
+    class="tray-indent-space-6 max-w-128 max-desk:tray-indent-space-5"
   />
 </div>

@@ -34,10 +34,10 @@
    * screen shows"), so Retry and Install now never stand in one view, and
    * the rendered checks' coral count reads each panel apart.
    */
-  const panel = floatingSurface({ class: "w-full max-w-c-panel-w" });
+  const panel = floatingSurface({ class: "w-full max-w-95" });
   /** The notice grids: panels at their width where it fits, the column's where not. */
   const NOTICE_COLS =
-    "repeat(auto-fill, minmax(min(100%, var(--spacing-c-panel-w)), 1fr))";
+    "repeat(auto-fill, minmax(min(100%, var(--panel-w)), 1fr))";
 
   /** Notes as every release writes them (docs/releases/README.md). */
   const NOTES = [
@@ -339,14 +339,14 @@
      holds the screen, and the notice grids' panels keep their 380px only
      where it fits (min(100%, …)): on a phone each takes the column. -->
 <main
-  class="mx-auto grid w-full max-w-decisions-900px grid-cols-(--main-cols) gap-space-5 p-space-6 max-phone:px-space-5"
+  class="mx-auto grid w-full max-w-desk grid-cols-(--main-cols) gap-space-5 p-space-6 max-phone:px-space-5"
   style:--main-cols="minmax(0, 1fr)"
   style:--notice-cols={NOTICE_COLS}
 >
   <h1 class="type-title">Channel cards</h1>
   <section
     data-slot="updates-page-card"
-    class="rounded-lg bg-surface-raised p-space-5 shadow-tile"
+    class="rounded-lg bg-surface-raised p-space-5 shadow-sm"
     data-states="cards-stable"
   >
     <p class="type-meta mb-space-2 text-ink-muted">
@@ -356,7 +356,7 @@
   </section>
   <section
     data-slot="updates-page-card"
-    class="rounded-lg bg-surface-raised p-space-5 shadow-tile"
+    class="rounded-lg bg-surface-raised p-space-5 shadow-sm"
     data-states="cards-nightly"
   >
     <p class="type-meta mb-space-2 text-ink-muted">
@@ -368,7 +368,7 @@
   <h1 class="type-title">Update cell, rows 1 to 13</h1>
   <section
     data-slot="updates-page-card"
-    class="rounded-lg bg-surface-raised p-space-5 shadow-tile"
+    class="rounded-lg bg-surface-raised p-space-5 shadow-sm"
     data-states="table"
   >
     <UpdateTable machines={ROWS} policy={OFF} />

@@ -3,7 +3,7 @@
   one centred column on the recessed ground (DESIGN.md, The Frame Recesses
   Rule), 21px in at a desk and 14px under a finger, its groups 18px apart
   (Layout: "the groups of a page … stand 18px apart"): the room's width up
-  to `--spacing-c-decision-page-max` (three option columns at the label measure),
+  to `--decision-page-max` (three option columns at the label measure),
   so the cards grow with the window; or on a
   pictured page (media that knows its own width: a Preview's `width`, a
   drawing, a picture, a diagram) as wide as the most options abreast its
@@ -13,7 +13,7 @@
   its well's `data-fills`) stands at the room's whole width, its foot's
   edges with it, so that design grows with the window (the owner, of a
   live timeline in a 1348px column on his 2529px window: "it's not
-  growing"); its words keep their reading measure (`max-w-c-measure` on a
+  growing"); its words keep their reading measure (`max-w-measure` on a
   card's question, its advice and its options' words). Its head is
   the page head: Caw as the title's mark (The Mark Line Rule) and the title.
   Then the offline notice when CawCo does not show the page, and every
@@ -111,7 +111,7 @@
   /**
    * The widest piece of media on the page at its real size, px, as its well
    * says it (Well.svelte `picture`, through its card); 0 on a page with no
-   * pictures, whose column is the room up to `--spacing-c-decision-page-max`.
+   * pictures, whose column is the room up to `--decision-page-max`.
    */
   const widths = hearWidths();
   setContext(MEDIA_WIDTHS, widths.hear);
@@ -120,7 +120,7 @@
   /**
    * A pictured page's column: as many options abreast as its room holds,
    * each its picture at 1:1 (`--spacing-space-3` between them), inside the card's
-   * and the page's insets; the largest such step that fits, never under `--spacing-c-decision-page-max`; the room's
+   * and the page's insets; the largest such step that fits, never under `--decision-page-max`; the room's
    * whole width where not one fits, so a picture wider than the room shows
    * as much of itself as it can, scrolling sideways in its well. Read from the
    * scroller's own room (its gutter kept, so a scrollbar coming never moves
@@ -145,7 +145,7 @@
       );
       const step =
         abreast > 0 ? abreast * (story + gap) - gap + insets : box.clientWidth;
-      pageWidth = Math.max(px("--spacing-c-decision-page-max"), step);
+      pageWidth = Math.max(px("--decision-page-max"), step);
     };
     read();
     const sizes = frameObserver(read);
@@ -183,7 +183,7 @@
   /**
    * The bar's fill, a scale along its track (the compositor's: Vercel's Web
    * Interface Guidelines, "prioritize GPU-accelerated properties"): one move
-   * with the count, on the count's clock (MorphText's: --duration-morph on
+   * with the count, on the count's clock (MorphText's: --duration-fade on
    * ease-out, started at the frame's own time as its letters are), from
    * where it is drawn, so a change caught mid-way turns from there (L489).
    * With less motion it lands at once (L517: a bar is travel, not a fade).
@@ -205,7 +205,7 @@
         return;
       }
       run = node.animate([{ scale: from }, { scale: to }], {
-        duration: dur("--duration-morph"),
+        duration: dur("--duration-fade"),
         easing: CURVE.out,
       });
       run.startTime = document.timeline.currentTime;
@@ -357,7 +357,7 @@
           ><MorphText text={String(count)} /> of {ids.length} picked</span
         >
         <span
-          class="h-space-1 w-0 max-w-c-decision-meter-w grow overflow-hidden rounded-xs bg-surface-recess-deep"
+          class="h-space-1 w-0 max-w-30 grow overflow-hidden rounded-xs bg-surface-sunk"
           data-box
           data-slot="meter-bar"
         >

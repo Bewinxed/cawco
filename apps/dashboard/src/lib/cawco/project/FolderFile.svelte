@@ -125,7 +125,7 @@
         <pre
           in:reveal
           data-slot="text"
-          class="m-0 font-mono text-size-code wrap-anywhere whitespace-pre-wrap text-ink-strong">{content}</pre>
+          class="m-0 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong">{content}</pre>
       {/if}
     </div>
   </div>

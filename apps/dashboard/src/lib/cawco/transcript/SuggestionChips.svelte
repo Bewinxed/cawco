@@ -52,7 +52,7 @@
    */
   function arrive(_node: HTMLElement, { i }: { i: number }) {
     return {
-      delay: i * dur("--duration-stagger"),
+      delay: i * dur("--duration-step"),
       duration: dur("--duration-panel"),
       easing: easeOut,
       css: (t: number, u: number) =>
@@ -201,7 +201,7 @@
 </script>
 
 <!-- Out of flow, standing on the composer's top edge, one line tall whatever
-     it holds (app.css `--spacing-c-suggest-room`, the row and the step under it): a
+     it holds (app.css `--suggest-room`, the row and the step under it): a
      layer over the transcript's foot, which keeps no room for it, so chips
      coming, going or changing never move the transcript (the composer's
      surface brief, The Composer Layer Rule). Past its width the line
@@ -215,8 +215,8 @@
   data-slot="suggest"
   data-filled={shown.length > 0 || slow || !!failure || undefined}
   style:--suggest-bottom="calc(100% + var(--spacing-space-2))"
-  style:--suggest-lift={"linear-gradient(to top, var(--color-surface-recess) 55%, var(--color-surface-recess-clear))"}
-  class="absolute inset-x-0 bottom-(--suggest-bottom) flex flex-col justify-end h-c-suggest-row pt-space-4 pointer-events-none data-filled:bg-(image:--suggest-lift)"
+  style:--suggest-lift={"linear-gradient(to top, var(--color-surface-recess) 55%, var(--surface-recess-clear))"}
+  class="absolute inset-x-0 bottom-(--suggest-bottom) flex flex-col justify-end h-(--suggest-row) pt-space-4 pointer-events-none data-filled:bg-(image:--suggest-lift)"
 >
   <!-- Drawn only with something in it: chips, the shimmer of an answer on
        its way, or a failure; laid out whether it is drawn or not. -->
@@ -239,7 +239,7 @@
              confidence that moves in place re-tints over --duration-panel. -->
         <button
           data-slot="suggest-chip"
-          class="select-none inline-flex items-center h-c-suggest-chip gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 border border-suggest-tint rounded-sm bg-suggest-tint shadow-tile text-ink-strong text-size-label font-medium whitespace-nowrap flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:scale-(--press-scale) hover:bg-suggest-tint-hover mark-line touch-hit"
+          class="select-none inline-flex items-center h-(--suggest-chip) gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 border border-suggest-tint rounded-sm bg-suggest-tint shadow-sm text-ink-strong text-size-label font-medium whitespace-nowrap flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:scale-(--press-scale) hover:bg-suggest-tint-hover mark-line touch-hit"
           onclick={() => choose(candidate)}
           title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ""}`}
           type="button"

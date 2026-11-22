@@ -8,7 +8,7 @@
    * a long unbroken path, one with none). Both report ElevenLabs waiting on
    * the fleet's sign-in, under every harness, as obelisk's report did: the
    * card says it once, at its head (SignInWaits). It stands on the floating surface at the machines card's width,
-   * `--spacing-c-machines-w`, and no wider than the page's column (a phone's), with
+   * `--container-xs`, and no wider than the page's column (a phone's), with
    * the list's own insets (MachinesList `--fault-indent`, `--fault-end`).
    */
   import type {
@@ -117,7 +117,7 @@
     },
   ];
   const panel = floatingSurface({
-    class: "mx-auto my-space-5 w-full max-w-c-machines-w p-space-1",
+    class: "mx-auto my-space-5 w-full max-w-xs p-space-1",
   });
 </script>
 
@@ -135,7 +135,7 @@
       >
         <div
           data-slot="row"
-          class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm px-space-2 py-space-1 text-ink-strong coarse:min-h-c-row-h"
+          class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm px-space-2 py-space-1 text-ink-strong coarse:min-h-control-lg"
         >
           <MachineRow
             hue={machineHue(index, true)}

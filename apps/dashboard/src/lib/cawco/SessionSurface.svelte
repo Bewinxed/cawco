@@ -161,7 +161,7 @@
   /* ── Caw stands in only for a real wait ──────────────────────────────────
      A wide screen with nothing open is usually a moment: the fleet is read
      and a session lands within a second. Loading and reconnecting are waits,
-     so their Caw appears only once the wait has outlasted --duration-wait-grace;
+     so their Caw appears only once the wait has outlasted --duration-loop;
      until then the area is its plain surface. Once he appears he is kept
      until his enter has played, and what lands waits for that, so he is
      never cut off mid-entrance. After that what lands is not kept waiting:
@@ -180,7 +180,7 @@
     }
     const grace = setTimeout(() => {
       waitShown = true;
-    }, dur("--duration-wait-grace"));
+    }, dur("--duration-loop"));
     return () => clearTimeout(grace);
   });
   $effect(() => {
@@ -543,7 +543,7 @@
   /* ── Board ↔ conversation ───────────────────────────────────────────
      The board is the home the groups push in over: opening a conversation
      slides the groups in from 8% toward the inline end as the board recedes
-     8% the other way and dims to 0.6, over --duration-pop on the drawer curve;
+     8% the other way and dims to 0.6, over --duration-panel on the drawer curve;
      going back to the board slides the groups off the way they came as the
      board returns. The one leaving stays drawn until its slide ends, then
      is hidden (below); input goes to the one arriving at once. Parked under
@@ -570,7 +570,7 @@
     const side =
       getComputedStyle(document.documentElement).direction === "rtl" ? -1 : 1;
     const timing: KeyframeAnimationOptions = {
-      duration: dur("--duration-pop"),
+      duration: dur("--duration-panel"),
       easing: ease("--ease-drawer"),
       fill: "forwards",
     };

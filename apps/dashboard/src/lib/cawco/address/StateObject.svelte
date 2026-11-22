@@ -97,7 +97,7 @@
   </div>
 {:else if tray.step === "secure" && tray.certs && tray.issuesCerts}
   <p
-    class="mark-line m-0 flex min-w-0 items-center gap-space-2 rounded-well border border-border-well bg-surface-well px-space-3 py-space-2"
+    class="mark-line m-0 flex min-w-0 items-center gap-space-2 rounded-sm border border-border-control bg-surface-sunk px-space-3 py-space-2"
     data-slot="secure-address"
   >
     <IconLock

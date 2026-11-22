@@ -110,7 +110,7 @@
 >
   <header class="flex flex-col gap-0 ps-space-2 pe-0 pt-space-1 pb-space-1">
     <!-- mark-line: the name is a field, a box of its own; the glyph and More stand centred on it as boxes. -->
-    <span class="flex min-h-c-btn-h-sm items-center gap-space-2">
+    <span class="flex min-h-control-sm items-center gap-space-2">
       {#if stage.kind === "you"}
         <IconNeedsYou
           aria-hidden="true"

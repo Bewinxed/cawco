@@ -31,17 +31,17 @@
     <li>
       <a
         aria-current={shown === path ? "page" : undefined}
-        class="group/file mark-line press-tint type-label inline-flex min-h-c-btn-h-sm max-w-full items-center gap-space-2 rounded-sm border border-border-control bg-surface-raised px-space-3 text-ink-strong transition-[background-color] duration-(--duration-control) ease-out focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) text-center no-underline aria-current-page:bg-selected-bg aria-current-page:text-selected-ink"
+        class="group/file mark-line press-tint type-label inline-flex min-h-control-sm max-w-full items-center gap-space-2 rounded-sm border border-border-control bg-surface-raised px-space-3 text-ink-strong transition-[background-color] duration-(--duration-control) ease-out focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) text-center no-underline aria-current-page:bg-selected-bg aria-current-page:text-brand-ink"
         data-folder-chip={path}
         href={folderFileHref(projectId, path)}
       >
         <IconDocument
           data-slot="file-icon"
-          class="size-icon-md flex-none text-ink-muted group-aria-current-page/file:text-selected-icon"
+          class="size-icon-md flex-none text-ink-muted group-aria-current-page/file:text-brand-ink"
         />
         <bdi
           data-slot="path"
-          class="min-w-0 overflow-clip font-(family-name:--font-mono) text-size-code text-ellipsis whitespace-nowrap"
+          class="min-w-0 overflow-clip font-(family-name:--font-mono) text-size-meta text-ellipsis whitespace-nowrap"
           >{path}</bdi
         >
       </a>

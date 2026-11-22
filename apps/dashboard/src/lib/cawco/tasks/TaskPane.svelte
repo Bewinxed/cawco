@@ -548,7 +548,11 @@
           </span>
         {:else}
           <span class="flex" out:revealOut>
-            <Skeleton class="w-c-task-stage-skeleton-w" height="control-sm" />
+            <Skeleton
+              class="w-(--w)"
+              style="--w: calc(var(--spacing) * 24)"
+              height="control-sm"
+            />
           </span>
         {/if}
       </div>
@@ -594,7 +598,7 @@
       <RowFault again={saveTitle} reason={titleProblem} />
       {#if decided}
         <p data-slot="decided" class="m-0 type-meta text-ink-muted">
-          Decided on <a class="text-link-ink" href={decided.href}
+          Decided on <a class="text-brand-ink" href={decided.href}
             >{decided.question
               ? `${decided.page} › ${decided.question}`
               : decided.page}</a

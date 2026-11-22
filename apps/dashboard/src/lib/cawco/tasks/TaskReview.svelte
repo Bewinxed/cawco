@@ -325,11 +325,11 @@
   {@const Icon = GLYPH[one.kind]}
   <a
     data-slot="attachment"
-    class="inline-flex items-center gap-space-1 max-w-(--attach-max-w) min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-c-btn-h-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
+    class="inline-flex items-center gap-space-1 max-w-(--attach-max-w) min-h-control-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-control-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
     href={hrefOf(one)}
     rel="noopener"
-    style:--attach-my="calc((1lh - var(--spacing-c-btn-h-xs)) / 2)"
-    style:--attach-my-coarse="calc((1lh - var(--spacing-c-btn-h-lg)) / 2)"
+    style:--attach-my="calc((1lh - var(--spacing-control-xs)) / 2)"
+    style:--attach-my-coarse="calc((1lh - var(--spacing-control-lg)) / 2)"
     style:--attach-max-w="calc(100% + var(--spacing-space-1) * 2)"
     target="_blank"
     title={titleOf(one)}
@@ -357,7 +357,7 @@
 
 <section
   aria-label="Review {task.id}"
-  class="group flex-auto grid grid-cols-1 grid-rows-(--review-rows) grid-areas-(--review-areas) @task-frame/task-frame:grid-areas-(--review-areas-wide) min-h-0 border-t border-t-border-hairline @task-frame/task-frame:grid-cols-(--review-cols) @task-frame/task-frame:grid-rows-(--review-rows-wide)"
+  class="group flex-auto grid grid-cols-1 grid-rows-(--review-rows) grid-areas-(--review-areas) @desk/task-frame:grid-areas-(--review-areas-wide) min-h-0 border-t border-t-border-hairline @desk/task-frame:grid-cols-(--review-cols) @desk/task-frame:grid-rows-(--review-rows-wide)"
   data-words-staged={wordsStage || undefined}
   style:--review-areas={'"result" "stage" "decide"'}
   style:--review-areas-wide={'"result stage" "decide decide"'}
@@ -370,7 +370,7 @@
   <div
     data-slot="result"
     style:--area="result"
-    class="row-(--area) col-(--area) flex flex-col gap-space-2 py-space-3 px-(--pane-inline) @task-frame/task-frame:min-h-0 @task-frame/task-frame:overflow-y-auto @task-frame/task-frame:overscroll-contain @task-frame/task-frame:border-e @task-frame/task-frame:border-e-border-hairline"
+    class="row-(--area) col-(--area) flex flex-col gap-space-2 py-space-3 px-(--pane-inline) @desk/task-frame:min-h-0 @desk/task-frame:overflow-y-auto @desk/task-frame:overscroll-contain @desk/task-frame:border-e @desk/task-frame:border-e-border-hairline"
     data-band="result"
   >
     {#if from}
@@ -399,7 +399,7 @@
         {/if}
         <a
           aria-label="Open its session beside this task"
-          class="inline-flex flex-none items-center gap-space-1 ms-auto h-c-btn-h-xs px-space-2 rounded-sm type-label text-ink-strong no-underline hover:bg-surface-hover hover:text-ink-strong mark-line press-tint focus-inset"
+          class="inline-flex flex-none items-center gap-space-1 ms-auto h-control-xs px-space-2 rounded-sm type-label text-ink-strong no-underline hover:bg-surface-hover hover:text-ink-strong mark-line press-tint focus-inset"
           data-box
           href={rowHref(from.instanceId)}
           onclick={(event) => {
@@ -459,7 +459,7 @@
     {#if wordsLine}
       <div
         data-slot="words"
-        class="group/words flex flex-col @task-frame/task-frame:hidden"
+        class="group/words flex flex-col @desk/task-frame:hidden"
         data-more={more || undefined}
         bind:this={wordsBox}
       >
@@ -496,7 +496,7 @@
         </div>
       </div>
       <!-- Two columns: the words whole, what to check as the list. -->
-      <div class="hidden flex-col gap-space-2 @task-frame/task-frame:flex">
+      <div class="hidden flex-col gap-space-2 @desk/task-frame:flex">
         <MessageBody source={whole} />
         {@render checkList()}
       </div>
@@ -519,7 +519,7 @@
   <div
     data-slot="stage"
     style:--area="stage"
-    class="row-(--area) col-(--area) flex flex-col min-h-0 py-space-3 px-(--pane-inline) border-y border-y-border-hairline overflow-y-auto overscroll-contain data-framed:overflow-hidden @task-frame/task-frame:border-b-none"
+    class="row-(--area) col-(--area) flex flex-col min-h-0 py-space-3 px-(--pane-inline) border-y border-y-border-hairline overflow-y-auto overscroll-contain data-framed:overflow-hidden @desk/task-frame:border-b-none"
     data-band="stage"
     data-framed={!!presented || undefined}
     id="stage-{task.id}"
@@ -548,7 +548,7 @@
        buttons; under them, who takes it up once it is sent back. -->
   {#if ended || deciding}
     <form
-      class="flex flex-col gap-space-2 pt-space-3 pb-(--decide-end) px-(--pane-inline) row-(--area) col-(--area) @task-frame/task-frame:border-t @task-frame/task-frame:border-t-border-hairline"
+      class="flex flex-col gap-space-2 pt-space-3 pb-(--decide-end) px-(--pane-inline) row-(--area) col-(--area) @desk/task-frame:border-t @desk/task-frame:border-t-border-hairline"
       data-band="decide"
       onsubmit={(event) => {
         event.preventDefault();

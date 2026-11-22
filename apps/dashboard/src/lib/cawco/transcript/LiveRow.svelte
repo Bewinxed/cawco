@@ -6,7 +6,7 @@
    *
    * A change of phase is a crossfade inside the row: the outgoing face fades
    * out on top while the incoming one fades in, and the row's height tweens
-   * from one to the other (--duration-pop, --ease-in-out: this is movement on
+   * from one to the other (--duration-panel, --ease-in-out: this is movement on
    * screen, not an entrance). Its heights are the ones frames laid out, read
    * in its size observers' deliveries: before the change, the row's last;
    * after it, the incoming face's first, where the tween starts from the
@@ -202,7 +202,7 @@
     from = null;
     if (Math.abs(end - start) >= 0.5) {
       el.animate([{ blockSize: `${start}px` }, { blockSize: `${end}px` }], {
-        duration: dur("--duration-pop"),
+        duration: dur("--duration-panel"),
         easing,
       }).finished.then(
         () => {
@@ -315,7 +315,7 @@
     <div
       data-slot="face"
       aria-hidden={face.leaving ? true : undefined}
-      class="flow-root min-w-0 data-leaving:absolute data-leaving:top-0 data-leaving:inset-x-0 data-leaving:pointer-events-none motion-safe:data-leaving:animate-face-out motion-safe:data-entering:animate-face-in"
+      class="flow-root min-w-0 data-leaving:absolute data-leaving:top-0 data-leaving:inset-x-0 data-leaving:pointer-events-none motion-safe:data-leaving:animate-fade-out motion-safe:data-entering:animate-fade-in motion-safe:data-entering:anim-dur-control"
       data-entering={face.entering || undefined}
       data-leaving={face.leaving !== null || undefined}
       inert={face.leaving !== null}

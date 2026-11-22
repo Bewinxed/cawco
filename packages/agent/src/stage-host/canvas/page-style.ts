@@ -15,28 +15,28 @@ html.cawco-canvas-page[data-theme="light"] { color-scheme: light; }
 html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
 /* Something on its way (DESIGN.md's Real Wait Rule): nothing until the wait has lasted the grace, then what stands for it,
    holding its room from the first, so nothing moves. */
-.cawco-waiting { animation: cawco-wait 1ms var(--duration-wait-grace) both; }
-/* The skeleton recipe: a surface-fill block, pulsing down to --skeleton-pulse-floor and back once a --duration-skeleton-pulse on
+.cawco-waiting { animation: cawco-wait 1ms var(--duration-loop) both; }
+/* The skeleton recipe: a surface-hover block, pulsing down to 0.5 and back once a --duration-loop on
    ease-in-out (transitions.dev Skeleton loader and reveal), still without motion. */
-.cawco-stand-in-body { inline-size: var(--spacing-c-canvas-skeleton-w); max-inline-size: 100vw; block-size: calc(var(--spacing) * 24);
-  border-radius: var(--radius-sm); background: var(--color-surface-fill); }
+.cawco-stand-in-body { inline-size: calc(var(--spacing) * 60); max-inline-size: 100vw; block-size: calc(var(--spacing) * 24);
+  border-radius: var(--radius-sm); background: var(--color-surface-hover); }
 @media (prefers-reduced-motion: no-preference) {
   .cawco-waiting { animation-duration: var(--duration-fade); animation-timing-function: var(--ease-out); }
-  .cawco-stand-in-body { animation: cawco-pulse var(--duration-skeleton-pulse) var(--ease-crossfade) infinite; }
+  .cawco-stand-in-body { animation: cawco-pulse var(--duration-loop) var(--ease-crossfade) infinite; }
 }
 @keyframes cawco-wait { from { opacity: 0; } }
-@keyframes cawco-pulse { 0%, 100% { opacity: 1; } 50% { opacity: var(--skeleton-pulse-floor); } }
+@keyframes cawco-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 /* What failed says so where it would stand: the error formula's line, then Show details. It reads raised on the page, so its
    details recess inside it in both schemes. */
 .cawco-section-failed, .cawco-stage-failed { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--spacing-space-2); inline-size: 0;
-  min-inline-size: max(100%, var(--spacing-c-canvas-skeleton-w)); box-sizing: border-box; padding: var(--spacing-space-3); background: var(--color-surface-raised);
+  min-inline-size: max(100%, calc(var(--spacing) * 60)); box-sizing: border-box; padding: var(--spacing-space-3); background: var(--color-surface-raised);
   border: 1px solid var(--color-border-hairline); border-radius: var(--radius-md); font: var(--type-body); color: var(--color-ink-strong); }
 .cawco-section-failed-line { margin: 0; font: var(--type-body); color: var(--color-status-fail-ink); text-wrap: pretty; }
 /* Who is on it, under what failed: the muted ink, a calm line beside the red one. */
 .cawco-failed-fixing { margin: 0; font: var(--type-body); color: var(--color-ink-muted); text-wrap: pretty; }
 /* Show details: the sm ghost, its words standing on the line's start (its own inset pulled back), no disclosure triangle. */
 :is(.cawco-section-failed, .cawco-stage-failed) summary { list-style: none; display: inline-flex; align-items: center; inline-size: fit-content;
-  block-size: var(--spacing-c-btn-h-sm); padding-inline: var(--spacing-space-2); margin-inline-start: calc(var(--spacing-space-2) * -1); border-radius: var(--radius-sm);
+  block-size: var(--spacing-control-sm); padding-inline: var(--spacing-space-2); margin-inline-start: calc(var(--spacing-space-2) * -1); border-radius: var(--radius-sm);
   font: var(--type-label); color: var(--color-ink-strong); cursor: pointer; }
 :is(.cawco-section-failed, .cawco-stage-failed) summary::-webkit-details-marker { display: none; }
 /* Its details stand in the card's one track: a wide code frame scrolls inside it, never widens it. */
@@ -107,38 +107,38 @@ html.cawco-stage-page .cawco-canvas { display: flex; flex-direction: column; ali
 /* A difference's ring: outside the element's box on its own shape, solid for what came in or changed, dashed for what
    went, in the stage's own layer over both drawings, taking no press. */
 .cawco-stage-rings { position: absolute; inset: 0; pointer-events: none; }
-.cawco-change-ring { --ring-out: calc(var(--spacing-c-change-ring-offset) + var(--spacing-c-change-ring-width)); position: absolute; box-sizing: border-box;
+.cawco-change-ring { --ring-out: calc(var(--spacing-space-1) + var(--focus-ring-width)); position: absolute; box-sizing: border-box;
   left: calc(var(--ring-x) - var(--ring-out)); top: calc(var(--ring-y) - var(--ring-out));
   inline-size: calc(var(--ring-w) + 2 * var(--ring-out)); block-size: calc(var(--ring-h) + 2 * var(--ring-out));
-  border: var(--spacing-c-change-ring-width) solid var(--color-c-change-ring); border-radius: calc(var(--ring-r) + var(--spacing-c-change-ring-offset)); }
+  border: var(--focus-ring-width) solid var(--color-status-done-glyph); border-radius: calc(var(--ring-r) + var(--spacing-space-1)); }
 .cawco-change-ring[data-kind="went"] { border-style: dashed; }
 /* The ring on what a row of the design graph's Animation face rests on: the change ring's stroke round the thing as it
    stands at the playhead's moment, in the same layer, taking no press. */
-.cawco-lit-ring { --ring-out: calc(var(--spacing-c-change-ring-offset) + var(--spacing-c-change-ring-width)); position: absolute; box-sizing: border-box;
+.cawco-lit-ring { --ring-out: calc(var(--spacing-space-1) + var(--focus-ring-width)); position: absolute; box-sizing: border-box;
   pointer-events: none; left: calc(var(--ring-x) - var(--ring-out)); top: calc(var(--ring-y) - var(--ring-out));
   inline-size: calc(var(--ring-w) + 2 * var(--ring-out)); block-size: calc(var(--ring-h) + 2 * var(--ring-out));
-  border: var(--spacing-c-change-ring-width) solid var(--color-c-change-ring); border-radius: var(--radius-sm); }
+  border: var(--focus-ring-width) solid var(--color-status-done-glyph); border-radius: var(--radius-sm); }
 .cawco-lit-ring[hidden] { display: none; }
 /* The alignment guides (guides.ts): a layer of the stage's own over the drawing, at its px, taking no press. One hue per kind of
    edge, a near-miss and an off-token spacing in red with its px, an on-token spacing washed green (theme.css --color-c-guide-*). */
 .cawco-guides { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: 100%; block-size: 100%;
   overflow: visible; pointer-events: none; z-index: 1; }
 .cawco-guides[hidden] { display: none; }
-.cawco-guides line { stroke-width: var(--spacing-c-guide-line); shape-rendering: crispEdges; }
-.cawco-guides [data-kind="start"] { stroke: var(--color-c-guide-start); }
-.cawco-guides [data-kind="end"] { stroke: var(--color-c-guide-end); }
-.cawco-guides [data-kind="centre"] { stroke: var(--color-c-guide-centre); }
-.cawco-guides [data-kind="baseline"] { stroke: var(--color-c-guide-baseline); stroke-dasharray: 2 2; }
-.cawco-guides rect[data-kind="surface"] { fill: none; stroke: var(--color-c-guide-surface); stroke-width: var(--spacing-c-guide-line); }
-.cawco-guides rect[data-kind="on-token"] { fill: var(--color-c-guide-on-token-wash); }
-.cawco-guides rect[data-kind="off-token"] { fill: var(--color-c-guide-off-token-wash); }
+.cawco-guides line { stroke-width: var(--border-width); shape-rendering: crispEdges; }
+.cawco-guides [data-kind="start"] { stroke: var(--color-mark-6); }
+.cawco-guides [data-kind="end"] { stroke: var(--color-mark-8); }
+.cawco-guides [data-kind="centre"] { stroke: var(--color-mark-7); }
+.cawco-guides [data-kind="baseline"] { stroke: var(--color-mark-5); stroke-dasharray: 2 2; }
+.cawco-guides rect[data-kind="surface"] { fill: none; stroke: var(--color-mark-3); stroke-width: var(--border-width); }
+.cawco-guides rect[data-kind="on-token"] { fill: color-mix(in oklab, var(--color-status-done-glyph) 14%, transparent); }
+.cawco-guides rect[data-kind="off-token"] { fill: color-mix(in oklab, var(--color-status-fail-glyph) 30%, transparent); }
 /* A gap handed out of free room (an auto margin, space-between): off every token too, drawn as its outline alone, dashed, so a
    wide stretch of it never floods the drawing red. */
-.cawco-guides rect[data-kind="free"] { fill: none; stroke: var(--color-c-guide-miss); stroke-width: var(--spacing-c-guide-line);
+.cawco-guides rect[data-kind="free"] { fill: none; stroke: var(--color-status-fail-glyph); stroke-width: var(--border-width);
   stroke-dasharray: 4 3; }
-.cawco-guides line[data-kind="miss"] { stroke: var(--color-c-guide-miss); stroke-width: var(--spacing-c-guide-miss-line); }
+.cawco-guides line[data-kind="miss"] { stroke: var(--color-status-fail-glyph); stroke-width: var(--spacing-space-row); }
 /* A px said over the drawing: the miss red, haloed in the page's ground so it reads over any line or word under it. */
-.cawco-guides text { font: var(--type-meta); font-variant-numeric: tabular-nums; fill: var(--color-c-guide-miss); text-anchor: middle;
+.cawco-guides text { font: var(--type-meta); font-variant-numeric: tabular-nums; fill: var(--color-status-fail-glyph); text-anchor: middle;
   dominant-baseline: central; paint-order: stroke; stroke: var(--color-surface-page); stroke-width: 3px; stroke-linejoin: round; }
 /* A decision page's Preview (by=embed) and a map's card (by=map), drawn by the stage (stage.ts bootColumn): each story it
    names a drawing, one under another, each at its own width, 1 CSS px per px. A drawing of no width of its own answers
@@ -152,7 +152,7 @@ html.cawco-column-page .cawco-canvas { container: cawco-width / inline-size; }
    room is narrower, and a wheel or a finger on it scrolls that page. */
 html.cawco-embed, html.cawco-embed body { block-size: auto; overflow-x: hidden; overflow-y: auto; background: var(--color-surface-page); }
 /* A map's card: the column on the well, fitted to the card by one transform (stage.ts fit). */
-html.cawco-map, html.cawco-map body { block-size: 100%; overflow: hidden; background: var(--color-surface-well); }
+html.cawco-map, html.cawco-map body { block-size: 100%; overflow: hidden; background: var(--color-surface-sunk); }
 html.cawco-map .cawco-canvas { position: fixed; inset: 0; overflow: hidden; }
 html.cawco-map .cawco-column { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: max-content;
   transform-origin: 0 0; }
@@ -161,10 +161,10 @@ html.cawco-map .cawco-column { position: absolute; inset-block-start: 0; inset-i
 .cawco-stage-failed { justify-items: start; }
 .cawco-stage-failed-head { display: flex; align-items: center; gap: var(--spacing-space-2); margin: 0; font: var(--type-label); color: var(--color-status-fail-ink); }
 .cawco-stage-failed-head svg { inline-size: var(--spacing-icon-md); block-size: var(--spacing-icon-md); flex: none; }
-.cawco-stage-failed-message { margin: 0; max-inline-size: var(--spacing-c-measure); font: var(--type-body); color: var(--color-ink-row); overflow-wrap: anywhere; }
+.cawco-stage-failed-message { margin: 0; max-inline-size: var(--spacing-measure); font: var(--type-body); color: var(--color-ink-strong); overflow-wrap: anywhere; }
 /* Try again: the kit's sm outline button. */
-.cawco-stage-failed button { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; block-size: var(--spacing-c-btn-h-sm);
-  padding-inline: var(--spacing-space-3); border: 1px solid var(--color-border-row-outline); border-radius: var(--radius-md); background: var(--color-surface-raised);
+.cawco-stage-failed button { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; block-size: var(--spacing-control-sm);
+  padding-inline: var(--spacing-space-3); border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-surface-raised);
   box-shadow: var(--shadow-xs); font: var(--type-label); color: var(--color-ink-strong); cursor: pointer; }
 @media (hover: hover) { .cawco-stage-failed button:hover { background: var(--color-surface-hover); } }
 .cawco-sr { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

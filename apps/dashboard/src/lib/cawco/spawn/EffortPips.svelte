@@ -85,7 +85,7 @@
       }
     });
   });
-  /** A bar's place in the move, counted from the bar it starts at (each a --duration-stagger on); bars that do not change wait for nothing. */
+  /** A bar's place in the move, counted from the bar it starts at (each a --duration-step on); bars that do not change wait for nothing. */
   const barStep = (i: number) => {
     if (effortIdx > cameFrom && i > cameFrom && i <= effortIdx) {
       return i - cameFrom - 1;
@@ -187,7 +187,7 @@
   data-embedded={embedded || undefined}
 >
   <div
-    class="col-start-1 row-start-1 grid content-box-start transition-[opacity] duration-(--duration-pop) ease-out"
+    class="col-start-1 row-start-1 grid content-box-start transition-[opacity] duration-(--duration-panel) ease-out"
     style:opacity={n ? 1 : 0.55}
     style:pointer-events={n ? "auto" : "none"}
   >
@@ -195,7 +195,7 @@
       data-slot="track"
       data-focus={focused || undefined}
       data-ready={ready || undefined}
-      class="group touch-hit hit-edge-hair relative h-c-btn-h-sm max-phone:h-9.5 cursor-ew-resize touch-none rounded-md border border-border-control bg-surface-raised shadow-none transition-control-ring select-none not-data-ready:transition-none data-focus:outline-solid data-focus:outline-(length:--focus-ring-width) data-focus:outline-focus-ring data-focus:outline-offset-(--focus-ring-inset)"
+      class="group touch-hit hit-edge-hair relative h-control-sm max-phone:h-9.5 cursor-ew-resize touch-none rounded-md border border-border-control bg-surface-raised shadow-none transition-control-ring select-none not-data-ready:transition-none data-focus:outline-solid data-focus:outline-(length:--focus-ring-width) data-focus:outline-focus-ring data-focus:outline-offset-(--focus-ring-inset)"
       onpointercancel={() => {
         draft = null;
         drag = false;
@@ -215,12 +215,12 @@
       >
         <div
           data-slot="fill"
-          class="pointer-events-none absolute top-0 bottom-0 left-0 flex items-center justify-end rounded-md bg-surface-recess-deep p-space-row motion-safe:transition-[width] motion-safe:duration-(--ns-fill-ms) motion-safe:ease-in-out group-not-data-ready:transition-none"
+          class="pointer-events-none absolute top-0 bottom-0 left-0 flex items-center justify-end rounded-md bg-surface-sunk p-space-row motion-safe:transition-[width] motion-safe:duration-(--ns-fill-ms) motion-safe:ease-in-out group-not-data-ready:transition-none"
           style:width={`calc(var(--kw) + ${p} * (100% - var(--kw)))`}
         >
           <div
             data-slot="knob"
-            class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-space-2 font-sans text-size-label leading-none font-medium text-ink-muted capitalize num shadow-knob transition-[color,opacity] pointer-events-none duration-(--duration-control) ease-out whitespace-nowrap group-not-data-ready:transition-none data-active:text-ink-strong"
+            class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-raised px-space-2 font-sans text-size-label leading-none font-medium text-ink-muted capitalize num shadow-sm transition-[color,opacity] pointer-events-none duration-(--duration-control) ease-out whitespace-nowrap group-not-data-ready:transition-none data-active:text-ink-strong"
             data-active={active || undefined}
             style:--bars={n}
             style:opacity={n ? 1 : 0.7}
@@ -262,7 +262,7 @@
                     />
                     <rect
                       data-slot="bar-fill"
-                      class="origin-bottom transform-(--t) transform-fill fill-ink-strong motion-safe:transition-[transform] motion-safe:delay-(--delay) motion-safe:duration-(--duration-morph) motion-safe:ease-out group-not-data-ready:transition-none"
+                      class="origin-bottom transform-(--t) transform-fill fill-ink-strong motion-safe:transition-[transform] motion-safe:delay-(--delay) motion-safe:duration-(--duration-fade) motion-safe:ease-out group-not-data-ready:transition-none"
                       height="10"
                       rx="1"
                       style:--delay={staggered(barStep(i))}

@@ -41,11 +41,16 @@
       <Table.Header>
         <Table.Row variant="band">
           <Table.Head variant="band">{words.columnItem}</Table.Head>
-          <Table.Head class="w-c-ledger-when-w" variant="band"
-            >{words.columnLastCall}</Table.Head
+          <Table.Head
+            class="w-(--w)"
+            style="--w: calc(var(--spacing) * 24)"
+            variant="band">{words.columnLastCall}</Table.Head
           >
-          <Table.Head class="w-c-ledger-when-w" edge="end" variant="band"
-            >{words.columnSessions}</Table.Head
+          <Table.Head
+            class="w-(--w)"
+            style="--w: calc(var(--spacing) * 24)"
+            edge="end"
+            variant="band">{words.columnSessions}</Table.Head
           >
         </Table.Row>
       </Table.Header>
@@ -55,7 +60,7 @@
             <Table.Cell rule="top" variant="ledger">
               <span class="flex min-w-0 items-baseline gap-space-2">
                 <span
-                  class="min-w-0 truncate font-mono text-ink-row"
+                  class="min-w-0 truncate font-mono text-ink-strong"
                   title={row.name}>{row.name}</span
                 >
                 <span class="flex-none text-ink-subtle"
@@ -65,7 +70,12 @@
                 >
               </span>
             </Table.Cell>
-            <Table.Cell class="w-c-ledger-when-w" rule="top" variant="ledger">
+            <Table.Cell
+              class="w-(--w)"
+              style="--w: calc(var(--spacing) * 24)"
+              rule="top"
+              variant="ledger"
+            >
               {#if row.lastAt === null}
                 <span class="text-ink-subtle">{words.noCallIn(table.days)}</span
                 >
@@ -78,7 +88,8 @@
               {/if}
             </Table.Cell>
             <Table.Cell
-              class="w-c-ledger-when-w"
+              class="w-(--w)"
+              style="--w: calc(var(--spacing) * 24)"
               edge="end"
               rule="top"
               variant="ledger"

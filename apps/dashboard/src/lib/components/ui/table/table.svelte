@@ -53,18 +53,18 @@
      * the last card is unruled.
      */
     narrow: {
-      table: "@max-table-424px/table:block",
-      body: "@max-table-424px/table:block",
-      header: "@max-table-424px/table:hidden",
+      table: "@max-sm/table:block",
+      body: "@max-sm/table:block",
+      header: "@max-sm/table:hidden",
       section:
-        "@max-table-424px/table:block @max-table-424px/table:[&>*]:flex @max-table-424px/table:[&_th:not(:first-child)]:hidden",
+        "@max-sm/table:block @max-sm/table:[&>*]:flex @max-sm/table:[&_th:not(:first-child)]:hidden",
       row: {
         stacks:
-          "@max-table-424px/table:grid @max-table-424px/table:grid-cols-(--card-cols) @max-table-424px/table:items-center @max-table-424px/table:gap-x-space-3 @max-table-424px/table:gap-y-space-1 @max-table-424px/table:border-b @max-table-424px/table:border-b-border-hairline @max-table-424px/table:px-space-3 @max-table-424px/table:py-space-2 @max-table-424px/table:[&:is(tbody>tr):last-child]:border-b-none",
+          "@max-sm/table:grid @max-sm/table:grid-cols-(--card-cols) @max-sm/table:items-center @max-sm/table:gap-x-space-3 @max-sm/table:gap-y-space-1 @max-sm/table:border-b @max-sm/table:border-b-border-hairline @max-sm/table:px-space-3 @max-sm/table:py-space-2 @max-sm/table:[&:is(tbody>tr):last-child]:border-b-none",
       },
       cell: {
         ledger:
-          "@max-table-424px/table:block @max-table-424px/table:h-auto @max-table-424px/table:w-auto @max-table-424px/table:border-none @max-table-424px/table:p-0",
+          "@max-sm/table:block @max-sm/table:h-auto @max-sm/table:w-auto @max-sm/table:border-none @max-sm/table:p-0",
       },
     },
   } as const;
@@ -102,7 +102,7 @@
      * row's first line, for a ledger whose cells can wrap under their
      * first line (a refusal under a row's state), so every cell's first
      * line shares one centre line. Its content's first line stands the row
-     * pitch tall (`min-h-c-ledger-row-h`) to keep that line centred.
+     * pitch tall (`min-h-control-lg`) to keep that line centred.
      */
     settle: { top: "align-top" },
     /**
@@ -135,13 +135,13 @@
        * cell is a block at that tier, and the fold comes after it.
        */
       /** The task ledger's Labels: from a 1102px ledger, never in the card. */
-      "tasks-labels": "@max-table-1102px/table:hidden @max-phone/table:hidden",
+      "tasks-labels": "@max-wide/table:hidden @max-phone/table:hidden",
       /** The task ledger's Created: from an 878px ledger, never in the card. */
-      "tasks-created": "@max-table-878px/table:hidden @max-phone/table:hidden",
+      "tasks-created": "@max-desk/table:hidden @max-phone/table:hidden",
       /** The task ledger's To-dos: from a 766px ledger, and in the card. */
-      "tasks-todos": "@phone/table:@max-table-766px/table:hidden",
-      /** The task ledger's Id: from a 670px ledger, and in the card. */
-      "tasks-id": "@phone/table:@max-table-670px/table:hidden",
+      "tasks-todos": "@phone/table:@max-desk/table:hidden",
+      /** The task ledger's Id: stands at every width and in the card. */
+      "tasks-id": "",
       /*
        * The routine runs ledger's, by the same rule, Result its floor: When
        * (96px) and Outcome (176px) stand beside it, Took (80px) from
@@ -150,13 +150,12 @@
        * card (`stacks="narrow"`).
        */
       /** The runs ledger's Took: from a 576px ledger, never in the card. */
-      "runs-took":
-        "@max-table-576px/table:hidden @max-table-424px/table:hidden",
+      "runs-took": "@max-md/table:hidden",
       /**
        * In a ledger narrower than the Routines block's measure
        * (`c-block-routines`, 34rem), whose row then says it in its own line.
        */
-      measure: "@max-table-34rem/table:hidden",
+      measure: "@max-md/table:hidden",
     },
   } as const;
 

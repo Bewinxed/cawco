@@ -257,7 +257,7 @@
 
 <section
   aria-label={firstRunWords.title}
-  class="mx-auto flex w-full max-w-c-page-line flex-col items-stretch gap-space-5"
+  class="mx-auto flex w-full max-w-104 flex-col items-stretch gap-space-5"
 >
   <figure class="m-0 flex flex-col items-center gap-space-2">
     <Caw
@@ -276,8 +276,8 @@
   <!-- mark-line: the folder glyph heads the title and its meta as a pair in the lead column; the steps below are rows of their own. -->
   <div
     data-slot="first-run"
-    class="grid grid-cols-(--row-cols) gap-x-space-3 rounded-lg bg-surface-raised p-space-4 shadow-tile"
-    style:--row-cols="var(--spacing-c-mark) minmax(0, 1fr)"
+    class="grid grid-cols-(--row-cols) gap-x-space-3 rounded-lg bg-surface-raised p-space-4 shadow-sm"
+    style:--row-cols="var(--mark-box) minmax(0, 1fr)"
   >
     <span class="mark-cell row-span-2"
       ><IconFolder

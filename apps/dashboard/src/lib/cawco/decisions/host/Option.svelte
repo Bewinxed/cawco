@@ -73,9 +73,9 @@
   /** Its media name themselves by its label (page.svelte.ts `pieceName`). */
   /** Its line's type; its cost's and builds'. */
   const LINE_LOOK =
-    "type-body min-w-0 max-w-c-measure text-pretty text-ink-strong wrap-anywhere";
+    "type-body min-w-0 max-w-measure text-pretty text-ink-strong wrap-anywhere";
   const META_LOOK =
-    "type-meta min-w-0 max-w-c-measure text-pretty text-ink-muted wrap-anywhere";
+    "type-meta min-w-0 max-w-measure text-pretty text-ink-muted wrap-anywhere";
   setContext<PieceNames>(PIECE_NAME, () => plainOf(String(props.label ?? id)));
   const keycap = $derived((order?.().indexOf(id) ?? -1) + 1);
   const media = $derived(Array.isArray(props.media) ? props.media : []);

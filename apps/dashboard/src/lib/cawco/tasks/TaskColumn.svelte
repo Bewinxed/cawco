@@ -138,7 +138,7 @@
   {@attach land(() => `stage:${label}`)}
 >
   <header data-slot="head" class="flex flex-col gap-0 px-space-2 py-space-1">
-    <span class="mark-line flex min-h-c-btn-h-xs items-center gap-space-2">
+    <span class="mark-line flex min-h-control-xs items-center gap-space-2">
       {#if kind === "you"}
         <IconNeedsYou
           aria-hidden="true"
@@ -181,7 +181,7 @@
     data-slot="cards"
     class={[
       !phone.current && "kit-edge-fade-block",
-      "m-0 flex min-h-c-btn-h-lg flex-auto list-none flex-col gap-space-1 overflow-y-auto p-0 max-phone:flex-none max-phone:overflow-visible",
+      "m-0 flex min-h-control-lg flex-auto list-none flex-col gap-space-1 overflow-y-auto p-0 max-phone:flex-none max-phone:overflow-visible",
     ]}
     bind:this={list}
     {@attach reflow()}
@@ -217,7 +217,7 @@
               onpick(task.id, !on, event.shiftKey);
             }}
             reveal="card-pick"
-            style="--pick-top: calc(var(--spacing-space-2) + (var(--spacing-c-badge-h) - var(--spacing-icon-md)) / 2)"
+            style="--pick-top: calc(var(--spacing-space-2) + (var(--spacing-icon-lg) - var(--spacing-icon-md)) / 2)"
           />
         {/if}
         {#if moving?.(task.id)}

@@ -35,7 +35,7 @@
     </p>
   {:else if media.still}
     <p
-      class="mark-line m-0 flex min-h-c-btn-h items-center gap-space-2 rounded-pill bg-surface-recess px-space-3 text-ink-muted"
+      class="mark-line m-0 flex min-h-control-md items-center gap-space-2 rounded-pill bg-surface-recess px-space-3 text-ink-muted"
       data-slot="sound-still"
     >
       <IconAudio class="size-icon-md flex-none" />

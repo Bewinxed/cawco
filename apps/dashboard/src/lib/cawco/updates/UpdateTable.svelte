@@ -35,11 +35,17 @@
   >
     {#snippet heads()}
       <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-      <Table.Head class="w-c-ledger-outcome-w" scope="col" variant="band"
-        >Running</Table.Head
+      <Table.Head
+        class="w-(--w)"
+        style="--w: calc(var(--spacing) * 44)"
+        scope="col"
+        variant="band">Running</Table.Head
       >
-      <Table.Head class="w-c-matrix-col-w" scope="col" variant="band"
-        >Update</Table.Head
+      <Table.Head
+        class="w-(--w)"
+        style="--w: calc(var(--spacing) * 56)"
+        scope="col"
+        variant="band">Update</Table.Head
       >
       <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
     {/snippet}

@@ -118,7 +118,7 @@
     {#each CARDS as card (card.channel)}
       {@const found = release(card.channel)}
       <RadioGroup.Item
-        class="relative flex flex-col rounded-md border border-border-control bg-transparent px-space-4 pt-space-7 pb-space-4 type-meta text-start text-ink-strong transition-control hover:bg-surface-hover no-hover:active:bg-surface-fill unhovered:active:bg-surface-fill focus-visible:-outline-offset-2 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+        class="relative flex flex-col rounded-md border border-border-control bg-transparent px-space-4 pt-space-6 pb-space-4 type-meta text-start text-ink-strong transition-control hover:bg-surface-hover no-hover:active:bg-surface-hover unhovered:active:bg-surface-hover focus-visible:-outline-offset-2 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
         value={card.channel}
       >
         <span data-slot="name" class="relative z-2 type-label text-ink-strong"
@@ -147,7 +147,7 @@
               amount: 2,
             }}
             out:blur={{
-              duration: dur("--duration-exit"),
+              duration: dur("--duration-fade"),
               easing: easeOut,
               amount: 2,
             }}
@@ -168,7 +168,7 @@
               ></circle>
               <path
                 d="M6.2 10.4l2.5 2.5 5.1-5.6"
-                class="stroke-selected-icon dash-unit motion-safe:animate-check-draw motion-safe:anim-delay-ghost"
+                class="stroke-brand-ink dash-unit motion-safe:animate-check-draw motion-safe:anim-delay-control"
                 pathLength="1"
                 stroke-width="1.8"
               ></path>

@@ -73,7 +73,7 @@
     >
       <span
         aria-hidden="true"
-        class="size-icon-sm rounded-pill inset-ring inset-ring-border-row-outline"
+        class="size-icon-sm rounded-pill inset-ring inset-ring-border-strong"
         data-box
       ></span>
     </DropdownMenu.RadioItem>

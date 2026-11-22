@@ -21,7 +21,7 @@
   } = $props();
 </script>
 
-<div class="w-field-group max-w-full">
+<div class="w-sm max-w-full">
   <Collapsible.Root {open}>
     <Collapsible.Trigger class="group w-full" look="fold">
       <IconChevronRight

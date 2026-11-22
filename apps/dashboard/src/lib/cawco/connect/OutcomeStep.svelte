@@ -46,7 +46,7 @@
   function arrive(_node: Element) {
     const travel = motionOk.current;
     return {
-      duration: dur("--duration-toggle"),
+      duration: dur("--duration-fade"),
       easing: easeOut,
       css: (t: number) =>
         travel
@@ -128,8 +128,8 @@
             class={[
               "size-(--status-dot-size) rounded-pill",
               machine?.status === "online"
-                ? "bg-presence-online"
-                : "bg-presence-off",
+                ? "bg-status-done-glyph"
+                : "bg-ink-subtle",
             ]}
             data-box
           ></span>

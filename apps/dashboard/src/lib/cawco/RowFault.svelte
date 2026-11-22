@@ -196,7 +196,7 @@
       {#if command}
         <div
           data-slot="command"
-          class="ms-(--fault-indent) me-(--fault-end) mb-space-1 flex min-w-0 items-start gap-space-2 rounded-well border border-border-well bg-surface-well py-space-1 ps-space-3 pe-space-1"
+          class="ms-(--fault-indent) me-(--fault-end) mb-space-1 flex min-w-0 items-start gap-space-2 rounded-sm border border-border-control bg-surface-sunk py-space-1 ps-space-3 pe-space-1"
         >
           <code
             class="min-w-0 flex-1 py-space-1 font-mono type-code text-ink-strong whitespace-pre-wrap wrap-anywhere"

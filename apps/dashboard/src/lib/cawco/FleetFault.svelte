@@ -114,7 +114,7 @@
           return;
         }
         fold(node, next, {
-          ms: dur(next ? "--duration-pop" : "--duration-exit"),
+          ms: dur(next ? "--duration-panel" : "--duration-fade"),
           easing: CURVE.out,
           fade: true,
           gap,
@@ -303,7 +303,7 @@
            minimum; measured at 14.6px. -->
           <button
             aria-expanded={expanded}
-            class="select-none group/disclose mark-line touch-hit inline-flex min-h-space-7 items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 ms-auto hover:opacity-100"
+            class="select-none group/disclose mark-line touch-hit inline-flex min-h-space-6 items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 ms-auto hover:opacity-100"
             data-box
             onclick={() => {
               expanded = !expanded;
@@ -342,7 +342,7 @@
           {/if}
         </p>
 
-        <p data-slot="why" class="max-w-c-measure text-size-body font-normal">
+        <p data-slot="why" class="max-w-measure text-size-body font-normal">
           {copy.why}
         </p>
 
@@ -400,7 +400,7 @@
           {:else}
             <button
               aria-expanded={disclosureOpen}
-              class="select-none group/disclose mark-line touch-hit -ms-space-2 inline-flex min-h-space-7 items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 hover:opacity-100"
+              class="select-none group/disclose mark-line touch-hit -ms-space-2 inline-flex min-h-space-6 items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 hover:opacity-100"
               onclick={() => {
                 disclosureOpen = !disclosureOpen;
               }}
@@ -428,7 +428,7 @@
           {/if}
         {/if}
 
-        <p class="max-w-c-measure text-size-body font-normal">
+        <p class="max-w-measure text-size-body font-normal">
           {copy.fix}
         </p>
 

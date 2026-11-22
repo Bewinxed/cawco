@@ -32,14 +32,14 @@
       size: {
         default: "",
         compact:
-          "[--px:var(--spacing-c-segment-pad-x)] coarse:[--item:calc(var(--spacing)_*_7)]",
+          "[--px:var(--spacing-space-3)] coarse:[--item:calc(var(--spacing)_*_7)]",
       },
       variant: {
         /* The kit's one segmented recipe (fluid-tabs/thumb.ts): its groove, pad,
            segment height and concentric corners, on a page's ground (in a
            bar's glass the switch is BarSegments); the chosen segment
            lifted in surface-lift. */
-        segmented: `${SEGMENTED_TRACK} [--sheet:var(--color-surface-lift)]`,
+        segmented: `${SEGMENTED_TRACK} [--sheet:var(--color-surface-raised)]`,
         folder:
           "isolate gap-0 rounded-none bg-transparent [--item:calc(var(--spacing)_*_7)] [--pad:var(--spacing-space-1)] [--radius:var(--radius-sm)] [--sheet:var(--color-surface-raised)] ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--duration-settle)] [--choose-ease:var(--ease-crossfade)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:calc(var(--spacing)_*_0)] [--slope-start:calc(var(--spacing)_*_0.25)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-(--z,var(--z-rest,1)) [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap)",
       },
@@ -56,7 +56,7 @@
         variant: "segmented",
         size: "compact",
         class:
-          "[--item:var(--spacing-c-btn-h-xs)] [--pad:var(--spacing-space-row)]",
+          "[--item:var(--spacing-control-xs)] [--pad:var(--spacing-space-row)]",
       },
     ],
   });
@@ -1176,7 +1176,7 @@
     <div
       data-slot="segment"
       aria-hidden="true"
-      class="pointer-events-none absolute start-0 top-0 z-1 rounded-(--shape) bg-(--sheet) shadow-raised in-variant-folder:hidden hover-hover:beside-ghost:opacity-85 data-travelling:transition-off motion-safe:transition-segment motion-safe:data-travelling:transition-off"
+      class="pointer-events-none absolute start-0 top-0 z-1 rounded-(--shape) bg-(--sheet) shadow-sm in-variant-folder:hidden hover-hover:beside-ghost:opacity-85 data-travelling:transition-off motion-safe:transition-segment motion-safe:data-travelling:transition-off"
       style:transform="translate({at.left}px,{at.top}px)"
       style:width="{at.width}px"
       style:height="{at.height}px"
@@ -1190,7 +1190,7 @@
     <div
       data-slot="ring"
       aria-hidden="true"
-      class="pointer-events-none absolute start-0 top-0 z-4 rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:duration-(--duration-ghost) motion-safe:ease-out"
+      class="pointer-events-none absolute start-0 top-0 z-4 rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:duration-(--duration-step) motion-safe:ease-out"
       style:transform="translate({focusRect.left}px,{focusRect.top}px)"
       style:width="{focusRect.width}px"
       style:height="{focusRect.height}px"

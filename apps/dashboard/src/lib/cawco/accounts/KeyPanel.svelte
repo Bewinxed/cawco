@@ -117,7 +117,7 @@
   {#if result?.ok}
     <span
       data-slot="ok"
-      class="mark-line type-meta inline-flex items-center gap-space-1 text-ink-row"
+      class="mark-line type-meta inline-flex items-center gap-space-1 text-ink-strong"
       ><Check /><span>{words.sent}</span></span
     >
   {:else if result}
@@ -177,7 +177,7 @@
       {#each machines as machine (machine.machineId)}
         {@const online = machineOnline(machine)}
         <li
-          class="flex min-h-c-btn-h flex-wrap items-center justify-between gap-x-space-3 gap-y-space-1 not-first:border-t not-first:border-t-border-hairline"
+          class="flex min-h-control-md flex-wrap items-center justify-between gap-x-space-3 gap-y-space-1 not-first:border-t not-first:border-t-border-hairline"
         >
           <span
             data-slot="pick"

@@ -22,8 +22,8 @@
     & .pswp__button {
       display: grid;
       place-items: center;
-      inline-size: var(--spacing-c-top-bar-h);
-      block-size: var(--spacing-c-top-bar-h);
+      inline-size: var(--spacing-control-lg);
+      block-size: var(--spacing-control-lg);
       border: 1px solid var(--color-border-hairline);
       border-radius: var(--radius-sm);
       background: var(--color-surface-raised);
@@ -42,7 +42,7 @@
       }
     }
     & .pswp__button--arrow {
-      margin-block-start: calc(var(--spacing-c-top-bar-h) / -2);
+      margin-block-start: calc(var(--spacing-control-lg) / -2);
     }
     & .pswp__button--arrow--prev {
       inset-inline-start: var(--spacing-space-3);
@@ -56,7 +56,7 @@
     & .pswp__counter {
       display: grid;
       place-items: center;
-      block-size: var(--spacing-c-top-bar-h);
+      block-size: var(--spacing-control-lg);
       margin: 0;
       padding-inline: var(--spacing-space-3);
       border: 1px solid var(--color-border-hairline);

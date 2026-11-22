@@ -90,7 +90,7 @@
         {@const hung = tab === chosen && joined}
         <!-- The tab's box the card hangs from, as PaneTabs wraps its tabs. -->
         <div
-          class="group/tab pane-tab-pads pane-tab-rims relative flex max-w-c-tab-max-w min-w-0 flex-none"
+          class="group/tab pane-tab-pads pane-tab-rims relative flex max-w-60 min-w-0 flex-none"
           data-chosen={tab === chosen ? "" : undefined}
           data-flush={hung ? (flush ?? undefined) : undefined}
           data-hung={hung ? "" : undefined}

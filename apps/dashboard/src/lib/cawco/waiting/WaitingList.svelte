@@ -73,15 +73,15 @@
       <li class="relative" data-waiting-row>
         <!-- The face is the highlight's row: hover, press and focus draw on its one rounded box. -->
         <button
-          class="focus-inset press-tint grid w-full grid-cols-(--waiting-cols) items-start gap-x-c-row-inset rounded-sm px-c-row-inset py-space-2 text-start"
+          class="focus-inset press-tint grid w-full grid-cols-(--waiting-cols) items-start gap-x-space-3 rounded-sm px-space-3 py-space-2 text-start"
           data-kind={row.kind}
           data-waiting-face
           onclick={() => onopen(row)}
-          style:--waiting-cols="var(--spacing-c-row-lead) minmax(0, 1fr)"
+          style:--waiting-cols="var(--spacing-row-compact) minmax(0, 1fr)"
           type="button"
         >
           <span
-            class="mark-cell type-body w-c-row-lead text-ink-muted"
+            class="mark-cell type-body w-row-compact text-ink-muted"
             title={waitingWords.kind[row.kind]}
             data-box
           >
@@ -100,8 +100,8 @@
         </button>
         <RowFault
           again={() => onopen(row)}
-          end="var(--spacing-c-row-inset)"
-          indent="calc(var(--spacing-c-row-inset) * 2 + var(--spacing-c-row-lead))"
+          end="var(--spacing-space-3)"
+          indent="calc(var(--spacing-space-3) * 2 + var(--spacing-row-compact))"
           reason={faultOf(row)}
         />
       </li>

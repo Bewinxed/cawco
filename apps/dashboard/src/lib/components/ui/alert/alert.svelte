@@ -15,7 +15,7 @@
       /** A notice on a card: the raised surface, the control's edge, the
           card's corner and its tile shadow. */
       surface: {
-        card: "rounded-lg border border-border-control bg-surface-raised shadow-tile",
+        card: "rounded-lg border border-border-control bg-surface-raised shadow-sm",
       },
       /** A one-line notice beside its action (DESIGN.md, Alert: "a compact
           tinted row"): its words centred on the action, not hung from the

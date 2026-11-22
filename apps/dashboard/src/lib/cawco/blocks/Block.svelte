@@ -11,7 +11,7 @@
    *   one column still sets the desk's ("On wider screens"); Hide; and for a
    *   custom view, Show as a tab.
    * - **Body:** the block's content, as its card or bare (a view or a board
-   *   draws its own surfaces); a list stands at most --spacing-c-block-body-max tall
+   *   draws its own surfaces); a list stands at most --block-body-max tall
    *   on a desk and scrolls inside; the board fills the page's height.
    *
    * While a block is in the air its own box stays as a slot (surface-recess,
@@ -116,8 +116,8 @@
   data-flip
   data-span={span}
   style:grid-column="span {span}"
-  style:--fill-h-coarse={"calc(var(--block-fill) - var(--spacing-c-btn-h-lg) - var(--spacing-space-2))"}
-  style:--fill-h-fine={"calc(var(--block-fill) - var(--spacing-c-btn-h-sm) - var(--spacing-space-2))"}
+  style:--fill-h-coarse={"calc(var(--block-fill) - var(--spacing-control-lg) - var(--spacing-space-2))"}
+  style:--fill-h-fine={"calc(var(--block-fill) - var(--spacing-control-sm) - var(--spacing-space-2))"}
   {@attach dropOnBlock(drag, () => ({ block: id, columns, page }))}
   {@attach resizing &&
     morph({ width: true, on: ["data-wide", "data-narrow", "data-span"] })}
@@ -126,7 +126,7 @@
        twice (its head and body hidden). -->
   <header
     data-slot="block-head"
-    class="mark-line press-tint flex min-h-c-btn-h-sm min-w-0 cursor-grab items-center gap-space-2 rounded-md px-space-1 select-none touch-callout-none group-data-dragging/block:invisible coarse:min-h-c-btn-h-lg data-block-preview:bg-surface-raised data-block-preview:px-space-3 data-block-preview:shadow-overlay"
+    class="mark-line press-tint flex min-h-control-sm min-w-0 cursor-grab items-center gap-space-2 rounded-md px-space-1 select-none touch-callout-none group-data-dragging/block:invisible coarse:min-h-control-lg data-block-preview:bg-surface-raised data-block-preview:px-space-3 data-block-preview:shadow-lg"
     {@attach dragHead(drag, () => ({ block: id, page }))}
   >
     <span
@@ -215,7 +215,7 @@
   <div
     data-card={card || undefined}
     data-slot="block-body"
-    class="flex min-w-0 flex-col group-data-dragging/block:invisible group-body-capped/block:phone:max-h-c-block-body-max group-body-capped/block:phone:overflow-y-auto group-body-capped/block:phone:overscroll-contain group-body-fill/block:h-(--fill-h-fine) group-body-fill/block:coarse:h-(--fill-h-coarse) data-card:overflow-x-hidden not-group-body-capped/block:data-card:overflow-y-hidden max-phone:data-card:overflow-y-hidden data-card:rounded-lg data-card:bg-surface-raised data-card:shadow-tile"
+    class="flex min-w-0 flex-col group-data-dragging/block:invisible group-body-capped/block:phone:max-h-120 group-body-capped/block:phone:overflow-y-auto group-body-capped/block:phone:overscroll-contain group-body-fill/block:h-(--fill-h-fine) group-body-fill/block:coarse:h-(--fill-h-coarse) data-card:overflow-x-hidden not-group-body-capped/block:data-card:overflow-y-hidden max-phone:data-card:overflow-y-hidden data-card:rounded-lg data-card:bg-surface-raised data-card:shadow-sm"
   >
     {@render children()}
   </div>
@@ -227,7 +227,7 @@
       aria-hidden="true"
       class="pointer-events-none absolute z-2 rounded-hair bg-brand-solid before:absolute before:size-1.5 before:rounded-pill before:bg-brand-solid edge-bottom:inset-x-0 edge-bottom:bottom-(--drop-off) edge-bottom:h-0.5 edge-bottom:before:start-(--dot-out) edge-bottom:before:top-(--dot-mid) edge-left:inset-y-0 edge-left:start-(--drop-off) edge-left:w-0.5 edge-left:before:start-(--dot-mid) edge-left:before:top-(--dot-out) edge-right:inset-y-0 edge-right:end-(--drop-off) edge-right:w-0.5 edge-right:before:start-(--dot-mid) edge-right:before:top-(--dot-out) edge-top:inset-x-0 edge-top:top-(--drop-off) edge-top:h-0.5 edge-top:before:start-(--dot-out) edge-top:before:top-(--dot-mid)"
       data-edge={over}
-      style:--drop-off={"calc(var(--spacing-space-group) / -2 - calc(var(--spacing) * 0.5) / 2)"}
+      style:--drop-off={"calc(var(--spacing-space-5) / -2 - calc(var(--spacing) * 0.5) / 2)"}
       style:--dot-mid={"calc((calc(var(--spacing) * 0.5) - calc(var(--spacing) * 1.5)) / 2)"}
       style:--dot-out={"calc(calc(var(--spacing) * 1.5) / -2)"}
     ></span>

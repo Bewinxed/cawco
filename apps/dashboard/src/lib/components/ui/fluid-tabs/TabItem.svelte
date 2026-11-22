@@ -430,15 +430,15 @@
     "in-variant-folder:data-trailed:pe-(--fold-end-pad)",
     "data-tab-item-selected:text-ink-strong hover-hover:data-ghosted:not-data-tab-item-selected:text-ink-strong",
     "in-variant-folder:data-tab-item-selected:text-ink-muted",
-    "motion-safe:transition-[color] motion-safe:duration-(--duration-ghost) motion-safe:ease-out",
-    "in-variant-folder:motion-safe:[transition:color_var(--duration-ghost)_var(--ease-out),--pick_var(--choose-dur)_var(--choose-ease)]",
+    "motion-safe:transition-[color] motion-safe:duration-(--duration-step) motion-safe:ease-out",
+    "in-variant-folder:motion-safe:[transition:color_var(--duration-step)_var(--ease-out),--pick_var(--choose-dur)_var(--choose-ease)]",
     "[[data-variant=folder]_[data-ride]_&]:transition-off",
     "hit-pressed:bg-surface-pressed in-variant-folder:hit-pressed:bg-transparent light:hit-pressed:text-ink-strong hit-pressed:[--sheet-press:var(--color-surface-pressed)]",
     // A glyph alone is narrower than a finger: under one it takes the touch
     // floor across, its glyph centred (The 44 Touch Rule), since its
     // neighbours' edges bound its hit area.
     glyphOnly &&
-      "coarse:min-w-c-touch-floor coarse:[&>[data-hit]]:justify-center",
+      "coarse:min-w-control-lg coarse:[&>[data-hit]]:justify-center",
     className
   )}
   data-flush={flush}

@@ -939,7 +939,7 @@
    * folds to nothing whole, its space with it.
    */
   const REPO_COLS =
-    "calc((var(--spacing-c-row-lead) + var(--spacing-space-3)) * var(--lead-share)) minmax(0, 1fr) calc(var(--spacing-icon-md) + var(--spacing-space-3)) max-content";
+    "calc((var(--spacing-row-compact) + var(--spacing-space-3)) * var(--lead-share)) minmax(0, 1fr) calc(var(--spacing-icon-md) + var(--spacing-space-3)) max-content";
   /** A row's lead cell: its mark on the lead's own width, clipped as the lead folds, fading with it. */
   const LEAD =
     "col-start-1 mark-cell min-w-0 justify-start overflow-clip opacity-(--lead-share) motion-safe:transition-opacity motion-safe:duration-(--duration-panel) motion-safe:ease-in-out";
@@ -958,9 +958,9 @@
 <div data-slot="repo-picker" class="grid min-w-0 gap-space-2">
   <label
     data-slot="location-section-field"
-    class="field-edge flex h-c-row-h min-w-0 items-center gap-space-3 rounded-md border bg-surface-raised pe-space-3 shadow-xs transition-control"
+    class="field-edge flex h-control-lg min-w-0 items-center gap-space-3 rounded-md border bg-surface-raised pe-space-3 shadow-xs transition-control"
   >
-    <span class="grid w-c-row-lead flex-none place-items-center self-stretch"
+    <span class="grid w-row-compact flex-none place-items-center self-stretch"
       ><Search class="size-icon-md text-ink-subtle" /></span
     >
     <input
@@ -1220,12 +1220,12 @@
             data-slot="repo-row-skeleton"
           >
             <span class={LEAD}
-              ><span class="mark-cell w-c-row-lead"
+              ><span class="mark-cell w-row-compact"
                 ><Skeleton cell="avatar" radius="pill" /></span
               ></span
             >
             <span
-              class="col-start-2 flex h-lh items-center type-label @max-repo-narrow/repos:col-span-3"
+              class="col-start-2 flex h-lh items-center type-label @max-sm/repos:col-span-3"
               data-box
               style:--bar={bars.name}
               ><Skeleton
@@ -1236,7 +1236,7 @@
               /></span
             >
             <span
-              class="col-start-4 flex h-lh items-center justify-end ps-space-3 type-meta @max-repo-narrow/repos:row-start-2"
+              class="col-start-4 flex h-lh items-center justify-end ps-space-3 type-meta @max-sm/repos:row-start-2"
               data-box
               ><Skeleton
                 height="x-height"
@@ -1322,7 +1322,7 @@
            chosen: the chip above names that owner (the lead's track and its
            ink, on the prefix's clock). -->
       <span class={LEAD} data-box
-        ><span class="mark-cell w-c-row-lead"
+        ><span class="mark-cell w-row-compact"
           >{@render avatar(one.owner, "size-icon-lg")}</span
         ></span
       >
@@ -1331,7 +1331,7 @@
       <span
         data-slot="name"
         data-box
-        class="col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label font-medium text-ink-row group-aria-selected:text-selected-ink @max-repo-narrow/repos:col-span-3"
+        class="col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label font-medium text-ink-strong group-aria-selected:text-brand-ink @max-sm/repos:col-span-3"
         ><span
           data-slot="owner"
           aria-hidden={Boolean(owner) || undefined}
@@ -1347,7 +1347,7 @@
       {/if}
       <span
         data-slot="updated"
-        class="col-start-4 ps-space-3 num type-meta text-end whitespace-nowrap text-ink-muted @max-repo-narrow/repos:row-start-2"
+        class="col-start-4 ps-space-3 num type-meta text-end whitespace-nowrap text-ink-muted @max-sm/repos:row-start-2"
         >{formatAgeShort(Date.parse(one.updatedAt))}</span
       >
       {@const worn = mark?.(one) ?? ""}
@@ -1373,7 +1373,7 @@
      what the machine said of it under the name. -->
 {#snippet urlFields(look: UrlFace)}
   <span class={LEAD} data-box
-    ><span class="mark-cell w-c-row-lead"
+    ><span class="mark-cell w-row-compact"
       ><span class="icon-swap"
         ><span data-active={!look.repo}
           >{#if look.github}<ProviderLogo
@@ -1395,7 +1395,7 @@
   <span
     data-slot="name"
     data-box
-    class="col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label font-medium text-ink-row group-aria-selected:text-selected-ink @max-repo-narrow/repos:col-span-3"
+    class="col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label font-medium text-ink-strong group-aria-selected:text-brand-ink @max-sm/repos:col-span-3"
     ><span class="font-normal text-ink-muted"
       >{look.host
         ? spawnWords.location.onHost(look.host)
@@ -1407,7 +1407,7 @@
   {/if}
   <span
     data-slot="updated"
-    class="col-start-4 ps-space-3 num type-meta text-end whitespace-nowrap text-ink-muted @max-repo-narrow/repos:row-start-2"
+    class="col-start-4 ps-space-3 num type-meta text-end whitespace-nowrap text-ink-muted @max-sm/repos:row-start-2"
     ><MorphText
       text={look.repo ? formatAgeShort(Date.parse(look.repo.updatedAt)) : ""}
     /></span
@@ -1434,7 +1434,7 @@
     <span
       data-slot="social-image"
       data-box
-      class="relative col-span-3 col-start-2 row-start-3 aspect-2/1 w-full max-w-64 overflow-clip rounded-xs bg-surface-well outline-1 -outline-offset-1 outline-image-outline"
+      class="relative col-span-3 col-start-2 row-start-3 aspect-2/1 w-full max-w-64 overflow-clip rounded-xs bg-surface-sunk outline-1 -outline-offset-1 outline-image-outline"
       in:unfold
       out:unfold
     >
@@ -1462,7 +1462,7 @@
       <span
         {...tip}
         aria-label={PRIVATE}
-        class="col-start-3 mark-cell justify-self-end text-ink-muted @max-repo-narrow/repos:row-start-2"
+        class="col-start-3 mark-cell justify-self-end text-ink-muted @max-sm/repos:row-start-2"
         data-box
         data-slot="private"
         role="img"

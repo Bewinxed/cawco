@@ -31,7 +31,7 @@
   setSidebar({ open: () => true, setOpen: () => undefined });
 </script>
 
-<div class="flex w-c-rail-sheet-w max-w-full flex-col py-space-2">
+<div class="flex w-71 max-w-full flex-col py-space-2">
   <Sidebar.Content>
     <Sidebar.Group pad="rail">
       <Sidebar.Menu aria-label="Places" gap="tight">

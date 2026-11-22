@@ -113,9 +113,9 @@
   }
 </script>
 
-<div class="rounded-md overflow-hidden border border-border bg-neutral-2">
+<div class="rounded-md overflow-hidden border border-border-control bg-neutral-2">
   <div
-    class="flex items-center justify-between px-3 py-2 bg-card border-b border-border font-mono text-meta text-ink-muted"
+    class="flex items-center justify-between px-3 py-2 bg-surface-raised border-b border-border-control font-mono text-meta text-ink-muted"
   >
     <span class="break-all flex-1 min-w-0">{filePath}</span>
     <Button
@@ -140,7 +140,7 @@
   <div data-slot="body" class="relative grid" {@attach morph()}>
     {#if failure}
       <div
-        class="mark-line row-start-1 col-start-1 min-w-0 flex items-center justify-center gap-2 p-space-8 type-label text-error-9"
+        class="mark-line row-start-1 col-start-1 min-w-0 flex items-center justify-center gap-2 p-space-8 type-label text-status-fail-glyph"
         role="alert"
         in:crossIn
         out:crossOut

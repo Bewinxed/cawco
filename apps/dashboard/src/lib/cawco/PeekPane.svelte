@@ -342,7 +342,7 @@
            own. -->
       <header
         data-slot="bar"
-        class="flex h-c-top-bar-h items-center gap-space-2 ps-space-4 pe-space-2"
+        class="flex h-control-lg items-center gap-space-2 ps-space-4 pe-space-2"
       >
         <h2
           class="mark-line m-0 flex min-w-0 flex-1 items-center gap-space-2 text-body font-medium"
@@ -554,7 +554,7 @@
       {damagedWords(row.damaged)}
     </p>
   {:else if stale}
-    <p class="border-t border-border/50 px-4 py-3 type-meta text-ink-muted">
+    <p class="border-t border-border-control/50 px-4 py-3 type-meta text-ink-muted">
       {UNKNOWN_HINT}
     </p>
   {/if}
@@ -563,7 +563,7 @@
        Capped, because a peek is a glance — a forty-step plan scrolls inside
        its own section rather than pushing the tail off. -->
   {#if progress && progress.total > 0}
-    <div class="flex flex-col border-t border-border/50 pb-3">
+    <div class="flex flex-col border-t border-border-control/50 pb-3">
       <p class="px-4 pt-3 pb-space-1 type-label">
         {planWords.plan} · {progress.done} of {progress.total}
       </p>
@@ -584,7 +584,7 @@
        and drawing the next row over them. -->
   {#key target.viewId}
     <div
-      class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto border-t border-border/50 px-4 py-3 [&>*]:shrink-0"
+      class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto border-t border-border-control/50 px-4 py-3 [&>*]:shrink-0"
       {@attach followTail()}
     >
       {#if session?.loading && tail.length === 0}
@@ -593,7 +593,7 @@
         </p>
       {:else if session?.readFault && tail.length === 0}
         <!-- A read that failed is not a session with nothing to say. -->
-        <p class="type-meta text-error-9">
+        <p class="type-meta text-status-fail-glyph">
           Couldn't read this session: {session.readFault.message}
         </p>
       {:else if tail.length === 0 && !session?.streaming}
@@ -623,7 +623,7 @@
             </p>
           {:else if message.type === "result.error"}
             <!-- A failed turn's last words are the agent's too: flat. -->
-            <p class="line-clamp-3 type-body wrap-break-word text-error-9">
+            <p class="line-clamp-3 type-body wrap-break-word text-status-fail-glyph">
               {plainMarkdown(message.content)}
             </p>
           {:else}

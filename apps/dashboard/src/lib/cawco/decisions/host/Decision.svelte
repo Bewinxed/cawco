@@ -30,7 +30,7 @@
   the page.
 
   "Add a note" folds into the note's field on one clock (open over
-  `--duration-pop`, shut over `--duration-exit`, The Fast Exit Rule), inside the
+  `--duration-panel`, shut over `--duration-fade`, The Fast Exit Rule), inside the
   card's height tween; the note is kept as it is typed, and its field stays
   open while it holds words: emptied, it folds back into "Add a note" once
   focus leaves it. Its words name what the note is for when the program
@@ -198,7 +198,7 @@
   /**
    * Every option carries pictures and none a piece of a real width: the
    * options stand side by side in one equal column each, their pictures at
-   * one scale, one under another under `@pictures-split`.
+   * one scale, one under another under `@phone`.
    */
   const comparing = $derived(
     storyWidth === 0 &&
@@ -214,7 +214,7 @@
     }
     return mediaWidth > 0
       ? "grid-cols-fit-story max-phone:grid-cols-1"
-      : "grid-cols-1 @media-split:grid-cols-2";
+      : "grid-cols-1 @phone:grid-cols-2";
   });
   /** The options' columns: on their widest piece's pitch, one equal column each when comparing pictures, else as many words as fit. */
   const optionColumns = $derived.by(() => {
@@ -222,8 +222,8 @@
       return "grid-cols-fit-story max-phone:grid-cols-1";
     }
     return comparing
-      ? "grid-cols-1 @pictures-split:grid-cols-options"
-      : "grid-cols-fit-c-decision-option-min";
+      ? "grid-cols-1 @phone:grid-cols-options"
+      : "grid-cols-fit-48";
   });
   let optionsGrid = $state<HTMLDivElement>();
   /**
@@ -395,7 +395,7 @@
   let noteKey = false;
   let noteFirst = true;
   // "Add a note" and the field fold on one clock, the field opening over
-  // --duration-pop and shutting over --duration-exit (The Fast Exit Rule), the card's
+  // --duration-panel and shutting over --duration-fade (The Fast Exit Rule), the card's
   // height tween following them (motion/morph); a key's press lands at once.
   $effect(() => {
     const shown = noteOpen;
@@ -412,7 +412,7 @@
       return;
     }
     const clock = {
-      ms: dur(shown ? "--duration-pop" : "--duration-exit"),
+      ms: dur(shown ? "--duration-panel" : "--duration-fade"),
       easing: ease("--ease-out"),
       fade: true,
     };
@@ -470,7 +470,7 @@
       disabled={!bridge()}
       {multiple}
     >
-      <!-- Options whose every one carries pictures (Image, which fits its slot) stand in one equal column each where the body holds them (`@pictures-split`), one under another below. Options with a piece of a real width (a Preview's, a drawing's, a diagram's) stand on their widest picture's pitch, each at its real size in a well that hugs it, as many abreast as the card holds, one under another at the card's full width where one is wider than a column (it scrolls sideways in its well), one left alone on the last row spanning it (`data-lone`); under the phone's line one under another, each well reaching the screen's edges as far as its picture does (`data-bleeds`, Well.svelte). Options of words stand at least 190px each. An option holding a page-sized Preview that names no width (a whole screen that lays itself out to its frame, `data-fills`) stands its card's options one to a row, so it has the card's whole width. -->
+      <!-- Options whose every one carries pictures (Image, which fits its slot) stand in one equal column each where the body holds them (`@phone`), one under another below. Options with a piece of a real width (a Preview's, a drawing's, a diagram's) stand on their widest picture's pitch, each at its real size in a well that hugs it, as many abreast as the card holds, one under another at the card's full width where one is wider than a column (it scrolls sideways in its well), one left alone on the last row spanning it (`data-lone`); under the phone's line one under another, each well reaching the screen's edges as far as its picture does (`data-bleeds`, Well.svelte). Options of words stand at least 190px each. An option holding a page-sized Preview that names no width (a whole screen that lays itself out to its frame, `data-fills`) stands its card's options one to a row, so it has the card's whole width. -->
       <div
         bind:this={optionsGrid}
         class={[
@@ -532,7 +532,7 @@
     </div>
     {#if advice}
       <p
-        class="type-body max-w-c-measure text-pretty text-ink-muted wrap-anywhere"
+        class="type-body max-w-measure text-pretty text-ink-muted wrap-anywhere"
         data-slot="why"
       >
         <Words text={advice} />

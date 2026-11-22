@@ -60,7 +60,7 @@ export function markLook(mark: ReferenceMark): MarkLook {
     case "decision":
       return { glyph: IconDecisions };
     case "change":
-      return { glyph: IconRefresh, tone: "text-c-change-ring" };
+      return { glyph: IconRefresh, tone: "text-status-done-glyph" };
     default:
       return mark satisfies never;
   }

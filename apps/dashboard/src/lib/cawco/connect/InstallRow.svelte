@@ -142,7 +142,7 @@
   data-state={install.state}
   aria-haspopup="dialog"
   aria-label="{name}: {line}. Open"
-  class="select-none group/install flex h-c-row-h-two w-full items-center gap-space-2 rounded-sm px-space-2 text-start text-ink-strong transition-control hover:bg-surface-hover press-tint focus-inset"
+  class="select-none group/install flex h-14 w-full items-center gap-space-2 rounded-sm px-space-2 text-start text-ink-strong transition-control hover:bg-surface-hover press-tint focus-inset"
   onclick={(event) => connect.openInstall(install.id, event.currentTarget)}
   {@attach clock.watch}
 >
@@ -165,7 +165,7 @@
       <span
         data-slot="name"
         data-box
-        class="flex min-w-0 flex-1 whitespace-nowrap type-label text-ink-row"
+        class="flex min-w-0 flex-1 whitespace-nowrap type-label text-ink-strong"
         ><span class="min-w-0 overflow-clip text-ellipsis">{split[0]}</span
         >{#if split[1]}<span class="flex-none">{split[1]}</span>{/if}</span
       >

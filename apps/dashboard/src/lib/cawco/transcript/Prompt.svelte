@@ -333,7 +333,7 @@
         handOn = false;
         next.focus();
       }
-    }, dur("--duration-panel-exit"));
+    }, dur("--duration-panel"));
   });
 
   /**
@@ -723,7 +723,7 @@
   <h2
     class="mark-line flex items-center gap-space-2 mb-space-2 text-size-label font-medium text-ink-strong opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
     style:--part="0"
-    style:--part-delay="calc(var(--part) * var(--duration-stagger))"
+    style:--part-delay="calc(var(--part) * var(--duration-step))"
   >
     <span
       data-slot="glyph"
@@ -798,11 +798,11 @@
       data-slot="body"
       class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="1"
-      style:--part-delay="calc(var(--part) * var(--duration-stagger))"
+      style:--part-delay="calc(var(--part) * var(--duration-step))"
     >
       <p
         data-slot="lede"
-        class="type-body text-ink-strong mb-space-2 max-w-c-measure wrap-anywhere text-pretty"
+        class="type-body text-ink-strong mb-space-2 max-w-measure wrap-anywhere text-pretty"
       >
         {browserAsk.reason}
       </p>
@@ -822,7 +822,7 @@
            the line opens. -->
       <div
         data-slot="browser-other"
-        class="mb-space-2 flex h-c-input-h min-w-0 items-center gap-space-2"
+        class="mb-space-2 flex h-control-md min-w-0 items-center gap-space-2"
       >
         <OptionGroup
           aria-label={`Other answer to: ${browserAsk.reason}`}
@@ -867,7 +867,7 @@
       data-slot="foot"
       class="flex-none pt-space-1 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
-      style:--part-delay="calc(var(--part) * var(--duration-stagger))"
+      style:--part-delay="calc(var(--part) * var(--duration-step))"
     >
       <!-- A refusal stands over the pair: the card grows upward from the
            composer's pill, so nothing under the thumb moves as it appears. -->
@@ -928,9 +928,9 @@
       data-slot="body"
       class="group/body kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain coarse:pb-(--hit-reach) opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       data-railed={questions.length > 1 || undefined}
-      style:--hit-reach={"calc((var(--spacing-c-touch-floor) - var(--spacing-c-btn-h-sm)) / 2)"}
+      style:--hit-reach={"calc((var(--spacing-control-lg) - var(--spacing-control-sm)) / 2)"}
       style:--part="1"
-      style:--part-delay="calc(var(--part) * var(--duration-stagger))"
+      style:--part-delay="calc(var(--part) * var(--duration-step))"
     >
       <!-- The live question's rail, on its lede's inline edge. -->
       {#if rail}
@@ -959,7 +959,7 @@
              does. -->
         <p
           data-slot="lede"
-          class="type-body text-ink-strong mb-space-2 max-w-c-measure wrap-anywhere text-pretty group-data-railed/body:ps-space-2"
+          class="type-body text-ink-strong mb-space-2 max-w-measure wrap-anywhere text-pretty group-data-railed/body:ps-space-2"
           id="{claimId}-q{qi}"
           bind:this={ledes[qi]}
         >
@@ -1087,7 +1087,7 @@
       data-slot="foot"
       class="flex-none pt-space-1 coarse:pt-space-2 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
-      style:--part-delay="calc(var(--part) * var(--duration-stagger))"
+      style:--part-delay="calc(var(--part) * var(--duration-step))"
     >
       <div class="flex gap-space-2">
         <Button
@@ -1132,13 +1132,13 @@
       data-slot="body"
       class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain coarse:-mx-space-3 coarse:px-space-3 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="1"
-      style:--part-delay="calc(var(--part) * var(--duration-stagger))"
+      style:--part-delay="calc(var(--part) * var(--duration-step))"
     >
       <!-- What will happen, in the title's weight: the line the grant is
            made on. -->
       <p
         data-slot="lede"
-        class="text-size-body font-medium leading-body text-ink-strong mb-space-1 max-w-c-measure wrap-anywhere text-pretty"
+        class="text-size-body font-medium leading-body text-ink-strong mb-space-1 max-w-measure wrap-anywhere text-pretty"
       >
         {presentation.summary}
       </p>
@@ -1239,7 +1239,7 @@
       data-slot="foot"
       class="flex-none pt-space-1 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
-      style:--part-delay="calc(var(--part) * var(--duration-stagger))"
+      style:--part-delay="calc(var(--part) * var(--duration-step))"
     >
       <!-- JOURNEY §Triage: the full row width sits between grant and
            refusal. At --spacing-space-2 the two sat 7px apart, close enough that a
@@ -1303,7 +1303,7 @@
              10.25px micro-label step. -->
         <div class="mt-space-8 pt-space-5 border-t border-t-border-hairline">
           <p
-            class="text-size-body font-normal text-ink-muted mb-space-2 max-w-c-measure"
+            class="text-size-body font-normal text-ink-muted mb-space-2 max-w-measure"
           >
             This would allow <span
               class="font-(family-name:--font-mono) text-size-label"

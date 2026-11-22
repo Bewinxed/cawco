@@ -5,14 +5,14 @@
  * `meta.changes` less the person's looks in its `seen` map, read from the doc
  * this page holds, so every screen of the canvas marks the same.
  *
- * Each changed element wears the ring the pages wear (`--color-c-change-ring`,
- * `--spacing-c-change-ring-width` heavy, `--spacing-c-change-ring-offset` outside its box,
+ * Each changed element wears the ring the pages wear (`--color-status-done-glyph`,
+ * `--focus-ring-width` heavy, `--spacing-space-1` outside its box,
  * so it never covers its strokes or words) on a layer of its own over the
  * scene, in the scene's coordinates: it pans and zooms with the drawing,
  * takes no press, and fades off over `--duration-fade` once seen. An ellipse is
  * ringed as an ellipse, a diamond as a diamond, a rounded box at its own
  * radius grown by as much. A ring pings once as it lands and again when a
- * step reaches it: its halo, the same shape, grows `--spacing-c-change-ping-spread`
+ * step reaches it: its halo, the same shape, grows `--spacing-space-3`
  * outward as it fades over `--duration-loop`, its line kept as heavy
  * (`vector-effect: non-scaling-stroke`); with less motion it stands still.
  *
@@ -139,10 +139,10 @@ const ringOut = (): number => {
   const root = getComputedStyle(document.documentElement);
   const offset =
     Number.parseFloat(
-      root.getPropertyValue("--spacing-c-change-ring-offset")
+      root.getPropertyValue("--spacing-space-1")
     ) || 3;
   const line =
-    Number.parseFloat(root.getPropertyValue("--spacing-c-change-ring-width")) ||
+    Number.parseFloat(root.getPropertyValue("--focus-ring-width")) ||
     2;
   return offset + line / 2;
 };
@@ -151,7 +151,7 @@ const ringOut = (): number => {
 const pingSpread = (): number =>
   Number.parseFloat(
     getComputedStyle(document.documentElement).getPropertyValue(
-      "--spacing-c-change-ping-spread"
+      "--spacing-space-3"
     )
   ) || 10;
 

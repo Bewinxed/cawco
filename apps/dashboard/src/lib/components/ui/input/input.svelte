@@ -51,7 +51,7 @@
         inline: {
           box: "min-w-0",
           field:
-            "h-c-btn-h-sm text-ellipsis border-transparent bg-transparent px-c-field-inline-inset text-ink-row shadow-none not-focus-visible:hover:bg-surface-hover focus-visible:bg-surface-raised",
+            "h-control-sm text-ellipsis border-transparent bg-transparent px-(--field-inline-inset) text-ink-strong shadow-none not-focus-visible:hover:bg-surface-hover focus-visible:bg-surface-raised",
         },
         /** A field in a list of keys and values (a task's own fields): a
             small button's height and its cell's tighter corner, flat, its

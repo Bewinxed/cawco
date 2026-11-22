@@ -134,7 +134,7 @@
     "--ease-in-out",
     "--ease-drawer",
     "--ease-crossfade",
-    "--ease-goo",
+    "--ease-drawer",
     "linear",
   ] as const;
   const houseEasing = (token: (typeof HOUSE)[number]) =>
@@ -313,7 +313,7 @@
   <!-- The undo glyph's slot after its chip, held whether or not the value
        changed (as the Controls face holds its column), so no chip moves or
        wraps to another line as the glyph comes and goes. -->
-  <span class="flex w-c-btn-h-xs flex-none items-center justify-center">
+  <span class="flex w-control-xs flex-none items-center justify-center">
     {#if resets[key]}
       {@const said = resets[key]}
       <Tip label={said}>
@@ -351,7 +351,7 @@
     <span
       class={[
         "num min-w-0 overflow-clip text-ellipsis whitespace-nowrap",
-        edits.has(key) ? "text-ink-strong" : "text-ink-row",
+        edits.has(key) ? "text-ink-strong" : "text-ink-strong",
       ]}
       data-slot="chip-label">{value}</span
     >
@@ -369,7 +369,7 @@
     <Popover.Root bind:open={delayOpen.open}>
       {@render chip(words.delay, words.ms(figure(delay)), "start", null)}
       <Popover.Content align="start" pad="inset">
-        <InputGroup.Root class="w-c-graph-figure-w">
+        <InputGroup.Root class="w-(--w)" style="--w: calc(var(--spacing) * 42)">
           <InputGroup.Addon>
             <InputGroup.Button
               aria-label={words.earlier}
@@ -443,7 +443,7 @@
           <span class="min-w-0 flex-1 type-label text-ink-muted"
             >{words.ownLength}</span
           >
-          <InputGroup.Root class="w-c-graph-figure-w">
+          <InputGroup.Root class="w-(--w)" style="--w: calc(var(--spacing) * 42)">
             <InputGroup.Input
               field="number"
               max={LONGEST}
@@ -540,7 +540,7 @@
           >
             {#each values as one (one.property)}
               {@const said = propertyName(one.property)}
-              <span class="min-w-0 truncate type-label text-ink-row"
+              <span class="min-w-0 truncate type-label text-ink-strong"
                 >{said}</span
               >
               <Input

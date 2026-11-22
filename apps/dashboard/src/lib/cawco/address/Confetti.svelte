@@ -52,7 +52,7 @@
           ],
           {
             duration:
-              dur("--duration-hold") + Math.random() * dur("--duration-panel"),
+              dur("--duration-loop") + Math.random() * dur("--duration-panel"),
             delay: Math.random() * dur("--duration-control"),
             easing: CURVE.out,
             fill: "both",

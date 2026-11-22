@@ -114,11 +114,12 @@
   data-slot="bulk"
   data-safe-bottom
   aria-label="Selected tasks"
-  class="fixed inset-x-space-3 bottom-(--off-bottom) z-(--layer-toolbar) flex min-h-(--min-h) w-fit flex-wrap items-center justify-center gap-space-1 mx-auto border border-border-control rounded-lg bg-surface-raised shadow-overlay py-space-1 pr-space-1 pl-space-3 max-phone:bottom-(--off-bottom-phone)"
+  class="fixed inset-x-space-3 bottom-(--off-bottom) z-(--z) flex min-h-(--min-h) w-fit flex-wrap items-center justify-center gap-space-1 mx-auto border border-border-control rounded-lg bg-surface-raised shadow-lg py-space-1 pr-space-1 pl-space-3 max-phone:bottom-(--off-bottom-phone)"
   role="toolbar"
+  style:--z="calc(var(--layer-bar) + 10)"
   style:--off-bottom="calc(var(--spacing-space-5) + var(--safe-bottom, 0px))"
-  style:--off-bottom-phone={"calc(var(--spacing-c-composer-panel) + var(--spacing-space-4) + var(--safe-bottom) + var(--spacing-space-2))"}
-  style:--min-h="calc(var(--spacing-c-btn-h-sm) + var(--spacing-space-2))"
+  style:--off-bottom-phone={"calc(var(--composer-panel) + var(--spacing-space-4) + var(--safe-bottom) + var(--spacing-space-2))"}
+  style:--min-h="calc(var(--spacing-control-sm) + var(--spacing-space-2))"
 >
   {#if run}
     <!-- The change in flight, drawn where it was asked for. -->
@@ -282,7 +283,7 @@
                   {#if task.attempts[0]}
                     <a
                       data-slot="session"
-                      class="ms-auto flex-none type-meta text-link-ink"
+                      class="ms-auto flex-none type-meta text-brand-ink"
                       href="/session/{task.attempts[0].instanceId}"
                       >its session</a
                     >

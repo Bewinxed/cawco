@@ -29,7 +29,7 @@
   {...props}
   bind:this={card}
   class={[
-    "row-span-3 flex min-h-c-touch-floor min-w-0 flex-col items-center justify-center gap-space-2 rounded-lg border-2 p-space-4 text-center transition-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid",
+    "row-span-3 flex min-h-control-lg min-w-0 flex-col items-center justify-center gap-space-2 rounded-lg border-2 p-space-4 text-center transition-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid",
     open
       ? "border-brand-solid bg-surface-raised"
       : "border-dashed border-border-control can-hover:hover:bg-surface-hover",
@@ -38,14 +38,14 @@
   type="button"
 >
   <span
-    class="grid size-c-roster-face place-items-center rounded-lg bg-surface-recess-deep text-ink-muted"
+    class="grid size-12 place-items-center rounded-lg bg-surface-sunk text-ink-muted"
   >
     <IconPlus aria-hidden="true" class="size-icon-md" />
   </span>
   <span class="type-body font-medium text-ink-strong wrap-anywhere">
     {resume === null ? decidesWords.addMember : decidesWords.resume(resume)}
   </span>
-  <span class="max-w-c-measure type-meta text-ink-muted text-pretty">
+  <span class="max-w-measure type-meta text-ink-muted text-pretty">
     {decidesWords.addMemberNote}
   </span>
 </button>

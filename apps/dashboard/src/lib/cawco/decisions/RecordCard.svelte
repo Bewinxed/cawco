@@ -60,7 +60,7 @@
 
 <article
   data-slot="record"
-  class="flex min-w-0 scroll-mt-space-4 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+  class="flex min-w-0 scroll-mt-space-4 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-sm"
   id={card.id}
 >
   {#if card.still}
@@ -199,7 +199,7 @@
         </div>
         <div
           data-slot="fold"
-          class="group/fold grid max-w-full grid-rows-shut transition-[grid-template-rows] duration-(--duration-exit) ease-out data-open:grid-rows-open data-open:duration-(--duration-panel) motion-reduce:transition-off motion-reduce:data-open:duration-(--duration-panel)"
+          class="group/fold grid max-w-full grid-rows-shut transition-[grid-template-rows] duration-(--duration-fade) ease-out data-open:grid-rows-open data-open:duration-(--duration-panel) motion-reduce:transition-off motion-reduce:data-open:duration-(--duration-panel)"
           data-open={open || undefined}
           id="{fid}-others"
           inert={!open}

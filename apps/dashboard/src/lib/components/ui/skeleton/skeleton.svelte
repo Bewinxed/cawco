@@ -6,14 +6,14 @@
    * The one loading placeholder (DESIGN.md, Skeleton): a `surface-fill`
    * block at exactly the size of what it stands for. It pulses while it
    * waits (transitions.dev Skeleton loader and reveal): its opacity down to
-   * `--skeleton-pulse-floor` and back once a `--duration-skeleton-pulse`, on
+   * `--skeleton-pulse-floor` and back once a `--duration-loop`, on
    * ease-in-out; without motion it sits still. Where it hands its place to
    * what it stood for, its block goes by `revealOut` and the content comes
    * by `reveal` (motion/curves). Each prop names what it stands for,
    * never a number.
    */
   const skeletonVariants = tv({
-    base: "loops block rounded-sm bg-surface-fill motion-safe:animate-skeleton-pulse motion-safe:[animation-delay:var(--loop-at)]",
+    base: "loops block rounded-sm bg-surface-hover motion-safe:animate-pulse motion-safe:[animation-delay:var(--loop-at)]",
     variants: {
       /** The block it holds the place of, at that block's height. */
       height: {
@@ -28,25 +28,25 @@
         chart: "h-48",
         board: "h-64",
         /** A stage of Caw's setup draft still coming: a draft column's height. */
-        "draft-column": "h-c-draft-col-h",
+        "draft-column": "h-(--draft-col-h)",
         /** A word's bar at its text's x-height, so it sits like the word's body. */
-        "x-height": "h-c-skeleton-x-height",
+        "x-height": "h-x-height",
         /** A card's picture well, at the ghost picture's 16:10. */
         picture: "aspect-16/10",
         /** A decision page's live screen in its well: a screen's 16:10 under the media cap, as its frame stands (decisions host Preview.svelte). */
-        screen: "aspect-16/10 max-h-c-media-max-h",
+        screen: "aspect-16/10 max-h-vb-80",
         /** The default 36px button, or a 36px row of a menu or a finder. */
-        control: "h-c-btn-h",
+        control: "h-control-md",
         /** A small (30px) button or chip, or a rail row. */
-        "control-sm": "h-c-btn-h-sm",
+        "control-sm": "h-control-sm",
         /** A text field. */
-        field: "h-c-input-h",
+        field: "h-control-md",
         /** A badge or a run's status chip. */
-        badge: "h-c-badge-h",
+        badge: "h-icon-lg",
         /** A suggestion chip under the composer. */
-        chip: "h-c-suggest-chip",
+        chip: "h-(--suggest-chip)",
         /** A stat tile. */
-        stat: "h-c-stat-h",
+        stat: "h-22",
         /** A card on a project's board. */
         card: "h-13.5",
         /** A finder row with its reason under its name. */
@@ -69,7 +69,7 @@
         title: "w-40",
         "chart-cap": "max-w-144",
         /** A relative age ("3d"): two characters of the text it stands in. */
-        age: "w-c-skeleton-age",
+        age: "w-ch-2",
       },
       radius: {
         card: "rounded-lg",
@@ -87,11 +87,11 @@
         /** A 16px glyph's own cell. */
         glyph: "size-icon-md",
         /** A speaker's or a row's 18px identity mark. */
-        mark: "size-c-row-mark",
+        mark: "size-4.5",
         /** An owner's avatar in a list row's lead (a repository's owner). */
         avatar: "size-icon-lg",
         /** A comment pin's disc. */
-        pin: "size-c-pin",
+        pin: "size-row-compact",
       },
       /** The text role it stands in, so its x-height and its ch are that role's. */
       type: { label: "type-label", meta: "type-meta" },

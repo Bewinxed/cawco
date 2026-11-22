@@ -37,7 +37,7 @@
   } = $props();
 </script>
 
-<div class="w-field-group max-w-full">
+<div class="w-sm max-w-full">
   <Alert {layout} {surface} {variant}>
     {#if Icon}
       <Icon />

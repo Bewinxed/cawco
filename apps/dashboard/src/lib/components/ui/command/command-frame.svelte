@@ -18,7 +18,7 @@
 </script>
 
 <div
-  class="w-field-group max-w-full overflow-clip rounded-lg border border-border-control bg-surface-raised"
+  class="w-sm max-w-full overflow-clip rounded-lg border border-border-control bg-surface-raised"
 >
   <Command.Root value="" shouldFilter={false}>
     <Command.Input

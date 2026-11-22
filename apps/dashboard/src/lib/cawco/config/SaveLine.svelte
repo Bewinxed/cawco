@@ -18,7 +18,7 @@
     words: { saving: string; saved: string; notSaved: string };
   } = $props();
 
-  const lineBlur = (tier: "--duration-panel" | "--duration-exit") => ({
+  const lineBlur = (tier: "--duration-panel" | "--duration-fade") => ({
     duration: dur(tier),
     easing: easeOut,
     amount: 2,
@@ -27,14 +27,14 @@
 
 <p
   aria-live="polite"
-  class="mark-line m-0 grid min-h-c-btn-h-sm items-center type-meta text-ink-muted"
+  class="mark-line m-0 grid min-h-control-sm items-center type-meta text-ink-muted"
   data-slot="save"
 >
   {#key phase}
     <span
       class="mark-line col-start-1 row-start-1 flex items-center gap-space-2"
       in:blur={lineBlur("--duration-panel")}
-      out:blur={lineBlur("--duration-exit")}
+      out:blur={lineBlur("--duration-fade")}
     >
       {#if phase === "saving"}
         <LiveDot data-pulse size="row" tone="muted" />

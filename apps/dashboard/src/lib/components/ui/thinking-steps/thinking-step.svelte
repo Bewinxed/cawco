@@ -66,7 +66,7 @@
     ink?: StepInk;
     /**
      * This step is new — it appeared under a block already on screen — and
-     * fades in (--duration-menu). Read once, at mount: a step drawn with its block
+     * fades in (--duration-control). Read once, at mount: a step drawn with its block
      * (history, a block opened, a remount) never replays.
      */
     enters?: boolean;
@@ -97,7 +97,7 @@
   /**
    * A step's glyph changing cross-fades in its cell (--duration-control), and the
    * connector a step gains when the next one starts draws down from it
-   * (--duration-toggle). Neither plays on a step's first render.
+   * (--duration-fade). Neither plays on a step's first render.
    */
   function glyphFade(_node: Element) {
     return {
@@ -108,7 +108,7 @@
   }
   function draw(_node: Element) {
     return {
-      duration: dur("--duration-toggle"),
+      duration: dur("--duration-fade"),
       easing: easeOut,
       css: (t: number) => `transform-origin: top; scale: 1 ${t}`,
     };
@@ -183,7 +183,7 @@
          muted ink, strong at the middle of a band three times the words'
          width, sliding across them once a breath (`light`). -->
     <div
-      class="flex min-w-0 flex-1 flex-col gap-space-1 pb-space-2 motion-safe:data-enters:animate-thinking-step-in"
+      class="flex min-w-0 flex-1 flex-col gap-space-1 pb-space-2 motion-safe:data-enters:animate-fade-in motion-safe:data-enters:anim-dur-control"
       data-enters={entering || undefined}
     >
       {#if label}

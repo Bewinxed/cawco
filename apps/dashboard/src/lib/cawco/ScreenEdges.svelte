@@ -94,7 +94,7 @@
      box, and Safari fell back to the page's background (the body's, the
      bottom edge): the status bar took the page's ground on the home and the
      drawer's surface while it was open. Over every layer, toasts' (sonner,
-     --layer-toast) included (--layer-screen-edge): the strip is the colour of whatever stands on its edge,
+     --layer-top) included (--layer-screen-edge): the strip is the colour of whatever stands on its edge,
      so it is never seen as itself. Each strip runs two clocks in one
      transition, its colour's and its showing's. `data-screen-edge` is
      where app.css sets the strips' own --edge-* (they inherit from no one,
@@ -103,8 +103,9 @@
   data-slot="edge-top"
   data-screen-edge
   aria-hidden="true"
-  class="fixed inset-x-0 -top-space-2 z-(--layer-screen-edge) h-(--edge-h) pointer-events-none edge-mask-top opacity-(--edge-shown) bg-(--edge-top-background) transition-[background-color,opacity] duration-(--edge-top-durs) ease-out"
+  class="fixed inset-x-0 -top-space-2 z-(--z) h-(--edge-h) pointer-events-none edge-mask-top opacity-(--edge-shown) bg-(--edge-top-background) transition-[background-color,opacity] duration-(--edge-top-durs) ease-out"
   ontransitionend={read}
+  style:--z="calc(var(--layer-top) + 10)"
   style:--edge-h="max(var(--spacing-icon-sm), env(safe-area-inset-top))"
   style:--edge-top-durs="var(--edge-top-fade), var(--edge-show-fade)"
   bind:this={top}
@@ -113,7 +114,8 @@
   data-slot="edge-bottom"
   data-screen-edge
   aria-hidden="true"
-  class="fixed inset-x-0 -bottom-space-2 z-(--layer-screen-edge) h-(--edge-h) pointer-events-none opacity-(--edge-shown) bg-(--edge-bottom-background) transition-[background-color,opacity] duration-(--edge-bottom-durs) ease-out"
+  class="fixed inset-x-0 -bottom-space-2 z-(--z) h-(--edge-h) pointer-events-none opacity-(--edge-shown) bg-(--edge-bottom-background) transition-[background-color,opacity] duration-(--edge-bottom-durs) ease-out"
+  style:--z="calc(var(--layer-top) + 10)"
   style:--edge-h="max(var(--spacing-icon-sm), env(safe-area-inset-bottom))"
   style:--edge-bottom-durs="var(--edge-bottom-fade), var(--edge-show-fade)"
 ></div>

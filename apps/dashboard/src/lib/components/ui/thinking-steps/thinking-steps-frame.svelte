@@ -13,7 +13,7 @@
   } = $props();
 </script>
 
-<div class="w-field-group max-w-full">
+<div class="w-sm max-w-full">
   <ThinkingSteps>
     {#each steps as step, index (step.label)}
       <ThinkingStep

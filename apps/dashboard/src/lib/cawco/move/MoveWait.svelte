@@ -9,7 +9,7 @@
    * is simply done.
    *
    * Caw stands in for the wait under the Real Wait Rule: nothing for the
-   * first --duration-wait-grace, then his `loading`, the steps landing after his
+   * first --duration-loop, then his `loading`, the steps landing after his
    * enter. An ask is not a wait: it shows at once, with no Caw. A failure
    * keeps him over the steps (the owner's pick), in `needs-you` until his
    * failed phase is drawn.
@@ -319,7 +319,7 @@
     untrack(
       () =>
         browser &&
-        Date.now() - Date.parse(job.createdAt) >= dur("--duration-wait-grace")
+        Date.now() - Date.parse(job.createdAt) >= dur("--duration-loop")
     )
   );
   $effect(() => {
@@ -328,7 +328,7 @@
     }
     const grace = setTimeout(() => {
       graceOver = true;
-    }, dur("--duration-wait-grace"));
+    }, dur("--duration-loop"));
     return () => clearTimeout(grace);
   });
   const waiting = $derived(WORKING.has(job.stage) && !asking);
@@ -471,7 +471,7 @@
   {#if columnShown}
     <div
       data-slot="column"
-      class="grid gap-space-3 w-full max-w-c-move-wait-col-w"
+      class="grid gap-space-3 w-full max-w-140"
       in:crossIn
     >
       <ThinkingSteps>
@@ -551,7 +551,7 @@
                      gap on touch"). -->
                 <div
                   data-slot="move-wait-card"
-                  class="grid gap-space-3 coarse:gap-space-5 mbs-space-1 p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-hairline"
+                  class="grid gap-space-3 coarse:gap-space-5 mbs-space-1 p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-sm"
                   in:unfold
                   out:unfold
                 >
@@ -661,7 +661,7 @@
          the glyph column, the foot's whole width on a phone (design 2g). -->
     <div
       data-slot="foot"
-      class="flex flex-col items-start gap-space-1 w-full max-w-c-move-wait-col-w group-data-phone/wait:mbs-auto"
+      class="flex flex-col items-start gap-space-1 w-full max-w-140 group-data-phone/wait:mbs-auto"
     >
       {#if cancellable}
         <Button

@@ -52,7 +52,7 @@
       {#each INSTALL_CHECKS as check (check)}
         <li
           data-check-chip={check}
-          class="mark-line inline-flex h-c-badge-h items-center gap-space-1 rounded-xs bg-surface-recess px-space-2 type-label text-ink-strong"
+          class="mark-line inline-flex h-icon-lg items-center gap-space-1 rounded-xs bg-surface-recess px-space-2 type-label text-ink-strong"
         >
           <StepMark state="future" size="sm" />
           <span>{CHECK_WORDS[check]}</span>

@@ -256,7 +256,7 @@
     class="grid min-h-dvh grid-cols-1 content-start gap-space-6 bg-surface-page p-space-6"
     data-preview="address"
   >
-    <header class="grid max-w-c-measure gap-space-4" data-slot="bar">
+    <header class="grid max-w-measure gap-space-4" data-slot="bar">
       <div class="grid gap-space-1">
         <h1 class="m-0 type-title text-ink-strong">Open CawCo by one word</h1>
         <p class="m-0 type-body text-pretty text-ink-muted">
@@ -279,7 +279,7 @@
         <DeskNeeds bind:this={needs} {flow} />
       </figure>
       <figure
-        class="m-0 grid min-w-0 grow basis-c-connect-w grid-cols-1 content-start gap-space-3"
+        class="m-0 grid min-w-0 grow basis-120 grid-cols-1 content-start gap-space-3"
       >
         <figcaption class="type-meta text-ink-muted">
           Desk · Configure › Devices

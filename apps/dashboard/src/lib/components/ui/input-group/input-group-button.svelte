@@ -9,9 +9,9 @@
     base: "flex items-center gap-space-2 not-in-data-[look=bar]:rounded-sm in-data-[look=bar]:rounded-s-xs in-data-[look=bar]:rounded-e-pill type-label shadow-none",
     variants: {
       size: {
-        xs: "h-c-btn-h-xs gap-space-1 px-space-2 [&>svg:not([class*='size-'])]:size-icon-sm",
+        xs: "h-control-xs gap-space-1 px-space-2 [&>svg:not([class*='size-'])]:size-icon-sm",
         sm: "",
-        "icon-xs": "size-c-btn-h-xs p-0 has-[>svg]:p-0",
+        "icon-xs": "size-control-xs p-0 has-[>svg]:p-0",
         "icon-sm": "size-space-8 p-0 has-[>svg]:p-0",
       },
     },

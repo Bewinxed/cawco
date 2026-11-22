@@ -343,7 +343,7 @@
 
 <div class="flex min-h-dvh flex-col bg-surface-recess">
   <div
-    class="flex flex-wrap items-center gap-space-3 px-space-7 pt-space-4 max-desk:px-space-5"
+    class="flex flex-wrap items-center gap-space-3 px-space-6 pt-space-4 max-desk:px-space-5"
   >
     <Tabs
       onValueChange={(next) => {
@@ -380,7 +380,7 @@
   {#if view === "project"}
     <!-- The project page's head, as it stands under the bar. -->
     <div
-      class="flex min-w-0 items-center gap-space-3 pt-space-5 ps-space-7 pe-space-6 max-desk:px-space-5"
+      class="flex min-w-0 items-center gap-space-3 pt-space-5 ps-space-6 pe-space-6 max-desk:px-space-5"
     >
       <h1 class="m-0 me-auto type-title text-balance text-ink-strong">
         {pageName}
@@ -392,7 +392,7 @@
               {...props}
               aria-label={commonWords.moreFor(pageName)}
               bind:this={more}
-              class="grid size-c-btn-h-sm select-none place-items-center rounded-full touch-hit press-tint"
+              class="grid size-control-sm select-none place-items-center rounded-full touch-hit press-tint"
               type="button"
             >
               <IconMore aria-hidden="true" class="size-icon-md" />
@@ -448,7 +448,7 @@
       >
         <StopTrayView
           activityOf={(id) => ACTIVITY[id] ?? "idle"}
-          class="tray-indent-space-7 max-w-128 max-desk:tray-indent-space-5"
+          class="tray-indent-space-6 max-w-128 max-desk:tray-indent-space-5"
           fillOf={(row) => `var(--color-mark-${(row.s.id.length % 8) + 1})`}
           job={tray.job}
           nameOf={(id) => MACHINES[id] ?? id}
@@ -487,7 +487,7 @@
   {:else if view === "home"}
     <!-- Where the app goes once a project's page is gone (stop-work's end,
          route.spoke): the home stands for it here. -->
-    <div class="px-space-7 pt-space-5 max-desk:px-space-5">
+    <div class="px-space-6 pt-space-5 max-desk:px-space-5">
       <h1 class="m-0 type-title text-ink-strong">Home</h1>
     </div>
   {:else}

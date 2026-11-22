@@ -238,7 +238,7 @@
       {#if note}
         <p
           class="border-t border-ink-strong/5 px-3 py-2 text-meta {unread
-            ? 'text-error-9'
+            ? 'text-status-fail-glyph'
             : 'text-ink-muted'}"
           role={unread ? "alert" : undefined}
         >

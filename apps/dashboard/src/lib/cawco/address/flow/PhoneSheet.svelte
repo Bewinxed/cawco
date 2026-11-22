@@ -5,7 +5,7 @@
    * kit's bottom sheet (DESIGN.md, Drawer: full-bleed, flush on the foot,
    * the hairline, the grabber, up to 85% of the screen, its content
    * scrolling inside). It rises over --duration-panel on the drawer curve and
-   * leaves over --duration-exit (motion.ts `sheetIn`, `sheetOut`); a drag down
+   * leaves over --duration-fade (motion.ts `sheetIn`, `sheetOut`); a drag down
    * is its × (dragToDismiss), as a press on the scrim is.
    */
   import { untrack } from "svelte";
@@ -20,7 +20,7 @@
   let { flow }: { flow: AddressFlow } = $props();
 
   /** The sheet stands at most 85% of the screen. */
-  const SHEET_ROOM = "calc(var(--spacing-c-bench-phone-h) * 0.85)";
+  const SHEET_ROOM = "calc(var(--bench-phone-h) * 0.85)";
 
   let sheetEl = $state<HTMLElement | null>(null);
   let scrimEl = $state<HTMLElement | null>(null);
@@ -55,7 +55,7 @@
 </script>
 
 <div
-  class="relative h-c-bench-phone-h w-c-bench-phone-w max-w-full flex-none overflow-clip rounded-modal border border-border-hairline bg-surface-page"
+  class="relative h-211 w-97.5 max-w-full flex-none overflow-clip rounded-modal border border-border-hairline bg-surface-page"
   data-frame="phone"
 >
   <div class="grid content-start gap-space-3 px-space-1 pt-space-4">

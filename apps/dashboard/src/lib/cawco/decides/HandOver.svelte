@@ -2,7 +2,7 @@
   /** The popover's width for `count` rows: two across where two fit, else one, never wider than the room beside the tile (bits-ui measures it). */
   export const handOverWidth = (count: number): string => {
     const across = Math.min(2, Math.max(1, count));
-    return `min(calc(${across} * calc(var(--spacing) * 68) + ${across - 1} * var(--spacing-space-3) + 2 * var(--spacing-c-floating-pad) + 2px), var(--bits-popover-content-available-width, calc(100vw - 2 * var(--spacing-c-screen-margin))))`;
+    return `min(calc(${across} * calc(var(--spacing) * 68) + ${across - 1} * var(--spacing-space-3) + 2 * var(--spacing-space-2) + 2px), var(--bits-popover-content-available-width, calc(100vw - 2 * var(--spacing-space-3))))`;
   };
 </script>
 
@@ -62,7 +62,7 @@
     {#each members as member (member.id)}
       <li class="min-w-0">
         <button
-          class="flex min-h-c-touch-floor w-full items-start gap-x-space-2 concentric-xs p-space-2 text-start transition-control can-hover:hover:bg-surface-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+          class="flex min-h-control-lg w-full items-start gap-x-space-2 concentric-xs p-space-2 text-start transition-control can-hover:hover:bg-surface-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
           onclick={() => onpick(member.id)}
           type="button"
         >

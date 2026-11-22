@@ -28,7 +28,7 @@
   } = $props();
 </script>
 
-<div class="w-field-group max-w-full">
+<div class="w-sm max-w-full">
   <EmptyState {icon} {inline} {line} {title}>
     {#snippet action()}
       {#if act}

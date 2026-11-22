@@ -29,15 +29,15 @@
    * dashed to the tick's length (Tick.svelte): one 20-unit dash, then a gap
    * longer than the path, offset so that no dash end (and no round cap)
    * sits on the path until it draws. On by `data-on="true"`. Its clock:
-   * --duration-toggle in a checkbox, --duration-control in a menu, and in a button's
-   * slot the --duration-morph its label crosses on.
+   * --duration-fade in a checkbox, --duration-control in a menu, and in a button's
+   * slot the --duration-fade its label crosses on.
    */
   export const tickVariants = tv({
-    base: "opacity-0 [--tick-dur:var(--duration-toggle)] [transition:opacity_var(--tick-dur)_var(--ease-out)] data-[on=true]:opacity-100 motion-safe:opacity-100 motion-safe:[transition:none] motion-safe:[&_path]:[stroke-dasharray:20_30] motion-safe:[&_path]:[stroke-dashoffset:22] motion-safe:[&_path]:[transition:stroke-dashoffset_var(--tick-dur)_var(--ease-out)] motion-safe:data-[on=true]:[&_path]:[stroke-dashoffset:0]",
+    base: "opacity-0 [--tick-dur:var(--duration-fade)] [transition:opacity_var(--tick-dur)_var(--ease-out)] data-[on=true]:opacity-100 motion-safe:opacity-100 motion-safe:[transition:none] motion-safe:[&_path]:[stroke-dasharray:20_30] motion-safe:[&_path]:[stroke-dashoffset:22] motion-safe:[&_path]:[transition:stroke-dashoffset_var(--tick-dur)_var(--ease-out)] motion-safe:data-[on=true]:[&_path]:[stroke-dashoffset:0]",
     variants: {
       clock: {
         menu: "[--tick-dur:var(--duration-control)]",
-        morph: "[--tick-dur:var(--duration-morph)]",
+        morph: "[--tick-dur:var(--duration-fade)]",
       },
     },
   });
@@ -69,15 +69,15 @@
     /* Drawn at 16px: its hit area reaches 44px under a finger and 24px
        under a fine pointer (DESIGN.md, The 44 Touch Rule, The 24 Pointer
        Rule). */
-    "touch-hit pointer-hit border-border-row-outline [--hit-edge:1px]",
+    "touch-hit pointer-hit border-border-strong [--hit-edge:1px]",
     "disabled:cursor-not-allowed disabled:opacity-50",
     "group-data-[disabled=true]/field:opacity-50",
-    "aria-invalid:border-error-9",
+    "aria-invalid:border-status-fail-glyph",
     "aria-invalid:aria-checked:border-action-solid",
     "data-checked:border-action-solid data-checked:bg-action-solid",
-    "data-checked:text-on-action dark:not-data-checked:bg-input/30",
+    "data-checked:text-on-action dark:not-data-checked:bg-border-control/30",
     "dark:data-checked:bg-action-solid",
-    "dark:aria-invalid:border-error-9/50",
+    "dark:aria-invalid:border-status-fail-glyph/50",
     checkboxVariants({ reveal }),
     className
   )}

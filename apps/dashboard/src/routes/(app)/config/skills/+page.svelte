@@ -761,7 +761,7 @@
         {/each}
       </RowList>
     {/if}
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
       {words.degraded}
     </p>
   </div>
@@ -898,7 +898,7 @@
                 {:else if (listings[row.name] ?? []).length === 0}
                   <p
                     data-slot="note"
-                    class="type-meta max-w-c-measure text-ink-muted"
+                    class="type-meta max-w-measure text-ink-muted"
                     in:reveal
                   >
                     {words.listsNothing}
@@ -923,14 +923,14 @@
                             {#if plugin.version}
                               <span
                                 data-slot="note"
-                                class="type-meta max-w-c-measure text-ink-muted"
+                                class="type-meta max-w-measure text-ink-muted"
                                 >{plugin.version}</span
                               >
                             {/if}
                             {#if plugin.category}
                               <span
                                 data-slot="note"
-                                class="type-meta max-w-c-measure text-ink-muted"
+                                class="type-meta max-w-measure text-ink-muted"
                                 >{plugin.category}</span
                               >
                             {/if}
@@ -938,7 +938,7 @@
                           {#if plugin.description}
                             <span
                               data-slot="note"
-                              class="type-meta max-w-c-measure text-ink-muted"
+                              class="type-meta max-w-measure text-ink-muted"
                               >{plugin.description}</span
                             >
                           {/if}
@@ -946,7 +946,7 @@
                         {#if installed(id)}
                           <span
                             data-slot="note"
-                            class="type-meta max-w-c-measure text-ink-muted"
+                            class="type-meta max-w-measure text-ink-muted"
                             >{words.added}</span
                           >
                         {:else}
@@ -1077,7 +1077,7 @@
         {/each}
       </RowList>
     {/if}
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
       {words.pluginOff}
     </p>
   </div>

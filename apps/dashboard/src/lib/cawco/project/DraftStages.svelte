@@ -61,9 +61,9 @@
   const uid = $props.id();
   /** The board's column width, wrapping into rows; one column where the room is narrower. */
   const COLS =
-    "repeat(auto-fill, minmax(min(100%, var(--spacing-c-board-col-min)), 1fr))";
+    "repeat(auto-fill, minmax(min(100%, var(--board-col-min)), 1fr))";
   /** Every row past a phone: one height, at least a whole stage's. */
-  const ROWS = "minmax(var(--spacing-c-draft-col-h), 1fr)";
+  const ROWS = "minmax(var(--draft-col-h), 1fr)";
   let grid = $state<HTMLElement>();
 
   /** A new stage stands before the first closed one (done, dropped): in view, its name taking the caret. */
@@ -96,7 +96,7 @@
        edges with the stages. -->
   <div class="flex flex-col gap-space-1" data-slot="setup-aim">
     <label
-      class="ps-c-field-inline-inset type-meta text-ink-muted"
+      class="ps-(--field-inline-inset) type-meta text-ink-muted"
       for="{uid}-aim">{setupPageWords.aim}</label
     >
     <Textarea
@@ -138,7 +138,7 @@
   {/each}
   {#if adds}
     <button
-      class="select-none press-tint mark-line flex min-h-c-draft-col-h max-phone:min-h-c-btn-h items-center justify-center gap-space-2 rounded-lg border-none bg-transparent text-ink-muted inset-ring inset-ring-border-control hover:bg-surface-hover"
+      class="select-none press-tint mark-line flex min-h-(--draft-col-h) max-phone:min-h-control-md items-center justify-center gap-space-2 rounded-lg border-none bg-transparent text-ink-muted inset-ring inset-ring-border-control hover:bg-surface-hover"
       data-slot="add-stage"
       onclick={add}
       type="button"

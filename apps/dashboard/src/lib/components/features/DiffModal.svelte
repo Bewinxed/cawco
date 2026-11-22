@@ -75,7 +75,7 @@
     aria-label={`Diff: ${filePath}`}
     body="document"
     bodyPad="flush"
-    class="w-c-dialog-document-w"
+    class="w-vw-95"
     modal={false}
     width="document"
   >
@@ -96,8 +96,8 @@
           />
         </div>
         <div data-slot="num" class="num flex items-center gap-2 type-meta">
-          <span class="text-success-9">+{stats.additions}</span>
-          <span class="text-error-9">-{stats.deletions}</span>
+          <span class="text-status-done-glyph">+{stats.additions}</span>
+          <span class="text-status-fail-glyph">-{stats.deletions}</span>
         </div>
       </div>
       <ToggleGroup.Root
@@ -126,7 +126,7 @@
           class="min-h-full"
           style:--diffs-font-size="var(--text-label)"
           style:--diffs-line-height="var(--leading-code)"
-          style:--diffs-bg-separator-override="var(--muted)"
+          style:--diffs-bg-separator-override="var(--color-surface-recess)"
           in:crossIn
           out:crossOut
           {@attach drawn(diffStyle)}

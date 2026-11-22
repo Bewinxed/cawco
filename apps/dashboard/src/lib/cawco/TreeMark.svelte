@@ -148,7 +148,7 @@
      (apps/dashboard/scripts/has-subject-check.ts). -->
 <span
   data-tree-mark
-  class="group/mark relative z-(--mark-z) inline-block flex-none size-(--size) text-mark-glyph data-bare:text-ink-muted"
+  class="group/mark relative z-(--mark-z) inline-block flex-none size-(--size) text-on-ink data-bare:text-ink-muted"
   data-box
   data-bare={fill ? undefined : ""}
   data-dot={dot}
@@ -181,7 +181,7 @@
       {#each [1, 2, 3] as i (i)}
         <span
           data-slot="tree-mark-card"
-          class="absolute inset-0 overflow-hidden rounded-xs bg-(--fill) bg-mark-overlay opacity-(--card-seen) origin-(--card-origin) transform-(--card-scale) after:absolute after:inset-0 after:bg-mark-deck-shade after:opacity-(--shade-seen) before:absolute before:z-1 before:inset-x-0 before:top-0 before:h-(--cast-h) before:bg-linear-to-b before:from-mark-deck-cast before:to-transparent before:translate-y-(--cast-y)"
+          class="absolute inset-0 overflow-hidden rounded-xs bg-(--fill) bg-mark-overlay opacity-(--card-seen) origin-(--card-origin) transform-(--card-scale) after:absolute after:inset-0 after:bg-(--mark-deck-shade) after:opacity-(--shade-seen) before:absolute before:z-1 before:inset-x-0 before:top-0 before:h-(--cast-h) before:bg-linear-to-b before:from-(--mark-deck-cast) before:to-transparent before:translate-y-(--cast-y)"
           style:--i={i}
           style:--p="max(0, calc(var(--n) - var(--i) + 1))"
           style:--shade-seen="calc(var(--p) * var(--deck-shade-step))"
@@ -219,7 +219,7 @@
     style:--hole={dot
       ? "calc(var(--status-dot-size) / 2 + var(--status-dot-cut))"
       : undefined}
-    style:--hole-mask={"var(--beat-mask, radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--spacing-c-tree-mark-hole-edge)), var(--color-mask-opaque) calc(var(--hole) + var(--spacing-c-tree-mark-hole-edge))))"}
+    style:--hole-mask={"var(--beat-mask, radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--tree-mark-hole-edge)), var(--color-ink-strong) calc(var(--hole) + var(--tree-mark-hole-edge))))"}
   >
     <span
       data-slot="tree-mark-rest"
@@ -232,7 +232,7 @@
              is laid out as the figure changes, and 9 to 10 stays centred. -->
         <span
           data-slot="num"
-          class="num inline-grid place-items-center w-c-tree-mark-num-w h-lh type-meta leading-none contain-layout contain-size data-past:scale-75"
+          class="num inline-grid place-items-center w-ch-2 h-lh type-meta leading-none contain-layout contain-size data-past:scale-75"
           data-past={count >= 100 || undefined}><MorphText text={shown} /></span
         >
       {:else}
@@ -259,7 +259,7 @@
        its way to its row (motion/branch). Unseen at rest. -->
   <span
     aria-hidden="true"
-    class="absolute inset-0 overflow-hidden rounded-xs bg-(--skin-fill) bg-mark-overlay opacity-0 pointer-events-none after:absolute after:inset-0 after:bg-mark-deck-shade after:opacity-(--shade-seen) before:absolute before:z-1 before:inset-x-0 before:top-0 before:h-(--cast-h) before:bg-linear-to-b before:from-mark-deck-cast before:to-transparent before:translate-y-(--cast-y)"
+    class="absolute inset-0 overflow-hidden rounded-xs bg-(--skin-fill) bg-mark-overlay opacity-0 pointer-events-none after:absolute after:inset-0 after:bg-(--mark-deck-shade) after:opacity-(--shade-seen) before:absolute before:z-1 before:inset-x-0 before:top-0 before:h-(--cast-h) before:bg-linear-to-b before:from-(--mark-deck-cast) before:to-transparent before:translate-y-(--cast-y)"
     data-ride-skin
     style:--p="1"
     style:--shade-seen="calc(var(--p) * var(--deck-shade-step))"
@@ -352,7 +352,7 @@
       style:--reach="calc(var(--status-dot-size) / 2)"
       style:--hit-max={"var(--mark-hit-max, calc(var(--spacing-space-1) + var(--tree-gap)))"}
       style:--hit-foot={"calc(-1 * min(var(--n) * var(--deck-step) + var(--reach), var(--hit-max)))"}
-      style:--hit-stop-x={"calc(2 * (var(--mark-hit-gap, var(--row-compact-gap)) - var(--reach)))"}
+      style:--hit-stop-x={"calc(2 * (var(--mark-hit-gap, var(--spacing-space-2)) - var(--reach)))"}
       style:--hit-stop-y={"calc(2 * (var(--hit-max) - var(--tree-gap) / 2 - var(--reach)))"}
       onclick={toggle}
       onkeydown={(event) => {

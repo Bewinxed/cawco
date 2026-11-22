@@ -362,7 +362,7 @@
 
   /**
    * The tab's first read of its tasks, opened in the browser with no server
-   * read: once the wait outlasts --duration-wait-grace the board stands as its
+   * read: once the wait outlasts --duration-loop the board stands as its
    * skeleton and Caw reads it (design §2, Loading); a quick one shows
    * nothing of its own.
    */
@@ -982,7 +982,7 @@
                   title: viewLabel(view.name),
                   glyph: IconArtifactSheet,
                   content: viewBody,
-                  measure: "--spacing-c-block-view",
+                  measure: "--block-view",
                   hideable: true,
                   body: "natural",
                   card: false,
@@ -1015,7 +1015,7 @@
         hideable: false,
         body: view === "board" ? "fill" : "natural",
         card: false,
-        measure: "--spacing-c-block-view",
+        measure: "--block-view",
       },
       ...viewItemsOf(view),
     };
@@ -1538,7 +1538,7 @@
    */
   const paneFoot = $derived([
     PANE_FOOT[reading.current ? "board" : paneView] ?? "pb-space-6",
-    docked && "max-phone:pb-c-sheet-max-h",
+    docked && "max-phone:pb-vh-85",
   ]);
   /**
    * Which box wears the house edge fade: the one that scrolls the view. On a
@@ -1582,7 +1582,7 @@
 {#snippet strip(roomy: boolean)}
   <div
     data-slot="strip"
-    class="flex min-w-0 items-center gap-space-3 pt-0 pe-space-6 pb-space-4 ps-space-7 max-desk:px-space-5"
+    class="flex min-w-0 items-center gap-space-3 pt-0 pe-space-6 pb-space-4 ps-space-6 max-desk:px-space-5"
   >
     <ViewTabs
       {current}
@@ -1597,7 +1597,7 @@
         data-wide={needsYou.length === 0 || undefined}
         aria-hidden="true"
         class={[
-          "h-c-btn-h-sm w-px flex-none bg-border-hairline",
+          "h-control-sm w-px flex-none bg-border-hairline",
           needsYou.length === 0 && "max-phone:hidden",
         ]}
       ></span>
@@ -1711,7 +1711,7 @@
 {#snippet tableBody(_block: string)}
   <div class="flex flex-col gap-space-3">
     {#if adding}
-      <div class="max-w-144 rounded-lg bg-surface-raised p-space-3 shadow-tile">
+      <div class="max-w-144 rounded-lg bg-surface-raised p-space-3 shadow-sm">
         <NewTaskForm
           oncreate={(title, stage) => board.create(title, stage)}
           stage={newIn ?? ""}
@@ -1767,7 +1767,7 @@
             out:crossOut
           >
             <span
-              class="type-label min-w-0 shrink grow basis-c-draft-line text-ink-strong"
+              class="type-label min-w-0 shrink grow basis-56 text-ink-strong"
               >{viewsWords.drafted(viewLabel(view.name))}</span
             >
             <div class="flex flex-none gap-space-2">
@@ -1802,7 +1802,7 @@
           <!-- A kept view's head: its ⋯ places it on a page, as a block. -->
           <div
             data-slot="view-head"
-            class="mark-line flex min-h-c-btn-h-sm items-center gap-space-2 px-space-1"
+            class="mark-line flex min-h-control-sm items-center gap-space-2 px-space-1"
           >
             <span
               aria-hidden="true"
@@ -1911,7 +1911,7 @@
          own, never the refusal it has not had (a quick read drew "Tasks are
          not available" for a beat on every open from the rail). -->
   {:else if !board.list}
-    <div class="max-w-c-measure">
+    <div class="max-w-measure">
       <EmptyState
         icon={IconToolTodo}
         line={unread ??
@@ -1979,7 +1979,7 @@
            words. -->
       <div
         data-slot="caw-empty"
-        class="mx-auto w-full max-w-c-starters-w"
+        class="mx-auto w-full max-w-(--starters-w)"
         in:reveal
       >
         <EmptyState
@@ -2018,7 +2018,7 @@
         </EmptyState>
       </div>
     {:else}
-      <div class="max-w-c-measure" in:reveal>
+      <div class="max-w-measure" in:reveal>
         <EmptyState
           icon={IconToolTodo}
           line="Add a task by hand while Caw can’t start."
@@ -2077,7 +2077,7 @@
 {/snippet}
 
 {#if !project}
-  <div class="flex flex-1 items-center justify-center p-space-7">
+  <div class="flex flex-1 items-center justify-center p-space-6">
     <p class="type-body text-ink-muted">
       No such project. It may have been removed; pick another from the rail.
     </p>
@@ -2145,8 +2145,8 @@
               "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:scroll-pb-(--reveal-foot) max-phone:fade-inset-end-(--bar-fade-inset)",
               fadeOn === "page" && "kit-edge-fade-block",
             ]}
-            style:--reveal-foot={`max(${docked ? "var(--spacing-c-sheet-max-h)" : "var(--bar-reach)"}, var(--fade-foot))`}
-            style:--bar-reach={"calc(var(--spacing-c-composer-panel) + var(--spacing-space-4) + var(--safe-bottom) + var(--spacing-space-3))"}
+            style:--reveal-foot={`max(${docked ? "var(--sheet-max-h)" : "var(--bar-reach)"}, var(--fade-foot))`}
+            style:--bar-reach={"calc(var(--composer-panel) + var(--spacing-space-4) + var(--safe-bottom) + var(--spacing-space-3))"}
             style:--bar-fade-inset={"calc(var(--bar-reach) - var(--spacing-space-3))"}
           >
             <ProjectHead
@@ -2172,7 +2172,7 @@
             {#if lead.problem}
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-6 w-auto max-desk:mx-space-5"
                 variant="warning"
               >
                 <AlertDescription>{lead.problem}</AlertDescription>
@@ -2181,7 +2181,7 @@
             {#if board.stages && board.stages.problems.length > 0}
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-6 w-auto max-desk:mx-space-5"
                 variant="warning"
               >
                 <AlertDescription>{unreadStages}</AlertDescription>
@@ -2190,7 +2190,7 @@
             {#if board.list && board.list.problems.length > 0}
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-6 w-auto max-desk:mx-space-5"
                 variant="warning"
               >
                 <AlertDescription
@@ -2203,7 +2203,7 @@
                  title or id, and why, and where they wait to be tried
                  again: said where the restore landed, until dismissed. -->
               <RestoreHeldAlert
-                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-6 w-auto max-desk:mx-space-5"
                 ondismiss={() => restoreHeld.dismiss(projectId)}
                 rows={heldBack}
               />
@@ -2213,7 +2213,7 @@
                  once, here, with its Retry. -->
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-6 w-auto max-desk:mx-space-5"
                 variant="warning"
               >
                 <AlertDescription>{unread}</AlertDescription>
@@ -2355,9 +2355,9 @@
       : "var(--spacing-space-6)"}
     style:--draft-bleed-start={sheetQuery.current
       ? "var(--spacing-space-5)"
-      : "var(--spacing-space-7)"}
+      : "var(--spacing-space-6)"}
     style:--pane-min={docked
-      ? "calc(50cqb + var(--spacing-c-sheet-max-h))"
+      ? "calc(50cqb + var(--sheet-max-h))"
       : "50cqb"}
   >
     {#if reading.current}
@@ -2366,7 +2366,7 @@
       <div
         aria-hidden="true"
         class="grid auto-cols-(--skeleton-col) grid-flow-col gap-space-3 overflow-hidden max-phone:auto-cols-(--skeleton-col-phone)"
-        style:--skeleton-col={"minmax(var(--spacing-c-board-col-min), var(--spacing-c-board-col-max))"}
+        style:--skeleton-col={"minmax(var(--board-col-min), var(--board-col-max))"}
         style:--skeleton-col-phone="calc(100% - var(--spacing-space-8))"
         out:revealOut
       >
@@ -2429,7 +2429,7 @@
       class="w-(--ask-w)"
       customAnchor={askAnchor}
       side="bottom"
-      style="--ask-w: min(var(--spacing-c-panel-w), calc(100vw - 2 * var(--spacing-c-screen-margin)))"
+      style="--ask-w: min(var(--panel-w), calc(100vw - 2 * var(--spacing-space-3)))"
     >
       <div
         class="relative w-full"

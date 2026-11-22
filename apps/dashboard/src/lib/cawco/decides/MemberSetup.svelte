@@ -413,13 +413,13 @@
         bind:value={setup.draft.effort}
       />
       {#if effort}
-        <p class="m-0 max-w-c-measure type-meta text-ink-muted text-pretty">
+        <p class="m-0 max-w-measure type-meta text-ink-muted text-pretty">
           {effort.description}
         </p>
       {/if}
     </div>
     <label
-      class="flex min-h-c-touch-floor items-center gap-space-2 type-label text-ink-strong"
+      class="flex min-h-control-lg items-center gap-space-2 type-label text-ink-strong"
     >
       <Checkbox bind:checked={setup.draft.delegates} />
       <span>{decidesWords.delegatesLabel}</span>
@@ -432,13 +432,13 @@
     <p class="m-0 flex min-w-0 flex-col gap-space-1 type-label">
       {#if who.projectId !== null && project !== null}
         <a
-          class="text-link-ink underline-offset-2 wrap-anywhere can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+          class="text-brand-ink underline-offset-2 wrap-anywhere can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
           href={folderFileHref(who.projectId, "AGENTS.md")}
           >{decidesWords.cawInstructions(project)}</a
         >
       {/if}
       <a
-        class="text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+        class="text-brand-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
         href="/config/skills">{decidesWords.cawSkills}</a
       >
     </p>
@@ -456,7 +456,7 @@
           {#each who.skills as skill (skill.id)}
             <li>
               <label
-                class="flex min-h-c-touch-floor items-start gap-space-2 py-space-1"
+                class="flex min-h-control-lg items-start gap-space-2 py-space-1"
               >
                 <Checkbox
                   bind:checked={
@@ -516,7 +516,7 @@
           : undefined}
       <li>
         <label
-          class="mark-line flex min-h-c-touch-floor items-center gap-space-2 py-space-1"
+          class="mark-line flex min-h-control-lg items-center gap-space-2 py-space-1"
         >
           <Checkbox
             data-box
@@ -580,7 +580,7 @@
   <p class="m-0 type-meta text-ink-muted">{decidesWords.hearHint}</p>
   {#if who.projectId !== null}
     <a
-      class="self-start type-label text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+      class="self-start type-label text-brand-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
       href="/project/{encodeURIComponent(who.projectId)}?view=decisions"
       >{decidesWords.answersIn}</a
     >
@@ -627,7 +627,7 @@
       >
         <MemberFace member={face} size={56} />
         <span
-          class="absolute -end-space-1 -bottom-space-1 grid size-6 place-items-center rounded-full border border-border-hairline bg-surface-raised text-ink-strong shadow-tile"
+          class="absolute -end-space-1 -bottom-space-1 grid size-6 place-items-center rounded-full border border-border-hairline bg-surface-raised text-ink-strong shadow-sm"
         >
           <IconPen aria-hidden="true" class="size-icon-sm" />
         </span>
@@ -767,7 +767,7 @@
       </div>
       {#if member !== null && isAgent && member.delegateType}
         <a
-          class="self-end type-meta text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+          class="self-end type-meta text-brand-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
           href="/config/delegate-types/{encodeURIComponent(
             member.delegateType
           )}">{decidesWords.openType}</a

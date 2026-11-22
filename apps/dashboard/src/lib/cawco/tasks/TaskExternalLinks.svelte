@@ -164,7 +164,7 @@
     {@const who = whoOf(each)}
     <li
       data-slot="link-comment"
-      class="flex max-w-c-measure min-w-0 flex-col gap-space-2 rounded-md bg-surface-recess px-space-3 py-space-2"
+      class="flex max-w-measure min-w-0 flex-col gap-space-2 rounded-md bg-surface-recess px-space-3 py-space-2"
     >
       <div
         data-slot="comment-text"
@@ -229,7 +229,7 @@
   >
     <!-- mark-line: the glyph, age and link-out stand in cells one title line tall, on the title's first line, beside words that wrap -->
     <div
-      class="group/row relative isolate col-span-full grid grid-cols-subgrid items-start gap-y-space-1 px-space-2 py-space-2 before:absolute before:inset-0 before:-z-1 before:rounded-sm before:transition-[background-color] before:duration-(--duration-ghost) before:ease-in-out hover:not-active:before:bg-surface-hover active:before:bg-surface-pressed"
+      class="group/row relative isolate col-span-full grid grid-cols-subgrid items-start gap-y-space-1 px-space-2 py-space-2 before:absolute before:inset-0 before:-z-1 before:rounded-sm before:transition-[background-color] before:duration-(--duration-step) before:ease-in-out hover:not-active:before:bg-surface-hover active:before:bg-surface-pressed"
       data-slot="link-line"
     >
       <span class="mark-cell type-row" data-slot="glyph"
@@ -247,7 +247,7 @@
           {#if glyph === "pending"}
             <span class="flex h-lh items-center" data-slot="link-title-bar">
               <Skeleton
-                class="w-4/5 max-w-c-measure-short"
+                class="w-4/5 max-w-measure-short"
                 line="label"
                 radius="text"
               />
@@ -267,7 +267,7 @@
         </a>
         {#if link.title && sentence}
           <p
-            class="m-0 max-w-c-measure type-body text-pretty wrap-anywhere text-status-fail-ink"
+            class="m-0 max-w-measure type-body text-pretty wrap-anywhere text-status-fail-ink"
             data-slot="link-problem"
             role="alert"
           >
@@ -276,7 +276,7 @@
         {/if}
         {#if link.baselineUnread}
           <p
-            class="m-0 max-w-c-measure type-body text-pretty wrap-anywhere text-status-attn-ink"
+            class="m-0 max-w-measure type-body text-pretty wrap-anywhere text-status-attn-ink"
             data-slot="link-held"
           >
             {words.baselineUnread}
@@ -323,7 +323,7 @@
         {/if}
       </div>
       <span
-        class="mark-cell hidden type-row @min-table-34rem/links:grid"
+        class="mark-cell hidden type-row @min-md/links:grid"
         data-slot="link-author"
       >
         {#if link.author?.avatarUrl && !link.problem}
@@ -395,7 +395,7 @@
     >
   </h3>
   <div
-    class="grid grid-cols-(--links-cols) gap-x-space-3 @min-table-34rem/links:grid-cols-(--links-cols-wide) @min-table-34rem/links:gap-x-space-4"
+    class="grid grid-cols-(--links-cols) gap-x-space-3 @min-md/links:grid-cols-(--links-cols-wide) @min-md/links:gap-x-space-4"
     data-slot="link-groups"
     style:--links-cols={COLS}
     style:--links-cols-wide={COLS_WIDE}

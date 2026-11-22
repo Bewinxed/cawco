@@ -161,7 +161,7 @@
     class={[
       "flex flex-col gap-space-2 data-bare:p-0",
       variant === "page" && "px-space-5 pt-space-5 pb-space-3",
-      wide && "w-full max-w-c-measure",
+      wide && "w-full max-w-measure",
       variant === "rail" && "px-space-3 pt-space-2 pb-space-1",
     ]}
     data-bare={bare || machinesThere !== null || undefined}
@@ -184,8 +184,8 @@
   <div
     class={[
       "flex flex-col",
-      variant === "page" && "gap-space-5 px-space-5 pt-space-2 pb-space-7",
-      wide && "w-full max-w-c-measure",
+      variant === "page" && "gap-space-5 px-space-5 pt-space-2 pb-space-6",
+      wide && "w-full max-w-measure",
       variant === "rail" && "gap-space-3 px-space-2 pt-space-1 empty:p-0",
     ]}
   >
@@ -203,7 +203,7 @@
     {/if}
 
     {#if machinesThere}
-      <!-- Anchored as New project's ask is (its page pads --spacing-space-7 on a
+      <!-- Anchored as New project's ask is (its page pads --spacing-space-6 on a
            phone): the groups' own top padding and this margin make that. -->
       <div data-slot="machines" class="mx-0 mt-space-5 mb-space-6" data-flip>
         <MachinesEmpty
@@ -256,7 +256,7 @@
 
   {#if !(wide || noFleet)}
     <!-- The one Recent list: the rail's section, or the phone's page of it. -->
-    <div class={[variant === "page" && "px-space-3 pb-space-7"]}>
+    <div class={[variant === "page" && "px-space-3 pb-space-6"]}>
       <RecentList active={current} {variant} />
     </div>
   {/if}

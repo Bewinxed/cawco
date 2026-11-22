@@ -55,18 +55,18 @@
   );
   const shown = $derived(phase === "waiting" || phase === "expired");
 
-  /** Its place opens (--duration-morph), then what it holds fades up --pop-rise (--duration-menu). */
+  /** Its place opens (--duration-fade), then what it holds fades up --pop-rise (--duration-control). */
   function openPlace(node: HTMLElement): TransitionConfig {
     if (!motionOk.current) {
       return {
-        duration: dur("--duration-menu"),
+        duration: dur("--duration-control"),
         easing: easeOut,
         css: (t) => `opacity: ${t}`,
       };
     }
     const height = node.offsetHeight;
-    const open = dur("--duration-morph");
-    const rise = dur("--duration-menu");
+    const open = dur("--duration-fade");
+    const rise = dur("--duration-control");
     const total = open + rise;
     const split = open / total;
     return {
@@ -86,7 +86,7 @@
 <div class="flex min-w-0 flex-col gap-space-2">
   {#if flow?.phase === "signed-in"}
     <p
-      class="type-meta flex items-center gap-space-2 text-ink-row"
+      class="type-meta flex items-center gap-space-2 text-ink-strong"
       role="status"
     >
       <Check />
@@ -102,7 +102,7 @@
       <div
         data-slot="well"
         data-dim={phase === "expired" || undefined}
-        class="flex items-center rounded-sm bg-code-bg px-space-4 py-space-3 transition-[opacity] duration-(--duration-fade) ease-out data-dim:opacity-50"
+        class="flex items-center rounded-sm bg-surface-recess px-space-4 py-space-3 transition-[opacity] duration-(--duration-fade) ease-out data-dim:opacity-50"
         in:openPlace
       >
         <span class="sr-only">{words.said(flow?.code ?? "")}</span>

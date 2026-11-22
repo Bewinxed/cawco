@@ -118,13 +118,13 @@
   {#if onePlan}
     <p
       data-slot="one-plan"
-      class="pt-space-2 pb-space-3 text-pretty text-ink-row"
+      class="pt-space-2 pb-space-3 text-pretty text-ink-strong"
     >
       {words.onePlan}
     </p>
   {:else}
     <div
-      class="flex items-center justify-between gap-space-4 pt-space-2 pb-space-3 text-ink-row"
+      class="flex items-center justify-between gap-space-4 pt-space-2 pb-space-3 text-ink-strong"
     >
       <label for="{id}-move">{words.move}</label>
       <Switch id="{id}-move" bind:checked={atLimit.move} />
@@ -133,7 +133,7 @@
   {#if atLimit.move && !onePlan}
     <div class="flex flex-col" in:unfold out:unfold>
       <p
-        class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-row"
+        class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-strong"
       >
         <label for="{id}-wait">{words.wait}</label>
         <Input
@@ -153,7 +153,7 @@
         <span>{words.minutes}</span>
       </p>
       <p
-        class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-row"
+        class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-strong"
       >
         <label for="{id}-over">{words.over}</label>
         <Input
@@ -173,7 +173,7 @@
         <span>{words.kTokens}</span>
       </p>
       <div
-        class="flex flex-wrap items-center justify-between gap-space-3 py-space-2 text-pretty text-ink-row"
+        class="flex flex-wrap items-center justify-between gap-space-3 py-space-2 text-pretty text-ink-strong"
       >
         <span id="{id}-at-limit">{words.atLimit}</span>
         <Tabs
@@ -193,7 +193,7 @@
         </Tabs>
       </div>
       <div
-        class="flex flex-wrap items-center justify-between gap-space-3 py-space-2 text-pretty text-ink-row"
+        class="flex flex-wrap items-center justify-between gap-space-3 py-space-2 text-pretty text-ink-strong"
       >
         <span id="{id}-cold-move">{words.coldMove}</span>
         <Tabs
@@ -238,7 +238,7 @@
       </div>
       {#if terms}
         <a
-          class="mark-line inline-flex items-center gap-space-1 self-start rounded-xs type-label text-pretty text-link-ink no-underline hover:text-link-hover"
+          class="mark-line inline-flex items-center gap-space-1 self-start rounded-xs type-label text-pretty text-brand-ink no-underline hover:text-brand-ink"
           href={TERMS_URL}
           rel="noopener noreferrer"
           target="_blank"
@@ -250,7 +250,7 @@
     </div>
   {/if}
   <p
-    class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-row"
+    class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-strong"
   >
     <label for="{id}-file-room">{words.fileRoom}</label>
     <Input
@@ -271,7 +271,7 @@
     <span class="type-meta text-ink-muted">{words.fileRoomOff}</span>
   </p>
   <p
-    class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-row"
+    class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-strong"
   >
     <label for="{id}-stale">{words.stale}</label>
     <Input

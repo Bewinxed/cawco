@@ -169,21 +169,21 @@
        the keys) shows where it is taken; its track thickens under the
        pointer, focus or a drag. A drag draws the fill to the pointer. -->
   <media-time-slider
-    class="group/scrub relative mx-space-2 coarse:mx-space-6 hit-gap-x-space-8 flex h-c-bar-item min-w-0 flex-1 items-center"
+    class="group/scrub relative mx-space-2 coarse:mx-space-6 hit-gap-x-space-8 flex h-row-compact min-w-0 flex-1 items-center"
     label={madeWords.position}
   >
     <media-slider-track
-      class="relative block h-1 w-full overflow-clip rounded-pill bg-media-track transition-[height] duration-(--duration-control) ease-out group-data-interactive/scrub:h-1.5"
+      class="relative block h-1 w-full overflow-clip rounded-pill bg-border-control transition-[height] duration-(--duration-control) ease-out group-data-interactive/scrub:h-1.5"
     >
       <media-slider-buffer
-        class="absolute inset-y-0 start-0 block w-(--media-slider-buffer,0%) bg-media-buffered"
+        class="absolute inset-y-0 start-0 block w-(--media-slider-buffer,0%) bg-border-strong"
       ></media-slider-buffer>
       <media-slider-fill
-        class="absolute inset-y-0 start-0 block w-(--media-slider-fill,0%) bg-media-fill group-data-dragging/scrub:w-(--media-slider-pointer,0%)"
+        class="absolute inset-y-0 start-0 block w-(--media-slider-fill,0%) bg-ink-strong group-data-dragging/scrub:w-(--media-slider-pointer,0%)"
       ></media-slider-fill>
     </media-slider-track>
     <media-slider-thumb
-      class="absolute start-(--media-slider-fill,0%) top-1/2 block size-3 -translate-x-1/2 rtl:translate-x-1/2 -translate-y-1/2 touch-hit rounded-full bg-media-fill opacity-0 transition-opacity duration-(--duration-control) ease-out group-data-interactive/scrub:opacity-100 group-data-dragging/scrub:start-(--media-slider-pointer,0%) coarse:opacity-100 focus-visible:opacity-100"
+      class="absolute start-(--media-slider-fill,0%) top-1/2 block size-3 -translate-x-1/2 rtl:translate-x-1/2 -translate-y-1/2 touch-hit rounded-full bg-ink-strong opacity-0 transition-opacity duration-(--duration-control) ease-out group-data-interactive/scrub:opacity-100 group-data-dragging/scrub:start-(--media-slider-pointer,0%) coarse:opacity-100 focus-visible:opacity-100"
     ></media-slider-thumb>
   </media-time-slider>
 {/snippet}
@@ -268,9 +268,9 @@
          glass's do (design.css `concentric-row`), each marked by where it
          stands (placeItems). -->
     <media-container
-      class="flex h-c-btn-h w-full min-w-0 items-center gap-c-bar-group-pad rounded-pill bg-surface-raised p-c-bar-group-pad shadow-tile outline-1 -outline-offset-1 outline-border-hairline concentric-row r-inset-c-bar-group-pad r-join-xs hit-gap-x-c-bar-group-pad coarse:gap-space-5 coarse:hit-gap-x-space-5"
+      class="flex h-control-md w-full min-w-0 items-center gap-space-1 rounded-pill bg-surface-raised p-space-1 shadow-sm outline-1 -outline-offset-1 outline-border-hairline concentric-row r-inset-space-1 r-join-xs hit-gap-x-space-1 coarse:gap-space-5 coarse:hit-gap-x-space-5"
       data-glass
-      style:--r-outer="calc(var(--spacing-c-btn-h) / 2)"
+      style:--r-outer="calc(var(--spacing-control-md) / 2)"
       {@attach placeItems}
       in:reveal
     >

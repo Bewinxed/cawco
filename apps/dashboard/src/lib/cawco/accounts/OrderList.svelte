@@ -81,7 +81,7 @@
       if (motionOk.current && left !== 0) {
         row.animate(
           [{ transform: `translateY(${left}px)` }, { transform: "none" }],
-          { duration: dur("--duration-exit"), easing: ease("--ease-out") }
+          { duration: dur("--duration-fade"), easing: ease("--ease-out") }
         );
       }
       await tick();
@@ -146,7 +146,7 @@
             order.length
           )}
           aria-roledescription={words.draggable}
-          class="type-label relative flex min-h-space-8 w-full cursor-grab touch-none items-center gap-space-3 rounded-sm border-none border-current bg-surface-fill px-space-3 text-start text-ink-row select-none group-data-held:cursor-grabbing group-data-held:bg-surface-lift group-data-held:shadow-md focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) coarse:min-h-c-btn-h-lg"
+          class="type-label relative flex min-h-space-8 w-full cursor-grab touch-none items-center gap-space-3 rounded-sm border-none border-current bg-surface-hover px-space-3 text-start text-ink-strong select-none group-data-held:cursor-grabbing group-data-held:bg-surface-raised group-data-held:shadow-md focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) coarse:min-h-control-lg"
           data-id={account.id}
           onkeydown={(event) => nudge(event, account.id)}
           onpointerdown={(event) => grab(event, account.id)}

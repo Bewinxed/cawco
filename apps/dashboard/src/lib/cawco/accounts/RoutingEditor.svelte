@@ -118,7 +118,7 @@
   function slideOut(node: HTMLElement): TransitionConfig {
     const by = -32 * toward;
     return lifting(node, pinned(node), {
-      duration: dur("--duration-exit"),
+      duration: dur("--duration-fade"),
       easing: easeOut,
       css: (t) =>
         motionOk.current
@@ -183,7 +183,7 @@
           <TabItem {label} value={kind}>
             {#snippet trail()}
               <span
-                class="ms-space-1 font-normal text-ink-muted @max-kinds/kinds:hidden"
+                class="ms-space-1 font-normal text-ink-muted @max-sm/kinds:hidden"
                 >{words.trail(strategyLabel(draft[kind].strategy))}</span
               >
             {/snippet}

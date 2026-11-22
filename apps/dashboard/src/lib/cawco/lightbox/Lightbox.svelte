@@ -172,10 +172,10 @@
     const source = thumb(doc.share);
     let exit: Animation | undefined;
     if (source) {
-      exit = closeInto(sheet, source, dur("--duration-exit"));
+      exit = closeInto(sheet, source, dur("--duration-fade"));
     } else if (motionOk.current) {
       exit = sheet.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: dur("--duration-exit"),
+        duration: dur("--duration-fade"),
         easing: ease("--ease-out"),
         fill: "forwards",
       });
@@ -235,7 +235,7 @@
     <div
       class={dialogTray.tray({
         class:
-          "pointer-events-auto flex w-c-lightbox-sheet-w max-h-c-lightbox-sheet-max-h flex-col",
+          "pointer-events-auto flex w-(--lightbox-sheet-w) max-h-(--lightbox-sheet-max-h) flex-col",
       })}
       bind:this={sheet}
       {@attach land(() => doc.share, {

@@ -85,7 +85,7 @@
 
 <a
   data-task-card
-  class="press-tint focus-inset flex flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] duration-(--duration-control) ease-out data-dragging:opacity-40 not-group-data-picked/task:hover:bg-surface-hover not-data-dragging:group-data-moving/task:opacity-60 group-data-picked/task:bg-selected-bg"
+  class="press-tint focus-inset flex flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-sm transition-[background-color,opacity] duration-(--duration-control) ease-out data-dragging:opacity-40 not-group-data-picked/task:hover:bg-surface-hover not-data-dragging:group-data-moving/task:opacity-60 group-data-picked/task:bg-selected-bg"
   data-flip-enter={flying ? "own" : undefined}
   data-share={key}
   data-task={task.id}
@@ -98,16 +98,16 @@
 >
   <span
     data-task-head
-    class="flex min-h-c-badge-h items-center gap-space-1 group-data-pickable/task:pe-space-6"
+    class="flex min-h-icon-lg items-center gap-space-1 group-data-pickable/task:pe-space-6"
   >
     <span
       data-slot="id"
-      class="type-meta font-(family-name:--font-mono) liga-none text-ink-subtle group-data-picked/task:text-selected-ink"
+      class="type-meta font-(family-name:--font-mono) liga-none text-ink-subtle group-data-picked/task:text-brand-ink"
       >{task.id}</span
     >
     {#if task.problem}
       <span
-        class="inline-flex text-ink-muted group-data-picked/task:text-selected-ink"
+        class="inline-flex text-ink-muted group-data-picked/task:text-brand-ink"
         title={task.problem}
       >
         <IconWarningTriangle aria-hidden="true" class="size-icon-sm" />
@@ -135,12 +135,12 @@
   </span>
   <span
     data-slot="title"
-    class="line-clamp-2 type-label wrap-anywhere text-ink-row"
+    class="line-clamp-2 type-label wrap-anywhere text-ink-strong"
     >{task.title}</span
   >
   {#if flags.live || task.kind === "you" || asks || approves || date}
     <span
-      class="mark-line inline-flex items-center gap-space-2 type-meta text-ink-muted group-data-picked/task:text-selected-ink"
+      class="mark-line inline-flex items-center gap-space-2 type-meta text-ink-muted group-data-picked/task:text-brand-ink"
     >
       {#if asks || approves}
         <!-- Waiting on you outranks working: the attempt is stopped on you. -->
@@ -171,7 +171,7 @@
   {#if task.todos.total > 0 || waitsOn.length > 0 || task.labels.length > 0 || task.links.length > 0}
     <span
       data-slot="foot"
-      class="mt-space-1 flex flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted group-data-picked/task:text-selected-ink"
+      class="mt-space-1 flex flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted group-data-picked/task:text-brand-ink"
     >
       {#if task.todos.total > 0}
         <TodoCount

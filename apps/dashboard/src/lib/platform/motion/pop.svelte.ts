@@ -35,7 +35,7 @@ export function popOut(
   const rise = Number.parseFloat(styles.getPropertyValue("--pop-rise"));
   const [x, y] = TOWARD[side];
   return {
-    duration: dur("--duration-exit"),
+    duration: dur("--duration-fade"),
     easing: easeDrawer,
     css: (t) =>
       `opacity: ${t}; scale: ${scale + (1 - scale) * t}; translate: ${(x * (1 - t) * rise).toFixed(2)}px ${(y * (1 - t) * rise).toFixed(2)}px`,

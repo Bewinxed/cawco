@@ -33,7 +33,7 @@
   <AlertDescription>
     <p>
       {projectTrashWords.heldWhere.before}<a
-        class="text-link-ink hover:text-link-hover"
+        class="text-brand-ink hover:text-brand-ink"
         href="/project/forgotten">{projectTrashWords.heldWhere.place}</a
       >{projectTrashWords.heldWhere.after}
     </p>

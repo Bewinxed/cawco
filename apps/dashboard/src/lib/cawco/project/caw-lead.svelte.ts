@@ -128,7 +128,7 @@ export class CawLead {
   /** The task that just landed, held for two breaths. */
   landed = $state<string | null>(null);
   /**
-   * The project's row has not come within --duration-wait-grace: only then does
+   * The project's row has not come within --duration-loop: only then does
    * Caw stand in for the wait (The Real Wait Rule); a row that comes sooner
    * shows nothing of its own.
    */
@@ -231,7 +231,7 @@ export class CawLead {
       if (this.project === null) {
         this.waited = true;
       }
-    }, dur("--duration-wait-grace"));
+    }, dur("--duration-loop"));
   }
 
   /**

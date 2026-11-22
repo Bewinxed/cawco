@@ -77,7 +77,7 @@
           {/snippet}
           <span
             data-slot="title"
-            class="type-body truncate pe-(--x-room) text-ink-row"
+            class="type-body truncate pe-(--x-room) text-ink-strong"
             >{words.title}</span
           >
           {#each words.lines as line, n (n)}

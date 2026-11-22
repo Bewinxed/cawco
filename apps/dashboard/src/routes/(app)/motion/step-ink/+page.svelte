@@ -32,7 +32,7 @@
   ];
 </script>
 
-<main class="grid max-w-c-move-wait-col-w gap-space-3 p-space-3">
+<main class="grid max-w-140 gap-space-3 p-space-3">
   <ThinkingSteps>
     {#each STEPS as step, at (step.label)}
       <div data-ink={step.ink ?? "none"}>

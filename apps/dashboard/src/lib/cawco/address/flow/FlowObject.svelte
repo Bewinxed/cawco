@@ -67,7 +67,7 @@
   </div>
 {:else if flow.step === "answers"}
   <p
-    class="m-0 min-w-0 rounded-well border border-border-well bg-surface-well px-space-3 py-space-4 text-start type-title font-mono wrap-anywhere text-ink-strong select-all"
+    class="m-0 min-w-0 rounded-sm border border-border-control bg-surface-sunk px-space-3 py-space-4 text-start type-title font-mono wrap-anywhere text-ink-strong select-all"
     data-slot="answers-address"
   >
     {flow.address}
@@ -77,7 +77,7 @@
        QR departs as the name arrives (§4.9, a tick lands). -->
   <!-- The QR at §4.2's 160: proposed; the token moves to 160 if picked (proposed.ts). -->
   <div
-    style:--spacing-c-address-qr={PROPOSED_QR}
+    style:--address-qr={PROPOSED_QR}
     class="@container relative grid min-w-0"
     data-slot="phone-object"
   >
@@ -115,7 +115,7 @@
       class="size-icon-md flex-none text-status-done-ink"
     />
     <p
-      class="m-0 min-w-0 flex-1 rounded-well border border-border-well bg-surface-well px-space-3 py-space-4 text-start type-label font-mono wrap-anywhere text-ink-strong select-all"
+      class="m-0 min-w-0 flex-1 rounded-sm border border-border-control bg-surface-sunk px-space-3 py-space-4 text-start type-label font-mono wrap-anywhere text-ink-strong select-all"
     >
       {flow.secureAddress}
     </p>
@@ -125,7 +125,7 @@
     <!-- The address, named once, large and mono: Open beside it, and Copy
          only where this page has a clipboard; elsewhere it selects whole. -->
     <div
-      class="flex min-w-0 flex-wrap items-center gap-space-2 rounded-well border border-border-well bg-surface-well py-space-2 ps-space-3 pe-space-2"
+      class="flex min-w-0 flex-wrap items-center gap-space-2 rounded-sm border border-border-control bg-surface-sunk py-space-2 ps-space-3 pe-space-2"
       data-slot="live-address"
     >
       <code

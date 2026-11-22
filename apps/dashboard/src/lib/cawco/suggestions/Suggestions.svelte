@@ -110,7 +110,7 @@
 <!-- A sentence's skeleton line in its type role, as long as sentences run, varied by its slot. -->
 {#snippet sentenceBone(slot: number, line: "body" | "label")}
   {#if slot % 3 === 0}
-    <Skeleton class="w-c-measure-meta max-w-full" {line} radius="line" />
+    <Skeleton class="w-ch-32 max-w-full" {line} radius="line" />
   {:else if slot % 3 === 1}
     <Skeleton class="w-3/4" {line} radius="line" />
   {:else}
@@ -122,7 +122,7 @@
   data-slot="suggestions"
   data-look={look}
   data-placement={placement}
-  class="group/suggestions @container w-full min-w-0 data-[placement=panel]:max-w-c-starters-w"
+  class="group/suggestions @container w-full min-w-0 data-[placement=panel]:max-w-(--starters-w)"
 >
   {#if look === "list"}
     <ul
@@ -134,7 +134,7 @@
         {#each slots as slot (slot)}
           <li
             class={[
-              "grid min-h-c-row-h content-center items-center gap-x-space-1 not-last:border-b not-last:border-border-hairline",
+              "grid min-h-control-lg content-center items-center gap-x-space-1 not-last:border-b not-last:border-border-hairline",
               glyphed
                 ? "grid-cols-lead-fluid pe-space-3"
                 : "grid-cols-1 px-space-3",
@@ -154,7 +154,7 @@
             <button
               data-slot="suggestion"
               class={[
-                "group/item mark-line press-tint focus-inset grid w-full min-h-c-row-h content-center items-start gap-x-space-1 rounded-sm py-space-3 text-start type-body text-ink-strong select-none transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover",
+                "group/item mark-line press-tint focus-inset grid w-full min-h-control-lg content-center items-start gap-x-space-1 rounded-sm py-space-3 text-start type-body text-ink-strong select-none transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover",
                 glyphed
                   ? "grid-cols-lead-fluid pe-space-3"
                   : "grid-cols-1 px-space-3",
@@ -191,7 +191,7 @@
         {#each slots as slot (slot)}
           <li
             class={[
-              "grid min-h-c-row-h-two content-center items-start gap-x-space-3 rounded-md bg-surface-raised px-space-4 py-space-3 shadow-tile",
+              "grid min-h-14 content-center items-start gap-x-space-3 rounded-md bg-surface-raised px-space-4 py-space-3 shadow-sm",
               glyphed ? "grid-cols-mark-fluid" : "grid-cols-1",
             ]}
           >
@@ -218,7 +218,7 @@
                       /></span
                     >
                   {:else}
-                    <span class="hidden @max-suggestion-rows-narrow:flex"
+                    <span class="hidden @max-xs:flex"
                       ><Skeleton
                         class="w-1/2"
                         line="meta"
@@ -237,7 +237,7 @@
             <button
               data-slot="suggestion"
               class={[
-                "mark-line press-tint grid w-full min-h-c-row-h-two content-center items-start gap-x-space-3 rounded-md bg-surface-raised px-space-4 py-space-3 text-start text-ink-strong shadow-tile select-none transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover",
+                "mark-line press-tint grid w-full min-h-14 content-center items-start gap-x-space-3 rounded-md bg-surface-raised px-space-4 py-space-3 text-start text-ink-strong shadow-sm select-none transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover",
                 glyphed ? "grid-cols-mark-fluid" : "grid-cols-1",
               ]}
               onclick={() => onpick(suggestion)}
@@ -295,7 +295,7 @@
             ]}
           >
             <Skeleton
-              class="w-c-measure-meta max-w-full"
+              class="w-ch-32 max-w-full"
               height="control-sm"
               radius="chip"
               type="label"
@@ -315,7 +315,7 @@
               data-slot="suggestion"
               class={chipVariants({
                 class:
-                  "inline-grid min-w-c-touch-floor grid-cols-[auto_minmax(0,auto)] content-center items-start border-border-row-outline select-none motion-safe:transition-[border-color,background-color,transform] motion-safe:enabled:active:[transform:scale(var(--press-scale))] motion-safe:enabled:data-pressed:[transform:scale(var(--press-scale))]",
+                  "inline-grid min-w-control-lg grid-cols-[auto_minmax(0,auto)] content-center items-start border-border-strong select-none motion-safe:transition-[border-color,background-color,transform] motion-safe:enabled:active:[transform:scale(var(--press-scale))] motion-safe:enabled:data-pressed:[transform:scale(var(--press-scale))]",
               })}
               onclick={() => onpick(suggestion)}
               type="button"

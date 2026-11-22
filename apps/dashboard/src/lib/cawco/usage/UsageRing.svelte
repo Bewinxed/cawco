@@ -48,7 +48,7 @@
     stroke-width={STROKE}
   ></circle>
   <circle
-    class="fill-none stroke-meter-calm group-state-near/ring:stroke-warning-9 group-state-over/ring:stroke-error-9 group-state-reached/ring:stroke-error-9 group-state-stale/ring:stroke-meter-stale motion-safe:transition-[stroke-dasharray] motion-safe:duration-(--duration-morph) motion-safe:ease-drawer"
+    class="fill-none stroke-ink-muted group-state-near/ring:stroke-status-attn-glyph group-state-over/ring:stroke-status-fail-glyph group-state-reached/ring:stroke-status-fail-glyph group-state-stale/ring:stroke-ink-subtle motion-safe:transition-[stroke-dasharray] motion-safe:duration-(--duration-fade) motion-safe:ease-drawer"
     cx="8"
     cy="8"
     pathLength="100"

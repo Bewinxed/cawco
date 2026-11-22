@@ -272,13 +272,13 @@
       <!-- Said before Save, where the name is changed: that is its consequence. -->
       <p
         data-slot="note"
-        class="type-meta max-w-c-measure text-ink-muted"
+        class="type-meta max-w-measure text-ink-muted"
         in:appear
       >
         {words.renamed(server.name)}
       </p>
     {:else}
-      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
         <Coded text={words.callsAs(serverName || "name")} />
       </p>
     {/if}
@@ -311,12 +311,12 @@
       value={mode}
     />
     <!-- One kind's note and fields cross-fade into the next's
-         (--duration-control) in one box, whose height follows over --duration-pop on
+         (--duration-control) in one box, whose height follows over --duration-panel on
          --ease-drawer. -->
     <div
       data-slot="kind"
       class="relative flex flex-col"
-      {@attach morph({ ms: dur("--duration-pop") })}
+      {@attach morph({ ms: dur("--duration-panel") })}
     >
       {#if mode === "bunx"}
         <div
@@ -325,7 +325,7 @@
           in:crossIn
           out:crossOut
         >
-          <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+          <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
             {HOW.bunx}
           </p>
           <Field id="mcp-package" label={words.package}>
@@ -360,7 +360,7 @@
           in:crossIn
           out:crossOut
         >
-          <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+          <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
             {HOW.command}
           </p>
           <Field id="mcp-command" label={words.command}>
@@ -391,7 +391,7 @@
           in:crossIn
           out:crossOut
         >
-          <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+          <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
             {HOW.remote}
           </p>
           <Field id="mcp-url" label={words.url}>
@@ -407,7 +407,7 @@
           {#if urlKeyHeld}
             <p
               data-slot="note"
-              class="type-meta max-w-c-measure text-ink-muted"
+              class="type-meta max-w-measure text-ink-muted"
             >
               {clearUrlKey ? words.urlKeyCleared : words.urlKeyHeld}
               <Button
@@ -448,13 +448,13 @@
         icon={IconKey}
         label={mode === "remote" ? words.headers : words.environment}
       >
-        <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+        <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
           <Coded text={words.expanded} />
         </p>
         <div
           data-slot="kind"
           class="relative flex flex-col"
-          {@attach morph({ ms: dur("--duration-pop") })}
+          {@attach morph({ ms: dur("--duration-panel") })}
         >
           {#if mode === "remote"}
             <div in:crossIn out:crossOut>
@@ -481,7 +481,7 @@
   {/if}
 
   <EditorSection hue={HUE} icon={IconMapPoint} label={words.where}>
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
       {words.whereNote}
     </p>
     <div>

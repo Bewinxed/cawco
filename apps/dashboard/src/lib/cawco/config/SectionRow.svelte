@@ -92,19 +92,19 @@
 >
   <div
     data-slot="row"
-    class="group/row relative flex min-h-c-row-h items-center gap-space-3 rounded-sm px-space-2 py-space-2 transition-control data-two:min-h-c-row-h-two has-link-active:bg-surface-fill light:has-link-active:bg-surface-fill-strong light:has-link-active:inks-strong max-phone:grid max-phone:@min-section-row/section-row:grid-cols-(--row-cols) max-phone:@min-section-row/section-row:grid-rows-(--row-rows) max-phone:gap-x-space-3 max-phone:gap-y-space-row max-phone:@max-section-row/section-row:grid-cols-(--row-cols-narrow) max-phone:@max-section-row/section-row:grid-rows-(--row-rows-narrow)"
+    class="group/row relative flex min-h-control-lg items-center gap-space-3 rounded-sm px-space-2 py-space-2 transition-control data-two:min-h-14 has-link-active:bg-surface-hover light:has-link-active:bg-surface-pressed light:has-link-active:inks-strong max-phone:grid max-phone:@min-xs/section-row:grid-cols-(--row-cols) max-phone:@min-xs/section-row:grid-rows-(--row-rows) max-phone:gap-x-space-3 max-phone:gap-y-space-row max-phone:@max-xs/section-row:grid-cols-(--row-cols-narrow) max-phone:@max-xs/section-row:grid-rows-(--row-rows-narrow)"
     data-off={enabled === false || undefined}
     data-two={meta !== undefined || undefined}
-    style:--row-cols="var(--spacing-c-mark) minmax(0, 1fr) auto"
+    style:--row-cols="var(--mark-box) minmax(0, 1fr) auto"
     style:--row-rows={meta === undefined ? "auto" : "auto auto"}
-    style:--row-cols-narrow="var(--spacing-c-mark) minmax(0, 1fr)"
+    style:--row-cols-narrow="var(--mark-box) minmax(0, 1fr)"
     style:--row-rows-narrow={meta === undefined
       ? "auto auto"
       : "auto auto auto"}
   >
     <span
       data-slot="tile"
-      class="inline-flex size-c-mark flex-none items-center justify-center rounded-sm bg-surface-raised text-ink-muted shadow-tile [&>*]:size-icon-md [&>*]:flex-none max-phone:row-span-full max-phone:self-center"
+      class="inline-flex size-6.5 flex-none items-center justify-center rounded-sm bg-surface-raised text-ink-muted shadow-sm [&>*]:size-icon-md [&>*]:flex-none max-phone:row-span-full max-phone:self-center"
       data-share={href ? `icon:${href}` : undefined}
       style:color={hue}
       {@attach land(() => {
@@ -175,7 +175,7 @@
          it takes a line of its own, last, from the name's start. -->
     <span
       data-slot="controls"
-      class="relative z-1 flex flex-none items-center ghost-rest-fill gap-space-2 hit-gap-x-space-2 coarse:gap-space-4 coarse:hit-gap-x-space-4 max-phone:@min-section-row/section-row:col-start-3 max-phone:@min-section-row/section-row:row-start-1 max-phone:@max-section-row/section-row:col-start-2 max-phone:@max-section-row/section-row:row-start-(--row-controls) max-phone:@max-section-row/section-row:justify-self-start"
+      class="relative z-1 flex flex-none items-center ghost-rest-fill gap-space-2 hit-gap-x-space-2 coarse:gap-space-4 coarse:hit-gap-x-space-4 max-phone:@min-xs/section-row:col-start-3 max-phone:@min-xs/section-row:row-start-1 max-phone:@max-xs/section-row:col-start-2 max-phone:@max-xs/section-row:row-start-(--row-controls) max-phone:@max-xs/section-row:justify-self-start"
       style:--row-controls={meta === undefined ? 2 : 3}
     >
       {#if rollout}
@@ -201,7 +201,7 @@
   {#if below || note}
     <div
       class="flex min-w-0 flex-col gap-space-2 pt-0 pe-space-2 pb-space-2 ps-(--below-ps) empty:hidden max-phone:ps-space-2"
-      style:--below-ps={"calc(var(--spacing-space-2) + var(--spacing-c-mark) + var(--spacing-space-3))"}
+      style:--below-ps={"calc(var(--spacing-space-2) + var(--mark-box) + var(--spacing-space-3))"}
     >
       {#if note}
         <p

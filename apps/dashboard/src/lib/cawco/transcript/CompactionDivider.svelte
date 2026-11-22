@@ -124,7 +124,7 @@
     if (watched) {
       return dur("--duration-fade");
     }
-    return lead === null ? 0 : dur("--duration-morph") + lead;
+    return lead === null ? 0 : dur("--duration-fade") + lead;
   }
 
   const disclosed = $derived(disclosureAt(row.session, row.key));
@@ -173,7 +173,7 @@
   aria-label={row.brief === null || failed
     ? undefined
     : `Compacted, ${open ? "hide" : "show"} the summary`}
-  class="select-none group/divider divider-chevron flex items-center gap-space-2 w-full min-h-c-btn-h-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-brand-ink transition-[color] duration-(--duration-control) ease-out hover:enabled:text-brand-ink-strong data-failed:block data-failed:text-start data-failed:text-status-fail-ink focus-inset touch-hit"
+  class="select-none group/divider divider-chevron flex items-center gap-space-2 w-full min-h-control-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-brand-ink transition-[color] duration-(--duration-control) ease-out hover:enabled:text-brand-ink data-failed:block data-failed:text-start data-failed:text-status-fail-ink focus-inset touch-hit"
   disabled={row.brief === null || failed}
   onclick={() => disclosed.set(!open)}
   type="button"
@@ -222,13 +222,13 @@
        press's. -->
   <span
     style:--mid-x="calc(var(--chev) * var(--room) * -1)"
-    style:--mid-durs="var(--chev-dur), var(--duration-toggle)"
+    style:--mid-durs="var(--chev-dur), var(--duration-fade)"
     style:--mid-eases="var(--chev-ease), var(--ease-out)"
     class="whitespace-nowrap translate-x-(--mid-x) group-data-failed/divider:hidden motion-safe:transition-[translate,scale] motion-safe:duration-(--mid-durs) motion-safe:ease-(--mid-eases) motion-safe:group-active/divider:group-enabled/divider:scale-(--press-scale)"
     ><!-- Caw's slot: his still's box, its middle on the word's x-height; as
           wide as Caw at work while it runs, closing to his mark's box as it
           ends, on the line's clock. --><span
-      class="relative inline-block align-middle w-(--tx-compact-caw) h-(--tx-compact-caw) me-c-pill-gap group-data-live/divider:w-(--tx-compacting-caw) motion-safe:transition-[inline-size,margin-inline-end] motion-safe:duration-(--duration-panel) motion-safe:ease-out"
+      class="relative inline-block align-middle w-(--tx-compact-caw) h-(--tx-compact-caw) me-space-2 group-data-live/divider:w-space-8 motion-safe:transition-[inline-size,margin-inline-end] motion-safe:duration-(--duration-panel) motion-safe:ease-out"
       data-caw
       >{#if working}
         <span class="absolute top-1/2 left-1/2 block leading-0 -translate-1/2"
@@ -261,7 +261,7 @@
         >
       {/if}</span
     ><span
-      style:--word-clip={"inset(calc(var(--spacing-c-compaction-word-bleed) * -1) 0)"}
+      style:--word-clip={"inset(calc(var(--compaction-word-bleed) * -1) 0)"}
       class="group-data-settling/divider:clip-path-(--word-clip)"
       >{#if failed}
         <!-- A compaction that failed never reads "Compacted", seen or not. -->

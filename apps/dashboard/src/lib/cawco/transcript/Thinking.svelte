@@ -157,13 +157,13 @@
   });
   /**
    * Folding shut, the last thought's end rises into the header as the body
-   * closes up under it, on the fold's own length (--duration-exit); opened, it
+   * closes up under it, on the fold's own length (--duration-fade); opened, it
    * fades out of the way (--duration-control). Never on a first render.
    */
   function tailIn(_node: Element) {
     const rise = motionOk.current;
     return {
-      duration: dur("--duration-exit"),
+      duration: dur("--duration-fade"),
       easing: easeOut,
       css: (t: number) =>
         `opacity: ${t}${rise ? `; translate: 0 ${((1 - t) * 0.5).toFixed(3)}lh` : ""}`,
@@ -203,7 +203,7 @@
   data-slot="rail-row"
   data-think
   data-tx-rail
-  class="rail-row max-w-c-measure"
+  class="rail-row max-w-measure"
 >
   <ThinkingSteps
     onOpenChange={(value) => {

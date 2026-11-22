@@ -18,7 +18,7 @@
  *   settle on one spring. The grown shape's shoulders step out from the
  *   pill's edges to it (grown.ts `wide`, the same each side). The height
  *   and the width chosen are kept across Done and reopen.
- * - **Done** folds it over `--duration-panel-exit` into its chip, its picture the
+ * - **Done** folds it over `--duration-panel` into its chip, its picture the
  *   chip's thumbnail. The rail's **Remove** folds it back into the pill on
  *   the same clock, leaves no chip, and takes it out of the message as the
  *   chip's remove does; the panel still lists it.
@@ -574,7 +574,7 @@ export class CanvasRoom {
     }
   }
 
-  /** Done: the canvas folds into its chip over `--duration-panel-exit`; its picture becomes the chip's. */
+  /** Done: the canvas folds into its chip over `--duration-panel`; its picture becomes the chip's. */
   async fold(): Promise<void> {
     await this.#fold(true);
   }
@@ -591,7 +591,7 @@ export class CanvasRoom {
   }
 
   /**
-   * The canvas folds over `--duration-panel-exit`: into its chip's box (`intoChip`),
+   * The canvas folds over `--duration-panel`: into its chip's box (`intoChip`),
    * or back into the pill along the grown shape's own fold. Whether it
    * landed folded.
    */
@@ -616,7 +616,7 @@ export class CanvasRoom {
       to = chip ? atRest(() => boxOf(chip)) : null;
     }
     const { halo } = shape.layers;
-    const ms = dur("--duration-panel-exit");
+    const ms = dur("--duration-panel");
     let runs: Animation[];
     if (motionOk.current && (to || !intoChip)) {
       const into = to

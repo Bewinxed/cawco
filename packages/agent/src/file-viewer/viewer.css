@@ -54,7 +54,7 @@ body {
   text-underline-offset: 0.2em;
 }
 .file-download:hover {
-  color: var(--color-brand-ink-strong);
+  color: var(--color-brand-ink);
 }
 .file-download:focus-visible {
   outline: var(--border-width) solid var(--color-focus-ring);
@@ -68,7 +68,7 @@ body {
 }
 .file-note {
   margin: var(--spacing-space-4) auto 0;
-  max-inline-size: var(--spacing-c-measure);
+  max-inline-size: var(--spacing-measure);
   font: var(--type-meta);
   color: var(--color-ink-muted);
   text-align: center;
@@ -93,7 +93,7 @@ body {
   inline-size: 100%;
   overflow: clip;
   background: var(--color-surface-raised);
-  box-shadow: var(--shadow-raised);
+  box-shadow: var(--shadow-sm);
 }
 .page-canvas {
   display: block;
@@ -110,13 +110,13 @@ body {
   display: block;
   max-inline-size: 100%;
   block-size: auto;
-  box-shadow: var(--shadow-raised);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Text: its lines on one sheet at the reading measure, each numbered. */
 .sheet {
   max-inline-size: calc(
-    var(--spacing-c-measure) + var(--digits, 4) * 1ch + var(--spacing-space-3) *
+    var(--spacing-measure) + var(--digits, 4) * 1ch + var(--spacing-space-3) *
       2 + var(--spacing-space-4)
   );
   margin-inline: auto;
@@ -157,12 +157,12 @@ body {
 .file-card {
   display: grid;
   gap: var(--spacing-space-2);
-  max-inline-size: var(--spacing-c-measure-short);
+  max-inline-size: var(--spacing-measure-short);
   padding: var(--spacing-space-5);
   background: var(--color-surface-raised);
   border: var(--border-width) solid var(--color-border-control);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-raised);
+  box-shadow: var(--shadow-sm);
 }
 .file-kind {
   margin: 0;

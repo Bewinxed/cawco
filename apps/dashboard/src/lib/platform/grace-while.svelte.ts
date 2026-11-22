@@ -1,7 +1,7 @@
 import { dur } from "./motion/curves.svelte";
 
 /**
- * Whether a wait has lasted past its grace (`--duration-wait-grace`, DESIGN.md
+ * Whether a wait has lasted past its grace (`--duration-loop`, DESIGN.md
  * The Real Wait Rule): `current` turns true once `waiting()` has held for
  * the grace, and false again as soon as it stops. Made where an effect can
  * stand (a component's script, or a store a component makes).
@@ -17,7 +17,7 @@ export class GraceWhile {
       }
       const grace = setTimeout(() => {
         this.current = true;
-      }, dur("--duration-wait-grace"));
+      }, dur("--duration-loop"));
       return () => clearTimeout(grace);
     });
   }

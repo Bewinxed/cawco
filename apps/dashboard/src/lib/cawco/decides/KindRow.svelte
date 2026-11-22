@@ -80,7 +80,7 @@
 
 {#snippet glyph(Mark: typeof Glyph)}
   <span
-    class="grid size-8 flex-none place-items-center rounded-xs bg-surface-raised text-ink-strong shadow-tile"
+    class="grid size-8 flex-none place-items-center rounded-xs bg-surface-raised text-ink-strong shadow-sm"
   >
     <Mark aria-hidden="true" class="size-icon-sm" />
   </span>
@@ -91,7 +91,7 @@
   class="col-span-full grid min-w-0 grid-cols-subgrid items-start gap-y-space-2 border-b border-border-hairline py-space-3 last:border-b-0"
   data-kind-row={kind.id}
 >
-  <div class="col-start-1 row-start-1 @max-kinds/kinds:row-span-2">
+  <div class="col-start-1 row-start-1 @max-sm/kinds:row-span-2">
     {@render glyph(Glyph)}
   </div>
   {#if rename}
@@ -180,7 +180,7 @@
     </div>
     {#if holder}
       <p
-        class="mark-line m-0 col-start-3 row-start-1 flex min-w-0 items-center gap-x-space-2 self-center @max-kinds/kinds:col-start-2 @max-kinds/kinds:row-start-2"
+        class="mark-line m-0 col-start-3 row-start-1 flex min-w-0 items-center gap-x-space-2 self-center @max-sm/kinds:col-start-2 @max-sm/kinds:row-start-2"
       >
         <span class="sr-only">{decidesWords.whoAcrossFleet(holder.name)}</span>
         <MemberFace member={holder} size={24} />
@@ -192,7 +192,7 @@
       </p>
     {/if}
     <div
-      class="col-start-4 row-start-1 flex items-center gap-x-space-3 self-center @max-kinds/kinds:col-start-3 @max-kinds/kinds:row-span-2"
+      class="col-start-4 row-start-1 flex items-center gap-x-space-3 self-center @max-sm/kinds:col-start-3 @max-sm/kinds:row-span-2"
     >
       <Button
         aria-label={decidesWords.rename(kind.name)}

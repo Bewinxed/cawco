@@ -175,10 +175,10 @@
     overflowing && "kit-edge-fade-block",
   ]}
   data-safe-bottom
-  style:--fade-len="var(--spacing-c-edge-fade-len)"
+  style:--fade-len="var(--edge-fade-len)"
   style:--list-max={"min(calc(var(--spacing) * 140), calc(100dvh - calc(var(--spacing) * 30)))"}
-  style:--list-max-phone={"calc(100dvh - var(--spacing-c-top-bar-h) - var(--spacing-space-3) - var(--safe-bottom) - calc(var(--spacing) * 24))"}
-  style:--stuck-fade={"linear-gradient(to bottom, transparent, var(--color-mask-opaque) var(--fade-start), var(--color-mask-opaque))"}
+  style:--list-max-phone={"calc(100dvh - var(--spacing-control-lg) - var(--spacing-space-3) - var(--safe-bottom) - calc(var(--spacing) * 24))"}
+  style:--stuck-fade={"linear-gradient(to bottom, transparent, var(--color-ink-strong) var(--fade-start), var(--color-ink-strong))"}
   {@attach reflow()}
   {@attach measured}
 >
@@ -193,7 +193,7 @@
         <span
           data-slot="needs"
           data-caw-panel-glyph
-          class="me-space-1 grid w-c-row-lead flex-none place-items-center self-center text-status-attn-glyph"
+          class="me-space-1 grid w-row-compact flex-none place-items-center self-center text-status-attn-glyph"
           data-box
           ><IconNeedsYou aria-hidden="true" class="size-icon-md" /></span
         >
@@ -231,7 +231,7 @@
       >
         <span
           data-slot="glyph"
-          class="me-space-1 grid w-c-row-lead flex-none place-items-center self-center text-ink-muted"
+          class="me-space-1 grid w-row-compact flex-none place-items-center self-center text-ink-muted"
           data-box><IconNotices aria-hidden="true" class="size-icon-md" /></span
         >
         <span
@@ -277,7 +277,7 @@
             class="grid grid-cols-(--damaged-cols) items-box-start gap-x-space-2 gap-y-space-1 py-space-2 pe-space-3 ps-(--damaged-lead)"
             data-flip
             style:--damaged-cols="1fr auto"
-            style:--damaged-lead={"calc(var(--spacing-space-3) + var(--spacing-c-row-lead) + var(--spacing-space-3))"}
+            style:--damaged-lead={"calc(var(--spacing-space-3) + var(--spacing-row-compact) + var(--spacing-space-3))"}
           >
             <p
               data-slot="words"

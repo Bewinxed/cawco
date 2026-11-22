@@ -14,13 +14,13 @@
 
 <!-- The pages' one gutter (as Usage stands on it). -->
 <div
-  class="min-w-0 flex-auto overflow-y-auto pt-space-6 pr-space-6 pb-space-6 pl-space-7 max-desk:px-space-5 max-phone:px-space-5 max-phone:py-space-4"
+  class="min-w-0 flex-auto overflow-y-auto pt-space-6 pr-space-6 pb-space-6 pl-space-6 max-desk:px-space-5 max-phone:px-space-5 max-phone:py-space-4"
 >
-  <div class="flex max-w-c-config-max-w flex-col gap-space-group">
+  <div class="flex max-w-245 flex-col gap-space-5">
     <h1 class="m-0 type-title text-balance text-ink-strong">
       {projectEndWords.forgottenTitle}
     </h1>
-    <div class="rounded-lg bg-surface-raised px-space-4 py-space-2 shadow-tile">
+    <div class="rounded-lg bg-surface-raised px-space-4 py-space-2 shadow-sm">
       <ForgottenProjects {...props} />
     </div>
   </div>

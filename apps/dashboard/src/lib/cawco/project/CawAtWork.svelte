@@ -58,7 +58,7 @@
   aria-label={label}
   data-slot={slot}
   data-tx-rail
-  class="tx-columns rail-row max-w-c-measure"
+  class="tx-columns rail-row max-w-measure"
 >
   {#if present}
     <div class="rail-hang" data-box>

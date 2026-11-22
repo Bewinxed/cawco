@@ -24,7 +24,7 @@
   } = $props();
 </script>
 
-<div class="w-field-group max-w-full">
+<div class="w-sm max-w-full">
   <InputGroup.Root>
     <InputGroup.Addon>
       <IconSearch aria-hidden="true" />

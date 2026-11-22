@@ -206,7 +206,8 @@
      wrapper), so the bench stands on the bench layer under it. One group,
      its strip on the shelf and its panes under it. -->
 <div
-  class="@container/leaf fixed inset-0 z-(--layer-bench) flex flex-col bg-surface-shelf pt-space-7 text-ink-strong"
+  class="@container/leaf fixed inset-0 z-(--z) flex flex-col bg-surface-shelf pt-space-6 text-ink-strong"
+  style:--z="calc(var(--layer-sheet) + 20)"
   data-head-tint
   onclickcapture={benchClick(leaf)}
 >

@@ -45,7 +45,7 @@
    * the title saying what happened. Once live a last part says so, with
    * every address and Done; an optional station not done stays a line that
    * reopens it. The tray's height is its rows', carried by morph over
-   * --duration-pop on the drawer curve.
+   * --duration-panel on the drawer curve.
    */
   import Words from "./Words.svelte";
   import {
@@ -231,7 +231,7 @@
   data-form={form}
   data-step={tray.step}
   data-tray="stations"
-  {@attach (node) => morph({ ms: dur("--duration-pop") })(node)}
+  {@attach (node) => morph({ ms: dur("--duration-panel") })(node)}
 >
   <!-- Caw's room over the top edge, over the title's start: he stands
        behind the edge, leading the tray, and never moves. -->
@@ -316,7 +316,7 @@
                    optional station not done. -->
                 <button
                   aria-expanded={open || shown === station}
-                  class="mark-line press-tint focus-inset group/station grid min-h-c-row-h grid-cols-(--station-cols) items-center gap-x-space-2 rounded-sm px-space-2 text-start enabled:hover:bg-surface-hover disabled:cursor-default"
+                  class="mark-line press-tint focus-inset group/station grid min-h-control-lg grid-cols-(--station-cols) items-center gap-x-space-2 rounded-sm px-space-2 text-start enabled:hover:bg-surface-hover disabled:cursor-default"
                   disabled={open}
                   onclick={() => press(station, state)}
                   style:--station-cols={STATION_COLS}
@@ -445,7 +445,7 @@
             <!-- The stations not reached yet: one line together, each
                  opening as it is reached. -->
             <li
-              class="mark-line grid min-h-c-row-h grid-cols-(--station-cols) items-center gap-x-space-2 border-t border-t-border-hairline px-space-2 type-meta text-ink-muted"
+              class="mark-line grid min-h-control-lg grid-cols-(--station-cols) items-center gap-x-space-2 border-t border-t-border-hairline px-space-2 type-meta text-ink-muted"
               data-slot="ahead"
               style:--station-cols={STATION_COLS}
             >

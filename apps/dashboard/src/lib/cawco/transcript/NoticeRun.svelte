@@ -54,7 +54,7 @@
 >
   <button
     aria-expanded={open}
-    class="select-none flex items-center gap-space-3 w-full min-h-c-btn-h-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-ink-muted focus-inset touch-hit"
+    class="select-none flex items-center gap-space-3 w-full min-h-control-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-ink-muted focus-inset touch-hit"
     onclick={() => disclosed.set(!open)}
     type="button"
   >
@@ -75,7 +75,7 @@
       <span data-slot="chev" class="inline-flex flex-none" data-box
         ><IconChevron
           aria-hidden="true"
-          class="size-icon-sm group-data-open/notice:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--duration-toggle) motion-safe:ease-in-out"
+          class="size-icon-sm group-data-open/notice:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--duration-fade) motion-safe:ease-in-out"
         /></span
       ></span
     >

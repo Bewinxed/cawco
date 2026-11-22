@@ -10,7 +10,7 @@
   import { pressVariants } from "./press.js";
 
   export const buttonVariants = tv({
-    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md glass-item:concentric-at border border-border-row-outline bg-linear-to-b bg-surface-raised from-transparent to-transparent bg-clip-padding font-medium text-body text-ink-strong leading-none tracking-title [--hit-edge:1px] hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-error-9 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md glass-item:concentric-at border border-border-strong bg-linear-to-b bg-surface-raised from-transparent to-transparent bg-clip-padding font-medium text-body text-ink-strong leading-none tracking-title [--hit-edge:1px] hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-status-fail-glyph [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       /* The press, by size (./press.ts, The Press Rule): a compact button
          scales; one stretched full width, as a list row or a card's body,
@@ -30,20 +30,20 @@
            a switch to or from this variant, and its hover, cross the
            highlight with the fill on one clock (`--transition-control`). */
         default:
-          "border-transparent bg-action-solid from-action-top to-action-bottom bg-clip-border text-on-action hover:bg-action-hover hover:from-action-hover-top hover:to-action-hover-bottom",
+          "border-transparent bg-action-solid action-stops bg-clip-border text-on-action hover:bg-action-hover hover:action-stops-hover",
         outline: "aria-expanded:not-aria-current-page:bg-surface-hover",
         secondary:
           "border-border-hairline bg-surface-recess hover:bg-surface-hover",
         ghost:
           "border-transparent bg-transparent aria-expanded:not-aria-current-page:bg-surface-hover",
         destructive:
-          "border-error-9 bg-transparent text-error-11 hover:bg-error-3",
+          "border-status-fail-glyph bg-transparent text-status-fail-ink hover:bg-status-fail-bg",
         /* A grant wider than what was asked (DESIGN.md, The Consequential
            Grant Rule): warning tint, warning ink and a real edge, the same at
            rest and under the pointer, so it is never made more inviting. */
         grant:
           "border-status-attn-ink bg-status-attn-bg text-status-attn-ink hover:bg-status-attn-bg",
-        link: "border-transparent bg-transparent text-link-ink underline-offset-4 hover:bg-transparent hover:underline",
+        link: "border-transparent bg-transparent text-brand-ink underline-offset-4 hover:bg-transparent hover:underline",
       },
       size: {
         default:
@@ -53,19 +53,19 @@
            words not drawn, it stands as its glyph: the icon size's square,
            the glyph centred inside its edge, and a count it still says kept
            that inset from the glyph and the edge. */
-        sm: "h-c-btn-h-sm glass-item:h-c-bar-item in-form-compact:min-w-c-btn-h-sm gap-(--btn-gap) in-form-compact:px-[calc((var(--spacing-c-btn-h-sm)-var(--btn-icon))/2-1px)] px-space-3 type-label [--btn-gap:var(--spacing-space-2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        sm: "h-control-sm glass-item:h-row-compact in-form-compact:min-w-control-sm gap-(--btn-gap) in-form-compact:px-[calc((var(--spacing-control-sm)-var(--btn-icon))/2-1px)] px-space-3 type-label [--btn-gap:var(--spacing-space-2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:calc(var(--spacing)_*_2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         /* A control standing in a composer shell (the composer's surface brief, Composer:
            "34px Attach … and Send/Stop … each at the concentric 4px
            radius"): the default's recipe at the composer field's height. */
         composer:
-          "h-c-composer-field gap-(--btn-gap) px-space-4 [--btn-gap:calc(var(--spacing)_*_2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+          "h-control-md gap-(--btn-gap) px-space-4 [--btn-gap:calc(var(--spacing)_*_2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         icon: "size-9",
         "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-icon-sm",
         "icon-sm":
-          "size-c-btn-h-sm glass-item:size-c-bar-item glass-item:[&_svg:not([class*='size-'])]:size-c-bar-symbol",
+          "size-control-sm glass-item:size-row-compact glass-item:[&_svg:not([class*='size-'])]:size-4.5",
         "icon-lg": "size-11",
-        "icon-composer": "size-c-composer-field",
+        "icon-composer": "size-control-md",
       },
       /* The looks its callers draw over a variant, each as they drew it. */
       /** The ink: muted, muted until the pointer is on it, or destructive. */
@@ -74,9 +74,9 @@
         quiet: "text-ink-muted hover:text-ink-strong",
         /** A bare symbol that removes (a list's minus in edit mode, as
             Reminders' is): the destructive ink, at rest and under the pointer. */
-        destructive: "text-error-11",
+        destructive: "text-status-fail-ink",
         /** A changed value's own mark (the design graph's restore glyph, where his pick marks a change by its glyph alone): the edit's ink. */
-        edited: "text-selected-ink",
+        edited: "text-brand-ink",
       },
       /** An answer to an ask: filled in the status tint, edged on the recess,
           or edged with its strong ink held (a prompt's answers). Its hover
@@ -126,7 +126,7 @@
           shrinking, at the bar's control corner. */
       look: {
         "in-bar":
-          "group-data-bar:h-c-composer-field group-data-bar:w-auto group-data-bar:min-w-c-composer-field group-data-bar:flex-none group-data-bar:concentric-xs",
+          "group-data-bar:h-control-md group-data-bar:w-auto group-data-bar:min-w-control-md group-data-bar:flex-none group-data-bar:concentric-xs",
       },
       /** It may shrink below its words, or up to a field's cap. */
       width: { shrink: "min-w-0", capped: "min-w-0 max-w-112" },
@@ -202,7 +202,7 @@
           press tint still darkens it (The Press Rule). */
       current: {
         selected:
-          "[transition:background-color_var(--duration-control)_var(--ease-out),color_var(--duration-control)_var(--ease-out)] aria-current-page:bg-selected-bg aria-current-page:bg-clip-border aria-current-page:text-selected-ink aria-current-page:hover:bg-selected-bg aria-current-page:hover:text-selected-ink",
+          "[transition:background-color_var(--duration-control)_var(--ease-out),color_var(--duration-control)_var(--ease-out)] aria-current-page:bg-selected-bg aria-current-page:bg-clip-border aria-current-page:text-brand-ink aria-current-page:hover:bg-selected-bg aria-current-page:hover:text-brand-ink",
       },
     },
     defaultVariants: {
@@ -242,7 +242,7 @@
        * The work this button started is running. The icon slot spins, the
        * label cross-fades to `pendingLabel` (the button is as wide as the
        * wider of the two from the start), and the button holds its place and its focus but takes no press. When it
-       * ends without `failed`, a check stands in the slot for --duration-hold.
+       * ends without `failed`, a check stands in the slot for --duration-loop.
        */
       pending?: boolean;
       /** What the label says while pending ("Saving…"); unchanged if unset. */

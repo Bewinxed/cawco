@@ -9,11 +9,11 @@
    * wears it, and HangCard's cards.
    *
    * `pop` (DESIGN.md, Navigation, menus and floating surfaces): it opens from its trigger's
-   * side (`--kit-rise`, by bits-ui's `data-side`) over --duration-pop on the
+   * side (`--kit-rise`, by bits-ui's `data-side`) over --duration-panel on the
    * drawer curve, rising --pop-rise and growing from --pop-scale as it fades
    * in from its @starting-style (which iOS 27.2 Safari applies to a surface
    * just added: probe-kit ios-safari-motion, 2026-10-23), and leaves the
-   * same way over --duration-exit.
+   * same way over --duration-fade.
    * Transitions on `data-state`, so a close caught mid-open turns back from
    * where it is; bits-ui holds it mounted until they end (getAnimations()).
    * It grows from its trigger through bits' transform-origin, which each
@@ -30,10 +30,10 @@
    * anchor; it leaves by `popOut` with the same side.
    */
   export const popMotion =
-    "transition-opacity duration-(--duration-pop) ease-drawer [--kit-rise:0_calc(-1*var(--pop-rise))] side-left:[--kit-rise:var(--pop-rise)_0] side-right:[--kit-rise:calc(-1*var(--pop-rise))_0] side-top:[--kit-rise:0_var(--pop-rise)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--duration-exit) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)]";
+    "transition-opacity duration-(--duration-panel) ease-drawer [--kit-rise:0_calc(-1*var(--pop-rise))] side-left:[--kit-rise:var(--pop-rise)_0] side-right:[--kit-rise:calc(-1*var(--pop-rise))_0] side-top:[--kit-rise:0_var(--pop-rise)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--duration-fade) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)]";
 
   export const floatingSurface = tv({
-    base: "rounded-lg concentric-in r-outer-lg border border-border-control bg-surface-raised p-c-floating-pad text-ink-strong",
+    base: "rounded-lg concentric-in r-outer-lg border border-border-control bg-surface-raised p-space-2 text-ink-strong",
     variants: {
       /**
        * Its drop (DESIGN.md, Shadow Vocabulary): `overlay` for what opens
@@ -44,12 +44,12 @@
        * tile's 2px read as no shadow at all.
        */
       depth: {
-        overlay: "shadow-overlay",
+        overlay: "shadow-lg",
         panel: "shadow-md",
       },
       motion: {
         pop: popMotion,
-        hang: "motion-reduce:transition-opacity motion-reduce:duration-(--duration-pop) motion-reduce:ease-drawer motion-reduce:data-closed:opacity-0 motion-reduce:starting:data-open:opacity-0 motion-reduce:data-closed:duration-(--duration-exit)",
+        hang: "motion-reduce:transition-opacity motion-reduce:duration-(--duration-panel) motion-reduce:ease-drawer motion-reduce:data-closed:opacity-0 motion-reduce:starting:data-open:opacity-0 motion-reduce:data-closed:duration-(--duration-fade)",
       },
       /**
        * Where its edge is drawn, for its rows' concentric radius
@@ -58,8 +58,8 @@
        * (HangCard's `::after`), so they stand the pad in.
        */
       edge: {
-        own: "r-inset-c-inset-floating",
-        drawn: "r-inset-c-floating-pad",
+        own: "r-inset-(--inset-floating)",
+        drawn: "r-inset-space-2",
       },
     },
     defaultVariants: { motion: "pop", edge: "own", depth: "overlay" },
@@ -103,8 +103,8 @@
       },
       frame: {
         panel: "rounded-lg shadow-md",
-        "panel-high": "rounded-lg shadow-overlay",
-        raised: "shadow-raised",
+        "panel-high": "rounded-lg shadow-lg",
+        raised: "shadow-sm",
       },
       look: { "new-session": "ns-theme bg-surface-recess" },
     },
@@ -196,7 +196,7 @@
     collisionPadding ??
       (browser
         ? numberOf(
-            phone.current ? "--spacing-c-screen-margin" : "--spacing-space-5"
+            phone.current ? "--spacing-space-3" : "--spacing-space-5"
           )
         : 0)
   );
@@ -273,7 +273,7 @@
          gives (a width of its own, or the room bits-ui measures) stands at
          this one under the phone line. */
       phoneWide &&
-        "max-phone:min-w-[calc(100vw-2*var(--spacing-c-screen-margin))] max-phone:max-w-[calc(100vw-2*var(--spacing-c-screen-margin))]",
+        "max-phone:min-w-[calc(100vw-2*var(--spacing-space-3))] max-phone:max-w-[calc(100vw-2*var(--spacing-space-3))]",
       className
     )}
     collisionPadding={inset}

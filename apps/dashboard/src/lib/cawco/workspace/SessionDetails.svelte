@@ -130,7 +130,7 @@
   /** The harness mark arrives from the side the card moved toward. */
   function harnessIn(_node: Element): TransitionConfig {
     return {
-      duration: reduceMotion.current ? 0 : dur("--duration-morph"),
+      duration: reduceMotion.current ? 0 : dur("--duration-fade"),
       easing: easeOut,
       css: (t) =>
         `transform: translateX(calc(var(--pop-rise) * ${1 - t} * var(--dir))); opacity: ${t}`,
@@ -520,7 +520,7 @@
             },
             { transform: "none", opacity: 1 },
           ],
-          { duration: dur("--duration-morph"), easing: CURVE.out }
+          { duration: dur("--duration-fade"), easing: CURVE.out }
         );
       }
     });
@@ -603,7 +603,7 @@
   }
   /*
    * A change that lands says so where it was made: a check on its line for
-   * the hold (--duration-hold), in the place its pending and failed lines take.
+   * the hold (--duration-loop), in the place its pending and failed lines take.
    * Only a change seen going from pending to settled while the card is on
    * this session counts — opening the card shows no old news.
    */
@@ -684,7 +684,7 @@
             slot,
             setTimeout(() => {
               done[slot] = false;
-            }, dur("--duration-hold"))
+            }, dur("--duration-loop"))
           );
         }
       }
@@ -949,7 +949,7 @@
                it. -->
           <span
             aria-label={harnessName(harness)}
-            class="inline-flex h-c-btn-h-sm flex-none items-center"
+            class="inline-flex h-control-sm flex-none items-center"
             role="img"
             title={harnessName(harness)}
           >

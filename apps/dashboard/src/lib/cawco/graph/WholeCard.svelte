@@ -36,12 +36,12 @@
   data-kept={card.kept ? "" : undefined}
   class={[
     "relative flex min-w-0 flex-col gap-space-row rounded-md border bg-surface-raised px-space-3 py-space-2 transition-control",
-    wide ? "w-auto" : "w-c-graph-node-w",
+    wide ? "w-auto" : "w-52",
     card.kept
       ? "border-brand-solid"
       : "border-border-control can-hover:has-[button:hover]:bg-surface-hover",
     card.against &&
-      "outline-solid outline-(length:--spacing-c-change-ring-width) outline-c-change-ring",
+      "outline-solid outline-(length:--focus-ring-width) outline-status-done-glyph",
   ]}
   style:--xy-handle-background-color="transparent"
   style:--xy-handle-border-color="transparent"
@@ -56,7 +56,7 @@
       aria-describedby={card.marks.length > 0 ? `${uid}-marks` : undefined}
       class={[
         "min-w-0 flex-1 text-start type-label wrap-anywhere outline-none before:absolute before:inset-0 focus-visible:before:outline-(length:--focus-ring-width) focus-visible:before:outline-solid focus-visible:before:outline-focus-ring focus-visible:before:-outline-offset-2",
-        "text-ink-row before:rounded-md",
+        "text-ink-strong before:rounded-md",
       ]}
       onclick={() => card.onpress(card.id)}
     >

@@ -28,7 +28,7 @@
 </script>
 
 <div
-  class="relative min-h-(--frame-h) w-field-group max-w-full contain-layout"
+  class="relative min-h-(--frame-h) w-sm max-w-full contain-layout"
   style:--frame-h={`${height}px`}
 >
   <Select.Root {disabled} {open} type="single" value={value ?? ""}>

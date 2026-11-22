@@ -70,7 +70,7 @@
           <span
             class={[
               "flex min-w-0 items-center gap-space-2",
-              settle === "top" && "@phone/table:min-h-c-ledger-row-h",
+              settle === "top" && "@phone/table:min-h-control-lg",
             ]}
           >
             <OsMark
@@ -83,7 +83,7 @@
                      hostname's own breaks (its hyphens), past them only
                      where one part is wider than the column. -->
                 <span
-                  class="min-w-0 type-label whitespace-normal wrap-break-word text-ink-row"
+                  class="min-w-0 type-label whitespace-normal wrap-break-word text-ink-strong"
                   >{machineLabel(machine.hostname)}</span
                 >
                 <!-- On the name's first line when it wraps (mark-cell). -->
@@ -91,8 +91,8 @@
                   <span
                     data-box
                     class="size-(--status-dot-size) shrink-0 rounded-pill {on
-                      ? 'bg-presence-online'
-                      : 'bg-presence-off'}"
+                      ? 'bg-status-done-glyph'
+                      : 'bg-ink-subtle'}"
                   ></span>
                 </span>
               </span>

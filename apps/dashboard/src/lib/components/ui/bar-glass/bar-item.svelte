@@ -5,7 +5,7 @@
   /**
    * A bar item's recipe, every state on its own box so hover, pressed,
    * selected and focus share one contour: the bar's item tall
-   * (`--spacing-c-bar-item`), at least as wide, its corners the glass's by where it
+   * (`--spacing-row-compact`), at least as wide, its corners the glass's by where it
    * stands (`concentric-at`, BarGlass: the ends' 18 less the 4px pad, 5px
    * toward a neighbour), a capsule where no glass holds it. Bare until the
    * pointer rests on it (the hover only where a fine pointer can rest),
@@ -26,7 +26,7 @@
    * buttons, MediaPlayer) takes this recipe on that element.
    */
   export const barItemVariants = tv({
-    base: "group/bar-item relative inline-flex group-data-joined/tools:data-open:after:absolute group-data-joined/tools:data-open:after:inset-x-0 group-data-joined/tools:data-open:after:top-full group-data-joined/tools:data-open:after:h-c-bar-group-pad group-data-joined/tools:data-open:after:bg-inherit group-data-joined/tools:data-open:after:pointer-events-none h-c-bar-item min-w-c-bar-item flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:not-data-open:bg-surface-hover data-open:not-data-lit:unhovered:bg-surface-hover data-open:not-data-lit:hover:bg-surface-pressed data-lit:bg-selected-bg data-lit:text-selected-ink [&>[data-slot=bar-symbol]]:size-c-bar-symbol [&>[data-slot=bar-symbol]]:flex-none",
+    base: "group/bar-item relative inline-flex group-data-joined/tools:data-open:after:absolute group-data-joined/tools:data-open:after:inset-x-0 group-data-joined/tools:data-open:after:top-full group-data-joined/tools:data-open:after:h-space-1 group-data-joined/tools:data-open:after:bg-inherit group-data-joined/tools:data-open:after:pointer-events-none h-row-compact min-w-row-compact flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:not-data-open:bg-surface-hover data-open:not-data-lit:unhovered:bg-surface-hover data-open:not-data-lit:hover:bg-surface-pressed data-lit:bg-selected-bg data-lit:text-brand-ink [&>[data-slot=bar-symbol]]:size-4.5 [&>[data-slot=bar-symbol]]:flex-none",
     variants: {
       /** What it holds: a symbol, a title's words and chevron (a bar's title as a control), an action's words, or Caw's head. */
       form: {
@@ -46,14 +46,14 @@
            ring over his own box, as the sidebar toggle's is, and a finger's
            44px area from the glass's leading edge across the bar's margin to
            the screen's edge, as the toggle's starts at the other. */
-        head: "grid w-c-bar-item place-items-center p-0 tap-highlight-none @max-desk/shell:focus-inset @max-desk/shell:coarse:after:start-0 @max-desk/shell:coarse:after:end-auto @max-desk/shell:coarse:after:top-(--caw-hit-top) @max-desk/shell:coarse:after:bottom-auto @max-desk/shell:coarse:after:size-c-btn-h-lg",
+        head: "grid w-row-compact place-items-center p-0 tap-highlight-none @max-desk/shell:focus-inset @max-desk/shell:coarse:after:start-0 @max-desk/shell:coarse:after:end-auto @max-desk/shell:coarse:after:top-(--caw-hit-top) @max-desk/shell:coarse:after:bottom-auto @max-desk/shell:coarse:after:size-control-lg",
       },
       /** A title's lines: one, the bar item's height; two on a phone (`phone-two`, an ordinary title read whole at 390), or two everywhere (`two`, the title over its description), its box growing with them and its corners a card's, never a tall capsule. */
       lines: {
         one: "",
         "phone-two":
-          "max-phone:h-auto max-phone:min-h-c-bar-item max-phone:not-glass-item:rounded-lg",
-        two: "h-auto min-h-c-bar-item py-space-1 not-glass-item:rounded-lg",
+          "max-phone:h-auto max-phone:min-h-row-compact max-phone:not-glass-item:rounded-lg",
+        two: "h-auto min-h-row-compact py-space-1 not-glass-item:rounded-lg",
       },
       /** Its symbol's ink, said of what it stands for. */
       tone: {
@@ -72,7 +72,7 @@
       // Selected, its symbol takes the selected ink with its wash.
       {
         tone: "muted",
-        class: "data-lit:[&>[data-slot=bar-symbol]]:text-selected-ink",
+        class: "data-lit:[&>[data-slot=bar-symbol]]:text-brand-ink",
       },
     ],
     defaultVariants: {
@@ -187,11 +187,11 @@
    * With no room said, the lift is the corner form's.
    */
   const COUNT_FOOT =
-    "max(calc(-1 * var(--spacing-c-bar-group-pad) / 2), calc(var(--spacing-icon-md) / 2 - var(--spacing-c-bar-group-pad) - var(--bar-room, var(--spacing-icon-md))))";
+    "max(calc(-1 * var(--spacing-space-1) / 2), calc(var(--spacing-icon-md) / 2 - var(--spacing-space-1) - var(--bar-room, var(--spacing-icon-md))))";
 
   /** Caw's head on the phone's glass: its finger's area centred on the glass's height. */
   const CAW_HIT_TOP =
-    "calc((var(--spacing-c-bar-caw-glass-phone) - var(--spacing-c-btn-h-lg)) / 2)";
+    "calc((var(--spacing-control-sm) - var(--spacing-control-lg)) / 2)";
 
   const counted = $derived(count !== undefined && count !== null && count > 0);
   const lit = $derived(Boolean(pressed) || marked);
@@ -240,7 +240,7 @@
     class={look}
     {href}
     style:--count-foot={COUNT_FOOT}
-    style:--count-glyph="var(--spacing-c-bar-symbol)"
+    style:--count-glyph="var(--bar-symbol)"
     style:--caw-hit-top={form === "head" ? CAW_HIT_TOP : undefined}
     type={href ? undefined : "button"}
     bind:this={ref}

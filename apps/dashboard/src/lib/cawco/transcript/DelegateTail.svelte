@@ -67,7 +67,7 @@
     | TailNote;
 
   /** A failed call's glyph ink, the transcript's (ToolGroup `.glyph.err`). */
-  const FAILED_INK = "text-error-9";
+  const FAILED_INK = "text-status-fail-glyph";
 
   /** Rows on screen, the height of the tail; one row's height, in px. */
   const SLOTS = 6;
@@ -309,13 +309,13 @@
     untrack(() => take(target));
   });
 
-  /** Plays the queue one row at a time: the first lift over --duration-morph, the rest back to back at --duration-control. */
+  /** Plays the queue one row at a time: the first lift over --duration-fade, the rest back to back at --duration-control. */
   function pump(): void {
     if (playing) {
       return;
     }
     playing = true;
-    detach(lift(dur("--duration-morph")), "lift");
+    detach(lift(dur("--duration-fade")), "lift");
   }
 
   /** One row into the bottom slot, then the next one queued, if any. */
@@ -369,7 +369,7 @@
   style:--row="calc(var(--spacing) * 6)"
   style:--slots={slots}
   style:--tail-h="calc(var(--row) * var(--slots))"
-  style:--tail-fade={"linear-gradient(to bottom, transparent, var(--color-mask-opaque) var(--row))"}
+  style:--tail-fade={"linear-gradient(to bottom, transparent, var(--color-ink-strong) var(--row))"}
   data-full={shown.length >= SLOTS || undefined}
 >
   {#if shown.length}

@@ -221,7 +221,7 @@
             <button
               aria-controls="tool-output-{machineId}-{spec.id}"
               aria-expanded={outputShown}
-              class="pointer-hit self-start rounded-xs type-meta text-link-ink hover:text-link-hover"
+              class="pointer-hit self-start rounded-xs type-meta text-brand-ink hover:text-brand-ink"
               onclick={() => {
                 outputShown = !outputShown;
               }}

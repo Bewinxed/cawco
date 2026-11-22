@@ -108,7 +108,7 @@
         class="flex justify-end ps-(--text-column) pe-space-3 coarse:pb-space-1"
         data-flip
         style:--hang={"calc(-1 * (1px + 1.5 * var(--spacing) + var(--spacing-icon-sm) * 4.25 / 24))"}
-        style:--text-column={"calc(var(--spacing-space-3) + var(--spacing-c-row-lead) + var(--spacing-space-3))"}
+        style:--text-column={"calc(var(--spacing-space-3) + var(--spacing-row-compact) + var(--spacing-space-3))"}
       >
         <!-- Open, it says so in its words and its flipped chevron, not in the
              kit ghost's expanded fill, which would stand hung past the
@@ -145,7 +145,7 @@
            opening; the chevron flips with it. -->
       <div
         data-slot="fold"
-        class="group grid grid-rows-shut data-open:grid-rows-open motion-safe:transition-[grid-template-rows] motion-safe:duration-(--duration-exit) motion-safe:ease-out motion-safe:data-open:duration-(--duration-panel)"
+        class="group grid grid-rows-shut data-open:grid-rows-open motion-safe:transition-[grid-template-rows] motion-safe:duration-(--duration-fade) motion-safe:ease-out motion-safe:data-open:duration-(--duration-panel)"
         data-open={open || undefined}
         id="moved-done"
         inert={!open}

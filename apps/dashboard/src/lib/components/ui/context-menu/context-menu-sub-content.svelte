@@ -8,7 +8,7 @@
     variants: {
       min: { standard: "min-w-52" },
       width: { wide: "w-64" },
-      frame: { "panel-high": "rounded-lg shadow-overlay" },
+      frame: { "panel-high": "rounded-lg shadow-lg" },
       pad: { card: "p-3" },
     },
   });

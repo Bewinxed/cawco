@@ -107,11 +107,11 @@
     >
   {:else}
     <label
-      class="flex min-h-c-input-h min-w-0 items-center type-label text-ink-row text-pretty wrap-anywhere"
+      class="flex min-h-control-md min-w-0 items-center type-label text-ink-strong text-pretty wrap-anywhere"
       for={id}>{name}</label
     >
     <div
-      class="flex min-h-c-input-h min-w-0 items-center"
+      class="flex min-h-control-md min-w-0 items-center"
       data-dial={dial.name}
     >
       {#if dial.kind === "number"}
@@ -193,7 +193,7 @@
     </div>
     <!-- The undo glyph's column, held in every row: a changed
          value's way back, in the edit's ink. -->
-    <span class="flex h-c-input-h w-c-btn-h-xs items-center justify-center">
+    <span class="flex h-control-md w-control-xs items-center justify-center">
       {#if edited}
         {@const wasSaid = said(was)}
         <Tip label={words.dials.resetTo(wasSaid)}>

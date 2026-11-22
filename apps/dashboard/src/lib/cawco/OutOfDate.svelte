@@ -151,11 +151,15 @@
     >
       {#snippet heads()}
         <Table.Head variant="band">{words.toolHead}</Table.Head>
-        <Table.Head class="w-c-version-col-w" variant="band"
-          >{words.versionHead}</Table.Head
+        <Table.Head
+          class="w-(--w)"
+          style="--w: calc(var(--spacing) * 24)"
+          variant="band">{words.versionHead}</Table.Head
         >
-        <Table.Head class="w-c-tool-state-col-w" variant="band"
-          >{words.stateHead}</Table.Head
+        <Table.Head
+          class="w-(--w)"
+          style="--w: calc(var(--spacing) * 64)"
+          variant="band">{words.stateHead}</Table.Head
         >
       {/snippet}
       {#snippet cells(row: Row, online: boolean)}
@@ -169,7 +173,7 @@
           variant="ledger-stacks"
         >
           <span
-            class="mark-line flex min-w-0 flex-wrap items-center gap-x-space-2 @phone/table:min-h-c-ledger-row-h @max-phone/table:ps-c-ledger-text-inset"
+            class="mark-line flex min-w-0 flex-wrap items-center gap-x-space-2 @phone/table:min-h-control-lg @max-phone/table:ps-(--ledger-text-inset)"
           >
             {#if hasMark(row.spec.id)}
               <HarnessLogo data-box harness={row.spec.id} />
@@ -183,7 +187,7 @@
           </span>
         </Table.Cell>
         <Table.Cell settle="top" variant="ledger-stacks">
-          <span class="flex items-center @phone/table:min-h-c-ledger-row-h">
+          <span class="flex items-center @phone/table:min-h-control-lg">
             <code
               data-slot="num"
               class={[
@@ -199,7 +203,7 @@
           variant="ledger-stacks"
         >
           <div
-            class="flex flex-col items-start gap-space-1 whitespace-normal @phone/table:min-h-c-ledger-row-h @phone/table:justify-center @max-phone/table:ps-c-ledger-text-inset"
+            class="flex flex-col items-start gap-space-1 whitespace-normal @phone/table:min-h-control-lg @phone/table:justify-center @max-phone/table:ps-(--ledger-text-inset)"
           >
             <ToolUpdateCell
               blocks

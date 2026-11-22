@@ -100,7 +100,7 @@
     data-slot="draft-bar"
     data-state={barState}
   >
-    <div aria-live="polite" class="min-w-0 shrink grow basis-c-draft-line">
+    <div aria-live="polite" class="min-w-0 shrink grow basis-56">
       {#if waiting > 0}
         <p class="mark-line m-0 flex items-center gap-space-2">
           <IconNeedsYou

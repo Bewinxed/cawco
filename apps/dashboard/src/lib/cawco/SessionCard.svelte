@@ -119,7 +119,7 @@
       data-slot="mark"
       data-session-hover-mark
       aria-hidden="true"
-      class="grid size-c-row-mark flex-none place-items-center rounded-xs bg-(--mark-bg) bg-mark-overlay"
+      class="grid size-4.5 flex-none place-items-center rounded-xs bg-(--mark-bg) bg-mark-overlay"
       style:--mark-bg="var(--color-mark-{markHue(sessionPlace(id))})"
       data-box
     >

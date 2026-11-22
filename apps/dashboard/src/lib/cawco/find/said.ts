@@ -25,7 +25,7 @@ import { piecesOf, type Run } from "./find-rows";
 
 const MARK_CLASS = "bg-transparent text-ink-strong font-medium";
 const HIDDEN_CLASS =
-  "inline-block px-space-1 rounded-xs bg-surface-fill text-ink-muted tracking-caps select-none whitespace-nowrap align-baseline hover:text-ink-strong";
+  "inline-block px-space-1 rounded-xs bg-surface-hover text-ink-muted tracking-caps select-none whitespace-nowrap align-baseline hover:text-ink-strong";
 const SHOWN_CLASS = "text-ink-strong";
 
 /** `runs` written into `into`: a matched one a `<mark>`, the rest text. */

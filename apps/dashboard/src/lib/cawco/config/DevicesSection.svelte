@@ -163,7 +163,7 @@
     />
     {#if confirming === "on"}
       <div
-        class="flex max-w-c-measure flex-col gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
+        class="flex max-w-measure flex-col gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-sm"
         transition:unfold
       >
         <p data-slot="lead" class="type-body text-ink-strong">
@@ -216,7 +216,7 @@
       </div>
     {:else if confirming === "off"}
       <div
-        class="flex max-w-c-measure flex-col gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
+        class="flex max-w-measure flex-col gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-sm"
         transition:unfold
       >
         <p data-slot="lead" class="type-body text-ink-strong">
@@ -426,7 +426,7 @@
       {#if devices.length === 1}
         <p
           data-slot="note"
-          class="type-meta max-w-c-measure wrap-anywhere text-ink-muted"
+          class="type-meta max-w-measure wrap-anywhere text-ink-muted"
         >
           The only paired device stays until you pair another or turn pairing
           off, so the fleet always has someone who can approve.

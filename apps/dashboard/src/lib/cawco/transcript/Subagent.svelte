@@ -81,7 +81,7 @@
         aria-hidden="true"
         class="rail-cell rounded-xs bg-mark-overlay bg-(--mark-bg)"
         style:--mark-bg="var(--color-mark-{markHue(seed)})"
-        ><Sprite class="size-icon-sm block text-mark-glyph" /></span
+        ><Sprite class="size-icon-sm block text-on-ink" /></span
       >
       <!-- A narrow head (DESIGN.md, The Truncate Inside Rule: the name
            stands, the rest gives way): the name stays whole; the model stands
@@ -113,7 +113,7 @@
         {#if title !== branch.subagentType}
           <span
             data-slot="task"
-            class="min-w-0 max-w-max grow basis-c-give-way-min overflow-clip text-ellipsis whitespace-nowrap text-ink-muted text-size-meta font-normal"
+            class="min-w-0 max-w-max grow basis-ch-6 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted text-size-meta font-normal"
             >{title}</span
           >
         {/if}
@@ -130,7 +130,7 @@
            words on their x-height in the box (.mark-text): 2px past the
            trim's room given back, so the box keeps its height. -->
       <span
-        class="mark-text ms-auto flex-none text-size-meta font-normal num rounded-xs py-(--pill-py) px-space-2 bg-status-idle-bg text-status-idle-ink status-running:bg-status-live-bg status-running:text-status-live-ink status-done:bg-status-done-bg status-done:text-status-done-ink status-failed:bg-status-fail-bg status-failed:text-status-fail-ink"
+        class="mark-text ms-auto flex-none text-size-meta font-normal num rounded-xs py-(--pill-py) px-space-2 bg-transparent text-ink-muted status-running:bg-status-live-bg status-running:text-status-live-ink status-done:bg-status-done-bg status-done:text-status-done-ink status-failed:bg-status-fail-bg status-failed:text-status-fail-ink"
         data-status={phase}
         data-subagent-phase={phase}
         data-box
@@ -154,7 +154,7 @@
          running is said by its hue and the pill, not a loop. -->
     {#if view.running}
       <p
-        class="rail-line items-start mt-space-1 mb-0 text-size-meta font-normal text-ink-strong leading-body max-w-c-measure"
+        class="rail-line items-start mt-space-1 mb-0 text-size-meta font-normal text-ink-strong leading-body max-w-measure"
       >
         <span data-slot="rail-cell" aria-hidden="true" class="rail-cell h-lh"
           ><LiveDot /></span
@@ -163,14 +163,14 @@
     {:else if failed && branch.error}
       <p
         data-slot="now"
-        class="rail-hang mt-space-1 mb-0 items-box-start text-size-meta font-normal text-status-fail-ink leading-body max-w-c-measure"
+        class="rail-hang mt-space-1 mb-0 items-box-start text-size-meta font-normal text-status-fail-ink leading-body max-w-measure"
       >
         {headline(branch.error)}
       </p>
     {:else if view.report}
       <p
         data-slot="now"
-        class="rail-hang mt-space-1 mb-0 items-box-start text-size-meta font-normal text-ink-strong leading-body max-w-c-measure"
+        class="rail-hang mt-space-1 mb-0 items-box-start text-size-meta font-normal text-ink-strong leading-body max-w-measure"
       >
         {headline(view.report)}
       </p>
@@ -186,7 +186,7 @@
       <CollapsibleLazy count={1} open={open.get()}>
         <div
           data-slot="inner"
-          class="mt-space-2 mb-0 ms-(--inner-start) me-0 p-space-1 rounded-inner-well bg-surface-recess"
+          class="mt-space-2 mb-0 ms-(--inner-start) me-0 p-space-1 rounded-sm bg-surface-recess"
           style:--inner-start="calc(var(--x-hang) - var(--spacing-space-1))"
           style:--rail-head="var(--rail)"
           style:--rail-gap="var(--spacing-space-4)"
@@ -216,13 +216,13 @@
 
           {#if failed && branch.error}
             <p
-              class="mt-space-4 p-space-3 rounded-xs text-size-body font-normal text-status-fail-ink bg-surface-raised shadow-tile whitespace-pre-wrap"
+              class="mt-space-4 p-space-3 rounded-xs text-size-body font-normal text-status-fail-ink bg-surface-raised shadow-sm whitespace-pre-wrap"
             >
               {branch.error}
             </p>
           {:else if view.report}
             <section
-              class="mt-space-4 p-space-3 rounded-xs bg-surface-raised shadow-tile"
+              class="mt-space-4 p-space-3 rounded-xs bg-surface-raised shadow-sm"
             >
               <h4
                 class="text-size-label font-medium tracking-caps uppercase text-ink-muted mb-space-2"

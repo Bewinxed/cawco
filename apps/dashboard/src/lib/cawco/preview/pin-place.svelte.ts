@@ -39,7 +39,7 @@ interface Room {
 
 /** Its width: the reading card's, never past the well less `--spacing-space-2` each side. */
 export const FLOAT_W =
-  "min(var(--spacing-c-pin-card-reading-w), calc(100% - 2 * var(--spacing-space-2)))";
+  "min(var(--pin-card-reading-w), calc(100% - 2 * var(--spacing-space-2)))";
 
 /** Two boxes as one. */
 const union = (parts: Box[]): Box => {
@@ -330,7 +330,7 @@ const drawnShift = (el: HTMLElement): [number, number] => {
 
 /**
  * It travels from `before` to where it now stands, `now`, over
- * `--duration-morph` on `--ease-drawer`, starting from where it is drawn, a
+ * `--duration-fade` on `--ease-drawer`, starting from where it is drawn, a
  * travel in flight counted (The Interruptible Rule). Returns the travel,
  * the one to cancel when the next starts.
  */
@@ -349,6 +349,6 @@ export const travelTo = (
       },
       { translate: "0px 0px" },
     ],
-    { duration: dur("--duration-morph"), easing: ease("--ease-drawer") }
+    { duration: dur("--duration-fade"), easing: ease("--ease-drawer") }
   );
 };

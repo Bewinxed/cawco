@@ -22,7 +22,7 @@
     <button
       aria-checked={value === swatch.hue}
       aria-label={swatch.name}
-      class="touch-hit select-none size-space-7 rounded-sm border-none border-current bg-(--c) transition-[box-shadow,scale] duration-(--duration-control) ease-out focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--spacing-space-1) aria-checked:shadow-(--swatch-on) motion-safe:active:scale-(--press-scale)"
+      class="touch-hit select-none size-space-6 rounded-sm border-none border-current bg-(--c) transition-[box-shadow,scale] duration-(--duration-control) ease-out focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--spacing-space-1) aria-checked:shadow-(--swatch-on) motion-safe:active:scale-(--press-scale)"
       onclick={() => {
         value = swatch.hue;
       }}

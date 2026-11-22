@@ -278,7 +278,7 @@ const STRIP = `${AT} h-(--fig-chip) rounded-hair`;
 const PART = {
   root: "absolute inset-0",
   layer: AT,
-  label: `${AT} flex items-center gap-space-2 h-space-4 ${META} font-medium text-ink-row`,
+  label: `${AT} flex items-center gap-space-2 h-space-4 ${META} font-medium text-ink-strong`,
   dot: "flex-none size-space-2 rounded-pill bg-(--c)",
   name: "min-w-0 overflow-hidden text-ellipsis",
   pin: "size-icon-sm text-ink-muted",
@@ -289,8 +289,8 @@ const PART = {
    * status khaki (DESIGN.md, The Reserved Hue Rule).
    */
   clockWash: `${AT} rounded-xs bg-selection opacity-0`,
-  blocked: `${AT} ${META} font-medium text-right text-error-9 opacity-0`,
-  bar: `${STRIP} bg-surface-fill`,
+  blocked: `${AT} ${META} font-medium text-right text-status-fail-glyph opacity-0`,
+  bar: `${STRIP} bg-surface-hover`,
   headroom: `${STRIP} bg-(--c)/42 opacity-0`,
   fill: `${STRIP} bg-(--c) origin-left`,
   ghost: `${STRIP} border border-dashed border-(--c) bg-(--c)/22 opacity-0`,
@@ -298,10 +298,10 @@ const PART = {
   chip: `${AT} size-(--fig-chip) rounded-hair bg-(--c) ring-2 ring-surface-recess`,
   /** A fork is its parent's chip drawn hollow: the same lane, no extra mark. */
   fork: `${AT} size-(--fig-chip) rounded-hair bg-surface-recess inset-ring-2 inset-ring-(--c) ring-2 ring-surface-recess`,
-  tag: `${AT} px-space-1 rounded-xs bg-surface-fill type-caps leading-space-4 tabular-nums text-ink-row whitespace-nowrap`,
+  tag: `${AT} px-space-1 rounded-xs bg-surface-hover type-caps leading-space-4 tabular-nums text-ink-strong whitespace-nowrap`,
   /** A caption wraps where the stage is narrow; the stage grows to hold it. */
   caption:
-    "absolute inset-x-(--fig-pad) bottom-(--fig-cap-foot) type-meta leading-(--fig-cap-line) text-ink-row text-pretty",
+    "absolute inset-x-(--fig-pad) bottom-(--fig-cap-foot) type-meta leading-(--fig-cap-line) text-ink-strong text-pretty",
 };
 
 /**

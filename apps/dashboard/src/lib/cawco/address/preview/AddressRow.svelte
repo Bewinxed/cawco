@@ -37,7 +37,7 @@
 
 <div
   bind:this={ref}
-  class="group/row mark-line relative grid min-h-c-row-h grid-cols-(--row-cols) items-baseline gap-x-space-3 rounded-sm px-space-3 py-space-2"
+  class="group/row mark-line relative grid min-h-control-lg grid-cols-(--row-cols) items-baseline gap-x-space-3 rounded-sm px-space-3 py-space-2"
   data-address-row
   data-kind="address"
   style:--row-cols="auto minmax(0, 1fr) auto"
@@ -52,7 +52,7 @@
   ></button>
   <span
     data-box
-    class="pointer-events-none relative col-1 row-1 grid h-c-row-mark w-c-row-lead place-items-center self-center text-ink-muted"
+    class="pointer-events-none relative col-1 row-1 grid h-4.5 w-row-compact place-items-center self-center text-ink-muted"
     data-slot="lead"
   >
     {#if done}

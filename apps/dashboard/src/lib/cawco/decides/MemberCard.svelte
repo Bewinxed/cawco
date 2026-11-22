@@ -126,7 +126,7 @@
       {@render tiles()}
     {:else}
       <p
-        class="rounded-well border border-dashed border-border-control px-space-3 py-space-4 text-center type-meta text-ink-muted text-pretty"
+        class="rounded-sm border border-dashed border-border-control px-space-3 py-space-4 text-center type-meta text-ink-muted text-pretty"
       >
         {project === null
           ? decidesWords.holdsNothingFleet

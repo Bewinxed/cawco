@@ -21,7 +21,7 @@ const phone = new MediaQuery(PHONE_QUERY);
 export const screenInset = (): number =>
   browser
     ? numberOf(
-        phone.current ? "--spacing-c-screen-margin" : "--spacing-space-5"
+        phone.current ? "--spacing-space-3" : "--spacing-space-5"
       )
     : 0;
 

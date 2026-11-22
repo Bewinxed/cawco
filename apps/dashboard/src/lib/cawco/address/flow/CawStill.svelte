@@ -5,10 +5,10 @@
    * Between poses he plays the mascot's Appearing and Leaving contract as
    * TrayCaw plays it: the leaving pose holds its drawing and fades to
    * --leave-scale over --duration-fade, out of the flow; the next fades in from
-   * --leave-scale over --duration-pop on ease-out. With less motion, a fade.
+   * --leave-scale over --duration-panel on ease-out. With less motion, a fade.
    *
-   * `big`: a failure's 80px box (--spacing-c-caw-hero) in place of the step's 64
-   * (--spacing-c-address-caw); the box travels between the two as one object
+   * `big`: a failure's 80px box (--caw-hero) in place of the step's 64
+   * (--address-caw); the box travels between the two as one object
    * (FLIP) over --duration-panel on the drawer curve.
    */
   import {
@@ -66,7 +66,7 @@
     wasBig = now;
   });
 
-  /** The next pose: from --leave-scale over --duration-pop. */
+  /** The next pose: from --leave-scale over --duration-panel. */
   function enter(_node: HTMLElement) {
     if (!motionOk.current) {
       return {
@@ -77,7 +77,7 @@
     }
     const scale = numberOf("--leave-scale");
     return {
-      duration: dur("--duration-pop"),
+      duration: dur("--duration-panel"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}; scale: ${scale + (1 - scale) * t}`,
     };
@@ -89,7 +89,7 @@
   aria-hidden="true"
   class={[
     "pointer-events-none relative grid flex-none select-none",
-    big ? "size-c-caw-hero" : "size-c-address-caw",
+    big ? "size-20" : "size-16",
   ]}
   data-caw-pose={pose}
   data-slot="tray-caw"

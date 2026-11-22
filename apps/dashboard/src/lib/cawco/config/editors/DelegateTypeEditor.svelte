@@ -242,7 +242,7 @@
       placeholder={words.namePlaceholder}
       bind:value={draft.name}
     />
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
       {name ? words.nameKept : words.nameRule}
     </p>
     {#if problemFor("name")}
@@ -286,7 +286,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconCpu} label={words.runsOn}>
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
       {words.runsOnNote}
     </p>
     <Choice
@@ -332,7 +332,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconKey} label={words.reach}>
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
       {words.reachNote}
     </p>
     <Field id="type-skills" label={words.skills}>

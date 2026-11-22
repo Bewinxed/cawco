@@ -118,7 +118,7 @@
           {@const project = projectOf(row)}
           <div
             data-slot="session"
-            class="type-meta flex justify-between gap-space-4 py-space-1 text-ink-row"
+            class="type-meta flex justify-between gap-space-4 py-space-1 text-ink-strong"
           >
             <span data-slot="what" class="min-w-0 truncate"
               >{#if project}
@@ -187,7 +187,7 @@
         <small class="type-meta text-ink-muted">{figure.label}</small>
       </span>
     </div>
-    <p class="m-0 type-body text-ink-row" data-status><Words parts={say} /></p>
+    <p class="m-0 type-body text-ink-strong" data-status><Words parts={say} /></p>
     <RingsKey {ring} />
     {@render running(ring)}
   </div>
@@ -196,7 +196,7 @@
 <section
   data-slot="limits-block-card"
   aria-labelledby="limits-title"
-  class="flex flex-col gap-space-5 rounded-lg bg-surface-raised p-space-6 shadow-tile max-phone:p-space-4"
+  class="flex flex-col gap-space-5 rounded-lg bg-surface-raised p-space-6 shadow-sm max-phone:p-space-4"
   style:--ring-ground="var(--color-surface-raised)"
 >
   <h2 data-slot="title" class="type-label text-ink-muted" id="limits-title">
@@ -213,7 +213,7 @@
       <Skeleton class="w-3/4" line="body" />
       <div
         data-slot="grid"
-        class="grid grid-cols-usage-tiles gap-x-space-7 gap-y-space-5"
+        class="grid grid-cols-usage-tiles gap-x-space-6 gap-y-space-5"
       >
         {#each [0, 1, 2] as one (one)}
           <Skeleton class="w-full" height="chart" />
@@ -245,7 +245,7 @@
           </p>
           <p
             data-slot="sentence"
-            class="type-body max-w-c-measure-short text-ink-row"
+            class="type-body max-w-measure-short text-ink-strong"
             data-lead
           >
             <Words parts={lead.say} />
@@ -289,7 +289,7 @@
       {#if claude}
         <div
           data-slot="grid"
-          class="grid grid-cols-usage-tiles gap-x-space-7 gap-y-space-5"
+          class="grid grid-cols-usage-tiles gap-x-space-6 gap-y-space-5"
         >
           {#each claude.accounts as ring, i (ring.id)}
             {@render tile(
@@ -301,7 +301,7 @@
           {/each}
         </div>
         {#if extraText}
-          <p class="type-body flex gap-space-3 text-ink-row">
+          <p class="type-body flex gap-space-3 text-ink-strong">
             <span
               data-slot="limits-block-label"
               class="type-label text-ink-strong">Extra usage</span
@@ -340,7 +340,7 @@
         {#if openCode}
           <div
             data-slot="grid"
-            class="grid grid-cols-usage-tiles gap-x-space-7 gap-y-space-5"
+            class="grid grid-cols-usage-tiles gap-x-space-6 gap-y-space-5"
           >
             {@render tile(
               openCode,
@@ -351,7 +351,7 @@
           </div>
         {/if}
         {#if spend && spend.all > 0}
-          <p class="type-body flex gap-space-3 text-ink-row">
+          <p class="type-body flex gap-space-3 text-ink-strong">
             <span
               data-slot="limits-block-label"
               class="type-label text-ink-strong">Spend</span

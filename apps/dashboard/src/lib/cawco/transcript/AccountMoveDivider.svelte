@@ -170,7 +170,7 @@
   <button
     aria-expanded={open}
     data-account-run={moves.length > 1 ? moves.length : undefined}
-    class="select-none peer/line flex items-center gap-space-3 w-full min-h-c-btn-h-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-ink-muted group-data-stopped/move:text-status-fail-ink focus-inset touch-hit"
+    class="select-none peer/line flex items-center gap-space-3 w-full min-h-control-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-ink-muted group-data-stopped/move:text-status-fail-ink focus-inset touch-hit"
     onclick={() => disclosed.set(!open)}
     type="button"
     style:--account={hue ? hueVar(hue) : "var(--color-ink-muted)"}
@@ -200,7 +200,7 @@
         <span data-slot="chev" class="inline-flex flex-none" data-box
           ><IconChevron
             aria-hidden="true"
-            class="size-icon-sm group-data-open/move:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--duration-toggle) motion-safe:ease-in-out"
+            class="size-icon-sm group-data-open/move:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--duration-fade) motion-safe:ease-in-out"
           /></span
         >
       {/if}</span
@@ -209,7 +209,7 @@
   </button>
   <p
     data-slot="detail"
-    class="grid grid-rows-shut opacity-0 text-center type-meta text-ink-subtle group-data-open/move:grid-rows-open group-data-open/move:opacity-100 peer-focus-visible/line:grid-rows-open peer-focus-visible/line:opacity-100 group-hover/move:grid-rows-open group-hover/move:opacity-100 @phone:grid-rows-open @phone:opacity-100 motion-safe:transition-[grid-template-rows,opacity] motion-safe:duration-(--duration-toggle) motion-safe:ease-out"
+    class="grid grid-rows-shut opacity-0 text-center type-meta text-ink-subtle group-data-open/move:grid-rows-open group-data-open/move:opacity-100 peer-focus-visible/line:grid-rows-open peer-focus-visible/line:opacity-100 group-hover/move:grid-rows-open group-hover/move:opacity-100 @phone:grid-rows-open @phone:opacity-100 motion-safe:transition-[grid-template-rows,opacity] motion-safe:duration-(--duration-fade) motion-safe:ease-out"
   >
     <span class="fold-item">{words.detail}</span>
   </p>

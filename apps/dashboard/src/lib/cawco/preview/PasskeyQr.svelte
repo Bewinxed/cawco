@@ -118,7 +118,7 @@
   >
     <!-- mark-line: the icon is in the title row, not beside the card's body -->
     <div
-      class="flex w-full max-w-c-panel-w flex-col items-center gap-space-4 rounded-modal border border-border-hairline bg-surface-raised p-space-5 shadow-raised"
+      class="flex w-full max-w-95 flex-col items-center gap-space-4 rounded-modal border border-border-hairline bg-surface-raised p-space-5 shadow-sm"
       data-slot="passkey-qr-card"
     >
       <!-- Title with key icon. -->
@@ -136,7 +136,7 @@
       <!-- Inline QR code: the raised surface behind it, the modules in
              ink-strong, as the house's PhoneQr draws its own. -->
       <svg
-        class="block size-48 flex-none rounded-well bg-surface-raised text-ink-strong shadow-xs"
+        class="block size-48 flex-none rounded-sm bg-surface-raised text-ink-strong shadow-xs"
         aria-label={passkeyWords.qrCode}
         role="img"
         viewBox="0 0 {code.size} {code.size}"

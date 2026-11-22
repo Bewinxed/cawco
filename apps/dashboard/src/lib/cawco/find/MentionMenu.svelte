@@ -72,7 +72,7 @@
     const out = direction === "out";
     const travel = motionOk.current;
     return {
-      duration: dur(out ? "--duration-exit" : "--duration-pop"),
+      duration: dur(out ? "--duration-fade" : "--duration-panel"),
       easing: out ? easeOut : easeDrawer,
       css: (t: number) =>
         travel
@@ -87,7 +87,7 @@
 <!-- biome-ignore lint/a11y/noStaticElementInteractions: the mousedown handler only keeps the focus in the field; the rows are its controls -->
 <div
   data-slot="menu"
-  class="group/menu absolute inset-x-0 bottom-(--menu-bottom) z-2 origin-bottom overflow-hidden border border-border-control rounded-lg bg-surface-raised shadow-overlay"
+  class="group/menu absolute inset-x-0 bottom-(--menu-bottom) z-2 origin-bottom overflow-hidden border border-border-control rounded-lg bg-surface-raised shadow-lg"
   data-phone={phone || undefined}
   style:--menu-bottom="calc(100% + var(--spacing-space-2))"
   onmousedown={(event) => event.preventDefault()}
@@ -113,7 +113,7 @@
       >
         Can't reach the hub. Nothing can be named until it's back.
         <button
-          class="select-none border-none border-current p-0 bg-transparent text-link-ink"
+          class="select-none border-none border-current p-0 bg-transparent text-brand-ink"
           onclick={() => mention.retry()}
           type="button">Retry</button
         >

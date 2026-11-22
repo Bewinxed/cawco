@@ -26,7 +26,7 @@
    */
   export const savedShown = (): Promise<void> =>
     new Promise((resolve) => {
-      setTimeout(resolve, dur("--duration-hold"));
+      setTimeout(resolve, dur("--duration-loop"));
     });
 </script>
 
@@ -37,7 +37,7 @@
    * reaches gives way first, on one line.
    *
    * Save shows its work where it was pressed: the kit Button spins while
-   * the save runs and draws a check for --duration-hold when it ends well, and
+   * the save runs and draws a check for --duration-loop when it ends well, and
    * for that same hold the label says "Saved".
    */
   import { configureWords } from "@cawco/core/words/configure";
@@ -95,7 +95,7 @@
       saved = true;
       savedTimer = setTimeout(() => {
         saved = false;
-      }, dur("--duration-hold"));
+      }, dur("--duration-loop"));
     }
     wasSaving = now;
   });
@@ -146,7 +146,8 @@
       {configureWords.cancel}
     </Button>
     <Button
-      class="min-w-c-btn-min-w"
+      class="min-w-(--min-w)"
+      style="--min-w: calc(var(--spacing) * 24)"
       disabled={down !== null || deleting || !canSave}
       {failed}
       label={saved ? configureWords.saved : saveLabel}

@@ -55,7 +55,7 @@
 
 <div
   data-slot="ledger"
-  class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+  class="overflow-hidden rounded-lg bg-surface-raised shadow-sm"
 >
   <Table.Root fadeEdges ghostRows="tbody tr">
     <Table.Header>
@@ -76,13 +76,14 @@
         <Table.Row data-view-table-row class="relative">
           {#each row.getAllCells() as cell, i (cell.id)}
             <Table.Cell
-              class={i === 0 ? "min-w-c-view-lead-min" : undefined}
+              class={i === 0 ? "min-w-(--min-w)" : undefined}
+              style={i === 0 ? "--min-w: calc(var(--spacing) * 36)" : undefined}
               variant={i === 0 ? "view-lead" : "view"}
             >
               {#if i === 0}
                 <a
                   data-slot="cell-link"
-                  class="type-label text-ink-row no-underline after:absolute after:inset-0"
+                  class="type-label text-ink-strong no-underline after:absolute after:inset-0"
                   href={view.hrefOf(row.original.id)}
                   onclick={(event) => open(event, row.original.id)}
                   >{String(cell.getValue())}</a

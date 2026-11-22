@@ -30,10 +30,10 @@ p {
 }
 code {
   font-family: var(--font-mono);
-  font-size: var(--spacing-c-decision-code);
+  font-size: calc(1em * 0.9);
 }
 a {
-  color: var(--color-link-ink);
+  color: var(--color-brand-ink);
 }
 
 /* Caw, light and dark: always a pair, the page shows the right one. */
@@ -54,11 +54,11 @@ a {
 /* `--dp-real-w`: the widest real-size drawing's width (page.js), so the
    column grows to hold it whole where the screen is wide enough: the
    drawing plus the page's, card's, pane's and frame's insets. Under it the
-   column is the room up to `--spacing-c-decision-page-max`, so the cards grow with
+   column is the room up to `--decision-page-max`, so the cards grow with
    the window. */
 .dp {
   max-width: max(
-    var(--spacing-c-decision-page-max),
+    calc(var(--spacing) * 337),
     calc(
       var(--dp-real-w, 0px) + 2 *
         (
@@ -87,7 +87,7 @@ a {
 }
 .dp-hero p {
   color: var(--color-ink-muted);
-  max-width: var(--spacing-c-measure-short);
+  max-width: var(--spacing-measure-short);
   margin-top: var(--spacing-space-1);
 }
 .dp-meter {
@@ -104,8 +104,8 @@ a {
   font-size: var(--text-title);
 }
 .dp-bar {
-  width: var(--spacing-c-decision-meter-w);
-  height: calc(var(--spacing) _ * _1);
+  width: calc(var(--spacing) * 30);
+  height: var(--spacing-space-1);
   border-radius: var(--radius-xs);
   background: var(--color-surface-recess);
   overflow: hidden;
@@ -139,7 +139,7 @@ a {
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border-hairline);
   border-radius: var(--radius-modal);
-  box-shadow: var(--shadow-raised);
+  box-shadow: var(--shadow-sm);
   padding: var(--spacing-space-5);
   display: flex;
   flex-direction: column;
@@ -158,7 +158,7 @@ a {
 }
 .dp-card h2 {
   font-size: var(--text-title);
-  flex: 1 1 calc(var(--spacing) _ * _60);
+  flex: 1 1 calc(var(--spacing) * 60);
 }
 .dp-state {
   font-size: var(--text-meta);
@@ -177,13 +177,13 @@ a {
   align-items: center;
   justify-content: center;
   gap: var(--spacing-space-2);
-  min-block-size: var(--spacing-c-btn-h);
+  min-block-size: var(--spacing-control-md);
   padding: 0 var(--spacing-space-4);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background-color: var(--color-action-solid);
   color: var(--color-on-action);
-  font: var(--type-button);
+  font: var(--type-label);
   cursor: pointer;
   transition: background-color var(--duration-control) var(--ease-out);
 }
@@ -213,7 +213,7 @@ a {
 }
 @media (pointer: coarse) {
   .dp-send {
-    min-block-size: var(--spacing-c-btn-h-lg);
+    min-block-size: var(--spacing-control-lg);
   }
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -228,7 +228,7 @@ a {
 }
 .dp-why {
   color: var(--color-ink-muted);
-  max-width: var(--spacing-c-measure);
+  max-width: var(--spacing-measure);
 }
 /* A card's media: two side by side on a wide page; one, or three and more,
    in one column at the card's full width (`solo`), so several ways compared
@@ -277,7 +277,7 @@ a {
   display: grid;
   grid-template-columns: repeat(
     auto-fit,
-    minmax(min(100%, var(--spacing-c-decision-option-min)), 1fr)
+    minmax(min(100%, calc(var(--spacing) * 47.5)), 1fr)
   );
   gap: var(--spacing-space-2);
 }
@@ -295,7 +295,7 @@ a {
   color: var(--color-ink-strong);
   border: 1px solid var(--color-border-control);
   border-radius: var(--radius-sm);
-  min-block-size: var(--tx-option);
+  min-block-size: var(--spacing-control-sm);
   padding: var(--spacing-space-2) var(--spacing-space-3);
   display: flex;
   flex-direction: column;
@@ -335,8 +335,8 @@ a {
   display: inline-grid;
   place-items: center;
   flex: none;
-  min-width: calc(var(--spacing) _ * _4.25);
-  height: calc(var(--spacing) _ * _4.25);
+  min-width: calc(var(--spacing) * 4.25);
+  height: calc(var(--spacing) * 4.25);
   padding: 0 var(--spacing-space-1);
   border-radius: var(--radius-xs);
   background: var(--color-surface-recess);
@@ -368,7 +368,7 @@ a {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  block-size: var(--spacing-c-badge-h);
+  block-size: var(--spacing-icon-lg);
   padding-inline: var(--spacing-space-1);
   margin-block-end: var(--spacing-space-1);
   border-radius: var(--radius-xs);
@@ -391,12 +391,12 @@ a {
 }
 .dp-opt[data-cawco-picked] .dp-kc {
   background: var(--color-action-solid);
-  color: var(--color-chip-chosen-ink);
+  color: var(--color-on-action);
 }
 /* An option chip stands taller than 44px, so a
    press tints it to surface-fill and moves nothing. */
 .dp-opt:active {
-  background: var(--color-surface-fill);
+  background: var(--color-surface-hover);
 }
 @media (prefers-reduced-motion: reduce) {
   .dp-bar i {
@@ -413,7 +413,7 @@ a {
 }
 .dp-note textarea {
   font: inherit;
-  min-block-size: var(--spacing-c-btn-h);
+  min-block-size: var(--spacing-control-md);
   color: var(--color-ink-strong);
   background: var(--color-surface-page);
   border: 1px solid var(--color-border-control);
@@ -428,8 +428,8 @@ a {
 /* The 44 Touch Rule: under a finger the note stands 44px tall. */
 @media (pointer: coarse) {
   .dp-note textarea {
-    font-size: var(--text-field-floor);
-    min-block-size: var(--spacing-c-btn-h-lg);
+    font-size: var(--text-row);
+    min-block-size: var(--spacing-control-lg);
   }
 }
 

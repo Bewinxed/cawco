@@ -334,7 +334,7 @@
            surface and brings none of its own. -->
       <div
         bind:this={surface}
-        class="relative flex h-(--sheet-shown) min-h-0 flex-col pt-space-3 rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-drawer"
+        class="relative flex h-(--sheet-shown) min-h-0 flex-col pt-space-3 rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-lg"
         data-slot="thread-sheet"
         style:--sheet-shown="calc(100% - {below}px)"
         style:--sheet-pb={FOOT}

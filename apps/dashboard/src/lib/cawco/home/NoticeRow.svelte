@@ -48,16 +48,16 @@
 <article
   data-slot="notice"
   aria-label={label}
-  class="group relative grid min-h-c-row-h grid-cols-(--columns) items-box-start gap-x-space-3 px-space-3 py-(--pad-block) data-nested:min-h-0"
+  class="group relative grid min-h-control-lg grid-cols-(--columns) items-box-start gap-x-space-3 px-space-3 py-(--pad-block) data-nested:min-h-0"
   data-flip="box"
   data-nested={nested || undefined}
-  style:--columns="var(--spacing-c-row-lead) minmax(0, 1fr)"
+  style:--columns="var(--spacing-row-compact) minmax(0, 1fr)"
   style:--pad-block={nested
     ? "var(--spacing-space-1)"
     : "var(--spacing-space-3)"}
-  style:--x-ink={"calc((var(--spacing-c-btn-h-xs) - var(--spacing-icon-sm)) / 2 + var(--spacing-icon-sm) * 5.25 / 24)"}
+  style:--x-ink={"calc((var(--spacing-control-xs) - var(--spacing-icon-sm)) / 2 + var(--spacing-icon-sm) * 5.25 / 24)"}
 >
-  <span data-slot="lead" class="grid size-c-row-lead place-items-center"
+  <span data-slot="lead" class="grid size-row-compact place-items-center"
     >{@render lead()}</span
   >
   <!-- The first line pads by `--x-room` so its words stop `space-2` short of
@@ -65,7 +65,7 @@
   <div
     data-slot="body"
     class="flex min-w-0 flex-col gap-space-row"
-    style:--x-room={"calc(var(--spacing-c-btn-h-xs) - var(--x-ink) + var(--spacing-space-2))"}
+    style:--x-room={"calc(var(--spacing-control-xs) - var(--x-ink) + var(--spacing-space-2))"}
   >
     {@render children()}
   </div>
@@ -76,16 +76,16 @@
     data-slot="end"
     class="absolute end-(--end-edge) top-(--end-top) flex type-label group-data-nested:type-body"
     style:--end-edge="calc(var(--spacing-space-3) - var(--x-ink))"
-    style:--end-top={"calc(var(--pad-block) + (1lh - var(--spacing-c-btn-h-xs)) / 2)"}
+    style:--end-top={"calc(var(--pad-block) + (1lh - var(--spacing-control-xs)) / 2)"}
   >
     <button
       data-slot="x"
       aria-label={dismissLabel}
-      class="select-none touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press motion-safe:active:transform-(--tpress) coarse:after:start-(--hit-start) coarse:after:end-(--hit-end) hover:bg-surface-hover hover:text-ink-strong"
+      class="select-none touch-hit pointer-hit focus-inset grid size-control-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press motion-safe:active:transform-(--tpress) coarse:after:start-(--hit-start) coarse:after:end-(--hit-end) hover:bg-surface-hover hover:text-ink-strong"
       onclick={ondismiss}
       style:--tpress="scale(var(--press-scale))"
-      style:--hit-start={"calc((var(--spacing-c-btn-h-xs) - var(--spacing-c-btn-h-lg)) / 2 - var(--x-ink))"}
-      style:--hit-end={"calc((var(--spacing-c-btn-h-xs) - var(--spacing-c-btn-h-lg)) / 2 + var(--x-ink))"}
+      style:--hit-start={"calc((var(--spacing-control-xs) - var(--spacing-control-lg)) / 2 - var(--x-ink))"}
+      style:--hit-end={"calc((var(--spacing-control-xs) - var(--spacing-control-lg)) / 2 + var(--x-ink))"}
       type="button"
     >
       <IconClose aria-hidden="true" class="size-icon-sm" />

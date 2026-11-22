@@ -9,14 +9,14 @@
           trigger: the input's look"), or a control standing in a composer
           shell (the composer's surface brief, Composer: 34px). */
       size: {
-        default: "h-c-input-h",
-        composer: "h-c-composer-field",
+        default: "h-control-md",
+        composer: "h-control-md",
       },
       /** Sharing a row equally with its siblings, however long its words. */
       measure: { share: "min-w-0 basis-0" },
       /** `edited`: a value the person changed from what it was, in the
           edit's ink (the design graph's clip editor). */
-      tone: { strong: "text-ink-strong", edited: "text-selected-ink" },
+      tone: { strong: "text-ink-strong", edited: "text-brand-ink" },
       look: {
         /** In a view's bar: it shrinks, takes the bar's control corner, and
             clips the name it morphs while its width follows. */
@@ -24,7 +24,7 @@
           "group-data-bar:min-w-0 group-data-bar:overflow-clip group-data-bar:concentric-xs",
         /** A plain field: the small corner, the control's edge, field pads. */
         field:
-          "rounded-sm border border-border-row-outline px-space-3 py-space-2",
+          "rounded-sm border border-border-strong px-space-3 py-space-2",
       },
       /** `end`: its value at its end, before its mark, as a number field
           writes its figure (the design graph's Controls: a select whose
@@ -34,7 +34,7 @@
           its ink held over the placeholder's. */
       chosen: {
         selected:
-          "data-on:data-placeholder:text-selected-ink data-on:border-transparent data-on:bg-selected-bg data-on:text-selected-ink",
+          "data-on:data-placeholder:text-brand-ink data-on:border-transparent data-on:bg-selected-bg data-on:text-brand-ink",
       },
     },
   });
@@ -74,16 +74,16 @@
     "press-tint [transition:var(--transition-control)]",
     "mark-line flex w-fit",
     "items-center justify-between gap-1.5 whitespace-nowrap",
-    "border border-border-row-outline [--hit-edge:1px]",
+    "border border-border-strong [--hit-edge:1px]",
     "bg-surface-raised px-3 text-ink-strong",
     "type-body disabled:cursor-not-allowed",
-    "disabled:opacity-50 aria-invalid:border-error-9",
+    "disabled:opacity-50 aria-invalid:border-status-fail-glyph",
     "data-placeholder:text-ink-muted",
     "[&>[data-slot=select-value]]:line-clamp-1",
     "[&>[data-slot=select-value]]:flex",
     "[&>[data-slot=select-value]]:items-center",
     "[&>[data-slot=select-value]]:gap-1.5",
-    "dark:aria-invalid:border-error-9/50",
+    "dark:aria-invalid:border-status-fail-glyph/50",
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
     selectTriggerVariants({ size, measure, tone, look, chosen, align }),

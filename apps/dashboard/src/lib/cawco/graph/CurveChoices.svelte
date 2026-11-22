@@ -73,7 +73,7 @@
   >
     <span class="type-label text-ink-muted">{words.bounce}</span>
     <Slider.Root
-      class="relative flex h-c-btn-h-sm min-w-0 flex-1 touch-none items-center select-none"
+      class="relative flex h-control-sm min-w-0 flex-1 touch-none items-center select-none"
       max={spring.most}
       min={0}
       onValueChange={(next: number) => {
@@ -88,7 +88,7 @@
       value={held ?? Math.min(spring.most, spring.bounce)}
     >
       <span
-        class="relative h-space-1 w-full overflow-clip rounded-pill bg-surface-fill"
+        class="relative h-space-1 w-full overflow-clip rounded-pill bg-surface-hover"
       >
         <Slider.Range class="absolute h-full rounded-pill bg-ink-muted" />
       </span>
@@ -98,7 +98,7 @@
         index={0}
       />
     </Slider.Root>
-    <span class="w-space-7 text-end type-meta text-ink-muted num"
+    <span class="w-space-6 text-end type-meta text-ink-muted num"
       >{Math.round((held ?? spring.bounce) * 100)}%</span
     >
   </div>

@@ -19,7 +19,7 @@
 </script>
 
 <div class="flex min-w-0 flex-col items-start gap-space-2" data-empty-cant>
-  <p class="max-w-c-measure-short type-meta text-ink-muted text-pretty">
+  <p class="max-w-measure-short type-meta text-ink-muted text-pretty">
     {reason}
   </p>
   {@render byHand?.()}

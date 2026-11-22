@@ -215,7 +215,7 @@
   />
   <Popover.Content
     align="start"
-    class="w-c-panel-w max-w-(--bits-popover-content-available-width)"
+    class="w-(--panel-w) max-w-(--bits-popover-content-available-width)"
     customAnchor={parked.fromRow}
     gap="form"
     pad="form"

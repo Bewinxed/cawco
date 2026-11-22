@@ -25,7 +25,7 @@ export type StatusTone = "working" | "attention" | "failed" | "quiet";
 export const RIM_INK: Record<StatusTone, string> = {
   working: "var(--color-status-live-glyph)",
   // The attention glyph's tone, darker by day, so its rim holds 3:1.
-  attention: "var(--color-tab-rim-attn)",
+  attention: "var(--color-status-attn-glyph)",
   failed: "var(--color-status-fail-glyph)",
   quiet: "var(--color-ink-muted)",
 };

@@ -58,7 +58,7 @@
         >
           <span
             data-slot="mark"
-            class="grid size-c-status-mark place-items-center text-ink-muted"
+            class="grid size-control-md place-items-center text-ink-muted"
           >
             <Spinner aria-hidden="true" box="large" role="presentation" />
           </span>
@@ -85,13 +85,13 @@
           <span
             data-slot="mark"
             data-enter
-            class="grid size-c-status-mark place-items-center tone-caution:text-warning-9 tone-ok:text-success-9 motion-safe:animate-mark-in"
+            class="grid size-control-md place-items-center tone-caution:text-status-attn-glyph tone-ok:text-status-done-glyph motion-safe:animate-mark-in"
             data-tone={ok ? "ok" : "caution"}
           >
             {#if ok}
-              <IconSuccess class="size-c-status-mark" />
+              <IconSuccess class="size-control-md" />
             {:else}
-              <IconWarningTriangle class="size-c-status-mark" />
+              <IconWarningTriangle class="size-control-md" />
             {/if}
           </span>
           <p

@@ -87,21 +87,12 @@ export interface ClipBox {
 
 type Map2 = (x: number, y: number) => string;
 
-/** One shadow of a `--shadow-*` token: its offset, its blur and its colour. */
+/** One drop-shadow layer for the grown outline's SVG filter. */
 interface Shadow {
   blur: number;
   color: string;
   dx: number;
   dy: number;
-}
-const SHADOW =
-  /^\s*(-?[\d.]+)(?:px)?\s+(-?[\d.]+)(?:px)?\s+([\d.]+)(?:px)?\s+(.+?)\s*$/u;
-/** A one-shadow token as written (`0 14px 28px <colour>`), or null. */
-function shadowOf(value: string): Shadow | null {
-  const m = SHADOW.exec(value);
-  return m
-    ? { dx: Number(m[1]), dy: Number(m[2]), blur: Number(m[3]), color: m[4] }
-    : null;
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -198,9 +189,22 @@ export class GrownShape {
     // filter on the layer: WebKit applies a layer's filter again every frame
     // the layer moves (Playwright WebKit at 390, a fold's slow frames 3.75 a
     // round with it, 0.25 without), and draws no CSS filter on an SVG path.
-    const shadows = ["--drop-shadow-drop", "--drop-shadow-drop-near"]
-      .map((token) => shadowOf(getComputedStyle(host).getPropertyValue(token)))
-      .filter((s): s is Shadow => s !== null);
+    const u = numberOf("--spacing-space-1") || 4;
+    const hostStyle = getComputedStyle(host);
+    const shadows: Shadow[] = [
+      {
+        dx: 0,
+        dy: u * 3.5,
+        blur: u * 7,
+        color: hostStyle.getPropertyValue("--shadow-tint-2").trim(),
+      },
+      {
+        dx: 0,
+        dy: u * 0.5,
+        blur: u,
+        color: hostStyle.getPropertyValue("--color-shadow-tint").trim(),
+      },
+    ].filter((s) => s.color.length > 0);
     const lay = shadows
       .map(
         ({ dx, dy, blur, color }) =>
@@ -943,7 +947,7 @@ export function measureShape(
       r: Number.parseFloat(getComputedStyle(pill).borderTopLeftRadius) || 0,
       headroom: Number.parseFloat(style.getPropertyValue("--spacing-space-2")),
       row: Number.parseFloat(
-        style.getPropertyValue("--spacing-c-composer-field")
+        style.getPropertyValue("--spacing-control-md")
       ),
     },
     line: {

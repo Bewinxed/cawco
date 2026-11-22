@@ -2,8 +2,8 @@
  * What the person hasn't looked at since an update changed it (PRD §5.7,
  * "Pointing and what changed"; core comments.ts `ArtifactChanges`), as the
  * host names it (`cawco:changes`): each changed element ringed where it
- * stands, a `--color-c-change-ring` line `--spacing-c-change-ring-width` heavy standing
- * `--spacing-c-change-ring-offset` outside its box at its own radius grown by as
+ * stands, a `--color-status-done-glyph` line `--focus-ring-width` heavy standing
+ * `--spacing-space-1` outside its box at its own radius grown by as
  * much, so it follows the element's shape and never covers what it says;
  * in the page's own document as the pins are, never taking a press.
  *
@@ -17,7 +17,7 @@
  * Rule): a ring is never coral.
  *
  * A ring pings once as its change lands, and again when the person steps
- * to it: a halo of its own colour spreading `--spacing-c-change-ping-spread` out
+ * to it: a halo of its own colour spreading `--spacing-space-3` out
  * from the line as it fades, one turn of `--duration-loop` on `--ease-out`, a
  * Web Animation (`id` {@link PING}) on the ring's own halo, never on the
  * element. Asking for less motion, the ring stands without its ping.
@@ -142,10 +142,10 @@ export function startChanges(deps: ChangesDeps): Changes {
 
   const look = () =>
     deps.chrome.tokens({
-      ring: ["--color-c-change-ring"],
-      width: ["--spacing-c-change-ring-width", "width"],
-      offset: ["--spacing-c-change-ring-offset", "width"],
-      spread: ["--spacing-c-change-ping-spread", "width"],
+      ring: ["--color-status-done-glyph"],
+      width: ["--focus-ring-width", "width"],
+      offset: ["--spacing-space-1", "width"],
+      spread: ["--spacing-space-3", "width"],
     });
 
   /** Ring `ring` pings once: its halo spreads out from the line and fades, unless the person asks for less motion. */

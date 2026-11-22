@@ -328,7 +328,7 @@
   /**
    * The row's tile leaves for the button and the row folds shut behind it.
    * A session waits for its delegates' tiles to leave first; a tile leaving
-   * within a flight of the one before goes --duration-stagger after it.
+   * within a flight of the one before goes --duration-step after it.
    */
   export function fly(row: StopRow): void {
     if (row.departed || row.state !== "stopped" || !job.open) {
@@ -345,7 +345,7 @@
       return;
     }
     const at = performance.now();
-    const due = lastLeft + dur("--duration-stagger");
+    const due = lastLeft + dur("--duration-step");
     if (at - lastLeft < dur("--duration-panel") && due > at) {
       after(due - at, () => fly(row));
       return;
@@ -376,7 +376,7 @@
       node
         .querySelector(':scope > [data-slot="rin"]')
         ?.animate([{ opacity: 1 }, { opacity: 0 }], {
-          duration: dur("--duration-exit"),
+          duration: dur("--duration-fade"),
           easing: CURVE.out,
           fill: "forwards",
         });
@@ -388,7 +388,7 @@
       // Less motion: no flight; the row fades shut with its tile.
       if (node) {
         fold(node, false, {
-          ms: dur("--duration-exit"),
+          ms: dur("--duration-fade"),
           easing: CURVE.out,
           fade: true,
           gap,
@@ -705,7 +705,7 @@
          stands at the top of a first line as tall as the mark, and its
          lines meet it there. -->
     <li
-      class="kit-tree-row col-span-full grid grid-cols-subgrid @max-stop-tray/stop-tray:has-data-away:kit-tree-on-mark"
+      class="kit-tree-row col-span-full grid grid-cols-subgrid @max-sm/stop-tray:has-data-away:kit-tree-on-mark"
       {...lineAttrs(line)}
       data-row={row.s.id}
       style:--line-depth={line.depth}
@@ -718,8 +718,8 @@
       <div
         data-slot="rin"
         class="col-span-full grid min-w-0 grid-cols-subgrid"
-        style:--fault-end="var(--row-compact-pad-end)"
-        style:--fault-indent={"calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--spacing-space-5)))"}
+        style:--fault-end="var(--spacing-space-2)"
+        style:--fault-indent={"calc(var(--spacing-space-2) * 2 + var(--mark-size, var(--spacing-space-5)))"}
       >
         <!-- The row's three cells stand on the list's columns (subgrid): its
              mark and title, then its status as wide as the widest status
@@ -741,7 +741,7 @@
         >
           <span
             data-slot="lead"
-            class="mark-line flex min-w-0 items-center gap-(--row-compact-gap)"
+            class="mark-line flex min-w-0 items-center gap-space-2"
             data-box
           >
             <TreeMark
@@ -773,19 +773,19 @@
                own under the title. -->
           <span
             data-slot="status"
-            class="mark-line inline-flex items-center gap-space-1 text-size-label font-medium whitespace-nowrap text-ink-muted @max-stop-tray/stop-tray:group-data-away:col-span-full @max-stop-tray/stop-tray:group-data-away:row-start-2 @max-stop-tray/stop-tray:group-data-away:ps-(--stat-away-indent) @max-stop-tray/stop-tray:group-data-away:pb-space-1"
+            class="mark-line inline-flex items-center gap-space-1 text-size-label font-medium whitespace-nowrap text-ink-muted @max-sm/stop-tray:group-data-away:col-span-full @max-sm/stop-tray:group-data-away:row-start-2 @max-sm/stop-tray:group-data-away:ps-(--stat-away-indent) @max-sm/stop-tray:group-data-away:pb-space-1"
             data-stop-tray-tone={status.tone}
             data-box
-            style:--stat-away-indent={"calc(var(--mark-size, var(--spacing-space-5)) + var(--row-compact-gap))"}
+            style:--stat-away-indent={"calc(var(--mark-size, var(--spacing-space-5)) + var(--spacing-space-2))"}
           >
             <span
               data-slot="glyph"
               class={[
-                "inline-grid flex-none @min-stop-tray-rail/stop-tray:@max-stop-tray/stop-tray:hidden",
+                "inline-grid flex-none @min-xs/stop-tray:@max-sm/stop-tray:hidden",
                 status.tone === "working" && "text-status-live-glyph",
                 status.tone === "attention" && "text-status-attn-glyph",
                 status.tone === "failed" && "text-status-fail-glyph",
-                status.tone === "quiet" && "text-status-idle-glyph",
+                status.tone === "quiet" && "text-ink-muted",
               ]}
               data-box
             >
@@ -834,7 +834,7 @@
           </span>
           <span
             data-slot="num"
-            class="num type-meta text-end whitespace-nowrap text-ink-muted @max-stop-tray/stop-tray:group-data-away:row-start-1 @max-stop-tray/stop-tray:group-data-away:col-start-3 @max-stop-tray-rail/stop-tray:hidden"
+            class="num type-meta text-end whitespace-nowrap text-ink-muted @max-sm/stop-tray:group-data-away:row-start-1 @max-sm/stop-tray:group-data-away:col-start-3 @max-xs/stop-tray:hidden"
             >{trailOf(row)}</span
           >
           {#if picks}
@@ -868,7 +868,7 @@
   {#each arrivals as arrival (arrival.id)}
     {@const Sprite = sessionSprite(arrival.id)}
     <span
-      class="absolute inset-0 grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay text-mark-glyph"
+      class="absolute inset-0 grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay text-on-ink"
       style:--fill={arrival.fill}
       style:--landed-icon="calc(var(--btn-icon) * 2 / 3)"
       out:intoRing

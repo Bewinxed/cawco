@@ -653,8 +653,8 @@
           id={railLinkId(project.id)}
           aria-current={here ? "page" : undefined}
           onclick={(event) => openProjectPress(event, project.id, sheet)}
-          class="{props.class} mark-line coarse:h-c-btn-h-lg"
-          style:--mark-hit-gap="var(--row-compact-gap)"
+          class="{props.class} mark-line coarse:h-control-lg"
+          style:--mark-hit-gap="var(--spacing-space-2)"
           data-regroup="regroup:project:{project.id}"
           {@attach landRegroup(() => `regroup:project:${project.id}`)}
         >
@@ -770,12 +770,12 @@
     <div
       data-slot="sidebar-brand-row"
       data-toggled={toggleRoom || undefined}
-      class="flex items-center gap-space-1 data-toggled:h-c-top-bar-h"
+      class="flex items-center gap-space-1 data-toggled:h-control-lg"
     >
       {#if toggleRoom}
         <!-- The room the desk's sidebar toggle stands over (Shell
              `rail-toggle`): as wide as its glass, one bar item in its pad. -->
-        <span aria-hidden="true" class="flex-none w-c-btn-h"></span>
+        <span aria-hidden="true" class="flex-none w-control-md"></span>
       {/if}
       <Sidebar.Menu aria-label="Workspace" class="flex-1">
         <Sidebar.MenuItem>
@@ -821,7 +821,7 @@
           <button
             {...tip}
             aria-label="Start session"
-            class="select-none focus-inset touch-hit inline-grid flex-none place-items-center size-c-nav-h border-none border-current rounded-sm bg-transparent text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
+            class="select-none focus-inset touch-hit inline-grid flex-none place-items-center size-row border-none border-current rounded-sm bg-transparent text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
             data-start-session
             onclick={(event) => newSession(undefined, event.currentTarget)}
             type="button"
@@ -862,7 +862,7 @@
           <button
             data-slot="search"
             aria-haspopup="dialog"
-            class="select-none mark-line press-tint focus-inset flex items-center gap-space-2 w-full min-h-c-btn-h-lg px-space-3 border border-border-control rounded-sm bg-surface-raised type-body text-ink-muted text-start cursor-text"
+            class="select-none mark-line press-tint focus-inset flex items-center gap-space-2 w-full min-h-control-lg px-space-3 border border-border-control rounded-sm bg-surface-raised type-body text-ink-muted text-start cursor-text"
             data-share="jump"
             onclick={() => onsearch()}
             type="button"

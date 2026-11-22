@@ -77,7 +77,7 @@
   style:--frame-w={`${width}px`}
 >
   <header
-    class="flex h-c-btn-h-lg items-center justify-end gap-space-1 bg-surface-raised pe-space-3 ps-space-3"
+    class="flex h-control-lg items-center justify-end gap-space-1 bg-surface-raised pe-space-3 ps-space-3"
   >
     <span class="me-auto truncate type-label text-ink-strong">index.html</span>
     {#if holds === "mode"}

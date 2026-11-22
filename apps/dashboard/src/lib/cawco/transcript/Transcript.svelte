@@ -498,7 +498,7 @@
     <div
       data-tx-rail
       data-slot="livetool"
-      class="min-h-(--tx-line) coarse:min-h-(--tx-line-touch) text-size-label font-medium text-ink-strong rail-row rail-line"
+      class="min-h-(--tx-line) coarse:min-h-control-lg text-size-label font-medium text-ink-strong rail-row rail-line"
     >
       <span data-slot="rail-cell" class="rail-cell {d.color}"
         ><LiveIcon class="size-icon-md" /></span
@@ -543,7 +543,7 @@
 </p>
 
 <!-- Asymmetric content padding is the DESIGN.md ledger signature: inline
-     start --spacing-space-7 (25), inline end --spacing-space-6 (21). The foot's height
+     start --spacing-space-6 (25), inline end --spacing-space-6 (21). The foot's height
      (`.foot`), which what floats over it stands on, is --foot-room. What
      scrolls here is its own stacking context, so nothing in it (a row's
      raised mark, a card's z-index) rises over the pane's fades (FootFade,
@@ -557,7 +557,7 @@
   data-slot="tr"
   aria-label={transcriptWords.transcript}
   style:--foot-room={FOOT_ROOM}
-  class="flex-auto overflow-y-auto anchor-none scroll-timeline-transcript-head py-0 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 min-h-0 relative tx-columns"
+  class="flex-auto overflow-y-auto anchor-none scroll-timeline-transcript-head py-0 ps-space-6 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 min-h-0 relative tx-columns"
   role="log"
   bind:this={pin.scroller}
   {@attach pin.measureView}
@@ -840,10 +840,10 @@
       {#if seek.unfound}
         <!-- The dock's raised line, as the not-caught-up line floats (Behind). -->
         <p
-          class="max-w-full py-space-2 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-meta font-normal text-ink-muted text-center text-balance"
+          class="max-w-full py-space-2 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-lg text-size-meta font-normal text-ink-muted text-center text-balance"
           data-open-at={seek.unfound}
           in:rise={"--duration-panel"}
-          out:rise={"--duration-exit"}
+          out:rise={"--duration-fade"}
         >
           {seek.unfoundWords}
         </p>
@@ -878,7 +878,7 @@
   <div
     data-slot="first-screen"
     style:--foot-room={FOOT_ROOM}
-    class="absolute inset-0 isolate flex flex-col-reverse overflow-y-auto anchor-none ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 tx-columns"
+    class="absolute inset-0 isolate flex flex-col-reverse overflow-y-auto anchor-none ps-space-6 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 tx-columns"
   >
     <div>
       {#if rowBuild.built.before}

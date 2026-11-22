@@ -266,7 +266,7 @@
       departChecks();
       await connect.start(
         { route: "command", address },
-        dur("--duration-hold")
+        dur("--duration-loop")
       );
     } catch (error) {
       copied = false;
@@ -420,7 +420,7 @@
                     type="button"
                     data-slot="port"
                     aria-label="Port 22. Change the port"
-                    class="select-none pressable touch-hit mark-line col-start-1 row-start-1 inline-flex h-c-input-h w-full items-center justify-center gap-space-1 rounded-md border border-border-control bg-surface-raised type-body text-ink-strong shadow-xs transition-control hover:bg-surface-hover"
+                    class="select-none pressable touch-hit mark-line col-start-1 row-start-1 inline-flex h-control-md w-full items-center justify-center gap-space-1 rounded-md border border-border-control bg-surface-raised type-body text-ink-strong shadow-xs transition-control hover:bg-surface-hover"
                     onclick={() => {
                       // Its field takes focus in this press's own task. A
                       // frame later (`tick`, in async mode) it would take
@@ -444,7 +444,7 @@
             <p
               id="connect-said"
               aria-live="polite"
-              class="m-0 min-h-lh ps-c-row-lead type-meta text-status-fail-ink"
+              class="m-0 min-h-lh ps-row-compact type-meta text-status-fail-ink"
             >
               {said || refused}
             </p>
@@ -569,7 +569,7 @@
                   <label
                     data-address={row.kind}
                     class={[
-                      "mark-line flex min-h-c-btn-h-sm items-center gap-space-2 rounded-sm px-space-1 py-space-row coarse:min-h-c-row-h",
+                      "mark-line flex min-h-control-sm items-center gap-space-2 rounded-sm px-space-1 py-space-row coarse:min-h-control-lg",
                       row.address ? "hover:bg-surface-hover" : "opacity-50",
                     ]}
                   >
@@ -680,14 +680,14 @@
               <span class="grid" data-box>
                 <span
                   class={[
-                    "col-start-1 row-start-1 transition-opacity duration-(--duration-morph) ease-out",
+                    "col-start-1 row-start-1 transition-opacity duration-(--duration-fade) ease-out",
                     copied && "opacity-0",
                   ]}>{commonWords.copyCommand}</span
                 >
                 <span
                   aria-hidden="true"
                   class={[
-                    "col-start-1 row-start-1 transition-opacity duration-(--duration-morph) ease-out",
+                    "col-start-1 row-start-1 transition-opacity duration-(--duration-fade) ease-out",
                     !copied && "opacity-0",
                   ]}
                   >{connectWords.copiedListening}<span

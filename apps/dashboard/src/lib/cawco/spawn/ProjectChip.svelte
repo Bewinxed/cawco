@@ -138,7 +138,7 @@
     <div class="ns-panel grid gap-space-2 p-space-1">
       <label
         data-slot="project-chip-field"
-        class="field-edge transition-control flex h-c-input-h max-phone:h-c-btn-h-lg items-center gap-space-2 rounded-md border bg-surface-raised px-space-3 shadow-xs"
+        class="field-edge transition-control flex h-control-md max-phone:h-control-lg items-center gap-space-2 rounded-md border bg-surface-raised px-space-3 shadow-xs"
       >
         <Files class="size-icon-md flex-none text-ink-subtle" />
         <input
@@ -153,7 +153,7 @@
       </label>
       <label
         data-slot="project-chip-field"
-        class="field-edge transition-control flex h-c-input-h max-phone:h-c-btn-h-lg items-center gap-space-2 rounded-md border bg-surface-raised px-space-3 shadow-xs"
+        class="field-edge transition-control flex h-control-md max-phone:h-control-lg items-center gap-space-2 rounded-md border bg-surface-raised px-space-3 shadow-xs"
       >
         <Folder class="size-icon-md flex-none text-ink-subtle" />
         <input
@@ -208,7 +208,7 @@
       <button
         data-slot="row"
         aria-pressed={on}
-        class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color] duration-(--duration-toggle) ease-out aria-pressed:bg-selected-bg aria-pressed:text-selected-ink motion-safe:transition-[background-color,transform]"
+        class="select-none ns-in press-tint relative flex h-control-lg w-full items-center gap-space-3 rounded-xs border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color] duration-(--duration-fade) ease-out aria-pressed:bg-selected-bg aria-pressed:text-brand-ink motion-safe:transition-[background-color,transform]"
         data-fh="1"
         data-machine-id={row.machineId}
         data-project-id={row.id}
@@ -223,12 +223,12 @@
           <span data-slot="name" class="type-label block">{row.name}</span>
           <span
             data-slot="meta"
-            class="type-meta block truncate text-ink-subtle in-aria-pressed:text-selected-ink"
+            class="type-meta block truncate text-ink-subtle in-aria-pressed:text-brand-ink"
             >{row.machine ? `${row.machine} · ${row.path}` : row.path}</span
           >
         </span>
         {#if on}
-          <Check class="ns-check size-icon-md flex-none text-selected-icon" />
+          <Check class="ns-check size-icon-md flex-none text-brand-ink" />
         {/if}
       </button>
     {/each}
@@ -239,7 +239,7 @@
     <button
       data-slot="row"
       data-add
-      class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color] duration-(--duration-toggle) ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
+      class="select-none ns-in press-tint relative flex h-control-lg w-full items-center gap-space-3 rounded-xs border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color] duration-(--duration-fade) ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
       data-fh="1"
       onclick={() => {
         draft = { name: "", path: "" };

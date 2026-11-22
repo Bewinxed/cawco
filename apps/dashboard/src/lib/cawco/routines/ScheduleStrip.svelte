@@ -222,7 +222,7 @@
         bind:this={markRow}
         aria-hidden="true"
         class="@container relative block h-(--marks-h) type-meta num text-ink-subtle"
-        style:--marks-h={"calc(var(--spacing-space-1) + var(--text-meta) * var(--leading-meta))"}
+        style:--marks-h={"calc(var(--spacing-space-1) + var(--text-meta) * var(--leading-label))"}
       >
         {#each marks as mark (mark.at)}
           <!-- mark-line: the hairline stands above its label, not beside it -->

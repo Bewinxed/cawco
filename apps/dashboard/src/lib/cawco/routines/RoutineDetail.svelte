@@ -284,14 +284,14 @@
 
 <div
   data-slot="detail"
-  class="flex flex-col gap-space-4 px-space-3 pb-space-4 @table-400px/table:ps-(--detail-lead)"
-  style:--detail-lead={"calc(var(--spacing-c-row-lead) + var(--spacing-space-3) * 2)"}
+  class="flex flex-col gap-space-4 px-space-3 pb-space-4 @sm/table:ps-(--detail-lead)"
+  style:--detail-lead={"calc(var(--spacing-row-compact) + var(--spacing-space-3) * 2)"}
 >
   {#if condition}
     <section
       data-slot="condition"
       aria-labelledby="condition-{routine.id}"
-      class="flex max-w-c-measure flex-col gap-space-2 pt-space-2"
+      class="flex max-w-measure flex-col gap-space-2 pt-space-2"
     >
       <h4
         class="m-0 flex flex-wrap items-baseline gap-x-space-2 type-label text-ink-strong"
@@ -306,7 +306,7 @@
         {condition.statement}
       </p>
       {#if conditionSaid}
-        <p class="m-0 type-body text-ink-row wrap-break-word">
+        <p class="m-0 type-body text-ink-strong wrap-break-word">
           {conditionSaid}
         </p>
       {/if}
@@ -393,7 +393,7 @@
     <section
       data-slot="check"
       aria-labelledby="check-{routine.id}"
-      class="flex max-w-c-measure flex-col gap-space-2 pt-space-2"
+      class="flex max-w-measure flex-col gap-space-2 pt-space-2"
     >
       <h4 class="m-0 type-label text-ink-strong" id="check-{routine.id}">
         {checkWords.head}
@@ -423,7 +423,7 @@
               {/if}
             </span>
             {#if one.said}
-              <span class="type-meta text-ink-row wrap-break-word"
+              <span class="type-meta text-ink-strong wrap-break-word"
                 >{one.said}</span
               >
             {/if}
@@ -433,7 +433,7 @@
     </section>
   {/if}
   <!-- The schedule drawn whole: the row's strip with its days or hours. -->
-  <div data-slot="schedule-wrap" class="max-w-c-measure pt-space-2">
+  <div data-slot="schedule-wrap" class="max-w-measure pt-space-2">
     <ScheduleStrip
       label={scheduleWords}
       {now}
@@ -443,7 +443,7 @@
   </div>
   <div
     data-slot="instruction-wrap"
-    class="flex max-w-c-measure flex-col items-start gap-space-1"
+    class="flex max-w-measure flex-col items-start gap-space-1"
   >
     <div
       data-slot="instruction"
@@ -453,7 +453,7 @@
       id="instruction-{routine.id}"
       style:--clamp-h="calc(var(--lines) * 1lh)"
       style:--fade-from="calc(100% - 1lh)"
-      style:--fade-mask={"linear-gradient(to bottom, var(--color-mask-opaque) var(--fade-from), transparent)"}
+      style:--fade-mask={"linear-gradient(to bottom, var(--color-ink-strong) var(--fade-from), transparent)"}
       style:--lines="4"
     >
       <Markdown source={routine.prompt} />
@@ -501,15 +501,18 @@
             <Table.Row variant="band">
               <Table.Head
                 data-slot="routine-detail-col-when"
-                class="w-c-ledger-when-w @max-table-496px/table:w-c-ledger-when-w-narrow"
+                class="w-(--w) @max-md/table:w-(--w-narrow)"
+                style="--w: calc(var(--spacing) * 24); --w-narrow: calc(var(--spacing) * 18)"
                 variant="band">{words.columnWhen}</Table.Head
               >
               <Table.Head
-                class="w-c-ledger-outcome-w @max-table-496px/table:w-c-ledger-outcome-w-narrow"
+                class="w-(--w) @max-md/table:w-(--w-narrow)"
+                style="--w: calc(var(--spacing) * 44); --w-narrow: calc(var(--spacing) * 32)"
                 variant="band">{words.columnOutcome}</Table.Head
               >
               <Table.Head
-                class="w-c-ledger-took-w"
+                class="w-(--w)"
+                style="--w: calc(var(--spacing) * 20)"
                 fold="runs-took"
                 variant="band">{words.columnTook}</Table.Head
               >
@@ -528,7 +531,8 @@
                 variant="stacks"
               >
                 <Table.Cell
-                  class="w-c-ledger-when-w @max-table-496px/table:w-c-ledger-when-w-narrow"
+                  class="w-(--w) @max-md/table:w-(--w-narrow)"
+                  style="--w: calc(var(--spacing) * 24); --w-narrow: calc(var(--spacing) * 18)"
                   data-cell="when"
                   rule="top"
                   variant="ledger"
@@ -541,7 +545,8 @@
                   >
                 </Table.Cell>
                 <Table.Cell
-                  class="w-c-ledger-outcome-w @max-table-496px/table:w-c-ledger-outcome-w-narrow"
+                  class="w-(--w) @max-md/table:w-(--w-narrow)"
+                  style="--w: calc(var(--spacing) * 44); --w-narrow: calc(var(--spacing) * 32)"
                   data-cell="outcome"
                   rule="top"
                   variant="ledger"
@@ -549,7 +554,8 @@
                   <RunStatus status={outcome.status} text={outcome.word} />
                 </Table.Cell>
                 <Table.Cell
-                  class="w-c-ledger-took-w"
+                  class="w-(--w)"
+                  style="--w: calc(var(--spacing) * 20)"
                   data-cell="took"
                   fold="runs-took"
                   rule="top"
@@ -558,7 +564,7 @@
                   <span data-slot="num" class="num">{tookOf(run)}</span>
                 </Table.Cell>
                 <Table.Cell
-                  class="@max-table-424px/table:col-span-full @max-table-424px/table:row-start-1"
+                  class="@max-sm/table:col-span-full @max-sm/table:row-start-1"
                   data-cell="result"
                   rule="top"
                   variant="ledger"
@@ -566,14 +572,14 @@
                   {#if href}
                     <a
                       data-slot="result"
-                      class="block truncate text-ink-row no-underline group-outcome-failed/run:text-status-fail-ink hover:underline hover:underline-offset-3 hover:not-group-outcome-failed/run:text-link-ink"
+                      class="block truncate text-ink-strong no-underline group-outcome-failed/run:text-status-fail-ink hover:underline hover:underline-offset-3 hover:not-group-outcome-failed/run:text-brand-ink"
                       {href}
                       title={result || undefined}>{result || words.readRun}</a
                     >
                   {:else}
                     <span
                       data-slot="result"
-                      class="block truncate text-ink-row group-outcome-failed/run:text-status-fail-ink"
+                      class="block truncate text-ink-strong group-outcome-failed/run:text-status-fail-ink"
                       title={result || undefined}>{result}</span
                     >
                   {/if}

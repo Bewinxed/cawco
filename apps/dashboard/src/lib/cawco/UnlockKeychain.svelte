@@ -177,7 +177,7 @@
   >
     <div
       data-slot="tile"
-      class="relative grid rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
+      class="relative grid rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-sm"
     >
       {#key view}
         <div
@@ -204,7 +204,7 @@
                 class="mark-line m-0 flex items-center gap-space-2 type-label text-ink-strong"
                 id="{id}-title"
               >
-                <IconKey class="size-icon-md text-warning-9" />
+                <IconKey class="size-icon-md text-status-attn-glyph" />
                 <span>Unlock {machine.hostname}</span>
               </p>
               <p

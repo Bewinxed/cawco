@@ -68,7 +68,7 @@
     "has-[textarea]:rounded-md",
     "has-data-[align=block-end]:rounded-md",
     "has-data-[align=block-start]:rounded-md",
-    "has-[[data-slot][aria-invalid=true]]:border-error-9",
+    "has-[[data-slot][aria-invalid=true]]:border-status-fail-glyph",
     // The field's own input steps clear of an addon beside it, asked of the
     // input by its siblings: asked of the frame (`has-[…]:[&>input]:`), the
     // `:has()` stood outside the rule's subject, where Blink's one shared
@@ -86,7 +86,7 @@
     share !== undefined &&
       "isolate cursor-ew-resize touch-pan-y not-focus-within:[&_*]:cursor-ew-resize can-hover:hover:not-has-[[data-slot][aria-invalid=true]]:before:opacity-100 data-dragging:not-has-[[data-slot][aria-invalid=true]]:before:opacity-100",
     look === "bar" &&
-      "h-c-btn-h rounded-pill border-border-hairline bg-material-panel shadow-tile glass-backdrop contrast-more:border-border-contrast contrast-more:bg-surface-raised contrast-more:backdrop-filter-none reduced-transparency:border-border-contrast reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none",
+      "h-control-md rounded-pill border-border-hairline bg-surface-glass shadow-sm glass-backdrop contrast-more:border-border-strong contrast-more:bg-surface-raised contrast-more:backdrop-filter-none reduced-transparency:border-border-strong reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none",
     // The group's own Clear stands for the engine's: its search cancel glyph is not drawn.
     "[&>input::-webkit-search-cancel-button]:appearance-none",
     className

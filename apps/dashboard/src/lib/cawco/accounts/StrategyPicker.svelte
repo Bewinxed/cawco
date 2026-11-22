@@ -126,7 +126,7 @@
   <div
     data-slot="cards"
     aria-label={label}
-    class="grid grid-cols-2 gap-space-3 @max-decisions-520px:grid-cols-1"
+    class="grid grid-cols-2 gap-space-3 @max-md:grid-cols-1"
     role="radiogroup"
     bind:this={grid}
   >
@@ -137,7 +137,7 @@
         data-slot="strategy-picker-card"
         aria-checked={checked}
         aria-label={words.card(strategy.label, strategy.line)}
-        class="group flex min-w-0 flex-col gap-space-3 rounded-md border border-border-control select-none bg-transparent p-space-3 text-start transition-[border-color,background-color] duration-(--duration-fade) ease-out not-aria-checked:hover:border-border-control aria-checked:border-focus-ring aria-checked:bg-strategy-card-picked focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) motion-safe:transition-pick-card motion-safe:active:transform-(--card-press)"
+        class="group flex min-w-0 flex-col gap-space-3 rounded-md border border-border-control select-none bg-transparent p-space-3 text-start transition-[border-color,background-color] duration-(--duration-fade) ease-out not-aria-checked:hover:border-border-control aria-checked:border-focus-ring aria-checked:bg-selected-bg/45 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) motion-safe:transition-pick-card motion-safe:active:transform-(--card-press)"
         style:--card-press="scale(var(--press-scale))"
         onclick={(event) => {
           if (!(
@@ -159,14 +159,14 @@
       >
         <div
           data-slot="top"
-          class="flex min-h-c-btn-h flex-wrap items-center gap-x-space-3 gap-y-space-2 px-space-1"
+          class="flex min-h-control-md flex-wrap items-center gap-x-space-3 gap-y-space-2 px-space-1"
         >
           <span
             aria-hidden="true"
-            class="grid size-icon-md flex-none place-items-center rounded-pill border-2 border-neutral-8 transition-[border-color] duration-(--duration-fade) ease-out group-aria-checked:border-selected-icon"
+            class="grid size-icon-md flex-none place-items-center rounded-pill border-2 border-neutral-8 transition-[border-color] duration-(--duration-fade) ease-out group-aria-checked:border-brand-ink"
           >
             <span
-              class="size-space-2 scale-50 rounded-pill bg-selected-icon opacity-0 transition-[scale,opacity] duration-(--duration-toggle) ease-out group-aria-checked:scale-100 group-aria-checked:opacity-100"
+              class="size-space-2 scale-50 rounded-pill bg-brand-ink opacity-0 transition-[scale,opacity] duration-(--duration-fade) ease-out group-aria-checked:scale-100 group-aria-checked:opacity-100"
             ></span>
           </span>
           <span

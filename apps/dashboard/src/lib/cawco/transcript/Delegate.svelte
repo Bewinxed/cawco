@@ -459,7 +459,7 @@
           class="rail-cell rounded-xs bg-mark-overlay bg-(--mark-bg)"
           style:--mark-bg="var(--color-mark-{markHue(hueSeed)})"
           {@attach trayCard(() => (elsewhere ? null : id))}
-          ><Sprite class="size-space-3 block text-mark-glyph" /></span
+          ><Sprite class="size-space-3 block text-on-ink" /></span
         >
         <span
           class="font-(family-name:--font-mono) text-ink-strong group-hover/bhead:text-brand-ink flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap transition-[color] duration-(--duration-control) ease-out"
@@ -476,14 +476,14 @@
         {#if started}
           <span
             data-slot="kind"
-            class="mark-text flex-none text-size-meta font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-c-row-mark whitespace-nowrap"
+            class="mark-text flex-none text-size-meta font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-4.5 whitespace-nowrap"
             data-box
             style:--kind-py="calc((1lh - 1ex) / 2)">session</span
           >
         {:else if type}
           <span
             data-slot="kind"
-            class="mark-text flex-none text-size-meta font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-c-row-mark whitespace-nowrap"
+            class="mark-text flex-none text-size-meta font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-4.5 whitespace-nowrap"
             data-box
             style:--kind-py="calc((1lh - 1ex) / 2)">{type}</span
           >
@@ -513,7 +513,7 @@
              past the trim's room given back, so the box keeps its height. A phase
              change carries its tone across with its words. -->
         <span
-          class="mark-text ms-auto flex-none text-size-meta font-normal num rounded-xs py-(--pill-py) px-space-2 bg-status-idle-bg text-status-idle-ink whitespace-nowrap transition-[background-color,color] duration-(--duration-control) ease-out tone-live:bg-status-live-bg tone-live:text-status-live-ink tone-attn:bg-status-attn-bg tone-attn:text-status-attn-ink tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink"
+          class="mark-text ms-auto flex-none text-size-meta font-normal num rounded-xs py-(--pill-py) px-space-2 bg-transparent text-ink-muted whitespace-nowrap transition-[background-color,color] duration-(--duration-control) ease-out tone-live:bg-status-live-bg tone-live:text-status-live-ink tone-attn:bg-status-attn-bg tone-attn:text-status-attn-ink tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink"
           data-tone={tone}
           data-delegate-tone={tone}
           data-box
@@ -531,7 +531,7 @@
                  digit-widths, so the pill, pushed to the end of the head,
                  never steps sideways as the seconds change. -->
             <span
-              class="data-ticking:inline-block data-ticking:min-w-c-elapsed-w data-ticking:text-end"
+              class="data-ticking:inline-block data-ticking:min-w-ch-7 data-ticking:text-end"
               data-ticking={inFlight || undefined}
               role="timer"
               {@attach clock.watch}>{elapsed}</span
@@ -545,7 +545,7 @@
       {#if id}
         <a
           aria-label="Open {label} in its own view"
-          class="touch-hit flex-none size-c-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
+          class="touch-hit flex-none size-6.5 grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
           href={conversationHref(id, boardStore.instanceIndex)}
           title="Open {label} in its own view"
         >
@@ -558,7 +558,7 @@
          headline() bounds its length; the wrap is the layout's. -->
     {#if brief}
       <p
-        class="rail-hang mt-space-1 mb-0 type-body text-ink-muted max-w-c-measure wrap-anywhere"
+        class="rail-hang mt-space-1 mb-0 type-body text-ink-muted max-w-measure wrap-anywhere"
       >
         {headline(brief)}
       </p>
@@ -574,7 +574,7 @@
         {#key status.kind}
           <p
             data-slot="now"
-            class="rail-line col-start-1 row-start-1 mt-space-1 mb-0 items-box-start text-size-meta font-normal text-ink-strong data-err:text-status-fail-ink leading-body max-w-c-measure"
+            class="rail-line col-start-1 row-start-1 mt-space-1 mb-0 items-box-start text-size-meta font-normal text-ink-strong data-err:text-status-fail-ink leading-body max-w-measure"
             data-err={status.err || undefined}
             in:lineSwap
             out:lineSwap
@@ -599,7 +599,7 @@
          finish copied into the project's folder, drawn as what it is
          (ReportOutputs). -->
     {#if report && report.outputs.length > 0 && projectId && !open}
-      <div class="rail-hang max-w-c-measure">
+      <div class="rail-hang max-w-measure">
         <ReportOutputs files={report.outputs} {projectId} />
       </div>
     {/if}
@@ -609,7 +609,7 @@
          card's only warm colour. The register is always there for an ask to
          land in; it takes room only with one in it. -->
     <ul
-      class="list-none m-0 p-0 flex flex-col gap-space-row max-w-c-measure"
+      class="list-none m-0 p-0 flex flex-col gap-space-row max-w-measure"
       {@attach reflow()}
     >
       {#each waiting as ask (ask.key)}
@@ -644,7 +644,7 @@
           {#if report}
             <section
               data-delegate-failed={report.failed || undefined}
-              class="group/report mt-space-4 p-space-3 rounded-xs bg-surface-raised shadow-tile"
+              class="group/report mt-space-4 p-space-3 rounded-xs bg-surface-raised shadow-sm"
               data-failed={report.failed || undefined}
             >
               <h4

@@ -8,4 +8,4 @@
  * `:has()`, the frame alone is its anchor.
  */
 export const REPLY_FRAME =
-  "max-w-c-measure has-[[data-block-key]]:@container has-[[data-block-wide]]:max-w-none has-[[data-block-wide]]:[--words-measure:var(--spacing-c-measure)]";
+  "max-w-measure has-[[data-block-key]]:@container has-[[data-block-wide]]:max-w-none has-[[data-block-wide]]:[--words-measure:var(--spacing-measure)]";

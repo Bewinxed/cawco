@@ -1,6 +1,6 @@
 /**
  * Resting a mouse on a reference chip peeks what it names under it (a pin's
- * thread, a thing's card), after `--duration-peek`. Never under a finger, where
+ * thread, a thing's card), after `--duration-panel`. Never under a finger, where
  * a press opens it; the chip's own name carries its state for a screen
  * reader. `place` answers where the peek stands from the chip's box; `can`
  * whether there is anything to peek yet. Set up with the chip.
@@ -30,7 +30,7 @@ export function chipPeek<T>(
       }
       timer = setTimeout(() => {
         at = place(el.getBoundingClientRect());
-      }, dur("--duration-peek"));
+      }, dur("--duration-panel"));
     },
     leave() {
       clearTimeout(timer);

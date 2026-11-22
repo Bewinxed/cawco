@@ -218,7 +218,7 @@
         bind:checked={fields.neverBackup}
       />
       <div
-        class="flex flex-wrap items-center gap-space-3 pt-space-2 text-ink-row"
+        class="flex flex-wrap items-center gap-space-3 pt-space-2 text-ink-strong"
       >
         <label for="reserve">{words.editor.reserve}</label>
         <!-- The figure and its unit hold together on one line. -->

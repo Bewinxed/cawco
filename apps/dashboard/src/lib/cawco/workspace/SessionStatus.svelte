@@ -31,7 +31,7 @@
       status.tone === "working" && "breathe loops text-status-live-glyph",
       status.tone === "attention" && "text-status-attn-glyph",
       status.tone === "failed" && "text-status-fail-glyph",
-      status.tone === "quiet" && "text-status-idle-glyph",
+      status.tone === "quiet" && "text-ink-muted",
     ]}
     data-box
     {@attach loopInStep}

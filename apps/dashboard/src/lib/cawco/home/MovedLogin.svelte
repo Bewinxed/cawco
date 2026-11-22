@@ -43,7 +43,7 @@
   <!-- An entry under the group's head: body type in row ink, a step under the
        head's label, so the head reads as the heading and the entries as its
        list. The name gives way first (The Truncate Inside Rule). -->
-  <span data-slot="name" class="pe-(--x-room) type-body text-ink-row truncate"
+  <span data-slot="name" class="pe-(--x-room) type-body text-ink-strong truncate"
     >{one.name}</span
   >
   <!-- Where it was found, and the to-do at the line's trailing edge; the
@@ -61,7 +61,7 @@
            of 24). -->
       <a
         data-slot="todo"
-        class="mark-line me-(--hang) ms-auto inline-flex items-center gap-space-row rounded-xs type-meta text-link-ink no-underline whitespace-nowrap transition-[opacity] duration-(--duration-control) ease-out hover:text-link-hover active:opacity-72"
+        class="mark-line me-(--hang) ms-auto inline-flex items-center gap-space-row rounded-xs type-meta text-brand-ink no-underline whitespace-nowrap transition-[opacity] duration-(--duration-control) ease-out hover:text-brand-ink active:opacity-72"
         href="/config/accounts/{one.account.id}"
         onclick={onchoose}
         style:--hang="calc(-1 * var(--spacing-icon-sm) * 8.25 / 24)"

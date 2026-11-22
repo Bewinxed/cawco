@@ -2039,13 +2039,13 @@
             floatingSurface({ motion: "pop" }),
             "absolute inset-x-space-3 bottom-(--rise-foot) z-2 mx-auto flex min-h-0 flex-col overflow-hidden",
             rising === "map"
-              ? "h-1/2 max-w-c-graph-stage-min"
-              : "max-h-1/2 max-w-c-measure p-space-3",
+              ? "h-1/2 max-w-150"
+              : "max-h-1/2 max-w-measure p-space-3",
           ]}
           data-slot="graph-rising"
           style:--rise-foot={riseFoot}
           in:rise={"--duration-panel"}
-          out:rise={"--duration-exit"}
+          out:rise={"--duration-fade"}
         >
           {@render risingBody()}
         </div>

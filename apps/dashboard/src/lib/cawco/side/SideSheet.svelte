@@ -80,8 +80,8 @@
    * an ask's card grown out of it, the chips in the tray row, the
    * suggestions while the row holds any, the plan's ring, Caw perched on
    * the pill. Its rows are kept laid out whether they show anything or not
-   * (the tray row, the suggestion row: app.css `--spacing-c-tray-row`,
-   * `--spacing-c-suggest-room`), and a part steps aside for an ask by `visibility`;
+   * (the tray row, the suggestion row: app.css `--tray-row`,
+   * `--suggest-room`), and a part steps aside for an ask by `visibility`;
    * counted by their boxes, an empty suggestion row stood the sheet 59px
    * over the delegate chips on a phone. Drawn is what has a box and paints:
    * neither `visibility: hidden` nor faded to nothing.
@@ -850,7 +850,7 @@
            card in a card). -->
       <div
         data-slot="sheet"
-        class="relative flex flex-1 flex-col min-h-0 pt-space-3 rounded-t-lg bg-surface-well shadow-drawer"
+        class="relative flex flex-1 flex-col min-h-0 pt-space-3 rounded-t-lg bg-surface-sunk shadow-lg"
         style:--sheet-hidden="{hidden}px"
         {@attach land(() => share, { mode: "clip" })}
       >

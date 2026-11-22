@@ -374,7 +374,7 @@
   bind:this={form}
   data-slot="routine-form"
   aria-label={words.newRoutine}
-  class="@container flex w-full max-w-c-measure min-w-0 flex-col gap-space-4"
+  class="@container flex w-full max-w-measure min-w-0 flex-col gap-space-4"
   novalidate
   onsubmit={create}
 >
@@ -407,7 +407,7 @@
 
   <!-- Its condition and the day its checks stop, two to a row where they
        hold: a condition makes it a check tasks wait on. -->
-  <div class="grid min-w-0 gap-space-3 @field-group:grid-cols-2">
+  <div class="grid min-w-0 gap-space-3 @sm:grid-cols-2">
     <Field
       hint={conditions.conditionHint}
       id="routine-condition"
@@ -440,7 +440,7 @@
        two to a row where they hold and one where they don't; right under
        them, the hub's read-back in words, then its week on the strip. -->
   <div data-slot="when" class="flex min-w-0 flex-col gap-space-2">
-    <div class="grid min-w-0 gap-space-3 @field-group:grid-cols-2">
+    <div class="grid min-w-0 gap-space-3 @sm:grid-cols-2">
       <Field id="routine-repeat" label={words.whenLabel}>
         <NativeSelect
           id="routine-repeat"
@@ -494,7 +494,7 @@
         </Field>
       {/if}
       {#if custom}
-        <div class="min-w-0 @field-group:col-span-2">
+        <div class="min-w-0 @sm:col-span-2">
           <Field
             hint={words.customHint}
             id="routine-custom"
@@ -613,13 +613,13 @@
   <!-- The commit row: what creating it does at once, in plain words; why
        a create was refused and what to do; then Cancel and Create. -->
   <div data-slot="commit" class="flex min-w-0 flex-col gap-space-3">
-    <p class="m-0 max-w-c-measure type-body text-pretty text-ink-row">
+    <p class="m-0 max-w-measure type-body text-pretty text-ink-strong">
       {words.testRun}
     </p>
     {#if failure}
       <p
         data-slot="form-failure"
-        class="m-0 max-w-c-measure type-body text-pretty wrap-anywhere text-status-fail-ink"
+        class="m-0 max-w-measure type-body text-pretty wrap-anywhere text-status-fail-ink"
         role="alert"
         in:unfold
         out:unfold

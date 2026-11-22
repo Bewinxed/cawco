@@ -8,7 +8,7 @@
    * with that sign-in's panel for that machine; an offline machine only says
    * so. Word and action share one trailing column, at one x on every row.
    * The popovers are one surface (NsPopoverGroup), gliding from row to row.
-   * Signed in, the check draws, holds for --duration-hold, and the popover puts
+   * Signed in, the check draws, holds for --duration-loop, and the popover puts
    * itself away.
    *
    * A sign-in outlives its popover (DESIGN.md, The Work Outlives Its
@@ -256,7 +256,7 @@
     const timer = setTimeout(() => {
       settleHarness(place.machine.machineId, "claude");
       setOpen(place, false);
-    }, dur("--duration-hold"));
+    }, dur("--duration-loop"));
     return () => clearTimeout(timer);
   });
 
@@ -341,7 +341,7 @@
           : words.machines.openSignIn}
       {@const landedHere = claude ? landedOn(machine, "claude") : undefined}
       <li
-        class="col-span-full grid min-h-c-btn-h-lg grid-cols-subgrid items-center gap-x-space-4 px-space-2 py-space-1 not-first:not-data-again:border-t not-first:not-data-again:border-t-border-hairline"
+        class="col-span-full grid min-h-control-lg grid-cols-subgrid items-center gap-x-space-4 px-space-2 py-space-1 not-first:not-data-again:border-t not-first:not-data-again:border-t-border-hairline"
         data-again={again || undefined}
         data-flip
       >
@@ -407,7 +407,7 @@
                   variant: "outline",
                   size: "sm",
                 })}
-                width="var(--spacing-c-signin-pop-w)"
+                width="var(--signin-pop-w)"
               >
                 {#snippet trigger()}
                   {parked ? resume : verb}

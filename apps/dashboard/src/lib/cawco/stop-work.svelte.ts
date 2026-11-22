@@ -744,7 +744,7 @@ class StopWork {
     const parent = job.rows.find((each) => each.s.id === row.s.parentId);
     const flier = job.open ? this.fliers.get(jobKey(job)) : undefined;
     if (parent && flier) {
-      this.after(job, dur("--duration-stagger"), () => flier.fly(parent));
+      this.after(job, dur("--duration-step"), () => flier.fly(parent));
     }
     if (job.rows.every((each) => each.arrived)) {
       this.after(job, dur("--duration-control"), () => {
@@ -804,7 +804,7 @@ class StopWork {
     // label's morph waits for the morph to land.
     const morphing =
       job.rows.length > 0
-        ? dur("--duration-morph") - (performance.now() - started)
+        ? dur("--duration-fade") - (performance.now() - started)
         : 0;
     if (morphing > 0 && job.open) {
       await new Promise<void>((resolve) => setTimeout(resolve, morphing));
@@ -817,7 +817,7 @@ class StopWork {
     this.keep();
     if (job.open) {
       await new Promise<void>((resolve) =>
-        setTimeout(resolve, dur("--duration-hold"))
+        setTimeout(resolve, dur("--duration-loop"))
       );
     }
     if (job.kind !== "caw-off") {
@@ -857,7 +857,7 @@ class StopWork {
     this.keep();
   }
 
-  /** The tray folds away as it is (--duration-exit), then the job goes. */
+  /** The tray folds away as it is (--duration-fade), then the job goes. */
   private close(job: StopJob): void {
     if (!job.open) {
       this.drop(job);
@@ -865,7 +865,7 @@ class StopWork {
     }
     job.open = false;
     this.keep();
-    setTimeout(() => this.drop(job), dur("--duration-exit"));
+    setTimeout(() => this.drop(job), dur("--duration-fade"));
   }
 
   /* ── After a reload ─────────────────────────────────────────────── */

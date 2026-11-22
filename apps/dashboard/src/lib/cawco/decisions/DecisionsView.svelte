@@ -140,7 +140,7 @@
             </EmptyState>
           </div>
         {:else if empty && canTalk}
-          <div class="mx-auto w-full max-w-c-starters-w" data-slot="first-use">
+          <div class="mx-auto w-full max-w-(--starters-w)" data-slot="first-use">
             <EmptyState centre="mark" line={words.emptyCaw} title={words.empty}>
               {#snippet mark()}
                 <div

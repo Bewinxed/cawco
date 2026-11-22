@@ -112,7 +112,8 @@
 {#if !framed}
   <nav
     aria-label="Usage popover bench"
-    class="pointer-events-auto relative z-(--layer-bench-controls) flex flex-wrap justify-end gap-x-space-4 gap-y-space-2 p-space-2"
+    class="pointer-events-auto relative z-(--z) flex flex-wrap justify-end gap-x-space-4 gap-y-space-2 p-space-2"
+    style:--z="calc(var(--layer-float) + 20)"
     onpointerdown={(event) => event.stopPropagation()}
   >
     <span class="flex items-center gap-space-1">

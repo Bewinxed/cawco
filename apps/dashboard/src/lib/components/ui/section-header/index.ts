@@ -18,7 +18,7 @@ export const sectionHeadVariants = tv({
   variants: {
     inset: {
       list: "mb-space-1 px-space-3",
-      flush: "m-0 min-h-c-btn-h-xs px-0",
+      flush: "m-0 min-h-control-xs px-0",
     },
   },
   defaultVariants: { inset: "list" },

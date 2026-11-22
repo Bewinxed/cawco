@@ -60,8 +60,8 @@
   data-skeleton
   aria-busy="true"
   style:--sk-foot="var(--composer-clearance, calc(var(--spacing-space-8) * 3))"
-  style:--sk-line-my="calc((1lh - var(--spacing-c-skeleton-x-height)) / 2)"
-  class="relative flex flex-col justify-end flex-auto min-h-0 overflow-hidden pb-(--sk-foot) ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 tx-columns"
+  style:--sk-line-my="calc((1lh - 1ex) / 2)"
+  class="relative flex flex-col justify-end flex-auto min-h-0 overflow-hidden pb-(--sk-foot) ps-space-6 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 tx-columns"
   role="status"
 >
   <!-- Read, never seen: off-screen rather than `display: none`, which
@@ -81,9 +81,9 @@
     <div
       data-slot="well"
       style:--well-pad-block="calc(var(--spacing-space-2) + 1px)"
-      class="ms-(--well-x) py-(--well-pad-block) px-(--pad) inset-ring-1 inset-ring-border-well rounded-well bg-surface-recess-deep"
+      class="ms-(--well-x) py-(--well-pad-block) px-(--pad) inset-ring-1 inset-ring-border-control rounded-sm bg-surface-sunk"
     >
-      <div class="flex flex-col max-w-c-measure text-size-body leading-body">
+      <div class="flex flex-col max-w-measure text-size-body leading-body">
         {@render line("52%")}
       </div>
     </div>
@@ -95,7 +95,7 @@
     {#each ANSWER as lines, i (i)}
       <div
         class={[
-          "flex flex-col max-w-c-measure text-size-body leading-body",
+          "flex flex-col max-w-measure text-size-body leading-body",
           i > 0 && "mt-space-3",
         ]}
       >
@@ -111,7 +111,7 @@
        in the rail cell, the verb, then the mono argument. -->
   <div data-slot="tools" data-tx-rail class="rail-row">
     {#each TOOLS as width (width)}
-      <div class="min-h-(--tx-line) coarse:min-h-(--tx-line-touch) rail-line">
+      <div class="min-h-(--tx-line) coarse:min-h-control-lg rail-line">
         <Skeleton data-rail-cell radius="text" cell="rail" data-box /><Skeleton
           class="w-space-8 flex-none"
           height="x-height"
@@ -131,7 +131,7 @@
   <!-- And what it said about them. -->
   <div data-slot="block" class="mt-space-4">
     {@render who()}
-    <div class="flex flex-col max-w-c-measure text-size-body leading-body">
+    <div class="flex flex-col max-w-measure text-size-body leading-body">
       {#each AFTER as width (width)}
         {@render line(width)}
       {/each}

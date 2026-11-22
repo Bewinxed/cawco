@@ -213,7 +213,7 @@
       "max-phone:snap-x max-phone:snap-mandatory max-phone:group-data-rail-open:hidden",
       tasks.length > 0 && "max-phone:h-auto",
     ]}
-    style:--cols={"minmax(var(--spacing-c-board-col-min), var(--spacing-c-board-col-max))"}
+    style:--cols={"minmax(var(--board-col-min), var(--board-col-max))"}
     style:--cols-phone="calc(100% - var(--spacing-space-8))"
   >
     {#each stages as stage (stage.name)}
@@ -234,7 +234,7 @@
       <div
         data-slot="rail-open"
         class="mb-space-3 flex min-h-0 w-(--w) flex-none flex-col gap-space-1 max-phone:w-full"
-        style:--w="min(var(--spacing-c-board-col-max), 80%)"
+        style:--w="min(var(--board-col-max), 80%)"
       >
         <TaskColumn
           archived
@@ -248,7 +248,7 @@
         <button
           data-slot="rail-close"
           bind:this={foldButton}
-          class="select-none press-tint min-h-c-btn-h-sm rounded-sm border-none border-current bg-transparent p-space-1 type-meta text-ink-muted coarse:min-h-c-btn-h-lg"
+          class="select-none press-tint min-h-control-sm rounded-sm border-none border-current bg-transparent p-space-1 type-meta text-ink-muted coarse:min-h-control-lg"
           onclick={() => setRail(false)}
           type="button"
         >
@@ -263,7 +263,7 @@
         aria-label="Archived, {archived.length} {archived.length === 1
           ? 'task'
           : 'tasks'}. Open it."
-        class="select-none press-tint mb-space-3 flex w-c-btn-h-lg flex-none flex-col items-center gap-space-2 rounded-lg border-none border-current bg-surface-recess px-0 py-space-3 text-ink-muted inset-ring inset-ring-border-hairline"
+        class="select-none press-tint mb-space-3 flex w-control-lg flex-none flex-col items-center gap-space-2 rounded-lg border-none border-current bg-surface-recess px-0 py-space-3 text-ink-muted inset-ring inset-ring-border-hairline"
         onclick={() => setRail(true)}
         type="button"
       >

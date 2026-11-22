@@ -9,7 +9,7 @@
    * - `lost`: the socket dropped and the next try is counted down.
    * - `retrying`: a try is out now.
    * - `refused`: this page has never reached the hub; its address shows.
-   * - `back`: the hub answered again after the band showed, for --duration-hold.
+   * - `back`: the hub answered again after the band showed, for --duration-loop.
    * - `older`: the page is on an older wire than the hub's, and reads
    *   nothing more until the update toast's reload: `offered` while the
    *   toast offers the new build (its Update now catches the page up), else
@@ -30,7 +30,7 @@
    * hid "No limits yet" under it on a phone). Its row opens from nothing on
    * the band's own clock while the band slides down from under the bar,
    * over --duration-panel on the drawer curve, and both go back up over
-   * --duration-exit on ease-out (DESIGN.md, The Fast Exit Rule), as CSS
+   * --duration-fade on ease-out (DESIGN.md, The Fast Exit Rule), as CSS
    * transitions on its own `data-open`, so a socket that blips turns it
    * back from where it is drawn (The Interruptible Rule). With less motion
    * it fades in place. While it leaves it keeps the words it had, so it
@@ -114,7 +114,7 @@
 
   /**
    * The hub answered after the band had something to say: "back" stands for
-   * --duration-hold. `updated` is the build an announced update went to (null
+   * --duration-loop. `updated` is the build an announced update went to (null
    * when unnamed); undefined after any other outage.
    */
   let back = $state<{ updated: string | null | undefined } | null>(null);
@@ -135,7 +135,7 @@
         clearTimeout(backTimer);
         backTimer = setTimeout(() => {
           back = null;
-        }, dur("--duration-hold"));
+        }, dur("--duration-loop"));
       }
     });
   });
@@ -292,7 +292,7 @@
      clearing both. -->
 <div
   data-slot="hub-band-slot"
-  class="pointer-events-none relative z-(--layer-band) grid flex-none grid-rows-shut @container/hub-band data-open:grid-rows-open max-desk:peer-data-floating/top:-order-1 peer-data-under/top:translate-y-c-top-bar-h motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
+  class="pointer-events-none relative z-(--layer-base) grid flex-none grid-rows-shut @container/hub-band data-open:grid-rows-open max-desk:peer-data-floating/top:-order-1 peer-data-under/top:translate-y-control-lg motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
   data-open={band ? "" : undefined}
 >
   <!-- The live region stands from the first markup, so assistive tech has
@@ -317,7 +317,7 @@
            under the drawer's line). -->
       <div
         data-slot="hub-band"
-        class="pointer-events-auto invisible mx-space-3 mt-(--band-air) grid auto-rows-band grid-cols-fluid-auto items-center gap-x-space-3 rounded-md bg-status-attn-bg px-3 py-2.5 text-size-body font-normal text-status-attn-ink tabular-nums opacity-0 desk:ms-space-7 desk:me-space-6 @max-phone/hub-band:auto-rows-band-phone data-open:visible data-open:opacity-100 tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink tone-live:bg-status-live-bg tone-live:text-status-live-ink motion-reduce:not-data-open:transition-band-hide motion-reduce:data-open:transition-band-show motion-safe:not-data-open:translate-band-shut motion-safe:not-data-open:transition-band-slide-hide motion-safe:data-open:translate-y-0 motion-safe:data-open:transition-band-slide-show"
+        class="pointer-events-auto invisible mx-space-3 mt-(--band-air) grid auto-rows-band grid-cols-fluid-auto items-center gap-x-space-3 rounded-md bg-status-attn-bg px-3 py-2.5 text-size-body font-normal text-status-attn-ink tabular-nums opacity-0 desk:ms-space-6 desk:me-space-6 @max-phone/hub-band:auto-rows-band-phone data-open:visible data-open:opacity-100 tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink tone-live:bg-status-live-bg tone-live:text-status-live-ink motion-reduce:not-data-open:transition-band-hide motion-reduce:data-open:transition-band-show motion-safe:not-data-open:translate-band-shut motion-safe:not-data-open:transition-band-slide-hide motion-safe:data-open:translate-y-0 motion-safe:data-open:transition-band-slide-show"
         aria-hidden={band ? undefined : "true"}
         data-open={band ? "" : undefined}
         data-tone={tone}

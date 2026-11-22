@@ -58,7 +58,7 @@
   );
   /** The head's height: the first group 96px under the bar (DESIGN.md, Layout). */
   const HEAD_ROOM =
-    "calc(calc(var(--spacing) * 24) - var(--spacing-space-6) - var(--spacing-space-group))";
+    "calc(calc(var(--spacing) * 24) - var(--spacing-space-6) - var(--spacing-space-5))";
 
   /** Whether the filtered project's Caw is on, once read. */
   let leadOn = $state<boolean | null>(null);
@@ -173,11 +173,11 @@
 <!-- The pages' one gutter: the ledger's asymmetric pair (DESIGN.md), as
      the project page stands on it, the column from that edge. -->
 <div
-  class="min-w-0 flex-auto overflow-y-auto pt-space-6 pr-space-6 pb-space-6 pl-space-7 max-desk:px-space-5 max-phone:px-space-5 max-phone:py-space-4"
+  class="min-w-0 flex-auto overflow-y-auto pt-space-6 pr-space-6 pb-space-6 pl-space-6 max-desk:px-space-5 max-phone:px-space-5 max-phone:py-space-4"
 >
   <!-- The page's width, to its gutter: as the project page stands, no cap
        of its own leaving a wider margin on the right than any other page. -->
-  <div data-slot="col" class="m-0 flex flex-col gap-space-group">
+  <div data-slot="col" class="m-0 flex flex-col gap-space-5">
     <!-- No head of its own (DESIGN.md, Layout): the bar's title names the
          page, so it opens on its one line, the filters beside it, the first
          group under them. -->
@@ -262,7 +262,7 @@
       />
     {:else}
       <div class="max-phone:order-1"><LimitsBlock /></div>
-      <div class="flex flex-col gap-space-group max-phone:order-3">
+      <div class="flex flex-col gap-space-5 max-phone:order-3">
         <WhereItGoes {since} bind:this={where} />
         <History hourly={range === "window" || range === "today"} {since} />
       </div>

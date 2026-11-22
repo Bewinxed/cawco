@@ -20,7 +20,7 @@
    * The house hover panel: the delegate tray's chip panel, and the rail's
    * session card. One surface for whichever thing the pointer rests on; when
    * it moves to the next one the panel glides there (translate on
-   * --duration-morph, --ease-drawer) and takes the new content's size (morph)
+   * --duration-fade, --ease-drawer) and takes the new content's size (morph)
    * while the content cross-fades, rather than closing and opening again.
    * It comes in with a 4px rise from .98 and leaves as a fade.
    *
@@ -159,7 +159,7 @@
     }
     const release = setTimeout(() => {
       held = null;
-    }, dur("--duration-wait-grace"));
+    }, dur("--duration-loop"));
     return () => clearTimeout(release);
   });
 
@@ -222,14 +222,14 @@
 
   function panelIn(_node: Element): TransitionConfig {
     if (!motionOk.current) {
-      return { duration: dur("--duration-menu"), css: (t) => `opacity: ${t}` };
+      return { duration: dur("--duration-control"), css: (t) => `opacity: ${t}` };
     }
     // Out of its trigger: up from a row of chips or a chip under it, down
     // from a chip over it, in from the left beside a list.
     const lift = side === "above" || edge ? "translateY" : "translateX";
     const from = side === "above" || edge === "bottom" ? 4 : -4;
     return {
-      duration: dur("--duration-menu"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t, u) =>
         `opacity: ${t}; transform: ${lift}(${(u * from).toFixed(2)}px) scale(${(0.98 + 0.02 * t).toFixed(4)})`,
@@ -281,7 +281,7 @@
        The 4px bridge between the panel and its trigger is its `after:`. -->
   <div
     {...rest}
-    class="pointer-events-auto absolute start-0 bottom-(--panel-bottom) z-2 w-max origin-(--panel-origin-above) translate-x-(--panel-x) rounded-lg border border-border-control bg-surface-raised shadow-overlay side-right:fixed side-right:start-(--x) side-right:top-0 side-right:bottom-auto side-right:z-(--layer-float) side-right:origin-(--panel-origin-right) side-right:translate-x-0 side-right:translate-y-(--top) motion-safe:data-gliding:transition-[translate] motion-safe:data-gliding:duration-(--duration-morph) motion-safe:data-gliding:ease-drawer side-above:after:absolute side-above:after:inset-x-0 side-above:after:top-full side-above:after:h-space-1 side-right:after:absolute side-right:after:inset-y-0 side-right:after:end-full side-right:after:w-space-1"
+    class="pointer-events-auto absolute start-0 bottom-(--panel-bottom) z-2 w-max origin-(--panel-origin-above) translate-x-(--panel-x) rounded-lg border border-border-control bg-surface-raised shadow-lg side-right:fixed side-right:start-(--x) side-right:top-0 side-right:bottom-auto side-right:z-(--layer-float) side-right:origin-(--panel-origin-right) side-right:translate-x-0 side-right:translate-y-(--top) motion-safe:data-gliding:transition-[translate] motion-safe:data-gliding:duration-(--duration-fade) motion-safe:data-gliding:ease-drawer side-above:after:absolute side-above:after:inset-x-0 side-above:after:top-full side-above:after:h-space-1 side-right:after:absolute side-right:after:inset-y-0 side-right:after:end-full side-right:after:w-space-1"
     data-gliding={gliding || undefined}
     data-side={side}
     style:--panel-bottom="calc(100% + var(--spacing-space-1) + var(--rise, 0px))"
@@ -306,7 +306,7 @@
     <div
       class="relative grid w-max max-w-(--cell-max) max-h-(--cell-room) overflow-y-auto overscroll-contain p-space-3"
       style:--cell-max={"calc(min(var(--hover-panel-max), var(--span, var(--hover-panel-max))) - 2px)"}
-      style:--cell-room="var(--room, var(--spacing-c-hover-panel-room))"
+      style:--cell-room="var(--room, var(--container-xs))"
     >
       {#key key}
         <div

@@ -7,7 +7,7 @@ import { solarGlyphs } from "./glyphs" with { type: "macro" };
  *
  * When the pen lifts, a 24px raised circle with the pen glyph arrives at the
  * stroke's last point as a floating tag does (rising 8px, from 0.96, over
- * `--duration-panel`) and leaves the same way (`--duration-exit`) two breaths later or
+ * `--duration-panel`) and leaves the same way (`--duration-fade`) two breaths later or
  * when the next stroke starts. A press on it that moves opens the menu: two
  * 180° sectors round the icon, Comment over Erase, outer radius 56px, in the
  * panel material with the control edge, each with its glyph and, outside the
@@ -17,8 +17,8 @@ import { solarGlyphs } from "./glyphs" with { type: "macro" };
  * The sector under the pointer takes `surface-fill` and its word
  * `selected-ink`; releasing on a sector picks it, releasing within 20px of
  * the centre picks nothing. A tap opens the same menu and a second tap
- * picks. The menu opens over `--duration-pop` on ease-out and closes over
- * `--duration-exit`; with reduced motion the icon fades and the menu appears and
+ * picks. The menu opens over `--duration-panel` on ease-out and closes over
+ * `--duration-fade`; with reduced motion the icon fades and the menu appears and
  * goes. A pen never works the icon or the menu (a stroke that starts on
  * them is a stroke): they answer a finger, a mouse and the keyboard.
  */
@@ -91,7 +91,7 @@ const CHROME = `
     display: grid; place-items: center;
     border: 1px solid var(--color-border-control); border-radius: 50%;
     background: var(--color-surface-raised); color: var(--color-ink-strong);
-    box-shadow: var(--shadow-tile); cursor: pointer; pointer-events: auto;
+    box-shadow: var(--shadow-sm); cursor: pointer; pointer-events: auto;
     touch-action: none;
   }
   .ink-icon:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus-ring); outline-offset: 2px; }
@@ -110,11 +110,11 @@ const CHROME = `
   @media (prefers-reduced-transparency: reduce) { .ink-ring { display: none; } }
   .ink-menu > svg { position: absolute; inset: 0; overflow: visible; }
   .ink-sector {
-    fill: var(--color-material-panel); stroke: var(--color-border-control); stroke-width: 1;
+    fill: var(--color-surface-glass); stroke: var(--color-border-control); stroke-width: 1;
     transition: fill var(--duration-control) var(--ease-out);
   }
   @media (prefers-reduced-transparency: reduce) { .ink-sector { fill: var(--color-surface-raised); } }
-  .ink-sector[data-hot] { fill: var(--color-surface-fill); }
+  .ink-sector[data-hot] { fill: var(--color-surface-hover); }
   .ink-glyph { color: var(--color-ink-strong); pointer-events: none; }
   .ink-word {
     position: absolute; margin: 0; padding: 2px 6px;
@@ -122,7 +122,7 @@ const CHROME = `
     color: var(--color-ink-muted); font: var(--type-label); white-space: nowrap;
     cursor: pointer; transition: color var(--duration-control) var(--ease-out);
   }
-  .ink-word[data-hot] { color: var(--color-selected-ink); }
+  .ink-word[data-hot] { color: var(--color-brand-ink); }
   .ink-word:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus-ring); outline-offset: 0; }
   .ink-said {
     position: fixed; z-index: 2; translate: -50% 12px; max-inline-size: 280px;
@@ -239,7 +239,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
             { opacity: 0, translate: "-50% calc(-50% + 8px)", scale: "0.96" },
           ]
         : [{ opacity: 1 }, { opacity: 0 }],
-      { duration: ms("--duration-exit"), easing: easeOut(), fill: "forwards" }
+      { duration: ms("--duration-fade"), easing: easeOut(), fill: "forwards" }
     );
     run.id = "ink-icon";
     run.finished.then(
@@ -264,7 +264,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
           { opacity: 1, scale: "1" },
           { opacity: 0, scale: "0.5" },
         ],
-        { duration: ms("--duration-exit"), easing: easeOut(), fill: "forwards" }
+        { duration: ms("--duration-fade"), easing: easeOut(), fill: "forwards" }
       );
       run.id = "ink-menu";
       run.finished.then(
@@ -436,7 +436,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
           { opacity: 0, scale: "0.5" },
           { opacity: 1, scale: "1" },
         ],
-        { duration: ms("--duration-pop"), easing: easeOut() }
+        { duration: ms("--duration-panel"), easing: easeOut() }
       );
       run.id = "ink-menu";
     }

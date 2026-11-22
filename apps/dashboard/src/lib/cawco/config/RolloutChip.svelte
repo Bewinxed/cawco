@@ -160,7 +160,7 @@
       {@const online = machine.status === "online"}
       <div data-slot="machine" class="flex flex-col gap-space-2">
         <div
-          class="flex min-h-c-row-h items-center gap-space-3 rounded-sm px-space-2 py-space-2"
+          class="flex min-h-control-lg items-center gap-space-3 rounded-sm px-space-2 py-space-2"
         >
           <MachineRow
             hue={machineHue(index, online)}
@@ -187,7 +187,7 @@
                   aria-disabled={syncing || undefined}
                   aria-label="Sync {machineLabel(machine.hostname)}"
                   data-slot="sync"
-                  class="select-none inline-flex h-c-btn-h-xs items-center gap-space-1 rounded-sm px-space-2 type-label text-ink-strong transition-control hover:enabled:bg-surface-hover disabled:opacity-50 motion-safe:transition-control-press motion-safe:active:enabled:not-aria-busy:scale-(--press-scale)"
+                  class="select-none inline-flex h-control-xs items-center gap-space-1 rounded-sm px-space-2 type-label text-ink-strong transition-control hover:enabled:bg-surface-hover disabled:opacity-50 motion-safe:transition-control-press motion-safe:active:enabled:not-aria-busy:scale-(--press-scale)"
                   disabled={!online}
                   onclick={whileIdle(
                     () => syncing,

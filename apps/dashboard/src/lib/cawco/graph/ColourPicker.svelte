@@ -54,7 +54,7 @@
     }
   };
   const thumb =
-    "block size-space-4 rounded-pill border-2 border-surface-page shadow-knob outline-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-1";
+    "block size-space-4 rounded-pill border-2 border-surface-page shadow-sm outline-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-1";
 </script>
 
 <ColorPicker.Root
@@ -78,7 +78,7 @@
     {#if dropper}
       <ColorPicker.EyeDropperTrigger
         aria-label={words.eyedropper}
-        class="pointer-hit grid size-c-btn-h-sm flex-none place-items-center rounded-sm text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong press-tint"
+        class="pointer-hit grid size-control-sm flex-none place-items-center rounded-sm text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong press-tint"
       >
         <IconPipette class="size-icon-md" />
       </ColorPicker.EyeDropperTrigger>

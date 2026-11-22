@@ -158,7 +158,7 @@
 </script>
 
 <figure
-  class="group flex flex-col min-w-0 m-0 border border-border-well rounded-sm bg-surface-well overflow-hidden"
+  class="group flex flex-col min-w-0 m-0 border border-border-control rounded-sm bg-surface-sunk overflow-hidden"
   data-kind={kind}
   data-compact={compact || undefined}
 >
@@ -166,7 +166,7 @@
     <figcaption
       data-slot="row"
       data-with-body={kind !== "file" || undefined}
-      class="flex items-center gap-space-2 min-h-c-btn-h-sm ps-space-3 pe-space-1 text-ink-muted data-with-body:border-b data-with-body:border-b-border-well mark-line"
+      class="flex items-center gap-space-2 min-h-control-sm ps-space-3 pe-space-1 text-ink-muted data-with-body:border-b data-with-body:border-b-border-control mark-line"
     >
       <IconDocument class="flex-none size-icon-md" />
       <bdi
@@ -176,7 +176,7 @@
       >
       {#if kind === "file"}
         <a
-          class="inline-flex flex-none items-center gap-space-1 h-c-btn-h-xs px-space-2 rounded-sm type-label text-ink-strong no-underline hover:bg-surface-hover mark-line press-tint focus-inset"
+          class="inline-flex flex-none items-center gap-space-1 h-control-xs px-space-2 rounded-sm type-label text-ink-strong no-underline hover:bg-surface-hover mark-line press-tint focus-inset"
           data-box
           {href}
           rel="noopener"
@@ -218,7 +218,7 @@
         <div
           data-slot="markdown"
           in:reveal
-          style:--markdown-fade={"linear-gradient(to bottom, var(--color-mask-opaque) calc(100% - var(--spacing-space-6)), transparent)"}
+          style:--markdown-fade={"linear-gradient(to bottom, var(--color-ink-strong) calc(100% - var(--spacing-space-6)), transparent)"}
           class="group-data-compact:max-h-24 group-data-compact:overflow-hidden group-data-compact:mask-(--markdown-fade)"
         >
           <MessageBody source={content} />

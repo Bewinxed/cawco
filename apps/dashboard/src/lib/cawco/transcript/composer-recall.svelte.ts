@@ -34,7 +34,7 @@ interface DeckPlace {
  * Where each of the pill's buttons stands in the deck they fold into
  * while the wheel is up, read before anything is written: Send in front,
  * where it is; each one behind it slid toward it until it peeks out by
- * `--spacing-c-deck-peek`, a step smaller (`--c-deck-scale`), whole, so its edge
+ * `--spacing-space-1`, a step smaller (`--c-deck-scale`), whole, so its edge
  * reads behind the one in front and nothing behind it shows through. With
  * reduced motion nothing slides: the ones behind fade out, and the deck is
  * Send alone. Returns each button's place, and where the deck starts
@@ -47,7 +47,7 @@ function foldDeck(
 ): { deck: number; start: number; places: DeckPlace[] } {
   const style = getComputedStyle(row);
   const peek = Number.parseFloat(
-    style.getPropertyValue("--spacing-c-deck-peek")
+    style.getPropertyValue("--spacing-space-1")
   );
   const scale = Number.parseFloat(style.getPropertyValue("--c-deck-scale"));
   const cards = [...row.children]
@@ -337,10 +337,10 @@ export class ComposerRecall {
 
   /**
    * They fan back out to their places from wherever they are, on the
-   * wheel's fold: its --duration-panel-exit on the drawer curve (`ms`: 0 puts
+   * wheel's fold: its --duration-panel on the drawer curve (`ms`: 0 puts
    * them back at once).
    */
-  deckOut(ms = dur("--duration-panel-exit")): void {
+  deckOut(ms = dur("--duration-panel")): void {
     const was = this.#decked;
     this.#decked = null;
     if (!was) {

@@ -11,7 +11,7 @@ import { DIAGRAM_SIZES, type DiagramSize } from "@cawco/core/views-library";
 
 export const BLOCK_ROOM: Record<DiagramSize, string> = {
   small: "w-100 max-w-[100cqi] max-phone:w-[100cqi]",
-  medium: "w-c-diagram-medium max-w-[100cqi]",
+  medium: "w-measure max-w-[100cqi]",
   full: "w-[100cqi]",
 };
 
@@ -20,11 +20,11 @@ export const MEASURE_ROOM = BLOCK_ROOM.medium;
 
 /**
  * A picture given no size: its own size up to the reply's measure, and in
- * a Row a share of the row, never under `--spacing-c-picture-min` before the Row
+ * a Row a share of the row, never under `--picture-min` before the Row
  * wraps it.
  */
 export const PICTURE_ROOM =
-  "w-fit max-w-c-diagram-medium in-data-layout-row:w-auto in-data-layout-row:flex-1 in-data-layout-row:basis-c-picture-min";
+  "w-fit max-w-measure in-data-layout-row:w-auto in-data-layout-row:flex-1 in-data-layout-row:basis-40";
 
 /** The size a program gives, when it gives one the library has. */
 export const blockSize = (size: unknown): DiagramSize | undefined =>

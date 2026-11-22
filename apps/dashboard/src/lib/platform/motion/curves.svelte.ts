@@ -89,47 +89,32 @@ export const easeDrawer = bezier(0.32, 0.72, 0, 1);
  * on no document root ({@link tokensOn}: an HTML page's dials).
  */
 const TOKENS = [
+  "--duration-step",
   "--duration-control",
-  "--duration-menu",
-  "--duration-pop",
-  "--duration-panel",
-  "--duration-panel-exit",
-  "--duration-press-hold",
-  "--duration-exit",
-  "--duration-toggle",
-  "--duration-morph",
   "--duration-fade",
-  "--duration-hold",
-  "--duration-ghost",
-  "--duration-stagger",
-  "--duration-cascade",
-  "--duration-skeleton-reveal",
-  "--skeleton-reveal-blur",
+  "--duration-panel",
+  "--duration-settle",
+  "--duration-loop",
+  "--duration-breath",
   "--ease-out",
   "--ease-in-out",
   "--ease-drawer",
+  "--ease-crossfade",
   "--pop-scale",
   "--pop-rise",
+  "--press-scale",
   "--spacing-space-1",
-  // Read through here as well: each one missing from this pass styled the
-  // page on its own the first time it was asked (a turn's first echo,
-  // `--echo-scale` from echo.svelte.ts, laid the page out for 6.6ms).
-  "--duration-loop",
-  "--duration-fade",
-  "--duration-peek",
-  "--duration-settle",
-  "--duration-glide",
-  "--duration-wait-grace",
+  "--spacing-space-2",
+  "--spacing-space-4",
+  "--text-meta",
+  // Component-local motion tokens declared on :root in design.css.
+  "--skeleton-reveal-blur",
   "--echo-opacity",
   "--echo-scale",
   "--deck-shrink",
   "--deck-step",
-  "--press-scale",
   "--ride-fade",
-  "--spacing-space-2",
-  "--spacing-space-4",
-  "--text-meta",
-  "--spacing-c-pin-card-w",
+  "--pin-card-w",
 ];
 const tokens = new Map<string, string>();
 /** The element the tokens are read off; null for the document's root. */
@@ -172,11 +157,11 @@ export const dur = (name: `--duration-${string}`): number =>
 
 /**
  * The delay of the `n`th of a run of things arriving in turn, as CSS for a
- * `--delay`: --duration-stagger apart, never later than --duration-cascade however
+ * `--delay`: --duration-step apart, never later than --duration-settle however
  * many there are (a tree's rows are paced the same way, `glideSpeed`).
  */
 export const staggered = (n: number): string =>
-  `min(calc(var(--duration-stagger) * ${n}), var(--duration-cascade))`;
+  `min(calc(var(--duration-step) * ${n}), var(--duration-settle))`;
 /** An `--ease-*` token on the root, as CSS. @browser */
 export const ease = (name: `--ease-${string}`): string => rootToken(name);
 /** --pop-scale on the root, as its number. @browser */
@@ -191,7 +176,7 @@ const CUBIC_BEZIER = /cubic-bezier\(([^)]*)\)/u;
 /**
  * A `--ease-*` token as a function of progress, for motion drawn frame by
  * frame (a computed outline): the stylesheet's own `cubic-bezier()`, its
- * overshoot kept (`--ease-goo` runs past 1 and settles).
+ * overshoot kept (`--ease-drawer` runs past 1 and settles).
  *
  * @browser
  */
@@ -232,11 +217,11 @@ const space = (name: string) => Number.parseFloat(rootToken(name)) || 0;
 
 /**
  * The speed (px a ms) to glide `distance` px past `stops` evenly spaced
- * stops at: --duration-stagger between one stop and the next, and never longer
- * than --duration-cascade for the whole way, its two ends included, however many
+ * stops at: --duration-step between one stop and the next, and never longer
+ * than --duration-settle for the whole way, its two ends included, however many
  * stops there are. With no stops to space (a block opening on its own), the
  * whole way takes --duration-panel, as a panel's does. `least`: the slowest it
- * may go and still take no longer than --duration-cascade.
+ * may go and still take no longer than --duration-settle.
  *
  * @browser
  */
@@ -245,10 +230,10 @@ export function glideSpeed(
   stops: number
 ): { least: number; speed: number } {
   const end = space("--spacing-space-1");
-  const least = (distance + end) / dur("--duration-cascade");
+  const least = (distance + end) / dur("--duration-settle");
   const own =
     stops > 0
-      ? distance / stops / dur("--duration-stagger")
+      ? distance / stops / dur("--duration-step")
       : (distance + end) / dur("--duration-panel");
   return { least, speed: Math.max(own, least) };
 }
@@ -256,7 +241,7 @@ export function glideSpeed(
 /**
  * A glide: a distance travelled at one steady speed (px a ms), linear from
  * its first frame, so it starts at its speed, and falling evenly to rest over
- * the last --spacing-space-1 (--ease-glide-out). A tree's line runs its length this
+ * the last --spacing-space-1 (quadratic ease-out). A tree's line runs its length this
  * way, so the rows it reaches are revealed at even times, and the room it
  * opens and the rows under it travel the same way at the same speed, so they
  * keep step with it. A distance too short for the fall is all fall.
@@ -420,12 +405,12 @@ export function appearOnMount({
 /**
  * A floating tag coming and going over the transcript's foot ("Jump to
  * latest", the catch-up): it rises --pop-rise and grows from .96 as it fades in,
- * and sinks back out. `token` is its duration: --duration-panel in, --duration-exit
+ * and sinks back out. `token` is its duration: --duration-panel in, --duration-fade
  * out. Without motion it only fades.
  */
 export function rise(
   _node: Element,
-  token: "--duration-panel" | "--duration-exit"
+  token: "--duration-panel" | "--duration-fade"
 ) {
   const travel = motionOk.current;
   return {
@@ -460,7 +445,7 @@ const easeCrossfade = bezier(0.42, 0, 0.58, 1);
 /**
  * The reveal (transitions.dev Skeleton loader and reveal, DESIGN.md
  * Skeleton): a skeleton handing its place to what it stood for. Both layers
- * run on one clock, --duration-skeleton-reveal on --ease-crossfade: the content
+ * run on one clock, --duration-settle on --ease-crossfade: the content
  * fades up out of a --skeleton-reveal-blur blur while the skeleton fades out
  * into one. Every swap from a skeleton to its content takes it: `in:reveal`
  * on what arrives, and `out:revealOut` on the skeleton where it leaves the
@@ -473,7 +458,7 @@ export function reveal(_node?: Element): TransitionConfig {
   }
   const blur = numberOf("--skeleton-reveal-blur");
   return {
-    duration: dur("--duration-skeleton-reveal"),
+    duration: dur("--duration-settle"),
     easing: easeCrossfade,
     css: (t) => `opacity: ${t}; filter: blur(${((1 - t) * blur).toFixed(3)}px)`,
   };

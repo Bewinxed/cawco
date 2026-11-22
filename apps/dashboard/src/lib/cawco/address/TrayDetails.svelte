@@ -55,7 +55,7 @@
     <button
       aria-controls={foldId}
       aria-expanded={open}
-      class="mark-line press-tint focus-inset group/fold -mx-space-2 flex min-h-c-btn-h-sm items-center gap-space-1 rounded-sm px-space-2 type-label text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
+      class="mark-line press-tint focus-inset group/fold -mx-space-2 flex min-h-control-sm items-center gap-space-1 rounded-sm px-space-2 type-label text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
       data-tray-details
       onclick={() => {
         open = !open;
@@ -108,7 +108,7 @@
       {:else}
         <div class="grid min-w-0 gap-space-1">
           <pre
-            class="focus-inset m-0 max-h-c-address-raw-h overflow-auto overscroll-contain rounded-well border border-border-well bg-surface-well px-space-3 py-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong select-all"
+            class="focus-inset m-0 max-h-48 overflow-auto overscroll-contain rounded-sm border border-border-control bg-surface-sunk px-space-3 py-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong select-all"
             data-slot="raw">{raw}</pre>
           {#if tray.overHttps}
             <span class="flex justify-end">

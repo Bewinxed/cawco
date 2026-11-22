@@ -33,8 +33,8 @@ import { tv } from "#lib/utils.js";
  *   chip's baseline (`align-self: baseline`), and the chip stands on the
  *   text's (`vertical-align: baseline`), so the label shares the words'
  *   baseline at any size of text. Its line is the mark's height
- *   (`--spacing-c-inline-chip-line`), so no mark is taller than the label's line and
- *   the label stands at its top; its fill reaches `--spacing-c-inline-chip-pad` past
+ *   (`--row-mark-box`), so no mark is taller than the label's line and
+ *   the label stands at its top; its fill reaches `--spacing-space-row` past
  *   that line above and below, given back by an equal negative margin, so
  *   the chip never changes its line's height. No margin across: the space
  *   before and after it is the text's own. A long label truncates at
@@ -80,14 +80,14 @@ export const chipVariants = tv({
         "group/option touch-hit min-h-c-btn-h-sm max-w-full gap-space-2 border border-border-control bg-surface-raised px-space-3 py-space-1 text-start hit-edge-hair enabled:not-aria-pressed:not-aria-checked:not-data-chosen:hover:bg-surface-hover disabled:opacity-50 aria-checked:border-brand-solid aria-checked:bg-option-picked aria-pressed:border-brand-solid aria-pressed:bg-option-picked data-chosen:border-brand-solid data-chosen:bg-option-picked motion-safe:transition-[border-color,background-color] motion-safe:duration-(--duration-control) motion-safe:ease-out",
       tray: "pointer-events-auto touch-hit relative isolate h-c-tray-chip touch-manipulation gap-c-pill-gap border-0 bg-transparent px-space-2 transition-[color] duration-(--duration-control) ease-out select-none [--tray-chip-fill:var(--color-surface-raised)] touch-callout-none before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:bg-(color:--tray-chip-fill) before:shadow-tile before:transition-[background-color] before:duration-(--duration-control) before:ease-out motion-safe:transition-[color,transform] motion-safe:active:[transform:scale(var(--press-scale))] can-hover:hover:[--tray-chip-fill:var(--color-surface-hover)] [&>svg]:size-icon-md [&>svg]:flex-none",
       inline:
-        "-my-c-inline-chip-pad max-w-full gap-space-1 rounded-[calc(var(--radius-xs)+var(--spacing-c-inline-chip-pad))] bg-surface-recess py-c-inline-chip-pad ps-c-inline-chip-pad pe-space-2 align-baseline leading-c-inline-chip-line whitespace-nowrap inset-ring inset-ring-border-hairline motion-safe:transition-[background-color,transform] motion-safe:duration-(--duration-control) motion-safe:ease-out motion-safe:enabled:active:[transform:scale(var(--press-scale))] can-hover:enabled:hover:bg-surface-hover [&>[data-slot=label]]:max-w-c-inline-chip-max-w [&>[data-slot=label]]:min-w-0 [&>[data-slot=label]]:self-baseline [&>[data-slot=label]]:overflow-clip [&>[data-slot=label]]:text-ellipsis [&>svg]:size-icon-md [&>svg]:flex-none",
+        "-my-space-row max-w-full gap-space-1 rounded-[calc(var(--radius-xs)+var(--spacing-space-row))] bg-surface-recess py-space-row ps-space-row pe-space-2 align-baseline leading-4.5 whitespace-nowrap inset-ring inset-ring-border-hairline motion-safe:transition-[background-color,transform] motion-safe:duration-(--duration-control) motion-safe:ease-out motion-safe:enabled:active:[transform:scale(var(--press-scale))] can-hover:enabled:hover:bg-surface-hover [&>[data-slot=label]]:max-w-ch-32 [&>[data-slot=label]]:min-w-0 [&>[data-slot=label]]:self-baseline [&>[data-slot=label]]:overflow-clip [&>[data-slot=label]]:text-ellipsis [&>svg]:size-icon-md [&>svg]:flex-none",
       setting:
-        "touch-hit h-c-btn-h-sm max-w-full gap-space-2 border border-border-control bg-surface-raised px-space-2 leading-none whitespace-nowrap hit-edge-hair transition-control aria-disabled:opacity-50 motion-safe:transition-control-press can-hover:enabled:not-variant-static:hover:bg-surface-hover motion-safe:enabled:not-aria-busy:pressed:[transform:scale(var(--press-scale))] variant-static:border-border-hairline variant-static:bg-surface-recess [&_[data-slot=chip-label]]:min-w-0 [&_[data-slot=chip-label]]:overflow-hidden [&_[data-slot=chip-label]]:text-ellipsis [&>[data-slot=chevron]]:size-icon-sm [&>[data-slot=chevron]]:text-ink-subtle [&>svg]:flex-none [&>svg:not([data-slot=chevron])]:size-icon-md",
+        "touch-hit h-control-sm max-w-full gap-space-2 border border-border-control bg-surface-raised px-space-2 leading-none whitespace-nowrap hit-edge-hair transition-control aria-disabled:opacity-50 motion-safe:transition-control-press can-hover:enabled:not-variant-static:hover:bg-surface-hover motion-safe:enabled:not-aria-busy:pressed:[transform:scale(var(--press-scale))] variant-static:border-border-hairline variant-static:bg-surface-recess [&_[data-slot=chip-label]]:min-w-0 [&_[data-slot=chip-label]]:overflow-hidden [&_[data-slot=chip-label]]:text-ellipsis [&>[data-slot=chevron]]:size-icon-sm [&>[data-slot=chevron]]:text-ink-subtle [&>svg]:flex-none [&>svg:not([data-slot=chevron])]:size-icon-md",
     },
     size: {
       regular: "",
       compact:
-        "h-(--row-compact-h) gap-space-1 max-phone:not-data-account-chip:[&>[data-slot=chevron]]:hidden",
+        "h-row-compact gap-space-1 max-phone:not-data-account-chip:[&>[data-slot=chevron]]:hidden",
     },
     /** A setting chip's tone; its classes are the setting chip's own (below). */
     tone: { muted: "", fail: "", grant: "" },

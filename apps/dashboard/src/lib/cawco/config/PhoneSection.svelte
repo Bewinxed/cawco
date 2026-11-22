@@ -127,7 +127,7 @@
         />
       {/snippet}
     </SectionHeader>
-    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
       A push names the session or task and nothing else; the app reads the rest
       over your tailnet.
     </p>

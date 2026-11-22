@@ -82,10 +82,10 @@
       {@const length = postLength(text)}
       <li
         data-slot="post-card-card"
-        class="relative flex flex-col gap-space-2 rounded-md bg-surface-raised px-space-4 py-space-3 shadow-tile group-data-compact:px-space-3 group-data-compact:py-space-2 not-first:before:absolute not-first:before:start-(--joint-x) not-first:before:bottom-full not-first:before:h-(--joint-reach) not-first:before:w-space-row not-first:before:bg-border-control"
+        class="relative flex flex-col gap-space-2 rounded-md bg-surface-raised px-space-4 py-space-3 shadow-sm group-data-compact:px-space-3 group-data-compact:py-space-2 not-first:before:absolute not-first:before:start-(--joint-x) not-first:before:bottom-full not-first:before:h-(--joint-reach) not-first:before:w-space-row not-first:before:bg-border-control"
         data-part={index}
         style:--joint-reach="calc(var(--spacing-space-2) + 1px)"
-        style:--joint-x={"calc(var(--spacing-space-4) + var(--spacing-c-mark) / 2 - var(--spacing-space-row) / 2)"}
+        style:--joint-x={"calc(var(--spacing-space-4) + var(--mark-box) / 2 - var(--spacing-space-row) / 2)"}
       >
         <div
           data-slot="who"
@@ -94,7 +94,7 @@
           <span
             data-slot="mark"
             aria-hidden="true"
-            class="grid size-c-mark flex-none place-items-center rounded-xs bg-surface-fill type-meta font-medium text-ink-strong"
+            class="grid size-6.5 flex-none place-items-center rounded-xs bg-surface-hover type-meta font-medium text-ink-strong"
             data-box>{handle.slice(0, 1).toUpperCase()}</span
           >
           <span

@@ -188,7 +188,7 @@
       aria-label={name}
       class={[
         "my-space-4",
-        room === undefined ? "h-c-inline-block-fossil-h" : "h-(--room)",
+        room === undefined ? "h-40" : "h-(--room)",
       ]}
       data-slot="inline-block-room"
       style:--room={room === undefined ? undefined : `${room}px`}

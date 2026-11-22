@@ -199,12 +199,12 @@
    * the undo glyph stays beside what it marks.
    */
   const COLUMNS =
-    "fit-content(var(--spacing-c-graph-move-name-w)) minmax(0, 1fr) var(--spacing-c-btn-h-xs)";
+    "fit-content(var(--graph-move-name-w)) minmax(0, 1fr) var(--spacing-control-xs)";
   /** Narrow: the name takes what it needs up to two fifths, its control the rest. */
   const NARROW_COLUMNS =
-    "fit-content(40%) minmax(0, 1fr) var(--spacing-c-btn-h-xs)";
+    "fit-content(40%) minmax(0, 1fr) var(--spacing-control-xs)";
   const GRID_MAX =
-    "calc(var(--spacing-c-graph-move-name-w) + var(--spacing-c-graph-control-w) + var(--spacing-c-btn-h-xs) + 2 * var(--spacing-space-3))";
+    "calc(var(--graph-move-name-w) + var(--graph-control-w) + var(--spacing-control-xs) + 2 * var(--spacing-space-3))";
   /** A layer's open and close, for the control named `key`. */
   const layerOf = (key: string) => (next: boolean) => {
     if (next) {
@@ -237,7 +237,7 @@
      muted ink, under the part's head, set apart by the space above it. -->
 {#snippet groupHead(text: string)}
   <h4
-    class="col-span-full m-0 flex min-h-c-btn-h-xs min-w-0 items-end text-ink-muted type-label"
+    class="col-span-full m-0 flex min-h-control-xs min-w-0 items-end text-ink-muted type-label"
   >
     <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
       >{text}</span
@@ -268,7 +268,7 @@
     <!-- Under a floating head the rows clear it at rest (`--face-top`). -->
     <div aria-hidden="true" class="h-(--face-top,0px)"></div>
     <div
-      class="grid min-w-0 max-w-(--grid-max) grid-cols-(--cols) gap-x-space-3 gap-y-space-5 @max-timeline/dials:grid-cols-(--narrow)"
+      class="grid min-w-0 max-w-(--grid-max) grid-cols-(--cols) gap-x-space-3 gap-y-space-5 @max-sm/dials:grid-cols-(--narrow)"
       data-slot="dials-grid"
     >
       {#if dials.length > 0}
@@ -397,7 +397,7 @@
     <!-- Under the rows, on the grid's edges: the way back at the names'
          start, the state's saves at the controls' end. -->
     <div
-      class="grid min-w-0 max-w-(--grid-max) flex-none grid-cols-(--cols) gap-x-space-3 pt-space-3 @max-timeline/dials:grid-cols-(--narrow)"
+      class="grid min-w-0 max-w-(--grid-max) flex-none grid-cols-(--cols) gap-x-space-3 pt-space-3 @max-sm/dials:grid-cols-(--narrow)"
       data-slot="dials-foot"
     >
       <div class="col-span-full flex min-w-0 items-center gap-space-1">

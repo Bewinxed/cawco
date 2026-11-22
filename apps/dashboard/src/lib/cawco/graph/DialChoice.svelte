@@ -101,7 +101,7 @@
     >
       <Select.Trigger aria-label={label} class="w-full min-w-0" {id}>
         <span
-          class="min-w-0 truncate max-phone:text-(length:--text-field-floor) coarse:text-(length:--text-field-floor)"
+          class="min-w-0 truncate max-phone:text-row coarse:text-row"
           >{optionSaid(value)}</span
         >
       </Select.Trigger>

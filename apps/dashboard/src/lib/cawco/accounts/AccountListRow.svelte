@@ -100,14 +100,14 @@
 </script>
 
 <li
-  class="@container/arow flex min-h-c-row-h min-w-0 flex-col border-t border-t-border-hairline"
+  class="@container/arow flex min-h-control-lg min-w-0 flex-col border-t border-t-border-hairline"
   data-flip
   style:--link-cols={"var(--spacing-space-3) minmax(0, 1fr) var(--spacing-icon-md)"}
 >
   <a
     data-setup={account.setupStep}
     data-slot="account-list-row-link"
-    class="grid min-w-0 flex-auto grid-areas-(--link-areas) grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-row px-space-2 py-space-3 text-inherit no-underline transition-control focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) active:bg-surface-fill data-two:grid-areas-(--link-areas-two)"
+    class="grid min-w-0 flex-auto grid-areas-(--link-areas) grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-row px-space-2 py-space-3 text-inherit no-underline transition-control focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) active:bg-surface-hover data-two:grid-areas-(--link-areas-two)"
     data-two={Boolean(problem) || undefined}
     {href}
     style:--link-areas={'"dot name chev"'}
@@ -122,7 +122,7 @@
     ></i>
     <span
       data-slot="name"
-      class="col-(--area) row-(--area) type-label flex min-w-0 text-ink-row"
+      class="col-(--area) row-(--area) type-label flex min-w-0 text-ink-strong"
       style:--area="name"
       ><span data-slot="words" class="truncate" data-share="title:{href}"
         >{name}</span
@@ -146,7 +146,7 @@
     <span
       data-slot="chev"
       aria-hidden="true"
-      class="col-(--area) row-(--area) flex text-ink-subtle @max-kinds/arow:row-1"
+      class="col-(--area) row-(--area) flex text-ink-subtle @max-sm/arow:row-1"
       style:--area="chev"><IconChevronRight class="size-icon-md" /></span
     >
   </a>

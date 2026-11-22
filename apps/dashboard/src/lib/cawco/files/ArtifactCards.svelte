@@ -314,7 +314,7 @@
   {onkeydown}
   role="listbox"
   style:--card-min="calc(var(--spacing) * 37)"
-  style:--gutter={"calc((var(--spacing-c-row-inset) - (var(--spacing-c-row-lead) - var(--spacing-icon-md)) / 2) - var(--spacing-space-1))"}
+  style:--gutter={"calc((var(--spacing-space-3) - (var(--spacing-row-compact) - var(--spacing-icon-md)) / 2) - var(--spacing-space-1))"}
   style:--lane-tracks="repeat({count}, minmax(0, 1fr))"
   {@attach highlight({
     rows: "[data-files-card]",
@@ -330,11 +330,11 @@
     {#each Array.from({ length: ghosts }, (_, i) => i) as i (i)}
       <div
         aria-hidden="true"
-        class="flex min-h-c-artifact-row-h items-center gap-c-row-inset ps-(--lead-pad) pe-c-row-inset"
+        class="flex min-h-control-lg items-center gap-space-3 ps-(--lead-pad) pe-space-3"
         data-files-ghost
       >
         <span
-          class="grid w-c-row-lead flex-none place-items-center text-ink-muted"
+          class="grid w-row-compact flex-none place-items-center text-ink-muted"
           data-box><Skeleton cell="glyph" radius="text" /></span
         >
         <Skeleton
@@ -386,7 +386,7 @@
       class={view === "list"
         ? menuItemVariants({
             class:
-              "relative flex min-h-c-artifact-row-h w-full min-w-0 items-center gap-c-row-inset rounded-sm border-none border-current bg-transparent ps-(--lead-pad) pe-c-row-inset text-start text-ink-strong select-none focus-inset",
+              "relative flex min-h-control-lg w-full min-w-0 items-center gap-space-3 rounded-sm border-none border-current bg-transparent ps-(--lead-pad) pe-space-3 text-start text-ink-strong select-none focus-inset",
           })
         : "select-none relative col-start-(--lane) row-end-(--span) grid min-w-0 grid-cols-1 gap-space-1 rounded-lg border-none border-current bg-transparent px-space-1 pt-space-1 pb-space-2 text-start text-ink-strong focus-inset"}
       data-artifact={artifact.id}
@@ -469,7 +469,7 @@
        sizes it. -->
   <span
     class={[
-      "relative grid aspect-(--shape) place-items-center overflow-clip rounded-sm bg-surface-well after:pointer-events-none after:absolute after:inset-0 after:rounded-inherit after:border after:border-border-well",
+      "relative grid aspect-(--shape) place-items-center overflow-clip rounded-sm bg-surface-sunk after:pointer-events-none after:absolute after:inset-0 after:rounded-inherit after:border after:border-border-control",
       waiting && "mask-(--hole-mask)",
     ]}
     data-files-thumb={pictured(artifact) ? "picture" : "glyph"}
@@ -478,7 +478,7 @@
       ? "calc(var(--status-dot-size) / 2 + var(--status-dot-cut))"
       : undefined}
     style:--hole-mask={waiting
-      ? "radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--spacing-c-tree-mark-hole-edge)), var(--color-mask-opaque) calc(var(--hole) + var(--spacing-c-tree-mark-hole-edge)))"
+      ? "radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--tree-mark-hole-edge)), var(--color-ink-strong) calc(var(--hole) + var(--tree-mark-hole-edge)))"
       : undefined}
   >
     {#if artifact.thumbnail && pictured(artifact)}
@@ -532,9 +532,9 @@
   <!-- Its kind's glyph in the lead column, the dot just off the glyph's
        top-right corner, clear of its ink. -->
   <span
-    class="relative grid size-c-row-lead flex-none place-items-center text-ink-muted"
+    class="relative grid size-row-compact flex-none place-items-center text-ink-muted"
     data-box
-    style:--dot-at={"calc((var(--spacing-c-row-lead) - var(--spacing-icon-md)) / 2 - var(--status-dot-size))"}
+    style:--dot-at={"calc((var(--spacing-row-compact) - var(--spacing-icon-md)) / 2 - var(--status-dot-size))"}
   >
     <Glyph aria-hidden="true" class="size-icon-md" />
     {#if artifact.pending}{@render needsDot()}{/if}

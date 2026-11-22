@@ -22,12 +22,12 @@
     "cursor-default select-none items-center gap-2.5 type-label",
     "outline-hidden data-disabled:pointer-events-none",
     "data-inset:pl-9.5",
-    "data-[variant=destructive]:text-error-9",
+    "data-[variant=destructive]:text-status-fail-glyph",
     "data-disabled:opacity-50",
-    "data-[variant=destructive]:focus:text-error-9",
+    "data-[variant=destructive]:focus:text-status-fail-glyph",
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
-    "px-2.5 data-[variant=destructive]:[&>svg]:text-error-9",
+    "px-2.5 data-[variant=destructive]:[&>svg]:text-status-fail-glyph",
     className
   )}
   data-inset={inset}

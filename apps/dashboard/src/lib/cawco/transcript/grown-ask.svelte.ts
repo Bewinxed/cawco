@@ -370,7 +370,7 @@ export class GrownAsk {
       this.#parts.draft().askRun += 1;
       this.askShown = false;
       if (motionOk.current) {
-        await new Promise((done) => setTimeout(done, dur("--duration-exit")));
+        await new Promise((done) => setTimeout(done, dur("--duration-fade")));
       }
       if (turn !== this.#askTurn) {
         return;
@@ -403,7 +403,7 @@ export class GrownAsk {
         shape.ext += shape.base - base;
         shape.base = base;
       }
-      await shape.morphTo(0, shape.ext, dur("--duration-panel-exit"));
+      await shape.morphTo(0, shape.ext, dur("--duration-panel"));
     }
     if (turn !== this.#askTurn) {
       return;

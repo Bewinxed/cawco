@@ -679,7 +679,7 @@
       return { duration: 0 };
     }
     return lifting(node, pinned(node), {
-      duration: dur("--duration-exit"),
+      duration: dur("--duration-fade"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     });
@@ -705,19 +705,19 @@
 
   <div data-slot="host" class="@container/setup min-w-0">
     <div
-      class="grid grid-cols-(--setup-cols) items-box-start gap-space-7 @max-setup/setup:grid-cols-(--setup-cols-narrow) @max-setup/setup:gap-space-4"
+      class="grid grid-cols-(--setup-cols) items-box-start gap-space-6 @max-phone/setup:grid-cols-(--setup-cols-narrow) @max-phone/setup:gap-space-4"
       style:--setup-cols="calc(var(--spacing) * 46) minmax(0, 1fr)"
       style:--setup-cols-narrow="minmax(0, 1fr)"
     >
       <ol
         aria-label={words.stepsLabel}
-        class="sticky top-0 m-0 flex list-none flex-col gap-space-row p-0 @max-setup/setup:static @max-setup/setup:flex-row @max-setup/setup:flex-wrap @max-setup/setup:gap-space-1"
+        class="sticky top-0 m-0 flex list-none flex-col gap-space-row p-0 @max-phone/setup:static @max-phone/setup:flex-row @max-phone/setup:flex-wrap @max-phone/setup:gap-space-1"
       >
         {#each STEPS as id, place (id)}
           <li
             data-account-setup-done={place < step || undefined}
             aria-current={place === step ? "step" : undefined}
-            class="group mark-line flex min-h-c-btn-h items-center gap-space-3 rounded-sm px-space-3 type-label text-ink-muted transition-[background-color,color] duration-(--duration-fade) ease-out @max-setup/setup:px-space-2 data-account-setup-done:text-ink-row data-cur:bg-selected-bg data-cur:not-data-account-setup-done:text-selected-ink"
+            class="group mark-line flex min-h-control-md items-center gap-space-3 rounded-sm px-space-3 type-label text-ink-muted transition-[background-color,color] duration-(--duration-fade) ease-out @max-phone/setup:px-space-2 data-account-setup-done:text-ink-strong data-cur:bg-selected-bg data-cur:not-data-account-setup-done:text-brand-ink"
             data-cur={place === step || undefined}
           >
             {#if place < step}
@@ -728,13 +728,13 @@
             {:else}
               <span
                 aria-hidden="true"
-                class="grid size-icon-md flex-none place-items-center after:size-space-2 after:rounded-pill after:bg-neutral-8 after:transition-[background-color] after:duration-(--duration-fade) after:ease-out group-data-cur:after:bg-selected-icon"
+                class="grid size-icon-md flex-none place-items-center after:size-space-2 after:rounded-pill after:bg-neutral-8 after:transition-[background-color] after:duration-(--duration-fade) after:ease-out group-data-cur:after:bg-brand-ink"
                 data-box
               ></span>
             {/if}
             <span
               data-slot="name"
-              class="@max-setup/setup:group-not-data-cur:sr-only"
+              class="@max-phone/setup:group-not-data-cur:sr-only"
               >{words.steps[id]}</span
             >
           </li>
@@ -888,7 +888,7 @@
             data-choice
             {...props}
             aria-disabled={free ? undefined : "true"}
-            class="select-none mark-line grid min-h-c-btn-h-lg w-full grid-cols-(--choice-cols) items-center gap-space-3 border-none border-current bg-transparent pr-space-4 pl-space-3 text-start text-inherit active:not-aria-disabled:bg-surface-fill focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) aria-disabled:opacity-50"
+            class="select-none mark-line grid min-h-control-lg w-full grid-cols-(--choice-cols) items-center gap-space-3 border-none border-current bg-transparent pr-space-4 pl-space-3 text-start text-inherit active:not-aria-disabled:bg-surface-hover focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) aria-disabled:opacity-50"
             onclick={(event) => {
               if (free) {
                 choose(
@@ -899,17 +899,17 @@
                 );
               }
             }}
-            style:--choice-cols={"var(--spacing-c-mark) minmax(0, 1fr) var(--spacing-icon-md)"}
+            style:--choice-cols={"var(--mark-box) minmax(0, 1fr) var(--spacing-icon-md)"}
             type="button"
           >
             <span
               data-slot="ptile"
-              class="grid size-c-mark flex-none place-items-center rounded-sm bg-surface-raised shadow-tile"
+              class="grid size-6.5 flex-none place-items-center rounded-sm bg-surface-raised shadow-sm"
               data-box><ProviderMark provider={row.provider} /></span
             >
             <span
               data-slot="plabel"
-              class="type-label min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-row"
+              class="type-label min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
               >{label}</span
             >
             <span
@@ -948,7 +948,7 @@
       >
         <span
           data-slot="ptile"
-          class="grid size-c-mark flex-none place-items-center rounded-sm bg-surface-raised shadow-tile"
+          class="grid size-6.5 flex-none place-items-center rounded-sm bg-surface-raised shadow-sm"
           data-box
           {@attach land(() =>
             choice ? `provider:${keyOf(choice)}` : undefined
@@ -1015,14 +1015,14 @@
           {@const rows = rowsOn(machine)}
           {#if choice?.signin === "device-code" && rows.others.length > 0}
             <li
-              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-setup/setup:grid-areas-(--mrow-areas-stack) @max-setup/setup:grid-cols-(--mrow-cols-two) data-device:items-box-start"
+              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-phone/setup:grid-areas-(--mrow-areas-stack) @max-phone/setup:grid-cols-(--mrow-cols-two) data-device:items-box-start"
               data-device
             >
               <span
                 class="col-(--area) row-(--area) flex min-w-0 flex-col"
                 style:--area="name"
                 ><b
-                  class="type-label min-w-0 truncate text-ink-strong group-data-device:leading-c-btn-h-sm"
+                  class="type-label min-w-0 truncate text-ink-strong group-data-device:leading-control-sm"
                   >{name}</b
                 >{#if rows.codex}<SigninFor
                     harnesses={rows.others}
@@ -1030,7 +1030,7 @@
               >
               <div
                 data-slot="controls"
-                class="col-(--area) row-(--area) flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 @max-setup/setup:pt-space-2"
+                class="col-(--area) row-(--area) flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 @max-phone/setup:pt-space-2"
                 style:--area="controls"
               >
                 <DevicePanel
@@ -1057,7 +1057,7 @@
             {@const codex = codexOn(machine.machineId)}
             <!-- Codex's own sign-in, under the machine's first, named once. -->
             <li
-              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 py-space-3 not-data-again:border-t not-data-again:border-t-border-hairline @max-setup/setup:grid-areas-(--mrow-areas-stack) @max-setup/setup:grid-cols-(--mrow-cols-two) data-device:items-box-start"
+              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 py-space-3 not-data-again:border-t not-data-again:border-t-border-hairline @max-phone/setup:grid-areas-(--mrow-areas-stack) @max-phone/setup:grid-cols-(--mrow-cols-two) data-device:items-box-start"
               data-again={rows.others.length > 0 || undefined}
               data-device
             >
@@ -1073,7 +1073,7 @@
               >
               <div
                 data-slot="controls"
-                class="col-(--area) row-(--area) flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 @max-setup/setup:pt-space-2"
+                class="col-(--area) row-(--area) flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 @max-phone/setup:pt-space-2"
                 style:--area="controls"
               >
                 <DevicePanel
@@ -1103,11 +1103,11 @@
               paste !== undefined &&
               (paste.phase !== "idle" || paste.url !== null)}
             <li
-              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-setup/setup:grid-areas-(--mrow-areas-stack) @max-setup/setup:grid-cols-(--mrow-cols-two) data-paste:grid-areas-(--mrow-areas-stack) data-paste:grid-cols-(--mrow-cols-two)"
+              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-phone/setup:grid-areas-(--mrow-areas-stack) @max-phone/setup:grid-cols-(--mrow-cols-two) data-paste:grid-areas-(--mrow-areas-stack) data-paste:grid-cols-(--mrow-cols-two)"
               data-paste
             >
               <b
-                class="col-(--area) row-(--area) type-label min-w-0 truncate text-ink-strong group-data-device:leading-c-btn-h-sm"
+                class="col-(--area) row-(--area) type-label min-w-0 truncate text-ink-strong group-data-device:leading-control-sm"
                 style:--area="name">{name}</b
               >
               <span
@@ -1140,7 +1140,7 @@
                      Code, in its place (HarnessBlock). -->
                 <div
                   data-slot="controls"
-                  class="col-(--area) row-(--area) min-w-0 group-data-paste:pt-space-2 @max-setup/setup:pt-space-2"
+                  class="col-(--area) row-(--area) min-w-0 group-data-paste:pt-space-2 @max-phone/setup:pt-space-2"
                   in:unfold
                   style:--area="controls"
                 >
@@ -1153,7 +1153,7 @@
               {:else if paste && asked && !done}
                 <div
                   data-slot="controls"
-                  class="col-(--area) row-(--area) flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 group-data-paste:pt-space-2 @max-setup/setup:pt-space-2"
+                  class="col-(--area) row-(--area) flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 group-data-paste:pt-space-2 @max-phone/setup:pt-space-2"
                   in:unfold
                   style:--area="controls"
                   style:--code-flex="1 1 calc(var(--spacing) * 35)"
@@ -1265,7 +1265,8 @@
       </label>
       <Input
         autocomplete="off"
-        class="max-w-c-setup-nickname-w"
+        class="max-w-(--max-w)"
+        style="--max-w: calc(var(--spacing) * 70)"
         id="setup-nickname"
         placeholder={words.nicknamePlaceholder}
         bind:value={nickname}

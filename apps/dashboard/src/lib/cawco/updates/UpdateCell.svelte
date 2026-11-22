@@ -36,7 +36,7 @@
   {#key cell.row}
     <div
       data-slot="swap"
-      class="flex flex-wrap items-center gap-space-2 type-label motion-safe:animate-cell-swap motion-reduce:animate-cell-fade"
+      class="flex flex-wrap items-center gap-space-2 type-label motion-safe:animate-cell-swap motion-reduce:animate-fade-in motion-reduce:anim-dur-control"
     >
       {#if cell.plain}
         <span class="type-meta text-ink-muted">{cell.text}</span>
@@ -50,7 +50,7 @@
           <Badge size="cell-tall" variant={cell.fail ? "destructive" : "ghost"}>
             {#if cell.fail}
               <span
-                class="size-(--status-dot-size) shrink-0 rounded-pill bg-error-9"
+                class="size-(--status-dot-size) shrink-0 rounded-pill bg-status-fail-glyph"
                 data-box
               ></span>
             {:else if cell.icon === "clock"}
@@ -108,7 +108,7 @@
   {/key}
   {#if reading && cell.buttons.includes("error")}
     <pre
-      class="mt-space-2 max-h-40 overflow-auto rounded-xs border border-border-well bg-surface-well p-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong"
+      class="mt-space-2 max-h-40 overflow-auto rounded-xs border border-border-control bg-surface-sunk p-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong"
       transition:unfold>{machine.binaryUpdate?.error ??
         "The machine did not say why."}</pre>
   {/if}

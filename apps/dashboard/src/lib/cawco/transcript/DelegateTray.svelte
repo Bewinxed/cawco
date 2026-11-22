@@ -360,7 +360,7 @@
     if (!(chip && seen && motionOk.current)) {
       left.add(item.id);
       target.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--duration-menu"),
+        duration: dur("--duration-control"),
         easing: CURVE.out,
       });
       return;
@@ -375,7 +375,7 @@
     }
     copy.setAttribute("aria-hidden", "true");
     copy.inert = true;
-    copy.style.cssText = `position:fixed;left:${from.left}px;top:${from.top}px;inline-size:${from.width}px;block-size:${from.height}px;margin:0;z-index:var(--layer-flight);pointer-events:none;transform-origin:0 0`;
+    copy.style.cssText = `position:fixed;left:${from.left}px;top:${from.top}px;inline-size:${from.width}px;block-size:${from.height}px;margin:0;z-index:calc(var(--layer-float) + 10);pointer-events:none;transform-origin:0 0`;
     document.body.append(copy);
     chip.style.visibility = "hidden";
     target.style.opacity = "0";
@@ -408,7 +408,7 @@
         fill: "forwards",
       }
     ).finished;
-    const landing = { duration: dur("--duration-menu"), easing: CURVE.out };
+    const landing = { duration: dur("--duration-control"), easing: CURVE.out };
     target.style.removeProperty("opacity");
     target.animate([{ opacity: 0 }, { opacity: 1 }], landing);
     await copy.animate([{ opacity: 1 }, { opacity: 0 }], {
@@ -1223,7 +1223,7 @@
 
   /**
    * The row comes and goes in the room the composer lays out for it from
-   * its first render (app.css `--spacing-c-tray-row`): opacity only, so nothing
+   * its first render (app.css `--tray-row`): opacity only, so nothing
    * standing on it moves; the transcript clears that room while a chip
    * stands (SessionPane `trayStands`). Growing its height instead, a first chip
    * arriving after the switch lifted the suggestion row 35px.
@@ -1238,7 +1238,7 @@
 
   /**
    * The check or the triangle taking the dot's place: it grows from 0.6 over
-   * --duration-pop (`slotIn`, on the glyph) as it is drawn in from its leading
+   * --duration-panel (`slotIn`, on the glyph) as it is drawn in from its leading
    * edge (`slotCut`, on the glyph's inside), two effects on one timing: one
    * effect that cuts and moves dies with its renderer once another move
    * displaces it (house/no-clip-with-move).
@@ -1252,7 +1252,7 @@
       };
     }
     return {
-      duration: dur("--duration-pop"),
+      duration: dur("--duration-panel"),
       easing: easeOut,
       css: (t) => `transform: scale(${(0.6 + 0.4 * t).toFixed(3)})`,
     };
@@ -1262,7 +1262,7 @@
       return { duration: 0 };
     }
     return {
-      duration: dur("--duration-pop"),
+      duration: dur("--duration-panel"),
       easing: easeOut,
       css: (_t, u) => `clip-path: inset(0 ${(u * 100).toFixed(1)}% 0 0)`,
     };
@@ -1309,11 +1309,11 @@
   <span
     data-slot="mark"
     aria-hidden="true"
-    class="flex-none size-c-row-mark rounded-xs grid place-items-center bg-mark-overlay bg-(--mark-bg)"
+    class="flex-none size-4.5 rounded-xs grid place-items-center bg-mark-overlay bg-(--mark-bg)"
     data-box
     style:--mark-bg="var(--color-mark-{markHue(sessionPlace(item.instanceId))})"
     {@attach land(() => (flies ? flightKey(item.instanceId) : undefined))}
-    ><Sprite class="size-icon-sm block text-mark-glyph" /></span
+    ><Sprite class="size-icon-sm block text-on-ink" /></span
   >
 {/snippet}
 
@@ -1330,7 +1330,7 @@
     <a
       data-box
       aria-label="Open {item.title} in its own view"
-      class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
+      class="touch-hit flex-none size-4.5 grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
       href={hrefOf(item)}
       title="Open {item.title} in its own view"
     >
@@ -1375,7 +1375,7 @@
     class={chipVariants({
       variant: "tray",
       class:
-        "group/chip touch-hit flex-initial min-w-c-tray-chip-min max-w-c-tray-chip-max data-end:ms-auto status-failed:text-status-fail-ink status-needs:text-status-attn-ink status-failed:before:bg-status-fail-bg status-needs:before:bg-status-attn-bg motion-safe:data-fly:not-data-finished:before:animate-arrive-late motion-reduce:data-fly:animate-arrive data-finished:before:animate-finish",
+        "group/chip touch-hit flex-initial min-w-30 max-w-56 data-end:ms-auto status-failed:text-status-fail-ink status-needs:text-status-attn-ink status-failed:before:bg-status-fail-bg status-needs:before:bg-status-attn-bg motion-safe:data-fly:not-data-finished:before:animate-fade-in motion-safe:data-fly:not-data-finished:before:anim-dur-control motion-safe:data-fly:not-data-finished:before:anim-delay-control motion-reduce:data-fly:animate-fade-in motion-reduce:data-fly:anim-dur-control data-finished:before:animate-finish",
     })}
     data-tray-chip
     data-delegate-tray-tone={tone}
@@ -1405,7 +1405,7 @@
     <span
       data-chip-words
       aria-hidden="true"
-      class="mark-line min-w-0 flex items-baseline gap-c-pill-gap motion-safe:group-data-fly/chip:animate-arrive-late"
+      class="mark-line min-w-0 flex items-baseline gap-space-2 motion-safe:group-data-fly/chip:animate-fade-in motion-safe:group-data-fly/chip:anim-dur-control motion-safe:group-data-fly/chip:anim-delay-control"
       data-box
     >
       <span
@@ -1446,7 +1446,7 @@
     <span
       data-chip-slot
       aria-hidden="true"
-      class="flex-none size-icon-md grid place-items-center group-status-running/chip:text-ink-muted group-status-done/chip:text-status-done-ink group-status-starting/chip:text-ink-muted group-status-asked/chip:text-ink-muted group-status-cancelled/chip:text-ink-muted motion-safe:group-data-fly/chip:animate-arrive-late"
+      class="flex-none size-icon-md grid place-items-center group-status-running/chip:text-ink-muted group-status-done/chip:text-status-done-ink group-status-starting/chip:text-ink-muted group-status-asked/chip:text-ink-muted group-status-cancelled/chip:text-ink-muted motion-safe:group-data-fly/chip:animate-fade-in motion-safe:group-data-fly/chip:anim-dur-control motion-safe:group-data-fly/chip:anim-delay-control"
       data-box
     >
       {#key slotOf(tone)}
@@ -1480,7 +1480,7 @@
     class="flex flex-col gap-space-1 py-space-3 px-space-4 not-first:border-t not-first:border-t-border-hairline"
     data-flip
     data-shelf-row={item.id}
-    style:--sacts-start={"calc(var(--spacing-c-row-mark) + var(--spacing-space-2))"}
+    style:--sacts-start={"calc(var(--row-mark-box) + var(--spacing-space-2))"}
   >
     <div class="mark-line flex items-center gap-space-2 min-w-0">
       {@render mark(item, false)}
@@ -1495,7 +1495,7 @@
       <a
         data-box
         aria-label="Open {item.title} in its own view"
-        class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
+        class="touch-hit flex-none size-4.5 grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
         href={hrefOf(item)}
         title="Open {item.title} in its own view"
       >
@@ -1673,7 +1673,7 @@
          keeps. The shelf, open, stands over the row, out of its flow. -->
     <div
       data-slot="tray"
-      class="relative pb-c-tray-gap"
+      class="relative pb-space-2"
       onpointerenter={() => {
         hovering = true;
         clearTimeout(closing);
@@ -1740,7 +1740,7 @@
             class={chipVariants({
               variant: "tray",
               class:
-                "touch-hit flex-none min-w-0 max-w-c-tray-chip-max whitespace-nowrap ms-auto text-status-fail-ink before:bg-status-fail-bg",
+                "touch-hit flex-none min-w-0 max-w-56 whitespace-nowrap ms-auto text-status-fail-ink before:bg-status-fail-bg",
             })}
             data-tray-chip
             data-flip="pop"
@@ -1774,9 +1774,9 @@
              flow: opening and closing it moves nothing, the row, the
              composer and the transcript under it included. It comes in by
              the kit's own `@starting-style` (opacity, translate and scale
-             on one transition, --duration-pop on the drawer curve, from its
+             on one transition, --duration-panel on the drawer curve, from its
              bottom edge) and leaves by `popOut` back down into the row
-             (--duration-exit, The Fast Exit Rule). What it holds changing size
+             (--duration-fade, The Fast Exit Rule). What it holds changing size
              (a reason field, a row leaving) tweens its height (`morph`),
              up from its foot. -->
         <!-- svelte-ignore a11y_no_noninteractive_element_interactions: Escape inside the shelf is heard on the region, as it passes up from the row's field -->
@@ -1807,7 +1807,7 @@
                symbol in its glass group. -->
           <header
             data-slot="shead"
-            class="flex h-c-top-bar-h items-center gap-space-2 pe-space-2 ps-space-4"
+            class="flex h-control-lg items-center gap-space-2 pe-space-2 ps-space-4"
           >
             <h2
               class="flex-auto min-w-0 m-0 text-size-label font-medium text-ink-strong"

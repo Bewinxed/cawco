@@ -7,9 +7,9 @@
    * design.css so BlockPage reads it in px (house/typed-property-read).
    */
   type BlockMeasure =
-    | "--spacing-c-block-ledger"
-    | "--spacing-c-block-routines"
-    | "--spacing-c-block-view";
+    | "--block-ledger"
+    | "--block-routines"
+    | "--block-view";
 
   /** What a page knows of one block it can hold: its face and its body. */
   export interface BlockItem {
@@ -27,7 +27,7 @@
     content: Snippet<[string]>;
     glyph: Component;
     hideable: boolean;
-    /** The token holding its measure, the narrowest it reads at: `--spacing-c-block-ledger`. */
+    /** The token holding its measure, the narrowest it reads at: `--block-ledger`. */
     measure: BlockMeasure;
     /** What follows the title: a count, a needs-you mark. */
     meta?: Snippet;
@@ -43,7 +43,7 @@
   /**
    * A project page as a stack of blocks (Projects spec §5.2; wireframe
    * §1.2): the person's arrangement, laid on a column grid by the page's
-   * own width. Four columns from --spacing-c-grid-4, two from --spacing-c-grid-2, one under;
+   * own width. Four columns from --grid-4, two from --grid-2, one under;
    * the order is the person's and room left at a row's end stays empty
    * (never `dense`). A wide block spans the row; a narrow one takes the
    * fewest columns that hold its measure, the row at most. On one column a
@@ -54,7 +54,7 @@
    * the hub, and the grid reflows when it answers (`reflow`, The Nothing
    * Jumps Rule): blocks that stay slide to their places, one that leaves
    * closes while fading, one that arrives is uncovered. A block whose width
-   * changes tweens its box over --duration-morph on the drawer curve (`morph`).
+   * changes tweens its box over --duration-fade on the drawer curve (`morph`).
    * Hidden blocks wait at the page's end, each shown again from there; a
    * refused write is said there in the hub's words.
    */
@@ -133,8 +133,8 @@
     untrack(() => {
       const styles = getComputedStyle(node);
       px = {
-        four: lengthOf(styles, "--spacing-c-grid-4"),
-        two: lengthOf(styles, "--spacing-c-grid-2"),
+        four: lengthOf(styles, "--grid-4"),
+        two: lengthOf(styles, "--grid-2"),
         gap: Number.parseFloat(styles.columnGap) || 0,
         measures: Object.fromEntries(
           tokens.map((token) => [token, lengthOf(styles, token)])
@@ -243,7 +243,7 @@
           resizing = null;
         }
       },
-      dur("--duration-morph") * 2
+      dur("--duration-fade") * 2
     );
   }
 </script>
@@ -287,7 +287,7 @@
 {:else}
   <div
     data-slot="block-page"
-    class="flex min-w-0 flex-col gap-space-group"
+    class="flex min-w-0 flex-col gap-space-5"
     data-columns={columns}
     data-page={page}
   >
@@ -295,7 +295,7 @@
       data-slot="blocks"
       bind:this={grid}
       {@attach measureGrid}
-      class="grid grid-flow-row grid-cols-(--block-cols) items-box-start gap-space-group min-w-0"
+      class="grid grid-flow-row grid-cols-(--block-cols) items-box-start gap-space-5 min-w-0"
       style:--block-fill={fill === null ? undefined : `${fill}px`}
       style:--columns={columns}
       style:--block-cols="repeat(var(--columns), minmax(0, 1fr))"
@@ -317,7 +317,7 @@
               title: place.block,
               glyph: IconLayers,
               hideable: true,
-              measure: "--spacing-c-block-view",
+              measure: "--block-view",
               body: "natural",
               card: true,
               content: newer,
@@ -334,7 +334,7 @@
         {#if refused}
           <p
             data-slot="refused"
-            class="type-meta m-0 max-w-c-measure grow basis-72 text-pretty text-status-fail-ink"
+            class="type-meta m-0 max-w-measure grow basis-72 text-pretty text-status-fail-ink"
             role="status"
           >
             {refused}

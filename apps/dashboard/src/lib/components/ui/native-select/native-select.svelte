@@ -46,15 +46,15 @@
   class={cn(
     "group/native-select relative isolate w-fit rounded-md has-[select:disabled]:opacity-50",
     "has-[select:focus-visible]:outline-(length:--focus-ring-width) has-[select:focus-visible]:outline-focus-ring has-[select:focus-visible]:outline-solid has-[select:focus-visible]:outline-offset-(--focus-ring-inset)",
-    "before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-row-outline before:bg-surface-raised before:shadow-xs before:transition-control",
-    "has-[select[aria-invalid=true]]:before:border-error-9 dark:has-[select[aria-invalid=true]]:before:border-error-9/50",
+    "before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-strong before:bg-surface-raised before:shadow-xs before:transition-control",
+    "has-[select[aria-invalid=true]]:before:border-status-fail-glyph dark:has-[select[aria-invalid=true]]:before:border-status-fail-glyph/50",
     nativeSelectVariants({ measure }),
     className
   )}
   data-slot="native-select-wrapper"
 >
   <select
-    class="h-(--select-h) w-full focus-visible:outline-off min-w-0 overflow-hidden text-ellipsis whitespace-nowrap select-none appearance-none rounded-md border border-transparent bg-transparent pr-space-8 pl-3 type-body text-ink-strong [--select-h:var(--spacing-c-input-h)] [--select-reach:max(calc((var(--select-h)-var(--spacing-c-touch-floor))/2),calc(var(--hit-gap-y,var(--spacing-c-touch-floor))/-2))] selection:bg-action-solid selection:text-on-action placeholder:text-ink-muted disabled:pointer-events-none disabled:cursor-not-allowed coarse:mt-[calc(var(--select-reach)+var(--hit-nudge))] coarse:mb-(--select-reach) coarse:h-[calc(var(--select-h)-2*var(--select-reach)-var(--hit-nudge))]"
+    class="h-(--select-h) w-full focus-visible:outline-off min-w-0 overflow-hidden text-ellipsis whitespace-nowrap select-none appearance-none rounded-md border border-transparent bg-transparent pr-space-8 pl-3 type-body text-ink-strong [--select-h:var(--spacing-control-md)] [--select-reach:max(calc((var(--select-h)-var(--spacing-control-lg))/2),calc(var(--hit-gap-y,var(--spacing-control-lg))/-2))] selection:bg-action-solid selection:text-on-action placeholder:text-ink-muted disabled:pointer-events-none disabled:cursor-not-allowed coarse:mt-[calc(var(--select-reach)+var(--hit-nudge))] coarse:mb-(--select-reach) coarse:h-[calc(var(--select-h)-2*var(--select-reach)-var(--hit-nudge))]"
     data-slot="native-select"
     bind:this={ref}
     bind:value

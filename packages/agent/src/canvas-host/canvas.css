@@ -34,8 +34,8 @@ body {
   height: 100%;
   background-color: var(--color-surface-raised);
   background-image:
-    linear-gradient(to right, var(--color-code-bg) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--color-code-bg) 1px, transparent 1px);
+    linear-gradient(to right, var(--color-surface-recess) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-surface-recess) 1px, transparent 1px);
   background-position: var(--grid-x) var(--grid-y);
   background-size: var(--grid) var(--grid);
 
@@ -47,7 +47,7 @@ body {
   --rail-tools-row: var(--rail-tools-h, var(--rail-h));
 
   @media (pointer: coarse) {
-    --rail-box: var(--spacing-c-btn-h-lg);
+    --rail-box: var(--spacing-control-lg);
   }
 }
 
@@ -91,10 +91,10 @@ body {
   padding: var(--spacing-space-2);
   border: 1px solid var(--color-border-control);
   border-radius: var(--radius-lg);
-  background: var(--color-material-panel);
+  background: var(--color-surface-glass);
   backdrop-filter: blur(calc(var(--material-blur) * 1.4))
     saturate(var(--material-saturate));
-  box-shadow: var(--shadow-tile);
+  box-shadow: var(--shadow-sm);
 
   @media (prefers-reduced-transparency: reduce) {
     background: var(--color-surface-raised);
@@ -298,12 +298,12 @@ body {
   border: 1px solid var(--color-border-control);
   border-radius: var(--radius-lg);
   background: var(--color-surface-raised);
-  box-shadow: var(--shadow-overlay);
+  box-shadow: var(--shadow-lg);
   color: var(--color-ink-strong);
   transform-origin: top left;
 
   @media (prefers-reduced-motion: no-preference) {
-    animation: rail-menu-in var(--duration-pop) var(--ease-drawer);
+    animation: rail-menu-in var(--duration-panel) var(--ease-drawer);
   }
 }
 
@@ -356,7 +356,7 @@ body {
     }
   }
   @media (pointer: coarse) {
-    height: var(--spacing-c-btn-h-lg);
+    height: var(--spacing-control-lg);
   }
 }
 
@@ -389,7 +389,7 @@ body {
    stands at the foot), in the panel material's raised card. It fades in
    over --duration-fade and stands until the person next acts on the canvas (a
    press, a key, a paste or a drop: images.ts marks it `data-leaving`), then
-   fades out over --duration-exit, by opacity alone, so reduced motion keeps it
+   fades out over --duration-fade, by opacity alone, so reduced motion keeps it
    as it is. No timer takes it away. It takes no press. */
 .canvas-refusal {
   --refusal-top: calc(
@@ -407,7 +407,7 @@ body {
   border: 1px solid var(--color-border-control);
   border-radius: var(--radius-md);
   background: var(--color-surface-raised);
-  box-shadow: var(--shadow-tile);
+  box-shadow: var(--shadow-sm);
   color: var(--color-ink-strong);
   font: var(--type-body);
   pointer-events: none;
@@ -415,7 +415,7 @@ body {
   animation: canvas-refusal-in var(--duration-fade) var(--ease-out);
 
   &[data-leaving] {
-    animation: canvas-refusal-out var(--duration-exit) var(--ease-out) forwards;
+    animation: canvas-refusal-out var(--duration-fade) var(--ease-out) forwards;
   }
 }
 
@@ -452,7 +452,7 @@ body {
 /* ---- The canvas that can't reach the hub: one line in the error formula,
    centred over the grid, standing while it can't. The pen draws nothing
    under it (view mode); the rail still takes Done and Dock. Before the doc
-   first syncs the line waits out --duration-wait-grace (host.tsx), then fades in
+   first syncs the line waits out --duration-loop (host.tsx), then fades in
    over --duration-fade, by opacity alone, as the image refusal does. */
 .canvas-unlinked {
   position: absolute;
@@ -512,15 +512,15 @@ body {
 
 /* The kit's outline button at sm: 30px, 11px in, 10px radius. */
 .canvas-empty-action {
-  height: var(--spacing-c-btn-h-sm);
+  height: var(--spacing-control-sm);
   margin-top: var(--spacing-space-2);
   padding: 0 var(--spacing-space-3);
-  border: 1px solid var(--color-border-row-outline);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-surface-raised);
   color: var(--color-ink-strong);
   cursor: pointer;
-  font: var(--type-button);
+  font: var(--type-label);
   pointer-events: auto;
   transition:
     background-color var(--duration-control) var(--ease-out),
@@ -543,7 +543,7 @@ body {
 
     &::after {
       position: absolute;
-      inset: calc((var(--spacing-c-btn-h-sm) - var(--spacing-c-btn-h-lg)) / 2);
+      inset: calc((var(--spacing-control-sm) - var(--spacing-control-lg)) / 2);
       content: "";
     }
   }
@@ -567,8 +567,8 @@ body {
 
 .canvas-change {
   fill: none;
-  stroke: var(--color-c-change-ring);
-  stroke-width: var(--spacing-c-change-ring-width);
+  stroke: var(--color-status-done-glyph);
+  stroke-width: var(--focus-ring-width);
 
   &[data-leaving] {
     animation: canvas-change-out var(--duration-fade) var(--ease-out) forwards;
@@ -579,8 +579,8 @@ body {
    heavy as the ring's whatever its scale; none with less motion. */
 .canvas-change-ping {
   fill: none;
-  stroke: var(--color-c-change-ring);
-  stroke-width: var(--spacing-c-change-ring-width);
+  stroke: var(--color-status-done-glyph);
+  stroke-width: var(--focus-ring-width);
   vector-effect: non-scaling-stroke;
   transform-box: fill-box;
   transform-origin: center;
@@ -622,21 +622,21 @@ body {
   display: flex;
   min-width: 0;
   max-width: calc(100% - 2 * var(--spacing-space-3));
-  height: var(--spacing-c-btn-h-sm);
+  height: var(--spacing-control-sm);
   margin: 0;
   padding: 0;
   align-items: stretch;
   border: 1px solid var(--color-border-hairline);
   border-radius: var(--radius-md);
   background: var(--color-surface-raised);
-  box-shadow: var(--shadow-overlay);
+  box-shadow: var(--shadow-lg);
   color: var(--color-ink-strong);
   font: var(--type-label);
   translate: -50% 0;
   animation: canvas-changes-in var(--duration-panel) var(--ease-out);
 
   @media (pointer: coarse) {
-    height: var(--spacing-c-btn-h-lg);
+    height: var(--spacing-control-lg);
   }
 }
 

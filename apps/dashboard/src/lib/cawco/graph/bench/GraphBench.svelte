@@ -450,7 +450,7 @@
   /** The stand-in page's width, px, and its gutter. */
   let room = $state(0);
   let gutter = $state(0);
-  /** The component's own measure: a component held to a measure (the form's `max-w-c-measure`) is that wide, else its story's width. */
+  /** The component's own measure: a component held to a measure (the form's `max-w-measure`) is that wide, else its story's width. */
   let held = $state<number | null>(null);
   const measure = $derived(Math.min(own, held ?? own));
   /** A device's width he picked; Adapt (the stage's own width, the page's whole) lays the drawing out to the page, as the stage page does. */

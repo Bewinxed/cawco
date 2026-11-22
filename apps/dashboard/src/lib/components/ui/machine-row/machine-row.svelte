@@ -66,7 +66,7 @@
     ><span
       data-slot="dot"
       data-machine-row-away={presence === "away" || undefined}
-      class="size-(--status-dot-size) flex-none rounded-pill bg-presence-off data-is-away:bg-presence-away not-data-is-away:data-is-online:bg-presence-online"
+      class="size-(--status-dot-size) flex-none rounded-pill bg-ink-subtle data-is-away:bg-status-attn-glyph not-data-is-away:data-is-online:bg-status-done-glyph"
       data-box
       data-is-away={presence === "away" || undefined}
       data-is-online={presence === "online" || undefined}

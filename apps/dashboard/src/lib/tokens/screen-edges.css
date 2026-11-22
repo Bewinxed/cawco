@@ -55,14 +55,14 @@
     background: light-dark(oklch(96.6% 0.008 85), oklch(18.4% 0.004 70));
   }
   body {
-    background: light-dark(oklch(96.7% 0.008 84), oklch(22.2% 0.006 70));
+    background: light-dark(oklch(96.6% 0.008 85), oklch(21% 0.005 70));
   }
   :root[data-scrim~="open"] body,
   :root[data-scrim~="lightbox"] body {
     background: color-mix(
       in srgb,
       light-dark(oklch(96.6% 0.008 85), oklch(18.4% 0.004 70)) calc(72%),
-      light-dark(oklch(96.7% 0.008 84), oklch(22.2% 0.006 70))
+      light-dark(oklch(96.6% 0.008 85), oklch(21% 0.005 70))
     );
   }
   :root[data-kit-sheet~="bottom"] body,

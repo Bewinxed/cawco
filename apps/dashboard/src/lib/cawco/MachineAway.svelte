@@ -33,7 +33,7 @@
 {#if away}
   <p
     data-slot="machine-away"
-    class="type-meta max-w-c-measure text-pretty wrap-anywhere text-ink-muted"
+    class="type-meta max-w-measure text-pretty wrap-anywhere text-ink-muted"
     role="status"
     in:unfold
     out:unfold

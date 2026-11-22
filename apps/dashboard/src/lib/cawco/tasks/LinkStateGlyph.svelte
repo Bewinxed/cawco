@@ -23,7 +23,7 @@
 
   const TONE: Record<LinkGlyph, string> = {
     open: "text-status-live-glyph",
-    draft: "text-status-idle-glyph",
+    draft: "text-ink-muted",
     merged: "text-status-done-glyph",
     closed: "text-ink-muted",
     canceled: "text-ink-subtle",

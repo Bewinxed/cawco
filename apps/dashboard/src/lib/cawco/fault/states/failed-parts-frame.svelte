@@ -45,20 +45,20 @@
 </script>
 
 {#snippet stand()}
-  <div class="size-full bg-surface-well"></div>
+  <div class="size-full bg-surface-sunk"></div>
 {/snippet}
 
 {#snippet transcript(pill = true)}
   <div
-    class="flex min-h-0 flex-1 flex-col justify-end gap-space-4 bg-tab-sheet px-space-6 pb-space-4"
+    class="flex min-h-0 flex-1 flex-col justify-end gap-space-4 bg-surface-recess px-space-6 pb-space-4"
   >
-    <p class="m-0 max-w-c-measure text-pretty text-ink-strong type-body">
+    <p class="m-0 max-w-measure text-pretty text-ink-strong type-body">
       The side panel crash: your console shows a list that got two items with
       the same key.
     </p>
     {#if pill}
       <div
-        class="flex h-c-input-h max-w-c-composer-w items-center rounded-lg border border-border-control bg-surface-raised px-space-3 text-ink-subtle shadow-tile type-body"
+        class="flex h-control-md max-w-(--composer-w) items-center rounded-lg border border-border-control bg-surface-raised px-space-3 text-ink-subtle shadow-sm type-body"
       >
         Write to Claude Code
       </div>
@@ -112,11 +112,11 @@
     <div class="absolute inset-x-0 top-2/5 bottom-0 flex flex-col">
       <div
         data-preview-sheet
-        class="relative flex min-h-0 flex-1 flex-col rounded-t-lg bg-surface-raised pt-space-3 shadow-drawer"
+        class="relative flex min-h-0 flex-1 flex-col rounded-t-lg bg-surface-raised pt-space-3 shadow-lg"
       >
         <span
           aria-hidden="true"
-          class="mx-auto mb-space-1 block h-c-grabber-h w-c-grabber-w flex-none rounded-full bg-border-control"
+          class="mx-auto mb-space-1 block h-1.5 w-25 flex-none rounded-full bg-border-control"
         ></span>
         <RegionBoundary part="preview">
           <Throws {builds} {stuck}>{@render stand()}</Throws>
@@ -135,7 +135,7 @@
   {:else if place === "page"}
     <!-- The bar's room, as the app's bar stands over a page: it names no
          section (DESIGN.md, The Title Bars Follow Liquid Glass Rule). -->
-    <div aria-hidden="true" class="h-c-top-bar-h flex-none"></div>
+    <div aria-hidden="true" class="h-control-lg flex-none"></div>
     <div class="flex min-h-0 flex-1 flex-col">
       <RegionBoundary face="page" part="workspace">
         <Throws {builds} {stuck}>{@render stand()}</Throws>

@@ -42,15 +42,15 @@
 >
   <span
     aria-hidden="true"
-    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-c-btn-h translate-y-(--fill-y) rounded-well bg-surface-fill opacity-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:duration-(--duration-control) motion-safe:ease-in-out"
+    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-control-md translate-y-(--fill-y) rounded-sm bg-surface-hover opacity-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:duration-(--duration-control) motion-safe:ease-in-out"
     data-shown={items.length > 0 || undefined}
-    style:--fill-y={`calc(${index} * (var(--spacing-c-btn-h) + var(--spacing-space-row)))`}
+    style:--fill-y={`calc(${index} * (var(--spacing-control-md) + var(--spacing-space-row)))`}
   ></span>
   {#each items as item (item.key)}
     {@const Icon = item.icon}
     <button
       data-slot="row"
-      class="select-none press-tint transition-control relative flex h-c-btn-h w-full items-center gap-space-3 rounded-well border-none border-current bg-transparent px-space-2 text-start text-ink-strong"
+      class="select-none press-tint transition-control relative flex h-control-md w-full items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start text-ink-strong"
       data-fh="1"
       onmousedown={(event) => {
         event.preventDefault();

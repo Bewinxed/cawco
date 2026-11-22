@@ -118,10 +118,10 @@
 
 {#snippet ref(id: string, remove?: () => void)}
   <span
-    class="flex items-center gap-space-1 min-h-c-btn-h-sm min-w-0 pe-space-1 rounded-sm bg-surface-recess"
+    class="flex items-center gap-space-1 min-h-control-sm min-w-0 pe-space-1 rounded-sm bg-surface-recess"
   >
     <button
-      class="select-none flex flex-auto items-center gap-space-2 min-w-0 min-h-c-btn-h-sm px-space-2 border-none border-current rounded-sm bg-transparent text-start press-tint focus-inset"
+      class="select-none flex flex-auto items-center gap-space-2 min-w-0 min-h-control-sm px-space-2 border-none border-current rounded-sm bg-transparent text-start press-tint focus-inset"
       onclick={() => onopen(id)}
       title={byId.get(id)?.title}
       type="button"
@@ -160,7 +160,7 @@
       ? referenceOf(one.href)
       : null}
     <span
-      class="flex items-center gap-space-1 min-h-c-btn-h-sm min-w-0 px-space-2 pe-space-1 rounded-sm bg-surface-recess"
+      class="flex items-center gap-space-1 min-h-control-sm min-w-0 px-space-2 pe-space-1 rounded-sm bg-surface-recess"
     >
       <span class="flex-auto min-w-0 overflow-clip text-ellipsis type-label">
         {#if drawn?.draw === "element"}

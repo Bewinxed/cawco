@@ -786,12 +786,12 @@
           {/each}
         </ul>
       {:else if !ghProblem}
-        <p class="max-w-c-measure type-meta text-pretty text-ink-muted">
+        <p class="max-w-measure type-meta text-pretty text-ink-muted">
           {words.ghNone}
         </p>
       {/if}
       {#if gh.unread.length > 0}
-        <p class="max-w-c-measure type-meta text-pretty text-ink-muted">
+        <p class="max-w-measure type-meta text-pretty text-ink-muted">
           {words.ghUnanswered(listOf.format(gh.unread))}
         </p>
       {/if}
@@ -869,7 +869,7 @@
     >
       <p
         data-slot="empty-line"
-        class="type-body max-w-c-measure text-pretty text-ink-muted"
+        class="type-body max-w-measure text-pretty text-ink-muted"
       >
         {words.emptyLine}
       </p>
@@ -878,14 +878,14 @@
       <ul
         data-slot="cards"
         aria-label={words.servicesLabel}
-        class="grid auto-rows-fr grid-cols-1 gap-space-2 @details:grid-cols-(--cards-cols)"
-        style:--cards-cols={"repeat(auto-fill, minmax(min(100%, var(--spacing-c-starter-w)), 1fr))"}
+        class="grid auto-rows-fr grid-cols-1 gap-space-2 @sm:grid-cols-(--cards-cols)"
+        style:--cards-cols={"repeat(auto-fill, minmax(min(100%, var(--starter-w)), 1fr))"}
       >
         {#each SERVICES as service (service.service)}
           <li>
             <button
               data-slot="connections-page-card"
-              class="select-none mark-line press-tint type-label flex size-full min-h-c-starter-h items-center gap-space-2 rounded-lg border-none border-current bg-surface-raised p-space-3 text-start text-ink-strong shadow-tile transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
+              class="select-none mark-line press-tint type-label flex size-full min-h-14 items-center gap-space-2 rounded-lg border-none border-current bg-surface-raised p-space-3 text-start text-ink-strong shadow-sm transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
               onclick={() => startAdding(service)}
               type="button"
             >
@@ -970,7 +970,7 @@
               <form
                 data-slot="row-app"
                 aria-label={words.appOf(labelOf(row))}
-                class="flex min-w-0 max-w-c-measure flex-col gap-space-3 py-space-2"
+                class="flex min-w-0 max-w-measure flex-col gap-space-3 py-space-2"
                 onsubmit={(event) => {
                   event.preventDefault();
                   saveApp(row);
@@ -1019,7 +1019,8 @@
                 <Input
                   aria-label={words.rowKey(labelOf(row), row.account)}
                   autocomplete="off"
-                  class="max-w-c-key-field-max grow basis-c-key-field-basis"
+                  class="max-w-(--max-w) grow basis-(--basis)"
+                  style="--max-w: calc(var(--spacing) * 96); --basis: calc(var(--spacing) * 56)"
                   measure="shrink"
                   required
                   type="password"

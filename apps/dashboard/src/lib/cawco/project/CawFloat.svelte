@@ -10,7 +10,7 @@
    * two and never covers a column of the board or the head.
    *
    * Wider than a phone it is docked: a column of its own beside the page,
-   * a conversation's width (--spacing-c-panel-w), where the page has the room for
+   * a conversation's width (--panel-w), where the page has the room for
    * both; a row of its own under the page, the column's width, where it has
    * not (the page's grid places it, `.caw-docked`). The page yields it that
    * room, so whatever Caw files lands on a board that stays in sight. It is
@@ -142,7 +142,7 @@
       data-caw-float-sheet
       data-caw-preview={lead.tab === "preview" || undefined}
       style={lead.tab === "preview"
-        ? "--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), var(--spacing-space-7)))"
+        ? "--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), var(--spacing-space-6)))"
         : undefined}
       height="cap"
       modal={false}
@@ -185,7 +185,7 @@
        2026-10-23). -->
   <aside
     aria-label="Caw, {projectName}"
-    class="grid-area-dock in-data-caw-open:phone:mx-space-5 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@project-dock:mt-space-6 in-data-caw-open:@project-dock:mr-space-6 in-data-caw-open:@project-dock:mb-space-6 in-data-caw-open:@project-dock:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+    class="grid-area-dock in-data-caw-open:phone:mx-space-5 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@md:mt-space-6 in-data-caw-open:@md:mr-space-6 in-data-caw-open:@md:mb-space-6 in-data-caw-open:@md:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-sm"
     data-caw-dock
     {@attach dock}
     {@attach appearOnMount({

@@ -528,8 +528,8 @@
         <div
           data-split-shown={open || undefined}
           hidden={squeezed}
-          class="w-full min-w-c-side-surface-min p-space-4 opacity-0 transform-(--surface-off) transition-[opacity] duration-(--duration-panel) ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:duration-(--duration-panel) data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
-          style:--surface-off="translateX(var(--spacing-space-7))"
+          class="w-full min-w-xs p-space-4 opacity-0 transform-(--surface-off) transition-[opacity] duration-(--duration-panel) ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:duration-(--duration-panel) data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
+          style:--surface-off="translateX(var(--spacing-space-6))"
           style:--surface-on="translateX(0)"
           in:surfaceIn
           {@attach landKey

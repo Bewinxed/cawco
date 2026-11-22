@@ -57,7 +57,8 @@
        `pending`, `aria-busy` and idle guard). -->
   <Button
     aria-describedby={held ? "session-start-held" : undefined}
-    class="min-w-c-btn-min-w"
+    class="min-w-(--min-w)"
+    style="--min-w: calc(var(--spacing) * 24)"
     data-share="session:new"
     data-share-ttl="8000"
     {disabled}

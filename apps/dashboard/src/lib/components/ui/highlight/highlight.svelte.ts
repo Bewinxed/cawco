@@ -367,7 +367,7 @@ interface Glide {
 }
 /** The ghost's glide and the pill's (the sheet's head says which is which). */
 const GLIDES = {
-  ghost: { duration: "--duration-ghost", easing: "--ease-in-out" },
+  ghost: { duration: "--duration-step", easing: "--ease-in-out" },
   pill: { duration: "--duration-control", easing: "--ease-drawer" },
 } as const satisfies Record<string, Glide>;
 

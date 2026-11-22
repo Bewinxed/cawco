@@ -27,9 +27,9 @@
   });
 </script>
 
-<div class="p-space-7">
+<div class="p-space-6">
   <div
-    class="relative flex w-c-canvas-skeleton-w flex-col gap-space-2"
+    class="relative flex w-60 flex-col gap-space-2"
     data-bench="stage"
   >
     {#if waiting}
@@ -56,14 +56,14 @@
     {/if}
   </div>
   <div
-    class="mt-space-7 flex w-c-canvas-skeleton-w flex-col"
+    class="mt-space-6 flex w-60 flex-col"
     data-bench="list"
     {@attach reflow()}
   >
     {#if waiting}
       {#each [0, 1, 2] as row (row)}
         <div
-          class="flex h-c-btn-h items-center px-space-3"
+          class="flex h-control-md items-center px-space-3"
           data-case="skeleton-row"
           data-flip
           data-flip-skeleton
@@ -74,7 +74,7 @@
     {:else}
       {#each ["Harbour", "Lantern", "Quay"] as name (name)}
         <div
-          class="type-label flex h-c-btn-h items-center px-space-3 text-ink-strong"
+          class="type-label flex h-control-md items-center px-space-3 text-ink-strong"
           data-case="row"
           data-flip
         >

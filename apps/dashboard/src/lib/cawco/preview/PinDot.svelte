@@ -48,7 +48,7 @@
   >
     <!-- The needs-you dot's echo: three loops, then still. -->
     <span
-      class="absolute inset-0 rounded-pill bg-status-attn-glyph opacity-0 motion-safe:opacity-100 motion-safe:animate-attn-echo"
+      class="absolute inset-0 rounded-pill bg-status-attn-glyph opacity-0 motion-safe:opacity-100 motion-safe:animate-ping"
       data-echo
     ></span>
   </span>

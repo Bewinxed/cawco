@@ -18,7 +18,7 @@
    * tool call's chip (the owner, 10-26: "just like any tool call I can click
    * the chip to view the comment thread and reply").
    *
-   * Pressing it, or resting a mouse on it for `--duration-peek`, opens the
+   * Pressing it, or resting a mouse on it for `--duration-panel`, opens the
    * thread: on a desk and a tablet the house hover panel (HoverPanel) under
    * the chip, over it where the room under it is short; on a phone the
    * thread's bottom sheet (ThreadSheet). It holds the page's name with Open
@@ -192,7 +192,7 @@
     // Under the chip; over it only where the room under it is short and the
     // room over it is more. Over it, the panel stands its own height (the
     // 100%, which the panel's translate reads) above the chip.
-    if (under >= px("--spacing-c-hover-panel-room") || under >= over) {
+    if (under >= px("--container-xs") || under >= over) {
       place = {
         x,
         y: `${Math.round(box.bottom + gap)}px`,
@@ -344,7 +344,7 @@
     }
   }
 
-  /* Resting a mouse on the chip opens it after --duration-peek; a finger presses. */
+  /* Resting a mouse on the chip opens it after --duration-panel; a finger presses. */
   let restTimer: ReturnType<typeof setTimeout> | undefined;
   function rest(): void {
     clearTimeout(restTimer);
@@ -355,7 +355,7 @@
       stand();
       problem = null;
       show(true);
-    }, dur("--duration-peek"));
+    }, dur("--duration-panel"));
   }
   $effect(() => () => clearTimeout(restTimer));
 

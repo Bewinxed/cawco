@@ -127,7 +127,7 @@
   )}
   {@attach measured}
   in:rise={"--duration-panel"}
-  out:rise={"--duration-exit"}
+  out:rise={"--duration-fade"}
 >
   {@render children()}
 </div>

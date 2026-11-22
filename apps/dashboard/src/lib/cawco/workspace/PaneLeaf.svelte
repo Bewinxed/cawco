@@ -248,7 +248,7 @@
      the strip, a key, a jump — lands the way a swipe does: the panes slide
      by their distance on the swipe's own spring (gesture.svelte.ts,
      `prepare` and `arrive`). Elsewhere the arriving transcript glides in
-     from the side of the tab it came from and fades up, over --duration-pop on
+     from the side of the tab it came from and fades up, over --duration-panel on
      --ease-drawer (the app's own curve), so the eye reads which
      way it went. The side is read off the strip as it was before the
      switch, so a tab that closed still says where it stood. Only the
@@ -307,7 +307,7 @@
         done: new Promise((resolve) => {
           landed = resolve;
         }),
-        ms: () => (settle ? swipe.settleMs : dur("--duration-pop")),
+        ms: () => (settle ? swipe.settleMs : dur("--duration-panel")),
       };
       if (settle) {
         swipe.prepare(from, id);
@@ -369,7 +369,7 @@
               },
               { transform: "none", opacity: 1 },
             ],
-            { duration: dur("--duration-pop"), easing: ease("--ease-drawer") }
+            { duration: dur("--duration-panel"), easing: ease("--ease-drawer") }
           );
         if (glide) {
           glide.finished.then(done, done);
@@ -444,7 +444,7 @@
     <div
       data-slot="drop-preview"
       aria-hidden="true"
-      class="pointer-events-none absolute z-3 border border-border-control bg-surface-hover opacity-90 motion-safe:transition-[inset] motion-safe:duration-(--duration-morph) motion-safe:ease-in-out"
+      class="pointer-events-none absolute z-3 border border-border-control bg-surface-hover opacity-90 motion-safe:transition-[inset] motion-safe:duration-(--duration-fade) motion-safe:ease-in-out"
       style:inset={previewInset}
       transition:previewFade
     ></div>

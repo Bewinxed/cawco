@@ -564,14 +564,14 @@
 {#snippet whoChips()}
   <div
     data-slot="chips"
-    class="flex items-center flex-none flex-wrap gap-space-1 min-h-c-btn-h px-space-2"
+    class="flex items-center flex-none flex-wrap gap-space-1 min-h-control-md px-space-2"
     data-flip
     role="toolbar"
     aria-label="Who said it"
   >
     {#each WHO as who (who.value)}
       <button
-        class="select-none inline-flex items-center gap-space-row h-c-pill-h px-space-3 border border-border-control rounded-pill bg-surface-raised type-label text-ink-muted transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] aria-pressed:border-transparent aria-pressed:bg-brand-wash aria-pressed:text-brand-ink aria-pressed-false:hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
+        class="select-none inline-flex items-center gap-space-row h-control-xs px-space-3 border border-border-control rounded-pill bg-surface-raised type-label text-ink-muted transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] aria-pressed:border-transparent aria-pressed:bg-brand-wash aria-pressed:text-brand-ink aria-pressed-false:hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
         aria-pressed={(finder.by ?? "anyone") === who.value}
         onclick={() => {
           if (finder.parsed.me && who.value !== "me") {
@@ -585,7 +585,7 @@
     {/each}
     {#each finder.projectChips as word (word)}
       <span
-        class="mark-line inline-flex items-center gap-space-row h-c-pill-h ps-space-3 pe-space-row border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
+        class="mark-line inline-flex items-center gap-space-row h-control-xs ps-space-3 pe-space-row border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
         data-flip="pop"
         ><span>{word}</span><button
           data-box
@@ -599,7 +599,7 @@
     {#if finder.parsed.time}
       {@const time = finder.parsed.time}
       <span
-        class="mark-line inline-flex items-center gap-space-row h-c-pill-h ps-space-3 pe-space-row border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
+        class="mark-line inline-flex items-center gap-space-row h-control-xs ps-space-3 pe-space-row border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-surface-hover motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
         data-flip="pop"
         ><span>{time}</span><button
           data-box
@@ -696,7 +696,7 @@
         {@const k = `${row}#${act}`}
         <button
           id={idOf(k)}
-          class="mark-line select-none flex items-center gap-space-2 w-full h-space-8 px-space-2 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill"
+          class="mark-line select-none flex items-center gap-space-2 w-full h-space-8 px-space-2 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-strong cursor-default active:bg-surface-hover"
           aria-selected={activeKey === k}
           data-active={activeKey === k ? "" : undefined}
           data-find-row
@@ -722,7 +722,7 @@
     <button
       data-slot="fold-row"
       id={idOf(item.key)}
-      class="mark-line select-none flex items-center gap-space-2 flex-none w-full h-10 px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-c-find-phone-h"
+      class="mark-line select-none flex items-center gap-space-2 flex-none w-full h-10 px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-strong cursor-default active:bg-surface-hover group-data-phone/finder:h-13"
       aria-label={`${count} ${kindNoun(first, count)} match “${finder.asked}”, ${open ? "shown" : "folded"}`}
       aria-selected={activeKey === item.key}
       data-active={activeKey === item.key ? "" : undefined}
@@ -735,7 +735,7 @@
       type="button"
     >
       <Glyph
-        class="flex-none size-icon-md text-status-idle-glyph"
+        class="flex-none size-icon-md text-ink-muted"
         aria-hidden="true"
       />
       <span class="flex-1 min-w-0 overflow-clip whitespace-nowrap text-ellipsis"
@@ -743,7 +743,7 @@
         {kindNoun(first, count)} match “{finder.asked}”</span
       >
       <ChevronRight
-        class="flex-none size-icon-md text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--duration-toggle) motion-safe:ease-in-out data-open:rotate-90"
+        class="flex-none size-icon-md text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--duration-fade) motion-safe:ease-in-out data-open:rotate-90"
         aria-hidden="true"
         data-box
         data-open={open || undefined}
@@ -752,7 +752,7 @@
   {:else if item.t === "waiting"}
     <button
       id={idOf("waiting")}
-      class="mark-line select-none flex items-center gap-space-2 flex-none w-full h-10 px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-c-find-phone-h"
+      class="mark-line select-none flex items-center gap-space-2 flex-none w-full h-10 px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-strong cursor-default active:bg-surface-hover group-data-phone/finder:h-13"
       aria-selected={activeKey === "waiting"}
       data-active={activeKey === "waiting" ? "" : undefined}
       data-find-row
@@ -822,7 +822,7 @@
         >
       {/if}
       <button
-        class="select-none border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
+        class="select-none border-none border-current p-0 bg-transparent text-brand-ink active:opacity-72"
         onclick={() => finder.retry()}
         type="button">Retry</button
       >
@@ -857,7 +857,7 @@
     {@const page = finder.morePage[item.source]}
     <button
       data-slot="more-row"
-      class="mark-line select-none flex items-center flex-none w-full h-10 px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-link-ink active:bg-surface-fill disabled:text-ink-muted group-data-phone/finder:h-c-find-phone-h"
+      class="mark-line select-none flex items-center flex-none w-full h-10 px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-brand-ink active:bg-surface-hover disabled:text-ink-muted group-data-phone/finder:h-13"
       data-flip
       disabled={page === "asking"}
       onclick={() => finder.loadMore(item.source)}
@@ -873,7 +873,7 @@
         No sessions for “{finder.text.trim()}”
       </p>
       <button
-        class="select-none border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
+        class="select-none border-none border-current p-0 bg-transparent text-brand-ink active:opacity-72"
         onclick={clear}
         type="button">Open today's sessions</button
       >
@@ -900,10 +900,10 @@
 
 {#snippet waitingList()}
   <div
-    class="flex items-center gap-space-2 flex-none h-c-row-h ps-space-1 pe-space-2 border-b border-b-border-hairline"
+    class="flex items-center gap-space-2 flex-none h-control-lg ps-space-1 pe-space-2 border-b border-b-border-hairline"
   >
     <button
-      class="select-none grid place-items-center size-c-btn-h border-none border-current rounded-md bg-transparent text-ink-muted active:bg-surface-fill group-data-phone/finder:size-c-btn-h-lg"
+      class="select-none grid place-items-center size-control-md border-none border-current rounded-md bg-transparent text-ink-muted active:bg-surface-hover group-data-phone/finder:size-control-lg"
       aria-label="Back to find"
       onclick={() => finder.showFind()}
       type="button"><ChevronLeft class="size-icon-md" /></button
@@ -956,7 +956,7 @@
           Nothing waits for you
         </p>
         <button
-          class="select-none border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
+          class="select-none border-none border-current p-0 bg-transparent text-brand-ink active:opacity-72"
           onclick={() => finder.showFind()}
           type="button">Open today's sessions</button
         >
@@ -1030,7 +1030,7 @@
             {/if}
           </p>
           <button
-            class="select-none border-none border-current p-0 bg-transparent text-link-ink active:opacity-72"
+            class="select-none border-none border-current p-0 bg-transparent text-brand-ink active:opacity-72"
             onclick={() => finder.retry()}
             type="button">Retry</button
           >

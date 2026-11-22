@@ -40,8 +40,8 @@
 
 <div class="bg-surface-page p-space-5">
   <div
-    class="relative flex h-(--frame-h) w-(--frame-w) flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile timeline-scope-transcript-head"
-    style:--face-top="var(--spacing-c-head-room)"
+    class="relative flex h-(--frame-h) w-(--frame-w) flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-sm timeline-scope-transcript-head"
+    style:--face-top="var(--head-room)"
     style:--frame-h={`${height}px`}
     style:--frame-w={`${width}px`}
   >
@@ -49,7 +49,7 @@
          run up beneath it, clear it at rest and fade under it. -->
     <HeadFade band="var(--face-top)" tint="bg-surface-raised" />
     <div
-      class="absolute inset-x-0 top-0 z-2 flex h-c-head-room min-w-0 items-center ps-space-4 pe-space-2"
+      class="absolute inset-x-0 top-0 z-2 flex h-(--head-room) min-w-0 items-center ps-space-4 pe-space-2"
     >
       <!-- At a phone drawer's width the faces' switch draws the shown face's
            name and the others' glyphs, as the graph's drawer does. -->

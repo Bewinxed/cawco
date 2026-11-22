@@ -5,7 +5,7 @@
    * The scrim (DESIGN.md, Materials: "the page's own background at 72% with
    * a 2px blur, behind dialogs and sheets"), every kit dialog's, alert
    * dialog's, sheet's and drawer's. It fades in over --duration-panel and out
-   * over --duration-exit with its surface. One that leaves before its dialog
+   * over --duration-fade with its surface. One that leaves before its dialog
    * says it is closed (the lightbox flying its picture home, `leaving`)
    * fades out then. One opened over another open scrim draws nothing of
    * its own (`data-stacked`, scrim-stack.ts): there is one scrim.
@@ -13,7 +13,7 @@
    * scrim leaving while its dialog still says it is open.
    */
   export const scrimVariants = tv({
-    base: "bg-scrim backdrop-blur-(--scrim-blur) data-[leaving]:animate-kit-fade-out data-closed:animate-kit-fade-out data-open:animate-scrim-in data-[stacked]:bg-transparent data-[stacked]:backdrop-filter-none",
+    base: "bg-scrim backdrop-blur-(--scrim-blur) data-[leaving]:animate-fade-out data-closed:animate-fade-out data-open:animate-fade-in data-open:anim-dur-panel data-[stacked]:bg-transparent data-[stacked]:backdrop-filter-none",
   });
 </script>
 

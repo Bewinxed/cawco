@@ -28,7 +28,7 @@
    * With reduced motion, sonner's own sheet turns every transition and
    * animation off, so a toast would appear and vanish in one frame. Reduced
    * motion means stillness, not an instant swap (DESIGN.md, Reduced Motion
-   * Rule): the toast still fades in over --duration-panel and out over --duration-exit,
+   * Rule): the toast still fades in over --duration-panel and out over --duration-fade,
    * both on --ease-out, through the Web Animations API, which that sheet does
    * not reach. A toast sonner keeps hidden (past the visible count) is left
    * hidden. With motion allowed, the transitions below do all of it.
@@ -43,7 +43,7 @@
       toast: HTMLElement,
       from: number | string,
       to: number,
-      length: "--duration-panel" | "--duration-exit"
+      length: "--duration-panel" | "--duration-fade"
     ) => {
       if (motionOk.current || toast.dataset.visible === "false") {
         return;
@@ -73,7 +73,7 @@
         toast,
         entering ? getComputedStyle(toast).opacity : 1,
         0,
-        "--duration-exit"
+        "--duration-fade"
       );
     };
     // The first toast arrives inside the list sonner draws for it, so an
@@ -133,7 +133,7 @@
      under it showed through, and its text and buttons read as painted over
      the toast even though the toast was on top and taking the taps. -->
 <!-- A sheet over the viewport, above the app chrome and every floating
-     surface (--layer-toast), that takes no taps itself; the toasts take
+     surface (--layer-top), that takes no taps itself; the toasts take
      their own (`pointer-events-auto` through sonner's `toastOptions.class`).
      Navigation stays above a toast. While the burger's sheet is open (its
      scrim and panel on --layer-float), the layer goes under the scrim
@@ -141,7 +141,8 @@
      area, and the sheet that covers it on a phone or a narrow tablet is
      never painted over. -->
 <div
-  class="pointer-events-none fixed inset-0 z-(--layer-toast) data-under-nav:z-(--layer-toast-held)"
+  class="pointer-events-none fixed inset-0 z-(--layer-top) data-under-nav:z-(--z-held)"
+  style:--z-held="calc(var(--layer-float) - 10)"
   bind:this={layer}
   data-slot="toast-layer"
   data-under-nav={navSheet.open || undefined}

@@ -50,15 +50,16 @@ export function outlineLayer(): OutlineLayer {
   // inks, in the tokens'.
   svg.setAttribute(
     "class",
-    "pointer-events-none fixed inset-0 z-(--layer-hang-outline) size-full overflow-visible"
+    "pointer-events-none fixed inset-0 size-full overflow-visible"
   );
+  svg.style.zIndex = "calc(var(--layer-float) - 3)";
   svg.setAttribute("data-slot", "hang-outline");
   svg.setAttribute("aria-hidden", "true");
   svg.innerHTML = `<defs>
 <linearGradient id="${id}-ink" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="0" y2="1"><stop offset="0" data-slot="rim"/><stop offset="1" class="[stop-color:var(--color-border-control)]"/></linearGradient>
 <clipPath id="${id}-under"><rect data-slot="under" x="-100000" y="0" width="200000" height="200000"/></clipPath>
 <filter id="${id}-cast" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
-<feGaussianBlur in="SourceAlpha" stdDeviation="24"/><feOffset dy="18" result="far"/><feFlood class="[flood-color:var(--color-shadow-tint-3)]"/><feComposite in2="far" operator="in" result="farInk"/>
+<feGaussianBlur in="SourceAlpha" stdDeviation="24"/><feOffset dy="18" result="far"/><feFlood class="[flood-color:var(--shadow-tint-3)]"/><feComposite in2="far" operator="in" result="farInk"/>
 <feGaussianBlur in="SourceAlpha" stdDeviation="3"/><feOffset dy="2" result="near"/><feFlood class="[flood-color:var(--color-shadow-tint)]"/><feComposite in2="near" operator="in" result="nearInk"/>
 <feMerge result="both"><feMergeNode in="farInk"/><feMergeNode in="nearInk"/></feMerge>
 <feComposite in="both" in2="SourceAlpha" operator="out"/>

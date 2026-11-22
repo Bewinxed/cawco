@@ -9,7 +9,7 @@
   const sidebarMenuBadgeVariants = tv({
     variants: {
       tone: {
-        row: "text-ink-strong peer-data-active/menu-button:text-selected-ink",
+        row: "text-ink-strong peer-data-active/menu-button:text-brand-ink",
         live: "bg-status-live-bg text-status-live-ink data-blocked:bg-status-attn-bg data-blocked:text-status-attn-ink",
       },
     },
@@ -39,7 +39,7 @@
 <div
   data-num
   class={cn(
-    "pointer-events-none absolute inset-y-0 end-space-1 my-auto flex h-c-badge-h min-w-c-badge-h",
+    "pointer-events-none absolute inset-y-0 end-space-1 my-auto flex h-icon-lg min-w-icon-lg",
     "select-none items-center justify-center",
     "rounded-xs px-space-1",
     "num type-meta",

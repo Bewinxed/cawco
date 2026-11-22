@@ -34,7 +34,7 @@
   aria-label={`Needs you, ${count}`}
   aria-pressed={on}
   class={cn(
-    "select-none mark-line type-label inline-flex h-c-btn-h-sm flex-none items-center gap-space-2 rounded-md border border-transparent bg-transparent px-space-3 in-form-compact:px-space-2 text-status-attn-ink hover:bg-surface-hover transition-[background-color,color,border-color] duration-(--duration-control) ease-out motion-safe:active:transform-(--tpress) aria-pressed:border-status-attn-glyph",
+    "select-none mark-line type-label inline-flex h-control-sm flex-none items-center gap-space-2 rounded-md border border-transparent bg-transparent px-space-3 in-form-compact:px-space-2 text-status-attn-ink hover:bg-surface-hover transition-[background-color,color,border-color] duration-(--duration-control) ease-out motion-safe:active:transform-(--tpress) aria-pressed:border-status-attn-glyph",
     className
   )}
   style:--tpress="scale(var(--press-scale))"

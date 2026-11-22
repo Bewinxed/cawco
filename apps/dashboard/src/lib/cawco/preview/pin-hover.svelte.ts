@@ -28,28 +28,28 @@ export class PinHover {
   /**
    * The pill the pointer rests on, its thread beside it, uncommitted: the
    * thread's own card, whole, where a press would open it (PinThread
-   * `drawnPin`), after `--duration-peek` the first time, at once while one
+   * `drawnPin`), after `--duration-panel` the first time, at once while one
    * is up or just went; never under a finger, nor where a thread is a foot
    * sheet. The pointer may leave the pill for the card: it goes
-   * `--duration-peek` after the pointer left them both. A press on the pill
+   * `--duration-panel` after the pointer left them both. A press on the pill
    * or in the card commits it (PinThread `openCard`), the same card.
    */
   hoverAt = $state<PinHoverAt | null>(null);
 
   hoverTimer: ReturnType<typeof setTimeout> | undefined;
 
-  /** When the last hover went: the next within `--duration-peek` comes at once. */
+  /** When the last hover went: the next within `--duration-panel` comes at once. */
   hoverWent = 0;
 
   /** The pointer rests on the card itself. */
   onCard = false;
 
-  /** The pointer came onto the card (it stays) or left it (it goes after `--duration-peek`, unless the pointer is back on its pill). */
+  /** The pointer came onto the card (it stays) or left it (it goes after `--duration-panel`, unless the pointer is back on its pill). */
   restOn = (on: boolean) => {
     this.onCard = on;
     clearTimeout(this.hoverTimer);
     if (!on) {
-      this.hoverTimer = setTimeout(this.leave, dur("--duration-peek"));
+      this.hoverTimer = setTimeout(this.leave, dur("--duration-panel"));
     }
   };
 
@@ -104,12 +104,12 @@ export class PinHover {
     if (!(id && mark)) {
       // Off its pill: onto the card, which stays, or away.
       if (this.hoverAt && !this.onCard) {
-        this.hoverTimer = setTimeout(this.leave, dur("--duration-peek"));
+        this.hoverTimer = setTimeout(this.leave, dur("--duration-panel"));
       }
       return;
     }
     const at: PinHoverAt = { id, mark, box: previewBox(message.box) };
-    const wait = dur("--duration-peek");
+    const wait = dur("--duration-panel");
     if (this.hoverAt || performance.now() - this.hoverWent < wait) {
       this.hoverAt = at;
       return;

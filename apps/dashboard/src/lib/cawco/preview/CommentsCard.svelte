@@ -92,7 +92,7 @@
   {#if thread}
     {#key threadKey}
       <div
-        class="flex w-c-comments-w min-h-0 flex-col gap-space-2 overflow-x-hidden overflow-y-auto overscroll-contain p-space-3"
+        class="flex w-xs min-h-0 flex-col gap-space-2 overflow-x-hidden overflow-y-auto overscroll-contain p-space-3"
         data-slot="thread-card"
       >
         {@render thread()}
@@ -119,7 +119,7 @@
     trapFocus={false}
   >
     <div
-      class="flex h-(--rail-h) w-c-comments-w min-h-0 flex-col"
+      class="flex h-(--rail-h) w-xs min-h-0 flex-col"
       data-slot="rail-card"
       style:--rail-h="{height}px"
       {@attach reach}

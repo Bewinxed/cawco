@@ -361,10 +361,10 @@
   const META = "min-w-0 max-w-full truncate type-meta text-ink-muted";
   /** A step's controls: side by side, each the column's width in a narrow card (one grid column), `space-2` apart. */
   const CONTROLS =
-    "flex min-w-0 flex-wrap items-center gap-space-2 @max-field-group:grid @max-field-group:grid-cols-1";
+    "flex min-w-0 flex-wrap items-center gap-space-2 @max-sm:grid @max-sm:grid-cols-1";
   /** The words under the title: on the title's edge (the lead column and `space-3`), on the card's own edge in a narrow card. */
   const UNDER_TITLE =
-    "flex min-w-0 flex-col ps-(--title-edge) @max-field-group:ps-0";
+    "flex min-w-0 flex-col ps-(--title-edge) @max-sm:ps-0";
 </script>
 
 {#snippet stepMark(mark: Mark, n: number)}
@@ -394,7 +394,7 @@
           class={[
             "box-border grid size-full place-items-center rounded-pill border bg-transparent text-meta leading-none num before:content-data-n",
             mark === "standing"
-              ? "border-border-row-outline text-ink-strong"
+              ? "border-border-strong text-ink-strong"
               : "border-border-control text-ink-muted",
           ]}
           data-n={n}
@@ -415,11 +415,11 @@
   copyLabel: string,
   clamp: boolean
 )}
-  <div class="min-w-0 @max-field-group:hidden" data-box>
+  <div class="min-w-0 @max-sm:hidden" data-box>
     <CopyBox {label} {text} wrap />
   </div>
   <div
-    class="hidden min-w-0 flex-col gap-space-2 @max-field-group:flex"
+    class="hidden min-w-0 flex-col gap-space-2 @max-sm:flex"
     data-box
   >
     <!-- The box keeps its edge and padding; the clamp is on the words
@@ -455,10 +455,10 @@
      labels' edge. -->
 {#snippet head(done: boolean)}
   <div
-    class="mark-line flex min-w-0 items-center gap-space-3 @max-field-group:gap-space-2"
+    class="mark-line flex min-w-0 items-center gap-space-3 @max-sm:gap-space-2"
   >
     <span
-      class="grid w-c-row-lead flex-none place-items-center text-ink-muted @max-field-group:w-icon-md"
+      class="grid w-row-compact flex-none place-items-center text-ink-muted @max-sm:w-icon-md"
       data-box
     >
       {#if done}
@@ -495,7 +495,7 @@
 
 {#snippet choiceRow(choice: RelayChoice)}
   <li
-    class="grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-1 py-space-2 not-first:border-t not-first:border-border-hairline @max-field-group:grid-cols-1"
+    class="grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-1 py-space-2 not-first:border-t not-first:border-border-hairline @max-sm:grid-cols-1"
     data-relay-choice={choice.machineId}
   >
     <div class="flex min-w-0 flex-col gap-space-1">
@@ -508,7 +508,7 @@
       </p>
     </div>
     <Button
-      class="@max-field-group:w-full"
+      class="@max-sm:w-full"
       disabled={pending !== null}
       label={words.runHere}
       onclick={() => run({ act: "pick", machineId: choice.machineId })}
@@ -542,7 +542,7 @@
       <Input
         autocapitalize="off"
         autocomplete="off"
-        class="w-full max-w-field-group"
+        class="w-full max-w-sm"
         data-relay-name-field
         id="relay-name"
         inputmode="url"
@@ -784,22 +784,22 @@
 {#snippet journey()}
   <section
     aria-label={words.title}
-    class="@container flex min-w-0 max-w-c-measure flex-col gap-space-2 type-body"
+    class="@container flex min-w-0 max-w-measure flex-col gap-space-2 type-body"
     data-relay-journey
   >
     {@render head(false)}
     <div
       class="{UNDER_TITLE} gap-space-3"
-      style:--title-edge={"calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"}
+      style:--title-edge={"calc(var(--spacing-row-compact) + var(--spacing-space-3))"}
     >
       {#if lead}
         <p
-          class="type-body text-ink-strong text-pretty @max-field-group:hidden"
+          class="type-body text-ink-strong text-pretty @max-sm:hidden"
         >
           {domain ? words.leadDomain(domain) : words.leadPlain}
         </p>
         <p
-          class="hidden type-body text-ink-strong text-pretty @max-field-group:block"
+          class="hidden type-body text-ink-strong text-pretty @max-sm:block"
         >
           {domain ? words.leadDomainShort(domain) : words.leadPlainShort}
         </p>
@@ -833,7 +833,7 @@
             >
             {#if index === open && hasBody(step)}
               <div
-                class="col-start-2 flex min-w-0 flex-col gap-space-2 @max-field-group:col-span-2 @max-field-group:col-start-1"
+                class="col-start-2 flex min-w-0 flex-col gap-space-2 @max-sm:col-span-2 @max-sm:col-start-1"
                 data-box
                 data-slot="step-body"
               >
@@ -878,21 +878,21 @@
        running underneath. -->
   <section
     aria-label={words.title}
-    class="@container flex min-w-0 max-w-c-measure-short flex-col items-start gap-space-3"
+    class="@container flex min-w-0 max-w-measure-short flex-col items-start gap-space-3"
     data-relay-entry
   >
     <p
-      class="type-body text-ink-strong text-pretty wrap-anywhere @max-field-group:hidden"
+      class="type-body text-ink-strong text-pretty wrap-anywhere @max-sm:hidden"
     >
       {words.entry(domain)}
     </p>
     <p
-      class="hidden type-body text-ink-strong text-pretty wrap-anywhere @max-field-group:block"
+      class="hidden type-body text-ink-strong text-pretty wrap-anywhere @max-sm:block"
     >
       {words.entryShort(domain)}
     </p>
     <Button
-      class="@max-field-group:w-full"
+      class="@max-sm:w-full"
       label={words.setUp}
       onclick={() => {
         entered = true;
@@ -906,19 +906,19 @@
   <!-- Settings › Browsers before anyone set it up: why, and Set up. -->
   <section
     aria-label={words.title}
-    class="@container flex min-w-0 max-w-c-measure flex-col gap-space-2"
+    class="@container flex min-w-0 max-w-measure flex-col gap-space-2"
     data-relay-start
   >
     {@render head(false)}
     <div
       class="{UNDER_TITLE} items-start gap-space-3"
-      style:--title-edge={"calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"}
+      style:--title-edge={"calc(var(--spacing-row-compact) + var(--spacing-space-3))"}
     >
       <p class="type-body text-ink-strong text-pretty wrap-anywhere">
         {domain ? words.leadDomain(domain) : words.leadPlain}
       </p>
       <Button
-        class="@max-field-group:w-full"
+        class="@max-sm:w-full"
         data-relay-set-up
         label={words.setUp}
         onclick={() => act("set-up")}
@@ -932,13 +932,13 @@
        it is seen from now on. -->
   <section
     aria-label={words.title}
-    class="@container flex min-w-0 max-w-c-measure flex-col gap-space-2"
+    class="@container flex min-w-0 max-w-measure flex-col gap-space-2"
     data-relay-done
   >
     {@render head(true)}
     <div
       class="{UNDER_TITLE} items-start gap-space-2"
-      style:--title-edge={"calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"}
+      style:--title-edge={"calc(var(--spacing-row-compact) + var(--spacing-space-3))"}
     >
       <p class="type-body text-ink-strong text-pretty wrap-anywhere">
         {words.doneRow(summary.name ?? summary.machine.address)}
@@ -949,7 +949,7 @@
         </p>
       {/if}
       <Button
-        class="@max-field-group:w-full"
+        class="@max-sm:w-full"
         href="/config/browsers"
         label={words.openSettings}
         size="sm"
@@ -966,11 +966,11 @@
        one width. -->
   <section
     aria-label={words.title}
-    class="@container min-w-0 max-w-c-measure"
+    class="@container min-w-0 max-w-measure"
     data-relay-summary
   >
     <div
-      class="grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-2 @max-field-group:grid-cols-1"
+      class="grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-2 @max-sm:grid-cols-1"
     >
       <div class="flex min-w-0 flex-col gap-space-1">
         <div class="flex min-w-0 flex-wrap items-center gap-space-2">
@@ -994,7 +994,7 @@
         </p>
       </div>
       <div
-        class="flex flex-wrap items-center gap-space-4 @max-field-group:order-last @max-field-group:justify-self-start"
+        class="flex flex-wrap items-center gap-space-4 @max-sm:order-last @max-sm:justify-self-start"
       >
         {#if summary.state === "stopped" || summary.state === "failed"}
           <Button
@@ -1012,7 +1012,7 @@
           <Button
             aria-describedby={busy ? "relay-stop-wait" : undefined}
             aria-expanded={asking("relay-stop")}
-            class="@max-field-group:-ms-space-3"
+            class="@max-sm:-ms-space-3"
             data-relay-stop
             disabled={asking("relay-stop") || busy}
             label={words.stop}
@@ -1079,7 +1079,7 @@
         </p>
       {/if}
       <div
-        class="col-span-full grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-2 @max-field-group:grid-cols-1 @max-field-group:justify-items-start"
+        class="col-span-full grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-2 @max-sm:grid-cols-1 @max-sm:justify-items-start"
       >
         <p
           class="min-w-0 type-meta text-ink-muted text-pretty wrap-anywhere"
@@ -1117,7 +1117,7 @@
       </div>
       <!-- Under Stop and Remove in every layout: in a narrow card they move
            last, and the question they ask moves with them. -->
-      <div class="col-span-full min-w-0 @max-field-group:order-last">
+      <div class="col-span-full min-w-0 @max-sm:order-last">
         {@render refused()}
         <AskHere {asker} at="relay-stop" />
         <AskHere {asker} at="relay-remove" />

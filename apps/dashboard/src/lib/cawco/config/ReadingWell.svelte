@@ -11,6 +11,6 @@
   let { text }: { text: string } = $props();
 </script>
 
-<Alert.Root aria-live="polite" class="max-w-c-measure" data-slot="well">
+<Alert.Root aria-live="polite" class="max-w-measure" data-slot="well">
   <Alert.Description><Coded {text} /></Alert.Description>
 </Alert.Root>

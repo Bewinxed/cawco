@@ -5,7 +5,7 @@
    * (DESIGN.md, Drawer: full-bleed, flush on the foot, 12px top corners,
    * the hairline, the grabber, up to 85% of the screen, its content
    * scrolling inside). It rises over --duration-panel on the drawer curve and
-   * goes over --duration-exit; a finger drags it down to put it away
+   * goes over --duration-fade; a finger drags it down to put it away
    * (dragToDismiss), as × and a press on the scrim do. The story's control
    * stands folded under the screen.
    */
@@ -29,7 +29,7 @@
 
   /** The sheet stands at most 85% of the screen, Caw's room over its edge included. */
   const SHEET_ROOM =
-    "calc(var(--spacing-c-address-phone-h) * 0.85 - var(--spacing-space-8))";
+    "calc(var(--address-phone-h) * 0.85 - var(--spacing-space-8))";
 
   let sheetEl = $state<HTMLElement | null>(null);
   let scrimEl = $state<HTMLElement | null>(null);
@@ -74,7 +74,7 @@
   data-address-phone={direction}
 >
   <div
-    class="relative h-c-address-phone-h overflow-clip rounded-modal border border-border-hairline bg-surface-page"
+    class="relative h-195 overflow-clip rounded-modal border border-border-hairline bg-surface-page"
     data-phone-screen
   >
     <div class="grid content-start gap-space-3 px-space-1 pt-space-4">

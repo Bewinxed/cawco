@@ -1750,7 +1750,7 @@
    * The room this pane's transcript keeps clear at its foot for the
    * composer standing over it: the composer's one-line box, and the tray
    * row on it while something stands in that row (`trayStands`; app.css
-   * `--spacing-c-composer-panel`, `--spacing-c-tray-row`). An empty row's room kept was a
+   * `--composer-panel`, `--tray-row`). An empty row's room kept was a
    * blank band under the last row (42px in Caw's column), as the
    * suggestion row's was (59px). Everything else the composer holds — a
    * longer draft, attachments, the suggestion chips while one is typed, a
@@ -1777,7 +1777,7 @@
    */
   const composerRoom = $derived(
     writable
-      ? `var(--spacing-c-composer-panel)${trayStands ? " + var(--spacing-c-tray-row)" : ""}`
+      ? `var(--composer-panel)${trayStands ? " + var(--tray-row)" : ""}`
       : "0px"
   );
   /**
@@ -2179,7 +2179,7 @@
       >
         <span class="flex-none whitespace-nowrap">{CONTINUED_IN}</span>
         <a
-          class="touch-hit pointer-hit min-w-0 text-link-ink underline-offset-2 hover:underline"
+          class="touch-hit pointer-hit min-w-0 text-brand-ink underline-offset-2 hover:underline"
           href={rowHref(continuedTo.id)}
           ><span class="block truncate">{continuedTo.title}</span></a
         >

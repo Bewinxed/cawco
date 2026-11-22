@@ -2,8 +2,8 @@
   What stands beside a comment's pill over the page: its composer while it
   is written (bare: the composer's own pill is its surface) and its thread
   once it is (the raised card recipe: `--radius-lg`, `--color-border-control`,
-  `--shadow-hairline`, `--spacing-space-3` padding). One width for both,
-  `--spacing-c-pin-card-reading-w` (two fifths of the well, 280 to 480px: the pin
+  `--shadow-sm`, `--spacing-space-3` padding). One width for both,
+  `--pin-card-reading-w` (two fifths of the well, 280 to 480px: the pin
   room is the size container its `cqi` reads), never past the well's room,
   so a card never changes width as it goes from composer to thread
   (commenting addendum §3; the owner's pick "Beside the comment").
@@ -35,7 +35,7 @@
   its position?"): scrolling, it keeps to its pill, held whole inside the
   well at its edges, every place a continuous step from the last, and a
   pill gone out of view leaves it where it last stood beside it. Chosen
-  again while it stands, it travels to its new place over `--duration-morph` on
+  again while it stands, it travels to its new place over `--duration-fade` on
   `--ease-drawer`, never a jump.
 
   It moves by its `transform` alone, on a layer of its own
@@ -52,15 +52,15 @@
   pill and the card are one vector silhouette (pin-pour.ts), one `<path>`
   on the raised surface with a 1px `border-control` stroke, redrawn each
   frame. The card's box grows out of the pill's, its corners from the
-  pill's round to `radius-lg`, over `--duration-goo` on `--ease-goo` (its
+  pill's round to `radius-lg`, over `--duration-settle` on `--ease-drawer` (its
   overshoot), and the union's inward corners round to `--goo-join`, so the
   card pulls a neck out of its pill that thins and lets go as it comes to
   rest. The pill itself stays the page's own, seen through the shape (its
-  box cut out of it). The thread fades in over `--duration-goo-content` after
-  `--duration-goo-content-delay`, clipped to the card's box as drawn; its drop
+  box cut out of it). The thread fades in over `--duration-fade` after
+  `--duration-control`, clipped to the card's box as drawn; its drop
   comes once the shape is still. Closing drains it back over
-  `--duration-goo-exit` on `--ease-out`, the thread gone over
-  `--duration-goo-content-exit`. Either run starts from where the shape is
+  `--duration-panel` on `--ease-out`, the thread gone over
+  `--duration-control`. Either run starts from where the shape is
   drawn, so a close caught mid-open, or an open caught mid-close, turns back
   there. The card stays on the page through its close: `open` turns its
   clock, and only once a close has landed does it say so (`onclosed`) for
@@ -71,7 +71,7 @@
   the pointer leaving it closes it as any close does. With no pill on
   the page to pour from, or without motion, it fades. The composer, whose
   own pill is its surface, opens as every kit popover does (`popMotion`),
-  out of the pill; the foot sheet fades in over `--duration-menu` and out over
+  out of the pill; the foot sheet fades in over `--duration-control` and out over
   `--duration-control`.
 -->
 <script lang="ts">
@@ -258,7 +258,7 @@
   }) => `${at.left + at.origin.x}px ${at.top + at.origin.y}px`;
 
   // A new plan while it stands: it travels from where it stood to its new
-  // place, over --duration-morph on --ease-drawer (The Interruptible Rule: a
+  // place, over --duration-fade on --ease-drawer (The Interruptible Rule: a
   // second one starts from where the first has it).
   let stood: { left: number; top: number; plan: Plan | null } | null = null;
   let travel: Animation | null = null;
@@ -328,8 +328,8 @@
     from,
     to: to ? 1 : 0,
     elapsed: 0,
-    length: dur(to ? "--duration-goo" : "--duration-goo-exit"),
-    curve: curveOf(to ? "--ease-goo" : "--ease-out"),
+    length: dur(to ? "--duration-settle" : "--duration-panel"),
+    curve: curveOf(to ? "--ease-drawer" : "--ease-out"),
   });
   const runAt = (one: Run) =>
     one.from +
@@ -500,7 +500,7 @@
       standAt(true);
       fadeTo(
         true,
-        dur(motionOk.current ? "--duration-pop" : "--duration-control")
+        dur(motionOk.current ? "--duration-panel" : "--duration-control")
       );
       return;
     }
@@ -529,7 +529,7 @@
       onclosed?.();
       return;
     }
-    let length = dur("--duration-goo-exit");
+    let length = dur("--duration-panel");
     if (motionOk.current && pinHere) {
       fade?.cancel();
       pourTo(false);
@@ -587,7 +587,7 @@
   function arrive(_node: Element): TransitionConfig {
     return sheet
       ? {
-          duration: dur("--duration-menu"),
+          duration: dur("--duration-control"),
           easing: easeOut,
           css: (t: number) => `opacity: ${t}`,
         }
@@ -668,7 +668,7 @@
       </defs>
       <g clip-path="url(#{uid}-pill)">
         <use
-          class="drop-shadow-drop-near transition-opacity duration-(--duration-goo-content) ease-out group-data-run/pour:opacity-0 group-data-run/pour:duration-(--duration-goo-content-exit) motion-reduce:transition-none"
+          class="drop-shadow-near transition-opacity duration-(--duration-fade) ease-out group-data-run/pour:opacity-0 group-data-run/pour:duration-(--duration-control) motion-reduce:transition-none"
           href="#{uid}-shape"
         />
         <g class="stroke-border-control" stroke-width="1">
@@ -697,9 +697,9 @@
         !bare &&
           "kit-edge-fade-block gap-space-2 overflow-x-hidden overflow-y-auto overscroll-contain",
         card &&
-          "p-space-3 opacity-0 transition-[opacity] duration-(--duration-goo-content-exit) ease-out group-data-[open=true]/pour:opacity-100 group-data-[open=true]/pour:duration-(--duration-goo-content) group-data-[open=true]/pour:delay-(--duration-goo-content-delay) motion-reduce:transition-none",
+          "p-space-3 opacity-0 transition-[opacity] duration-(--duration-control) ease-out group-data-[open=true]/pour:opacity-100 group-data-[open=true]/pour:duration-(--duration-fade) group-data-[open=true]/pour:delay-(--duration-control) motion-reduce:transition-none",
         sheet &&
-          "px-space-3 pt-space-3 pb-(--sheet-pb) border-t border-border-hairline rounded-t-lg bg-surface-raised shadow-drawer",
+          "px-space-3 pt-space-3 pb-(--sheet-pb) border-t border-border-hairline rounded-t-lg bg-surface-raised shadow-lg",
       ]}
       data-slot="pin-body"
       bind:this={body}

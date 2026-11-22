@@ -218,7 +218,7 @@
     const { machineId, toolId } = signinOf(key);
     const timer = setTimeout(() => {
       setOpen(machineId, toolId, false);
-    }, dur("--duration-hold"));
+    }, dur("--duration-loop"));
     return () => clearTimeout(timer);
   });
 
@@ -331,11 +331,11 @@
     !(update.kind === "updating" && update.from === undefined)}
   <span
     class={[
-      "flex items-center self-stretch @phone/table:min-h-c-ledger-row-h",
+      "flex items-center self-stretch @phone/table:min-h-control-lg",
       // On a phone's card: its own line under the machine and its version,
       // from the machine's name to the card's end, the quiet tick included,
       // so its Reinstall is in reach.
-      "@max-phone/table:col-span-full @max-phone/table:ps-c-ledger-text-inset",
+      "@max-phone/table:col-span-full @max-phone/table:ps-(--ledger-text-inset)",
     ]}
   >
     {#if moved && update}
@@ -558,7 +558,7 @@
        so the State stays as narrow as its act. The row's own press is the
        way on, so the fault offers none of its own. -->
   <RowFault
-    class="@max-phone/table:col-span-full @max-phone/table:ps-c-ledger-text-inset"
+    class="@max-phone/table:col-span-full @max-phone/table:ps-(--ledger-text-inset)"
     reason={pressRefused(machine.machineId, spec.id)}
   />
 {/snippet}
@@ -584,12 +584,12 @@
   {@const { state, verb, line } = open ? (heldView[key] ?? now) : now}
   {#if hasCopy(toolStatus) || flow}
     <div
-      class="flex flex-col gap-space-1 whitespace-normal @max-phone/table:ps-c-ledger-text-inset"
+      class="flex flex-col gap-space-1 whitespace-normal @max-phone/table:ps-(--ledger-text-inset)"
     >
       <!-- One line on the row's first line: the state's glyph and word at
          the column's start, in meta, and its act at the column's end. -->
       <span
-        class="flex items-center justify-between gap-space-2 @phone/table:min-h-c-ledger-row-h"
+        class="flex items-center justify-between gap-space-2 @phone/table:min-h-control-lg"
       >
         <span
           class="mark-line flex min-w-0 items-start gap-space-2 type-meta text-ink-muted"
@@ -619,7 +619,7 @@
                 onchange={(next) => showRead(key, next)}
                 open={readOpen === key}
                 triggerClass="pointer-hit touch-hit rounded-xs text-ink-muted transition-colors hover:text-ink-strong"
-                width="var(--spacing-c-signin-pop-w)"
+                width="var(--signin-pop-w)"
               >
                 {#snippet trigger()}
                   {toolWords.signinUnknown}
@@ -651,7 +651,7 @@
             onclosefocus={() => closeFocus(key)}
             {open}
             triggerClass={buttonVariants({ variant: "outline", size: "xs" })}
-            width="var(--spacing-c-signin-pop-w)"
+            width="var(--signin-pop-w)"
           >
             {#snippet trigger()}
               <span class="grid">
@@ -790,15 +790,19 @@
             {#snippet heads()}
               {#if spec.signin}
                 <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-                <Table.Head class="w-c-signin-col-w" scope="col" variant="band"
+                <Table.Head class="w-xs" scope="col" variant="band"
                   >{toolWords.signinHead}</Table.Head
                 >
               {/if}
-              <Table.Head class="w-c-version-col-w" variant="band"
-                >{toolUpdateWords.versionHead}</Table.Head
+              <Table.Head
+                class="w-(--w)"
+                style="--w: calc(var(--spacing) * 24)"
+                variant="band">{toolUpdateWords.versionHead}</Table.Head
               >
-              <Table.Head class="w-c-tool-state-col-w" variant="band"
-                >{toolUpdateWords.stateHead}</Table.Head
+              <Table.Head
+                class="w-(--w)"
+                style="--w: calc(var(--spacing) * 64)"
+                variant="band">{toolUpdateWords.stateHead}</Table.Head
               >
             {/snippet}
             {#snippet cells(machine: Machine, online: boolean)}
@@ -821,7 +825,7 @@
               {@const v = machine.tools?.[spec.id]}
               <Table.Cell settle="top" variant="ledger-stacks">
                 <span
-                  class="flex items-center @phone/table:min-h-c-ledger-row-h"
+                  class="flex items-center @phone/table:min-h-control-lg"
                 >
                   <code
                     data-slot="num"

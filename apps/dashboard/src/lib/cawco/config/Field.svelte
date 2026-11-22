@@ -40,27 +40,27 @@
       {#if problem}
         <span
           data-slot="field-problem"
-          class="max-w-c-measure type-meta text-status-fail-ink"
+          class="max-w-measure type-meta text-status-fail-ink"
           in:crossIn
           out:crossOut>{problem}</span
         >
       {:else if warn}
         <span
-          class="max-w-c-measure type-meta text-status-attn-ink"
+          class="max-w-measure type-meta text-status-attn-ink"
           in:crossIn
           out:crossOut>{@render warn()}</span
         >
       {:else if typeof hint === "string"}
         <span
           data-slot="hint"
-          class="max-w-c-measure type-meta text-pretty text-ink-muted"
+          class="max-w-measure type-meta text-pretty text-ink-muted"
           in:crossIn
           out:crossOut>{hint}</span
         >
       {:else if hint}
         <span
           data-slot="hint"
-          class="max-w-c-measure type-meta text-pretty text-ink-muted"
+          class="max-w-measure type-meta text-pretty text-ink-muted"
           in:crossIn
           out:crossOut>{@render hint()}</span
         >

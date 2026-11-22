@@ -10,7 +10,7 @@
    * object, closed when the state has none), a meta line with the live dot,
    * one button, and Show details under it. The card never rearranges: only
    * its words (MorphText), its object and its button change, and only the
-   * slot changes height, which morph carries over --duration-pop on the drawer
+   * slot changes height, which morph carries over --duration-panel on the drawer
    * curve. A second way on (Skip, Open Setup Keys) is a text action in its
    * own place under the button, so the card keeps its one button and the
    * meta line only ever says what it waits on. Caw never moves; a failure
@@ -46,13 +46,13 @@
   class={[
     "relative min-w-0",
     form === "desk"
-      ? "rounded-modal bg-surface-recess p-(--tray-pad) shadow-overlay"
-      : "rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-drawer",
+      ? "rounded-modal bg-surface-recess p-(--tray-pad) shadow-lg"
+      : "rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-lg",
   ]}
   data-form={form}
   data-step={tray.step}
   data-tray="card"
-  {@attach (node) => morph({ ms: dur("--duration-pop") })(node)}
+  {@attach (node) => morph({ ms: dur("--duration-panel") })(node)}
 >
   <TrayBody
     class="justify-items-center gap-space-4 text-center"
@@ -63,7 +63,7 @@
       aria-label="Close"
       class={[
         "absolute end-space-3",
-        form === "desk" ? "top-space-3" : "top-space-7",
+        form === "desk" ? "top-space-3" : "top-space-6",
       ]}
       icon={IconClose}
       onclick={() => tray.park()}
@@ -77,7 +77,7 @@
       <TrayCaw pose={tray.pose.pose} size={CAW} />
       <h2
         id={titleId}
-        class="m-0 min-w-0 px-space-7 type-title text-balance text-ink-strong"
+        class="m-0 min-w-0 px-space-6 type-title text-balance text-ink-strong"
         data-slot="title"
       >
         <MorphText text={words.title} wrap />
@@ -91,7 +91,7 @@
           >
             {#each words.lines as line (line)}
               <p
-                class="m-0 max-w-c-page-line type-body text-pretty text-ink-muted"
+                class="m-0 max-w-104 type-body text-pretty text-ink-muted"
               >
                 <Words text={line} />
               </p>
@@ -101,7 +101,7 @@
       </div>
       {#if slot}
         <div
-          class="w-full min-w-0 rounded-well border border-border-well bg-surface-recess p-space-3 text-start"
+          class="w-full min-w-0 rounded-sm border border-border-control bg-surface-recess p-space-3 text-start"
           data-slot="slot"
           transition:unfold
         >

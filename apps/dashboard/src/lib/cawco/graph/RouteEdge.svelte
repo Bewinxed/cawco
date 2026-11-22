@@ -65,7 +65,7 @@
   />
   <path
     {id}
-    class="pointer-events-none fill-none stroke-border-contrast stroke-(length:--spacing-c-graph-edge)"
+    class="pointer-events-none fill-none stroke-border-strong stroke-(length:--graph-edge)"
     d={path}
     data-played={route.played ? "played" : "named"}
     marker-end={markerEnd}
@@ -74,7 +74,7 @@
   {#if route.label && route.labelAt}
     <EdgeLabel transparent x={route.labelAt.x} y={route.labelAt.y}>
       <button
-        class="pointer-hit block max-w-c-graph-label rounded-sm border border-border-hairline bg-surface-raised px-space-1 text-start type-meta text-ink-row transition-control can-hover:hover:bg-surface-hover"
+        class="pointer-hit block max-w-40 rounded-sm border border-border-hairline bg-surface-raised px-space-1 text-start type-meta text-ink-strong transition-control can-hover:hover:bg-surface-hover"
         onclick={route.open}
         tabindex="-1"
         type="button">{route.label}</button

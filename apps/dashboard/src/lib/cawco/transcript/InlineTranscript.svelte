@@ -147,7 +147,7 @@
          row above it. -->
     <div
       data-slot="inner"
-      class="mt-space-2 mb-0 ms-(--well-start) me-0 p-space-1 rounded-inner-well bg-surface-recess"
+      class="mt-space-2 mb-0 ms-(--well-start) me-0 p-space-1 rounded-sm bg-surface-recess"
       style:--well-start="var(--well-at, 0)"
       style:--rail-head="var(--rail)"
       style:--rail-gap="var(--spacing-space-4)"

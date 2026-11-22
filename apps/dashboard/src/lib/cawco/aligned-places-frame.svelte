@@ -42,7 +42,7 @@
 
   /** The panel's room under the hero for its composer (ProjectConversation `reserved`, before the composer has measured its foot). */
   const RESERVED =
-    "calc(var(--spacing-space-4) + var(--safe-bottom) + var(--spacing-c-composer-panel) + var(--spacing-space-2))";
+    "calc(var(--spacing-space-4) + var(--safe-bottom) + var(--composer-panel) + var(--spacing-space-2))";
 
   const draft = new ComposerDraft();
   /** A send that waits: the story never leaves the page. */
@@ -52,7 +52,7 @@
 {#if place === "hero"}
   <div
     data-slot="panel"
-    class="flex h-c-caw-panel-h w-c-panel-w max-w-full flex-col overflow-hidden rounded-modal bg-surface-raised shadow-tile max-desk:w-full max-desk:rounded-none"
+    class="flex h-160 w-95 max-w-full flex-col overflow-hidden rounded-modal bg-surface-raised shadow-sm max-desk:w-full max-desk:rounded-none"
   >
     <div
       data-slot="pane"

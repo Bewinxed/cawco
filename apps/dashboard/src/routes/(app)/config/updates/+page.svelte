@@ -70,7 +70,7 @@
       holding = true;
       setTimeout(() => {
         holding = false;
-      }, dur("--duration-hold"));
+      }, dur("--duration-loop"));
     }
   }
 
@@ -216,14 +216,14 @@
           {#if pendingText}
             <p
               aria-live="polite"
-              class="type-meta max-w-c-measure text-ink-muted"
+              class="type-meta max-w-measure text-ink-muted"
               in:blur={{
                 duration: dur("--duration-panel"),
                 easing: easeOut,
                 amount: 2,
               }}
               out:blur={{
-                duration: dur("--duration-exit"),
+                duration: dur("--duration-fade"),
                 easing: easeOut,
                 amount: 2,
               }}

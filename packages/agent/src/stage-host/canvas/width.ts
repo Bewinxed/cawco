@@ -262,7 +262,7 @@ const FRAME_ROOT = ":where(.cawco-frame-body) > *";
  * A rule as a frame's container holds it: `:root` and `html` among its
  * selectors stand for the frame's own top ({@link FRAME_ROOT}), so the
  * tokens a phone sets on the root (`@media (pointer: coarse) { :root {
- * --spacing-c-nav-h: 44px } }`) reach the story inside a phone's frame.
+ * --spacing-row: 44px } }`) reach the story inside a phone's frame.
  */
 function framedRule(rule: CSSRule): string {
   if (!(rule instanceof CSSStyleRule)) {

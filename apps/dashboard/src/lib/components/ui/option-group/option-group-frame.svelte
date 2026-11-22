@@ -20,7 +20,7 @@
   } = $props();
 </script>
 
-<div class="w-field-group max-w-full">
+<div class="w-sm max-w-full">
   <OptionGroup aria-label={label} layout="list" value={value ? [value] : []}>
     {#each options as option, index (option)}
       <OptionGroupItem digit={index + 1} value={option}

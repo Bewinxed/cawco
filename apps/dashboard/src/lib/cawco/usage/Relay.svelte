@@ -11,7 +11,7 @@
    * at its hour's place on the bar.
    *
    * Motion: a new reading eases the bands' widths (--duration-panel, ease-out); a
-   * band arriving fades in (--duration-fade), one leaving fades out (--duration-exit).
+   * band arriving fades in (--duration-fade), one leaving fades out (--duration-fade).
    * The minute moving on re-lays them in place. Reduced motion: at once.
    */
   import type { CarrySpan } from "@cawco/core/accounts";
@@ -151,7 +151,7 @@
   });
   const bandOut = (node: Element) =>
     fade(node, {
-      duration: instant ? 0 : dur("--duration-exit"),
+      duration: instant ? 0 : dur("--duration-fade"),
       easing: easeOut,
     });
 
@@ -245,7 +245,7 @@
   <div
     aria-hidden="true"
     class="relative h-(--ticks-h) type-meta num text-ink-subtle"
-    style:--ticks-h={"calc(var(--spacing-space-1) + var(--text-meta) * var(--leading-meta))"}
+    style:--ticks-h={"calc(var(--spacing-space-1) + var(--text-meta) * var(--leading-label))"}
   >
     {#each ticks as tick (tick.hour)}
       <!-- mark-line: the tick stands above its hour, not beside it -->

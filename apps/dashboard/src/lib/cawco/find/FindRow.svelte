@@ -88,7 +88,7 @@
   <button
     data-slot="row"
     {id}
-    class="group/row mark-line relative grid grid-cols-(--row-cols) grid-rows-(--row-rows) gap-x-space-2 items-center w-full min-h-13 px-space-3 py-space-2 border-none border-current rounded-sm bg-transparent text-start box-border cursor-default outline-off select-none active:bg-surface-fill data-phone:min-h-14 data-phone:py-space-3 data-peekable:pe-c-btn-h-lg"
+    class="group/row mark-line relative grid grid-cols-(--row-cols) grid-rows-(--row-rows) gap-x-space-2 items-center w-full min-h-13 px-space-3 py-space-2 border-none border-current rounded-sm bg-transparent text-start box-border cursor-default outline-off select-none active:bg-surface-hover data-phone:min-h-14 data-phone:py-space-3 data-peekable:pe-control-lg"
     aria-describedby={peeked ? `${id}-peek` : undefined}
     aria-label={row.spoken}
     aria-posinset={posinset}
@@ -132,7 +132,7 @@
     <span
       data-slot="title"
       data-box={phone || undefined}
-      class="row-start-1 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label leading-icon-lg text-ink-row group-data-phone/row:type-body group-data-phone/row:leading-icon-lg group-data-phone/row:font-medium group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-3 group-data-phone/row:line-clamp-std-3 group-data-phone/row:overflow-clip"
+      class="row-start-1 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label leading-icon-lg text-ink-strong group-data-phone/row:type-body group-data-phone/row:leading-icon-lg group-data-phone/row:font-medium group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-3 group-data-phone/row:line-clamp-std-3 group-data-phone/row:overflow-clip"
       {@attach said(titleRuns, shown)}
     ></span>
     {#if ago}
@@ -176,7 +176,7 @@
   </button>
   {#if peekable}
     <button
-      class="select-none group/disclose absolute inset-y-0 end-0 grid place-items-center w-c-btn-h-lg min-h-0 p-0 border-none border-current rounded-sm bg-transparent text-ink-muted active:bg-surface-fill"
+      class="select-none group/disclose absolute inset-y-0 end-0 grid place-items-center w-control-lg min-h-0 p-0 border-none border-current rounded-sm bg-transparent text-ink-muted active:bg-surface-hover"
       aria-controls={`${id}-peek`}
       aria-expanded={peeked}
       aria-label={peeked ? "Fold" : "Peek"}
@@ -187,7 +187,7 @@
       type="button"
     >
       <ChevronDown
-        class="size-icon-md motion-safe:transition-[rotate] motion-safe:duration-(--duration-toggle) motion-safe:ease-in-out group-aria-expanded/disclose:rotate-180"
+        class="size-icon-md motion-safe:transition-[rotate] motion-safe:duration-(--duration-fade) motion-safe:ease-in-out group-aria-expanded/disclose:rotate-180"
       />
     </button>
   {/if}

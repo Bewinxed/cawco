@@ -159,7 +159,7 @@
     data-slot="todo"
     data-todo={ref}
     data-linked={marked === ref || undefined}
-    class="group flex items-center gap-space-2 min-h-c-btn-h ps-(--indent) rounded-sm transition-[background-color] duration-(--duration-fade) ease-out data-linked:bg-selected-bg"
+    class="group flex items-center gap-space-2 min-h-control-md ps-(--indent) rounded-sm transition-[background-color] duration-(--duration-fade) ease-out data-linked:bg-selected-bg"
     style:--depth={todo.depth}
     style:--indent="calc(var(--depth, 0) * var(--spacing-space-6))"
   >
@@ -235,7 +235,7 @@
 {#snippet addForm(under: string, depth: number)}
   <form
     data-slot="add"
-    class="flex items-center gap-space-2 min-h-c-btn-h ps-(--indent)"
+    class="flex items-center gap-space-2 min-h-control-md ps-(--indent)"
     onsubmit={add}
     style:--depth={depth}
     style:--indent="calc(var(--depth, 0) * var(--spacing-space-6))"
@@ -290,7 +290,7 @@
     {/if}
   </h3>
   {#if problem}
-    <p class="type-meta text-error-11" role="alert">{problem}</p>
+    <p class="type-meta text-status-fail-ink" role="alert">{problem}</p>
   {/if}
   {#if groups.agreed.length > 0}
     <ul class="flex flex-col m-0 p-0 list-none">

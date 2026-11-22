@@ -118,7 +118,7 @@
       data-slot="peer-label"
       class="relative m-0 type-label leading-ui text-ink-muted"
     >
-      <span data-slot="line" class="min-h-space-7 rail-line">
+      <span data-slot="line" class="min-h-space-6 rail-line">
         <span
           data-rail-cell
           data-slot="glyph"

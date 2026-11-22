@@ -13,8 +13,8 @@
  * so the change is drawn landed. `getAnimations()` brings the page's style
  * up to date first, so a transition the key's change starts exists by then.
  * A loop (a breath, a spinner) is never touched, nor a wait (a delay past
- * --duration-cascade: The Real Wait Rule's grace), nor a clock longer than any
- * beat (past --duration-hold: a progress drawn over minutes), nor anything that
+ * --duration-settle: The Real Wait Rule's grace), nor a clock longer than any
+ * beat (past --duration-loop: a progress drawn over minutes), nor anything that
  * was already moving before the key.
  *
  * Typing is not an action: a character, Backspace, Delete, Shift+Enter or a
@@ -110,8 +110,8 @@ const typed = (event: KeyboardEvent): boolean =>
  * fade drawn over the first row whatever the scroll.
  */
 function land(from: number): void {
-  const wait = dur("--duration-cascade");
-  const longest = dur("--duration-hold");
+  const wait = dur("--duration-settle");
+  const longest = dur("--duration-loop");
   for (const animation of document.getAnimations()) {
     const timing = animation.effect?.getComputedTiming();
     const started = animation.startTime;

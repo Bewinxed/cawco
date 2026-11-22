@@ -208,7 +208,7 @@
     <PlanRing done={1} onopen={noop} open={true} total={3} />
     <PlanRing done={1} onopen={noop} open={false} total={3} />
   </section>
-  <section class="w-c-bench-field-w min-w-0" data-probe="model">
+  <section class="w-120 min-w-0" data-probe="model">
     <ModelSection
       harness="claude"
       installed={["claude"]}
@@ -219,7 +219,7 @@
       onmodel={noop}
     />
   </section>
-  <section class="w-c-bench-field-w min-w-0" data-probe="slash">
+  <section class="w-120 min-w-0" data-probe="slash">
     <MarkdownEditor bind:value={markdown} label="Notes" />
   </section>
   <!-- The Comments rail as it stands beside the page, its first comment's thread open. -->
@@ -253,7 +253,7 @@
   </section>
   <!-- Rows on a half pixel, as a message well sits (`ms-(--well-x)`, 0.5px
        in, and as far down): the list's ghost and pill cover each whole. -->
-  <section class="w-c-bench-field-w min-w-0" data-probe="half">
+  <section class="w-120 min-w-0" data-probe="half">
     <div
       class="flex flex-col"
       {@attach highlight({ rows: "button", selected: '[aria-pressed="true"]' })}

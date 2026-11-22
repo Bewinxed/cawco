@@ -106,7 +106,7 @@
   {:else if !ready}
     <div
       class="grid grid-cols-(--roster-cols) gap-space-3"
-      style:--roster-cols={"repeat(auto-fill, minmax(max(min(100%, var(--spacing-c-roster-card-min)), calc((100% - 3 * var(--spacing-space-3)) / 4)), 1fr))"}
+      style:--roster-cols={"repeat(auto-fill, minmax(max(min(100%, var(--roster-card-min)), calc((100% - 3 * var(--spacing-space-3)) / 4)), 1fr))"}
     >
       {#each [0, 1, 2, 3] as at (at)}
         <Skeleton height="board" radius="card" />
@@ -148,7 +148,7 @@
     class="flex min-h-0 min-w-0 flex-auto flex-col overflow-y-auto bg-surface-recess px-space-5 py-space-2"
   >
     <div
-      class="flex max-w-c-config-max-w min-w-0 flex-col gap-space-5 py-space-6"
+      class="flex max-w-245 min-w-0 flex-col gap-space-5 py-space-6"
     >
       <div
         class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
@@ -166,7 +166,7 @@
   </div>
 {:else}
   <div
-    class="min-w-0 flex-auto overflow-y-auto pt-space-5 pr-space-6 pb-space-6 pl-space-7 max-desk:px-space-5 max-phone:py-space-4"
+    class="min-w-0 flex-auto overflow-y-auto pt-space-5 pr-space-6 pb-space-6 pl-space-6 max-desk:px-space-5 max-phone:py-space-4"
   >
     <div class="flex flex-col gap-space-5">
       <nav
@@ -195,7 +195,7 @@
           </li>
         </ol>
         <a
-          class="flex-none text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+          class="flex-none text-brand-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
           href="{projectHref}?view=decisions">{decidesWords.decisions}</a
         >
       </nav>
@@ -221,7 +221,7 @@
               {#if who.own.length > 0}
                 <button
                   aria-disabled={who.asking !== null || undefined}
-                  class="text-brand-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-brand-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs aria-disabled:text-ink-muted"
+                  class="text-brand-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs aria-disabled:text-ink-muted"
                   onclick={() => {
                     if (who.asking === null) {
                       who.useFleet(who.own);

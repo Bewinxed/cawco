@@ -84,7 +84,7 @@ export const DELEGATE_DIALS: GraphDial[] = [
     max: 64,
     step: 2,
     unit: "px",
-    target: { cssVar: "--spacing-c-row-h" },
+    target: { cssVar: "--spacing-control-lg" },
   },
   {
     kind: "select",

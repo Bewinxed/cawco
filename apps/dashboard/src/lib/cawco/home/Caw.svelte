@@ -265,7 +265,7 @@
    * their own; this only sets the file's `Caw` view model and hears its
    * `entered` (assets/mascot/README.md, Contract). He comes in by his
    * status's drawn enter, or where it has none by a fade up from
-   * --leave-scale over --duration-pop, and `onentered` says when that has ended,
+   * --leave-scale over --duration-panel, and `onentered` says when that has ended,
    * so a place can keep him until then. He goes the same way from any
    * drawing: he holds the one he is on and fades out to --leave-scale over
    * --duration-fade, so what he stood in for is never under a looping Caw. With
@@ -639,7 +639,7 @@
    * Shows `layer`, whose file has begun: his drawn enter is playing, and the
    * file says `entered` at its end. A file with no drawn enter (`enters`
    * off) has him there already, so the canvas fades in from --leave-scale
-   * over --duration-pop; with less motion every file holds his still and the
+   * over --duration-panel; with less motion every file holds his still and the
    * canvas fades in over --duration-fade, across the Caw below.
    */
   function show(layer: Layer, canvas: HTMLCanvasElement) {
@@ -674,7 +674,7 @@
             { opacity: 0, transform: `scale(${numberOf("--leave-scale")})` },
             { opacity: 1, transform: "none" },
           ],
-          { duration: dur("--duration-pop"), easing: ease("--ease-out") }
+          { duration: dur("--duration-panel"), easing: ease("--ease-out") }
         );
     layer.fade.finished
       .then(() => {

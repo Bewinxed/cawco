@@ -402,8 +402,8 @@
    * waits on this one. The brief's "about 2 s" (tsk-396).
    */
   const PROBE_AFTER_MS = 2000;
-  /** `--duration-wait-grace` in ms, in the unit host.css writes it (motion `dur`: its minifier writes `1000ms` as `1s`): a wait shows nothing before it (DESIGN.md, The Real Wait Rule). */
-  const grace = () => dur("--duration-wait-grace");
+  /** `--duration-loop` in ms, in the unit host.css writes it (motion `dur`: its minifier writes `1000ms` as `1s`): a wait shows nothing before it (DESIGN.md, The Real Wait Rule). */
+  const grace = () => dur("--duration-loop");
   /**
    * The address its frame loads: at once on its turn, with no ping before
    * it. A machine's preview is waited on by the proxy, which answers with
@@ -468,7 +468,7 @@
   /** Why a canvas says it can't draw what this Preview names (core `CANVAS_EMBED_FAILED`), in its own words; null for any other message. */
   const failureIn = (said: PageHeard | null): string | null =>
     said?.type === CANVAS_EMBED_FAILED ? said.why : null;
-  /** Its draw's wait ({@link drawing}) has outlasted `--duration-wait-grace`: the failure may show. */
+  /** Its draw's wait ({@link drawing}) has outlasted `--duration-loop`: the failure may show. */
   let slow = $state(false);
   /** Each Try again asks the origin again from the start. */
   let attempt = $state(0);
@@ -798,8 +798,8 @@
    * What its status says while it isn't drawn: an embed waiting for its turn
    * among the page's embeds (or for its card to come near the view), or
    * opening on its turn; a page opening from the moment it mounts; nothing
-   * once it stands drawn or failed. Its line arrives after `--duration-wait-grace`
-   * by CSS (`animate-wait-grace-in`), from the moment it mounts, so every
+   * once it stands drawn or failed. Its line arrives after `--duration-loop`
+   * by CSS (`animate-fade-in anim-delay-loop`), from the moment it mounts, so every
    * Preview not yet drawn says so, wherever it is in the queue.
    */
   const waitLine = $derived.by(() => {
@@ -861,7 +861,7 @@
     role="status"
   >
     {#if waitLine}
-      <span class="mark-line flex items-start gap-space-2 animate-wait-grace-in"
+      <span class="mark-line flex items-start gap-space-2 animate-fade-in anim-delay-loop"
         ><span class="mark-cell"><LiveDot /></span><span
           class="min-w-0 wrap-anywhere">{waitLine}</span
         ></span
@@ -889,7 +889,7 @@
   status={framed && !fault ? wait : undefined}
 >
   {#if pageAddress !== null}
-    <!-- A page taller than its frame scrolls inside it, under the house edge fade (its 40px, `--spacing-c-edge-fade-len`) at its head and foot while more is past them. Wider than its well, its well scrolls it sideways. Until its frame has loaded it holds a screen's skeleton at the frame's own box, and past the grace the wait's line stands over it (`status`), as a screen's embed does: never a blank box. -->
+    <!-- A page taller than its frame scrolls inside it, under the house edge fade (its 40px, `--edge-fade-len`) at its head and foot while more is past them. Wider than its well, its well scrolls it sideways. Until its frame has loaded it holds a screen's skeleton at the frame's own box, and past the grace the wait's line stands over it (`status`), as a screen's embed does: never a blank box. -->
     <div
       class={["relative", picture === undefined ? "w-full" : "flex-none"]}
       data-cawco-embed-place={id}
@@ -900,7 +900,7 @@
         bind:this={frame}
         class={[
           "block rounded-xs border-0 bg-surface-page outline-1 -outline-offset-1 outline-image-outline transition-opacity duration-(--duration-fade) not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)",
-          screenTall === null && "max-h-c-media-max-h",
+          screenTall === null && "max-h-vb-80",
           picture === undefined ? "w-full" : "flex-none",
           tall === null && screenTall === null && "aspect-16/10",
           !standing && "opacity-0",
@@ -916,10 +916,10 @@
           sized();
         }}
         src={pageAddress}
-        style:--fade="var(--spacing-c-edge-fade-len)"
-        style:--fade-above={"linear-gradient(transparent, var(--color-mask-opaque) var(--fade))"}
-        style:--fade-below={"linear-gradient(var(--color-mask-opaque) calc(100% - var(--fade)), transparent)"}
-        style:--fade-both={"linear-gradient(transparent, var(--color-mask-opaque) var(--fade), var(--color-mask-opaque) calc(100% - var(--fade)), transparent)"}
+        style:--fade="var(--edge-fade-len)"
+        style:--fade-above={"linear-gradient(transparent, var(--color-ink-strong) var(--fade))"}
+        style:--fade-below={"linear-gradient(var(--color-ink-strong) calc(100% - var(--fade)), transparent)"}
+        style:--fade-both={"linear-gradient(transparent, var(--color-ink-strong) var(--fade), var(--color-ink-strong) calc(100% - var(--fade)), transparent)"}
         style:block-size={framedHeight}
         style:inline-size={picture === undefined ? undefined : `${picture}px`}
         title={named()}
@@ -938,7 +938,7 @@
       class={[
         "flex w-full flex-col justify-center rounded-xs",
         heldHeight === null
-          ? "aspect-16/10 max-h-c-media-max-h"
+          ? "aspect-16/10 max-h-vb-80"
           : "min-h-(--held-h)",
       ].join(" ")}
       down={unavailable.down}
@@ -967,7 +967,7 @@
           class={[
             "flex w-full flex-col justify-center rounded-xs",
             heldHeight === null
-              ? "aspect-16/10 max-h-c-media-max-h"
+              ? "aspect-16/10 max-h-vb-80"
               : "min-h-(--held-h)",
           ].join(" ")}
           down={fault.down}
@@ -983,7 +983,7 @@
           class={[
             "flex w-full flex-col items-center justify-center gap-space-2 p-space-4 text-center",
             heldHeight === null
-              ? "aspect-16/10 max-h-c-media-max-h"
+              ? "aspect-16/10 max-h-vb-80"
               : "min-h-(--held-h)",
           ]}
           data-slot="embed-fault"
@@ -1028,7 +1028,7 @@
               "block w-full rounded-xs border-0 bg-surface-page outline-1 -outline-offset-1 outline-image-outline transition-opacity duration-(--duration-fade)",
               tall === null &&
                 screenTall === null &&
-                (screen ? "aspect-16/10 max-h-c-media-max-h" : "h-0"),
+                (screen ? "aspect-16/10 max-h-vb-80" : "h-0"),
               !(drawn && shaped) && "opacity-0",
             ]}
             data-cawco-artifact={id}
@@ -1097,7 +1097,7 @@
       class="flex flex-wrap items-center gap-space-3 w-full"
       role="alert"
     >
-      <p class="flex-1 min-w-0 m-0 type-meta text-error-9 wrap-anywhere">
+      <p class="flex-1 min-w-0 m-0 type-meta text-status-fail-glyph wrap-anywhere">
         {held.unopened}
       </p>
       <Button

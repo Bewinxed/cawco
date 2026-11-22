@@ -68,7 +68,7 @@
   /** The page leaving, pinned where it stood so the dialog is only ever the size of what arrives. */
   function pageOut(node: HTMLElement) {
     return lifting(node, pinned(node), {
-      duration: dur("--duration-exit"),
+      duration: dur("--duration-fade"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     });
@@ -104,7 +104,7 @@
    */
   const lifted = $derived(
     phone.current
-      ? `bottom: ${keyboard}px; max-height: calc(${room > 0 ? `${room}px` : "100dvh"} - max(env(safe-area-inset-top), var(--spacing-space-7)));`
+      ? `bottom: ${keyboard}px; max-height: calc(${room > 0 ? `${room}px` : "100dvh"} - max(env(safe-area-inset-top), var(--spacing-space-6)));`
       : undefined
   );
 
@@ -189,7 +189,7 @@
     const row = rowOf(parked);
     if (phone.current) {
       if (row) {
-        setTimeout(() => echo(row), dur("--duration-exit"));
+        setTimeout(() => echo(row), dur("--duration-fade"));
       }
       return;
     }
@@ -238,7 +238,7 @@
       height: `${box.height}px`,
       margin: "0",
       pointerEvents: "none",
-      zIndex: "var(--layer-flight)",
+      zIndex: "calc(var(--layer-float) + 10)",
     });
     document.body.append(copy);
     copy

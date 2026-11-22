@@ -65,7 +65,7 @@
   style:--frame-w="{width}px"
 >
   <div
-    class="flex min-h-0 w-c-comments-w max-w-full flex-col rounded-lg bg-surface-raised shadow-drawer"
+    class="flex min-h-0 w-xs max-w-full flex-col rounded-lg bg-surface-raised shadow-lg"
   >
     <CommentRail
       down={null}

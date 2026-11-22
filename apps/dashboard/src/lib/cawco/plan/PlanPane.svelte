@@ -138,8 +138,8 @@
 </script>
 
 <!-- It comes in by the kit's `@starting-style` (opacity, rise and scale on
-     one transition, --duration-pop on the drawer curve, from the ring's corner)
-     and leaves by `popOut` back down into the row (--duration-exit), global: the
+     one transition, --duration-panel on the drawer curve, from the ring's corner)
+     and leaves by `popOut` back down into the row (--duration-fade), global: the
      pane's `{#if}` that shuts it is outside this component, a snippet
      render between. -->
 <section
@@ -162,10 +162,10 @@
        floats over the parts, which run to the card's top beneath it and
        blur and fade under it as they scroll (HeadFade), clearing it at
        rest by the body's top padding. -->
-  <HeadFade band="var(--spacing-c-top-bar-h)" tint="bg-surface-raised" />
+  <HeadFade band="var(--spacing-control-lg)" tint="bg-surface-raised" />
   <header
     data-slot="plan-head"
-    class="absolute inset-x-0 top-0 z-2 flex h-c-top-bar-h items-center gap-space-2 pe-space-2 ps-space-4"
+    class="absolute inset-x-0 top-0 z-2 flex h-control-lg items-center gap-space-2 pe-space-2 ps-space-4"
   >
     <h2
       class="flex-auto min-w-0 m-0 truncate text-size-label font-medium text-ink-strong"
@@ -182,7 +182,7 @@
     data-slot="body"
     bind:this={body}
     class="kit-edge-fade-block flex-auto min-h-0 overflow-y-auto overscroll-contain touch-pan-y scroll-timeline-transcript-head pbs-(--body-top) pbe-space-4 px-space-4 flex flex-col gap-space-2"
-    style:--body-top="calc(var(--spacing-c-top-bar-h) + var(--spacing-space-3))"
+    style:--body-top="calc(var(--spacing-control-lg) + var(--spacing-space-3))"
     style:--more-px="0"
   >
     {#if todosOnly && plan?.taskId}
