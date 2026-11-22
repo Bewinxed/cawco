@@ -8,11 +8,24 @@
    * pick moves at the press (changes.ts `withAsked`); a refusal puts it
    * back and stands under its control (RowFault).
    */
+  import {
+    CONNECTION_SERVICES,
+    connectionsWords,
+  } from "@cawco/core/words/connections";
+  import AddConnectionForm from "#lib/cawco/config/AddConnectionForm.svelte";
+  import Choice from "#lib/cawco/config/Choice.svelte";
+  import {
+    type AppDraft,
+    emptyApp,
+    nameFor,
+    type Service,
+  } from "#lib/cawco/config/connection-form.js";
   import Field from "#lib/cawco/config/Field.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import {
     OptionGroup,
@@ -24,13 +37,17 @@
     IconGitRepo,
     IconKey,
     IconLargeFilesServer,
+    IconPlus,
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
-  import type { HrefOf, StageSends } from "./changes";
+  import type { StageSends } from "./changes";
   import { FORM_FIELD, FORM_LABEL, OPENED_FORM } from "./opened-form";
   import PickTiles from "./PickTiles.svelte";
   import { CARD_GROUP, GROUP_LABEL } from "./section-card";
-  import { LARGE_FILE_KEY_CONNECTIONS } from "./tie-setup.fixture";
+  import {
+    type FixtureConnection,
+    LARGE_FILE_KEY_CONNECTIONS,
+  } from "./tie-setup.fixture";
   import WorkLands from "./WorkLands.svelte";
   import { howItRunsWords as words } from "./words";
 
@@ -40,10 +57,8 @@
     refused,
     onchange,
     onretry,
-    hrefOf,
     opening = null,
   }: StageSends & {
-    hrefOf: HrefOf;
     /** The custom large-file server's form standing open as it mounts: a states file reads it without the press. */
     opening?: "largeFiles" | null;
   } = $props();
@@ -53,6 +68,48 @@
 
   /* ── Large files ────────────────────────────────────────────────── */
 
+  /** The fleet's saved keys an LFS server signs in with (the stand-in's list, a key added here joining it). */
+  let keys = $state<FixtureConnection[]>([...LARGE_FILE_KEY_CONNECTIONS]);
+
+  /** The services a key signs in to, each offering only its key way (Connections' add form, as a large-file key needs it). */
+  const KEY_SERVICES: Service[] = CONNECTION_SERVICES.flatMap((service) => {
+    const ways = service.ways.filter((way) => way.auth === "bearer");
+    return ways.length > 0 ? [{ ...service, ways }] : [];
+  });
+  /** Add key's form, open on the service it signs in to; null while closed. */
+  let keyService = $state<Service | null>(null);
+  let keyAccount = $state("");
+  let keyAddress = $state("");
+  let keyOrganization = $state("");
+  let keySecret = $state("");
+  let keyApp = $state<AppDraft>(emptyApp());
+  let keyAddressProblem = $state<string | null>(null);
+
+  function openAddKey() {
+    keyService = KEY_SERVICES[0] ?? null;
+    keyAccount = "";
+    keyAddress = keyService?.url ?? "";
+    keySecret = "";
+    keyAddressProblem = null;
+  }
+
+  /** Saves the key as Connections' add form does, then picks it. */
+  function saveKey(event: SubmitEvent) {
+    event.preventDefault();
+    const service = keyService;
+    const account = keyAccount.trim();
+    if (!(service && account && keySecret)) {
+      return;
+    }
+    const id = nameFor(service.service, account);
+    keys = [
+      ...keys.filter((one) => one.id !== id),
+      { id, name: connectionsWords.rowKey(service.label, account), account },
+    ];
+    lfsConnectionDraft = id;
+    keyService = null;
+  }
+
   /** The address being written: the pick moves to it at the press, the record once it is saved. */
   let declaring = $derived(opening === "largeFiles");
   let lfsAddressDraft = $derived(
@@ -61,7 +118,7 @@
   let lfsConnectionDraft = $derived(
     record.largeFiles.kind === "declared"
       ? record.largeFiles.connection
-      : (LARGE_FILE_KEY_CONNECTIONS[0]?.id ?? "")
+      : (keys[0]?.id ?? "")
   );
   const largeFilesShown = $derived(
     declaring ? "declared" : record.largeFiles.kind
@@ -159,12 +216,14 @@
   />
 
   {#if largeFilesShown === "declared"}
-    <form
+    <!-- Its fields submit the empty form at its head (`form`), so Add key's
+         own form opens among them without nesting a form in a form. -->
+    <section
       aria-label={words.places.largeFilesDeclared.name}
       class={OPENED_FORM}
-      onsubmit={saveLargeFiles}
       transition:unfold
     >
+      <form class="hidden" id="{uid}-lfs-form" onsubmit={saveLargeFiles}></form>
       <p class="m-0 type-label text-ink-strong">
         {words.places.largeFilesDeclared.name}
       </p>
@@ -174,6 +233,7 @@
           autocomplete="off"
           {disabled}
           face="mono"
+          form="{uid}-lfs-form"
           placeholder={words.places.largeFilesAddressPlaceholder}
           spellcheck="false"
           type="url"
@@ -184,38 +244,93 @@
         <p class={FORM_LABEL} id="{uid}-lfs-key">
           {words.places.largeFilesKey}
         </p>
-        {#if LARGE_FILE_KEY_CONNECTIONS.length === 0}
-          <RowFault
-            goTo={{
-              href: hrefOf("connections"),
-              label: words.tasks.openConnections,
-            }}
-            reason={words.places.largeFilesNoKey}
-          />
-        {:else}
-          <OptionGroup
-            glide
-            aria-labelledby="{uid}-lfs-key"
-            bind:value={
-              () => (lfsConnectionDraft ? [lfsConnectionDraft] : []),
-              (next) => {
-                lfsConnectionDraft = next[0] ?? "";
+        <!-- The saved keys, then Add key as the last tile (the only one
+             with none saved), opening Connections' add form in place. -->
+        <div class="flex min-w-0 flex-wrap items-start gap-space-2">
+          {#if keys.length > 0}
+            <OptionGroup
+              glide
+              aria-labelledby="{uid}-lfs-key"
+              bind:value={
+                () => (lfsConnectionDraft ? [lfsConnectionDraft] : []),
+                (next) => {
+                  lfsConnectionDraft = next[0] ?? "";
+                }
               }
-            }
+              {disabled}
+            >
+              {#each keys as conn (conn.id)}
+                <OptionGroupItem value={conn.id}>
+                  <span
+                    class="mark-line flex min-w-0 items-center gap-x-space-2"
+                  >
+                    <IconKey
+                      aria-hidden="true"
+                      class="size-icon-sm flex-none text-ink-muted"
+                    />
+                    <span>{conn.name}</span>
+                  </span>
+                </OptionGroupItem>
+              {/each}
+            </OptionGroup>
+          {/if}
+          <button
+            aria-expanded={keyService !== null}
+            class={chipVariants({ variant: "option", class: "focus-inset" })}
+            data-slot="add-key"
             {disabled}
+            onclick={openAddKey}
+            type="button"
           >
-            {#each LARGE_FILE_KEY_CONNECTIONS as conn (conn.id)}
-              <OptionGroupItem value={conn.id}>
-                <span class="mark-line flex min-w-0 items-center gap-x-space-2">
-                  <IconKey
-                    aria-hidden="true"
-                    class="size-icon-sm flex-none text-ink-muted"
-                  />
-                  <span>{conn.name}</span>
-                </span>
-              </OptionGroupItem>
-            {/each}
-          </OptionGroup>
+            <span
+              class="mark-line flex min-w-0 items-center gap-x-space-2"
+              data-box
+            >
+              <IconPlus
+                aria-hidden="true"
+                class="size-icon-sm flex-none text-ink-muted"
+                data-box
+              />
+              <span>{words.places.addKey}</span>
+            </span>
+          </button>
+        </div>
+        {#if keyService}
+          <div class="flex min-w-0 flex-col gap-space-2" transition:unfold>
+            <Choice
+              label={connectionsWords.signInTo}
+              onchange={(next) => {
+                keyService =
+                  KEY_SERVICES.find((one) => one.service === next) ?? null;
+                keyAddress = keyService?.url ?? "";
+              }}
+              options={KEY_SERVICES.map((one) => ({
+                value: one.service,
+                label: one.label,
+              }))}
+              value={keyService.service}
+            />
+            <AddConnectionForm
+              callbackUrl=""
+              class="mb-0"
+              oncancel={() => {
+                keyService = null;
+              }}
+              onsubmit={saveKey}
+              onway={() => undefined}
+              pending={false}
+              problem={null}
+              secretAskedAgain={false}
+              service={keyService}
+              way={keyService.ways[0] ?? null}
+              bind:account={keyAccount}
+              bind:address={keyAddress}
+              bind:addressProblem={keyAddressProblem}
+              bind:app={keyApp}
+              bind:key={keySecret}
+              bind:organization={keyOrganization}
+            />
+          </div>
         {/if}
       </div>
       {#if lfsDirty || declaring}
@@ -231,7 +346,7 @@
               lfsConnectionDraft =
                 record.largeFiles.kind === "declared"
                   ? record.largeFiles.connection
-                  : (LARGE_FILE_KEY_CONNECTIONS[0]?.id ?? "");
+                  : (keys[0]?.id ?? "");
             }}
             size="sm"
             type="button"
@@ -241,13 +356,14 @@
             disabled={disabled ||
               lfsAddressDraft.trim().length === 0 ||
               lfsConnectionDraft.length === 0}
+            form="{uid}-lfs-form"
             label={words.save}
             size="sm"
             type="submit"
           />
         </div>
       {/if}
-    </form>
+    </section>
   {/if}
 </div>
 
