@@ -6,7 +6,7 @@
    * the place's acts in its ⋯ menu (Find folder standing out on a folder
    * gone missing). The list's last row adds a place: pressed, it becomes
    * the add form in its own place (the house's add row: a to-do list's,
-   * Who decides' Add a member). Under the list the linked repositories, and
+   * Who decides' Add a member). Under the list the linked repositories under their own section head, as Git LFS has, and
    * for a code project where its large files are kept, as two of the
    * house's tiles each led by its glyph; the second opens its address and
    * key under the tiles.
@@ -362,40 +362,42 @@
       {/if}
     </li>
   </RowList>
-
-  {#if record.holdsCode && record.repos.length > 0}
-    <div
-      class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-1 pt-space-1"
-      data-slot="repo"
-    >
-      <span class="type-meta text-ink-muted">{words.places.repositories}</span>
-      <ul
-        class="m-0 flex list-none flex-wrap items-center gap-x-space-3 gap-y-space-1 p-0"
-      >
-        {#each record.repos as repo (`${repo.host}/${repo.owner}/${repo.name}`)}
-          <li>
-            <a
-              class="mark-line inline-flex items-center gap-space-1 rounded-xs type-code text-link-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid can-hover:hover:underline"
-              href={repo.url}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <IconGitRepo
-                aria-hidden="true"
-                class="size-icon-sm flex-none text-ink-muted"
-              />
-              <span>{repo.owner}/{repo.name}</span>
-              <IconExternalLinear
-                aria-hidden="true"
-                class="size-icon-sm flex-none"
-              />
-            </a>
-          </li>
-        {/each}
-      </ul>
-    </div>
-  {/if}
 </section>
+
+{#if record.holdsCode && record.repos.length > 0}
+  <section
+    aria-labelledby="{uid}-repos"
+    class="flex min-w-0 flex-col gap-space-2"
+  >
+    <h3 class={sectionHeadVariants({ inset: "flush" })} id="{uid}-repos">
+      {words.places.repositories}
+    </h3>
+    <ul
+      class="m-0 flex list-none flex-wrap items-center gap-x-space-3 gap-y-space-1 p-0"
+    >
+      {#each record.repos as repo (`${repo.host}/${repo.owner}/${repo.name}`)}
+        <li>
+          <a
+            class="mark-line inline-flex items-center gap-space-1 rounded-xs type-code text-link-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid can-hover:hover:underline"
+            href={repo.url}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <IconGitRepo
+              aria-hidden="true"
+              class="size-icon-sm flex-none text-ink-muted"
+            />
+            <span>{repo.owner}/{repo.name}</span>
+            <IconExternalLinear
+              aria-hidden="true"
+              class="size-icon-sm flex-none"
+            />
+          </a>
+        </li>
+      {/each}
+    </ul>
+  </section>
+{/if}
 
 {#if record.holdsCode}
   <section
