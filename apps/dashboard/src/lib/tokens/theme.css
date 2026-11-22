@@ -1240,6 +1240,8 @@
   --spacing-c-deck-gap: 12px;
   /* Caw's still box in the cawco address tray, standing on its top edge (Family) or over its card (status card). */
   --spacing-c-address-caw: 64px;
+  /* An outcome line's answer column (outcomes-proto option 2): one fixed width down a tile, so every answer word starts on one x; it holds "Held on 12 Nov" with its glyph. */
+  --spacing-c-answer-w: 112px;
   /* The QR on the address tray's phone step: the address a phone opens once. */
   --spacing-c-address-qr: 112px;
   /* The tallest the address tray's Raw well stands before it scrolls. */
