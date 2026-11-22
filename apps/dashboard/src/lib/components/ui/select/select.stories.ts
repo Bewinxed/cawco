@@ -22,7 +22,7 @@ export const Unpicked = {};
 export const Picked = { args: { value: "In review" } };
 
 /** Its list open, the pick ticked. */
-export const Open = { args: { value: "In progress", open: true, height: 220 } };
+export const Open = { args: { value: "In progress", open: true, height: 250 } };
 
 /** Can't be changed while the task runs. */
 export const Disabled = { args: { value: "In progress", disabled: true } };

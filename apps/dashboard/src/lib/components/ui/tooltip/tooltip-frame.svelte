@@ -45,7 +45,7 @@
 </script>
 
 <div
-  class="relative w-field-group max-w-full pt-(--frame-room)"
+  class="relative flex w-field-group max-w-full justify-center pt-(--frame-room)"
   style:--frame-room={`${room}px`}
 >
   <Tooltip.TooltipProvider>
