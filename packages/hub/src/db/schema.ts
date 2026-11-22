@@ -6396,6 +6396,12 @@ export const taskRuns = sqliteTable(
       table.attempt
     ),
     index("task_runs_item").on(table.workItemId),
+    // The open runs (queued, starting, running) read by state across every
+    // routine: the scheduler's live runs and its queued routines. Plain,
+    // not partial: those reads bind their states as parameters, and SQLite
+    // takes a partial index only when the statement's own text implies its
+    // `WHERE` (sqlite.org/partialindex.html).
+    index("task_runs_state").on(table.state, table.triggerId),
   ]
 );
 

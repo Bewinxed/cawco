@@ -23,7 +23,7 @@ language js
     `artifacts`, `artifactUpdates`, `artifactChanges`,
     `turnUsage`, `usageBuckets`, `usageLimitHistory`, `limitEvents`,
     `sessionLines`, `capabilityCalls`, `toolCallKeys`,
-    `inboundEvents`, `routineRuns`
+    `inboundEvents`, `taskRuns`
   },
   $read <: not contains `$_.where($_)`,
   $read <: not contains `$_.limit($_)`,
