@@ -115,7 +115,10 @@
     aria-labelledby="{uid}-account"
     class="flex min-w-0 flex-col gap-space-2"
   >
-    <h3 class={sectionHeadVariants({ inset: "flush" })} id="{uid}-account">
+    <h3
+      class={sectionHeadVariants({ inset: "flush", rule: "group" })}
+      id="{uid}-account"
+    >
       {words.account.heading}
     </h3>
 
@@ -215,7 +218,10 @@
       aria-labelledby="{uid}-limit"
       class="flex min-w-0 flex-col gap-space-2"
     >
-      <h3 class={sectionHeadVariants({ inset: "flush" })} id="{uid}-limit">
+      <h3
+        class={sectionHeadVariants({ inset: "flush", rule: "group" })}
+        id="{uid}-limit"
+      >
         {words.account.atLimitHeading}
       </h3>
       <OptionTiles
