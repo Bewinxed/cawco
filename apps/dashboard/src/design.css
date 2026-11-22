@@ -1428,6 +1428,29 @@
 @utility grid-cols-lead-fluid {
   grid-template-columns: var(--spacing-c-row-lead) minmax(0, 1fr);
 }
+/* A row's lead column, its words, and one control at its end (the open
+   control, a disclosure): the words take the rest, and the control keeps
+   its own width, `space-3` past them (the end track's own start pad, so
+   the lead and the words keep `grid-cols-lead-fluid`'s edges). */
+@utility grid-cols-lead-fluid-end {
+  grid-template-columns:
+    var(--spacing-c-row-lead) minmax(0, 1fr)
+    calc(var(--spacing-space-3) + var(--spacing-c-btn-h-xs));
+}
+/* The Routines view's outcome tiles: as many to a row as hold
+   `c-outcome-tile` each, every one the row's equal share; one, the whole
+   width, where the view is narrower than a tile. */
+@utility grid-cols-outcome-tiles {
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, var(--spacing-c-outcome-tile)), 1fr)
+  );
+}
+/* A lead column and the ledger beside it, three shares to two (the
+   Routines view: what needs him, then every other outcome as a line). */
+@utility grid-cols-lead-ledger {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
 /* The artifact masonry's row unit: one pixel, each card spanning its height. */
 @utility auto-rows-line {
   grid-auto-rows: 1px;
