@@ -25,7 +25,7 @@
  */
 import { timingSafeEqual } from "node:crypto";
 import { isRecord } from "@cawco/core/is-record";
-import { PREVIEW_DOWNS, type PreviewDown } from "@cawco/core/preview/protocol";
+import type { PreviewDown } from "@cawco/core/preview/protocol";
 import { isSourceKey, type Upstream } from "@cawco/core/preview/upstream";
 import { z } from "zod";
 import type { PreviewStop } from "../preview-stops";
@@ -129,19 +129,6 @@ export type UpstreamAnswer =
 export type RevivedAnswer =
   { ok: true } | { ok: false; down: "gone" | "machine"; why: string | null };
 
-const RevivedAnswerSchema = z.discriminatedUnion("ok", [
-  z.object({ ok: z.literal(true) }),
-  z.object({
-    ok: z.literal(false),
-    down: z.enum(["gone", "machine"]),
-    why: z.string().nullable(),
-  }),
-]);
-
-/** Whether `said` is {@link REVIVE_PATH}'s answer. */
-export const isRevivedAnswer = (said: unknown): said is RevivedAnswer =>
-  RevivedAnswerSchema.safeParse(said).success;
-
 const TailnetServingSchema = z.object({
   ips: z.array(z.string()),
   name: z.string(),
@@ -207,32 +194,3 @@ export const serverSaid = (text: string): ServerSays | null => {
     return null;
   }
 };
-
-const PreviewDownSchema = z.enum(PREVIEW_DOWNS);
-const PreviewStopSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("away"), machineId: z.string() }),
-  z.object({ kind: z.literal("silent") }),
-  z.object({ kind: z.literal("paused") }),
-  z.object({ kind: z.literal("closed") }),
-  z.object({ kind: z.literal("failed") }),
-]);
-
-const UpstreamAnswerSchema = z.discriminatedUnion("ok", [
-  z.object({ ok: z.literal(true), upstream: UpstreamSchema }),
-  z.object({
-    ok: z.literal(false),
-    down: PreviewDownSchema,
-    error: z.string(),
-    stop: PreviewStopSchema,
-  }),
-]);
-
-/** Whether `said` is {@link UPSTREAM_PATH}'s answer. */
-export const isUpstreamAnswer = (said: unknown): said is UpstreamAnswer =>
-  UpstreamAnswerSchema.safeParse(said).success;
-
-/** {@link OPEN_PATH}'s answer: the port, or the hub's refusal (a problem's `detail`). */
-export const OpenedSchema = z.object({
-  port: z.number().optional(),
-  detail: z.string().optional(),
-});

@@ -63,6 +63,7 @@ import type { Server } from "bun";
 import { ElysiaStatus } from "elysia";
 import { serveCanvas } from "../artifacts/canvas";
 import { ARTIFACT_PATH, STORE_PATH } from "../artifacts/sync";
+import { reached as answered, dataOf, refusalText, succeeded } from "../client";
 import { ARTIFACTS_ROOT, PREVIEW_PORTS_TEXT } from "../config";
 import type { ArtifactDocumentRow } from "../db/artifact-documents";
 import { decisionHostFile } from "../decision-host";
@@ -84,20 +85,13 @@ import { composePage, type EmbedAt } from "./document";
 import { type HubLink, hubOrigin } from "./link";
 import type { PreviewStore } from "./store";
 import {
-  DOCUMENT_PATH,
-  isRevivedAnswer,
-  isUpstreamAnswer,
   LOCK_HEADER,
-  OPEN_PATH,
-  OpenedSchema,
   ORIGIN_PATH,
   REACHED_HEADER,
-  REVIVE_PATH,
   type RevivedAnswer,
   STORE_SYNC_PATH,
   SYNC_PATH,
   TOKEN_HEADER,
-  UPSTREAM_PATH,
   type UpstreamAnswer,
 } from "./wire";
 
@@ -262,30 +256,24 @@ export const createUpstreams = (env: Pick<ServeEnv, "link">) => {
       if (already !== undefined) {
         return already;
       }
-      const asked = env.link
-        .ask(`${UPSTREAM_PATH}${encodeURIComponent(key)}`)
-        .then(async (answer) => {
-          if (!answer.ok) {
+      const asked = env.link.hub["__cawco-preview"]
+        .upstream({ key })
+        .get()
+        .then((sent): Reached => {
+          const answer = answered(sent);
+          if (!succeeded(answer)) {
             return {
-              ok: false as const,
-              down: "machine" as const,
+              ok: false,
+              down: "machine",
               error: `the hub answered ${answer.status}`,
-              stop: { kind: "failed" as const },
+              stop: { kind: "failed" },
             };
           }
-          const reached: unknown = await answer.json();
-          if (!isUpstreamAnswer(reached)) {
-            return {
-              ok: false as const,
-              down: "machine" as const,
-              error: "the hub's answer wasn't where the preview is served",
-              stop: { kind: "failed" as const },
-            };
+          const said = dataOf(answer);
+          if (said.ok) {
+            held.set(key, said.upstream);
           }
-          if (reached.ok) {
-            held.set(key, reached.upstream);
-          }
-          return reached;
+          return said;
         })
         .catch((error: unknown): Reached => ({
           ok: false,
@@ -379,12 +367,13 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     if (under) {
       return under.answer;
     }
-    const answer = env.link
-      .ask(`${REVIVE_PATH}${encodeURIComponent(key)}`, { method: "POST" })
-      .then(async (said): Promise<RevivedAnswer> => {
-        const read: unknown = await said.json();
-        return isRevivedAnswer(read)
-          ? read
+    const answer = env.link.hub["__cawco-preview"]
+      .revive({ key })
+      .post()
+      .then((sent): RevivedAnswer => {
+        const said = answered(sent);
+        return succeeded(said)
+          ? dataOf(said)
           : { ok: false, down: "gone", why: null };
       })
       .catch((error: unknown): RevivedAnswer => ({
@@ -463,14 +452,12 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
       return held;
     }
     try {
-      const answer = await env.link.ask(
-        `${OPEN_PATH}${encodeURIComponent(key)}`,
-        { method: "POST" }
+      const answer = answered(
+        await env.link.hub["__cawco-preview"].open({ key }).post()
       );
-      const said = OpenedSchema.safeParse(await answer.json()).data;
-      return typeof said?.port === "number"
-        ? said.port
-        : (said?.detail ?? `the hub answered ${answer.status}`);
+      return succeeded(answer)
+        ? dataOf(answer).port
+        : refusalText({ status: answer.status, value: answer.error?.value });
     } catch (error) {
       return `the hub didn't answer: ${causeOf(error)}`;
     }
@@ -498,11 +485,10 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
       return kept;
     }
     try {
-      const answer = await env.link.ask(
-        `${DOCUMENT_PATH}${encodeURIComponent(id)}`,
-        { method: "POST" }
+      const answer = answered(
+        await env.link.hub["__cawco-preview"].document({ id }).post()
       );
-      return answer.ok ? env.store.document(id) : undefined;
+      return answer.error === null ? env.store.document(id) : undefined;
     } catch (error) {
       previewFailed(
         HOP,

@@ -126,7 +126,13 @@ import {
   originEndpoint,
   urlOrigin,
 } from "./git/lfs";
-import { type CopyRunner, type Git, gitUntil, hostGit } from "./git/run";
+import {
+  type CopyRunner,
+  type Git,
+  GitExited,
+  gitUntil,
+  hostGit,
+} from "./git/run";
 import { configEnv, useHubCredentialHelper } from "./git-credential";
 import {
   declaredLfs,
@@ -1277,8 +1283,26 @@ const applyCarried = async (
   }
 };
 
-/** git's words for a fetch of a branch `origin` doesn't have (git 2.x `fetch-pack`: "couldn't find remote ref refs/heads/…"). */
-const NO_REMOTE_REF = /couldn't find remote ref/iu;
+/** `git ls-remote --exit-code`'s status when `origin` has no ref the patterns name (git-scm.com/docs/git-ls-remote). */
+const NO_MATCHING_REF = 2;
+
+/** Whether `origin` of the clone at `path` has no branch `branch`: asked once a fetch of it failed, by `ls-remote`'s status, never git's words. */
+const branchGone = async (
+  path: string,
+  branch: string,
+  git: Git
+): Promise<boolean> =>
+  await git(
+    path,
+    "ls-remote",
+    "--exit-code",
+    "origin",
+    `refs/heads/${branch}`
+  ).then(
+    () => false,
+    (error: unknown) =>
+      error instanceof GitExited && error.exitCode === NO_MATCHING_REF
+  );
 
 /**
  * A cut again's commit in the new clone at `path` ({@link WorkspaceCut}):
@@ -1307,8 +1331,8 @@ const fetchCut = async (
       "--no-tags",
       "origin",
       `+refs/heads/${cut.branch}:refs/remotes/origin/${cut.branch}`
-    ).catch((error: Error) => {
-      throw NO_REMOTE_REF.test(error.message)
+    ).catch(async (error: Error) => {
+      throw (await branchGone(path, cut.branch, git))
         ? gone(error, `its branch ${cut.branch} is gone from origin`)
         : error;
     });
