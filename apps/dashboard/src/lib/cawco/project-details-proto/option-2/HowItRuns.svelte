@@ -142,15 +142,15 @@
   <div aria-busy="true" class="min-w-0">
     {#if stage === "sessions"}
       <div
-        class="grid min-w-0 grid-cols-1 items-start gap-x-space-6 gap-y-space-5 @setup:grid-cols-5"
+        class="grid min-w-0 grid-cols-1 items-start gap-x-space-6 gap-y-space-5 @desk:grid-cols-5"
       >
-        <div class="flex min-w-0 flex-col gap-space-2 @setup:col-span-3">
+        <div class="flex min-w-0 flex-col gap-space-2 @desk:col-span-3">
           <Skeleton line="label" radius="text" width="label" />
           {#each [0, 1, 2] as row (row)}
             <Skeleton class="w-full" height="row" radius="chip" />
           {/each}
         </div>
-        <div class="flex min-w-0 flex-col gap-space-2 @setup:col-span-2">
+        <div class="flex min-w-0 flex-col gap-space-2 @desk:col-span-2">
           <Skeleton line="label" radius="text" width="label" />
           <div class="flex flex-wrap gap-space-2">
             <Skeleton height="control-sm" radius="chip" width="name" />
