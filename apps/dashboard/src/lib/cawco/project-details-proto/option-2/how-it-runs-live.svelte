@@ -7,6 +7,9 @@
   /** How the mock hub answers a change: it takes it, or refuses it. */
   export type HubAnswer = "takes it" | "refuses it";
 
+  /** What carries a dragged kind's tile into its slot, as the graph's Landing dial names it (kind-dnd `landing`). */
+  export type Landing = "House settle" | "Longer settle" | "Motion spring";
+
   /** How the stages were read: all at once, one still on its way, or one refused. */
   export type Reading =
     | "Every stage read"
@@ -22,6 +25,7 @@
 </script>
 
 <script lang="ts">
+  import { landing } from "#lib/cawco/decides/kind-dnd.svelte.js";
   /**
    * Option 2's live frame: the app's shell as it ships (its rail, the
    * project's bar and its views strip) with "How it runs" the open view,
@@ -55,11 +59,28 @@
     situation,
     answer = "takes it",
     reading = "Every stage read",
+    landing: landingDial = "House settle",
+    settleMs = null,
   }: {
     situation: Situation;
     answer?: HubAnswer;
     reading?: Reading;
+    landing?: Landing;
+    /** The longer settle's length, in ms; none: --duration-settle-drag. */
+    settleMs?: number | null;
   } = $props();
+
+  // The roster's drags land on the dial's landing, for the owner to feel each.
+  $effect(() => {
+    landing.style = (
+      {
+        "House settle": "house",
+        "Longer settle": "longer",
+        "Motion spring": "motion",
+      } as const
+    )[landingDial];
+    landing.ms = settleMs;
+  });
 
   const record = $derived(SITUATIONS[situation]);
   const loading = $derived<StageId[]>(

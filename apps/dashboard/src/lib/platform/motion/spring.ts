@@ -35,12 +35,17 @@ export interface Sample {
 }
 
 /**
- * The settle from `x0` px away from rest, moving at `v0` px/s, to rest at 0.
- * Always at least two points, the last exactly at rest.
+ * The settle from `x0` px away from rest, moving at `v0` px/s, to rest at 0,
+ * over --duration-settle unless a surface names its own perceptual
+ * duration (`ms`). Always at least two points, the last exactly at rest.
  */
-export function integrate(x0: number, v0: number): Sample[] {
+export function integrate(
+  x0: number,
+  v0: number,
+  ms: number = dur("--duration-settle")
+): Sample[] {
   /** The perceptual duration, in seconds. */
-  const settle = dur("--duration-settle") / 1000;
+  const settle = ms / 1000;
   const stiffness = ((2 * Math.PI) / settle) ** 2;
   const damping = (4 * Math.PI * (1 - BOUNCE)) / settle;
   const out: Sample[] = [{ t: 0, x: x0, v: v0 }];
