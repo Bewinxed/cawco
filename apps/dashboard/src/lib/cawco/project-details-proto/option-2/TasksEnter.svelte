@@ -193,7 +193,12 @@
           ? `${words.tasks.stagesVia} ${board.name}`
           : `${words.tasks.stagesNone} ${board.none}`;
     }
+    const inStep =
+      tie.sync.kind === "inStep" && !syncPending
+        ? words.tasks.inStep(formatAge(tie.sync.at))
+        : null;
     return [
+      inStep,
       `${tie.connection.name} (${tie.connection.account})`,
       words.tasks.linkedCount(tie.linked),
       columns,
@@ -247,11 +252,7 @@
             <Badge variant="live"><span>{words.tasks.syncing}</span></Badge>
           {:else if tie.sync.kind === "first"}
             <Badge variant="live"><span>{words.tasks.firstSync}</span></Badge>
-          {:else if tie.sync.kind === "inStep"}
-            <Badge kind="meta"
-              ><span>{words.tasks.inStep(formatAge(tie.sync.at))}</span></Badge
-            >
-          {:else}
+          {:else if tie.sync.kind === "refused"}
             <Badge variant="fail"
               ><span>{words.tasks.syncRefused(formatAge(tie.sync.at))}</span
               ></Badge
