@@ -6881,9 +6881,6 @@ export const createServer = (
    * says (join.ts `settle`). A register it takes clears its record's.
    */
   const sshAddHeard = new Map<string, string>();
-  /** The mode a machine's socket is held to: always paired through a machine's SSH forward (hub-auth.ts `modeFor`). */
-  const socketMode = (ws: AuthSocket) =>
-    hubAuth.modeFor((name) => ws.headers?.[name]);
   /**
    * Where a machine's socket came from, as the hub names it: through an SSH
    * add's forward, the address the person gave that add (ssh-door.ts sets
@@ -6971,7 +6968,7 @@ export const createServer = (
     const version = said.build?.version ?? "of an unknown version";
     return keyed
       ? `${host}'s agent connected through this add's SSH connection with a key this hub does not hold: neither the one this add wrote to the machine nor one admitted before. Its agent reads its key from another file than the add wrote ($XDG_CONFIG_HOME/cawco/machine-key in the add's SSH session). Make its service read that file, then Retry.`
-      : `${host}'s agent, CawCo ${version}, connected through this add's SSH connection and proved no key, which this hub requires of every machine added over SSH. Either that build predates machine keys (choose a channel in ${connectWords.updatesPlace} whose newest build is newer), or its agent found no key where the add wrote one ($XDG_CONFIG_HOME/cawco/machine-key in the add's SSH session: make its service read that file). Then Retry.`;
+      : `${host}'s agent, CawCo ${version}, connected through this add's SSH connection and proved no key, which this hub requires of every machine while it requires paired devices. Either that build predates machine keys (choose a channel in ${connectWords.updatesPlace} whose newest build is newer), or its agent found no key where the add wrote one ($XDG_CONFIG_HOME/cawco/machine-key in the add's SSH session: make its service read that file). Then Retry.`;
   };
 
   /** A register through an SSH add's forward, kept for that add (join.ts `settle`): taken clears its record's words, else they say why not. */
@@ -7021,7 +7018,7 @@ export const createServer = (
           ws.id
         )
       : "unknown";
-    const taken = verdict === "proven" || socketMode(ws) === "trusted";
+    const taken = verdict === "proven" || hubAuth.mode() === "trusted";
     noteSshAdd(ws, message, taken, typeof proof === "string");
     if (taken) {
       unhold(ws, message.machineId);
@@ -7150,7 +7147,7 @@ export const createServer = (
     if (!known || registry.agent(former)) {
       return;
     }
-    if (socketMode(ws) === "pairing") {
+    if (hubAuth.mode() === "pairing") {
       const nonce = machineNonces.get(ws.id) ?? "";
       const { proof } = message.payload;
       const proven =

@@ -5,15 +5,13 @@
  * to the hub's own port, marked as having come through a machine's forward
  * and named by the address the person gave its add.
  *
- * A machine's forward listens on its own loopback, so on a box several
- * people share, any local user can reach it, not only the machine's own
- * agent. What arrives here is therefore held to what a hub that requires
- * paired devices holds every caller to (hub-auth.ts `classify`, whatever the
- * hub's own mode): a machine's proof of its key, a session's credential, a
- * paired device's token, or nothing, and nothing reaches only the open
- * routes. The mark is a secret this process made at start and keeps in
- * memory, set here on every
- * request and socket and refused from anyone else.
+ * What arrives here is held to the hub's own mode, as a request over the
+ * tailnet is (hub-auth.ts `classify`): any local user of a machine reaches
+ * its forward, as any local user of a tailnet machine reaches the hub's
+ * tailnet address, so the two are one rule. The mark says which add's
+ * forward a request came through, so the hub reads the door's address and
+ * record from it alone: a secret this process made at start and keeps in
+ * memory, set here on every request and socket and refused from anyone else.
  *
  * Every connection through a forward reaches the hub from this host's
  * loopback, so its own address names no machine. Each add's listener says
