@@ -21,6 +21,7 @@
     tiles,
     editing = false,
     parked = false,
+    over = false,
     card = $bindable(),
     pencil,
     said = ROSTER_WORDS,
@@ -39,6 +40,8 @@
     parked?: boolean;
     /** The card, which its settings hang from. */
     card?: HTMLElement | null;
+    /** A dragged kind's tile is over it, from another card (kind-dnd.svelte.ts). */
+    over?: boolean;
     /** The pencil that opens its settings; none for members with none. */
     pencil?: Snippet;
     /** Its words: Who decides' unless the surface drawing it says its own. */
@@ -58,11 +61,12 @@
   bind:this={card}
   aria-labelledby="member-{member.id}"
   class={[
-    "row-span-3 grid min-w-0 grid-rows-subgrid gap-y-space-2 rounded-lg bg-surface-raised p-space-3 text-ink-strong shadow-tile transition-control",
+    "row-span-3 grid min-w-0 grid-rows-subgrid gap-y-space-2 rounded-lg bg-surface-raised p-space-3 text-ink-strong shadow-tile transition-control data-over:bg-surface-hover",
     editing && "inset-ring-2 inset-ring-brand-solid",
   ]}
   data-editing={editing || undefined}
   data-member={member.id}
+  data-over={over || undefined}
   style:--stand-in="calc(var(--spacing-c-roster-face) + var(--spacing-space-3))"
 >
   {#snippet head(props: Record<string, unknown> = {})}

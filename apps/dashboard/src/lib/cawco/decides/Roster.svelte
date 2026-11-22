@@ -3,7 +3,8 @@
    * Who decides' members as cards on one grid, each holding the kinds it
    * decides. A press on a kind's tile opens who it can go to in a popover
    * hung from that tile (KindTile): nothing on the page moves. A press on a
-   * member hands it over; the tile flies to its new card once the hub has
+   * member hands it over, as dragging the tile onto that member's card does
+   * (kind-dnd.svelte.ts); the tile flies to its new card once the hub has
    * written it, and the focus follows it there. Props in, events out: what a
    * hand-over writes is its owner's.
    */
@@ -22,6 +23,7 @@
   import type { Facts, Fault, WhoDecides } from "./decides.svelte";
   import HandOver, { handOverWidth } from "./HandOver.svelte";
   import KindTile from "./KindTile.svelte";
+  import { dragKind, kindDrag, memberDropTarget } from "./kind-dnd.svelte";
   import MemberCard from "./MemberCard.svelte";
   import { ROSTER_WORDS, type RosterWords } from "./roster-words";
   import SetupPopover from "./SetupPopover.svelte";
@@ -82,8 +84,34 @@
     brief?: boolean;
   } = $props();
 
-  /** Each card, which its settings hang from. */
+  /** Each card, which its settings hang from and a dragged tile drops on. */
   const cards = $state<Record<string, HTMLElement | null>>({});
+
+  /** Hands `kind` to `to`, from its tile's list or a drop on `to`'s card. */
+  function hand(kind: string, to: string) {
+    handing = null;
+    land(kind, onhand(kind, to));
+  }
+
+  // Every member's card takes a dragged tile, which hands its kind over.
+  $effect(() => {
+    const stops = members.flatMap((member) => {
+      const node = cards[member.id];
+      return node
+        ? [
+            memberDropTarget(
+              () => member.id,
+              (kind) => hand(kind, member.id)
+            )(node),
+          ]
+        : [];
+    });
+    return () => {
+      for (const stop of stops) {
+        stop?.();
+      }
+    };
+  });
   /** Members with settings: all but You and The agent. */
   const editable = (member: Member) =>
     member.type !== "you" && member.type !== "asker";
@@ -139,10 +167,15 @@
     {#snippet tiles()}
       {#each holds as kind (kind.id)}
         <div
-          class="min-w-0"
+          class="min-w-0 transition-opacity duration-(--duration-control) ease-out data-dragging:opacity-40"
           data-kind={kind.id}
           in:receive={{ key: kind.id }}
           out:send={{ key: kind.id }}
+          {@attach dragKind(() => ({
+            kind: kind.id,
+            from: member.id,
+            held: !asking?.kinds.includes(kind.id),
+          }))}
         >
           {#snippet list(headId: string)}
             <HandOver
@@ -158,8 +191,7 @@
                     `[data-kind-press="${CSS.escape(kind.id)}"]`
                   )
                   ?.focus({ preventScroll: true });
-                handing = null;
-                land(kind.id, onhand(kind.id, to));
+                hand(kind.id, to);
               }}
             />
           {/snippet}
@@ -218,6 +250,7 @@
       editing={who?.setup?.from === member.id}
       facts={facts(member)}
       {member}
+      over={kindDrag.over === member.id && kindDrag.from !== member.id}
       parked={who?.parked[member.id] !== undefined}
       pencil={who && editable(member) ? pencil : undefined}
       {project}
