@@ -160,8 +160,9 @@
   class="@container/deciders flex min-w-0 flex-col gap-space-2"
 >
   <!-- The section head every step's parts wear, its hairline under the
-       whole line: the heading at its start, how the project stands and what
-       to do about it pushed to its end. -->
+       whole line: the heading at its start, what to do
+       about the project's own rules pushed to its end (each tile marks its
+       own). -->
   <div
     class={[
       sectionHeadVariants({ inset: "flush" }),
@@ -175,26 +176,19 @@
       class="ms-auto flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
       data-box
     >
-      {#if rules !== null}
-        <span class="type-meta text-ink-muted num">
-          {own.length === 0
-            ? words.waits.followingFleet
-            : words.waits.projectRules(own.length)}
-        </span>
-        {#if own.length > 0}
-          <Button
-            disabled={!record.hubReachable}
-            label={words.waits.putAllBack}
-            onclick={() => {
-              for (const kind of own) {
-                putBack(kind);
-              }
-            }}
-            size="xs"
-            tone="quiet"
-            variant="ghost"
-          />
-        {/if}
+      {#if own.length > 0}
+        <Button
+          disabled={!record.hubReachable}
+          label={words.waits.putAllBack}
+          onclick={() => {
+            for (const kind of own) {
+              putBack(kind);
+            }
+          }}
+          size="xs"
+          tone="quiet"
+          variant="ghost"
+        />
       {/if}
       <a
         class="mark-line inline-flex items-center gap-space-1 type-meta text-link-ink hover:underline"

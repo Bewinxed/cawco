@@ -148,8 +148,6 @@ export const howItRunsWords = {
 
   waits: {
     heading: "Who makes the call",
-    followingFleet: "Using defaults",
-    projectRules: (count: number) => `${count} custom`,
     putAllBack: "Reset to defaults",
     fleetDefaults: "Manage defaults",
     unreadTitle: "Rules failed to load, so agents ask you everything.",
@@ -168,27 +166,27 @@ export const howItRunsWords = {
     kinds: {
       look: {
         name: "Design and copy",
-        example: "Covers layout, colors, motion, wording, and screen labels.",
+        example: "Layout, colors, motion, wording, and screen labels.",
       },
       behaviour: {
         name: "Behavior",
-        example: "Covers user flows, notifications, and how agents act.",
+        example: "User flows, notifications, and how agents act.",
       },
       scope: {
         name: "Scope changes",
-        example: "Covers what to cut or save for later.",
+        example: "What to cut or save for later.",
       },
       approach: {
         name: "Implementation",
-        example: "Covers picking how to build among valid options.",
+        example: "Picking how to build among valid options.",
       },
       rules: {
         name: "Rule exceptions",
-        example: "Covers disabled lint, skipped checks, and spec deviations.",
+        example: "Disabled lint, skipped checks, and spec deviations.",
       },
       tools: {
         name: "Libraries and style",
-        example: "Covers packages, versions, config values, and code names.",
+        example: "Packages, versions, config values, and code names.",
       },
     } satisfies Record<ChoiceKind, { name: string; example: string }>,
     /** The roster's own parts (its tiles, their hand-over, an empty card), in this view's words. */
