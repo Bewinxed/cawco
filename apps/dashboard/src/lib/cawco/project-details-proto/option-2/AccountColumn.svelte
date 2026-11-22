@@ -89,7 +89,11 @@
   </h3>
 
   <div class="flex min-w-0" inert={disabled}>
+    <!-- Full width of its column, as Project details' own account field
+         (ProjectDetails.svelte, data-account-select: w-full); its label takes
+         the room so the chevron sits at the end, as a select's does. -->
     <AccountChip
+      class="w-full [&_[data-slot=chip-label]]:flex-1 [&_[data-slot=chip-label]]:text-start"
       id="work-path"
       onchange={(next) => {
         open = next;
