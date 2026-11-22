@@ -30,8 +30,13 @@
     IconWorking,
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
-  import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
+  import {
+    aside,
+    type Travel,
+    travelIn,
+    travelOut,
+  } from "#lib/platform/motion/route.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import type { Change, ChangeKey } from "./changes";
   import { FORM_FIELD, FORM_LABEL, OPENED_FORM } from "./opened-form";
@@ -78,21 +83,32 @@
   );
   /** The tiles' order, which way a swap between their setups moves. */
   const TILE_AT = { github: 1, linear: 2 } as const;
-  const setupSwap = new ListSwap<never>();
+  /** Which way the setup swapped for its sibling moves: the move every page makes to a sibling (motion/route `aside`). */
+  let setupTravel = $state<Travel>(aside(1, false));
   let setupWas = untrack(() => setupHome);
   $effect.pre(() => {
     const next = setupHome;
     if (next !== setupWas) {
       const was = setupWas;
       if (next !== null && was !== null) {
-        untrack(() =>
-          setupSwap.swap([], TILE_AT[next] > TILE_AT[was] ? 1 : -1)
+        setupTravel = aside(
+          TILE_AT[next] - TILE_AT[was],
+          getComputedStyle(document.documentElement).direction === "rtl"
         );
       }
       setupWas = next;
     }
   });
-  const leaveSetup = setupSwap.leaveView;
+  /**
+   * The setup leaving, out of the flow where it stood, so the form's height
+   * follows the one arriving (morph) while the two cross.
+   */
+  const setupOut = (node: HTMLElement) => {
+    node.style.position = "absolute";
+    node.style.insetInline = "0";
+    node.style.top = "0";
+    return travelOut(node, () => setupTravel);
+  };
   /** Leaving a tie for the project's own files, asked and not yet answered: the press first says what it stops (DESIGN.md, ceremony matches consequence). */
   let leaving = $derived(opening === "files");
   let connectionPick = $state<string | null>(null);
@@ -392,16 +408,16 @@
       data-slot="setup-asks"
       transition:unfold
     >
-      <!-- GitHub's setup and Linear's swap sideways, from the side of the
-           tile picked (the house's list swap, motion/list-swap: the old one
-           leaves the other way, the new one comes in after it), and the form's
-           height follows the one coming in (motion/morph). -->
+      <!-- GitHub's setup and Linear's swap sideways toward the tile picked,
+           both at once, as a page moves to its sibling (motion/route
+           `aside`: the old one out, the new one in, one nudge), and the
+           form's height follows the one coming in (motion/morph). -->
       <div class="relative min-w-0" {@attach morph()}>
         {#key setupHome}
           <div
-            class="flex min-w-0 animate-(--setup-in) flex-col gap-space-5"
-            out:leaveSetup
-            style:--setup-in={setupSwap.rowAnim(0)}
+            class="flex min-w-0 flex-col gap-space-5"
+            in:travelIn={setupTravel}
+            out:setupOut
           >
             <div class="flex min-w-0 flex-col gap-space-1">
               <p
