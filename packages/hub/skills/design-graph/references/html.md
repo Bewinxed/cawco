@@ -1,6 +1,6 @@
 # An HTML page on the design graph
 
-An HTML design is a page the hub keeps and opens on the design graph itself: no workspace, stage or app runs behind it. It is the form for two things: something not in the codebase yet, and a throwaway mockup. A piece that exists, or that you are building now, is its live story (the steps in `SKILL.md`). On a stack with no stage (`design-explore`, "Where the graph runs") every design takes this form.
+An HTML design is a page the hub keeps and opens on the design graph itself: no workspace, stage or app runs behind it. It is your choice for two cases: a stack with no stage (`design-explore`, "Where the graph runs"), and an idea you judge throwaway. Every other design, a new part included, is a live story in the project's own language and framework (the steps in `SKILL.md`).
 
 ## Open it
 
