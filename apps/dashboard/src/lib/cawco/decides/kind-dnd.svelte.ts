@@ -104,11 +104,16 @@ export const kindDrag = {
  * above every dialog and outside every container that would clip or
  * re-anchor a fixed box), on the overlay's shadow. It tracks the pointer
  * 1:1, as every hand-driven surface does (motion/drag.svelte.ts), and where
- * it is put down it settles on the house's settle (motion/spring.ts) from
- * the speed the hand let it go at.
+ * it is put down it settles on the house's settle (motion/spring.ts),
+ * leaving the hand at the hand's own velocity: the settle is a linear
+ * spring, so across and down are two settles of the house's, each from its
+ * own distance and speed, played on two boxes (the ghost across, its lane
+ * inside it down), whose sum is the one 2D settle.
  */
 class Ghost {
   readonly #node: HTMLElement;
+  /** The box inside it that carries the settle's vertical half. */
+  readonly #lane: HTMLElement;
   readonly #offset: DragPoint;
   /** Where it is drawn: its box's top-left corner in the viewport. */
   #at: DragPoint;
@@ -152,10 +157,13 @@ class Ghost {
         : "none",
       willChange: "transform",
     });
-    node.append(copy);
+    const lane = document.createElement("div");
+    lane.append(copy);
+    node.append(lane);
     document.body.append(node);
     node.showPopover();
     this.#node = node;
+    this.#lane = lane;
     this.#draw();
     requestAnimationFrame(() => {
       node.style.boxShadow = "var(--shadow-overlay)";
@@ -172,43 +180,55 @@ class Ghost {
   }
 
   /**
-   * Settles into the box `aim` finds, its shadow down: the house's settle
-   * along the line from where it is to there, starting at the hand's speed
-   * along that line. Answers once it is at rest.
+   * Settles into the box `aim` finds (once the page has drawn it, for a slot
+   * still opening), its shadow down, starting at the hand's velocity at
+   * `now`. Answers once it is at rest.
    */
-  async settle(aim: () => Element | null): Promise<void> {
+  async settle(aim: () => Element | null, now: number): Promise<void> {
     this.#node.style.boxShadow = "none";
-    const box = aim()?.getBoundingClientRect();
+    const vx = this.#handX.velocity(now);
+    const vy = this.#handY.velocity(now);
+    this.#handX.clear();
+    this.#handY.clear();
+    let target = aim();
+    if (!target) {
+      await tick();
+      target = aim();
+    }
+    const box = target?.getBoundingClientRect();
     if (!box) {
       return;
     }
     const from = this.#at;
-    const dx = from.x - box.left;
-    const dy = from.y - box.top;
-    const distance = Math.hypot(dx, dy);
-    const along = { x: dx / distance, y: dy / distance };
-    const speed =
-      this.#handX.velocity(performance.now()) * along.x +
-      this.#handY.velocity(performance.now()) * along.y;
-    this.#handX.clear();
-    this.#handY.clear();
     this.#at = { x: box.left, y: box.top };
     this.#node.style.width = `${box.width}px`;
-    if (!motionOk.current || distance < 0.5) {
+    if (!motionOk.current) {
       this.#draw();
       return;
     }
-    const [flight] = spring(integrate(distance, speed * 1000), [
-      {
-        el: this.#node,
-        frame: (x) => ({
-          transform: place(box.left + along.x * x, box.top + along.y * x),
-        }),
-      },
-    ]);
-    await flight.finished;
+    const flights = [
+      ...spring(integrate(from.x - box.left, vx * 1000), [
+        {
+          el: this.#node,
+          frame: (x) => ({ transform: place(box.left + x, box.top) }),
+        },
+      ]),
+      ...spring(integrate(from.y - box.top, vy * 1000), [
+        { el: this.#lane, frame: (y) => ({ transform: place(0, y) }) },
+      ]),
+    ];
+    // Both halves start on this frame, at the moment the hand let go: an
+    // animation left pending starts on the frame after, the ghost standing
+    // still for it however fast the hand was going.
+    const start = document.timeline.currentTime;
+    for (const flight of flights) {
+      flight.startTime = start;
+    }
+    await Promise.all(flights.map((flight) => flight.finished));
     this.#draw();
-    flight.cancel();
+    for (const flight of flights) {
+      flight.cancel();
+    }
   }
 
   remove() {
@@ -231,13 +251,13 @@ const tileOn = (member: string, kind: string) => () =>
     `[data-member="${CSS.escape(member)}"] [data-kind="${CSS.escape(kind)}"], [data-member="${CSS.escape(member)}"] [data-slot-for="${CSS.escape(kind)}"]`
   );
 
-/** Puts the ghost down in `aim`'s box, then takes it away. */
-async function setDown(aim: () => Element | null) {
+/** Puts the ghost down in `aim`'s box, let go at `now`, then takes it away. */
+async function setDown(aim: () => Element | null, now: number) {
   const held = ghost;
   if (held === null) {
     return;
   }
-  await held.settle(aim);
+  await held.settle(aim, now);
   held.remove();
   ghost = null;
 }
@@ -246,16 +266,15 @@ async function setDown(aim: () => Element | null) {
 async function land(
   drag: Aloft,
   to: string,
-  take: (kind: string) => Promise<boolean>
+  take: (kind: string) => Promise<boolean>,
+  now: number
 ) {
   hint.aloft = { ...drag, to };
   hint.over = null;
-  const went = take(drag.kind);
-  await tick();
-  const [taken] = await Promise.all([
-    went,
-    ghost?.settle(tileOn(to, drag.kind)),
-  ]);
+  // The settle leaves the hand on the frame it lets go: the slot it aims
+  // at stands open from the hover.
+  const settled = ghost?.settle(tileOn(to, drag.kind), now);
+  const [taken] = await Promise.all([take(drag.kind), settled]);
   if (taken) {
     await tick();
     ghost?.remove();
@@ -265,7 +284,7 @@ async function land(
   }
   hint.aloft = { ...drag, to: null };
   await tick();
-  await setDown(tileOn(drag.from, drag.kind));
+  await setDown(tileOn(drag.from, drag.kind), performance.now());
   hint.aloft = null;
 }
 
@@ -308,6 +327,9 @@ export function dragKind(
  * the source from its registry at the drop).
  */
 function end({ targets }: DragEnd) {
+  // It leaves from where it is drawn, the hand's last step: put first where
+  // the drop says the pointer was, it would jump the frame it is behind.
+  const now = performance.now();
   const drag = hint.aloft;
   hint.over = null;
   if (drag === null) {
@@ -319,10 +341,10 @@ function end({ targets }: DragEnd) {
   const to = card ? asCard(card.data) : null;
   const take = card ? takers.get(card.element) : undefined;
   if (to !== null && take && to !== drag.from) {
-    land(drag, to, take);
+    land(drag, to, take, now);
     return;
   }
-  setDown(tileOn(drag.from, drag.kind)).then(() => {
+  setDown(tileOn(drag.from, drag.kind), now).then(() => {
     hint.aloft = null;
   });
 }
