@@ -91,7 +91,7 @@
   import { PinThread } from "./pin-thread.svelte";
   import { PreviewFrame } from "./preview-frame.svelte";
   import { PreviewReach } from "./preview-reach.svelte";
-  import { errorPlace, errorTitle, StageCover } from "./stage-cover.svelte";
+  import { StageCover } from "./stage-cover.svelte";
   import ThreadSheet from "./ThreadSheet.svelte";
   import { pageMessage } from "./wire";
 
@@ -1313,38 +1313,6 @@
         <CoverState waiting={stageCover.stageWaiting} />
       {/if}
     </div>
-    {#if stageCover.compileErrors.length > 0}
-      {@const first = stageCover.compileErrors[0]}
-      <!-- The last good render stays under it, dimmed; the session is told of it on its own. -->
-      <div
-        aria-hidden="true"
-        class="absolute inset-0 bg-scrim pointer-events-none"
-        transition:appear
-      ></div>
-      <div
-        data-slot="sheet-error"
-        class="absolute inset-x-space-3 bottom-space-3 grid gap-space-2 max-h-3/5 overflow-auto p-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-tile"
-        role="alert"
-        transition:appear
-      >
-        <p class="m-0 text-error-9 text-size-body font-medium">
-          {errorTitle(first.kind)}
-          <code class="type-code">{errorPlace(first)}</code>
-        </p>
-        <p class="m-0 text-ink-muted type-meta">
-          {first.message.split("\n")[0]}
-        </p>
-        {#if first.frame}
-          <pre
-            class="m-0 overflow-x-auto p-space-2 rounded-sm bg-surface-recess text-ink-strong type-code">{first.frame}</pre>
-        {/if}
-        <p class="m-0 text-ink-muted type-meta">
-          {first.kind === "missing"
-            ? sheetWords.missingNext(stageCover.compileErrors.length - 1)
-            : sheetWords.errorNext(stageCover.compileErrors.length - 1)}
-        </p>
-      </div>
-    {/if}
   {/if}
   {#if stageCover.staged?.status === "error"}
     {@const staged = stageCover.staged}

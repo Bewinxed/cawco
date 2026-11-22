@@ -558,7 +558,7 @@ function faultCard(
   card.append(
     head,
     message,
-    ...fixingLine(page.by, words.storyNextSave),
+    ...fixingLine(page.by, words.agentTold),
     actions,
     details
   );

@@ -411,13 +411,11 @@ export const graphWords = {
     page: (name: string) => `${name} stopped with an error as it loaded.`,
   },
   /**
-   * Under a section that failed, on a page the person sees: the stage's
-   * section errors reach the agent's session (hub marks.ts `errorsOwed`),
-   * and its next save that compiles draws it.
+   * Under a section or a story that failed, on a page the person sees: the
+   * stage's errors, a story's throw among them, reach the agent's session
+   * (hub marks.ts `errorsOwed`), and its next save that works draws it.
    */
-  sectionAgentTold: "The agent is told. Its next save that works draws it.",
-  /** Under a story that threw, on a page the person sees: its next save that runs draws it. */
-  storyNextSave: "The agent's next save that works draws it.",
+  agentTold: "The agent is told. Its next save that works draws it.",
   /** The hub's link down: the stage keeps its last drawing. */
   stale: "Not live: the hub can't be reached. This is the last view it sent.",
 

@@ -63,6 +63,7 @@ import {
   type SheetOnPage,
   type SheetRead,
   type Story,
+  type StoryThrew,
   screenHeight,
   sectionName,
   sectionPlansOf,
@@ -791,11 +792,7 @@ export function boot(options: BootOptions): void {
       code.textContent = frame;
       details.append(code);
     }
-    failed.append(
-      line,
-      ...fixingLine(by, graphWords.sectionAgentTold),
-      details
-    );
+    failed.append(line, ...fixingLine(by, graphWords.agentTold), details);
     return failed;
   }
 
@@ -872,6 +869,12 @@ export function boot(options: BootOptions): void {
     };
   }
 
+  /**
+   * Each story whose drawing threw, by `file|story`, until it mounts again:
+   * posted with the report (`threw`), so the stage tells its agent.
+   */
+  const thrown = new Map<string, StoryThrew>();
+
   /** Mounts one story into `body`, its failure kept on `into`. */
   function mountInto(
     body: HTMLElement,
@@ -897,12 +900,18 @@ export function boot(options: BootOptions): void {
     mounting = Number.isFinite(width) ? width : null;
     // A throw its framework catches after the mount (an edit applied in place, an effect) is said in the story's place by the mode; one during the mount, by whoever mounted it.
     let returned = false;
+    const key = `${section.file}|${name}`;
+    const threw = (error: unknown) => {
+      into.error = pageError(error, root, base);
+      thrown.set(key, { file: section.file, story: name, error: into.error });
+    };
+    thrown.delete(key);
     try {
       const mounted = adapter.mountStory(
         body,
         specFor(section, name, args),
         (error) => {
-          into.error = pageError(error, root, base);
+          threw(error);
           later();
           if (returned) {
             mode?.threw(body);
@@ -912,7 +921,7 @@ export function boot(options: BootOptions): void {
       returned = true;
       return mounted;
     } catch (error) {
-      into.error = pageError(error, root, base);
+      threw(error);
       console.error(`[cawco] story ${name} did not mount:`, error);
     } finally {
       mounting = was;
@@ -1542,6 +1551,7 @@ export function boot(options: BootOptions): void {
               ? [{ file: section.file, error: section.failure.error }]
               : []
           ),
+          threw: [...thrown.values()],
         };
         await fetch(new URL("rendered", location.href), {
           method: "POST",

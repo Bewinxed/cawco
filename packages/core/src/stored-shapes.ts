@@ -4257,6 +4257,13 @@ const PageReportShape = declared(
 );
 export type PageReportOutput = z.output<typeof PageReportShape>;
 
+const StoryThrewShape = declared(
+  z.object({ error: PageErrorShape, file: z.string(), story: z.string() }),
+  "StoryThrew",
+  "packages/core/src/stage.ts"
+);
+export type StoryThrewOutput = z.output<typeof StoryThrewShape>;
+
 const SectionUnloadedShape = declared(
   z.object({ error: PageErrorShape, file: z.string() }),
   "SectionUnloaded",
@@ -4267,6 +4274,7 @@ export type SectionUnloadedOutput = z.output<typeof SectionUnloadedShape>;
 const PostedReportShape = declared(
   PageReportShape.extend({
     drawing: z.array(z.string()),
+    threw: z.array(StoryThrewShape),
     unloaded: z.array(SectionUnloadedShape),
   }),
   "PostedReport",

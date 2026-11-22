@@ -104,6 +104,7 @@ import {
   type StageFramework,
   type StageToolchain,
   type StoryOp,
+  type StoryThrew,
   sectionName,
   stageFrameworkOf,
   stageToolchainOf,
@@ -118,6 +119,7 @@ import {
   SheetWriteSchema,
 } from "@cawco/core/stored-shapes";
 import { lastLines } from "@cawco/core/words/helpers";
+import { stageRenderWords } from "@cawco/core/words/stage-render";
 import { transformCode } from "@code-inspector/core";
 import { originalPositionFor, TraceMap } from "@jridgewell/trace-mapping";
 import { parse as lex, init as lexerReady } from "es-module-lexer";
@@ -1373,6 +1375,7 @@ const frameId = (frame: FrameRender): string =>
 async function keepReport(body: unknown): Promise<void> {
   const report: PostedReport = PostedReportSchema.parse(body);
   keepUnloaded(report.unloaded, report.sections);
+  keepThrew(report.threw, report.sections);
   keepDrawing(report.sections, report.drawing);
   for (const drawn of report.sections) {
     if (storyFile(drawn.file)) {
@@ -3354,6 +3357,52 @@ function keepUnloaded(unloaded: SectionUnloaded[], drawn: PageSection[]): void {
   }
 }
 
+/** Where the stage keeps a story's throw ({@link keepThrew}): under its states file and its export, beside the file's own problem. */
+const threwKey = (abs: string, story: string): string => `${abs}#${story}`;
+
+/**
+ * Each story a page's drawing threw (`threw`), kept as a `page` problem of
+ * its states file naming the story, so its agent is told as of a section's
+ * (hub marks.ts `errorsOwed`); and every other story of a section the page
+ * posted lets its go, the post having drawn it.
+ */
+function keepThrew(threw: StoryThrew[], drawn: PageSection[]): void {
+  let changed = false;
+  const now = new Map<string, StageError>();
+  for (const one of threw) {
+    const file = storyFile(one.file);
+    if (file) {
+      const problem = pageProblem(file, one.error);
+      now.set(threwKey(resolve(root, file), one.story), {
+        ...problem,
+        message: stageRenderWords.storyThrew(one.story, problem.message),
+      });
+    }
+  }
+  for (const section of drawn) {
+    const file = storyFile(section.file);
+    if (!file) {
+      continue;
+    }
+    const prefix = threwKey(resolve(root, file), "");
+    for (const key of [...stageErrors.keys()]) {
+      if (key.startsWith(prefix) && !now.has(key)) {
+        stageErrors.delete(key);
+        changed = true;
+      }
+    }
+  }
+  for (const [key, problem] of now) {
+    if (!Bun.deepEquals(stageErrors.get(key), problem)) {
+      stageErrors.set(key, problem);
+      changed = true;
+    }
+  }
+  if (changed) {
+    tellErrors();
+  }
+}
+
 /** States file `file`'s (from the toolchain root) section as a page couldn't load it: the page's error, placed in the source and framed where its stack names a place. */
 function pageProblem(file: string, said: PageError): StageError {
   const error = sourced(said);
@@ -3775,8 +3824,11 @@ function cawcoStage() {
         const was = stageErrors.get(key);
         if (stageErrors.delete(key)) {
           tellErrors();
+          // A page's own problem (a story that threw, a module the browser refused) is cleared by the redraw itself.
           const still = new Set(
-            [...stageErrors.values()].flatMap((error) => error.sheets)
+            [...stageErrors.values()].flatMap((error) =>
+              error.kind === "page" ? [] : error.sheets
+            )
           );
           const files = (was?.sheets ?? []).filter((one) => !still.has(one));
           if (files.length > 0) {

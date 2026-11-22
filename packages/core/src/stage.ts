@@ -696,9 +696,25 @@ export interface SectionUnloaded {
  * section whose module didn't load in the page, which posts no section of
  * its own. The stage keeps each as that section's `page` problem.
  */
+/**
+ * A story whose drawing threw on the page (as it mounted, or after: an edit
+ * its framework applied in place, an effect): the stage keeps it as a
+ * `page` error of its states file until a post draws the story, so its
+ * agent is told as of a section's error (hub marks.ts `errorsOwed`).
+ */
+export interface StoryThrew {
+  error: PageError;
+  /** Its states file, from the toolchain root. */
+  file: string;
+  /** Its export's name. */
+  story: string;
+}
+
 export interface PostedReport extends PageReport {
   /** The states files the page is still drawing: their sections post once read. */
   drawing: string[];
+  /** Each story of a posted section whose drawing threw. */
+  threw: StoryThrew[];
   unloaded: SectionUnloaded[];
 }
 

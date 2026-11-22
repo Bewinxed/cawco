@@ -2,11 +2,7 @@
  * What stands over the page while its stage starts, compiles or fails: the cover's waiting, the down page's words, and the never-drawn time limit.
  */
 import { detach } from "@cawco/core/detach";
-import {
-  STAGE_CLONE_MS,
-  STAGE_READY_MS,
-  type StageErrorKind,
-} from "@cawco/core/stage";
+import { STAGE_CLONE_MS, STAGE_READY_MS } from "@cawco/core/stage";
 import { previewWords } from "@cawco/core/words/preview";
 import { sheetWords } from "@cawco/core/words/sheet";
 import { removeArtifact } from "../artifact-api";
@@ -16,25 +12,6 @@ import type { PaneDoc } from "./pane-doc.svelte";
 import type { PaneSubject } from "./pane-subject.svelte";
 import type { PreviewFrame } from "./preview-frame.svelte";
 
-/** A compile error's place, `file:line:column` as far as the toolchain's Vite payload names it (Astro and Nuxt run Vite inside). */
-export const errorPlace = (error: {
-  column: number | null;
-  file: string;
-  line: number | null;
-}) =>
-  `${error.file}${error.line ? `:${error.line}` : ""}${error.column ? `:${error.column}` : ""}`;
-/** The error card's title by its kind (core `StageError`): a missing states file is no compile error. */
-export const errorTitle = (kind: StageErrorKind | undefined) => {
-  switch (kind) {
-    case "missing":
-      return sheetWords.missingTitle;
-    case "page":
-      return sheetWords.pageTitle;
-    case "compile":
-    case undefined:
-      return sheetWords.errorTitle;
-  }
-};
 export interface StageCoverDeps {
   readonly instanceId: () => string;
   readonly paneDoc: PaneDoc;
