@@ -11753,78 +11753,6 @@
       "joined"
     ]
   },
-  "routine_runs.outcome": {
-    "type": "string",
-    "enum": [
-      "silent",
-      "delivered",
-      "failed",
-      "cancelled"
-    ]
-  },
-  "routine_runs.state": {
-    "type": "string",
-    "enum": [
-      "queued",
-      "starting",
-      "running",
-      "ended",
-      "skipped"
-    ]
-  },
-  "routine_runs.verdict": {
-    "type": "string",
-    "enum": [
-      "met",
-      "unmet",
-      "unknown"
-    ]
-  },
-  "routines.lands": {
-    "type": "string",
-    "enum": [
-      "main",
-      "branch",
-      "pr",
-      "none"
-    ]
-  },
-  "routines.made_by": {
-    "type": "string",
-    "enum": [
-      "delegate",
-      "session"
-    ]
-  },
-  "routines.mode": {
-    "type": "string",
-    "enum": [
-      "default",
-      "acceptEdits",
-      "plan",
-      "bypassPermissions",
-      "fullSend"
-    ]
-  },
-  "routines.stopped": {
-    "type": "string",
-    "enum": [
-      "met",
-      "deadline",
-      "failing"
-    ]
-  },
-  "routines.target": {
-    "type": "string",
-    "enum": [
-      "delegate",
-      "orchestrator",
-      "conversation",
-      "curator",
-      "trim",
-      "command"
-    ]
-  },
   "rule_state.status": {
     "type": "string",
     "enum": [
@@ -13743,6 +13671,70 @@
       "merged",
       "closed",
       "canceled"
+    ]
+  },
+  "task_runs.outcome": {
+    "type": "string",
+    "enum": [
+      "silent",
+      "delivered",
+      "failed",
+      "cancelled"
+    ]
+  },
+  "task_runs.state": {
+    "type": "string",
+    "enum": [
+      "queued",
+      "starting",
+      "running",
+      "ended",
+      "skipped"
+    ]
+  },
+  "task_runs.verdict": {
+    "type": "string",
+    "enum": [
+      "keep",
+      "stop",
+      "ask"
+    ]
+  },
+  "task_triggers.held": {
+    "type": "string",
+    "enum": [
+      "failed",
+      "deadline",
+      "failing",
+      "asked"
+    ]
+  },
+  "task_triggers.made_by": {
+    "type": "string",
+    "enum": [
+      "delegate",
+      "session"
+    ]
+  },
+  "task_triggers.mode": {
+    "type": "string",
+    "enum": [
+      "default",
+      "acceptEdits",
+      "plan",
+      "bypassPermissions",
+      "fullSend"
+    ]
+  },
+  "task_triggers.target": {
+    "type": "string",
+    "enum": [
+      "delegate",
+      "orchestrator",
+      "conversation",
+      "curator",
+      "trim",
+      "command"
     ]
   },
   "tool_call_keys.headers": {

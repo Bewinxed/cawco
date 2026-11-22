@@ -8,6 +8,8 @@
 export const commonWords = {
   /** Asks again for what failed to be read or done. */
   tryAgain: "Try again",
+  /** Try again while it asks. */
+  tryingAgain: "Trying again…",
   /** An editor's save, once what it edits exists. */
   saveChanges: "Save changes",
   /** Starts a session: the strip's +, the dialog's title. */

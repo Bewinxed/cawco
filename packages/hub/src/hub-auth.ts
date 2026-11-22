@@ -26,6 +26,13 @@
  *   read-only disclosure of the store is in your threat model, store a
  *   one-way verifier instead").
  *
+ * The mode is one rule for every way a request reaches the hub: the
+ * tailnet, the LAN, and a machine's SSH forward (ssh-door.ts) alike. Any
+ * local user of a machine reaches the hub by whichever of these its machine
+ * uses, so a program on a machine added over SSH is the caller a program on
+ * a tailnet machine is (owner, 2026-11-22: "any machine connected to cawco,
+ * whether via ssh or tailnet, should have feature parity").
+ *
  * In both, a request that presents a session credential is that session,
  * never the owner: it is refused on every route not listed for sessions,
  * however its other headers read. What decides is the credential presented,
@@ -59,8 +66,6 @@ import { Elysia, problem, t } from "elysia";
 import type { HubAuthDb } from "./db/hub-auth";
 import type { RecordHubEvent } from "./hub-record";
 import type { RouteSet } from "./machine-answers";
-
-import { SSH_FORWARD_HEADER, viaSshForward } from "./ssh-door";
 
 /** A machine's own row, which its join wait reads (cli await-joined.ts). */
 const AGENT_ROW = /^\/api\/agents\/([^/]+)$/u;
@@ -623,26 +628,13 @@ export const createHubAuth = ({
     if (machineId) {
       return { kind: "machine", machineId };
     }
-    return modeFor(header) === "trusted"
+    return mode() === "trusted"
       ? { kind: "owner", device: null }
       : { kind: "anonymous" };
   };
 
-  /**
-   * The mode a request is held to: the hub's, except through a machine's SSH
-   * forward (ssh-door.ts), where any local user of a shared box can reach
-   * it and every caller proves what it is, as with paired devices.
-   */
-  const modeFor = (header: Headers): HubAuthMode =>
-    viaSshForward(header(SSH_FORWARD_HEADER)) ? "pairing" : mode();
-
-  /** Whether `caller` may reach `method path` in the mode its request is held to. */
-  const allows = (
-    caller: Caller,
-    method: string,
-    path: string,
-    held: HubAuthMode
-  ): boolean => {
+  /** Whether `caller` may reach `method path` in the hub's mode. */
+  const allows = (caller: Caller, method: string, path: string): boolean => {
     const access = accessOf(method, path);
     if (caller.kind === "machine" && namesAnother(path, caller.machineId)) {
       return false;
@@ -653,7 +645,7 @@ export const createHubAuth = ({
         caller.instanceId === sessionReadOf(method, path)
       );
     }
-    if (access === "machine-proof" && held === "trusted") {
+    if (access === "machine-proof" && mode() === "trusted") {
       return caller.kind === "owner" || caller.kind === "machine";
     }
     return ALLOWED[access].has(caller.kind);
@@ -751,7 +743,7 @@ export const createHubAuth = ({
       clientAddress(header, address)
     );
     gated.set(request, caller);
-    if (allows(caller, request.method, path, modeFor(header))) {
+    if (allows(caller, request.method, path)) {
       return;
     }
     console.warn(
@@ -1263,7 +1255,6 @@ export const createHubAuth = ({
     holdsMachine,
     mintMachineKey,
     mode,
-    modeFor,
     pairingOff,
     provesFormer,
     proveSocket,

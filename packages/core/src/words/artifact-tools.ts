@@ -149,6 +149,9 @@ export const artifactToolWords = {
   /** A preview of a port CawCo itself serves (the dashboard's, the hub's): the dashboard would act on a preview's calls as the owner. */
   previewOfOwnPort:
     'That port is CawCo\'s own dashboard. A preview carries no CawCo sign-in, so the dashboard has no access through it. To look at a CawCo screen, draw its component: kind "component" with its states file (design-graph skill).',
+  /** A port preview's `serve.cwd` (`asked`) that its machine read no folder at, in the machine's words (`why`). */
+  serveFolderRefused: (asked: string, why: string) =>
+    `serve.cwd ${asked} names no folder CawCo can serve from: ${why} Name the app's folder on your machine, absolute or from your folder.`,
   /** An `artifact_list` cursor that no page of it gave. */
   notListCursor: (cursor: string) =>
     `"${cursor}" is not a cursor artifact_list gave. Pass a page's next_cursor for the page after it, or none for the newest page.`,

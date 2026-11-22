@@ -125,10 +125,6 @@ export const stepLink = (
   words: string
 ): string => referenceLink("step", `${session}/${step}`, words);
 
-/** Routine `id`, labelled by its name: its chip opens it. */
-export const routineLink = (id: string, name: string): string =>
-  referenceLink("routine", id, name);
-
 /** Project `id`, labelled by its name: its chip opens the project. */
 export const projectLink = (id: string, name: string): string =>
   referenceLink("project", id, name);

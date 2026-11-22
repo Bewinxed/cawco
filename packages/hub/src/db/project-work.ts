@@ -563,11 +563,17 @@ export const workRowsDb = (core: DbCore): WorkRowsDb => {
           .run();
       }),
     projectAttempts: (projectId) => {
+      // A routine's runs are read from its ledger, capped (routines.ts):
+      // their work items stay out of the project's attempts.
       const items = db
         .select()
         .from(workItems)
         .where(
-          and(eq(workItems.projectId, projectId), isNotNull(workItems.taskId))
+          and(
+            eq(workItems.projectId, projectId),
+            isNotNull(workItems.taskId),
+            sql`coalesce(${workItems.parentInstanceId}, '') NOT LIKE 'routine:%'`
+          )
         )
         .orderBy(desc(workItems.createdAt), desc(workItems.id))
         .all();

@@ -929,7 +929,7 @@ export const createWorkspaces = ({
    * A workspace's own folders, which go with it: its copy ({@link ownCopy})
    * and its scratch dir (its commands' `TMPDIR`). A Linux view's path is the
    * person's folder, which its retirement never touches, so nothing there
-   * (a project's place, a preview of it) is the workspace's.
+   * (a project's place) is the workspace's.
    */
   const rootsOf = (workspace: WorkspaceRow): string[] => [
     ...(ownCopy(workspace) ? [workspace.path] : []),
@@ -938,30 +938,15 @@ export const createWorkspaces = ({
   /**
    * THE ONE READ OF WHAT A WORKSPACE SERVES: the artifacts, any session's,
    * whose row names it (db artifacts.ts `previewing`: a port preview or a
-   * sheet naming it, a folder preview inside its clone or scratch dir), a
-   * held next version among them. None of them holds it: once its work is
-   * over and no stage runs in it, it goes, and opening one of them brings it
-   * back ({@link revive}). Its archive or discard, on purpose, refuses while
-   * any of them, or a decision page showing one, waits on the person
-   * ({@link waitingFrom}). A Linux view's path is the person's folder, so a
-   * folder preview there is not the workspace's; a port preview naming it
-   * is.
+   * sheet naming it), a held next version among them. A folder preview is
+   * none: the hub keeps its files (artifacts/preview-folder.ts). None of
+   * them holds it: once its work is over and no stage runs in it, it goes,
+   * and opening one of them brings it back ({@link revive}). Its archive or
+   * discard, on purpose, refuses while any of them, or a decision page
+   * showing one, waits on the person ({@link waitingFrom}).
    */
-  const servedFrom = (workspace: WorkspaceRow): ArtifactRow[] => {
-    const roots = rootsOf(workspace);
-    const rows = new Map<string, ArtifactRow>();
-    // "//" is no folder: a workspace with no folder of its own still serves its ports.
-    for (const path of roots.length > 0 ? roots : ["//"]) {
-      for (const row of db.artifacts.previewing({
-        id: workspace.id,
-        machineId: workspace.machineId,
-        path,
-      })) {
-        rows.set(row.id, row);
-      }
-    }
-    return [...rows.values()];
-  };
+  const servedFrom = (workspace: WorkspaceRow): ArtifactRow[] =>
+    db.artifacts.previewing(workspace.id);
   /**
    * How long a workspace cut again for a design being opened ({@link
    * revive}) is held for that open's stage to start and be heard: a place's

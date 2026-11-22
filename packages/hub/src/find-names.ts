@@ -412,7 +412,7 @@ export const routineEntry = (
     project,
     enabled: routine.enabled,
     lastOutcome: routine.lastOutcome,
-    nextRun: routine.nextSlot.getTime(),
+    nextRun: routine.nextSlot?.getTime() ?? 0,
     lastActivity: routine.lastRunAt?.getTime() ?? null,
     matched: [],
     score: 0,

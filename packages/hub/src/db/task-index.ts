@@ -1,6 +1,8 @@
 /** The project-task index and who waits on what. */
 
 import type { TaskLinkSummary } from "@cawco/core/external-items";
+import type { OfferedMode } from "@cawco/core/harness/modes";
+import type { RoutineTarget } from "@cawco/core/routine-kinds";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { DbCore } from "./core";
 import {
@@ -10,8 +12,34 @@ import {
   projectTaskLabels,
   projectTaskOutputs,
   projectTasks,
+  taskTriggers,
 } from "./schema";
 import { summaryOf as linkSummaryOf, syncTaskLinks } from "./task-links";
+import type { Tx } from "./tx";
+
+/**
+ * A routine's lines (task-file.ts `TRIGGER_FIELDS`) as the index read them:
+ * what `task_triggers` copies, so the scheduler reads no file.
+ */
+export interface TriggerIndex {
+  command: string | null;
+  cron: string | null;
+  dailyCapUsd: number | null;
+  deadline: Date | null;
+  keep: boolean;
+  mode: OfferedMode | null;
+  /**
+   * The schedule's next slot from the read: kept only when the schedule
+   * changed (a changed schedule starts from now) or none was kept; null
+   * with no schedule, or one that does not parse.
+   */
+  nextSlot: Date | null;
+  /** What of its lines does not read, its cron and zone included; null when all of it does. */
+  problem: string | null;
+  stop: string | null;
+  target: RoutineTarget;
+  timeZone: string | null;
+}
 
 /** One task file as a project's task index holds it (tasks.ts). */
 export type TaskIndexRow = typeof projectTasks.$inferSelect & {
@@ -29,6 +57,13 @@ export type TaskIndexRow = typeof projectTasks.$inferSelect & {
    * last said it.
    */
   links: TaskLinkSummary[];
+  /**
+   * Written only: its routine's lines when its file makes it one, copied to
+   * its trigger (a new trigger row when it has none); null when its file
+   * makes it none, which leaves its trigger firing nothing; left out, its
+   * trigger is not touched.
+   */
+  trigger?: TriggerIndex | null;
 };
 
 export interface TaskIndexDb {
@@ -44,6 +79,65 @@ export interface TaskIndexDb {
     taskId: string
   ) => { id: string; path: string }[];
 }
+
+/**
+ * A task's routine lines copied to its trigger: a trigger made for a task
+ * whose file makes it a routine and that has none (made by you, until a
+ * maker says otherwise: task-tools.ts writes who made it right after), its
+ * next slot moved only when its schedule changed; a file that no longer
+ * makes it one leaves its trigger with no target, which fires nothing and
+ * keeps its runs.
+ */
+const copyTrigger = (
+  tx: Tx,
+  projectId: string,
+  taskId: string,
+  trigger: TriggerIndex | null
+): void => {
+  const ofTask = and(
+    eq(taskTriggers.projectId, projectId),
+    eq(taskTriggers.taskId, taskId)
+  );
+  const kept = tx.select().from(taskTriggers).where(ofTask).get();
+  if (trigger === null) {
+    if (kept?.target) {
+      tx.update(taskTriggers).set({ target: null }).where(ofTask).run();
+    }
+    return;
+  }
+  const { nextSlot, ...copy } = trigger;
+  if (!kept) {
+    tx.insert(taskTriggers)
+      .values({
+        id: crypto.randomUUID(),
+        projectId,
+        taskId,
+        ...copy,
+        nextSlot,
+        createdBy: "owner",
+        createdAt: new Date(),
+      })
+      .run();
+    return;
+  }
+  const rescheduled =
+    kept.cron !== copy.cron ||
+    kept.timeZone !== copy.timeZone ||
+    (kept.nextSlot === null && nextSlot !== null);
+  tx.update(taskTriggers)
+    .set({ ...copy, ...(rescheduled ? { nextSlot } : {}) })
+    .where(ofTask)
+    .run();
+};
+
+/** Each written row's routine lines copied to its trigger ({@link copyTrigger}); a row that leaves them out touches none. */
+const copyTriggers = (tx: Tx, rows: readonly TaskIndexRow[]): void => {
+  for (const row of rows) {
+    if (row.trigger !== undefined) {
+      copyTrigger(tx, row.projectId, row.id, row.trigger);
+    }
+  }
+};
 
 export const taskIndexDb = (core: DbCore): TaskIndexDb => {
   const { db, taskLinksOf } = core;
@@ -156,14 +250,17 @@ export const taskIndexDb = (core: DbCore): TaskIndexDb => {
             .all()
             .map((project) => project.id)
         );
+        const kept = rows.filter((r) => live.has(r.projectId));
+        copyTriggers(tx, kept);
         for (const {
           waitsOn,
           labels,
           outputs,
           fields,
           links,
+          trigger: _trigger,
           ...row
-        } of rows.filter((r) => live.has(r.projectId))) {
+        } of kept) {
           const { projectId, path: file } = row;
           syncTaskLinks(
             tx,

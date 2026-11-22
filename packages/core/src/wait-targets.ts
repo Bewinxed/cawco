@@ -13,12 +13,14 @@
  * | pr      | `https://github.com/<owner>/<repo>/pull/<n>`      | the same                        |
  * | run     | `https://github.com/<owner>/<repo>/actions/runs/<n>` | the same                     |
  * | session | `<dir>#<id8>`, the handle CawCo's tools name it by | `<dir>#<session id>`           |
- * | routine | `routine:<handle, id or name>`, a routine's condition | `routine:<routine id>`         |
  * | time    | an ISO 8601 date or date-time (`2026-12-01`, `2026-12-01T09:00+03:00`) | the instant in UTC, `2026-12-01T06:00:00Z` |
  *
  * A date or date-time with no offset is UTC: the hub, the dashboard and the
  * task file read it as the same instant wherever they run. A day that is
  * not on the calendar (`2026-02-30`) reads as no date.
+ *
+ * A routine is a task (Projects spec §5.5): a wait on one names its task,
+ * `tsk-12`, and settles once its task is done.
  *
  * A kept card's artifact and a kept session are whole ids, so `<uuid>#<card>`
  * and `<dir>#<uuid>` never read as each other.
@@ -26,7 +28,7 @@
 import { refOfUrl } from "./external-items";
 
 export type WaitKind =
-  "task" | "card" | "pin" | "pr" | "run" | "session" | "routine" | "time";
+  "task" | "card" | "pin" | "pr" | "run" | "session" | "time";
 
 export type WaitTarget =
   | { kind: "task"; id: string }
@@ -41,8 +43,6 @@ export type WaitTarget =
   | { kind: "pr"; number: number; repo: string; url: string }
   | { kind: "run"; id: string; repo: string; url: string }
   | { kind: "session"; dir: string; instanceId: string }
-  /** A routine's condition: settled once a run says it is met. */
-  | { kind: "routine"; id: string }
   /** A date: settled once the instant, in ms since the epoch, has passed. */
   | { kind: "time"; at: number };
 
@@ -50,9 +50,6 @@ const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const TASK = /^(?:tsk-|#)?(\d{1,9})$/iu;
 const CARD = new RegExp(`^(${UUID})#([^#=\\s]+)(?:=([^#=\\s]+))?$`, "iu");
 const SESSION = new RegExp(`^([^#\\s]*)#(${UUID})$`, "iu");
-/** What a wait on a routine's condition begins with: a bare short handle of digits would read as a task. */
-export const ROUTINE_WAIT = "routine:";
-const ROUTINE = new RegExp(`^${ROUTINE_WAIT}(${UUID})$`, "iu");
 const PIN = new RegExp(`^(${UUID})/(\\d{1,6})$`, "iu");
 const TIME =
   /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:?\d{2})?)?$/iu;
@@ -138,16 +135,12 @@ export const taskTarget = (handle: string): string | undefined => {
   return found ? `tsk-${Number(found[1])}` : undefined;
 };
 
-/** A wait as a file keeps it, read back; undefined when its shape is none of the eight. */
+/** A wait as a file keeps it, read back; undefined when its shape is none of the seven. */
 export const waitTarget = (handle: string): WaitTarget | undefined => {
   const kept = handle.trim();
   const time = timeTarget(kept);
   if (time) {
     return time;
-  }
-  const routine = ROUTINE.exec(kept);
-  if (routine) {
-    return { kind: "routine", id: routine[1].toLowerCase() };
   }
   const task = taskTarget(kept);
   if (task) {
@@ -198,8 +191,6 @@ export const waitHandle = (target: WaitTarget): string => {
       return target.url;
     case "session":
       return `${target.dir}#${target.instanceId}`;
-    case "routine":
-      return `${ROUTINE_WAIT}${target.id}`;
     case "time":
       return timeHandle(target.at);
   }

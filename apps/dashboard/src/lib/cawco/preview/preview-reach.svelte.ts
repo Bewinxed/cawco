@@ -39,7 +39,7 @@ const namesOrigin = (address: { origin?: string; port?: number }): boolean =>
  * its tab coming back into view probes it, the pane still saying what
  * failed. Our calls.
  */
-export const PROBES: BackoffPolicy = {
+const PROBES: BackoffPolicy = {
   firstMs: 2000,
   mostMs: 30_000,
   giveUp: { afterTries: 20 },

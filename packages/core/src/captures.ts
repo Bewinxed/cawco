@@ -3,7 +3,7 @@
  * which the panel (600px beside the transcript, 390px on a phone) draws at a
  * fraction of their size. Read from each file's header alone (PNG IHDR,
  * JPEG SOF0/SOF2, WebP VP8/VP8L/VP8X), with no decoder: the hub counts them
- * on a built page, the daemon in a folder preview's start page.
+ * on a built page and on a folder preview's start page.
  */
 import { DESK_CAPTURE_WIDTH } from "./artifact-kinds";
 

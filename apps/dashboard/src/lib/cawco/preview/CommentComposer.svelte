@@ -22,6 +22,7 @@
 -->
 <script lang="ts">
   import { commentWords } from "@cawco/core/words/comments";
+  import { previewWords } from "@cawco/core/words/preview";
   import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
@@ -154,7 +155,7 @@
         {#snippet child({ props })}
           <button
             {...props}
-            aria-label={`On ${chain[chosen]}: change what this comment is about`}
+            aria-label={previewWords.aboutElement(chain[chosen])}
             class={[chipVariants({ variant: "setting" }), "max-w-full"]}
             data-slot="target-chip"
             type="button"

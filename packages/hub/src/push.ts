@@ -2096,25 +2096,30 @@ export const createPush = ({
     },
 
     /**
-     * A routine's run you should hear of (routines.ts): `failed`, its retry
-     * failed too and it needs you; else a routine in no project delivered
-     * words, which go sealed. Named by the routine's name, which its maker
-     * gave it, so it goes sealed too; the visible title is "Routine".
+     * A routine that needs you (routines.ts, §5.5): a slot that failed
+     * twice, three failing slots, its deadline passed with no stop, or a
+     * run's question. One push (`CAWCO_TASK`) that opens its task; Reply
+     * writes to the run's session while the hub holds it. Named by the
+     * routine's name, which its maker gave it, so it goes sealed; the
+     * visible title is "Routine".
      */
     routine(run: {
       failed: boolean;
       instanceId: string | null;
       name: string;
       output: string | null;
-      projectId: string | null;
+      projectId: string;
       routineId: string;
-      runId: string;
+      runId: string | null;
+      /** Its task; null while it is not filed. */
+      taskId: string | null;
     }): void {
       const [row] = run.instanceId
         ? db.getInstancesByIds([run.instanceId])
         : [];
       const project = projectName(run.projectId);
       const body = run.failed ? NEEDS_YOU : "Delivered";
+      const { taskId } = run;
       arrive({
         ask: false,
         instanceId: row?.id ?? null,
@@ -2125,44 +2130,51 @@ export const createPush = ({
           sealed: alertOf(
             run.name,
             project,
-            run.failed ? NEEDS_YOU : firstLine(run.output ?? "") || body
+            firstLine(run.output ?? "") || body
           ),
-          category: row
-            ? PUSH_CATEGORIES.attempt
-            : PUSH_CATEGORIES.taskOpenOnly,
+          category:
+            row && taskId ? PUSH_CATEGORIES.task : PUSH_CATEGORIES.taskOpenOnly,
           collapseId: `routine-${run.routineId}`,
-          group: run.projectId ?? `routine-${run.routineId}`,
-          data: {
-            kind: "routine",
-            instanceId: row?.id ?? null,
-            machineId: row?.machineId ?? null,
-            projectId: run.projectId,
-            routineId: run.routineId,
-            runId: run.runId,
-          },
+          group: run.projectId,
+          data: taskId
+            ? {
+                kind: "task",
+                instanceId: row?.id ?? null,
+                machineId: row?.machineId ?? null,
+                projectId: run.projectId,
+                taskId,
+              }
+            : {
+                kind: "routine",
+                instanceId: row?.id ?? null,
+                machineId: row?.machineId ?? null,
+                projectId: run.projectId,
+                routineId: run.routineId,
+                runId: run.runId,
+              },
         },
       });
       console.log(
-        `[push] routine ${run.routineId} run ${run.runId}: ${run.failed ? "needs you" : "delivered"}`
+        `[push] routine ${run.routineId} run ${run.runId ?? "none"}: ${run.failed ? "needs you" : "delivered"}`
       );
     },
 
     /**
      * A session made a routine (routines.ts `announce`): you hear of it once,
-     * beside its note in the project's conversation. Its name and what it said are the
-     * agent's words, so they go sealed; the visible words are "Routine" and
-     * "New routine". Open only: there is nothing to answer from the lock
-     * screen, and Keep and Turn off are on its notice.
+     * beside its note in the project's conversation, opening its task. Its
+     * name and what it said are the agent's words, so they go sealed; the
+     * visible words are "Routine" and "New routine".
      */
     routineMade(made: {
       /** The sealed line under its name: its schedule and when it turns off. */
       line: string;
       name: string;
-      /** Null for a routine in no project. */
-      projectId: string | null;
+      projectId: string;
       routineId: string;
+      taskId: string | null;
     }): void {
       const project = projectName(made.projectId);
+      const { taskId } = made;
       arrive({
         ask: false,
         instanceId: null,
@@ -2173,15 +2185,23 @@ export const createPush = ({
           sealed: alertOf(made.name, project, made.line),
           category: PUSH_CATEGORIES.taskOpenOnly,
           collapseId: `routine-made-${made.routineId}`,
-          group: made.projectId ?? `routine-${made.routineId}`,
-          data: {
-            kind: "routine",
-            instanceId: null,
-            machineId: null,
-            projectId: made.projectId,
-            routineId: made.routineId,
-            runId: null,
-          },
+          group: made.projectId,
+          data: taskId
+            ? {
+                kind: "task",
+                instanceId: null,
+                machineId: null,
+                projectId: made.projectId,
+                taskId,
+              }
+            : {
+                kind: "routine",
+                instanceId: null,
+                machineId: null,
+                projectId: made.projectId,
+                routineId: made.routineId,
+                runId: null,
+              },
         },
       });
       console.log(`[push] routine ${made.routineId}: made, announced`);

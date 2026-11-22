@@ -1,6 +1,7 @@
 /**
- * A routine as the routes and tools answer it (routines.ts makes it), and as
- * the words that show it (presenters/project.ts) read it.
+ * A routine as the `/api/routines` routes answer it (routines.ts `viewOf`),
+ * thin over its task until the dashboard reads tasks (slice 6 of the
+ * routines-as-tasks merge): its trigger, and its task's words.
  */
 
 import type { OfferedMode } from "@cawco/core/harness/modes";
@@ -17,7 +18,7 @@ import type {
 import type { WorkBudget } from "./db/stored-types";
 
 /**
- * Where a routine was made: the session whose `routine_create` call made
+ * Where a routine was made: the session whose `task_create` call made
  * it, and how its notice names that session.
  */
 interface RoutineMadeIn {
@@ -25,9 +26,9 @@ interface RoutineMadeIn {
   instanceId: string;
 }
 
-/** A routine's condition as its view answers it: where it stands, and what waits on it. */
+/** A routine's stop condition as its view answers it: where it stands. */
 export interface RoutineCondition extends ConditionView {
-  /** What a task's `waits_on` or a plan step's `waitsOn` writes to wait on it. */
+  /** What a task's `waits_on` or a plan step's `waitsOn` writes to wait on it: its task, `tsk-N`. */
   handle: string;
   /** Plan steps not done, of sessions not over, that wait on it. */
   steps: number;
@@ -38,7 +39,7 @@ export interface RoutineCondition extends ConditionView {
 /** A routine, as the routes and tools answer it (times in ms), with its newest runs. */
 export interface RoutineView {
   budget: WorkBudget | null;
-  /** Its condition, which makes it a check tasks and plan steps wait on; null for a routine with none. */
+  /** Its stop condition; null for a routine with none. */
   condition: RoutineCondition | null;
   createdAt: number;
   createdBy: string;
@@ -65,7 +66,9 @@ export interface RoutineView {
    */
   nextRuns: number[];
   nextSlot: number;
+  /** Its project; null for the Fleet project's. */
   projectId: string | null;
+  /** Its task's description: what each run does (a command check's: its title). */
   prompt: string;
   runs: RoutineRunView[];
   /** Every run it has had; `runs` holds only the newest of them. */
@@ -73,5 +76,7 @@ export interface RoutineView {
   /** Its schedule in words, and its next run. */
   schedule: RoutineSchedule;
   target: RoutineTarget;
+  /** Its task, `tsk-N`; null while a routine carried over from before routines were tasks waits to be filed. */
+  taskId?: string | null;
   timeZone: string;
 }

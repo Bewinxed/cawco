@@ -15,7 +15,8 @@
   inside it. Replaced, its block holds no frame: it stands as the page's
   last picture (its thumbnail), or a box of the frame's shape naming it.
   A name no page of the conversation has, or a page that can't open, says
-  so in one line in its place.
+  so in one line in its place; a page nothing serves any more (the proxy's
+  own page in its frame) draws every frame's down state over it.
 
   A kept block draws a Preview with the decision page's own
   (decisions/host/Preview.svelte), which the page's media resolve.
@@ -28,6 +29,8 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconArtifactPageLinear } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
+  import FrameDown from "../../preview/FrameDown.svelte";
+  import { type Down, hearDown } from "../../preview/frame-down";
   import { entryTo, turnedAwayWords } from "../../preview/pass";
   import { blockMediaHere } from "./block-media";
   import { BLOCK_ROOM, blockSize } from "./block-size";
@@ -65,6 +68,8 @@
   let served = $state<{ origin: string; src: string } | null>(null);
   let problem = $state<string | null>(null);
   let loaded = $state(false);
+  /** The proxy's own page stands in its frame (`cawco:down`, frame-down.ts): nothing serves the page. */
+  let down = $state<Down | null>(null);
 
   // Where the page is served, asked once it is found, for a live block.
   $effect(() => {
@@ -73,6 +78,7 @@
     served = null;
     problem = null;
     loaded = false;
+    down = null;
     if (!(found && pages) || stands) {
       return;
     }
@@ -120,6 +126,16 @@
       );
     }
   });
+
+  // Its frame's down page, from whatever origin answered it.
+  $effect(() =>
+    hearDown(
+      () => frame,
+      (heard) => {
+        down = heard;
+      }
+    )
+  );
 
   // Turned away by its origin, it goes through the entry once, which lands it at its page.
   $effect(() => {
@@ -208,7 +224,20 @@
           title={transcriptWords.blockPageFrame(title)}
         ></iframe>
       {/if}
-      {#if !loaded}
+      {#if down}
+        <!-- Nothing serves the page: every frame's down state, over its frame. -->
+        <FrameDown
+          class="absolute inset-0"
+          down={down.down}
+          onretry={() => {
+            down = null;
+            if (frame && served) {
+              frame.src = served.src;
+            }
+          }}
+          why={down.why}
+        />
+      {:else if !loaded}
         <div aria-hidden="true" class="absolute inset-0">
           <Skeleton fill="frame" />
         </div>

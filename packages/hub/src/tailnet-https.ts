@@ -538,16 +538,21 @@ export const dashboardRelay =
         hop("x-forwarded-host", request.headers.get("host") ?? url.host);
         const upstream = `127.0.0.1:${port}${url.pathname}${url.search}`;
         if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-          return upgradePreview(request, server, `ws://${upstream}`, headers, {
-            hop: RELAY_HOP,
-            instanceId: "dashboard",
-          })
-            ? undefined
-            : problemResponse({
-                status: 400,
-                code: "websocket-upgrade-failed",
-                detail: "WebSocket upgrade failed",
-              });
+          const refused = await upgradePreview(
+            request,
+            server,
+            `ws://${upstream}`,
+            headers,
+            { hop: RELAY_HOP, instanceId: "dashboard" }
+          );
+          return (
+            refused &&
+            problemResponse({
+              status: refused.status,
+              code: "websocket-upgrade-failed",
+              detail: refused.why,
+            })
+          );
         }
         try {
           const answer = await forwardRequest(

@@ -405,7 +405,7 @@
                   />
                 {/if}
               </div>
-              {#if wait.kind === "routine"}
+              {#if wait.condition}
                 <ConditionWait
                   {onchanged}
                   {projectId}

@@ -32,10 +32,9 @@ export const machineFetch = async (
   );
   const hubId = health.data?.hubId;
   // An admitted machine's request goes signed or not at all: one sent
-  // without its proof is refused through a machine's SSH forward, which
-  // holds every caller to paired devices (hub ssh-door.ts), and its 401
-  // would read as the hub's word on this machine rather than as a hub that
-  // could not be asked.
+  // without its proof is refused by a hub that requires paired devices, and
+  // its 401 would read as the hub's word on this machine rather than as a
+  // hub that could not be asked.
   if (!hubId) {
     throw new Error(
       `${origin}/health answered HTTP ${health.status} without naming its hub, so this machine's request to it could not be signed`

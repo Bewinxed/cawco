@@ -48,7 +48,7 @@ const LARGE: ReadonlySet<string> = new Set([
   "capability_calls",
   "tool_call_keys",
   "inbound_events",
-  "routine_runs",
+  "task_runs",
 ]);
 
 /** How many statements' plans are kept as explained: past it, new ones go unexplained, and the log says so once. */

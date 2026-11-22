@@ -674,7 +674,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     if (unopened) {
       return unopened;
     }
-    // Served from the workspace's own stage, live (served.ts `pinTarget`).
+    // Served from the workspace's own stage, live (served.ts `sheetOf`).
     const { before, row } = placeSheet(making, input.name, said, {
       machineId,
       source,
@@ -737,7 +737,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
                 bytes: new TextEncoder().encode(from.html),
               },
             ]
-          : await deps.folderFiles(maker, from.dir);
+          : await deps.folderFiles({ instance: maker }, from.dir);
       if (own instanceof ElysiaStatus) {
         return designMissed(
           ask,

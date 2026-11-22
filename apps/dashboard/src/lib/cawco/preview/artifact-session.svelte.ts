@@ -23,6 +23,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { ListedBrowser } from "@cawco/core/browser";
 import type { ArtifactSessionFrame } from "@cawco/core/frames";
 import type { FsEntry, FsPayload } from "@cawco/core/protocol";
+import { artifactSessionWords } from "@cawco/core/words/artifact-session";
 import { z } from "zod";
 import { ArtifactSessionHeardSchema } from "#lib/cawco/stored-shapes.js";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
@@ -246,9 +247,7 @@ export class ArtifactSession implements PaneFleet {
       waiter.resolve(payload.result);
     } else {
       waiter.reject(
-        new Error(
-          payload.error ?? "The machine could not carry out that request."
-        )
+        new Error(payload.error ?? artifactSessionWords.folderRefused)
       );
     }
   }
@@ -286,11 +285,7 @@ export class ArtifactSession implements PaneFleet {
   ): Promise<Bounded<T>> {
     const socket = this.#socket;
     if (socket?.readyState !== WebSocket.OPEN) {
-      return Promise.reject(
-        new Error(
-          "The hub isn't connected right now, so the folders can't be read. Try again."
-        )
-      );
+      return Promise.reject(new Error(artifactSessionWords.hubNotLinked));
     }
     const requestId = newId();
     const payload: FsPayload = { requestId, op, path };

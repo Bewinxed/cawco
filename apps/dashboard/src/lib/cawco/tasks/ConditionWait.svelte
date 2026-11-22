@@ -3,7 +3,7 @@
   import { conditionWords as words } from "@cawco/core/words/conditions";
   /**
    * A condition a task waits on, under its row in Waits on (TaskNeeds):
-   * where it stands, told by its state (hub conditions.ts), and what you can
+   * where it stands, told by its state (hub routine-stop.ts), and what you can
    * do to it beside it (DESIGN.md, Flow):
    * - checking, not yet, could not check: its last words and when it checks
    *   next and stops; Mark met, Start anyway;
@@ -79,6 +79,8 @@
         return words.failing(condition.reason);
       case "paused":
         return words.paused;
+      case "asked":
+        return words.askedLine(condition.reason);
       case "met":
         return condition.markedMet
           ? words.markedMet(ago(condition.metAt ?? Date.now()))
@@ -125,6 +127,7 @@
       case "met":
       case "timed-out":
       case "failing":
+      case "asked":
       case "paused":
       case "deleted":
         return [];

@@ -48,6 +48,7 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { z } from "zod";
 import type { Blocks } from "./blocks";
 import type { DbShape } from "./db";
+import type { RoutineRow } from "./db/task-triggers";
 import { fileOr } from "./memory";
 import { checkView, readView } from "./openui";
 import {
@@ -64,6 +65,7 @@ import {
 import { appliesNow } from "./proposal-base";
 
 import { nextRunsOf, slotLabel } from "./routine-schedule";
+import { standingOf } from "./routine-standing";
 import type { Tasks } from "./tasks";
 import { unrecognizedKeys } from "./unrecognized-keys";
 
@@ -297,30 +299,57 @@ export const createViews = ({
     return staged;
   };
 
-  const routinesOf = (projectId: string, runs = 5) => {
+  /**
+   * Each routine of a project as its task stands (routine-standing.ts
+   * `standingOf`): one its task ended is off with no next start. A list
+   * that does not read tells each as its trigger keeps it, as find does
+   * before it has read a project's stages.
+   */
+  const standingIn = async (projectId: string) => {
+    const list = await tasks.list(projectId);
+    if (list instanceof ElysiaStatus) {
+      return (row: RoutineRow): RoutineRow => row;
+    }
+    const listed = new Map(
+      list.tasks.map((task) => [
+        task.id,
+        { kind: task.kind, stage: task.stage },
+      ])
+    );
+    return (row: RoutineRow): RoutineRow =>
+      standingOf(row, (row.taskId && listed.get(row.taskId)) || "gone");
+  };
+
+  /** A project's routines, each as its task stands ({@link standingIn}): one its task ended has no runs ahead. */
+  const routinesOf = async (projectId: string, runs = 5) => {
     const unknown = known(projectId);
     if (unknown instanceof ElysiaStatus) {
       return unknown;
     }
+    const stood = await standingIn(projectId);
     const rows: ViewRoutinesOutput["rows"] = [];
-    for (const row of db.routines.list(projectId)) {
-      const nextRuns = nextRunsOf(row.cron, row.timeZone, Date.now());
+    for (const kept of db.routines.list(projectId)) {
+      const row = stood(kept);
+      const zone =
+        row.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const nextRuns =
+        row.cron && row.nextSlot ? nextRunsOf(row.cron, zone, Date.now()) : [];
       if (nextRuns instanceof ElysiaStatus) {
         return nextRuns;
       }
       rows.push({
         id: row.id,
         name: row.name,
-        target: row.target,
-        delegateType: row.delegateType,
-        enabled: row.enabled,
-        cron: row.cron,
-        timeZone: row.timeZone,
-        nextSlot: row.nextSlot.getTime(),
+        target: row.target ?? "delegate",
+        delegateType: null,
+        enabled: row.enabled && row.held === null,
+        cron: row.cron ?? "",
+        timeZone: row.timeZone ?? "",
+        nextSlot: row.nextSlot?.getTime() ?? 0,
         nextRuns,
         lastSlot: row.lastSlot?.getTime() ?? null,
         runs: db.routines.runs(row.id, runs).map((run) => ({
-          slot: slotLabel(run.slot, row.timeZone),
+          slot: slotLabel(run.slot, zone),
           state: run.state,
           outcome: run.outcome,
           reason: run.reason,

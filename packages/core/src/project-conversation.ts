@@ -272,7 +272,7 @@ export type ProjectNoteEvent =
 export type RoutineMadeBy = "delegate" | "session";
 
 /**
- * A session made a routine with `routine_create` (routines.ts `announce`):
+ * A session made a routine with `task_create` (routines.ts `announce`):
  * the note in its project's conversation. Keep, Turn off and Open act on `routineId`
  * through `/api/routines/:id`.
  */

@@ -20,7 +20,7 @@ import type {
   StageState,
   StageWarm,
 } from "@cawco/core/stage";
-import type { FolderWeight } from "@cawco/preview/proxy";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type { problem } from "elysia";
 import type { Caw } from "../caw";
 import type {
@@ -222,27 +222,13 @@ export interface ArtifactServiceDeps {
    */
   finished: (instance: InstanceRow) => boolean;
   /**
-   * Every file of folder `dir` on session `instance`'s machine, admitted as
-   * a delegate's inputs are (agent inputs.ts: a workspace's session hands
-   * only what it reads, never what every boundary hides) and read whole,
-   * each by its path from `dir`; refused in the machine's words.
+   * Every file of folder `dir` as `reader` reads it (design-files.ts
+   * `FolderReader`), admitted as a delegate's inputs are (agent inputs.ts:
+   * a workspace's session hands only what it reads, never what every
+   * boundary hides) and read whole within its limits, each by its path from
+   * `dir`; refused in the machine's words.
    */
-  folderFiles: (
-    instance: InstanceRow,
-    dir: string
-  ) => ReturnType<ReturnType<typeof createDesignFiles>>;
-  /** What a folder preview of `dir` loads, weighed on machine `machineId`, and the desk captures on its start page at `path` (agent preview.ts `previewWeight`); refused saying why it can't. */
-  folderWeight: (
-    machineId: string,
-    dir: string,
-    path: string | undefined
-  ) => Promise<
-    | FolderWeight
-    | Unanswered
-    | ReturnType<
-        typeof problem<502, { code: "artifact-folder-unread"; detail: string }>
-      >
-  >;
+  folderFiles: ReturnType<typeof createDesignFiles>;
   /** Whether a dashboard (or the app) follows the session's stream now: one shows it. */
   followed: (instanceId: string) => boolean;
   /**
@@ -313,7 +299,7 @@ export interface ArtifactServiceDeps {
         typeof problem<400, { code: "picture-save-refused"; detail: string }>
       >
   >;
-  /** Machine `machineId` told the pins its artifacts are served from, as it registers: it lets go of every other one (agent stage.ts `keepPins`). Never throws. */
+  /** Machine `machineId` told the pins whose files the hub has yet to move in (folder-move.ts): it lets go of every other one (agent stage.ts `keepPins`). Never throws. */
   keepPins: (machineId: string, pins: string[]) => void;
   /**
    * The projects session `instance` is the conversation of (their Caw): an ended writer's
@@ -331,6 +317,8 @@ export interface ArtifactServiceDeps {
   listing: (instance: InstanceRow) => void;
   /** The person looked at artifact `id` (a view's word that it had it on screen): its push is over. */
   looked: (id: string) => void;
+  /** Machine `machineId`'s home folder, as its daemon reported at register; null until one that says so has. */
+  machineHome: (machineId: string) => string | null;
   /** The machines the hub knows. */
   machines: () => Pick<AgentRow, "machineId" | "hostname">[];
   /**
@@ -391,29 +379,25 @@ export interface ArtifactServiceDeps {
     | ReturnType<typeof problem<502, { code: "picture-none"; detail: string }>>
   >;
   /**
-   * The version of a sheet or a served preview its author hands up (core
-   * `PreviewSource.pin`), cut on the machine of the workspace or place `at`
-   * names: pin `pin`'s clone of it, cut or brought in step with it once
-   * (agent stage.ts `pinTreeOf`). Refused saying why it can't.
-   */
-  pin: (at: StageAt, pin: string) => Promise<StageRefused | undefined>;
-  /**
    * The agent's reply `text` on a pin of artifact `artifactId` asks the
    * person something (`comment_reply`'s `asks`): its push, grouped per
    * artifact (push.ts `pinAsked`).
    */
   pinAsked: (artifactId: string, text: string) => void;
-  /** The version of folder `dir` on machine `machineId` its author hands up: pin `pin`'s copy of it made again (agent stage.ts `pinFolderOf`). Refused saying why it can't. */
-  pinFolder: (
-    machineId: string,
-    dir: string,
-    pin: string
+  /**
+   * The place a port preview of session `instance`, in no workspace, is
+   * staged from, and its server's folder in it: from `folder`, the app's
+   * folder on its machine (artifact-events.ts `placeFor`).
+   */
+  placeFor: (
+    instance: InstanceRow,
+    folder: string | undefined
   ) => Promise<
+    | { cwd: string; place: WorkspaceRef }
     | Unanswered
     | ReturnType<
-        typeof problem<502, { code: "artifact-pin-uncut"; detail: string }>
+        typeof problem<400, { code: "artifact-preview-folder"; detail: string }>
       >
-    | undefined
   >;
   /**
    * Session `instanceId`'s preview origin (preview.ts `address`), its listener started
@@ -489,18 +473,12 @@ export interface ArtifactServiceDeps {
    * refusal saying why it didn't start. A decision page's Previews of it
    * wake it as the page goes out, unwaited (`warmPreviews`).
    */
-  serve: (
-    at: StageAt,
-    serve: ServeSpec,
-    /** The pin of the version the person is served (core `PreviewSource.pin`), whose server it is. */
-    pin: string | undefined
-  ) => Promise<StageState | StageRefused>;
+  serve: (at: StageAt, serve: ServeSpec) => Promise<StageState | StageRefused>;
   /**
    * A served preview's page as its author has it now, for its author's
-   * `artifact_read` with `png`: its workspace's own server, started by
+   * `artifact_read` with `png`: the server its row names, started by
    * CawCo as `artifact_create` starts it, drawn in that machine's own
-   * Chromium (agent stage.ts `drawServed`), never the pin the person is
-   * served. Refused saying why it can't.
+   * Chromium (agent stage.ts `drawServed`). Refused saying why it can't.
    */
   servedPicture: (
     at: StageAt,
@@ -569,6 +547,16 @@ export interface ArtifactServiceDeps {
   /** The session's plan's steps: an open one naming a card or pin of an artifact holds its ask (needs.ts `planHolds`). */
   steps: (instanceId: string) => readonly PlanStep[];
   /**
+   * A preview's server on machine `machineId`, on `port` of the workspace or
+   * place it runs in, stopped: no artifact is served from it any more
+   * (agent stage.ts `stopServed`). Whether one ran; undefined when the
+   * machine did not answer. Never throws.
+   */
+  stopServed: (
+    machineId: string,
+    server: { port: number; workspace: string }
+  ) => Promise<boolean | undefined>;
+  /**
    * Whether a session can no longer act, ever: no one, its parent and the
    * person included, can give it a turn again. Its item ended and its
    * workspace was discarded or retired past cutting again, or a newer item
@@ -586,8 +574,6 @@ export interface ArtifactServiceDeps {
    * ({@link ArtifactServiceDeps.stranded}).
    */
   tree: (instance: InstanceRow) => Set<string>;
-  /** Pin `pin` on machine `machineId` let go: no artifact is served from it any more (agent stage.ts `unpin`). Never throws. */
-  unpin: (machineId: string, pin: string) => void;
   /**
    * A design graph drawn by its workspace's daemon in the machine's own
    * Chromium (agent stage.ts `renderStage`): the stage's report once every

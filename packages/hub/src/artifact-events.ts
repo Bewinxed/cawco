@@ -1,3 +1,4 @@
+import { posix } from "node:path";
 import { waitsOnYou } from "@cawco/core/activity";
 import type { SendAttachment } from "@cawco/core/attachments";
 import {
@@ -36,7 +37,11 @@ import { unhandled } from "@cawco/core/unhandled";
 import { waitArtifact } from "@cawco/core/wait-targets";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { workWords } from "@cawco/core/words/work";
-import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import {
+  CONTROL_REPO_ROOT,
+  WORKSPACE_GIT_TIMEOUT_MS,
+  type WorkspaceRef,
+} from "@cawco/core/workspace/controls";
 import { byWorkspaceIdKind, workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactServiceDeps } from "./artifacts/deps";
@@ -44,7 +49,7 @@ import { designFolderOf } from "./artifacts/design-folder";
 import type { MarksDelivery, MarksOutcome, StageAt } from "./artifacts/shapes";
 import { artifactTaker, takesNoInput } from "./artifacts/taker";
 import type { Caw } from "./caw";
-import { stagePlaceRef } from "./caw";
+import { placeRefOf, stagePlaceRef } from "./caw";
 import { ARTIFACTS_ROOT } from "./config";
 import type { ArtifactRow } from "./db/artifacts";
 import { askWhat } from "./delegate-waits";
@@ -83,6 +88,7 @@ export type ArtifactEventsContext = Pick<
   | "pending"
   | "plans"
   | "publishSend"
+  | "readAgent"
   | "registry"
   | "sentFrame"
   | "sessionName"
@@ -700,9 +706,72 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     );
   };
   /**
+   * The place session `instance`'s port preview is staged from, and its
+   * server's folder in it: `folder`, absolute or from the session's folder
+   * (the session's own when absent), read on the session's machine (agent
+   * repo-top.ts `repoRoot`). In a repository, the place is over its top and
+   * the server runs in the folder's path from there; else it is over the
+   * folder, its server at ".". Kept by its id (db stage-places.ts), so its
+   * stage finds the folder when no session works in it ({@link stageWhere}).
+   * Refused, naming `folder`, when it is no folder on that machine.
+   */
+  const placeFor = async (
+    instance: InstanceRow,
+    folder: string | undefined
+  ) => {
+    const app = posix.resolve(instance.cwd, folder ?? ".");
+    const asked = await ctx.readAgent(
+      instance.machineId,
+      CONTROL_REPO_ROOT,
+      [app],
+      WORKSPACE_GIT_TIMEOUT_MS + 15_000
+    );
+    switch (asked.kind) {
+      case "unanswered":
+        return asked.reason === "dead"
+          ? awayProblem(
+              instance.machineId,
+              "Your machine isn't connected to the hub, so the preview's folder can't be read."
+            )
+          : silentProblem(
+              `Your machine didn't answer within ${secondsOf(asked.after)}s, so the preview's folder wasn't read.`
+            );
+      case "answered":
+        break;
+      default:
+        throw unreachable(asked);
+    }
+    if (!asked.value.ok) {
+      return problem(400, {
+        code: "artifact-preview-folder",
+        detail: artifactToolWords.serveFolderRefused(
+          folder ?? ".",
+          asked.value.error ?? `${app} could not be read.`
+        ),
+      });
+    }
+    const top = asked.value.result ?? app;
+    const inside = posix.relative(top, app);
+    // git names its top by its real path: a folder reached through a link
+    // to it is staged from itself, whose clone the machine cuts at that top.
+    const outside = inside.startsWith("..") || posix.isAbsolute(inside);
+    const place = placeRefOf(instance.machineId, outside ? app : top);
+    ctx.db.stagePlaces.keep({
+      machineId: instance.machineId,
+      namedBy: instance.id,
+      ref: place,
+    });
+    const staged: { cwd: string; place: WorkspaceRef } = {
+      place,
+      cwd: (outside ? "" : inside) || ".",
+    };
+    return staged;
+  };
+  /**
    * Where a stage runs, with its machine: a session's work item's workspace,
    * else its place (caw.ts `stagePlaceRef`), on the session's machine; or
-   * the workspace or place a sheet was made in; or a design folder's tree,
+   * the workspace or place a sheet or a port preview was made in (a port
+   * preview's kept as its create named it, {@link placeFor}); or a design folder's tree,
    * its folder under the artifacts root on the hub's machine (core stage.ts
    * `designOf`). Undefined when that is gone: a workspace the hub no longer
    * has, a place no session names any more.
@@ -736,6 +805,10 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
           machineId: ctx.ownMachineIdRead,
         };
       case "place": {
+        const kept = ctx.db.stagePlaces.get(at.workspace);
+        if (kept) {
+          return { workspace: kept.ref, machineId: kept.machineId };
+        }
         const row = ctx.db
           .listInstances()
           .find(
@@ -973,6 +1046,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     waitPageMoved,
     recordFollows,
     onStage,
+    placeFor,
     stranded,
     itemEnded,
     itemLive,

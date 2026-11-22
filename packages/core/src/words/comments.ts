@@ -43,6 +43,8 @@ export const commentWords = {
   close: "Close",
   /** A pin's spot pressed: its thread opens. */
   openThread: (n: number) => `Open comment ${n}`,
+  /** A comment's thread, named by its number: its card's and its sheet's label. */
+  numbered: (n: number) => `Comment ${n}`,
   // The rail.
   comments: "Comments",
   searchComments: "Search comments",

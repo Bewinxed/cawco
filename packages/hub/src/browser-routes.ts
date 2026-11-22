@@ -43,6 +43,7 @@ import { HOUR_MS } from "@cawco/core/time";
 import {
   causeOf,
   decodedHeaders,
+  openUpstream,
   type PreviewSocket,
   type PreviewSocketEnd,
   previewWebSocket,
@@ -427,13 +428,12 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
     const data: PreviewSocket = {
       url: `ws://${hostOf(at)}${browserMount(place.key)}/${kind === "api" ? "api/ws" : "cdp"}`,
       protocol: "",
+      protocols: [],
       headers: new Headers({
         [RELAY_HEADER]: at.token,
         ...(viewer ? { authorization: `Bearer ${viewer.session.token}` } : {}),
       }),
-      pending: [],
       closed: false,
-      opened: false,
       hop: HOP,
       instanceId: socket.instance,
       nothingListens: () => forgetListener(place.machineId, at),
@@ -512,6 +512,16 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
       { at, kind, place },
       viewer ? { id: viewerId, session: viewer } : undefined
     );
+    // The view's frames wait in `early` until the machine's socket opened.
+    const why = await openUpstream(adapter.data);
+    if (entry.closed) {
+      adapter.data.upstream?.close();
+      return;
+    }
+    if (why !== null) {
+      shut(socket, 1011, "Preview connection failed");
+      return;
+    }
     entry.adapter = adapter;
     previewWebSocket.open?.(adapter);
     for (const frame of entry.early.splice(0)) {

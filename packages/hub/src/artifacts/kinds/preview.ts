@@ -7,9 +7,8 @@ import type { StageWarm } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { ElysiaStatus, problem } from "elysia";
-import { stagePlaceRef } from "../../caw";
 import type { ArtifactRow, ArtifactServed } from "../../db/artifacts";
-import { servedOf, servedPin, sheetOf } from "../served";
+import { servedOf, serverOf, sheetOf } from "../served";
 import type { ArtifactInput, Making, StageAt, WarmPreviews } from "../shapes";
 import type { KindContext } from "./context";
 
@@ -38,7 +37,7 @@ const previewProblem = (input: ArtifactInput): string | null => {
  * "record the command for every preview").
  */
 const NOT_SERVED =
-  'A preview of a port names the command that starts its server: serve: { command, cwd }, like { "command": "bun run dev --port 5195", "cwd": "apps/web" }, cwd from your workspace\'s root or your folder. CawCo runs it with PORT set, keeps it up while the preview is used, and starts it again whenever the person opens the preview; a server started in your own shell ends with it.';
+  'A preview of a port names the command that starts its server: serve: { command, cwd }, like { "command": "bun run dev --port 5195", "cwd": "apps/web" }, cwd the app\'s folder, absolute or from your folder (from your workspace\'s root in a workspace). CawCo runs it with PORT set, keeps it up while the preview is used, and starts it again whenever the person opens the preview; a server started in your own shell ends with it.';
 
 /** The machine a hostname, its label or its id names. */
 const machineNamed = (
@@ -52,25 +51,25 @@ const machineNamed = (
       machineLabel(machine.hostname) === nameOrId
   )?.machineId;
 
-/** A port's source in workspace or place `workspace`: refused without what serves it ({@link NOT_SERVED}). */
-const servedSource = (input: ArtifactInput, workspace: string) => {
-  if (!input.serve || input.port === undefined) {
-    return problem(400, {
-      code: "artifact-preview-unserved",
-      detail: NOT_SERVED,
-    });
-  }
-  const source: PreviewSource = {
-    port: input.port,
-    ...(input.path === undefined ? {} : { path: input.path }),
-    workspace,
-    serve: {
-      command: input.serve.command.trim(),
-      cwd: input.serve.cwd?.trim() || ".",
-    },
-  };
-  return source;
-};
+/** Why a port preview with nothing named to serve it is refused ({@link NOT_SERVED}). */
+const unserved = () =>
+  problem(400, {
+    code: "artifact-preview-unserved",
+    detail: NOT_SERVED,
+  });
+
+/** A port's source in workspace or place `workspace`, its server run in `cwd` from that tree's root. */
+const servedSource = (
+  input: ArtifactInput,
+  serve: { command: string },
+  port: number,
+  at: { cwd: string; workspace: string }
+): PreviewSource => ({
+  port,
+  ...(input.path === undefined ? {} : { path: input.path }),
+  workspace: at.workspace,
+  serve: { command: serve.command.trim(), cwd: at.cwd },
+});
 
 /** The stage a sheet is served the person on (its workspace's own, live), by its key, and how a call reaches it. */
 const stageOf = (
@@ -79,9 +78,6 @@ const stageOf = (
   key: `${sheet.workspace}:${sheet.dir}`,
   at: { workspace: sheet.workspace },
 });
-
-/** How long a pin no row names stands before it is let go ({@link createPreviewKind} `releasePin`). Ours: past a create's own checks, which may put its row back on it. */
-const PIN_KEPT_MS = 2 * 60_000;
 
 /** What PreviewKind reads of the artifact service ({@link KindContext}). */
 export type PreviewKindContext = Pick<
@@ -98,7 +94,7 @@ export type PreviewKindContext = Pick<
   | "waitsOnPerson"
 >;
 
-/** A preview: a dev server or folder a machine serves live, the workspace it is made from, its server kept up while a page shows it, and let go when nothing does. */
+/** A preview: a dev server a machine serves (the workspace it is made from, its server kept up while a page shows it, and stopped once no artifact is served from it), or a folder's files the hub keeps. */
 export const createPreviewKind = (ctx: PreviewKindContext) => {
   const { above, db, deps, holder, ofTree, pagesShowing, waitsOnPerson } = ctx;
 
@@ -196,10 +192,9 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
         : null;
     }
     if (served) {
-      const key = served.pin ?? served.workspace;
-      return deps.stageLive(key, served.port)
+      return deps.stageLive(served.workspace, served.port)
         ? {
-            key: `${key}@${served.port}`,
+            key: `${served.workspace}@${served.port}`,
             use: () => serveFirst(row.source),
           }
         : null;
@@ -293,49 +288,68 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
   };
   /**
    * A preview's server, up before anything shows it (core `ServeSpec`), in
-   * its workspace or place on that tree's machine: its state. One that can't
-   * start is the refusal, and nothing is kept. None for any other source.
+   * its workspace or place on that tree's machine: its state. It is the one
+   * server the person is served, live. One that can't start is the refusal,
+   * and nothing is kept. None for any other source.
    */
   const serveFirst = (source: PreviewSource) =>
     "port" in source && source.serve && source.workspace
       ? deps.serve(
           { workspace: source.workspace },
-          { ...source.serve, port: source.port },
-          source.pin
+          { ...source.serve, port: source.port }
         )
       : Promise.resolve(undefined);
   /**
-   * Pin `pin` on machine `machineId` let go once no artifact is served from
-   * it (core `PreviewSource.pin`): its stages and server stop with it, and
-   * its copy goes. Looked at {@link PIN_KEPT_MS} after the last row moved
-   * off it, so a create that puts its row back as it was (service.ts
-   * `unplace`) finds the person's pin still standing. Its life is its
-   * artifacts'.
+   * The server a served preview's source names on machine `machineId`
+   * (served.ts `serverOf`), stopped once no artifact is served from it: no
+   * row, a held next version included, names its workspace or place and
+   * port, and no create is making a preview from that tree now
+   * ({@link makingIn}), whose server may be this one before its row names
+   * it. Its tree stays, and retires by the workspace sweep once nothing
+   * runs in it (workspaces.ts `servedHold`). `what` says what happened to
+   * the artifact; the journal says the stop in one line.
    */
-  const releasePin = (machineId: string | null, pin: string | null): void => {
-    if (!(machineId && pin)) {
+  const letGoServer = (
+    machineId: string | null,
+    source: PreviewSource,
+    what: string
+  ): void => {
+    const server = serverOf(source);
+    if (!(machineId && server) || makingIn.has(server.workspace)) {
       return;
     }
-    deps.lifetime.after("preview pin let go", PIN_KEPT_MS, () => {
-      if (db.pinnedBy(pin).length === 0) {
-        deps.unpin(machineId, pin);
-      }
-    });
+    const others = db
+      .previewing(server.workspace)
+      .filter((row) => servedOf(row)?.port === server.port);
+    if (others.length > 0) {
+      return;
+    }
+    const tree = `${workspaceIdKindOf(server.workspace) === "place" ? "place" : "workspace"} ${server.workspace.slice(0, 8)}`;
+    detach(
+      deps.stopServed(machineId, server).then((ran) => {
+        console.info(
+          ran === undefined
+            ? `[artifacts] ${what}: its server on port ${server.port} in ${tree} was not stopped, as its machine did not answer; it sleeps once unused`
+            : `[artifacts] ${what}: its server on port ${server.port} in ${tree} ${ran ? "stopped" : "was not running"}, as no artifact is served from it; its copy retires by the workspace sweep once nothing runs in it`
+        );
+      }),
+      "preview server stop"
+    );
   };
   /**
    * Artifact `id`'s source moved off `before` (db artifacts.ts `resource`):
-   * the pin `before` was served from let go once nothing else is served from
-   * it, unless the row names it again now. Told by the preview service once
-   * the new source answers or no screen waits on it (server.ts
-   * `onSourceMoved`).
+   * the served preview's server `before` was served from let go once
+   * nothing else is served from it ({@link letGoServer}). Told by the
+   * preview service once the new source answers or no screen waits on it
+   * (server.ts `onSourceMoved`).
    */
   const letGoMoved = (id: string, before: ArtifactServed): void => {
-    const was = servedPin(before.source);
     const row = db.get(id);
-    if (was === undefined || (row && servedPin(row.source) === was)) {
-      return;
-    }
-    releasePin(before.machineId, was);
+    letGoServer(
+      before.machineId,
+      before.source,
+      `${row?.name ?? "An artifact"} (${id.slice(0, 8)}) moved to another source`
+    );
   };
   /**
    * The stages decision page `page`'s Previews run on, warmed as the page
@@ -367,7 +381,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
         one.warm.canvases.push(sheet.files);
         sheets.set(key, one);
       } else if (served) {
-        servers.set(`${served.pin ?? served.workspace}@${served.port}`, media);
+        servers.set(`${served.workspace}@${served.port}`, media);
       }
     }
     // A refused one is said as a failed one is.
@@ -393,17 +407,18 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
     (port === CAWCO_HUB_PORT && machineId === deps.hubMachine());
 
   /**
-   * The source a preview input names, on the machine that serves it: a
+   * The source a preview input names, on the machine it is read on: a
    * port's server run in a workspace ({@link portSource}); a folder on the
-   * machine `machine` names, else the session's.
+   * machine `machine` names, else the session's, whose files the hub reads
+   * and keeps (preview-folder.ts).
    */
-  const previewSource = (instance: InstanceRow, input: ArtifactInput) => {
+  const previewSource = async (instance: InstanceRow, input: ArtifactInput) => {
     const misfit = previewProblem(input);
     if (misfit) {
       return problem(400, { code: "artifact-preview-fields", detail: misfit });
     }
     if (input.port !== undefined) {
-      return portSource(instance, input, input.port);
+      return await portSource(instance, input, input.port);
     }
     const machineId =
       input.machine === undefined
@@ -424,35 +439,57 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
   /**
    * A port's source, its server's command recorded ({@link servedSource}):
    * in the workspace named, else the session's own, on that workspace's
-   * machine and in its network; for a session in no workspace, in the place
-   * over the folder it works in (caw.ts `stagePlaceRef`) on its machine,
-   * whose stage clone the command runs in (agent stage-clone.ts), never on
-   * the bare host. A place's port that is CawCo's own is refused: its
-   * network may be the host's.
+   * machine and in its network, `serve.cwd` from its root; for a session in
+   * no workspace, in the place over the app's folder `serve.cwd` names on
+   * its machine (the session's folder when it names none), whose stage
+   * clone the command runs in (agent stage-clone.ts), never on the bare
+   * host: the place over that folder's repository's top, or over the folder
+   * itself in none (deps `placeFor`). A place's port that is CawCo's own
+   * is refused: its network may be the host's. Refused without what serves
+   * it ({@link NOT_SERVED}).
    */
-  const portSource = (
+  const portSource = async (
     instance: InstanceRow,
     input: ArtifactInput,
     port: number
   ) => {
+    const { serve } = input;
+    if (!serve) {
+      return unserved();
+    }
     const workspace = workspaceFor(instance, input.workspace);
     if (workspace instanceof ElysiaStatus) {
       return workspace;
     }
-    if (!workspace && ownPort(port, instance.machineId)) {
+    if (workspace) {
+      return {
+        machineId: workspace.machineId,
+        source: servedSource(input, serve, port, {
+          workspace: workspace.id,
+          cwd: serve.cwd?.trim() || ".",
+        }),
+      };
+    }
+    if (ownPort(port, instance.machineId)) {
       return problem(400, {
         code: "artifact-preview-own-port",
         detail: artifactToolWords.previewOfOwnPort,
       });
     }
-    const tree = workspace ?? {
-      id: stagePlaceRef(instance).id,
+    const staged = await deps.placeFor(
+      instance,
+      serve.cwd?.trim() || undefined
+    );
+    if (staged instanceof ElysiaStatus) {
+      return staged;
+    }
+    return {
       machineId: instance.machineId,
+      source: servedSource(input, serve, port, {
+        workspace: staged.place.id,
+        cwd: staged.cwd,
+      }),
     };
-    const served = servedSource(input, tree.id);
-    return served instanceof ElysiaStatus
-      ? served
-      : { machineId: tree.machineId, source: served };
   };
   /**
    * The workspace a port preview's server runs in, with its machine: the one
@@ -492,11 +529,11 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
   return {
     keptUpAt,
     letGoMoved,
+    letGoServer,
     makingFor,
     makingFrom,
     makingIn,
     previewSource,
-    releasePin,
     serveFirst,
     waitingStages,
     warmPreviews,

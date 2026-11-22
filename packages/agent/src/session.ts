@@ -81,10 +81,8 @@ import type { InboundRefusal } from "@cawco/core/machine-inbound";
 import { machineLabel } from "@cawco/core/machine-names";
 import { sessionScratchDir } from "@cawco/core/paths/workspace";
 import {
-  PREVIEW_FOLDERS,
   PREVIEW_START,
   PREVIEW_STOP,
-  PREVIEW_WEIGHT,
   PreviewStartDown,
 } from "@cawco/core/preview/protocol";
 import type {
@@ -249,13 +247,7 @@ import { onFleetMcpMoved } from "./mcp-status";
 import { gaugeGroup, gaugeTables } from "./memory";
 import { noticeMessage } from "./notices";
 import { Outbox } from "./outbox";
-import {
-  foldersThere,
-  previewWeight,
-  startPreview,
-  stopPreview,
-  stopPreviews,
-} from "./preview";
+import { startPreview, stopPreview, stopPreviews } from "./preview";
 import { parseProcId, sessionOfProc } from "./proc-id";
 import { forgetRevoked, rememberCredential } from "./redaction";
 import { removeTree } from "./remove-tree";
@@ -1120,9 +1112,6 @@ export class SessionSupervisor {
     [PREVIEW_STOP]: {
       call: (options) => stopPreview(options),
     },
-    [PREVIEW_WEIGHT]: { call: (dir, path) => previewWeight(dir, path) },
-    // A read of folders, as a machine registers: nothing starts (preview.ts `foldersThere`).
-    [PREVIEW_FOLDERS]: { call: (dirs) => foldersThere(dirs) },
     // A canvas no person's screen shows, drawn by this machine's Chromium (canvas-screen.ts).
     [CANVAS_SCREEN_OPEN]: {
       call: (options) =>

@@ -361,16 +361,20 @@ const FILE_MODE = 0o644;
 const holds = (path: string, bytes: Uint8Array): boolean =>
   kindAt(path) === "file" && Buffer.from(readFileSync(path)).equals(bytes);
 
-/** Every path under `folder` (from it, `/`-separated), links and files alike, folders walked; what the stage made at its top left out. */
-function standing(folder: string, rel = ""): string[] {
+/** Every path under `folder` (from it, `/`-separated), links and files alike, folders walked; the entries at its top that `kept` names left out. */
+function standing(
+  folder: string,
+  kept: ReadonlySet<string>,
+  rel = ""
+): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(join(folder, rel), { withFileTypes: true })) {
     const path = rel ? `${rel}/${entry.name}` : entry.name;
-    if (!rel && MADE.has(entry.name)) {
+    if (!rel && kept.has(entry.name)) {
       continue;
     }
     if (entry.isDirectory()) {
-      found.push(...standing(folder, path));
+      found.push(...standing(folder, kept, path));
     } else {
       found.push(path);
     }
@@ -378,14 +382,18 @@ function standing(folder: string, rel = ""): string[] {
   return found;
 }
 
-/** The folders under `folder` that hold nothing now, deepest first, taken out; what the stage made at its top kept. */
-function emptiedFolders(folder: string, rel = ""): void {
+/** The folders under `folder` that hold nothing now, deepest first, taken out; the entries at its top that `kept` names kept. */
+function emptiedFolders(
+  folder: string,
+  kept: ReadonlySet<string>,
+  rel = ""
+): void {
   for (const entry of readdirSync(join(folder, rel), { withFileTypes: true })) {
-    if (!entry.isDirectory() || (!rel && MADE.has(entry.name))) {
+    if (!entry.isDirectory() || (!rel && kept.has(entry.name))) {
       continue;
     }
     const path = rel ? `${rel}/${entry.name}` : entry.name;
-    emptiedFolders(folder, path);
+    emptiedFolders(folder, kept, path);
     if (readdirSync(join(folder, path)).length === 0) {
       rmSync(join(folder, path), { recursive: true, force: true });
     }
@@ -394,24 +402,36 @@ function emptiedFolders(folder: string, rel = ""): void {
 
 /**
  * Design `files` (whole: {@link designWhole}) written into `folder` in
- * place: each changed file written over, each the design no longer has
- * deleted, what its stage made kept. Answers what it moved, each by its
- * path from the folder (core `DesignMoved`).
+ * place ({@link writeFolderInPlace}), what its stage made kept. Answers
+ * what it moved, each by its path from the folder (core `DesignMoved`).
  */
-export function writeDesignFolder(
+export const writeDesignFolder = (
   folder: string,
   files: readonly DesignFile[]
+): DesignMoved => writeFolderInPlace(folder, files, MADE);
+
+/**
+ * `files` written into `folder` in place: each changed file written over
+ * ({@link writeInPlace}), each the files no longer have deleted, and the
+ * entries at its top that `kept` names left as they are. Answers what it
+ * moved, each by its path from the folder (core `DesignMoved`): a design's
+ * folder, and a folder preview's (preview-folder.ts).
+ */
+export function writeFolderInPlace(
+  folder: string,
+  files: readonly DesignFile[],
+  kept: ReadonlySet<string> = new Set()
 ): DesignMoved {
   makeFolderSync(folder);
   const wanted = new Set(files.map((one) => one.path));
   const moved: DesignMoved = { added: [], changed: [], removed: [] };
-  for (const path of standing(folder)) {
+  for (const path of standing(folder, kept)) {
     if (!wanted.has(path)) {
       rmSync(join(folder, path), { force: true });
       moved.removed.push(path);
     }
   }
-  emptiedFolders(folder);
+  emptiedFolders(folder, kept);
   for (const file of files) {
     const path = join(folder, file.path);
     foldersOf(folder, file.path);

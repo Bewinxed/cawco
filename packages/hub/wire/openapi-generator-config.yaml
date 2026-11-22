@@ -169,7 +169,6 @@ typeOverrides:
     PlanStepStatus: OpenEnums.PlanStepStatus
     PostApiInstancesByIdAccount200State: OpenEnums.PostApiInstancesByIdAccount200State
     PostApiInstancesByIdArtifactsByArtifactSend403Code: OpenEnums.PostApiInstancesByIdArtifactsByArtifactSend403Code
-    PostApiRoutinesByIdRecheck200Stopped: OpenEnums.PostApiRoutinesByIdRecheck200Stopped
     PostApiToolsByIdUpdateAll200Why: OpenEnums.PostApiToolsByIdUpdateAll200Why
     PresenceDeviceState: OpenEnums.PresenceDeviceState
     PreviewDown: OpenEnums.PreviewDown
@@ -237,6 +236,7 @@ typeOverrides:
     TranscriptBlockState: OpenEnums.TranscriptBlockState
     TranscriptBranchStatus: OpenEnums.TranscriptBranchStatus
     TranscriptEventOpenBlock: OpenEnums.TranscriptEventOpenBlock
+    TriggerHold: OpenEnums.TriggerHold
     Verb: OpenEnums.Verb
     WaitKind: OpenEnums.WaitKind
     WaitReason: OpenEnums.WaitReason

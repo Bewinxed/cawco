@@ -1,8 +1,10 @@
 /**
  * The comment being written: its composer beside the pill the press put down, its draft kept per artifact, and the page's answer to Comment.
  */
+
 import { pinProblem } from "@cawco/core/comments/validate";
 import type { FrameSays } from "@cawco/core/page-wire";
+import { previewWords } from "@cawco/core/words/preview";
 import { z } from "zod";
 import { ComposeTargetSchema } from "#lib/cawco/stored-shapes.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
@@ -233,7 +235,7 @@ export class PinComposer {
     this.composing.error =
       typeof message.error === "string"
         ? message.error
-        : "The page didn't keep that comment. Try again.";
+        : previewWords.commentNotKept;
   }
 
   /** The page opened a comment's composer (`cawco:compose`): nothing is written yet. */

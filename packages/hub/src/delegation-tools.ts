@@ -354,7 +354,7 @@ const catalogTool = toolOn<CatalogOn>();
 
 /** `list_delegate_types`: the same for every session, and read by a call that names none. */
 
-/** `artifact_update`'s fields a design graph's own route takes: a states file's, its spec's, a design folder's. */
+/** `artifact_update`'s fields a design graph's own route takes alone: a states file's, its spec's, a design folder's. */
 const COMPONENT_FIELDS = [
   "args",
   "story",
@@ -362,21 +362,23 @@ const COMPONENT_FIELDS = [
   "group",
   "dials",
   "directions",
-  "dir",
   "content",
 ] as const;
 
 /**
  * Whether an `artifact_update` goes by a design graph's own route: it
- * names a field of one ({@link COMPONENT_FIELDS}), or html for an artifact
- * that is a design folder (`isDesign`), whose page it is.
+ * names a field of one ({@link COMPONENT_FIELDS}), or html or dir for an
+ * artifact that is a design folder (`isDesign`), whose page or folder it
+ * is. A folder preview's dir goes by the update's own route.
  */
 const componentChange = (
-  change: Partial<Record<(typeof COMPONENT_FIELDS)[number] | "html", unknown>>,
+  change: Partial<
+    Record<(typeof COMPONENT_FIELDS)[number] | "dir" | "html", unknown>
+  >,
   isDesign: () => boolean
 ): boolean =>
   COMPONENT_FIELDS.some((key) => change[key] !== undefined) ||
-  (change.html !== undefined && isDesign());
+  ((change.html !== undefined || change.dir !== undefined) && isDesign());
 
 export const listDelegateTypesTool = catalogTool(
   "list_delegate_types",
@@ -1210,7 +1212,7 @@ export function handoffTools(view: ToolView) {
         if (!changes && head) {
           return { change: "head", answer: head };
         }
-        // A design graph's states file, its own spec and a design folder's pages have their own route; a page's html goes by the page's, which hands a design folder's on.
+        // A design graph's states file, its own spec and a design folder's pages have their own route; a page's html and a folder preview's dir go by the update's.
         const component = componentChange(change, () =>
           bound.actions.artifacts.isDesign(id)
         );

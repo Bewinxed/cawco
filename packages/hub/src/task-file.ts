@@ -23,6 +23,12 @@
  * rank: a0V
  * labels: [ui]
  * accounts: [<account id>]
+ * on: {cron: "0 9 * * 1-5", zone: Europe/London}
+ * target: delegate
+ * stop: every open pull request has our answer
+ * deadline: 2026-12-01
+ * daily_cap_usd: 3
+ * keep: true
  * ---
  * # Persist the theme toggle
  *
@@ -63,6 +69,16 @@
  *   One whose words open with `(proposed)` was left open in an attempt's plan
  *   and is offered, not agreed: `- [ ] [td-9] (proposed) Cover the edge case`.
  *
+ * - **A routine** (Projects spec §5.5) is a task that starts on its own:
+ *   its file carries `target:` (what each run starts) and, for a schedule,
+ *   `on:` (a cron and its zone); event routes may name it too, or instead.
+ *   `stop:` is the stop condition the agent that made it wrote, `deadline:`
+ *   the day past which, with no stop, it stands in Needs you, and
+ *   `daily_cap_usd:`, `mode:`, `keep:` and `command:` say how its runs go.
+ *   The hub keeps its slots, its runs and whether it is on (db
+ *   `task_triggers`), never in the file. What of these lines does not read
+ *   holds its trigger ({@link ParsedTask} `triggerUnread`).
+ *
  * Writes change only what they own. A field change rewrites that field's
  * line in the front matter (comments, unknown keys and order elsewhere stay);
  * a section change rewrites that section; a to-do change rewrites that line.
@@ -77,9 +93,11 @@ import {
   refOfUrl,
 } from "@cawco/core/external-items";
 import { type FrontMatterLine, frontMatterBlock } from "@cawco/core/fleet";
+import { type OfferedMode, PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
 import { isOneOf } from "@cawco/core/one-of";
 import type { TaskTodo } from "@cawco/core/plan";
+import { ROUTINE_TARGETS, type RoutineTarget } from "@cawco/core/routine-kinds";
 import { TASK_EDGES } from "@cawco/core/task-edges";
 import { TASK_MOVERS, type TaskMover } from "@cawco/core/views";
 import { waitHandle, waitTarget } from "@cawco/core/wait-targets";
@@ -106,11 +124,39 @@ export const TASK_FIELDS = [
   "rank",
   "labels",
   "accounts",
+  "on",
+  "target",
+  "stop",
+  "deadline",
+  "daily_cap_usd",
+  "mode",
+  "keep",
+  "command",
 ] as const;
 export type TaskField = (typeof TASK_FIELDS)[number];
 
 /** The keys a task file carried before task links were one blocking edge: tasks.ts `migrateLinks` takes them out. */
 const LEGACY_LINK_KEYS = ["after", "parent", "related"] as const;
+
+/** A routine's schedule (`on:`): a cron in its zone. */
+export interface TaskSchedule {
+  /** Five fields, or six with seconds first (Effect's `Cron.parse`). */
+  cron: string;
+  /** The IANA zone the cron reads in. */
+  zone: string;
+}
+
+/** The front matter fields that make a task a routine and say how its runs go (§5.5): what the hub's trigger copies. */
+const TRIGGER_FIELDS = [
+  "on",
+  "target",
+  "stop",
+  "deadline",
+  "daily_cap_usd",
+  "mode",
+  "keep",
+  "command",
+] as const satisfies readonly TaskField[];
 
 export interface TaskFields {
   /** The accounts its attempts may run on (account ids); empty: every account. */
@@ -118,8 +164,14 @@ export interface TaskFields {
   /** What an attempt may spend before the hub stops it; null: the project's default. */
   budget: WorkBudget | null;
   checks: string[];
+  /** A command check's shell command (`command:`); null for every other target. */
+  command: string | null;
   /** Project folder files its attempt's brief carries (memory.ts `contextFor`): the conversation's pick, `knowledge/…`. */
   context: string[];
+  /** Dollars a routine's runs may spend a day of its zone (`daily_cap_usd:`); null: no cap. */
+  dailyCapUsd: number | null;
+  /** The day past which a routine with no stop stands in Needs you (`deadline:`, ISO 8601 as written); null: none. */
+  deadline: string | null;
   /** The task this one repeats (`duplicate_of`); null when none. */
   duplicateOf: string | null;
   /** The task or pin it was found in (`found_in`, `tsk-12` or `<artifact id>/<n>`); null when none. */
@@ -131,6 +183,8 @@ export interface TaskFields {
    * its URL; only the hub's tracker sync writes it. Null when none.
    */
   issue: string | null;
+  /** A session's routine kept past its 7 days (`keep:`); null: not kept. */
+  keep: boolean | null;
   labels: string[];
   /** Where an attempt's work lands (`main`, `branch`, `pr`, `none`); null: the project's default. */
   lands: LandsMode | null;
@@ -140,6 +194,10 @@ export interface TaskFields {
    * external-items.ts). Written by a person, a session or the sync.
    */
   links: string[];
+  /** The mode a conversation run starts the project's conversation in (`mode:`); null: the project's. */
+  mode: OfferedMode | null;
+  /** A routine's schedule (`on:`); null: none (event routes alone start it, or it is no routine). */
+  on: TaskSchedule | null;
   outputs: string[];
   /** Globs of the repository's files its attempt owns: no overlapping live item runs beside it. */
   owns: string[];
@@ -149,8 +207,12 @@ export interface TaskFields {
   /** Where its attempts run (runs-on.ts): a machine, or a capability like `apple`; null: the project's. */
   runsOn: string | null;
   stage: string | null;
+  /** A routine's stop condition, in words (`stop:`); null: it runs until it is ended. */
+  stop: string | null;
+  /** What a routine's runs start (`target:`); null: it is no routine. */
+  target: RoutineTarget | null;
   type: string | null;
-  /** What it waits on (`waits_on`), each as wait-targets.ts keeps it: `tsk-12`, a card, a pin, a PR, a run, a session, a condition. */
+  /** What it waits on (`waits_on`), each as wait-targets.ts keeps it: `tsk-12`, a card, a pin, a PR, a run, a session, a date. */
   waitsOn: string[];
 }
 
@@ -224,6 +286,12 @@ export interface ParsedTask {
   /** The `# ` heading the body opens with, if any. */
   title: string | null;
   todos: Todo[];
+  /**
+   * What its routine lines ({@link TRIGGER_FIELDS}) hold that does not read,
+   * one sentence each (in `problems` too); null when they read or there are
+   * none. While set, its trigger fires nothing.
+   */
+  triggerUnread: string | null;
 }
 
 /** A task file's name: `tsk-12-some-slug.md`. */
@@ -262,6 +330,9 @@ const SPACE = /\s/u;
 const BOX = /\[( |x|X)\]/u;
 const MD_EXTENSION = /\.md$/u;
 const ID_PREFIX = /^tsk-\d+-?/u;
+
+/** A dollar sign a cap may open with. */
+const DOLLAR = /^\$/u;
 
 /** The longest slug a file name takes. */
 const SLUG_LIMIT = 48;
@@ -485,6 +556,14 @@ const FIELD_KEYS = {
   rank: "rank",
   labels: "labels",
   accounts: "accounts",
+  on: "on",
+  target: "target",
+  stop: "stop",
+  deadline: "deadline",
+  daily_cap_usd: "dailyCapUsd",
+  mode: "mode",
+  keep: "keep",
+  command: "command",
 } as const satisfies Record<TaskField, keyof TaskFields>;
 
 /** A front matter field's value, as {@link TaskFields} holds it. */
@@ -504,8 +583,11 @@ const renderField = (
   if (value === null || (Array.isArray(value) && value.length === 0)) {
     return;
   }
+  if (typeof value === "boolean" || typeof value === "number") {
+    return String(value);
+  }
   if (typeof value === "object" && !Array.isArray(value)) {
-    return renderBudget(value);
+    return "cron" in value ? renderSchedule(value) : renderBudget(value);
   }
   const edge = EDGE_FIELDS.has(field);
   if (Array.isArray(value)) {
@@ -521,6 +603,10 @@ const renderBudget = (budget: WorkBudget): string | undefined => {
     .map((key) => `${key}: ${budget[key]}`);
   return parts.length > 0 ? `{${parts.join(", ")}}` : undefined;
 };
+
+/** A schedule as front matter writes it: `{cron: "0 9 * * 1-5", zone: Europe/London}`, the cron always quoted. */
+const renderSchedule = (schedule: TaskSchedule): string =>
+  `{cron: ${JSON.stringify(schedule.cron)}, zone: ${renderScalar(schedule.zone)}}`;
 
 const emptyFields = (): TaskFields => ({
   stage: null,
@@ -542,6 +628,14 @@ const emptyFields = (): TaskFields => ({
   rank: null,
   labels: [],
   accounts: [],
+  on: null,
+  target: null,
+  stop: null,
+  deadline: null,
+  dailyCapUsd: null,
+  mode: null,
+  keep: null,
+  command: null,
 });
 
 /** How `waits_on:` is written. */
@@ -550,7 +644,7 @@ const WAITS_LIKE = '[138, "<artifact id>#<card>"]';
 /**
  * What of a `waits_on:` line does not read, one sentence each, quoted: the
  * line's own ({@link listUnread}), and each entry that names no task, card,
- * pin, pull request, Actions run, session, routine's condition or date. Empty
+ * pin, pull request, Actions run, session or date. Empty
  * when it reads whole.
  */
 const waitsUnread = (line: FrontMatterLine): string[] => [
@@ -559,7 +653,7 @@ const waitsUnread = (line: FrontMatterLine): string[] => [
     .filter((item) => !waitTarget(item))
     .map(
       (item) =>
-        `waits_on: “${item}” is not a task, card, pin, pull request, Actions run, session, routine's condition or date.`
+        `waits_on: “${item}” is not a task, card, pin, pull request, Actions run, session or date.`
     ),
 ];
 
@@ -649,6 +743,24 @@ const readLands = (
 };
 
 /**
+ * A mapping line's entries: one per line under it, or its flow mapping's
+ * (`{a: 1, b: 2}`) as `split` splits what is inside the braces; undefined
+ * when it is neither.
+ */
+const mappingEntries = (
+  line: FrontMatterLine,
+  split: (inner: string) => string[]
+): string[] | undefined => {
+  const value = withoutComment(line.value);
+  if (value === "") {
+    return line.under.map((under) => withoutComment(under)).filter(Boolean);
+  }
+  return value.startsWith("{") && value.endsWith("}")
+    ? split(value.slice(1, -1))
+    : undefined;
+};
+
+/**
  * `budget:` — `{usd: 2, turns: 40, minutes: 30}`, or the same keys one per
  * line under it. Dollars are a positive number; turns and minutes whole
  * numbers from 1. What does not read goes to `problems`.
@@ -658,15 +770,10 @@ const readBudget = (
   problems: string[]
 ): WorkBudget | null => {
   const value = withoutComment(line.value);
-  let entries: string[];
-  if (value === "") {
-    entries = line.under.map((under) => withoutComment(under)).filter(Boolean);
-  } else if (value.startsWith("{") && value.endsWith("}")) {
-    entries = value
-      .slice(1, -1)
-      .split(",")
-      .filter((entry) => entry.trim());
-  } else {
+  const entries = mappingEntries(line, (inner) =>
+    inner.split(",").filter((entry) => entry.trim())
+  );
+  if (!entries) {
     problems.push(
       `budget: “${value}” is not a budget like {usd: 2, turns: 40, minutes: 30}.`
     );
@@ -729,6 +836,174 @@ const SCALAR_FIELDS = [
   "rank",
 ] as const satisfies readonly TaskField[];
 
+/** A flow mapping's entries (`{a: 1, b: "x, y"}`), split at the commas outside quotes; undefined when it is not one. */
+const mappingOf = (line: FrontMatterLine): [string, string][] | undefined => {
+  // Split at the commas outside quotes; an entry is no quoted scalar whole.
+  const entries = mappingEntries(line, flowItems);
+  if (!entries) {
+    return;
+  }
+  const pairs: [string, string][] = [];
+  for (const entry of entries.filter((each) => each.trim())) {
+    const colon = entry.indexOf(":");
+    if (colon === -1) {
+      return;
+    }
+    pairs.push([
+      entry.slice(0, colon).trim(),
+      unquoted(entry.slice(colon + 1)),
+    ]);
+  }
+  return pairs;
+};
+
+/** How `on:` is written. */
+const ON_LIKE = '{cron: "0 9 * * 1-5", zone: Europe/London}';
+
+/** `on:` — a cron and its zone; what does not read goes to `problems`. */
+const readSchedule = (
+  line: FrontMatterLine,
+  problems: string[]
+): TaskSchedule | null => {
+  if (withoutComment(line.value) === "" && line.under.length === 0) {
+    return null;
+  }
+  const pairs = mappingOf(line);
+  const cron = pairs?.find(([key]) => key === "cron")?.[1]?.trim();
+  const zone = pairs?.find(([key]) => key === "zone")?.[1]?.trim();
+  const stray = pairs?.find(([key]) => key !== "cron" && key !== "zone");
+  if (!(pairs && cron && zone) || stray) {
+    problems.push(
+      `on: “${withoutComment(line.value) || line.under.join(" ")}” is not a schedule like ${ON_LIKE}.`
+    );
+    return null;
+  }
+  return { cron, zone };
+};
+
+/** `target:` — one of the routine targets; anything else goes to `problems`. */
+const readTarget = (
+  line: FrontMatterLine,
+  problems: string[]
+): RoutineTarget | null => {
+  const value = scalarOf(line);
+  if (value === null) {
+    return null;
+  }
+  if (isOneOf(ROUTINE_TARGETS, value)) {
+    return value;
+  }
+  problems.push(
+    `target: “${value}” is not one of ${ROUTINE_TARGETS.join(", ")}.`
+  );
+  return null;
+};
+
+/** `daily_cap_usd:` — dollars above 0; anything else goes to `problems`. */
+const readCap = (line: FrontMatterLine, problems: string[]): number | null => {
+  const value = scalarOf(line);
+  if (value === null) {
+    return null;
+  }
+  const amount = Number(value.replace(DOLLAR, ""));
+  if (Number.isFinite(amount) && amount > 0) {
+    return amount;
+  }
+  problems.push(
+    `daily_cap_usd: “${value}” is not a number of dollars above 0.`
+  );
+  return null;
+};
+
+/** `mode:` — a permission mode CawCo offers; anything else goes to `problems`. */
+const readMode = (
+  line: FrontMatterLine,
+  problems: string[]
+): OfferedMode | null => {
+  const value = scalarOf(line);
+  if (value === null) {
+    return null;
+  }
+  if (isOneOf(PERMISSION_MODES, value)) {
+    return value;
+  }
+  problems.push(
+    `mode: “${value}” is not one of ${PERMISSION_MODES.join(", ")}.`
+  );
+  return null;
+};
+
+/** `keep:` — true or false; anything else goes to `problems`. */
+const readKeep = (
+  line: FrontMatterLine,
+  problems: string[]
+): boolean | null => {
+  const value = scalarOf(line)?.toLowerCase();
+  if (value === undefined) {
+    return null;
+  }
+  if (value === "true" || value === "false") {
+    return value === "true";
+  }
+  problems.push(`keep: “${value}” is neither true nor false.`);
+  return null;
+};
+
+/** `deadline:` — an ISO 8601 date or date-time; what does not read goes to `problems`. */
+const readDeadline = (
+  line: FrontMatterLine,
+  problems: string[]
+): string | null => {
+  const value = scalarOf(line);
+  if (value === null) {
+    return null;
+  }
+  if (Number.isNaN(new Date(value).getTime())) {
+    problems.push(
+      `deadline: “${value}” is not a date: write an ISO 8601 date or date-time, like 2026-12-01.`
+    );
+    return null;
+  }
+  return value;
+};
+
+/** Reads one routine line into `fields`; false for a key that is none. */
+const readTriggerField = (
+  fields: TaskFields,
+  field: string,
+  line: FrontMatterLine,
+  problems: string[]
+): boolean => {
+  switch (field) {
+    case "on":
+      fields.on = readSchedule(line, problems);
+      return true;
+    case "target":
+      fields.target = readTarget(line, problems);
+      return true;
+    case "stop":
+      fields.stop = scalarOf(line);
+      return true;
+    case "deadline":
+      fields.deadline = readDeadline(line, problems);
+      return true;
+    case "daily_cap_usd":
+      fields.dailyCapUsd = readCap(line, problems);
+      return true;
+    case "mode":
+      fields.mode = readMode(line, problems);
+      return true;
+    case "keep":
+      fields.keep = readKeep(line, problems);
+      return true;
+    case "command":
+      fields.command = scalarOf(line);
+      return true;
+    default:
+      return false;
+  }
+};
+
 /** Reads one known field into `fields`; false for a key a task file does not know. */
 const readField = (
   fields: TaskFields,
@@ -757,7 +1032,7 @@ const readField = (
   } else if (field === "runs_on") {
     fields.runsOn = scalarOf(line);
   } else {
-    return false;
+    return readTriggerField(fields, field, line, problems);
   }
   return true;
 };
@@ -785,6 +1060,27 @@ const readFields = (
     }
   }
   return { fields, extra };
+};
+
+/** A task file's lines whose unread parts hold what they govern: its budget's, its governing lists', its routine's. */
+const unreadOf = (lines: readonly FrontMatterLine[]) => {
+  const budgetUnread: string[] = [];
+  const listsUnread: string[] = [];
+  const triggerUnread: string[] = [];
+  const triggers = new Set<string>(TRIGGER_FIELDS);
+  for (const line of lines) {
+    const { key } = line;
+    if (key === "budget") {
+      readBudget(line, budgetUnread);
+    } else if (key === "waits_on") {
+      listsUnread.push(...waitsUnread(line));
+    } else if (key !== undefined && GOVERNING_LISTS.has(key)) {
+      listsUnread.push(...listUnread(key, line));
+    } else if (key !== undefined && triggers.has(key)) {
+      readTriggerField(emptyFields(), key, line, triggerUnread);
+    }
+  }
+  return { budgetUnread, listsUnread, triggerUnread };
 };
 
 /** A front matter key a task file may carry beyond its own: what YAML reads bare. */
@@ -1120,18 +1416,9 @@ export class TaskDoc {
     if (this.front && !fields.stage) {
       problems.push("The front matter names no stage.");
     }
-    const budgetUnread: string[] = [];
-    const listsUnread: string[] = [];
-    for (const line of this.front ?? []) {
-      if (line.key === "budget") {
-        readBudget(line, budgetUnread);
-      }
-      if (line.key === "waits_on") {
-        listsUnread.push(...waitsUnread(line));
-      } else if (line.key !== undefined && GOVERNING_LISTS.has(line.key)) {
-        listsUnread.push(...listUnread(line.key, line));
-      }
-    }
+    const { budgetUnread, listsUnread, triggerUnread } = unreadOf(
+      this.front ?? []
+    );
     const sections = sectionsOf(this.body);
     const preambleEnd = sections[0]?.at ?? this.body.length;
     const title = titleLine(this.body, preambleEnd);
@@ -1170,6 +1457,7 @@ export class TaskDoc {
       problems,
       budgetUnread: budgetUnread.join(" ") || null,
       listsUnread: listsUnread.join(" ") || null,
+      triggerUnread: triggerUnread.join(" ") || null,
     };
   }
 
@@ -1181,6 +1469,13 @@ export class TaskDoc {
   unreadOfList(field: "accounts"): string[] {
     const line = this.front?.find((each) => each.key === field);
     return line ? listUnread(field, line) : [];
+  }
+
+  /** Whether its file makes it a routine: it carries `target:` or `on:` (§5.5), read or not. */
+  startsOnItsOwn(): boolean {
+    return (this.front ?? []).some(
+      (line) => line.key === "target" || line.key === "on"
+    );
   }
 
   /** The title the file gives, else one from its name. */

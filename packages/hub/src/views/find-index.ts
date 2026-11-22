@@ -37,6 +37,7 @@ import {
   storedEntry,
   taskEntry,
 } from "../find-names";
+import { type RoutineTask, standingOf } from "../routine-standing";
 import type { Catalogs } from "./catalogs";
 import { VIEW_KINDS, type ViewChanges } from "./changes";
 import type { ViewMachine, ViewProject, ViewsDb } from "./read";
@@ -723,6 +724,12 @@ export const createFindIndex = (deps: FindIndexDeps) => {
         continue;
       }
       const kinds = kindsOf(projectId, now);
+      // A routine reads as its task stands: its entry is laid again with them.
+      for (const routine of routines.values()) {
+        if (routine.projectId === projectId) {
+          routinesOwed.add(routine.id);
+        }
+      }
       taskEntries.set(
         projectId,
         tasks.map((task) =>
@@ -737,10 +744,31 @@ export const createFindIndex = (deps: FindIndexDeps) => {
     tasksOwed.clear();
   };
 
+  /**
+   * A routine's task as the index last read it; undefined while its
+   * project's stage kinds are not read yet, when it is told as kept.
+   */
+  const taskOfRoutine = (routine: FindRoutineRow): RoutineTask | undefined => {
+    const kinds = routine.projectId
+      ? stageKinds.get(routine.projectId)?.kinds
+      : undefined;
+    if (!(kinds && routine.projectId)) {
+      return;
+    }
+    const task = routine.taskId
+      ? tasksOf.get(routine.projectId)?.find((one) => one.id === routine.taskId)
+      : undefined;
+    return task
+      ? { kind: kinds.get(task.stage) ?? null, stage: task.stage }
+      : "gone";
+  };
+
   const layRoutines = (): void => {
     for (const id of routinesOwed) {
-      const routine = routines.get(id);
-      if (routine) {
+      const kept = routines.get(id);
+      if (kept) {
+        const task = taskOfRoutine(kept);
+        const routine = task ? standingOf(kept, task) : kept;
         routineEntries.set(
           id,
           routineEntry(routine, projectOf(routine.projectId))

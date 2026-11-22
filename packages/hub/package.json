@@ -32,6 +32,7 @@
     "platforms-routes": "bun scripts/platforms-routes.ts",
     "queued-requests": "bun scripts/queued-requests.ts",
     "roles:check": "bun scripts/role-budgets.ts",
+    "routines:carry-check": "bun scripts/routines-carry-check.ts",
     "sealed-facts": "bun scripts/sealed-facts.ts",
     "session-plans": "bun scripts/session-plans.ts",
     "skills:check": "bun scripts/skills-check.ts",

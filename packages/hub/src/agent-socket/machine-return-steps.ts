@@ -37,7 +37,6 @@ export type MachineReturnContext = Pick<
   | "escalateRoutedAsks"
   | "fleetSyncs"
   | "flushOwedStarts"
-  | "foldersSeen"
   | "forgetPending"
   | "freshAccountReports"
   | "goneWithProcess"
@@ -83,6 +82,7 @@ export type MachineReturnContext = Pick<
   | "settlePending"
   | "socketAddress"
   | "speaksContract"
+  | "sshRecordOf"
   | "streamRelay"
   | "streams"
   | "tailnetHttps"
@@ -125,14 +125,8 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
 
   const artifactsBack = (ret: MachineReturn): void => {
     const { message } = ret;
-    // The pins its artifacts are served from: it lets go of every other.
+    // Its folder previews' files still in pins there moved in; every other pin let go.
     ctx.artifacts.pinsBack(message.machineId);
-  };
-
-  const foldersRead = (ret: MachineReturn): void => {
-    const { message } = ret;
-    // Its folder previews' folders read, never started.
-    ctx.foldersSeen(message.machineId);
   };
 
   const workResumed = (ret: MachineReturn): void => {
@@ -639,7 +633,10 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
         ctx.db.revokedAmong(agentFrame.credentialHashes),
         ctx.hubGitOrigins(),
         ctx.hubPreviewOrigins(),
-        ctx.tailnetHttps.serving()
+        ctx.tailnetHttps.serving(),
+        // It came through its SSH add's forward: the agent carries the
+        // dashboard and previews to that forward (ssh-door.ts).
+        ctx.sshRecordOf(ws) !== undefined
       )
     );
   };
@@ -761,7 +758,6 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     backRegistered,
     registryEntered,
     artifactsBack,
-    foldersRead,
     workResumed,
     checkoutsLearned,
     previewsReconciled,

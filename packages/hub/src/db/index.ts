@@ -74,7 +74,6 @@ import {
 } from "./project-work";
 import { type ProjectsDb, projectsDb } from "./projects";
 import { type RelaysDb, relaysDb } from "./relays";
-import { type RoutinesDb, routinesDb } from "./routines";
 import { type RulesDb, rulesDb } from "./rules";
 import { type SendsDb, sendsDb } from "./sends";
 import type { Revocations } from "./session-identity";
@@ -83,11 +82,13 @@ import { type SessionLinesDb, sessionLinesDb } from "./session-lines";
 import { type SessionPlansDb, sessionPlansDb } from "./session-plans";
 import { type SessionTasksDb, sessionTasksDb } from "./session-tasks";
 import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
+import { type StagePlacesDb, stagePlacesDb } from "./stage-places";
 import { type StartersDb, startersDb } from "./starters";
 import { explainStatements, type StatementPlans } from "./statement-plans";
 import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
 import { type TaskIndexDb, taskIndexDb } from "./task-index";
 import type { TaskLinksDb } from "./task-links";
+import { type TaskTriggersDb, taskTriggersDb } from "./task-triggers";
 import { type TaskWaitFlagsDb, taskWaitFlagsDb } from "./task-wait-flags";
 import { type ToolCallKeysDb, toolCallKeysDb } from "./tool-call-keys";
 import { type TrackersDb, trackersDb } from "./trackers";
@@ -180,12 +181,14 @@ interface HubStore {
   readonly restoreProject: ForgetDb["restore"];
   /** Rows a project's restore held back, put back (forget.ts `retry`). */
   readonly retryHeldRows: ForgetDb["retry"];
-  /** Routines and their runs (routines.ts). */
-  readonly routines: RoutinesDb;
+  /** Routines' triggers and runs (routines.ts). */
+  readonly routines: TaskTriggersDb;
   /** The background tasks each Claude session's process runs now (session-tasks.ts). */
   readonly sessionTasks: SessionTasksDb;
   /** The machines the hub added over SSH, and the connection it holds to each (ssh-tunnels.ts). */
   readonly sshMachines: SshMachinesDb;
+  /** The folder each place a port preview is staged from stands for (stage-places.ts). */
+  readonly stagePlaces: StagePlacesDb;
   /** A project's starters as last written, and what was done with them (project-starters.ts). */
   readonly starters: StartersDb;
   /**
@@ -393,7 +396,7 @@ const make = async (path: string): Promise<DbShape> => {
     blocks: blocksDb(db),
     decides: decidesDb(db, delegateTypes),
     starters: startersDb(db),
-    routines: routinesDb(db),
+    routines: taskTriggersDb(db),
     connections: connectionsDb(db),
     ingress: ingressDb(db),
     relays: relaysDb(db),
@@ -414,6 +417,7 @@ const make = async (path: string): Promise<DbShape> => {
     previewPasses: previewPassesDb(db),
     documents: artifactDocumentsDb(db),
     pageStores: pageStoresDb(db),
+    stagePlaces: stagePlacesDb(db),
     streamRelay: streamRelayDb(db),
     browsers: browsersDb(db),
     actions: actionsDb(db),

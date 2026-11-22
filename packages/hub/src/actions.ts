@@ -343,7 +343,7 @@ export const createActions = ({
         (workItemId ? db.routines.runOfItem(workItemId) : undefined) ??
         live.find((each) => each.instanceId === id);
       if (run) {
-        return { routineId: run.routineId, runId: run.id };
+        return { routineId: run.triggerId, runId: run.id };
       }
       [session] = parentInstanceId
         ? db.getInstancesByIds([parentInstanceId])

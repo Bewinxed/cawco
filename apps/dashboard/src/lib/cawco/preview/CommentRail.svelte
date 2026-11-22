@@ -52,6 +52,7 @@
    * same fault line stands over the rows, which keep their last read.
    */
   import { commentWords as said } from "@cawco/core/words/comments";
+  import { previewWords } from "@cawco/core/words/preview";
   import { type Snippet, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
@@ -97,7 +98,7 @@
   } from "../../platform/motion/curves.svelte";
   import { unfold } from "../../platform/motion/fold.svelte";
   import { ListSwap } from "../../platform/motion/list-swap.svelte";
-  import { LINK_DROPPED, type ListHold } from "./artifact-doc";
+  import type { ListHold } from "./artifact-doc";
   import {
     attachedTo,
     lastActivity,
@@ -1161,7 +1162,7 @@
         details={down}
         end="var(--spacing-space-2)"
         indent="var(--spacing-space-2)"
-        reason={LINK_DROPPED}
+        reason={previewWords.notReachingLine}
       />
     {/if}
   </div>

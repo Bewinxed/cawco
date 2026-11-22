@@ -198,13 +198,17 @@ let { mediaAt } = artifact.meta();
  * A page the hub served, opened alone (`artifact_browse`'s address, or a
  * tab of its own): no frame holds it, so no host says hello, and it joins
  * its own doc on its own origin, through the pass its entry set
- * (preview-access.ts), so revisions and its pieces' new versions reach it
- * as they reach the panel. The dashboard frames a page, and the app's host
- * script stands in for `window.parent`: both say hello themselves.
+ * (preview-access.ts), so revisions, its pieces' new versions and its
+ * files' moves reach it as they reach the panel. A page's doc is embedded
+ * in its tag; a folder preview's page names only its artifact there (hub
+ * preview-server/serve.ts `serveFolder`). The dashboard frames a page, and
+ * the app's host script stands in for `window.parent`: both say hello
+ * themselves.
  */
 const alone = window.top === window && window.parent === window;
-const seededId = artifact.id();
-const seededKind = artifact.kind();
+const seededId = artifact.id() ?? tag?.dataset.artifact ?? null;
+const seededKind =
+  artifact.kind() ?? (tag?.dataset.kind === "preview" ? "preview" : null);
 if (alone && seededId && seededKind) {
   artifact.join(
     {
@@ -945,6 +949,7 @@ artifact.watch({
     aimFaults();
     republished();
     mediaMoved();
+    filesMoved();
     toldSent();
     tellDoc();
   },
@@ -967,6 +972,7 @@ artifact.watch({
     toldSent();
     republished();
     mediaMoved();
+    filesMoved();
     tellDoc();
   },
   refused: (reason) => failed("state", reason),
@@ -1306,6 +1312,41 @@ function mediaMoved() {
       detail: { pageHash },
     })
   );
+}
+
+/** The key of a folder preview's files when this page first heard its doc (hub artifacts service `folderStamped`); undefined before. */
+let folderKey: string | null | undefined;
+
+/**
+ * A folder preview's files moved since this page first heard its doc (an
+ * `artifact_update` with a dir, a create in place, a held version opened):
+ * the page hears it as a revision (`cawco:revision`), and one that doesn't
+ * take it itself loads again, once every pointer is up, its files read at
+ * their new key.
+ */
+function filesMoved() {
+  if (!artifact.known()) {
+    return;
+  }
+  const now = artifact.meta().folderKey;
+  if (folderKey === undefined) {
+    folderKey = now;
+    return;
+  }
+  if (now === folderKey) {
+    return;
+  }
+  folderKey = now;
+  if (
+    dispatchEvent(
+      new CustomEvent("cawco:revision", {
+        cancelable: true,
+        detail: { pageHash },
+      })
+    )
+  ) {
+    whenPointersUp(() => location.reload());
+  }
 }
 
 function choose(

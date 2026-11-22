@@ -68,8 +68,6 @@ import {
   queuedWorkItems,
   relays,
   removedMachines,
-  routineRuns,
-  routines,
   ruleState,
   rules,
   sentMessages,
@@ -78,6 +76,9 @@ import {
   sessionPlans,
   skills,
   sshMachines,
+  stagePlaces,
+  taskRuns,
+  taskTriggers,
   treeStops,
   trimOffers,
   turnUsage,
@@ -143,6 +144,7 @@ export const OWNED_ROWS = [
     drop: "delete",
   },
   { column: workspaces.createdByInstanceId, fold: "move" },
+  { column: stagePlaces.namedBy, fold: "move" },
   { column: projects.conversationInstanceId, fold: "move" },
   // A session's own words and records go with its row, as its transcript
   // does: the hub's notes that are lines of its transcript, what it asked,
@@ -201,6 +203,7 @@ export const OWNED_ROWS = [
   { column: agents.machineId, rekey: "custom" },
   { column: instances.machineId, rekey: "move" },
   { column: workspaces.machineId, rekey: "move" },
+  { column: stagePlaces.machineId, rekey: "move", goesWithMachine: true },
   { column: workspaceCreates.machineId, rekey: "move" },
   { column: artifacts.machineId, rekey: "move" },
   { column: parkedAsks.machineId, rekey: "move" },
@@ -236,7 +239,7 @@ export const OWNED_ROWS = [
   { column: workItems.projectId, foldProject: "custom" },
   { column: projectNotes.projectId, foldProject: "move" },
   { column: rules.scopeProjectId, foldProject: "move" },
-  { column: routines.projectId, foldProject: "move" },
+  { column: taskTriggers.projectId, foldProject: "custom" },
   { column: eventRoutes.projectId, foldProject: "move" },
   { column: connectorPolls.projectId, foldProject: "move" },
   { column: inboundEvents.projectId, foldProject: "move" },
@@ -506,19 +509,19 @@ export const KNOWN_UNOWNED: readonly {
       "A machine the person removed: the row is the record that it went, read by rows that still name it.",
   },
   {
-    column: routineRuns.instanceId,
+    column: taskRuns.instanceId,
     reason:
       "The session that did a routine's run: the run's record outlives the session.",
   },
   {
-    column: routines.createdBy,
+    column: taskTriggers.createdBy,
     reason:
       "`owner`, or the id of the session that made the routine: who made it, kept after that session goes.",
   },
   {
-    column: routines.madeInInstance,
+    column: taskTriggers.madeInInstance,
     reason:
-      "The session whose `routine_create` made the routine: kept after that session goes, and a fold does not move it, so a folded former's id stays here.",
+      "The session whose `task_create` made the routine: kept after that session goes, and a fold does not move it, so a folded former's id stays here.",
   },
   {
     column: trimOffers.projectId,

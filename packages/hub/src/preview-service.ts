@@ -9,7 +9,7 @@ import {
 } from "@cawco/core/preview/upstream";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
-import { isFolderGone, startRefused } from "@cawco/preview/proxy";
+import { startRefused } from "@cawco/preview/proxy";
 import type { ArtifactRow, ArtifactServed, SourceMoved } from "./db/artifacts";
 import { artifactOrigin, originOfKey } from "./db/previews";
 import type { AgentCall } from "./machine-answers";
@@ -47,8 +47,6 @@ export interface PreviewServiceDeps {
   rowAt: (origin: string) => ArtifactRow | undefined;
   /** How long a hand-up's check waits for its page (artifacts service `SHOWN_WAIT_MS`). */
   shownWaitMs: number;
-  /** What a start said of a folder preview's folder (artifacts service `sourceSeen`): gone, with the machine's words, or there. */
-  sourceSeen: (id: string, gone: string | null) => void;
 }
 
 /** One start of a machine's listener for an origin: the key it is for, and its answer once the machine gives it. */
@@ -225,18 +223,6 @@ export function createPreviewService(deps: PreviewServiceDeps) {
     return await upstreamAt(machineId, key, port, start);
   };
 
-  /** What a start said of a folder preview's folder, kept on its artifact: gone in its machine's words, or there; any other failure says nothing of it. */
-  const folderSeen = (row: MachineRow, started: PreviewReach): void => {
-    if (!("dir" in row.source)) {
-      return;
-    }
-    if (started.ok) {
-      deps.sourceSeen(row.id, null);
-    } else if (isFolderGone(started.error)) {
-      deps.sourceSeen(row.id, started.error);
-    }
-  };
-
   /** Origin `key`'s upstream, when it is for what `row` names now. */
   const upstreamOf = (row: MachineRow): Upstream | undefined => {
     const held = upstreams.get(artifactOrigin(row.origin));
@@ -313,7 +299,6 @@ export function createPreviewService(deps: PreviewServiceDeps) {
     };
     start.reach = (async (): Promise<PreviewReach> => {
       const started = await startListener(key, row, start);
-      folderSeen(row, started);
       if (starting.get(key) !== start) {
         return voided(row, key, started);
       }
@@ -482,14 +467,24 @@ export function createPreviewService(deps: PreviewServiceDeps) {
     /**
      * Artifact `move.id`'s source moved (db `onSourceMoved`, its row's one
      * write): the upstream of the origin it stands on now told to go when
-     * it was for another source, and a start for another voided; while a
-     * screen uses that origin the row's own source is started at once.
+     * it was for another source (or for any, once no machine serves the
+     * row: a folder preview's files are the hub's), and a start for another
+     * voided; while a screen uses that origin the row's own source is
+     * started at once.
      * Only then is the server it moved off let go, once nothing else shows
      * it (artifacts service `letGoMoved`), so a page open on it has its new
      * server before its old one stops.
      */
     moved: async ({ id, before }: SourceMoved): Promise<void> => {
       const row = deps.row(id);
+      if (row && !servedByMachine(row)) {
+        const key = artifactOrigin(row.origin);
+        const held = upstreams.get(key);
+        if (held) {
+          drop(key, held);
+        }
+        starting.delete(key);
+      }
       if (row && servedByMachine(row)) {
         const key = artifactOrigin(row.origin);
         const want = keyOf(row);

@@ -2,7 +2,9 @@
  * What the pane is showing: its session's panel, the artifact in it, and who owns it.
  */
 import { machineLabel } from "@cawco/core/machine-names";
+import { type Named, named } from "@cawco/core/named";
 import { designOf } from "@cawco/core/stage";
+import { previewWords } from "@cawco/core/words/preview";
 import { resolveSessionTitle } from "../links";
 import { paneFleet } from "./pane-fleet";
 
@@ -28,22 +30,30 @@ export class PaneSubject {
     this.fleet.session(this.#deps.instanceId())
   );
 
-  readonly ownerMachine = $derived.by(() => {
+  /** The session's machine by its label, in both its forms; the unnamed words while it isn't known. */
+  readonly ownerMachine = $derived.by((): Named => {
     const machine = this.fleet.machines.find(
       (one) => one.machineId === this.owner?.machineId
     );
-    return machine ? machineLabel(machine.hostname) : "its machine";
+    if (!machine) {
+      return previewWords.unnamed.machine;
+    }
+    return named(machineLabel(machine.hostname));
   });
 
-  readonly ownerName = $derived(
-    this.owner
-      ? resolveSessionTitle({
-          title: this.owner.title,
-          cwd: this.owner.cwd,
-          id: this.owner.id,
-        })
-      : "the session"
-  );
+  /** The session by its title, in both its forms; the unnamed words while it isn't known. */
+  readonly ownerName = $derived.by((): Named => {
+    if (!this.owner) {
+      return previewWords.unnamed.session;
+    }
+    return named(
+      resolveSessionTitle({
+        title: this.owner.title,
+        cwd: this.owner.cwd,
+        id: this.owner.id,
+      })
+    );
+  });
 
   readonly downPort = $derived(
     this.source && "port" in this.source ? this.source.port : null
