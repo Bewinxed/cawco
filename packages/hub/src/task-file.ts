@@ -147,7 +147,7 @@ export interface TaskSchedule {
 }
 
 /** The front matter fields that make a task a routine and say how its runs go (§5.5): what the hub's trigger copies. */
-export const TRIGGER_FIELDS = [
+const TRIGGER_FIELDS = [
   "on",
   "target",
   "stop",
@@ -743,6 +743,24 @@ const readLands = (
 };
 
 /**
+ * A mapping line's entries: one per line under it, or its flow mapping's
+ * (`{a: 1, b: 2}`) as `split` splits what is inside the braces; undefined
+ * when it is neither.
+ */
+const mappingEntries = (
+  line: FrontMatterLine,
+  split: (inner: string) => string[]
+): string[] | undefined => {
+  const value = withoutComment(line.value);
+  if (value === "") {
+    return line.under.map((under) => withoutComment(under)).filter(Boolean);
+  }
+  return value.startsWith("{") && value.endsWith("}")
+    ? split(value.slice(1, -1))
+    : undefined;
+};
+
+/**
  * `budget:` — `{usd: 2, turns: 40, minutes: 30}`, or the same keys one per
  * line under it. Dollars are a positive number; turns and minutes whole
  * numbers from 1. What does not read goes to `problems`.
@@ -752,15 +770,10 @@ const readBudget = (
   problems: string[]
 ): WorkBudget | null => {
   const value = withoutComment(line.value);
-  let entries: string[];
-  if (value === "") {
-    entries = line.under.map((under) => withoutComment(under)).filter(Boolean);
-  } else if (value.startsWith("{") && value.endsWith("}")) {
-    entries = value
-      .slice(1, -1)
-      .split(",")
-      .filter((entry) => entry.trim());
-  } else {
+  const entries = mappingEntries(line, (inner) =>
+    inner.split(",").filter((entry) => entry.trim())
+  );
+  if (!entries) {
     problems.push(
       `budget: “${value}” is not a budget like {usd: 2, turns: 40, minutes: 30}.`
     );
@@ -825,14 +838,9 @@ const SCALAR_FIELDS = [
 
 /** A flow mapping's entries (`{a: 1, b: "x, y"}`), split at the commas outside quotes; undefined when it is not one. */
 const mappingOf = (line: FrontMatterLine): [string, string][] | undefined => {
-  const value = withoutComment(line.value);
-  let entries: string[];
-  if (value === "") {
-    entries = line.under.map((under) => withoutComment(under)).filter(Boolean);
-  } else if (value.startsWith("{") && value.endsWith("}")) {
-    // Split at the commas outside quotes; an entry is no quoted scalar whole.
-    entries = flowItems(value.slice(1, -1));
-  } else {
+  // Split at the commas outside quotes; an entry is no quoted scalar whole.
+  const entries = mappingEntries(line, flowItems);
+  if (!entries) {
     return;
   }
   const pairs: [string, string][] = [];

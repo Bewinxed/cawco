@@ -40,7 +40,7 @@ const ms = (date: Date | null | undefined): number | null =>
   date?.getTime() ?? null;
 
 /** Where a routine's stop stands, its task's stage kind (`gone`: no index row) read with it. */
-export const stopStateOf = (
+const stopStateOf = (
   facts: RoutineFacts,
   kind: StageKind | null | "gone"
 ): ConditionState => {

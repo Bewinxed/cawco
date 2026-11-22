@@ -55,7 +55,7 @@
  */
 
 import type { CommandResult } from "@cawco/core/commands/controls";
-import type { DelegateType, SessionRole } from "@cawco/core/delegate-types";
+import type { DelegateType } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { FLEET_PROJECT_ID, isFleetProject } from "@cawco/core/fleet-project";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
@@ -83,6 +83,7 @@ import type {
 } from "@cawco/core/session-messages";
 import type { TaskRoutine } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
+import type { StageKind } from "@cawco/core/views";
 import { withoutUndefined } from "@cawco/core/without-undefined";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import {
@@ -117,6 +118,7 @@ import { ROUTINE_ORIGIN } from "./memory";
 import type { MemoryRun, ProbeAnswer } from "./memory-run";
 import type { Push } from "./push";
 import type { CarryRoutines } from "./routine-carry";
+import type { RunStart } from "./routine-run";
 import {
   cronOf,
   EVENT_SLOT,
@@ -167,7 +169,7 @@ const MIN_GAP_MS = 500;
 const PLACE_WAIT_MS = 60_000;
 const PLACE_POLL_MS = 1000;
 /** Runs a routine's read carries, and a page of `/api/routines/:id/runs` holds: the newest; its `runsTotal` says how many it has had. */
-export const RUNS_SHOWN = 20;
+const RUNS_SHOWN = 20;
 /** The longest delivered output a project note carries. */
 const NOTE_MAX = 4000;
 /** A conversation run's skip while Caw is off: a routine is Caw acting on his own (Caw on / Caw off). */
@@ -238,33 +240,6 @@ export interface RoutinePatch {
 
 /** Who acts: you (the dashboard), or a session through its tools. */
 export type RoutineActor = "owner" | InstanceRow;
-
-/** A run a session does, as the engine asks dispatch to start it (dispatch.ts `startRun`). */
-export interface RunStart {
-  /** In place of the task's own budget (a recovery run's). */
-  budget?: WorkBudget;
-  /** Comments on the task since this time are carried (a question the person answered). */
-  commentsSince?: number;
-  /** The run's contract, after the task file and the input. */
-  contract: string;
-  /** What the run reads after the task file: an event, or the hub's findings. */
-  input: string;
-  /** The brief's first line: the routine, its slot and its attempt. */
-  lead: string;
-  /** A session that may delegate, with host scope, landing nothing itself. */
-  orchestrator: boolean;
-  /** Its work item's parent: the routine, at the place dispatch cut it. */
-  parent: { id: string; name: string };
-  /** In place of the task's description: the hub's own prompt (the curator's). */
-  prompt?: string;
-  /** The role it runs in (`curator`, `trimmer`); its type's otherwise. */
-  role?: SessionRole;
-  runId: string;
-}
-
-/** What dispatch answers a run's start: its item, or why it was turned down, or a refusal that failed it. */
-export type RunStarted =
-  { item: WorkItemRow; kind: "started" } | { kind: "skipped"; why: string };
 
 export interface RoutineDeps {
   /** Whether any machine is connected now. */
@@ -361,7 +336,7 @@ const scheduleWords = (cron: string, timeZone: string): string =>
   `${cronstrue.toString(cron, { use24HourTimeFormat: true, verbose: atFixedTimes(cron) })} (${timeZone})`;
 
 /** A routine's schedule as the person reads it; one with none runs on its event routes. */
-export const scheduleOf = (
+const scheduleOf = (
   routine: Pick<RoutineRow, "cron" | "enabled" | "nextSlot" | "timeZone">
 ): RoutineSchedule => {
   if (!(routine.cron && routine.timeZone)) {
@@ -420,7 +395,7 @@ const ms = (date: Date | null): number | null => date?.getTime() ?? null;
 const zoneOf = (routine: Pick<RoutineRow, "timeZone">): string =>
   routine.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-export const runView = (run: RoutineRunRow): RoutineRunView => ({
+const runView = (run: RoutineRunRow): RoutineRunView => ({
   id: run.id,
   slot: run.slot,
   attempt: run.attempt,
@@ -1160,7 +1135,8 @@ export const createRoutines = ({
             detail: "its task's file no longer makes it a routine",
           })
         );
-      default:
+      case "delegate":
+      case "orchestrator":
         return fireSession(routine, run);
     }
   };
@@ -1404,12 +1380,12 @@ export const createRoutines = ({
     };
   };
 
-  /** The project's first done stage's name; undefined while its stages do not read or have none. */
-  const firstDone = async (projectId: string) => {
+  /** The project's first stage of `kind`, by name; undefined while its stages do not read or have none. */
+  const stageOf = async (projectId: string, kind: StageKind) => {
     const stages = await tasks().stages(projectId);
     return stages instanceof ElysiaStatus
       ? undefined
-      : stages.stages.find((stage) => stage.kind === "done")?.name;
+      : stages.stages.find((stage) => stage.kind === kind)?.name;
   };
 
   /**
@@ -1437,7 +1413,7 @@ export const createRoutines = ({
       if (!(task instanceof ElysiaStatus) && task.kind === "done") {
         return;
       }
-      const done = await firstDone(projectId);
+      const done = await stageOf(projectId, "done");
       if (!done) {
         return `the project has no done stage, so ${taskId} stays where it is`;
       }
@@ -2627,9 +2603,7 @@ export const createRoutines = ({
       mode: input.mode,
       keep: input.keep === undefined ? undefined : input.keep || null,
       command:
-        input.command === undefined
-          ? undefined
-          : input.command?.trim() || null,
+        input.command === undefined ? undefined : input.command?.trim() || null,
     });
 
   /** Who changes a routine's task: the hub, you, or a session. */
@@ -3492,101 +3466,73 @@ export const createRoutines = ({
       : { runs: store.runs(row.id, RUNS_SHOWN, skip).map(runView) };
   };
 
-  /** A routine ended by you (`DELETE /api/routines/:id`): its task moves to the first dropped stage, its runs kept. */
-  const drop = async (id: string) => {
+  /**
+   * Your move of routine `id`'s task into the project's first stage of
+   * `kind`, `why` its reason: the route's acts on a routine are moves of its
+   * task. Refused while its task is not filed, or the project has no such
+   * stage; `when` holds the move unless the task's kind now allows it.
+   */
+  const moveYours = async (
+    id: string,
+    kind: Extract<StageKind, "done" | "dropped" | "todo">,
+    why: string,
+    when: (task: TaskView) => boolean = () => true
+  ) => {
     const row = routineOf(id);
     if (row instanceof ElysiaStatus) {
       return row;
     }
-    if (!row.taskId) {
+    const { projectId, taskId } = row;
+    const stage = await stageOf(projectId, kind);
+    if (!(taskId && stage)) {
       return problem(409, {
-        code: "routine-unfiled",
-        detail: `Routine ${row.name}'s task is not filed yet.`,
+        code: "routine-no-stage",
+        detail: `Routine ${row.name}'s task is not filed, or its project has no ${kind} stage.`,
       });
     }
-    const stages = await tasks().stages(row.projectId);
-    const dropped =
-      stages instanceof ElysiaStatus
-        ? undefined
-        : stages.stages.find((stage) => stage.kind === "dropped")?.name;
-    if (!dropped) {
-      return problem(409, {
-        code: "routine-no-dropped-stage",
-        detail: "The project has no dropped stage to end the routine in.",
-      });
+    const task = await tasks().get(projectId, taskId);
+    if (task instanceof ElysiaStatus || !when(task)) {
+      return row;
     }
-    const moved = await tasks().move(
-      row.projectId,
-      row.taskId,
-      dropped,
-      YOU_ACTOR,
-      "ended"
-    );
-    return moved instanceof ElysiaStatus
-      ? moved
-      : { deleted: true, routes: [], waiting: [] };
+    const moved = await tasks().move(projectId, taskId, stage, YOU_ACTOR, why);
+    return moved instanceof ElysiaStatus ? moved : row;
+  };
+
+  /** A routine ended by you (`DELETE /api/routines/:id`): its task moves to the first dropped stage, its runs kept. */
+  const drop = async (id: string) => {
+    const moved = await moveYours(id, "dropped", "ended");
+    if (moved instanceof ElysiaStatus) {
+      return moved;
+    }
+    // Its event routes and the waits on it stand: an ended routine is its dropped task.
+    const ended: { deleted: boolean; routes: string[]; waiting: string[] } = {
+      deleted: true,
+      routes: [],
+      waiting: [],
+    };
+    return ended;
   };
 
   /** A routine's stop met by you (`POST /api/routines/:id/met`): its task moves to the first done stage. */
   const markMet = async (id: string) => {
-    const row = routineOf(id);
-    if (row instanceof ElysiaStatus) {
-      return row;
-    }
-    const done = await firstDone(row.projectId);
-    if (!(row.taskId && done)) {
-      return problem(409, {
-        code: "routine-no-done-stage",
-        detail: "The routine's task has no done stage to move to.",
-      });
-    }
-    const moved = await tasks().move(
-      row.projectId,
-      row.taskId,
-      done,
-      YOU_ACTOR,
-      "marked met"
-    );
-    return moved instanceof ElysiaStatus ? moved : await viewOf(row);
+    const moved = await moveYours(id, "done", "marked met");
+    return moved instanceof ElysiaStatus ? moved : await viewOf(moved);
   };
 
   /** Check again (`POST /api/routines/:id/recheck`): its task moved back to its to-do stage, on again from now, run once now. */
   const recheck = async (id: string, deadline?: Date | null) => {
-    const row = routineOf(id);
-    if (row instanceof ElysiaStatus) {
-      return row;
-    }
-    if (!row.taskId) {
-      return problem(409, {
-        code: "routine-unfiled",
-        detail: `Routine ${row.name}'s task is not filed yet.`,
-      });
-    }
-    const stages = await tasks().stages(row.projectId);
-    const todo =
-      stages instanceof ElysiaStatus
-        ? undefined
-        : stages.stages.find((stage) => stage.kind === "todo")?.name;
-    const task = await tasks().get(row.projectId, row.taskId);
-    if (
-      todo &&
-      !(task instanceof ElysiaStatus) &&
-      (task.kind === "done" || task.kind === "dropped")
-    ) {
-      const moved = await tasks().move(
-        row.projectId,
-        row.taskId,
-        todo,
-        YOU_ACTOR,
-        "check again"
-      );
-      if (moved instanceof ElysiaStatus) {
-        return moved;
-      }
+    const moved = await moveYours(
+      id,
+      "todo",
+      "check again",
+      (task) => task.kind === "done" || task.kind === "dropped"
+    );
+    if (moved instanceof ElysiaStatus) {
+      return moved;
     }
     const updated = await update(
       id,
-      { enabled: true, ...(deadline === undefined ? {} : { deadline }) },
+      { enabled: true, ...withoutUndefined({ deadline }) },
       "owner"
     );
     if (updated instanceof ElysiaStatus) {
@@ -3719,7 +3665,9 @@ const routePatch = (
     on: rescheduled ? { cron, zone } : undefined,
     stop: body.stop ?? body.condition,
     deadline:
-      body.deadline === undefined ? undefined : (deadlineAt(body.deadline) ?? null),
+      body.deadline === undefined
+        ? undefined
+        : (deadlineAt(body.deadline) ?? null),
     dailyCapUsd: body.dailyCapUsd,
     target: body.target,
     type: body.delegateType,

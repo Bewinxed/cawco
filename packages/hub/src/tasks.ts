@@ -1624,36 +1624,30 @@ const patchLists = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
   }
 };
 
-/** A patch's routine lines, each set or taken out (routines.ts checked them). */
-const patchTrigger = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
-  const trigger = patch.trigger ?? {};
-  const set = <F extends keyof typeof TRIGGER_KEYS>(key: F) => {
-    const value = trigger[key];
-    if (value !== undefined) {
-      const field = TRIGGER_KEYS[key];
-      setField(changed, field, () =>
-        doc.setField(field, value as TaskFieldValue<typeof field>)
-      );
-    }
-  };
-  for (const key of Object.keys(
-    TRIGGER_KEYS
-  ) as (keyof typeof TRIGGER_KEYS)[]) {
-    set(key);
+/** One line of a task file set, or taken out (null); left alone when the patch leaves it out. */
+const setLine = <F extends TaskField>(
+  doc: TaskDoc,
+  changed: string[],
+  field: F,
+  value: TaskFieldValue<F> | undefined
+): void => {
+  if (value !== undefined) {
+    setField(changed, field, () => doc.setField(field, value));
   }
 };
 
-/** A routine's lines by the name a patch gives them, and the field each writes. */
-const TRIGGER_KEYS = {
-  on: "on",
-  target: "target",
-  stop: "stop",
-  deadline: "deadline",
-  dailyCapUsd: "daily_cap_usd",
-  mode: "mode",
-  keep: "keep",
-  command: "command",
-} as const satisfies Record<keyof TriggerDraft, TaskField>;
+/** A patch's routine lines, each set or taken out (routines.ts checked them). */
+const patchTrigger = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
+  const trigger = patch.trigger ?? {};
+  setLine(doc, changed, "on", trigger.on);
+  setLine(doc, changed, "target", trigger.target);
+  setLine(doc, changed, "stop", trigger.stop);
+  setLine(doc, changed, "deadline", trigger.deadline);
+  setLine(doc, changed, "daily_cap_usd", trigger.dailyCapUsd);
+  setLine(doc, changed, "mode", trigger.mode);
+  setLine(doc, changed, "keep", trigger.keep);
+  setLine(doc, changed, "command", trigger.command);
+};
 
 /** Applies a patch to a task file; answers what it changed, for the commit message, or the refusal of the first field that cannot stand. */
 const applyPatch = (doc: TaskDoc, patch: TaskPatch) => {

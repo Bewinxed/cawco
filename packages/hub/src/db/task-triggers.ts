@@ -20,6 +20,15 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { projectTasks, taskRuns, taskTriggers } from "./schema";
 import type { Tx } from "./tx";
 
+/** A routine's name: its task's title, else its task's id while the index holds no row of it. */
+export const ROUTINE_NAME = sql<string>`coalesce(${projectTasks.title}, ${taskTriggers.taskId}, 'routine')`;
+
+/** A trigger's task's index row, joined. */
+export const ITS_TASK = and(
+  eq(projectTasks.projectId, taskTriggers.projectId),
+  eq(projectTasks.id, taskTriggers.taskId)
+);
+
 /** A trigger as its table keeps it. */
 export type TriggerRow = typeof taskTriggers.$inferSelect;
 
@@ -59,17 +68,6 @@ export interface TaskTriggersDb {
   /** Routines carried over from before routines were tasks whose task is not filed yet. */
   readonly carried: () => TriggerRow[];
   /**
-   * A carried routine's task filed (routine-carry.ts): the trigger the index
-   * made for the new file gives way to the carried one, which takes its
-   * task and keeps its state, runs, routes and id; its definition is let go.
-   */
-  readonly filed: (id: string, projectId: string, taskId: string) => void;
-  /**
-   * Waits kept outside task files that named a routine (`routine:<id>`)
-   * named its task now: plan steps' waits and attempts' witnesses.
-   */
-  readonly repointWaits: (from: string, to: string) => void;
-  /**
    * The next queued run, taken in one transaction while the routine has no
    * run going: its oldest by arrival, filed as `decide` says now. Nothing
    * while a run goes or none waits.
@@ -92,6 +90,12 @@ export interface TaskTriggersDb {
     routineId: string;
     slot: Date;
   }) => RoutineRunRow | undefined;
+  /**
+   * A carried routine's task filed (routine-carry.ts): the trigger the index
+   * made for the new file gives way to the carried one, which takes its
+   * task and keeps its state, runs, routes and id; its definition is let go.
+   */
+  readonly filed: (id: string, projectId: string, taskId: string) => void;
   readonly get: (id: string) => RoutineRow | undefined;
   /** Files an unscheduled run as `decide` says, in one transaction; nothing when (routine, slot, attempt) is there already. */
   readonly insertRun: (run: {
@@ -111,6 +115,11 @@ export interface TaskTriggersDb {
   readonly newestRuns: (projectId: string) => Map<string, RoutineRunRow>;
   /** Routines that have runs waiting: what a hub start drains. */
   readonly queuedRoutines: () => string[];
+  /**
+   * Waits kept outside task files that named a routine (`routine:<id>`)
+   * named its task now: plan steps' waits and attempts' witnesses.
+   */
+  readonly repointWaits: (from: string, to: string) => void;
   readonly run: (id: string) => RoutineRunRow | undefined;
   readonly runOfItem: (workItemId: string) => RoutineRunRow | undefined;
   /** A routine's runs, newest first, `limit` of them after `skip`. */
@@ -139,18 +148,9 @@ export const taskTriggersDb = (db: BunSQLiteDatabase): TaskTriggersDb => {
   /** Triggers with their task's title, as one select. */
   const routines = (q: Tx | BunSQLiteDatabase = db) =>
     q
-      .select({
-        ...getTableColumns(taskTriggers),
-        name: sql<string>`coalesce(${projectTasks.title}, ${taskTriggers.taskId}, 'routine')`,
-      })
+      .select({ ...getTableColumns(taskTriggers), name: ROUTINE_NAME })
       .from(taskTriggers)
-      .leftJoin(
-        projectTasks,
-        and(
-          eq(projectTasks.projectId, taskTriggers.projectId),
-          eq(projectTasks.id, taskTriggers.taskId)
-        )
-      );
+      .leftJoin(projectTasks, ITS_TASK);
 
   const get = (id: string, q: Tx | BunSQLiteDatabase = db) =>
     routines(q).where(eq(taskTriggers.id, id)).get();

@@ -175,7 +175,7 @@ import type { HubLifetimeShape } from "./lifetime";
 import type { Memory } from "./memory";
 import type { ProblemsOf } from "./refusal";
 import { orchestrates } from "./roles";
-import type { RunStart, RunStarted } from "./routines";
+import type { RunStart, RunStarted } from "./routine-run";
 import { fits, type PlacedMachine, runsOnValue } from "./runs-on";
 import { moveProblem, waitingStageOf } from "./stages";
 import { criteriaOf, type TaskComment } from "./task-file";
@@ -847,7 +847,10 @@ const runRequest = (
   task: TaskView,
   run: RunStart,
   how: { lands: LandsMode; type: string | undefined }
-): Omit<WorkItemRequest, "cwd" | "machineId" | "parentInstanceId" | "prompt"> => {
+): Omit<
+  WorkItemRequest,
+  "cwd" | "machineId" | "parentInstanceId" | "prompt"
+> => {
   const limits = taskLimits(task);
   return {
     title: titleOf(task),

@@ -129,7 +129,9 @@ const draftOf = (
     }),
     trigger: {
       on:
-        row.cron && row.timeZone ? { cron: row.cron, zone: row.timeZone } : null,
+        row.cron && row.timeZone
+          ? { cron: row.cron, zone: row.timeZone }
+          : null,
       target: row.target ?? "delegate",
       stop: row.stop,
       deadline: row.deadline?.toISOString() ?? null,
@@ -163,7 +165,10 @@ const descriptionOf = (row: TriggerRow, carried: Carried): string => {
       return routineToolWords.trimSaid;
     case "command":
       return "Runs its command; it stops once the command exits 0.";
-    default:
+    case "conversation":
+    case "delegate":
+    case "orchestrator":
+    case null:
       return carried.prompt;
   }
 };

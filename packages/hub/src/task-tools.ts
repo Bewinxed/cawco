@@ -36,6 +36,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import {
   MADE_ROUTINE_TARGETS,
   ROUTINE_VERDICTS,
+  type RoutineVerdict,
 } from "@cawco/core/routine-kinds";
 import type { AttemptStart } from "@cawco/core/task-views";
 import { withoutUndefined } from "@cawco/core/without-undefined";
@@ -285,139 +286,6 @@ const deadlineOf = (written: string | undefined) => {
     : at;
 };
 
-/** What `task_create` takes. */
-const TASK_CREATE_INPUT = z.object({
-  title: z.string(),
-  description: z.string().optional(),
-  type: z.string().optional(),
-  lands: z.enum(LANDS_MODES).optional(),
-  budget: z
-    .object({
-      usd: z.number().positive().optional(),
-      turns: z.number().int().min(1).optional(),
-      minutes: z.number().int().min(1).optional(),
-    })
-    .optional(),
-  stage: z.string().optional(),
-  ...ROUTINE_SHAPE,
-});
-
-/** What `task_update` takes of a routine. */
-const TASK_UPDATE_INPUT = z.object({
-  id: z.string(),
-  title: z.string().optional(),
-  description: z.string().optional(),
-  type: z.string().nullable().optional(),
-  lands: z.enum(LANDS_MODES).nullable().optional(),
-  budget: z
-    .object({
-      usd: z.number().positive().optional(),
-      turns: z.number().int().min(1).optional(),
-      minutes: z.number().int().min(1).optional(),
-    })
-    .nullable()
-    .optional(),
-  enabled: z.boolean().optional(),
-  ...ROUTINE_SHAPE,
-});
-
-/** A `task_create` call with a trigger as the routine it makes; its deadline's refusal. */
-export const routineCreated = (input: z.infer<typeof TASK_CREATE_INPUT>) => {
-  const deadline = deadlineOf(input.deadline);
-  if (deadline instanceof ElysiaStatus) {
-    return deadline;
-  }
-  const made: Omit<RoutineInput, "projectId"> = {
-    title: input.title,
-    description:
-      input.description ?? (input.target === "command" ? input.title : ""),
-    target: input.target ?? "delegate",
-    on: input.on ?? null,
-    stop: input.stop ?? null,
-    deadline: deadline ?? null,
-    dailyCapUsd: input.daily_cap_usd ?? null,
-    mode: input.mode ?? null,
-    keep: input.keep ?? false,
-    command: input.command ?? null,
-    type: input.type ?? null,
-    ...(input.lands ? { lands: input.lands } : {}),
-    budget: input.budget ?? null,
-  };
-  return made;
-};
-
-/** A `task_update` call as a change of its routine; its deadline's refusal. */
-export const routinePatched = (
-  input: Omit<z.infer<typeof TASK_UPDATE_INPUT>, "id">
-) => {
-  const deadline = deadlineOf(input.deadline);
-  if (deadline instanceof ElysiaStatus) {
-    return deadline;
-  }
-  const patch: RoutinePatch = {
-    ...(input.title === undefined ? {} : { title: input.title }),
-    ...(input.description === undefined
-      ? {}
-      : { description: input.description }),
-    ...(input.type === undefined ? {} : { type: input.type }),
-    ...(input.lands === undefined ? {} : { lands: input.lands }),
-    ...(input.budget === undefined ? {} : { budget: input.budget }),
-    ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
-    ...(input.on === undefined ? {} : { on: input.on }),
-    ...(input.target === undefined ? {} : { target: input.target }),
-    ...(input.stop === undefined ? {} : { stop: input.stop }),
-    ...(deadline === undefined ? {} : { deadline }),
-    ...(input.daily_cap_usd === undefined
-      ? {}
-      : { dailyCapUsd: input.daily_cap_usd }),
-    ...(input.mode === undefined ? {} : { mode: input.mode }),
-    ...(input.keep === undefined ? {} : { keep: input.keep }),
-    ...(input.command === undefined ? {} : { command: input.command }),
-  };
-  return patch;
-};
-
-/** An approved `task_create` or `task_update` ask's input, read again; why it does not read. */
-export const approvedRoutineCall = {
-  create: (input: Record<string, unknown>) => {
-    const parsed = TASK_CREATE_INPUT.safeParse(input);
-    return parsed.success ? routineCreated(parsed.data) : parsed.error.message;
-  },
-  update: (input: Record<string, unknown>) => {
-    const parsed = TASK_UPDATE_INPUT.safeParse(input);
-    if (!parsed.success) {
-      return parsed.error.message;
-    }
-    const { id, ...change } = parsed.data;
-    const patch = routinePatched(change);
-    return patch instanceof ElysiaStatus ? patch : { id, patch };
-  },
-};
-
-/** Whether a call writes a routine's lines: `on` or `target` makes a task one; the rest change one. */
-const routineAsked = (input: Record<string, unknown>): boolean =>
-  Object.keys(ROUTINE_SHAPE).some((key) => input[key] !== undefined);
-const landsParameter = () =>
-  z
-    .enum(LANDS_MODES)
-    .describe(
-      "main, branch (cawco/<task>), pr (and a pull request) or none (outputs are the deliverable). Default: the project's."
-    );
-const runsOnParameter = () =>
-  z.string().trim().min(1).describe("apple, linux or a hostname.");
-const lines = (what?: string) =>
-  what === undefined
-    ? z.array(z.string()).optional()
-    : z.array(z.string()).optional().describe(what);
-/** The external items a task links, by URL: task_create's and task_update's one shape. */
-const linksParameter = () => lines();
-/** The project's own fields a task file carries beyond its known ones: task_create's and task_update's one shape. */
-const fieldsParameter = () =>
-  z
-    .record(z.string(), z.union([z.string(), z.array(z.string())]))
-    .optional()
-    .describe("Like {priority: 'high'}; '' or [] takes one out.");
-
 /** An artifact named where no session can resolve it (discovery): as given. */
 const same = (asked: string): string => asked;
 
@@ -525,6 +393,126 @@ export const groupParameter = () =>
     .describe(
       "Items in one group under one parent report once, together, when all have ended; a failure reports at once."
     );
+
+/** What `task_create` takes. */
+const TASK_CREATE_INPUT = z.object({
+  title: z.string(),
+  description: z.string().optional(),
+  type: z.string().optional(),
+  lands: z.enum(LANDS_MODES).optional(),
+  budget: budgetParameter().optional(),
+  stage: z.string().optional(),
+  ...ROUTINE_SHAPE,
+});
+
+/** What `task_update` takes of a routine. */
+const TASK_UPDATE_INPUT = z.object({
+  id: z.string(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  type: z.string().nullable().optional(),
+  lands: z.enum(LANDS_MODES).nullable().optional(),
+  budget: budgetParameter().nullable().optional(),
+  enabled: z.boolean().optional(),
+  ...ROUTINE_SHAPE,
+});
+
+/** A `task_create` call with a trigger as the routine it makes; its deadline's refusal. */
+const routineCreated = (input: z.infer<typeof TASK_CREATE_INPUT>) => {
+  const deadline = deadlineOf(input.deadline);
+  if (deadline instanceof ElysiaStatus) {
+    return deadline;
+  }
+  const made: Omit<RoutineInput, "projectId"> = {
+    title: input.title,
+    description:
+      input.description ?? (input.target === "command" ? input.title : ""),
+    target: input.target ?? "delegate",
+    on: input.on ?? null,
+    stop: input.stop ?? null,
+    deadline: deadline ?? null,
+    dailyCapUsd: input.daily_cap_usd ?? null,
+    mode: input.mode ?? null,
+    keep: input.keep ?? false,
+    command: input.command ?? null,
+    type: input.type ?? null,
+    ...(input.lands ? { lands: input.lands } : {}),
+    budget: input.budget ?? null,
+  };
+  return made;
+};
+
+/** A `task_update` call as a change of its routine; its deadline's refusal. */
+const routinePatched = (
+  input: Omit<z.infer<typeof TASK_UPDATE_INPUT>, "id">
+) => {
+  const deadline = deadlineOf(input.deadline);
+  if (deadline instanceof ElysiaStatus) {
+    return deadline;
+  }
+  const patch: RoutinePatch = {
+    ...(input.title === undefined ? {} : { title: input.title }),
+    ...(input.description === undefined
+      ? {}
+      : { description: input.description }),
+    ...(input.type === undefined ? {} : { type: input.type }),
+    ...(input.lands === undefined ? {} : { lands: input.lands }),
+    ...(input.budget === undefined ? {} : { budget: input.budget }),
+    ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
+    ...(input.on === undefined ? {} : { on: input.on }),
+    ...(input.target === undefined ? {} : { target: input.target }),
+    ...(input.stop === undefined ? {} : { stop: input.stop }),
+    ...(deadline === undefined ? {} : { deadline }),
+    ...(input.daily_cap_usd === undefined
+      ? {}
+      : { dailyCapUsd: input.daily_cap_usd }),
+    ...(input.mode === undefined ? {} : { mode: input.mode }),
+    ...(input.keep === undefined ? {} : { keep: input.keep }),
+    ...(input.command === undefined ? {} : { command: input.command }),
+  };
+  return patch;
+};
+
+/** An approved `task_create` or `task_update` ask's input, read again; why it does not read. */
+export const approvedRoutineCall = {
+  create: (input: Record<string, unknown>) => {
+    const parsed = TASK_CREATE_INPUT.safeParse(input);
+    return parsed.success ? routineCreated(parsed.data) : parsed.error.message;
+  },
+  update: (input: Record<string, unknown>) => {
+    const parsed = TASK_UPDATE_INPUT.safeParse(input);
+    if (!parsed.success) {
+      return parsed.error.message;
+    }
+    const { id, ...change } = parsed.data;
+    const patch = routinePatched(change);
+    return patch instanceof ElysiaStatus ? patch : { id, patch };
+  },
+};
+
+/** Whether a call writes a routine's lines: `on` or `target` makes a task one; the rest change one. */
+const routineAsked = (input: Record<string, unknown>): boolean =>
+  Object.keys(ROUTINE_SHAPE).some((key) => input[key] !== undefined);
+const landsParameter = () =>
+  z
+    .enum(LANDS_MODES)
+    .describe(
+      "main, branch (cawco/<task>), pr (and a pull request) or none (outputs are the deliverable). Default: the project's."
+    );
+const runsOnParameter = () =>
+  z.string().trim().min(1).describe("apple, linux or a hostname.");
+const lines = (what?: string) =>
+  what === undefined
+    ? z.array(z.string()).optional()
+    : z.array(z.string()).optional().describe(what);
+/** The external items a task links, by URL: task_create's and task_update's one shape. */
+const linksParameter = () => lines();
+/** The project's own fields a task file carries beyond its known ones: task_create's and task_update's one shape. */
+const fieldsParameter = () =>
+  z
+    .record(z.string(), z.union([z.string(), z.array(z.string())]))
+    .optional()
+    .describe("Like {priority: 'high'}; '' or [] takes one out.");
 
 /** What `task_create` takes: a task, or with `on` or `target` a routine. */
 const TASK_CREATE_SHAPE = {
@@ -840,7 +828,7 @@ export function taskTools(context: TaskToolContext | undefined) {
   const runAnswered = (
     summary: string,
     run: string | undefined,
-    verdict: "ask" | "keep" | "stop" | undefined
+    verdict: RoutineVerdict | undefined
   ) => {
     const routines = context?.routines;
     const { workItemId } = context?.actor ?? {};

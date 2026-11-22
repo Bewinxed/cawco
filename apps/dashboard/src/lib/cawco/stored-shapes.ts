@@ -1426,6 +1426,62 @@ const BuiltOnShape = z.object({
 });
 export type BuiltOnOutput = z.output<typeof BuiltOnShape>;
 
+const RoutineOutcomeShape = z.enum(ROUTINE_OUTCOMES);
+export type RoutineOutcomeOutput = z.output<typeof RoutineOutcomeShape>;
+
+const RoutineRunStateShape = z.enum(ROUTINE_RUN_STATES);
+export type RoutineRunStateOutput = z.output<typeof RoutineRunStateShape>;
+
+const RoutineVerdictShape = z.enum(ROUTINE_VERDICTS);
+export type RoutineVerdictOutput = z.output<typeof RoutineVerdictShape>;
+
+const RoutineRunViewShape = z.object({
+  attempt: z.number(),
+  endedAt: z.number().nullable(),
+  id: z.string(),
+  instanceId: z.string().nullable(),
+  outcome: RoutineOutcomeShape.nullable(),
+  output: z.string().nullable(),
+  reason: z.string().nullable(),
+  slot: z.string(),
+  startedAt: z.number(),
+  state: RoutineRunStateShape,
+  usd: z.number().nullable(),
+  verdict: RoutineVerdictShape.nullable(),
+  workItemId: z.string().nullable(),
+});
+export type RoutineRunViewOutput = z.output<typeof RoutineRunViewShape>;
+
+const TriggerHoldShape = z.enum(TRIGGER_HOLDS);
+export type TriggerHoldOutput = z.output<typeof TriggerHoldShape>;
+
+const RoutineScheduleShape = z.object({
+  cron: z.string(),
+  nextAt: z.number().nullable(),
+  timeZone: z.string(),
+  words: z.string(),
+});
+export type RoutineScheduleOutput = z.output<typeof RoutineScheduleShape>;
+
+const RoutineTargetShape = z.enum(ROUTINE_TARGETS);
+export type RoutineTargetOutput = z.output<typeof RoutineTargetShape>;
+
+const TaskRoutineShape = z.object({
+  deadline: z.number().nullable(),
+  disabledReason: z.string().nullable(),
+  enabled: z.boolean(),
+  id: z.string(),
+  lastRun: RoutineRunViewShape.nullable(),
+  needs: z.object({ said: z.string(), why: TriggerHoldShape }).nullable(),
+  problem: z.string().nullable(),
+  runs: z.array(RoutineRunViewShape).optional(),
+  runsTotal: z.number().optional(),
+  schedule: RoutineScheduleShape,
+  stop: z.string().nullable(),
+  target: RoutineTargetShape,
+});
+export type TaskRoutineOutput = z.output<typeof TaskRoutineShape>;
+
 const ConditionStateShape = z.enum(CONDITION_STATES);
 export type ConditionStateOutput = z.output<typeof ConditionStateShape>;
 
@@ -1469,45 +1525,6 @@ export type WaitStateOutput = z.output<typeof WaitStateShape>;
 
 const TaskWaitShape = WaitStateShape.extend({ via: z.string().nullable() });
 export type TaskWaitOutput = z.output<typeof TaskWaitShape>;
-
-const RoutineScheduleShape = z.object({
-  cron: z.string(),
-  nextAt: z.number().nullable(),
-  timeZone: z.string(),
-  words: z.string(),
-});
-
-const RoutineRunViewShape = z.object({
-  attempt: z.number(),
-  endedAt: z.number().nullable(),
-  id: z.string(),
-  instanceId: z.string().nullable(),
-  outcome: z.enum(ROUTINE_OUTCOMES).nullable(),
-  output: z.string().nullable(),
-  reason: z.string().nullable(),
-  slot: z.string(),
-  startedAt: z.number(),
-  state: z.enum(ROUTINE_RUN_STATES),
-  usd: z.number().nullable(),
-  verdict: z.enum(ROUTINE_VERDICTS).nullable(),
-  workItemId: z.string().nullable(),
-});
-
-const TaskRoutineShape = z.object({
-  deadline: z.number().nullable(),
-  disabledReason: z.string().nullable(),
-  enabled: z.boolean(),
-  id: z.string(),
-  lastRun: RoutineRunViewShape.nullable(),
-  needs: z.object({ said: z.string(), why: z.enum(TRIGGER_HOLDS) }).nullable(),
-  problem: z.string().nullable(),
-  runs: z.array(RoutineRunViewShape).optional(),
-  runsTotal: z.number().optional(),
-  schedule: RoutineScheduleShape,
-  stop: z.string().nullable(),
-  target: z.enum(ROUTINE_TARGETS),
-});
-export type TaskRoutineOutput = z.output<typeof TaskRoutineShape>;
 
 const TaskFlagsShape = z.object({
   attempts: z.array(TaskAttemptShape),

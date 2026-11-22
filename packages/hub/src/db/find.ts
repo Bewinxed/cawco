@@ -28,6 +28,7 @@ import {
   workItemTexts,
   workspaces,
 } from "./schema";
+import { ITS_TASK, ROUTINE_NAME } from "./task-triggers";
 
 /** An artifact as the find engine reads it: its row, and whether the person changed any of its keys. */
 export type FindArtifactRow = typeof artifacts.$inferSelect & {
@@ -312,16 +313,10 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         enabled: taskTriggers.enabled,
         nextSlot: taskTriggers.nextSlot,
         stop: taskTriggers.stop,
-        name: sql<string>`coalesce(${projectTasks.title}, ${taskTriggers.taskId}, 'routine')`,
+        name: ROUTINE_NAME,
       })
       .from(taskTriggers)
-      .leftJoin(
-        projectTasks,
-        and(
-          eq(projectTasks.projectId, taskTriggers.projectId),
-          eq(projectTasks.id, taskTriggers.taskId)
-        )
-      )
+      .leftJoin(projectTasks, ITS_TASK)
       .where(
         and(
           isNotNull(taskTriggers.target),

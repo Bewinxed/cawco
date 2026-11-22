@@ -8,6 +8,8 @@
  * (CawCoCore/Words.generated.swift), and `words:check` fails the typecheck
  * chain when that file is stale. So a word is changed here or nowhere.
  */
+
+import type { RoutineVerdict } from "../routine-kinds";
 export const routinesWords = {
   /** The strip's tab, and the page's first block. */
   tab: "Routines",
@@ -345,11 +347,11 @@ export const routinesWords = {
  * page's words: agent-facing, so none of them reach the app.
  */
 /** What follows a run's answer, by its keep, stop or ask. */
-const ANSWERED_NEXT = {
+const ANSWERED_NEXT: Record<RoutineVerdict, string> = {
   keep: "It runs again on its trigger.",
   stop: "Its task moves to done once the run ends.",
   ask: "It waits for the owner's answer.",
-} as const;
+};
 
 export const routineToolWords = {
   /** `event_route_list`'s heading over its events, when the project has more than it lists. */
@@ -393,7 +395,7 @@ export const routineToolWords = {
       ? `${taskId} is a routine: its run now was ${state}${reason ? `: ${reason}` : "."}`
       : `${taskId} is a routine: it runs once now, as its trigger would run it. Its result comes as its runs' do.`,
   /** `task_result` on a routine's run: its answer, kept. */
-  answered: (runId: string, verdict: "ask" | "keep" | "stop"): string =>
+  answered: (runId: string, verdict: RoutineVerdict): string =>
     `Run ${runId}: answered ${verdict}. ${ANSWERED_NEXT[verdict]}`,
   /** The unused skills and servers routine's task, as its description reads. */
   trimSaid:
