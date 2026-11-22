@@ -6,9 +6,8 @@
   import RepoPicker from "#lib/cawco/spawn/RepoPicker.svelte";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   /**
-   * Task sync: the three homes for the project's tasks as the house's
-   * option tiles (OptionTiles, one a line, the pick marked), each led by
-   * its mark (CawCo's own
+   * Task sync: the three homes for the project's tasks as the view's one
+   * pick (PickChips), each led by its mark (CawCo's own
    * files, GitHub's and Linear's own logos); while tied to one, how the two
    * sides stand above them; and pressed on GitHub or Linear, the tie's setup
    * opening under the tiles. Files moves at the press (changes.ts
@@ -20,7 +19,6 @@
   import {
     OptionGroup,
     OptionGroupItem,
-    OptionTiles,
   } from "#lib/components/ui/option-group/index.js";
   import {
     IconDocument,
@@ -34,6 +32,7 @@
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import type { Change, ChangeKey } from "./changes";
   import { FORM_FIELD, FORM_LABEL, OPENED_FORM } from "./opened-form";
+  import PickChips from "./PickChips.svelte";
   import type { HowItRunsRecord, TaskHome } from "./records";
   import {
     GITHUB_CONNECTIONS,
@@ -300,25 +299,17 @@
     </RowList>
   {/if}
 
-  <OptionTiles
-    bind:value={
-      () => (leaving ? "files" : (setupHome ?? record.taskHome)),
-      (next) => {
-        if (next !== null) {
-          handleHomeClick(next);
-        }
-      }
-    }
-    cols={1}
+  <PickChips
     {disabled}
-    glide="mark"
     glyph={homeGlyph}
     label={words.tasks.groupLabel}
+    onpick={handleHomeClick}
     options={HOMES.map((home) => ({
       id: home,
       name: words.tasks.homes[home].name,
       note: words.tasks.homes[home].note,
     }))}
+    value={leaving ? "files" : (setupHome ?? record.taskHome)}
   />
   <RowFault
     again={() => onretry("taskHome")}

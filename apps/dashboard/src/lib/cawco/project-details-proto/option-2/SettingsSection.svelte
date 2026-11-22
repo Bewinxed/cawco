@@ -41,13 +41,13 @@
 
 <section
   aria-labelledby={headingId}
-  class="flex min-w-0 flex-col gap-space-3"
+  class={["@container break-inside-avoid", SECTION_CARD]}
   data-section={id}
   data-slot="settings-section"
   data-state={state}
 >
   <header
-    class="mark-line flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2"
+    class="mark-line flex min-h-c-btn-h-xs min-w-0 items-center gap-space-2"
   >
     {#if state !== "settled"}
       <span
@@ -74,9 +74,6 @@
     {/if}
   </header>
 
-  <!-- Its own container: its parts fit the card's width. -->
-  <div class={["@container", SECTION_CARD]}>
-    {@render children()}
-    <span aria-live="polite" class="sr-only" role="status">{announcement}</span>
-  </div>
+  {@render children()}
+  <span aria-live="polite" class="sr-only" role="status">{announcement}</span>
 </section>

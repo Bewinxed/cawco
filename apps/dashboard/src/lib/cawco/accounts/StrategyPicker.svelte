@@ -164,6 +164,7 @@
         >
           <RadioMark />
           <span
+            data-box
             data-slot="words"
             class="type-label flex min-w-0 flex-auto flex-col gap-space-row text-ink-strong"
           >
@@ -175,6 +176,7 @@
           {#if strategy.id === "pinned" && checked}
             <span
               class="ms-auto max-w-full min-w-0 flex-initial"
+              data-box
               in:appear
               out:crossOut
             >

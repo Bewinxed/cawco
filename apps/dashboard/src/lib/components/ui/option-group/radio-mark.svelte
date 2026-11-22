@@ -1,11 +1,9 @@
-<script lang="ts">
-  /**
-   * A one-of-many pick's mark: a ring, its dot growing in while the control
-   * it stands in is checked (any ancestor's `aria-checked`), so the pick is
-   * told by shape as well as colour. Accounts' routing cards (StrategyPicker)
-   * and the option tiles' marked look (OptionTiles `glide: "mark"`) draw it.
-   */
-</script>
+<!--
+  A one-of-many pick's mark: a ring, its dot growing in while the control it
+  stands in is checked (any ancestor's `aria-checked`), so the pick is told by
+  shape as well as colour. Accounts' routing cards (StrategyPicker) and the
+  option tiles' marked look (OptionTiles `glide: "mark"`) draw it.
+-->
 
 <span
   aria-hidden="true"
