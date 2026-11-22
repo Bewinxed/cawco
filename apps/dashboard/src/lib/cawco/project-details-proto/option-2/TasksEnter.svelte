@@ -1,5 +1,7 @@
 <script lang="ts">
   import { repoIdentity } from "@cawco/core/protocol";
+  import RowList from "#lib/cawco/config/RowList.svelte";
+  import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import RepoPicker from "#lib/cawco/spawn/RepoPicker.svelte";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
@@ -17,20 +19,20 @@
     AlertAction,
     AlertDescription,
   } from "#lib/components/ui/alert/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import {
     OptionGroup,
     OptionGroupItem,
     OptionTiles,
   } from "#lib/components/ui/option-group/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import {
-    IconChevronRight,
     IconDocument,
-    IconError,
     IconExternalLinear,
     IconInfo,
     IconRefresh,
+    IconSettings,
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
@@ -177,6 +179,28 @@
   function formatAge(iso: string): string {
     return formatDistanceToNow(new Date(iso));
   }
+
+  /** The tie's quieter facts: whose sign-in, how many tasks it holds, where its columns come from. */
+  const tieMeta = $derived.by(() => {
+    if (!tie) {
+      return "";
+    }
+    const board = tie.home === "github" ? tie.githubProject : null;
+    let columns: string | null = null;
+    if (board !== null) {
+      columns =
+        "url" in board
+          ? `${words.tasks.stagesVia} ${board.name}`
+          : `${words.tasks.stagesNone} ${board.none}`;
+    }
+    return [
+      `${tie.connection.name} (${tie.connection.account})`,
+      words.tasks.linkedCount(tie.linked),
+      columns,
+    ]
+      .filter((fact) => fact !== null)
+      .join(", ");
+  });
 </script>
 
 {#snippet homeGlyph(home: TaskHome)}
@@ -187,68 +211,54 @@
   {/if}
 {/snippet}
 
-<div class="flex min-w-0 flex-col gap-space-2">
+<div class="flex min-w-0 flex-col gap-space-3">
   {#if tie}
-    <div class="flex flex-col gap-space-1" data-slot="sync">
-      <div
-        class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
+    <!-- The tie as a connected thing's row (ConnectionsSection's sign-ins):
+         where tasks sync, by whose sign-in, how the two sides stand; Sync
+         now at its end, the rest of its acts in its ⋯. -->
+    <RowList label={words.tasks.groupLabel}>
+      <SectionRow
+        actions={[
+          {
+            label: words.tasks.changeTie,
+            icon: IconSettings,
+            disabled,
+            onselect: () =>
+              setupHome === tie.home ? closeSetup() : openSetup(tie.home),
+          },
+          {
+            label: tie.target.label,
+            icon: IconExternalLinear,
+            onselect: () => {
+              window.open(tie.target.url, "_blank", "noopener");
+            },
+          },
+        ]}
+        meta={tieMeta}
+        mono
+        name={tie.target.label}
+        whole
       >
-        <a
-          class="mark-line inline-flex min-w-0 items-center gap-space-1 type-code text-link-ink hover:underline"
-          href={tie.target.url}
-          rel="noreferrer"
-          target="_blank"
-        >
-          <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-            >{tie.target.label}</span
-          >
-          <IconExternalLinear
-            aria-hidden="true"
-            class="size-icon-sm flex-none"
-          />
-        </a>
-        <span class="type-meta text-ink-muted">
-          {tie.connection.name} · {tie.connection.account}
-        </span>
-        <span class="type-meta text-ink-muted num">
-          {words.tasks.linkedCount(tie.linked)}
-        </span>
-
-        <span
-          class="mark-line inline-flex items-center gap-space-1 type-meta"
-          data-slot="status"
-        >
+        {#snippet tile()}
+          <ProviderLogo provider={tie.home} />
+        {/snippet}
+        {#snippet badge()}
           {#if syncPending || tie.sync.kind === "syncing"}
-            <LiveDot size="dot" tone="live" />
-            <span class="text-status-live-ink">{words.tasks.syncing}</span>
+            <Badge variant="live"><span>{words.tasks.syncing}</span></Badge>
           {:else if tie.sync.kind === "first"}
-            <LiveDot size="dot" tone="live" />
-            <span class="text-status-live-ink">{words.tasks.firstSync}</span>
+            <Badge variant="live"><span>{words.tasks.firstSync}</span></Badge>
           {:else if tie.sync.kind === "inStep"}
-            <span class="text-ink-muted"
-              >{words.tasks.inStep(formatAge(tie.sync.at))}</span
+            <Badge kind="meta"
+              ><span>{words.tasks.inStep(formatAge(tie.sync.at))}</span></Badge
             >
           {:else}
-            <IconError
-              aria-hidden="true"
-              class="size-icon-sm flex-none text-status-fail-glyph"
-            />
-            <span class="text-status-fail-ink"
-              >{words.tasks.syncRefused(formatAge(tie.sync.at))}</span
+            <Badge variant="fail"
+              ><span>{words.tasks.syncRefused(formatAge(tie.sync.at))}</span
+              ></Badge
             >
           {/if}
-        </span>
-
-        <span class="ms-auto flex flex-none items-center gap-space-1">
-          <Button
-            {disabled}
-            label={words.tasks.changeTie}
-            onclick={() =>
-              setupHome === tie.home ? closeSetup() : openSetup(tie.home)}
-            size="xs"
-            tone="quiet"
-            variant="ghost"
-          />
+        {/snippet}
+        {#snippet trailing()}
           <Button
             {disabled}
             icon={IconRefresh}
@@ -259,56 +269,23 @@
             size="xs"
             variant="outline"
           />
-        </span>
-      </div>
-
-      {#if tie.home === "github" && tie.githubProject !== null}
-        <div
-          class="flex min-w-0 flex-wrap items-center gap-space-1 type-meta text-ink-muted"
-        >
-          {#if "url" in tie.githubProject}
-            <span>{words.tasks.stagesVia}</span>
-            <a
-              class="mark-line inline-flex items-center gap-space-1 text-link-ink hover:underline"
-              href={tie.githubProject.url}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <span>{tie.githubProject.name}</span>
-              <IconExternalLinear
-                aria-hidden="true"
-                class="size-icon-sm flex-none"
-              />
-            </a>
-          {:else}
-            <span>{words.tasks.stagesNone} {tie.githubProject.none}</span>
-          {/if}
-        </div>
-      {/if}
-
-      {#if tie.sync.kind === "refused" && !syncPending}
-        <Alert class="mt-space-1" layout="row" variant="destructive">
-          <IconError aria-hidden="true" />
-          <AlertDescription>{tie.sync.words}</AlertDescription>
-          <AlertAction>
-            <Button
-              {disabled}
-              icon={IconRefresh}
-              label={words.tryAgain}
-              onclick={onsync}
-              size="xs"
-              variant="outline"
+        {/snippet}
+        {#snippet below()}
+          {#if tie.sync.kind === "refused" && !syncPending}
+            <RowFault
+              again={onsync}
+              againLabel={words.tryAgain}
+              reason={tie.sync.words}
             />
-          </AlertAction>
-        </Alert>
-      {/if}
-
-      <RowFault
-        again={() => onretry("sync")}
-        againLabel={words.retryChange}
-        reason={refused.sync}
-      />
-    </div>
+          {/if}
+          <RowFault
+            again={() => onretry("sync")}
+            againLabel={words.retryChange}
+            reason={refused.sync}
+          />
+        {/snippet}
+      </SectionRow>
+    </RowList>
   {/if}
 
   <OptionTiles
@@ -322,6 +299,7 @@
     }
     cols={3}
     {disabled}
+    glide
     glyph={homeGlyph}
     label={words.tasks.groupLabel}
     options={HOMES.map((home) => ({
@@ -338,24 +316,24 @@
 
   {#if setupHome !== null}
     <div
-      class="flex min-w-0 flex-col gap-space-3 pt-space-2"
+      class="flex min-w-0 flex-col gap-space-5 pt-space-4"
       data-slot="setup-asks"
       transition:unfold
     >
-      <div class="flex flex-wrap items-baseline justify-between gap-space-2">
-        <h3 class="m-0 type-label text-ink-strong">
+      <div class="flex flex-col gap-space-1">
+        <h3 class={sectionHeadVariants({ inset: "flush" })}>
           {words.tasks.setupTitle(setupHome)}
         </h3>
-        <span class="type-meta text-ink-muted"
-          >{words.tasks.setupFieldsNote}</span
-        >
+        <p class="m-0 type-meta text-pretty text-ink-muted">
+          {words.tasks.setupFieldsNote}
+        </p>
       </div>
 
       <!-- Connection picker (or alert when none can serve). -->
-      <div class="flex flex-col gap-space-1">
-        <span class="type-meta font-medium text-ink-muted"
-          >{words.tasks.connectionLabel}</span
-        >
+      <div class="flex flex-col gap-space-2">
+        <p class="m-0 type-meta text-ink-muted">
+          {words.tasks.connectionLabel}
+        </p>
         {#if setupConnections.length === 0}
           <Alert layout="row" variant="default">
             <IconInfo aria-hidden="true" />
@@ -374,6 +352,7 @@
         {:else}
           <div class="flex flex-wrap items-center gap-space-2">
             <OptionGroup
+              glide
               aria-label={words.tasks.connectionLabel}
               {disabled}
               value={activeConnectionId ? [activeConnectionId] : []}
@@ -391,16 +370,13 @@
                 </OptionGroupItem>
               {/each}
             </OptionGroup>
-            <a
-              class="mark-line inline-flex items-center gap-space-1 type-meta text-link-ink hover:underline"
+            <Button
               href={hrefOf("connections")}
-            >
-              <span>{words.tasks.openConnections}</span>
-              <IconChevronRight
-                aria-hidden="true"
-                class="size-icon-sm flex-none"
-              />
-            </a>
+              label={words.tasks.openConnections}
+              size="xs"
+              tone="quiet"
+              variant="ghost"
+            />
           </div>
         {/if}
       </div>
@@ -409,10 +385,8 @@
            the connection's account; Team (Linear): its few teams as one pick. -->
       {#if setupConnections.length > 0}
         {#if setupHome === "github" && activeConnection}
-          <div class="flex min-w-0 flex-col gap-space-1" inert={disabled}>
-            <span class="type-meta font-medium text-ink-muted"
-              >{words.tasks.repoLabel}</span
-            >
+          <div class="flex min-w-0 flex-col gap-space-2" inert={disabled}>
+            <p class="m-0 type-meta text-ink-muted">{words.tasks.repoLabel}</p>
             <RepoPicker
               machineId={activeConnection.id}
               machineName={activeConnection.name}
@@ -424,11 +398,10 @@
             />
           </div>
         {:else if setupHome === "linear"}
-          <div class="flex flex-col gap-space-1">
-            <span class="type-meta font-medium text-ink-muted"
-              >{words.tasks.teamLabel}</span
-            >
+          <div class="flex flex-col gap-space-2">
+            <p class="m-0 type-meta text-ink-muted">{words.tasks.teamLabel}</p>
             <OptionGroup
+              glide
               aria-label={words.tasks.teamLabel}
               {disabled}
               value={activeTeamId ? [activeTeamId] : []}
@@ -450,12 +423,13 @@
 
         <!-- GitHub Project & per-stage Status mapping (GitHub only). -->
         {#if setupHome === "github"}
-          <div class="flex flex-col gap-space-2">
-            <div class="flex flex-col gap-space-1">
-              <span class="type-meta font-medium text-ink-muted"
-                >{words.tasks.githubProjectLabel}</span
-              >
+          <div class="flex flex-col gap-space-5">
+            <div class="flex flex-col gap-space-2">
+              <p class="m-0 type-meta text-ink-muted">
+                {words.tasks.githubProjectLabel}
+              </p>
               <OptionGroup
+                glide
                 aria-label={words.tasks.githubProjectLabel}
                 {disabled}
                 value={[githubProjectPick]}
@@ -484,11 +458,11 @@
             </div>
 
             {#if selectedGithubProject}
-              <div class="flex flex-col gap-space-1 pt-space-1">
-                <span class="type-meta font-medium text-ink-muted"
-                  >{words.tasks.stageMapLabel}</span
-                >
-                <div class="flex flex-col gap-space-1 coarse:gap-y-space-3">
+              <div class="flex flex-col gap-space-2">
+                <p class="m-0 type-meta text-ink-muted">
+                  {words.tasks.stageMapLabel}
+                </p>
+                <div class="flex flex-col gap-space-2 coarse:gap-y-space-3">
                   {#each PROJECT_STAGES as stage (stage)}
                     {@const currentStatus = stageMapping[stage] ?? LEAVE_ALONE}
                     <div
@@ -499,6 +473,7 @@
                         >{stage}</span
                       >
                       <OptionGroup
+                        glide
                         aria-label={words.tasks.stageStatusLabel(stage)}
                         class="min-w-0 flex-1"
                         {disabled}

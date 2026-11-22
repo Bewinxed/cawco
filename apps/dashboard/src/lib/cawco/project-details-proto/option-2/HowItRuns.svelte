@@ -3,12 +3,12 @@
    * Option 2 ("How it runs"): the whole work-path view mounted inside the
    * project page's pane, which gives it the page's side edges and its
    * scroller as it gives every view. The pane's whole width, a
-   * container-query root: one column of stages under the wide line, two
-   * side by side from it, drawing the
-   * connected step rail across Tasks enter, Sessions start, What waits for
-   * you, and (for code projects only) Work lands, with per-stage loading
-   * skeletons, read-failure alerts, live announcements, and hub-offline
-   * notice.
+   * container-query root: one column of steps under the wide line, two
+   * side by side from it. Its numbered steps (Where tasks live, Where
+   * agents run, What needs you, and for code projects Where code goes)
+   * each open on their head and its rule (RailStage), with per-step
+   * loading skeletons, read-failure alerts, live announcements, and the
+   * hub-offline notice.
    */
   import {
     Alert,
@@ -142,15 +142,15 @@
   <div aria-busy="true" class="min-w-0">
     {#if stage === "sessions"}
       <div
-        class="grid min-w-0 grid-cols-1 items-start gap-x-space-6 gap-y-space-5 @desk:grid-cols-5"
+        class="grid min-w-0 grid-cols-1 items-start gap-x-space-6 gap-y-space-6 @phone:grid-cols-5"
       >
-        <div class="flex min-w-0 flex-col gap-space-2 @desk:col-span-3">
+        <div class="flex min-w-0 flex-col gap-space-2 @phone:col-span-3">
           <Skeleton line="label" radius="text" width="label" />
           {#each [0, 1, 2] as row (row)}
             <Skeleton class="w-full" height="row" radius="chip" />
           {/each}
         </div>
-        <div class="flex min-w-0 flex-col gap-space-2 @desk:col-span-2">
+        <div class="flex min-w-0 flex-col gap-space-2 @phone:col-span-2">
           <Skeleton line="label" radius="text" width="label" />
           <div class="flex flex-wrap gap-space-2">
             <Skeleton height="control-sm" radius="chip" width="name" />
@@ -195,15 +195,14 @@
     </Alert>
   {/if}
 
-  <!-- The stages in their order on one grid: one column, the rail running
-       down it; from the wide line two columns, read across and down (1 and
-       2 on the top edge, 3 under 1, 4 under 2), the rail's connectors put
-       away (RailStage). The short stages (Tasks enter, Work lands) take one
+  <!-- The steps in their order on one grid: one column; from the wide line
+       two columns, read across and down (1 and 2 on the top edge, 3 under
+       1, 4 under 2), each step bounded by its own head's rule. The short stages (Tasks enter, Work lands) take one
        row each and the tall ones (Sessions start, What waits) two, so each
        column fills under its first stage rather than waiting for the row
        beside it to end (PLACES). -->
   <div
-    class="grid min-w-0 grid-cols-1 items-start gap-x-space-7 @wide:grid-cols-2"
+    class="grid min-w-0 grid-cols-1 items-start gap-x-space-8 gap-y-space-8 @wide:grid-cols-2"
   >
     <!-- Stage 1: Tasks enter -->
     <RailStage
@@ -267,7 +266,6 @@
       announcement={announcementOf("waits")}
       id="waits"
       place={PLACES.waits}
-      last={!record.holdsCode}
       n={3}
       state={waitsState}
       stateWords={words.stageState[waitsState]}
@@ -297,7 +295,6 @@
         announcement={announcementOf("lands")}
         id="lands"
         place={PLACES.lands}
-        last
         n={4}
         state={landsState}
         stateWords={words.stageState[landsState]}

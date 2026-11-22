@@ -4,13 +4,15 @@
    * section's rows (RowList, SectionRow): the machine's glyph and name, the
    * whole path under it, where work starts and what is wrong as badges, and
    * the place's acts in its ⋯ menu (Find folder standing out on a folder
-   * gone missing). The list's last row adds a place: pressed, it becomes
-   * the add form in its own place (the house's add row: a to-do list's,
-   * Who decides' Add a member). Under the list the linked repositories under their own section head, as Git LFS has, and
+   * gone missing, and why under it). The list's last row adds a place, a
+   * row of the list's own (SectionRow `onpress`, the plus in its tile):
+   * pressed, it becomes the add form in its place. Under the list the
+   * linked repositories as rows of their own, each opening on its host, and
    * for a code project where its large files are kept, as two of the
    * house's tiles each led by its glyph; the second opens its address and
    * key under the tiles.
    */
+  import Field from "#lib/cawco/config/Field.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
@@ -225,6 +227,9 @@
         icon={machine ? machineIcon(machine.os) : IconHubFolder}
         meta={place.path}
         name={machine ? machine.name : words.places.hub}
+        note={place.missing
+          ? { text: words.places.missingTip, tone: "fail" }
+          : undefined}
         whole
       >
         {#snippet badge()}
@@ -254,44 +259,55 @@
       </SectionRow>
     {/each}
 
-    <li class="flex min-w-0 flex-col" data-slot="item">
-      {#if adding}
+    {#if adding}
+      <li class="flex min-w-0 flex-col" data-flip data-slot="item">
         <form
           aria-label={words.places.addPlace}
-          class="flex min-w-0 flex-col gap-space-3 rounded-sm px-space-2 py-space-2"
+          class="flex min-w-0 flex-col gap-space-4 rounded-sm px-space-2 py-space-2"
           data-slot="add"
           onsubmit={submitAddPlace}
           transition:unfold
         >
-          <OptionGroup
-            aria-label={words.places.machineLabel}
-            bind:value={
-              () => (activeMachineId ? [activeMachineId] : []),
-              (next) => {
-                machinePick = next[0] ?? null;
+          <div class="flex min-w-0 flex-col gap-space-2">
+            <p class="m-0 type-meta text-ink-muted">
+              {words.places.machineLabel}
+            </p>
+            <OptionGroup
+              glide
+              aria-label={words.places.machineLabel}
+              bind:value={
+                () => (activeMachineId ? [activeMachineId] : []),
+                (next) => {
+                  machinePick = next[0] ?? null;
+                }
               }
-            }
-            {disabled}
-          >
-            {#each record.machines as machine (machine.id)}
-              {@const Glyph = machineIcon(machine.os)}
-              <OptionGroupItem value={machine.id}>
-                <span class="mark-line flex min-w-0 items-center gap-x-space-2">
-                  <Glyph aria-hidden="true" class="size-icon-md flex-none" />
-                  <span>{machine.name}</span>
-                  {#if !machine.online}
-                    <Badge data-box variant="attn"
-                      ><span>{words.places.away}</span></Badge
-                    >
-                  {/if}
-                </span>
-              </OptionGroupItem>
-            {/each}
-          </OptionGroup>
-          <div class="flex min-w-0 flex-col gap-space-1">
-            <label class="type-meta font-medium text-ink-muted" for="{uid}-path"
-              >{words.places.folderPath}</label
+              {disabled}
             >
+              {#each record.machines as machine (machine.id)}
+                {@const Glyph = machineIcon(machine.os)}
+                <OptionGroupItem value={machine.id}>
+                  <span
+                    class="mark-line flex min-w-0 items-center gap-x-space-2"
+                  >
+                    <Glyph aria-hidden="true" class="size-icon-md flex-none" />
+                    <span>{machine.name}</span>
+                    {#if !machine.online}
+                      <Badge data-box variant="attn"
+                        ><span>{words.places.away}</span></Badge
+                      >
+                    {/if}
+                  </span>
+                </OptionGroupItem>
+              {/each}
+            </OptionGroup>
+          </div>
+          <Field
+            hint={activeMachine && !activeMachine.online
+              ? words.places.offlineNote
+              : undefined}
+            id="{uid}-path"
+            label={words.places.folderPath}
+          >
             <Input
               id="{uid}-path"
               aria-invalid={Boolean(scratchRefusal || refused.addPlace) ||
@@ -306,12 +322,7 @@
               spellcheck="false"
               bind:value={pathDraft}
             />
-            {#if activeMachine && !activeMachine.online && words.places.offlineNote}
-              <p class="m-0 type-meta text-pretty text-ink-muted">
-                {words.places.offlineNote}
-              </p>
-            {/if}
-          </div>
+          </Field>
           <RowFault reason={scratchRefusal} />
           <RowFault
             again={() => onretry("addPlace")}
@@ -337,30 +348,21 @@
             />
           </div>
         </form>
-      {:else}
-        <button
-          class="group/add mark-line flex min-h-c-row-h min-w-0 items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start transition-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid disabled:text-ink-muted"
-          data-add-place
-          data-slot="row"
-          {disabled}
-          onclick={() => {
-            adding = true;
-          }}
-          type="button"
-        >
-          <span
-            class="inline-flex size-c-mark flex-none items-center justify-center rounded-sm border border-dashed border-border-control text-ink-muted"
-            data-box
-          >
-            <IconPlus aria-hidden="true" class="size-icon-md" />
-          </span>
-          <span
-            class="type-label text-link-ink group-disabled/add:text-ink-muted"
-            >{words.places.addPlace}</span
-          >
-        </button>
-      {/if}
-    </li>
+      </li>
+    {:else}
+      <!-- The list's last row adds to it, in the list's own row (HIG, Lists:
+           an add row ends its list). -->
+      <SectionRow
+        enabled={disabled ? false : undefined}
+        icon={IconPlus}
+        name={words.places.addPlace}
+        onpress={disabled
+          ? undefined
+          : () => {
+              adding = true;
+            }}
+      />
+    {/if}
   </RowList>
 </section>
 
@@ -372,30 +374,24 @@
     <h3 class={sectionHeadVariants({ inset: "flush" })} id="{uid}-repos">
       {words.places.repositories}
     </h3>
-    <ul
-      class="m-0 flex list-none flex-wrap items-center gap-x-space-3 gap-y-space-1 p-0"
-    >
+    <RowList label={words.places.repositories}>
       {#each record.repos as repo (`${repo.host}/${repo.owner}/${repo.name}`)}
-        <li>
-          <a
-            class="mark-line inline-flex items-center gap-space-1 rounded-xs type-code text-link-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid can-hover:hover:underline"
-            href={repo.url}
-            rel="noreferrer"
-            target="_blank"
-          >
-            <IconGitRepo
-              aria-hidden="true"
-              class="size-icon-sm flex-none text-ink-muted"
+        <SectionRow icon={IconGitRepo} mono name="{repo.owner}/{repo.name}">
+          {#snippet trailing()}
+            <Button
+              aria-label="{repo.owner}/{repo.name}"
+              href={repo.url}
+              icon={IconExternalLinear}
+              rel="noreferrer"
+              size="icon-xs"
+              target="_blank"
+              tone="quiet"
+              variant="ghost"
             />
-            <span>{repo.owner}/{repo.name}</span>
-            <IconExternalLinear
-              aria-hidden="true"
-              class="size-icon-sm flex-none"
-            />
-          </a>
-        </li>
+          {/snippet}
+        </SectionRow>
       {/each}
-    </ul>
+    </RowList>
   </section>
 {/if}
 
@@ -411,7 +407,9 @@
       bind:value={() => largeFilesShown, pickLargeFiles}
       cols={2}
       {disabled}
+      glide
       glyph={largeFilesGlyph}
+      wraps
       label={words.places.largeFilesGroupLabel}
       options={[
         {
@@ -435,15 +433,11 @@
     {#if largeFilesShown === "declared"}
       <form
         aria-label={words.places.largeFilesDeclared.name}
-        class="flex min-w-0 flex-col gap-space-3 pt-space-1"
+        class="flex min-w-0 flex-col gap-space-4 pt-space-2"
         onsubmit={saveLargeFiles}
         transition:unfold
       >
-        <div class="flex min-w-0 flex-col gap-space-1">
-          <label
-            class="type-meta font-medium text-ink-muted"
-            for="{uid}-lfs-url">{words.places.largeFilesAddress}</label
-          >
+        <Field id="{uid}-lfs-url" label={words.places.largeFilesAddress}>
           <Input
             id="{uid}-lfs-url"
             autocomplete="off"
@@ -454,11 +448,11 @@
             type="url"
             bind:value={lfsAddressDraft}
           />
-        </div>
-        <div class="flex min-w-0 flex-col gap-space-1">
-          <span class="type-meta font-medium text-ink-muted"
-            >{words.places.largeFilesKey}</span
-          >
+        </Field>
+        <div class="flex min-w-0 flex-col gap-space-2">
+          <p class="m-0 type-meta text-ink-muted">
+            {words.places.largeFilesKey}
+          </p>
           {#if LARGE_FILE_KEY_CONNECTIONS.length === 0}
             <RowFault
               goTo={{
@@ -469,6 +463,7 @@
             />
           {:else}
             <OptionGroup
+              glide
               aria-label={words.places.largeFilesKey}
               bind:value={
                 () => (lfsConnectionDraft ? [lfsConnectionDraft] : []),

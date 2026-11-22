@@ -46,6 +46,8 @@
     hrefOf,
   }: StageSends & { hrefOf: HrefOf } = $props();
 
+  const uid = $props.id();
+
   /** The picker's popover stands open. */
   let open = $state(false);
 
@@ -94,124 +96,133 @@
   {/if}
 {/snippet}
 
-<section
-  aria-labelledby="work-path-account"
-  class="flex min-w-0 flex-col gap-space-2"
->
-  <h3 class={sectionHeadVariants({ inset: "flush" })} id="work-path-account">
-    {words.account.heading}
-  </h3>
+<div class="flex min-w-0 flex-col gap-space-6">
+  <section
+    aria-labelledby="{uid}-account"
+    class="flex min-w-0 flex-col gap-space-2"
+  >
+    <h3 class={sectionHeadVariants({ inset: "flush" })} id="{uid}-account">
+      {words.account.heading}
+    </h3>
 
-  <div class="flex min-w-0" inert={disabled}>
-    <NsPopover
-      align="start"
-      fit
-      haspopup="listbox"
-      id="work-path-account"
-      label={`${words.account.heading}: ${shownName}`}
-      onchange={(next) => {
-        open = next;
-      }}
-      {open}
-      rows="[data-pick-row]"
-      triggerClass={chipVariants({
-        variant: "setting",
-        class: "min-w-0 max-w-full",
-      })}
-      triggerData={{ "data-tool": true, "data-account-chip": true }}
-      width="calc(var(--spacing) * 64)"
-    >
-      {#snippet trigger()}
-        {#if chosenAccount}
-          <span
-            aria-hidden="true"
-            class="size-space-2 flex-none rounded-pill bg-(--c)"
-            data-slot="dot"
-            style:--c={hueVar(chosenAccount.hue)}
-          ></span>
-        {/if}
-        <span data-account-chip data-slot="chip-label">{shownName}</span>
-        <IconChevronDown data-slot="chevron" />
-      {/snippet}
-      <AccountPickRows
-        {accounts}
-        auto={{
-          name: words.account.fleetRouting,
-          detail: "",
-          onpick: () => pick(null),
+    <div class="flex min-w-0" inert={disabled}>
+      <NsPopover
+        align="start"
+        fit
+        haspopup="listbox"
+        id="work-path-account"
+        label={`${words.account.heading}: ${shownName}`}
+        onchange={(next) => {
+          open = next;
         }}
-        note={(id) =>
-          record.accounts.find((one) => one.id === id)?.signedIn === false
-            ? words.account.signedOut
-            : null}
-        pick={(id) => pick(id)}
-        picked={record.account.chosen}
-      />
-    </NsPopover>
-  </div>
-  <RowFault
-    again={() => onretry("account")}
-    againLabel={words.retryChange}
-    reason={refused.account}
-  />
-
-  {#if record.account.chosen !== null}
-    <p class="m-0 type-meta text-pretty text-ink-muted">
-      {words.account.scopeNamed}
-    </p>
-  {/if}
-
-  {#if chosenSignedOut && chosenAccount}
-    <Alert layout="row" variant="destructive">
-      <IconError aria-hidden="true" />
-      <AlertDescription>
-        {words.account.signedOutAlert(chosenAccount.name)}
-      </AlertDescription>
-      <AlertAction>
-        <Button
-          href={hrefOf("accounts")}
-          label={words.account.openAccounts}
-          size="xs"
-          variant="outline"
+        {open}
+        rows="[data-pick-row]"
+        triggerClass={chipVariants({
+          variant: "setting",
+          class: "min-w-0 max-w-full",
+        })}
+        triggerData={{ "data-tool": true, "data-account-chip": true }}
+        width="calc(var(--spacing) * 64)"
+      >
+        {#snippet trigger()}
+          {#if chosenAccount}
+            <span
+              aria-hidden="true"
+              class="size-space-2 flex-none rounded-pill bg-(--c)"
+              data-slot="dot"
+              style:--c={hueVar(chosenAccount.hue)}
+            ></span>
+          {/if}
+          <span data-account-chip data-slot="chip-label">{shownName}</span>
+          <IconChevronDown data-slot="chevron" />
+        {/snippet}
+        <AccountPickRows
+          {accounts}
+          auto={{
+            name: words.account.fleetRouting,
+            detail: "",
+            onpick: () => pick(null),
+          }}
+          note={(id) =>
+            record.accounts.find((one) => one.id === id)?.signedIn === false
+              ? words.account.signedOut
+              : null}
+          pick={(id) => pick(id)}
+          picked={record.account.chosen}
         />
-      </AlertAction>
-    </Alert>
-  {/if}
+      </NsPopover>
+    </div>
+    <RowFault
+      again={() => onretry("account")}
+      againLabel={words.retryChange}
+      reason={refused.account}
+    />
+
+    {#if record.account.chosen !== null}
+      <p class="m-0 type-meta text-pretty text-ink-muted">
+        {words.account.scopeNamed}
+      </p>
+    {/if}
+
+    {#if chosenSignedOut && chosenAccount}
+      <Alert layout="row" variant="destructive">
+        <IconError aria-hidden="true" />
+        <AlertDescription>
+          {words.account.signedOutAlert(chosenAccount.name)}
+        </AlertDescription>
+        <AlertAction>
+          <Button
+            href={hrefOf("accounts")}
+            label={words.account.openAccounts}
+            size="xs"
+            variant="outline"
+          />
+        </AlertAction>
+      </Alert>
+    {/if}
+  </section>
 
   {#if record.account.chosen !== null}
-    <h4 class={[sectionHeadVariants({ inset: "flush" }), "mt-space-3"]}>
-      {words.account.atLimitHeading}
-    </h4>
-    <OptionTiles
-      bind:value={
-        () => record.account.atLimit,
-        (next) => {
-          if (next !== null && next !== record.account.atLimit) {
-            onchange({ key: "atLimit", value: next });
+    <section
+      aria-labelledby="{uid}-limit"
+      class="flex min-w-0 flex-col gap-space-2"
+    >
+      <h3 class={sectionHeadVariants({ inset: "flush" })} id="{uid}-limit">
+        {words.account.atLimitHeading}
+      </h3>
+      <OptionTiles
+        bind:value={
+          () => record.account.atLimit,
+          (next) => {
+            if (next !== null && next !== record.account.atLimit) {
+              onchange({ key: "atLimit", value: next });
+            }
           }
         }
-      }
-      cols={2}
-      {disabled}
-      glyph={limitGlyph}
-      label={words.account.atLimitGroupLabel}
-      options={[
-        {
-          id: "wait",
-          name: words.account.atLimitWait.name,
-          note: words.account.atLimitWait.note,
-        },
-        {
-          id: "move",
-          name: words.account.atLimitMove.name,
-          note: words.account.atLimitMove.note,
-        },
-      ]}
-    />
-    <RowFault
-      again={() => onretry("atLimit")}
-      againLabel={words.retryChange}
-      reason={refused.atLimit}
-    />
+        cols={2}
+        {disabled}
+        glide
+        glyph={limitGlyph}
+        label={words.account.atLimitGroupLabel}
+        wraps
+        options={[
+          {
+            id: "wait",
+            name: words.account.atLimitWait.name,
+            note: words.account.atLimitWait.note,
+          },
+          {
+            id: "move",
+            name: words.account.atLimitMove.name,
+            note: words.account.atLimitMove.note,
+          },
+        ]}
+      />
+      <RowFault
+        again={() => onretry("atLimit")}
+        againLabel={words.retryChange}
+        reason={refused.atLimit}
+      />
+    </section>
   {/if}
-</section>
+</div>
