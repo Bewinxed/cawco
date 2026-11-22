@@ -1013,6 +1013,7 @@
                   aria-label={spawnWords.location.moreOwnersLabel(
                     strip.hidden.length
                   )}
+                  class="ms-auto"
                   data-flip="pop"
                   data-more
                   look="segment-compact"
