@@ -10,19 +10,21 @@
 
 <script lang="ts">
   /**
-   * Stage 3 ("What waits for you"): the project's Who decides as its own
-   * page draws it, on the stage's ground with no box of its own. The head
-   * is the page's: the lede (the project follows the fleet, or how many
-   * kinds it set itself, with the way to put them all back), the legend of
-   * the tiles' scope glyphs, Review before done as its switch (SwitchField),
-   * and the link to the fleet's defaults. Under it the page's roster
-   * (Roster): every decider a card holding the kinds it decides, a press on
-   * a kind's tile handing it to another.
+   * Stage 3 ("What waits for you"): the project's Who decides, in this
+   * view's own parts. Its head is the sub-head every step's parts wear
+   * (sectionHeadVariants), on one line with how the project stands (using
+   * the defaults, or how many kinds it set itself), the quiet button that
+   * puts them all back, and the link to the fleet's defaults. Under it the
+   * Who decides roster (Roster): every decider a card holding the kinds it
+   * decides, each tile wearing its scope's glyph (the fleet's globe or this
+   * project's folder, its tip saying which), a press on a tile handing it
+   * to another. Then who marks tasks done, as two of the house's tiles
+   * under their own sub-head, as the account's limit is picked.
    *
-   * Every hand-over, put-back and the review switch move at the press
+   * Every hand-over, put-back and the review pick move at the press
    * (changes.ts `withAsked`): the tile flies to its new card at once; a
    * refusal flies it back and stands under it in the hub's words with Try
-   * again (KindTile's RowFault), the switch's under the switch.
+   * again (KindTile's RowFault), the review's under its tiles.
    *
    * A rule file that doesn't read stands in the roster's place with the
    * hub's words and Try again: every choice is the person's until it reads.
@@ -33,11 +35,13 @@
     type Kind,
     type Member,
   } from "@cawco/core/decides";
-  import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import type { Fault } from "#lib/cawco/decides/decides.svelte.js";
   import Roster from "#lib/cawco/decides/Roster.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
-  import { IconChevronRight, IconFolder, IconGlobe } from "#lib/icons.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { OptionTiles } from "#lib/components/ui/option-group/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
+  import { IconAgent, IconChevronRight, IconEye } from "#lib/icons.js";
   import type { HrefOf, StageSends } from "./changes";
   import { CHOICE_KINDS, type ChoiceKind, type Decider } from "./records";
   import { howItRunsWords as words } from "./words";
@@ -142,72 +146,56 @@
   }
 </script>
 
-<div class="@container/deciders flex min-w-0 flex-col gap-space-4">
+{#snippet reviewGlyph(choice: "review" | "agents")}
+  {#if choice === "review"}
+    <IconEye aria-hidden="true" class="size-icon-md text-ink-muted" />
+  {:else}
+    <IconAgent aria-hidden="true" class="size-icon-md text-ink-muted" />
+  {/if}
+{/snippet}
+
+<section
+  aria-labelledby="work-path-deciders"
+  class="@container/deciders flex min-w-0 flex-col gap-space-2"
+>
   <div
-    class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
-    style:--head-cols="minmax(0, 1fr) auto"
+    class="flex min-w-0 flex-wrap items-center justify-between gap-x-space-3 gap-y-space-1"
   >
-    <header class="flex min-w-0 flex-col gap-space-2">
+    <h3 class={sectionHeadVariants({ inset: "flush" })} id="work-path-deciders">
+      {words.waits.heading}
+    </h3>
+    <span
+      class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
+    >
       {#if rules !== null}
-        <p class="m-0 type-body text-pretty text-ink-muted">
+        <span class="type-meta text-ink-muted num">
           {own.length === 0
             ? words.waits.followingFleet
             : words.waits.projectRules(own.length)}
-          {#if own.length > 0}
-            <button
-              class="rounded-xs text-brand-ink underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid disabled:text-ink-muted can-hover:hover:not-disabled:text-brand-ink-strong"
-              disabled={!record.hubReachable}
-              onclick={() => {
-                for (const kind of own) {
-                  putBack(kind);
-                }
-              }}
-              type="button">{words.waits.putAllBack}</button
-            >
-          {/if}
-        </p>
-        <ul
-          class="m-0 flex list-none flex-wrap items-center gap-x-space-4 gap-y-space-1 p-0 type-meta text-ink-muted"
-        >
-          <li class="mark-line flex items-center gap-x-space-1">
-            <IconGlobe aria-hidden="true" class="size-icon-sm" />
-            <span>{words.waits.legendFleet}</span>
-          </li>
-          <li class="mark-line flex min-w-0 items-center gap-x-space-1">
-            <IconFolder aria-hidden="true" class="size-icon-sm flex-none" />
-            <span class="wrap-anywhere">{words.waits.legendOwn}</span>
-          </li>
-        </ul>
-      {/if}
-      <div class="flex min-w-0 flex-col gap-space-1 pt-space-2">
-        <SwitchField
-          bind:checked={
-            () => record.reviewBeforeDone,
-            (next) => {
-              if (next !== record.reviewBeforeDone) {
-                onchange({ key: "review", value: next });
+        </span>
+        {#if own.length > 0}
+          <Button
+            disabled={!record.hubReachable}
+            label={words.waits.putAllBack}
+            onclick={() => {
+              for (const kind of own) {
+                putBack(kind);
               }
-            }
-          }
-          disabled={!record.hubReachable}
-          hint={words.waits.reviewNote}
-          id="work-path-review"
-          label={words.waits.reviewLabel}
-        />
-        <RowFault
-          again={() => onretry("review")}
-          againLabel={words.retryChange}
-          reason={refused.review}
-        />
-      </div>
-    </header>
-    <a
-      class="mark-line inline-flex items-center gap-space-1 rounded-xs type-label text-link-ink underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid can-hover:hover:underline"
-      href={hrefOf("fleetDecides")}
-    >
-      <span>{words.waits.fleetDefaults}</span>
-      <IconChevronRight aria-hidden="true" class="size-icon-sm flex-none" />
-    </a>
+            }}
+            size="xs"
+            tone="quiet"
+            variant="ghost"
+          />
+        {/if}
+      {/if}
+      <a
+        class="mark-line inline-flex items-center gap-space-1 type-meta text-link-ink hover:underline"
+        href={hrefOf("fleetDecides")}
+      >
+        <span>{words.waits.fleetDefaults}</span>
+        <IconChevronRight aria-hidden="true" class="size-icon-sm flex-none" />
+      </a>
+    </span>
   </div>
 
   {#if !record.whoDecides.ok}
@@ -234,4 +222,39 @@
     cols={DECIDERS_COLS}
     said={words.waits.roster}
   />
-</div>
+
+  <h4 class={[sectionHeadVariants({ inset: "flush" }), "mt-space-3"]}>
+    {words.waits.reviewHeading}
+  </h4>
+  <OptionTiles
+    bind:value={
+      () => (record.reviewBeforeDone ? "review" : "agents"),
+      (next) => {
+        if (next !== null && (next === "review") !== record.reviewBeforeDone) {
+          onchange({ key: "review", value: next === "review" });
+        }
+      }
+    }
+    cols={2}
+    disabled={!record.hubReachable}
+    glyph={reviewGlyph}
+    label={words.waits.reviewHeading}
+    options={[
+      {
+        id: "review",
+        name: words.waits.reviewOn.name,
+        note: words.waits.reviewOn.note,
+      },
+      {
+        id: "agents",
+        name: words.waits.reviewOff.name,
+        note: words.waits.reviewOff.note,
+      },
+    ]}
+  />
+  <RowFault
+    again={() => onretry("review")}
+    againLabel={words.retryChange}
+    reason={refused.review}
+  />
+</section>

@@ -4,6 +4,7 @@
  * the "How it runs" frame (how-it-runs-live.svelte).
  */
 
+import { CONTROL_GH_REPO, CONTROL_GH_REPOS } from "@cawco/core/connections";
 import { standSocket } from "#lib/cawco/hub/socket.svelte.js";
 import type {
   ProjectPlace as PlaceRow,
@@ -13,6 +14,7 @@ import { boardState, type Machine } from "#lib/cawco/stores/board.svelte.js";
 import { projectsState } from "#lib/cawco/stores/projects.svelte.js";
 import { page } from "$app/state";
 import { type HowItRunsRecord, SITUATIONS, type Situation } from "./records";
+import { githubReposOf } from "./tie-setup.fixture";
 
 /** The shell's rail reads the fleet's projects and machines from the stores, written here as the hub's first read would. */
 const placeRow = (
@@ -95,8 +97,23 @@ function seedShell(record: HowItRunsRecord): void {
   atProjectPage(own.id);
   // No hub stands behind a states file: the page stands on a bench whose hub
   // takes every command and answers none, so the shell reads the hub as
-  // reached and draws no band saying it is out of reach.
-  standSocket({ control: null, hub: () => undefined, spawn: null });
+  // reached and draws no band saying it is out of reach. Its one control is
+  // the repository picker's: GitHub's setup mounts it on a connection, whose
+  // id stands where a machine's would, and the fixture answers its list.
+  standSocket({
+    control: (connectionId, method) => {
+      switch (method) {
+        case CONTROL_GH_REPOS:
+          return githubReposOf(connectionId);
+        case CONTROL_GH_REPO:
+          return { kind: "not-found" };
+        default:
+          return null;
+      }
+    },
+    hub: () => undefined,
+    spawn: null,
+  });
   projectsState.projects = [
     own,
     ...OTHER_PROJECTS.filter(([id]) => id !== own.id).map(([id, name]) => ({

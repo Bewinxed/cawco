@@ -45,7 +45,7 @@
         }
       }
     }
-    cols={4}
+    cols={2}
     disabled={!record.hubReachable}
     {glyph}
     label={words.lands.groupLabel}
