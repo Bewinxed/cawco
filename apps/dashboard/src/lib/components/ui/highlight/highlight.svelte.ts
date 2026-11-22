@@ -104,11 +104,12 @@ const OVERLAP = 1;
  *   card's border and fill and under its face (CardFace): its edges are
  *   parts of their own, a border's width thick, so no scale ever thickens
  *   them.
- * - `fill`: a group of raised controls (option chips, option tiles), whose
- *   pill is the house's pick, the selected fill on the control's own
- *   neutral edge (border-control), drawn over each control's raised fill
- *   and edge and under its words (the controls' children stand over it):
- *   so the controls keep their raised rest, and the pick still glides.
+ * - `mark`: a group of raised controls (option chips, option tiles),
+ *   whose pill is the pick's strong edge: twice the border's width in the
+ *   selected coral (brand-solid), with no fill of its own, drawn over the
+ *   chosen control's own edge and under its words (the controls' children
+ *   stand over it): each control keeps its raised rest, picked or not, and
+ *   the edge glides from the option left to the one chosen.
  */
 const LAYERS = `
 [data-slot^="highlight-"] {
@@ -195,23 +196,22 @@ const LAYERS = `
 :host([data-highlight="card"]) :is([data-part="corner-tr"], [data-part="corner-br"]) {
   border-right: var(--border-width) solid var(--color-brand-solid);
 }
-:host([data-highlight="fill"]) :is([data-slot="highlight-pill"], [data-slot="highlight-trail"]) {
+:host([data-highlight="mark"]) :is([data-slot="highlight-pill"], [data-slot="highlight-trail"]) {
   z-index: 1;
+  --border-width: 2px;
+  background-color: transparent;
 }
-:host([data-highlight="fill"]) [data-part^="edge-"] {
-  background-color: var(--color-border-control);
+:host([data-highlight="mark"]) :is([data-part="corner-tl"], [data-part="corner-tr"]) {
+  border-top: var(--border-width) solid var(--color-brand-solid);
 }
-:host([data-highlight="fill"]) :is([data-part="corner-tl"], [data-part="corner-tr"]) {
-  border-top: var(--border-width) solid var(--color-border-control);
+:host([data-highlight="mark"]) :is([data-part="corner-bl"], [data-part="corner-br"]) {
+  border-bottom: var(--border-width) solid var(--color-brand-solid);
 }
-:host([data-highlight="fill"]) :is([data-part="corner-bl"], [data-part="corner-br"]) {
-  border-bottom: var(--border-width) solid var(--color-border-control);
+:host([data-highlight="mark"]) :is([data-part="corner-tl"], [data-part="corner-bl"]) {
+  border-left: var(--border-width) solid var(--color-brand-solid);
 }
-:host([data-highlight="fill"]) :is([data-part="corner-tl"], [data-part="corner-bl"]) {
-  border-left: var(--border-width) solid var(--color-border-control);
-}
-:host([data-highlight="fill"]) :is([data-part="corner-tr"], [data-part="corner-br"]) {
-  border-right: var(--border-width) solid var(--color-border-control);
+:host([data-highlight="mark"]) :is([data-part="corner-tr"], [data-part="corner-br"]) {
+  border-right: var(--border-width) solid var(--color-brand-solid);
 }
 `;
 
@@ -298,11 +298,11 @@ export interface HighlightOptions {
   laidOut?: () => ReadonlyMap<Element, LaidOut>;
   /**
    * `card`: a grid of icon cards, its pill the channel card's frame.
-   * `fill`: a group of raised controls (OptionGroup `glide: "fill"`), its
-   * pill the house's pick (selected-bg on a control's neutral edge) drawn
-   * over the controls' raised fill and under their words.
+   * `mark`: a group of raised controls (OptionGroup `glide: "mark"`), its
+   * pill the pick's strong coral edge with no fill, drawn over the chosen
+   * control's edge and under its words.
    */
-  look?: "card" | "fill";
+  look?: "card" | "mark";
   /** The rows the ghost and the pill stand under. */
   rows: string;
   /** The selected row. */
@@ -707,8 +707,8 @@ export function highlight(options: HighlightOptions) {
     container.dataset.highlight = look ?? "";
     const ownIsolate = !container.classList.contains("isolate");
     container.classList.add("isolate");
-    /** Its pill drawn in parts with edges of their own: the card's frame, or the fill's neutral edge. */
-    const card = look === "card" || look === "fill";
+    /** Its pill drawn in parts with edges of their own: the card's frame, or the pick's strong edge. */
+    const card = look === "card" || look === "mark";
     const ghost = layerOf("highlight-ghost", card);
     const trail = layerOf("highlight-trail", card);
     const pill = layerOf("highlight-pill", card);

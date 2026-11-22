@@ -134,7 +134,7 @@ export const withAsked = (
 ): HowItRunsRecord => [...asked].reduce(applied, record);
 
 /** What "Sessions start" and its places take: the stage's sends, the running move and the place acts. */
-export interface SessionsStartProps extends StageSends {
+export interface PlacesProps extends StageSends {
   hrefOf: HrefOf;
   movingPlaceId: string | null;
   onaddplace: (machineId: string, path: string) => void;
@@ -144,9 +144,9 @@ export interface SessionsStartProps extends StageSends {
 }
 
 /**
- * How a stage's node reads: settled (neutral), busy (blue live dot: a sync or
- * a move running), away (yellow: a machine offline or a value read earlier),
- * fault (crimson: a real blocker).
+ * How a section's heading reads: settled (no mark), busy (the live dot: a
+ * sync or a move running), away (a machine offline or a value read
+ * earlier), fault (a real blocker).
  */
 export type StageState = "settled" | "busy" | "away" | "fault";
 
@@ -177,13 +177,31 @@ function hasOfflineMachinePlace(record: HowItRunsRecord): boolean {
 }
 
 /**
- * Derive the rail node state for each of the four pipeline stages from the
- * hub's record and any active sync or move.
+ * The settings' sections, in the order they stand (HowItRuns): where tasks
+ * sync, the folders agents run in, the code's repositories and large files
+ * and where it lands, the account and its limit, and Who decides.
  */
-export function stageStates(
+export type SectionId = "tasks" | "places" | "git" | "account" | "waits";
+
+/** What the hub reads for each section: a stage still reading or refused stands in its place. */
+export const SECTION_READS: Record<SectionId, readonly StageId[]> = {
+  tasks: ["tasks"],
+  places: ["sessions"],
+  git: ["sessions", "lands"],
+  account: ["sessions"],
+  waits: ["waits"],
+};
+
+/**
+ * How each section's heading reads from the hub's record and any running
+ * sync or move: settled (no mark), busy (the live dot), away (a machine
+ * offline, or a value read earlier), fault (a real blocker).
+ */
+export function sectionStates(
   record: HowItRunsRecord,
   busy: { sync: boolean; movingPlaceId: string | null }
-): Record<StageId, StageState> {
+): Record<SectionId, StageState> {
+  const away: StageState = record.hubReachable ? "settled" : "away";
   const tasks: StageState = (() => {
     if (
       busy.sync ||
@@ -195,52 +213,30 @@ export function stageStates(
     if (record.tie?.sync.kind === "refused") {
       return "fault";
     }
-    if (!record.hubReachable) {
-      return "away";
-    }
-    return "settled";
+    return away;
   })();
-
-  const sessions: StageState = (() => {
+  const places: StageState = (() => {
     if (busy.movingPlaceId !== null) {
       return "busy";
     }
-    const hasMissingPlace = record.places.some((place) => place.missing);
-    if (hasMissingPlace || chosenAccountSignedOut(record)) {
+    if (record.places.some((place) => place.missing)) {
       return "fault";
     }
-    if (!record.hubReachable || hasOfflineMachinePlace(record)) {
-      return "away";
-    }
-    return "settled";
+    return hasOfflineMachinePlace(record) ? "away" : away;
   })();
-
-  const waits: StageState = (() => {
-    if (!record.whoDecides.ok) {
-      return "fault";
-    }
-    if (!record.hubReachable) {
-      return "away";
-    }
-    return "settled";
-  })();
-
-  const lands: StageState = record.hubReachable ? "settled" : "away";
-
-  return { tasks, sessions, waits, lands };
+  const account: StageState = chosenAccountSignedOut(record) ? "fault" : away;
+  const waits: StageState = record.whoDecides.ok ? away : "fault";
+  return { tasks, places, git: away, account, waits };
 }
 
 /**
- * Number of active pipeline stages currently in fault (at most one per stage:
- * a refused sync, a missing place or signed-out chosen account, or unreadable
- * Who decides). Read by the project page's "How it runs" tab badge.
+ * Number of the project's sections in fault (a refused sync, a missing
+ * folder, a signed-out named account, an unreadable Who decides). Read by
+ * the project page's settings tab badge.
  */
 export function faultCount(record: HowItRunsRecord): number {
-  const states = stageStates(record, { sync: false, movingPlaceId: null });
-  const active: StageId[] = record.holdsCode
-    ? ["tasks", "sessions", "waits", "lands"]
-    : ["tasks", "sessions", "waits"];
-  return active.filter((stage) => states[stage] === "fault").length;
+  const states = sectionStates(record, { sync: false, movingPlaceId: null });
+  return Object.values(states).filter((state) => state === "fault").length;
 }
 
 /** The fleet's accounts as the account picker lists them (AccountPickRows), each by the name it carries everywhere. */

@@ -45,9 +45,9 @@
         }
       }
     }
-    cols={2}
+    cols={1}
     disabled={!record.hubReachable}
-    glide="fill"
+    glide="mark"
     {glyph}
     label={words.lands.groupLabel}
     options={LANDINGS.map((landing) => ({

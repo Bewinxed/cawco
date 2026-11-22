@@ -10,9 +10,10 @@
   import { usageStore } from "#lib/cawco/stores/usage.svelte.js";
   import UsageRing from "#lib/cawco/usage/UsageRing.svelte";
   /**
-   * Stage 2's account: the house's account picker (AccountPickRows, the
-   * rows a session's account chip and its menus' Account submenu list),
-   * hung from a setting chip sized to its name: Any available first, then
+   * Account & usage limits: the house's account picker (AccountPickRows,
+   * the rows a session's account chip and its menus' Account submenu list),
+   * hung from a setting chip as wide as its card, the name at its start and
+   * the account's room at its end: Any available first, then
    * each fleet account by its dot, its name and its room, or the limit it
    * is at (one signed in nowhere says Signed out there). Under it, what
    * the pick does, the alert when the named account is signed out
@@ -29,7 +30,6 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { OptionTiles } from "#lib/components/ui/option-group/index.js";
-  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import {
     IconChevronDown,
     IconError,
@@ -42,6 +42,7 @@
     pickAccounts,
     type StageSends,
   } from "./changes";
+  import { CARD_GROUP, GROUP_LABEL } from "./section-card";
   import { howItRunsWords as words } from "./words";
 
   let {
@@ -110,14 +111,9 @@
   {/if}
 {/snippet}
 
-<div class="flex min-w-0 flex-col gap-space-6">
-  <section
-    aria-labelledby="{uid}-account"
-    class="flex min-w-0 flex-col gap-space-2"
-  >
-    <h3 class={sectionHeadVariants({ inset: "flush" })} id="{uid}-account">
-      {words.account.heading}
-    </h3>
+<div class="flex min-w-0 flex-col gap-space-5">
+  <section aria-labelledby="{uid}-account" class={CARD_GROUP}>
+    <p class={GROUP_LABEL} id="{uid}-account">{words.account.heading}</p>
 
     <div class="flex min-w-0" inert={disabled}>
       <NsPopover
@@ -135,7 +131,7 @@
         rows="[data-pick-row]"
         triggerClass={chipVariants({
           variant: "setting",
-          class: "min-w-0 max-w-full",
+          class: "w-full min-w-0 justify-start",
         })}
         triggerData={{ "data-tool": true, "data-account-chip": true }}
         width="calc(var(--spacing) * 64)"
@@ -151,11 +147,11 @@
           {/if}
           <span data-account-chip data-slot="chip-label">{shownName}</span>
           <!-- The account's room as the session card's account chip draws it
-               (AccountSwitch `quota`): the ring and its figure one unit, a
-               word space off the name. -->
+               (AccountSwitch `quota`): the ring and its figure one unit, at
+               the field's end apart from the name. -->
           {#if chosenRoom}
             <span
-              class="mark-line ms-word inline-flex flex-none items-center gap-word text-ink-muted tabular-nums"
+              class="mark-line ms-auto inline-flex flex-none items-center gap-word text-ink-muted tabular-nums"
               data-box
               data-slot="quota"
             >
@@ -163,7 +159,10 @@
               <span>{chosenRoom.words}</span>
             </span>
           {/if}
-          <IconChevronDown data-slot="chevron" />
+          <IconChevronDown
+            class={chosenRoom ? undefined : "ms-auto"}
+            data-slot="chevron"
+          />
         {/snippet}
         <AccountPickRows
           {accounts}
@@ -211,13 +210,10 @@
   </section>
 
   {#if record.account.chosen !== null}
-    <section
-      aria-labelledby="{uid}-limit"
-      class="flex min-w-0 flex-col gap-space-2"
-    >
-      <h3 class={sectionHeadVariants({ inset: "flush" })} id="{uid}-limit">
+    <section aria-labelledby="{uid}-limit" class={CARD_GROUP}>
+      <p class={GROUP_LABEL} id="{uid}-limit">
         {words.account.atLimitHeading}
-      </h3>
+      </p>
       <OptionTiles
         bind:value={
           () => record.account.atLimit,
@@ -227,12 +223,11 @@
             }
           }
         }
-        cols={2}
+        cols={1}
         {disabled}
-        glide="fill"
+        glide="mark"
         glyph={limitGlyph}
         label={words.account.atLimitGroupLabel}
-        wraps
         options={[
           {
             id: "wait",

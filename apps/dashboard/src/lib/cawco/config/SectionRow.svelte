@@ -9,7 +9,7 @@
 <script lang="ts">
   /**
    * One row of a section list. The whole row opens the thing when it has an
-   * editor, or runs `onpress` (a list's last row that adds to it); the switch, the rollout chip and the ⋯ menu sit above that link
+   * editor; the switch, the rollout chip and the ⋯ menu sit above that link
    * so each stays its own target. What the row's last action came to, and a
    * fault, attach underneath as compact lines.
    *
@@ -28,11 +28,11 @@
     name,
     meta,
     href,
-    onpress,
     icon: Icon,
     hue,
     tile,
     mono = false,
+    code = false,
     whole = false,
     badge,
     rollout,
@@ -50,13 +50,13 @@
     meta?: string;
     /** The editor. Without one the row is not a link. */
     href?: string;
-    /** What a press on the whole row does, for a row with no editor (the list's add row). */
-    onpress?: () => void;
     icon?: Component;
     hue?: string;
     /** Replaces the icon tile, for a harness logo or an OS mark. */
     tile?: Snippet;
     mono?: boolean;
+    /** Its meta in the code face, muted (a folder's path, a repository's address). */
+    code?: boolean;
     /** Its meta read whole, wrapping at any character, never cut short (a folder's path). */
     whole?: boolean;
     badge?: Snippet;
@@ -132,13 +132,6 @@
             {href}
             {@attach land(() => `title:${href}`, { uniform: true })}>{name}</a
           >
-        {:else if onpress}
-          <button
-            class="truncate border-none bg-transparent p-0 text-start text-inherit outline-off after:absolute after:inset-0 after:rounded-inherit focus-visible:after:outline-solid focus-visible:after:outline-(length:--focus-ring-width) focus-visible:after:outline-focus-ring focus-visible:after:outline-offset-(--focus-ring-inset)"
-            data-link
-            onclick={onpress}
-            type="button">{name}</button
-          >
         {:else}
           <span
             data-slot="section-row-label"
@@ -156,7 +149,8 @@
         <span
           data-slot="meta"
           data-whole={whole || undefined}
-          class="truncate type-meta text-ink-muted data-whole:overflow-visible data-whole:whitespace-normal data-whole:wrap-anywhere transition-opacity duration-(--duration-panel) ease-out group-data-off/row:opacity-55 max-phone:col-start-2 max-phone:-col-end-1 max-phone:row-start-2"
+          data-code={code || undefined}
+          class="truncate type-meta text-ink-muted data-code:type-code data-whole:overflow-visible data-whole:whitespace-normal data-whole:wrap-anywhere transition-opacity duration-(--duration-panel) ease-out group-data-off/row:opacity-55 max-phone:col-start-2 max-phone:-col-end-1 max-phone:row-start-2"
           title={whole ? undefined : meta}>{meta}</span
         >
       {/if}

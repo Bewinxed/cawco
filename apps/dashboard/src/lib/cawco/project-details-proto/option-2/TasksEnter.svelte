@@ -6,8 +6,9 @@
   import RepoPicker from "#lib/cawco/spawn/RepoPicker.svelte";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   /**
-   * Stage 1 ("Tasks enter"): the three homes for the project's tasks as the
-   * house's equal tiles (OptionTiles), each led by its mark (CawCo's own
+   * Task sync: the three homes for the project's tasks as the house's
+   * option tiles (OptionTiles, one a line, the pick marked), each led by
+   * its mark (CawCo's own
    * files, GitHub's and Linear's own logos); while tied to one, how the two
    * sides stand above them; and pressed on GitHub or Linear, the tie's setup
    * opening under the tiles. Files moves at the press (changes.ts
@@ -308,9 +309,9 @@
         }
       }
     }
-    cols={3}
+    cols={1}
     {disabled}
-    glide="fill"
+    glide="mark"
     glyph={homeGlyph}
     label={words.tasks.groupLabel}
     options={HOMES.map((home) => ({
@@ -429,7 +430,7 @@
           <OptionGroup
             aria-labelledby="{uid}-connection"
             {disabled}
-            glide="fill"
+            glide="mark"
             value={activeConnectionId ? [activeConnectionId] : []}
           >
             {#each setupConnections as conn (conn.id)}
@@ -470,7 +471,7 @@
             <OptionGroup
               aria-labelledby="{uid}-team"
               {disabled}
-              glide="fill"
+              glide="mark"
               value={activeTeamId ? [activeTeamId] : []}
             >
               {#each LINEAR_TEAMS as team (team.id)}
@@ -498,7 +499,7 @@
             <OptionGroup
               aria-labelledby="{uid}-board"
               {disabled}
-              glide="fill"
+              glide="mark"
               value={[githubProjectPick]}
             >
               <OptionGroupItem

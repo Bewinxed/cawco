@@ -1085,6 +1085,8 @@
   --spacing-c-decision-option-min: 190px;
   /* The narrowest a choice tile stands in a row of tiles before the row wraps (a project's four landings sit in one row from a 640px column). */
   --spacing-c-choice-tile-min: 160px;
+  /* A project's settings column (its work path view): one centred column of its sections, the measure Gemini Neon's critique asked (720 to 760px). */
+  --spacing-c-settings-col: 46rem;
   /* The narrowest a picture stands beside others in a decision page's Row before the Row's pictures wrap, one to a line. A 390px-wide phone shot at 160px is drawn at 41%: its layout, its headings and its controls still read, where at the 70px it fell to (18%) nothing on it could be judged. */
   --spacing-c-picture-min: 160px;
   /* Code inside a decision page's words: a step under the words around it, at any size they stand at. */
