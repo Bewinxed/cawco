@@ -14,6 +14,13 @@
          * (DESIGN.md, Density: "a 32px header band"; ledger-header).
          */
         band: "type-label sticky top-0 h-8 bg-surface-recess text-ink-muted uppercase tracking-caps",
+        /**
+         * A body row's heading over the rows it groups (`scope="rowgroup"`,
+         * a goal over its facts): a light label in muted ink, air above it
+         * and its rows close under it, its words wrapping.
+         */
+        group:
+          "whitespace-normal px-space-3 pt-space-4 pb-space-1 text-ink-muted type-label",
         /*
          * A matrix's heads stand on their top edge, so heads of different
          * heights start their names on one line, and take the base's label

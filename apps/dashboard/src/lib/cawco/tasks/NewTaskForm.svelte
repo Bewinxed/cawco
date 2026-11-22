@@ -4,9 +4,11 @@
    * starts in. On the board the column is the stage; the table asks for one
    * (`stages`), starting from the project's first to-do stage. The form stays
    * open after an add, so a run of tasks is typed one after another, and the
-   * hub's refusal is said under the field, in its own words.
+   * hub's refusal is said under the field, in its own words. A caller may
+   * ask more of a new task under its title (`fields`): what they hold is
+   * the caller's, read as `oncreate` is called.
    */
-  import { tick } from "svelte";
+  import { type Snippet, tick } from "svelte";
   import { type Stage, stageLabel } from "#lib/cawco/project-tasks.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -19,8 +21,11 @@
     stage,
     stages,
     primary = false,
+    fields,
     oncreate,
   }: {
+    /** More of the new task, asked under its title; the caller holds what they say. */
+    fields?: Snippet;
     open?: boolean;
     /** Closed, the form is the page's one action (a first-use empty state). */
     primary?: boolean;
@@ -88,6 +93,7 @@
     {#if problem}
       <p class="type-meta text-error-11" role="alert">{problem}</p>
     {/if}
+    {@render fields?.()}
     <div data-slot="actions" class="flex items-center justify-end gap-space-1">
       {#if stages}
         <Select.Root

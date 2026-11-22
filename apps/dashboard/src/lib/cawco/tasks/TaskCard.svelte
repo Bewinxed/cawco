@@ -16,6 +16,12 @@
    * names each external item it links by the source's mark and its ref; the
    * task's pane lists them whole, each a link out.
    *
+   * A task that repeats (`answer`) wears the repeats mark after its id, and
+   * where a one-off task says what its attempt does, its answer now: the
+   * Needs you mark before it only when it needs the person, the live dot
+   * while a run goes. Its failed run is no Failed badge: what needs the
+   * person is its mark.
+   *
    * The card is a link to the task (`?task=tsk-12`), so it opens in a new
    * tab and is shared like one; a plain click opens it beside what it was
    * pressed in (`onopen`), or follows the link where nothing stands beside
@@ -30,11 +36,13 @@
     IconError,
     IconLock,
     IconNeedsYou,
+    IconRepeat,
     IconWarningTriangle,
   } from "#lib/icons.js";
   import { land, waiting } from "#lib/platform/motion/share.svelte.js";
   import { plainClick } from "#lib/platform/plain-click.js";
   import { dragTask } from "./board-dnd.svelte.js";
+  import type { CardAnswer } from "./card-answer";
   import { actionsOf, asksOf, taskProject } from "./needs.svelte";
   import TodoCount from "./TodoCount.svelte";
   import { taskShare } from "./task-share.js";
@@ -45,7 +53,10 @@
     onopen,
     date = null,
     movable = true,
+    answer = null,
   }: {
+    /** It repeats: its answer now; null for a one-off task. */
+    answer?: CardAnswer | null;
     task: TaskSummary;
     href: string;
     /** The date the task's file sets it for, said short ("Thu 09:30"). */
@@ -105,6 +116,16 @@
       class="type-meta font-(family-name:--font-mono) liga-none text-ink-subtle group-data-picked/task:text-selected-ink"
       >{task.id}</span
     >
+    {#if answer}
+      <span
+        class="inline-flex text-ink-subtle group-data-picked/task:text-selected-ink"
+        data-slot="repeats"
+        title="Repeats"
+      >
+        <IconRepeat aria-hidden="true" class="size-icon-sm" />
+        <span class="sr-only">Repeats</span>
+      </span>
+    {/if}
     {#if task.problem}
       <span
         class="inline-flex text-ink-muted group-data-picked/task:text-selected-ink"
@@ -126,7 +147,7 @@
         <span>{projectWords.cantStart}</span>
         <span class="sr-only">{flags.startProblem}</span>
       </Badge>
-    {:else if flags.failed && !flags.live}
+    {:else if flags.failed && !flags.live && !answer}
       <Badge class="ml-auto" variant="fail">
         <IconError aria-hidden="true" />
         <span>Failed</span>
@@ -138,7 +159,30 @@
     class="line-clamp-2 type-label wrap-anywhere text-ink-row"
     >{task.title}</span
   >
-  {#if flags.live || task.kind === "you" || asks || approves || date}
+  {#if answer}
+    <!-- Its answer now where a one-off task says what its attempt does. -->
+    <span
+      class="mark-line inline-flex items-center gap-space-2 type-meta text-ink-muted group-data-picked/task:text-selected-ink"
+      data-slot="answer"
+      title={answer.sentence}
+    >
+      {#if answer.needsYou}
+        <IconNeedsYou
+          aria-hidden="true"
+          class="size-icon-sm flex-none text-status-attn-glyph"
+        />
+        <span class="sr-only">Needs you:</span>
+      {:else if answer.live}
+        <LiveDot data-slot="dot" size="row" />
+      {/if}
+      <span
+        class={answer.needsYou
+          ? "text-ink-strong group-data-picked/task:text-selected-ink"
+          : undefined}
+        >{answer.live ? `${answer.word} · ${answer.live}` : answer.word}</span
+      >
+    </span>
+  {:else if flags.live || task.kind === "you" || asks || approves || date}
     <span
       class="mark-line inline-flex items-center gap-space-2 type-meta text-ink-muted group-data-picked/task:text-selected-ink"
     >
