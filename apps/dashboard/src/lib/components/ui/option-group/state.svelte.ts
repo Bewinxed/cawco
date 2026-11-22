@@ -3,6 +3,8 @@ import { getContext, setContext, untrack } from "svelte";
 /** What a group is given by its root: its props, read live. */
 export interface OptionGroupProps {
   disabled: () => boolean;
+  /** Gliding, the pill is the selected fill and the chosen option keeps its neutral edge (OptionGroup `glide: "fill"`). */
+  fill: () => boolean;
   /** The chosen option's mark glides from the last one (one pick only): the kit's `highlight` pill, the chips' own fill and edge clear. */
   glide: () => boolean;
   /** How the options stand (option-group.svelte `optionGroupVariants`). */
@@ -29,6 +31,7 @@ export class OptionGroupState {
   readonly disabled = $derived.by(() => this.#props.disabled());
   readonly layout = $derived.by(() => this.#props.layout());
   readonly glide = $derived.by(() => this.#props.glide());
+  readonly fill = $derived.by(() => this.#props.fill());
   readonly value = $derived.by(() => this.#props.value());
   /** The tab stop: the option focus last stood on, else the first chosen, else the first. */
   readonly stop = $derived.by(() => {

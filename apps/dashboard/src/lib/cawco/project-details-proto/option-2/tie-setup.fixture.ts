@@ -26,7 +26,6 @@ export interface FixtureTarget {
 export interface FixtureGithubProject {
   id: string;
   name: string;
-  statuses: readonly string[];
 }
 
 export const GITHUB_CONNECTIONS: readonly FixtureConnection[] = [
@@ -154,28 +153,12 @@ export const GITHUB_PROJECTS: readonly FixtureGithubProject[] = [
   {
     id: "proj-7",
     name: "Lantern roadmap",
-    statuses: ["Todo", "In Progress", "In Review", "Done"],
   },
   {
     id: "proj-12",
     name: "Q4 launch",
-    statuses: ["Todo", "In Progress", "In Review", "Done"],
   },
 ];
-
-export const PROJECT_STAGES: readonly string[] = [
-  "Backlog",
-  "In progress",
-  "Review",
-  "Done",
-];
-
-export const DEFAULT_STAGE_STATUS: Readonly<Record<string, string>> = {
-  Backlog: "Todo",
-  "In progress": "In Progress",
-  Review: "In Review",
-  Done: "Done",
-};
 
 /** Key-bearing connections eligible to sign in to a declared large-file server. */
 export const LARGE_FILE_KEY_CONNECTIONS: readonly FixtureConnection[] = [

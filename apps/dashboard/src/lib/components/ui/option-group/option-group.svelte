@@ -65,13 +65,16 @@
     multiple?: boolean;
     disabled?: boolean;
     /**
-     * One pick whose mark moves: the kit's selection pill (`highlight`,
-     * `look: "card"`, the chip's own picked edge over the recess) glides
-     * from the option left to the one chosen, across a wrap too, the way
-     * the segmented control's thumb slides; the options stand over it with
-     * no fill or edge of their own while chosen.
+     * One pick whose mark moves: the kit's selection pill (`highlight`)
+     * glides from the option left to the one chosen, across a wrap too, the
+     * way the segmented control's thumb slides. `true` draws it as the
+     * chip's own picked edge over the recess (`look: "card"`), the options
+     * standing over it with no fill or edge of their own while chosen;
+     * `"fill"` as the house's selected fill (`selected-bg`, as a Select's
+     * trigger, a menu's radio and ChoiceChip show a pick), the chosen
+     * option keeping its neutral edge and taking the selected ink.
      */
-    glide?: boolean;
+    glide?: boolean | "fill";
     layout?: OptionGroupLayout;
     /** Enter on an option: the host's own act (continue, send, answer). */
     onenter?: (event: KeyboardEvent) => void;
@@ -81,7 +84,8 @@
     value: () => value,
     multiple: () => multiple,
     disabled: () => disabled,
-    glide: () => glide && !multiple,
+    glide: () => glide !== false && !multiple,
+    fill: () => glide === "fill",
     layout: () => layout ?? "chips",
     setValue: (next) => {
       value = next;
@@ -192,13 +196,13 @@
   role={multiple ? "group" : "radiogroup"}
   bind:this={ref}
   {...restProps}
-  {@attach glide && !multiple
+  {@attach glide !== false && !multiple
     ? highlight({
         rows: '[data-slot="option"]',
         selected: '[data-slot="option"][aria-checked="true"]',
         axis: "xy",
         ghost: false,
-        look: "card",
+        look: glide === "fill" ? undefined : "card",
       })
     : undefined}
 >

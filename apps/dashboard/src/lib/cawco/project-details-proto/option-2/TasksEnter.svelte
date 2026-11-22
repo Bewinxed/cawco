@@ -39,12 +39,10 @@
   import type { Change, ChangeKey } from "./changes";
   import type { HowItRunsRecord, TaskHome } from "./records";
   import {
-    DEFAULT_STAGE_STATUS,
     GITHUB_CONNECTIONS,
     GITHUB_PROJECTS,
     LINEAR_CONNECTIONS,
     LINEAR_TEAMS,
-    PROJECT_STAGES,
   } from "./tie-setup.fixture";
   import { howItRunsWords as words } from "./words";
 
@@ -73,7 +71,6 @@
 
   const HOMES: readonly TaskHome[] = ["files", "github", "linear"];
   const NONE_PROJECT = "__none__";
-  const LEAVE_ALONE = "__leave__";
 
   /** The tie's setup standing open, for GitHub or Linear: the pick shows it from the press. */
   let setupHome = $derived<"github" | "linear" | null>(opening);
@@ -83,9 +80,6 @@
   /** The GitHub repository picked, by its git URL; "" for the project's own. */
   let repoPick = $state("");
   let githubProjectPick = $state<string>("proj-7");
-  let stageMapping = $state<Record<string, string>>({
-    ...DEFAULT_STAGE_STATUS,
-  });
 
   const disabled = $derived(!record.hubReachable);
   const syncPending = $derived(syncing || pending.includes("sync"));
@@ -121,10 +115,6 @@
     setupConnections.find((conn) => conn.id === activeConnectionId) ?? null
   );
 
-  const selectedGithubProject = $derived(
-    GITHUB_PROJECTS.find((proj) => proj.id === githubProjectPick) ?? null
-  );
-
   const canSaveTie = $derived(
     !disabled &&
       setupHome !== null &&
@@ -138,7 +128,6 @@
     teamPick = null;
     repoPick = "";
     githubProjectPick = GITHUB_PROJECTS[0]?.id ?? NONE_PROJECT;
-    stageMapping = { ...DEFAULT_STAGE_STATUS };
   }
 
   function closeSetup() {
@@ -300,7 +289,7 @@
     }
     cols={3}
     {disabled}
-    glide
+    glide="fill"
     glyph={homeGlyph}
     label={words.tasks.groupLabel}
     options={HOMES.map((home) => ({
@@ -353,7 +342,7 @@
         {:else}
           <div class="flex flex-wrap items-center gap-space-2">
             <OptionGroup
-              glide
+              glide="fill"
               aria-label={words.tasks.connectionLabel}
               {disabled}
               value={activeConnectionId ? [activeConnectionId] : []}
@@ -402,7 +391,7 @@
           <div class="flex flex-col gap-space-2">
             <p class="m-0 type-meta text-ink-muted">{words.tasks.teamLabel}</p>
             <OptionGroup
-              glide
+              glide="fill"
               aria-label={words.tasks.teamLabel}
               {disabled}
               value={activeTeamId ? [activeTeamId] : []}
@@ -422,7 +411,8 @@
           </div>
         {/if}
 
-        <!-- GitHub Project & per-stage Status mapping (GitHub only). -->
+        <!-- The GitHub Project its columns come from (GitHub only): linked,
+             the hub matches the board's columns to the Project's statuses. -->
         {#if setupHome === "github"}
           <div class="flex flex-col gap-space-5">
             <div class="flex flex-col gap-space-2">
@@ -430,7 +420,7 @@
                 {words.tasks.githubProjectLabel}
               </p>
               <OptionGroup
-                glide
+                glide="fill"
                 aria-label={words.tasks.githubProjectLabel}
                 {disabled}
                 value={[githubProjectPick]}
@@ -457,61 +447,6 @@
                 {/each}
               </OptionGroup>
             </div>
-
-            {#if selectedGithubProject}
-              <div class="flex flex-col gap-space-2">
-                <p class="m-0 type-meta text-ink-muted">
-                  {words.tasks.stageMapLabel}
-                </p>
-                <div class="flex flex-col gap-space-2 coarse:gap-y-space-3">
-                  {#each PROJECT_STAGES as stage (stage)}
-                    {@const currentStatus = stageMapping[stage] ?? LEAVE_ALONE}
-                    <div
-                      class="flex flex-col gap-space-1 @kinds:flex-row @kinds:items-center @kinds:gap-space-2"
-                    >
-                      <span
-                        class="type-label text-ink-row @kinds:w-22 @kinds:flex-none"
-                        >{stage}</span
-                      >
-                      <OptionGroup
-                        glide
-                        aria-label={words.tasks.stageStatusLabel(stage)}
-                        class="min-w-0 flex-1"
-                        {disabled}
-                        value={[currentStatus]}
-                      >
-                        {#each selectedGithubProject.statuses as status (status)}
-                          <OptionGroupItem
-                            onclick={(event) => {
-                              event.preventDefault();
-                              stageMapping = {
-                                ...stageMapping,
-                                [stage]: status,
-                              };
-                            }}
-                            value={status}
-                          >
-                            {status}
-                          </OptionGroupItem>
-                        {/each}
-                        <OptionGroupItem
-                          onclick={(event) => {
-                            event.preventDefault();
-                            stageMapping = {
-                              ...stageMapping,
-                              [stage]: LEAVE_ALONE,
-                            };
-                          }}
-                          value={LEAVE_ALONE}
-                        >
-                          {words.tasks.leaveAlone}
-                        </OptionGroupItem>
-                      </OptionGroup>
-                    </div>
-                  {/each}
-                </div>
-              </div>
-            {/if}
           </div>
         {/if}
       {/if}

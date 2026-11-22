@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { Account } from "@cawco/core/accounts";
   import AccountPickRows from "#lib/cawco/accounts/AccountPickRows.svelte";
   import { hueVar } from "#lib/cawco/accounts/model.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
@@ -34,6 +33,7 @@
   import {
     chosenAccountSignedOut,
     type HrefOf,
+    pickAccounts,
     type StageSends,
   } from "./changes";
   import { howItRunsWords as words } from "./words";
@@ -62,23 +62,7 @@
   const shownName = $derived(chosenAccount?.name ?? words.account.fleetRouting);
 
   /** The fleet's accounts as the picker lists them, each by the name it carries everywhere. */
-  const accounts = $derived<Account[]>(
-    record.accounts.map((account, order) => ({
-      atPlanLimit: "move",
-      createdAt: 0,
-      email: null,
-      hue: account.hue,
-      id: account.id,
-      identity: null,
-      kind: "subscription",
-      label: account.name,
-      neverBackup: false,
-      order,
-      provider: account.provider,
-      reservePct: null,
-      sessionReservePct: null,
-    }))
-  );
+  const accounts = $derived(pickAccounts(record));
 
   function pick(next: string | null) {
     open = false;
@@ -140,7 +124,6 @@
           {accounts}
           auto={{
             name: words.account.fleetRouting,
-            detail: "",
             onpick: () => pick(null),
           }}
           note={(id) =>
@@ -201,7 +184,7 @@
         }
         cols={2}
         {disabled}
-        glide
+        glide="fill"
         glyph={limitGlyph}
         label={words.account.atLimitGroupLabel}
         wraps

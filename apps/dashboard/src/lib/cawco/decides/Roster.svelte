@@ -43,6 +43,7 @@
     who = null,
     said = ROSTER_WORDS,
     cols,
+    brief = false,
   }: {
     /** Who decides' state, whose settings and Add a member open from the cards; null draws neither. */
     who?: WhoDecides | null;
@@ -72,6 +73,14 @@
     said?: RosterWords;
     /** Its grid's columns as classes, where the surface lays its cards out its own way; none: as many a line as fit, four at most. */
     cols?: string;
+    /**
+     * Each member and kind by its name alone, its line (a member's job, a
+     * kind's example) in the house tooltip, and a kind this project set
+     * marked by its deeper fill alone: no scope glyph, and no put-back of
+     * its own, the surface's head putting them all back (the project's
+     * settings view).
+     */
+    brief?: boolean;
   } = $props();
 
   /** Each card, which its settings hang from. */
@@ -138,6 +147,7 @@
         >
           {#snippet list(headId: string)}
             <HandOver
+              describe={brief}
               {said}
               fleetChoice={project === null ? null : fleetRoutes[kind.id]}
               {headId}
@@ -155,6 +165,7 @@
             />
           {/snippet}
           <KindTile
+            {brief}
             asking={asking?.kinds.includes(kind.id) ? asking.said : null}
             fault={fault?.kinds.includes(kind.id) ? fault : null}
             fleetWho={members.find((one) => one.id === fleetRoutes[kind.id])}
@@ -203,6 +214,7 @@
       {/if}
     {/snippet}
     <MemberCard
+      {brief}
       bind:card={cards[member.id]}
       editing={who?.setup?.from === member.id}
       facts={facts(member)}

@@ -81,9 +81,6 @@ export const howItRunsWords = {
     projectRepoTag: "This project",
     githubProjectLabel: "GitHub Project for columns",
     githubProjectNone: "Open and closed only",
-    stageMapLabel: "Match columns to Status",
-    leaveAlone: "Leave unchanged",
-    stageStatusLabel: (stage: string) => `GitHub Status for ${stage}`,
     saveTie: "Start syncing",
   },
 

@@ -9,6 +9,7 @@
   import type { Member } from "@cawco/core/decides";
   import { decidesWords } from "@cawco/core/words/decides";
   import type { Snippet } from "svelte";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import type { Facts } from "./decides.svelte";
   import MemberFace from "./MemberFace.svelte";
   import { ROSTER_WORDS, type RosterWords } from "./roster-words";
@@ -23,6 +24,7 @@
     card = $bindable(),
     pencil,
     said = ROSTER_WORDS,
+    brief = false,
   }: {
     /** What it runs on, or why it can't be reached; null for members with none. */
     facts: Facts | null;
@@ -41,6 +43,8 @@
     pencil?: Snippet;
     /** Its words: Who decides' unless the surface drawing it says its own. */
     said?: RosterWords;
+    /** Its name alone, its job in the house tooltip on its head (Roster `brief`). */
+    brief?: boolean;
   } = $props();
 
   const factsLine = $derived(
@@ -61,23 +65,42 @@
   data-member={member.id}
   style:--stand-in="calc(var(--spacing-c-roster-face) + var(--spacing-space-3))"
 >
-  <div class="flex items-start gap-x-space-3">
-    <MemberFace {member} size={48} />
-    <div class="flex min-w-0 flex-auto flex-col">
-      <div class="flex min-w-0 items-start gap-x-space-1">
-        <h2
-          class="min-w-0 flex-auto type-body font-medium wrap-anywhere"
-          id="member-{member.id}"
+  {#snippet head(props: Record<string, unknown> = {})}
+    <div
+      {...props}
+      class={["flex gap-x-space-3", brief ? "items-center" : "items-start"]}
+    >
+      <MemberFace {member} size={48} />
+      <div class="flex min-w-0 flex-auto flex-col">
+        <div class="flex min-w-0 items-start gap-x-space-1">
+          <h2
+            class="min-w-0 flex-auto type-body font-medium wrap-anywhere"
+            id="member-{member.id}"
+          >
+            {member.name}
+          </h2>
+          {@render pencil?.()}
+        </div>
+        <p
+          class={[
+            "type-meta text-ink-muted text-pretty wrap-anywhere",
+            brief && "sr-only",
+          ]}
         >
-          {member.name}
-        </h2>
-        {@render pencil?.()}
+          {member.job}
+        </p>
       </div>
-      <p class="type-meta text-ink-muted text-pretty wrap-anywhere">
-        {member.job}
-      </p>
     </div>
-  </div>
+  {/snippet}
+  {#if brief}
+    <Tip label={member.job} tap>
+      {#snippet children(props)}
+        {@render head(props)}
+      {/snippet}
+    </Tip>
+  {:else}
+    {@render head()}
+  {/if}
   <p
     class={[
       "ps-(--stand-in) type-meta text-pretty wrap-anywhere",

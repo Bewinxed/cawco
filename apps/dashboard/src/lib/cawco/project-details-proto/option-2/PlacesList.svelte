@@ -273,7 +273,7 @@
               {words.places.machineLabel}
             </p>
             <OptionGroup
-              glide
+              glide="fill"
               aria-label={words.places.machineLabel}
               bind:value={
                 () => (activeMachineId ? [activeMachineId] : []),
@@ -407,7 +407,7 @@
       bind:value={() => largeFilesShown, pickLargeFiles}
       cols={2}
       {disabled}
-      glide
+      glide="fill"
       glyph={largeFilesGlyph}
       wraps
       label={words.places.largeFilesGroupLabel}
@@ -463,7 +463,7 @@
             />
           {:else}
             <OptionGroup
-              glide
+              glide="fill"
               aria-label={words.places.largeFilesKey}
               bind:value={
                 () => (lfsConnectionDraft ? [lfsConnectionDraft] : []),
