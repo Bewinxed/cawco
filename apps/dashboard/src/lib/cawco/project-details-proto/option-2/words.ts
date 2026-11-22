@@ -144,7 +144,7 @@ export const howItRunsWords = {
 
   account: {
     heading: "Account",
-    fleetRouting: "Any available",
+    fleetRouting: "Use fleet routing rules",
     signedOut: "Signed out",
     signedOutAlert: (name: string) =>
       `${name} is signed out, so nothing can start.`,

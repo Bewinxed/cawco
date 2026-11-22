@@ -18,7 +18,12 @@
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { IconCloudCross, IconError, IconRefresh } from "#lib/icons.js";
+  import {
+    IconCloudCross,
+    IconError,
+    IconExternalLinear,
+    IconRefresh,
+  } from "#lib/icons.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import AccountColumn from "./AccountColumn.svelte";
@@ -146,6 +151,16 @@
       ? { left: ["tasks", "git", "account"], right: ["places", "waits"] }
       : { left: ["tasks", "git", "places"], right: ["account", "waits"] };
   });
+
+  /** What stands at a card's head end: Who decides' way to the defaults, the repository beside Repository & Git. */
+  function headActs(section: SectionId) {
+    if (section === "waits" && record.whoDecides.ok) {
+      return waitsActs;
+    }
+    if (section === "git" && record.repos.length > 0) {
+      return repoLink;
+    }
+  }
 </script>
 
 {#snippet sectionReadFailed(section: SectionId, stage: StageId, reason: string)}
@@ -181,6 +196,26 @@
   />
 {/snippet}
 
+{#snippet repoLink()}
+  <!-- The project's repository beside the card's title: a fact that opens
+       where it lives, so it takes no row of its own. -->
+  {@const [first, ...rest] = record.repos}
+  {#if first}
+    <a
+      class="inline-flex min-w-0 items-center gap-space-1 type-meta font-mono liga-none text-ink-muted no-underline hover:text-ink-strong"
+      href={first.url}
+      rel="noreferrer"
+      target="_blank"
+    >
+      <span class="truncate">{first.owner}/{first.name}</span>
+      <IconExternalLinear aria-hidden="true" class="size-icon-sm flex-none" />
+    </a>
+    {#if rest.length > 0}
+      <span class="type-meta text-ink-muted">+{rest.length}</span>
+    {/if}
+  {/if}
+{/snippet}
+
 {#snippet sectionSkeleton(section: SectionId)}
   <!-- Each section's own shape inside its card: its rows, its field, its cards, its tiles. -->
   <div aria-busy="true" class="flex min-w-0 flex-col gap-space-2">
@@ -212,9 +247,7 @@
   {@const state = stateOf(section)}
   {@const failed = failedOf(section)}
   <SettingsSection
-    actions={section === "waits" && record.whoDecides.ok
-      ? waitsActs
-      : undefined}
+    actions={headActs(section)}
     announcement={announcementOf(section)}
     id={section}
     {state}
