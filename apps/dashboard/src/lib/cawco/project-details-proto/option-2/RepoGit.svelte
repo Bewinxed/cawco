@@ -3,7 +3,7 @@
    * Repository & Git, for a code project: its linked repositories as a
    * list (RowList `divided`), each by its slug in the code face, opening on
    * its host; where its large files are kept, the view's one pick
-   * (PickChips; the custom server opening its address and key under it);
+   * (PickTiles; the custom server opening its address and key under it);
    * and where its finished code goes (WorkLands). Every
    * pick moves at the press (changes.ts `withAsked`); a refusal puts it
    * back and stands under its control (RowFault).
@@ -18,11 +18,17 @@
     OptionGroup,
     OptionGroupItem,
   } from "#lib/components/ui/option-group/index.js";
-  import { IconExternalLinear, IconGitRepo, IconKey } from "#lib/icons.js";
+  import {
+    IconExternalLinear,
+    IconFolderGit,
+    IconGitRepo,
+    IconKey,
+    IconLargeFilesServer,
+  } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import type { HrefOf, StageSends } from "./changes";
   import { FORM_FIELD, FORM_LABEL, OPENED_FORM } from "./opened-form";
-  import PickChips from "./PickChips.svelte";
+  import PickTiles from "./PickTiles.svelte";
   import { CARD_GROUP, GROUP_LABEL } from "./section-card";
   import { LARGE_FILE_KEY_CONNECTIONS } from "./tie-setup.fixture";
   import WorkLands from "./WorkLands.svelte";
@@ -99,33 +105,49 @@
 
 {#if record.repos.length > 0}
   <div class={CARD_GROUP}>
-    <RowList divided label={words.places.repositories}>
-      {#each record.repos as repo (`${repo.host}/${repo.owner}/${repo.name}`)}
-        <SectionRow icon={IconGitRepo} mono name="{repo.owner}/{repo.name}">
-          {#snippet trailing()}
-            <Button
-              aria-label="{repo.owner}/{repo.name}"
-              href={repo.url}
-              icon={IconExternalLinear}
-              rel="noreferrer"
-              size="icon-xs"
-              target="_blank"
-              tone="quiet"
-              variant="ghost"
-            />
-          {/snippet}
-        </SectionRow>
-      {/each}
-    </RowList>
+    <!-- Drawn out by its glyphs' inset, so they share the card's left edge. -->
+    <div class="-ms-c-mark-inset min-w-0">
+      <RowList divided label={words.places.repositories}>
+        {#each record.repos as repo (`${repo.host}/${repo.owner}/${repo.name}`)}
+          <SectionRow icon={IconGitRepo} mono name="{repo.owner}/{repo.name}">
+            {#snippet trailing()}
+              <Button
+                aria-label="{repo.owner}/{repo.name}"
+                href={repo.url}
+                icon={IconExternalLinear}
+                rel="noreferrer"
+                size="icon-xs"
+                target="_blank"
+                tone="quiet"
+                variant="ghost"
+              />
+            {/snippet}
+          </SectionRow>
+        {/each}
+      </RowList>
+    </div>
   </div>
 {/if}
 
+{#snippet largeFilesGlyph(kind: "own" | "declared")}
+  {#if kind === "own"}
+    <IconFolderGit aria-hidden="true" class="size-icon-md text-ink-muted" />
+  {:else}
+    <IconLargeFilesServer
+      aria-hidden="true"
+      class="size-icon-md text-ink-muted"
+    />
+  {/if}
+{/snippet}
+
 <!-- Git LFS: its label over its one pick, never a heading without its control. -->
 <div class={CARD_GROUP}>
-  <p class={GROUP_LABEL} id="{uid}-lfs">{words.places.largeFilesHeading}</p>
-  <PickChips
+  <p class={GROUP_LABEL}>{words.places.largeFilesHeading}</p>
+  <PickTiles
+    cols={2}
     {disabled}
-    labelledby="{uid}-lfs"
+    glyph={largeFilesGlyph}
+    label={words.places.largeFilesGroupLabel}
     onpick={pickLargeFiles}
     options={LARGE_FILES}
     value={largeFilesShown}
@@ -172,7 +194,7 @@
           />
         {:else}
           <OptionGroup
-            glide="mark"
+            glide
             aria-labelledby="{uid}-lfs-key"
             bind:value={
               () => (lfsConnectionDraft ? [lfsConnectionDraft] : []),
@@ -197,16 +219,7 @@
         {/if}
       </div>
       {#if lfsDirty || declaring}
-        <div class="flex flex-wrap items-center gap-space-2">
-          <Button
-            disabled={disabled ||
-              lfsAddressDraft.trim().length === 0 ||
-              lfsConnectionDraft.length === 0}
-            label={words.save}
-            size="sm"
-            type="submit"
-            variant="outline"
-          />
+        <div class="flex justify-end gap-space-2">
           <Button
             label={words.cancel}
             onclick={() => {
@@ -221,7 +234,16 @@
                   : (LARGE_FILE_KEY_CONNECTIONS[0]?.id ?? "");
             }}
             size="sm"
+            type="button"
             variant="ghost"
+          />
+          <Button
+            disabled={disabled ||
+              lfsAddressDraft.trim().length === 0 ||
+              lfsConnectionDraft.length === 0}
+            label={words.save}
+            size="sm"
+            type="submit"
           />
         </div>
       {/if}
@@ -230,13 +252,6 @@
 </div>
 
 <div class={CARD_GROUP}>
-  <p class={GROUP_LABEL} id="{uid}-lands">{words.lands.groupLabel}</p>
-  <WorkLands
-    labelledby="{uid}-lands"
-    {onchange}
-    {onretry}
-    {pending}
-    {record}
-    {refused}
-  />
+  <p class={GROUP_LABEL}>{words.lands.groupLabel}</p>
+  <WorkLands {onchange} {onretry} {pending} {record} {refused} />
 </div>

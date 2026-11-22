@@ -7,14 +7,12 @@
    * on the recessed fill, never the focus ring.
    *
    * `cols` across, `colsPhone` under the phone line (one a row by default:
-   * stacked). With `wraps`, `cols` is the most across: a row narrower than
-   * `cols` tiles at the choice tile's least width
-   * (`--spacing-c-choice-tile-min`) stands fewer, down to one.
+   * stacked). With `wraps`, `cols` across where `cols` tiles hold the
+   * choice tile's least width (`--spacing-c-choice-tile-min`), else one a
+   * row, so no tile stands alone under a row of others.
    *
    * With `glide`, the pick is the kit's selection pill (OptionGroup
-   * `glide`): it slides from the tile left to the one chosen. With
-   * `glide: "mark"` each tile also wears a radio mark (RadioMark) at its
-   * trailing edge, on its name's line, so the pick reads by shape too.
+   * `glide`): it slides from the tile left to the one chosen.
    *
    * `glyph`, drawn for each option's id, leads its tile with a mark of what
    * picking it does, on its name's line; the note then hangs under the
@@ -23,7 +21,6 @@
   import type { Snippet } from "svelte";
   import OptionGroup from "./option-group.svelte";
   import OptionGroupItem from "./option-group-item.svelte";
-  import RadioMark from "./radio-mark.svelte";
 
   let {
     value = $bindable(),
@@ -48,16 +45,16 @@
     disabled?: boolean;
     /** Each tile wears its digit, which picks it. */
     digits?: boolean;
-    /** The pick slides from tile to tile (OptionGroup `glide`): its edge, or with `"mark"` the strong edge and a radio mark. */
-    glide?: boolean | "mark";
-    /** Fewer across where `cols` tiles would stand under the choice tile's least width. */
+    /** The pick slides from tile to tile (OptionGroup `glide`). */
+    glide?: boolean;
+    /** One a row where `cols` tiles would stand under the choice tile's least width. */
     wraps?: boolean;
   } = $props();
 
-  /** The grid's tracks: `cols` equal ones, or with `wraps` as many as hold the least width, `cols` at most. */
+  /** The grid's tracks: `cols` equal ones; with `wraps`, one filling the row where `cols` would stand under the least width (the clamp turns from 0 to the row's whole width there). */
   const tracks = $derived(
     wraps
-      ? `repeat(auto-fit, minmax(min(100%, max(var(--spacing-c-choice-tile-min), calc((100% - ${cols - 1} * var(--spacing-space-2)) / ${cols}))), 1fr))`
+      ? `repeat(auto-fit, minmax(max(calc((100% - ${cols - 1} * var(--spacing-space-2)) / ${cols}), clamp(0px, calc((${cols} * var(--spacing-c-choice-tile-min) + ${cols - 1} * var(--spacing-space-2) - 100%) * 999), 100%)), 1fr))`
       : `repeat(${cols}, minmax(0, 1fr))`
   );
 </script>
@@ -83,45 +80,30 @@
       disabled={option.disabled}
       value={option.id}
     >
-      <span
-        class="flex w-full min-w-0 items-start gap-x-space-3"
-        data-slot="tile-row"
-      >
-        {#if glyph}
-          <span
-            class="mark-line grid min-w-0 flex-auto grid-cols-auto-fluid items-start gap-x-space-2"
+      {#if glyph}
+        <span
+          class="mark-line grid w-full min-w-0 grid-cols-auto-fluid items-start gap-x-space-2"
+        >
+          <span class="mark-cell type-label" data-box
+            >{@render glyph(option.id)}</span
           >
-            <span class="mark-cell type-label" data-box
-              >{@render glyph(option.id)}</span
+          <span class="type-label font-medium wrap-anywhere">{option.name}</span
+          >
+          {#if option.note}
+            <span
+              class="col-start-2 type-meta text-ink-muted text-pretty wrap-anywhere"
+              >{option.note}</span
             >
-            <span class="type-label font-medium wrap-anywhere"
-              >{option.name}</span
-            >
-            {#if option.note}
-              <span
-                class="col-start-2 type-meta text-ink-muted text-pretty wrap-anywhere"
-                >{option.note}</span
-              >
-            {/if}
-          </span>
-        {:else}
-          <span class="flex min-w-0 flex-auto flex-col">
-            <span class="type-label font-medium wrap-anywhere"
-              >{option.name}</span
-            >
-            {#if option.note}
-              <span class="type-meta text-ink-muted text-pretty wrap-anywhere"
-                >{option.note}</span
-              >
-            {/if}
-          </span>
-        {/if}
-        {#if glide === "mark"}
-          <span class="mark-line flex-none type-label" data-box
-            ><RadioMark /></span
+          {/if}
+        </span>
+      {:else}
+        <span class="type-label font-medium wrap-anywhere">{option.name}</span>
+        {#if option.note}
+          <span class="type-meta text-ink-muted text-pretty wrap-anywhere"
+            >{option.note}</span
           >
         {/if}
-      </span>
+      {/if}
     </OptionGroupItem>
   {/each}
 </OptionGroup>

@@ -65,17 +65,13 @@
     multiple?: boolean;
     disabled?: boolean;
     /**
-     * One pick whose mark moves: the kit's selection pill (`highlight`)
-     * glides from the option left to the one chosen, across a wrap too, the
-     * way the segmented control's thumb slides. `true` draws it as the
-     * chip's own picked edge over the recess (`look: "card"`), the options
-     * standing over it with no fill or edge of their own while chosen;
-     * `"mark"` as the pick's strong coral edge, twice the border's width
-     * with no fill (highlight `look: "mark"`), over the chosen option's own
-     * raised rest and under its words: every option keeps its raised rest
-     * and dark ink, picked or not, and tiles wear a radio mark (OptionTiles).
+     * One pick whose mark moves: the kit's selection pill (`highlight`,
+     * `look: "card"`, the chip's own picked edge over the recess) glides
+     * from the option left to the one chosen, across a wrap too, the way
+     * the segmented control's thumb slides; the options stand over it with
+     * no fill or edge of their own while chosen.
      */
-    glide?: boolean | "mark";
+    glide?: boolean;
     layout?: OptionGroupLayout;
     /** Enter on an option: the host's own act (continue, send, answer). */
     onenter?: (event: KeyboardEvent) => void;
@@ -85,8 +81,7 @@
     value: () => value,
     multiple: () => multiple,
     disabled: () => disabled,
-    glide: () => glide !== false && !multiple,
-    mark: () => glide === "mark",
+    glide: () => glide && !multiple,
     layout: () => layout ?? "chips",
     setValue: (next) => {
       value = next;
@@ -197,13 +192,13 @@
   role={multiple ? "group" : "radiogroup"}
   bind:this={ref}
   {...restProps}
-  {@attach glide !== false && !multiple
+  {@attach glide && !multiple
     ? highlight({
         rows: '[data-slot="option"]',
         selected: '[data-slot="option"][aria-checked="true"]',
         axis: "xy",
         ghost: false,
-        look: glide === "mark" ? "mark" : "card",
+        look: "card",
       })
     : undefined}
 >

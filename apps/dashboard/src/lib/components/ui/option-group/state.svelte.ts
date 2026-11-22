@@ -7,8 +7,6 @@ export interface OptionGroupProps {
   glide: () => boolean;
   /** How the options stand (option-group.svelte `optionGroupVariants`). */
   layout: () => "chips" | "list" | "tiles";
-  /** Gliding, the pill is the pick's strong edge and every option keeps its raised rest (OptionGroup `glide: "mark"`). */
-  mark: () => boolean;
   multiple: () => boolean;
   /** Writes the chosen set back to the root's `value`. */
   setValue: (value: string[]) => void;
@@ -31,7 +29,6 @@ export class OptionGroupState {
   readonly disabled = $derived.by(() => this.#props.disabled());
   readonly layout = $derived.by(() => this.#props.layout());
   readonly glide = $derived.by(() => this.#props.glide());
-  readonly mark = $derived.by(() => this.#props.mark());
   readonly value = $derived.by(() => this.#props.value());
   /** The tab stop: the option focus last stood on, else the first chosen, else the first. */
   readonly stop = $derived.by(() => {

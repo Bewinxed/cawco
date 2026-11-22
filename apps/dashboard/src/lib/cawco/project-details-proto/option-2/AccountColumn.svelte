@@ -1,21 +1,17 @@
 <script lang="ts">
   import { CLAUDE_PROVIDER } from "@cawco/core/accounts";
-  import AccountPickRows from "#lib/cawco/accounts/AccountPickRows.svelte";
+  import AccountSwitch from "#lib/cawco/accounts/AccountSwitch.svelte";
   import { minuteClock } from "#lib/cawco/accounts/minute-clock.svelte.js";
-  import { hueVar } from "#lib/cawco/accounts/model.svelte.js";
-  import { limitRowOf, meterOf } from "#lib/cawco/accounts/room.js";
-  import { roomOf } from "#lib/cawco/accounts/room-of.js";
+  import { chipQuota } from "#lib/cawco/accounts/room.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
-  import NsPopover from "#lib/cawco/spawn/NsPopover.svelte";
   import { usageStore } from "#lib/cawco/stores/usage.svelte.js";
-  import UsageRing from "#lib/cawco/usage/UsageRing.svelte";
+  import { firstToStop, limitRows } from "#lib/cawco/usage.js";
   /**
-   * Account & usage limits: the house's account picker (AccountPickRows,
-   * the rows a session's account chip and its menus' Account submenu list),
-   * hung from a setting chip sized to its name and room: Any available
-   * first, then
-   * each fleet account by its dot, its name and its room, or the limit it
-   * is at (one signed in nowhere says Signed out there). Under it, what
+   * Account & usage limits: the house's account chip (AccountSwitch, the
+   * one a session card's account line is) fed this project's account: Any
+   * available first, then each fleet account by its dot, its name and its
+   * room, or the limit it is at (one signed in nowhere says Signed out
+   * there). Under it, what
    * the pick does, the alert when the named account is signed out
    * everywhere, and, with an account named, what its sessions do at its
    * limit as two of the house's tiles, each led by its glyph. Every pick
@@ -28,15 +24,14 @@
     AlertDescription,
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { chipVariants } from "#lib/components/ui/chip/index.js";
-  import { IconChevronDown, IconError } from "#lib/icons.js";
+  import { IconError, IconHourglass, IconTransfer } from "#lib/icons.js";
   import {
     chosenAccountSignedOut,
     type HrefOf,
     pickAccounts,
     type StageSends,
   } from "./changes";
-  import PickChips from "./PickChips.svelte";
+  import PickTiles from "./PickTiles.svelte";
   import { CARD_GROUP, GROUP_LABEL } from "./section-card";
   import { howItRunsWords as words } from "./words";
 
@@ -53,29 +48,22 @@
   /** The clock the rooms are read against, a minute at a time. */
   const clock = minuteClock();
 
-  /** The named account's room, as its picker row says it: the ring's share and state, and its words. */
-  const chosenRoom = $derived.by(() => {
+  /** The named account's room for the window that stops it first, as a session card's account chip draws it (AccountSwitch `quota`). */
+  const quota = $derived.by(() => {
     const account = record.accounts.find(
       (one) => one.id === record.account.chosen
     );
-    if (!account?.signedIn || account.provider !== CLAUDE_PROVIDER) {
-      return null;
-    }
-    const room = roomOf(usageStore.claudeLimits[account.id], null, clock.now);
-    if (room === null) {
-      return null;
-    }
-    const meter = meterOf(room);
-    return meter === null
-      ? null
-      : {
-          ...meter,
-          words: limitRowOf(`account:${account.id}`, room, clock.now).detail,
-        };
+    const claude =
+      account?.signedIn && account.provider === CLAUDE_PROVIDER
+        ? usageStore.claudeLimits[account.id]
+        : undefined;
+    const limit = claude
+      ? firstToStop(limitRows("Claude", claude, clock.now))
+      : null;
+    return limit && claude
+      ? chipQuota(limit, claude.fetchedAt, clock.now)
+      : null;
   });
-
-  /** The picker's popover stands open. */
-  let open = $state(false);
 
   const disabled = $derived(!record.hubReachable);
   const chosenAccount = $derived(
@@ -85,83 +73,47 @@
           null)
   );
   const chosenSignedOut = $derived(chosenAccountSignedOut(record));
-  const shownName = $derived(chosenAccount?.name ?? words.account.fleetRouting);
 
   /** The fleet's accounts as the picker lists them, each by the name it carries everywhere. */
   const accounts = $derived(pickAccounts(record));
 
   function pick(next: string | null) {
-    open = false;
     if (!disabled && next !== record.account.chosen) {
       onchange({ key: "account", value: next });
     }
   }
 </script>
 
+{#snippet limitGlyph(choice: "wait" | "move")}
+  {#if choice === "wait"}
+    <IconHourglass aria-hidden="true" class="size-icon-md text-ink-muted" />
+  {:else}
+    <IconTransfer aria-hidden="true" class="size-icon-md text-ink-muted" />
+  {/if}
+{/snippet}
+
 <div class="flex min-w-0 flex-col gap-space-4">
   <section aria-labelledby="{uid}-account" class={CARD_GROUP}>
     <p class={GROUP_LABEL} id="{uid}-account">{words.account.heading}</p>
 
-    <div class="flex min-w-0" inert={disabled}>
-      <NsPopover
-        align="start"
-        fit
-        haspopup="listbox"
-        id="work-path-account"
-        label={chosenRoom
-          ? `${words.account.heading}: ${shownName}, ${chosenRoom.words}`
-          : `${words.account.heading}: ${shownName}`}
-        onchange={(next) => {
-          open = next;
-        }}
-        {open}
-        rows="[data-pick-row]"
-        triggerClass={chipVariants({
-          variant: "setting",
-          class: "min-w-0 max-w-full",
-        })}
-        triggerData={{ "data-tool": true, "data-account-chip": true }}
-        width="calc(var(--spacing) * 64)"
-      >
-        {#snippet trigger()}
-          {#if chosenAccount}
-            <span
-              aria-hidden="true"
-              class="size-space-2 flex-none rounded-pill bg-(--c)"
-              data-slot="dot"
-              style:--c={hueVar(chosenAccount.hue)}
-            ></span>
-          {/if}
-          <span data-account-chip data-slot="chip-label">{shownName}</span>
-          <!-- The account's room as the session card's account chip draws it
-               (AccountSwitch `quota`): the ring and its figure one unit, a
-               word space off the name. -->
-          {#if chosenRoom}
-            <span
-              class="mark-line ms-word inline-flex flex-none items-center gap-word text-ink-muted tabular-nums"
-              data-box
-              data-slot="quota"
-            >
-              <UsageRing share={chosenRoom.share} state={chosenRoom.state} />
-              <span>{chosenRoom.words}</span>
-            </span>
-          {/if}
-          <IconChevronDown data-slot="chevron" />
-        {/snippet}
-        <AccountPickRows
-          {accounts}
-          auto={{
-            name: words.account.fleetRouting,
-            onpick: () => pick(null),
-          }}
-          note={(id) =>
+    <!-- The house's account chip (AccountSwitch, a session card's), fed
+         this project's account. -->
+    <div class="flex min-w-0">
+      <AccountSwitch
+        choice={{
+          id: "work-path-account",
+          accounts,
+          picked: record.account.chosen,
+          auto: { name: words.account.fleetRouting },
+          note: (id) =>
             record.accounts.find((one) => one.id === id)?.signedIn === false
               ? words.account.signedOut
-              : null}
-          pick={(id) => pick(id)}
-          picked={record.account.chosen}
-        />
-      </NsPopover>
+              : null,
+          onpick: pick,
+        }}
+        {quota}
+        readonly={disabled}
+      />
     </div>
     <RowFault
       again={() => onretry("account")}
@@ -179,7 +131,7 @@
           <Button
             href={hrefOf("accounts")}
             label={words.account.openAccounts}
-            size="xs"
+            size="sm"
             variant="outline"
           />
         </AlertAction>
@@ -192,9 +144,11 @@
       <p class={GROUP_LABEL} id="{uid}-limit">
         {words.account.atLimitHeading}
       </p>
-      <PickChips
+      <PickTiles
+        cols={2}
         {disabled}
-        labelledby="{uid}-limit"
+        glyph={limitGlyph}
+        label={words.account.atLimitGroupLabel}
         onpick={(next) => {
           if (next !== record.account.atLimit) {
             onchange({ key: "atLimit", value: next });

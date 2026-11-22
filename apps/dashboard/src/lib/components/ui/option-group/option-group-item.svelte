@@ -2,7 +2,6 @@
   import type { HTMLButtonAttributes } from "svelte/elements";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { cn, type WithElementRef } from "#lib/utils.js";
-  import RadioMark from "./radio-mark.svelte";
   import { useOptionGroup } from "./state.svelte.js";
 
   /**
@@ -51,13 +50,9 @@
     chipVariants({ variant: "option" }),
     "focus-inset",
     // Gliding, the group's pill is the pick (look "card": the picked edge
-    // over the recess, the option over it, clear while chosen; "mark": the
-    // pick's strong edge over the option's own raised rest and edge, under
-    // its words, which stand over it, the ink staying dark).
+    // over the recess); the option stands over it, clear while chosen.
     group.glide &&
-      (group.mark
-        ? "aria-checked:border-border-control enabled:aria-checked:bg-surface-raised [&>*]:relative [&>*]:z-2"
-        : "relative z-2 bg-transparent aria-checked:border-transparent aria-checked:bg-transparent"),
+      "relative z-2 bg-transparent aria-checked:border-transparent aria-checked:bg-transparent",
     group.layout === "list" &&
       "items-box-start grid min-w-0 grid-cols-auto-fluid",
     group.layout === "tiles" &&
@@ -87,9 +82,5 @@
   bind:this={ref}
   {...restProps}
 >
-  {#if group.mark && group.layout === "chips"}
-    <!-- The marked look's chips lead with the radio mark, so the pick reads by shape too. -->
-    <RadioMark />
-  {/if}
   {@render children?.()}
 </button>

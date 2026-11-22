@@ -1,15 +1,12 @@
 <script lang="ts">
   /**
-   * Run environments: every folder the project lives in at once, as a
-   * line at a glance (each by its machine's glyph and name, where sessions
-   * start marked by a pill), and Show folders opens them in place as a
-   * divided list (RowList `divided`, SectionRow; open by itself while one is
-   * missing): the machine's glyph and name, its whole path under it in the
-   * muted code face, where sessions start as a pill, the hub's own copy said as such, what is wrong as
+   * Run environments: every folder the project lives in, always shown as a
+   * divided list (RowList `divided`, SectionRow): the machine's glyph and
+   * name, its whole path under it in the muted code face, where sessions
+   * start as a pill, the hub's own copy said as such, what is wrong as
    * badges, and the place's acts in its ⋯ menu (Find folder standing out on
-   * a folder gone missing, and why under it). Add folder is the card's
-   * secondary button under them, beside Show folders; pressed, it becomes
-   * the add form in its place.
+   * a folder gone missing, and why under it). Add folder is the list's
+   * last row; pressed, the add form opens under the list.
    */
   import Field from "#lib/cawco/config/Field.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
@@ -108,15 +105,6 @@
     opening?.startsWith("drop:") ? opening.slice("drop:".length) : null
   );
 
-  /** The folders' whole list (paths, acts) opened in place under their summary; open by itself while one is missing. */
-  let showList = $state(false);
-  const listOpen = $derived(
-    showList ||
-      adding ||
-      dropping !== null ||
-      record.places.some((place) => place.missing)
-  );
-
   /** A place's acts, its ⋯ menu's rows. */
   const actsOf = (place: ProjectPlace) => {
     const off = disabled || movingPlaceId === place.id;
@@ -163,7 +151,8 @@
 </script>
 
 <div class="flex min-w-0 flex-col gap-space-3">
-  {#if listOpen}
+  <!-- Drawn out by its glyphs' inset, so they share the card's left edge. -->
+  <div class="-ms-c-mark-inset min-w-0">
     <RowList divided label={words.places.heading}>
       {#each record.places as place (place.id)}
         {@const machine = place.machineId
@@ -216,7 +205,7 @@
                 icon={IconFolderOpen}
                 label={words.places.findFolder}
                 onclick={() => onplace("find", place.id)}
-                size="xs"
+                size="sm"
                 variant="outline"
               />
             {/if}
@@ -231,7 +220,15 @@
                   )}
                   <span class="text-ink-muted">{words.places.dropKeeps}</span>
                 </p>
-                <div class="flex flex-wrap items-center gap-space-2">
+                <div class="flex justify-end gap-space-2">
+                  <Button
+                    label={words.cancel}
+                    onclick={() => {
+                      dropping = null;
+                    }}
+                    size="sm"
+                    variant="ghost"
+                  />
                   <Button
                     {disabled}
                     label={words.places.drop}
@@ -239,16 +236,7 @@
                       dropping = null;
                       onplace("drop", place.id);
                     }}
-                    size="xs"
-                    variant="outline"
-                  />
-                  <Button
-                    label={words.cancel}
-                    onclick={() => {
-                      dropping = null;
-                    }}
-                    size="xs"
-                    variant="ghost"
+                    size="sm"
                   />
                 </div>
               </div>
@@ -256,41 +244,21 @@
           {/snippet}
         </SectionRow>
       {/each}
+      {#if !adding}
+        <!-- The list's last row adds to it, in the rows' shape, its plus in
+             the row's lead. -->
+        <SectionRow
+          icon={IconPlus}
+          name={words.places.addPlace}
+          onpress={disabled
+            ? undefined
+            : () => {
+                adding = true;
+              }}
+        />
+      {/if}
     </RowList>
-  {:else}
-    <!-- At a glance: each folder by its machine, where sessions start marked. -->
-    <ul
-      aria-label={words.places.heading}
-      class="m-0 flex list-none flex-wrap items-center gap-x-space-4 gap-y-space-2 p-0"
-    >
-      {#each record.places as place (place.id)}
-        {@const machine = place.machineId
-          ? (machinesById.get(place.machineId) ?? null)
-          : null}
-        {@const Glyph = machine ? machineIcon(machine.os) : IconHubFolder}
-        <li class="mark-line flex min-w-0 items-center gap-space-2">
-          <Glyph
-            aria-hidden="true"
-            class="size-icon-md flex-none text-ink-muted"
-            data-box
-          />
-          <span class="type-label text-ink-strong"
-            >{machine ? machine.name : words.places.hub}</span
-          >
-          {#if place.kind === "start"}
-            <Badge data-box variant="brand"
-              ><span>{words.places.startsHere}</span></Badge
-            >
-          {/if}
-          {#if machine !== null && !machine.online}
-            <Badge data-box variant="attn"
-              ><span>{words.places.away}</span></Badge
-            >
-          {/if}
-        </li>
-      {/each}
-    </ul>
-  {/if}
+  </div>
 
   {#if adding}
     <form
@@ -308,7 +276,7 @@
           {words.places.machineLabel}
         </p>
         <OptionGroup
-          glide="mark"
+          glide
           aria-labelledby="{uid}-machine"
           bind:value={
             () => (activeMachineId ? [activeMachineId] : []),
@@ -358,7 +326,14 @@
       </Field>
       <RowFault reason={scratchRefusal} />
       <RowFault again={() => onretry("addPlace")} reason={refused.addPlace} />
-      <div class="flex flex-wrap items-center gap-space-2">
+      <div class="flex justify-end gap-space-2">
+        <Button
+          label={words.cancel}
+          onclick={stopAdding}
+          size="sm"
+          type="button"
+          variant="ghost"
+        />
         <Button
           disabled={disabled ||
             !activeMachineId ||
@@ -368,40 +343,8 @@
           pendingLabel={words.places.adding}
           size="sm"
           type="submit"
-          variant="outline"
-        />
-        <Button
-          label={words.cancel}
-          onclick={stopAdding}
-          size="sm"
-          variant="ghost"
         />
       </div>
     </form>
-  {:else}
-    <!-- The card's acts, under its list: the secondary Add folder, then
-         the paths, opened in place. -->
-    <div class="flex flex-wrap items-center gap-space-2">
-      <Button
-        {disabled}
-        icon={IconPlus}
-        label={words.places.addPlace}
-        onclick={() => {
-          adding = true;
-        }}
-        size="sm"
-        variant="outline"
-      />
-      <Button
-        aria-expanded={listOpen}
-        label={listOpen ? words.places.hideFolders : words.places.showFolders}
-        onclick={() => {
-          showList = !listOpen;
-        }}
-        size="sm"
-        tone="quiet"
-        variant="ghost"
-      />
-    </div>
   {/if}
 </div>

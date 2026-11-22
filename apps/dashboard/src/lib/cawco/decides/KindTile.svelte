@@ -10,8 +10,9 @@
    * it and lands where it lands.
    *
    * Brief (the project's settings view), it is this tile with its name
-   * alone: its example is its tooltip and its hand-over's head, and it has
-   * no put-back of its own, the surface's head putting them all back.
+   * alone: its example is its tooltip and its hand-over's head, and while it
+   * is custom here the design graph dials' reset arrow stands in it, which
+   * puts this kind alone back.
    *
    * While the hub writes a hand-over or a put-back the swap glyph breathes;
    * a refusal stands under the tile in the hub's words, with Try again.
@@ -23,7 +24,13 @@
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
-  import { IconFolder, IconGlobe, IconTransfer } from "#lib/icons.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import {
+    IconFolder,
+    IconGlobe,
+    IconReset,
+    IconTransfer,
+  } from "#lib/icons.js";
   import type { Fault } from "./decides.svelte";
   import { kindGlyph } from "./kind-glyph";
   import { ROSTER_WORDS, type RosterWords } from "./roster-words";
@@ -141,6 +148,31 @@
         >
       {/if}
     </div>
+    {#if own && brief}
+      <!-- Custom here: the design graph dials' reset arrow (DialRow), over
+           the tile's press, which puts this kind alone back. -->
+      <span class="relative z-1 -my-space-1 flex flex-none">
+        <Tip label={said.giveBack}>
+          {#snippet children(tip)}
+            <Button
+              {...tip}
+              aria-disabled={asking !== null || undefined}
+              aria-label="{said.giveBack}: {kind.name}"
+              icon={IconReset}
+              onclick={() => {
+                if (asking === null) {
+                  onputback();
+                }
+              }}
+              press="pressable"
+              size="icon-xs"
+              tone="edited"
+              variant="ghost"
+            />
+          {/snippet}
+        </Tip>
+      </span>
+    {/if}
     <span class="grid size-icon-sm flex-none place-items-center">
       {#if asking}
         <LiveDot />
@@ -202,18 +234,16 @@
     </Popover.Root>
   </div>
   {#if own && !brief}
-    <Button
-      class="self-center"
-      label={said.giveBack}
+    <button
+      class="self-center type-meta text-brand-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-brand-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid aria-disabled:text-ink-muted"
+      aria-disabled={asking !== null || undefined}
       onclick={() => {
         if (asking === null) {
           onputback();
         }
       }}
-      size="xs"
-      tone="quiet"
-      variant="ghost"
-    />
+      type="button">{said.giveBack}</button
+    >
   {/if}
   <RowFault
     again={fault?.again}

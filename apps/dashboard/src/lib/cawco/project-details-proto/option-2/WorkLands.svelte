@@ -1,37 +1,47 @@
 <script lang="ts">
   /**
    * Where code goes (Repository & Git, code projects only): the four ways
-   * finished code goes, as the view's one pick (PickChips): a commit onto
-   * the main line, a branch of its own, a branch with a pull request, kept
-   * here, each one's line in its tooltip. A press moves the pick at
+   * finished code goes, as the view's one pick (PickTiles), each led by the
+   * glyph of what happens to the code: a commit onto the main line, a
+   * branch of its own, a branch with a pull request, kept here, each one's
+   * line under its name. A press moves the pick at
    * once (changes.ts `withAsked`); a refusal puts it back and stands under
    * the tiles in the hub's words, with Try again (RowFault).
    */
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import {
+    IconLandBranch,
+    IconLandCommit,
+    IconLandKept,
+    IconLandPullRequest,
+  } from "#lib/icons.js";
   import type { StageSends } from "./changes";
-  import PickChips from "./PickChips.svelte";
+  import PickTiles from "./PickTiles.svelte";
   import type { Landing } from "./records";
   import { howItRunsWords as words } from "./words";
 
-  let {
-    record,
-    refused,
-    onchange,
-    onretry,
-    labelledby,
-  }: StageSends & {
-    /** The label on the page that names its pick, where one does. */
-    labelledby?: string;
-  } = $props();
+  let { record, refused, onchange, onretry }: StageSends = $props();
 
+  const GLYPHS = {
+    default: IconLandCommit,
+    branch: IconLandBranch,
+    pr: IconLandPullRequest,
+    nowhere: IconLandKept,
+  } as const;
   const LANDINGS: readonly Landing[] = ["default", "branch", "pr", "nowhere"];
 </script>
 
+{#snippet glyph(landing: Landing)}
+  {@const Glyph = GLYPHS[landing]}
+  <Glyph aria-hidden="true" class="size-icon-md text-ink-muted" />
+{/snippet}
+
 <div class="flex min-w-0 flex-col gap-space-1">
-  <PickChips
+  <PickTiles
+    cols={2}
     disabled={!record.hubReachable}
-    label={labelledby ? undefined : words.lands.groupLabel}
-    {labelledby}
+    {glyph}
+    label={words.lands.groupLabel}
     onpick={(next) => {
       if (next !== record.landing) {
         onchange({ key: "landing", value: next });

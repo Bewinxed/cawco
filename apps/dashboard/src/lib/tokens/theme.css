@@ -36,12 +36,8 @@
   /* Who decides' cards two across, and four: --spacing-c-roster-card-min (17.5rem, 280px) each, with --spacing-space-3 (11px) between. */
   --container-roster-two: 571px;
   --container-roster-four: 1153px;
-  /* A project's work path view at its full width: its two columns at --spacing-c-settings-col and the space-4 between them (--spacing-c-settings-max, written out because a container query takes no var). */
-  --container-settings-pair: 1110px;
   /* A project's work path view in two columns at all: two 320px columns and the space-4 between them; under it the cards stand one under another. */
   --container-settings-two: 654px;
-  /* What needs you's four deciders in one row: each at its width (Standard practice the widest) with --spacing-space-3 between; under it they stand two by two, read down. */
-  --container-deciders-row: 35rem;
   --container-images: 44rem;
   --container-decisions-520px: 520px;
   --container-leaf: 620px;
@@ -787,6 +783,10 @@
   /* The narrowest the design graph's stage stands beside its room on a desk (spec: at 1440 the stage never under 600px); under it the room becomes the drawer. */
   --spacing-c-graph-stage-min: 600px;
   --spacing-c-mark: 26px;
+  /* How far a row's glyph stands in from its mark tile's edge: a list in a card is drawn this far out, so its rows' glyphs share the card's left edge with its title. */
+  --spacing-c-mark-inset: calc(
+    (var(--spacing-c-mark) - var(--spacing-icon-md)) / 2
+  );
   --spacing-c-row-mark: 18px;
   --spacing-c-pill-h: 24px;
   --spacing-c-pill-gap: 6px;

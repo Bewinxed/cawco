@@ -9,7 +9,7 @@
 <script lang="ts">
   /**
    * One row of a section list. The whole row opens the thing when it has an
-   * editor; the switch, the rollout chip and the ⋯ menu sit above that link
+   * editor, or runs `onpress` (a list's last row that adds to it); the switch, the rollout chip and the ⋯ menu sit above that link
    * so each stays its own target. What the row's last action came to, and a
    * fault, attach underneath as compact lines.
    *
@@ -28,6 +28,7 @@
     name,
     meta,
     href,
+    onpress,
     icon: Icon,
     hue,
     tile,
@@ -50,6 +51,8 @@
     meta?: string;
     /** The editor. Without one the row is not a link. */
     href?: string;
+    /** What a press on the whole row does, for a row with no editor (the list's add row). */
+    onpress?: () => void;
     icon?: Component;
     hue?: string;
     /** Replaces the icon tile, for a harness logo or an OS mark. */
@@ -131,6 +134,13 @@
             data-share="title:{href}"
             {href}
             {@attach land(() => `title:${href}`, { uniform: true })}>{name}</a
+          >
+        {:else if onpress}
+          <button
+            class="truncate border-none bg-transparent p-0 text-start text-inherit outline-off after:absolute after:inset-0 after:rounded-inherit focus-visible:after:outline-solid focus-visible:after:outline-(length:--focus-ring-width) focus-visible:after:outline-focus-ring focus-visible:after:outline-offset-(--focus-ring-inset)"
+            data-link
+            onclick={onpress}
+            type="button">{name}</button
           >
         {:else}
           <span

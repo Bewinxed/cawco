@@ -12,14 +12,12 @@
 <script lang="ts">
   /**
    * What needs you: the project's Who decides as its page draws it,
-   * fitted in its section's card. The section's heading holds what acts on
-   * all of it (HowItRuns: the reset arrow while a kind is custom, Manage
-   * defaults). At a glance each decider by its face and name with how many
-   * kinds it decides; Show kinds opens the Who decides roster in place
-   * (Roster, brief), every decider a card holding the kinds it decides by
+   * fitted in its section's card, its heading holding the way to the
+   * fleet's defaults (HowItRuns). The Who decides roster, always open
+   * (Roster, brief): every decider a card holding the kinds it decides by
    * name, each one's line in its tooltip, a press on a tile handing it to
-   * another (a refused one opens it by itself). Then who marks tasks done,
-   * as the view's one pick (PickChips).
+   * another, a kind custom here wearing its own reset arrow. Then who marks
+   * tasks done, as the view's one pick (PickTiles).
    *
    * Every hand-over, put-back and the review pick move at the press
    * (changes.ts `withAsked`): the tile flies to its new card at once; a
@@ -36,13 +34,11 @@
     type Member,
   } from "@cawco/core/decides";
   import type { Fault } from "#lib/cawco/decides/decides.svelte.js";
-  import MemberFace from "#lib/cawco/decides/MemberFace.svelte";
   import Roster from "#lib/cawco/decides/Roster.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { IconAgent, IconEye } from "#lib/icons.js";
   import type { StageSends } from "./changes";
-  import PickChips from "./PickChips.svelte";
+  import PickTiles from "./PickTiles.svelte";
   import { CHOICE_KINDS, type ChoiceKind, type Decider } from "./records";
   import { CARD_GROUP, GROUP_LABEL } from "./section-card";
   import { howItRunsWords as words } from "./words";
@@ -82,8 +78,6 @@
 
   /** The kind whose hand-over stands open. */
   let handing = $state<string | null>(null);
-  /** The roster opened in place under the deciders' summary. */
-  let showRoster = $state(false);
 
   const rules = $derived(record.whoDecides.ok ? record.whoDecides.rules : null);
   /** Each kind's decider; with the rule file unread, every kind is the person's (as Who decides draws it). */
@@ -147,91 +141,53 @@
   }
 </script>
 
-<!-- Who decides at a glance, and who marks tasks done beside it where the
-     two fit on one line (the card's two ends), else under it; the roster and
-     the rule file's fault take a line of their own. -->
-<div
-  class="@container/deciders flex min-w-0 flex-wrap items-start justify-between gap-x-space-8 gap-y-space-4"
->
+{#snippet reviewGlyph(choice: "review" | "agents")}
+  {#if choice === "review"}
+    <IconEye aria-hidden="true" class="size-icon-md text-ink-muted" />
+  {:else}
+    <IconAgent aria-hidden="true" class="size-icon-md text-ink-muted" />
+  {/if}
+{/snippet}
+
+<!-- Who decides' roster as its page draws it, always open, then who marks
+     tasks done; the rule file's fault over them both. -->
+<div class="@container/deciders flex min-w-0 flex-col gap-space-4">
   {#if !record.whoDecides.ok}
-    <div class="min-w-0 basis-full">
-      <RowFault
-        again={onreread}
-        againLabel={words.tryAgain}
-        details={record.whoDecides.error}
-        reason={words.waits.unreadTitle}
-      />
-    </div>
-  {/if}
-  <!-- Each decider by its face and name with how many kinds it decides,
-       four in one row where they fit, else two by two read down; the roster
-       itself opening in place. -->
-  <div class={CARD_GROUP}>
-    <ul
-      class="m-0 grid list-none grid-flow-col grid-cols-(--deciders-two) grid-rows-2 gap-x-space-3 gap-y-space-2 p-0 @min-deciders-row/deciders:grid-flow-row @min-deciders-row/deciders:grid-cols-(--deciders-four) @min-deciders-row/deciders:grid-rows-none"
-      style:--deciders-four="repeat(4, minmax(0, max-content))"
-      style:--deciders-two="repeat(2, minmax(0, max-content))"
-    >
-      {#each members as member (member.id)}
-        {@const count = CHOICE_KINDS.filter(
-          (kind) => routes[kind] === member.id
-        ).length}
-        <li class="mark-line flex min-w-0 items-center gap-space-2">
-          <span class="flex-none" data-box
-            ><MemberFace {member} size={24} /></span
-          >
-          <span
-            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
-            >{member.name}</span
-          >
-          <span class="flex-none type-meta text-ink-muted tabular-nums"
-            >{words.waits.holds(count)}</span
-          >
-        </li>
-      {/each}
-    </ul>
-    <Button
-      aria-expanded={showRoster}
-      class="self-start"
-      label={showRoster ? words.waits.hideKinds : words.waits.showKinds}
-      onclick={() => {
-        showRoster = !showRoster;
-      }}
-      size="sm"
-      tone="quiet"
-      variant="ghost"
+    <RowFault
+      again={onreread}
+      againLabel={words.tryAgain}
+      details={record.whoDecides.error}
+      reason={words.waits.unreadTitle}
     />
-  </div>
-  {#if showRoster || fault !== null}
-    <div class="min-w-0 basis-full" transition:unfold>
-      <Roster
-        asking={null}
-        facts={() => null}
-        {fault}
-        {fleetRoutes}
-        bind:handing
-        {kinds}
-        {members}
-        onhand={hand}
-        onputback={putBack}
-        {own}
-        project={record.project.name}
-        {routes}
-        brief
-        cols={DECIDERS_COLS}
-        said={words.waits.roster}
-      />
-    </div>
   {/if}
+  <Roster
+    asking={null}
+    facts={() => null}
+    {fault}
+    {fleetRoutes}
+    bind:handing
+    {kinds}
+    {members}
+    onhand={hand}
+    onputback={putBack}
+    {own}
+    project={record.project.name}
+    {routes}
+    brief
+    cols={DECIDERS_COLS}
+    said={words.waits.roster}
+  />
 
   <!-- Its own group in the section's card. -->
   <div class={CARD_GROUP}>
-    <p class={GROUP_LABEL} id="work-path-review">
+    <p class={GROUP_LABEL}>
       {words.waits.reviewHeading}
     </p>
-    <PickChips
+    <PickTiles
+      cols={2}
       disabled={!record.hubReachable}
-      labelledby="work-path-review"
+      glyph={reviewGlyph}
+      label={words.waits.reviewHeading}
       onpick={(next) => {
         if ((next === "review") !== record.reviewBeforeDone) {
           onchange({ key: "review", value: next === "review" });
