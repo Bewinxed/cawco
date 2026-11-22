@@ -1,19 +1,24 @@
 <script lang="ts">
   /**
-   * The Dials card where the artifact panel raises it from its tools over
-   * the drawing's foot, with no store read: the kit's floating surface at
-   * the reading measure, no taller than half the stage, holding the agent's
-   * dials and the props of the state on the stage (props as docgen reads
-   * them, the state's args as its file writes them). It answers his hand as
-   * the panel does, its args where each story starts: a turned dial, a typed
-   * prop and a picked case of the words stand until he takes them back.
+   * The Controls card as the design graph opens it, with no store read: a
+   * stage with the graph's tools at its foot, the Controls button in their
+   * glass, and the card grown out of that button (GraphCard) holding the
+   * agent's dials and the props of the state on the stage (props as docgen
+   * reads them, the state's args as its file writes them). It answers his
+   * hand as the panel does, its args where each story starts: the button
+   * opens and closes the card, Escape and a press outside close it, and a
+   * turned dial, a picked value and a picked case of the words stand until
+   * he takes them back.
    */
   import type { PropMeta } from "@cawco/core/stage";
-  import { MediaQuery } from "svelte/reactivity";
-  import { floatingSurface } from "#lib/components/ui/popover/index.js";
-  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
-  import Dials from "./Dials.svelte";
+  import { graphWords } from "@cawco/core/words/graph";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import { IconTuningLinear } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import PreviewTools from "../preview/PreviewTools.svelte";
+  import Dials, { DIALS_CARD_W } from "./Dials.svelte";
   import type { DialValues, GraphDial } from "./dials";
+  import GraphCard from "./GraphCard.svelte";
   import { contentCases, propDials, savedOf } from "./prop-dials";
 
   let {
@@ -26,6 +31,7 @@
     edits,
     longest = {},
     content = null,
+    open = true,
     lang,
   }: {
     dials: GraphDial[];
@@ -43,52 +49,82 @@
     longest?: DialValues;
     /** The words' case he picked, by its name: every text prop it reaches holds its words. */
     content?: string | null;
+    /** The card stands open as the story starts. */
+    open?: boolean;
     lang: string | undefined;
   } = $props();
 
-  /** The stage's height the card is held to half of: a 1440 desk's panel, a 390 phone's. */
-  const phone = new MediaQuery(PHONE_QUERY);
-  const stage = $derived(phone.current ? 700 : 820);
   const nothing = () => undefined;
   const saved = $derived(savedOf(props, args));
   const shown = $derived(propDials(props, dials, saved));
   const cases = $derived(contentCases(shown, longest));
+  /** The card: the story's, then each press on its button, Escape or a press outside. */
+  let standing = $derived(open);
   /** His dial values: the story's, then each one he turns. */
   let turned = $derived(values);
-  /** His prop edits: the story's with its picked case's words over the text props it reaches, then each he makes. */
+  /** His prop edits: the story's with its picked case's words over the props it reaches, then each he makes. */
   let held = $derived({
     ...edits,
     ...(cases.find((one) => one.label === content)?.fill ?? {}),
   });
+  let button = $state<HTMLElement | null>(null);
+  let stage = $state<HTMLElement | null>(null);
+  let size = $state({ width: 0, height: 0 });
   const without = (from: DialValues, names: string[]): DialValues =>
     Object.fromEntries(
       Object.entries(from).filter(([name]) => !names.includes(name))
     );
-  /** A case picked: its words over the text props it reaches, the saved words back where it reaches none (Saved: all of them). */
+  /** A case picked: its words over the props it reaches, the saved words back where it reaches none (Saved: all of them). */
   const pick = (fill: Record<string, string> | null) => {
     const reached = [...new Set(cases.flatMap((one) => Object.keys(one.fill)))];
     held = { ...without(held, reached), ...fill };
   };
-  /**
-   * The card hugs the controls' grid (Dials' columns, their two gaps, its
-   * pad and edge), never past the reading measure, so no strip of the card
-   * stands empty beside the undo glyphs.
-   */
-  const CARD_W =
-    "min(var(--spacing-c-measure), calc(var(--spacing-c-graph-move-name-w) + var(--spacing-c-graph-control-w) + var(--spacing-c-btn-h-xs) + 4 * var(--spacing-space-3) + 2px))";
 </script>
 
+<!-- The stage: the drawing's room, the tools at its foot. -->
 <div
-  class="flex justify-center bg-surface-page px-space-3 pt-space-5 pb-space-6"
+  bind:this={stage}
+  class="relative h-200 max-h-dvh w-screen max-w-full bg-surface-page contain-layout"
+  data-slot="graph-stage"
+  {@attach frameSize(
+    (node: HTMLElement) => ({
+      width: node.clientWidth,
+      height: node.clientHeight,
+    }),
+    (value) => {
+      size = value;
+    }
+  )}
 >
-  <div
-    class={floatingSurface({
-      class:
-        "flex max-h-(--card-max) w-full max-w-(--card-w) flex-col p-space-3",
-    })}
-    data-slot="dials-card"
-    style:--card-max={`${stage / 2}px`}
-    style:--card-w={CARD_W}
+  <PreviewTools spread>
+    <div></div>
+    <div></div>
+    <BarGlass form="group">
+      <BarItem
+        aria-controls={standing ? "graph-card-dials" : undefined}
+        icon={IconTuningLinear}
+        label={graphWords.dialsFace}
+        onclick={() => {
+          standing = !standing;
+        }}
+        pressed={standing}
+        bind:ref={button}
+      />
+    </BarGlass>
+  </PreviewTools>
+  <GraphCard
+    align="end"
+    anchor={button}
+    boundary={stage}
+    id="graph-card-dials"
+    inPlace
+    label={graphWords.dialsFace}
+    onclose={() => {
+      standing = false;
+    }}
+    measure={DIALS_CARD_W}
+    open={standing}
+    stage={size}
   >
     <Dials
       {dials}
@@ -117,5 +153,5 @@
       values={turned}
       {written}
     />
-  </div>
+  </GraphCard>
 </div>

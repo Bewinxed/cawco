@@ -1,3 +1,14 @@
+<script lang="ts" module>
+  /**
+   * The width of a card that holds the Controls (GraphCard): the controls'
+   * grid (a name's column, a control's and the undo glyph's, and their two
+   * gaps), the card's pad each side and its edge, never past the reading
+   * measure, so no strip of the card stands empty beside the undo glyphs.
+   */
+  export const DIALS_CARD_W =
+    "min(var(--spacing-c-measure), calc(var(--spacing-c-graph-move-name-w) + var(--spacing-c-graph-control-w) + var(--spacing-c-btn-h-xs) + 4 * var(--spacing-space-3) + 2px))";
+</script>
+
 <script lang="ts">
   /**
    * The agent's controls (its canvas spec's `dials`) and, under them, the
@@ -256,9 +267,12 @@
        a focus ring on its edge is drawn whole (The One Ring Rule); under a
        finger its foot holds the last row's touch areas too (The 44 Touch
        Rule's `::after` reaches past a switch), so nothing scrolls short.
-       It takes its rows' height, up to what the face has. -->
+       It takes its rows' height, up to what the face has, and scrolls up
+       and down only: a field's long value ends in an ellipsis inside the
+       field, and a touch area reaching past a row's edge never draws a
+       sideways bar. -->
   <div
-    class="kit-edge-fade-block -m-space-1 min-h-0 min-w-0 flex-initial overflow-y-auto p-space-1 scroll-timeline-transcript-head coarse:pb-space-4"
+    class="kit-edge-fade-block -m-space-1 min-h-0 min-w-0 flex-initial overflow-x-hidden overflow-y-auto p-space-1 scroll-timeline-transcript-head coarse:pb-space-4"
     data-slot="dials-rows"
   >
     <!-- One grid for every section, so each control starts on one edge

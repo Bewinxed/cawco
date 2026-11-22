@@ -190,3 +190,33 @@ export const TASK_ARGS = {
   radius: "radius-md",
   titleFont: "font-sans",
 };
+
+/** The situations a project's How it runs line reads its words from: nine, each long, too long to stand in place. */
+const SITUATIONS = [
+  "A run waits on his answer to a question",
+  "Every outcome is met and the work has landed",
+  "A check failed on the last attempt and needs a look",
+  "Two runs are going at once on different machines",
+  "Nothing has started yet because the brief is still a draft",
+  "A routine paused itself after three failures in a row",
+  "The hub lost the machine the run was on halfway through",
+  "A delegate is blocked on a permission only he can grant",
+  "The run finished but its report is still being written up",
+];
+
+/** A project's How it runs line: a situation picked from nine long ones, how fresh its reading is, and its free words. */
+export const HOW_IT_RUNS: PropMeta[] = [
+  oneOf("situation", SITUATIONS, SITUATIONS[0]),
+  oneOf("reading", ["Read just now", "Read an hour ago", "Never read yet"]),
+  prop("headline", "string", "string", { required: true }),
+  prop("note", "string", "string"),
+  prop("compact", "boolean", "boolean", { defaultValue: "false" }),
+];
+
+export const HOW_IT_RUNS_ARGS = {
+  situation: "A run waits on his answer to a question",
+  reading: "Read just now",
+  headline: "Fix tray chip overflow",
+  note: "Waiting since 14:02 on the question about the composer's height.",
+  compact: false,
+};

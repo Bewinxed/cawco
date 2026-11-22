@@ -1,6 +1,7 @@
 <script lang="ts" module>
   import type { VariantProps } from "tailwind-variants";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { selectTriggerLook } from "#lib/components/ui/select/select-trigger.svelte";
   import { segmentedVariants } from "#lib/components/ui/tabs/thumb.js";
   import { tv } from "#lib/utils.js";
 
@@ -30,6 +31,9 @@
    * - `swatch`: a colour's swatch that opens its picker (the design graph's
    *   colour control): the swatch drawn inside it is its whole look, its
    *   focus ring hugging it.
+   * - `select`: a field that opens a list of values to pick from, searched
+   *   (the design graph's Controls on a long set): the kit Select's
+   *   trigger, the input's look (DESIGN.md, Inputs and fields).
    * - `segment`: a segment of a segmented group that opens what the group
    *   has no room for (the repository picker's "+N" owners): the kit's
    *   segment (tabs/thumb), pressed with the tint as a toggle item is, its
@@ -50,6 +54,7 @@
         "strip-home":
           "press-tint flex h-14 items-center rounded-md px-space-4 text-start text-ink-strong transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
         mark: "pressable inline-flex rounded-xs",
+        select: `${selectTriggerLook} h-c-input-h`,
         swatch:
           "pointer-hit grid place-items-center rounded-xs outline-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-1",
         segment: `${segmentedVariants().segment()} num press-tint focus-inset shrink-0 aria-expanded:bg-groove-hover`,

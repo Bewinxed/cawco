@@ -2549,13 +2549,22 @@ export function bootStage(page: Page): Mode {
       }) ?? null,
     mediaWidth: () =>
       live && !frame.hidden ? Number.parseFloat(drawing.style.width) : null,
+    // A drawing whose story threw is mounted afresh with the args he set:
+    // its framework's boundary took the instance down, so args set on it
+    // reach nothing, and the values he put back (Saved, a reset) never drew
+    // it again. One that throws again says so again.
     overridden: (section, story) => {
       const now = live;
       if (now && now.section === section && now.story.name === story) {
         page.quietly(
           queue(async () => {
             const target = resolved(now.ref);
-            if (!("refused" in target) && live) {
+            if ("refused" in target || !live) {
+              return;
+            }
+            if (fault) {
+              await open(target, false);
+            } else {
               await act(() => setArgs(target.args), view.motion === "reduce");
               live = { ...live, ...target };
               laid();

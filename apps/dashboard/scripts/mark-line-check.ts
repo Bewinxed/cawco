@@ -81,7 +81,7 @@ const LOOKS: Record<string, Record<string, readonly string[] | true>> = {
     size: true,
     variant: true,
   },
-  "Popover.Trigger": { look: ["chip", "state", "meter"] },
+  "Popover.Trigger": { look: ["chip", "state", "meter", "select"] },
 };
 /** Kit primitives whose own class draws the recipe. */
 const PRIMITIVES = new Set([

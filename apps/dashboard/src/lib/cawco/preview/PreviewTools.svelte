@@ -30,7 +30,7 @@
     away?: boolean;
     /** Its groups stand at the two ends (the mode leading, the view trailing), not centred. */
     spread?: boolean;
-    /** Its own height, px: what rises over it stands above it (the design graph's map, move and dials). */
+    /** Its own height, px: what stands over the stage's foot stands above it (a change tour's card). */
     height?: number;
     /** The width its groups need on one row at their own size, its inset and gaps included, px: the surface folds them while it is narrower. */
     need?: number;

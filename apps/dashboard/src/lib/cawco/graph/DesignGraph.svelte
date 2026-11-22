@@ -60,7 +60,7 @@
   import { type StateRef, storyWords } from "@cawco/core/stage-graph";
   import type { TunedRecord } from "@cawco/core/tuned";
   import { graphWords as words } from "@cawco/core/words/graph";
-  import { onMount, type Snippet, untrack } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import {
     BarGlass,
     BarItem,
@@ -69,7 +69,6 @@
   } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import {
     IconAdaptLinear,
     IconBranchingLinear,
@@ -93,16 +92,17 @@
     IconWideLinear,
   } from "#lib/icons.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
-  import { motionOk, rise } from "#lib/platform/motion/curves.svelte.js";
+  import { motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
   import { track } from "#lib/platform/track.js";
   import { theme } from "#lib/theme.svelte.js";
   import PreviewTools from "../preview/PreviewTools.svelte";
   import type { SheetInspector } from "../preview/sheet-inspector.svelte";
   import ThreadSheet from "../preview/ThreadSheet.svelte";
-  import Dials from "./Dials.svelte";
+  import Dials, { DIALS_CARD_W } from "./Dials.svelte";
   import type { DialValue, DialValues, GraphDial } from "./dials";
   import { figureOf, pageLang } from "./figures";
+  import GraphCard from "./GraphCard.svelte";
   import type { GraphHead } from "./graph-head";
   import { keepUnder, keptUnder } from "./kept";
   import MoveFace, { type MoveState } from "./MoveFace.svelte";
@@ -353,7 +353,10 @@
     }
     const metas = held.props;
     const saved = savedOf(metas, held.saved);
-    const props = propDials(metas, dials, saved);
+    // A prop the agent made a dial for shows once, as the dial, from the
+    // spec's own list: the dials stand on the card only once the drawing is
+    // read, and before that the props must not take their place.
+    const props = propDials(metas, spec.dials ?? [], saved);
     if (props.length === 0) {
       return null;
     }
@@ -374,9 +377,12 @@
         // A case's words over the text props it reaches; Saved (null) takes them back.
         onpick: (fill: Record<string, string> | null) => {
           const values = Object.fromEntries(
-            Object.entries(fill ?? {}).filter(
-              ([name, fillWords]) => fillWords !== saved[name]
-            )
+            Object.entries(fill ?? {})
+              .filter(([name, fillWords]) => fillWords !== saved[name])
+              .map(([name, fillWords]) => [
+                name,
+                argOf(metaOf(name), fillWords),
+              ])
           );
           changedSince();
           held.change(
@@ -433,16 +439,53 @@
   });
   /** The face the room shows: his, while the room has it (the dials come once the page has read them); else the states. */
   /**
-   * How he looks at the component (graph-head.ts): its kept state drawn, or
-   * the map of every state in the drawing's place, and over the drawing's
-   * foot the move into the kept state (its transport and timeline) or the
-   * agent's dials, one at a time.
+   * How he looks at the component (graph-head.ts): its kept state drawn,
+   * and over it, on a card grown out of the button that opened it, the map
+   * of every state, the move into the kept state (its transport and
+   * timeline) or the dials, one at a time.
    */
   let rising = $state<"map" | "move" | "dials" | null>(
     untrack(() => (page && startFace !== "dials" ? null : startFace)) ?? null
   );
-  /** The tools' height over the drawing's foot, px: what rises stands above them. */
-  let toolsHeight = $state(0);
+  /**
+   * The bar buttons each face's card grows out of (GraphCard): the Map's
+   * and the Animation's in the states' group, the Controls' among the
+   * view's tools, or View itself where the tools fold.
+   */
+  let mapButton = $state<HTMLElement | null>(null);
+  let moveButton = $state<HTMLElement | null>(null);
+  let dialsButton = $state<HTMLElement | null>(null);
+  let viewButtonEl = $state<HTMLElement | null>(null);
+  /** The stage the cards stand inside, and its size, px. */
+  let stageEl = $state<HTMLElement | null>(null);
+  let stageTall = $state(0);
+  /** Each face's card's id, which its button names while it stands. */
+  const CARD_IDS = {
+    map: "graph-card-map",
+    move: "graph-card-move",
+    dials: "graph-card-dials",
+  } as const;
+  /** The faces as cards over the stage (past the phone line): which, its button, which of its edges meets the button's, and its width. */
+  const cards = $derived([
+    {
+      kind: "map" as const,
+      anchor: mapButton,
+      align: "start" as const,
+      measure: "var(--spacing-c-graph-stage-min)",
+    },
+    {
+      kind: "move" as const,
+      anchor: moveButton,
+      align: "end" as const,
+      measure: "var(--spacing-c-measure)",
+    },
+    {
+      kind: "dials" as const,
+      anchor: dialsButton?.isConnected ? dialsButton : viewButtonEl,
+      align: "end" as const,
+      measure: DIALS_CARD_W,
+    },
+  ]);
   /** Under the phone line, what rises stands as a bottom sheet, drawn until it has slid down. */
   let sheetDrawn = $state(false);
   $effect(() => {
@@ -457,10 +500,6 @@
     dials: words.dialsFace,
   } as const;
   const risingName = $derived(rising ? RISING_NAMES[rising] : "");
-  /** Where what rises stands: a step clear of the tools' top. */
-  const riseFoot = $derived(
-    `calc(${toolsHeight}px + 2 * var(--spacing-space-3))`
-  );
   /** The kept state of each component, by its states file. */
   let keptOf = $state<Record<string, Pick>>({});
   /** The state he kept on the component in front, while its states file still has it; else where the component opens. */
@@ -1195,32 +1234,6 @@
     link.reveal({ difference: index });
   };
 
-  // --- Keys and presses ------------------------------------------------------
-
-  onMount(() => {
-    const key = (event: KeyboardEvent) => {
-      const field =
-        event.target instanceof Element
-          ? event.target.closest(
-              "input, textarea, select, [contenteditable='true']"
-            )
-          : null;
-      if (
-        event.key === "Escape" &&
-        event.isTrusted &&
-        !event.defaultPrevented &&
-        !field &&
-        rising
-      ) {
-        rising = null;
-      }
-    };
-    window.addEventListener("keydown", key);
-    return () => {
-      window.removeEventListener("keydown", key);
-    };
-  });
-
   /** The journey's one order: the component's path, as the list shows it. */
   const path = $derived(review ? pathOf(review) : []);
   const at = $derived(kept ? path.indexOf(kept.state) : -1);
@@ -1355,10 +1368,10 @@
   );
 </script>
 
-<!-- What rises over the drawing: the map, the move, or the dials. -->
-{#snippet risingBody()}
+<!-- A face's card over the stage, or the phone's sheet: the map, the move, or the dials. -->
+{#snippet risingBody(face: typeof rising)}
   {#if review && kept}
-    {#if rising === "map"}
+    {#if face === "map"}
       {#if !single}
         <WholeSet
           against={againstState && !across ? againstId : null}
@@ -1369,9 +1382,9 @@
           {review}
         />
       {/if}
-    {:else if rising === "move"}
+    {:else if face === "move"}
       {@render moveFace(false)}
-    {:else if rising === "dials"}
+    {:else if face === "dials"}
       {@render dialsBody()}
     {/if}
   {/if}
@@ -1620,15 +1633,18 @@
 {#snippet headLead()}
   {#if review && kept && !single && path.length > 1}
     <BarGlass form="group">
-      <!-- Map: every state at once, on a card risen over the drawing; a
-           press on one draws it behind the card, which stays. -->
+      <!-- Map: every state at once, on a card grown out of this button
+           over the drawing; a press on one draws it behind the card, which
+           stays. -->
       <BarItem
+        aria-controls={rising === "map" && !narrow ? CARD_IDS.map : undefined}
         icon={IconBranchingLinear}
         label={words.wholeSet}
         onclick={() => {
           rising = rising === "map" ? null : "map";
         }}
         pressed={rising === "map"}
+        bind:ref={mapButton}
       />
       <BarItem
         aria-disabled={at <= 0 || undefined}
@@ -1737,9 +1753,10 @@
         label={words.next}
         onclick={() => stepBy(1)}
       />
-      <!-- The move into the state on show: its transport and timeline
-           rise over the drawing's foot. -->
+      <!-- The move into the state on show: its transport and timeline on
+           a card grown out of this button over the drawing. -->
       <BarItem
+        aria-controls={rising === "move" && !narrow ? CARD_IDS.move : undefined}
         aria-disabled={move.kind === "none" || undefined}
         icon={IconPlayLinear}
         label={move.kind === "none" && keptState
@@ -1751,6 +1768,7 @@
           }
         }}
         pressed={rising === "move"}
+        bind:ref={moveButton}
       />
     </BarGlass>
   {/if}
@@ -1797,12 +1815,14 @@
 
 {#snippet dialsItem()}
   <BarItem
+    aria-controls={rising === "dials" && !narrow ? CARD_IDS.dials : undefined}
     icon={IconTuningLinear}
     label={words.dialsFace}
     onclick={() => {
       rising = rising === "dials" ? null : "dials";
     }}
     pressed={rising === "dials"}
+    bind:ref={dialsButton}
   />
 {/snippet}
 
@@ -1811,7 +1831,12 @@
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
         {#snippet child({ props })}
-          <BarItem icon={IconEyeLinear} label={words.stageView} {props} />
+          <BarItem
+            icon={IconEyeLinear}
+            label={words.stageView}
+            {props}
+            bind:ref={viewButtonEl}
+          />
         {/snippet}
       </DropdownMenu.Trigger>
       <BarMenu label={words.stageView} rises width="regular">
@@ -1953,11 +1978,18 @@
        Glass Rule). -->
   <div data-slot="graph-page" class="flex min-h-0 min-w-0 flex-1 overflow-clip">
     <div
+      bind:this={stageEl}
       class="relative flex min-h-0 min-w-0 flex-1 flex-col"
       {@attach frameSize(
         (node: HTMLElement) => node.clientWidth,
         (value) => {
           stageAcross = value;
+        }
+      )}
+      {@attach frameSize(
+        (node: HTMLElement) => node.clientHeight,
+        (value) => {
+          stageTall = value;
         }
       )}
     >
@@ -1986,28 +2018,33 @@
                states' stepper in the middle (the state on show is the
                drawing's, never a back button: the owner's pin), the view
                trailing. -->
-      {#if rising && review && kept && !narrow}
-        <!-- What rises over the drawing's foot, above the tools: the
-                 map of every state (the owner's pick on pin 47: a card
-                 over the drawing, never in its place), the move's
-                 transport and timeline, or the dials. Under the phone
-                 line it is a bottom sheet instead (below). -->
-        <div
-          class={[
-            floatingSurface({ motion: "pop" }),
-            "absolute inset-x-space-3 bottom-(--rise-foot) z-2 mx-auto flex min-h-0 flex-col overflow-hidden",
-            rising === "map"
-              ? "h-1/2 max-w-c-graph-stage-min"
-              : "max-h-1/2 max-w-c-measure p-space-3",
-          ]}
-          data-slot="graph-rising"
-          style:--rise-foot={riseFoot}
-          in:rise={"--duration-panel"}
-          out:rise={"--duration-exit"}
+      <!-- Past the phone line each face is a card grown out of the bar
+           button that opened it, over the stage and inside it (the
+           owner's pick, Design graph Controls card fixes, `card-placement`):
+           the map of every state (his pick on pin 47: a card over the
+           drawing, never in its place), the move's transport and timeline,
+           or the dials. One stands at a time. Under the phone line they are
+           a bottom sheet instead (below). -->
+      {#each cards as card (card.kind)}
+        <GraphCard
+          align={card.align}
+          anchor={card.anchor}
+          boundary={stageEl}
+          id={CARD_IDS[card.kind]}
+          label={RISING_NAMES[card.kind]}
+          measure={card.measure}
+          onclose={() => {
+            if (rising === card.kind) {
+              rising = null;
+            }
+          }}
+          open={rising === card.kind && !narrow && !!review && !!kept}
+          stage={{ width: stageAcross, height: stageTall }}
+          whole={card.kind === "map"}
         >
-          {@render risingBody()}
-        </div>
-      {/if}
+          {@render risingBody(card.kind)}
+        </GraphCard>
+      {/each}
       {#if narrow && sheetDrawn && review && kept}
         <!-- Under the phone line what rises is the kit's bottom sheet
              (the owner's pick: "Open as a sheet on phones"): half the
@@ -2029,7 +2066,7 @@
             class="flex min-h-0 flex-1 flex-col px-space-3 pb-space-3"
             data-slot="graph-rising-sheet"
           >
-            {@render risingBody()}
+            {@render risingBody(rising)}
           </div>
         </ThreadSheet>
       {/if}
@@ -2039,7 +2076,6 @@
       <PreviewTools
         away={narrow && link.scrolledDown && !rising}
         spread={!folded}
-        bind:height={toolsHeight}
         bind:need={toolsNeed}
       >
         <div class="flex items-center">

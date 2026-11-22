@@ -40,6 +40,32 @@
   });
 
   type SelectTriggerLooks = VariantProps<typeof selectTriggerVariants>;
+
+  /**
+   * The trigger's own look (DESIGN.md, Inputs and fields: "Select trigger:
+   * the input's look"), worn too by a popover's trigger that opens a list of
+   * values to pick from (popover-trigger `select`: a list searched, the
+   * design graph's Controls).
+   */
+  export const selectTriggerLook = [
+    "touch-hit rounded-md shadow-xs",
+    // It opens a list, so it tints under a press and never moves (The Press Rule).
+    "press-tint [transition:var(--transition-control)]",
+    "mark-line flex w-fit",
+    "items-center justify-between gap-1.5 whitespace-nowrap",
+    "border border-border-row-outline [--hit-edge:1px]",
+    "bg-surface-raised px-3 text-ink-strong",
+    "type-body disabled:cursor-not-allowed",
+    "disabled:opacity-50 aria-invalid:border-error-9",
+    "data-placeholder:text-ink-muted",
+    "[&>[data-slot=select-value]]:line-clamp-1",
+    "[&>[data-slot=select-value]]:flex",
+    "[&>[data-slot=select-value]]:items-center",
+    "[&>[data-slot=select-value]]:gap-1.5",
+    "dark:aria-invalid:border-error-9/50",
+    "[&_svg:not([class*='size-'])]:size-icon-md",
+    "[&_svg]:pointer-events-none [&_svg]:shrink-0",
+  ].join(" ");
 </script>
 
 <script lang="ts">
@@ -69,23 +95,7 @@
 
 <SelectPrimitive.Trigger
   class={cn(
-    "touch-hit rounded-md shadow-xs",
-    // It opens a list, so it tints under a press and never moves (The Press Rule).
-    "press-tint [transition:var(--transition-control)]",
-    "mark-line flex w-fit",
-    "items-center justify-between gap-1.5 whitespace-nowrap",
-    "border border-border-row-outline [--hit-edge:1px]",
-    "bg-surface-raised px-3 text-ink-strong",
-    "type-body disabled:cursor-not-allowed",
-    "disabled:opacity-50 aria-invalid:border-error-9",
-    "data-placeholder:text-ink-muted",
-    "[&>[data-slot=select-value]]:line-clamp-1",
-    "[&>[data-slot=select-value]]:flex",
-    "[&>[data-slot=select-value]]:items-center",
-    "[&>[data-slot=select-value]]:gap-1.5",
-    "dark:aria-invalid:border-error-9/50",
-    "[&_svg:not([class*='size-'])]:size-icon-md",
-    "[&_svg]:pointer-events-none [&_svg]:shrink-0",
+    selectTriggerLook,
     selectTriggerVariants({ size, measure, tone, look, chosen, align }),
     className
   )}

@@ -89,12 +89,22 @@
         capped: "max-h-80",
         room: "max-h-(--pop-max-h)",
         available: "max-h-(--bits-popover-content-available-height)",
+        /* `whole`: that room's height exactly, whatever it holds (the design
+           graph's Map card, half its stage). */
+        whole: "h-(--pop-max-h)",
       },
       overflow: {
         scroll: "overflow-y-auto overscroll-contain",
         clip: "overflow-hidden",
       },
-      pad: { none: "p-0", inset: "p-space-2", form: "p-3" },
+      pad: {
+        none: "p-0",
+        inset: "p-space-2",
+        form: "p-3",
+        /* A card of controls over a stage (the design graph's Animation
+           and Controls). */
+        card: "p-space-3",
+      },
       gap: {
         none: "gap-0",
         tight: "gap-space-1",

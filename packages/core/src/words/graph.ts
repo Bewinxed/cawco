@@ -431,6 +431,12 @@ export const graphWords = {
     /** The agent's option in a select's list while his differs, said to a reader (the undo glyph marks it). */
     agentsValue: "the agent's value",
     resetAllSaid: "Reset all values",
+    /** A long list's search field, empty: typing narrows the values under it. */
+    search: "Search",
+    /** The same field's name to a reader, the control's name first as the agent wrote it. */
+    searchSaid: (dial: string) => `${dial}: search`,
+    /** In place of the list when no value holds what he typed. */
+    noMatch: (query: string) => `Nothing matches “${query}”`,
     /** A colour control's swatch: it opens the picker. */
     pick: (dial: string) => `Pick ${dial}`,
     /** The picker's square, its thumb: the colour's saturation across, its brightness down. */

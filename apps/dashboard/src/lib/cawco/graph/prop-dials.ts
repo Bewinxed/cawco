@@ -20,8 +20,13 @@ import {
 /** How a line of words is entered, read off its prop's type and value: a date, a time, both, or a link; none for free words. */
 type WordsFormat = "date" | "time" | "datetime" | "url";
 
-/** A prop as the face lists it: its dial, and for words with a form of their own, that form. */
-export type PropDial = GraphDial & { format?: WordsFormat };
+/**
+ * A prop as the face lists it: its dial; for words with a form of their
+ * own, that form; and `listed` for a prop held to a set of named values too
+ * many or too long to stand in place (data, as projects or situations
+ * are), which its list is searched for.
+ */
+export type PropDial = GraphDial & { format?: WordsFormat; listed?: true };
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u;
 const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/u;
@@ -75,16 +80,20 @@ export interface ContentCase {
  * The cases the component's words can be put in, at once across its text
  * props (the owner's pick, 2026-11-10: one switch for the whole component,
  * after interfaces `break`), each kept only where it reaches a prop: Empty
- * and Long reach every text prop (Long with the longest value the prop's own
- * data holds, `longest`, else a sample); No spaces, Emoji and Right to left
- * only words people or other locales write, never an identifier (a
- * branch, a path, a link), which runs unbroken in one script.
+ * and Long reach every free-words prop (Long with the longest value the
+ * prop's own data holds, `longest`, else a sample); No spaces, Emoji and
+ * Right to left only words people or other locales write, never an
+ * identifier (a branch, a path, a link), which runs unbroken in one script.
+ * A prop held to a long set of named values (`listed`) takes Long alone, as
+ * its own longest value: no case writes a value its set lacks (the owner's
+ * pick, Design graph Controls card fixes, `fixed-list-props`).
  */
 export function contentCases(
   props: readonly PropDial[],
   longest: DialValues = {}
 ): ContentCase[] {
   const text = props.filter((dial) => dial.kind === "text" && !dial.format);
+  const listed = props.filter((dial) => dial.listed && dial.options?.length);
   const prose = text.filter((dial) => !IDENTIFIER.test(dial.name));
   const fill = (
     dials: readonly GraphDial[],
@@ -100,7 +109,11 @@ export function contentCases(
   };
   return [
     { is: "empty" as const, label: cases.empty, fill: fill(text, () => "") },
-    { is: "long" as const, label: cases.long, fill: fill(text, long) },
+    {
+      is: "long" as const,
+      label: cases.long,
+      fill: { ...fill(text, long), ...fill(listed, longestOption) },
+    },
     {
       is: "noSpaces" as const,
       label: cases.noSpaces,
@@ -118,6 +131,13 @@ export function contentCases(
     },
   ].filter((one) => Object.keys(one.fill).length > 0);
 }
+
+/** A set's longest value, as its words read: the first of the longest where two tie. */
+const longestOption = (dial: GraphDial): string =>
+  (dial.options ?? []).reduce(
+    (best, one) => (one.length > best.length ? one : best),
+    ""
+  );
 
 /** A word's start inside an identifier: a capital after a small letter or a figure, or an underscore or hyphen. */
 const WORD_START = /(?<=[a-z0-9])(?=[A-Z])|[_-]+/gu;
@@ -145,9 +165,8 @@ export function wordsOf(identifier: string): string {
  * A prop as the dial of its kind, named in words; none for a slot or a
  * code-typed prop. Whatever selects a look or a behaviour is picked: an
  * enum of a few looks and a size or font token as a choice, a colour token
- * as its swatches, a boolean as a switch, a figure as a number; data (free
- * words, and a set of names too long to stand in place) is one line of
- * words, its length and script the words' switch's.
+ * as its swatches, a boolean as a switch, a figure as a number; free
+ * words a line of words, its length and script the words' switch's.
  */
 function dialOf(prop: PropMeta, value: DialValue | undefined): PropDial | null {
   const base = {
@@ -167,13 +186,15 @@ function dialOf(prop: PropMeta, value: DialValue | undefined): PropDial | null {
   }
   switch (controlOf(prop)) {
     case "choice":
-      // A set too long to stand in place names data (projects, people),
-      // not looks: which one it holds changes the drawing only by its
-      // length and script, so it is a line of words under the words'
-      // switch, never a list of its values (the owner's pin, 2026-11-10).
+      // A prop held to a set of names is only ever one of them: a set too
+      // long to stand in place is picked from a list of its own values he
+      // can search, and the words' switch reaches it by Long alone, as its
+      // longest value (the owner's pick, Design graph Controls card fixes,
+      // `fixed-list-props`, in place of his 2026-11-10 pin that made such
+      // a set a line of words).
       return fitsInPlace(options)
         ? { ...base, kind: "select", options }
-        : { ...base, kind: "text" };
+        : { ...base, kind: "select", options, listed: true };
     case "switch":
       return { ...base, kind: "toggle" };
     case "number":
