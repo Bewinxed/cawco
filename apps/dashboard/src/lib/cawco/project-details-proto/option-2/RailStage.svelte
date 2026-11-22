@@ -10,7 +10,8 @@
    * The mark is the house step's ring (home/StepRow: its number in a
    * control-edged ring, the live dot while something runs); a step that is
    * offline or needs fixing wears the status glyph in its status ink on
-   * that ring, the words in the heading's accessible name.
+   * that ring, the words in the heading's accessible name. What acts on
+   * the whole step (`actions`) stands at the head's end.
    */
   import type { Snippet } from "svelte";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
@@ -24,6 +25,7 @@
     stateWords,
     id,
     announcement = "",
+    actions,
     children,
   }: {
     /** 1-based position along the work path. */
@@ -35,6 +37,8 @@
     id: StageId;
     /** Polite live-region text announcing state changes for this step. */
     announcement?: string;
+    /** What acts on the whole step, at the head's end. */
+    actions?: Snippet;
     children: Snippet;
   } = $props();
 
@@ -76,6 +80,11 @@
     >
       {title}{#if stateWords}<span class="sr-only"> — {stateWords}</span>{/if}
     </h2>
+    {#if actions}
+      <span class="ms-auto flex flex-none items-center gap-space-1" data-box>
+        {@render actions()}
+      </span>
+    {/if}
   </header>
 
   <!-- Its own container: its parts fit the column it stands in, whether

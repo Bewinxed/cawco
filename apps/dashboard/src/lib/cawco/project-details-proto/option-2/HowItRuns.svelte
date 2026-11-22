@@ -18,10 +18,17 @@
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { IconCloudCross, IconError, IconRefresh } from "#lib/icons.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import {
+    IconCloudCross,
+    IconError,
+    IconRefresh,
+    IconReset,
+  } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import {
     type ChangeKey,
+    ownKinds,
     type SessionsStartProps,
     type StageId,
     type StageState,
@@ -71,6 +78,8 @@
   );
 
   const asOfAge = $derived(formatDistanceToNow(new Date(record.asOf)));
+  /** The kinds this project set itself: the reset arrow stands while there are any. */
+  const own = $derived(ownKinds(record));
 
   const stageStateOf = (stage: StageId): StageState => {
     if (loading.includes(stage)) {
@@ -123,6 +132,39 @@
       />
     </AlertAction>
   </Alert>
+{/snippet}
+
+{#snippet waitsActs()}
+  <!-- What acts on all of Who decides: the design graph dials' reset arrow
+       (DialRow), while a kind is custom, then the fleet's defaults. -->
+  {#if own.length > 0}
+    <Tip label={words.waits.putAllBack}>
+      {#snippet children(tip)}
+        <Button
+          {...tip}
+          aria-label={words.waits.putAllBack}
+          disabled={!record.hubReachable}
+          icon={IconReset}
+          onclick={() => {
+            for (const kind of own) {
+              onchange({ key: "decidesReset", kind });
+            }
+          }}
+          press="pressable"
+          size="icon-xs"
+          tone="edited"
+          variant="ghost"
+        />
+      {/snippet}
+    </Tip>
+  {/if}
+  <Button
+    href={hrefOf("fleetDecides")}
+    label={words.waits.fleetDefaults}
+    size="xs"
+    tone="quiet"
+    variant="ghost"
+  />
 {/snippet}
 
 {#snippet stageSkeleton(stage: StageId)}
@@ -255,6 +297,7 @@
       state={waitsState}
       stateWords={words.stageState[waitsState]}
       title={words.stages.waits}
+      actions={record.whoDecides.ok ? waitsActs : undefined}
     >
       {#if loading.includes("waits")}
         {@render stageSkeleton("waits")}
@@ -262,7 +305,6 @@
         {@render stageReadFailed("waits", readFailed.waits)}
       {:else}
         <WhatWaits
-          {hrefOf}
           {onchange}
           onreread={() => onreread("waits")}
           {onretry}

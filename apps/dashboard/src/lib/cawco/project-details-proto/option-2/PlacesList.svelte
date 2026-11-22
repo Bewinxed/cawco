@@ -41,6 +41,7 @@
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import type { PlaceAct, SessionsStartProps } from "./changes";
+  import { FORM_FIELD, FORM_LABEL, OPENED_FORM } from "./opened-form";
   import type { ProjectPlace } from "./records";
   import { LARGE_FILE_KEY_CONNECTIONS } from "./tie-setup.fixture";
   import { howItRunsWords as words } from "./words";
@@ -263,18 +264,21 @@
       <li class="flex min-w-0 flex-col" data-flip data-slot="item">
         <form
           aria-label={words.places.addPlace}
-          class="flex min-w-0 flex-col gap-space-4 rounded-sm px-space-2 py-space-2"
+          class={OPENED_FORM}
           data-slot="add"
           onsubmit={submitAddPlace}
           transition:unfold
         >
-          <div class="flex min-w-0 flex-col gap-space-2">
-            <p class="m-0 type-meta text-ink-muted">
+          <p class="m-0 type-label text-ink-strong">
+            {words.places.addPlace}
+          </p>
+          <div class={FORM_FIELD}>
+            <p class={FORM_LABEL} id="{uid}-machine">
               {words.places.machineLabel}
             </p>
             <OptionGroup
               glide="fill"
-              aria-label={words.places.machineLabel}
+              aria-labelledby="{uid}-machine"
               bind:value={
                 () => (activeMachineId ? [activeMachineId] : []),
                 (next) => {
@@ -433,10 +437,13 @@
     {#if largeFilesShown === "declared"}
       <form
         aria-label={words.places.largeFilesDeclared.name}
-        class="flex min-w-0 flex-col gap-space-4 pt-space-2"
+        class={OPENED_FORM}
         onsubmit={saveLargeFiles}
         transition:unfold
       >
+        <p class="m-0 type-label text-ink-strong">
+          {words.places.largeFilesDeclared.name}
+        </p>
         <Field id="{uid}-lfs-url" label={words.places.largeFilesAddress}>
           <Input
             id="{uid}-lfs-url"
@@ -449,8 +456,8 @@
             bind:value={lfsAddressDraft}
           />
         </Field>
-        <div class="flex min-w-0 flex-col gap-space-2">
-          <p class="m-0 type-meta text-ink-muted">
+        <div class={FORM_FIELD}>
+          <p class={FORM_LABEL} id="{uid}-lfs-key">
             {words.places.largeFilesKey}
           </p>
           {#if LARGE_FILE_KEY_CONNECTIONS.length === 0}
@@ -464,7 +471,7 @@
           {:else}
             <OptionGroup
               glide="fill"
-              aria-label={words.places.largeFilesKey}
+              aria-labelledby="{uid}-lfs-key"
               bind:value={
                 () => (lfsConnectionDraft ? [lfsConnectionDraft] : []),
                 (next) => {
