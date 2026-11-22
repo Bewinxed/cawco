@@ -17,6 +17,8 @@ import {
   type PageError,
   type PageReport,
   type Scheme,
+  SECTION_BROKEN,
+  SECTION_MENDED,
   SECTION_WRITTEN,
   type SectionPlan,
   type SectionSheet,
@@ -145,17 +147,20 @@ export interface SectionFailure {
   kind: StageErrorKind;
 }
 
-/** Each failure's line, the error formula's what happened and what it means: the stage's words stand under Show details. */
-export const FAILED_LINE: Record<
-  SectionFailure["kind"],
-  (name: string) => string
-> = {
-  missing: (name) =>
-    `${name}'s states file isn't there yet, so none of its stories are drawn.`,
-  compile: (name) =>
-    `${name} doesn't compile, so none of its stories are drawn.`,
-  page: (name) => `${name} didn't load, so none of its stories are drawn.`,
-};
+/**
+ * The line under a failure on a page the person sees (`by` anything but the
+ * stage's own render, which its agent reads): what brings it back, the
+ * agent's next save that works. None on the agent's own render.
+ */
+export function fixingLine(by: PageBy, words: string): HTMLParagraphElement[] {
+  if (by === "stage") {
+    return [];
+  }
+  const line = document.createElement("p");
+  line.className = "cawco-failed-fixing";
+  line.textContent = words;
+  return [line];
+}
 
 /** The house's disclosure (dashboard RowFault) over `text`: Show details, its words saying what a press does. */
 export function detailsOf(text: string): HTMLDetailsElement {
@@ -181,15 +186,19 @@ export interface BootOptions {
   load: (file: string, fresh?: boolean) => Promise<SectionModule>;
   /** Vite's `vite/module-runner`, from the Vite serving the page (host.ts `moduleRunnerModule`): loaded the first time a story needs a runner of its own. */
   moduleRunner: () => Promise<RunnerModule>;
-  /**
-   * The project's preview file (Storybook's `.storybook/preview.*`, host.ts
-   * `previewFile`): its `decorators` wrap every story outside the meta's,
-   * as the app's root wraps its whole tree, and its `parameters` stand
-   * under each story's. None where the project has none.
-   */
-  preview: { decorators?: unknown; parameters?: unknown };
   /** The toolchain root, absolute: dev paths are made relative to it. */
   root: string;
+  /**
+   * What every story stands on, loaded once as the page boots: the app's
+   * global styles, then the project's preview file (Storybook's
+   * `.storybook/preview.*`, host.ts `previewFile`), answered as its
+   * `decorators`, which wrap every story outside the meta's as the app's
+   * root wraps its whole tree, and its `parameters`, which stand under each
+   * story's (none where the project has none). A save that breaks one of
+   * them rejects it: every section then says why in its own place, the page
+   * stays up, and Vite's reload on the next save that works draws it again.
+   */
+  shared: () => Promise<{ decorators?: unknown; parameters?: unknown }>;
   /** CawCo's tokens (DESIGN.md), `:root` scoped by the page's style to its own (page-style.ts). */
   tokens: string;
 }
@@ -390,6 +399,8 @@ declare global {
     "cawco:stage-error": CustomEvent<ViteError | undefined>;
     "cawco:updates": CustomEvent<string[]>;
     [SECTION_WRITTEN]: CustomEvent<string>;
+    [SECTION_BROKEN]: CustomEvent<string[]>;
+    [SECTION_MENDED]: CustomEvent<string[]>;
   }
 }
 
@@ -418,7 +429,7 @@ export interface Mode {
   }>;
   /** The states files this page is still drawing for its report: a report says them, never their half-read frames. */
   drawing: () => string[];
-  /** A section's module didn't load: it says why in its own place. */
+  /** A section's module didn't load, or a save broke one it is drawn from: it says why in its own place, in place of its drawings. */
   failed: (section: Section, failure: SectionFailure) => void;
   /** A section's frames as its report says them; null while it has not been read: a report leaves it out, so the stage keeps what an earlier draw saw of it. */
   framesOf: (section: Section) => FrameRender[] | null;
@@ -436,6 +447,8 @@ export interface Mode {
   selected: (story: string | null) => void;
   /** A section's module loaded (or loaded again as it was edited): its stories are to be drawn. */
   shown: (section: Section) => void;
+  /** A story drawn in `body` threw after it mounted (an edit its framework applied in place, an effect): it says why in its own place until it is drawn again. */
+  threw: (body: HTMLElement) => void;
   /** Vite sent an update (any page's, this page's or not): what the mode lays out is laid out again. A section an edit reaches is read again as it is shown. */
   updated: () => void;
 }

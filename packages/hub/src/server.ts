@@ -5132,11 +5132,7 @@ export const createServer = (
       return staged instanceof ElysiaStatus ? staged : staged.result;
     },
     stageWrite: async (at, write) => {
-      const staged = await onStage(at, STAGE_WRITE, (ref, version) => [
-        ref,
-        write,
-        version,
-      ]);
+      const staged = await onStage(at, STAGE_WRITE, (ref) => [ref, write]);
       return staged instanceof ElysiaStatus ? staged : staged.result;
     },
     // A served preview's page as its author has it, drawn on its workspace's own server.
@@ -5144,18 +5140,14 @@ export const createServer = (
       const staged = await onStage(at, STAGE_PICTURE, (ref) => [ref, ask]);
       return staged instanceof ElysiaStatus ? staged : staged.result;
     },
-    // The version of a sheet or a served preview an author hands up, cut on its workspace's machine.
+    // The version of a served preview an author hands up, cut on its workspace's machine.
     pin: async (at, pin) => {
       const staged = await onStage(at, STAGE_PIN, (ref) => [ref, pin]);
       return staged instanceof ElysiaStatus ? staged : undefined;
     },
     // A decision page's Previews' stage warmed as it goes out; the machine answers before the warm-up runs.
     warmStage: async (at, warm) => {
-      const staged = await onStage(at, STAGE_WARM, (ref, version) => [
-        ref,
-        warm,
-        version,
-      ]);
+      const staged = await onStage(at, STAGE_WARM, (ref) => [ref, warm]);
       return staged instanceof ElysiaStatus ? staged : undefined;
     },
     stageComponents: async (at, ask) => {

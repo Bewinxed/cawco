@@ -55,6 +55,8 @@ import {
   type PostedReport,
   RENDER_STATE_PARAM,
   type Scheme,
+  SECTION_BROKEN,
+  SECTION_MENDED,
   SECTION_MISSING,
   SECTION_WRITTEN,
   type SectionPlan,
@@ -78,6 +80,7 @@ import {
   STAGE_SEEK,
 } from "@cawco/core/stage-graph";
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
+import { graphWords } from "@cawco/core/words/graph";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 import { holdFocusInFrame } from "./held-focus";
 import {
@@ -100,8 +103,8 @@ import {
   type Column,
   type Csf,
   detailsOf,
-  FAILED_LINE,
   FORCED,
+  fixingLine,
   frameTick,
   HELD,
   type Mode,
@@ -483,6 +486,30 @@ export function boot(options: BootOptions): void {
   const quietly = (promise: Promise<unknown>) => {
     promise.catch(heard);
   };
+
+  /*
+   * What every story stands on (the app's global styles, the preview
+   * file's decorators and parameters), loaded once, after the stage's
+   * words are heard here: a save that broke one of them is every section's
+   * failure, said in each section's place with the stage's words for it,
+   * and the page stays up. Vite reloads the page on the next save that
+   * compiles (no module of its graph accepts an edit to them), which draws
+   * it again.
+   */
+  let preview: { decorators?: unknown; parameters?: unknown } = {};
+  const sharedSince = performance.now();
+  const shared: Promise<{ failure: SectionFailure } | null> = options
+    .shared()
+    .then(
+      (loaded) => {
+        preview = loaded;
+        return null;
+      },
+      async (error: unknown) => {
+        heard(error);
+        return { failure: await loadFailure(error, sharedSince) };
+      }
+    );
   for (const one of window.__cawcoErrors ?? []) {
     heard(one.error);
   }
@@ -743,7 +770,7 @@ export function boot(options: BootOptions): void {
     failed.setAttribute("role", "alert");
     const line = document.createElement("p");
     line.className = "cawco-section-failed-line";
-    line.textContent = FAILED_LINE[kind](section.name);
+    line.textContent = graphWords.sectionFailed[kind](section.name);
     const details = detailsOf(error.message);
     if (error.file) {
       // Its place on one line: the path gives way inside, its line and column never.
@@ -764,7 +791,11 @@ export function boot(options: BootOptions): void {
       code.textContent = frame;
       details.append(code);
     }
-    failed.append(line, details);
+    failed.append(
+      line,
+      ...fixingLine(by, graphWords.sectionAgentTold),
+      details
+    );
     return failed;
   }
 
@@ -822,7 +853,7 @@ export function boot(options: BootOptions): void {
         name: csf.name ?? name,
         title: meta.title ?? section.file,
         parameters: {
-          ...objectOf(options.preview.parameters),
+          ...objectOf(preview.parameters),
           ...meta.parameters,
           ...csf.parameters,
         },
@@ -836,9 +867,7 @@ export function boot(options: BootOptions): void {
       decorators: [
         ...(csf.decorators ?? []),
         ...(meta.decorators ?? []),
-        ...(Array.isArray(options.preview.decorators)
-          ? options.preview.decorators
-          : []),
+        ...(Array.isArray(preview.decorators) ? preview.decorators : []),
       ],
     };
   }
@@ -866,11 +895,22 @@ export function boot(options: BootOptions): void {
     // What the story's script asks of matchMedia while it mounts, its body answers.
     const width = Number.parseFloat(body.style.width);
     mounting = Number.isFinite(width) ? width : null;
+    // A throw its framework catches after the mount (an edit applied in place, an effect) is said in the story's place by the mode; one during the mount, by whoever mounted it.
+    let returned = false;
     try {
-      return adapter.mountStory(body, specFor(section, name, args), (error) => {
-        into.error = pageError(error, root, base);
-        later();
-      });
+      const mounted = adapter.mountStory(
+        body,
+        specFor(section, name, args),
+        (error) => {
+          into.error = pageError(error, root, base);
+          later();
+          if (returned) {
+            mode?.threw(body);
+          }
+        }
+      );
+      returned = true;
+      return mounted;
     } catch (error) {
       into.error = pageError(error, root, base);
       console.error(`[cawco] story ${name} did not mount:`, error);
@@ -1024,6 +1064,14 @@ export function boot(options: BootOptions): void {
   /** Loads a section's states file; the mode draws its stories. */
   function loadSection(section: Section): Promise<void> {
     section.loading ??= (async () => {
+      const standing = await shared;
+      if (standing) {
+        section.failure = standing.failure;
+        mode?.failed(section, standing.failure);
+        later();
+        section.loading = undefined;
+        return;
+      }
       const since = performance.now();
       let loaded: SectionModule;
       try {
@@ -1652,6 +1700,12 @@ export function boot(options: BootOptions): void {
     quietly(
       seeded(section).then(
         () => {
+          // A save that broke it was said after this update began: it stays said until the next.
+          if (
+            (brokenAt.get(section.file) ?? Number.NEGATIVE_INFINITY) >= since
+          ) {
+            return;
+          }
           show(section, mod);
           dispatchEvent(new CustomEvent("cawco:hmr"));
         },
@@ -1663,6 +1717,47 @@ export function boot(options: BootOptions): void {
         }
       )
     );
+  });
+  /*
+   * A save broke a module a drawn section is drawn from (the stage's
+   * SECTION_BROKEN, just after Vite's error for it): the section says so in
+   * its own place, with the stage's words, its drawings taken down, rather
+   * than standing at what it drew before the save, or at half of it. Vite
+   * applies none of an update a module of which failed (its client calls
+   * each accept with nothing), so what stood is no longer what the files
+   * say. Its next save that compiles draws it again: the stage says so
+   * ({@link SECTION_MENDED}), and an edit inside the toolchain root also
+   * updates its own module (host.ts `hotUpdate`, `cawco:section`). A
+   * section not yet drawn says its own load's failure.
+   */
+  const brokenAt = new Map<string, number>();
+  window.addEventListener(SECTION_BROKEN, (event) => {
+    const now = performance.now();
+    const failure: SectionFailure = saidSince(now - STAGE_SAYS_MS) ?? {
+      kind: "compile",
+      frame: null,
+      error: { message: "", file: null, line: null, column: null },
+    };
+    for (const file of event.detail ?? []) {
+      const section = sectionOf(file);
+      if (!section?.loaded) {
+        continue;
+      }
+      brokenAt.set(section.file, now);
+      section.failure = failure;
+      mode?.failed(section, failure);
+    }
+    later();
+  });
+  // The save that broke it compiles now: drawn again from its module as it stands, its framework's update applied.
+  window.addEventListener(SECTION_MENDED, (event) => {
+    for (const file of event.detail ?? []) {
+      const section = sectionOf(file);
+      if (section?.loaded && section.failure && section.mod) {
+        brokenAt.delete(section.file);
+        show(section, section.mod);
+      }
+    }
   });
   // A states file it found missing is written: its section loads again, with no reload of the canvas.
   window.addEventListener(SECTION_WRITTEN, (event) => {
@@ -1695,7 +1790,12 @@ export function boot(options: BootOptions): void {
   window.addEventListener("cawco:updates", (event) => {
     const updated = new Set((event.detail ?? []).map(sectionOfPath));
     for (const section of sections) {
-      if (section.failure && !section.loading && updated.has(section.file)) {
+      if (
+        section.failure &&
+        !section.loaded &&
+        !section.loading &&
+        updated.has(section.file)
+      ) {
         quietly(
           loadSection(section).then(() => {
             dispatchEvent(new CustomEvent("cawco:hmr"));

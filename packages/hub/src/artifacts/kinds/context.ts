@@ -103,7 +103,6 @@ export interface KindContext {
     present: Set<string>
   ) => string[];
   pictureOf: (id: string) => string | null;
-  pinnedSource: ReturnType<typeof createVersions>["pinnedSource"];
   read: (
     row: ArtifactRow,
     since?: number,

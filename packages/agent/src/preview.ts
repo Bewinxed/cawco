@@ -62,7 +62,6 @@ import {
 import {
   networkOf,
   StageRefusal,
-  servedPort,
   sourceUp,
   sourceViewer,
   sourceWakes,
@@ -830,9 +829,7 @@ async function start(
     source = { dir: await pinnedRoot(options.dir, pin) };
   } else {
     const { port, workspace, stage, serve } = options;
-    const named = portSource(port, { workspace, stage, serve, pin });
-    // A pinned sheet answers on its pin's stage's own port.
-    source = { ...named, port: servedPort(named) };
+    source = portSource(port, { workspace, stage, serve, pin });
   }
   await stopNow(instanceId);
   // A workspace no boundary runs refuses the preview in so many words. A

@@ -3815,21 +3815,20 @@ const startDaemon = (rediscover = false) =>
           );
     });
     // A stage warmed for a decision page as it goes out: answered at once, the warm-up run after and never failing (stage.ts `warmStage`).
-    // With a pin, the stage of the version the page's Previews are served (core `PreviewSource.pin`).
-    supervisor.declareControl(STAGE_WARM, (ref, warm, pin) => {
+    supervisor.declareControl(STAGE_WARM, (ref, warm) => {
       if (fenced()) {
         return Promise.reject(new Error(AGENT_RESTARTING));
       }
-      warmStage(ports, ref, warm, pin ?? undefined);
+      warmStage(ports, ref, warm);
       return Promise.resolve();
     });
-    // A sheet's story file written by its stage: a story's args, a story added, duplicated, removed or moved; the person's in the pinned version he is served, copied to the workspace.
-    supervisor.declareControl(STAGE_WRITE, (ref, write, pin) =>
+    // A sheet's story file written by its stage: a story's args, a story added, duplicated, removed or moved, the person's and the agent's alike.
+    supervisor.declareControl(STAGE_WRITE, (ref, write) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : writeSheet(ports, ref, write, pin ?? undefined)
+        : writeSheet(ports, ref, write)
     );
-    // The version an author hands up, cut: a tree's clone (`[ref, pin]`) or a folder's copy (`[null, pin, dir]`).
+    // The version an author hands up, cut: a served preview's tree's clone (`[ref, pin]`) or a folder's copy (`[null, pin, dir]`).
     supervisor.declareControl(STAGE_PIN, (...asked) => {
       if (fenced()) {
         return Promise.reject(new Error(AGENT_RESTARTING));

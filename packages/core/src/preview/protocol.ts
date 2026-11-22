@@ -21,6 +21,8 @@ export type PreviewSource =
        * A sheet's: the workspace's stage serves the port (core `stage.ts`),
        * its toolchain root `dir` from the clone's root and the sheet's story file
        * `file` from that root. A request for it wakes the stage when it sleeps.
+       * The person is served the workspace's stage live: every save reaches
+       * the open panel through Vite's HMR, and a sheet names no `pin`.
        */
       stage?: { dir: string; file: string };
       /**
@@ -32,16 +34,16 @@ export type PreviewSource =
       /** The workspace whose dev server it is: it runs in that workspace's own network. */
       workspace?: string;
       /**
-       * The version the person is served: the id of a clone of `workspace`
-       * cut on its machine at its HEAD with its uncommitted changes when its
-       * author handed this version up (its `artifact_create`, its
-       * `artifact_update`, its own `artifact_show`), and changed only by the
-       * next hand-up, never by an edit to the workspace's files (agent
-       * stage-clone.ts `pinClone`). Its own stage or server answers the
-       * artifact's preview origin, in its own network; what the author reads
-       * (`artifact_read`, its renders) is the workspace as it is now.
-       * Absent for a port on a machine's host, whose server is the
-       * session's own.
+       * A served preview's (`serve`) version the person is served: the id of
+       * a clone of `workspace` cut on its machine at its HEAD with its
+       * uncommitted changes when its author handed this version up (its
+       * `artifact_create`, its `artifact_update`, its own `artifact_show`),
+       * and changed only by the next hand-up, never by an edit to the
+       * workspace's files (agent stage-clone.ts `cutPin`). Its own server
+       * answers the artifact's preview origin, in its own network; what the
+       * author reads (`artifact_read`, its renders) is the workspace as it
+       * is now. Absent for a sheet, served live, and for a port on a
+       * machine's host, whose server is the session's own.
        */
       pin?: string;
     }

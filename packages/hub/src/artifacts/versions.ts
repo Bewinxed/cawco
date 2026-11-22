@@ -14,7 +14,7 @@ import { stateOf, stillThere } from "./facts";
 import { unheardKeys } from "./needs";
 import { answersKept } from "./overwrite";
 import type { createPageStore } from "./page-store";
-import { pinnedAt, servedOf, sheetOf } from "./served";
+import { pinnedAt, pinTarget, servedOf } from "./served";
 import type { Making, WarmPreviews } from "./shapes";
 
 /** What createVersions reads of the artifact service: its deps, and the service's parts it calls, each read when called. */
@@ -128,13 +128,16 @@ export const createVersions = (ctx: VersionsContext) => {
    * opened it, so it is no longer waiting on the parent as handed, every
    * change its maker makes waits for the parent's artifact_show, whether the
    * panel shows it now or the person can open it from the panel's list.
-   * Every kind alike: what a machine serves of it (a sheet's stage, a
-   * served preview's server, a folder) is served from the version's own pin
-   * (core `PreviewSource.pin`), never from the files its maker goes on
-   * editing. Not the owner's own change.
+   * What a machine serves of it (a served preview's server, a folder) is
+   * served from the version's own pin (core `PreviewSource.pin`), never
+   * from the files its maker goes on editing. Not the owner's own change,
+   * nor a sheet's: its stage serves the workspace's files live (served.ts
+   * `pinTarget`), so a held version of it could hold nothing the panel
+   * shows.
    */
   const holdsChange = (maker: InstanceRow, row: ArtifactRow): boolean =>
     row.instanceId !== maker.id &&
+    row.kind !== "component" &&
     (db.heldOf(row.id) !== undefined || !isHanded(row));
   /**
    * Where a maker's change to its parent's artifact `row` goes when it
@@ -184,21 +187,20 @@ export const createVersions = (ctx: VersionsContext) => {
   };
   /** Pin `pin` of `source` cut on machine `machineId` ({@link pinnedSource}): the refusal, or `unpinned` for a source nothing pins. */
   const cutOn = (machineId: string, source: PreviewSource, pin: string) => {
-    if ("dir" in source) {
-      return deps.pinFolder(machineId, source.dir, pin);
+    const target = pinTarget(source);
+    if (!target) {
+      return Promise.resolve("unpinned" as const);
     }
-    return "port" in source &&
-      source.workspace !== undefined &&
-      (source.stage !== undefined || source.serve !== undefined)
-      ? deps.pin({ workspace: source.workspace }, pin)
-      : Promise.resolve("unpinned" as const);
+    return "dir" in target
+      ? deps.pinFolder(machineId, target.dir, pin)
+      : deps.pin({ workspace: target.workspace }, pin);
   };
   /**
    * The version of `source` its author hands up (core `PreviewSource.pin`),
    * cut on its machine as a pin of its own beside the one the person is
-   * served: a sheet's or a workspace preview's tree as it is now, a
-   * folder's copy; a served preview's server started there. The source on
-   * that pin, and the server's state; a page or a host's port as it is.
+   * served: a workspace preview's tree as it is now, a folder's copy; a
+   * served preview's server started there. The source on that pin, and the
+   * server's state; a sheet, a page or a host's port as it is.
    * Refused, nothing of the pin left, when its machine could not cut it or
    * its server did not start: the person's pin is never touched, and he is
    * moved onto the new one only by its row's write (db `resource`), which
@@ -479,10 +481,9 @@ export const createVersions = (ctx: VersionsContext) => {
     // left it in the version's doc ({@link staged}): the row's doc holds its
     // own source's, set beside it since the fork, and the merge keeps
     // whichever of two such sets its client id ranks last, never the newer.
-    const stage =
-      servedOf(next) || sheetOf(next)
-        ? getMeta(docs.doc(next.id), "stage")
-        : undefined;
+    const stage = servedOf(next)
+      ? getMeta(docs.doc(next.id), "stage")
+      : undefined;
     mergeKeepingAnswers(row, next);
     // What serves it is the version's: its one write, which the preview
     // that serves its origin follows, and which lets the server it moved

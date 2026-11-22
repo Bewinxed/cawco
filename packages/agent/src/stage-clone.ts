@@ -684,14 +684,15 @@ export const copyBack = async (
  * and the hub moves the artifact onto it only once it stands (and its
  * server serves, for a served preview), so a cut or a server that fails
  * leaves him the version he had. A pin never changes after its cut.
- * - A sheet's or a served preview's is its tree as it is now
- *   ({@link cutPin}): a clone cut at its repository's HEAD with its
- *   uncommitted changes, as a place's stage clone is ({@link cut}), or for
- *   a tree in no repository (a macOS copy of a folder) a copy of it without
- *   what an install makes ({@link REMADE}). Its stage or server runs in its
- *   own boundary, as any workspace's does, installed as a stage clone is
- *   (stage.ts `treeOf`).
+ * - A served preview's is its tree as it is now ({@link cutPin}): a clone
+ *   cut at its repository's HEAD with its uncommitted changes, as a place's
+ *   stage clone is ({@link cut}), or for a tree in no repository (a macOS
+ *   copy of a folder) a copy of it without what an install makes
+ *   ({@link REMADE}). Its server runs in its own boundary, as any
+ *   workspace's does, installed as a stage clone is (stage.ts `treeOf`).
  * - A folder's is a copy of the folder ({@link pinFolder}).
+ * A sheet has none: the person's design graph shows its workspace's stage
+ * live, every save through Vite's HMR (hub served.ts `pinTarget`).
  * The hub lets a pin go once no artifact names it (stage.ts `unpin`), sends
  * the pins it serves from as the machine registers so the rest go
  * (stage.ts `keepPins`), and a workspace's archive lets go every pin cut

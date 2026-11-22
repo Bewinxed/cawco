@@ -71,19 +71,13 @@ const servedSource = (input: ArtifactInput, workspace: string) => {
   return source;
 };
 
-/** The stage a sheet is served the person on (its pin's, core `PreviewSource.pin`), by its key, and how a call reaches it. */
+/** The stage a sheet is served the person on (its workspace's own, live), by its key, and how a call reaches it. */
 const stageOf = (
   sheet: NonNullable<ReturnType<typeof sheetOf>>
-): { at: StageAt; key: string } =>
-  sheet.pin === undefined
-    ? {
-        key: `${sheet.workspace}:${sheet.dir}`,
-        at: { workspace: sheet.workspace },
-      }
-    : {
-        key: `${sheet.pin}:${sheet.dir}`,
-        at: { workspace: sheet.workspace, pin: sheet.pin },
-      };
+): { at: StageAt; key: string } => ({
+  key: `${sheet.workspace}:${sheet.dir}`,
+  at: { workspace: sheet.workspace },
+});
 
 /** How long a pin no row names stands before it is let go ({@link createPreviewKind} `releasePin`). Ours: past a create's own checks, which may put its row back on it. */
 const PIN_KEPT_MS = 2 * 60_000;

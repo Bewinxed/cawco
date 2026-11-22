@@ -30,7 +30,7 @@ A choice that is no design reaches the person only as a decision card on a page,
 
 **Media is words, a diagram or a picture that is no UI.** A design never stands on a page: the hub refuses a `Preview` in a program and names the design graph. A behaviour or flow choice draws its states and the moves between them as a `Diagram` in each option (a Mermaid `stateDiagram-v2`, each edge labelled by what the person does). A picture that is no UI (a generated image, a logo, a photograph) is an `Image`: a file beside page.oui or a `generate_image` result by its absolute path. A drawing of what is not a screen is a `Canvas`. A choice that needs no picture needs no media.
 
-**Fixes from the person's pins** are shown where they pinned: revise the same design graph or page (`artifact_update`) and answer each pin in its own thread with what changed (`comment_reply`). The revision waits for them in Needs you until they open it.
+**Fixes from the person's pins** are shown where they pinned: a design graph's fix is the code change itself, which their open graph shows as you save; a page is revised with `artifact_update`. Answer each pin in its own thread with what changed (`comment_reply`). A page's revision, or a graph's new `ask`, waits for them in Needs you until they open it.
 
 ## Who decides
 

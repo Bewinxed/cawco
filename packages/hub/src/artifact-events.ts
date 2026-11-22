@@ -732,19 +732,16 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
         }
       : undefined;
   };
-  /** The version a call on a pinned one names (core `PreviewSource.pin`); none for the source's own. */
-  const pinOf = (at: StageAt): string | undefined =>
-    "pin" in at ? at.pin : undefined;
   /**
    * A stage method (core stage.ts) on a workspace's machine (a session's
    * own, or the one a sheet was made in), with the arguments `args` makes of
-   * the workspace and the version's pin: its answer, or a refusal saying
+   * the workspace: its answer, or a refusal saying
    * why the stage can't be reached or said no.
    */
   const onStage = async <K extends ControlName>(
     at: StageAt,
     method: K,
-    args: (workspace: WorkspaceRef, pin: string | undefined) => ControlArgs<K>
+    args: (workspace: WorkspaceRef) => ControlArgs<K>
   ) => {
     const where = stageWhere(at);
     if (!where) {
@@ -768,7 +765,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     const asked = await ctx.callAgent(
       machineId,
       method,
-      args(workspace, pinOf(at)),
+      args(workspace),
       STAGE_READY_MS +
         (isPlace(workspace.id) ? STAGE_CLONE_MS : STAGE_INSTALL_MS) +
         (method === STAGE_RENDER || method === STAGE_PICTURE

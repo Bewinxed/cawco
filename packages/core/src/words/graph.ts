@@ -402,8 +402,22 @@ export const graphWords = {
   mounting: (name: string) => `Loading ${name}…`,
   /** The component failed to mount: what happened, why, what to do, what next. */
   mountFailed: (name: string, state: string) =>
-    `${name} didn't load at ${state}.`,
+    `${name} stopped with an error at ${state}.`,
   tryAgain: "Try again",
+  /** A section that isn't drawn, by why (core `StageErrorKind`): the error formula's what happened and what it means; the stage's words stand under Show details. */
+  sectionFailed: {
+    missing: (name: string) => `${name} has no states written yet.`,
+    compile: (name: string) => `${name} has an error in its code.`,
+    page: (name: string) => `${name} stopped with an error as it loaded.`,
+  },
+  /**
+   * Under a section that failed, on a page the person sees: the stage's
+   * section errors reach the agent's session (hub marks.ts `errorsOwed`),
+   * and its next save that compiles draws it.
+   */
+  sectionAgentTold: "The agent is told. Its next save that works draws it.",
+  /** Under a story that threw, on a page the person sees: its next save that runs draws it. */
+  storyNextSave: "The agent's next save that works draws it.",
   /** The hub's link down: the stage keeps its last drawing. */
   stale: "Not live: the hub can't be reached. This is the last view it sent.",
 

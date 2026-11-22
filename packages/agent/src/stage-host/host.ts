@@ -84,6 +84,8 @@ import {
   REPORT_PATH,
   type RenderReport,
   type ReportAnswer,
+  SECTION_BROKEN,
+  SECTION_MENDED,
   SECTION_MISSING,
   SECTION_WRITTEN,
   type SectionPlan,
@@ -753,6 +755,8 @@ declare module "vite/types/customEvent.d.ts" {
   interface CustomEventMap {
     [SECTION_HELD]: { file: string };
     [SECTION_WRITTEN]: { file: string };
+    [SECTION_BROKEN]: { files: string[] };
+    [SECTION_MENDED]: { files: string[] };
   }
 }
 
@@ -960,7 +964,8 @@ function globalStyles(): string[] {
 const ADAPTERS: Record<StageFramework, string> = {
   svelte: `import { createRawSnippet, flushSync, getAllContexts, mount, unmount } from "svelte";
 import { reactive } from "${VIRTUAL_STAGE}svelte-props.js";
-export function mountStory(target, s) {
+import Boundary from "${VIRTUAL_STAGE}svelte-boundary.js";
+export function mountStory(target, s, failed) {
   const inner = () => (s.render ? s.render(s.args, s.context) : { Component: s.component, props: s.args }) ?? {};
   const props = reactive({ ...(inner().props ?? {}) });
   let result = { ...inner(), props };
@@ -969,7 +974,7 @@ export function mountStory(target, s) {
     const outer = decorator(() => wrapped, s.context);
     result = outer && outer !== wrapped && outer.Component ? { ...outer, child: wrapped } : (outer ?? wrapped);
   }
-  const undo = mountSvelte(target, result);
+  const undo = mountSvelte(target, result, undefined, failed);
   return {
     unmount: undo,
     update(next) {
@@ -982,14 +987,19 @@ export function mountStory(target, s) {
     },
   };
 }
-function mountSvelte(target, { Component, props = {}, child }, context) {
+function mountSvelte(target, { Component, props = {}, child }, context, failed) {
   if (child) {
     props.children = createRawSnippet(() => ({
       render: () => '<div style="display:contents"></div>',
-      setup: (el) => mountSvelte(el, child, getAllContexts()),
+      setup: (el) => mountSvelte(el, child, getAllContexts(), failed),
     }));
+    const instance = mount(Component, { target, props, context });
+    return () => unmount(instance);
   }
-  const instance = mount(Component, { target, props, context });
+  // The story itself inside its boundary, so what it throws later (an edit applied in place, an effect) is its frame's alone.
+  const instance = Boundary
+    ? mount(Boundary, { target, props: { Component, props, failed }, context })
+    : mount(Component, { target, props, context });
   return () => unmount(instance);
 }`,
   vue: `import { createApp, h, reactive } from "vue";
@@ -1049,6 +1059,46 @@ export function mountStory(target, s) {
 }`,
 };
 
+/**
+ * The boundary each Svelte story is mounted in: what the story throws once
+ * it stands (Svelte applies an edit to a mounted component in place, and an
+ * effect may throw any time) is caught here and handed the canvas
+ * (`failed`), which says it in that story's frame, and nothing else of the
+ * page goes down with it. `<svelte:boundary>` is Svelte's own since 5.3
+ * (svelte.dev/docs/svelte/svelte-boundary): "Boundaries allow you to guard
+ * against errors in part of your app from breaking the app as a whole."
+ * Compiled by the project's own Svelte.
+ */
+const SVELTE_BOUNDARY = `<script>
+  let { Component, props, failed } = $props();
+</script>
+<svelte:boundary onerror={(error) => failed?.(error)}><Component {...props} /></svelte:boundary>
+`;
+
+/**
+ * The project's Svelte compiling the story boundary ({@link SVELTE_BOUNDARY});
+ * `null` from a Svelte older than 5.3, which has no boundary: its stories
+ * mount bare, and a throw after the mount stands as the page's error.
+ */
+async function svelteBoundary(): Promise<string> {
+  const { href } = projectPackage("svelte", "./compiler");
+  const compiler: {
+    compile: (
+      source: string,
+      options: { dev: boolean; filename: string; generate: "client" }
+    ) => { js: { code: string } };
+  } = await import(href);
+  try {
+    return compiler.compile(SVELTE_BOUNDARY, {
+      dev: true,
+      filename: "cawco-boundary.svelte",
+      generate: "client",
+    }).js.code;
+  } catch {
+    return "export default null;";
+  }
+}
+
 /** The Svelte props holder's source: a `$state` object, which `mount` reads as reactive props. Compiled by the project's own Svelte. */
 const SVELTE_PROPS = `export function reactive(value) {
   const props = $state(value);
@@ -1093,33 +1143,48 @@ function previewFile(): string | null {
 }
 
 /**
- * The canvas's entry: the app's global styles, the project's preview file
- * ({@link previewFile}: its decorators every story's outermost), the
- * framework's adapter and the canvas runtime (canvas/runtime.ts, bundled into this host), which
- * loads each section's module as it comes into view. Vite's HMR words
+ * The canvas's entry: the framework's adapter and the canvas runtime
+ * (canvas/runtime.ts, bundled into this host), which loads the app's global
+ * styles and the project's preview file ({@link previewFile}: its
+ * decorators every story's outermost) once as it boots (`shared`), then
+ * each section's module as it comes into view. Neither is imported
+ * statically: a save that breaks one of them would fail the entry, and the
+ * page would boot nothing and stand blank, which the panel takes for a page
+ * that crashed. Loaded by the runtime, the break is said in each section's
+ * place, and Vite's reload on the next save that compiles draws the page
+ * again. Vite's HMR words
  * reach the runtime as window events: `cawco:updates` with the modules an
  * update names, before it applies (a section that failed to load, among
  * them, loads again), `cawco:after-update` after any
  * update, this page's or not (a component's own edit redraws through its
  * framework's HMR and loads again each section drawn from it, which reads
  * its frames again; the canvas lays its drawing out), `cawco:stage-error` with Vite's error for a module it couldn't
- * serve, which a section that didn't load says, and {@link SECTION_WRITTEN}
+ * serve, which a section that didn't load says, {@link SECTION_WRITTEN}
  * with a states file found missing that is written now, whose section loads
- * again, fresh (`?t=`: its failed import is never the browser's to reuse).
+ * again, fresh (`?t=`: its failed import is never the browser's to reuse),
+ * {@link SECTION_BROKEN} with the sections that error breaks, and
+ * {@link SECTION_MENDED} with those a save that compiles draws again.
  */
 function entryModule(): string {
+  // In order: a later sheet stands over an earlier one, as the app's own imports stack them.
   const styles = globalStyles()
-    .map((style) => `import ${JSON.stringify(style)};`)
+    .map((style) => `  await import(${JSON.stringify(style)});`)
     .join("\n");
   const preview = previewFile();
-  return `${styles}
-${preview ? `import * as preview from ${JSON.stringify(preview)};` : "const preview = {};"}
-import { mountStory } from "${VIRTUAL_STAGE}adapter.js";
+  return `import { mountStory } from "${VIRTUAL_STAGE}adapter.js";
 import { boot } from "${VIRTUAL_STAGE}runtime.js";
 const BASE = new URL(import.meta.url).pathname.replace(/\\/@id\\/.*$/, "");
 boot({
   adapter: { mountStory },
-  preview: preview.default ?? preview,
+  shared: async () => {
+${styles}
+${
+  preview
+    ? `    const preview = await import(${JSON.stringify(preview)});
+    return preview.default ?? preview;`
+    : "    return {};"
+}
+  },
   root: ${JSON.stringify(root)},
   tokens: ${JSON.stringify(CANVAS_TOKENS)},
   faces: ${JSON.stringify(CANVAS_FACES)},
@@ -1134,6 +1199,8 @@ if (import.meta.hot) {
   import.meta.hot.on("vite:afterUpdate", () => dispatchEvent(new CustomEvent("cawco:after-update")));
   import.meta.hot.on("vite:error", (payload) => dispatchEvent(new CustomEvent("cawco:stage-error", { detail: payload.err })));
   import.meta.hot.on(${JSON.stringify(SECTION_WRITTEN)}, (data) => dispatchEvent(new CustomEvent(${JSON.stringify(SECTION_WRITTEN)}, { detail: data.file })));
+  import.meta.hot.on(${JSON.stringify(SECTION_BROKEN)}, (data) => dispatchEvent(new CustomEvent(${JSON.stringify(SECTION_BROKEN)}, { detail: data.files })));
+  import.meta.hot.on(${JSON.stringify(SECTION_MENDED)}, (data) => dispatchEvent(new CustomEvent(${JSON.stringify(SECTION_MENDED)}, { detail: data.files })));
 }
 `;
 }
@@ -3492,6 +3559,8 @@ function stageModule(name: string): string | Promise<string> | null {
       return ADAPTERS[framework];
     case "svelte-props.js":
       return svelteProps();
+    case "svelte-boundary.js":
+      return svelteBoundary();
     case "module-runner.js":
       return server ? moduleRunnerModule(server) : null;
     default:
@@ -3558,21 +3627,29 @@ function cawcoStage() {
   };
 
   /**
-   * A compile error Vite sends the pages, kept under its module. A section's
+   * A compile error Vite sends the pages, kept under its module, and the
+   * states files whose sections it breaks ({@link sheetsOf}). A section's
    * own load refusal comes with neither the section module's id nor a place
    * when its states file isn't written: that one its load keeps
    * (`sectionLoad`), and it is passed by here. A states file that doesn't
    * compile stops its own section, which no module graph links it to while
    * its load fails.
    */
-  const keepSent = (err: ErrorPayload["err"]) => {
+  const keepSent = (err: ErrorPayload["err"]): string[] => {
     if (err.pluginCode === SECTION_MISSING) {
-      return;
+      return [];
     }
-    // The module's id is Vite's absolute path; a plugin's `loc.file` may be
-    // its own (vite-plugin-svelte's is the bare file name).
-    const at = resolve(root, pathOfId(err.id ?? err.loc?.file ?? ""));
+    // The module's id is Vite's absolute path, or a section module's, filed
+    // under its states file as a good compile clears it ({@link errorKeyOf});
+    // a plugin's `loc.file` may be its own (vite-plugin-svelte's is the bare
+    // file name).
+    const at = err.id
+      ? resolve(root, errorKeyOf(err.id))
+      : resolve(root, pathOfId(err.loc?.file ?? ""));
     const file = relative(root, at);
+    const sheets = notStatesFile(file)
+      ? sheetsOf(at)
+      : [...new Set([file, ...sheetsOf(at)])];
     stageErrors.set(at, {
       kind: "compile",
       file,
@@ -3581,11 +3658,10 @@ function cawcoStage() {
       column: typeof err.loc?.column === "number" ? err.loc.column + 1 : null,
       message: err.message,
       frame: err.frame ?? null,
-      sheets: notStatesFile(file)
-        ? sheetsOf(at)
-        : [...new Set([file, ...sheetsOf(at)])],
+      sheets,
     });
     tellErrors();
+    return sheets;
   };
 
   return {
@@ -3690,13 +3766,22 @@ function cawcoStage() {
       const redrawn = reached.filter((mod): mod is ModuleNode => !!mod);
       return redrawn.length > 0 ? [...modules, ...redrawn] : undefined;
     },
-    // A good compile of a module clears the error it had, and is a move the daemon's reads wait on ({@link moved}).
+    // A good compile of a module clears the error it had, and is a move the daemon's reads wait on ({@link moved}); the sections it broke, and nothing else breaks now, are drawn again ({@link SECTION_MENDED}).
     transform: {
       order: "post" as const,
       handler(_code: string, id: string) {
         moved();
-        if (stageErrors.delete(errorKeyOf(id))) {
+        const key = errorKeyOf(id);
+        const was = stageErrors.get(key);
+        if (stageErrors.delete(key)) {
           tellErrors();
+          const still = new Set(
+            [...stageErrors.values()].flatMap((error) => error.sheets)
+          );
+          const files = (was?.sheets ?? []).filter((one) => !still.has(one));
+          if (files.length > 0) {
+            server?.environments.client.hot.send(SECTION_MENDED, { files });
+          }
         }
         return null;
       },
@@ -3722,7 +3807,13 @@ function cawcoStage() {
           if (!pageAsks(payload.err.id)) {
             return;
           }
-          keepSent(payload.err);
+          const sheets = keepSent(payload.err);
+          send(payload);
+          // After Vite's own error, whose words the pages say it with.
+          if (sheets.length > 0) {
+            send(SECTION_BROKEN, { files: sheets });
+          }
+          return;
         }
         send(payload);
       }

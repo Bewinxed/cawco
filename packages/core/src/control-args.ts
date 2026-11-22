@@ -637,11 +637,10 @@ const ARGS: {
     ]),
   ]),
   stageRender: tuple([WorkspaceRef, RenderAsk]),
-  stageWrite: tuple([WorkspaceRef, SheetWrite, maybe(named)]),
+  stageWrite: tuple([WorkspaceRef, SheetWrite]),
   stageWarm: tuple([
     WorkspaceRef,
     object({ by: text, canvases: array(texts) }),
-    maybe(named),
   ]),
   stageComponents: tuple([
     WorkspaceRef,

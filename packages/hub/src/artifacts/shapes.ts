@@ -717,13 +717,7 @@ export type ShowStep = "open" | "reach" | "publish" | "shown wait";
  * the workspace a sheet was made in (every use after), whichever session's
  * panel it is in.
  */
-export type StageAt =
-  | { session: InstanceRow }
-  | {
-      /** With `pin`, the version of it the person is served (core `PreviewSource.pin`), whose own stage or server the call reaches. */
-      pin?: string;
-      workspace: string;
-    };
+export type StageAt = { session: InstanceRow } | { workspace: string };
 
 /**
  * What a page is built from: a decision page's `program` (with the folder

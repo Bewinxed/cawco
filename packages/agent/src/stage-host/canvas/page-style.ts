@@ -32,6 +32,8 @@ html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
   min-inline-size: max(100%, var(--spacing-c-canvas-skeleton-w)); box-sizing: border-box; padding: var(--spacing-space-3); background: var(--color-surface-raised);
   border: 1px solid var(--color-border-hairline); border-radius: var(--radius-md); font: var(--type-body); color: var(--color-ink-strong); }
 .cawco-section-failed-line { margin: 0; font: var(--type-body); color: var(--color-status-fail-ink); text-wrap: pretty; }
+/* Who is on it, under what failed: the muted ink, a calm line beside the red one. */
+.cawco-failed-fixing { margin: 0; font: var(--type-body); color: var(--color-ink-muted); text-wrap: pretty; }
 /* Show details: the sm ghost, its words standing on the line's start (its own inset pulled back), no disclosure triangle. */
 :is(.cawco-section-failed, .cawco-stage-failed) summary { list-style: none; display: inline-flex; align-items: center; inline-size: fit-content;
   block-size: var(--spacing-c-btn-h-sm); padding-inline: var(--spacing-space-2); margin-inline-start: calc(var(--spacing-space-2) * -1); border-radius: var(--radius-sm);

@@ -34397,7 +34397,7 @@
           },
           "unreached": {
             "$ref": "#/components/schemas/StageUnreached",
-            "description": "An author's read of its design graph that couldn't reach its\nworkspace's stage (hub component.ts `stageRead`): the hop that failed, in\nthe preview proxy's kinds, and why, in the hub's words. Said in that read\nalone: the person's panel is served the version handed up (core\n`PreviewSource.pin`), whose own load says what it meets."
+            "description": "An author's read of its design graph that couldn't reach its\nworkspace's stage (hub component.ts `stageRead`): the hop that failed, in\nthe preview proxy's kinds, and why, in the hub's words. Said in that read\nalone: the person's panel loads the same stage, and its own load says\nwhat it meets."
           },
           "verify": {
             "description": "A design graph's design system round, as `verify: true` asked it: what the ask did.",
@@ -54022,7 +54022,7 @@
                     "type": "string"
                   },
                   "pin": {
-                    "description": "The version the person is served: the id of a clone of `workspace`\ncut on its machine at its HEAD with its uncommitted changes when its\nauthor handed this version up (its `artifact_create`, its\n`artifact_update`, its own `artifact_show`), and changed only by the\nnext hand-up, never by an edit to the workspace's files (agent\nstage-clone.ts `pinClone`). Its own stage or server answers the\nartifact's preview origin, in its own network; what the author reads\n(`artifact_read`, its renders) is the workspace as it is now.\nAbsent for a port on a machine's host, whose server is the\nsession's own.",
+                    "description": "A served preview's (`serve`) version the person is served: the id of\na clone of `workspace` cut on its machine at its HEAD with its\nuncommitted changes when its author handed this version up (its\n`artifact_create`, its `artifact_update`, its own `artifact_show`),\nand changed only by the next hand-up, never by an edit to the\nworkspace's files (agent stage-clone.ts `cutPin`). Its own server\nanswers the artifact's preview origin, in its own network; what the\nauthor reads (`artifact_read`, its renders) is the workspace as it\nis now. Absent for a sheet, served live, and for a port on a\nmachine's host, whose server is the session's own.",
                     "type": "string"
                   },
                   "port": {
@@ -54045,7 +54045,7 @@
                     ]
                   },
                   "stage": {
-                    "description": "A sheet's: the workspace's stage serves the port (core `stage.ts`),\nits toolchain root `dir` from the clone's root and the sheet's story file\n`file` from that root. A request for it wakes the stage when it sleeps.",
+                    "description": "A sheet's: the workspace's stage serves the port (core `stage.ts`),\nits toolchain root `dir` from the clone's root and the sheet's story file\n`file` from that root. A request for it wakes the stage when it sleeps.\nThe person is served the workspace's stage live: every save reaches\nthe open panel through Vite's HMR, and a sheet names no `pin`.",
                     "type": "object",
                     "properties": {
                       "dir": {
@@ -59697,7 +59697,7 @@
         ]
       },
       "StageUnreached": {
-        "description": "An author's read of its design graph that couldn't reach its\nworkspace's stage (hub component.ts `stageRead`): the hop that failed, in\nthe preview proxy's kinds, and why, in the hub's words. Said in that read\nalone: the person's panel is served the version handed up (core\n`PreviewSource.pin`), whose own load says what it meets.",
+        "description": "An author's read of its design graph that couldn't reach its\nworkspace's stage (hub component.ts `stageRead`): the hop that failed, in\nthe preview proxy's kinds, and why, in the hub's words. Said in that read\nalone: the person's panel loads the same stage, and its own load says\nwhat it meets.",
         "type": "object",
         "properties": {
           "down": {

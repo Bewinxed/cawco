@@ -1454,7 +1454,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     docs,
     handOver,
     heldId,
-    holdNext,
     inPanel,
     get marked() {
       return marked;
@@ -1463,7 +1462,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return openedOf;
     },
     openNextFirst,
-    pinnedSource,
     get read() {
       return read;
     },
@@ -4889,9 +4887,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (row instanceof ElysiaStatus) {
         return row;
       }
-      // Written in its workspace, then handed up as the version it is now
-      // (its pin cut, cutVersion); a maker's change to one its parent opened
-      // is its next version (changedBy).
+      // Written in its workspace, whose stage the person's panel shows
+      // live (served.ts `pinTarget`), so the write reaches it at once.
       const answer = await changedBy(instance, row, async (target) => {
         const written = await writeSheet(
           target,
@@ -4902,11 +4899,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         if (written instanceof ElysiaStatus) {
           return written;
         }
-        const cut = await cutVersion(target);
-        if (cut instanceof ElysiaStatus) {
-          return cut;
-        }
-        return await componentWritten(cut, change, written);
+        return await componentWritten(target, change, written);
       });
       if (!(answer instanceof ElysiaStatus)) {
         askedNow(instance, row.id);
@@ -4957,21 +4950,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         dials: input.dials ?? sheet.spec.dials,
         directions: directions ?? sheet.spec.directions,
       });
-      // Handed up as the version its files are now (its pin cut,
-      // cutVersion); a maker's change to one its parent opened is its next
-      // version (changedBy).
+      // Its new address on the same live stage (served.ts `pinTarget`).
       const answer = await changedBy(instance, row, async (target) => {
-        // Its new address, cut as a version of its own first: a refusal leaves the person's pin and address as they were.
-        const cut = await pinnedSource(target.machineId, {
-          ...target.source,
-          path: canvasPath(files, spec),
-        });
-        if (cut instanceof ElysiaStatus) {
-          return cut;
-        }
         db.resource(target.id, {
           machineId: target.machineId,
-          source: cut.source,
+          source: { ...target.source, path: canvasPath(files, spec) },
         });
         const next = stillThere(
           db.update(target.id, {
@@ -5168,14 +5151,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * A stage's state, kept in the doc of each artifact served from it: the
-     * person is served a pinned version (core `PreviewSource.pin`), so a
-     * frame of a pin's stage or server is its artifacts', by its toolchain
-     * root or its port; the workspace's own stages serve its author's reads,
-     * which say their own state.
+     * A stage's state, kept in the doc of each artifact served from it, by
+     * its toolchain root or its port: a sheet is served from its
+     * workspace's own stage (served.ts `pinTarget`), a served preview from
+     * its pin's server (core `PreviewSource.pin`). A workspace's own server
+     * serves its author's reads of a served preview, which say their own
+     * state.
      */
     staged: (machineId: string, frame: StageFrame): void => {
-      for (const row of db.pinnedBy(frame.workspace)) {
+      const live = db
+        .previewing({ id: frame.workspace, machineId, path: "//" })
+        .filter((row) => sheetOf(row) !== null);
+      for (const row of [...db.pinnedBy(frame.workspace), ...live]) {
         const sheet = sheetOf(row);
         const served = servedOf(row);
         const ours =

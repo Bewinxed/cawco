@@ -136,8 +136,8 @@ import {
   type Column,
   canvasOf,
   detailsOf,
-  FAILED_LINE,
   FORCED,
+  fixingLine,
   frameTick,
   type Mode,
   type Mounted,
@@ -521,6 +521,7 @@ function mountDrawing(
 
 /** The component threw as it mounted: the error formula's card, its own Try again (`again`), the error and where it threw under Show details. */
 function faultCard(
+  page: Page,
   target: Target,
   error: PageError,
   again: () => void
@@ -554,7 +555,13 @@ function faultCard(
   );
   const actions = document.createElement("div");
   actions.append(button);
-  card.append(head, message, actions, details);
+  card.append(
+    head,
+    message,
+    ...fixingLine(page.by, words.storyNextSave),
+    actions,
+    details
+  );
   return card;
 }
 
@@ -988,7 +995,7 @@ export function bootStage(page: Page): Mode {
   function faulted(target: Target, error: PageError): void {
     clearFault();
     frame.hidden = true;
-    const card = faultCard(target, error, () => {
+    const card = faultCard(page, target, error, () => {
       queue(() => open(target));
     });
     canvas.append(card);
@@ -2673,6 +2680,17 @@ export function bootStage(page: Page): Mode {
       if (!live) {
         waiting.remove();
       }
+      // A save broke the section drawn: the card in its place, never what it drew before the save. Its next draw (`shown`) shows the drawing again.
+      if (live?.section === section) {
+        clearFault();
+        frame.hidden = true;
+      }
+    },
+    threw: (body) => {
+      const now = live;
+      if (now && body === drawing && now.into.error) {
+        faulted(now, now.into.error);
+      }
     },
     reported: () => undefined,
     restyled: () => laid(),
@@ -2682,7 +2700,16 @@ export function bootStage(page: Page): Mode {
     // file of the project read every open canvas again. One a section's
     // frames are drawn from updates that section's own module (host.ts
     // `hotUpdate`), and it is read again as it is shown (`cawco:section`).
-    updated: () => laid(),
+    // A drawing whose story threw is mounted again: the save that broke it
+    // may be fixed by this one, which its framework could not apply to a
+    // story its boundary had taken down. One that throws again says so again.
+    updated: () => {
+      laid();
+      const now = live;
+      if (fault && now && !failedCards.has(now.section.file)) {
+        page.quietly(queue(() => open(now, false)));
+      }
+    },
     redressed: () => {
       relay();
       readAgain();
@@ -2831,7 +2858,7 @@ function bootColumn(page: Page): Mode {
     one.heard = null;
     one.frame.hidden = true;
     one.body.dataset.cawcoState = "failed";
-    const card = faultCard(one.target, error, () => {
+    const card = faultCard(page, one.target, error, () => {
       const target = resolveState(page, one.target.ref);
       if (!("refused" in target)) {
         one.target = target;
@@ -2956,7 +2983,7 @@ function bootColumn(page: Page): Mode {
     }
     const failedOne = sections.find((one) => one.failure);
     if (all.length === 0 && failedOne?.failure) {
-      return FAILED_LINE[failedOne.failure.kind](failedOne.name);
+      return words.sectionFailed[failedOne.failure.kind](failedOne.name);
     }
     return null;
   }
@@ -3124,9 +3151,26 @@ function bootColumn(page: Page): Mode {
     },
     shown,
     failed,
+    threw: (body) => {
+      const one = drawn().find((each) => each.body === body);
+      if (one && !one.fault) {
+        laidOut(one);
+      }
+    },
     reported: () => undefined,
     restyled: () => undefined,
-    updated: () => undefined,
+    // A drawing whose story threw is mounted again, as the stage's own is.
+    updated: () => {
+      for (const one of drawn()) {
+        if (one.fault) {
+          const target = resolveState(page, one.target.ref);
+          if (!("refused" in target)) {
+            one.target = target;
+            draw(one);
+          }
+        }
+      }
+    },
     redressed: () => {
       for (const one of drawn()) {
         dress(one);

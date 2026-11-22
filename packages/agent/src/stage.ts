@@ -457,11 +457,7 @@ const installFor = async (stage: Stage): Promise<void> => {
     await installStage(stage.workspace, clone, stage.root);
     return;
   }
-  await installProject(
-    projectOf(stage),
-    // A pin's sheet has no `node_modules` but what this makes; a server's command may need none.
-    isPin(stage.workspace.id) && stage.runs.kind === "sheet"
-  );
+  await installProject(projectOf(stage), false);
 };
 
 /** Whether a stage's project moved past its install; a look that fails is no move, and the start after says why. */
@@ -517,9 +513,9 @@ export const closingStages = <T>(
 
 /**
  * The workspace whose network a preview's port is in: a pinned version's
- * stage or server runs in its pin's boundary; a place's sheet stage in its
- * stage clone's; every other port is in the network of the workspace the
- * source names.
+ * server runs in its pin's boundary (a sheet is never pinned: hub
+ * served.ts `pinTarget`); a place's sheet stage in its stage clone's;
+ * every other port is in the network of the workspace the source names.
  */
 export const networkOf = (source: {
   pin?: string;
@@ -840,27 +836,13 @@ function stageFor(tree: Tree, story: string, rootOnly = false): StagePlace {
   };
 }
 
-/** A sheet's stage's key: its workspace (or pin) and toolchain root. */
+/** A sheet's stage's key: its workspace and toolchain root. */
 const sheetKey = (workspace: string, dir: string) => `${workspace}:${dir}`;
 
 /** The port a sheet's stage of key `key` serves on: its key's own. */
 const sheetPort = (key: string): number =>
   stagePort(createHash("sha256").update(key).digest().readUInt32BE(0));
 
-/**
- * The port a preview source is answered on in the network it is in
- * ({@link networkOf}): a pinned sheet's on its pin's stage, whose key is the
- * pin's; any other the source's own (a pinned server runs on the same port
- * in its pin's network).
- */
-export const servedPort = (source: {
-  pin?: string;
-  port: number;
-  stage?: { dir: string };
-}): number =>
-  source.pin !== undefined && source.stage
-    ? sheetPort(sheetKey(source.pin, source.stage.dir))
-    : source.port;
 /** A preview server's key: its workspace and port, one server per port. */
 const serveKey = (workspace: string, port: number) => `${workspace}@${port}`;
 
@@ -1825,18 +1807,15 @@ async function sheetWeight(
  * stage writes its clone, and the file is copied to the place's checkout in
  * the same turn as its mirror (stage-clone.ts `copyBack`): the session reads
  * the story file as the sheet shows it, and no mirror undoes the write.
- * The person's write on a pinned version (`pin`, core `PreviewSource.pin`)
- * is made by its pin's stage, so the version he is served shows it, and
- * copied to the workspace or place it was cut from in the pin's turn, so
- * the author reads it there.
+ * The person's panel shows this stage, so the write reaches it through
+ * Vite's HMR.
  */
 export async function writeSheet(
   ports: StagePorts,
   workspace: WorkspaceRef,
-  write: SheetWrite,
-  pin?: string
+  write: SheetWrite
 ): Promise<SheetWritten> {
-  const tree = await treeOf(workspace, ports, pin);
+  const tree = await treeOf(workspace, ports);
   const stories = write.files.map((file) => storyPath(tree, file));
   const [first] = stories;
   if (first === undefined) {
@@ -1853,14 +1832,13 @@ export async function writeSheet(
       SheetWrittenSchema,
       { ...write, files }
     );
-  const done =
-    pin !== undefined || isPlace(workspace.id)
-      ? await inCloneTurn(tree.boundary.id, async () => {
-          const made = await written();
-          await copyBack(workspace, tree, join(stage.root, made.file));
-          return made;
-        })
-      : await written();
+  const done = isPlace(workspace.id)
+    ? await inCloneTurn(tree.boundary.id, async () => {
+        const made = await written();
+        await copyBack(workspace, tree, join(stage.root, made.file));
+        return made;
+      })
+    : await written();
   return { ...done, file: join(stage.dir, done.file) };
 }
 
@@ -1995,12 +1973,10 @@ function walkedAsEmbed(stage: Stage, files: string[]): Promise<void> {
 export async function warmStage(
   ports: StagePorts,
   workspace: WorkspaceRef,
-  warm: StageWarm,
-  /** The pinned version the page's Previews are served (core `PreviewSource.pin`): its pin's stage is the one warmed. */
-  pin?: string
+  warm: StageWarm
 ): Promise<void> {
   try {
-    const tree = await treeOf(workspace, ports, pin);
+    const tree = await treeOf(workspace, ports);
     const canvases = warm.canvases.map((files) =>
       files.map((file) => storyPath(tree, file))
     );
@@ -2236,7 +2212,7 @@ async function servedOn(
   return stateOf(stage);
 }
 
-/** The stage a preview source names, by its key: a sheet's toolchain root, or the server on its port, in its pin when it names one; none for any other source. */
+/** The stage a preview source names, by its key: a sheet's toolchain root, or the server on its port, in its pin when it names one (a served preview's: hub served.ts `pinTarget`); none for any other source. */
 const keyOf = (source: PreviewSource): string | null => {
   if (!("port" in source && source.workspace)) {
     return null;

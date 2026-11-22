@@ -497,11 +497,8 @@ interface ControlTable {
     StageState
   >;
   stageUnpin: Unread<[pin: string]>;
-  stageWarm: Unread<[ref: WorkspaceRef, warm: StageWarm, pin?: string | null]>;
-  stageWrite: Entry<
-    [ref: WorkspaceRef, write: SheetWrite, pin?: string | null],
-    SheetWritten
-  >;
+  stageWarm: Unread<[ref: WorkspaceRef, warm: StageWarm]>;
+  stageWrite: Entry<[ref: WorkspaceRef, write: SheetWrite], SheetWritten>;
   storedRun: Entry<[sessionKey: string, dir?: CatalogDir], StoredRun>;
   supportedCommands: Entry<[], SupportedCommands>;
   supportedModels: Unread<[]>;

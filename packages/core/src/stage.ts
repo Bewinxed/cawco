@@ -1059,7 +1059,7 @@ export const STAGE_SERVE = "stageServe";
  * The daemon's control method that cuts the version of an artifact its
  * author hands up (core preview/protocol.ts `PreviewSource.pin`), a pin of
  * its own beside the one the person is served: `[ref, pin]` for a
- * workspace's or place's sheet or served preview, that tree as it is now
+ * workspace's or place's served preview, that tree as it is now
  * (agent stage-clone.ts `cutPin`: a clone of its repository, or a copy of a
  * tree in none); `[null, pin, dir]` for a folder, a copy of `dir`
  * (`pinFolder`). Answers once the version stands.
@@ -1142,6 +1142,27 @@ export const SECTION_MISSING = "cawco-section-missing";
  * of it to update, its load having failed.
  */
 export const SECTION_WRITTEN = "cawco:section-written";
+
+/**
+ * The stage's word to its pages that a module failed to compile as a page
+ * asked for it (Vite's error, sent just before), with the states files
+ * (from the toolchain root) whose sections are drawn from that module: each
+ * such section a page has drawn says so in its own place, its last drawing
+ * taken down, until its next save that compiles draws it again. Sent after
+ * Vite's own error, so the page reads that error's words with it.
+ */
+export const SECTION_BROKEN = "cawco:section-broken";
+
+/**
+ * The stage's word to its pages that a module whose compile error broke
+ * sections ({@link SECTION_BROKEN}) compiles now, with the states files
+ * that error broke and no other error breaks: each such section a page
+ * drew is drawn again. Sent as Vite's update fetches the module, so its
+ * framework has the new code in place by the time the page hears it. A
+ * module outside the toolchain root updates no section's own module, so
+ * this word is what draws it again.
+ */
+export const SECTION_MENDED = "cawco:section-mended";
 
 /** A CSF story file: `Who.stories.ts`, `Card.stories.tsx`, `Page.stories.js`. */
 export const STORY_FILE = /\.stories\.[cm]?[jt]sx?$/u;
@@ -1470,8 +1491,8 @@ export interface DesignMap {
  * An author's read of its design graph that couldn't reach its
  * workspace's stage (hub component.ts `stageRead`): the hop that failed, in
  * the preview proxy's kinds, and why, in the hub's words. Said in that read
- * alone: the person's panel is served the version handed up (core
- * `PreviewSource.pin`), whose own load says what it meets.
+ * alone: the person's panel loads the same stage, and its own load says
+ * what it meets.
  */
 export interface StageUnreached {
   down: PreviewDown;
