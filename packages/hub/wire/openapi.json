@@ -54487,7 +54487,7 @@
                     ]
                   },
                   "workspace": {
-                    "description": "The workspace whose dev server it is, or the place over its session's\nfolder (core workspace-id.ts `place`) for a session in no workspace:\nit runs in that tree's own network.",
+                    "description": "The workspace whose dev server it is, or for a session in no\nworkspace the place it is staged from (core workspace-id.ts\n`place`): a sheet's over its session's folder, a served preview's\nover its app's folder's repository, or that folder in none (hub\nartifact-events.ts `placeFor`). It runs in that tree's own network.",
                     "type": "string"
                   }
                 },
@@ -139850,6 +139850,42 @@
                 "type": "string",
                 "enum": [
                   "artifact-preview-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-preview-folder"
                 ]
               },
               "detail": {

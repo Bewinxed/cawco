@@ -239,10 +239,15 @@ import {
  * task_result takes a run's keep, stop or ask (`run`, `routine`), and
  * event_route_create names a routine's task (worker 31,469, delegate 12,285
  * measured); the worker's budget is lowered to it, the delegate's raised.
+ * 2026-11-22: artifact_create's `serve.cwd` names the app's folder, absolute
+ * or from the session's, which a port preview is staged from (hub
+ * artifact-events.ts `placeFor`): a session in its home folder previews an
+ * app in any folder (worker 31,477, delegate 12,293 measured); both budgets
+ * are raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 31_469,
-  delegate: 12_285,
+  worker: 31_477,
+  delegate: 12_293,
   overseer: 770,
   "web-facing": 3400,
   curator: 1550,

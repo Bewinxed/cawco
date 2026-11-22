@@ -1847,6 +1847,29 @@ export const workspaces = sqliteTable(
   (table) => [index("workspaces_cut_from").on(table.cutFromWorkspace)]
 );
 
+/**
+ * The folder each place a port preview is staged from stands for (core
+ * workspace-id.ts `place`; hub caw.ts `placeRefOf`): the top of the
+ * repository its app's folder is in, else that folder, on its machine.
+ * A place's id is a hash of its machine and folder, so the hub reads the
+ * folder back here: a sheet's place is its session's folder, but a
+ * preview's may be a folder no session works in. Written as a create names
+ * it (artifact-events.ts `placeFor`), read by the stage it runs
+ * (artifact-events.ts `stageWhere`) and its stage clone's filing
+ * (machine-reports.ts `stageCloneFiled`). The id fixes the folder, so a
+ * row is never stale.
+ */
+export const stagePlaces = sqliteTable("stage_places", {
+  id: text("id").primaryKey(),
+  /** Not a reference: a machine's places go with it in `deleteMachine`. */
+  machineId: machineColumn("machine_id").notNull(),
+  /** Absolute on its machine. */
+  path: text("path").notNull(),
+  /** The session whose create named it last: its stage clone is filed as made by it. */
+  namedBy: sessionColumn("named_by").notNull(),
+  createdAt: stampedNow("created_at"),
+});
+
 /** A work item's life. Only `starting` and `running` take messages. */
 export type WorkItemState = import("@cawco/core/work-items").WorkItemState;
 
@@ -5714,10 +5737,12 @@ export const artifacts = sqliteTable(
     /**
      * A sheet's or a port preview's place instead (core workspace-id.ts
      * `place`): the boundary over the folder of a session with no
-     * workspace, whose stage or server runs in that place's stage clone. No
+     * workspace, or over a preview's app's folder ({@link stagePlaces}),
+     * whose stage or server runs in that place's stage clone. No
      * workspace row is ever made for a place (archiving one deletes its
-     * folder), so it is no key: the hub finds it through the session that
-     * names it (artifact-events.ts `stageWhere`). Or a design folder's
+     * folder), so it is no key: the hub finds it through the create that
+     * named it or the session that works in it (artifact-events.ts
+     * `stageWhere`). Or a design folder's
      * tree (core stage.ts `designOf`), the boundary over the folder the hub
      * keeps for the artifact, found by its id alone.
      */

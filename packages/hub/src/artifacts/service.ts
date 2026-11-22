@@ -3269,7 +3269,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const from =
       input.kind === "page"
         ? await createdPage(making, input)
-        : previewSource(instance, input);
+        : await previewSource(instance, input);
     if (from instanceof ElysiaStatus) {
       return from;
     }

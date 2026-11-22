@@ -270,7 +270,7 @@ export const artifactCreate = {
           .string()
           .max(1000)
           .optional()
-          .describe("From your working folder."),
+          .describe("The app's folder: absolute, or from yours (default)."),
       })
       .optional()
       .describe(

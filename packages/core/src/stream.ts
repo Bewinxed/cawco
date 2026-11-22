@@ -483,12 +483,15 @@ import type { TailnetServing } from "./tailnet-https";
  *    (`task-routine-done-not-run`, `wait-routine-never-ends`,
  *    `task-trigger-not-yours`, `dispatch-routine`). A page built for 95
  *    reads a wait of kind `routine`, so it reloads first.
+ * 97: a port preview's create refuses a `serve.cwd` that names no folder
+ *    on the session's machine under a new code (`artifact-preview-folder`).
+ *    A page built for 96 does not read that refusal, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 96;
+export const WIRE_PROTOCOL = 97;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

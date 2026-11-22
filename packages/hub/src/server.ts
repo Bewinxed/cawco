@@ -2057,6 +2057,7 @@ export const createServer = (
     itemLive,
     onStage,
     personWaitOf,
+    placeFor,
     recordFollows,
     signalResponses,
     stranded,
@@ -5160,6 +5161,7 @@ export const createServer = (
             workItems.ledBy(item.instanceId, instance.id)
         ),
     ownWorkspace: (instance) => workItems.workspaceOf(instance)?.id,
+    placeFor,
     workspaces: (needle) => db.workspacesNamed(needle),
     // A sheet runs on its workspace's stage, on that workspace's machine.
     stage: async (at, file, files, opening) => {

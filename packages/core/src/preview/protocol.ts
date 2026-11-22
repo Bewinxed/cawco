@@ -34,9 +34,11 @@ export type PreviewSource =
        */
       serve?: { command: string; cwd: string };
       /**
-       * The workspace whose dev server it is, or the place over its session's
-       * folder (core workspace-id.ts `place`) for a session in no workspace:
-       * it runs in that tree's own network.
+       * The workspace whose dev server it is, or for a session in no
+       * workspace the place it is staged from (core workspace-id.ts
+       * `place`): a sheet's over its session's folder, a served preview's
+       * over its app's folder's repository, or that folder in none (hub
+       * artifact-events.ts `placeFor`). It runs in that tree's own network.
        */
       workspace?: string;
       /**

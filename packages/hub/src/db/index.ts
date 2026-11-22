@@ -82,6 +82,7 @@ import { type SessionLinesDb, sessionLinesDb } from "./session-lines";
 import { type SessionPlansDb, sessionPlansDb } from "./session-plans";
 import { type SessionTasksDb, sessionTasksDb } from "./session-tasks";
 import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
+import { type StagePlacesDb, stagePlacesDb } from "./stage-places";
 import { type StartersDb, startersDb } from "./starters";
 import { explainStatements, type StatementPlans } from "./statement-plans";
 import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
@@ -186,6 +187,8 @@ interface HubStore {
   readonly sessionTasks: SessionTasksDb;
   /** The machines the hub added over SSH, and the connection it holds to each (ssh-tunnels.ts). */
   readonly sshMachines: SshMachinesDb;
+  /** The folder each place a port preview is staged from stands for (stage-places.ts). */
+  readonly stagePlaces: StagePlacesDb;
   /** A project's starters as last written, and what was done with them (project-starters.ts). */
   readonly starters: StartersDb;
   /**
@@ -414,6 +417,7 @@ const make = async (path: string): Promise<DbShape> => {
     previewPasses: previewPassesDb(db),
     documents: artifactDocumentsDb(db),
     pageStores: pageStoresDb(db),
+    stagePlaces: stagePlacesDb(db),
     streamRelay: streamRelayDb(db),
     browsers: browsersDb(db),
     actions: actionsDb(db),

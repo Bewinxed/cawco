@@ -20,6 +20,7 @@ import type {
   StageState,
   StageWarm,
 } from "@cawco/core/stage";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type { FolderWeight } from "@cawco/preview/proxy";
 import type { problem } from "elysia";
 import type { Caw } from "../caw";
@@ -414,6 +415,21 @@ export interface ArtifactServiceDeps {
         typeof problem<502, { code: "artifact-pin-uncut"; detail: string }>
       >
     | undefined
+  >;
+  /**
+   * The place a port preview of session `instance`, in no workspace, is
+   * staged from, and its server's folder in it: from `folder`, the app's
+   * folder on its machine (artifact-events.ts `placeFor`).
+   */
+  placeFor: (
+    instance: InstanceRow,
+    folder: string | undefined
+  ) => Promise<
+    | { cwd: string; place: WorkspaceRef }
+    | Unanswered
+    | ReturnType<
+        typeof problem<400, { code: "artifact-preview-folder"; detail: string }>
+      >
   >;
   /**
    * Session `instanceId`'s preview origin (preview.ts `address`), its listener started

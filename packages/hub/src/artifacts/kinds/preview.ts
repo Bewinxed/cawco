@@ -7,7 +7,6 @@ import type { StageWarm } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { ElysiaStatus, problem } from "elysia";
-import { stagePlaceRef } from "../../caw";
 import type { ArtifactRow, ArtifactServed } from "../../db/artifacts";
 import { servedOf, servedPin, sheetOf } from "../served";
 import type { ArtifactInput, Making, StageAt, WarmPreviews } from "../shapes";
@@ -38,7 +37,7 @@ const previewProblem = (input: ArtifactInput): string | null => {
  * "record the command for every preview").
  */
 const NOT_SERVED =
-  'A preview of a port names the command that starts its server: serve: { command, cwd }, like { "command": "bun run dev --port 5195", "cwd": "apps/web" }, cwd from your workspace\'s root or your folder. CawCo runs it with PORT set, keeps it up while the preview is used, and starts it again whenever the person opens the preview; a server started in your own shell ends with it.';
+  'A preview of a port names the command that starts its server: serve: { command, cwd }, like { "command": "bun run dev --port 5195", "cwd": "apps/web" }, cwd the app\'s folder, absolute or from your folder (from your workspace\'s root in a workspace). CawCo runs it with PORT set, keeps it up while the preview is used, and starts it again whenever the person opens the preview; a server started in your own shell ends with it.';
 
 /** The machine a hostname, its label or its id names. */
 const machineNamed = (
@@ -52,25 +51,25 @@ const machineNamed = (
       machineLabel(machine.hostname) === nameOrId
   )?.machineId;
 
-/** A port's source in workspace or place `workspace`: refused without what serves it ({@link NOT_SERVED}). */
-const servedSource = (input: ArtifactInput, workspace: string) => {
-  if (!input.serve || input.port === undefined) {
-    return problem(400, {
-      code: "artifact-preview-unserved",
-      detail: NOT_SERVED,
-    });
-  }
-  const source: PreviewSource = {
-    port: input.port,
-    ...(input.path === undefined ? {} : { path: input.path }),
-    workspace,
-    serve: {
-      command: input.serve.command.trim(),
-      cwd: input.serve.cwd?.trim() || ".",
-    },
-  };
-  return source;
-};
+/** Why a port preview with nothing named to serve it is refused ({@link NOT_SERVED}). */
+const unserved = () =>
+  problem(400, {
+    code: "artifact-preview-unserved",
+    detail: NOT_SERVED,
+  });
+
+/** A port's source in workspace or place `workspace`, its server run in `cwd` from that tree's root. */
+const servedSource = (
+  input: ArtifactInput,
+  serve: { command: string },
+  port: number,
+  at: { cwd: string; workspace: string }
+): PreviewSource => ({
+  port,
+  ...(input.path === undefined ? {} : { path: input.path }),
+  workspace: at.workspace,
+  serve: { command: serve.command.trim(), cwd: at.cwd },
+});
 
 /** The stage a sheet is served the person on (its workspace's own, live), by its key, and how a call reaches it. */
 const stageOf = (
@@ -397,13 +396,13 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
    * port's server run in a workspace ({@link portSource}); a folder on the
    * machine `machine` names, else the session's.
    */
-  const previewSource = (instance: InstanceRow, input: ArtifactInput) => {
+  const previewSource = async (instance: InstanceRow, input: ArtifactInput) => {
     const misfit = previewProblem(input);
     if (misfit) {
       return problem(400, { code: "artifact-preview-fields", detail: misfit });
     }
     if (input.port !== undefined) {
-      return portSource(instance, input, input.port);
+      return await portSource(instance, input, input.port);
     }
     const machineId =
       input.machine === undefined
@@ -424,35 +423,57 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
   /**
    * A port's source, its server's command recorded ({@link servedSource}):
    * in the workspace named, else the session's own, on that workspace's
-   * machine and in its network; for a session in no workspace, in the place
-   * over the folder it works in (caw.ts `stagePlaceRef`) on its machine,
-   * whose stage clone the command runs in (agent stage-clone.ts), never on
-   * the bare host. A place's port that is CawCo's own is refused: its
-   * network may be the host's.
+   * machine and in its network, `serve.cwd` from its root; for a session in
+   * no workspace, in the place over the app's folder `serve.cwd` names on
+   * its machine (the session's folder when it names none), whose stage
+   * clone the command runs in (agent stage-clone.ts), never on the bare
+   * host: the place over that folder's repository's top, or over the folder
+   * itself in none (deps `placeFor`). A place's port that is CawCo's own
+   * is refused: its network may be the host's. Refused without what serves
+   * it ({@link NOT_SERVED}).
    */
-  const portSource = (
+  const portSource = async (
     instance: InstanceRow,
     input: ArtifactInput,
     port: number
   ) => {
+    const { serve } = input;
+    if (!serve) {
+      return unserved();
+    }
     const workspace = workspaceFor(instance, input.workspace);
     if (workspace instanceof ElysiaStatus) {
       return workspace;
     }
-    if (!workspace && ownPort(port, instance.machineId)) {
+    if (workspace) {
+      return {
+        machineId: workspace.machineId,
+        source: servedSource(input, serve, port, {
+          workspace: workspace.id,
+          cwd: serve.cwd?.trim() || ".",
+        }),
+      };
+    }
+    if (ownPort(port, instance.machineId)) {
       return problem(400, {
         code: "artifact-preview-own-port",
         detail: artifactToolWords.previewOfOwnPort,
       });
     }
-    const tree = workspace ?? {
-      id: stagePlaceRef(instance).id,
+    const staged = await deps.placeFor(
+      instance,
+      serve.cwd?.trim() || undefined
+    );
+    if (staged instanceof ElysiaStatus) {
+      return staged;
+    }
+    return {
       machineId: instance.machineId,
+      source: servedSource(input, serve, port, {
+        workspace: staged.place.id,
+        cwd: staged.cwd,
+      }),
     };
-    const served = servedSource(input, tree.id);
-    return served instanceof ElysiaStatus
-      ? served
-      : { machineId: tree.machineId, source: served };
   };
   /**
    * The workspace a port preview's server runs in, with its machine: the one

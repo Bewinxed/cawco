@@ -76,6 +76,7 @@ import {
   sessionPlans,
   skills,
   sshMachines,
+  stagePlaces,
   taskRuns,
   taskTriggers,
   treeStops,
@@ -143,6 +144,7 @@ export const OWNED_ROWS = [
     drop: "delete",
   },
   { column: workspaces.createdByInstanceId, fold: "move" },
+  { column: stagePlaces.namedBy, fold: "move" },
   { column: projects.conversationInstanceId, fold: "move" },
   // A session's own words and records go with its row, as its transcript
   // does: the hub's notes that are lines of its transcript, what it asked,
@@ -201,6 +203,7 @@ export const OWNED_ROWS = [
   { column: agents.machineId, rekey: "custom" },
   { column: instances.machineId, rekey: "move" },
   { column: workspaces.machineId, rekey: "move" },
+  { column: stagePlaces.machineId, rekey: "move", goesWithMachine: true },
   { column: workspaceCreates.machineId, rekey: "move" },
   { column: artifacts.machineId, rekey: "move" },
   { column: parkedAsks.machineId, rekey: "move" },
