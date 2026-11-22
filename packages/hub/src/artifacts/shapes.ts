@@ -7,6 +7,7 @@ import type { Pin } from "@cawco/core/comments/model";
 import type { ProgramRead } from "@cawco/core/decisions";
 import type { QuestionClose, SentBy } from "@cawco/core/doc-meta";
 import type { InkGroup } from "@cawco/core/ink";
+import type { LayoutRead } from "@cawco/core/layout-guides";
 import type { PageFault } from "@cawco/core/page-faults";
 import type { FolderWeight, ShownFailure } from "@cawco/core/preview/protocol";
 import type { PreviewAddress } from "@cawco/core/preview/routes";
@@ -340,6 +341,8 @@ export interface ComponentRead extends ArtifactRead {
   errors: ReturnType<typeof errorsSaid>;
   frame?: ReturnType<typeof stateSaid>;
   hint: string;
+  /** The frame's layout as its alignment guides read it, on a read with `layout`. */
+  layout?: LayoutRead;
   moves?: ReturnType<typeof movesSaid>;
   /** The direction the person picked, on a design with directions; null while none is. */
   picked?: { file: string; name: string } | null;
@@ -670,6 +673,8 @@ export interface ComponentWritten {
 export interface ComponentReadAsk {
   /** `story`: one story's args and code too. */
   detail?: "summary" | "story";
+  /** The alignment guides laid over `state`'s frame: its picture with them, and their read (core layout-guides.ts). */
+  layout?: boolean;
   /** A picture: of `state`'s frame, else the canvas, drawn by the daemon. */
   png?: boolean;
   /** Draw it now on the daemon's Chromium and answer that report. */

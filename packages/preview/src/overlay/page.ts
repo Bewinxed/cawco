@@ -55,6 +55,7 @@ import {
   STAGE_DIALS_WRITTEN,
   STAGE_DIFFERENCES,
   STAGE_FAULT,
+  STAGE_GUIDES,
   STAGE_LAID,
   STAGE_LET_GO,
   STAGE_LOAD,
@@ -71,6 +72,7 @@ import {
   STAGE_TIME,
   stageCompareOf,
   stageDialsOf,
+  stageGuidesOf,
   stageLetGoOf,
   stageLoadOf,
   stagePauseOf,
@@ -3709,7 +3711,7 @@ async function personWrite(
 /** What each of the host's messages does, by its type. */
 /**
  * The Animation face's asks of a component's stage (core stage-graph.ts),
- * each read by its own reader and handed the page as a window event of its
+ * and the head's alignment guides, each read by its own reader and handed the page as a window event of its
  * own name, as a reach is.
  */
 function stageAsks(): Record<string, (message: HostMessage) => void> {
@@ -3721,6 +3723,7 @@ function stageAsks(): Record<string, (message: HostMessage) => void> {
     [STAGE_RETIME]: stageRetimeOf,
     [STAGE_RING]: stageRingOf,
     [STAGE_LOAD]: stageLoadOf,
+    [STAGE_GUIDES]: stageGuidesOf,
   };
   return Object.fromEntries(
     Object.entries(readers).map(([type, read]) => [

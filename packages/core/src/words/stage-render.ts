@@ -15,6 +15,9 @@ const readAlone = (first: string | null): string =>
     : "it has no stories to draw";
 
 export const stageRenderWords = {
+  /** A layout read whose state stood posed and whose page answered no guides: a stage served by a daemon older than the guides. */
+  layoutUnread: (story: string) =>
+    `State ${story} was drawn, but its page laid no alignment guides over it: the stage's page predates them. Update the daemon on the workspace's machine, then read again.`,
   /** A states file's weight, as a measurement: what its page loaded. */
   weight: (modules: number, bytes: number) =>
     `It loads ${modules} ${modules === 1 ? "module" : "modules"}, ${bytes} bytes.`,

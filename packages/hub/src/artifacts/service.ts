@@ -581,6 +581,15 @@ const pictureRefusal = (row: ArtifactRow, ask: PictureAsk, drawn: boolean) => {
           : `${row.name} is a ${row.kind}: a state's link draws a preview or a page.`,
     });
   }
+  if (ask.layout && !(row.kind === "component" && ask.state)) {
+    return problem(400, {
+      code: "artifact-read-state-unfit",
+      detail:
+        row.kind === "component"
+          ? "layout lays the alignment guides over one frame: name it, { id, layout: true, state: { story, interaction?, scheme?, width? } }."
+          : `${row.name} is a ${row.kind}: layout reads a design graph's frame.`,
+    });
+  }
   if (ask.state && row.kind !== "component") {
     return problem(400, {
       code: "artifact-read-state-unfit",
@@ -5095,6 +5104,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const drawn =
         png ||
         ask.png === true ||
+        ask.layout === true ||
         ask.link !== undefined ||
         ask.save !== undefined;
       const unfit = pictureRefusal(row, ask, drawn);

@@ -14193,6 +14193,21 @@
             }
           },
           {
+            "name": "layout",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          {
             "name": "verify",
             "in": "query",
             "required": false,
