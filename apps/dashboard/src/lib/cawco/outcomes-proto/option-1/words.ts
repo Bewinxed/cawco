@@ -3,7 +3,7 @@
  * that shows what its place says; the product's copy is Fable's, and lands
  * in `packages/core/src/words/**` once a direction is picked.
  */
-import type { Answer } from "./outcomes";
+import { answerWord } from "../answer-word";
 
 export const outcomesWords = {
   view: "Outcomes",
@@ -17,22 +17,7 @@ export const outcomesWords = {
   asks: (from: string) => `${from} asks:`,
   open: (what: string) => `Open ${what}`,
   close: "Close",
-  answer: (answer: Answer): string => {
-    switch (answer.kind) {
-      case "holds":
-        return "Holds";
-      case "fails":
-        return "Does not hold";
-      case "unknown":
-        return "Not known";
-      case "held":
-        return `Held on ${answer.on}`;
-      case "failed":
-        return `Did not hold on ${answer.on}`;
-      default:
-        return answer satisfies never;
-    }
-  },
+  answer: answerWord,
   why: "Why",
   saidBy: (by: string) => `${by}'s run said:`,
   readRun: "Read the whole run",
