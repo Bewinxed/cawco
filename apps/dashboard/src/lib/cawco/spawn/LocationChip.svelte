@@ -79,7 +79,7 @@
     class: "min-w-0",
   })}
   tall
-  width="calc(var(--spacing) * 80)"
+  width="calc(var(--spacing) * 100)"
 >
   {#snippet trigger()}
     {#if mode === "repo" && onGithub}
