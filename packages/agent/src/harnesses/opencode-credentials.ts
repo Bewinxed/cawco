@@ -39,7 +39,7 @@ export interface HeldCredential {
   /**
    * The workspace whose boundary the session's spawn put it in (agent
    * `HarnessContext.workspace`), or null for none. The plugin reads it for a
-   * location a place holds (core `isPlace`): one OpenCode location serves
+   * location a place holds (core workspace-id.ts `place`): one OpenCode location serves
    * every session in its folder, and only the place's own sessions there are
    * bounded by it.
    */

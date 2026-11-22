@@ -23,7 +23,6 @@ import type { InstanceRow, SendPayload } from "@cawco/core/protocol";
 import { artifactLink } from "@cawco/core/references";
 import { relaunchOf } from "@cawco/core/relaunch";
 import {
-  isDesignTree,
   STAGE_CLONE_MS,
   STAGE_INSTALL_MS,
   STAGE_PICTURE,
@@ -38,7 +37,7 @@ import { waitArtifact } from "@cawco/core/wait-targets";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { workWords } from "@cawco/core/words/work";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
-import { isPlace } from "@cawco/core/workspace-policy";
+import { byWorkspaceIdKind, workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactServiceDeps } from "./artifacts/deps";
 import { designFolderOf } from "./artifacts/design-folder";
@@ -711,15 +710,6 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
   const stageWhere = (
     at: StageAt
   ): { machineId?: string; workspace: WorkspaceRef } | undefined => {
-    if ("workspace" in at && isDesignTree(at.workspace)) {
-      return {
-        workspace: {
-          id: at.workspace,
-          path: designFolderOf(ARTIFACTS_ROOT, at.workspace),
-        },
-        machineId: ctx.ownMachineIdRead,
-      };
-    }
     if ("session" in at) {
       const own = ctx.workItems.workspaceOf(at.session);
       return own
@@ -734,25 +724,39 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
             machineId: at.session.machineId,
           };
     }
-    if (isPlace(at.workspace)) {
-      const row = ctx.db
-        .listInstances()
-        .find(
-          (one) =>
-            stagePlaceRef(one).id === at.workspace &&
-            !ctx.workItems.workspaceOf(one)
-        );
-      return row
-        ? { workspace: stagePlaceRef(row), machineId: row.machineId }
-        : undefined;
+    switch (workspaceIdKindOf(at.workspace)) {
+      case undefined:
+        return;
+      case "design":
+        return {
+          workspace: {
+            id: at.workspace,
+            path: designFolderOf(ARTIFACTS_ROOT, at.workspace),
+          },
+          machineId: ctx.ownMachineIdRead,
+        };
+      case "place": {
+        const row = ctx.db
+          .listInstances()
+          .find(
+            (one) =>
+              stagePlaceRef(one).id === at.workspace &&
+              !ctx.workItems.workspaceOf(one)
+          );
+        return row
+          ? { workspace: stagePlaceRef(row), machineId: row.machineId }
+          : undefined;
+      }
+      case "clone": {
+        const workspace = ctx.workItems.workspaceRef(at.workspace);
+        return workspace
+          ? {
+              workspace,
+              machineId: ctx.db.workspacesNamed(workspace.id)[0]?.machineId,
+            }
+          : undefined;
+      }
     }
-    const workspace = ctx.workItems.workspaceRef(at.workspace);
-    return workspace
-      ? {
-          workspace,
-          machineId: ctx.db.workspacesNamed(workspace.id)[0]?.machineId,
-        }
-      : undefined;
   };
   /**
    * A stage method (core stage.ts) on a workspace's machine (a session's
@@ -783,13 +787,18 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     }
     // A stage installs its project first when its lockfile moved (agent
     // stage-install.ts); a place's runs in a clone of its checkout, cut on
-    // its first use (agent stage-clone.ts): its call waits for that too.
+    // its first use (agent stage-clone.ts): its call waits for that too. A
+    // design folder's installs as a clone's does.
     const asked = await ctx.callAgent(
       machineId,
       method,
       args(workspace),
       STAGE_READY_MS +
-        (isPlace(workspace.id) ? STAGE_CLONE_MS : STAGE_INSTALL_MS) +
+        byWorkspaceIdKind(workspace.id, {
+          place: STAGE_CLONE_MS,
+          clone: STAGE_INSTALL_MS,
+          design: STAGE_INSTALL_MS,
+        }) +
         (method === STAGE_RENDER || method === STAGE_PICTURE
           ? STAGE_RENDER_MS
           : 0) +

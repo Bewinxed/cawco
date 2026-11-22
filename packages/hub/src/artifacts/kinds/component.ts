@@ -9,7 +9,6 @@ import {
   type DesignOpened,
   designContentOf,
   designOf,
-  designTreeId,
   GRAPH_WIDTHS_SAID,
   type RenderReport,
   type SectionUndrawn,
@@ -23,6 +22,7 @@ import {
   storyRefOf,
 } from "@cawco/core/stage";
 import { withoutUndefined } from "@cawco/core/without-undefined";
+import { designTreeId } from "@cawco/core/workspace-id";
 import { pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow } from "../../db/artifacts";

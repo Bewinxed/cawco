@@ -20,7 +20,8 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
-import { borrowedObjectsOf, isPlace } from "@cawco/core/workspace-policy";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
+import { borrowedObjectsOf } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { reportDamaged } from "./damaged-records";
 import { ownFolderSync } from "./layer";
@@ -32,7 +33,7 @@ interface Scan {
 }
 
 /**
- * Keeps place `ref` (core `isPlace`) as a stage ran there: its boundary's
+ * Keeps place `ref` (core workspace-id.ts `place`) as a stage ran there: its boundary's
  * record goes when it closes once quiet, and a preview's request for its
  * stage after the daemon restarted finds the folder here (stage.ts
  * `wakeSource`). A clone has its `create.json`.
@@ -217,12 +218,29 @@ export const workspaceHolding = (
 /**
  * The boundary a spawn that names none runs in: a delegation workspace's,
  * when `path` is inside its clone ({@link workspaceHolding}), and never a
- * place. A place is a person's own folder (core `isPlace`), bounded only
+ * place. A place is a person's own folder (core workspace-id.ts `place`), bounded only
  * for a spawn that names it; a person's session in that folder runs on the
  * host.
  */
 export const cloneHolding = (path: string): Promise<WorkspaceRef | undefined> =>
-  holding(path, (ref) => !isPlace(ref.id));
+  holding(path, (ref) => workspaceIdKindOf(ref.id) !== "place");
+
+/**
+ * Whether workspace `ref` holds the paths under its own: a place its
+ * folder, a clone a folder of its own ({@link ownFolderSync}). A design
+ * folder holds none: its stage alone runs there, named by its tree.
+ */
+const holdsItsPath = (ref: WorkspaceRef): boolean => {
+  switch (workspaceIdKindOf(ref.id)) {
+    case "place":
+      return true;
+    case "clone":
+      return ownFolderSync(ref.id, ref.path);
+    case "design":
+    case undefined:
+      return false;
+  }
+};
 
 /** {@link workspaceHolding} over the workspaces `take` keeps. */
 const holding = async (
@@ -233,10 +251,7 @@ const holding = async (
   const { refs, unread } = await scan();
   const clones = await Promise.all(
     refs
-      .filter(
-        (ref) =>
-          take(ref) && (isPlace(ref.id) || ownFolderSync(ref.id, ref.path))
-      )
+      .filter((ref) => take(ref) && holdsItsPath(ref))
       .map(async (ref) => ({ ref, root: await realOf(ref.path) }))
   );
   const held = clones

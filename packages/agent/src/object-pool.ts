@@ -70,7 +70,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { DAY_MS } from "@cawco/core/time";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
-import { isPlace } from "@cawco/core/workspace-policy";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { fetchDefaultBranch, type Git, gitUntil } from "./git/run";
 import { configEnv } from "./git-credential";
 
@@ -552,7 +552,8 @@ const convert = async (
   ref: WorkspaceRef,
   idle: (() => Promise<string | undefined>) | undefined
 ): Promise<void> => {
-  if (isPlace(ref.id) || unconverted.has(ref.id)) {
+  // Only a clone (core workspace-id.ts) is a repository CawCo cut and may convert.
+  if (workspaceIdKindOf(ref.id) !== "clone" || unconverted.has(ref.id)) {
     return;
   }
   const record = await createRecordOf(ref.id);

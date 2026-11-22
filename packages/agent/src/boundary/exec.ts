@@ -16,8 +16,8 @@ import {
 import { shellQuote } from "@cawco/core/shell-quote";
 import type { Pid } from "@cawco/core/signal";
 import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core/workspace/controls";
+import { workspaceIdKind } from "@cawco/core/workspace-id";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
-import { isPlace } from "@cawco/core/workspace-policy";
 import {
   AGENT_SOCKET_ENV,
   hostCaEnv,
@@ -291,9 +291,9 @@ take() {
  * the command runs with its caller's PATH, behind the hub's git helper and,
  * on macOS, the toolchain shims.
  */
-/** A place's guard, looking before its command (place-guard.ts `placeGuard`): a place it cannot look at runs no command. Nothing for a clone. */
+/** A place's guard, looking before its command (place-guard.ts `placeGuard`): a place it cannot look at runs no command. Nothing for a clone or a design folder. */
 const guardBefore = (id: string, held: Pick<Held, "gen" | "path">): string =>
-  isPlace(id)
+  workspaceIdKind(id) === "place"
     ? `if ! ${shellQuote(perl())} ${shellQuote(guardOf(id, held.gen))} before "$req" ${shellQuote(held.path)} 2> "$req/guard-err"; then
   echo "cawco: this place's guard could not look at it before the command, so the command did not run: $(cat "$req/guard-err")" >&2
   rm -rf "$req"
@@ -302,12 +302,12 @@ fi
 `
     : "";
 
-/** A place's guard, judging what its command did (place-guard.ts `placeGuard`): what it moved fails the command, and so does a guard that could not look. Nothing for a clone. */
+/** A place's guard, judging what its command did (place-guard.ts `placeGuard`): what it moved fails the command, and so does a guard that could not look. Nothing for a clone or a design folder. */
 const guardAfter = (
   id: string,
   held: Pick<Held, "gen" | "path" | "scratch">
 ): string =>
-  isPlace(id)
+  workspaceIdKind(id) === "place"
     ? `${shellQuote(perl())} ${shellQuote(guardOf(id, held.gen))} after "$req" ${shellQuote(held.path)} ${shellQuote(held.scratch)} ${shellQuote(workspacePolicyFile(id))} "$HOME" >&2
 guarded=$?
 if [ "$guarded" = 3 ]; then status=1; elif [ "$guarded" != 0 ]; then echo "cawco: this place's guard could not check what the command changed, so the command is taken as failed." >&2; status=1; fi

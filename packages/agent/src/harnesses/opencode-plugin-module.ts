@@ -45,7 +45,7 @@
  *   gate's to decide. The server pins the built-in's description
  *   for the model, so a clone's session context gives it the boundary's. A
  *   location serves every session in its folder, so in a place (core
- *   `isPlace`) the `shell` decides per session (`context.sessionID`): the
+ *   workspace-id.ts `place`) the `shell` decides per session (`context.sessionID`): the
  *   place's own sessions, the ones the agent records with that place (opencode-
  *   credentials.ts `workspace`), and any not recorded yet, run inside it;
  *   a person's session there runs through the built-in it replaces, which
@@ -105,6 +105,7 @@ import {
 } from "@cawco/core/hooks";
 import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import type * as Judge from "@cawco/core/workspace-judge";
 import { hubClient, refusalText, unwrap } from "@cawco/hub/client";
 import type { Plugin } from "@opencode/plugin";
@@ -146,8 +147,6 @@ export interface PluginSettings {
   mcpConnectMs: number;
   /** The hub's tool that lists a session's open items. */
   openItemsTool: string;
-  /** What a workspace's name ends in when it is a place (core `PLACE_SUFFIX`). */
-  placeSuffix: string;
   /** The plugin's id. */
   pluginId: string;
   /** The location the agent reads through, where every MCP server is off. */
@@ -1044,7 +1043,8 @@ const hereOf = (directory: string): Here => {
   // there (its spawn named the place: the workspace its record names), or
   // before the agent has recorded it at all, never unbounded on a guess.
   // Every session in a clone is the clone's.
-  const inPlace = workspace?.endsWith(settings.placeSuffix) === true;
+  const inPlace =
+    workspace !== undefined && workspaceIdKindOf(workspace) === "place";
   const bounded = (sessionID: string): boolean => {
     if (!holding) {
       return false;

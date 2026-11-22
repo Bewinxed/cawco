@@ -25,15 +25,12 @@ import {
   OUTPUTS_DIR,
   type WorkspaceOutputs,
 } from "@cawco/core/workspace/controls";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { removeTree } from "./remove-tree";
 
-/** A workspace id as the hub makes one (`crypto.randomUUID()`): nothing else names a folder under the scratch root. */
-const WORKSPACE_ID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
-
-/** The host workspace id a spawn names (`SpawnPayload.hostScratch`); refused for anything else. */
+/** The host workspace id a spawn names (`SpawnPayload.hostScratch`): a workspace the hub made, of the clone kind (core workspace-id.ts); refused for anything else, so nothing else names a folder under the scratch root. */
 const hostId = (id: string): string => {
-  if (!WORKSPACE_ID.test(id)) {
+  if (workspaceIdKindOf(id) !== "clone") {
     throw new Error(workWords.hostScratchUnnamed);
   }
   return id;

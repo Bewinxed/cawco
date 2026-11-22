@@ -126,7 +126,7 @@ const FLEET_PLACED: readonly string[] = [...PLACED_SYNCED, PLACED_MEMORY];
  * path from the dir it is found in: git's ({@link GIT_EMPTY}), the
  * harnesses' ({@link HARNESS_CONFIG}), what the fleet places
  * ({@link FLEET_PLACED}) and srt's mandatory names: every clone deny's path.
- * A place (a person's own folder, workspace-policy.ts `isPlace`) protects
+ * A place (a person's own folder, core workspace-id.ts `place`) protects
  * each at any depth from what runs inside it: its policy hands this list to
  * its judge, which refuses writing one (workspace-judge.ts
  * `protectedConfig`), and its boundary binds each one the place has

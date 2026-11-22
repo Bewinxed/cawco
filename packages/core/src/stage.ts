@@ -15,6 +15,7 @@
 
 import type { PreviewDown, PreviewSource } from "./preview/protocol";
 import { withoutUndefined } from "./without-undefined";
+import { workspaceIdKindOf } from "./workspace-id";
 
 /**
  * The frameworks a stage mounts a component with: what the daemon hands its
@@ -805,28 +806,6 @@ export function canvasOf(path: string): { files: string[]; spec: CanvasSpec } {
 }
 
 /**
- * A design folder's stage tree (the owner's pin on graph-general-canvas,
- * 2026-11-22: "the agent should choose as it needs"; "hot reload, no
- * versions"): a component artifact whose files the hub keeps, run by the
- * hub machine's stage over that folder as a stage runs over a workspace's
- * clone, a boundary of its own around it (agent stage-design.ts). Its id
- * is the artifact's that first made it with this suffix, so a held next
- * version, which copies its source, serves from the same folder.
- */
-const DESIGN_SUFFIX = "-design";
-
-/** The stage tree id of the design artifact `artifactId` makes. */
-export const designTreeId = (artifactId: string): string =>
-  `${artifactId}${DESIGN_SUFFIX}`;
-
-/** Whether stage tree `id` is a design folder's ({@link designTreeId}). */
-export const isDesignTree = (id: string): boolean => id.endsWith(DESIGN_SUFFIX);
-
-/** The artifact whose folder holds design tree `id`'s files. */
-export const designArtifactOf = (id: string): string =>
-  id.slice(0, -DESIGN_SUFFIX.length);
-
-/**
  * Where a design's files stand in its artifact's folder under the hub's
  * artifacts root: the toolchain root its stage runs on, its pages and code
  * as the agent gave them, and the package.json and Vite config the hub
@@ -839,7 +818,7 @@ export const PAGE_FILE = /\.html$/u;
 
 /**
  * A design folder (the owner's pick on graph-general-canvas, 2026-11-22):
- * a component artifact served from a {@link isDesignTree} stage tree, each
+ * a component artifact served from a design tree (core workspace-id.ts), each
  * canvas file one of its pages, opened on the design graph like a live
  * story. Its canvas address is its source's `path`. Null for any other
  * artifact, a component on a workspace's stage among them.
@@ -851,7 +830,7 @@ export const designOf = (row: {
   row.kind === "component" &&
   "port" in row.source &&
   row.source.workspace !== undefined &&
-  isDesignTree(row.source.workspace) &&
+  workspaceIdKindOf(row.source.workspace) === "design" &&
   row.source.path
     ? {
         ...canvasOf(row.source.path),
