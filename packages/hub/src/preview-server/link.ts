@@ -8,6 +8,7 @@
  */
 import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
 import { openWebSocket } from "@cawco/preview/proxy";
+import { type HubClient, hubClient } from "../client";
 import { HUB_PORT } from "../config";
 import {
   CONTROL_PATH,
@@ -34,7 +35,19 @@ const REOPENS: BackoffPolicy = {
 /** The hub's own origin on loopback, where the preview server reaches it. */
 export const hubOrigin = (): string => `http://127.0.0.1:${HUB_PORT}`;
 
-export const openHubLink = (heard: (said: HubSays) => void) => {
+/** The preview server's way to the hub, as {@link openHubLink} opens it. */
+export interface HubLink {
+  close: () => void;
+  /** The hub's routes as Eden's typed client (client.ts), each request carrying the server's token. */
+  hub: HubClient;
+  /** Runs `listener` each time the link opens. */
+  onOpen: (listener: () => void) => void;
+  /** Says `said` to the hub when the link is open; dropped while it isn't. */
+  say: (said: ServerSays) => void;
+  token: string;
+}
+
+export const openHubLink = (heard: (said: HubSays) => void): HubLink => {
   let socket: WebSocket | null = null;
   const tries = new Backoff(REOPENS);
   let ended = false;
@@ -82,22 +95,15 @@ export const openHubLink = (heard: (said: HubSays) => void) => {
   open();
 
   return {
-    /** Says `said` to the hub when the link is open; dropped while it isn't. */
     say(said: ServerSays): void {
       if (socket?.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify(said));
       }
     },
-    /** Runs `listener` each time the link opens. */
     onOpen(listener: () => void): void {
       listeners.push(listener);
     },
-    /** A request to the hub's route `path`, carrying the server's token. */
-    ask(path: string, init: RequestInit = {}): Promise<Response> {
-      const headers = new Headers(init.headers);
-      headers.set(TOKEN_HEADER, token);
-      return fetch(`${hubOrigin()}${path}`, { ...init, headers });
-    },
+    hub: hubClient(hubOrigin(), fetch, { headers: { [TOKEN_HEADER]: token } }),
     token,
     close(): void {
       ended = true;
@@ -106,5 +112,3 @@ export const openHubLink = (heard: (said: HubSays) => void) => {
     },
   };
 };
-
-export type HubLink = ReturnType<typeof openHubLink>;

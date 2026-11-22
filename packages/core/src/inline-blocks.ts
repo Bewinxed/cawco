@@ -12,6 +12,8 @@
  * ({@link inlineBlockSlug}), so the transcript knows the artifact again.
  */
 
+import { nameSlug } from "./name-slug";
+
 /** A block's fence language. */
 export const INLINE_BLOCK_LANG = "openui";
 
@@ -116,13 +118,9 @@ export const inlineBlocksIn = (text: string): InlineBlockFence[] => {
   return found;
 };
 
-const SLUG = /[^a-z0-9]+/gu;
-const SLUG_ENDS = /^-+|-+$/gu;
-
-/** The artifact name a block is kept under: its name in lowercase words joined by dashes. */
+/** The artifact name a block is kept under: its name as a slug (name-slug.ts). */
 export const inlineBlockSlug = (name: string): string =>
-  name.toLowerCase().replace(SLUG, "-").replace(SLUG_ENDS, "").slice(0, 63) ||
-  "block";
+  nameSlug(name) || "block";
 
 /** `root = Name(` at a statement's start: the component a program's root is. */
 const ROOT = /^\s*root\s*=\s*([A-Za-z_][\w]*)\s*\(/mu;

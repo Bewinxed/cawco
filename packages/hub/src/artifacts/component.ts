@@ -9,6 +9,7 @@
  */
 
 import type { DrawnKept } from "@cawco/core/doc-meta";
+import { nameSlug } from "@cawco/core/name-slug";
 import {
   CANVAS_SPEC_LIMITS,
   type CanvasDial,
@@ -233,12 +234,7 @@ export const designPlaces = (parts: readonly DesignPartAsked[]): string[] => {
   }
   const taken = new Set<string>();
   return parts.map((part, at) => {
-    const base =
-      (part.name ?? "")
-        .toLowerCase()
-        .replaceAll(/[^a-z0-9]+/gu, "-")
-        .replaceAll(/^-+|-+$/gu, "")
-        .slice(0, 60) || `direction-${at + 1}`;
+    const base = nameSlug(part.name ?? "") || `direction-${at + 1}`;
     let slug = base;
     for (let n = 2; taken.has(slug); n += 1) {
       slug = `${base}-${n}`;

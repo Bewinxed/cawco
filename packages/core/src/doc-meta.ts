@@ -178,7 +178,7 @@ export interface DocMeta {
   promoted: ArtifactPromotion;
   /** The agent's closes of its questions, by question key: the hub's alone to write. */
   questionsClosed: Record<string, QuestionClose>;
-  /** Made for its maker's own reading (artifact_create's `reading`): never handed up, never the person's, and it holds no workspace (hub artifacts service `owedToPerson`). */
+  /** Made for its maker's own reading (artifact_create's `reading`): never handed up, never the person's, its name refused to any other tree, and gone when its maker's work item ends (hub artifacts service `itemEnded`). */
   reading: boolean;
   /** When the session last changed it, a revision or a new ask. */
   revisedAt: string;
