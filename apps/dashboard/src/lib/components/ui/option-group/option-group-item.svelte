@@ -2,6 +2,7 @@
   import type { HTMLButtonAttributes } from "svelte/elements";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { cn, type WithElementRef } from "#lib/utils.js";
+  import RadioMark from "./radio-mark.svelte";
   import { useOptionGroup } from "./state.svelte.js";
 
   /**
@@ -86,5 +87,9 @@
   bind:this={ref}
   {...restProps}
 >
+  {#if group.mark && group.layout === "chips"}
+    <!-- The marked look's chips lead with the radio mark, so the pick reads by shape too. -->
+    <RadioMark />
+  {/if}
   {@render children?.()}
 </button>

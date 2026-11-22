@@ -12,8 +12,8 @@
   /**
    * Account & usage limits: the house's account picker (AccountPickRows,
    * the rows a session's account chip and its menus' Account submenu list),
-   * hung from a setting chip as wide as its card, the name at its start and
-   * the account's room at its end: Any available first, then
+   * hung from a setting chip sized to its name and room: Any available
+   * first, then
    * each fleet account by its dot, its name and its room, or the limit it
    * is at (one signed in nowhere says Signed out there). Under it, what
    * the pick does, the alert when the named account is signed out
@@ -29,19 +29,14 @@
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
-  import { OptionTiles } from "#lib/components/ui/option-group/index.js";
-  import {
-    IconChevronDown,
-    IconError,
-    IconHourglass,
-    IconTransfer,
-  } from "#lib/icons.js";
+  import { IconChevronDown, IconError } from "#lib/icons.js";
   import {
     chosenAccountSignedOut,
     type HrefOf,
     pickAccounts,
     type StageSends,
   } from "./changes";
+  import PickChips from "./PickChips.svelte";
   import { CARD_GROUP, GROUP_LABEL } from "./section-card";
   import { howItRunsWords as words } from "./words";
 
@@ -103,15 +98,7 @@
   }
 </script>
 
-{#snippet limitGlyph(choice: "wait" | "move")}
-  {#if choice === "wait"}
-    <IconHourglass aria-hidden="true" class="size-icon-md text-ink-muted" />
-  {:else}
-    <IconTransfer aria-hidden="true" class="size-icon-md text-ink-muted" />
-  {/if}
-{/snippet}
-
-<div class="flex min-w-0 flex-col gap-space-5">
+<div class="flex min-w-0 flex-col gap-space-4">
   <section aria-labelledby="{uid}-account" class={CARD_GROUP}>
     <p class={GROUP_LABEL} id="{uid}-account">{words.account.heading}</p>
 
@@ -131,7 +118,7 @@
         rows="[data-pick-row]"
         triggerClass={chipVariants({
           variant: "setting",
-          class: "w-full min-w-0 justify-start",
+          class: "min-w-0 max-w-full",
         })}
         triggerData={{ "data-tool": true, "data-account-chip": true }}
         width="calc(var(--spacing) * 64)"
@@ -147,11 +134,11 @@
           {/if}
           <span data-account-chip data-slot="chip-label">{shownName}</span>
           <!-- The account's room as the session card's account chip draws it
-               (AccountSwitch `quota`): the ring and its figure one unit, at
-               the field's end apart from the name. -->
+               (AccountSwitch `quota`): the ring and its figure one unit, a
+               word space off the name. -->
           {#if chosenRoom}
             <span
-              class="mark-line ms-auto inline-flex flex-none items-center gap-word text-ink-muted tabular-nums"
+              class="mark-line ms-word inline-flex flex-none items-center gap-word text-ink-muted tabular-nums"
               data-box
               data-slot="quota"
             >
@@ -159,10 +146,7 @@
               <span>{chosenRoom.words}</span>
             </span>
           {/if}
-          <IconChevronDown
-            class={chosenRoom ? undefined : "ms-auto"}
-            data-slot="chevron"
-          />
+          <IconChevronDown data-slot="chevron" />
         {/snippet}
         <AccountPickRows
           {accounts}
@@ -214,20 +198,14 @@
       <p class={GROUP_LABEL} id="{uid}-limit">
         {words.account.atLimitHeading}
       </p>
-      <OptionTiles
-        bind:value={
-          () => record.account.atLimit,
-          (next) => {
-            if (next !== null && next !== record.account.atLimit) {
-              onchange({ key: "atLimit", value: next });
-            }
-          }
-        }
-        cols={1}
+      <PickChips
         {disabled}
-        glide="mark"
-        glyph={limitGlyph}
-        label={words.account.atLimitGroupLabel}
+        labelledby="{uid}-limit"
+        onpick={(next) => {
+          if (next !== record.account.atLimit) {
+            onchange({ key: "atLimit", value: next });
+          }
+        }}
         options={[
           {
             id: "wait",
@@ -240,6 +218,7 @@
             note: words.account.atLimitMove.note,
           },
         ]}
+        value={record.account.atLimit}
       />
       <RowFault
         again={() => onretry("atLimit")}

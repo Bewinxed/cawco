@@ -1,11 +1,10 @@
 <script lang="ts">
   /**
    * Repository & Git, for a code project: its linked repositories as a
-   * divided list (RowList `divided`), each by its name with its whole
-   * address under it in the muted code face, opening on its host; where its
-   * large files are kept as one inline row, the label and what the pick
-   * does beside the two choices (the custom server opening its address and
-   * key under the row); and where its finished code goes (WorkLands). Every
+   * list (RowList `divided`), each by its slug in the code face, opening on
+   * its host; where its large files are kept, the view's one pick
+   * (PickChips; the custom server opening its address and key under it);
+   * and where its finished code goes (WorkLands). Every
    * pick moves at the press (changes.ts `withAsked`); a refusal puts it
    * back and stands under its control (RowFault).
    */
@@ -19,16 +18,11 @@
     OptionGroup,
     OptionGroupItem,
   } from "#lib/components/ui/option-group/index.js";
-  import {
-    IconExternalLinear,
-    IconFolderGit,
-    IconGitRepo,
-    IconKey,
-    IconLargeFilesServer,
-  } from "#lib/icons.js";
+  import { IconExternalLinear, IconGitRepo, IconKey } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import type { HrefOf, StageSends } from "./changes";
   import { FORM_FIELD, FORM_LABEL, OPENED_FORM } from "./opened-form";
+  import PickChips from "./PickChips.svelte";
   import { CARD_GROUP, GROUP_LABEL } from "./section-card";
   import { LARGE_FILE_KEY_CONNECTIONS } from "./tie-setup.fixture";
   import WorkLands from "./WorkLands.svelte";
@@ -98,33 +92,16 @@
 
   /** The large-file choices, each by its words. */
   const LARGE_FILES = [
-    { id: "own", ...words.places.largeFilesOwn },
-    { id: "declared", ...words.places.largeFilesDeclared },
-  ] as const;
+    { id: "own" as const, ...words.places.largeFilesOwn },
+    { id: "declared" as const, ...words.places.largeFilesDeclared },
+  ];
 </script>
-
-{#snippet largeFilesGlyph(kind: "own" | "declared")}
-  {#if kind === "own"}
-    <IconFolderGit aria-hidden="true" class="size-icon-md text-ink-muted" />
-  {:else}
-    <IconLargeFilesServer
-      aria-hidden="true"
-      class="size-icon-md text-ink-muted"
-    />
-  {/if}
-{/snippet}
 
 {#if record.repos.length > 0}
   <div class={CARD_GROUP}>
-    <p class={GROUP_LABEL} id="{uid}-repos">{words.places.repositories}</p>
     <RowList divided label={words.places.repositories}>
       {#each record.repos as repo (`${repo.host}/${repo.owner}/${repo.name}`)}
-        <SectionRow
-          code
-          icon={IconGitRepo}
-          meta="{repo.host}/{repo.owner}/{repo.name}"
-          name={repo.name}
-        >
+        <SectionRow icon={IconGitRepo} mono name="{repo.owner}/{repo.name}">
           {#snippet trailing()}
             <Button
               aria-label="{repo.owner}/{repo.name}"
@@ -143,42 +120,16 @@
   </div>
 {/if}
 
-<!-- Git LFS: one inline row, its label and what the pick does beside the
-     two choices, never a heading without its control. -->
+<!-- Git LFS: its label over its one pick, never a heading without its control. -->
 <div class={CARD_GROUP}>
-  <div
-    class="flex min-w-0 flex-wrap items-center justify-between gap-x-space-4 gap-y-space-2"
-  >
-    <div class="flex min-w-0 flex-auto basis-48 flex-col gap-space-row">
-      <p class={GROUP_LABEL} id="{uid}-lfs">{words.places.largeFilesHeading}</p>
-      <p class="m-0 type-meta text-pretty text-ink-muted">
-        {largeFilesShown === "own"
-          ? words.places.largeFilesOwn.note
-          : words.places.largeFilesDeclared.note}
-      </p>
-    </div>
-    <OptionGroup
-      aria-labelledby="{uid}-lfs"
-      bind:value={
-        () => [largeFilesShown],
-        (next) => {
-          const kind = LARGE_FILES.find((one) => one.id === next[0])?.id;
-          pickLargeFiles(kind ?? null);
-        }
-      }
-      {disabled}
-      glide="mark"
-    >
-      {#each LARGE_FILES as choice (choice.id)}
-        <OptionGroupItem value={choice.id}>
-          <span class="mark-line flex min-w-0 items-center gap-x-space-2">
-            {@render largeFilesGlyph(choice.id)}
-            <span>{choice.name}</span>
-          </span>
-        </OptionGroupItem>
-      {/each}
-    </OptionGroup>
-  </div>
+  <p class={GROUP_LABEL} id="{uid}-lfs">{words.places.largeFilesHeading}</p>
+  <PickChips
+    {disabled}
+    labelledby="{uid}-lfs"
+    onpick={pickLargeFiles}
+    options={LARGE_FILES}
+    value={largeFilesShown}
+  />
   <RowFault
     again={() => onretry("largeFiles")}
     againLabel={words.retryChange}
@@ -279,6 +230,13 @@
 </div>
 
 <div class={CARD_GROUP}>
-  <p class={GROUP_LABEL}>{words.lands.groupLabel}</p>
-  <WorkLands {onchange} {onretry} {pending} {record} {refused} />
+  <p class={GROUP_LABEL} id="{uid}-lands">{words.lands.groupLabel}</p>
+  <WorkLands
+    labelledby="{uid}-lands"
+    {onchange}
+    {onretry}
+    {pending}
+    {record}
+    {refused}
+  />
 </div>

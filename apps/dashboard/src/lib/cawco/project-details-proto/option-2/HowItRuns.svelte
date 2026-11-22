@@ -2,9 +2,10 @@
   /**
    * Option 2 ("How it runs"): the project's settings, mounted inside the
    * project page's pane, which gives it the page's side edges and its
-   * scroller as it gives every view. One centred column of peer sections
-   * (SettingsSection), each its heading over one white card: Task sync,
-   * Run environments, Repository & Git for a code project, Account & usage
+   * scroller as it gives every view. Its peer sections (SettingsSection),
+   * each one white card holding its heading and settings, stand in as many
+   * columns as fit, so every one shows in the first screen: Task sync, Run
+   * environments, Repository & Git for a code project, Account & usage
    * limits, and What needs you. A section still reading draws its own
    * skeleton, one whose read failed its alert with Try again, and the
    * hub's being out of reach stands over them all.
@@ -119,10 +120,10 @@
     return "";
   };
 
-  /** The sections in their order: Repository & Git only for code. */
+  /** The sections in their order, which the columns fill down (Repository & Git, the tallest, after the account so the two columns balance): Repository & Git only for code. */
   const SECTIONS = $derived<SectionId[]>(
     record.holdsCode
-      ? ["tasks", "places", "git", "account", "waits"]
+      ? ["tasks", "places", "account", "git", "waits"]
       : ["tasks", "places", "account", "waits"]
   );
 </script>
@@ -202,11 +203,11 @@
 <!-- A view of the project page: its pane gives it the page's side edges and its scroller (ProjectPage `viewPane`, pane-inset `PANE_INSET`). -->
 <section
   aria-label={words.viewLabel}
-  class="@container flex w-full flex-col pt-space-5 pb-space-6 max-phone:py-space-4"
+  class="@container flex w-full flex-col pt-space-4 pb-space-6 max-phone:py-space-4"
 >
   {#if !record.hubReachable}
     <Alert
-      class="mx-auto mb-space-5 max-w-c-settings-col"
+      class="mb-space-4 max-w-c-settings-max"
       layout="row"
       variant="warning"
     >
@@ -217,9 +218,12 @@
     </Alert>
   {/if}
 
-  <!-- One centred column of peer sections, 32px apart. -->
+  <!-- Every section's card in the first screen: as many columns of the
+       card's width as fit, three at most, filled down and balanced
+       (multi-column), each card whole in its column and only as tall as
+       what it holds. -->
   <div
-    class="mx-auto flex w-full max-w-c-settings-col min-w-0 flex-col gap-space-8"
+    class="max-w-c-settings-max min-w-0 columns-(--spacing-c-settings-col) gap-x-space-4 [&>*]:mb-space-4"
   >
     {#each SECTIONS as section (section)}
       {@const state = stateOf(section)}

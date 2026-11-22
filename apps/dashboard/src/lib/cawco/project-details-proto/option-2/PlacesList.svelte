@@ -1,13 +1,15 @@
 <script lang="ts">
   /**
    * Run environments: every folder the project lives in at once, as a
-   * divided list (RowList `divided`, SectionRow): the machine's glyph and
-   * name, the whole path under it in the muted code face, where sessions
-   * start as a pill, the hub's own copy said as such, what is wrong as
+   * line at a glance (each by its machine's glyph and name, where sessions
+   * start marked by a pill), and Show folders opens them in place as a
+   * divided list (RowList `divided`, SectionRow; open by itself while one is
+   * missing): the machine's glyph and name, its whole path under it in the
+   * muted code face, where sessions start as a pill, the hub's own copy said as such, what is wrong as
    * badges, and the place's acts in its ⋯ menu (Find folder standing out on
    * a folder gone missing, and why under it). Add folder is the card's
-   * secondary button under the list; pressed, it becomes the add form in
-   * its place.
+   * secondary button under them, beside Show folders; pressed, it becomes
+   * the add form in its place.
    */
   import Field from "#lib/cawco/config/Field.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
@@ -106,6 +108,15 @@
     opening?.startsWith("drop:") ? opening.slice("drop:".length) : null
   );
 
+  /** The folders' whole list (paths, acts) opened in place under their summary; open by itself while one is missing. */
+  let showList = $state(false);
+  const listOpen = $derived(
+    showList ||
+      adding ||
+      dropping !== null ||
+      record.places.some((place) => place.missing)
+  );
+
   /** A place's acts, its ⋯ menu's rows. */
   const actsOf = (place: ProjectPlace) => {
     const off = disabled || movingPlaceId === place.id;
@@ -152,97 +163,134 @@
 </script>
 
 <div class="flex min-w-0 flex-col gap-space-3">
-  <RowList divided label={words.places.heading}>
-    {#each record.places as place (place.id)}
-      {@const machine = place.machineId
-        ? (machinesById.get(place.machineId) ?? null)
-        : null}
-      {@const offline = machine !== null && !machine.online}
-      {@const moving = movingPlaceId === place.id}
-      <SectionRow
-        actions={place.kind === "hub" ? [] : actsOf(place)}
-        icon={machine ? machineIcon(machine.os) : IconHubFolder}
-        code
-        meta={place.path}
-        name={machine ? machine.name : words.places.hub}
-        note={place.missing
-          ? { text: words.places.missingTip, tone: "fail" }
-          : undefined}
-        whole
-      >
-        {#snippet badge()}
-          {#if place.missing}
-            <Badge variant="fail"
-              ><IconError aria-hidden="true" /><span
-                >{words.places.missing}</span
-              ></Badge
-            >
-          {:else if moving}
-            <Badge variant="live"
-              ><IconWorking aria-hidden="true" /><span
-                >{words.places.moving}</span
-              ></Badge
-            >
-          {:else if offline}
-            <Badge variant="attn"><span>{words.places.away}</span></Badge>
-          {/if}
-          {#if place.kind === "start"}
-            <!-- Where sessions start: the one marked place, a pill. -->
-            <Badge variant="brand"><span>{words.places.startsHere}</span></Badge
-            >
-          {:else if place.kind === "hub"}
-            <!-- Why it has no menu: the hub keeps it. -->
-            <span class="type-meta text-ink-muted">{words.places.hubOwn}</span>
-          {/if}
-        {/snippet}
-        {#snippet trailing()}
-          {#if place.missing}
-            <Button
-              {disabled}
-              icon={IconFolderOpen}
-              label={words.places.findFolder}
-              onclick={() => onplace("find", place.id)}
-              size="xs"
-              variant="outline"
-            />
-          {/if}
-        {/snippet}
-        {#snippet below()}
-          {#if dropping === place.id}
-            <div class="flex min-w-0 flex-col gap-space-2" transition:unfold>
-              <p class="m-0 type-meta text-pretty text-ink-strong">
-                {words.places.dropSays(
-                  place.path,
-                  machine ? machine.name : words.places.hub
-                )}
-                <span class="text-ink-muted">{words.places.dropKeeps}</span>
-              </p>
-              <div class="flex flex-wrap items-center gap-space-2">
-                <Button
-                  {disabled}
-                  label={words.places.drop}
-                  onclick={() => {
-                    dropping = null;
-                    onplace("drop", place.id);
-                  }}
-                  size="xs"
-                  variant="outline"
-                />
-                <Button
-                  label={words.cancel}
-                  onclick={() => {
-                    dropping = null;
-                  }}
-                  size="xs"
-                  variant="ghost"
-                />
+  {#if listOpen}
+    <RowList divided label={words.places.heading}>
+      {#each record.places as place (place.id)}
+        {@const machine = place.machineId
+          ? (machinesById.get(place.machineId) ?? null)
+          : null}
+        {@const offline = machine !== null && !machine.online}
+        {@const moving = movingPlaceId === place.id}
+        <SectionRow
+          actions={place.kind === "hub" ? [] : actsOf(place)}
+          icon={machine ? machineIcon(machine.os) : IconHubFolder}
+          code
+          meta={place.path}
+          name={machine ? machine.name : words.places.hub}
+          note={place.missing
+            ? { text: words.places.missingTip, tone: "fail" }
+            : undefined}
+          whole
+        >
+          {#snippet badge()}
+            {#if place.missing}
+              <Badge variant="fail"
+                ><IconError aria-hidden="true" /><span
+                  >{words.places.missing}</span
+                ></Badge
+              >
+            {:else if moving}
+              <Badge variant="live"
+                ><IconWorking aria-hidden="true" /><span
+                  >{words.places.moving}</span
+                ></Badge
+              >
+            {:else if offline}
+              <Badge variant="attn"><span>{words.places.away}</span></Badge>
+            {/if}
+            {#if place.kind === "start"}
+              <!-- Where sessions start: the one marked place, a pill. -->
+              <Badge variant="brand"
+                ><span>{words.places.startsHere}</span></Badge
+              >
+            {:else if place.kind === "hub"}
+              <!-- Why it has no menu: the hub keeps it. -->
+              <span class="type-meta text-ink-muted">{words.places.hubOwn}</span
+              >
+            {/if}
+          {/snippet}
+          {#snippet trailing()}
+            {#if place.missing}
+              <Button
+                {disabled}
+                icon={IconFolderOpen}
+                label={words.places.findFolder}
+                onclick={() => onplace("find", place.id)}
+                size="xs"
+                variant="outline"
+              />
+            {/if}
+          {/snippet}
+          {#snippet below()}
+            {#if dropping === place.id}
+              <div class="flex min-w-0 flex-col gap-space-2" transition:unfold>
+                <p class="m-0 type-meta text-pretty text-ink-strong">
+                  {words.places.dropSays(
+                    place.path,
+                    machine ? machine.name : words.places.hub
+                  )}
+                  <span class="text-ink-muted">{words.places.dropKeeps}</span>
+                </p>
+                <div class="flex flex-wrap items-center gap-space-2">
+                  <Button
+                    {disabled}
+                    label={words.places.drop}
+                    onclick={() => {
+                      dropping = null;
+                      onplace("drop", place.id);
+                    }}
+                    size="xs"
+                    variant="outline"
+                  />
+                  <Button
+                    label={words.cancel}
+                    onclick={() => {
+                      dropping = null;
+                    }}
+                    size="xs"
+                    variant="ghost"
+                  />
+                </div>
               </div>
-            </div>
+            {/if}
+          {/snippet}
+        </SectionRow>
+      {/each}
+    </RowList>
+  {:else}
+    <!-- At a glance: each folder by its machine, where sessions start marked. -->
+    <ul
+      aria-label={words.places.heading}
+      class="m-0 flex list-none flex-wrap items-center gap-x-space-4 gap-y-space-2 p-0"
+    >
+      {#each record.places as place (place.id)}
+        {@const machine = place.machineId
+          ? (machinesById.get(place.machineId) ?? null)
+          : null}
+        {@const Glyph = machine ? machineIcon(machine.os) : IconHubFolder}
+        <li class="mark-line flex min-w-0 items-center gap-space-2">
+          <Glyph
+            aria-hidden="true"
+            class="size-icon-md flex-none text-ink-muted"
+            data-box
+          />
+          <span class="type-label text-ink-strong"
+            >{machine ? machine.name : words.places.hub}</span
+          >
+          {#if place.kind === "start"}
+            <Badge data-box variant="brand"
+              ><span>{words.places.startsHere}</span></Badge
+            >
           {/if}
-        {/snippet}
-      </SectionRow>
-    {/each}
-  </RowList>
+          {#if machine !== null && !machine.online}
+            <Badge data-box variant="attn"
+              ><span>{words.places.away}</span></Badge
+            >
+          {/if}
+        </li>
+      {/each}
+    </ul>
+  {/if}
 
   {#if adding}
     <form
@@ -331,17 +379,29 @@
       </div>
     </form>
   {:else}
-    <!-- The card's secondary act, under its list. -->
-    <Button
-      class="self-start"
-      {disabled}
-      icon={IconPlus}
-      label={words.places.addPlace}
-      onclick={() => {
-        adding = true;
-      }}
-      size="sm"
-      variant="outline"
-    />
+    <!-- The card's acts, under its list: the secondary Add folder, then
+         the paths, opened in place. -->
+    <div class="flex flex-wrap items-center gap-space-2">
+      <Button
+        {disabled}
+        icon={IconPlus}
+        label={words.places.addPlace}
+        onclick={() => {
+          adding = true;
+        }}
+        size="sm"
+        variant="outline"
+      />
+      <Button
+        aria-expanded={listOpen}
+        label={listOpen ? words.places.hideFolders : words.places.showFolders}
+        onclick={() => {
+          showList = !listOpen;
+        }}
+        size="sm"
+        tone="quiet"
+        variant="ghost"
+      />
+    </div>
   {/if}
 </div>

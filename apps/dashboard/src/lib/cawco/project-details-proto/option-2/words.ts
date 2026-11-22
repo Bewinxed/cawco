@@ -112,6 +112,8 @@ export const howItRunsWords = {
     hub: "CawCo server",
     /** The hub's own copy, said beside its row: why it has no menu. */
     hubOwn: "The hub's own copy",
+    showFolders: "Show folders",
+    hideFolders: "Hide folders",
     missing: "Not found",
     missingTip: "Folder not found here, so agents cannot start.",
     away: "Offline",
@@ -164,6 +166,11 @@ export const howItRunsWords = {
   },
 
   waits: {
+    /** How many kinds a decider decides, beside its name. */
+    holds: (count: number) =>
+      count === 1 ? "1 kind" : `${count === 0 ? "No" : count} kinds`,
+    showKinds: "Show kinds",
+    hideKinds: "Hide kinds",
     heading: "Who makes the call",
     putAllBack: "Reset to defaults",
     /** What Reset to defaults puts back, said before it does. */
