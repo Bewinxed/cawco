@@ -27,14 +27,15 @@ permissions and questions from the lock screen.
   Projects features (Caw, tasks, routines, decisions, live-component sheets). Read it whole before
   briefing or building any of them.
 - **Journey spec**: JOURNEY.md. Structural and IA decisions come from it.
-- **Design spec**: DESIGN.md holds the design judgements that span screens and no check can
-  hold; read it whole before UI work and follow each line, and the skill it names for a kind of
-  work. A value several places share is a token in `apps/dashboard/src/lib/tokens/theme.css`
-  (Tailwind's `@theme`; add it there first); padding, margin and gap use the house steps; a size
-  only one place needs is written on Tailwind's number scale. DESIGN.md changes when the
-  owner picks a change to the system; a screen's own decisions live in its surface brief at
+- **Design spec**: `design/DESIGN.md` holds the design judgements that span screens and no
+  check can hold; read it whole before UI work and follow each line, and the skill it names for
+  a kind of work. `design/` is this repo's design system as CawCo reads it (`design/manifest.json`
+  names the token source), and a file in it changes through `design_write`. A value several
+  places share is a token in `apps/dashboard/src/lib/tokens/theme.css` (Tailwind's `@theme`; add
+  it there first); padding, margin and gap use the house steps; a size only one place needs is
+  written on Tailwind's number scale. A screen's own decisions live in its surface brief at
   `apps/dashboard/.impeccable/surfaces/` (`impeccable surface-brief read <file>`).
-- **Product truth**: PRODUCT.md (users, principles, accessibility). **Copy**: the words the product shows live in `packages/core/src/words/**`, written to DESIGN.md's Words section.
+- **Product truth**: PRODUCT.md (users, principles, accessibility). **Copy**: the words the product shows live in `packages/core/src/words/**`, written to `design/DESIGN.md`'s Words section.
 
 ## Tests
 

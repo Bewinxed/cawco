@@ -4,7 +4,7 @@
    * render error (FaultBoundary), inside the chrome that outlives it: Caw
    * stands whole on the axis, the largest thing, over one headline and one
    * line; under them one action leads, with Show details quiet under it
-   * (design/fault-references.md, BitePal).
+   * (design/references/fault-references.md, BitePal).
    *
    * `room`: how much the part gives him. A panel or a sheet, or a whole page,
    * where the fault is the whole of the view and its lead takes the house's

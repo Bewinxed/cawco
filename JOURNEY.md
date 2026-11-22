@@ -1,9 +1,9 @@
 # JOURNEY.md
 
-<!-- The structural and temporal design spec for Caw&Co ("CawCo"). Pairs with DESIGN.md
+<!-- The structural and temporal design spec for Caw&Co ("CawCo"). Pairs with design/DESIGN.md
      (the design rules; the tokens are in apps/dashboard/src/lib/tokens/theme.css) — this
      document carries the structural and temporal spec that rules and tokens alone can't
-     encode. For the rules, see DESIGN.md. -->
+     encode. For the rules, see design/DESIGN.md. -->
 
 ## Job
 
@@ -533,7 +533,7 @@ Two scales, one token language. The plan reserves compact for the transcript and
 
 ### 3. `project/[id]` — Project
 
-This spec describes jobs and the order of what matters, not a look. DESIGN.md decides every pixel; the PRD (`.design-foundations/plans/2026-10-06-projects.md`) decides what a project is and holds. Where this spec and the PRD differ, the PRD wins and this spec is corrected.
+This spec describes jobs and the order of what matters, not a look. `design/DESIGN.md` decides every pixel; the PRD (`.design-foundations/plans/2026-10-06-projects.md`) decides what a project is and holds. Where this spec and the PRD differ, the PRD wins and this spec is corrected.
 
 **Job:** When I have handed a project's work to Caw and his delegates and I am not watching it, I want one look at the project to tell me what is moving, what is stuck and what waits on me, so I can answer what waits, steer Caw, and accept or send back what came back, without opening each session to find out.
 

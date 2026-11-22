@@ -19,7 +19,6 @@ import { loadOverlay } from "../packages/preview/src/proxy";
 export const checkReads = [
   "apps/dashboard/",
   "design/",
-  "DESIGN.md",
   "packages/agent/src/",
   "packages/core/src/",
 ];
