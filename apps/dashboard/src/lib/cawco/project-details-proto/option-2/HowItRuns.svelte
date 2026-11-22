@@ -18,13 +18,7 @@
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import {
-    IconCloudCross,
-    IconError,
-    IconRefresh,
-    IconReset,
-  } from "#lib/icons.js";
+  import { IconCloudCross, IconError, IconRefresh } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import {
     type ChangeKey,
@@ -35,6 +29,7 @@
     stageStates,
   } from "./changes";
   import RailStage from "./RailStage.svelte";
+  import ResetDefaults from "./ResetDefaults.svelte";
   import SessionsStart from "./SessionsStart.svelte";
   import TasksEnter from "./TasksEnter.svelte";
   import WhatWaits, { DECIDERS_COLS } from "./WhatWaits.svelte";
@@ -135,28 +130,18 @@
 {/snippet}
 
 {#snippet waitsActs()}
-  <!-- What acts on all of Who decides: the design graph dials' reset arrow
-       (DialRow), while a kind is custom, then the fleet's defaults. -->
+  <!-- What acts on all of Who decides: the reset arrow while a kind is
+       custom (ResetDefaults), then the fleet's defaults. -->
   {#if own.length > 0}
-    <Tip label={words.waits.putAllBack}>
-      {#snippet children(tip)}
-        <Button
-          {...tip}
-          aria-label={words.waits.putAllBack}
-          disabled={!record.hubReachable}
-          icon={IconReset}
-          onclick={() => {
-            for (const kind of own) {
-              onchange({ key: "decidesReset", kind });
-            }
-          }}
-          press="pressable"
-          size="icon-xs"
-          tone="edited"
-          variant="ghost"
-        />
-      {/snippet}
-    </Tip>
+    <ResetDefaults
+      disabled={!record.hubReachable}
+      kinds={own}
+      onreset={() => {
+        for (const kind of own) {
+          onchange({ key: "decidesReset", kind });
+        }
+      }}
+    />
   {/if}
   <Button
     href={hrefOf("fleetDecides")}

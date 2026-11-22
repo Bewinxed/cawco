@@ -159,6 +159,11 @@
     });
   }
 
+  /** The place whose Stop using is being said under its row before it goes. */
+  let dropping = $derived<string | null>(
+    opening?.startsWith("drop:") ? opening.slice("drop:".length) : null
+  );
+
   /** A place's acts, its ⋯ menu's rows. */
   const actsOf = (place: ProjectPlace) => {
     const off = disabled || movingPlaceId === place.id;
@@ -193,7 +198,10 @@
               icon: IconClose,
               destructive: true,
               disabled: off,
-              onselect: act("drop"),
+              // Said first, under its row, with what it reaches.
+              onselect: () => {
+                dropping = place.id;
+              },
             },
           ]
         : []),
@@ -267,6 +275,39 @@
               size="xs"
               variant="outline"
             />
+          {/if}
+        {/snippet}
+        {#snippet below()}
+          {#if dropping === place.id}
+            <div class="flex min-w-0 flex-col gap-space-2" transition:unfold>
+              <p class="m-0 type-meta text-pretty text-ink-strong">
+                {words.places.dropSays(
+                  place.path,
+                  machine ? machine.name : words.places.hub
+                )}
+                <span class="text-ink-muted">{words.places.dropKeeps}</span>
+              </p>
+              <div class="flex flex-wrap items-center gap-space-2">
+                <Button
+                  {disabled}
+                  label={words.places.drop}
+                  onclick={() => {
+                    dropping = null;
+                    onplace("drop", place.id);
+                  }}
+                  size="xs"
+                  variant="outline"
+                />
+                <Button
+                  label={words.cancel}
+                  onclick={() => {
+                    dropping = null;
+                  }}
+                  size="xs"
+                  variant="ghost"
+                />
+              </div>
+            </div>
           {/if}
         {/snippet}
       </SectionRow>

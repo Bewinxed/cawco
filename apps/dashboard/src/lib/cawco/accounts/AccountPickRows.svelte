@@ -3,7 +3,8 @@
    * A session's accounts to move to, one PickRow each, wherever the move is
    * picked: the session card's account chip (a popover's list), and its
    * row's and tab's menus (`menu`, a context menu's radio group). Each row
-   * is the account's dot, its name, and its room, or the limit it is at;
+   * is the account's dot, its name, and its room (the house ring and its
+   * figure), or the limit it is at;
    * the check stands on `picked`, the account the session shows (the one it
    * is moving to from the moment it is picked). A row at its limit as last
    * read is asked again before its pick goes (limit-checks.svelte.ts): the
@@ -21,8 +22,9 @@
   import PickRow from "../pick/PickRow.svelte";
   import { usageStore } from "../stores/usage.svelte";
   import { forcePast, pickPastLimit } from "./limit-checks.svelte";
+  import { minuteClock } from "./minute-clock.svelte";
   import { hueVar, nameOf } from "./model.svelte";
-  import { limitRowOf } from "./room";
+  import { limitRowOf, meterOf } from "./room";
   import { roomOf } from "./room-of";
 
   let {
@@ -46,14 +48,8 @@
     note?: (id: string) => string | null;
   } = $props();
 
-  /** The clock the rows' limits are read against, a minute at a time. */
-  let now = $state(Date.now());
-  $effect(() => {
-    const timer = setInterval(() => {
-      now = Date.now();
-    }, 60_000);
-    return () => clearInterval(timer);
-  });
+  /** The clock the rooms are read against, a minute at a time. */
+  const clock = minuteClock();
 </script>
 
 <PickList label="Account" menu={menu ? { value: picked ?? "" } : undefined}>
@@ -73,13 +69,11 @@
   {/if}
   {#each accounts as account (account.id)}
     {@const key = `account:${account.id}`}
-    {@const limit = limitRowOf(
-      key,
+    {@const room =
       account.provider === CLAUDE_PROVIDER
-        ? roomOf(usageStore.claudeLimits[account.id], null, now)
-        : null,
-      now
-    )}
+        ? roomOf(usageStore.claudeLimits[account.id], null, clock.now)
+        : null}
+    {@const limit = limitRowOf(key, room, clock.now)}
     {@const said = note?.(account.id) ?? null}
     <PickRow
       checking={limit.checking}
@@ -98,6 +92,7 @@
         .filter(Boolean)
         .join("\n")}
       limited={limit.limited}
+      meter={said === null ? meterOf(room) : null}
       name={nameOf(account)}
       onpick={() => {
         if (limit.limited) {

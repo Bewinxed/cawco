@@ -34,3 +34,8 @@ export const AddingAFolder = {
 export const CustomLargeFileServer = {
   args: { ...stageArgs("At rest"), opening: "largeFiles" },
 };
+
+/** I chose Stop using on kestrel's folder: it says what goes and what stays first. */
+export const StoppingAFolder = {
+  args: { ...stageArgs("At rest"), opening: "drop:p-kestrel" },
+};

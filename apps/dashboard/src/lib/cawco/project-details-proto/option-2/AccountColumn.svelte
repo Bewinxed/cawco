@@ -1,8 +1,14 @@
 <script lang="ts">
+  import { CLAUDE_PROVIDER } from "@cawco/core/accounts";
   import AccountPickRows from "#lib/cawco/accounts/AccountPickRows.svelte";
+  import { minuteClock } from "#lib/cawco/accounts/minute-clock.svelte.js";
   import { hueVar } from "#lib/cawco/accounts/model.svelte.js";
+  import { limitRowOf, meterOf } from "#lib/cawco/accounts/room.js";
+  import { roomOf } from "#lib/cawco/accounts/room-of.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import NsPopover from "#lib/cawco/spawn/NsPopover.svelte";
+  import { usageStore } from "#lib/cawco/stores/usage.svelte.js";
+  import UsageRing from "#lib/cawco/usage/UsageRing.svelte";
   /**
    * Stage 2's account: the house's account picker (AccountPickRows, the
    * rows a session's account chip and its menus' Account submenu list),
@@ -47,6 +53,30 @@
   }: StageSends & { hrefOf: HrefOf } = $props();
 
   const uid = $props.id();
+
+  /** The clock the rooms are read against, a minute at a time. */
+  const clock = minuteClock();
+
+  /** The named account's room, as its picker row says it: the ring's share and state, and its words. */
+  const chosenRoom = $derived.by(() => {
+    const account = record.accounts.find(
+      (one) => one.id === record.account.chosen
+    );
+    if (!account?.signedIn || account.provider !== CLAUDE_PROVIDER) {
+      return null;
+    }
+    const room = roomOf(usageStore.claudeLimits[account.id], null, clock.now);
+    if (room === null) {
+      return null;
+    }
+    const meter = meterOf(room);
+    return meter === null
+      ? null
+      : {
+          ...meter,
+          words: limitRowOf(`account:${account.id}`, room, clock.now).detail,
+        };
+  });
 
   /** The picker's popover stands open. */
   let open = $state(false);
@@ -95,7 +125,9 @@
         fit
         haspopup="listbox"
         id="work-path-account"
-        label={`${words.account.heading}: ${shownName}`}
+        label={chosenRoom
+          ? `${words.account.heading}: ${shownName}, ${chosenRoom.words}`
+          : `${words.account.heading}: ${shownName}`}
         onchange={(next) => {
           open = next;
         }}
@@ -118,6 +150,19 @@
             ></span>
           {/if}
           <span data-account-chip data-slot="chip-label">{shownName}</span>
+          <!-- The account's room as the session card's account chip draws it
+               (AccountSwitch `quota`): the ring and its figure one unit, a
+               word space off the name. -->
+          {#if chosenRoom}
+            <span
+              class="mark-line ms-word inline-flex flex-none items-center gap-word text-ink-muted tabular-nums"
+              data-box
+              data-slot="quota"
+            >
+              <UsageRing share={chosenRoom.share} state={chosenRoom.state} />
+              <span>{chosenRoom.words}</span>
+            </span>
+          {/if}
           <IconChevronDown data-slot="chevron" />
         {/snippet}
         <AccountPickRows
