@@ -42,6 +42,7 @@
    * line; a pick holds for this session only.
    */
   import { IconSuccess as Check, IconChevronDown as Down } from "#lib/icons.js";
+  import { cn } from "#lib/utils.js";
   import AccountName from "../accounts/AccountName.svelte";
   import Rings from "../usage/Rings.svelte";
   import Words from "../usage/Words.svelte";
@@ -52,11 +53,14 @@
     id,
     open,
     onchange,
+    class: className = "",
   }: {
     tool: AccountTool;
     id: string;
     open: boolean;
     onchange: (open: boolean) => void;
+    /** The trigger's width where its mount sets one, as a form field's. */
+    class?: string;
   } = $props();
 
   const shown = $derived(
@@ -78,7 +82,7 @@
   {onchange}
   {open}
   rows="[data-account-option]"
-  triggerClass={chipVariants({ variant: "setting" })}
+  triggerClass={cn(chipVariants({ variant: "setting" }), className)}
   triggerData={{ "data-tool": true }}
   width={360}
 >
