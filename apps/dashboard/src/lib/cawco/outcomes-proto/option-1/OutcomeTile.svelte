@@ -115,8 +115,8 @@
     </p>
     <ul
       class="m-0 grid list-none grid-cols-(--line-cols) gap-x-space-3 p-0 @max-phone/view:grid-cols-(--line-cols-narrow) @max-phone/view:gap-x-space-2"
-      style:--line-cols={"minmax(0, 1fr) var(--spacing-c-answer-w) auto"}
-      style:--line-cols-narrow={"minmax(0, 1fr) var(--spacing-c-answer-w-narrow) auto"}
+      style:--line-cols={"minmax(0, 1fr) var(--spacing-c-line-answer-w) auto"}
+      style:--line-cols-narrow={"minmax(0, 1fr) var(--spacing-c-line-answer-w-narrow) auto"}
     >
       {#each shown.lines as line (line.id)}
         <OutcomeLine
