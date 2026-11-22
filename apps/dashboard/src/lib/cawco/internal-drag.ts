@@ -17,6 +17,9 @@
  * any file let go where nothing takes it ({@link guardDrops}).
  */
 
+import { draggable } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
+import { combine } from "@atlaskit/pragmatic-drag-and-drop/utils/combine";
+
 /** The private type every internal drag carries, and nothing a field reads. */
 const INTERNAL_DRAG = "application/x-cawco-drag";
 
@@ -43,6 +46,40 @@ export function bareDrag(node: HTMLElement): () => void {
   };
   node.addEventListener("dragstart", empty);
   return () => node.removeEventListener("dragstart", empty);
+}
+
+/**
+ * One of the dashboard's own drag sources (a task card, a kind's tile) on
+ * Pragmatic drag and drop: the browser's data emptied ({@link bareDrag}),
+ * {@link internalData} alone carried, and `data-dragging` on `node` while it
+ * is in the air. Returns its removal.
+ */
+export function internalDraggable(
+  node: HTMLElement,
+  source: {
+    canDrag?: () => boolean;
+    data: () => Record<string, unknown>;
+    onEnd: () => void;
+    onStart: () => void;
+  }
+): () => void {
+  return combine(
+    bareDrag(node),
+    draggable({
+      element: node,
+      canDrag: source.canDrag,
+      getInitialData: source.data,
+      getInitialDataForExternal: internalData,
+      onDragStart: () => {
+        node.dataset.dragging = "";
+        source.onStart();
+      },
+      onDrop: () => {
+        delete node.dataset.dragging;
+        source.onEnd();
+      },
+    })
+  );
 }
 
 /** A field a default drop types into: a textarea, a text input, an editable host. */
