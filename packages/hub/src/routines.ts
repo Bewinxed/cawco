@@ -44,10 +44,15 @@
  * - **Stuck** routines stand in Needs you (`held`) with one push that opens
  *   the task: a slot that failed twice; its deadline passed with no stop;
  *   three slots in a row failing, which also turns it off.
- * - **Routines agents make** run once at once as a test, are told to you
- *   once with what the session said before making it, and turn off after 7
+ * - **A new routine** runs once at once as a test, yours as an agent's
+ *   (§5.5; the hub's own have none). One an agent makes is told to you once
+ *   with what the session said before making it, and turns off after 7
  *   days unless kept (a routine with a stop condition never expires). A
  *   command check's command runs only as approved ({@link approvedCommand}).
+ * - **Shown as its task stands** (routine-standing.ts `standingOf`): a
+ *   routine whose task is in a done or dropped stage, or gone, reads off
+ *   with no next start in every read (the task's read and list, the
+ *   routes, the views, find); its cursor moves on unfired while it does.
  * - **The hub's own**: the Memory curator in every project that is set up,
  *   the unused-skills trim in a project once turned on, and the fleet-wide
  *   trim in the Fleet project, each a task the hub files with its prompt
@@ -126,6 +131,7 @@ import {
   RECOVERY_SLOT,
   slotLabel,
 } from "./routine-schedule";
+import { type RoutineTask, routineEnded, standingOf } from "./routine-standing";
 import { stopViewOf } from "./routine-stop";
 import type { RoutineView } from "./routine-view";
 import type { TaskSchedule } from "./task-file";
@@ -3380,12 +3386,16 @@ export const createRoutines = ({
 
   // --- what the routes read --------------------------------------------------------------
 
-  /** A routine as the routes answer it: its trigger, its task's words, its newest runs. */
-  const viewOf = async (row: RoutineRow): Promise<RoutineView> => {
-    const task = row.taskId
-      ? await tasks().get(row.projectId, row.taskId)
+  /** A routine as the routes answer it: its trigger as its task stands ({@link standingOf}), its task's words, its newest runs. */
+  const viewOf = async (kept: RoutineRow): Promise<RoutineView> => {
+    const task = kept.taskId
+      ? await tasks().get(kept.projectId, kept.taskId)
       : undefined;
     const read = task instanceof ElysiaStatus ? undefined : task;
+    const row = standingOf(
+      kept,
+      read ? { kind: read.kind, stage: read.stage } : "gone"
+    );
     return {
       ...triggerView(row),
       condition: conditionOfRoutine(
@@ -3414,10 +3424,10 @@ export const createRoutines = ({
     };
   };
 
-  /** What a routine's view says of its trigger: its ids, name and schedule, its runs ahead. */
+  /** What a routine's view says of its trigger, as its task stands: its ids, name and schedule, its runs ahead (none once its task ended it, whose next slot is gone). */
   const triggerView = (row: RoutineRow) => {
     const nextRuns =
-      row.cron && row.timeZone
+      row.cron && row.timeZone && row.nextSlot
         ? nextRunsOf(row.cron, row.timeZone, Date.now())
         : [];
     return {
@@ -3468,63 +3478,82 @@ export const createRoutines = ({
     return { ...view, handle: row.taskId ?? "", steps: 0, waitedBy: [] };
   };
 
-  /** A routine as a task's read and its list carry it (core `TaskRoutine`): its trigger, and its newest runs from the ledger. */
+  /** A routine as a task's read and its list carry it (core `TaskRoutine`): its trigger as its task stands ({@link standingOf}), and its newest runs from the ledger. */
   const taskRoutineOf = (
-    row: RoutineRow,
+    kept: RoutineRow,
+    task: RoutineTask,
     newest: RoutineRunRow | undefined,
     runs?: { shown: number }
-  ): TaskRoutine => ({
-    id: row.id,
-    target: row.target ?? "delegate",
-    schedule: scheduleOf(row),
-    stop: row.stop,
-    deadline: ms(row.deadline),
-    enabled: row.enabled && !holdsOff(row.held),
-    disabledReason: row.disabledReason,
-    needs: row.held
-      ? {
-          why: row.held,
-          said:
-            row.held === "asked"
-              ? (row.asked ?? "")
-              : (row.disabledReason ?? newest?.reason ?? ""),
-        }
-      : null,
-    problem: row.problem,
-    lastRun: newest ? runView(newest) : null,
-    ...(runs
-      ? {
-          runs: store.runs(row.id, runs.shown).map(runView),
-          runsTotal: store.runsSince(row.id, 0).runs,
-        }
-      : {}),
-  });
+  ): TaskRoutine => {
+    const row = standingOf(kept, task);
+    return {
+      id: row.id,
+      target: row.target ?? "delegate",
+      schedule: scheduleOf(row),
+      stop: row.stop,
+      deadline: ms(row.deadline),
+      enabled: row.enabled && !holdsOff(row.held),
+      disabledReason: row.disabledReason,
+      // An ended routine asks nothing of you: what held it ended with it.
+      needs:
+        row.held && !routineEnded(task)
+          ? {
+              why: row.held,
+              said:
+                row.held === "asked"
+                  ? (row.asked ?? "")
+                  : (row.disabledReason ?? newest?.reason ?? ""),
+            }
+          : null,
+      problem: row.problem,
+      lastRun: newest ? runView(newest) : null,
+      ...(runs
+        ? {
+            runs: store.runs(row.id, runs.shown).map(runView),
+            runsTotal: store.runsSince(row.id, 0).runs,
+          }
+        : {}),
+    };
+  };
 
-  /** A project's routines as its task list carries them, by task id: each with its newest run alone. */
-  const ofProject = (projectId: string): Map<string, TaskRoutine> => {
+  /** A project's routines as its task list carries them, by task id: each with its newest run alone, as its task in `listed` stands (one not listed is gone). */
+  const ofProject = (
+    projectId: string,
+    listed: ReadonlyMap<string, RoutineTask>
+  ): Map<string, TaskRoutine> => {
     const newest = store.newestRuns(projectId);
     return new Map(
       store
         .list(projectId)
-        .filter((row) => row.taskId !== null)
-        .map((row) => [
-          row.taskId ?? "",
-          taskRoutineOf(row, newest.get(row.id)),
-        ])
+        .flatMap((row) =>
+          row.taskId === null
+            ? []
+            : [
+                [
+                  row.taskId,
+                  taskRoutineOf(
+                    row,
+                    listed.get(row.taskId) ?? "gone",
+                    newest.get(row.id)
+                  ),
+                ] as const,
+              ]
+        )
     );
   };
 
-  /** One task's routine as its own read carries it: its newest {@link RUNS_SHOWN} runs and the total; undefined for no routine. */
+  /** One task's routine as its own read carries it, as `task` stands: its newest {@link RUNS_SHOWN} runs and the total; undefined for no routine. */
   const ofTask = (
     projectId: string,
-    taskId: string
+    taskId: string,
+    task: RoutineTask
   ): TaskRoutine | undefined => {
     const row = store.byTask(projectId, taskId);
     if (!row?.target) {
       return;
     }
     const [newest] = store.runs(row.id, 1);
-    return taskRoutineOf(row, newest, { shown: RUNS_SHOWN });
+    return taskRoutineOf(row, task, newest, { shown: RUNS_SHOWN });
   };
 
   /** The routines, as the routes read them (a project's; `null` the Fleet project's; every one). */

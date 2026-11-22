@@ -145,6 +145,7 @@ import {
 } from "./project-folder";
 import type { AnyProblem } from "./refusal";
 import { triggerIndexOf } from "./routine-schedule";
+import type { RoutineTask } from "./routine-standing";
 import { type PlacedMachine, runsOnValue } from "./runs-on";
 import {
   firstStage,
@@ -441,8 +442,16 @@ export interface TaskStore {
    */
   readonly routines?: () =>
     | {
-        ofProject: (projectId: string) => Map<string, TaskRoutine>;
-        ofTask: (projectId: string, taskId: string) => TaskRoutine | undefined;
+        /** Each routine of the project, by its task's id, as its task in `listed` stands (routine-standing.ts `standingOf`). */
+        ofProject: (
+          projectId: string,
+          listed: ReadonlyMap<string, RoutineTask>
+        ) => Map<string, TaskRoutine>;
+        ofTask: (
+          projectId: string,
+          taskId: string,
+          task: RoutineTask
+        ) => TaskRoutine | undefined;
         sessionDone: (
           projectId: string,
           taskId: string,
@@ -3568,7 +3577,10 @@ export const createTasks = (store: TaskStore) => {
       },
       context
     );
-    const routine = store.routines?.()?.ofTask(projectId, taskId(number));
+    const routine = store.routines?.()?.ofTask(projectId, taskId(number), {
+      kind: kindIn(stages, stage),
+      stage,
+    });
     const viewed = viewOf(
       path,
       number,
@@ -4390,7 +4402,17 @@ export const createTasks = (store: TaskStore) => {
     }
     const { gone, times } = timed;
     const context = contextOf(projectId, board, stages, gone);
-    const routines = store.routines?.()?.ofProject(projectId);
+    const routines = store
+      .routines?.()
+      ?.ofProject(
+        projectId,
+        new Map(
+          rows.map((row) => [
+            row.id,
+            { kind: kindIn(stages, row.stage), stage: row.stage },
+          ])
+        )
+      );
     const kept = rows
       .map((row, index) =>
         summaryOf(

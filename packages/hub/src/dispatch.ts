@@ -1382,6 +1382,12 @@ export const createDispatcher = ({
           todos: task.todos
             .filter((todo) => !todo.done)
             .map((todo) => todo.text),
+          waitedOn: task.waits
+            .filter((wait) => wait.settled)
+            .map(
+              (wait) =>
+                `${wait.label}: ${wait.value ?? wait.state}${wait.via ? ` (through ${wait.via})` : ""}`
+            ),
           waiting: task.unblocks.length,
         }))
       );

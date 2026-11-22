@@ -91,14 +91,18 @@ export interface FindWorkItemRow {
 }
 
 export interface FindRoutineRow {
+  disabledReason: string | null;
   enabled: boolean;
   id: string;
   lastOutcome: string | null;
   lastRunAt: Date | null;
   name: string;
-  nextSlot: Date;
+  /** Its next scheduled slot; null with none, and once its task ended it (routine-standing.ts `standingOf`). */
+  nextSlot: Date | null;
   projectId: string | null;
   prompt: string;
+  /** Its task, `tsk-N`; null while a carried routine waits to be filed. */
+  taskId: string | null;
 }
 
 /**
@@ -311,8 +315,10 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
         id: taskTriggers.id,
         projectId: taskTriggers.projectId,
         enabled: taskTriggers.enabled,
+        disabledReason: taskTriggers.disabledReason,
         nextSlot: taskTriggers.nextSlot,
         stop: taskTriggers.stop,
+        taskId: taskTriggers.taskId,
         name: ROUTINE_NAME,
       })
       .from(taskTriggers)
@@ -331,8 +337,10 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
           name: row.name,
           prompt: row.stop ?? "",
           projectId: row.projectId,
+          taskId: row.taskId,
           enabled: row.enabled,
-          nextSlot: row.nextSlot ?? new Date(0),
+          disabledReason: row.disabledReason,
+          nextSlot: row.nextSlot,
           lastOutcome: run?.outcome ?? null,
           lastRunAt: run?.endedAt ? new Date(run.endedAt) : null,
         };

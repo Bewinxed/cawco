@@ -376,6 +376,15 @@ export const routineToolWords = {
     "The unused skills and servers routine is the hub's: its target stays trim.",
   /** A routine with no schedule, as its schedule reads: its event routes start it. */
   onEvents: "When an event route sends it one",
+  /**
+   * Why a routine whose task is in a done or dropped stage (`stage`), or no
+   * longer on the board (null), is off: nothing starts it until its task
+   * moves back out, and then it runs from that moment on.
+   */
+  endedWith: (stage: string | null): string =>
+    stage
+      ? `Its task is in ${stage}, so it has ended. Move the task out of ${stage} to turn it back on.`
+      : "Its task is no longer on the board, so it has ended.",
   /** A command check whose file's command is not the one approved: its run is skipped, saying so. */
   commandUnapproved:
     "its command changed since it was approved, so it runs nothing until it is approved again: the owner turns the routine back on to approve the command its file holds",
