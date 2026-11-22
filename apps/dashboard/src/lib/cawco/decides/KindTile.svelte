@@ -9,6 +9,10 @@
    * open. Escape gives the focus back to the tile; a press elsewhere closes
    * it and lands where it lands.
    *
+   * Brief (the project's settings view), it is its glyph and name: its
+   * example is its tooltip and its hand-over's head, and this project's own
+   * is told by its deeper fill alone, put back from the surface's head.
+   *
    * While the hub writes a hand-over or a put-back the swap glyph breathes;
    * a refusal stands under the tile in the hub's words, with Try again.
    */
@@ -38,6 +42,7 @@
     onputback,
     list,
     said = ROSTER_WORDS,
+    brief = false,
   }: {
     /** A write the hub has not answered moves it. */
     asking: string | null;
@@ -63,6 +68,8 @@
     width: string;
     /** Its words: Who decides' unless the surface drawing it says its own. */
     said?: RosterWords;
+    /** Its name alone, its example in its tooltip, this project's own marked by its fill alone (Roster `brief`). */
+    brief?: boolean;
   } = $props();
 
   const uid = $props.id();
@@ -87,16 +94,20 @@
     const subject = fleetWho?.subject ?? "";
     return own ? said.ownTip(project, subject) : said.followsFleetTip(subject);
   });
-  const tip = $derived(
-    scopeTip ? `${said.handOver} · ${scopeTip}` : said.handOver
-  );
+  const tip = $derived.by(() => {
+    if (brief) {
+      return own && scopeTip ? `${kind.example} ${scopeTip}` : kind.example;
+    }
+    return scopeTip ? `${said.handOver} · ${scopeTip}` : said.handOver;
+  });
 </script>
 
 <div class="flex min-w-0 flex-col items-stretch gap-space-1">
   <div
     bind:this={tile}
     class={[
-      "relative flex min-w-0 items-start gap-x-space-2 rounded-well p-space-2 transition-control",
+      "relative flex min-w-0 gap-x-space-2 rounded-well p-space-2 transition-control",
+      brief ? "items-center" : "items-start",
       surface,
     ]}
     data-handing={handing || undefined}
@@ -116,17 +127,19 @@
           class="min-w-0 type-label font-medium text-ink-strong wrap-anywhere"
           >{kind.name}</span
         >
-        {#if project !== null}
+        {#if project !== null && !brief}
           <Scope
             aria-hidden="true"
             class="size-icon-sm flex-none text-ink-muted"
           />
         {/if}
       </span>
-      <span
-        class="block type-meta text-ink-muted wrap-anywhere first-letter:uppercase"
-        >{kind.example}</span
-      >
+      {#if !brief}
+        <span
+          class="block type-meta text-ink-muted wrap-anywhere first-letter:uppercase"
+          >{kind.example}</span
+        >
+      {/if}
     </div>
     <span class="grid size-icon-sm flex-none place-items-center">
       {#if asking}
@@ -146,9 +159,13 @@
               {#snippet child({ props })}
                 <button
                   {...props}
-                  aria-label={scopeTip
-                    ? `${said.handOverKind(kind.name)}. ${scopeTip}`
-                    : said.handOverKind(kind.name)}
+                  aria-label={[
+                    said.handOverKind(kind.name),
+                    brief ? kind.example : null,
+                    scopeTip,
+                  ]
+                    .filter(Boolean)
+                    .join(". ")}
                   class="absolute inset-0 rounded-well can-hover:hover:bg-ink-strong/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
                   aria-disabled={asking !== null || undefined}
                   data-kind-press={kind.id}
@@ -184,7 +201,7 @@
       </Popover.Content>
     </Popover.Root>
   </div>
-  {#if own}
+  {#if own && !brief}
     <Button
       class="self-center"
       label={said.giveBack}

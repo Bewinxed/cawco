@@ -47,7 +47,7 @@
     }
     cols={2}
     disabled={!record.hubReachable}
-    glide
+    glide="fill"
     {glyph}
     label={words.lands.groupLabel}
     options={LANDINGS.map((landing) => ({

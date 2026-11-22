@@ -45,8 +45,8 @@
     disabled?: boolean;
     /** Each tile wears its digit, which picks it. */
     digits?: boolean;
-    /** The pick slides from tile to tile (OptionGroup `glide`). */
-    glide?: boolean;
+    /** The pick slides from tile to tile (OptionGroup `glide`): its edge, or with `"fill"` the selected fill. */
+    glide?: boolean | "fill";
     /** Fewer across where `cols` tiles would stand under the choice tile's least width. */
     wraps?: boolean;
   } = $props();

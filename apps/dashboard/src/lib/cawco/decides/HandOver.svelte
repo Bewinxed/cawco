@@ -24,6 +24,7 @@
     fleetChoice,
     onpick,
     said = ROSTER_WORDS,
+    describe = false,
   }: {
     /** The member the fleet names for this kind; null on the fleet's page, where every choice is the fleet's. */
     fleetChoice: string | null;
@@ -35,6 +36,8 @@
     onpick: (member: string) => void;
     /** Its words: Who decides' unless the surface drawing it says its own. */
     said?: RosterWords;
+    /** The kind's example under the head, where its tile shows only its name (Roster `brief`). */
+    describe?: boolean;
   } = $props();
 </script>
 
@@ -45,6 +48,13 @@
   >
     {said.handTo(kind.name)}
   </p>
+  {#if describe}
+    <p
+      class="px-space-2 type-meta text-ink-muted text-pretty first-letter:uppercase"
+    >
+      {kind.example}
+    </p>
+  {/if}
   <ul
     class="m-0 grid list-none grid-cols-(--rows) gap-x-space-3 gap-y-space-1 p-0"
     style:--rows={"repeat(auto-fill, minmax(min(100%, calc(var(--spacing) * 68)), 1fr))"}

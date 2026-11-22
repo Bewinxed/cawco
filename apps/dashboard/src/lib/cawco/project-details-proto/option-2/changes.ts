@@ -4,6 +4,7 @@
  * and the pure derivation of each pipeline stage's standing and fault count.
  */
 
+import type { Account } from "@cawco/core/accounts";
 import type {
   ChoiceKind,
   Decider,
@@ -238,3 +239,21 @@ export function faultCount(record: HowItRunsRecord): number {
     : ["tasks", "sessions", "waits"];
   return active.filter((stage) => states[stage] === "fault").length;
 }
+
+/** The fleet's accounts as the account picker lists them (AccountPickRows), each by the name it carries everywhere. */
+export const pickAccounts = (record: HowItRunsRecord): Account[] =>
+  record.accounts.map((account, order) => ({
+    atPlanLimit: "move",
+    createdAt: 0,
+    email: null,
+    hue: account.hue,
+    id: account.id,
+    identity: null,
+    kind: "subscription",
+    label: account.name,
+    neverBackup: false,
+    order,
+    provider: account.provider,
+    reservePct: null,
+    sessionReservePct: null,
+  }));

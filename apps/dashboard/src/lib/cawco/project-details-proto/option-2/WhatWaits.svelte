@@ -16,10 +16,10 @@
    * (sectionHeadVariants), on one line with how the project stands (using
    * the defaults, or how many kinds it set itself), the quiet button that
    * puts them all back, and the link to the fleet's defaults. Under it the
-   * Who decides roster (Roster): every decider a card holding the kinds it
-   * decides, each tile wearing its scope's glyph (the fleet's globe or this
-   * project's folder, its tip saying which), a press on a tile handing it
-   * to another. Then who marks tasks done, as two of the house's tiles
+   * Who decides roster (Roster, brief): every decider a card holding the
+   * kinds it decides by name, each one's line in its tooltip, a kind this
+   * project set told by its deeper fill alone, a press on a tile handing it
+   * to another; the head's Reset to defaults puts them all back. Then who marks tasks done, as two of the house's tiles
    * under their own sub-head, as the account's limit is picked.
    *
    * Every hand-over, put-back and the review pick move at the press
@@ -221,6 +221,7 @@
     {own}
     project={record.project.name}
     {routes}
+    brief
     cols={DECIDERS_COLS}
     said={words.waits.roster}
   />
@@ -242,7 +243,7 @@
     }
     cols={2}
     disabled={!record.hubReachable}
-    glide
+    glide="fill"
     glyph={reviewGlyph}
     label={words.waits.reviewHeading}
     options={[

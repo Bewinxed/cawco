@@ -4,7 +4,8 @@
    * same structure whatever it holds: a lead slot (the account's dot, the
    * model's maker), a name line and one second line, each one line that
    * ends in an ellipsis inside the row, and one trailing slot. Its height is
-   * the two lines', whichever details it has. Its whole name and second
+   * the two lines', whichever details it has; a row with no second line
+   * (empty `detail`) is its name alone. Its whole name and second
    * line are its tooltip, the list's one tooltip gliding to it (focus opens
    * it too). The hover ghost is the popover's (NsPopover `rows`
    * `[data-pick-row]`), so the row draws none of its own.
@@ -107,11 +108,13 @@
       class="min-w-0 truncate type-label text-ink-strong group-aria-disabled:opacity-50 group-data-limited:text-ink-muted"
       ><bdi>{name}</bdi></span
     >
-    <span
-      data-slot="detail"
-      class="min-w-0 truncate type-meta text-ink-muted tabular-nums group-data-limited:text-status-attn-ink data-mono:font-(family-name:--font-mono)"
-      data-mono={mono || undefined}>{detail}</span
-    >
+    {#if detail}
+      <span
+        data-slot="detail"
+        class="min-w-0 truncate type-meta text-ink-muted tabular-nums group-data-limited:text-status-attn-ink data-mono:font-(family-name:--font-mono)"
+        data-mono={mono || undefined}>{detail}</span
+      >
+    {/if}
   </span>
   <span
     data-slot="trail"

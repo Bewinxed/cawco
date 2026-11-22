@@ -41,7 +41,7 @@
     /** The rows are a context menu's radio group, not a popover's list. */
     menu?: boolean;
     /** The fleet's routing as the first row: its name, its line, its pick. */
-    auto?: { name: string; detail: string; onpick: () => void };
+    auto?: { name: string; detail?: string; onpick: () => void };
     /** An account's line in place of its room, where something keeps it from taking a session. */
     note?: (id: string) => string | null;
   } = $props();
@@ -59,8 +59,8 @@
 <PickList label="Account" menu={menu ? { value: picked ?? "" } : undefined}>
   {#if auto}
     <PickRow
-      detail={auto.detail}
-      full={auto.detail}
+      detail={auto.detail ?? ""}
+      full={auto.detail ?? ""}
       name={auto.name}
       onpick={auto.onpick}
       picked={picked === null}

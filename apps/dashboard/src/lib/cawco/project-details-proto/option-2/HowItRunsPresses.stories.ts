@@ -56,7 +56,15 @@ export const AddingAFolder = {
 /** I opened the account picker: each account with the room it has left. */
 export const AccountPickerOpen = {
   from: "AtRest",
-  play: press("button", new RegExp(`^${words.account.heading}:`, "u")),
+  play: async ({ userEvent }: Play): Promise<void> => {
+    await userEvent.wait(SETTLED_MS);
+    // Its trigger by its id: Caw's seat on the project's bar names an account too.
+    const trigger = document.getElementById("work-path-account");
+    if (trigger) {
+      await userEvent.click(trigger);
+    }
+    await userEvent.wait(SETTLED_MS);
+  },
 };
 
 /** I asked for agents to go to another account at the limit, and the server took it. */
