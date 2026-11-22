@@ -7,8 +7,8 @@
  */
 import type { CardAnswer } from "../tasks/card-answer";
 import type {
+  CheckAnswer,
   EndRule,
-  FactAnswer,
   Repeat,
   Run,
   RunOutcome,
@@ -25,7 +25,7 @@ export interface RepeatReading {
   sentence: string;
 }
 
-const FACT_FROM_RUN: Partial<Record<RunOutcome, FactAnswer | "unknown">> = {
+const CHECK_FROM_RUN: Partial<Record<RunOutcome, CheckAnswer | "unknown">> = {
   "could-not-check": "unknown",
   failed: "unknown",
   met: "yes",
@@ -37,13 +37,13 @@ const upper = (text: string) =>
 const lower = (text: string) =>
   text ? `${text[0]?.toLowerCase() ?? ""}${text.slice(1)}` : text;
 
-function factWord(repeat: Repeat, run: Run): string {
-  const found = run.answer ?? FACT_FROM_RUN[run.outcome] ?? "unknown";
+function checkWord(repeat: Repeat, run: Run): string {
+  const found = run.answer ?? CHECK_FROM_RUN[run.outcome] ?? "unknown";
   switch (found) {
     case "yes":
       return "Yes";
     case "no":
-      // A fact it repeats until true is not true yet; any other is simply not true.
+      // What it repeats until true is not true yet; anything else is simply not true.
       return repeat.end === "until-true" ? "Not yet" : "No";
     case "unknown":
       return "Not known";
@@ -58,7 +58,7 @@ export function readRepeat(title: string, repeat: Repeat): RepeatReading {
   const latest = repeat.runs.find((run) => run.outcome !== "running");
   if (!latest) {
     return {
-      answer: repeat.kind === "fact" ? "Not known" : "Not yet",
+      answer: repeat.kind === "check" ? "Not known" : "Not yet",
       fixPrompt: null,
       live,
       needsYou: false,
@@ -76,7 +76,7 @@ export function readRepeat(title: string, repeat: Repeat): RepeatReading {
       sentence: `${repeat.stateReason ?? "Paused"}. Last time: ${lower(latest.oneLine)}.`,
     };
   }
-  let answer = repeat.kind === "fact" ? factWord(repeat, latest) : "Done";
+  let answer = repeat.kind === "check" ? checkWord(repeat, latest) : "Done";
   if (repeat.kind === "delivery" && failed) {
     answer = "Didn't deliver";
   }
@@ -90,6 +90,14 @@ export function readRepeat(title: string, repeat: Repeat): RepeatReading {
     sentence: `${upper(latest.oneLine)}.`,
   };
 }
+
+/**
+ * The line that says it needs the person: what it keeps true, and its
+ * answer ("Staging is healthy: not known"). Why stands where its run's
+ * result does, so this line never repeats it.
+ */
+export const needsYouLine = (title: string, reading: RepeatReading): string =>
+  `${title}: ${lower(reading.answer)}`;
 
 /** When it stops, in words. */
 export const endWords = (end: EndRule): string =>
@@ -125,12 +133,12 @@ function quietKey(repeat: Repeat, run: Run): string | null {
     return null;
   }
   if (run.outcome === "nothing-to-report") {
-    return repeat.kind === "fact" && run.answer === "yes"
+    return repeat.kind === "check" && run.answer === "yes"
       ? "all fine"
       : "nothing to report";
   }
-  if (repeat.kind === "fact") {
-    const word = factWord(repeat, run);
+  if (repeat.kind === "check") {
+    const word = checkWord(repeat, run);
     if (word === "Yes") {
       return "all fine";
     }
@@ -188,13 +196,13 @@ export function runWord(repeat: Repeat, run: Run): string {
     case "met":
       return "Came true";
     case "nothing-to-report":
-      return repeat.kind === "fact" && run.answer === "yes"
+      return repeat.kind === "check" && run.answer === "yes"
         ? "Yes"
         : "Nothing new";
     case "not-yet":
-      return factWord(repeat, run);
+      return checkWord(repeat, run);
     case "delivered":
-      return repeat.kind === "fact" ? factWord(repeat, run) : "Delivered";
+      return repeat.kind === "check" ? checkWord(repeat, run) : "Delivered";
   }
 }
 
@@ -203,7 +211,7 @@ export function cardAnswer(title: string, repeat: Repeat): CardAnswer {
   const reading = readRepeat(title, repeat);
   let live: string | null = null;
   if (reading.live) {
-    live = repeat.kind === "fact" ? "checking now" : "running now";
+    live = repeat.kind === "check" ? "checking now" : "running now";
   }
   return {
     live,

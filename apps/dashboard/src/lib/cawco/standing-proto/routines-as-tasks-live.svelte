@@ -14,8 +14,9 @@
    * CawCo Cloud's project page, with routines as tasks that repeat: its
    * head, its view strip and the view beside the task open on it, as
    * ProjectPage composes them. Routines is the board's tasks that repeat,
-   * each an outcome row (OutcomeList); the Board (TaskBoard) draws every
-   * task, a repeating one with its repeats mark and its answer (`answerOf`);
+   * under the goals they keep (OutcomeList; a goal is a name, no task);
+   * the Board (TaskBoard) draws every task, a repeating one with its
+   * repeats mark and its answer (`answerOf`);
    * either opens a task on the same page (TaskPane, with a repeating task's
    * alert, Runs tab and Repeats section), and New task asks how it repeats
    * (NewTaskForm `fields`: RepeatFields).
@@ -47,6 +48,7 @@
     initialTasks,
     MOCK_MACHINE,
     MOCK_PROJECT,
+    OUTCOMES,
     PROJECT_ID,
     PROJECT_VIEWS,
     REPEATS,
@@ -156,7 +158,7 @@
     if (draft.kind !== "never") {
       repeats[id] = {
         end: draft.doneWhen ? "until-true" : "keeps",
-        kind: draft.doneWhen ? "fact" : "delivery",
+        kind: draft.doneWhen ? "check" : "delivery",
         noun: "runs",
         runs: [],
         state: "on",
@@ -294,6 +296,7 @@
         onopen={(id) => {
           openTask = id;
         }}
+        outcomes={OUTCOMES}
         {repeatOf}
         selected={openTask}
         {tasks}

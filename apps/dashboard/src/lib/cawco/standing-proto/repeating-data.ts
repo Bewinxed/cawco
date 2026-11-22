@@ -1,9 +1,11 @@
 /**
  * CawCo Cloud as the hub would answer it once a routine is a task that
- * repeats (the assumed model of 2026-11-22): its stages, its one-off tasks,
- * and its repeating tasks, each a task with a trigger (a schedule or an
- * event), an end rule (keeps running, or until its fact is true) and the
- * runs it made, newest first. Every time is counted back from when the
+ * repeats (the model of 2026-11-22): its stages, its one-off tasks, its
+ * repeating tasks, each a task with a trigger (a schedule or an event), an
+ * end rule (keeps running, or until what it checks is true) and the runs it
+ * made, newest first, and its goals: plain records, a name each, which a
+ * repeating task names by its `outcome`. A goal is no task and stands on
+ * no board. Every time is counted back from when the
  * frame is drawn, so the pane's own "18 minutes ago" reads true.
  */
 
@@ -113,7 +115,7 @@ export const STAGES: StagesView = {
 type Trigger =
   { kind: "schedule"; words: string } | { kind: "event"; words: string };
 
-/** When it stops: never on its own, or once its fact is true. */
+/** When it stops: never on its own, or once what it checks is true. */
 export type EndRule = "keeps" | "until-true";
 
 /** How one run ended. */
@@ -126,11 +128,11 @@ export type RunOutcome =
   | "failed"
   | "running";
 
-/** What a run found about its task's fact, where its outcome doesn't say. */
-export type FactAnswer = "yes" | "no";
+/** What a run found about what its task checks, where its outcome doesn't say. */
+export type CheckAnswer = "yes" | "no";
 
 export interface Run {
-  answer?: FactAnswer;
+  answer?: CheckAnswer;
   at: number;
   id: string;
   /** How long it took, in minutes. */
@@ -145,15 +147,18 @@ export interface Run {
 }
 
 /**
- * What makes a task repeat: what its title states (a fact the project
- * depends on, or what each run delivers), what starts it, when it stops,
- * whether it runs now, and its runs.
+ * What makes a task repeat: what its title states (something the project
+ * depends on being true, which each run checks, or what each run
+ * delivers), the goal it keeps, what starts it, when it stops, whether it
+ * runs now, and its runs.
  */
 export interface Repeat {
   end: EndRule;
-  kind: "fact" | "delivery";
+  kind: "check" | "delivery";
   /** What a run is called in its folded rows: "checks", "sweeps". */
   noun: string;
+  /** The goal it keeps (`Outcome.id`), or none. */
+  outcome?: string;
   /** Runs, newest first. */
   runs: Run[];
   /** `stopped`: CawCo stopped it (`reason` says why); `paused`: someone did. */
@@ -169,7 +174,7 @@ const quiet = (
   outcome: RunOutcome,
   oneLine: string,
   session: string,
-  answer?: FactAnswer
+  answer?: CheckAnswer
 ): Run => ({
   answer,
   at,
@@ -214,11 +219,27 @@ const jqRun = (id: string, at: number): Run => ({
   session: "ses-staging",
 });
 
+/** A goal: its name, and nothing else; its repeating tasks name it. */
+export interface Outcome {
+  id: string;
+  name: string;
+}
+
+/** The project's goals, in the order they were set. */
+export const OUTCOMES: Outcome[] = [
+  { id: "out-release", name: "Release 2.4 ships" },
+  { id: "out-staging", name: "Staging stays healthy" },
+  { id: "out-docs", name: "Docs stay trustworthy" },
+  { id: "out-upkeep", name: "Everyday upkeep is done" },
+  { id: "out-billing", name: "Billing runs on Stripe v3" },
+];
+
 export const REPEATS: Record<string, Repeat> = {
   "tsk-180": {
     end: "until-true",
-    kind: "fact",
+    kind: "check",
     noun: "checks",
+    outcome: "out-staging",
     runs: [
       jqRun("run-sh-14", ago(18 * MINUTE_MS)),
       jqRun("run-sh-13", ago(33 * MINUTE_MS)),
@@ -256,8 +277,9 @@ export const REPEATS: Record<string, Repeat> = {
   },
   "tsk-176": {
     end: "keeps",
-    kind: "fact",
+    kind: "check",
     noun: "sweeps",
+    outcome: "out-docs",
     runs: [
       {
         at: ago(15 * HOUR_MS),
@@ -297,8 +319,9 @@ export const REPEATS: Record<string, Repeat> = {
   },
   "tsk-184": {
     end: "until-true",
-    kind: "fact",
+    kind: "check",
     noun: "checks",
+    outcome: "out-release",
     runs: [
       {
         at: ago(74_000),
@@ -338,6 +361,7 @@ export const REPEATS: Record<string, Repeat> = {
     end: "keeps",
     kind: "delivery",
     noun: "digests",
+    outcome: "out-upkeep",
     runs: [
       {
         at: ago(12 * HOUR_MS),
@@ -375,8 +399,9 @@ export const REPEATS: Record<string, Repeat> = {
   },
   "tsk-172": {
     end: "keeps",
-    kind: "fact",
+    kind: "check",
     noun: "merges",
+    outcome: "out-release",
     runs: [
       {
         answer: "yes",
@@ -407,6 +432,7 @@ export const REPEATS: Record<string, Repeat> = {
     end: "keeps",
     kind: "delivery",
     noun: "nights",
+    outcome: "out-upkeep",
     runs: [
       {
         at: ago(2 * DAY_MS),
@@ -425,8 +451,9 @@ export const REPEATS: Record<string, Repeat> = {
   },
   "tsk-165": {
     end: "until-true",
-    kind: "fact",
+    kind: "check",
     noun: "checks",
+    outcome: "out-billing",
     runs: [
       {
         at: ago(2 * DAY_MS),
@@ -459,15 +486,11 @@ export const REPEATS: Record<string, Repeat> = {
 
 /** A task as it is first written: what the board's row is made from. */
 export interface Seed {
-  /** A goal's acceptance: the facts that must be true, one a line. */
-  acceptance?: string;
   attempts?: TaskAttempt[];
   createdAt: number;
   id: string;
   kind: Stage["kind"];
   labels?: string[];
-  /** The goal it is a fact of (`part_of`). */
-  partOf?: string;
   stage: string;
   title: string;
   waits?: TaskWait[];
@@ -522,59 +545,13 @@ function attemptOf(run: Run): TaskAttempt {
 }
 
 const SEEDS: Seed[] = [
-  // The goals, each with the facts that must be true for it.
-  {
-    acceptance:
-      "- Release assets are published\n- Changelog has the latest merge",
-    createdAt: ago(14 * DAY_MS),
-    id: "tsk-150",
-    kind: "active",
-    labels: ["release"],
-    stage: "doing",
-    title: "Release 2.4 ships",
-  },
-  {
-    acceptance: "- Staging is healthy",
-    createdAt: ago(20 * DAY_MS),
-    id: "tsk-151",
-    kind: "active",
-    stage: "doing",
-    title: "Staging stays healthy",
-  },
-  {
-    acceptance: "- Docs have no broken links",
-    createdAt: ago(31 * DAY_MS),
-    id: "tsk-152",
-    kind: "active",
-    labels: ["docs"],
-    stage: "doing",
-    title: "Docs stay trustworthy",
-  },
-  {
-    acceptance: "- PRs triaged this morning\n- Project memory curated",
-    createdAt: ago(61 * DAY_MS),
-    id: "tsk-153",
-    kind: "active",
-    stage: "doing",
-    title: "Everyday upkeep is done",
-  },
-  {
-    acceptance: "- Stripe v3 migration complete",
-    createdAt: ago(13 * DAY_MS),
-    id: "tsk-154",
-    kind: "done",
-    labels: ["billing"],
-    stage: "done",
-    title: "Billing runs on Stripe v3",
-  },
-  // The facts, each checked by a task that repeats.
+  // The tasks that repeat, each under its goal by its repeat's `outcome`.
   {
     createdAt: ago(9 * DAY_MS),
     id: "tsk-180",
     kind: "active",
     stage: "doing",
     title: "Staging is healthy",
-    partOf: "tsk-151",
   },
   {
     createdAt: ago(30 * DAY_MS),
@@ -582,7 +559,6 @@ const SEEDS: Seed[] = [
     kind: "active",
     stage: "doing",
     title: "Docs have no broken links",
-    partOf: "tsk-152",
   },
   {
     createdAt: ago(6 * DAY_MS),
@@ -590,7 +566,6 @@ const SEEDS: Seed[] = [
     kind: "active",
     stage: "doing",
     title: "Release assets are published",
-    partOf: "tsk-150",
   },
   {
     createdAt: ago(40 * DAY_MS),
@@ -598,7 +573,6 @@ const SEEDS: Seed[] = [
     kind: "active",
     stage: "doing",
     title: "PRs triaged this morning",
-    partOf: "tsk-153",
   },
   {
     createdAt: ago(40 * DAY_MS),
@@ -606,7 +580,6 @@ const SEEDS: Seed[] = [
     kind: "active",
     stage: "doing",
     title: "Changelog has the latest merge",
-    partOf: "tsk-150",
   },
   {
     createdAt: ago(60 * DAY_MS),
@@ -614,7 +587,6 @@ const SEEDS: Seed[] = [
     kind: "todo",
     stage: "ready",
     title: "Project memory curated",
-    partOf: "tsk-153",
   },
   {
     createdAt: ago(12 * DAY_MS),
@@ -622,7 +594,6 @@ const SEEDS: Seed[] = [
     kind: "done",
     stage: "done",
     title: "Stripe v3 migration complete",
-    partOf: "tsk-154",
   },
   // The one-off work around them.
   {
@@ -734,10 +705,8 @@ export function summaryOf(seed: Seed): TaskSummary {
     needsYou: seed.kind === "you",
     number: Number(seed.id.slice(4)),
     outputs: [],
-    partOf: seed.partOf ?? null,
-    parts: SEEDS.filter((each) => each.partOf === seed.id).map(
-      (each) => each.id
-    ),
+    partOf: null,
+    parts: [],
     path: `tasks/${seed.id}.md`,
     problem: null,
     queuedStart: false,
@@ -781,7 +750,7 @@ const DESCRIPTIONS: Record<string, string> = {
 export function viewOf(summary: TaskSummary): TaskView {
   const newest = summary.attempts.find((attempt) => attempt.endedAt !== null);
   return {
-    acceptance: SEEDS.find((seed) => seed.id === summary.id)?.acceptance ?? "",
+    acceptance: "",
     archivedAt: summary.archivedAt,
     attempts: summary.attempts,
     builtOn: summary.builtOn,

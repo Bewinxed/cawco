@@ -40,7 +40,7 @@ export const DocsOpened = { args: { open: "tsk-176" } };
 /** The PR digest opened, on its Review. */
 export const DigestOpened = { args: { open: "tsk-171" } };
 
-/** The changelog fact opened. */
+/** The changelog check opened. */
 export const ChangelogOpened = { args: { open: "tsk-172" } };
 
 /** The Routines tab, nothing open. */
@@ -83,7 +83,7 @@ export const StoppedOpened = {
 /** The release check opened while it runs. */
 export const RunningOpened = { args: { open: "tsk-184" } };
 
-/** The changelog fact, added on each merge, its details. */
+/** The changelog check, run on each merge, its details. */
 export const OnEventDetails = {
   args: { open: "tsk-172" },
   from: "ChangelogOpened",

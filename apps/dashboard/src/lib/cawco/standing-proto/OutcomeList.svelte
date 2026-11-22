@@ -1,18 +1,18 @@
 <script lang="ts">
   /**
-   * The Routines tab: the project's goals, each a light heading over its
-   * facts, the acceptance he defined for it. A fact is a task that repeats
-   * (part of its goal), and its row reads as an outcome: what must be true
-   * (or what each run delivers), its answer now as a word read down one
+   * The Routines tab: the project's goals, each a light heading over the
+   * tasks that repeat to keep it (each names its goal by its repeat's
+   * `outcome`; a goal is a name, never a task). Each row reads as what is
+   * done when it holds (or what each run delivers), its answer now as a word read down one
    * column, one sentence of what its newest run found or delivered, and,
    * only where it needs him, the Needs you mark and Fix with Caw. The open
    * button at the row's end opens the task that keeps checking it, the same
    * page a board card opens.
    *
-   * Goals with a fact that needs him lead, and those facts lead their goal;
-   * the rest keep the board's order. A task that repeats under no goal
-   * stands after the goals, with no heading. Under a 640px list each row is
-   * one card: the fact, the mark when it needs him and the open button,
+   * Goals with a row that needs him lead, and those rows lead their goal;
+   * the rest keep the goals' order and the board's. A task that repeats
+   * under no goal stands after the goals, with no heading. Under a 640px
+   * list each row is one card: its sentence, the mark when it needs him and the open button,
    * with the answer under them; the fix is in the opened task.
    */
   import type { TaskSummary } from "#lib/cawco/project-tasks.js";
@@ -21,12 +21,14 @@
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconMaximize, IconNeedsYou, IconSparkles } from "#lib/icons.js";
   import { readRepeat } from "./repeat-words";
-  import type { Repeat } from "./repeating-data";
+  import type { Outcome, Repeat } from "./repeating-data";
 
   interface Props {
     /** Asks Caw to fix a repeating task, with the words that say what went wrong. */
     onfix: (prompt: string) => void;
     onopen: (id: string) => void;
+    /** The project's goals, each a heading. */
+    outcomes: Outcome[];
     /** The repeat behind each task that has one. */
     repeatOf: (id: string) => Repeat | null;
     /** The task open beside the list. */
@@ -35,32 +37,34 @@
     tasks: TaskSummary[];
   }
 
-  let { tasks, repeatOf, selected, onopen, onfix }: Props = $props();
+  let { tasks, outcomes, repeatOf, selected, onopen, onfix }: Props = $props();
 
   /** Those that need him first, then the board's order. */
   const needsFirst = <T extends { needsYou: boolean }>(rows: T[]): T[] =>
     rows.toSorted((a, b) => Number(b.needsYou) - Number(a.needsYou));
 
-  /** Each goal with its facts, the tasks that repeat under it; then those under none. */
+  /** Each goal with the tasks that repeat under it; then those under none. */
   const groups = $derived.by(() => {
-    const facts = tasks.flatMap((task) => {
+    const repeating = tasks.flatMap((task) => {
       const repeat = repeatOf(task.id);
       if (!repeat) {
         return [];
       }
       const reading = readRepeat(task.title, repeat);
-      return [{ needsYou: reading.needsYou, reading, task }];
+      return [
+        { needsYou: reading.needsYou, outcome: repeat.outcome, reading, task },
+      ];
     });
-    const goals = tasks.flatMap((goal) => {
+    const goals = outcomes.flatMap((goal) => {
       const rows = needsFirst(
-        facts.filter((fact) => fact.task.partOf === goal.id)
+        repeating.filter((row) => row.outcome === goal.id)
       );
       return rows.length > 0
         ? [{ goal, needsYou: rows.some((row) => row.needsYou), rows }]
         : [];
     });
-    const loose = facts.filter(
-      (fact) => !goals.some((group) => group.goal.id === fact.task.partOf)
+    const loose = repeating.filter(
+      (row) => !goals.some((group) => group.goal.id === row.outcome)
     );
     const loneGroup =
       loose.length > 0
@@ -90,7 +94,7 @@
         <Table.Head
           class="w-(--col-w)"
           style="--col-w: {COL_W.outcome}"
-          variant="band">What must be true</Table.Head
+          variant="band">Done when</Table.Head
         >
         <Table.Head variant="band">Now</Table.Head>
         <Table.Head
@@ -110,7 +114,7 @@
         {#if group.goal}
           <Table.Row data-goal={group.goal.id} variant="unruled">
             <Table.Head colspan={4} variant="group"
-              >{group.goal.title}</Table.Head
+              >{group.goal.name}</Table.Head
             >
           </Table.Row>
         {/if}

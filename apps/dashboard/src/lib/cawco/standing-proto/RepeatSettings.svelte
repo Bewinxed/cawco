@@ -2,7 +2,8 @@
   import type { When } from "#lib/cawco/routines/when.js";
   import { Button } from "#lib/components/ui/button/index.js";
   /**
-   * How a task repeats, at the head of its Details: what starts each run in
+   * How a task repeats, at the head of its Details: what it checks, when it
+   * checks something ("What it checks: Staging is healthy"), what starts each run in
    * words ("Every weekday at 09:00", "When a pull request merges to main"),
    * when it stops ("Keeps running", "Until it's true"), and, when it is not
    * simply running, where it stands. Edit turns it into the fields New task
@@ -102,6 +103,12 @@
       </div>
     </form>
   {:else}
+    {#if repeat.kind === "check"}
+      <p class="m-0 type-body text-pretty text-ink-strong" data-slot="checks">
+        <span class="text-ink-muted">What it checks:</span>
+        {title}
+      </p>
+    {/if}
     <!-- The Fields' key column, so the two parts' values stand on one line. -->
     <dl
       class="m-0 grid grid-cols-(--cols) gap-x-space-2 gap-y-space-1"

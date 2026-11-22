@@ -1,13 +1,14 @@
 <script lang="ts">
   /**
-   * Under a repeating task's title while it needs the person: why, in one
-   * sentence (CawCo stopped it, or its newest run failed), and the one act,
+   * Under a repeating task's title while it needs the person: what it keeps
+   * true and its answer ("Staging is healthy: not known"), and the one act,
    * Fix with Caw, which puts the words that say what went wrong in Caw's
-   * composer. Nothing while it doesn't need him.
+   * composer. Why stands once, in Review's result of the run that failed.
+   * Nothing while it doesn't need him.
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconNeedsYou, IconSparkles } from "#lib/icons.js";
-  import { readRepeat, standingWords } from "./repeat-words";
+  import { needsYouLine, readRepeat } from "./repeat-words";
   import type { Repeat } from "./repeating-data";
 
   let {
@@ -37,7 +38,7 @@
     />
     <p class="m-0 min-w-0 flex-1 type-body text-pretty text-ink-strong">
       <span class="sr-only">Needs you:</span>
-      {standingWords(repeat) ?? reading.sentence}
+      {needsYouLine(title, reading)}
     </p>
     {#if reading.fixPrompt}
       {@const prompt = reading.fixPrompt}
