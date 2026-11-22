@@ -33,7 +33,11 @@ import type { InkGroup } from "@cawco/core/ink";
 import { pinName } from "@cawco/core/pin-name";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { pinLink } from "@cawco/core/references";
-import type { CanvasDirection, StageError } from "@cawco/core/stage";
+import {
+  type CanvasDirection,
+  type StageError,
+  stageErrorReason,
+} from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import {
   askedAgainLine,
@@ -77,7 +81,7 @@ const errorSection = (error: StageError): string => {
   const at = `${error.file}${error.line ? `:${error.line}` : ""}${error.column ? `:${error.column}` : ""}`;
   return [
     `## ${ERROR_HEADING[error.kind ?? "compile"]} ${at}`,
-    `- ${error.message.split("\n")[0]}`,
+    `- ${stageErrorReason(error.message)}`,
     ...(error.frame ? ["```", error.frame, "```"] : []),
   ].join("\n");
 };

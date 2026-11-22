@@ -168,6 +168,7 @@ import {
   errorsSaid,
   pagesAsked,
   specOf,
+  stageSaid,
 } from "./component";
 import type { ArtifactServiceDeps, HandedArtifactFile } from "./deps";
 import { createFacts, metaOf, stateOf, stillThere } from "./facts";
@@ -657,7 +658,7 @@ const createdExtras = ({
   stage: StageState | undefined;
   weight: FolderWeight | undefined;
 }) => ({
-  ...(stage ? { stage } : {}),
+  ...(stage ? { stage: stageSaid(stage) } : {}),
   ...(weight ? { weight } : {}),
   ...(broken ? { broken } : {}),
 });
@@ -1485,6 +1486,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const meta = metaOf(doc);
     const sentText = sentTextOf(doc);
     const current = meta.pageHash ?? newestHash(state);
+    const served = servedOf(row) ? getMeta(doc, "stage") : undefined;
     const changed =
       since === undefined
         ? null
@@ -1534,9 +1536,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ...("workspace" in row.source && row.source.workspace
         ? { workspace: row.source.workspace }
         : {}),
-      ...(servedOf(row) && getMeta(doc, "stage")
-        ? { stage: getMeta(doc, "stage") }
-        : {}),
+      ...(served ? { stage: stageSaid(served) } : {}),
       ...faultsOf(row, doc),
     };
   };
@@ -3704,7 +3704,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const written: DesignChanged = {
         ...heldId(next),
         revision: next.revision,
-        stage: { ...changed.state, errors: [] },
+        stage: stageSaid(changed.state),
         errors: errorsSaid(changed.state.errors),
         hint: designHint(changed.spec.content),
       };

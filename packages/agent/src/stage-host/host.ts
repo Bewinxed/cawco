@@ -527,6 +527,55 @@ function relinkOnManifestChange(dev: DevServer): void {
   });
 }
 
+/** Field `name` of a thrown value, read by name: an Error's own `message` is no enumerable property, so a spread of it leaves the message out. */
+const fieldOf = (from: unknown, name: string): unknown =>
+  typeof from === "object" && from !== null
+    ? Reflect.get(from, name)
+    : undefined;
+
+/**
+ * A compile error of Vite 8's that gathers others (Vite's `transformWithOxc`
+ * and Rolldown's own: "Transform failed with 1 error:", each gathered one
+ * in `errors`) made to say its first as its own. The gathering error's
+ * message names none of them on its first line, its own `loc` is where Vite
+ * threw it from, a line of Vite's code (line 7669 of a one-line App.tsx,
+ * Vite 8.3.6), and its `frame` is empty. A gathered error's message is its
+ * reason on its first line ("[PARSE_ERROR] Unexpected token") over its
+ * diagnostic drawn around the place, and its `loc` that place. Its message
+ * becomes the gathered reasons, one a line, the first's first; its place
+ * the first's; its frame the first's own, else the first's drawing. Vite's
+ * page error (`prepareError`) and the stage's keep ({@link keepSent}) then
+ * read the module's own words and place, on every path a transform throws by.
+ */
+function gatheredSaid(error: unknown): void {
+  const errors: unknown = fieldOf(error, "errors");
+  if (!(error instanceof Object && Array.isArray(errors))) {
+    return;
+  }
+  const first: unknown = errors[0];
+  const said = errors
+    .map((one: unknown) => fieldOf(one, "message"))
+    .filter((one): one is string => typeof one === "string");
+  const [opening] = said;
+  if (opening === undefined) {
+    return;
+  }
+  const reasons = said.map((one) => one.trim().split("\n")[0] ?? "");
+  const drawing = opening.trim().split("\n").slice(1).join("\n");
+  const frame = fieldOf(first, "frame");
+  const loc = fieldOf(first, "loc");
+  Reflect.set(error, "message", reasons.join("\n"));
+  if (typeof frame === "string" && frame !== "") {
+    Reflect.set(error, "frame", frame);
+  } else if (drawing !== "") {
+    Reflect.set(error, "frame", drawing);
+  }
+  // Its module's id stays the one Vite gave: the gathered error's may be the bare name.
+  if (loc) {
+    Reflect.set(error, "loc", loc);
+  }
+}
+
 /**
  * Each error a page's request for a module throws names that module. Vite
  * sends a page its error with the error's own `id` (`prepareError`: "id:
@@ -538,7 +587,8 @@ function relinkOnManifestChange(dev: DevServer): void {
  * `environment.transformRequest(url)` for every module a page fetches; an
  * error thrown from it that names no module is given the id of the module
  * at `url`, the one whose transform threw, and goes on as Vite's own:
- * kept by `keepSent` under that module, with its sheets.
+ * kept by `keepSent` under that module, with its sheets. An error that
+ * gathers others ({@link gatheredSaid}) says them as its own first.
  */
 function nameFailedModules(dev: DevServer): void {
   const env = dev.environments.client;
@@ -547,6 +597,7 @@ function nameFailedModules(dev: DevServer): void {
     try {
       return await transform(url, ...rest);
     } catch (error) {
+      gatheredSaid(error);
       if (error instanceof Object && !Reflect.get(error, "id")) {
         const mod = await env.moduleGraph
           .getModuleByUrl(url)
@@ -3210,27 +3261,14 @@ function pageModules(html: string, page: string): string[] {
   return asked;
 }
 
-/** Field `name` of a thrown value, read by name: an Error's own `message` is no enumerable property, so a spread of it leaves the message out. */
-const fieldOf = (from: unknown, name: string): unknown =>
-  typeof from === "object" && from !== null
-    ? Reflect.get(from, name)
-    : undefined;
-
 /**
- * Vite's error from a transform, as its own error payload carries one. A
- * compile error of Vite 8's (Rolldown's "Transform failed with 1 error")
- * names each error it gathers in `errors`, each with its place in the file;
- * its own `loc` is where Vite threw it from, a line of Vite's code (line 7673
- * of a one-line App.tsx, 2026-11-22), so the first error's place is the
- * one said.
+ * Vite's error from a transform, as its own error payload carries one: its
+ * message, module, place and code frame, read by name ({@link fieldOf}).
  */
 const thrownPayload = (error: unknown): ErrorPayload["err"] => {
   const text = (value: unknown) =>
     typeof value === "string" ? stripVTControlCharacters(value) : undefined;
-  const errors = fieldOf(error, "errors");
-  const place =
-    fieldOf(Array.isArray(errors) ? errors[0] : undefined, "loc") ??
-    fieldOf(error, "loc");
+  const place = fieldOf(error, "loc");
   const line = fieldOf(place, "line");
   const column = fieldOf(place, "column");
   const file = fieldOf(place, "file");

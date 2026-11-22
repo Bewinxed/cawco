@@ -34396,13 +34396,73 @@
             "description": "A sheet as its stage reads it: its stories with their args, its meta, and each component's props."
           },
           "stage": {
-            "description": "A sheet's stage: its status, and the compile errors standing in the modules the sheet imports. A served preview's: its server's status, and why it is in `error`.",
+            "description": "A sheet's stage: its status (the compile errors standing in the modules the sheet imports are a design graph's `errors`). A served preview's: its server's status, and why it is in `error`.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ServerStageState"
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "string"
+                  },
+                  "dir": {
+                    "description": "Where it runs from the clone's root (\".\" for the root itself): a sheet's toolchain root, a server's `cwd`.",
+                    "type": "string"
+                  },
+                  "message": {
+                    "description": "Why it is in `error`, one sentence; none otherwise.",
+                    "type": "string"
+                  },
+                  "runs": {
+                    "type": "string",
+                    "enum": [
+                      "serve"
+                    ]
+                  },
+                  "status": {
+                    "$ref": "#/components/schemas/StageStatus"
+                  }
+                },
+                "required": [
+                  "at",
+                  "dir",
+                  "runs",
+                  "status"
+                ]
               },
               {
-                "$ref": "#/components/schemas/SheetStageState"
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "string"
+                  },
+                  "dir": {
+                    "description": "Where it runs from the clone's root (\".\" for the root itself): a sheet's toolchain root, a server's `cwd`.",
+                    "type": "string"
+                  },
+                  "message": {
+                    "description": "Why it is in `error`, one sentence; none otherwise.",
+                    "type": "string"
+                  },
+                  "runs": {
+                    "type": "string",
+                    "enum": [
+                      "sheet"
+                    ]
+                  },
+                  "status": {
+                    "$ref": "#/components/schemas/StageStatus"
+                  },
+                  "toolchain": {
+                    "$ref": "#/components/schemas/StageToolchain"
+                  }
+                },
+                "required": [
+                  "at",
+                  "dir",
+                  "runs",
+                  "status",
+                  "toolchain"
+                ]
               }
             ]
           },
@@ -39179,13 +39239,73 @@
             "description": "A sheet as its stage reads it: its stories with their args, its meta, and each component's props."
           },
           "stage": {
-            "description": "A sheet's stage, or a served preview's server, as it stands once started.",
+            "description": "A sheet's stage, or a served preview's server, as it stands once started; a sheet's compile errors are `errors`.",
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ServerStageState"
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "string"
+                  },
+                  "dir": {
+                    "description": "Where it runs from the clone's root (\".\" for the root itself): a sheet's toolchain root, a server's `cwd`.",
+                    "type": "string"
+                  },
+                  "message": {
+                    "description": "Why it is in `error`, one sentence; none otherwise.",
+                    "type": "string"
+                  },
+                  "runs": {
+                    "type": "string",
+                    "enum": [
+                      "serve"
+                    ]
+                  },
+                  "status": {
+                    "$ref": "#/components/schemas/StageStatus"
+                  }
+                },
+                "required": [
+                  "at",
+                  "dir",
+                  "runs",
+                  "status"
+                ]
               },
               {
-                "$ref": "#/components/schemas/SheetStageState"
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "string"
+                  },
+                  "dir": {
+                    "description": "Where it runs from the clone's root (\".\" for the root itself): a sheet's toolchain root, a server's `cwd`.",
+                    "type": "string"
+                  },
+                  "message": {
+                    "description": "Why it is in `error`, one sentence; none otherwise.",
+                    "type": "string"
+                  },
+                  "runs": {
+                    "type": "string",
+                    "enum": [
+                      "sheet"
+                    ]
+                  },
+                  "status": {
+                    "$ref": "#/components/schemas/StageStatus"
+                  },
+                  "toolchain": {
+                    "$ref": "#/components/schemas/StageToolchain"
+                  }
+                },
+                "required": [
+                  "at",
+                  "dir",
+                  "runs",
+                  "status",
+                  "toolchain"
+                ]
               }
             ]
           },
