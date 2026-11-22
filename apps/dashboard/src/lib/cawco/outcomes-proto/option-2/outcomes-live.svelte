@@ -1,27 +1,18 @@
 <script lang="ts">
   /**
-   * Outcomes as the project page draws it, for its live story: the page's
-   * dock and head, the view strip from 640 and the views bar under it, and
-   * the Outcomes view in the pane's inset, fed the project "cockpit". The
+   * Outcomes as the project page draws it, for its live story: the page
+   * around the view (OutcomesFrame: its dock, head, view strip and views'
+   * bar, as they ship), and the Outcomes view in the pane's inset, fed the
+   * project "cockpit". The
    * mock hub holds what the URL and the hub would: which outcome leads and
    * which of its lines is open, each answer's way to the hub, and Caw's
    * suggestion until it is taken or dismissed. A press does what it does in
    * the product; the hub's answer to Send, and whether the hub answers at
    * all, are the story's dials.
    */
-  import { HOUR_MS } from "@cawco/core/time";
-  import { MediaQuery } from "svelte/reactivity";
-  import CawFloat from "#lib/cawco/project/CawFloat.svelte";
-  import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
-  import ProjectDock from "#lib/cawco/project/ProjectDock.svelte";
-  import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
-  import { PANE_INSET } from "#lib/cawco/project/pane-inset.js";
-  import ViewBar, { type BarView } from "#lib/cawco/project/ViewBar.svelte";
-  import type { ProjectRow } from "#lib/cawco/projects.js";
-  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
+  import OutcomesFrame from "../OutcomesFrame.svelte";
   import type { AnswerState } from "./AskBlock.svelte";
   import type { LeadFace } from "./FaceSwitch.svelte";
-  import OutcomesStrip from "./OutcomesStrip.svelte";
   import OutcomesView, { type Lead, SUGGESTION } from "./OutcomesView.svelte";
   import {
     firstLine,
@@ -64,48 +55,6 @@
     answered?: Record<string, AnswerState>;
   } = $props();
 
-  const PROJECT: ProjectRow = {
-    id: "cockpit",
-    name: "cockpit",
-    account: null,
-    accountAtLimit: "wait",
-    cawHarness: "claude",
-    cawModel: null,
-    conversationInstanceId: null,
-    createdAt: new Date(Date.now() - 24 * 30 * HOUR_MS).toISOString(),
-    eventsOn: true,
-    lands: "main",
-    lfsConnection: null,
-    lfsUrl: null,
-    links: ["github.com/bewinxed/cockpit"],
-    places: [],
-    primaryPlaceId: null,
-    review: true,
-  };
-  const lead = new CawLead({
-    id: () => PROJECT.id,
-    machinesOnline: () => true,
-    project: () => PROJECT,
-    reading: () => false,
-    tasks: () => [],
-  });
-
-  // His panel opens and shuts with the story's dial, and with his seat.
-  $effect(() => {
-    lead.open = conversation;
-  });
-  const docked = $derived(lead.open && lead.anchor !== null);
-
-  const VIEWS: BarView[] = [
-    { value: "board", label: "Board", draft: false, count: 0 },
-    { value: "table", label: "Table", draft: false, count: 0 },
-    { value: "outcomes", label: "Outcomes", draft: false, count: 0 },
-    { value: "routines", label: "Routines", draft: false, count: 0 },
-    { value: "decisions", label: "Decisions", draft: false, count: 0 },
-  ];
-
-  const phone = new MediaQuery(PHONE_QUERY, false);
-
   // --- the mock hub -------------------------------------------------------
 
   /** The outcome Caw's suggestion became, once taken. */
@@ -130,14 +79,14 @@
     all.flatMap((outcome) => outcome.lines).find((one) => one.id === id);
 
   /** A press on something the view opens or acts on: what the mock hub does with it. */
-  function act(what: string): void {
+  function act(what: string, askCaw: () => void): void {
     const [kind, id = ""] = what.split(":");
     const checker = lineById(id)?.checker;
     switch (kind) {
       case "change":
       case "suggestion":
         // Tell Caw what to change, and Change the words first: his conversation.
-        lead.open = true;
+        askCaw();
         return;
       case "start":
         if (checker?.kind === "routine") {
@@ -198,8 +147,6 @@
   let selected = $derived<string | null>(lineOf(leading));
   let face = $state<LeadFace>("line");
   let linePage = $derived<string | null>(lineOpen);
-  let needsOn = $state(false);
-  let current = $state("outcomes");
 
   function makeLead(next: Lead): void {
     leading = next;
@@ -252,117 +199,52 @@
   }
 </script>
 
-<div class="flex h-dvh w-dvw min-h-0 flex-col bg-surface-page">
-  <ProjectDock {docked} preview={false}>
-    {#snippet page()}
-      <div class="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
-        <div
-          class="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
-          data-project-page
-          data-slot="project-page"
-        >
-          <ProjectHead
-            {lead}
-            machine={null}
-            onask={null}
-            onfilter={() => undefined}
-            onnewtask={null}
-            project={PROJECT}
-            seated
-            setup={null}
-          />
-          {#if !phone.current}
-            <OutcomesStrip
-              {current}
-              needs={unanswered}
-              {needsOn}
-              onchoose={(view) => {
-                current = view;
-              }}
-              onsay={() => {
-                lead.open = true;
-              }}
-              ontoggleneeds={() => {
-                needsOn = !needsOn;
-              }}
-              views={VIEWS}
-            />
-          {/if}
-          <div
-            class={[
-              "flex min-h-0 flex-1 flex-col pb-space-5 max-phone:pb-(--bar-reach)",
-              PANE_INSET,
-            ]}
-            data-safe-bottom
-            data-slot="pane"
-            style:--bar-reach={"calc(var(--spacing-c-composer-panel) + var(--spacing-space-4) + var(--safe-bottom) + var(--spacing-space-3))"}
-          >
-            <OutcomesView
-              {answers}
-              {face}
-              lead={leading}
-              {linePage}
-              offline={live
-                ? null
-                : {
-                    lastRead: `Last read at ${lastRead}.`,
-                    why: "The hub is not answering.",
-                  }}
-              ondismiss={() => {
-                queue = queue.slice(1);
-                if (leading === SUGGESTION) {
-                  makeLead(null);
-                }
-              }}
-              onface={(next) => {
-                face = next;
-              }}
-              onlead={makeLead}
-              onnext={() => {
-                queue = [...queue.slice(1), ...queue.slice(0, 1)];
-              }}
-              onopen={act}
-              onopenline={(line) => {
-                linePage = line;
-                face = "line";
-              }}
-              onselect={(line) => {
-                selected = line;
-                face = "line";
-              }}
-              onsend={send}
-              ontake={take}
-              outcomes={all}
-              {selected}
-              suggestion={shown}
-              {unplaced}
-            />
-          </div>
-        </div>
-        {#if phone.current}
-          <ViewBar
-            {current}
-            needs={unanswered}
-            {needsOn}
-            onchoose={(view) => {
-              current = view;
-            }}
-            onnewsession={() => undefined}
-            ontoggleneeds={() => {
-              needsOn = !needsOn;
-            }}
-            views={VIEWS}
-          />
-        {/if}
-      </div>
-    {/snippet}
-    {#snippet dock()}
-      <CawFloat
-        front
-        {lead}
-        projectId={PROJECT.id}
-        projectName={PROJECT.name}
-      />
-    {/snippet}
-  </ProjectDock>
-</div>
+<OutcomesFrame
+  act="Say an outcome"
+  {conversation}
+  needs={unanswered}
+  view="Outcomes"
+>
+  {#snippet pane(askCaw)}
+    <OutcomesView
+      {answers}
+      {face}
+      lead={leading}
+      {linePage}
+      offline={live
+        ? null
+        : {
+            lastRead: `Last read at ${lastRead}.`,
+            why: "The hub is not answering.",
+          }}
+      ondismiss={() => {
+        queue = queue.slice(1);
+        if (leading === SUGGESTION) {
+          makeLead(null);
+        }
+      }}
+      onface={(next) => {
+        face = next;
+      }}
+      onlead={makeLead}
+      onnext={() => {
+        queue = [...queue.slice(1), ...queue.slice(0, 1)];
+      }}
+      onopen={(what) => act(what, askCaw)}
+      onopenline={(line) => {
+        linePage = line;
+        face = "line";
+      }}
+      onselect={(line) => {
+        selected = line;
+        face = "line";
+      }}
+      onsend={send}
+      ontake={take}
+      outcomes={all}
+      {selected}
+      suggestion={shown}
+      {unplaced}
+    />
+  {/snippet}
+</OutcomesFrame>
