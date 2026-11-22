@@ -466,12 +466,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    workspace's cut again found origin no longer holds its commit, core
  *    workspace/controls.ts `CutCommitGone`). A page built for 92 reads no
  *    such kind, so it reloads first.
+ * 94: a design folder (core stage.ts `designOf`) is a component served on
+ *    its stage's port, and a page source names no `path` again; a design's
+ *    create and update refuse under new codes (`artifact-design-unfit`,
+ *    `artifact-design-unread`, `artifact-update-component`). A page built
+ *    for 93 opens a design at its page's place, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 93;
+export const WIRE_PROTOCOL = 94;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

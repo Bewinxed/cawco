@@ -53,16 +53,7 @@ export type PreviewSource =
       /** The version the person is served: the id of a copy of `dir` made on its machine when its author handed this version up, served in its place (agent stage-clone.ts `pinFolder`). */
       pin?: string;
     }
-  | {
-      page: string;
-      /**
-       * An HTML design's (a component artifact the hub keeps, core
-       * stage.ts {@link htmlDesignOf}): its design graph's address on the
-       * page's place (`/@cawco/canvas?file=…&spec=…`), each `file` one of
-       * its pages under its artifact's folder. None for a page.
-       */
-      path?: string;
-    };
+  | { page: string };
 
 /** Every reason a preview's page can say it can't be drawn ({@link PreviewDown}). */
 export const PREVIEW_DOWNS = [

@@ -1230,7 +1230,7 @@
           changesTools={changesBar}
           modeTools={modeBar}
           {modeCompact}
-          page={!!paneSubject.htmlDesign}
+          page={!!paneSubject.design}
           ask={paneSubject.artifact.ask ?? ""}
           files={paneSheet.sheetCanvas.files}
           frame={frameTags}

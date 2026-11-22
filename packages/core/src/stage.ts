@@ -805,26 +805,59 @@ export function canvasOf(path: string): { files: string[]; spec: CanvasSpec } {
 }
 
 /**
- * Where an HTML design's pages stand in its artifact's folder under the
- * hub's artifacts root, one page per direction: its canvas's files name
- * them from that folder (`pages/<name>.html`).
+ * A design folder's stage tree (the owner's pin on graph-general-canvas,
+ * 2026-11-22: "the agent should choose as it needs"; "hot reload, no
+ * versions"): a component artifact whose files the hub keeps, run by the
+ * hub machine's stage over that folder as a stage runs over a workspace's
+ * clone, a boundary of its own around it (agent stage-design.ts). Its id
+ * is the artifact's that first made it with this suffix, so a held next
+ * version, which copies its source, serves from the same folder.
  */
-export const DESIGN_PAGES_DIR = "pages";
+const DESIGN_SUFFIX = "-design";
+
+/** The stage tree id of the design artifact `artifactId` makes. */
+export const designTreeId = (artifactId: string): string =>
+  `${artifactId}${DESIGN_SUFFIX}`;
+
+/** Whether stage tree `id` is a design folder's ({@link designTreeId}). */
+export const isDesignTree = (id: string): boolean => id.endsWith(DESIGN_SUFFIX);
+
+/** The artifact whose folder holds design tree `id`'s files. */
+export const designArtifactOf = (id: string): string =>
+  id.slice(0, -DESIGN_SUFFIX.length);
 
 /**
- * An HTML design (the owner's pick on design-workspace-release#html,
- * 2026-11-22): a component artifact whose pages the hub keeps and serves
- * itself, opened on the design graph like a live story with no workspace,
- * stage or app behind it. Its canvas address is its source's `path`: its
- * pages as the files, each a direction, and the spec. Null for any other
+ * Where a design's files stand in its artifact's folder under the hub's
+ * artifacts root: the toolchain root its stage runs on, its pages and code
+ * as the agent gave them, and the package.json and Vite config the hub
+ * completes them with (hub design-folder.ts).
+ */
+export const DESIGN_FOLDER = "design";
+
+/** A design's page: an HTML document its stage serves, framed on the graph as one state. */
+export const PAGE_FILE = /\.html$/u;
+
+/**
+ * A design folder (the owner's pick on graph-general-canvas, 2026-11-22):
+ * a component artifact served from a {@link isDesignTree} stage tree, each
+ * canvas file one of its pages, opened on the design graph like a live
+ * story. Its canvas address is its source's `path`. Null for any other
  * artifact, a component on a workspace's stage among them.
  */
-export const htmlDesignOf = (row: {
+export const designOf = (row: {
   kind: string;
   source: PreviewSource;
-}): { files: string[]; path: string; spec: CanvasSpec } | null =>
-  row.kind === "component" && "page" in row.source && row.source.path
-    ? { ...canvasOf(row.source.path), path: row.source.path }
+}): { files: string[]; path: string; spec: CanvasSpec; tree: string } | null =>
+  row.kind === "component" &&
+  "port" in row.source &&
+  row.source.workspace !== undefined &&
+  isDesignTree(row.source.workspace) &&
+  row.source.path
+    ? {
+        ...canvasOf(row.source.path),
+        path: row.source.path,
+        tree: row.source.workspace,
+      }
     : null;
 
 /**
@@ -850,6 +883,8 @@ export interface CanvasSpec {
   /** Story → the parent story or section heading it groups under. */
   group?: Record<string, string>;
   name?: string;
+  /** A design folder's title ({@link designOf}): the name its one page shows by on the graph, where no direction names it. */
+  title?: string;
 }
 
 /*
@@ -951,6 +986,7 @@ export const canvasSpecOf = (value: unknown): CanvasSpec => {
       : undefined,
     group,
     name: textOf(value.name),
+    title: textOf(value.title),
   });
 };
 
@@ -1054,6 +1090,50 @@ export const STAGE_ENSURE = "stageEnsure";
 /** What {@link STAGE_ENSURE} is asked of a stage: its first states file, or (`{ file, files }`) every states file whose report it reads, `opening` as the canvas is made. */
 export type StageEnsure =
   string | { file?: string; files?: string[]; opening?: boolean };
+
+/**
+ * The daemon's control method that starts a design folder's stage or wakes
+ * it ({@link designOf}) and looks at its pages ({@link DesignLook}).
+ */
+export const STAGE_DESIGN = "stageDesign";
+
+/**
+ * What a write of a design's folder moved (hub design-folder.ts), each by
+ * its path from the folder: told its stage's Vite as its watcher would tell
+ * it, so a second write of one file a few milliseconds after the first,
+ * which the watcher folds into the first, still reaches the page.
+ */
+export interface DesignMoved {
+  added: string[];
+  changed: string[];
+  removed: string[];
+}
+
+/** What {@link STAGE_DESIGN} is asked: the design's pages, from its folder, and what the write before it moved. */
+export interface DesignLook {
+  files: string[];
+  moved?: DesignMoved;
+}
+
+/**
+ * The stage's own path that compiles a design's pages (`file=…`, from the
+ * toolchain root) as a browser loading them would ask for each module, and
+ * answers {@link PagesLooked}: Vite's own transform of each, no page drawn.
+ */
+export const PAGES_PATH = "/__cawco/pages";
+
+/** What {@link PAGES_PATH} answers: every problem the stage keeps standing after the look. */
+export interface PagesLooked {
+  errors: StageError[];
+}
+
+/** The daemon's answer to {@link STAGE_DESIGN}: the stage's port and root, and its state after its pages were looked at. */
+export interface DesignOpened {
+  /** The toolchain root, from the design's folder: `.`. */
+  dir: string;
+  port: number;
+  state: StageState;
+}
 
 /**
  * The daemon's control method that warms one stage for a decision page as

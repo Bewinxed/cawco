@@ -69,7 +69,6 @@ import { readWithin } from "@cawco/core/bounded";
 import type { PageBody } from "@cawco/core/page-wire";
 import {
   type AnimationRead,
-  type CanvasDial,
   FORMS,
   type FramePictureRead,
   type FrameRender,
@@ -86,9 +85,9 @@ import {
   clipEnd,
   clipKindOf,
   cutRecords,
-  type DialSet,
   type DifferenceRead,
   type DrawingBox,
+  dialsWritten,
   STAGE_COMPARE,
   STAGE_DIALS,
   STAGE_DIALS_WRITTEN,
@@ -108,6 +107,7 @@ import {
   type StageReached,
   type StageReveal,
   type StateRef,
+  scrollTurns,
   shownName,
   stageCompareOf,
   stageDialsOf,
@@ -340,80 +340,6 @@ const tokenPx = (name: string): number =>
   Number.parseFloat(
     getComputedStyle(document.documentElement).getPropertyValue(name)
   ) || 0;
-
-/**
- * A dial's value as written, from what the drawing holds for it: a
- * number's figure (a plain number, or one in the dial's own unit), a
- * toggle's state, a colour's or an option's words; null where it holds
- * none the dial can show.
- */
-function dialValueOf(
-  kind: string,
-  raw: unknown,
-  unit: string | undefined
-): DialSet | null {
-  if (typeof raw === "boolean") {
-    return kind === "toggle" || kind === "action" ? raw : String(raw);
-  }
-  if (typeof raw === "number") {
-    return Number.isFinite(raw) ? raw : null;
-  }
-  if (typeof raw !== "string" || raw === "") {
-    return kind === "action" ? 0 : null;
-  }
-  if (kind === "number" || kind === "action") {
-    return figureOf(raw, unit);
-  }
-  return kind === "toggle" ? raw === "true" || raw === "1" : raw;
-}
-
-/** A plain number, or one in `unit`, read from its words; null for any other. */
-function figureOf(raw: string, unit: string | undefined): number | null {
-  const said = (
-    unit && raw.endsWith(unit) ? raw.slice(0, -unit.length) : raw
-  ).trim();
-  const figure = Number(said);
-  return said !== "" && Number.isFinite(figure) ? figure : null;
-}
-
-/**
- * Each dial's value as written on `body`: a `cssVar` dial's as the body
- * computes it with no dial set on it (each set one lifted for the read and
- * put back), an `arg` dial's as `own`, the story's args, hold it.
- */
-function writtenOf(
-  dials: readonly CanvasDial[],
-  body: HTMLElement,
-  own: Record<string, unknown>
-): Record<string, DialSet> {
-  const lifted = new Map<string, string>();
-  for (const dial of dials) {
-    const now =
-      "cssVar" in dial.target
-        ? body.style.getPropertyValue(dial.target.cssVar)
-        : "";
-    if ("cssVar" in dial.target && now) {
-      lifted.set(dial.target.cssVar, now);
-      body.style.removeProperty(dial.target.cssVar);
-    }
-  }
-  const style = getComputedStyle(body);
-  const values: Record<string, DialSet> = {};
-  for (const dial of dials) {
-    const raw =
-      "cssVar" in dial.target
-        ? style.getPropertyValue(dial.target.cssVar).trim()
-        : own[dial.target.arg];
-    const value = dialValueOf(dial.kind, raw, dial.unit);
-    if (value !== null) {
-      values[dial.name] = value;
-    }
-  }
-  for (const [name, value] of lifted) {
-    body.style.setProperty(name, value);
-  }
-  return values;
-}
 
 /* --- A drawing: what every page of the stage draws a story as ----------- */
 
@@ -873,24 +799,13 @@ export function bootStage(page: Page): Mode {
   // panel's tools over the drawing's foot leave on the way down and come
   // back on the way up.
   {
-    const DEAD = 12;
-    let from = 0;
-    let down = false;
+    const scrolled = scrollTurns((down) => tell(STAGE_SCROLLED, { down }));
     addEventListener(
       "scroll",
-      () => {
-        const top = (document.scrollingElement ?? document.documentElement)
-          .scrollTop;
-        if (Math.abs(top - from) < DEAD) {
-          return;
-        }
-        const now = top > from && top > 0;
-        from = top;
-        if (now !== down) {
-          down = now;
-          tell(STAGE_SCROLLED, { down });
-        }
-      },
+      () =>
+        scrolled(
+          (document.scrollingElement ?? document.documentElement).scrollTop
+        ),
       { passive: true }
     );
   }
@@ -1936,7 +1851,7 @@ export function bootStage(page: Page): Mode {
     if (dials.length === 0) {
       return;
     }
-    const values = writtenOf(
+    const values = dialsWritten(
       dials,
       drawing,
       page.ownArgsOf(target.section, target.story.name)

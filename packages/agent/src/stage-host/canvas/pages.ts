@@ -1,14 +1,19 @@
 /**
- * An HTML design's stage (core stage.ts `htmlDesignOf`): the page the design
- * graph frames for a component artifact whose pages the hub keeps, served on
- * the page's place at `/@cawco/canvas?file=…&spec=…` (preview-server
- * serve.ts `serveDesign`), the overlay in it as in every page the hub
- * serves. It answers the graph's messages as the live stage does (agent
- * stage-host canvas stage.ts; core stage-graph.ts), for what a page can be:
+ * A design folder's canvas (core stage.ts `designOf`): the page the design
+ * graph frames for a component artifact whose folder the hub keeps, served
+ * by its stage at `/@cawco/canvas?file=…&spec=…` (host.ts `servePages`), the
+ * overlay in it as in every page a preview serves. It answers the graph's
+ * messages as a states file's canvas does (stage.ts beside it; core
+ * stage-graph.ts), for what a page can be:
  *
  * - each page (`file`, a direction) is one state, `Page`, said as its sheet
  *   (`cawco:sheet`) with no props, so the graph has nothing to save into
- *   code and no move to play;
+ *   code and no move to play, named as its direction is, else by the
+ *   design's title (the spec's `title`);
+ * - the page is the stage's own (Vite's), so an edit to its folder reaches
+ *   the frame by Vite's HMR, a full reload of it where the edit can't be
+ *   swapped in, and a compile error stands in it as Vite's error overlay;
+ *   each load of the frame is dressed again in the picked scheme and dials;
  * - a reach shows that page in the one frame this document holds, of this
  *   origin, so Comment mode points into it element by element and a pin
  *   anchors by selector there (overlay frames.ts);
@@ -31,11 +36,17 @@
  */
 
 import { detach } from "@cawco/core/detach";
-import { type MediaScheme, settledMedia } from "@cawco/core/scheme-media";
+import {
+  eachRule,
+  type MediaScheme,
+  settledMedia,
+} from "@cawco/core/scheme-media";
 import type { SheetOnPage, Story } from "@cawco/core/stage";
 import { canvasOf, FORMS } from "@cawco/core/stage";
 import {
   type DialSet,
+  dialSetOf,
+  dialsWritten,
   STAGE_DIALS,
   STAGE_DIALS_WRITTEN,
   STAGE_LAID,
@@ -47,6 +58,7 @@ import {
   type StageLaid,
   type StageReach,
   type StageReached,
+  scrollTurns,
   stageDialsOf,
   stageLoadOf,
   stageReachOf,
@@ -57,39 +69,25 @@ import {
 const PAGE_STORY = "Page";
 /** The page's gutter beside the frame where the window has room for it, px: the live stage's (`--spacing-space-4`). */
 const GUTTER = 16;
-/** How far the page scrolls before the tools over the stage's foot step aside, px: the live stage's dead zone. */
-const SCROLL_DEAD = 8;
-
-/** What the hub wrote into the document for this stage: each page's name as the graph shows it. */
-interface StageConfig {
-  /** Each page's name, by its file: a direction's, or the design's title. */
-  names: Record<string, string>;
-}
-
-/** The hub's JSON for this stage (serve.ts `designStage`), read as it wrote it. */
-const config = ((): StageConfig => {
-  const read: unknown = JSON.parse(
-    document.getElementById("cawco-design")?.textContent ?? "{}"
-  );
-  const names =
-    read && typeof read === "object" && "names" in read ? read.names : null;
-  return {
-    names: Object.fromEntries(
-      Object.entries(names && typeof names === "object" ? names : {}).filter(
-        (one): one is [string, string] => typeof one[1] === "string"
-      )
-    ),
-  };
-})();
 
 const { files, spec } = canvasOf(location.pathname + location.search);
+
+/** Each page's name as the graph shows it, by its file: its direction's, else the design's title. */
+const names: Record<string, string | null> = Object.fromEntries(
+  files.map((file) => [
+    file,
+    spec.directions?.find((one) => one.file === file)?.name ??
+      spec.title ??
+      null,
+  ])
+);
 const cssDials = (spec.dials ?? []).flatMap((dial) =>
   "cssVar" in dial.target ? [{ ...dial, cssVar: dial.target.cssVar }] : []
 );
 
 /** Page `file`'s sheet: its one state, named as the page is, the design's name or its direction's. */
 const sheetOf = (file: string): SheetOnPage => {
-  const name = config.names[file] ?? null;
+  const name = names[file] ?? null;
   const story: Story = {
     args: {},
     code: {},
@@ -133,7 +131,7 @@ for (const sheet of Object.values(said)) {
 const holder = document.createElement("div");
 holder.dataset.slot = "design-holder";
 const frame = document.createElement("iframe");
-frame.title = config.names[files[0] ?? ""] ?? "";
+frame.title = names[files[0] ?? ""] ?? "";
 holder.append(frame);
 document.body.append(holder);
 
@@ -185,10 +183,6 @@ let ownRootScheme: string | null = null;
 
 const isMediaRule = (rule: CSSRule): rule is CSSMediaRule =>
   "conditionText" in rule && "media" in rule;
-const isGroupingRule = (rule: CSSRule): rule is CSSGroupingRule =>
-  "cssRules" in rule;
-const isImportRule = (rule: CSSRule): rule is CSSImportRule =>
-  "styleSheet" in rule && "href" in rule;
 
 /** `now`, the media of `owner`, set to the page's own settled for `scheme` (none: as the page wrote it) through `set`. */
 function settle(
@@ -206,31 +200,15 @@ function settle(
   set(answered ?? own);
 }
 
-function settleRules(rules: CSSRuleList, scheme: MediaScheme | null): void {
-  for (const rule of Array.from(rules)) {
+/** Each media rule of `sheet`, at any depth, settled for `scheme` (none: as the page wrote it); another origin's sheet as it is. */
+function settleSheet(sheet: CSSStyleSheet, scheme: MediaScheme | null): void {
+  eachRule(sheet, (rule) => {
     if (isMediaRule(rule)) {
       settle(rule, rule.media.mediaText, scheme, (media) => {
         rule.media.mediaText = media;
       });
     }
-    if (isGroupingRule(rule)) {
-      settleRules(rule.cssRules, scheme);
-    }
-    if (isImportRule(rule) && rule.styleSheet) {
-      settleSheet(rule.styleSheet, scheme);
-    }
-  }
-}
-
-function settleSheet(sheet: CSSStyleSheet, scheme: MediaScheme | null): void {
-  let rules: CSSRuleList;
-  try {
-    rules = sheet.cssRules;
-  } catch {
-    // Another origin's sheet keeps its rules as they are: its queries hear the frame's own scheme.
-    return;
-  }
-  settleRules(rules, scheme);
+  });
 }
 
 /**
@@ -277,8 +255,6 @@ function dress(): void {
 
 /** The values the graph last set, by dial name. */
 let dialValues: Record<string, DialSet> = {};
-/** The variables set on the page's root now. */
-let setVars = new Map<string, string>();
 /** The values as written, as last told the graph. */
 let writtenSaid = "";
 
@@ -286,69 +262,25 @@ let writtenSaid = "";
 const pageRoot = (): HTMLElement | null =>
   loaded ? (frame.contentDocument?.documentElement ?? null) : null;
 
-/** Each `cssVar` dial's variable as the values set it, with its unit. */
-const varsOf = (values: Record<string, DialSet>) => {
-  const vars = new Map<string, string>();
-  for (const dial of cssDials) {
-    const value = values[dial.name];
-    if (value !== undefined) {
-      vars.set(
-        dial.cssVar,
-        typeof value === "number" ? `${value}${dial.unit ?? ""}` : String(value)
-      );
-    }
-  }
-  return vars;
-};
-
-/** A dial's value as the page writes it: a number's figure, a toggle's state, a colour's or option's words; null where it holds none. */
-function writtenValue(
-  kind: string,
-  raw: string,
-  unit: string | undefined
-): DialSet | null {
-  if (raw === "") {
-    return kind === "action" ? 0 : null;
-  }
-  if (kind === "number" || kind === "action") {
-    const figure = Number(
-      (unit && raw.endsWith(unit) ? raw.slice(0, -unit.length) : raw).trim()
-    );
-    return Number.isFinite(figure) ? figure : null;
-  }
-  return kind === "toggle" ? raw === "true" || raw === "1" : raw;
-}
-
-/** The dials set on the page, and each one's value as written told the graph when it changed. */
+/** The dials set on the page's root, and each one's value as written (core `dialsWritten`) told the graph when it changed. */
 function turn(): void {
   const root = pageRoot();
   if (!root) {
     return;
   }
-  const vars = varsOf(dialValues);
-  for (const name of setVars.keys()) {
-    root.style.removeProperty(name);
-  }
-  const style = getComputedStyle(root);
-  const written: Record<string, DialSet> = {};
+  const { vars } = dialSetOf(cssDials, dialValues);
   for (const dial of cssDials) {
-    const value = writtenValue(
-      dial.kind,
-      style.getPropertyValue(dial.cssVar).trim(),
-      dial.unit
-    );
-    if (value !== null) {
-      written[dial.name] = value;
+    if (!vars.has(dial.cssVar)) {
+      root.style.removeProperty(dial.cssVar);
     }
   }
   for (const [name, value] of vars) {
     root.style.setProperty(name, value);
   }
-  setVars = vars;
-  const now = JSON.stringify(written);
+  const now = JSON.stringify(dialsWritten(cssDials, root, {}));
   if (cssDials.length > 0 && now !== writtenSaid) {
     writtenSaid = now;
-    tell(STAGE_DIALS_WRITTEN, { values: written });
+    tell(STAGE_DIALS_WRITTEN, { values: JSON.parse(now) });
   }
 }
 
@@ -356,33 +288,16 @@ function turn(): void {
 
 /** The newest reach: an older one still loading answers superseded. */
 let latest = 0;
-/** The page's last scroll, for the way it went. */
-let lastY = 0;
-let wentDown = false;
-
 /** The frame's page heard: its scroll's way, and a press that closes the graph's open layers. */
 function hearPage(): void {
   const page = frame.contentWindow;
   if (!page) {
     return;
   }
-  lastY = page.scrollY;
-  page.addEventListener(
-    "scroll",
-    () => {
-      const y = page.scrollY;
-      if (Math.abs(y - lastY) < SCROLL_DEAD) {
-        return;
-      }
-      const down = y > lastY;
-      lastY = y;
-      if (down !== wentDown) {
-        wentDown = down;
-        tell(STAGE_SCROLLED, { down });
-      }
-    },
-    { passive: true }
-  );
+  const scrolled = scrollTurns((down) => tell(STAGE_SCROLLED, { down }));
+  page.addEventListener("scroll", () => scrolled(page.scrollY), {
+    passive: true,
+  });
   // A sheet the page adds later is drawn in the picked scheme too.
   const doc = frame.contentDocument;
   if (doc) {
@@ -405,6 +320,26 @@ function hearPage(): void {
   );
 }
 
+/** Who wait for the frame's next load: each reach of a page it didn't show yet. */
+const onLoaded: (() => void)[] = [];
+
+/**
+ * Each load of the frame's page, a reach's or its own (Vite's full reload
+ * after an edit it can't swap in, a link the page follows): heard, and
+ * drawn in the picked scheme and dials.
+ */
+frame.addEventListener("load", () => {
+  loaded = true;
+  ownRootScheme =
+    frame.contentDocument?.documentElement.style.colorScheme || null;
+  hearPage();
+  pageScheme(view.scheme);
+  turn();
+  for (const done of onLoaded.splice(0)) {
+    done();
+  }
+});
+
 /** The frame showing page `file`, loaded: at once when it shows it already. */
 function show(file: string): Promise<void> {
   if (shown === file && loaded) {
@@ -412,21 +347,9 @@ function show(file: string): Promise<void> {
   }
   shown = file;
   loaded = false;
-  frame.title = config.names[file] ?? "";
+  frame.title = names[file] ?? "";
   return new Promise((done) => {
-    frame.addEventListener(
-      "load",
-      () => {
-        loaded = true;
-        ownRootScheme =
-          frame.contentDocument?.documentElement.style.colorScheme || null;
-        hearPage();
-        pageScheme(view.scheme);
-        turn();
-        done();
-      },
-      { once: true }
-    );
+    onLoaded.push(done);
     frame.src = new URL(`../${file}`, location.href).href;
   });
 }

@@ -130,7 +130,9 @@ import type {
   SupportedCommands,
 } from "./session-messages";
 import type {
+  DesignLook,
   DesignMap,
+  DesignOpened,
   DesignQuery,
   RenderAsk,
   ServedPicture,
@@ -485,6 +487,7 @@ interface ControlTable {
     [ref: WorkspaceRef, query?: DesignQuery | null],
     DesignMap
   >;
+  stageDesign: Entry<[ref: WorkspaceRef, look: DesignLook], DesignOpened>;
   stageEnsure: Entry<[ref: WorkspaceRef, file: StageEnsure], StageOpened>;
   stagePicture: Entry<[ref: WorkspaceRef, ask: ServedPicture], PictureTaken>;
   stagePin: Unread<

@@ -8,6 +8,8 @@ import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
 import type {
   CanvasSpec,
   DesignMap,
+  DesignMoved,
+  DesignOpened,
   DesignQuery,
   ServedPicture,
   ServeSpec,
@@ -40,6 +42,7 @@ import type { ProblemsOf } from "../refusal";
 import type { CardsRouted, Settler } from "../settling-answers";
 import type { createSetupPicksApply, SentPage } from "../setup";
 import type { StateAsk } from "./component";
+import type { createDesignFiles } from "./design-files";
 import type { ArtifactDocs } from "./docs";
 import type {
   Browsed,
@@ -179,7 +182,25 @@ export interface ArtifactServiceDeps {
     artifact: ArtifactRow,
     delivery: MarksDelivery
   ) => Promise<MarksOutcome>;
+  /**
+   * Design tree `tree`'s stage on the hub's machine (agent stage.ts
+   * `ensureDesign`), over its folder under the artifacts root, started or
+   * woken there, its pages `files` compiled on it and waited on: its port,
+   * root and state with the machine; refused saying why it can't run.
+   */
+  design: (
+    tree: string,
+    files: string[],
+    /** What the write before it moved, told the stage's Vite (core `DesignMoved`). */
+    moved?: DesignMoved
+  ) => Promise<{ machineId: string; opened: DesignOpened } | StageRefused>;
   docs: ArtifactDocs;
+  /**
+   * Design tree `tree` let go on the hub's machine (agent stage.ts
+   * `unpin`): its stage and boundary stopped, its records there dropped.
+   * Sent and not waited on: its folder goes with its artifact.
+   */
+  dropDesign: (tree: string) => void;
   /**
    * Page `name`'s source taken out of project `projectId`'s folder
    * (hub kept-blocks.ts `pageSourcePaths`: `decisions/<name>/page.oui` or its
@@ -200,6 +221,16 @@ export interface ArtifactServiceDeps {
    * gone, or nothing can give it a turn again. A machine away is not.
    */
   finished: (instance: InstanceRow) => boolean;
+  /**
+   * Every file of folder `dir` on session `instance`'s machine, admitted as
+   * a delegate's inputs are (agent inputs.ts: a workspace's session hands
+   * only what it reads, never what every boundary hides) and read whole,
+   * each by its path from `dir`; refused in the machine's words.
+   */
+  folderFiles: (
+    instance: InstanceRow,
+    dir: string
+  ) => ReturnType<ReturnType<typeof createDesignFiles>>;
   /** What a folder preview of `dir` loads, weighed on machine `machineId`, and the desk captures on its start page at `path` (agent preview.ts `previewWeight`); refused saying why it can't. */
   folderWeight: (
     machineId: string,

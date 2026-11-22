@@ -21,7 +21,11 @@
  *   ({@link installMoved}, read by stage.ts);
  * - the install runs inside the stage's boundary by that manager, its
  *   failure thrown with the installer's last lines, which the stage shows as
- *   its error.
+ *   its error;
+ * - a design folder's project (core stage.ts `designOf`), which the agent
+ *   wrote and no one committed, installs unfrozen ({@link ProjectAt}
+ *   `design`): bun where its package.json names no manager, the lockfile
+ *   written by the install, and its hash taken after it.
  */
 
 import { createHash } from "node:crypto";
@@ -88,6 +92,11 @@ interface Install {
  */
 export interface ProjectAt {
   readonly boundary: WorkspaceRef;
+  /**
+   * A design folder's (stage-design.ts): installed by its manager's plain
+   * install, which writes its lockfile, by bun where nothing names one.
+   */
+  readonly design?: boolean;
   readonly from: string;
   /** The person's own path for `boundary.path`. */
   readonly shownAs: string;
@@ -154,7 +163,9 @@ const installOf = async (at: ProjectAt): Promise<Install | null> => {
       dirname(dir) === dir ||
       relative(top, dir).startsWith("..")
     ) {
-      return null;
+      return at.design
+        ? { dir: at.from, manager: "bun", named: "a design folder's own" }
+        : null;
     }
   }
 };
@@ -176,6 +187,22 @@ const frozenInstall = (install: Install): string => {
       return install.major >= 2
         ? "yarn install --immutable"
         : "yarn install --frozen-lockfile";
+    default:
+      unhandled("manager", install.manager);
+  }
+};
+
+/** A manager's plain install: a design folder's, whose lockfile the install writes. */
+const plainInstall = (install: Install): string => {
+  switch (install.manager) {
+    case "npm":
+      return "npm install";
+    case "pnpm":
+      return "pnpm install";
+    case "bun":
+      return "bun install";
+    case "yarn":
+      return "yarn install";
     default:
       unhandled("manager", install.manager);
   }
@@ -226,7 +253,7 @@ const lookAt = async (at: ProjectAt) => {
   if (!install) {
     return null;
   }
-  const command = frozenInstall(install);
+  const command = at.design ? plainInstall(install) : frozenInstall(install);
   const key = relative(at.boundary.path, install.dir) || ".";
   const inputs = await inputsOf(install.dir, command);
   const current =
@@ -319,9 +346,13 @@ const runInstall = async (
     );
   }
   const record = await readInstalled(at.boundary.id);
+  // A plain install wrote the lockfile it now stands installed from.
+  const installedFrom = at.design
+    ? await inputsOf(install.dir, command)
+    : inputs;
   await writeStateFile(
     recordOf(at.boundary.id),
-    `${JSON.stringify({ ...record, [key]: inputs })}\n`
+    `${JSON.stringify({ ...record, [key]: installedFrom })}\n`
   );
   console.info(
     `[stage] ${at.boundary.id.slice(0, 8)}: ${key} installed with \`${command}\` (${install.named})`

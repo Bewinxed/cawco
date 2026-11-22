@@ -104,6 +104,7 @@ const svelteShims = async (): Promise<string> =>
   );
 
 const CANVAS = new URL("./canvas/runtime.ts", import.meta.url).pathname;
+const PAGES = new URL("./canvas/pages.ts", import.meta.url).pathname;
 
 /**
  * The house faces the canvas page's own style is set in (DESIGN.md's type), as every
@@ -151,10 +152,23 @@ async function canvasRuntime(): Promise<string> {
   return await outputText("The canvas runtime", result.outputs);
 }
 
+/** A design folder's canvas (canvas/pages.ts), bundled: a browser IIFE its document carries inline (host.ts `servePages`). */
+async function pagesStage(): Promise<string> {
+  const result = await bundled("A design's canvas", {
+    entrypoints: [PAGES],
+    target: "browser",
+    format: "iife",
+    minify: true,
+  });
+  await refuseSchemeLowering("A design's canvas", result.outputs);
+  return await outputText("A design's canvas", result.outputs);
+}
+
 /** The host, bundled: its text. */
 export async function buildStageHost(): Promise<string> {
-  const [runtime, tokens, faces] = await Promise.all([
+  const [runtime, pages, tokens, faces] = await Promise.all([
     canvasRuntime(),
+    pagesStage(),
     themeVariablesCss(),
     canvasFaces(),
   ]);
@@ -169,6 +183,7 @@ export async function buildStageHost(): Promise<string> {
     define: {
       __SVELTE_SHIMS__: JSON.stringify(await svelteShims()),
       __CANVAS_RUNTIME__: JSON.stringify(runtime),
+      __PAGES_STAGE__: JSON.stringify(pages),
       __CANVAS_TOKENS__: JSON.stringify(tokens),
       __CANVAS_FACES__: JSON.stringify(faces.css),
       __CANVAS_FACE_FILES__: JSON.stringify(faces.files),

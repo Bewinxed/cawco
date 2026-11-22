@@ -80,9 +80,15 @@ import {
   COMPONENTS_PATH,
   canvasPath,
   type DesignCard,
+  type DesignLook,
   type DesignMap,
+  type DesignMoved,
+  type DesignOpened,
   type DesignQuery,
   HEALTH_PATH,
+  isDesignTree,
+  PAGE_FILE,
+  PAGES_PATH,
   REPORT_PATH,
   type RenderAsk,
   SERVE_COMMAND_LIMIT,
@@ -109,6 +115,7 @@ import {
 } from "@cawco/core/stage";
 import {
   DesignMapSchema,
+  PagesLookedSchema,
   ReportAnswerSchema,
   SheetReadSchema,
   SheetWeightSchema,
@@ -165,6 +172,7 @@ import {
   stageCloneOf,
   syncStageClone,
 } from "./stage-clone";
+import { designsGone, dropDesign, keepDesign } from "./stage-design";
 import { HOST_RUNTIME_ENV, stageHost } from "./stage-host/build";
 import { installMoved, installProject, type ProjectAt } from "./stage-install";
 import { listenerFor, type Rendered, renderCanvas } from "./stage-render";
@@ -324,7 +332,10 @@ export class WorkspaceNotHere extends StageRefusal {}
 /** What a stage runs: the stage host on a sheet's toolchain root, or the command a workspace preview names. */
 type Runs =
   | {
-      readonly framework: StageFramework;
+      /** A design folder's (stage-design.ts): its pages served, no story mounted, every compile error its own. */
+      readonly design: boolean;
+      /** The framework a story mounts on; none in a design folder that names none. */
+      readonly framework: StageFramework | null;
       readonly kind: "sheet";
       readonly kit: boolean;
       readonly runtime: string;
@@ -416,9 +427,13 @@ const treeOf = async (
     const clone = (await pinnedTree(pin)) ?? (await cutPin(workspace, pin));
     return pinTree(pin, clone, ports);
   }
-  return isPlace(workspace.id)
-    ? { ref: workspace, ports, ...(await stageCloneOf(workspace, ports)) }
-    : { ref: workspace, ports, folder: workspace.path, boundary: workspace };
+  if (isPlace(workspace.id)) {
+    return { ref: workspace, ports, ...(await stageCloneOf(workspace, ports)) };
+  }
+  if (isDesignTree(workspace.id)) {
+    await keepDesign(workspace);
+  }
+  return { ref: workspace, ports, folder: workspace.path, boundary: workspace };
 };
 
 /**
@@ -439,12 +454,13 @@ const installedFor = async (tree: Tree, from: string): Promise<void> => {
   if (running && running.status !== "asleep" && running.status !== "error") {
     return;
   }
+  const design = isDesignTree(tree.ref.id);
   await (isPlace(tree.ref.id)
     ? installStage(tree.ref, tree, root)
     : installProject(
-        { boundary: tree.boundary, from: root, shownAs: tree.ref.path },
-        // A pin's `node_modules` only this makes, as a place's clone's.
-        isPin(tree.ref.id)
+        { boundary: tree.boundary, from: root, shownAs: tree.ref.path, design },
+        // A pin's and a design folder's `node_modules` only this makes, as a place's clone's.
+        isPin(tree.ref.id) || design
       ));
 };
 
@@ -453,6 +469,7 @@ const projectOf = (stage: Stage): ProjectAt => ({
   boundary: stage.boundary,
   from: stage.root,
   shownAs: stage.boundary.path,
+  design: isDesignTree(stage.workspace.id),
 });
 
 /**
@@ -466,7 +483,7 @@ const installFor = async (stage: Stage): Promise<void> => {
     await installStage(stage.workspace, clone, stage.root);
     return;
   }
-  await installProject(projectOf(stage), false);
+  await installProject(projectOf(stage), isDesignTree(stage.workspace.id));
 };
 
 /** Whether a stage's project moved past its install; a look that fails is no move, and the start after says why. */
@@ -684,6 +701,23 @@ const storyPath = (tree: Tree, file: string): string => {
   return abs;
 };
 
+/**
+ * A canvas's file in the tree the stage serves, absolute: a design
+ * folder's page (core `PAGE_FILE`), else a story file ({@link storyPath}).
+ */
+const canvasFile = (tree: Tree, file: string): string => {
+  if (!isDesignTree(tree.ref.id)) {
+    return storyPath(tree, file);
+  }
+  const abs = inTree(tree, file, "a design's canvas names its pages in it.");
+  if (!PAGE_FILE.test(abs)) {
+    throw new StageRefusal(
+      `${file} is no page: a design's canvas names its HTML pages, like index.html.`
+    );
+  }
+  return abs;
+};
+
 /** A canvas opened on nothing is refused: each of `stories` (absolute) must be written first. */
 const writtenFirst = (tree: Tree, stories: string[]): void => {
   const unwritten = stories.find((story) => !existsSync(story));
@@ -798,8 +832,10 @@ function stageFor(tree: Tree, story: string, rootOnly = false): StagePlace {
   }
   const dir = relative(top, root) || ".";
   const deps = dependencyNames(root, top);
-  const framework = FRAMEWORK_PACKAGES.find(([, name]) => deps.has(name))?.[0];
-  if (!framework) {
+  const framework =
+    FRAMEWORK_PACKAGES.find(([, name]) => deps.has(name))?.[0] ?? null;
+  const design = isDesignTree(tree.ref.id);
+  if (!(framework || design)) {
     throw new StageRefusal(
       `${dir}'s package.json names none of Svelte, Vue, React, Solid or Preact, the frameworks a sheet mounts. ${AS_PAGE}`
     );
@@ -837,6 +873,7 @@ function stageFor(tree: Tree, story: string, rootOnly = false): StagePlace {
     dir,
     runs: {
       kind: "sheet",
+      design,
       framework,
       kit,
       runtime,
@@ -1336,7 +1373,8 @@ const commandOf = (stage: Stage): [string, Record<string, string>] =>
           ...HOST_RUNTIME_ENV,
           CAWCO_STAGE: "1",
           CAWCO_STAGE_PORT: String(stage.port),
-          CAWCO_STAGE_FRAMEWORK: stage.runs.framework,
+          CAWCO_STAGE_FRAMEWORK: stage.runs.framework ?? "",
+          CAWCO_STAGE_DESIGN: stage.runs.design ? "1" : "0",
           CAWCO_STAGE_KIT: stage.runs.kit ? "1" : "0",
           CAWCO_STAGE_TOOLCHAIN: stage.runs.toolchain,
         },
@@ -1794,6 +1832,62 @@ export async function ensureStage(
   };
 }
 
+/**
+ * Pages `files` (from the stage's root) of a design folder compiled on its
+ * stage as a browser loading them would ask for each module (host.ts
+ * `PAGES_PATH`, through Vite's own transform), and the problems the stage
+ * keeps after, told as its state is: a compile error is there to read
+ * before any browser loaded the page.
+ */
+async function pagesLooked(
+  stage: Stage,
+  files: string[],
+  moved?: DesignMoved
+): Promise<void> {
+  const asked: [string, string][] = [
+    ...files.map((one): [string, string] => ["file", one]),
+    ...(["added", "changed", "removed"] as const).flatMap((kind) =>
+      (moved?.[kind] ?? []).map((one): [string, string] => [kind, one])
+    ),
+  ];
+  const { errors } = await answerOf(
+    stage,
+    `${PAGES_PATH}?${new URLSearchParams(asked)}`,
+    "moving",
+    "compile the design's pages",
+    PagesLookedSchema
+  );
+  if (!Bun.deepEquals(errors, stage.errors)) {
+    stage.errors = errors;
+    tell(stage);
+  }
+}
+
+/**
+ * A design folder's stage (core stage.ts `designOf`), started or woken and
+ * waited on, its project installed first: the folder is the toolchain
+ * root, and the hub keeps it (stage-design.ts). Its pages `files` (from the
+ * folder) are compiled on it ({@link pagesLooked}) before it answers, so
+ * its state says each compile error. An agent's use: its idle time starts
+ * again. Refused with why, when the folder cannot run.
+ */
+export async function ensureDesign(
+  ports: StagePorts,
+  workspace: WorkspaceRef,
+  look: DesignLook
+): Promise<DesignOpened> {
+  const tree = await treeOf(workspace, ports);
+  const pages = look.files.map((file) => canvasFile(tree, file));
+  writtenFirst(tree, pages);
+  const stage = await rootStage(tree, tree.folder, "a design's read");
+  await pagesLooked(
+    stage,
+    pages.map((page) => relative(stage.root, page)),
+    look.moved
+  );
+  return { port: stage.port, dir: stage.dir, state: stateOf(stage) };
+}
+
 /** What sheet `rel` (from the stage's root) loads, as its stage's module graph has it; null until a view has loaded it. */
 async function sheetWeight(
   stage: Stage,
@@ -1989,10 +2083,22 @@ export async function warmStage(
   try {
     const tree = await treeOf(workspace, ports);
     const canvases = warm.canvases.map((files) =>
-      files.map((file) => storyPath(tree, file))
+      files.map((file) => canvasFile(tree, file))
     );
     const first = canvases[0]?.[0];
     if (!first) {
+      return;
+    }
+    if (isDesignTree(tree.ref.id)) {
+      const stage = await rootStage(tree, tree.folder, warm.by);
+      await Promise.all(
+        canvases.map((pages) =>
+          pagesLooked(
+            stage,
+            pages.map((page) => relative(stage.root, page))
+          )
+        )
+      );
       return;
     }
     const stage = await storyStage(tree, first, warm.by);
@@ -2285,7 +2391,9 @@ export async function wakeSource(
     workspace: source.workspace,
     ...(source.pin === undefined ? {} : { pin: source.pin }),
   });
-  if (source.stage) {
+  if (source.stage && isDesignTree(source.workspace)) {
+    await rootStage(tree, tree.folder, "a preview's request");
+  } else if (source.stage) {
     await storyStage(
       tree,
       storyPath(tree, join(source.stage.dir, source.stage.file)),
@@ -2426,6 +2534,14 @@ export async function keepPins(served: readonly string[]): Promise<number> {
   const kept = new Set(served);
   const now = Date.now();
   let gone = 0;
+  // A design whose folder went while this machine was away (stage-design.ts).
+  for (const design of await designsGone()) {
+    await unpin(design).catch((error: unknown) =>
+      console.warn(
+        `[stage] design ${design.slice(0, 8)}: its folder is gone, and it could not be let go; the next list tries again: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
+  }
   for (const { pin, at } of await pinsHeld()) {
     if (kept.has(pin) || now - at <= PIN_NAMED_MS) {
       continue;
@@ -2446,6 +2562,7 @@ export async function keepPins(served: readonly string[]): Promise<number> {
 export async function unpin(pin: string): Promise<void> {
   stopStages(pin);
   await dropPin(pin);
+  await dropDesign(pin);
 }
 
 /** Every pin cut from workspace `id` let go: its archive, after which none of it is served. */

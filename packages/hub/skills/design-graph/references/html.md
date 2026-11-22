@@ -1,10 +1,26 @@
-# An HTML page on the design graph
+# A design folder on the design graph
 
-An HTML design is a page the hub keeps and opens on the design graph itself: no workspace, stage or app runs behind it. It is your choice for two cases: a stack with no stage (`design-explore`, "Where the graph runs"), and an idea you judge throwaway. Every other design, a new part included, is a live story in the project's own language and framework (the steps in `SKILL.md`).
+A **design folder** is a design the hub keeps and serves itself: your page, or a folder of files or code, run by Vite on the hub's machine and opened on the design graph with no project behind it. It is your choice for three cases: work with no project behind it, a stack with no stage (`design-explore`, "Where the graph runs"), and an idea you judge throwaway. Every other design, a new part included, is a live story in the project's own language and framework (the steps in `SKILL.md`).
+
+## Pick the form
+
+You choose the form the work needs:
+
+- **One page**: `html`, a whole document. It is the folder's `index.html`.
+- **A folder of files**: `dir`, absolute, on your machine, holding `index.html` at its top and whatever it loads (styles, pictures, scripts). Served as they are.
+- **A folder of code**: the same `dir`, its `index.html` loading a module (`<script type="module" src="./main.tsx">`) that mounts a React or Svelte component or a small app, or plain TypeScript. Its npm imports are named in a `package.json` at its top; the stage installs them. React for `.jsx`/`.tsx` files, Svelte for `.svelte` files and Vite itself are added when the package.json names none, and a `vite.config` of your own at its top replaces the one the hub writes.
+
+Leave `node_modules` and `.git` out of the folder: the stage installs its own.
 
 ## Open it
 
-`artifact_create({ kind: "component", name, title, does: "judge", ask, html })`, or `dir` with a folder on your machine holding `page.html`, as a page artifact takes one: the hub builds it the same way, its pictures and `mockups/` taken in. Directions are one page each: `directions: [{ html, name, line }, { dir, name, line }]`, `html` and `dir` left out of the call. The same `name` again replaces the pages in place, picks and pins kept: that is how a new round lands.
+`artifact_create({ kind: "component", name, title, does: "judge", ask, html })`, or with `dir`. Directions are one form each: `directions: [{ html, name, line }, { dir, name, line }]`, `html` and `dir` left out of the call; each direction is a folder of its own, and their package.json files name the same range for any package they share.
+
+The create answers `errors`: every compile error in the pages and what they import, compiled before any browser loads them. A folder that can't install (a package.json that doesn't parse, a package that isn't there) refuses the create in the installer's words.
+
+## Change it in place
+
+`artifact_update({ id, html })`, `{ id, dir }`, or `{ id, directions }` naming the whole design again: its files are replaced in place, and the person's open panel takes the change by Vite's hot reload, their picks and pins kept. No version is kept; to compare alternatives, open directions. The answer's `errors` names each compile error, which the page shows in its frame as Vite's error overlay until your next update compiles. `artifact_create` again under the same `name` does the same.
 
 ## Write the page for the graph
 
@@ -15,4 +31,4 @@ An HTML design is a page the hub keeps and opens on the design graph itself: no 
 
 ## What comes back
 
-`artifact_read` answers their pins, their dial values (`dials`) and, with directions, their `picked`. A pin anchors on the element they pointed at and carries no `file:line`: find the element by what the pin names. The hub draws no frame of the page and keeps no render report, so read it yourself at each width and in both schemes before you open it. Save into code, the Animation face, Compare and the states' Map stay with live stories: a page has no states file to write and no move to play.
+`artifact_read` answers their pins, their dial values (`dials`), with directions their `picked`, and the stage's `errors`. A pin anchors on the element they pointed at and carries no `file:line`: find the element by what the pin names. The hub draws no frame of the page and keeps no render report, so read it yourself at each width and in both schemes before you open it. Save into code, the Animation face, Compare and the states' Map stay with live stories: a page has no states file to write and no move to play.

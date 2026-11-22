@@ -242,8 +242,6 @@ as-cast	Parameters<typeof titleFor>[0]	packages/hub/scripts/migrations-check.ts	
 as-cast	parser.Pseudo	apps/dashboard/group-selectors.ts	1
 as-cast	Partial<ArtifactRef> | null | undefined	packages/preview/src/overlay/artifact.ts	1
 as-cast	Partial<Box> | null	packages/preview/src/overlay/embeds.ts	1
-as-cast	Partial<CSSGroupingRule>	packages/preview/src/overlay/schemes.ts	1
-as-cast	Partial<CSSImportRule>	packages/preview/src/overlay/schemes.ts	1
 as-cast	Partial<CSSMediaRule>	packages/preview/src/overlay/schemes.ts	1
 as-cast	Partial<CSSStyleRule>	packages/preview/src/overlay/schemes.ts	1
 as-cast	Partial<Record<keyof Box, unknown>> | null	packages/preview/src/overlay/page.ts	1
@@ -563,7 +561,7 @@ empty-catch		packages/jsonl-parser/src/text.ts	1
 empty-catch		packages/preview/src/overlay/artifact.ts	1
 empty-catch		packages/preview/src/overlay/doc-worker.ts	1
 empty-catch		packages/preview/src/overlay/ink.ts	1
-empty-catch		packages/preview/src/overlay/schemes.ts	3
+empty-catch		packages/preview/src/overlay/schemes.ts	2
 empty-catch		packages/preview/src/proxy.ts	1
 empty-catch		packages/sessiond/src/server.ts	1
 empty-catch		packages/sessiond/src/tasks.ts	1

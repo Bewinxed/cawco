@@ -538,6 +538,7 @@ export interface CawDeps {
     | "projectNotes"
     | "projectSpend"
     | "routines"
+    | "sendRecord"
     | "setCawMode"
     | "setProjectCaw"
     | "spendOnCap"
@@ -1369,12 +1370,30 @@ export const createCaw = ({
   };
 
   /**
-   * The setup pages sent and not yet written up, by project: from the
-   * person's Send of the setup page until its conversation's next turn ends,
-   * Caw's own `folder_write` of AGENTS.md and of a delegate type commits it,
-   * the Send being the person's approval of both (no proposal follows it).
+   * The setup pages sent and not yet written up, by project: the uuid of the
+   * send that told the session of the person's Send. In the turn that reads
+   * that send, the reader's own `folder_write` of AGENTS.md and of a
+   * delegate type commits it, the Send being the person's approval of both
+   * (no proposal follows it). The turn the Send arrived into, its send
+   * queued behind it, is not that turn: its idle pulse finds the send still
+   * pending and leaves the window be ({@link setupRead}).
    */
   const setupsSent = new Map<string, string>();
+
+  /** Project `projectId`'s setup send, when one waits to be written up. */
+  const setupSend = (projectId: string) => {
+    const uuid = setupsSent.get(projectId);
+    return uuid === undefined ? undefined : db.sendRecord(uuid);
+  };
+
+  /**
+   * Whether `instanceId` is in the turn that read project `projectId`'s
+   * setup send: it read it, and no idle pulse has ended that turn since.
+   */
+  const setupRead = (projectId: string, instanceId: string): boolean => {
+    const told = setupSend(projectId);
+    return told?.instanceId === instanceId && told.state === "read";
+  };
 
   /**
    * A `folder_write`'s file, once its session may write it: a delegate
@@ -1501,12 +1520,13 @@ export const createCaw = ({
     tellQuietly,
     tellYours,
     /**
-     * The person sent project `projectId`'s setup page made by `instanceId`:
-     * until that session's turn ends, its `folder_write` of AGENTS.md and
-     * of a delegate type commits, their Send being the approval.
+     * The person sent project `projectId`'s setup page, and send `uuid`
+     * told its session: in the turn that reads it, that session's
+     * `folder_write` of AGENTS.md and of a delegate type commits, their Send
+     * being the approval.
      */
-    setupSent(projectId: string, instanceId: string): void {
-      setupsSent.set(projectId, instanceId);
+    setupSent(projectId: string, uuid: string): void {
+      setupsSent.set(projectId, uuid);
     },
     /** The mode the hub starts a project's conversation in where the project names none (`supervisor_config.caw_mode`). */
     fleetMode: (): OfferedMode | null => db.cawMode(),
@@ -1884,11 +1904,19 @@ export const createCaw = ({
       }
       turnEnded(instanceId);
       const current = row(instanceId);
-      if (
-        current?.projectId &&
-        setupsSent.get(current.projectId) === instanceId
-      ) {
-        setupsSent.delete(current.projectId);
+      // The setup window ends with the turn that read its send. A send
+      // still pending was queued behind the turn ending now, which is not
+      // the one the person's Send started; one never to be read (failed,
+      // cancelled, replaced) or gone closes it too.
+      if (current?.projectId) {
+        const told = setupSend(current.projectId);
+        if (
+          setupsSent.has(current.projectId) &&
+          (!told ||
+            (told.instanceId === instanceId && told.state !== "pending"))
+        ) {
+          setupsSent.delete(current.projectId);
+        }
       }
       if (current && isProjectConversation(current, db.project)) {
         answered(current.projectId ?? "");
@@ -1953,7 +1981,7 @@ export const createCaw = ({
           }
           // The setup page sent is the person's approval of AGENTS.md and
           // the delegate types its writer writes from it.
-          const approved = setupsSent.get(projectId) === calling.actor.id;
+          const approved = setupRead(projectId, calling.actor.id);
           const theirs = notWriters(rel, approved);
           if (theirs) {
             return problem(403, {
