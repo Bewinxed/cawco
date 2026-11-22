@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { repoIdentity } from "@cawco/core/protocol";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import RepoPicker from "#lib/cawco/spawn/RepoPicker.svelte";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   /**
    * Stage 1 ("Tasks enter"): the three homes for the project's tasks as the
@@ -15,9 +17,7 @@
     AlertAction,
     AlertDescription,
   } from "#lib/components/ui/alert/index.js";
-  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { Input } from "#lib/components/ui/input/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import {
     OptionGroup,
@@ -40,7 +40,6 @@
     DEFAULT_STAGE_STATUS,
     GITHUB_CONNECTIONS,
     GITHUB_PROJECTS,
-    GITHUB_REPOS,
     LINEAR_CONNECTIONS,
     LINEAR_TEAMS,
     PROJECT_STAGES,
@@ -71,13 +70,13 @@
   const NONE_PROJECT = "__none__";
   const LEAVE_ALONE = "__leave__";
 
-  const filterInputId = $props.id();
-
   /** The tie's setup standing open, for GitHub or Linear: the pick shows it from the press. */
   let setupHome = $state<"github" | "linear" | null>(null);
   let connectionPick = $state<string | null>(null);
-  let targetPick = $state<string | null>(null);
-  let targetQuery = $state("");
+  /** The Linear team picked; null for the first. */
+  let teamPick = $state<string | null>(null);
+  /** The GitHub repository picked, by its git URL; "" for the project's own. */
+  let repoPick = $state("");
   let githubProjectPick = $state<string>("proj-7");
   let stageMapping = $state<Record<string, string>>({
     ...DEFAULT_STAGE_STATUS,
@@ -99,37 +98,22 @@
       : (setupConnections[0]?.id ?? null)
   );
 
-  /** Linked repository labels on this project, promoted to the top of GitHub target picks. */
-  const projectRepoLabels = $derived(
-    new Set(record.repos.map((repo) => `${repo.owner}/${repo.name}`))
+  /** The project's own repositories, by identity: the picker marks their rows. */
+  const projectRepos = $derived(
+    new Set(record.repos.map((repo) => repoIdentity(repo.url)))
   );
+  /** The repository the tie takes: the one picked, else the project's own. */
+  const activeRepo = $derived(repoPick || (record.repos[0]?.url ?? ""));
+  const markOwn = (repo: { url: string }): string =>
+    projectRepos.has(repoIdentity(repo.url)) ? words.tasks.projectRepoTag : "";
 
-  const orderedTargets = $derived.by(() => {
-    const base = setupHome === "linear" ? LINEAR_TEAMS : GITHUB_REPOS;
-    if (setupHome !== "github" || projectRepoLabels.size === 0) {
-      return base;
-    }
-    return [...base].sort((a, b) => {
-      const aOwn = projectRepoLabels.has(a.label) ? 0 : 1;
-      const bOwn = projectRepoLabels.has(b.label) ? 0 : 1;
-      return aOwn - bOwn;
-    });
-  });
-
-  const filteredTargets = $derived.by(() => {
-    const query = targetQuery.trim().toLowerCase();
-    if (!query) {
-      return orderedTargets;
-    }
-    return orderedTargets.filter((target) =>
-      target.label.toLowerCase().includes(query)
-    );
-  });
-
-  const activeTargetId = $derived(
-    targetPick && orderedTargets.some((t) => t.id === targetPick)
-      ? targetPick
-      : (orderedTargets[0]?.id ?? null)
+  const activeTeamId = $derived(
+    teamPick && LINEAR_TEAMS.some((team) => team.id === teamPick)
+      ? teamPick
+      : (LINEAR_TEAMS[0]?.id ?? null)
+  );
+  const activeConnection = $derived(
+    setupConnections.find((conn) => conn.id === activeConnectionId) ?? null
   );
 
   const selectedGithubProject = $derived(
@@ -140,21 +124,20 @@
     !disabled &&
       setupHome !== null &&
       activeConnectionId !== null &&
-      activeTargetId !== null
+      (setupHome === "github" ? activeRepo !== "" : activeTeamId !== null)
   );
 
   function openSetup(home: "github" | "linear") {
     setupHome = home;
     connectionPick = null;
-    targetPick = null;
-    targetQuery = "";
+    teamPick = null;
+    repoPick = "";
     githubProjectPick = GITHUB_PROJECTS[0]?.id ?? NONE_PROJECT;
     stageMapping = { ...DEFAULT_STAGE_STATUS };
   }
 
   function closeSetup() {
     setupHome = null;
-    targetQuery = "";
   }
 
   function handleHomeClick(home: TaskHome) {
@@ -419,71 +402,48 @@
         {/if}
       </div>
 
-      <!-- Repository (GitHub) or Team (Linear) open list with live filter. -->
+      <!-- Repository (GitHub): the New session form's repository picker, on
+           the connection's account; Team (Linear): its few teams as one pick. -->
       {#if setupConnections.length > 0}
-        <div class="flex flex-col gap-space-1">
-          <div class="flex flex-wrap items-center justify-between gap-space-2">
-            <label
-              class="type-meta font-medium text-ink-muted"
-              for={filterInputId}
+        {#if setupHome === "github" && activeConnection}
+          <div class="flex min-w-0 flex-col gap-space-1" inert={disabled}>
+            <span class="type-meta font-medium text-ink-muted"
+              >{words.tasks.repoLabel}</span
             >
-              {setupHome === "github"
-                ? words.tasks.repoLabel
-                : words.tasks.teamLabel}
-            </label>
-            <Input
-              id={filterInputId}
-              class="w-full"
-              {disabled}
-              placeholder={setupHome === "github"
-                ? words.tasks.filterRepos
-                : words.tasks.filterTeams}
-              type="search"
-              bind:value={targetQuery}
+            <RepoPicker
+              machineId={activeConnection.id}
+              machineName={activeConnection.name}
+              mark={markOwn}
+              onrepo={(url) => {
+                repoPick = url;
+              }}
+              repo={activeRepo}
             />
           </div>
-
-          {#if filteredTargets.length === 0}
-            <p class="m-0 py-space-2 type-meta text-ink-muted">
-              {words.tasks.noMatches}
-            </p>
-          {:else}
-            <div
-              class="kit-edge-fade-block max-h-36 overflow-y-auto overscroll-contain py-space-1"
+        {:else if setupHome === "linear"}
+          <div class="flex flex-col gap-space-1">
+            <span class="type-meta font-medium text-ink-muted"
+              >{words.tasks.teamLabel}</span
             >
-              <OptionGroup
-                aria-label={setupHome === "github"
-                  ? words.tasks.repoLabel
-                  : words.tasks.teamLabel}
-                {disabled}
-                value={activeTargetId ? [activeTargetId] : []}
-              >
-                {#each filteredTargets as target (target.id)}
-                  {@const isProjectRepo =
-                    setupHome === "github" &&
-                    projectRepoLabels.has(target.label)}
-                  <OptionGroupItem
-                    onclick={(event) => {
-                      event.preventDefault();
-                      targetPick = target.id;
-                    }}
-                    value={target.id}
-                  >
-                    <span
-                      class={setupHome === "github" ? "type-code" : undefined}
-                      >{target.label}</span
-                    >
-                    {#if isProjectRepo}
-                      <Badge kind="meta"
-                        ><span>{words.tasks.projectRepoTag}</span></Badge
-                      >
-                    {/if}
-                  </OptionGroupItem>
-                {/each}
-              </OptionGroup>
-            </div>
-          {/if}
-        </div>
+            <OptionGroup
+              aria-label={words.tasks.teamLabel}
+              {disabled}
+              value={activeTeamId ? [activeTeamId] : []}
+            >
+              {#each LINEAR_TEAMS as team (team.id)}
+                <OptionGroupItem
+                  onclick={(event) => {
+                    event.preventDefault();
+                    teamPick = team.id;
+                  }}
+                  value={team.id}
+                >
+                  {team.label}
+                </OptionGroupItem>
+              {/each}
+            </OptionGroup>
+          </div>
+        {/if}
 
         <!-- GitHub Project & per-stage Status mapping (GitHub only). -->
         {#if setupHome === "github"}

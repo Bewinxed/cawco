@@ -79,9 +79,6 @@ export const howItRunsWords = {
     repoLabel: "Repository",
     teamLabel: "Team",
     projectRepoTag: "This project",
-    filterRepos: "Search repositories",
-    filterTeams: "Search teams",
-    noMatches: "No matches",
     githubProjectLabel: "GitHub Project for columns",
     githubProjectNone: "Open and closed only",
     stageMapLabel: "Match columns to Status",
@@ -130,7 +127,6 @@ export const howItRunsWords = {
 
   account: {
     heading: "Account",
-    groupLabel: "Subscription account",
     fleetRouting: "Any available",
     signedOut: "Signed out",
     /** What naming an account does, under the chips; leaving it to any available says nothing more. */
@@ -155,8 +151,6 @@ export const howItRunsWords = {
     followingFleet: "Using defaults",
     projectRules: (count: number) => `${count} custom`,
     putAllBack: "Reset to defaults",
-    legendFleet: "Default",
-    legendOwn: "Custom here",
     fleetDefaults: "Manage defaults",
     unreadTitle: "Rules failed to load, so agents ask you everything.",
     members: {
@@ -211,8 +205,15 @@ export const howItRunsWords = {
       holdsNothing: (_project: string) => "Nothing assigned",
       tryAgain: RETRY_CHANGE,
     } satisfies RosterWords,
-    reviewLabel: "Require your review",
-    reviewNote: "Only you mark tasks done, using a review column.",
+    reviewHeading: "Who marks tasks done",
+    reviewOn: {
+      name: "You, after review",
+      note: "Finished tasks wait in a review column for you.",
+    },
+    reviewOff: {
+      name: "Agents",
+      note: "Agents mark their own tasks done as they finish.",
+    },
   },
 
   lands: {

@@ -336,6 +336,7 @@
     oncommit,
     focus = false,
     shown = true,
+    mark,
   }: {
     machineId: string;
     machineName: string;
@@ -354,6 +355,12 @@
      * picked row in view.
      */
     shown?: boolean;
+    /**
+     * A word a listed repository wears at the head of its description line
+     * ("This project"), "" for none: a surface that knows which of the
+     * machine's repositories are its own says so on their rows.
+     */
+    mark?: (repo: GhRepo) => string;
   } = $props();
 
   /**
@@ -1323,12 +1330,18 @@
         class="col-start-4 ps-space-3 num type-meta text-end whitespace-nowrap text-ink-muted @max-repo-narrow/repos:row-start-2"
         >{formatAgeShort(Date.parse(one.updatedAt))}</span
       >
-      {#if one.description}
+      {@const worn = mark?.(one) ?? ""}
+      {#if one.description || worn}
         <span
           data-slot="description"
           data-box
           class="col-start-2 row-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted"
-          ><Marked query={q} text={one.description} /></span
+          >{#if worn}<span data-slot="mark" class="font-medium text-ink-strong"
+              >{worn}</span
+            >{#if one.description}{" · "}{/if}{/if}{#if one.description}<Marked
+              query={q}
+              text={one.description}
+            />{/if}</span
         >
       {/if}
     {/if}
