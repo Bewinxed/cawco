@@ -1,11 +1,13 @@
 ---
 name: design-graph
-description: "Build a design on CawCo's design graph, the panel that kind \"component\" opens: mount the real component or screen in a live story the person operates at any width, give it dials, read its every state in states files of your own, fix what failed or stands empty, hand the live piece up. Triggers when asked to show, mock up or design a component or screen, when building, changing or judging one, and when asked for states, hover or focus, a flow between states, or motion to tune."
+description: "Build a design on CawCo's design graph, the panel that kind \"component\" opens: mount the real component or screen in a live story the person operates at any width, give it dials, read its every state in states files of your own, fix what failed or stands empty, hand the live piece up; or open an HTML page there for what is not in the codebase yet or a throwaway mockup. Triggers when asked to show, mock up or design a component or screen, when building, changing or judging one, and when asked for states, hover or focus, a flow between states, or motion to tune."
 ---
 
 # Design graph
 
 The **design graph** is the project's real component or screen, mounted live by the project's own toolchain (its **stage**) and opened in the person's panel by `artifact_create` with `kind: "component"`. Each story of a **states file** (`<Component>.stories.ts`, CSF 3, beside the component) is a frame, and each frame is drawn again in every interaction state its CSS has a rule for (hover, focus, pressed), derived, never authored. Beside the frame the panel holds its States, Map, Animation and Controls faces, and its View sets the width, the colour scheme and reduced motion. You see what you drew: the stage's page reports every frame, and every tool answers from that **report**, never from the files alone. The `show` skill's step 1 comes first.
+
+Something not in the codebase yet, or a throwaway mockup, opens on the graph as an **HTML page** the hub keeps, with no stage behind it: read `references/html.md` and skip the steps below. A piece that exists, or that you are building now, is a live story, as follows.
 
 **The person's graph is live.** Once it is open in their panel it shows your workspace's stage as it is: every file you save reaches their open graph within a second through hot reload, with no `artifact_update`. Save each file whole and compiling. A save that breaks a story shows in its frame as an error card in place of the drawing, and your next save that works brings the story back by itself. A section that fails, or a story that throws as it draws, reaches you as the stage's error.
 

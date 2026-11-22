@@ -970,7 +970,7 @@
     {@render paneSheet.graphHead.components()}
     <DropdownMenu.Separator />
   {/if}
-  {#if paneSheet.graphHead}
+  {#if paneSheet.graphHead?.more}
     {@render paneSheet.graphHead.more()}
     <DropdownMenu.Separator />
   {/if}
@@ -1230,6 +1230,7 @@
           changesTools={changesBar}
           modeTools={modeBar}
           {modeCompact}
+          page={!!paneSubject.htmlDesign}
           ask={paneSubject.artifact.ask ?? ""}
           files={paneSheet.sheetCanvas.files}
           frame={frameTags}

@@ -13,7 +13,6 @@ import type { PreviewAddress } from "@cawco/core/preview/routes";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type {
   CanvasDial,
-  CanvasDirection,
   CanvasEdge,
   CanvasShapes,
   SheetRead,
@@ -27,6 +26,7 @@ import type { Operation } from "rfc6902";
 import type { ArtifactRow } from "../db/artifacts";
 import type { StatementChange } from "../decision-program";
 import type {
+  DirectionInput,
   errorsSaid,
   movesSaid,
   renderSaid,
@@ -78,8 +78,8 @@ export interface ArtifactInput {
   /** A design graph's dials: a CSS variable on every frame, or an arg. */
   dials?: CanvasDial[] | undefined;
   dir?: string | undefined;
-  /** A design graph's directions of one design: each one of its states files, its name and its line. */
-  directions?: CanvasDirection[] | undefined;
+  /** A design graph's directions of one design: each one of its states files (or, an HTML design's, its page), its name and its line. */
+  directions?: DirectionInput[] | undefined;
   /** What the person does on it (core `ARTIFACT_DOES`); named with `ask`. */
   does?: ArtifactDoes | undefined;
   /**

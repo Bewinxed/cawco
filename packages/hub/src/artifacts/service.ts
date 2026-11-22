@@ -125,6 +125,7 @@ import {
   canvasPath,
   type DesignQuery,
   type EmbedShape,
+  htmlDesignOf,
   STAGE_IDLE_MS,
   type StageFrame,
   type StageState,
@@ -160,7 +161,9 @@ import {
   type CanvasInput,
   CREATE_SHAPE,
   canvasProblem,
+  designDialsProblem,
   directionsStaged,
+  pagesAsked,
   specOf,
 } from "./component";
 import type { ArtifactServiceDeps, HandedArtifactFile } from "./deps";
@@ -246,7 +249,10 @@ const KIND_FIELDS = {
     takes: "port or dir",
   },
   canvas: { fields: ["elements", "mermaid"], takes: "elements or mermaid" },
-  component: { fields: ["file"], takes: "file" },
+  component: {
+    fields: ["file", "html", "dir"],
+    takes: "file (live stories), or html or dir (an HTML design)",
+  },
 } as const;
 
 const INPUT_FIELDS = [
@@ -345,11 +351,11 @@ const SCREEN_WORDS =
 const CANVAS_AS_SCREEN =
   'A canvas is a drawing of what is not a screen. A design is its real components on the design graph: kind "component", does "judge" (show skill).';
 
-/** A design judged as a preview or an HTML page where the project's designs open on the design graph. */
+/** A design judged as a preview or an HTML page: where it goes instead, the design graph, which takes an HTML page too. */
 const JUDGED_OFF_GRAPH = {
   preview:
-    'This project\'s designs open on the design graph, where they switch its widths and scheme: kind "component" with the screen\'s live story, does "judge". A preview is the running app, for a flow they try (does "try").',
-  page: 'This project\'s designs open on the design graph: its real components in a live story, kind "component", does "judge". An HTML page is for a stack with no stage.',
+    'A design is judged on the design graph, where the person switches its widths and scheme: kind "component", does "judge", with file (a live story of a component in the codebase) or html or dir (an HTML page, for what is not in the codebase yet or a throwaway mockup). A preview is the running app, for a flow they try (does "try").',
+  page: 'A design is judged on the design graph, at its widths, light and dark, with pins and dials: send this HTML as kind "component" with html (or dir holding page.html), does "judge". A component in the codebase is shown as its live story (file) instead.',
 } as const;
 
 /** A choice in a page's HTML: a kit choice, or a field the person fills. */
@@ -1382,6 +1388,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     askVerify,
     componentHash,
     componentWritten,
+    createDesign,
     createSheet,
     readSheet,
     shapesOf,
@@ -1410,6 +1417,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
     relistOf,
     stampMeta,
+    store,
   });
 
   /** A new ask in the doc, as a revision is: every open view's head morphs to it, and a Send before it is answered. */
@@ -2185,7 +2193,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ? Promise.resolve(createDraft(making.owner, input))
         : createCanvas(making, input);
     }
-    return input.kind === "component" ? createSheet(making, input) : null;
+    if (input.kind !== "component") {
+      return null;
+    }
+    return pagesAsked(input)
+      ? createDesign(making, input)
+      : createSheet(making, input);
   };
 
   /**
@@ -2550,6 +2563,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ownersRead: boolean,
     ask: Omit<PictureAsk, "link"> & { png: boolean }
   ) => {
+    // An HTML design keeps no stage: no frame to draw, no story, no states file to verify.
+    if (
+      htmlDesignOf(row) &&
+      (ask.png || ask.render || ask.state || ask.story || ask.verify)
+    ) {
+      return problem(400, {
+        code: "artifact-read-state-unfit",
+        detail: `${row.name} is an HTML design: the hub keeps no frames, stories or render of it. artifact_read({ id }) answers its pins, dials and pick.`,
+      });
+    }
     const answer = await readSheet(row, since, ownersRead, ask);
     if (answer instanceof ElysiaStatus || !ask.verify) {
       return answer;
@@ -3155,10 +3178,51 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * A design judged as a preview or an HTML page (no program) in a project
-   * whose designs open on the design graph, refused with where it goes: a
-   * project that has made a design graph has a stage, so its designs are
-   * its real components there.
+   * Design graph `row`'s files and the spec an `artifact_update` of its
+   * edges, groups, dials or directions makes, or why it can't: a row that
+   * is no design graph, or a spec that does not hold (an HTML design's
+   * dials set CSS variables alone).
+   */
+  const canvasAsked = (row: ArtifactRow, input: CanvasInput) => {
+    const design = htmlDesignOf(row);
+    const canvas = sheetOf(row) ?? design;
+    if (!canvas?.spec || row.source.path === undefined) {
+      return problem(409, {
+        code: "artifact-canvas-spec-not-sheet",
+        detail: `${row.name} is a ${row.kind}: edges, group, dials and directions are a design graph's.`,
+      });
+    }
+    const { files } = canvasOf(row.source.path);
+    // Each direction names its file as the stage does, from the toolchain
+    // root; an HTML design's, its page as the design names it.
+    const directions =
+      input.directions &&
+      (design
+        ? input.directions
+        : directionsStaged(input.directions, [], files));
+    const misfit =
+      (design && input.dials && designDialsProblem(input.dials)) ||
+      canvasProblem({ ...input, directions }, files);
+    if (misfit) {
+      return problem(400, {
+        code: "artifact-canvas-spec-unfit",
+        detail: misfit,
+      });
+    }
+    const spec = specOf(row.name, {
+      edges: input.edges ?? canvas.spec.edges,
+      group: input.group ?? canvas.spec.group,
+      dials: input.dials ?? canvas.spec.dials,
+      directions: directions ?? canvas.spec.directions,
+    });
+    return { files, spec };
+  };
+
+  /**
+   * A design judged as a preview or an HTML page (no program) in a project,
+   * refused with where it goes: the design graph, which opens a live story
+   * of a component in the codebase, or an HTML page the hub keeps for what
+   * is not (the owner's pick on design-workspace-release#html, 2026-11-22).
    */
   const judgedOffGraph = (
     instance: InstanceRow,
@@ -3169,13 +3233,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       input.kind === "preview" || (input.kind === "page" && !program)
         ? input.kind
         : null;
-    if (input.does !== "judge" || kind === null || !instance.projectId) {
-      return;
-    }
-    const onGraph = db
-      .ofProject(instance.projectId)
-      .some((row) => row.kind === "component");
-    if (onGraph) {
+    if (input.does === "judge" && kind !== null && instance.projectId) {
       return problem(400, {
         code: "artifact-ask-unfit",
         detail: JUDGED_OFF_GRAPH[kind],
@@ -4917,30 +4975,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (row instanceof ElysiaStatus) {
         return row;
       }
-      const sheet = sheetOf(row);
-      if (!(sheet && "port" in row.source)) {
-        return problem(409, {
-          code: "artifact-canvas-spec-not-sheet",
-          detail: `${row.name} is a ${row.kind}: edges, group, dials and directions are a design graph's.`,
-        });
+      const asked = canvasAsked(row, input);
+      if (asked instanceof ElysiaStatus) {
+        return asked;
       }
-      const { files } = canvasOf(row.source.path ?? "");
-      // Each direction names its file as the stage does, from the toolchain root.
-      const directions =
-        input.directions && directionsStaged(input.directions, [], files);
-      const misfit = canvasProblem({ ...input, directions }, files);
-      if (misfit) {
-        return problem(400, {
-          code: "artifact-canvas-spec-unfit",
-          detail: misfit,
-        });
-      }
-      const spec = specOf(row.name, {
-        edges: input.edges ?? sheet.spec.edges,
-        group: input.group ?? sheet.spec.group,
-        dials: input.dials ?? sheet.spec.dials,
-        directions: directions ?? sheet.spec.directions,
-      });
+      const { files, spec } = asked;
       // Its new address on the same live stage (served.ts `pinTarget`).
       const answer = await changedBy(instance, row, async (target) => {
         db.resource(target.id, {

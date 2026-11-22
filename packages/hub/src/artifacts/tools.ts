@@ -171,10 +171,10 @@ export const artifactCreate = {
     kind: z
       .enum(MADE_ARTIFACT_KINDS)
       .describe(
-        "page: `program`, `html`, or `dir` holding page.oui or page.html. component: the design graph, `file` a states file whose live story mounts the real component or screen (design-graph skill). preview: the running app (`port`, or a folder's `dir`) at `path`, for a flow he tries; it holds no CawCo sign-in. canvas: a drawing, never a screen: `elements`, `mermaid`, or empty."
+        "page: `program`, `html`, or `dir` holding page.oui or page.html. component: the design graph: `file` a states file whose live story mounts the real component or screen, or `html`/`dir` a mockup not in the codebase (design-graph skill). preview: the running app (`port`, or a folder's `dir`) at `path`, for a flow he tries; it holds no CawCo sign-in. canvas: a drawing, never a screen: `elements`, `mermaid`, or empty."
       ),
     does: does.describe(
-      "pick: a decision page, never a design. judge: a design graph, a kept block, or a page where no stage runs. try: a preview. draw: a canvas."
+      "pick: a decision page, never a design. judge: a design graph or a kept block. try: a preview. draw: a canvas."
     ),
     ask,
     title,
@@ -215,7 +215,9 @@ export const artifactCreate = {
     directions: z
       .array(
         z.object({
-          file: z.string().max(1000),
+          file: z.string().max(1000).optional(),
+          html: z.string().optional(),
+          dir: z.string().optional(),
           name: z.string().max(CANVAS_SPEC_LIMITS.label),
           line: z.string().max(CANVAS_SPEC_LIMITS.directionLine),
         })
@@ -223,7 +225,7 @@ export const artifactCreate = {
       .max(CANVAS_SPEC_LIMITS.files)
       .optional()
       .describe(
-        "Two or more directions of one design, a states file each: one graph switching between them; their pick is artifact_read's `picked`."
+        "Two or more directions of one design, a states file or page each: one graph switching between them; their pick is artifact_read's `picked`."
       ),
     dir: z.string().startsWith("/").max(4096).optional().describe("Absolute."),
     port: z

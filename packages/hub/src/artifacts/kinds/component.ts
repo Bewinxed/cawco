@@ -6,7 +6,9 @@ import {
   type CanvasShapes,
   type CanvasSpec,
   canvasPath,
+  DESIGN_PAGES_DIR,
   GRAPH_WIDTHS_SAID,
+  htmlDesignOf,
   type RenderReport,
   type SectionUndrawn,
   type SheetRead,
@@ -26,6 +28,9 @@ import { openProblem } from "../../preview-stops";
 import {
   COMPONENT_EXAMPLE,
   canvasProblem,
+  DESIGN_HINT,
+  designFiles,
+  designPagesOf,
   directionOf,
   directionsStaged,
   drawsHeld,
@@ -37,6 +42,7 @@ import {
   stateAmbiguity,
   stateSaid,
   storiesSaid,
+  storyDirectionsOf,
   unseen,
   weightSaid,
 } from "../component";
@@ -84,12 +90,22 @@ export type ComponentKindContext = Pick<
   | "read"
   | "relistOf"
   | "stampMeta"
+  | "store"
 >;
 
 /** A design graph: a states file's stories drawn live on its machine's stage, the draws and the sheet the hub keeps of them in the doc, and a read that waits for what a browser drew. */
 export const createComponentKind = (ctx: ComponentKindContext) => {
-  const { db, deps, discard, docs, handOver, inPanel, relistOf, stampMeta } =
-    ctx;
+  const {
+    db,
+    deps,
+    discard,
+    docs,
+    handOver,
+    inPanel,
+    relistOf,
+    stampMeta,
+    store,
+  } = ctx;
 
   /**
    * A component artifact's page hash: its canvas address's (core
@@ -99,10 +115,18 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
    * carry its program's, and a value made before the agent changed its
    * dials or files reads as an earlier revision's. None for any other kind.
    */
-  const componentHash = (row: ArtifactRow): string | null =>
-    row.kind === "component" && "port" in row.source && row.source.path
-      ? pageHash(row.source.path)
-      : null;
+  const componentHash = (row: ArtifactRow): string | null => {
+    if (!(row.kind === "component" && row.source.path)) {
+      return null;
+    }
+    // An HTML design's address names its pages, whose words its revision changes too.
+    const design = htmlDesignOf(row);
+    return pageHash(
+      design
+        ? [design.path, ...store.designPages(row.id, design.files)].join("\n")
+        : row.source.path
+    );
+  };
   /*
    * A sheet (live components, core stage.ts): a story file's stories,
    * mounted by its workspace's stage, shown through the workspace's port
@@ -396,10 +420,17 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
   };
   /** What a design graph's create names: its states files, and what the person does there; refused when it names no file or a canvas that does not hold. */
   const sheetAsked = (input: ArtifactInput) => {
+    const directions = storyDirectionsOf(input.directions);
+    if (typeof directions === "string") {
+      return problem(400, {
+        code: "artifact-sheet-unfit",
+        detail: directions,
+      });
+    }
     // A design's directions name its states files: file may be left out.
     const asked =
       input.file === undefined
-        ? (input.directions ?? []).map((one) => one.file)
+        ? (directions ?? []).map((one) => one.file)
         : [input.file].flat();
     if (asked.length === 0) {
       return problem(400, {
@@ -407,12 +438,12 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         detail: `A design graph takes file: its states file, the .stories.ts beside the component (or a list, one section each). Example: ${COMPONENT_EXAMPLE}.`,
       });
     }
-    const misfit = canvasProblem(input, asked);
+    const misfit = canvasProblem({ ...input, directions }, asked);
     if (misfit) {
       return problem(400, { code: "artifact-sheet-unfit", detail: misfit });
     }
     const said = ctx.askedOf(input);
-    return said instanceof ElysiaStatus ? said : { asked, said };
+    return said instanceof ElysiaStatus ? said : { asked, directions, said };
   };
   /**
    * A design graph's row placed in its owner's panel on its workspace's
@@ -423,7 +454,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     { owner, maker }: Making,
     name: string,
     said: Pick<ArtifactRow, "ask" | "does" | "title">,
-    at: { machineId: string; source: PreviewSource }
+    at: { machineId: string | null; source: PreviewSource }
   ) => {
     const now = new Date();
     const before = db.byName(owner.id, "component", name);
@@ -461,6 +492,21 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         });
     return { before, row: placed };
   };
+  /** What a design graph's create answers of `row` itself, shown as `shown` says. */
+  const createdOf = (
+    row: ArtifactRow,
+    shown: Parameters<typeof ctx.openedOf>[0]
+  ) => {
+    const named = ctx.heldId(row);
+    return {
+      ...named,
+      kind: row.kind,
+      name: row.name,
+      title: row.title,
+      route: routeOf(named.id),
+      ...ctx.openedOf(shown),
+    };
+  };
   /**
    * Makes a design graph in `owner`'s panel (or opens the one of that
    * name) on the stage of its maker's workspace, shows it, and answers what
@@ -472,7 +518,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     if (sheetAsk instanceof ElysiaStatus) {
       return sheetAsk;
     }
-    const { asked, said } = sheetAsk;
+    const { asked, directions, said } = sheetAsk;
     const at: StageAt = { session: maker };
     // A canvas opened on nothing is refused: "Write it, then call again."
     const staged = await deps.stage(at, asked[0], asked, true);
@@ -497,8 +543,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     // Each direction names its file as the stage does, from the toolchain root.
     const spec = specOf(input.name, {
       ...input,
-      directions:
-        input.directions && directionsStaged(input.directions, asked, files),
+      directions: directions && directionsStaged(directions, asked, files),
     });
     const source: PreviewSource = {
       port: opened.port,
@@ -535,14 +580,8 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     }
     const { undrawn, plansUnread } = drawn;
     const report = drawnHeld(row, drawn.report);
-    const named = ctx.heldId(row);
     const made: Created = {
-      ...named,
-      kind: row.kind,
-      name: row.name,
-      title: row.title,
-      route: routeOf(named.id),
-      ...ctx.openedOf(shown),
+      ...createdOf(row, shown),
       stage: { ...sheetState(row, opened.state), errors: [] },
       render: {
         ...renderSaid(report, undrawn, undefined, plansUnread, spec),
@@ -552,6 +591,76 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       errors: errorsSaid(sheetState(row, opened.state).errors),
       hint: READ_HINT,
     };
+    return made;
+  };
+  /**
+   * Makes an HTML design in `owner`'s panel (or makes the one of that name
+   * again, picks kept): each page built as a page's is (`deps.page`, never
+   * kept in the project's folder), kept under the artifact's folder
+   * (core `DESIGN_PAGES_DIR`), and opened on the design graph from there by
+   * the hub itself: no workspace, stage or app (core stage.ts
+   * `htmlDesignOf`). A design with directions is a page each.
+   */
+  const createDesign = async (making: Making, input: ArtifactInput) => {
+    const pages = designPagesOf(input);
+    if (typeof pages === "string") {
+      return problem(400, { code: "artifact-sheet-unfit", detail: pages });
+    }
+    const said = ctx.askedOf(input);
+    if (said instanceof ElysiaStatus) {
+      return said;
+    }
+    const files = designFiles(input.name, pages, DESIGN_PAGES_DIR);
+    const directions =
+      input.directions &&
+      pages.map((page, at) => ({
+        file: files[at] ?? "",
+        name: page.name ?? "",
+        line: page.line ?? "",
+      }));
+    const misfit = canvasProblem({ ...input, directions }, files);
+    if (misfit) {
+      return problem(400, { code: "artifact-sheet-unfit", detail: misfit });
+    }
+    const built: string[] = [];
+    for (const page of pages) {
+      const one = await deps.page(
+        making.maker,
+        input.name,
+        page.from,
+        false,
+        (asked) => asked
+      );
+      if (one instanceof ElysiaStatus) {
+        return one;
+      }
+      built.push(one.html);
+    }
+    const spec = specOf(input.name, { ...input, directions });
+    const source: PreviewSource = {
+      page: input.name,
+      path: canvasPath(files, spec),
+    };
+    // An owner's own create of one its maker's next version is held for opens that first (versions.ts `openNextFirst`).
+    const unopened = await ctx.openNextFirst(making, "component", input.name);
+    if (unopened) {
+      return unopened;
+    }
+    const { before, row } = placeSheet(making, input.name, said, {
+      machineId: null,
+      source,
+    });
+    store.writeDesign(
+      row.id,
+      files.map((file, at) => ({ file, html: built[at] ?? "" }))
+    );
+    stampMeta(row, null);
+    const shown = await handOver(making, before, row);
+    if (!(shown.started || before)) {
+      discard(row);
+      return openProblem(shown.stop, "artifact-sheet-unshown", shown.why);
+    }
+    const made: Created = { ...createdOf(row, shown), hint: DESIGN_HINT };
     return made;
   };
   /**
@@ -694,10 +803,12 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       reached && "unreached" in reached ? reached.unreached : undefined;
     const base = ctx.read(row, since, ownersRead);
     const { dials, tuned, picked, layout: _layout, ...picks } = base.state;
-    // His pick among the design's directions, by its states file: the direction it names, or none taken back.
+    // An HTML design's spec is its address's: no stage holds it.
+    const spec = sheet?.spec ?? htmlDesignOf(row)?.spec;
+    // His pick among the design's directions, by its states file (an HTML design's page): the direction it names, or none taken back.
     const pickedDirection = Object.hasOwn(base.state, "picked")
       ? directionOf(
-          sheet?.spec,
+          spec,
           typeof picked.value === "string" ? picked.value : undefined
         )
       : undefined;
@@ -733,7 +844,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       ...(opened ? { weight: opened.weight } : {}),
       ...(Object.hasOwn(base.state, "dials") ? { dials: dials.value } : {}),
       ...(Object.hasOwn(base.state, "tuned") ? { tuned: tuned.value } : {}),
-      ...(sheet?.spec.directions?.length
+      ...(spec?.directions?.length
         ? {
             picked: pickedDirection
               ? { name: pickedDirection.name, file: pickedDirection.file }
@@ -754,7 +865,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
           }
         : {}),
       ...(ask.png ? { png: png ?? null } : {}),
-      hint: READ_HINT,
+      hint: htmlDesignOf(row) ? DESIGN_HINT : READ_HINT,
     };
     return read;
   };
@@ -783,6 +894,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     askVerify,
     componentHash,
     componentWritten,
+    createDesign,
     createSheet,
     readSheet,
     shapesOf,

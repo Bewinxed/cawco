@@ -2,6 +2,7 @@
  * What the pane is showing: its session's panel, the artifact in it, and who owns it.
  */
 import { machineLabel } from "@cawco/core/machine-names";
+import { htmlDesignOf } from "@cawco/core/stage";
 import { resolveSessionTitle } from "../links";
 import { paneFleet } from "./pane-fleet";
 
@@ -69,6 +70,18 @@ export class PaneSubject {
   );
 
   readonly isSheet = $derived(this.artifact?.kind === "component");
+
+  /**
+   * An HTML design (core stage.ts `htmlDesignOf`): a component artifact
+   * whose pages the hub keeps, on the design graph with no stage behind it.
+   * Its address on the page's place (the design's by its id); null for any
+   * other artifact.
+   */
+  readonly htmlDesign = $derived.by(() =>
+    this.artifact && this.source
+      ? htmlDesignOf({ kind: this.artifact.kind, source: this.source })
+      : null
+  );
 
   /**
    * A page or a sheet draws in the dashboard's theme (the overlay's
