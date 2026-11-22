@@ -46,8 +46,7 @@
         form: "phone:max-w-128",
         report: "phone:max-w-168",
         document: "phone:max-w-320",
-        connect:
-          "phone:max-w-[calc(var(--connect-w)+2*--spacing(1.5))]",
+        connect: "phone:max-w-[calc(var(--connect-w)+2*--spacing(1.5))]",
       },
     },
   });

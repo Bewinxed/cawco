@@ -323,10 +323,7 @@
     oklch(34.4% 0.085 16.3),
     oklch(87.8% 0.054 14.4)
   );
-  --color-status-fail-glyph: light-dark(
-    oklch(53% 0.19 15),
-    oklch(71% 0.16 15)
-  );
+  --color-status-fail-glyph: light-dark(oklch(53% 0.19 15), oklch(71% 0.16 15));
 
   /* Support colour tokens: shadows, night inner ring, image edge, dynamic project hue. */
   --color-shadow-tint: light-dark(

@@ -243,10 +243,7 @@
   </Table.Header>
 {/snippet}
 
-<section
-  aria-label="{projectName}'s spend"
-  class="flex flex-col gap-space-5"
->
+<section aria-label="{projectName}'s spend" class="flex flex-col gap-space-5">
   {#if refused && !spend}
     <p data-slot="note" class="type-meta text-ink-muted" role="alert">
       The spend for {projectName} could not be read: {refused}
@@ -554,7 +551,7 @@
               </Table.Body>
             {/if}
             <Table.Body>
-              {#if spend.caw.monthUsd > 0}
+              {#snippet summaryRow(label: string, amount: number)}
                 <Table.Row
                   data-project-spend-row
                   class="relative"
@@ -566,7 +563,7 @@
                     ><span
                       data-slot="name"
                       class="type-label block truncate text-ink-strong no-underline"
-                      >Conversations</span
+                      >{label}</span
                     ></Table.Cell
                   >
                   <Table.Cell
@@ -580,7 +577,7 @@
                     variant="ledger-stacks"
                     class="w-(--w)"
                     style="--w: calc(var(--spacing) * 24)"
-                    >{usd(spend.caw.monthUsd)}</Table.Cell
+                    >{usd(amount)}</Table.Cell
                   >
                   <Table.Cell
                     data-col-last
@@ -590,79 +587,14 @@
                     style="--w: calc(var(--spacing) * 24)"
                   ></Table.Cell>
                 </Table.Row>
+              {/snippet}
+              {#if spend.caw.monthUsd > 0}
+                {@render summaryRow("Conversations", spend.caw.monthUsd)}
               {/if}
               {#if spend.others.monthUsd > 0}
-                <Table.Row
-                  data-project-spend-row
-                  class="relative"
-                  variant="stacks"
-                >
-                  <Table.Cell
-                    variant="ledger-stacks"
-                    class="@max-phone/table:col-span-full"
-                    ><span
-                      data-slot="name"
-                      class="type-label block truncate text-ink-strong no-underline"
-                      >Other sessions</span
-                    ></Table.Cell
-                  >
-                  <Table.Cell
-                    variant="ledger-stacks"
-                    class="w-(--w)"
-                    style="--w: calc(var(--spacing) * 32)"
-                  ></Table.Cell>
-                  <Table.Cell
-                    data-num
-                    edge="end"
-                    variant="ledger-stacks"
-                    class="w-(--w)"
-                    style="--w: calc(var(--spacing) * 24)"
-                    >{usd(spend.others.monthUsd)}</Table.Cell
-                  >
-                  <Table.Cell
-                    data-col-last
-                    edge="end"
-                    variant="ledger-stacks"
-                    class="w-(--w)"
-                    style="--w: calc(var(--spacing) * 24)"
-                  ></Table.Cell>
-                </Table.Row>
+                {@render summaryRow("Other sessions", spend.others.monthUsd)}
               {/if}
-              <Table.Row
-                data-project-spend-row
-                class="relative"
-                variant="stacks"
-              >
-                <Table.Cell
-                  variant="ledger-stacks"
-                  class="@max-phone/table:col-span-full"
-                  ><span
-                    data-slot="name"
-                    class="type-label block truncate text-ink-strong no-underline"
-                    >This month</span
-                  ></Table.Cell
-                >
-                <Table.Cell
-                  variant="ledger-stacks"
-                  class="w-(--w)"
-                  style="--w: calc(var(--spacing) * 32)"
-                ></Table.Cell>
-                <Table.Cell
-                  data-num
-                  edge="end"
-                  variant="ledger-stacks"
-                  class="w-(--w)"
-                  style="--w: calc(var(--spacing) * 24)"
-                  >{usd(spend.monthUsd)}</Table.Cell
-                >
-                <Table.Cell
-                  data-col-last
-                  edge="end"
-                  variant="ledger-stacks"
-                  class="w-(--w)"
-                  style="--w: calc(var(--spacing) * 24)"
-                ></Table.Cell>
-              </Table.Row>
+              {@render summaryRow("This month", spend.monthUsd)}
             </Table.Body>
           </Table.Root>
         </div>

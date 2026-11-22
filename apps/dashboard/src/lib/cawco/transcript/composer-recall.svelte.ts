@@ -46,9 +46,7 @@ function foldDeck(
   from: number
 ): { deck: number; start: number; places: DeckPlace[] } {
   const style = getComputedStyle(row);
-  const peek = Number.parseFloat(
-    style.getPropertyValue("--spacing-space-1")
-  );
+  const peek = Number.parseFloat(style.getPropertyValue("--spacing-space-1"));
   const scale = Number.parseFloat(style.getPropertyValue("--c-deck-scale"));
   const cards = [...row.children]
     .filter((card): card is HTMLElement => card instanceof HTMLElement)

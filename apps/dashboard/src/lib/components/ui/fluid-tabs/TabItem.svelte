@@ -437,8 +437,7 @@
     // A glyph alone is narrower than a finger: under one it takes the touch
     // floor across, its glyph centred (The 44 Touch Rule), since its
     // neighbours' edges bound its hit area.
-    glyphOnly &&
-      "coarse:min-w-control-lg coarse:[&>[data-hit]]:justify-center",
+    glyphOnly && "coarse:min-w-control-lg coarse:[&>[data-hit]]:justify-center",
     className
   )}
   data-flush={flush}

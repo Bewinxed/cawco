@@ -1663,8 +1663,7 @@ export function bootStage(page: Page): Mode {
 
   /** How far a change ring stands outside the box it rings, px: its offset and its width. */
   const ringOut = () =>
-    tokenPx("--spacing-space-1") +
-    tokenPx("--focus-ring-width");
+    tokenPx("--spacing-space-1") + tokenPx("--focus-ring-width");
 
   /** How far to scroll to stand `start`–`end` whole in a view `size` long by the least it takes; from its start where it can't stand whole. */
   const leastTo = (start: number, end: number, size: number): number => {

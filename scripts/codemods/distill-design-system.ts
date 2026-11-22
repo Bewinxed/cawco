@@ -1,5 +1,3 @@
-// biome-ignore-all lint/performance/useTopLevelRegex: one-shot codemod run by hand, never on a hot path.
-// biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: single-pass migration over the repository's design-token tree.
 /**
  * `bun scripts/codemods/distill-design-system.ts`:
  *
@@ -1371,7 +1369,20 @@ const RADIUS_PREFIXES =
 
 // ---- Compile regexes --------------------------------------------------------
 
-const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+const REGEX_META = /[.*+?^${}()|[\]\\]/gu;
+const esc = (s: string) => s.replace(REGEX_META, "\\$&");
+const VAR_INFO_RE = /var\(\s*--info\s*\)/gu;
+const PROSE_COLOR_SUFFIXES = new Set([
+  "border",
+  "input",
+  "info",
+  "card",
+  "muted",
+  "accent",
+  "background",
+  "foreground",
+  "sidebar",
+]);
 const byLen = (keys: string[]) => [...keys].sort((a, b) => b.length - a.length);
 
 const VAR_RE = new RegExp(
@@ -1419,19 +1430,16 @@ function transform(path: string, input: string): string {
   let out = input;
 
   // 1. Exact class renames (repeat variant prefixes onto expanded multi-class targets).
-  out = out.replace(
-    EXACT_CLASS_RE,
-    (_full, variants: string, base: string) => {
-      const target = EXACT_CLASS_MAP[base];
-      if (!target) {
-        return _full;
-      }
-      return target
-        .split(" ")
-        .map((part) => `${variants}${part}`)
-        .join(" ");
+  out = out.replace(EXACT_CLASS_RE, (_full, variants: string, base: string) => {
+    const target = EXACT_CLASS_MAP[base];
+    if (!target) {
+      return _full;
     }
-  );
+    return target
+      .split(" ")
+      .map((part) => `${variants}${part}`)
+      .join(" ");
+  });
 
   // 2. Container query variants (`@max-table-424px/table:` -> `@max-sm/table:`).
   out = out.replace(
@@ -1453,19 +1461,17 @@ function transform(path: string, input: string): string {
   // Avoid rewriting inside CSS custom property names (`--bg-card` is protected by `(?<![\w-])`).
   out = out.replace(
     COLOR_CLASS_RE,
-    (full, variants: string, prefix: string, suffix: string, offset: number) => {
+    (
+      full,
+      variants: string,
+      prefix: string,
+      suffix: string,
+      offset: number
+    ) => {
       // Skip plain English prose like "to border" or "from input" or "to info"
       if (
         (prefix === "from" || prefix === "to" || prefix === "via") &&
-        (suffix === "border" ||
-          suffix === "input" ||
-          suffix === "info" ||
-          suffix === "card" ||
-          suffix === "muted" ||
-          suffix === "accent" ||
-          suffix === "background" ||
-          suffix === "foreground" ||
-          suffix === "sidebar")
+        PROSE_COLOR_SUFFIXES.has(suffix)
       ) {
         return full;
       }
@@ -1509,10 +1515,7 @@ function transform(path: string, input: string): string {
 
   // 7. Special `--info` CSS custom property (never touch CLI `--info` flag).
   if (!CLI_INFO_FILES.has(path)) {
-    out = out.replace(
-      /var\(\s*--info\s*\)/gu,
-      "var(--color-status-live-glyph)"
-    );
+    out = out.replace(VAR_INFO_RE, "var(--color-status-live-glyph)");
   }
 
   // 8. Special CSS washes & masks that had dedicated tokens.

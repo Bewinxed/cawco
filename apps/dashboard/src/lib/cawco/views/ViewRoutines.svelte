@@ -1021,10 +1021,7 @@
                 >
               {/if}
               <!-- On a narrow ledger, Last and Next in the same order. -->
-              <span
-                data-slot="folded"
-                class="hidden @max-md/table:inline"
-              >
+              <span data-slot="folded" class="hidden @max-md/table:inline">
                 {lineHasLead ? "· " : ""}{words.lastShort}
                 <RunStatus
                   said={last.said}
@@ -1184,9 +1181,7 @@
           >{words.trimReason}</span
         >
         <!-- On a narrow ledger, Turn on under why, on the name's edge. -->
-        <span
-          data-slot="folded"
-          class="hidden pt-space-2 @max-md/table:block"
+        <span data-slot="folded" class="hidden pt-space-2 @max-md/table:block"
           >{@render turnOn(busy)}</span
         >
       </Table.Cell>
@@ -1346,6 +1341,7 @@
       data-slot="ledger"
       style:--col-state={"calc(var(--spacing-row-compact) + var(--spacing-space-3))"}
       style:--col-menu={"calc(var(--spacing-control-sm) + var(--spacing-space-3) * 2)"}
+      style:--col-run="calc(var(--spacing) * 36)"
       {@attach countColumns}
     >
       <Table.Root
@@ -1361,15 +1357,13 @@
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               data-col-last
-              class="z-2 w-(--w)"
-              style="--w: calc(var(--spacing) * 36)"
+              class="z-2 w-(--col-run)"
               fold="measure"
               scope="col"
               variant="band">{words.columnLastRun}</Table.Head
             >
             <Table.Head
-              class="z-2 w-(--w)"
-              style="--w: calc(var(--spacing) * 36)"
+              class="z-2 w-(--col-run)"
               fold="measure"
               scope="col"
               variant="band">{words.columnNextRun}</Table.Head
@@ -1455,6 +1449,7 @@
     <div
       data-slot="ledger"
       style:--col-state={"calc(var(--spacing-row-compact) + var(--spacing-space-3))"}
+      style:--col-run="calc(var(--spacing) * 36)"
     >
       <Table.Root aria-label={words.sources} layout="ledger" stickyBand>
         <Table.Header>
@@ -1463,8 +1458,7 @@
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               data-col-last
-              class="z-2 w-(--w)"
-              style="--w: calc(var(--spacing) * 36)"
+              class="z-2 w-(--col-run)"
               scope="col"
               variant="band">{words.columnLastRead}</Table.Head
             >
@@ -1560,9 +1554,7 @@
 
 {#snippet actionsBody()}
   {#if actions.length === 0}
-    <p
-      class="m-0 max-w-measure p-space-3 type-meta text-pretty text-ink-muted"
-    >
+    <p class="m-0 max-w-measure p-space-3 type-meta text-pretty text-ink-muted">
       {words.noActions}
     </p>
   {:else}

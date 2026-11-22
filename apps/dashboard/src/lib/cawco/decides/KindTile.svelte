@@ -90,9 +90,7 @@
     if (handing) {
       return "bg-surface-raised inset-ring-2 inset-ring-brand-solid";
     }
-    return own
-      ? "bg-(--wash,var(--color-surface-sunk))"
-      : "bg-surface-recess";
+    return own ? "bg-(--wash,var(--color-surface-sunk))" : "bg-surface-recess";
   });
   const scopeTip = $derived.by(() => {
     if (project === null) {

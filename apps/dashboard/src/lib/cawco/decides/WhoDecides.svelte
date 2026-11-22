@@ -147,9 +147,7 @@
   <div
     class="flex min-h-0 min-w-0 flex-auto flex-col overflow-y-auto bg-surface-recess px-space-5 py-space-2"
   >
-    <div
-      class="flex max-w-245 min-w-0 flex-col gap-space-5 py-space-6"
-    >
+    <div class="flex max-w-245 min-w-0 flex-col gap-space-5 py-space-6">
       <div
         class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
         style:--head-cols="minmax(0, 1fr) auto"

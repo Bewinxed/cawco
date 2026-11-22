@@ -2305,7 +2305,9 @@ export function branch(
       return { duration: 0 };
     }
     if (!motionOk.current) {
-      return { duration: out ? dur("--duration-fade") : dur("--duration-panel") };
+      return {
+        duration: out ? dur("--duration-fade") : dur("--duration-panel"),
+      };
     }
     // Unmounted once the last piece has gone: a frame for the batch, and a
     // frame to spare. A fold takes --duration-fade whatever it measures

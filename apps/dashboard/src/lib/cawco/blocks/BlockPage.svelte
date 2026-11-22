@@ -6,10 +6,7 @@
    * The tokens a block's measure is read from, each typed as a length in
    * design.css so BlockPage reads it in px (house/typed-property-read).
    */
-  type BlockMeasure =
-    | "--block-ledger"
-    | "--block-routines"
-    | "--block-view";
+  type BlockMeasure = "--block-ledger" | "--block-routines" | "--block-view";
 
   /** What a page knows of one block it can hold: its face and its body. */
   export interface BlockItem {

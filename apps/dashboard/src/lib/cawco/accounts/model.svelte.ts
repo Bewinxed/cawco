@@ -37,7 +37,7 @@ import { accountsStore } from "../stores/accounts.svelte";
 import { boardStore } from "../stores/board.svelte";
 
 /** Account hue mapped onto the categorical mark scale (`--color-mark-2..8`). */
-export const ACCOUNT_MARK: Record<AccountHue, number> = {
+const ACCOUNT_MARK: Record<AccountHue, number> = {
   orange: 2,
   amber: 3,
   green: 4,

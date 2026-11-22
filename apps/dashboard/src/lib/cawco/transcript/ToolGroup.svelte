@@ -311,16 +311,7 @@
     };
   }
   /** What a call measured out, arriving with its result. */
-  function factIn(_node: Element) {
-    if (!moving()) {
-      return { duration: 0 };
-    }
-    return {
-      duration: dur("--duration-control"),
-      easing: easeOut,
-      css: (t: number) => `opacity: ${t}`,
-    };
-  }
+  const factIn = glyphOut;
 
   const asString = (value: unknown): string | undefined =>
     typeof value === "string" ? value : undefined;

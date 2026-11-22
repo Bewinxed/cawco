@@ -731,8 +731,7 @@
     <span
       class="col-5 row-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted"
       data-week
-      ><span class="mono-figure inline-block min-w-ch-4 text-end"
-        >{week}%</span
+      ><span class="mono-figure inline-block min-w-ch-4 text-end">{week}%</span
       ></span
     >
   {/if}

@@ -136,7 +136,9 @@
             class="@max-sm/table:row-span-2 @max-sm/table:self-start"
             {rule}
             variant="ledger"
-            ><span data-slot="mark" class="grid w-row-compact place-items-center"
+            ><span
+              data-slot="mark"
+              class="grid w-row-compact place-items-center"
               ><ProviderLogo
                 provider={action.service.toLowerCase()}
                 size="control"

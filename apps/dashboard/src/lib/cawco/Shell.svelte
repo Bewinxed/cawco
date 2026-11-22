@@ -123,9 +123,7 @@
    */
   const tokenWidth = () =>
     Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue(
-        "--sidebar-w"
-      )
+      getComputedStyle(document.documentElement).getPropertyValue("--sidebar-w")
     );
 
   let {

@@ -23,8 +23,7 @@
         "in-bar":
           "group-data-bar:min-w-0 group-data-bar:overflow-clip group-data-bar:concentric-xs",
         /** A plain field: the small corner, the control's edge, field pads. */
-        field:
-          "rounded-sm border border-border-strong px-space-3 py-space-2",
+        field: "rounded-sm border border-border-strong px-space-3 py-space-2",
       },
       /** `end`: its value at its end, before its mark, as a number field
           writes its figure (the design graph's Controls: a select whose

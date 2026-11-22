@@ -2356,9 +2356,7 @@
     style:--draft-bleed-start={sheetQuery.current
       ? "var(--spacing-space-5)"
       : "var(--spacing-space-6)"}
-    style:--pane-min={docked
-      ? "calc(50cqb + var(--sheet-max-h))"
-      : "50cqb"}
+    style:--pane-min={docked ? "calc(50cqb + var(--sheet-max-h))" : "50cqb"}
   >
     {#if reading.current}
       <!-- The board at its real layout, its columns standing empty: the

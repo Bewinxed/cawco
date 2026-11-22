@@ -363,8 +363,7 @@
   const CONTROLS =
     "flex min-w-0 flex-wrap items-center gap-space-2 @max-sm:grid @max-sm:grid-cols-1";
   /** The words under the title: on the title's edge (the lead column and `space-3`), on the card's own edge in a narrow card. */
-  const UNDER_TITLE =
-    "flex min-w-0 flex-col ps-(--title-edge) @max-sm:ps-0";
+  const UNDER_TITLE = "flex min-w-0 flex-col ps-(--title-edge) @max-sm:ps-0";
 </script>
 
 {#snippet stepMark(mark: Mark, n: number)}
@@ -418,10 +417,7 @@
   <div class="min-w-0 @max-sm:hidden" data-box>
     <CopyBox {label} {text} wrap />
   </div>
-  <div
-    class="hidden min-w-0 flex-col gap-space-2 @max-sm:flex"
-    data-box
-  >
+  <div class="hidden min-w-0 flex-col gap-space-2 @max-sm:flex" data-box>
     <!-- The box keeps its edge and padding; the clamp is on the words
          inside it, so a third line is cut at the words' edge, never shown
          in the box's padding. -->
@@ -793,14 +789,10 @@
       style:--title-edge={"calc(var(--spacing-row-compact) + var(--spacing-space-3))"}
     >
       {#if lead}
-        <p
-          class="type-body text-ink-strong text-pretty @max-sm:hidden"
-        >
+        <p class="type-body text-ink-strong text-pretty @max-sm:hidden">
           {domain ? words.leadDomain(domain) : words.leadPlain}
         </p>
-        <p
-          class="hidden type-body text-ink-strong text-pretty @max-sm:block"
-        >
+        <p class="hidden type-body text-ink-strong text-pretty @max-sm:block">
           {domain ? words.leadDomainShort(domain) : words.leadPlainShort}
         </p>
       {/if}

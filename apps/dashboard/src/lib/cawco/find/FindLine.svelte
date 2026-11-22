@@ -80,9 +80,7 @@
 >
   <div class="flex flex-wrap items-center gap-x-space-1 gap-y-(--cin-pad)">
     <!-- mark-line: the glyph leads a field, not words; the field sets its own line. -->
-    <div
-      class="flex flex-auto basis-full min-w-0 items-center @sm:basis-0"
-    >
+    <div class="flex flex-auto basis-full min-w-0 items-center @sm:basis-0">
       <IconSearch
         class="flex-none size-icon-md me-space-2 text-ink-muted"
         aria-hidden="true"

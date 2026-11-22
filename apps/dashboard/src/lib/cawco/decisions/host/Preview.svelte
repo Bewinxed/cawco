@@ -861,7 +861,8 @@
     role="status"
   >
     {#if waitLine}
-      <span class="mark-line flex items-start gap-space-2 animate-fade-in anim-delay-loop"
+      <span
+        class="mark-line flex items-start gap-space-2 animate-fade-in anim-delay-loop"
         ><span class="mark-cell"><LiveDot /></span><span
           class="min-w-0 wrap-anywhere">{waitLine}</span
         ></span
@@ -937,9 +938,7 @@
     <FrameDown
       class={[
         "flex w-full flex-col justify-center rounded-xs",
-        heldHeight === null
-          ? "aspect-16/10 max-h-vb-80"
-          : "min-h-(--held-h)",
+        heldHeight === null ? "aspect-16/10 max-h-vb-80" : "min-h-(--held-h)",
       ].join(" ")}
       down={unavailable.down}
       names={unavailable.machine
@@ -1097,7 +1096,9 @@
       class="flex flex-wrap items-center gap-space-3 w-full"
       role="alert"
     >
-      <p class="flex-1 min-w-0 m-0 type-meta text-status-fail-glyph wrap-anywhere">
+      <p
+        class="flex-1 min-w-0 m-0 type-meta text-status-fail-glyph wrap-anywhere"
+      >
         {held.unopened}
       </p>
       <Button

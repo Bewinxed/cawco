@@ -405,10 +405,7 @@
             />
           </Field>
           {#if urlKeyHeld}
-            <p
-              data-slot="note"
-              class="type-meta max-w-measure text-ink-muted"
-            >
+            <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
               {clearUrlKey ? words.urlKeyCleared : words.urlKeyHeld}
               <Button
                 label={clearUrlKey ? words.urlKeyKeep : words.urlKeyClear}

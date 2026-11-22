@@ -65,9 +65,7 @@
             <span
               class="absolute inset-y-0 start-0 w-(--fill-w) rounded-pill bg-ink-muted group-state-near/bar:bg-status-attn-glyph group-state-over/bar:bg-status-fail-glyph group-state-reached/bar:bg-status-fail-glyph group-state-stale/bar:bg-ink-subtle motion-safe:transition-[inline-size] motion-safe:duration-(--duration-fade) motion-safe:ease-drawer"
               data-slot="fill"
-              style:--fill-w={share > 0
-                ? `max(${share}%, 1ex)`
-                : "0px"}
+              style:--fill-w={share > 0 ? `max(${share}%, 1ex)` : "0px"}
             ></span>
           </span>
           <span class="flex-none whitespace-nowrap tabular-nums">{said}</span>

@@ -90,9 +90,7 @@
             out:depart
           >
             {#each words.lines as line (line)}
-              <p
-                class="m-0 max-w-104 type-body text-pretty text-ink-muted"
-              >
+              <p class="m-0 max-w-104 type-body text-pretty text-ink-muted">
                 <Words text={line} />
               </p>
             {/each}

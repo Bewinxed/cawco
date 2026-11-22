@@ -138,12 +138,9 @@ const ringsOf = (
 const ringOut = (): number => {
   const root = getComputedStyle(document.documentElement);
   const offset =
-    Number.parseFloat(
-      root.getPropertyValue("--spacing-space-1")
-    ) || 3;
+    Number.parseFloat(root.getPropertyValue("--spacing-space-1")) || 3;
   const line =
-    Number.parseFloat(root.getPropertyValue("--focus-ring-width")) ||
-    2;
+    Number.parseFloat(root.getPropertyValue("--focus-ring-width")) || 2;
   return offset + line / 2;
 };
 

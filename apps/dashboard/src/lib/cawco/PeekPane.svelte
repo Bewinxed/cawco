@@ -554,7 +554,9 @@
       {damagedWords(row.damaged)}
     </p>
   {:else if stale}
-    <p class="border-t border-border-control/50 px-4 py-3 type-meta text-ink-muted">
+    <p
+      class="border-t border-border-control/50 px-4 py-3 type-meta text-ink-muted"
+    >
       {UNKNOWN_HINT}
     </p>
   {/if}
@@ -623,7 +625,9 @@
             </p>
           {:else if message.type === "result.error"}
             <!-- A failed turn's last words are the agent's too: flat. -->
-            <p class="line-clamp-3 type-body wrap-break-word text-status-fail-glyph">
+            <p
+              class="line-clamp-3 type-body wrap-break-word text-status-fail-glyph"
+            >
               {plainMarkdown(message.content)}
             </p>
           {:else}

@@ -174,7 +174,9 @@
         </p>
       </div>
 
-      <ul class="max-h-56 overflow-y-auto border-t border-border-control px-3 py-2">
+      <ul
+        class="max-h-56 overflow-y-auto border-t border-border-control px-3 py-2"
+      >
         {#each usage.categories as category, index (category.name)}
           <li class="flex items-center gap-2 py-space-1 type-label">
             <span
@@ -200,7 +202,9 @@
         <span>Compacting now — the session is rewriting its own context.</span>
       </p>
     {:else if compaction}
-      <p class="border-t border-border-control px-3 py-2 type-label text-ink-muted">
+      <p
+        class="border-t border-border-control px-3 py-2 type-label text-ink-muted"
+      >
         {#if compaction.result === "failed"}
           Last compaction failed{compaction.error
             ? `: ${compaction.error}`

@@ -76,8 +76,7 @@
     data-slot="grip"
     class={[
       "group-focus-visible/grab:outline-(length:--focus-ring-width) group-focus-visible/grab:outline-offset-2 group-focus-visible/grab:outline-focus-ring group-focus-visible/grab:outline-solid",
-      handle === "top" &&
-        "h-1.5 w-25 rounded-pill bg-border-control",
+      handle === "top" && "h-1.5 w-25 rounded-pill bg-border-control",
       handle !== "top" && "relative m-1.5 size-3 overflow-clip",
       handle === "top-left" && "rounded-ss-(--grip-r)",
       handle === "top-right" && "rounded-se-(--grip-r)",

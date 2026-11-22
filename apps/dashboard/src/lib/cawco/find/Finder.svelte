@@ -734,10 +734,7 @@
       tabindex="-1"
       type="button"
     >
-      <Glyph
-        class="flex-none size-icon-md text-ink-muted"
-        aria-hidden="true"
-      />
+      <Glyph class="flex-none size-icon-md text-ink-muted" aria-hidden="true" />
       <span class="flex-1 min-w-0 overflow-clip whitespace-nowrap text-ellipsis"
         ><span data-slot="num" class="num">{count}</span>
         {kindNoun(first, count)} match “{finder.asked}”</span

@@ -443,7 +443,10 @@
           <span class="min-w-0 flex-1 type-label text-ink-muted"
             >{words.ownLength}</span
           >
-          <InputGroup.Root class="w-(--w)" style="--w: calc(var(--spacing) * 42)">
+          <InputGroup.Root
+            class="w-(--w)"
+            style="--w: calc(var(--spacing) * 42)"
+          >
             <InputGroup.Input
               field="number"
               max={LONGEST}

@@ -568,7 +568,8 @@
     );
     --surface-recess-clear: oklch(from var(--color-surface-recess) l c h / 0);
     --shadow-overlay-hung:
-      0 calc(var(--spacing) * 4.5) calc(var(--spacing) * 12) var(--shadow-tint-3),
+      0 calc(var(--spacing) * 4.5) calc(var(--spacing) * 12)
+        var(--shadow-tint-3),
       0 2px calc(var(--spacing) * 1.5) var(--color-shadow-tint);
 
     /* Component-local motion and rim mechanics. */
@@ -635,9 +636,7 @@
     --tx-preview-thumb-h: calc(var(--spacing) * 16);
     --status-dot-size: calc(var(--spacing) * 1.5);
     --status-dot-cut: calc(var(--spacing) * 0.375);
-    --row-tall-h: calc(
-      2 * var(--spacing-space-5) + 2 * var(--spacing-space-1)
-    );
+    --row-tall-h: calc(2 * var(--spacing-space-5) + 2 * var(--spacing-space-1));
     --fig-pad: var(--spacing-space-3);
     --fig-chip: calc(var(--spacing) * 2.5);
     --fig-cap-line: var(--spacing-space-4);
@@ -1605,8 +1604,7 @@
     var(--color-ink-subtle) 1px,
     transparent var(--drag-dots-edge)
   );
-  background-size: var(--drag-dots-tile)
-    var(--drag-dots-tile);
+  background-size: var(--drag-dots-tile) var(--drag-dots-tile);
 }
 
 /* A row's ghost controls rest on the strong fill under a resting pointer by
@@ -1864,10 +1862,7 @@
 @utility picture-row {
   [data-axis="row"] > & {
     flex: var(--ratio) 1
-      calc(
-        var(--ratio) / var(--ratio-min, var(--ratio)) *
-          var(--picture-min)
-      );
+      calc(var(--ratio) / var(--ratio-min, var(--ratio)) * var(--picture-min));
   }
   [data-axis="row"] > &:has([data-full]) {
     flex-basis: 100%;
@@ -3110,10 +3105,7 @@
           calc(50% - var(--spacing-control-xs) / 2 / var(--hit-scale, 1))
         ),
         calc(
-          var(
-              --hit-gap-x,
-              var(--spacing-control-xs) / var(--hit-scale, 1)
-            ) /
+          var(--hit-gap-x, var(--spacing-control-xs) / var(--hit-scale, 1)) /
             -2 - var(--hit-edge, 0px)
         )
       );
@@ -3123,10 +3115,7 @@
           calc(50% - var(--spacing-control-xs) / 2 / var(--hit-scale, 1))
         ),
         calc(
-          var(
-              --hit-gap-y,
-              var(--spacing-control-xs) / var(--hit-scale, 1)
-            ) /
+          var(--hit-gap-y, var(--spacing-control-xs) / var(--hit-scale, 1)) /
             -2 - var(--hit-edge, 0px)
         )
       );

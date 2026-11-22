@@ -714,7 +714,10 @@
       return;
     }
     requestAnimationFrame(() => {
-      const timing = { duration: dur("--duration-panel"), easing: CURVE.drawer };
+      const timing = {
+        duration: dur("--duration-panel"),
+        easing: CURVE.drawer,
+      };
       node.animate(
         [{ clipPath: "inset(0 0 100% 0)" }, { clipPath: "inset(0)" }],
         { ...timing, pseudoElement: "::before" }

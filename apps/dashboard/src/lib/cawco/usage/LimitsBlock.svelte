@@ -187,7 +187,9 @@
         <small class="type-meta text-ink-muted">{figure.label}</small>
       </span>
     </div>
-    <p class="m-0 type-body text-ink-strong" data-status><Words parts={say} /></p>
+    <p class="m-0 type-body text-ink-strong" data-status>
+      <Words parts={say} />
+    </p>
     <RingsKey {ring} />
     {@render running(ring)}
   </div>

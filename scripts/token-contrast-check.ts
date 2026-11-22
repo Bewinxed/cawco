@@ -24,7 +24,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import Color from "colorjs.io";
 import postcss from "postcss";
-import { ACCOUNT_HUES, type AccountHue } from "../packages/core/src/accounts/kinds";
+import {
+  ACCOUNT_HUES,
+  type AccountHue,
+} from "../packages/core/src/accounts/kinds";
 import { STATUS_PAIRS } from "../packages/core/src/views";
 import {
   CssEvaluator,
@@ -122,7 +125,8 @@ const S = {
   inkSolid: "the ink-strong fill (theme.css)",
   chips: "DESIGN.md, Colour: status hues (each chip 4.5:1)",
   syntax: "syntax colours (libraries.css + design.css diff washes)",
-  strongEdge: "token border-strong (theme.css, non-text 3:1 WCAG 2.2 SC 1.4.11)",
+  strongEdge:
+    "token border-strong (theme.css, non-text 3:1 WCAG 2.2 SC 1.4.11)",
   inks: "the text inks (theme.css)",
   subtle: "token ink-subtle (theme.css)",
   identity: "DESIGN.md, Colour: identity hues; token identity-ink",

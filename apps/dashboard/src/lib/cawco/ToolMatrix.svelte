@@ -824,9 +824,7 @@
                    refusal on its own line under them. -->
               {@const v = machine.tools?.[spec.id]}
               <Table.Cell settle="top" variant="ledger-stacks">
-                <span
-                  class="flex items-center @phone/table:min-h-control-lg"
-                >
+                <span class="flex items-center @phone/table:min-h-control-lg">
                   <code
                     data-slot="num"
                     class={[

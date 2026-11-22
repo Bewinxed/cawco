@@ -223,9 +223,7 @@
           }
         }
       />
-      <output class="num min-w-ch-4 text-ink-strong"
-        >{taper ?? "–"}px</output
-      >
+      <output class="num min-w-ch-4 text-ink-strong">{taper ?? "–"}px</output>
     </label>
     <label class="flex items-center gap-space-2">
       <span>Subtle</span>
@@ -241,9 +239,7 @@
           }
         }
       />
-      <output class="num min-w-ch-4 text-ink-strong"
-        >{subtle ?? "–"}%</output
-      >
+      <output class="num min-w-ch-4 text-ink-strong">{subtle ?? "–"}%</output>
     </label>
     <label class="flex items-center gap-space-2">
       <span>Thickness</span>
@@ -259,9 +255,7 @@
           }
         }
       />
-      <output class="num min-w-ch-4 text-ink-strong"
-        >{width ?? "–"}px</output
-      >
+      <output class="num min-w-ch-4 text-ink-strong">{width ?? "–"}px</output>
     </label>
   </div>
 </div>

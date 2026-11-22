@@ -9,8 +9,7 @@
           and height (`--row-compact-*`); tall (`data-tall`), among the
           home's two-line rows, at their height and on the space ladder. */
       row: {
-        compact:
-          "h-row-compact gap-space-2 pr-space-2 pl-space-2",
+        compact: "h-row-compact gap-space-2 pr-space-2 pl-space-2",
         "compact-tall":
           "h-row-compact gap-space-2 pr-space-2 pl-space-2 data-tall:h-(--row-tall-h) data-tall:gap-space-2 data-tall:pr-space-3 data-tall:pl-space-3",
       },

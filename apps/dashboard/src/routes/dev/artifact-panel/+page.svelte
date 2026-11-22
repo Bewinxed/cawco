@@ -213,11 +213,7 @@
       "--duration-control",
       ...(asked === "drain"
         ? []
-        : [
-            "--duration-settle",
-            "--duration-fade",
-            "--duration-control",
-          ]),
+        : ["--duration-settle", "--duration-fade", "--duration-control"]),
     ];
     for (const name of slowed) {
       // Read off the root as it stands, never through dur(), which would

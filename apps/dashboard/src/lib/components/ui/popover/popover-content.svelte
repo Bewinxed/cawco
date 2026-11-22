@@ -195,9 +195,7 @@
   const inset = $derived(
     collisionPadding ??
       (browser
-        ? numberOf(
-            phone.current ? "--spacing-space-3" : "--spacing-space-5"
-          )
+        ? numberOf(phone.current ? "--spacing-space-3" : "--spacing-space-5")
         : 0)
   );
   /* A hanging card (motion `hang`) frames its own width, a bare one is what

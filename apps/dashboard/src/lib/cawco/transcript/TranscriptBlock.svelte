@@ -186,10 +186,7 @@
     <!-- Its place until it draws: its height as last drawn, else a fold's. -->
     <figure
       aria-label={name}
-      class={[
-        "my-space-4",
-        room === undefined ? "h-40" : "h-(--room)",
-      ]}
+      class={["my-space-4", room === undefined ? "h-40" : "h-(--room)"]}
       data-slot="inline-block-room"
       style:--room={room === undefined ? undefined : `${room}px`}
     ></figure>

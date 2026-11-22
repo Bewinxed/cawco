@@ -80,6 +80,8 @@
   {@attach orient}
 >
   {#if withHandle}
-    <div class="h-6 w-space-1 rounded-pill bg-border-control z-1 flex shrink-0"></div>
+    <div
+      class="h-6 w-space-1 rounded-pill bg-border-control z-1 flex shrink-0"
+    ></div>
   {/if}
 </PaneResizer>

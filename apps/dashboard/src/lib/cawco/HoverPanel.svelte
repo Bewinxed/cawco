@@ -222,7 +222,10 @@
 
   function panelIn(_node: Element): TransitionConfig {
     if (!motionOk.current) {
-      return { duration: dur("--duration-control"), css: (t) => `opacity: ${t}` };
+      return {
+        duration: dur("--duration-control"),
+        css: (t) => `opacity: ${t}`,
+      };
     }
     // Out of its trigger: up from a row of chips or a chip under it, down
     // from a chip over it, in from the left beside a list.

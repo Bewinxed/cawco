@@ -946,9 +946,7 @@ export function measureShape(
       base: pill.offsetHeight,
       r: Number.parseFloat(getComputedStyle(pill).borderTopLeftRadius) || 0,
       headroom: Number.parseFloat(style.getPropertyValue("--spacing-space-2")),
-      row: Number.parseFloat(
-        style.getPropertyValue("--spacing-control-md")
-      ),
+      row: Number.parseFloat(style.getPropertyValue("--spacing-control-md")),
     },
     line: {
       left: (text.left - box.left) / scale,

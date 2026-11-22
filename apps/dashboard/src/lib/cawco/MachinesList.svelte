@@ -63,9 +63,7 @@
   } = $props();
   /** A row with a bare glyph: the card's 7px pads, or the sheet's nav row's. */
   const bareRow = $derived(
-    rail
-      ? "gap-space-3 ps-space-3 pe-space-2"
-      : "gap-space-2 px-space-2"
+    rail ? "gap-space-3 ps-space-3 pe-space-2" : "gap-space-2 px-space-2"
   );
   /** A row led by a machine's tile: in the sheet, the tile on the glyph's box's centre. */
   const tileRow = $derived(

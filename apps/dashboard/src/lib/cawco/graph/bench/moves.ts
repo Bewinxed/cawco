@@ -58,14 +58,9 @@ const swap = (start: number): ClipRead[] => [
     "--duration-fade",
     [{ property: "--press-by", from: "1", to: "0.97" }]
   ),
-  clip(
-    BUTTON,
-    "Button “Create routine”",
-    "opacity",
-    start,
-    "--duration-fade",
-    [{ property: "opacity", from: "1", to: "0" }]
-  ),
+  clip(BUTTON, "Button “Create routine”", "opacity", start, "--duration-fade", [
+    { property: "opacity", from: "1", to: "0" },
+  ]),
 ];
 
 /** A line unfolding under its field: its height and its ink, together. */

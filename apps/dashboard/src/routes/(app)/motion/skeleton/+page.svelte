@@ -28,10 +28,7 @@
 </script>
 
 <div class="p-space-6">
-  <div
-    class="relative flex w-60 flex-col gap-space-2"
-    data-bench="stage"
-  >
+  <div class="relative flex w-60 flex-col gap-space-2" data-bench="stage">
     {#if waiting}
       <div
         aria-busy="true"

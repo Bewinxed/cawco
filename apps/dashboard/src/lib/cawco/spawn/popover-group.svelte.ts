@@ -20,9 +20,7 @@ const phone = new MediaQuery(PHONE_QUERY);
  */
 export const screenInset = (): number =>
   browser
-    ? numberOf(
-        phone.current ? "--spacing-space-3" : "--spacing-space-5"
-      )
+    ? numberOf(phone.current ? "--spacing-space-3" : "--spacing-space-5")
     : 0;
 
 export interface PopoverMember {
