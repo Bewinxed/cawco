@@ -2,23 +2,23 @@
  * A workspace lives exactly as long as its work item (workspaces.ts
  * `settle`). When the item ends, the hub settles its workspace: once nothing
  * runs in it (a session of its items attached, a stage serving from it,
- * which sleeps half an hour after its last use) and nothing it serves is
- * still owed to the person (not acted on since a session put it before
- * them: artifacts service `owedToPerson`), its machine closes its boundary,
+ * which sleeps half an hour after its last use) and nothing it serves
+ * stands in a panel (until the artifact is deleted or a newer version
+ * moves its source: artifacts service `owedToPerson`), its machine closes its boundary,
  * reads on the host what its clone holds that is nowhere else, and either
  * deletes it all (retired: its work landed, itself or through a workspace
  * cut from it, or there was none), carries it off (its items land nothing,
  * or its starter will never decide it: a routine's run, an ended parent) or
  * keeps it (held: the session that started its work is told, and continues
- * it or discards it). An artifact's row alone holds nothing (the owner's
- * pick on 2026-11-15: "By itself, once nothing in it is unique"). A machine's disk filled on
+ * it or discards it), the owner's pick on 2026-11-15: "By itself, once
+ * nothing in it is unique". A machine's disk filled on
  * 2026-10-14 because nothing removed a workspace once its work was over; on
  * 2026-10-16 the owner called keeping every finished workspace until someone
- * archived it "a terrible working model". What the person has not acted on
- * holds its workspace whoever made it and whatever ended since: on
- * 2026-11-20 he opened previews handed up to his panel and found their
- * workspaces gone, and on 2026-11-21 a design graph a view had only
- * acknowledged.
+ * archived it "a terrible working model". What stands in a panel holds
+ * its workspace whoever made it, whatever ended since and whatever the
+ * person did on it: on 2026-11-20 he opened previews handed up to his
+ * panel and found their workspaces gone, on 2026-11-21 a design graph a
+ * view had only acknowledged, and on 2026-11-22 one he had just pinned.
  *
  * A finished delegate stays continuable without its folder: a handoff or a
  * follow-up to a retired one cuts its clone again at the same path, at the
@@ -30,7 +30,7 @@
  * Settling follows the events that end a hold: an item's end, its session
  * asleep or ended, an artifact removed or its source moved off. This sweep
  * is the look that catches what no event reached (a hub restarted, a
- * machine away at the time, the person acting on what a workspace serves): every {@link RETIRE_SWEEP_MS},
+ * machine away at the time, a folder preview's look grown old): every {@link RETIRE_SWEEP_MS},
  * each active workspace on every online machine is settled (one whose
  * clone is gone from its machine holds nothing it serves), and so is each
  * host-scope one whose scratch dir a hold kept (workspaces.ts `hostKept`);

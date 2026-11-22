@@ -31,7 +31,7 @@ export class CommentKit {
 
   /**
    * The comment kit: the composer, the thread and their drafts, loaded once
-   * the page in the pane is up, or as soon as a composer or a thread is
+   * the frame has settled (its page up, or its down page standing), or as soon as a composer or a thread is
    * asked for. They are the conversation's code (the chat composer, the
    * transcript's pieces), which an artifact's own tab never loads at first
    * paint (scripts/page-imports-check.ts).
@@ -92,7 +92,7 @@ export class CommentKit {
       provideMarkdownFleet(() => this.ownMarkdown);
     }
     $effect(() => {
-      if (this.#deps.previewFrame.connected) {
+      if (this.#deps.previewFrame.settled) {
         return untrack(() => afterPaint(this.loadKit));
       }
     });

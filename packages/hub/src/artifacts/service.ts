@@ -176,7 +176,6 @@ import {
   answeredWhole,
   answersUnheard,
   heardSeq,
-  ms as isoMs,
   mayWait,
   movedOn,
   needOf,
@@ -805,57 +804,29 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Whether the person has acted on an artifact, by its `facts`, since its
-   * session last put it before them. Its put is the newest of its revision
-   * (`meta.revisedAt`), its create or show (its ask, `meta.asked`; never
-   * the row's `updatedAt`, which the person's own marks move), and an
-   * agent's reply on one of its pins that asks them something
-   * (`askingAt`). A decision page is acted on once it is answered: no card
-   * open, or a Send since its put. Anything else is acted on by an act of
-   * theirs since its put (`actedAt`): a pick, note or value, a pin, an
-   * entry on a pin or its resolve, or a Send. A look is no act, nor a dial
-   * moved (core `answersIn`): a design graph he is still tuning holds its
-   * workspace.
-   */
-  const actedOn = (facts: ArtifactFacts): boolean => {
-    const put = Math.max(
-      isoMs(facts.revisedAt),
-      isoMs(facts.asked?.at),
-      isoMs(facts.askingAt)
-    );
-    if (facts.answers !== null) {
-      return (
-        facts.answers.answered === facts.answers.asked ||
-        isoMs(facts.sentAt) > put
-      );
-    }
-    return facts.actedAt !== null && isoMs(facts.actedAt) > put;
-  };
-
-  /**
    * THE ONE RULE OF WHAT HOLDS A WORKSPACE FOR THE PERSON, read by
    * everything that deletes a workspace or refuses to (`servedOwed`,
    * `waitingOnPerson`; workspaces.ts `holdsOf`): an artifact a session put
-   * in a panel is owed to the person until they act on it
-   * ({@link actedOn}) or it is deleted. Every put owes it again: a
-   * revision, a show, a reply that asks. A next version held for its
-   * parent is owed until its parent opens it, as the version the person
-   * will see then. A newer version releases the older one's workspace by
-   * moving the artifact's source off it (db artifacts.ts `resource`), and
-   * nothing else does: not a view having it on screen, not a session's
-   * turn ending or its item ending, not time. On 2026-11-21 a design graph
-   * the owner had not judged lost its workspace 22 s after a view
-   * acknowledged its show, when a look counted as seen. Never owed: the
-   * person's own draft, a design check's verifier's working material, a
-   * maker's own reading (`meta.reading`), and an option's media on a
-   * decision page, which is owed through its page (`servedOwed`).
+   * in a panel holds the workspace serving it for as long as its row stands
+   * there. Two things release it: the artifact is deleted (db
+   * `onArtifactsGone`), or a newer version moves its source to another
+   * workspace or folder (db artifacts.ts `resource`, promote included; the
+   * hub's `onSourceMoved`). Nothing the person does on it releases it, nor
+   * a session's turn or item ending, nor time: a pin starts a conversation
+   * on the design, it does not end their use of it. On 2026-11-22 the
+   * owner's first pin on design graph `project-details-work-path` released
+   * its workspace, and the replies to his comments stood under "This
+   * preview's workspace is gone"; the three rules before (a look, a seen
+   * mark, an act since its put) each released a workspace the person was
+   * still using. A next version held for its parent holds as the version
+   * the person will see once it is opened. Never held: the person's own
+   * draft, a design check's verifier's working material, a maker's own
+   * reading (`meta.reading`), and an option's media on a decision page,
+   * which is held through its page while the page stands (`servedOwed`).
    */
   const owedToPerson = (row: ArtifactRow): boolean => {
     const facts = withMedia(row, factsOf(row));
-    if (facts.draft || facts.verifier || facts.reading || facts.media) {
-      return false;
-    }
-    return row.heldFor !== null || !actedOn(facts);
+    return !(facts.draft || facts.verifier || facts.reading || facts.media);
   };
 
   /**

@@ -356,8 +356,8 @@ export interface WorkspacesHub {
   readonly sendWakes: (instanceId: string) => boolean;
   /**
    * Of the artifacts a workspace serves, those its retirement still waits
-   * on, with why (artifacts service `servedOwed`): the person is still owed
-   * it or a page showing it (not acted on since it was put before them), or
+   * on, with why (artifacts service `servedOwed`): it, or a decision page
+   * showing it, stands in a panel until it is deleted or its source moves, or
    * it is a folder preview looked at within the half hour ({@link owedFrom}).
    */
   readonly servedOwed: (served: readonly ArtifactRow[]) => ServedOwed[];
@@ -884,8 +884,8 @@ export const createWorkspaces = ({
    * THE ONE READ OF WHAT A WORKSPACE SERVES: the artifacts, any session's,
    * whose row names it (db artifacts.ts `previewing`: a port preview or a
    * sheet naming it, a folder preview inside its clone or scratch dir), a
-   * held next version among them. Its retirement waits on those still owed
-   * ({@link owedFrom}), never on a row as such; its archive or discard, on purpose, refuses
+   * held next version among them. Its retirement waits on those that hold
+   * it ({@link owedFrom}); its archive or discard, on purpose, refuses
    * while any of them, or a decision page showing one, waits on the person
    * ({@link waitingFrom}). A Linux view's path is the person's folder, so a
    * folder preview there is not the workspace's; a port preview naming it
@@ -918,17 +918,18 @@ export const createWorkspaces = ({
   /** Why an artifact owed ({@link owedFrom}) holds its workspace, in words. */
   const OWED_WORDS: Record<ServedOwed["why"], string> = {
     looked: "was on the person's screen less than half an hour ago",
-    owed: "is still owed to the person: they have not acted on it since it was put before them",
+    owed: "stands in a panel: it holds its workspace until it is deleted or a newer version is served from elsewhere",
   };
   /**
    * THE ONE READ OF WHAT A WORKSPACE SERVES THAT HOLDS IT, in words, or
    * nothing: a stage running in it (`stageRuns`: a preview's server or a
    * sheet in use, which sleeps half an hour after its last use), an
-   * artifact it serves still owed ({@link owedFrom}), or a preview being
-   * made from it. A row alone holds nothing: an artifact that asks nothing
-   * of anyone is kept up only while it is used, and once its workspace goes
-   * it stays in its lists, saying so. The hub keeps awake only what waits
-   * on the person (artifacts service `keepWaitingUp`).
+   * artifact it serves standing in a panel ({@link owedFrom}: until it is
+   * deleted or its source moves), or a preview being made from it. A
+   * draft, a reading, a verifier's material or a page's media alone holds
+   * nothing, and once its workspace goes it stays in its lists, saying so.
+   * The hub keeps awake only what waits on the person (artifacts service
+   * `keepWaitingUp`).
    */
   const servedHold = (workspace: WorkspaceRow): string | undefined => {
     const stage = stageRuns(workspace.id, workspace.machineId);

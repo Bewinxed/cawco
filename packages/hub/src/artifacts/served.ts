@@ -15,9 +15,9 @@ import type { ArtifactRow } from "../db/artifacts";
 
 /**
  * An artifact a workspace serves that its retirement still waits on, and
- * why (`servedOwed`): the person is still owed it or a page showing it
- * (`owed`: not acted on since it was put before them), or it is a folder preview he
- * looked at within the half hour a stage stays up unused (`looked`).
+ * why (`servedOwed`): it, or a decision page showing it, stands in a panel
+ * (`owed`: service.ts `owedToPerson`), or it is a folder preview he looked
+ * at within the half hour a stage stays up unused (`looked`).
  */
 export interface ServedOwed {
   row: ArtifactRow;
