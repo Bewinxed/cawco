@@ -186,6 +186,8 @@ interface Placed extends Box {
   /** Against the container, where a copy of it would stand. */
   cx: number;
   cy: number;
+  /** The element it stood in, as it was placed: the grid a copy of it takes its columns from (`columnsOf`). */
+  parent: HTMLElement | null;
   /** The nearest marked ancestor `x` and `y` are read against, or the container. */
   ref: HTMLElement;
 }
@@ -532,6 +534,7 @@ function placesIn(node: HTMLElement): Map<HTMLElement, Placed> {
         y: box.y - origin.y,
         cx: box.x,
         cy: box.y,
+        parent: element.parentElement,
         ref,
       });
     }
@@ -727,60 +730,128 @@ function arrival(
 }
 
 /**
- * A grid container's columns as its rows are drawn on them: its own track
- * sizes, or, where it takes its columns from a grid around it (`subgrid`),
- * that grid's, when they run its whole content width. Its content box's
- * start and width, px, against its padding edge. Read with the places, in
- * the change's read (`plan`); none for a container that is no grid, or a
- * subgrid of part of the grid around it.
+ * The columns a row that left was drawn on, as a copy of it is drawn on
+ * them: the tracks of the grid it stood in that its box ran across, px
+ * each, and that grid's gap between them. A grid that takes its columns
+ * from one around it (`subgrid`) is read off that one.
  */
 interface Columns {
   gap: string;
-  start: number;
   tracks: string;
-  width: number;
 }
 
-function columnsOf(node: HTMLElement): Columns | undefined {
-  const own = getComputedStyle(node);
-  if (!own.display.endsWith("grid")) {
-    return;
-  }
-  const start = Number.parseFloat(own.paddingInlineStart) || 0;
-  const width =
-    node.clientWidth - start - (Number.parseFloat(own.paddingInlineEnd) || 0);
-  let grid: CSSStyleDeclaration = own;
-  for (
-    let at: HTMLElement | null = node;
-    at && grid.gridTemplateColumns.startsWith("subgrid");
-    grid = getComputedStyle(at)
-  ) {
-    at = at.parentElement;
-    if (!at) {
-      return;
+/** A grid's tracks against the container: where each starts and how wide it is, px, and its gap. */
+interface Lines {
+  gap: number;
+  tracks: { size: number; start: number }[];
+}
+
+/** A resolved track list's sizes, its line names left out; none for one that is not all lengths. */
+function sizesOf(list: string): number[] | undefined {
+  const sizes = list
+    .replace(/\[[^\]]*\]/gu, " ")
+    .trim()
+    .split(/\s+/u)
+    .map(Number.parseFloat);
+  return sizes.length > 0 && !sizes.some(Number.isNaN) ? sizes : undefined;
+}
+
+/**
+ * The tracks each departing row ran across in the grid it stood in
+ * ({@link Columns}), read in the change's read (`plan`), every grid once.
+ * A row stands in a copy of its own columns only where they run its box
+ * edge to edge: a row in no grid, in a grid laid right to left, or across
+ * tracks that moved since it was placed, leaves as its box alone.
+ */
+function columnsOf(
+  node: HTMLElement,
+  departures: readonly [HTMLElement, Placed, unknown][]
+): Map<HTMLElement, Columns> {
+  const columns = new Map<HTMLElement, Columns>();
+  const grids = new Map<HTMLElement, Lines | null>();
+  let frame: { left: number; scale: number } | undefined;
+  const linesOf = (parent: HTMLElement): Lines | null => {
+    const own = getComputedStyle(parent);
+    if (!own.display.endsWith("grid") || own.direction === "rtl") {
+      return null;
+    }
+    let grid = parent;
+    let style = own;
+    while (style.gridTemplateColumns.startsWith("subgrid")) {
+      const up = grid.parentElement;
+      if (!up) {
+        return null;
+      }
+      grid = up;
+      style = getComputedStyle(up);
+    }
+    const sizes = sizesOf(style.gridTemplateColumns);
+    if (!sizes) {
+      return null;
+    }
+    if (!frame) {
+      const box = node.getBoundingClientRect();
+      frame = {
+        left: box.left,
+        scale: box.width > 0 ? node.offsetWidth / box.width : 1,
+      };
+    }
+    const gap = Number.parseFloat(style.columnGap) || 0;
+    let start =
+      (grid.getBoundingClientRect().left - frame.left) * frame.scale -
+      node.clientLeft +
+      node.scrollLeft +
+      grid.clientLeft +
+      (Number.parseFloat(style.paddingLeft) || 0);
+    const tracks = sizes.map((size) => {
+      const track = { size, start };
+      start += size + gap;
+      return track;
+    });
+    return { gap, tracks };
+  };
+  for (const [element, was] of departures) {
+    const parent = was.parent;
+    if (!parent?.isConnected) {
+      continue;
+    }
+    let lines = grids.get(parent);
+    if (lines === undefined) {
+      lines = linesOf(parent);
+      grids.set(parent, lines);
+    }
+    const across = lines?.tracks.filter(
+      (track) =>
+        track.start >= was.cx - 1 &&
+        track.start + track.size <= was.cx + was.w + 1
+    );
+    const first = across?.[0];
+    const last = across?.at(-1);
+    if (
+      lines &&
+      across &&
+      first &&
+      last &&
+      Math.abs(first.start - was.cx) <= 1 &&
+      Math.abs(last.start + last.size - (was.cx + was.w)) <= 1
+    ) {
+      columns.set(element, {
+        tracks: across.map((track) => `${track.size}px`).join(" "),
+        gap: `${lines.gap}px`,
+      });
     }
   }
-  const tracks = grid.gridTemplateColumns;
-  const sizes = tracks.split(" ").map(Number.parseFloat);
-  if (sizes.some(Number.isNaN)) {
-    return;
-  }
-  const gap = Number.parseFloat(grid.columnGap) || 0;
-  const runs = sizes.reduce((sum, size) => sum + size, 0);
-  if (Math.abs(runs + gap * (sizes.length - 1) - width) > 1) {
-    return;
-  }
-  return { tracks, gap: `${gap}px`, start, width };
+  return columns;
 }
 
 /**
  * A copy of what left, where it was drawn, closing or shrinking away. A row
- * across a grid's every column stands in a grid of the container's columns
- * (`columns`), the container's content width wide, so a row drawn on them (a subgrid, or
- * placed by its column lines) is drawn on them still: taken out of the
- * container's flow alone, a subgrid row had no grid to take columns from,
- * its tracks fell to none, and every cell stacked in one column the row's
- * whole width (a repository's description drawn under its lock and time).
+ * that stood in a grid stands in a grid of the columns it ran across
+ * (`columns`), so a row drawn on them (a subgrid, or cells placed by
+ * column lines) is drawn on them still: taken out of its grid's flow alone,
+ * a subgrid row had no grid to take columns from, its tracks fell to none,
+ * and every cell stacked in one column the row's whole width (a
+ * repository's description drawn under its lock and time).
  */
 function departure(
   node: HTMLElement,
@@ -805,27 +876,26 @@ function departure(
     transform: "none",
   };
   let copy = clone;
-  // A row across every column: one across part of them (a card in a grid
-  // of cards) would be placed in the copy's first cell, not its own.
-  if (columns && Math.abs(was.w - columns.width) <= 1) {
+  if (columns) {
+    // The copy is the grid, the row its one cell across every track.
     copy = document.createElement("div");
     copy.setAttribute("aria-hidden", "true");
     copy.inert = true;
-    Object.assign(copy.style, place, {
-      display: "grid",
-      gridTemplateColumns: columns.tracks,
-      columnGap: columns.gap,
-      left: `${columns.start + at.x}px`,
-      width: `${columns.width}px`,
+    copy.style.display = "grid";
+    copy.style.gridTemplateColumns = columns.tracks;
+    copy.style.columnGap = columns.gap;
+    Object.assign(clone.style, {
+      gridColumn: "1 / -1",
+      gridRow: "1",
+      margin: "0",
+      transform: "none",
     });
-    Object.assign(clone.style, { margin: "0", transform: "none" });
     copy.append(clone);
-  } else {
-    Object.assign(copy.style, place, {
-      left: `${was.cx + at.x}px`,
-      width: `${was.w}px`,
-    });
   }
+  Object.assign(copy.style, place, {
+    left: `${was.cx + at.x}px`,
+    width: `${was.w}px`,
+  });
   node.append(copy);
   const done = () => copy.remove();
   // A skeleton row goes in the skeleton's reveal where it stood; at once
@@ -1415,7 +1485,7 @@ class Reflow {
       }
     }
     const departures = this.#departures(placed, now, scrolled, seenNow);
-    const columns = departures.length > 0 ? columnsOf(this.#node) : undefined;
+    const columns = columnsOf(this.#node, departures);
     // Every style the writes need, in one pass. An element under a slide or
     // its hold has its own transforms as the slide began (`Move.own`,
     // `Move.bare`): read with its hold dropped instead, the drop laid the
@@ -1497,7 +1567,7 @@ class Reflow {
       still,
     }: {
       arrivals: [HTMLElement, number][];
-      columns: Columns | undefined;
+      columns: Map<HTMLElement, Columns>;
       departures: [HTMLElement, Placed, { x: number; y: number }][];
       now: Map<HTMLElement, Placed>;
       own: Transforms[];
@@ -1571,7 +1641,7 @@ class Reflow {
       arrival(element, still, height, room, revealing);
     }
     for (const [element, was, at] of departures) {
-      departure(this.#node, element, was, at, still, columns);
+      departure(this.#node, element, was, at, still, columns.get(element));
     }
     this.#placed = now;
   }
