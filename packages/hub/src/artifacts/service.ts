@@ -991,6 +991,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return show;
     },
     store,
+    get folderStamped() {
+      return folderStamped;
+    },
     get versionMoved() {
       return versionMoved;
     },
@@ -1196,7 +1199,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     kept: (id) => store.hasFolder(id),
     machineHome: deps.machineHome,
     machineName: (machineId) => machineOf({ machineId }),
-    write: (id, files) => store.writeFolder(id, files),
+    write: (id, files) => {
+      store.writeFolder(id, files);
+      folderStamped(id);
+    },
   });
 
   /**
@@ -2356,22 +2362,38 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * Folder preview `id`'s files as they stand now told to every page of it
+   * open: its doc's `folderKey` set to their key (page-store.ts
+   * `folderKey`), and each open page that joined its doc loads again when
+   * it moves (preview overlay/page.ts `filesMoved`): a panel's, an artifact
+   * tab's, and one opened alone at its `artifact_browse` address. A decision
+   * page's Preview of it loads again from its revision (service
+   * `versionMoved`).
+   */
+  const folderStamped = (id: string): void => {
+    detach(
+      store.folderKey(id).then((key) => {
+        if (key !== null && getMeta(docs.doc(id), "folderKey") !== key) {
+          docs.transact(id, "hub", (doc) => docMeta(doc).set("folderKey", key));
+        }
+      }),
+      "telling a folder preview's pages its files moved"
+    );
+  };
+
+  /**
    * Folder preview `row`'s files written where the hub serves them, in
-   * place (preview-folder.ts); with `told`, each panel showing it loads
-   * them again (deps `filesMoved`), as one does when its source moves:
-   * what a write over files the person may have open does. A held next
-   * version's files reach no panel until it is opened (versions.ts
+   * place (preview-folder.ts), and every open page of it told
+   * ({@link folderStamped}). A held next version's are its own, under its
+   * own id: they reach the artifact's pages when it is opened (versions.ts
    * `promote`).
    */
   const folderWritten = (
     row: ArtifactRow,
-    files: readonly DesignFile[],
-    told: boolean
+    files: readonly DesignFile[]
   ): void => {
     store.writeFolder(row.id, files);
-    if (told && row.heldFor === null) {
-      deps.filesMoved(row.id);
-    }
+    folderStamped(row.id);
   };
 
   /**
@@ -2411,14 +2433,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return placement;
       }
       if (at.folder) {
-        // Made again in place over a folder it showed: its source stays, so
-        // the files alone tell its panels; one from a port moved its source.
-        const { before, holding, row } = placement;
-        folderWritten(
-          row,
-          at.folder,
-          holding === null && before !== undefined && "dir" in before.source
-        );
+        folderWritten(placement.row, at.folder);
       }
       const served: { placement: Placement; stage: StageState | undefined } = {
         stage: authors,
@@ -4715,7 +4730,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           }),
           row.id
         );
-        folderWritten(moved, folder.files, true);
+        folderWritten(moved, folder.files);
         versionMoved(moved);
         return read(moved, undefined, ownersRead);
       });

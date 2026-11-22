@@ -143,6 +143,14 @@ export interface DocMeta {
   errorsHeard: string[];
   /** What a browser met drawing a page or preview at its revision now (core page-faults.ts, hub `pageFault`). */
   faults: PageFaultsKept;
+  /**
+   * A folder preview's: the key of its files as the hub keeps them now
+   * (preview proxy.ts `folderKey`), written at each write of them (hub
+   * artifacts service `folderWritten`). Every open page of it that joined
+   * its doc loads again when it moves (preview overlay/page.ts
+   * `filesMoved`).
+   */
+  folderKey: string;
   /** A held next version: its artifact's seq when it was forked (hub `holdNext`), after which the person's answers there are newer than it (hub `promote`). */
   forkedAt: number;
   /** An artifact handed to its parent and not opened since (hub `handOver`). */
@@ -234,6 +242,7 @@ export const META_WRITERS = {
   drawnShapes: "hub",
   errorsHeard: "hub",
   faults: "hub",
+  folderKey: "hub",
   forkedAt: "hub",
   handed: "hub",
   heldNote: "person",

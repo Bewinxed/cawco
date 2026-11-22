@@ -216,12 +216,6 @@ export interface ArtifactServiceDeps {
   /** Whether a session has ended or takes no input now (artifacts/taker.ts `takesNoInput`), so its marks go to its parent, else its project's Caw. */
   ended: (instance: InstanceRow) => boolean;
   /**
-   * Folder preview `id`'s files written over in place while its source
-   * stays (preview-folder.ts): each panel showing it loads it again, as a
-   * move of its source makes it (server.ts `onSourceMoved`).
-   */
-  filesMoved: (id: string) => void;
-  /**
    * Whether a session's asks are over for good (Needs you's rule 4): it
    * finished, its workspace was archived or moved on, its conversation is
    * gone, or nothing can give it a turn again. A machine away is not.

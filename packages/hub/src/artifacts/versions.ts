@@ -22,6 +22,8 @@ export interface VersionsContext {
   deps: ArtifactServiceDeps;
   discard: (row: ArtifactRow) => void;
   docs: ArtifactServiceDeps["docs"];
+  /** Folder preview `id`'s files as they stand now told to every page of it open (service `folderStamped`). */
+  folderStamped: (id: string) => void;
   holder: (row: ArtifactRow) => InstanceRow | undefined;
   letGoHeadless: (id: string) => void;
   namedFor: (
@@ -403,14 +405,14 @@ export const createVersions = (ctx: VersionsContext) => {
     // What serves it is the version's: its one write, which the preview
     // that serves its origin follows, and which lets the server it moved
     // off go once nothing shows it (server.ts `onSourceMoved`). A folder's
-    // files the version took are no move of its source: each panel showing
-    // it loads them again all the same.
-    const moved = db.resource(row.id, {
+    // files the version took (`takeVersion`) are no move of its source:
+    // every open page of it is told them all the same.
+    db.resource(row.id, {
       machineId: next.machineId,
       source: next.source,
     });
-    if ("dir" in next.source && moved?.from === moved?.to) {
-      deps.filesMoved(row.id);
+    if ("dir" in next.source) {
+      ctx.folderStamped(row.id);
     }
     // What the maker named it with the version: its title, what the person
     // does there and the head's ask, as a create in place would write them.

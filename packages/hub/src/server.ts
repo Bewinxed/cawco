@@ -5055,8 +5055,6 @@ export const createServer = (
     tree: (instance) => treeSessions(db, instance),
     machines: () => db.namedMachines(),
     machineHome: (machineId) => db.machineHome(machineId),
-    // A folder preview's files written over: each panel showing it loads again, as a move of its source has it.
-    filesMoved: (id) => loadShownAgain(id),
     hubMachine: () => ownMachineIdRead,
     // A page is the hub's: its target names no machine.
     open: async (artifact, panel = artifact.instanceId, again = false) => {

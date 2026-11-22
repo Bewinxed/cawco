@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { DESIGN_FOLDER, type DesignMoved } from "@cawco/core/stage";
 import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
 import { ArtifactThumbnailSchema } from "@cawco/core/stored-shapes";
+import { folderKey } from "@cawco/preview/proxy";
 import {
   type BuiltProgram,
   keptImagePaths,
@@ -132,6 +133,16 @@ export const createPageStore = (root: string) => {
 
     /** Whether folder preview `id` has its files here. */
     hasFolder: (id: string): boolean => existsSync(previewFolderOf(root, id)),
+
+    /**
+     * The key of folder preview `id`'s files as they stand here (preview
+     * proxy.ts `folderKey`, the key its served pages' files are addressed
+     * at); null when it has none.
+     */
+    folderKey: async (id: string): Promise<string | null> =>
+      existsSync(previewFolderOf(root, id))
+        ? await folderKey(previewFolderOf(root, id))
+        : null,
 
     /** The pictures decision page `id` shows, by the name each Image of its kept program `program` gives. */
     shownPictures: (id: string, program: string): Map<string, Uint8Array> => {

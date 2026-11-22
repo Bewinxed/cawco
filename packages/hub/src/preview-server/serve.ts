@@ -699,9 +699,10 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
    * it (`artifacts/<id>/folder/`, artifacts/preview-folder.ts), as they are:
    * a path that ends at a folder answered with its index.html, a file at
    * the folder's key (core `versionAssets`) kept for good and any other
-   * address never kept, a page with its overlay and its own files written
-   * to the folder's key, a frame's load of a file that is no page answered
-   * with CawCo's viewer of it (core file-viewer.ts), and a document's load
+   * address never kept, a page with its overlay, its tag naming the
+   * artifact, and its own files written to the folder's key, a frame's load
+   * of a file that is no page answered with CawCo's viewer of it (core
+   * file-viewer.ts), and a document's load
    * of a file the folder lacks with CawCo's own error page. A path that
    * leaves the folder, by `..` or by a link, is refused. A row with no
    * files here is one a hub from before it kept them made: its machine is
@@ -737,7 +738,12 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     if (!file.type.startsWith("text/html")) {
       return new Response(file, { headers });
     }
-    const page = injectOverlay(await file.text());
+    // Its overlay's tag names the artifact, so a page opened alone joins its
+    // doc (preview overlay/page.ts) and loads again when its files move.
+    const page = injectOverlay(await file.text(), {
+      artifact: row.id,
+      kind: "preview",
+    });
     return new Response(
       versioned === null
         ? versionAssets(page, await folderKey(root), "/", url.pathname)
