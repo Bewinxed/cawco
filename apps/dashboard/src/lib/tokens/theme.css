@@ -1149,6 +1149,8 @@
   --spacing-c-board-col-min: 15rem;
   /* A task board column's widest, and the open Archived column's cap. */
   --spacing-c-board-col-max: 22rem;
+  /* An outcome's tile on the Routines view, at its narrowest: three to a desk's row, one to a phone's. */
+  --spacing-c-outcome-tile: 20rem;
   /* A field edited where it stands (the kit's `inline` input and `prose` textarea): its inline padding, so that inside its 1px edge its words stand where a boxed row's words stand (a row's space-3 inset), and its hover fill and focus edge are its own box, never past it into a neighbour or its container's padding. */
   --spacing-c-field-inline-inset: calc(
     var(--spacing-space-3) - var(--border-width)
