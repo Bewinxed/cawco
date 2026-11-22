@@ -1,5 +1,15 @@
-
 # Design
+
+## System
+- One source of truth: `apps/dashboard/src/lib/tokens/theme.css` declares every design token once, by hand, in two layers inside Tailwind's `@theme`.
+- **Layer 1 (primitive scales)** holds the raw vocabulary: warm neutrals (`neutral-1..9`, `11..12`), coral (`coral-3`, `9..11`), eight perceptually even categorical marks (`mark-1..8`), three brand art pigments, one 4px spacing unit and rhythm ladder (`space-row`, `space-1..6`, `space-8`), three house faces (Figtree, JetBrains Mono, Nunito wordmark) with two UI weights (`normal` 400, `medium` 500 — never above 500), six text sizes, five leadings, three trackings, seven radii (`hair` → `pill`), seven durations (`step` → `breath`), four curves (`ease-out`, `ease-in-out`, `ease-drawer`, `ease-crossfade`), three breakpoints (`phone`, `desk`, `wide`), six container tiers (`xs` → `wide`), and six z-layers (`base` → `top`).
+- **Layer 2 (semantic roles)** binds values to jobs, never to features, across light and dark schemes:
+  - **Surfaces**: `surface-page` for chrome and shell ground; `surface-raised` for cards, panels and controls; `surface-recess` for recessed wells and code; `surface-sunk` for grooves and inactive tabs; `surface-shelf` for tab strips; `surface-hover` and `surface-pressed` for pointer states; `surface-glass` and `scrim` for translucent chrome.
+  - **Inks**: `ink-strong`, `ink-muted`, `ink-subtle`, and `on-ink`. Every text ink holds ≥4.5:1 WCAG 2.2 AA contrast on the surfaces it sits on.
+  - **Borders**: `border-hairline` for quiet dividers; `border-control` for cards and menus; `border-strong` (≥3:1) for interactive frames and inputs; `seam` for a coral divider.
+  - **Accent & status**: `brand-solid` / `brand-ink` / `brand-wash` and `selected-bg` mark brand and selection; `action-solid` / `action-hover` / `on-action` belong to the primary act; `focus-ring` marks keyboard focus. Four status triads (`live`, `attn`, `done`, `fail` × `bg` / `ink` / `glyph`) mean status only.
+  - **Sizes, type & elevation**: `icon-sm/md/lg`, `control-xs/sm/md/lg`, `row` / `row-compact` (`row` steps to 44px on coarse pointers or `<640px`), and `measure` / `measure-short`. Eight type roles (`type-meta`, `label`, `body`, `row`, `title`, `kpi`, `code`, `caps`) and four elevations (`shadow-xs` → `lg`, softly ringed at night).
+- **Rules for choosing**: Pick a Layer 2 semantic role first; use Layer 1 directly only for the spacing ladder, categorical marks (`mark-1..8`), or brand art. Never add feature-named tokens or component-private dimensions to `theme.css` — express one-off component geometry on the 4px `--spacing` scale inside the component or `design.css`. Choose duration by scale of change (`step` stagger, `control` micro-state, `fade` opacity/exit, `panel` surface travel, `settle` reveal, `loop`/`breath` continuous) and curve by motion (`ease-out` entrances/exits, `ease-in-out` on-screen travel, `ease-drawer` sheets/popovers, `ease-crossfade` opacity swaps).
 
 ## Flow
 - A flow happens where the person's attention already is, and the thing they acted on shows its own result.
@@ -21,7 +31,7 @@
 ## Colour, focus and type
 - Colour appears only where it means something: the act, status, identity, focus, and data past a threshold.
 - Coral is the act: one per view, on the act the view is for. It also marks what is selected, focused or checked. Advice wears a badge; status wears a status hue.
-- Crimson, yellow, olive and blue mean status. Identity hues tell things apart and mean nothing else.
+- Crimson, yellow, olive and blue mean status. Identity hues and categorical marks (`mark-1..8`) tell things apart and mean nothing else.
 - Status reads by glyph, then word, then hue.
 - The focus ring means focus. A text field shows focus by its caret and its frame's edge, with no ring.
 - The option chip is the one control that picks an answer. A setting that cannot change where it is shown is the same chip, sunk.
@@ -71,6 +81,7 @@
 - A phone or a finger: `mobile-native`.
 
 ## Where the rest is
-- Tokens: `apps/dashboard/src/lib/tokens/theme.css`, Tailwind's `@theme`; a new value is added there.
-- Components: `apps/dashboard/src/lib/components/ui`.
+- Tokens: `apps/dashboard/src/lib/tokens/theme.css`, Tailwind's `@theme`; add only genuinely shared scale steps or semantic roles there.
+- Components: `apps/dashboard/src/lib/components/ui` (`Dialog` covers standard and alert dialogs, `FluidTabs` covers folder and column tabs, `IconToggle` covers binary icon switches).
+- Board: `apps/dashboard/src/lib/design-board/`, showing primitive scales, semantic roles, and core kit components in both schemes.
 - Checks: `bun run check`.
