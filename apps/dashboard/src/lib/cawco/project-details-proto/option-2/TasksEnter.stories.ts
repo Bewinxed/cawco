@@ -29,3 +29,8 @@ export const SyncedWithGitHub = {
 export const SettingUpGitHub = {
   args: { opening: "github" },
 };
+
+/** Pressed on Linear: its setup open, a sign-in and a team to pick. */
+export const SettingUpLinear = {
+  args: { opening: "linear" },
+};
