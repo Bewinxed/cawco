@@ -173,6 +173,7 @@
     </h3>
     <span
       class="ms-auto flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
+      data-box
     >
       {#if rules !== null}
         <span class="type-meta text-ink-muted num">

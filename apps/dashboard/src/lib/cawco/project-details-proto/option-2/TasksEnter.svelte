@@ -1,6 +1,5 @@
 <script lang="ts">
   import { repoIdentity } from "@cawco/core/protocol";
-  import { untrack } from "svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import RepoPicker from "#lib/cawco/spawn/RepoPicker.svelte";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
@@ -75,7 +74,7 @@
   const LEAVE_ALONE = "__leave__";
 
   /** The tie's setup standing open, for GitHub or Linear: the pick shows it from the press. */
-  let setupHome = $state<"github" | "linear" | null>(untrack(() => opening));
+  let setupHome = $derived<"github" | "linear" | null>(opening);
   let connectionPick = $state<string | null>(null);
   /** The Linear team picked; null for the first. */
   let teamPick = $state<string | null>(null);

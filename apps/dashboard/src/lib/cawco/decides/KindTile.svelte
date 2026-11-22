@@ -15,6 +15,7 @@
   import type { Kind, Member } from "@cawco/core/decides";
   import type { Snippet } from "svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
@@ -184,16 +185,18 @@
     </Popover.Root>
   </div>
   {#if own}
-    <button
-      class="self-center type-meta text-brand-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-brand-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid aria-disabled:text-ink-muted"
-      aria-disabled={asking !== null || undefined}
+    <Button
+      class="self-center"
+      label={said.giveBack}
       onclick={() => {
         if (asking === null) {
           onputback();
         }
       }}
-      type="button">{said.giveBack}</button
-    >
+      size="xs"
+      tone="quiet"
+      variant="ghost"
+    />
   {/if}
   <RowFault
     again={fault?.again}
