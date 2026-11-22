@@ -47,10 +47,11 @@
  * known by its path ({@link layerOf}), and retires as a copy of its own does.
  *
  * The change set ({@link changesOf}) is the upper on Linux and the clone's
- * differences from its base on the Mac, the root `node_modules` and every
- * path the boundary denies the delegate writing left out
- * ({@link notCarried}): landing writes into F only what the delegate wrote,
- * and a denied path is F's own for the workspace's whole life. A path the
+ * differences from its base on the Mac, the root `node_modules`, every
+ * path the boundary denies the delegate writing and every path a harness
+ * writes for itself left out ({@link notCarried}): landing writes into F
+ * only what the delegate wrote, and a path left out is F's own for the
+ * workspace's whole life. A path the
  * delegate changed that F changed too since the start is a conflict
  * ({@link conflictsOf}): on Linux by F's ctime past the start, on the Mac by
  * F against the base; either way both versions are shown, the person's and
@@ -76,7 +77,9 @@ import { basename, dirname, join, relative } from "node:path";
 import { cloneDenies } from "@cawco/core/clone-denies";
 import { makeFolder } from "@cawco/core/folders";
 import { claudeHome } from "@cawco/core/paths/claude";
+import { piAgentDir } from "@cawco/core/paths/harnesses";
 import { credentialStores } from "@cawco/core/paths/host-policy";
+import { xdgDataHome } from "@cawco/core/paths/roots";
 import {
   workspacePolicyFile,
   workspacesDir,
@@ -304,22 +307,113 @@ const mountsUnder = (
   };
 };
 
+/** The host's cache dir as a harness on this machine reads it: `XDG_CACHE_HOME`, else the platform's own under the home. */
+const hostCacheDir = (): string =>
+  process.platform === "darwin"
+    ? join(homedir(), "Library", "Caches")
+    : process.env.XDG_CACHE_HOME || join(homedir(), ".cache");
+
+/** The host's state dir as a harness on this machine reads it: `XDG_STATE_HOME`, else `~/.local/state`. */
+const hostStateDir = (): string =>
+  process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state");
+
+/** `paths` with each one that lies under another of them gone. */
+const outermost = (paths: readonly string[]): string[] =>
+  [...new Set(paths)].filter(
+    (path) => !paths.some((other) => other !== path && within(path, other))
+  );
+
 /**
  * What every process of the view reaches as the host has it, never layered,
  * where F holds it: CawCo's home (the workspace's own state, its upper among
- * it, its sessions' accounts) and the harnesses' homes, whose transcripts and
- * settings the agent reads on the host.
+ * it, its sessions' accounts, Codex's homes, OpenCode's view homes) and each
+ * harness's own homes, caches and logs, whose transcripts and settings the
+ * agent reads on the host. Read from each harness's code and from a start of
+ * each in a scratch home, every path listed:
+ * - Claude Code: its config dir ({@link claudeHome}; an account's is under
+ *   `.cawco`), and its cache, env-paths' `claude-cli` (`$XDG_CACHE_HOME`, else
+ *   `~/.cache`, on macOS `~/Library/Caches`, then `claude-cli-nodejs`), where
+ *   it logs each MCP server of each folder (`<folder>/mcp-logs-<server>/`).
+ * - OpenCode: its config, data, state and cache dirs (a view's server keeps
+ *   its data under `.cawco` instead, core paths/harnesses.ts
+ *   `opencodeViewHome`).
+ * - pi: `.pi`, and its agent dir wherever `PI_CODING_AGENT_DIR` puts it (core
+ *   paths/harnesses.ts `piAgentDir`). pi runs in the agent itself, on the
+ *   host; only its tools run in the view.
+ * - Codex: its homes are under `.cawco` (core paths/harnesses.ts
+ *   `codexAccountHome`), and the machine's own `~/.codex` is a credential
+ *   store the boundary denies ({@link leftOutOf}).
+ * What a harness writes into another program's place stays in the view
+ * instead ({@link HARNESS_FILES}).
  */
-const PASSTHROUGH = (): string[] => [
-  claudeHome(),
-  ...[
-    ".cawco",
-    ".config/opencode",
-    ".local/share/opencode",
-    ".local/state/opencode",
-    ".cache/opencode",
-    ".pi",
-  ].map((name) => join(homedir(), name)),
+const PASSTHROUGH = (): string[] =>
+  outermost([
+    claudeHome(),
+    join(hostCacheDir(), "claude-cli-nodejs"),
+    ...[
+      ".cawco",
+      ".config/opencode",
+      ".local/share/opencode",
+      ".local/state/opencode",
+      ".cache/opencode",
+      ".pi",
+    ].map((name) => join(homedir(), name)),
+    piAgentDir(),
+  ]);
+
+/** The name of Claude Code's manifest for its browser extension's native host. */
+const CLAUDE_BROWSER_MANIFEST =
+  "com.anthropic.claude_code_browser_extension.json";
+
+/**
+ * Where Claude Code writes {@link CLAUDE_BROWSER_MANIFEST}, under the home:
+ * each Chromium browser's `NativeMessagingHosts` folder it knows, made if
+ * absent and written whenever the manifest there differs from its own (its
+ * `nativeMessagingPath`s for Chrome, Brave, Arc, Edge, Chromium, Vivaldi
+ * and Opera, Claude Code 2.1.330). The manifest names the account's own
+ * launcher, so a session on another account than the host's last rewrites
+ * every one.
+ */
+const CLAUDE_BROWSER_HOSTS =
+  process.platform === "darwin"
+    ? [
+        "Google/Chrome",
+        "BraveSoftware/Brave-Browser",
+        "Arc/User Data",
+        "Microsoft Edge",
+        "Chromium",
+        "Vivaldi",
+        "com.operasoftware.Opera",
+      ].map((name) => join("Library", "Application Support", name))
+    : [
+        "google-chrome",
+        "BraveSoftware/Brave-Browser",
+        "microsoft-edge",
+        "chromium",
+        "vivaldi",
+        "opera",
+      ].map((name) => join(".config", name));
+
+/**
+ * What a harness writes under the home for itself that is no home of its
+ * own, but another program's place or the person's: kept in the view, where
+ * the harness reads it back, and never in the change set
+ * ({@link leftOutOf}), so a workspace never rewrites the host's copy. Not
+ * passed through either: the delegate's shell may write the folder, and
+ * through a bind it would write the host's own.
+ * - Claude Code's browser-extension manifests ({@link CLAUDE_BROWSER_HOSTS}).
+ * - Claude Code's native install, which its updater writes at start: its
+ *   versions (`$XDG_DATA_HOME/claude/versions`, else `~/.local/share`), their
+ *   locks (`$XDG_STATE_HOME/claude/locks`) and the launcher it links
+ *   (`~/.local/bin/claude`).
+ */
+const HARNESS_FILES = (): string[] => [
+  ...CLAUDE_BROWSER_HOSTS.map((host) =>
+    join(homedir(), host, "NativeMessagingHosts", CLAUDE_BROWSER_MANIFEST)
+  ),
+  join(xdgDataHome(), "claude"),
+  join(hostStateDir(), "claude"),
+  join(homedir(), ".local", "bin", "claude"),
 ];
 
 /**
@@ -1370,19 +1464,29 @@ const isOpaque = (path: string): boolean => {
 };
 
 /**
- * Every path of F, by its path from F, that workspace `id`'s boundary
- * denies the delegate writing, read from the one list the boundary is built
- * from: its policy's write denies (core workspace-policy.ts
- * `workspacePolicy`), as the boundary last ran with them (its `policy.json`)
- * and as they stand now, each credential store as named and as resolved
- * (core paths/host-policy.ts `credentialStores`, which the policy denies
- * already, so a store the policy gains or loses since is denied either way),
- * and CawCo's and srt's own paths at F (core clone-denies.ts `cloneDenies`).
- * Not the policy's read denies: they hold the home itself, which the policy
- * reads back where the workspace works. A copy's (macOS) clone-side denies
- * are read at the copy, F's at F. `""` when F itself lies in one.
+ * Every path of F, by its path from F, that workspace `id`'s change set
+ * never carries, written or deleted ({@link notCarried}, {@link sparing}):
+ * - each one its boundary denies the delegate writing, read from the one
+ *   list the boundary is built from: its policy's write denies (core
+ *   workspace-policy.ts `workspacePolicy`), as the boundary last ran with
+ *   them (its `policy.json`) and as they stand now, each credential store as
+ *   named and as resolved (core paths/host-policy.ts `credentialStores`,
+ *   which the policy denies already, so a store the policy gains or loses
+ *   since is denied either way), and CawCo's and srt's own paths at F (core
+ *   clone-denies.ts `cloneDenies`). Not the policy's read denies: they hold
+ *   the home itself, which the policy reads back where the workspace works.
+ *   Whatever is there is the sandbox's own mount point, a stand-in, or its
+ *   removal, and F's own for the workspace's whole life.
+ * - each one under F a harness writes for itself: its homes, caches and
+ *   logs ({@link PASSTHROUGH}), the host's own where the host has them, the
+ *   view's alone where it has not, and what it writes into another
+ *   program's place ({@link HARNESS_FILES}), the view's alone. Not where F
+ *   is one of them or lies in one: a workspace of `~/.config/opencode` is
+ *   the delegate's work on it.
+ * A copy's (macOS) clone-side paths are read at the copy, F's at F. `""`
+ * when F itself lies in one.
  */
-const deniedIn = async (id: string, layer: Layer): Promise<string[]> => {
+const leftOutOf = async (id: string, layer: Layer): Promise<string[]> => {
   const [then, now] = await Promise.all([
     readRecord(workspacePolicyFile(id), PolicySchema),
     workspacePolicy({ id, path: layer.path }),
@@ -1394,20 +1498,25 @@ const deniedIn = async (id: string, layer: Layer): Promise<string[]> => {
     ...cloneDenies(layer.folder).map((deny) => deny.path),
   ];
   const roots = [...new Set([layer.folder, layer.path, now.clone])];
-  const denied = new Set<string>();
+  const left = new Set<string>();
   for (const path of paths) {
     for (const root of roots) {
       if (within(root, path)) {
-        denied.add("");
+        left.add("");
       } else if (within(path, root)) {
-        denied.add(relative(root, path));
+        left.add(relative(root, path));
       }
     }
   }
-  return [...denied];
+  for (const path of [...PASSTHROUGH(), ...HARNESS_FILES()]) {
+    if (path !== layer.folder && within(path, layer.folder)) {
+      left.add(relative(layer.folder, path));
+    }
+  }
+  return [...left];
 };
 
-/** Whether `rel` lies at or under one of `denied` ({@link deniedIn}). */
+/** Whether `rel` lies at or under one of `denied` ({@link leftOutOf}). */
 const atOrUnder = (rel: string, denied: readonly string[]): boolean =>
   denied.some(
     (path) => path === "" || rel === path || rel.startsWith(`${path}/`)
@@ -1415,10 +1524,11 @@ const atOrUnder = (rel: string, denied: readonly string[]): boolean =>
 
 /**
  * The paths the change set never carries, written or deleted, at or under
- * each: every path the boundary denies the delegate writing ({@link
- * deniedIn}: whatever is there in the upper or the copy is the sandbox's own
- * mount point, a stand-in, or its removal, never the delegate's work), and
- * the linked tree.
+ * each: every path the boundary denies the delegate writing and every path a
+ * harness writes for itself ({@link leftOutOf}: whatever is there in the
+ * upper or the copy is the sandbox's own mount point, a stand-in, its
+ * removal, or the harness's own, never the delegate's work), and the linked
+ * tree.
  */
 const notCarried =
   (denied: readonly string[]): ((rel: string) => boolean) =>
@@ -1450,8 +1560,8 @@ const heldAt = async (folder: string, rel: string): Promise<boolean> => {
 };
 
 /**
- * `changes` with nothing that would take from F a denied path it holds
- * ({@link deniedIn}): a delete of a folder above one becomes the deletes of
+ * `changes` with nothing that would take from F a path left out that it
+ * holds ({@link leftOutOf}): a delete of a folder above one becomes the deletes of
  * everything else in it, the denied path and the folders down to it kept;
  * a write there, a file or link put in place of that folder
  * ({@link putOne}), is left out.
@@ -1662,7 +1772,8 @@ const delegateFile = (layer: Layer, rel: string): string | undefined => {
  * Workspace `id`'s change set: every path of F the delegate wrote or
  * deleted, read on the host from its upper dirs (Linux) or its copy against
  * the base (macOS), with nothing at, under or holding a path its boundary
- * denies the delegate writing ({@link notCarried}, {@link sparing}). Every
+ * denies the delegate writing or a harness writes for itself
+ * ({@link leftOutOf}, {@link notCarried}, {@link sparing}). Every
  * reader of what a folder workspace holds reads it here: its landing
  * ({@link applyChanges}), its changes as shown ({@link readChanges}), and
  * its carry and holding as it closes (workspace.ts `carryChanged`,
@@ -1672,7 +1783,7 @@ export const changesOf = async (
   id: string,
   layer: Layer
 ): Promise<ChangedPath[]> => {
-  const denied = await deniedIn(id, layer);
+  const denied = await leftOutOf(id, layer);
   const skip = notCarried(denied);
   let candidates: ChangedPath[];
   if (layer.form === "overlay") {
