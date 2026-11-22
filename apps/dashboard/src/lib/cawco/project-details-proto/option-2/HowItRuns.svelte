@@ -240,7 +240,7 @@
         {refused}
       />
     {:else if section === "git"}
-      <RepoGit {hrefOf} {onchange} {onretry} {pending} {record} {refused} />
+      <RepoGit {onchange} {onretry} {pending} {record} {refused} />
     {:else if section === "account"}
       <AccountColumn
         {hrefOf}

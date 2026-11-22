@@ -139,7 +139,7 @@ export const howItRunsWords = {
     largeFilesAddress: "Server URL",
     largeFilesAddressPlaceholder: "https://lfs.example.com/project",
     largeFilesKey: "Sign-in key",
-    largeFilesNoKey: "Add a saved key to sign in here.",
+    addKey: "Add key",
   },
 
   account: {

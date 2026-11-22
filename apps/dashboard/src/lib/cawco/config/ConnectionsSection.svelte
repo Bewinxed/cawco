@@ -1,10 +1,6 @@
 <script lang="ts" module>
   import type { GhSignIn } from "@cawco/core/connections";
-  import {
-    CONNECTION_SERVICES,
-    type ConnectionService,
-    type ConnectionWay,
-  } from "@cawco/core/words/connections";
+  import { CONNECTION_SERVICES } from "@cawco/core/words/connections";
   import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
   import { hub } from "#lib/platform/hub.js";
   import {
@@ -12,21 +8,15 @@
     hubDone,
     refusedOrUnreached,
   } from "#lib/platform/hub-read.js";
-
-  /** One way the hub signs in to a service (core `ConnectionWay`). */
-  export type Way = ConnectionWay;
-  /** A service the page can start a connection to (core `CONNECTION_SERVICES`, where each one's sources are). */
-  export type Service = ConnectionService;
+  import {
+    type AppDraft,
+    emptyApp,
+    nameFor,
+    type Service,
+    type Way,
+  } from "./connection-form";
 
   export const SERVICES: readonly Service[] = CONNECTION_SERVICES;
-
-  /** What a Linear app is set with, before the hub holds it. */
-  export interface AppDraft {
-    clientId: string;
-    clientSecret: string;
-  }
-
-  export const emptyApp = (): AppDraft => ({ clientId: "", clientSecret: "" });
 
   /** A typed server address as the hub takes one: an http(s) URL, or none. */
   export const serverUrl = (typed: string): string | undefined => {
@@ -63,21 +53,6 @@
 
   /** Services ProviderLogo draws a mark for. */
   const MARKED = new Set(["github", "linear", "slack", "gmail"]);
-
-  const NOT_NAME = /[^a-z0-9]+/gu;
-  const EDGE_HYPHENS = /^-+|-+$/gu;
-  const TRAILING_HYPHENS = /-+$/u;
-
-  /** A connection's name from its service and the account's words: `github-brand`. */
-  export const nameFor = (service: string, account: string): string => {
-    const words = account
-      .toLowerCase()
-      .replace(NOT_NAME, "-")
-      .replace(EDGE_HYPHENS, "");
-    return (words ? `${service}-${words}` : service)
-      .slice(0, CONNECTION_NAME_LENGTH)
-      .replace(TRAILING_HYPHENS, "");
-  };
 </script>
 
 <script lang="ts">
@@ -97,15 +72,12 @@
    * with Undo in its toast (JOURNEY.md Flow 5).
    */
   import type { ConnectionView } from "@cawco/core/connections";
-  import { CONNECTION_NAME_LENGTH } from "@cawco/core/delegate-types";
   import { detach } from "@cawco/core/detach";
   import { configureWords } from "@cawco/core/words/configure";
   import { connectionsWords as words } from "@cawco/core/words/connections";
   import { onMount } from "svelte";
   import { z } from "zod";
 
-  import Choice from "#lib/cawco/config/Choice.svelte";
-  import Field from "#lib/cawco/config/Field.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow, {
@@ -120,20 +92,19 @@
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
   import {
     IconConnection,
-    IconEye,
-    IconEyeClosed,
     IconPlus,
     IconToolTodo,
     IconTrash,
   } from "#lib/icons.js";
   import { failureClause, failureWords } from "#lib/platform/hub-read.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import AddConnectionForm from "./AddConnectionForm.svelte";
+  import AppFields from "./AppFields.svelte";
 
   const section = sectionOf("connections");
 
@@ -419,7 +390,6 @@
   let rowApp = $state<AppDraft>(emptyApp());
   let appPending = $state(false);
   /** Each secret field shown in the clear, by its id. */
-  let revealed = $state<Record<string, boolean>>({});
 
   async function saveApp(row: ConnectionView) {
     // A Linear app signs in once it is set: its tab opens on the press.
@@ -771,68 +741,6 @@
   </DropdownMenu.Root>
 {/snippet}
 
-<!-- A secret typed in the kit's password field, with show and hide. -->
-{#snippet secret(id: string, label: string, hint: string, draft: AppDraft)}
-  <Field {hint} {id} {label}>
-    <InputGroup.Root>
-      <InputGroup.Input
-        autocomplete="off"
-        {id}
-        required
-        spellcheck="false"
-        type={revealed[id] ? "text" : "password"}
-        bind:value={draft.clientSecret}
-      />
-      <InputGroup.Addon align="inline-end">
-        <InputGroup.Button
-          aria-label={revealed[id]
-            ? words.hideSecret(label.toLowerCase())
-            : words.showSecret(label.toLowerCase())}
-          aria-pressed={revealed[id] ?? false}
-          onclick={() => {
-            revealed[id] = !revealed[id];
-          }}
-          size="icon-xs"
-        >
-          {#if revealed[id]}
-            <IconEyeClosed />
-          {:else}
-            <IconEye />
-          {/if}
-        </InputGroup.Button>
-      </InputGroup.Addon>
-    </InputGroup.Root>
-  </Field>
-{/snippet}
-
-<!-- A Linear app's client id and secret, with the callback its settings list. -->
-{#snippet appFields(draft: AppDraft, at: string)}
-  <p
-    data-slot="callback"
-    class="flex min-w-0 max-w-c-measure flex-col gap-space-1 type-meta text-ink-muted"
-  >
-    <span>{words.callbackLine}</span>
-    <code class="min-w-0 font-mono wrap-anywhere text-ink-strong select-all"
-      >{callbackUrl}</code
-    >
-  </p>
-  <Field hint={words.clientIdHint} id="{at}-client-id" label={words.clientId}>
-    <Input
-      autocomplete="off"
-      id="{at}-client-id"
-      required
-      spellcheck="false"
-      bind:value={draft.clientId}
-    />
-  </Field>
-  {@render secret(
-    `${at}-client-secret`,
-    words.clientSecret,
-    words.clientSecretHint,
-    draft
-  )}
-{/snippet}
-
 <!-- Sign in to GitHub's first way: each account a fleet machine's gh is
      signed in to, its scopes, and one press that connects it. -->
 {#snippet ghAccounts()}
@@ -914,155 +822,41 @@
 <!-- The sign-in form opens where it was asked for: under the empty
      state's cards, or at the head of the list under its menu. -->
 {#snippet addForm(service: Service)}
-  <form
-    data-slot="add"
-    aria-label={words.signInService(service.label)}
-    class="mb-space-4 flex max-w-c-measure flex-col gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
+  <AddConnectionForm
+    {callbackUrl}
+    gh={ghAccounts}
+    oncancel={stopAdding}
     onsubmit={add}
-    transition:unfold
-  >
-    <p
-      class="mark-line type-label flex items-center gap-space-2 text-ink-strong"
-    >
-      <ProviderLogo class="flex-none" provider={service.service} />
-      <span>{words.signInService(service.label)}</span>
-    </p>
-    {#if service.ways.length > 1}
-      <div data-slot="way" class="flex min-w-0 flex-col gap-space-1">
-        <p class="type-meta text-ink-muted">{words.signsInWith}</p>
-        <Choice
-          label={words.signsInWith}
-          onchange={(next) => {
-            typed.way = next;
-          }}
-          options={service.ways.map((way) => ({
-            value: way.label,
-            label: way.label,
-          }))}
-          value={addWay?.label ?? ""}
-        />
-        {#if addWay}
-          <p
-            class="max-w-c-measure type-meta text-pretty text-ink-muted"
-            data-way-says
-          >
-            {addWay.says}
-          </p>
-        {/if}
-      </div>
-    {/if}
-    {#if addWay?.auth === "gh"}
-      {@render ghAccounts()}
-    {:else}
-      {#if service.serverExample}
-        <Field
-          id="connection-server"
-          label={words.serverAddress}
-          problem={addressProblem ?? undefined}
-        >
-          <Input
-            autocomplete="off"
-            id="connection-server"
-            inputmode="url"
-            oninput={() => {
-              addressProblem = null;
-            }}
-            oninvalid={(event: Event) => {
-              // Said under the field, never as the browser's bubble.
-              event.preventDefault();
-              addressProblem = words.serverAddressProblem;
-            }}
-            placeholder={service.serverExample}
-            spellcheck="false"
-            type="url"
-            bind:value={typed.address}
-          />
-        </Field>
-      {/if}
-      <Field
-        hint={words.accountHint}
-        id="connection-account"
-        label={words.account(service.label)}
-      >
-        <Input
-          autocomplete="off"
-          id="connection-account"
-          placeholder={words.accountPlaceholder}
-          required
-          {@attach focusOnOpen}
-          bind:value={typed.account}
-        />
-      </Field>
-    {/if}
-    {#if addWay?.auth === "bearer"}
-      <Field
-        hint={addWay.key}
-        id="connection-key"
-        label={words.key(service.label)}
-      >
-        <Input
-          autocomplete="off"
-          id="connection-key"
-          required
-          type="password"
-          bind:value={addKey}
-        />
-      </Field>
-    {:else if addWay?.auth === "app" && service.service === "github"}
-      <Field
-        hint={words.appOrganizationHint}
-        id="connection-organization"
-        label={words.appOrganization}
-      >
-        <Input
-          autocomplete="off"
-          id="connection-organization"
-          spellcheck="false"
-          bind:value={typed.organization}
-        />
-      </Field>
-    {:else if addWay?.auth === "app"}
-      {@render appFields(addApp, "connection")}
-    {/if}
-    {#if secretAskedAgain && addWay && (addWay.auth === "bearer" || (addWay.auth === "app" && service.service !== "github"))}
-      <p
-        data-slot="secret-again"
-        class="type-meta max-w-c-measure text-pretty text-ink-muted"
-        transition:unfold
-      >
-        {words.secretNotKept}
-      </p>
-    {/if}
-    {#if typed.problem}
-      <p
-        data-slot="add-problem"
-        class="type-meta wrap-anywhere text-status-fail-ink"
-        role="alert"
-        transition:unfold
-      >
-        {typed.problem}
-      </p>
-    {/if}
-    <div class="flex justify-end gap-space-2">
-      <Button
-        disabled={addPending}
-        label={words.cancel}
-        onclick={stopAdding}
-        size="sm"
-        variant="ghost"
-      />
-      {#if addWay?.auth !== "gh"}
-        <Button
-          press="pressable"
-          label={words.signIn}
-          pending={addPending}
-          pendingLabel={words.signingIn}
-          size="sm"
-          type="submit"
-        />
-      {/if}
-    </div>
-  </form>
+    onway={(label) => {
+      typed.way = label;
+    }}
+    pending={addPending}
+    problem={typed.problem}
+    {secretAskedAgain}
+    {service}
+    way={addWay}
+    bind:account={
+      () => typed.account,
+      (next) => {
+        typed.account = next;
+      }
+    }
+    bind:address={
+      () => typed.address,
+      (next) => {
+        typed.address = next;
+      }
+    }
+    bind:addressProblem
+    bind:app={addApp}
+    bind:key={addKey}
+    bind:organization={
+      () => typed.organization,
+      (next) => {
+        typed.organization = next;
+      }
+    }
+  />
 {/snippet}
 
 <SectionFrame problem={readError} ready={loaded} {section}>
@@ -1194,7 +988,11 @@
                 }}
                 transition:unfold
               >
-                {@render appFields(rowApp, `app-${row.name}`)}
+                <AppFields
+                  at="app-{row.name}"
+                  {callbackUrl}
+                  bind:draft={rowApp}
+                />
                 <div class="flex justify-end gap-space-2">
                   <Button
                     press="pressable"
