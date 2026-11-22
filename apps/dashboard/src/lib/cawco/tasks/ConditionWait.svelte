@@ -79,6 +79,8 @@
         return words.failing(condition.reason);
       case "paused":
         return words.paused;
+      case "asked":
+        return words.askedLine(condition.reason);
       case "met":
         return condition.markedMet
           ? words.markedMet(ago(condition.metAt ?? Date.now()))
@@ -125,6 +127,7 @@
       case "met":
       case "timed-out":
       case "failing":
+      case "asked":
       case "paused":
       case "deleted":
         return [];

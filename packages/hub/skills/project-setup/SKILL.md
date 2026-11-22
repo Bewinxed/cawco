@@ -86,7 +86,7 @@ You hear that the page has new responses; `artifact_read()` has them in full. Ca
 - **delegates/<type>.md** for each type id kept under `delegates` (or every one you drafted, when they removed none): front matter (harness, model, effort, role, lands) and the type's brief from their words. When they named the only skills and MCP servers that type's sessions start with, add them as `starting_set:` with indented `skills: [..]` and `servers: [..]` lines under it; CawCo's own come with every set. A shipped template's types are written already under their names; rewrite a brief only where their words change the work.
 - **AGENTS.md** from the text kept under `aim` (or your own, when they left it): what the project is and how its work is done, in CawCo's voice, no paths inside its sentences.
 - On a pivot, move each task to the stage the person picked for it.
-- Each routine they kept, made with `routine_create`.
+- Each routine they kept, made with `task_create` and its `on` (a schedule) or `target`, and the `stop` that ends it when it has one.
 
 Their Send is the approval of AGENTS.md and the delegate types: they commit as you write them, within this turn. Done when every file the page decided is written and reads.
 

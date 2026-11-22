@@ -74,7 +74,6 @@ import {
 } from "./project-work";
 import { type ProjectsDb, projectsDb } from "./projects";
 import { type RelaysDb, relaysDb } from "./relays";
-import { type RoutinesDb, routinesDb } from "./routines";
 import { type RulesDb, rulesDb } from "./rules";
 import { type SendsDb, sendsDb } from "./sends";
 import type { Revocations } from "./session-identity";
@@ -88,6 +87,7 @@ import { explainStatements, type StatementPlans } from "./statement-plans";
 import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
 import { type TaskIndexDb, taskIndexDb } from "./task-index";
 import type { TaskLinksDb } from "./task-links";
+import { type TaskTriggersDb, taskTriggersDb } from "./task-triggers";
 import { type TaskWaitFlagsDb, taskWaitFlagsDb } from "./task-wait-flags";
 import { type ToolCallKeysDb, toolCallKeysDb } from "./tool-call-keys";
 import { type TrackersDb, trackersDb } from "./trackers";
@@ -180,8 +180,8 @@ interface HubStore {
   readonly restoreProject: ForgetDb["restore"];
   /** Rows a project's restore held back, put back (forget.ts `retry`). */
   readonly retryHeldRows: ForgetDb["retry"];
-  /** Routines and their runs (routines.ts). */
-  readonly routines: RoutinesDb;
+  /** Routines' triggers and runs (routines.ts). */
+  readonly routines: TaskTriggersDb;
   /** The background tasks each Claude session's process runs now (session-tasks.ts). */
   readonly sessionTasks: SessionTasksDb;
   /** The machines the hub added over SSH, and the connection it holds to each (ssh-tunnels.ts). */
@@ -393,7 +393,7 @@ const make = async (path: string): Promise<DbShape> => {
     blocks: blocksDb(db),
     decides: decidesDb(db, delegateTypes),
     starters: startersDb(db),
-    routines: routinesDb(db),
+    routines: taskTriggersDb(db),
     connections: connectionsDb(db),
     ingress: ingressDb(db),
     relays: relaysDb(db),

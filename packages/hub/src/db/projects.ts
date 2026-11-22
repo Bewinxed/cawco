@@ -56,6 +56,7 @@ import {
   sessionTaints,
   spendSettings,
   taskCommentIds,
+  taskTriggers,
   usageBuckets,
   workItems,
   workspaces,
@@ -1169,6 +1170,21 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
                   .run();
               }
               items = moved.length;
+            },
+            // A routine's trigger names its task by the duplicate's number;
+            // one the kept project already has a trigger for stays behind
+            // and goes with the duplicate.
+            task_triggers: () => {
+              for (const trigger of tx
+                .select({ id: taskTriggers.id, taskId: taskTriggers.taskId })
+                .from(taskTriggers)
+                .where(eq(taskTriggers.projectId, dupId))
+                .all()) {
+                tx.update(taskTriggers)
+                  .set({ projectId: keepId, taskId: renamed(trigger.taskId) })
+                  .where(eq(taskTriggers.id, trigger.id))
+                  .run();
+              }
             },
             // An action names its task by the duplicate's number.
             actions: () => {

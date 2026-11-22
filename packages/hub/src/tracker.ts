@@ -17,6 +17,8 @@
  *   still names its issue, which the task's view shows.
  * - **Going forward.** Issues opened after the binding become tasks, and
  *   tasks filed after it become issues; nothing older is copied either way.
+ *   A routine (a task with a trigger, §5.5) never becomes an issue: it
+ *   stays a CawCo file whatever the tracker.
  *   Linear's own GitHub sync does the same: "This will only sync issues
  *   *going forward*" (linear.app/docs/github).
  * - **The link** is the task file's `issue:` (the issue's URL; files are the
@@ -68,6 +70,7 @@
  */
 
 import { detach } from "@cawco/core/detach";
+import { isFleetProject } from "@cawco/core/fleet-project";
 import type { Stage, TaskSummary } from "@cawco/core/task-views";
 import {
   type GithubProject,
@@ -1702,6 +1705,10 @@ export const createTrackers = (deps: TrackersDeps) => {
   ): Promise<Stopped | undefined> => {
     const bound = sync.binding.boundAt.getTime() - CLOCK_MARGIN_MS;
     for (const task of board) {
+      // A routine stays a CawCo file whatever the tracker (§5.2): never an issue.
+      if (task.routine) {
+        continue;
+      }
       const link = db.trackers.link(sync.projectId, task.id);
       if (task.createdAt >= bound && !link) {
         const stoppedBy = await fileOrRelink(sync, task.id);
@@ -1887,12 +1894,27 @@ export const createTrackers = (deps: TrackersDeps) => {
    * bound again keeps its links. `cawco` lets the binding go: the files stay,
    * each naming its issue, and nothing syncs.
    */
-  const bind = async (projectId: string, input: BindInput) => {
+  /** Why a project takes no binding: the hub keeps none such, or it is the Fleet project, which holds work tied to no one project (D31). */
+  const unbindable = (projectId: string) => {
     if (!db.project(projectId)) {
       return problem(400, {
         code: "tracker-project-unknown",
         detail: `The hub keeps no project ${projectId}.`,
       });
+    }
+    if (isFleetProject(projectId)) {
+      return problem(400, {
+        code: "tracker-fleet-project",
+        detail:
+          "The Fleet project holds work tied to no one project, so it is bound to no tracker.",
+      });
+    }
+  };
+
+  const bind = async (projectId: string, input: BindInput) => {
+    const unfit = unbindable(projectId);
+    if (unfit) {
+      return unfit;
     }
     if (input.tracker === "cawco") {
       await inTurn(projectId, () => {

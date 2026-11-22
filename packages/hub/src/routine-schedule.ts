@@ -8,7 +8,9 @@
 import { DAY_MS } from "@cawco/core/time";
 import { Cron, DateTime, Option, Result } from "effect";
 import { ElysiaStatus, problem } from "elysia";
+import type { TriggerIndex } from "./db/task-index";
 import type { ProblemsOf } from "./refusal";
+import type { ParsedTask } from "./task-file";
 
 /**
  * A run an inbound event started (ingress.ts): its slot is `event:<event
@@ -111,4 +113,48 @@ export const slotLabel = (slot: string, timeZone: string): string => {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(slot));
+};
+
+/**
+ * A routine's lines as the task index copies them to its trigger (db
+ * task-index.ts `TriggerIndex`): its schedule parsed in its zone (its next
+ * slot from `now`), and every line that does not read, or that its target
+ * cannot run with, said as its problem, which holds its trigger. A file with
+ * `on:` and no `target:` starts a delegate.
+ */
+export const triggerIndexOf = (
+  parsed: Pick<ParsedTask, "fields" | "triggerUnread">,
+  now: number = Date.now()
+): TriggerIndex => {
+  const { on, stop, deadline, dailyCapUsd, mode, keep, command } =
+    parsed.fields;
+  const target = parsed.fields.target ?? "delegate";
+  const problems = parsed.triggerUnread ? [parsed.triggerUnread] : [];
+  let nextSlot: Date | null = null;
+  if (on) {
+    const cron = cronOf(on.cron, on.zone);
+    if (cron instanceof ElysiaStatus) {
+      problems.push(`on: ${cron.response.detail}`);
+    } else {
+      nextSlot = Cron.next(cron, new Date(now));
+    }
+  }
+  if (target === "command" && !command) {
+    problems.push(
+      "target: command runs a shell command, and the file has no command: line."
+    );
+  }
+  return {
+    cron: on?.cron ?? null,
+    timeZone: on?.zone ?? null,
+    target,
+    stop,
+    deadline: deadline === null ? null : new Date(deadline),
+    dailyCapUsd,
+    mode,
+    keep: keep ?? false,
+    command: target === "command" ? command : null,
+    problem: problems.join(" ") || null,
+    nextSlot,
+  };
 };

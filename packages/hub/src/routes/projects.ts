@@ -2,6 +2,7 @@
  * Projects: making, editing, stopping, deleting them, and their places.
  */
 
+import { isFleetProject } from "@cawco/core/fleet-project";
 import { PROJECT_NAME_LENGTH } from "@cawco/core/forgotten-project";
 import { STAGES_TEMPLATES } from "@cawco/core/views";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
@@ -189,6 +190,13 @@ export const projectRoutes = ({
         ),
       },
       async ({ params, body }) => {
+        // The Fleet project is the hub's, named as it is (D31).
+        if (body.name !== undefined && isFleetProject(params.id)) {
+          return problem(409, {
+            code: "project-fleet-kept",
+            detail: "The Fleet project is the hub's own: its name stays.",
+          });
+        }
         const edited = await projectEdits.edit(params.id, body);
         if (edited instanceof ElysiaStatus) {
           return edited;
@@ -210,6 +218,15 @@ export const projectRoutes = ({
         console.log(
           `${projectTrashWords.forgetLine(params.id)} ${asked} outcome=${outcome}`
         );
+      // The Fleet project holds work tied to no one project, and stays (D31).
+      if (isFleetProject(params.id)) {
+        said("refused fleet");
+        return problem(409, {
+          code: "project-fleet-kept",
+          detail:
+            "The Fleet project is the hub's own and holds work tied to no one project: it cannot be deleted.",
+        });
+      }
       // Never orphaned: a project is forgotten only once nothing of it runs.
       const project = db.project(params.id);
       const still = project ? projectStops.stillRunning(params.id) : 0;

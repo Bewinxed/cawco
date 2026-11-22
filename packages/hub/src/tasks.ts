@@ -89,6 +89,7 @@ import type {
   TaskHistory,
   TaskList,
   TaskReviewRead,
+  TaskRoutine,
   TaskSummary,
   TaskTimes,
   TaskWait,
@@ -143,6 +144,7 @@ import {
   YOU,
 } from "./project-folder";
 import type { AnyProblem } from "./refusal";
+import { triggerIndexOf } from "./routine-schedule";
 import { type PlacedMachine, runsOnValue } from "./runs-on";
 import {
   firstStage,
@@ -171,12 +173,14 @@ import {
   EXTRA_KEY,
   type ExtraValue,
   fileTaskNumber,
+  normaliseTaskRef,
   type ParsedTask,
   TASK_FIELDS,
   type TaskComment,
   TaskDoc,
   type TaskField,
   type TaskFields,
+  type TaskFieldValue,
   type Todo,
   type TodoChanges,
   taskId,
@@ -429,6 +433,31 @@ export interface TaskStore {
   readonly queuedStarts?: (projectId: string) => string[];
   /** Whether a session of the project resolves `type`: a type file of its own, or a fleet type (project-delegate-types.ts). */
   readonly resolvesType: (projectId: string, type: string) => boolean;
+  /**
+   * The project's routines (routines.ts), made after the tasks: each task's
+   * as a list carries it (its newest run alone) and as its own read does
+   * (its newest runs), and a session's move of one to done, which only one
+   * of its runs makes (its stop) and any other session is refused.
+   */
+  readonly routines?: () =>
+    | {
+        ofProject: (projectId: string) => Map<string, TaskRoutine>;
+        ofTask: (projectId: string, taskId: string) => TaskRoutine | undefined;
+        sessionDone: (
+          projectId: string,
+          taskId: string,
+          actor: TaskActor
+        ) => { refused: string } | { runId: string } | undefined;
+        /** A task moved, open before and after or not: a routine moved back out of done is on again. */
+        taskMoved: (
+          projectId: string,
+          taskId: string,
+          from: string | null,
+          toOpen: boolean,
+          wasOpen: boolean
+        ) => void;
+      }
+    | undefined;
   /** Keeps an attempt's result, replacing the one it had. */
   readonly saveResult: (workItemId: string, result: AttemptResult) => void;
   /** Records the template a project's stages came from: its starter skills follow it. */
@@ -570,9 +599,26 @@ export interface TaskDraft {
   title: string;
   /** Top-level to-dos, one line each. */
   todos?: string[];
+  /** A routine's lines (§5.5): it starts on its own (routines.ts checks them first). */
+  trigger?: TriggerDraft;
   type?: string;
   waitsOn?: string[];
 }
+
+/** A routine's lines of a task file (task-file.ts `TRIGGER_FIELDS`), as a draft or a patch writes them; null takes one out. */
+export type TriggerDraft = Partial<
+  Pick<
+    TaskFields,
+    | "command"
+    | "dailyCapUsd"
+    | "deadline"
+    | "keep"
+    | "mode"
+    | "on"
+    | "stop"
+    | "target"
+  >
+>;
 
 /**
  * One write of a task's links (`task_link`): what it waits on, the whole it
@@ -652,6 +698,8 @@ export interface TaskPatch {
   /** Where its attempts run; null: the project's. */
   runsOn?: string | null;
   title?: string;
+  /** A routine's lines, each set or taken out (null); the others stay. */
+  trigger?: TriggerDraft;
   type?: string | null;
 }
 
@@ -1128,11 +1176,11 @@ const kindIn = (stages: Stages | undefined, stage: string): StageKind | null =>
   (stages && stageNamed(stages, stage)?.kind) ?? null;
 
 /**
- * A condition whose routine is gone: what was built on it stands, since
- * nothing un-met it; only Check again does, which a deleted one never has.
+ * A wait on a routine that was ended before it stopped: what was built on
+ * it stands, since nothing moved it back out of done.
  */
 const conditionGone = (wait: WaitState): boolean =>
-  wait.kind === "routine" && wait.condition === undefined;
+  wait.condition?.state === "deleted";
 
 /** How long a failure's first line may run in its task's sentence. */
 const WHY_LIMIT = 200;
@@ -1230,6 +1278,8 @@ const rowsById = (rows: TaskIndexRow[]): Map<string, TaskIndexRow> =>
  */
 export const onFrontier = (task: TaskSummary): boolean =>
   task.ready &&
+  // A routine starts only on its trigger, or by hand (routines.ts).
+  !task.routine &&
   task.parts.length === 0 &&
   !task.lastAttemptFailed &&
   !task.lastAttemptStopped &&
@@ -1240,7 +1290,7 @@ export const onFrontier = (task: TaskSummary): boolean =>
  * (dispatch.ts `startable`): its budget line, then a list line that governs
  * its attempt; null when they read.
  */
-const unreadLineOf = (task: {
+export const unreadLineOf = (task: {
   budgetUnread: string | null;
   id: string;
   listsUnread: string | null;
@@ -1259,7 +1309,8 @@ const summaryOf = (
   row: TaskIndexRow,
   stages: Stages | undefined,
   flags: TaskFlags,
-  times: TaskTimes
+  times: TaskTimes,
+  routine: TaskRoutine | undefined
 ): TaskSummary => {
   const kind = kindIn(stages, row.stage);
   const stray =
@@ -1273,8 +1324,11 @@ const summaryOf = (
     title: row.title,
     stage: row.stage,
     kind,
-    needsYou: kind === "you",
+    // A routine that asks you or is stuck stands in Needs you like any task (§5.5).
+    needsYou:
+      kind === "you" || (routine?.needs !== null && routine !== undefined),
     ...flags,
+    routine: routine ?? null,
     type: row.type,
     waitsOn: row.waitsOn,
     partOf: row.partOf,
@@ -1570,9 +1624,41 @@ const patchLists = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
   }
 };
 
+/** A patch's routine lines, each set or taken out (routines.ts checked them). */
+const patchTrigger = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
+  const trigger = patch.trigger ?? {};
+  const set = <F extends keyof typeof TRIGGER_KEYS>(key: F) => {
+    const value = trigger[key];
+    if (value !== undefined) {
+      const field = TRIGGER_KEYS[key];
+      setField(changed, field, () =>
+        doc.setField(field, value as TaskFieldValue<typeof field>)
+      );
+    }
+  };
+  for (const key of Object.keys(
+    TRIGGER_KEYS
+  ) as (keyof typeof TRIGGER_KEYS)[]) {
+    set(key);
+  }
+};
+
+/** A routine's lines by the name a patch gives them, and the field each writes. */
+const TRIGGER_KEYS = {
+  on: "on",
+  target: "target",
+  stop: "stop",
+  deadline: "deadline",
+  dailyCapUsd: "daily_cap_usd",
+  mode: "mode",
+  keep: "keep",
+  command: "command",
+} as const satisfies Record<keyof TriggerDraft, TaskField>;
+
 /** Applies a patch to a task file; answers what it changed, for the commit message, or the refusal of the first field that cannot stand. */
 const applyPatch = (doc: TaskDoc, patch: TaskPatch) => {
   const changed: string[] = [];
+  patchTrigger(doc, patch, changed);
   const refused =
     patchWords(doc, patch, changed) ??
     patchNames(doc, patch, changed) ??
@@ -2269,6 +2355,7 @@ export const createTasks = (store: TaskStore) => {
       listsUnread: parsed.listsUnread,
       hash,
       updatedAt: new Date(),
+      trigger: doc.startsOnItsOwn() ? triggerIndexOf(parsed) : null,
     };
   };
 
@@ -3487,7 +3574,8 @@ export const createTasks = (store: TaskStore) => {
       },
       context
     );
-    return viewOf(
+    const routine = store.routines?.()?.ofTask(projectId, taskId(number));
+    const viewed = viewOf(
       path,
       number,
       parsed,
@@ -3515,6 +3603,13 @@ export const createTasks = (store: TaskStore) => {
       store.links(projectId, taskId(number)),
       store.carried(projectId, taskId(number))
     );
+    return routine
+      ? {
+          ...viewed,
+          routine,
+          needsYou: viewed.needsYou || routine.needs !== null,
+        }
+      : viewed;
   };
 
   /** {@link view} over the project's stages as they read now. */
@@ -4301,9 +4396,16 @@ export const createTasks = (store: TaskStore) => {
     }
     const { gone, times } = timed;
     const context = contextOf(projectId, board, stages, gone);
+    const routines = store.routines?.()?.ofProject(projectId);
     const kept = rows
       .map((row, index) =>
-        summaryOf(row, stages, flagsOf(projectId, row, context), times[index])
+        summaryOf(
+          row,
+          stages,
+          flagsOf(projectId, row, context),
+          times[index],
+          routines?.get(row.id)
+        )
       )
       .filter(
         (task) =>
@@ -4588,6 +4690,65 @@ export const createTasks = (store: TaskStore) => {
    * Moves a task to another stage ({@link Tasks.move}); a move into a done
    * or dropped stage carries what closing it did ({@link afterClose}).
    */
+  /**
+   * A session's move of a routine to a done stage (§5.5, Stopping): one of
+   * its runs' sessions makes it that run's stop, its reason the evidence;
+   * any other session is refused. Nothing for any other move.
+   */
+  const routineDone = async (
+    projectId: string,
+    ref: string,
+    stage: string,
+    actor: TaskActor,
+    why: string | undefined
+  ) => {
+    const routines = store.routines?.();
+    if (actor.mover !== "session" || !routines) {
+      return;
+    }
+    const stages = await currentStages(projectId);
+    if (stages instanceof ElysiaStatus || kindIn(stages, stage) !== "done") {
+      return;
+    }
+    const id = normaliseTaskRef(ref) ?? ref.trim();
+    const said = routines.sessionDone(projectId, id, {
+      ...actor,
+      ...(why ? { reason: why } : {}),
+    });
+    return said && "refused" in said
+      ? problem(403, {
+          code: "task-routine-done-not-run",
+          detail: said.refused,
+        })
+      : undefined;
+  };
+
+  /** A move's reason read, and a session's move of a routine to done let through only as its run's stop. */
+  const moveAsked = async (
+    projectId: string,
+    ref: string,
+    stage: string,
+    actor: TaskActor,
+    reason: string | undefined
+  ) => {
+    const why = reasonOf(reason);
+    if (why instanceof ElysiaStatus) {
+      return why;
+    }
+    return (await routineDone(projectId, ref, stage, actor, why)) ?? { why };
+  };
+
+  /** A task's move told to its routine, when it is one (routines.ts `taskMoved`). */
+  const routineMoved = (
+    projectId: string,
+    id: string,
+    from: string,
+    open: boolean,
+    wasOpen: boolean
+  ): void => {
+    store.routines?.()?.taskMoved(projectId, id, from, open, wasOpen);
+  };
+
   const moveTask = async (
     projectId: string,
     ref: string,
@@ -4596,10 +4757,11 @@ export const createTasks = (store: TaskStore) => {
     reason?: string,
     options?: { tickCriteria?: boolean }
   ) => {
-    const why = reasonOf(reason);
-    if (why instanceof ElysiaStatus) {
-      return why;
+    const asked = await moveAsked(projectId, ref, stage, actor, reason);
+    if (asked instanceof ElysiaStatus) {
+      return asked;
     }
+    const { why } = asked;
     const done = await moveWritten(
       projectId,
       ref,
@@ -4632,7 +4794,9 @@ export const createTasks = (store: TaskStore) => {
       return stages;
     }
     const wasOpen = !CLOSED_KINDS.has(kindIn(stages, moved.from) ?? "todo");
-    if (!(wasOpen && (task.kind === "done" || task.kind === "dropped"))) {
+    const closed = task.kind === "done" || task.kind === "dropped";
+    routineMoved(projectId, task.id, moved.from, !closed, wasOpen);
+    if (!(wasOpen && closed)) {
       return task;
     }
     const closing = await afterClose(projectId, task.id);
@@ -5246,6 +5410,7 @@ export const createTasks = (store: TaskStore) => {
     const { checks, outputs, context, runsOn, limits, rank, labels, links } =
       lists;
     const fields: Partial<TaskFields> = {
+      ...draft.trigger,
       stage,
       type,
       waitsOn,
@@ -6412,7 +6577,7 @@ export const taskRoutes = (tasks: Tasks) =>
           title: t.String(),
           stage: t.Optional(t.String()),
           type: t.Optional(t.String()),
-          /** What it waits on: tasks (tsk-12), cards (<page>#<card>), pins (<page>/<n>), GitHub pull requests and Actions runs, sessions, conditions (routine:<handle>). */
+          /** What it waits on: tasks (tsk-12), cards (<page>#<card>), pins (<page>/<n>), GitHub pull requests and Actions runs, sessions, dates. */
           waitsOn: t.Optional(t.Array(t.String())),
           /** The whole it is a part of, like tsk-12: it inherits its waits. */
           partOf: t.Optional(t.String()),

@@ -63,7 +63,6 @@ import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { ARTIFACT_TOOLS } from "./artifacts/tools";
 import type { TASK_TOOL_NAMES } from "./task-tool-names";
-import { isRoutineParent } from "./work-item-state";
 
 /**
  * The role a session's row runs in: the one its spawn named, else derived
@@ -132,14 +131,12 @@ export const CAW_TOOLS = CAW_PROJECT_TOOLS;
 export type CawToolName = (typeof CAW_TOOLS)[number];
 
 /**
- * A project's own tools: caw.ts's, its settings (project-settings.ts) and
- * how a routine's run that woke the session went (routines.ts). Listed by
- * scope ({@link allows}).
+ * A project's own tools: caw.ts's and its settings (project-settings.ts).
+ * Listed by scope ({@link allows}).
  */
 const PROJECT_TOOLS: ReadonlySet<string> = new Set([
   ...CAW_PROJECT_TOOLS,
   "project_settings",
-  "routine_result",
 ]);
 
 /** Fleet watch's triage decision (fleet-watch.ts), the overseer's alone. */
@@ -281,12 +278,6 @@ export const allows = (row: InstanceRow, name: string): boolean => {
   if (PROJECT_TOOLS.has(name) && !closed(role)) {
     return !!row.projectId;
   }
-  // A routine's delegate run answers a condition's check with it, before
-  // its finish_item (routines.ts `leadResult` refuses it on a routine with
-  // no condition).
-  if (name === "routine_result" && role === "delegate") {
-    return !!row.projectId && isRoutineParent(row.parentInstanceId);
-  }
   if (role === "delegate" && ORCHESTRATORS_ONLY.has(name)) {
     return orchestrates(row);
   }
@@ -294,13 +285,14 @@ export const allows = (row: InstanceRow, name: string): boolean => {
 };
 
 /**
- * Whether the session makes the schedules that outlive it itself, with
- * `routine_create`. One that does not hands each to its parent, and its
- * harness's own durable schedule is refused it too (core protocol.ts
- * `SpawnPayload.schedulesToParent`).
+ * Whether the session makes the schedules that outlive it itself: a task
+ * with a trigger (`task_create` with `on` or `target`, §5.5), as a worker
+ * does. One that does not hands each to its parent, its `task_create` is
+ * refused a trigger, and its harness's own durable schedule is refused it
+ * too (core protocol.ts `SpawnPayload.schedulesToParent`).
  */
 export const makesRoutines = (row: InstanceRow): boolean =>
-  allows(row, "routine_create");
+  roleOf(row) === "worker";
 
 /**
  * Whether the session's todo_write and task_comment may name any of its

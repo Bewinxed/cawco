@@ -1,7 +1,7 @@
 /**
- * What a condition says to the person: a routine that answers a question
- * (hub routines.ts, `condition`), which tasks and plan steps wait on with
- * `routine:<handle>` (hub task-waits.ts). Its states and flags on a task's
+ * What a routine's stop condition says to the person (hub routines.ts,
+ * `stop`): tasks and plan steps wait on a routine as on any task, `tsk-N`
+ * (hub task-waits.ts), and it settles once its task is done. Its states and flags on a task's
  * waits, its row in a task's view (the dashboard's tasks/TaskNeeds), its
  * fields in the routine form, its block in a routine's detail, and the
  * lines the hub writes in the project's conversation and pushes when a
@@ -20,15 +20,16 @@ export const conditionStateWords = {
   met: "met",
   "timed-out": "timed out",
   failing: "checks failed",
+  asked: "asks you",
   paused: "paused",
-  deleted: "deleted",
+  deleted: "ended",
 } as const;
 
-/** What a check run answered (core routine-kinds.ts `RoutineVerdict`), in a routine's runs. */
+/** What a run answered in its task_result (core routine-kinds.ts `RoutineVerdict`), in a routine's runs. */
 export const verdictWords = {
-  met: "Met",
-  unmet: "Not yet",
-  unknown: "Could not check",
+  keep: "Kept going",
+  stop: "Stopped",
+  ask: "Asked you",
 } as const;
 
 export const conditionWords = {
@@ -41,13 +42,15 @@ export const conditionWords = {
   flagFailing: "could not be checked 3 times in a row",
   /** A person or a session paused its routine. */
   flagPaused: "is paused",
-  /** Its routine was deleted. */
-  flagDeleted: "was deleted",
+  /** A run of the routine asked you, and its trigger waits for your answer. */
+  flagAsked: "waits for your answer",
+  /** Its routine was ended (dropped, archived, deleted) before it stopped. */
+  flagDeleted: "was ended before it stopped",
   /**
-   * A task's file names a routine that has no condition (written by hand),
-   * so no check will ever say it is met. Said after the routine's name.
+   * A task's file waits on a routine that has no stop condition (written by
+   * hand), so it never moves to done. Said after the routine's name.
    */
-  flagNoCondition: "has no condition to wait on",
+  flagNoCondition: "has no stop condition to wait on",
   /** What a wait on a deleted condition is called, its statement gone with it. */
   deletedLabel: "A condition",
 
@@ -79,6 +82,9 @@ export const conditionWords = {
     `Its check failed 3 times in a row, so checking stopped.${error ? ` Last error: ${error}` : ""}`,
   /** Paused. */
   paused: "Nothing checks it while it is paused.",
+  /** A run asked you: its question, which your answer (a comment on its task, a run by hand) lets it go on from. */
+  askedLine: (question: string | null) =>
+    question ? `It asks you: ${question}` : "It asks you.",
   /** Deleted. */
   deleted: "It was deleted, so it will never be met.",
 

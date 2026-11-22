@@ -23,20 +23,33 @@ import {
   taskLink,
   todoLink,
 } from "@cawco/core/references";
+import type { RoutineRunView } from "@cawco/core/routine-kinds";
 import type {
   AttemptStart,
   StagesView,
   TaskHistoryEvent,
   TaskList,
+  TaskRoutine,
   TaskWait,
   WaitState,
 } from "@cawco/core/task-views";
 import { externalItemWords } from "@cawco/core/words/external-items";
 import { taskLinkWords } from "@cawco/core/words/task-links";
 import type { DuplicateOutcome } from "../jev-tasks";
+import { slotLabel } from "../routine-schedule";
 import type { TaskComment } from "../task-file";
 import type { Closing, LinkOutcome, TaskView } from "../tasks";
-import { ago, count, handle, lines, listed, quote, valueWords } from "./words";
+import {
+  ago,
+  ahead,
+  count,
+  handle,
+  lasted,
+  lines,
+  listed,
+  quote,
+  valueWords,
+} from "./words";
 
 type TaskLine = TaskList["tasks"][number];
 
@@ -166,11 +179,66 @@ const attemptWords = (
   return [];
 };
 
+/** A routine's run, a line: its slot as the dashboard says it (`09:00`, test, by-hand), how it ended and its words. */
+const runLine = (run: RoutineRunView, zone: string, now: number): string =>
+  `  - ${slotLabel(run.slot, zone)} run ${handle(run.id)}: ${run.outcome ?? run.state}, started ${ago(run.startedAt, now)}${run.endedAt ? `, after ${lasted(run.endedAt - run.startedAt)}` : ""}${run.verdict ? `, ${run.verdict}` : ""}${run.usd === null ? "" : `, $${run.usd.toFixed(2)}`}${run.reason ? `; ${run.reason}` : ""}${run.output ? `: ${quote(run.output, 300)}` : ""}`;
+
+/** Why a routine stands in Needs you, in words. */
+const NEEDS: Record<NonNullable<TaskRoutine["needs"]>["why"], string> = {
+  failed: "a slot failed twice",
+  deadline: "its deadline passed with no stop",
+  failing: "three slots in a row failed, so it is off",
+  asked: "a run asks the owner",
+};
+
+/** A routine's lines on its task's answer: its trigger, what it waits for from the owner, and its runs from the ledger. */
+const routineLines = (routine: TaskRoutine, now: number): string[] => {
+  const zone =
+    routine.schedule.timeZone ||
+    Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return [
+    `Routine ${handle(routine.id)}: ${routine.enabled ? "on" : `off${routine.disabledReason ? `: ${routine.disabledReason}` : ""}`} · ${routine.schedule.words}${routine.schedule.nextAt === null ? "" : `, next ${ahead(routine.schedule.nextAt, now)}`} · target ${routine.target} · ${routine.stop ? `stops when: ${quote(routine.stop, 300)}` : "no stop condition, runs until ended"}${routine.deadline === null ? "" : ` · deadline ${ahead(routine.deadline, now)}`}`,
+    ...(routine.needs
+      ? [
+          `Needs the owner: ${NEEDS[routine.needs.why]}${routine.needs.said ? `: ${quote(routine.needs.said, 300)}` : ""}`,
+        ]
+      : []),
+    ...(routine.problem
+      ? [`Its routine lines do not read: ${routine.problem}`]
+      : []),
+    ...runsLines(routine, zone, now),
+  ];
+};
+
+/** A routine's runs on its task's answer: its own read's newest runs, a list's newest run alone. */
+const runsLines = (
+  routine: TaskRoutine,
+  zone: string,
+  now: number
+): string[] => {
+  if (!routine.runs) {
+    return routine.lastRun
+      ? ["Last run:", runLine(routine.lastRun, zone, now)]
+      : [];
+  }
+  return routine.runs.length > 0
+    ? [
+        `Runs, newest ${routine.runs.length} of ${routine.runsTotal ?? routine.runs.length}:`,
+        ...routine.runs.map((run) => runLine(run, zone, now)),
+      ]
+    : ["No runs yet."];
+};
+
 /** One task of the board, a line. */
 const taskLine = (task: TaskLine, now: number, links: LinkScope): string => {
   const facts = [
     task.stage,
     ...(task.needsYou ? ["needs the operator"] : []),
+    ...(task.routine
+      ? [
+          `routine: ${task.routine.schedule.words}${task.routine.lastRun ? `, last run ${task.routine.lastRun.outcome ?? task.routine.lastRun.state}${task.routine.lastRun.verdict ? ` ${task.routine.lastRun.verdict}` : ""}` : ""}`,
+        ]
+      : []),
     ...(task.todos.total > 0
       ? [`to-dos ${task.todos.done}/${task.todos.total}`]
       : []),
@@ -406,6 +474,7 @@ const taskBody = (task: TaskAnswer, links: LinkScope): string => {
     unblocksLine(task, links),
     builtOnLine(task),
     `Runs: ${runWords(task).join("; ")}.`,
+    task.routine ? lines(routineLines(task.routine, now)) : false,
     fileLines(task, links),
     workLines(task, now)
   );

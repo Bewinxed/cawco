@@ -16,8 +16,8 @@ import { z } from "zod";
 import type { ProjectAtLimit } from "./accounts";
 import { BROWSER_ASK_TOOL, CONNECT_ASK_TOOL } from "./ask-tools";
 import {
-  ROUTINE_CREATE_TOOL,
-  ROUTINE_UPDATE_TOOL,
+  COMMAND_CHECK_CREATE_TOOL,
+  COMMAND_CHECK_UPDATE_TOOL,
   type SourceFacts,
 } from "./asks";
 import type { StartingSet } from "./delegate-types";
@@ -1676,32 +1676,41 @@ function projectSettings(
 }
 
 /**
- * A command check a session asks to make or change (hub routines.ts): what
- * it is called, its command whole under the summary as a shell call's is,
- * since what runs is what the person approves, and the condition its exit
- * code answers.
+ * A routine's command check a session asks to make or change (hub
+ * routines.ts): what it is called, its command whole under the summary as a
+ * shell call's is, since what runs is what the person approves, and the
+ * stop condition its exit code answers.
  */
 function commandCheck(
   toolName: string,
   input: Record<string, unknown>
 ): Presented {
-  const name = text(input.name) ?? "";
-  const command = text(input.prompt);
-  const condition = text(input.condition);
+  const name = text(input.title) ?? text(input.id) ?? "";
+  const command = text(input.command);
+  const stop = text(input.stop);
   return {
     summary:
-      toolName === ROUTINE_CREATE_TOOL
+      toolName === COMMAND_CHECK_CREATE_TOOL
         ? commandCheckWords.askMake(name)
         : commandCheckWords.askChange(name),
     detail: [
       commandCheckWords.askCovers,
-      ...(condition ? [commandCheckWords.askCondition(condition)] : []),
+      ...(stop ? [commandCheckWords.askCondition(stop)] : []),
     ].join("\n"),
     changes: [],
     ...(command?.trim() ? { command } : {}),
-    fields: fieldsOf(input, ["name", "prompt", "condition", "target", "id"]),
+    fields: fieldsOf(input, ["title", "command", "stop", "target", "id"]),
   };
 }
+
+/** Whether an ask is a task tool's call that sets a routine's command: a command check. */
+const isCommandCheck = (
+  toolName: string,
+  input: Record<string, unknown>
+): boolean =>
+  (toolName === COMMAND_CHECK_CREATE_TOOL ||
+    toolName === COMMAND_CHECK_UPDATE_TOOL) &&
+  input.command !== undefined;
 
 /** A file path, however the harness keys it (Claude Code, OpenCode, pi). */
 const filePathOf = (input: Record<string, unknown>): string | undefined =>
@@ -1905,7 +1914,7 @@ export function presentPermission(
   if (toolName === PROJECT_SETTINGS_TOOL) {
     return { ...who, ...projectSettings(input, context) };
   }
-  if (toolName === ROUTINE_CREATE_TOOL || toolName === ROUTINE_UPDATE_TOOL) {
+  if (isCommandCheck(toolName, input)) {
     return { ...who, ...commandCheck(toolName, input) };
   }
   // A browser ask reads as its reason, the page's origin under it.

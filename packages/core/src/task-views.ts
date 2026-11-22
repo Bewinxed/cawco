@@ -7,7 +7,13 @@
 import type { AttemptResult } from "./deliverables";
 import type { TaskLinkSummary } from "./external-items";
 import type { LandsMode } from "./injected";
-import type { ConditionView } from "./routine-kinds";
+import type { RoutineSchedule } from "./project-conversation";
+import type {
+  ConditionView,
+  RoutineRunView,
+  RoutineTarget,
+  TriggerHold,
+} from "./routine-kinds";
 import type { ProjectStarter } from "./starters";
 import type { TASK_FILE_STATES, TaskHistoryKind } from "./task-history";
 import type { Tracker } from "./trackers";
@@ -153,9 +159,9 @@ export interface TaskAttempt {
 /** One wait, settled or not, as every reader shows it. */
 export interface WaitState {
   /**
-   * A routine's condition, as its routine holds it: where it stands and the
-   * facts each state is told by, the routine's id with them. Present only
-   * on a `routine` wait whose routine is there.
+   * A routine's stop condition, as its trigger holds it: where it stands and
+   * the facts each state is told by, the routine's id with them. Present
+   * only on a wait on a task that is a routine with a stop condition.
    */
   condition?: ConditionView & { routineId: string };
   /** A task target dropped since (not as a duplicate): the wait is removed. */
@@ -172,7 +178,7 @@ export interface WaitState {
   state: string;
   /** The wait as its file keeps it ({@link waitHandle}). */
   target: string;
-  /** What it settled with, for a card (its pick), a pin or a condition (`met`); null otherwise or while unsettled. */
+  /** What it settled with, for a card (its pick), a pin or a routine's stop (`met`); null otherwise or while unsettled. */
   value: string | null;
 }
 
@@ -196,6 +202,38 @@ export interface BuiltOn {
     | typeof taskLinkWords.reopened
     | typeof taskLinkWords.maybeDecidedDifferently;
   target: string;
+}
+
+/**
+ * A task that starts on its own, a routine (Projects spec §5.5), as a task's
+ * list and its read carry it: its trigger as the hub keeps it, and its runs
+ * from the run ledger, never its attempts. A list carries its newest run
+ * alone; its own read the newest 20 and how many it has had.
+ */
+export interface TaskRoutine {
+  /** The deadline past which, with no stop, it stands in Needs you, ms epoch; null: none. */
+  deadline: number | null;
+  /** Why it is off, in a sentence; null while on. */
+  disabledReason: string | null;
+  /** Its trigger fires: on, and held for nothing. */
+  enabled: boolean;
+  /** Its trigger's id: the routine's id, which its runs, event routes and old links name. */
+  id: string;
+  /** Its newest run; null before any. */
+  lastRun: RoutineRunView | null;
+  /** Why it stands in Needs you, and the sentence that says so (a run's question, the failure); null when it does not. */
+  needs: { said: string; why: TriggerHold } | null;
+  /** What of its routine lines does not read, holding its trigger; null when all of it does. */
+  problem: string | null;
+  /** Its newest runs, on its own read. */
+  runs?: RoutineRunView[];
+  /** Every run it has had, on its own read. */
+  runsTotal?: number;
+  /** Its schedule in words and its next run; words for its event routes when it has none. */
+  schedule: RoutineSchedule;
+  /** Its stop condition, in words; null: it runs until ended. */
+  stop: string | null;
+  target: RoutineTarget;
 }
 
 /** What a task's attempts and edges say about it, worked out on every read. */
@@ -232,6 +270,8 @@ export interface TaskFlags {
    * rule dispatch, the board and every tool answer read.
    */
   ready: boolean;
+  /** Its routine, when it starts on its own (§5.5); null or absent for any other task. */
+  routine?: TaskRoutine | null;
   /** Why the hub could not start an attempt the last time it tried, while the task is unchanged since. */
   startProblem: string | null;
   /** The tasks that wait on it (`waits_on`), by id. */
