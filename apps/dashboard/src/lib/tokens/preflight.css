@@ -56,6 +56,7 @@
 :where(.\@max-desk\/shell\:before\:clip-join-phone)::before,
 :where(.active\:before\:bg-surface-pressed:active)::before,
 :where(.aria-pressed\:before\:bg-surface-pressed[aria-pressed="true"])::before,
+:where(.before\:-inset-x-space-2)::before,
 :where(.before\:-scale-y-100)::before,
 :where(.before\:-z-1)::before,
 :where(
@@ -79,6 +80,7 @@
 :where(.before\:bg-status-fail-bg)::before,
 :where(.before\:bg-surface-raised)::before,
 :where(.before\:bg-surface-recess-deep)::before,
+:where(.before\:bg-transparent)::before,
 :where(.before\:border)::before,
 :where(.before\:border-border)::before,
 :where(.before\:border-border-hairline)::before,
@@ -233,6 +235,12 @@
   .data-mention-field-empty\:before\:whitespace-nowrap[data-mention-field-empty]
 )::before,
 :where(.data-needs\:before\:bg-status-attn-bg[data-needs])::before,
+:where(
+  .data-open\:before\:bg-selected-bg:where(
+    [data-state="open"],
+    [data-open]:not([data-open="false"])
+  )
+)::before,
 :where(.data-runs-on\:before\:border-be-transparent[data-runs-on])::before,
 :where(.data-runs-on\:before\:rounded-ee-none[data-runs-on])::before,
 :where(.data-runs-on\:before\:rounded-es-none[data-runs-on])::before,
