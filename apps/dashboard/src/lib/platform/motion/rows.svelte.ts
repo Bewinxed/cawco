@@ -746,12 +746,16 @@ interface Lines {
   tracks: { size: number; start: number }[];
 }
 
+/** A resolved track list's line names, and the space between its tracks. */
+const LINE_NAMES = /\[[^\]]*\]/gu;
+const BETWEEN_TRACKS = /\s+/u;
+
 /** A resolved track list's sizes, its line names left out; none for one that is not all lengths. */
 function sizesOf(list: string): number[] | undefined {
   const sizes = list
-    .replace(/\[[^\]]*\]/gu, " ")
+    .replace(LINE_NAMES, " ")
     .trim()
-    .split(/\s+/u)
+    .split(BETWEEN_TRACKS)
     .map(Number.parseFloat);
   return sizes.length > 0 && !sizes.some(Number.isNaN) ? sizes : undefined;
 }
@@ -811,7 +815,7 @@ function columnsOf(
     return { gap, tracks };
   };
   for (const [element, was] of departures) {
-    const parent = was.parent;
+    const { parent } = was;
     if (!parent?.isConnected) {
       continue;
     }
