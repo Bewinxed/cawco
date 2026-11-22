@@ -332,7 +332,7 @@ export const INITIAL_ROUTINES: Routine[] = [
       },
       {
         id: "run-rt-3",
-        oneLine: "v2.4.0 is still a draft",
+        oneLine: "The v2.4.0 release is still a draft",
         outcome: "not-yet",
         resultMarkdown:
           "- **Newest published release:** `v2.4.0-rc.3` (prerelease, published 5 hours ago)\n- **Draft found:** `v2.4.0`, missing its signed macOS download\n\nThe upgrade notice keeps waiting until the final release is published with both signed downloads.",
