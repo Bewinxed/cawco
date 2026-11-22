@@ -1008,6 +1008,8 @@
   --row-tall-h: calc(2 * var(--spacing-space-5) + 2 * var(--spacing-space-1));
   /* A segment's inline padding (DESIGN.md, Segmented: "Segments are 30px tall with 10px padding"). */
   --spacing-c-segment-pad-x: 10px;
+  /* A compact segment's inline padding: a segment that carries a mark and a count beside its words (the repository picker's owner chips), on the scale's second step. */
+  --spacing-c-segment-pad-x-compact: var(--spacing-space-2);
   /* Running text's measure (DESIGN.md Body: 60 to 72ch): a note, a hint, a rule's or hook's sentence, a fault's explanation, the expanded plan, a refused write. */
   --spacing-c-measure: 72ch;
   /* Running text at the short end of DESIGN.md's 60 to 72ch, beside a control that takes the rest of the row. */

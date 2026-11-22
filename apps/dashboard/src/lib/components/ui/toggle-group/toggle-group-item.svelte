@@ -3,16 +3,20 @@
   import { segmentedVariants } from "#lib/components/ui/tabs/thumb.js";
   import { cn } from "#lib/utils.js";
 
-  const { segment } = segmentedVariants();
-
   let {
     ref = $bindable(null),
     value = $bindable(),
+    compact = false,
     fit = false,
     class: className,
     children,
     ...restProps
   }: ToggleGroupPrimitive.ItemProps & {
+    /**
+     * A segment carrying a mark and a count beside its words: the compact
+     * side room, its parts a step apart (segmentedVariants `compact`).
+     */
+    compact?: boolean;
     /**
      * The segment gives up its side room before its row scrolls: its
      * `c-segment-pad-x` each side is a grid track that grows to it and
@@ -38,7 +42,7 @@
 
 <ToggleGroupPrimitive.Item
   class={cn(
-    segment(),
+    segmentedVariants({ compact }).segment(),
     "press-tint focus-inset touch-hit shrink-0 disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     fit &&
       "grid shrink grid-cols-[minmax(0,var(--spacing-c-segment-pad-x))_max-content_minmax(0,var(--spacing-c-segment-pad-x))] gap-0 px-0",

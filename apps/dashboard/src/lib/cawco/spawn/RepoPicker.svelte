@@ -649,6 +649,12 @@
   /** The list's cap, px (its `max-h-72`), read off it once. */
   let cap = 0;
   /**
+   * The list's scrollbar gutter, px, as its size is reported: as wide as
+   * the platform's scrollbar (none where scrollbars overlay the content),
+   * and the same whether the list scrolls or not (`scrollbar-gutter`).
+   */
+  let gutter = $state(0);
+  /**
    * Only the rows near the list's view are drawn (TanStack Virtual): those
    * the view shows and `OVERSCAN` past each end, in the list's own flow
    * between a spacer for the rows above and one for the rows below, so they
@@ -675,6 +681,9 @@
         const element = instance.scrollElement;
         if (element && !cap) {
           cap = Number.parseFloat(getComputedStyle(element).maxHeight) || 0;
+        }
+        if (element) {
+          gutter = element.offsetWidth - element.clientWidth;
         }
         report({ width: rect.width, height: Math.max(rect.height, cap) });
       }),
@@ -907,14 +916,13 @@
   /** A row's lead cell: its mark on the lead's own width, clipped as the lead folds, fading with it. */
   const LEAD =
     "col-start-1 mark-cell min-w-0 justify-start overflow-clip opacity-(--lead-share) motion-safe:transition-opacity motion-safe:duration-(--duration-panel) motion-safe:ease-in-out";
-  /** Where a row's trailing ink ends: the path field's edge and Browse's (1px each), the field's inset and Browse's own. */
-  const REPO_END =
-    "calc(var(--spacing-space-2) + var(--spacing-space-3) + 2px)";
   /**
-   * An owner chip's insides (the avatar, the login, the count) at the
-   * house's smallest inline step, on the kit segment's own side room.
+   * Where a row's trailing ink ends: the path field's edge and Browse's
+   * (1px each), the field's inset and Browse's own, less the scrollbar's
+   * gutter the row already stands inside (`--gutter`).
    */
-  const CHIP = "gap-space-1";
+  const REPO_END =
+    "calc(var(--spacing-space-2) + var(--spacing-space-3) + 2px - var(--gutter))";
   /** A row: its lead, name and description, lock and time on the list's columns (a subgrid). */
   const ROW =
     "group mark-line col-span-full grid grid-cols-subgrid items-center gap-y-space-1 rounded-sm border-none bg-transparent py-space-2 pe-(--repo-end) ps-0 text-start select-none";
@@ -979,12 +987,12 @@
               line = read;
             })}
           >
-            <ToggleGroup.Item class={CHIP} data-login={ALL} value={ALL}>
+            <ToggleGroup.Item compact data-login={ALL} value={ALL}>
               {@render allChip()}
             </ToggleGroup.Item>
             {#each strip.shown as one (one.owner.login)}
               <ToggleGroup.Item
-                class={CHIP}
+                compact
                 data-flip="pop"
                 data-login={one.owner.login}
                 value={one.owner.login}
@@ -1007,7 +1015,7 @@
                   )}
                   data-flip="pop"
                   data-more
-                  look="segment"
+                  look="segment-compact"
                 >
                   <span
                     >{spawnWords.location.moreOwners(strip.hidden.length)}</span
@@ -1070,7 +1078,7 @@
               <span aria-hidden="true" class="basis-full"></span>
               {#each strip.hidden as one (one.owner.login)}
                 <ToggleGroup.Item
-                  class={CHIP}
+                  compact
                   data-login={one.owner.login}
                   disabled
                   inert
@@ -1091,8 +1099,9 @@
        list the lock and the time go to the description's line, so the
        name has the row's width. A row's trailing ink ends where Browse's
        does under it: the path field's edge and the button's (1px each),
-       the field's inset and the button's, inside the scrollbar's gutter.
-       The gutter stands whether the list scrolls or not: kept only while
+       the field's inset and the button's, the scrollbar's gutter given back
+       from the row's end padding. The gutter stands whether the list
+       scrolls or not: kept only while
        it scrolled, it came and went as one owner's list replaced every
        owner's (the height's morph clips the list as it travels, the closing
        rows overflow it after), and every row's columns jumped its width
@@ -1107,6 +1116,7 @@
     role="listbox"
     style:--repo-cols={REPO_COLS}
     style:--repo-end={REPO_END}
+    style:--gutter={`${gutter}px`}
     style:--owner-track={owner ? "0fr" : "1fr"}
     style:--owner-ink={owner ? 0 : 1}
     style:--lead-share={leadFolded ? 0 : 1}
