@@ -14328,6 +14328,12 @@
                       "type": "string"
                     }
                   },
+                  "dir": {
+                    "minLength": 2,
+                    "maxLength": 4096,
+                    "pattern": "^/",
+                    "type": "string"
+                  },
                   "elements": {
                     "minItems": 1,
                     "maxItems": 500,
@@ -44242,7 +44248,7 @@
         ]
       },
       "FolderWeight": {
-        "description": "What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's; and its start page's desk captures (core `deskCaptures`). {@link PREVIEW_WEIGHT}'s answer.",
+        "description": "What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's; and its start page's desk captures (core `deskCaptures`), weighed by the hub from the files it keeps (hub artifacts/preview-folder.ts `folderWeight`).",
         "type": "object",
         "properties": {
           "bytes": {
@@ -54412,19 +54418,16 @@
             "type": "string"
           },
           "source": {
-            "description": "What an artifact shows (Projects spec §5.10): a dev server or a folder on\nthe session's machine (a preview), or a page the hub built and keeps under\nits data dir at `artifacts/<id>/` and serves itself, named by the page's\nname. A dev server or folder may name `path`, the page inside it the\npreview opens at (`/motion/updates`); the root when absent.",
+            "description": "What an artifact shows (Projects spec §5.10): a dev server on the\nsession's machine, a folder of files the hub keeps (each a preview), or a\npage the hub built and keeps under its data dir at `artifacts/<id>/` and\nserves itself, named by the page's name. A dev server or folder may name\n`path`, the page inside it the preview opens at (`/motion/updates`); the\nroot when absent.",
             "anyOf": [
               {
                 "type": "object",
                 "properties": {
                   "dir": {
+                    "description": "A folder preview's: the folder its files were read from on the\nrow's machine, at its create or its last `artifact_update`. The hub\nkeeps those files with the artifact (hub artifacts/preview-folder.ts,\n`artifacts/<id>/folder/`) and serves them itself, as they are, on\nthe artifact's own origin: they outlive the agent's folder, and an\nupdate writes them over in place (the owner's pick on 2026-11-20,\n\"one way of serving\").",
                     "type": "string"
                   },
                   "path": {
-                    "type": "string"
-                  },
-                  "pin": {
-                    "description": "The version the person is served: the id of a copy of `dir` made on its machine when its author handed this version up, served in its place (agent stage-clone.ts `pinFolder`).",
                     "type": "string"
                   }
                 },
@@ -115464,6 +115467,150 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "artifact-desk-captures"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-folder-unfit"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-folder-unread"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-pick-no-choice"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "artifact-update-change-one"
                 ]
               },
@@ -116697,6 +116844,42 @@
                 "type": "string",
                 "enum": [
                   "artifact-update-not-canvas"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-update-not-folder"
                 ]
               },
               "detail": {
@@ -118017,39 +118200,76 @@
         ]
       },
       "patchApiInstancesByIdArtifactsByArtifact502": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "enum": [
-              "artifact-screen-unopened"
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-screen-unopened"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
             ]
           },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              502
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  502
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
             ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
           }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
         ]
       },
       "patchApiInstancesByIdArtifactsByArtifact503": {
@@ -139487,42 +139707,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "artifact-design-unread"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "artifact-desk-captures"
                 ]
               },
@@ -139632,6 +139816,78 @@
                 "type": "string",
                 "enum": [
                   "artifact-fields-stray"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-folder-unfit"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-folder-unread"
                 ]
               },
               "detail": {
@@ -149221,79 +149477,39 @@
         ]
       },
       "postApiInstancesByIdArtifactsByArtifactShow502": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-pin-uncut"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "artifact-show-unstarted"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-show-unstarted"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              502
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiInstancesByIdArtifactsByArtifactShow503": {

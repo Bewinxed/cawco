@@ -12,8 +12,8 @@
  * to the person: not a draft, not handed up to a parent that hasn't
  * opened it, not a maker's change held for one, not an option's media on a
  * decision page (the page asks, its Canvases and Previews are its
- * pictures, before and after it is answered or gone), not a preview whose
- * folder is gone from its machine. Its ask is open while (a reason each,
+ * pictures, before and after it is answered or gone), not a folder preview
+ * whose files can't be shown again. Its ask is open while (a reason each,
  * strongest first) a canvas to judge was never opened and nothing on it
  * answers it; a decision page has a question open (questions.ts: no pick,
  * no note, no pin on it the agent answered and resolved, not taken or
@@ -92,7 +92,7 @@ export interface ArtifactFacts {
   draft: boolean;
   /** The first decision, in page order, with no answer. */
   firstOpen: string | null;
-  /** Its folder isn't on its machine any more, in the daemon's words (preview proxy `folderGone`); null while it was there at its last start. */
+  /** Why a folder preview's files can't be shown again (doc `meta.sourceGone`, folder-move.ts); null while they can. */
   gone: string | null;
   /** Handed up to a parent session that hasn't opened it, or a maker's change held for it: not the person's yet. */
   handed: boolean;

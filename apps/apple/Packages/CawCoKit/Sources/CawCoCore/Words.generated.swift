@@ -1877,7 +1877,7 @@ public enum Words {
 
         public static let gonePage = "This preview's workspace can't be built again, so this version can't be shown. Ask its session to make it again."
 
-        /// Why a design can't come back (hub workspaces.ts `GoneWhy`), the pane's line under `goneTitle`: `origin` no longer holds the commit its workspace was last on, `branch` the branch that held it; its workspace was discarded; it went before its last version was recorded, or that record can't be read; or building it again failed, `why` its machine's words.
+        /// Why a design can't come back (hub workspaces.ts `GoneWhy`), the pane's line under `goneTitle`: `origin` no longer holds the commit its workspace was last on, `branch` the branch that held it; its workspace was discarded; it went before its last version was recorded, or that record can't be read; or building it again failed, `why` its machine's words. `filesLost`: a folder preview made before the hub kept its files, whose copy on `machine` (its machine's name, or `unnamed.machine.mid`) was gone when the hub came to move it in (hub artifacts/folder-move.ts).
         public enum GoneWhy {
             public static func commit(branch: String) -> String {
                 "Its commit, on \(branch), is no longer on origin. Usually the branch was deleted after it was merged."
@@ -1889,6 +1889,10 @@ public enum Words {
 
             public static func failed(why: String) -> String {
                 "Its workspace couldn't be built again (\(why))."
+            }
+
+            public static func filesLost(machine: String) -> String {
+                "Its files were kept on \(machine), and they are no longer there."
             }
         }
 

@@ -148,7 +148,6 @@ import {
   isHubPreview,
   originsFor,
 } from "@cawco/core/preview/hub-previews";
-import { PREVIEW_WEIGHT } from "@cawco/core/preview/protocol";
 import { previewEnterUrl } from "@cawco/core/preview/routes";
 import type {
   AgentRow,
@@ -210,8 +209,6 @@ import {
   STAGE_ENSURE,
   STAGE_IDLE_MS,
   STAGE_PICTURE,
-  STAGE_PIN,
-  STAGE_PIN_MS,
   STAGE_PINS,
   STAGE_RENDER,
   STAGE_SERVE,
@@ -606,7 +603,7 @@ import {
   type PreviewOriginDeps,
   previewControlRoutes,
 } from "./preview-control";
-import { servedByMachine } from "./preview-machine";
+import { hasOwnOrigin, servedByMachine } from "./preview-machine";
 import { previewRoutes } from "./preview-routes";
 import { createPreviewService } from "./preview-service";
 import { createCaps } from "./project-caps";
@@ -1342,7 +1339,6 @@ export const createServer = (
     fileAtThreshold: () => fileAtThreshold,
     finishStopDispatch: () => finishStopDispatch,
     flushOwedStarts: () => flushOwedStarts,
-    foldersSeen: () => foldersSeen,
     freshAccountReports: () => freshAccountReports,
     goneWithProcess: () => goneWithProcess,
     handAgain: () => handAgain,
@@ -2035,7 +2031,6 @@ export const createServer = (
     embedKeyOf,
     endPreviews,
     folderText,
-    foldersSeen,
     frameKey,
     frameOrigin,
     keepPage,
@@ -5059,6 +5054,9 @@ export const createServer = (
     // A delegation tree reads its sessions' artifacts (delegation-tree.ts).
     tree: (instance) => treeSessions(db, instance),
     machines: () => db.namedMachines(),
+    machineHome: (machineId) => db.machineHome(machineId),
+    // A folder preview's files written over: each panel showing it loads again, as a move of its source has it.
+    filesMoved: (id) => loadShownAgain(id),
     hubMachine: () => ownMachineIdRead,
     // A page is the hub's: its target names no machine.
     open: async (artifact, panel = artifact.instanceId, again = false) => {
@@ -5334,70 +5332,6 @@ export const createServer = (
         ? asked.value.result
         : undefined;
     },
-    // A folder preview's weight and its start page's desk captures, from its folder on the machine that serves it.
-    folderWeight: async (machineId, dir, path) => {
-      const asked = await readAgent(
-        machineId,
-        PREVIEW_WEIGHT,
-        [dir, path],
-        BUSY_TIMEOUT_MS
-      );
-      switch (asked.kind) {
-        case "unanswered":
-          return asked.reason === "dead"
-            ? awayProblem(
-                machineId,
-                "The folder's machine isn't connected to the hub, so its folder can't be read."
-              )
-            : silentProblem(
-                `The folder's machine didn't answer within ${secondsOf(asked.after)}s.`
-              );
-        case "answered":
-          break;
-        default:
-          throw unreachable(asked);
-      }
-      const answer = asked.value;
-      if (!answer.ok) {
-        return problem(502, {
-          code: "artifact-folder-unread",
-          detail: answer.error ?? "The folder couldn't be read.",
-        });
-      }
-      return answer.result;
-    },
-    // A folder's version an author hands up, copied on the folder's machine.
-    pinFolder: async (machineId, dir, pin) => {
-      const asked = await callAgent(
-        machineId,
-        STAGE_PIN,
-        [pin, dir],
-        STAGE_PIN_MS
-      );
-      switch (asked.kind) {
-        case "unanswered":
-          return asked.reason === "dead"
-            ? awayProblem(
-                machineId,
-                "The folder's machine isn't connected to the hub, so this version of it can't be kept."
-              )
-            : silentProblem(
-                `The folder's machine didn't answer within ${secondsOf(asked.after)}s, so this version of it may not be kept.`
-              );
-        case "answered":
-          break;
-        default:
-          throw unreachable(asked);
-      }
-      return asked.value.ok
-        ? undefined
-        : problem(502, {
-            code: "artifact-pin-uncut",
-            detail:
-              asked.value.error ??
-              "This version of the folder couldn't be kept.",
-          });
-    },
     keepPins: (machineId, pins) => {
       detach(
         callAgent(machineId, STAGE_PINS, [pins], BUSY_TIMEOUT_MS).then(
@@ -5408,20 +5342,12 @@ export const createServer = (
               asked.value.result > 0
             ) {
               console.info(
-                `[artifacts] ${machineId}: ${asked.value.result} pin(s) no artifact is served from let go`
+                `[artifacts] ${machineId}: ${asked.value.result} pin(s) whose files the hub keeps let go`
               );
             }
           }
         ),
         "pins kept"
-      );
-    },
-    unpin: (machineId, pin) => {
-      // Its stages end with it and say nothing more: forgotten here now.
-      workspaceStages.delete(pin);
-      detach(
-        callAgent(machineId, STAGE_UNPIN, [pin], BUSY_TIMEOUT_MS),
-        "pin let go"
       );
     },
   });
@@ -5722,7 +5648,7 @@ export const createServer = (
     after: lifetime.after,
     documents: db.documents,
     embedOf: (row) => {
-      if (!servedByMachine(row)) {
+      if (!hasOwnOrigin(row)) {
         return;
       }
       const key = artifactOrigin(row.origin);
@@ -5822,7 +5748,6 @@ export const createServer = (
     row: (id) => db.artifacts.get(id),
     rowAt: (origin) => db.artifacts.byOrigin(origin),
     shownWaitMs: SHOWN_WAIT_MS,
-    sourceSeen: (id, gone) => artifacts.sourceSeen(id, gone),
   });
   /** A design opened after its workspace went, brought back (design-revive.ts). */
   const reviveServed = createDesignRevive({
@@ -5863,6 +5788,15 @@ export const createServer = (
     );
     publishPreview(instanceId, "open", moved);
   };
+  /** Each panel showing artifact `id` loads it again (`loadAgain`), and every artifact tab reads its target again. */
+  const loadShownAgain = (id: string): void => {
+    for (const [instanceId, target] of previewTargets) {
+      if (target.artifact.id === id) {
+        loadAgain(instanceId, target);
+      }
+    }
+    soon(() => artifactSessions.moved({ kind: "shown" }));
+  };
   // Every move of an artifact's source moves the upstream of the origin it
   // stands on, and every frame showing it loads what it serves now. A
   // frame's address is its origin's, which a move keeps, so only a new
@@ -5873,12 +5807,7 @@ export const createServer = (
   // (`loadAgain`), and every artifact tab reads its target again once the
   // move's writer has written the row's revision beside it (`tabTarget`).
   db.onSourceMoved((move) => {
-    for (const [instanceId, target] of previewTargets) {
-      if (target.artifact.id === move.id) {
-        loadAgain(instanceId, target);
-      }
-    }
-    soon(() => artifactSessions.moved({ kind: "shown" }));
+    loadShownAgain(move.id);
     detach(previewService.moved(move), "preview source move");
   });
 

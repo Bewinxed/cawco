@@ -38,7 +38,9 @@ export const previewWords = {
    * workspace was last on, `branch` the branch that held it; its workspace
    * was discarded; it went before its last version was recorded, or that
    * record can't be read; or building it again failed, `why` its machine's
-   * words.
+   * words. `filesLost`: a folder preview made before the hub kept its files,
+   * whose copy on `machine` (its machine's name, or `unnamed.machine.mid`) was gone when the hub came
+   * to move it in (hub artifacts/folder-move.ts).
    */
   goneWhy: {
     commit: (branch: string) =>
@@ -48,6 +50,8 @@ export const previewWords = {
     unrecorded:
       "Its workspace was deleted before a record of this version was kept, or that record can't be read.",
     failed: (why: string) => `Its workspace couldn't be built again (${why}).`,
+    filesLost: (machine: string) =>
+      `Its files were kept on ${machine}, and they are no longer there.`,
   },
   /**
    * Its one action, the session asked to make it

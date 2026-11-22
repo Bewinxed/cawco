@@ -839,6 +839,19 @@ const copyBounded = async (
   return held;
 };
 
+/** `from` copied whole to `to` (a new folder), links as links, leaving out every entry `left` names. */
+const copyTree = (
+  from: string,
+  to: string,
+  left: ReadonlySet<string> = new Set()
+): Promise<void> =>
+  cp(from, to, {
+    recursive: true,
+    verbatimSymlinks: true,
+    preserveTimestamps: true,
+    filter: (source) => source === from || !left.has(basename(source)),
+  });
+
 /** What a stage of a folder in no repository does in place of a copy too large ({@link copyBounded}). */
 const COPY_INSTEAD =
   "start the session in the project's own folder, or run git init and commit there, so the stage runs in a clone of what git tracks";
@@ -1346,100 +1359,22 @@ export const copyBack = async (
 };
 
 /*
- * A pin: the version of a folder preview its author handed up, as its
- * machine serves it to the person (core preview/protocol.ts
- * `PreviewSource.pin`): a copy of the folder ({@link pinFolder}). A
- * delegate's folder is its scratch dir or its workspace's clone, which go
- * when its item ends, so the person is served a copy that outlives them.
- * Each hand-up copies a pin of its own beside the one the person is served,
- * and the hub moves the artifact onto it only once it stands, so a copy
- * that fails leaves him the version he had. A pin never changes after its
- * copy. A port preview has none: the person is served its workspace's or
- * place's own server live (stage.ts `ensureServed`), and a sheet its
- * workspace's stage. The hub lets a pin go once no artifact names it
- * (stage.ts `unpin`), and sends the pins it serves from as the machine
- * registers and on each workspace sweep, so every other one goes (stage.ts
- * `keepPins`), a tree pinned by an earlier build among them.
+ * A pin: a copy of a folder preview this machine made each time its author
+ * handed it up, before the hub kept a folder preview's files itself (hub
+ * artifacts/folder-move.ts). Its copy stands at `folder` in the pin's state
+ * dir, beside the record ({@link PIN}) written once it stood whole. No pin
+ * is made any more: the hub reads each one's copy off this machine as it
+ * registers, keeps the files with the artifact, and then this machine lets
+ * the pin go (stage.ts `keepPins`), a tree an earlier build pinned among
+ * them.
  */
 
-/** What the agent keeps of a pin in its state dir, written once its copy stands whole: the folder it copies, as a real path. */
-const PinSchema = z.object({
-  kind: z.literal("folder"),
-  from: z.string(),
-});
-type Pin = z.infer<typeof PinSchema>;
-
+/** The record a pin's state dir held once its copy stood whole. */
 const PIN = "stage-pin.json";
-
-/** Where a folder's pin keeps its copy, in the pin's state dir. */
-const PINNED_FOLDER = "folder";
-
-const pinOf = async (pin: string): Promise<Pin | undefined> =>
-  await readRecord(join(workspaceStateDir(pin), PIN), PinSchema).catch(
-    () => undefined
-  );
 
 /** Whether id `id` names a pin this machine copied whole (read synchronously), or a tree an earlier build pinned. */
 const isPin = (id: string): boolean =>
   existsSync(join(workspaceStateDir(id), PIN));
-
-/** `from` copied whole to `to` (a new folder), links as links, leaving out every entry `left` names. */
-const copyTree = (
-  from: string,
-  to: string,
-  left: ReadonlySet<string> = new Set()
-): Promise<void> =>
-  cp(from, to, {
-    recursive: true,
-    verbatimSymlinks: true,
-    preserveTimestamps: true,
-    filter: (source) => source === from || !left.has(basename(source)),
-  });
-
-/**
- * Pin `pin` of folder `dir`: a copy of it, made beside where it goes and
- * renamed there whole, so nothing serves half a copy, once
- * {@link copyBounded} finds it small enough. One already made stands as it
- * is. Answers the copy's root.
- */
-export const pinFolder = (dir: string, pin: string): Promise<string> =>
-  inCloneTurn(pin, async () => {
-    const state = workspaceStateDir(pin);
-    const copy = join(state, PINNED_FOLDER);
-    if ((await pinOf(pin)) && existsSync(copy)) {
-      return copy;
-    }
-    const from = await realpath(dir);
-    await makeFolder(dirname(state));
-    await copyBounded(
-      from,
-      dirname(state),
-      new Set(),
-      "show the folder that holds the page and what it loads"
-    );
-    await makeFolder(state);
-    const fresh = join(state, `.${PINNED_FOLDER}-${crypto.randomUUID()}`);
-    try {
-      await copyTree(from, fresh);
-      await removeTree(copy);
-      await rename(fresh, copy);
-    } finally {
-      await rm(fresh, { recursive: true, force: true });
-    }
-    await writeStateFile(
-      join(state, PIN),
-      `${JSON.stringify({ kind: "folder", from } satisfies Pin)}\n`
-    );
-    return copy;
-  });
-
-/** Pin `pin`'s folder copy, when it has one; nothing otherwise. */
-export const pinnedFolder = async (
-  pin: string
-): Promise<string | undefined> => {
-  const copy = join(workspaceStateDir(pin), PINNED_FOLDER);
-  return (await pinOf(pin)) && existsSync(copy) ? copy : undefined;
-};
 
 /**
  * Everything of pin `pin` removed: for a tree an earlier build pinned, its

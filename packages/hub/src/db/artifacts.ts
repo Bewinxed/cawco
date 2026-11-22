@@ -11,7 +11,6 @@ import {
   inArray,
   isNotNull,
   isNull,
-  lt,
   or,
   type SQL,
   sql,
@@ -101,7 +100,9 @@ const sourceColumnsOf = (
   sourceStageFile: "port" in source ? (source.stage?.file ?? null) : null,
   sourceServeCommand: "port" in source ? (source.serve?.command ?? null) : null,
   sourceServeCwd: "port" in source ? (source.serve?.cwd ?? null) : null,
-  sourcePin: "dir" in source ? (source.pin ?? null) : null,
+  // Written only by a hub from before it kept folder previews' files; a
+  // source written now names none ({@link ArtifactsDb.foldersToMove}).
+  sourcePin: null,
 });
 
 /** A stored artifact with its source whole again. */
@@ -116,12 +117,11 @@ export const artifactOf = ({
   sourceStageFile,
   sourceServeCommand,
   sourceServeCwd,
-  sourcePin,
+  sourcePin: _sourcePin,
   mayWait: _mayWait,
   ...row
 }: StoredArtifact): ArtifactRow => {
   const path = sourcePath === null ? {} : { path: sourcePath };
-  const pin = sourcePin === null ? {} : { pin: sourcePin };
   const workspace = sourceWorkspace ?? sourcePlace;
   const port = (): PreviewSource => ({
     port: sourcePort ?? 0,
@@ -133,10 +133,9 @@ export const artifactOf = ({
       ? {}
       : { serve: { command: sourceServeCommand, cwd: sourceServeCwd ?? "." } }),
     ...(workspace === null ? {} : { workspace }),
-    ...pin,
   });
   const folder = (): PreviewSource =>
-    sourceDir === null ? port() : { dir: sourceDir, ...path, ...pin };
+    sourceDir === null ? port() : { dir: sourceDir, ...path };
   return {
     ...row,
     source: sourcePage === null ? folder() : { page: sourcePage },
@@ -180,7 +179,7 @@ export type ArtifactServed = Pick<ArtifactRow, "machineId" | "source">;
  * browser), or a row no machine holds.
  */
 const rowSourceKey = (row: ArtifactServed): SourceKey | null =>
-  row.machineId && !("page" in row.source)
+  row.machineId && "port" in row.source
     ? sourceKeyOf({ machineId: row.machineId, source: row.source })
     : null;
 
@@ -244,6 +243,17 @@ export interface ArtifactsDb {
   readonly create: (
     row: Omit<ArtifactRow, "composer" | "origin"> & { composer?: boolean }
   ) => ArtifactRow;
+  /** Folder preview `id`'s pin's files moved in, or found gone: its pin named no more ({@link foldersToMove}). */
+  readonly folderMoved: (id: string) => void;
+  /** The folder previews on machine `machineId` that name no pin ({@link foldersToMove}), held next versions too: their ids. */
+  readonly foldersOn: (machineId: string) => string[];
+  /**
+   * The folder previews on machine `machineId` whose files a hub from
+   * before it kept them left in a pin's copy there (schema.ts
+   * `artifacts.sourcePin`), held next versions too, each with its pin:
+   * what artifacts/folder-move.ts moves in as the machine registers.
+   */
+  readonly foldersToMove: (machineId: string) => { id: string; pin: string }[];
   readonly get: (id: string) => ArtifactRow | undefined;
   /**
    * Artifact `id` takes the preview origin of `held`, its next version,
@@ -279,22 +289,14 @@ export interface ArtifactsDb {
   readonly ofProject: (projectId: string) => ArtifactRow[];
   /** Every page whose `state` took a change: the docs that may hold picks. */
   readonly picked: () => ArtifactRow[];
-  /** The folder previews served from pin `pin` (core `PreviewSource.pin`), held next versions too: the one that cut it, or one a held version was opened onto. */
-  readonly pinnedBy: (pin: string) => ArtifactRow[];
-  /** Every pin an artifact on machine `machineId` is served from (core `PreviewSource.pin`), held next versions' too. */
-  readonly pinsOn: (machineId: string) => string[];
   /**
-   * The artifacts, any session's, that show what a workspace serves: a port
-   * preview naming it (`source.workspace`), or a folder preview of its clone
-   * or a folder inside it on its machine. Every session's shown preview
-   * (shown_previews) is one of these rows, so this covers what panels show.
-   * A held next version is one too: a server it shows stays up for it.
+   * The artifacts, any session's, that show what workspace or place
+   * `workspace` serves: a port preview or a sheet naming it
+   * (`source.workspace`). Every session's shown preview (shown_previews) is
+   * one of these rows, so this covers what panels show. A held next
+   * version is one too: a server it shows stays up for it.
    */
-  readonly previewing: (workspace: {
-    id: string;
-    machineId: string;
-    path: string;
-  }) => ArtifactRow[];
+  readonly previewing: (workspace: string) => ArtifactRow[];
   /** A project's page of a name, whichever session wrote it, or none now ({@link projectPage}). */
   readonly projectPage: (
     projectId: string,
@@ -353,7 +355,7 @@ export interface ArtifactsDb {
 /** An artifact row that went, and the preview origin it pointed at (schema.ts `artifacts.origin`). */
 export interface GoneArtifact {
   id: string;
-  /** The machine that served it, and what it was served from (a folder's pin, a served preview's server): each let go once no row names it. */
+  /** The machine that served it, and what it was served from (a served preview's server): each let go once no row names it. */
   machineId: string | null;
   name: string;
   origin: string;
@@ -410,15 +412,6 @@ export const artifactsDb = (
     artifactsWritten: written,
   }: ArtifactEvents
 ): ArtifactsDb => ({
-  pinsOn: (machineId) =>
-    db
-      .selectDistinct({ pin: artifacts.sourcePin })
-      .from(artifacts)
-      .where(
-        and(eq(artifacts.machineId, machineId), isNotNull(artifacts.sourcePin))
-      )
-      .all()
-      .flatMap((row) => (row.pin === null ? [] : [row.pin])),
   append: (id, update, changed) =>
     db.transaction((tx) => {
       const row = tx.select().from(artifacts).where(eq(artifacts.id, id)).get();
@@ -666,33 +659,46 @@ export const artifactsDb = (
       .get();
     return row && artifactOf(row);
   },
-  pinnedBy: (pin) =>
+  foldersToMove: (machineId) =>
     db
-      .select()
+      .select({ id: artifacts.id, pin: artifacts.sourcePin })
       .from(artifacts)
-      .where(eq(artifacts.sourcePin, pin))
+      .where(
+        and(
+          eq(artifacts.machineId, machineId),
+          isNotNull(artifacts.sourceDir),
+          isNotNull(artifacts.sourcePin)
+        )
+      )
       .all()
-      .map(artifactOf),
-  previewing: ({ id, machineId, path }) =>
+      .flatMap(({ id, pin }) => (pin === null ? [] : [{ id, pin }])),
+  foldersOn: (machineId) =>
+    db
+      .select({ id: artifacts.id })
+      .from(artifacts)
+      .where(
+        and(
+          eq(artifacts.machineId, machineId),
+          isNotNull(artifacts.sourceDir),
+          isNull(artifacts.sourcePin)
+        )
+      )
+      .all()
+      .map((row) => row.id),
+  folderMoved: (id) => {
+    db.update(artifacts)
+      .set({ sourcePin: null })
+      .where(eq(artifacts.id, id))
+      .run();
+  },
+  previewing: (workspace) =>
     db
       .select()
       .from(artifacts)
       .where(
         or(
-          eq(artifacts.sourceWorkspace, id),
-          eq(artifacts.sourcePlace, id),
-          // The folder, or one inside it: every text from `path/` up to
-          // `path0` (the character after "/") starts `path/`. Each of the
-          // four is its own seek, `artifacts_machine_dir` the last two.
-          and(
-            eq(artifacts.machineId, machineId),
-            eq(artifacts.sourceDir, path)
-          ),
-          and(
-            eq(artifacts.machineId, machineId),
-            gte(artifacts.sourceDir, `${path}/`),
-            lt(artifacts.sourceDir, `${path}0`)
-          )
+          eq(artifacts.sourceWorkspace, workspace),
+          eq(artifacts.sourcePlace, workspace)
         )
       )
       .orderBy(desc(artifacts.createdAt))

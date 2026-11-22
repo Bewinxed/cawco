@@ -1,18 +1,17 @@
 import type { PREVIEW_START, PreviewSource } from "./protocol";
 
 /**
- * What a machine serves a preview from: a port (in a workspace's network or
- * on the host, a sheet's stage or a served server on it) or a folder. A
- * page is the hub's own, and no machine serves it.
+ * What a machine serves a preview from: a port, in a workspace's network or
+ * on the host, a sheet's stage or a served server on it. A page and a
+ * folder preview's files are the hub's own, and no machine serves them.
  */
-export type MachineSource = Exclude<PreviewSource, { page: string }>;
+export type MachineSource = Extract<PreviewSource, { port: number }>;
 
 /**
  * WHICH MACHINE AND WHICH SOURCE SERVE AN ORIGIN, as one string: the key a
  * preview's upstream is started for and is compared by. It names everything
  * a machine's listener serves with (the port, the workspace, a sheet's
- * stage, a served server's command, a folder and the copy of it pinned
- * for the person) and nothing it does not (the
+ * stage, a served server's command) and nothing it does not (the
  * start page, which the frame names). Made by {@link sourceKeyOf} alone, so
  * two keys are equal exactly when the same listener would serve both.
  */
@@ -20,26 +19,23 @@ export type SourceKey = string & { readonly __brand: "SourceKey" };
 
 /**
  * The key of `source` on machine `machineId` ({@link SourceKey}): a JSON
- * tuple, so no command, cwd or folder can make two sources read as one.
+ * tuple, so no command or cwd can make two sources read as one.
  */
 export const sourceKeyOf = (at: {
   machineId: string;
   source: MachineSource;
 }): SourceKey => {
   const { machineId, source } = at;
-  const tuple =
-    "dir" in source
-      ? [machineId, "dir", source.dir, source.pin ?? null]
-      : [
-          machineId,
-          "port",
-          source.port,
-          source.workspace ?? null,
-          source.stage?.dir ?? null,
-          source.stage?.file ?? null,
-          source.serve?.command ?? null,
-          source.serve?.cwd ?? null,
-        ];
+  const tuple = [
+    machineId,
+    "port",
+    source.port,
+    source.workspace ?? null,
+    source.stage?.dir ?? null,
+    source.stage?.file ?? null,
+    source.serve?.command ?? null,
+    source.serve?.cwd ?? null,
+  ];
   // Cast kept, the brand's one mint: TypeScript makes a branded string only by assertion (https://github.com/microsoft/TypeScript/issues/202).
   return JSON.stringify(tuple) as SourceKey;
 };
@@ -47,7 +43,7 @@ export const sourceKeyOf = (at: {
 /**
  * Whether `value`, off the wire, is a {@link SourceKey} as
  * {@link sourceKeyOf} writes one: a JSON tuple of its machine, its kind
- * (`dir` or `port`), and the source's parts.
+ * (`port`), and the source's parts.
  */
 export const isSourceKey = (value: unknown): value is SourceKey => {
   if (typeof value !== "string") {
@@ -58,14 +54,14 @@ export const isSourceKey = (value: unknown): value is SourceKey => {
     return (
       Array.isArray(tuple) &&
       typeof tuple[0] === "string" &&
-      (tuple[1] === "dir" || tuple[1] === "port")
+      tuple[1] === "port"
     );
   } catch {
     return false;
   }
 };
 
-/** What {@link PREVIEW_START} is asked: the source a machine serves (a port or a folder), the hub's name for the start (`instanceId`, which a stop of it names), the one credential its listener answers (`token`), and the source key it was started for, which the machine's register reports back. */
+/** What {@link PREVIEW_START} is asked: the port a machine serves, the hub's name for the start (`instanceId`, which a stop of it names), the one credential its listener answers (`token`), and the source key it was started for, which the machine's register reports back. */
 export type PreviewStartArgs = MachineSource & {
   for: SourceKey;
   instanceId: string;

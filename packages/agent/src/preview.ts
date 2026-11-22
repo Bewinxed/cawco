@@ -1,6 +1,4 @@
 import { timingSafeEqual } from "node:crypto";
-import { realpath, stat } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import {
   type BrowserKey,
@@ -8,11 +6,7 @@ import {
   isBrowserKey,
 } from "@cawco/core/browser";
 import { PREVIEW_RELAYED_HEADER } from "@cawco/core/browser-gate";
-import {
-  fileViewerPage,
-  fileViewOf,
-  opensAsFile,
-} from "@cawco/core/file-viewer";
+import { opensAsFile } from "@cawco/core/file-viewer";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import { PREVIEW_HELD_HEADER } from "@cawco/core/preview/reach";
 import { PREVIEW_PING_PATH } from "@cawco/core/preview/routes";
@@ -32,14 +26,9 @@ import {
   decodedHeaders,
   downResponse,
   errorPageResponse,
-  type FolderWeight,
-  folderGone,
-  folderKey,
-  folderWeight,
+  fileViewerOf,
   heldWhileServed,
-  IMMUTABLE,
   injectOverlay,
-  isFolderGone,
   loadsDocument,
   notUpYet,
   type PreviewSocket,
@@ -49,8 +38,6 @@ import {
   RELAY_HEADER,
   socketRefusal,
   upgradePreview,
-  versionAssets,
-  versionedFile,
 } from "@cawco/preview/proxy";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { z } from "zod";
@@ -75,7 +62,6 @@ import {
   WorkspaceNotHere,
   wakeSource,
 } from "./stage";
-import { pinFolder, pinnedFolder } from "./stage-clone";
 
 /**
  * The listeners this process serves, each with the hub's token for the
@@ -90,7 +76,7 @@ const previews = new Map<
   {
     for: SourceKey;
     listener: Server<PreviewSocket>;
-    /** The workspace network its port is in (stage.ts `networkOf`); none for the host's or a folder. */
+    /** The workspace network its port is in (stage.ts `networkOf`); none for the host's. */
     network: string | undefined;
     token: string;
   }
@@ -668,75 +654,6 @@ const portSource = (
   ...(parts.serve === undefined ? {} : { serve: parts.serve }),
 });
 
-/**
- * The folder a folder preview serves: with `pin` (core `PreviewSource.pin`)
- * its pin's copy, made from `dir` now when the pin has none here (one cut
- * before this machine kept pins); else `dir` itself.
- */
-async function pinnedRoot(dir: string, pin: string | undefined) {
-  if (pin === undefined) {
-    return await folderRoot(dir);
-  }
-  return await folderRoot(
-    (await pinnedFolder(pin)) ?? (await pinFolder(await folderRoot(dir), pin))
-  );
-}
-
-/** The system's codes for a path that is not there, or not a folder on the way to it. */
-const NOT_THERE = new Set(["ENOENT", "ENOTDIR"]);
-
-/**
- * A folder preview's folder, its links resolved; refused when it is no
- * absolute path to a folder, and in core's `folderGone` words when the
- * folder is not there, so the hub records the preview's source gone.
- */
-async function folderRoot(dir: string): Promise<string> {
-  if (!isAbsolute(dir)) {
-    throw new Error("Directory must be an absolute path.");
-  }
-  const root = await realpath(dir).catch((error: unknown) => {
-    const code =
-      error instanceof Error && "code" in error ? error.code : undefined;
-    throw typeof code === "string" && NOT_THERE.has(code)
-      ? new Error(folderGone(causeOf(error)))
-      : error;
-  });
-  if (!(await stat(root)).isDirectory()) {
-    throw new Error(folderGone(`${dir} is not a folder`));
-  }
-  return root;
-}
-
-/**
- * Whether each of `dirs` is still a folder on this machine, read with a
- * `realpath` and a `stat` (folderRoot) and nothing else: no listener, no
- * process. For each, in order, core's `folderGone` words when it isn't
- * there, else null (a path that is no absolute one says nothing of it).
- */
-export async function foldersThere(
-  dirs: readonly string[]
-): Promise<(string | null)[]> {
-  return await Promise.all(
-    dirs.map((dir) =>
-      folderRoot(dir).then(
-        () => null,
-        (error: unknown) => {
-          const said = error instanceof Error ? error.message : String(error);
-          return isFolderGone(said) ? said : null;
-        }
-      )
-    )
-  );
-}
-
-/** What a folder preview of `dir` loads at most, and the desk captures on its start page at `path` (core `folderWeight`). */
-export async function previewWeight(
-  dir: string,
-  path?: string | null
-): Promise<FolderWeight> {
-  return folderWeight(await folderRoot(dir), path ?? undefined);
-}
-
 export function startPreview(
   options: PreviewStartArgs,
   ports: Pick<AgentPorts, "stage" | "stageClone">
@@ -783,59 +700,14 @@ const servesNow = (held: number): Response =>
     },
   });
 
-/** What a file's answer says no longer once the viewer page stands in its place: the file's own length, encoding, range and validators. */
-const FILE_ONLY_HEADERS = [
-  "accept-ranges",
-  "content-disposition",
-  "content-encoding",
-  "content-length",
-  "content-range",
-  "etag",
-  "last-modified",
-] as const;
-
-/**
- * The viewer page (core file-viewer.ts) for the file at `url` answered with
- * `headers` and `body`, `size` bytes when the folder said (else its answer's
- * length); `headers` become the page's: HTML, never kept.
- */
-async function viewerOf(
-  url: URL,
-  headers: Headers,
-  body: ReadableStream<Uint8Array> | null,
-  size: number | null
-): Promise<string> {
-  const type = headers.get("content-type");
-  const length = Number(headers.get("content-length"));
-  const name = decodeURIComponent(url.pathname.split("/").at(-1) ?? "");
-  const page = fileViewerPage({
-    name: name || url.hostname,
-    src: `${url.pathname}${url.search}`,
-    type,
-    size: size ?? (Number.isFinite(length) && length > 0 ? length : null),
-    view: await fileViewOf(type, body),
-  });
-  for (const header of FILE_ONLY_HEADERS) {
-    headers.delete(header);
-  }
-  headers.set("content-type", "text/html; charset=utf-8");
-  headers.set("cache-control", "no-store");
-  return page;
-}
-
 async function start(
   options: PreviewStartArgs,
   ports: Pick<AgentPorts, "stage" | "stageClone">
 ): Promise<{ port: number }> {
   const { instanceId, token } = options;
   const relayToken = Buffer.from(token);
-  let source: Exclude<PreviewSource, { page: string }>;
-  if ("dir" in options) {
-    source = { dir: await pinnedRoot(options.dir, options.pin) };
-  } else {
-    const { port, workspace, stage, serve } = options;
-    source = portSource(port, { workspace, stage, serve });
-  }
+  const { port, workspace, stage, serve } = options;
+  const source = portSource(port, { workspace, stage, serve });
   const restarts = stagedSource(source);
   /** A server that stopped, as the proxy's own page says it: one a stage serves is started again by itself, any other only by hand. */
   const serverDown = (why: string): Response =>
@@ -850,10 +722,7 @@ async function start(
   // sheet's stage or a served preview's server is woken by its first
   // request (`staged`), which starts the boundary it runs in: a boundary
   // closed while it slept is no refusal.
-  if (
-    "port" in source &&
-    !(source.workspace && (source.stage || source.serve))
-  ) {
+  if (!(source.workspace && (source.stage || source.serve))) {
     await upstreamOf(instanceId, source);
   }
   /**
@@ -865,11 +734,7 @@ async function start(
    * didn't start stands until the person asks again.
    */
   const staged = async (request: Request): Promise<Response | null> => {
-    if (!(
-      "port" in source &&
-      (source.stage || source.serve) &&
-      source.workspace
-    )) {
+    if (!((source.stage || source.serve) && source.workspace)) {
       return null;
     }
     try {
@@ -923,8 +788,8 @@ async function start(
   /**
    * The hub's ping (hub preview.ts `pingSession`), answered as a load of
    * the page would be met, short of waking a stage: "ok", or the down page
-   * the load would get, which the hub reads (core `downOf`). A folder
-   * answers at once; a port a stage serves once the stage could be woken
+   * the load would get, which the hub reads (core `downOf`). A port a
+   * stage serves answers once the stage could be woken
    * (its workspace is on this machine: one archived or discarded is `gone`,
    * as `staged` answers its load); any other
    * port needs its workspace running and its server answering on it.
@@ -932,9 +797,6 @@ async function start(
   const holding = heldRequests();
   const pinged = async (): Promise<Response> => {
     const ok = servesNow(holding.oldest());
-    if (!("port" in source)) {
-      return ok;
-    }
     if (source.workspace && (source.stage || source.serve)) {
       try {
         await sourceWakes(source);
@@ -975,7 +837,7 @@ async function start(
       return serverDown(unanswered(source, error));
     }
   };
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the two source modes converge here so header rewriting and HTML injection have one path.
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one path for a request's header rewriting, its stage's wake, its socket or fetch, and its answer's HTML injection.
   async function relayed(
     request: Request,
     server: Server<PreviewSocket>
@@ -1004,173 +866,125 @@ async function start(
       return await pinged();
     }
     let response: Response;
-    /** A folder's file at its folder's key: kept for good. */
-    let versioned: string | null = null;
-    /** The bytes of the folder's file answered, as its folder holds it; a server's answer says its own length. */
-    let fileSize: number | null = null;
-    if ("port" in source) {
-      const route = machineRoute(url.pathname);
-      if (route) {
+    const route = machineRoute(url.pathname);
+    if (route) {
+      previewFailed(
+        "agent listener",
+        instanceId,
+        `refused /${route}: it opens a file or a program on this machine`
+      );
+      return refusal(route);
+    }
+    const asked = proxyHeaders(request.headers);
+    // The relay's credential is this listener's, never the app's.
+    asked.delete(RELAY_HEADER);
+    // A hub the app passes it on to records no origin of it (core
+    // `dashboardOriginOf`): the page's is the address given just below.
+    asked.set(PREVIEW_RELAYED_HEADER, "1");
+    asked.set("host", `localhost:${source.port}`);
+    for (const name of FORWARDING_HEADERS) {
+      asked.delete(name);
+    }
+    if (asked.has("origin")) {
+      asked.set("origin", `http://localhost:${source.port}`);
+    }
+    // The page's own Referer names the preview origin: the dev server
+    // hears it as its own address, as it does the Host and Origin.
+    const referer = asked.get("referer");
+    if (referer) {
+      try {
+        const ref = new URL(referer);
+        asked.set(
+          "referer",
+          `http://localhost:${source.port}${ref.pathname}${ref.search}`
+        );
+      } catch {
+        asked.delete("referer");
+      }
+    }
+    asked.set("accept-encoding", "identity");
+    // A socket into a stage that isn't live is refused at once, its
+    // wake started and not waited on: held, it held every socket of
+    // the tab to the same address (core `notUpYet`).
+    if (asksUpgrade(request) && !sourceUp(source)) {
+      staged(request).catch(() => undefined);
+      return notUpYet();
+    }
+    // A page's request waits on the stage's wake and the server's first answer.
+    heldWhileServed(server, request);
+    const asleep = await staged(request);
+    if (asleep) {
+      return asleep;
+    }
+    let upstream: Awaited<ReturnType<typeof upstreamOf>>;
+    try {
+      upstream = await upstreamOf(instanceId, source);
+    } catch (error) {
+      if (error instanceof WorkspaceDown) {
         previewFailed(
           "agent listener",
           instanceId,
-          `refused /${route}: it opens a file or a program on this machine`
+          `workspace ${source.workspace} has no boundary running`
         );
-        return refusal(route);
+        return downResponse("workspace", 503);
       }
-      const headers = proxyHeaders(request.headers);
-      // The relay's credential is this listener's, never the app's.
-      headers.delete(RELAY_HEADER);
-      // A hub the app passes it on to records no origin of it (core
-      // `dashboardOriginOf`): the page's is the address given just below.
-      headers.set(PREVIEW_RELAYED_HEADER, "1");
-      headers.set("host", `localhost:${source.port}`);
-      for (const name of FORWARDING_HEADERS) {
-        headers.delete(name);
-      }
-      if (headers.has("origin")) {
-        headers.set("origin", `http://localhost:${source.port}`);
-      }
-      // The page's own Referer names the preview origin: the dev server
-      // hears it as its own address, as it does the Host and Origin.
-      const referer = headers.get("referer");
-      if (referer) {
-        try {
-          const ref = new URL(referer);
-          headers.set(
-            "referer",
-            `http://localhost:${source.port}${ref.pathname}${ref.search}`
-          );
-        } catch {
-          headers.delete("referer");
-        }
-      }
-      headers.set("accept-encoding", "identity");
-      // A socket into a stage that isn't live is refused at once, its
-      // wake started and not waited on: held, it held every socket of
-      // the tab to the same address (core `notUpYet`).
-      if (asksUpgrade(request) && !sourceUp(source)) {
-        staged(request).catch(() => undefined);
-        return notUpYet();
-      }
-      // A page's request waits on the stage's wake and the server's first answer.
-      heldWhileServed(server, request);
-      const asleep = await staged(request);
-      if (asleep) {
-        return asleep;
-      }
-      let upstream: Awaited<ReturnType<typeof upstreamOf>>;
-      try {
-        upstream = await upstreamOf(instanceId, source);
-      } catch (error) {
-        if (error instanceof WorkspaceDown) {
-          previewFailed(
-            "agent listener",
-            instanceId,
-            `workspace ${source.workspace} has no boundary running`
-          );
-          return downResponse("workspace", 503);
-        }
-        // The bridge into the workspace's network did not open.
-        previewFailed("bridge", instanceId, causeOf(error));
-        return downResponse("reach", 502, causeOf(error));
-      }
-      const at = `${url.pathname}${url.search}`;
-      if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-        const ws =
-          upstream === "host"
-            ? `ws://127.0.0.1:${source.port}${at}`
-            : `ws+unix://${upstream.unix}:${at}`;
-        const socketRefused = await upgradePreview(
-          request,
-          server,
-          ws,
-          headers,
-          {
-            hop: "agent listener",
-            instanceId,
-            // A page's open socket (its HMR) is a viewer: the stage stays awake for it.
-            ...((source.stage || source.serve) && source.workspace
-              ? { viewer: () => sourceViewer(source) }
-              : {}),
-          }
-        );
-        return socketRefused && socketRefusal(socketRefused);
-      }
-      const ask = (): Promise<Response> =>
-        fetch(
-          upstream === "host"
-            ? `http://127.0.0.1:${source.port}${at}`
-            : `http://localhost:${source.port}${at}`,
-          {
-            method: request.method,
-            headers,
-            body: request.body,
-            redirect: "manual",
-            ...(upstream === "host" ? {} : { unix: upstream.unix }),
-          }
-        );
-      try {
-        response = await ask();
-      } catch (error) {
-        // Nothing answered: the workspace closed under it, or its server is down.
-        const network = networkOf(source);
-        if (network !== undefined && (await workspaceGone(network))) {
-          previewFailed(
-            "agent listener",
-            instanceId,
-            `workspace ${source.workspace} closed under it`
-          );
-          await closeBridge(instanceId);
-          return downResponse("workspace", 503);
-        }
-        const again = await afterRestart(request, ask);
-        if (again?.kind === "refused") {
-          return again.answer;
-        }
-        if (again?.kind !== "answered") {
-          const why = unanswered(source, error);
-          previewFailed("agent listener", instanceId, why);
-          return serverDown(why);
-        }
-        response = again.answer;
-      }
-    } else {
-      // A file at its folder's key (core `versionAssets`), or the page's own address.
-      versioned = versionedFile(url.pathname);
-      const asked = versioned ?? url.pathname;
-      const filePath = resolve(
-        source.dir,
-        `.${decodeURIComponent(asked === "/" ? "/index.html" : asked)}`
-      );
-      /** A file the folder doesn't serve: a document's load is answered with CawCo's own page (core `errorPageResponse`). */
-      const missing = (status: 403 | 404, text: string) =>
-        loadsDocument(request)
-          ? errorPageResponse(status, text)
-          : new Response(text, { status });
-      let actual: string;
-      try {
-        actual = await realpath(filePath);
-      } catch {
-        return missing(404, "Not found");
-      }
-      const path = relative(source.dir, actual);
-      if (path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path)) {
-        return missing(403, "Forbidden");
-      }
-      const stats = await stat(actual);
-      if (!stats.isFile()) {
-        return missing(404, "Not found");
-      }
-      fileSize = stats.size;
-      // A file at its folder's key never changes its bytes, so it is kept
-      // for good (core `IMMUTABLE`, longer than any TTL a CDN would set);
-      // the page's own address is what is on disk now.
-      response = new Response(Bun.file(actual), {
-        headers: {
-          "cache-control": versioned === null ? "no-store" : IMMUTABLE,
-        },
+      // The bridge into the workspace's network did not open.
+      previewFailed("bridge", instanceId, causeOf(error));
+      return downResponse("reach", 502, causeOf(error));
+    }
+    const at = `${url.pathname}${url.search}`;
+    if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+      const ws =
+        upstream === "host"
+          ? `ws://127.0.0.1:${source.port}${at}`
+          : `ws+unix://${upstream.unix}:${at}`;
+      const socketRefused = await upgradePreview(request, server, ws, asked, {
+        hop: "agent listener",
+        instanceId,
+        // A page's open socket (its HMR) is a viewer: the stage stays awake for it.
+        ...((source.stage || source.serve) && source.workspace
+          ? { viewer: () => sourceViewer(source) }
+          : {}),
       });
+      return socketRefused && socketRefusal(socketRefused);
+    }
+    const ask = (): Promise<Response> =>
+      fetch(
+        upstream === "host"
+          ? `http://127.0.0.1:${source.port}${at}`
+          : `http://localhost:${source.port}${at}`,
+        {
+          method: request.method,
+          headers: asked,
+          body: request.body,
+          redirect: "manual",
+          ...(upstream === "host" ? {} : { unix: upstream.unix }),
+        }
+      );
+    try {
+      response = await ask();
+    } catch (error) {
+      // Nothing answered: the workspace closed under it, or its server is down.
+      const network = networkOf(source);
+      if (network !== undefined && (await workspaceGone(network))) {
+        previewFailed(
+          "agent listener",
+          instanceId,
+          `workspace ${source.workspace} closed under it`
+        );
+        await closeBridge(instanceId);
+        return downResponse("workspace", 503);
+      }
+      const again = await afterRestart(request, ask);
+      if (again?.kind === "refused") {
+        return again.answer;
+      }
+      if (again?.kind !== "answered") {
+        const why = unanswered(source, error);
+        previewFailed("agent listener", instanceId, why);
+        return serverDown(why);
+      }
+      response = again.answer;
     }
     const headers = decodedHeaders(response.headers);
     for (const name of [
@@ -1185,21 +999,19 @@ async function start(
     // hub's listener for host-mode names is where `no-cache` becomes
     // `no-store`.
     cachePreview(headers, response.status, true);
-    if ("port" in source) {
-      const location = headers.get("location");
-      if (location) {
-        // A redirect back to the app itself, under any loopback name, has
-        // to stay inside the proxy: the browser's loopback is not this one.
-        const target = new URL(location, `http://localhost:${source.port}/`);
-        if (
-          LOOPBACK.has(target.hostname) &&
-          Number(target.port || 80) === source.port
-        ) {
-          headers.set(
-            "location",
-            `${target.pathname}${target.search}${target.hash}`
-          );
-        }
+    const location = headers.get("location");
+    if (location) {
+      // A redirect back to the app itself, under any loopback name, has
+      // to stay inside the proxy: the browser's loopback is not this one.
+      const target = new URL(location, `http://localhost:${source.port}/`);
+      if (
+        LOOPBACK.has(target.hostname) &&
+        Number(target.port || 80) === source.port
+      ) {
+        headers.set(
+          "location",
+          `${target.pathname}${target.search}${target.hash}`
+        );
       }
     }
     // A frame's load of a file that is no HTML page (a PDF, an image, text,
@@ -1208,7 +1020,7 @@ async function start(
     // a download, an `<img>` or the viewer's own fetch gets the file.
     let page: string | null = null;
     if (opensAsFile(request, response.status, headers.get("content-type"))) {
-      page = await viewerOf(url, headers, response.body, fileSize);
+      page = await fileViewerOf(url, headers, response.body, null);
     } else if (
       headers.get("content-type")?.startsWith("text/html") &&
       request.method !== "HEAD" &&
@@ -1232,15 +1044,6 @@ async function start(
     let body: ReadableStream<Uint8Array> | string | null = response.body;
     if (page !== null) {
       body = injectOverlay(page);
-      if ("dir" in source && versioned === null) {
-        // The folder's page: its own files at the folder's key, kept.
-        body = versionAssets(
-          body,
-          await folderKey(source.dir),
-          "/",
-          url.pathname
-        );
-      }
       headers.delete("content-length");
       headers.delete("content-encoding");
     }
@@ -1270,7 +1073,7 @@ async function start(
     listener,
     token,
     for: options.for,
-    network: "port" in source ? networkOf(source) : undefined,
+    network: networkOf(source),
   });
   return { port: portOf(listener) };
 }

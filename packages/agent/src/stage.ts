@@ -164,7 +164,6 @@ import {
   inCloneTurn,
   installStage,
   isStageClone,
-  pinFolder,
   pinsHeld,
   sameAsCheckout,
   stageCloneOf,
@@ -2598,7 +2597,7 @@ function stopOne(stage: Stage): void {
   }
 }
 
-/** Stops every stage of workspace, design or pin `id`: its archive, or its pin let go. */
+/** Stops every stage of workspace, design or pin `id`: its archive, or it let go. */
 function stopStages(id: string): void {
   for (const stage of [...stages.values()]) {
     if (stage.workspace.id === id) {
@@ -2628,34 +2627,20 @@ export function stopServed(workspace: string, port: number): boolean {
   return true;
 }
 
-/** The version of folder `dir` an author hands up cut: pin `pin`'s copy of it (stage-clone.ts `pinFolder`). */
-export async function pinFolderOf(dir: string, pin: string): Promise<void> {
-  await pinFolder(dir, pin);
-}
-
 /**
- * How long a pin's cut stands before a register's list may let it go
- * ({@link keepPins}): the hub names a pin on its artifact only once its cut
- * answered, and a list it sent before then does not name it. Ours: a
- * folder's copy, with room.
+ * The pins whose files the hub has yet to move into its own keeping, sent
+ * as this machine registers and on each of the hub's workspace sweeps (core
+ * `STAGE_PINS`): a pin is a copy of a folder preview this machine made
+ * before the hub kept each one's files itself (stage-clone.ts `dropPin`),
+ * or a tree an earlier build pinned. Every other pin it holds is let go,
+ * its stages stopped first. A design whose folder went while this machine
+ * was away goes too (stage-design.ts `designsGone`). One whose removal
+ * fails is logged and tried again next time, and the rest go on. Answers
+ * how many pins went.
  */
-const PIN_NAMED_MS = 10 * 60_000;
-
-/**
- * The pins the hub serves from, sent as this machine registers and on each
- * of the hub's workspace sweeps (core `STAGE_PINS`): every other pin it
- * holds let go ({@link unpin}), one whose unpin was sent while it was away,
- * or whose artifact went with its session, among them. One cut within
- * {@link PIN_NAMED_MS} stays: its create may not have named it yet. One
- * whose removal fails is logged and tried again next time, and the rest go
- * on: a removal that threw ended the loop, every pin after it left on disk.
- * Answers how many went.
- */
-export async function keepPins(served: readonly string[]): Promise<number> {
-  const kept = new Set(served);
-  const now = Date.now();
+export async function keepPins(moving: readonly string[]): Promise<number> {
+  const kept = new Set(moving);
   let gone = 0;
-  // A design whose folder went while this machine was away (stage-design.ts).
   for (const design of await designsGone()) {
     await unpin(design).catch((error: unknown) =>
       console.warn(
@@ -2663,27 +2648,27 @@ export async function keepPins(served: readonly string[]): Promise<number> {
       )
     );
   }
-  for (const { pin, at } of await pinsHeld()) {
-    if (kept.has(pin) || now - at <= PIN_NAMED_MS) {
+  for (const { pin } of await pinsHeld()) {
+    if (kept.has(pin)) {
       continue;
     }
     try {
-      await unpin(pin);
+      stopStages(pin);
+      await dropPin(pin);
       gone += 1;
     } catch (error) {
       console.warn(
-        `[stage] pin ${pin.slice(0, 8)}: no artifact is served from it, and it could not be let go; the next list tries again: ${error instanceof Error ? error.message : String(error)}`
+        `[stage] pin ${pin.slice(0, 8)}: the hub keeps its files now, and it could not be let go; the next list tries again: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
   return gone;
 }
 
-/** Pin `pin` let go (core `STAGE_UNPIN`): every stage running in it stopped, then its copy removed. */
-export async function unpin(pin: string): Promise<void> {
-  stopStages(pin);
-  await dropPin(pin);
-  await dropDesign(pin);
+/** Design tree `tree` let go once its artifact is gone (core `STAGE_UNPIN`): every stage running in it stopped, then its stage's own files removed. */
+export async function unpin(tree: string): Promise<void> {
+  stopStages(tree);
+  await dropDesign(tree);
 }
 
 /**

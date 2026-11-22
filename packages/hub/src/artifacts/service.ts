@@ -99,7 +99,11 @@ import {
   type PageFaultReport,
 } from "@cawco/core/page-faults";
 import { pinName } from "@cawco/core/pin-name";
-import type { PreviewSource, ShownFailure } from "@cawco/core/preview/protocol";
+import type {
+  FolderWeight,
+  PreviewSource,
+  ShownFailure,
+} from "@cawco/core/preview/protocol";
 import { placeAtLink } from "@cawco/core/preview/routes";
 import type {
   ArtifactHit,
@@ -136,7 +140,7 @@ import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { commentsFull } from "@cawco/core/words/comment-lines";
 import { decidesWords } from "@cawco/core/words/decides";
 import { designArtifactOf, workspaceIdKindOf } from "@cawco/core/workspace-id";
-import { type FolderWeight, pageHash } from "@cawco/preview/proxy";
+import { pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus, problem } from "elysia";
 import type { Doc } from "yjs";
 import type { ArtifactRow, GoneArtifact } from "../db/artifacts";
@@ -171,7 +175,9 @@ import {
   stageSaid,
 } from "./component";
 import type { ArtifactServiceDeps, HandedArtifactFile } from "./deps";
+import type { DesignFile } from "./design-folder";
 import { createFacts, metaOf, stateOf, stillThere } from "./facts";
+import { createFolderMove } from "./folder-move";
 import { createCanvasKind } from "./kinds/canvas";
 import { createComponentKind } from "./kinds/component";
 import { createPageKind, newestHash } from "./kinds/page";
@@ -195,8 +201,9 @@ import {
 } from "./needs";
 import { answersReplaced } from "./overwrite";
 import { createPageStore } from "./page-store";
+import { FOLDER_LIMITS, folderProblem, folderWeight } from "./preview-folder";
 import { type Question, stillAsked } from "./questions";
-import { servedOf, servedPin, serverOf, sheetOf } from "./served";
+import { servedOf, serverOf, sheetOf } from "./served";
 import {
   type ArtifactInput,
   type ArtifactList,
@@ -849,7 +856,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     makingFrom,
     makingIn,
     previewSource,
-    releasePin,
     serveFirst,
     waitingStages,
     warmPreviews,
@@ -955,8 +961,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
   const {
     changedBy,
-    cutVersion,
-    pinnedSource,
     handOver,
     handing,
     heldAnswer,
@@ -1159,6 +1163,41 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       versionMoved(row);
     }
   };
+
+  /**
+   * Folder preview `id` marked as one whose files can't be shown again,
+   * `gone` its reason in the person's words (doc `meta.sourceGone`), or
+   * that mark taken off (null): it leaves Needs you and stays in Files
+   * (needs.ts).
+   */
+  const sourceSeen = (id: string, gone: string | null): void => {
+    if (!db.get(id)) {
+      return;
+    }
+    const meta = docMeta(docs.doc(id));
+    const was = meta.get("sourceGone")?.why;
+    if ((was ?? null) === gone) {
+      return;
+    }
+    docs.transact(id, "hub", () => {
+      if (gone === null) {
+        meta.delete("sourceGone");
+      } else {
+        meta.set("sourceGone", { at: new Date().toISOString(), why: gone });
+      }
+    });
+    deps.needsMoved();
+  };
+  const folderMove = createFolderMove({
+    db,
+    folderFiles: deps.folderFiles,
+    gone: sourceSeen,
+    keepPins: deps.keepPins,
+    kept: (id) => store.hasFolder(id),
+    machineHome: deps.machineHome,
+    machineName: (machineId) => machineOf({ machineId }),
+    write: (id, files) => store.writeFolder(id, files),
+  });
 
   /**
    * Artifact `row`'s version moved (a next version held, opened or let go,
@@ -2317,19 +2356,42 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * Folder preview `row`'s files written where the hub serves them, in
+   * place (preview-folder.ts); with `told`, each panel showing it loads
+   * them again (deps `filesMoved`), as one does when its source moves:
+   * what a write over files the person may have open does. A held next
+   * version's files reach no panel until it is opened (versions.ts
+   * `promote`).
+   */
+  const folderWritten = (
+    row: ArtifactRow,
+    files: readonly DesignFile[],
+    told: boolean
+  ): void => {
+    store.writeFolder(row.id, files);
+    if (told && row.heldFor === null) {
+      deps.filesMoved(row.id);
+    }
+  };
+
+  /**
    * A create's server started in its author's workspace or place, the one
    * the person is served live ({@link serveFirst}), a held next version
-   * opened first ({@link openNextFirst}), a folder's version copied as a pin
-   * of its own ({@link pinnedSource}), then its row placed on its source
-   * ({@link placed}); its workspace held from the create's start until the
-   * row names it ({@link makingFrom}), as a retirement in between would end
-   * its source under the create. A refusal before the row is placed touches
-   * nothing the person is served; one of the placement lets the new pin go.
+   * opened first ({@link openNextFirst}), then its row placed on its source
+   * ({@link placed}) and a folder preview's files written where the hub
+   * serves them ({@link folderWritten}); its workspace held from the
+   * create's start until the row names it ({@link makingFrom}), as a
+   * retirement in between would end its source under the create. A refusal
+   * before the row is placed touches nothing the person is served.
    */
   const servedAndPlaced = async (
     making: Making,
     input: ArtifactInput,
-    at: { machineId: string | null; source: PreviewSource }
+    at: {
+      folder: readonly DesignFile[] | undefined;
+      machineId: string | null;
+      source: PreviewSource;
+    }
   ) => {
     const madeFrom = makingFrom(at.source);
     try {
@@ -2341,17 +2403,22 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (unopened) {
         return unopened;
       }
-      const cut = await pinnedSource(at.machineId, at.source);
-      if (cut instanceof ElysiaStatus) {
-        return cut;
-      }
       const placement = placed(making, input, {
         machineId: at.machineId,
-        source: cut.source,
+        source: at.source,
       });
       if (placement instanceof ElysiaStatus) {
-        releasePin(at.machineId, servedPin(cut.source) ?? null);
         return placement;
+      }
+      if (at.folder) {
+        // Made again in place over a folder it showed: its source stays, so
+        // the files alone tell its panels; one from a port moved its source.
+        const { before, holding, row } = placement;
+        folderWritten(
+          row,
+          at.folder,
+          holding === null && before !== undefined && "dir" in before.source
+        );
       }
       const served: { placement: Placement; stage: StageState | undefined } = {
         stage: authors,
@@ -2409,11 +2476,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * status and the error's first line, its placement let go
    * ({@link unplace}), and it never reaches the parent. A page its server
    * is still making goes up as it does to a panel. Nothing for a page
-   * artifact.
+   * artifact, nor a folder preview, whose files the hub holds and whose
+   * start page its create found among them (preview-folder.ts
+   * `folderProblem`).
    */
   const answersFirst = async (placement: Placement) => {
     const { row } = placement;
-    if (!(row.kind === "preview" && row.machineId) || "page" in row.source) {
+    if (!(row.kind === "preview" && row.machineId && "port" in row.source)) {
       return;
     }
     const down = await deps.reachable(row);
@@ -3247,8 +3316,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /**
    * What a page's or a preview's create is made from: its page built
    * ({@link createdPage}) or its source named ({@link previewSource}), a
-   * folder weighed, and checked against what it asks
-   * ({@link deliversItsAsk}).
+   * folder's files read off its machine and weighed ({@link folderRead}),
+   * and checked against what it asks ({@link deliversItsAsk}).
    */
   const createdFrom = async (
     instance: InstanceRow,
@@ -3272,26 +3341,66 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (offGraph) {
       return offGraph;
     }
-    const weight =
+    const folder =
       "dir" in source && machineId
-        ? await deps.folderWeight(machineId, source.dir, source.path)
+        ? await folderRead(instance, machineId, source)
         : undefined;
-    if (weight instanceof ElysiaStatus) {
-      return weight;
+    if (folder instanceof ElysiaStatus) {
+      return folder;
     }
+    const weight = folder?.weight;
     const undelivered = await deliversItsAsk(input, { html, program, weight });
     if (undelivered) {
       return undelivered;
     }
     const made: {
       broken: PageBroken | undefined;
+      folder: readonly DesignFile[] | undefined;
       html: string | null;
       machineId: string | null;
       program: BuiltProgram | undefined;
       source: PreviewSource;
       weight: FolderWeight | undefined;
-    } = { broken: page?.broken, html, machineId, program, source, weight };
+    } = {
+      broken: page?.broken,
+      folder: folder?.files,
+      html,
+      machineId,
+      program,
+      source,
+      weight,
+    };
     return made;
+  };
+
+  /**
+   * A folder preview's files as session `instance` hands them, read off
+   * machine `machineId` from its `dir` (design-files.ts, within
+   * preview-folder.ts `FOLDER_LIMITS`), with their weight; refused in words
+   * when they can't be read, or hold no page at its `path`.
+   */
+  const folderRead = async (
+    instance: InstanceRow,
+    machineId: string,
+    source: { dir: string; path?: string }
+  ) => {
+    const files = await deps.folderFiles(
+      { instance, machineId },
+      source.dir,
+      FOLDER_LIMITS
+    );
+    if (files instanceof ElysiaStatus) {
+      return files;
+    }
+    const misfit = folderProblem(files, source.path);
+    if (misfit) {
+      return problem(400, { code: "artifact-folder-unfit", detail: misfit });
+    }
+    const kept: { files: DesignFile[]; weight: FolderWeight } = {
+      files,
+      weight: await folderWeight(files, source.path),
+    };
+    return kept;
   };
 
   /**
@@ -3308,8 +3417,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (from instanceof ElysiaStatus) {
       return from;
     }
-    const { broken, html, machineId, program, source, weight } = from;
+    const { broken, folder, html, machineId, program, source, weight } = from;
     const served = await servedAndPlaced(making, input, {
+      folder,
       source,
       machineId,
     });
@@ -3813,49 +3923,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /** Whether session `id` reads otherwise now than the lane's last read read it ({@link readsOtherwise}). */
     readsOtherwise,
 
-    /** Whether the person had artifact `id` on screen at or after `at` (ms epoch). */
-    /**
-     * What artifact `id`'s machine said of its folder at its preview's last
-     * start (preview-service.ts `reach`): `gone`, the daemon's
-     * words that it isn't there (preview proxy `isFolderGone`), takes it
-     * out of Needs you and keeps it in Files; null, it was there.
-     */
-    /**
-     * The folder previews on machine `machineId` that are in Needs you, or
-     * would be but for a gone folder recorded: each one's folder, for the
-     * machine to read as it registers (artifact-pages.ts `foldersSeen`).
-     */
-    foldersAsking: (machineId: string): { dir: string; id: string }[] =>
-      db.mayWait().flatMap((row) => {
-        if (
-          row.machineId !== machineId ||
-          row.kind !== "preview" ||
-          !("dir" in row.source)
-        ) {
-          return [];
-        }
-        const kept = { ...withMedia(row, factsOf(row)), gone: null };
-        const facts = { ...kept, asked: askOf(row, kept) };
-        return mayWait(row, kept) &&
-          needOf(row, facts, sessionsOf(row, kept)) !== null
-          ? [{ id: row.id, dir: row.source.dir }]
-          : [];
-      }),
-
     /** The server artifact `id`'s source moved off, let go once nothing else shows it ({@link letGoMoved}). */
     letGoMoved,
     /**
      * Artifact rows gone (db `onArtifactsGone`, every way a row goes): each
-     * one's facts let go, and what it was served from let go once no row is
-     * served from it: a folder's pin, a served preview's server, stopped
-     * now with a line in the journal (kinds/preview.ts `letGoServer`).
+     * one's facts let go, and the served preview's server it was served
+     * from let go once no row is served from it, stopped now with a line in
+     * the journal (kinds/preview.ts `letGoServer`).
      */
     artifactsGone: (gone: readonly GoneArtifact[]): void => {
       // An artifact and its held next version on one server stop it once.
       const servers = new Set<string>();
       for (const { id, machineId, name, source } of gone) {
         factsKept.delete(id);
-        releasePin(machineId, servedPin(source) ?? null);
         const server = serverOf(source);
         const key = server && `${machineId}:${server.workspace}@${server.port}`;
         if (key && !servers.has(key)) {
@@ -3931,26 +4011,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
     },
 
-    sourceSeen: (id: string, gone: string | null): void => {
-      const row = db.get(id);
-      if (!row) {
-        return;
-      }
-      const meta = docMeta(docs.doc(id));
-      const was = meta.get("sourceGone")?.why;
-      if ((was ?? null) === gone) {
-        return;
-      }
-      docs.transact(id, "hub", () => {
-        if (gone === null) {
-          meta.delete("sourceGone");
-        } else {
-          meta.set("sourceGone", { at: new Date().toISOString(), why: gone });
-        }
-      });
-      deps.needsMoved();
-    },
-
+    /** Whether the person had artifact `id` on screen at or after `at` (ms epoch). */
     lookedSince: (id: string, at: number): boolean => {
       const row = db.get(id);
       const looked = row ? factsOf(row).lookedAt : null;
@@ -4590,6 +4651,74 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ? await pageChanged(instance, row, change, ownersRead)
           : await updateCanvas(row, change, ownersRead)
       );
+      if (answer instanceof ElysiaStatus) {
+        return answer;
+      }
+      askedNow(instance, found.id);
+      wroteNow(instance, found.id);
+      return heldAnswer(answer);
+    },
+
+    /**
+     * `artifact_update` with a `dir` of folder preview `id`, by whoever may
+     * change it ({@link revisable}): its files read again from `dir` on the
+     * caller's machine (design-files.ts) and written over in place where
+     * the hub serves them, each panel showing it loading them again
+     * ({@link folderWritten}), its revision moved so a decision page
+     * showing it takes it again ({@link versionMoved}); a maker's change
+     * while its parent's panel shows it goes to its next version
+     * ({@link changedBy}). Its read after, as the owner's read is.
+     */
+    folderUpdate: async (instanceId: string, id: string, dir: string) => {
+      const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
+      const found = revisable(instance, id);
+      if (found instanceof ElysiaStatus) {
+        return found;
+      }
+      if (!(found.kind === "preview" && "dir" in found.source)) {
+        return problem(409, {
+          code: "artifact-update-not-folder",
+          detail:
+            found.kind === "preview"
+              ? `${found.name} is a preview of a port: its server serves your edits live, so it takes no dir.`
+              : `${found.name} is a ${found.kind}: dir changes a folder preview, or a design folder by the design graph's own route.`,
+        });
+      }
+      const ownersRead = found.instanceId === instance.id;
+      const answer = await changedBy(instance, found, async (row) => {
+        const source: PreviewSource = {
+          dir,
+          ...("dir" in row.source && row.source.path !== undefined
+            ? { path: row.source.path }
+            : {}),
+        };
+        const folder = await folderRead(instance, instance.machineId, source);
+        if (folder instanceof ElysiaStatus) {
+          return folder;
+        }
+        const undelivered = await deliversItsAsk(row, {
+          html: null,
+          program: undefined,
+          weight: folder.weight,
+        });
+        if (undelivered) {
+          return undelivered;
+        }
+        db.resource(row.id, { machineId: instance.machineId, source });
+        const moved = stillThere(
+          db.update(row.id, {
+            revision: row.revision + 1,
+            updatedAt: new Date(),
+          }),
+          row.id
+        );
+        folderWritten(moved, folder.files, true);
+        versionMoved(moved);
+        return read(moved, undefined, ownersRead);
+      });
       if (answer instanceof ElysiaStatus) {
         return answer;
       }
@@ -5246,15 +5375,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /**
      * Machine `machineId`'s agent registered again, or the workspace sweep
-     * looked at it (workspace-retire.ts): it is sent every pin an artifact
-     * on it is served from (core `STAGE_PINS`), and lets go of every other
-     * one it holds, one whose unpin it missed while it was away, or whose
-     * artifact went with its session, among them (agent stage.ts
-     * `keepPins`). The pins are the hub's: its rows keep them.
+     * looked at it (workspace-retire.ts): the folder previews whose files
+     * a pin's copy there still holds moved into the hub's keeping, then it
+     * is sent the pins still to move, and lets go of every other one it
+     * holds (folder-move.ts, agent stage.ts `keepPins`).
      */
-    pinsBack: (machineId: string): void => {
-      deps.keepPins(machineId, db.pinsOn(machineId));
-    },
+    pinsBack: folderMove.pinsBack,
 
     /**
      * A fault page or preview `report.artifact` met as a browser drew it
@@ -5292,7 +5418,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      */
     staged: (machineId: string, frame: StageFrame): void => {
       const live = db
-        .previewing({ id: frame.workspace, machineId, path: "//" })
+        .previewing(frame.workspace)
         .filter((row) => sheetOf(row) !== null || servedOf(row) !== null);
       for (const row of live) {
         const sheet = sheetOf(row);
@@ -5513,21 +5639,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         by === "agent" && opens.instanceId === instance.id
           ? db.heldOf(opens.id)
           : undefined;
-      // Its author's own show hands it up again: a folder preview's folder
-      // is copied as it is now (cutVersion); a served preview's server is
-      // live already. Anyone else's opens the version that stands, or the
-      // next one held (promote).
-      const authors =
-        by === "agent" &&
-        opens.instanceId === instance.id &&
-        opens.madeBy === instance.id;
-      const opening = () => {
-        if (next) {
-          return promote(opens, next);
-        }
-        return authors ? cutVersion(opens) : Promise.resolve(opens);
-      };
-      const row = await opening();
+      // The owner's own show opens the next version held (promote); any
+      // other opens the version that stands, served live: a served
+      // preview's server, a folder preview's files as its last create or
+      // update wrote them.
+      const row = next ? await promote(opens, next) : opens;
       if (row instanceof ElysiaStatus) {
         return row;
       }

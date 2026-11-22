@@ -153,13 +153,8 @@ import {
   CONTROL_MOVE_REMOTE_CREDENTIAL,
   CONTROL_MOVE_SNAPSHOT,
 } from "./move";
-import type { FolderWeight, PreviewStarted } from "./preview/protocol";
-import {
-  PREVIEW_FOLDERS,
-  PREVIEW_START,
-  PREVIEW_STOP,
-  PREVIEW_WEIGHT,
-} from "./preview/protocol";
+import type { PreviewStarted } from "./preview/protocol";
+import { PREVIEW_START, PREVIEW_STOP } from "./preview/protocol";
 import type { FsEntry, UpdateReport } from "./protocol";
 import {
   AGENT_BUSY,
@@ -246,7 +241,6 @@ import {
   STAGE_DESIGN,
   STAGE_ENSURE,
   STAGE_PICTURE,
-  STAGE_PIN,
   STAGE_PINS,
   STAGE_RENDER,
   STAGE_SERVE,
@@ -279,7 +273,6 @@ import {
   FleetAckSchema,
   FleetMcpTakeAnswerSchema,
   FolderRemovedSchema,
-  FolderWeightSchema,
   ForgeVerdictSchema,
   FsMediaSchema,
   GeneratedImageSchema,
@@ -630,8 +623,6 @@ const CONTROLS = {
   [ARTIFACT_PICTURE]: reply<PictureTaken>(PictureTakenSchema),
   [PREVIEW_START]: reply<PreviewStarted>(PreviewStartedSchema),
   [PREVIEW_STOP]: UNREAD,
-  [PREVIEW_WEIGHT]: reply<FolderWeight>(FolderWeightSchema),
-  [PREVIEW_FOLDERS]: z.array(z.string().nullable()),
   [CANVAS_SCREEN_OPEN]: UNREAD,
   [CANVAS_SCREEN_CLOSE]: UNREAD,
   [STAGE_DESIGN]: reply<DesignOpened>(DesignOpenedSchema),
@@ -642,7 +633,6 @@ const CONTROLS = {
   [STAGE_COMPONENTS]: reply<DesignMap>(DesignMapSchema),
   [STAGE_SERVE]: reply<StageState>(StageStateSchema),
   [STAGE_SERVE_STOP]: reply<boolean>(z.boolean()),
-  [STAGE_PIN]: UNREAD,
   [STAGE_PINS]: reply<number>(z.number()),
   [STAGE_PICTURE]: reply<PictureTaken>(PictureTakenSchema),
   [STAGE_UNPIN]: UNREAD,

@@ -8,7 +8,7 @@ import type { ProgramRead } from "@cawco/core/decisions";
 import type { QuestionClose, SentBy } from "@cawco/core/doc-meta";
 import type { InkGroup } from "@cawco/core/ink";
 import type { PageFault } from "@cawco/core/page-faults";
-import type { ShownFailure } from "@cawco/core/preview/protocol";
+import type { FolderWeight, ShownFailure } from "@cawco/core/preview/protocol";
 import type { PreviewAddress } from "@cawco/core/preview/routes";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type {
@@ -21,7 +21,6 @@ import type {
   StageUnreached,
   StoryOp,
 } from "@cawco/core/stage";
-import type { FolderWeight } from "@cawco/preview/proxy";
 import type { Operation } from "rfc6902";
 import type { ArtifactRow } from "../db/artifacts";
 import type { StatementChange } from "../decision-program";

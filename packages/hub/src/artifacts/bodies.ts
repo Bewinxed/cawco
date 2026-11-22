@@ -184,7 +184,7 @@ const canvasFields = {
 export const SHAPES = {
   create: CREATE_SHAPE,
   update:
-    'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a design graph\'s states file); or edges, group, dials, directions (the canvas itself); or ask or title (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
+    'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); dir (a folder preview, its files read again); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a design graph\'s states file); or edges, group, dials, directions (the canvas itself); or ask or title (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
   read: 'artifact_read takes id?, since?, png?, width?, save?: a .png path, detail ("summary" | "story"), story, state: a component\'s { story: "Story" or, where two states files export it, "file:Story", interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? } or a preview\'s or page\'s "?query" or "#hash", render. Example: { id, state: { story: "Waiting", interaction: "hover" } }; { id, state: "?__state=pairing:asking", save: "$TMPDIR/outputs/asking.png" }.',
   map: `design_map takes dir?, query?, component?, limit? (1 to ${DESIGN_MAP_LIMITS.max}), cursor?, response_format? ("concise" | "detailed"). Example: { dir: "src/lib", query: "card" }.`,
 };
@@ -257,8 +257,9 @@ export const createBody = t.Object({
   reading: t.Optional(t.Boolean()),
 });
 
-/** A page's or a canvas's change: one of html, patch, elements, delete or mermaid. */
+/** A page's, a canvas's or a folder preview's change: one of html, patch, elements, delete, mermaid or dir. */
 export const updateBody = t.Object({
+  dir: t.Optional(folderField),
   html: t.Optional(t.String({ minLength: 1, maxLength: PAGE_LIMIT })),
   patch: t.Optional(t.Array(operation, { minItems: 1 })),
   elements: t.Optional(skeletons),

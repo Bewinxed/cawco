@@ -1,13 +1,12 @@
 import { readdir, stat } from "node:fs/promises";
 import { STATUS_CODES } from "node:http";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { refuseSchemeLowering } from "@cawco/core/bundle-css-guard";
 import { bundled } from "@cawco/core/bundled";
-import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
+import { fileViewerPage, fileViewOf } from "@cawco/core/file-viewer";
 import type { ControlRefusal } from "@cawco/core/frames";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import {
-  type FolderWeight,
   PREVIEW_DOWN_META,
   PREVIEW_DOWNS,
   PREVIEW_WHY_META,
@@ -27,7 +26,7 @@ let overlay: Promise<string> | undefined;
 
 /**
  * The script injected into every previewed page, by a daemon for a session's
- * dev server or folder and by the hub for a project's decision page. The
+ * dev server and by the hub for a folder preview and a decision page. The
  * standalone binary carries it prebuilt (`build-binary.ts`); a source
  * checkout bundles the overlay on first request.
  */
@@ -194,17 +193,6 @@ export async function overlayResponse(
 }
 
 /**
- * A folder preview's folder is not on its machine any more (removed, or its
- * workspace archived with it): the daemon refuses its start with these words
- * first, its system's own after them, and the hub records the artifact's
- * source gone (hub artifacts/needs.ts: it asks nothing of the person).
- */
-const FOLDER_GONE = "The preview's folder isn't on its machine any more";
-
-/** {@link FOLDER_GONE} with the system's own words for it ("ENOENT: no such file or directory, …"). */
-export const folderGone = (why: string): string => `${FOLDER_GONE}: ${why}`;
-
-/**
  * Which hop a machine's refusal of a preview's start says is down, and its
  * words: the kind it sent beside them (agent session.ts, core
  * `PreviewStartDown`); from a daemon from before it sent one, read off its
@@ -224,10 +212,6 @@ export const startRefused = (answer: {
     why,
   };
 };
-
-/** Whether a daemon's refusal of a preview's start says its folder is gone. */
-export const isFolderGone = (error: string): boolean =>
-  error.startsWith(FOLDER_GONE);
 
 const HTML_ESCAPES: Record<string, string> = {
   "&": "&amp;",
@@ -780,6 +764,49 @@ export async function compressed(
   return new Response(body, init);
 }
 
+/** What a file's answer says no longer once the viewer page stands in its place: the file's own length, encoding, range and validators. */
+const FILE_ONLY_HEADERS = [
+  "accept-ranges",
+  "content-disposition",
+  "content-encoding",
+  "content-length",
+  "content-range",
+  "etag",
+  "last-modified",
+] as const;
+
+/**
+ * The viewer page (core file-viewer.ts) for the file at `url` answered with
+ * `headers` and `body`, `size` bytes when its folder said (else its
+ * answer's length): what a frame's load of a file that is no HTML page
+ * gets, a machine's server's (agent preview.ts) or a folder preview's
+ * (hub preview-server/serve.ts). `headers` become the page's: HTML, never
+ * kept.
+ */
+export async function fileViewerOf(
+  url: URL,
+  headers: Headers,
+  body: ReadableStream<Uint8Array> | null,
+  size: number | null
+): Promise<string> {
+  const type = headers.get("content-type");
+  const length = Number(headers.get("content-length"));
+  const name = decodeURIComponent(url.pathname.split("/").at(-1) ?? "");
+  const page = fileViewerPage({
+    name: name || url.hostname,
+    src: `${url.pathname}${url.search}`,
+    type,
+    size: size ?? (Number.isFinite(length) && length > 0 ? length : null),
+    view: await fileViewOf(type, body),
+  });
+  for (const header of FILE_ONLY_HEADERS) {
+    headers.delete(header);
+  }
+  headers.set("content-type", "text/html; charset=utf-8");
+  headers.set("cache-control", "no-store");
+  return page;
+}
+
 /** A versioned address's file, its path under the mount; null when `pathname` is not one. */
 export const versionedFile = (pathname: string): string | null =>
   pathname.match(VERSIONED)?.[2] ?? null;
@@ -807,87 +834,6 @@ export async function folderKey(root: string): Promise<string> {
     hasher.update(`${name}\0${size}\0${mtimeMs}\n`);
   }
   return BigInt(`0x${hasher.digest("hex").slice(0, 24)}`).toString(36);
-}
-
-// The machine's own reader of a folder's weight: its answer's type is core's, as the hub reads it.
-export type { FolderWeight } from "@cawco/core/preview/protocol";
-
-const JS_FILE = /\.[cm]?js$/u;
-const WASM_FILE = /\.wasm$/u;
-
-const QUERY_OR_HASH = /[?#]/u;
-const LEADING_SLASHES = /^\/+/u;
-/** A source on another origin or scheme: no file of the folder. */
-const ELSEWHERE = /^[a-z][a-z0-9+.-]*:|^\/\//iu;
-
-/** The start page a folder preview opens at `path` (its index.html when the path names a folder), from `root`. */
-const startPage = (path: string | undefined): string => {
-  const at = (path ?? "/").split(QUERY_OR_HASH)[0] ?? "/";
-  return (at.endsWith("/") ? `${at}index.html` : at).replace(
-    LEADING_SLASHES,
-    ""
-  );
-};
-
-/**
- * The desk captures on `root`'s start page at `path`: each `<img>` a
- * `data:` URL or a file beside the page, read from its header alone.
- */
-async function startPageCaptures(
-  root: string,
-  path: string | undefined
-): Promise<number> {
-  const page = join(root, startPage(path));
-  if (!page.startsWith(root)) {
-    return 0;
-  }
-  const file = Bun.file(page);
-  if (!(await file.exists())) {
-    return 0;
-  }
-  const folder = dirname(page);
-  return deskCaptures(await file.text(), async (src) => {
-    const inline = dataUrlBytes(src);
-    if (inline || ELSEWHERE.test(src)) {
-      return inline;
-    }
-    const beside = join(
-      src.startsWith("/") ? root : folder,
-      src.split(QUERY_OR_HASH)[0] ?? ""
-    );
-    if (!beside.startsWith(root)) {
-      return null;
-    }
-    // The header is all the width needs.
-    const head = Bun.file(beside).slice(0, 64 * 1024);
-    return (await Bun.file(beside).exists())
-      ? new Uint8Array(await head.arrayBuffer())
-      : null;
-  });
-}
-
-/** `root`'s weight, from the same walk as its {@link folderKey}; the captures on its start page at `path`. */
-export async function folderWeight(
-  root: string,
-  path?: string
-): Promise<FolderWeight> {
-  const weight: FolderWeight = {
-    files: 0,
-    bytes: 0,
-    js: 0,
-    wasm: 0,
-    captures: await startPageCaptures(root, path),
-  };
-  for (const { name, size } of await folderFiles(root)) {
-    weight.files += 1;
-    weight.bytes += size;
-    if (JS_FILE.test(name)) {
-      weight.js += size;
-    } else if (WASM_FILE.test(name)) {
-      weight.wasm += size;
-    }
-  }
-  return weight;
 }
 
 /** The attributes that name one of the page's files, by the elements that carry them. */

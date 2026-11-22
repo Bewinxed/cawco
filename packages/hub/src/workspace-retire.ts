@@ -38,11 +38,11 @@
  * (workspaces.ts `settleOn`). The same look keeps up each stage serving the
  * person an artifact waiting on him (a preview's server, a design graph's or
  * a page's sheet), which would otherwise sleep once its idle half hour ran
- * out (artifacts service `keepWaitingUp`), and sends each online machine the
- * pins an artifact is served from, so it lets go of every other pin copy
- * under `~/.worktrees` (artifacts service `pinsBack`, agent stage.ts
- * `keepPins`): an artifact deleted with its session tells its pin nothing,
- * and before 2026-11-22 a machine heard the list only as it registered.
+ * out (artifacts service `keepWaitingUp`), and moves into the hub's
+ * keeping each online machine's folder previews whose files a pin's copy
+ * there still holds, then sends it the pins still to move, so it lets go
+ * of every other one, and of each design whose folder went (artifacts
+ * service `pinsBack`, folder-move.ts, agent stage.ts `keepPins`).
  */
 import type { HubLifetimeShape } from "./lifetime";
 import type { WorkItems } from "./work-items";
@@ -67,7 +67,7 @@ export interface RetireSweep {
 }
 
 export interface WorkspaceRetireDeps {
-  /** Sends machine `machineId` the pins an artifact on it is served from; it lets go of the rest (artifacts service `pinsBack`). */
+  /** Moves machine `machineId`'s folder previews still in pins into the hub's keeping, then sends it the pins still to move; it lets go of the rest (artifacts service `pinsBack`). */
   keepPins: (machineId: string) => void;
   /** Keeps up the stages serving the person what waits on him on `online` machines (artifacts service `keepWaitingUp`). */
   keepUp: (online: ReadonlySet<string>) => void;

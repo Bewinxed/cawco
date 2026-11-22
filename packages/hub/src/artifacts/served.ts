@@ -6,8 +6,8 @@
  * (the owner's pick on 2026-11-22, "Full hot reload"), a served preview
  * from the one server its author runs, its edits reaching the open page
  * through that server's own reload (the owner's pick on 2026-11-22, "The
- * agent's live app"). Only a folder preview is served from a copy its
- * author handed up ({@link pinnedAt}).
+ * agent's live app"). A folder preview's files are the hub's own,
+ * written over in place by each update (preview-folder.ts).
  */
 
 import { join } from "node:path";
@@ -33,14 +33,6 @@ export const servedOf = (
   row: Pick<ArtifactRow, "kind" | "source">
 ): { port: number; workspace: string } | null =>
   row.kind === "preview" ? serverOf(row.source) : null;
-
-/** The pin a machine serves a folder preview to the person from (core `PreviewSource.pin`); none for any other source. */
-export const servedPin = (source: PreviewSource): string | undefined =>
-  "dir" in source ? source.pin : undefined;
-
-/** Folder `source` served from pin `pin`, the copy its machine made of it; any other source as it is. */
-export const pinnedAt = (source: PreviewSource, pin: string): PreviewSource =>
-  "dir" in source ? { ...source, pin } : source;
 
 /** A sheet's place on its workspace's stage (core `PreviewSource`); null for any other artifact. */
 export const sheetOf = (

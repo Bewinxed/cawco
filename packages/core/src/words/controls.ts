@@ -36,7 +36,7 @@ export const controlWords = {
   notUrl: "is not a URL",
   notSession: "is not a session id",
   notWorkspace: "is not a workspace id",
-  noPin: "names no pin to let go",
+  noTree: "names no tree to let go",
   noBrowserKey: "names no browser",
   noSourceKey: "names no source key",
   noCredential: "Session credential is missing.",

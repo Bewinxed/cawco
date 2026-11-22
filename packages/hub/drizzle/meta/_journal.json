@@ -3228,6 +3228,13 @@
       "when": 1795355178492,
       "tag": "0468_keyed_foreign_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 469,
+      "version": "6",
+      "when": 1795356795322,
+      "tag": "0469_folder_previews_kept",
+      "breakpoints": true
     }
   ]
 }

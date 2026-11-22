@@ -1190,14 +1190,12 @@ export const STAGE_SERVE = "stageServe";
 export const STAGE_SERVE_STOP = "stageServeStop";
 
 /**
- * The daemon's control method that copies the version of a folder preview
- * its author hands up (core preview/protocol.ts `PreviewSource.pin`), a pin
- * of its own beside the one the person is served: `[pin, dir]`, a copy of
- * `dir` (agent stage-clone.ts `pinFolder`). Answers once the copy stands.
+ * The daemon's control method that takes the pins whose files the hub has
+ * yet to move into its own keeping, `[pins]`, as the machine registers: a
+ * pin is a copy of a folder preview its machine made before the hub kept
+ * each one's files itself (hub artifacts/folder-move.ts). Every other pin
+ * it holds is let go (agent stage.ts `keepPins`). Answers how many went.
  */
-export const STAGE_PIN = "stagePin";
-
-/** The daemon's control method that takes the pins the hub serves from, `[pins]`, as the machine registers: every other pin it holds is let go (agent stage.ts `keepPins`). Answers how many went. */
 export const STAGE_PINS = "stagePins";
 
 /**
@@ -1217,11 +1215,8 @@ export interface ServedPicture {
   width: number;
 }
 
-/** The daemon's control method that lets a pin go once no artifact is served from it: its stages stopped, its copy removed. */
+/** The daemon's control method that lets a design folder's tree go once its artifact is gone (hub `dropDesign`): its stages stopped, its stage's own files removed. */
 export const STAGE_UNPIN = "stageUnpin";
-
-/** How long a folder's pin may take to copy. Ours. */
-export const STAGE_PIN_MS = 120_000;
 
 /** How long a stage has to answer once started. The spec's number. */
 export const STAGE_READY_MS = 60_000;
@@ -1232,7 +1227,7 @@ export const STAGE_CLONE_GIT_MS = 60_000;
 /**
  * The most a copy of a folder in no repository may hold, measured before it
  * is made (agent `stage-clone.ts` `copyBounded`): a place's stage clone of
- * such a folder, or a folder preview's pin. Past either, the copy is refused.
+ * such a folder. Past either limit, the copy is refused.
  * Ours: cockpit, a large monorepo with its fonts and images, copies as
  * 275 MiB in 7,834 files once what an install remakes is left out
  * (2026-11-22); this holds about four times that, and stays near 2% of the

@@ -737,7 +737,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
                 bytes: new TextEncoder().encode(from.html),
               },
             ]
-          : await deps.folderFiles(maker, from.dir);
+          : await deps.folderFiles({ instance: maker }, from.dir);
       if (own instanceof ElysiaStatus) {
         return designMissed(
           ask,

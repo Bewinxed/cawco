@@ -148,7 +148,6 @@ import {
   STAGE_DESIGN,
   STAGE_ENSURE,
   STAGE_PICTURE,
-  STAGE_PIN,
   STAGE_PINS,
   STAGE_RENDER,
   STAGE_SERVE,
@@ -373,7 +372,6 @@ import {
   ensureStage,
   keepPins,
   moveStages,
-  pinFolderOf,
   renderStage,
   stageComponents,
   stopServed,
@@ -3836,13 +3834,7 @@ const startDaemon = (rediscover = false) =>
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : writeSheet(ports, ref, write)
     );
-    // The version of a folder preview an author hands up, copied.
-    supervisor.declareControl(STAGE_PIN, (pin, dir) =>
-      fenced()
-        ? Promise.reject(new Error(AGENT_RESTARTING))
-        : pinFolderOf(dir, pin)
-    );
-    // The pins the hub serves from, as this machine registers: every other one let go.
+    // The pins whose files the hub has yet to move in, as this machine registers and on each sweep: every other one let go.
     supervisor.declareControl(STAGE_PINS, keepPins);
     // A served preview's page as its author has it, drawn on its workspace's own server.
     supervisor.declareControl(STAGE_PICTURE, (ref, ask) =>
@@ -3850,7 +3842,7 @@ const startDaemon = (rediscover = false) =>
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : drawServed(ports, ref, ask)
     );
-    // A pin no artifact is served from any more, let go.
+    // A design folder's tree whose artifact is gone, let go.
     supervisor.declareControl(STAGE_UNPIN, unpin);
     // A canvas drawn by the daemon's own Chromium when no panel has drawn it (stage-render.ts).
     supervisor.declareControl(STAGE_RENDER, (ref, ask) =>

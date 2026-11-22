@@ -37,7 +37,6 @@ export type MachineReturnContext = Pick<
   | "escalateRoutedAsks"
   | "fleetSyncs"
   | "flushOwedStarts"
-  | "foldersSeen"
   | "forgetPending"
   | "freshAccountReports"
   | "goneWithProcess"
@@ -126,14 +125,8 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
 
   const artifactsBack = (ret: MachineReturn): void => {
     const { message } = ret;
-    // The pins its artifacts are served from: it lets go of every other.
+    // Its folder previews' files still in pins there moved in; every other pin let go.
     ctx.artifacts.pinsBack(message.machineId);
-  };
-
-  const foldersRead = (ret: MachineReturn): void => {
-    const { message } = ret;
-    // Its folder previews' folders read, never started.
-    ctx.foldersSeen(message.machineId);
   };
 
   const workResumed = (ret: MachineReturn): void => {
@@ -765,7 +758,6 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     backRegistered,
     registryEntered,
     artifactsBack,
-    foldersRead,
     workResumed,
     checkoutsLearned,
     previewsReconciled,

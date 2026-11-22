@@ -5736,11 +5736,12 @@ export const artifacts = sqliteTable(
      * beside the agent's canvas of the same name. False on every other row.
      */
     composer: integer("composer", { mode: "boolean" }).notNull().default(false),
-    /** The machine a preview's dev server or folder is on; null for a page, which the hub serves. */
+    /** The machine a preview's dev server is on, or the one a folder preview's files were read from; null for a page, which the hub serves. */
     machineId: machineColumn("machine_id"),
     /**
      * What the panel shows (core `PreviewSource`), exactly one of: a page by
-     * name (served from `artifacts/<id>/`), a folder, or a dev server's port.
+     * name (served from `artifacts/<id>/`), a folder (its files kept and
+     * served from `artifacts/<id>/folder/`), or a dev server's port.
      */
     sourcePage: text("source_page"),
     sourceDir: text("source_dir"),
@@ -5771,10 +5772,11 @@ export const artifacts = sqliteTable(
     sourceServeCommand: text("source_serve_command"),
     sourceServeCwd: text("source_serve_cwd"),
     /**
-     * A sheet's, a workspace preview's or a folder preview's: the pin the
-     * person is served it from (core `PreviewSource.pin`), the copy its
-     * machine cut as its author handed this version up. Null for a page and
-     * for a port on a machine's host.
+     * A folder preview made before the hub kept its files: the pin whose
+     * copy on its machine held them (agent stage-clone.ts). Its files are
+     * moved into the artifact's folder as that machine registers
+     * (artifacts/folder-move.ts), and then it is null; a source written now
+     * names none.
      */
     sourcePin: text("source_pin"),
     /** Moved by each new HTML; mirrored in the doc's `meta.revision`. */
@@ -5811,16 +5813,13 @@ export const artifacts = sqliteTable(
     index("artifacts_source_workspace")
       .on(table.sourceWorkspace)
       .where(sql`${table.sourceWorkspace} is not null`),
-    // What a tree serves (db/artifacts.ts `previewing`), each of its three
-    // ways by key, and a machine's pins (`pinsOn`) by its machine.
+    // What a tree serves (db/artifacts.ts `previewing`), by key, and a
+    // machine's folder previews (`foldersToMove`, `foldersOn`) by its
+    // machine.
     index("artifacts_source_place")
       .on(table.sourcePlace)
       .where(sql`${table.sourcePlace} is not null`),
     index("artifacts_machine_dir").on(table.machineId, table.sourceDir),
-    // The artifacts served from a pin (`pinnedBy`).
-    index("artifacts_source_pin")
-      .on(table.sourcePin)
-      .where(sql`${table.sourcePin} is not null`),
     index("artifacts_may_wait")
       .on(table.createdAt)
       .where(sql`${table.mayWait} = 1 and ${table.heldFor} is null`),

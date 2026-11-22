@@ -7,11 +7,12 @@
 export const PREVIEW_START_PATH = /^\/(?!\/)\S*$/u;
 
 /**
- * What an artifact shows (Projects spec §5.10): a dev server or a folder on
- * the session's machine (a preview), or a page the hub built and keeps under
- * its data dir at `artifacts/<id>/` and serves itself, named by the page's
- * name. A dev server or folder may name `path`, the page inside it the
- * preview opens at (`/motion/updates`); the root when absent.
+ * What an artifact shows (Projects spec §5.10): a dev server on the
+ * session's machine, a folder of files the hub keeps (each a preview), or a
+ * page the hub built and keeps under its data dir at `artifacts/<id>/` and
+ * serves itself, named by the page's name. A dev server or folder may name
+ * `path`, the page inside it the preview opens at (`/motion/updates`); the
+ * root when absent.
  */
 export type PreviewSource =
   | {
@@ -49,10 +50,17 @@ export type PreviewSource =
       workspace?: string;
     }
   | {
+      /**
+       * A folder preview's: the folder its files were read from on the
+       * row's machine, at its create or its last `artifact_update`. The hub
+       * keeps those files with the artifact (hub artifacts/preview-folder.ts,
+       * `artifacts/<id>/folder/`) and serves them itself, as they are, on
+       * the artifact's own origin: they outlive the agent's folder, and an
+       * update writes them over in place (the owner's pick on 2026-11-20,
+       * "one way of serving").
+       */
       dir: string;
       path?: string;
-      /** The version the person is served: the id of a copy of `dir` made on its machine when its author handed this version up, served in its place (agent stage-clone.ts `pinFolder`). */
-      pin?: string;
     }
   | { page: string };
 
@@ -155,7 +163,7 @@ export interface PreviewElement {
   text: string;
   url: string;
 }
-/** What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's; and its start page's desk captures (core `deskCaptures`). {@link PREVIEW_WEIGHT}'s answer. */
+/** What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's; and its start page's desk captures (core `deskCaptures`), weighed by the hub from the files it keeps (hub artifacts/preview-folder.ts `folderWeight`). */
 export interface FolderWeight {
   bytes: number;
   /** `<img>` on the start page whose file is wider than `DESK_CAPTURE_WIDTH`. */
@@ -178,12 +186,3 @@ export interface PreviewStopArgs {
   instanceId: string;
   token?: string;
 }
-/** The daemon's control method that weighs a folder preview's folder on its machine (core preview-proxy `folderWeight`). */
-export const PREVIEW_WEIGHT = "previewWeight";
-/**
- * The daemon's control method that reads whether folder previews' folders
- * are still on its machine: a `realpath` and a `stat` each, no listener and
- * no process. Answers, per folder in the order asked, core preview-proxy
- * `folderGone`'s words for one that isn't there, or null.
- */
-export const PREVIEW_FOLDERS = "previewFolders";

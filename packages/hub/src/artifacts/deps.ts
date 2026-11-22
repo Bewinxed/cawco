@@ -21,7 +21,6 @@ import type {
   StageWarm,
 } from "@cawco/core/stage";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
-import type { FolderWeight } from "@cawco/preview/proxy";
 import type { problem } from "elysia";
 import type { Caw } from "../caw";
 import type {
@@ -217,33 +216,25 @@ export interface ArtifactServiceDeps {
   /** Whether a session has ended or takes no input now (artifacts/taker.ts `takesNoInput`), so its marks go to its parent, else its project's Caw. */
   ended: (instance: InstanceRow) => boolean;
   /**
+   * Folder preview `id`'s files written over in place while its source
+   * stays (preview-folder.ts): each panel showing it loads it again, as a
+   * move of its source makes it (server.ts `onSourceMoved`).
+   */
+  filesMoved: (id: string) => void;
+  /**
    * Whether a session's asks are over for good (Needs you's rule 4): it
    * finished, its workspace was archived or moved on, its conversation is
    * gone, or nothing can give it a turn again. A machine away is not.
    */
   finished: (instance: InstanceRow) => boolean;
   /**
-   * Every file of folder `dir` on session `instance`'s machine, admitted as
-   * a delegate's inputs are (agent inputs.ts: a workspace's session hands
-   * only what it reads, never what every boundary hides) and read whole,
-   * each by its path from `dir`; refused in the machine's words.
+   * Every file of folder `dir` as `reader` reads it (design-files.ts
+   * `FolderReader`), admitted as a delegate's inputs are (agent inputs.ts:
+   * a workspace's session hands only what it reads, never what every
+   * boundary hides) and read whole within its limits, each by its path from
+   * `dir`; refused in the machine's words.
    */
-  folderFiles: (
-    instance: InstanceRow,
-    dir: string
-  ) => ReturnType<ReturnType<typeof createDesignFiles>>;
-  /** What a folder preview of `dir` loads, weighed on machine `machineId`, and the desk captures on its start page at `path` (agent preview.ts `previewWeight`); refused saying why it can't. */
-  folderWeight: (
-    machineId: string,
-    dir: string,
-    path: string | undefined
-  ) => Promise<
-    | FolderWeight
-    | Unanswered
-    | ReturnType<
-        typeof problem<502, { code: "artifact-folder-unread"; detail: string }>
-      >
-  >;
+  folderFiles: ReturnType<typeof createDesignFiles>;
   /** Whether a dashboard (or the app) follows the session's stream now: one shows it. */
   followed: (instanceId: string) => boolean;
   /**
@@ -314,7 +305,7 @@ export interface ArtifactServiceDeps {
         typeof problem<400, { code: "picture-save-refused"; detail: string }>
       >
   >;
-  /** Machine `machineId` told the pins its artifacts are served from, as it registers: it lets go of every other one (agent stage.ts `keepPins`). Never throws. */
+  /** Machine `machineId` told the pins whose files the hub has yet to move in (folder-move.ts): it lets go of every other one (agent stage.ts `keepPins`). Never throws. */
   keepPins: (machineId: string, pins: string[]) => void;
   /**
    * The projects session `instance` is the conversation of (their Caw): an ended writer's
@@ -332,6 +323,8 @@ export interface ArtifactServiceDeps {
   listing: (instance: InstanceRow) => void;
   /** The person looked at artifact `id` (a view's word that it had it on screen): its push is over. */
   looked: (id: string) => void;
+  /** Machine `machineId`'s home folder, as its daemon reported at register; null until one that says so has. */
+  machineHome: (machineId: string) => string | null;
   /** The machines the hub knows. */
   machines: () => Pick<AgentRow, "machineId" | "hostname">[];
   /**
@@ -397,18 +390,6 @@ export interface ArtifactServiceDeps {
    * artifact (push.ts `pinAsked`).
    */
   pinAsked: (artifactId: string, text: string) => void;
-  /** The version of folder `dir` on machine `machineId` its author hands up: pin `pin`'s copy of it made again (agent stage.ts `pinFolderOf`). Refused saying why it can't. */
-  pinFolder: (
-    machineId: string,
-    dir: string,
-    pin: string
-  ) => Promise<
-    | Unanswered
-    | ReturnType<
-        typeof problem<502, { code: "artifact-pin-uncut"; detail: string }>
-      >
-    | undefined
-  >;
   /**
    * The place a port preview of session `instance`, in no workspace, is
    * staged from, and its server's folder in it: from `folder`, the app's
@@ -599,8 +580,6 @@ export interface ArtifactServiceDeps {
    * ({@link ArtifactServiceDeps.stranded}).
    */
   tree: (instance: InstanceRow) => Set<string>;
-  /** Pin `pin` on machine `machineId` let go: no artifact is served from it any more (agent stage.ts `unpin`). Never throws. */
-  unpin: (machineId: string, pin: string) => void;
   /**
    * A design graph drawn by its workspace's daemon in the machine's own
    * Chromium (agent stage.ts `renderStage`): the stage's report once every

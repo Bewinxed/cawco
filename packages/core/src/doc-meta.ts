@@ -200,7 +200,7 @@ export interface DocMeta {
   sentUrl: string;
   /** A design graph's sheet as its stage last read it. */
   sheet: SheetRead;
-  /** A preview whose folder its machine said is gone at its last start, with the daemon's words (hub `sourceSeen`). */
+  /** A folder preview whose files can't be shown again, with why (hub artifacts/folder-move.ts: its copy was gone from its machine when the hub came to keep its files). */
   sourceGone: { at: string; why: string };
   /** A served artifact's stage as it last stood. */
   stage: StageState;

@@ -17,7 +17,7 @@ import type { ArtifactRow } from "./db/artifacts";
 import type { HubContext } from "./hub-context";
 import { awayProblem, silentProblem } from "./machine-answers";
 import { mintSessionTicket } from "./preview-access";
-import { servedByMachine } from "./preview-machine";
+import { isFolderRow, servedByMachine } from "./preview-machine";
 import { unreachable } from "./unreachable";
 
 const NOT_NAME = /[^a-z0-9]+/gu;
@@ -137,7 +137,8 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
         : { key: owner, address, path: `/__cawco/${row.kind}/${row.id}/` };
     }
     const key = ctx.embedKeyOf(row.id);
-    if (!servedByMachine(row) || key === undefined) {
+    const served = servedByMachine(row) || isFolderRow(row) ? row : undefined;
+    if (!served || key === undefined) {
       return problem(409, {
         code: "browse-unserved",
         detail: `${row.name} is served by no machine now, so it has no address to open.`,
@@ -146,7 +147,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     const address = ctx.previewListeners.address(key);
     return address instanceof ElysiaStatus
       ? address
-      : { key, address, path: row.source.path ?? "/" };
+      : { key, address, path: served.source.path ?? "/" };
   };
 
   /**

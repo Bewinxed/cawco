@@ -207,7 +207,6 @@ const PortSource = {
   serve: optional(object({ command: text, cwd: text })),
   workspace: optional(text),
 };
-const DirSource = { dir: text, path: optional(text), pin: optional(text) };
 const PreviewStarted = {
   for: custom<SourceKey>(isSourceKey, controlWords.noSourceKey),
   instanceId: text,
@@ -607,15 +606,8 @@ const ARGS: {
       width: count,
     }),
   ]),
-  previewStart: tuple([
-    union([
-      object({ ...PortSource, ...PreviewStarted }),
-      object({ ...DirSource, ...PreviewStarted }),
-    ]),
-  ]),
+  previewStart: tuple([object({ ...PortSource, ...PreviewStarted })]),
   previewStop: tuple([object({ instanceId: text, token: optional(text) })]),
-  previewWeight: tuple([text, maybe(text)]),
-  previewFolders: tuple([texts]),
   canvasScreenOpen: tuple([
     object({
       canvas: object({ id: text, name: text, sync: text }),
@@ -663,7 +655,6 @@ const ARGS: {
   ]),
   stageServe: tuple([WorkspaceRef, ServeSpec]),
   stageServeStop: tuple([text, Port]),
-  stagePin: tuple([named, absolute]),
   stagePins: tuple([texts]),
   stagePicture: tuple([
     WorkspaceRef,
@@ -674,7 +665,7 @@ const ARGS: {
       width: pipe(count, integer()),
     }),
   ]),
-  stageUnpin: tuple([pipe(text, nonEmpty(controlWords.noPin))]),
+  stageUnpin: tuple([pipe(text, nonEmpty(controlWords.noTree))]),
 
   // A machine's browsers and the passkey scans for them.
   "browser.start": tuple([

@@ -26,8 +26,11 @@ export const workspaceCarriesDir = (): string =>
   join(homedir(), ".cawco", "carries");
 
 /** Where every workspace's boundary keeps its state, one dir per workspace; read-only inside the boundary. */
-export const workspacesDir = (): string =>
-  join(homedir(), ".cawco", "workspaces");
+export const workspacesDir = (): string => workspacesDirUnder(homedir());
+
+/** {@link workspacesDir} on a machine whose home folder is `home`: how the hub names a path there (hub artifacts/folder-move.ts). */
+export const workspacesDirUnder = (home: string): string =>
+  join(home, ".cawco", "workspaces");
 
 /** One workspace's state dir: its executor, hook, policy and boundary record. */
 export const workspaceStateDir = (id: string): string =>

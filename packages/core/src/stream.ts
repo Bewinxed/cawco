@@ -490,12 +490,18 @@ import type { TailnetServing } from "./tailnet-https";
  *    server its workspace or place runs (hub served.ts `servedOf`). A page
  *    built for 97 holds a port source's `pin` to a string, so it reloads
  *    first.
+ * 99: a folder preview's source names no `pin`: the hub keeps its files and
+ *    serves them itself (hub artifacts/preview-folder.ts); `artifact_update`
+ *    takes a folder preview's `dir`, and a preview's create and update
+ *    refuse under new codes (`artifact-folder-unfit`,
+ *    `artifact-update-not-folder`, `artifact-folder-unread`). A page built
+ *    for 98 holds a folder source's `pin` to a string, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 98;
+export const WIRE_PROTOCOL = 99;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

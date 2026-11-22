@@ -8,7 +8,7 @@ import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow, ArtifactServed } from "../../db/artifacts";
-import { servedOf, servedPin, serverOf, sheetOf } from "../served";
+import { servedOf, serverOf, sheetOf } from "../served";
 import type { ArtifactInput, Making, StageAt, WarmPreviews } from "../shapes";
 import type { KindContext } from "./context";
 
@@ -79,9 +79,6 @@ const stageOf = (
   at: { workspace: sheet.workspace },
 });
 
-/** How long a pin no row names stands before it is let go ({@link createPreviewKind} `releasePin`). Ours: past a create's own checks, which may put its row back on it. */
-const PIN_KEPT_MS = 2 * 60_000;
-
 /** What PreviewKind reads of the artifact service ({@link KindContext}). */
 export type PreviewKindContext = Pick<
   KindContext,
@@ -97,7 +94,7 @@ export type PreviewKindContext = Pick<
   | "waitsOnPerson"
 >;
 
-/** A preview: a dev server or folder a machine serves, the workspace it is made from, its server kept up while a page shows it, and stopped once no artifact is served from it. */
+/** A preview: a dev server a machine serves (the workspace it is made from, its server kept up while a page shows it, and stopped once no artifact is served from it), or a folder's files the hub keeps. */
 export const createPreviewKind = (ctx: PreviewKindContext) => {
   const { above, db, deps, holder, ofTree, pagesShowing, waitsOnPerson } = ctx;
 
@@ -303,23 +300,6 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
         )
       : Promise.resolve(undefined);
   /**
-   * Folder preview pin `pin` on machine `machineId` let go once no artifact
-   * is served from it (core `PreviewSource.pin`): its copy goes. Looked at
-   * {@link PIN_KEPT_MS} after the last row moved off it, so a create that
-   * puts its row back as it was (service.ts `unplace`) finds the person's
-   * pin still standing. Its life is its artifacts'.
-   */
-  const releasePin = (machineId: string | null, pin: string | null): void => {
-    if (!(machineId && pin)) {
-      return;
-    }
-    deps.lifetime.after("preview pin let go", PIN_KEPT_MS, () => {
-      if (db.pinnedBy(pin).length === 0) {
-        deps.unpin(machineId, pin);
-      }
-    });
-  };
-  /**
    * The server a served preview's source names on machine `machineId`
    * (served.ts `serverOf`), stopped once no artifact is served from it: no
    * row, a held next version included, names its workspace or place and
@@ -339,7 +319,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
       return;
     }
     const others = db
-      .previewing({ id: server.workspace, machineId, path: "//" })
+      .previewing(server.workspace)
       .filter((row) => servedOf(row)?.port === server.port);
     if (others.length > 0) {
       return;
@@ -358,18 +338,13 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
   };
   /**
    * Artifact `id`'s source moved off `before` (db artifacts.ts `resource`):
-   * what `before` was served from let go once nothing else is served from
-   * it, unless the row names it again now: a folder's pin ({@link
-   * releasePin}), a served preview's server ({@link letGoServer}). Told by
-   * the preview service once the new source answers or no screen waits on
-   * it (server.ts `onSourceMoved`).
+   * the served preview's server `before` was served from let go once
+   * nothing else is served from it ({@link letGoServer}). Told by the
+   * preview service once the new source answers or no screen waits on it
+   * (server.ts `onSourceMoved`).
    */
   const letGoMoved = (id: string, before: ArtifactServed): void => {
     const row = db.get(id);
-    const was = servedPin(before.source);
-    if (was !== undefined && !(row && servedPin(row.source) === was)) {
-      releasePin(before.machineId, was);
-    }
     letGoServer(
       before.machineId,
       before.source,
@@ -432,9 +407,10 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
     (port === CAWCO_HUB_PORT && machineId === deps.hubMachine());
 
   /**
-   * The source a preview input names, on the machine that serves it: a
+   * The source a preview input names, on the machine it is read on: a
    * port's server run in a workspace ({@link portSource}); a folder on the
-   * machine `machine` names, else the session's.
+   * machine `machine` names, else the session's, whose files the hub reads
+   * and keeps (preview-folder.ts).
    */
   const previewSource = async (instance: InstanceRow, input: ArtifactInput) => {
     const misfit = previewProblem(input);
@@ -558,7 +534,6 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
     makingFrom,
     makingIn,
     previewSource,
-    releasePin,
     serveFirst,
     waitingStages,
     warmPreviews,
