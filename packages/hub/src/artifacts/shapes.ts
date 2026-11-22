@@ -643,6 +643,17 @@ export const PROMOTED_FILES = [
 
 export type PromotedFile = (typeof PROMOTED_FILES)[number];
 
+/** What `artifact_update` answers for a design folder changed in place: its revision, its stage after its pages compiled, every compile error. */
+export interface DesignChanged {
+  errors: ReturnType<typeof errorsSaid>;
+  /** Your change waits as this next version: your parent had opened the artifact. */
+  held?: string;
+  hint: string;
+  id: string;
+  revision: number;
+  stage: StageState;
+}
+
 /** What `artifact_update` answers for a design graph's write: nothing past the story it wrote (design graph §4, G2). */
 export interface ComponentWritten {
   file: string;

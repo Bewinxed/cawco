@@ -31,6 +31,7 @@ import type {
   ComponentWritten,
   Created,
   DecisionAnswer,
+  DesignChanged,
   Opened,
   PageBroken,
   Promoted,
@@ -62,7 +63,9 @@ export interface HeadChanged {
 
 /** What a design graph's own change answers: a states file's write, or the canvas's new spec. */
 export type ComponentChanged =
-  ComponentWritten | { id: string; revision: number; spec: CanvasSpec };
+  | ComponentWritten
+  | DesignChanged
+  | { id: string; revision: number; spec: CanvasSpec };
 
 /** `artifact_update`'s answer, by the change it made. */
 export type Updated =
@@ -632,6 +635,21 @@ const revisedWords = (revised: Revised): string => {
 
 /** A design graph's change: its new spec, or a states file's write and its frames. */
 const componentChangedWords = (changed: ComponentChanged): string => {
+  if ("hint" in changed) {
+    return lines(
+      `The design folder is at revision ${changed.revision}, its files changed in place: an open panel takes them by hot reload.`,
+      !!changed.errors.length && [
+        "Compile errors:",
+        ...changed.errors.map(
+          (one) =>
+            `- ${one.file}${one.line === null ? "" : `:${one.line}`}: ${one.message ?? "no message"}`
+        ),
+      ],
+      `Its stage: ${changed.stage.status}${changed.stage.message ? `, ${changed.stage.message}` : ""}.`,
+      changed.held,
+      changed.hint
+    );
+  }
   if ("spec" in changed) {
     return `The design graph is at revision ${changed.revision}: ${count(changed.spec.edges?.length ?? 0, "edge")}, ${count(Object.keys(changed.spec.group ?? {}).length, "group")}, ${count(changed.spec.dials?.length ?? 0, "dial")}, ${count(changed.spec.directions?.length ?? 0, "direction")}.`;
   }

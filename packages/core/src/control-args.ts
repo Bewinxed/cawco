@@ -625,6 +625,13 @@ const ARGS: {
     }),
   ]),
   canvasScreenClose: tuple([object({ token: text })]),
+  stageDesign: tuple([
+    WorkspaceRef,
+    object({
+      files: texts,
+      moved: optional(object({ added: texts, changed: texts, removed: texts })),
+    }),
+  ]),
   stageEnsure: tuple([
     WorkspaceRef,
     union([

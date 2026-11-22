@@ -145,6 +145,7 @@ import type { AuthState } from "@cawco/core/session-messages";
 import { sweepDeadShortLinks } from "@cawco/core/sessiond";
 import {
   STAGE_COMPONENTS,
+  STAGE_DESIGN,
   STAGE_ENSURE,
   STAGE_PICTURE,
   STAGE_PIN,
@@ -366,6 +367,7 @@ import { serviceManaged, setSessionLimits } from "./sessiond-client";
 import {
   closingStages,
   drawServed,
+  ensureDesign,
   ensureServed,
   ensureStage,
   keepPins,
@@ -3799,6 +3801,12 @@ const startDaemon = (rediscover = false) =>
     // A stage starts on its first use, never at this start (stage.ts `endStages`);
     // one in a boundary that is handed over starts again in the new one (stage.ts `moveStages`).
     moveServersWith(moveStages);
+    // A design folder's stage, started or woken, its pages compiled (stage.ts `ensureDesign`).
+    supervisor.declareControl(STAGE_DESIGN, (ref, look) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : ensureDesign(ports, ref, look)
+    );
     // A canvas's first states file, and (`{ file, files }`) every states file whose report it reads; `opening` as the canvas is made.
     supervisor.declareControl(STAGE_ENSURE, (ref, named) => {
       if (fenced()) {

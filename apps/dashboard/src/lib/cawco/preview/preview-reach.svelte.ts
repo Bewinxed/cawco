@@ -146,18 +146,15 @@ export class PreviewReach {
    * Where a show starts: a page at its own place on the origin that serves
    * it (core `projectPagePlace`: its project's, else its session's), which
    * holds that page whatever the session's panel shows, so an artifact's
-   * own tab never loads another (an HTML design's graph at its address
-   * there); else, on a machine artifact's own origin,
+   * own tab never loads another; else, on a machine artifact's own origin,
    * the page the agent named (`path`), else the root.
    */
   readonly startAt = $derived.by(() => {
-    const { preview, htmlDesign } = this.#deps.paneSubject;
-    if (preview && htmlDesign) {
-      // An HTML design's graph on its page's place: its address there, by its id.
-      return `${projectPagePlace(preview.artifact.id)}${htmlDesign.path.slice(1)}`;
-    }
-    if (preview?.project || preview?.artifact.kind === "page") {
-      return projectPagePlace(preview.artifact.id);
+    if (
+      this.#deps.paneSubject.preview?.project ||
+      this.#deps.paneSubject.preview?.artifact.kind === "page"
+    ) {
+      return projectPagePlace(this.#deps.paneSubject.preview.artifact.id);
     }
     return (
       (this.#deps.paneSubject.source && "path" in this.#deps.paneSubject.source

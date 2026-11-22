@@ -8,9 +8,12 @@
  * (artifacts service `moveServed`). The answer is what the open does next:
  * go on to the listener, or stand on the proxy's page naming why it can't
  * (core preview.ts `goneWhy`). The owner's pick on 2026-11-22, "Comes back
- * when you open it".
+ * when you open it". A design folder's tree (core stage.ts `designOf`),
+ * whose folder the hub keeps, comes back by its stage started on the hub's
+ * machine again, which records it there anew.
  */
 
+import { designOf } from "@cawco/core/stage";
 import { previewWords } from "@cawco/core/words/preview";
 import { ElysiaStatus } from "elysia";
 import { servedOf, sheetOf } from "./artifacts/served";
@@ -21,6 +24,8 @@ import type { GoneWhy, Workspaces } from "./workspaces";
 
 /** What a revive reads of the hub. */
 export interface DesignReviveDeps {
+  /** Design tree `tree`'s stage started on the hub's machine over its folder, its pages `files`: why not, in words, or nothing. */
+  design: (tree: string, files: string[]) => Promise<string | undefined>;
   moveServed: Artifacts["moveServed"];
   revive: Workspaces["revive"];
 }
@@ -60,6 +65,13 @@ export const createDesignRevive =
   (deps: DesignReviveDeps) =>
   /** Artifact `row`'s workspace, which its machine said is gone, back on its machine, or why it can't be. */
   async (row: ArtifactRow): Promise<RevivedAnswer> => {
+    const design = designOf(row);
+    if (design) {
+      const why = await deps.design(design.tree, design.files);
+      return why === undefined
+        ? { ok: true }
+        : goneAnswer({ kind: "failed", why });
+    }
     const workspace = sheetOf(row)?.workspace ?? servedOf(row)?.workspace;
     if (!workspace) {
       return { ok: false, down: "gone", why: null };

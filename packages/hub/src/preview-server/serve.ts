@@ -35,7 +35,6 @@ import {
   PREVIEW_PING_PATH,
 } from "@cawco/core/preview/routes";
 import { sourceKeyOf, type Upstream } from "@cawco/core/preview/upstream";
-import { htmlDesignOf, CANVAS_PATH as STAGE_PATH } from "@cawco/core/stage";
 import { DOWN_WORDS } from "@cawco/core/words/preview-down";
 import {
   asksUpgrade,
@@ -47,10 +46,8 @@ import {
   downResponse,
   heldWhileServed,
   IMMUTABLE,
-  injectOverlay,
   keyedOverlayPath,
   keyOverlay,
-  loadDesignStage,
   notUpYet,
   OVERLAY_KEY,
   overlayResponse,
@@ -107,47 +104,6 @@ export type ListenerSocket = PreviewSocket;
 
 /** Where a machine's preview is served now, or the hop that failed, why, and what stopped it (hub preview-service.ts `reach`). */
 type Reached = UpstreamAnswer;
-
-/** `text` as HTML text or an attribute's value. */
-const escapedHtml = (text: string): string =>
-  text.replaceAll(/[&<>"]/gu, (char) => HTML_ESCAPES[char] ?? char);
-const HTML_ESCAPES: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-};
-
-/**
- * An HTML design's stage document (`serveDesign`): its title, each page's
- * name for the graph (`names`), and the stage's script inline. The page
- * runs to the window's edges, its ground the picked scheme's canvas, the
- * frame centred in it.
- */
-const designStage = (
-  title: string,
-  names: Record<string, string>,
-  script: string
-): string => `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light dark">
-<title>${escapedHtml(title)}</title>
-<style>
-html,body{margin:0;block-size:100%}
-body{box-sizing:border-box;overflow:auto;background:Canvas;color:CanvasText}
-[data-slot="design-holder"]{margin-inline:auto;overflow:clip}
-iframe{display:block;border:0;transform-origin:0 0}
-</style>
-</head>
-<body>
-<script type="application/json" id="cawco-design">${JSON.stringify({ names }).replaceAll("<", "\\u003c")}</script>
-<script>${script.replaceAll("</script", "<\\/script")}</script>
-</body>
-</html>
-`;
 
 /** The status a preview's own down page answers with for each stop. */
 const STOP_STATUS: Record<PreviewStop["kind"], number> = {
@@ -723,59 +679,6 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     });
   }
 
-  /**
-   * HTML design `artifactId`'s files on its page's place (core stage.ts
-   * `htmlDesignOf`): at the design graph's address its stage, the document
-   * the graph frames (design-stage/stage.ts, carried inline) with the
-   * overlay in it as in every page; any other path one of its pages, as the
-   * hub keeps it under `artifacts/<id>/`, with no overlay of its own: the
-   * stage's reaches into it. Neither is kept: a revision moves every page
-   * under the same names, and the panel loads its frame again.
-   */
-  async function serveDesign(
-    artifactId: string,
-    pathname: string
-  ): Promise<Response> {
-    const row = env.store.artifact(artifactId);
-    const design = row ? htmlDesignOf(row) : null;
-    if (!(row && design)) {
-      return new Response("This origin serves no such design.", {
-        status: 404,
-      });
-    }
-    if (pathname !== STAGE_PATH) {
-      const found = await pageFileAt(artifactId, pathname);
-      if (found instanceof Response) {
-        return found;
-      }
-      const file = Bun.file(found.file);
-      return new Response(file, {
-        headers: { "cache-control": "no-store", "content-type": file.type },
-      });
-    }
-    // Each page's name as the graph shows it: its direction's, else the design's title.
-    const names = Object.fromEntries(
-      design.files.map((file) => [
-        file,
-        design.spec.directions?.find((one) => one.file === file)?.name ??
-          row.title,
-      ])
-    );
-    const stage = injectOverlay(
-      designStage(row.title, names, await loadDesignStage()),
-      { artifact: artifactId }
-    ).replace(
-      `<script src="${OVERLAY_PATH}"`,
-      `<script src="${await keyedOverlayPath(env.parents())}"`
-    );
-    return new Response(stage, {
-      headers: {
-        "cache-control": "no-store",
-        "content-type": "text/html; charset=utf-8",
-      },
-    });
-  }
-
   /** The ping on origin `key`: ok once whatever serves its page answers; a machine's preview's listener asked for its own (hub preview.ts `pingSession`, as it was). */
   async function pingOrigin(key: string): Promise<Response> {
     const row = isEmbed(key) ? env.store.rowAt(key) : undefined;
@@ -984,18 +887,13 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
       return null;
     }
     const [, artifactId, rest] = paged;
-    const row = env.store.artifact(artifactId);
-    if (!(
-      row &&
-      (row.kind === "page" || htmlDesignOf(row)) &&
-      env.store.servedOn(artifactId, key)
-    )) {
+    if (
+      env.store.artifact(artifactId)?.kind !== "page" ||
+      !env.store.servedOn(artifactId, key)
+    ) {
       return new Response("This origin serves no such page.", {
         status: 404,
       });
-    }
-    if (row.kind === "component") {
-      return serveDesign(artifactId, rest);
     }
     return servePage(
       request,
@@ -1060,9 +958,6 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
           maps: document?.seedMaps ?? "{}",
           state: document?.seedState ?? "",
         }));
-      }
-      if (row.kind === "component") {
-        return serveDesign(row.id, pathname);
       }
       return servePage(request, row.id, pathname, key, url);
     }

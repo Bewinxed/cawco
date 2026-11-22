@@ -16,6 +16,7 @@ import {
 import type { PermissionResult } from "@cawco/core/session-messages";
 import {
   STAGE_COMPONENTS,
+  STAGE_DESIGN,
   STAGE_ENSURE,
   STAGE_RENDER,
   STAGE_WARM,
@@ -94,6 +95,7 @@ const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
  */
 const HUB_STAGE_CONTROLS: ReadonlySet<string> = new Set([
   STAGE_COMPONENTS,
+  STAGE_DESIGN,
   STAGE_ENSURE,
   STAGE_RENDER,
   STAGE_WARM,

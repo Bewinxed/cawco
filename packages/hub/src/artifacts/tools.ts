@@ -155,6 +155,20 @@ const canvasFields = {
     ),
 };
 
+/** A design's directions: each a states file, or a design folder's page (`html`) or folder (`dir`). */
+const designDirections = z
+  .array(
+    z.object({
+      file: z.string().max(1000).optional(),
+      html: z.string().optional(),
+      dir: z.string().optional(),
+      name: z.string().max(CANVAS_SPEC_LIMITS.label),
+      line: z.string().max(CANVAS_SPEC_LIMITS.directionLine),
+    })
+  )
+  .max(CANVAS_SPEC_LIMITS.files)
+  .optional();
+
 const mermaid = z
   .string()
   .min(1)
@@ -171,7 +185,7 @@ export const artifactCreate = {
     kind: z
       .enum(MADE_ARTIFACT_KINDS)
       .describe(
-        "page: `program`, `html`, or `dir` holding page.oui or page.html. component: the design graph: `file` a states file whose live story mounts the real component or screen, or `html`/`dir` a mockup not in the codebase (design-graph skill). preview: the running app (`port`, or a folder's `dir`) at `path`, for a flow he tries; it holds no CawCo sign-in. canvas: a drawing, never a screen: `elements`, `mermaid`, or empty."
+        "page: `program`, `html`, or `dir` holding page.oui or page.html. component: the design graph: `file` a states file whose live story mounts the real component or screen, or a design folder: `html` one page, or `dir` a folder whose index.html loads its files or code (design-graph skill). preview: the running app (`port`, or a folder's `dir`) at `path`, for a flow he tries; it holds no CawCo sign-in. canvas: a drawing, never a screen: `elements`, `mermaid`, or empty."
       ),
     does: does.describe(
       "pick: a decision page, never a design. judge: a design graph or a kept block. try: a preview. draw: a canvas."
@@ -211,22 +225,9 @@ export const artifactCreate = {
         "CSF 3 states files from your workspace's root: one per direction, or your reading's."
       ),
     ...canvasFields,
-    // Create alone: the same name again replaces a design's directions, his pick kept.
-    directions: z
-      .array(
-        z.object({
-          file: z.string().max(1000).optional(),
-          html: z.string().optional(),
-          dir: z.string().optional(),
-          name: z.string().max(CANVAS_SPEC_LIMITS.label),
-          line: z.string().max(CANVAS_SPEC_LIMITS.directionLine),
-        })
-      )
-      .max(CANVAS_SPEC_LIMITS.files)
-      .optional()
-      .describe(
-        "Two or more directions of one design, a states file or page each: one graph switching between them; their pick is artifact_read's `picked`."
-      ),
+    directions: designDirections.describe(
+      "Two or more directions of one design, a states file or page each: one graph switching between them; their pick is artifact_read's `picked`."
+    ),
     dir: z.string().startsWith("/").max(4096).optional().describe("Absolute."),
     port: z
       .number()
@@ -326,10 +327,19 @@ export const artifactUpdate = {
       .min(1)
       .max(PAGE_LIMIT)
       .optional()
-      .describe("Replaces a page's whole document, picks kept."),
+      .describe("Replaces a page's or a design folder's document, picks kept."),
     ask: ask.optional().describe("A new ask, as artifact_create's."),
     title: title.optional().describe("A new title."),
     ...canvasFields,
+    dir: z
+      .string()
+      .startsWith("/")
+      .max(4096)
+      .optional()
+      .describe("A design folder's folder again, replaced in place."),
+    directions: designDirections.describe(
+      "A design folder's directions again, replaced in place."
+    ),
     patch: z
       .array(
         z.union([

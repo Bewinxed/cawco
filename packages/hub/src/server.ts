@@ -205,6 +205,7 @@ import { shellQuote } from "@cawco/core/shell-quote";
 import {
   isEmbedShape,
   STAGE_COMPONENTS,
+  STAGE_DESIGN,
   STAGE_ENSURE,
   STAGE_IDLE_MS,
   STAGE_INSTALL_MS,
@@ -340,6 +341,7 @@ import {
   titleUntitledOnce,
 } from "./artifact-titles";
 import { boardOf } from "./artifacts/access";
+import { createDesignFiles } from "./artifacts/design-files";
 import { createArtifactDocs } from "./artifacts/docs";
 import { createArtifactLane } from "./artifacts/lane";
 import { artifactPictures, artifactSend } from "./artifacts/page-posts";
@@ -5126,6 +5128,31 @@ export const createServer = (
     },
     // A design system round asked of a design graph in a chat; its verdict reaches the asker.
     verify: (requester, artifact) => designVerify.ask(requester, artifact),
+    // A design folder runs on the hub's machine, over its folder under the artifacts root.
+    design: async (tree, files, moved) => {
+      const staged = await onStage({ workspace: tree }, STAGE_DESIGN, (ref) => [
+        ref,
+        moved ? { files, moved } : { files },
+      ]);
+      return staged instanceof ElysiaStatus
+        ? staged
+        : { machineId: staged.machineId, opened: staged.result };
+    },
+    dropDesign: (tree) => {
+      const machineId = ownMachineIdRead;
+      // Its stage ends with it and says nothing more: forgotten here now.
+      workspaceStages.delete(tree);
+      if (machineId) {
+        detach(
+          callAgent(machineId, STAGE_UNPIN, [tree], BUSY_TIMEOUT_MS),
+          "design let go"
+        );
+      }
+    },
+    folderFiles: createDesignFiles({
+      call: (machineId, method, args) => callMachine(machineId, method, args),
+      workspaceOf: (row) => workItems.workspaceOf(row),
+    }),
     // A design graph drawn by its workspace's daemon in the machine's own Chromium.
     stageRender: async (at, ask) => {
       const staged = await onStage(at, STAGE_RENDER, (ref) => [ref, ask]);
@@ -5749,6 +5776,16 @@ export const createServer = (
   const reviveServed = createDesignRevive({
     moveServed: (id, to) => artifacts.moveServed(id, to),
     revive: (id) => workItems.revive(id),
+    // A design folder's tree recorded on the hub's machine again, its stage started there.
+    design: async (tree, files) => {
+      const staged = await onStage({ workspace: tree }, STAGE_DESIGN, (ref) => [
+        ref,
+        { files },
+      ]);
+      return staged instanceof ElysiaStatus
+        ? String(staged.response.detail)
+        : undefined;
+    },
   });
   // Every way an artifact row goes ends its own origin.
   db.onArtifactsGone((gone) => {

@@ -23,6 +23,7 @@ import type { InstanceRow, SendPayload } from "@cawco/core/protocol";
 import { artifactLink } from "@cawco/core/references";
 import { relaunchOf } from "@cawco/core/relaunch";
 import {
+  isDesignTree,
   STAGE_CLONE_MS,
   STAGE_INSTALL_MS,
   STAGE_PICTURE,
@@ -40,10 +41,12 @@ import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactServiceDeps } from "./artifacts/deps";
+import { designFolderOf } from "./artifacts/design-folder";
 import type { MarksDelivery, MarksOutcome, StageAt } from "./artifacts/shapes";
 import { artifactTaker, takesNoInput } from "./artifacts/taker";
 import type { Caw } from "./caw";
 import { stagePlaceRef } from "./caw";
+import { ARTIFACTS_ROOT } from "./config";
 import type { ArtifactRow } from "./db/artifacts";
 import { askWhat } from "./delegate-waits";
 import type { HubContext } from "./hub-context";
@@ -77,6 +80,7 @@ export type ArtifactEventsContext = Pick<
   | "lead"
   | "leftoverWords"
   | "lifetime"
+  | "ownMachineIdRead"
   | "pending"
   | "plans"
   | "publishSend"
@@ -699,12 +703,23 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
   /**
    * Where a stage runs, with its machine: a session's work item's workspace,
    * else its place (caw.ts `stagePlaceRef`), on the session's machine; or
-   * the workspace or place a sheet was made in. Undefined when that is gone:
-   * a workspace the hub no longer has, a place no session names any more.
+   * the workspace or place a sheet was made in; or a design folder's tree,
+   * its folder under the artifacts root on the hub's machine (core stage.ts
+   * `designOf`). Undefined when that is gone: a workspace the hub no longer
+   * has, a place no session names any more.
    */
   const stageWhere = (
     at: StageAt
   ): { machineId?: string; workspace: WorkspaceRef } | undefined => {
+    if ("workspace" in at && isDesignTree(at.workspace)) {
+      return {
+        workspace: {
+          id: at.workspace,
+          path: designFolderOf(ARTIFACTS_ROOT, at.workspace),
+        },
+        machineId: ctx.ownMachineIdRead,
+      };
+    }
     if ("session" in at) {
       const own = ctx.workItems.workspaceOf(at.session);
       return own

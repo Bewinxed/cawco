@@ -188,7 +188,7 @@
     /** The mode as one button, where the tools have no room for its three segments. */
     modeCompact?: Snippet;
     /**
-     * An HTML design (core stage.ts `htmlDesignOf`): each page one state,
+     * A design folder (core stage.ts `designOf`): each page one state,
      * drawn in a frame of its own, so nothing moves between states to
      * play or compare, and the page answers no Reduce motion of ours.
      */
@@ -1216,7 +1216,7 @@
   const path = $derived(review ? pathOf(review) : []);
   const at = $derived(kept ? path.indexOf(kept.state) : -1);
   const single = $derived((review?.order.length ?? 0) <= 1);
-  /** Compare has something to compare with: another state, or another direction of the design; an HTML design's page is read by no Compare. */
+  /** Compare has something to compare with: another state, or another direction of the design; a design folder's page is read by no Compare. */
   const canCompare = $derived(!page && (directed || !single));
   /** The states the stepper's menu lists: the direction in front's alone on a design with directions (the switch brings another in front); else every component's whose sheet has come. */
   const menuReviews = $derived.by(() => {

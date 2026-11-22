@@ -124,8 +124,9 @@ import {
   canvasOf,
   canvasPath,
   type DesignQuery,
+  designArtifactOf,
+  designOf,
   type EmbedShape,
-  htmlDesignOf,
   STAGE_IDLE_MS,
   type StageFrame,
   type StageState,
@@ -161,8 +162,10 @@ import {
   type CanvasInput,
   CREATE_SHAPE,
   canvasProblem,
+  DESIGN_HINT,
   designDialsProblem,
   directionsStaged,
+  errorsSaid,
   pagesAsked,
   specOf,
 } from "./component";
@@ -205,6 +208,7 @@ import {
   type CommentRead,
   type ComponentRead,
   type Created,
+  type DesignChanged,
   type Making,
   type Opened,
   type PageBroken,
@@ -1144,6 +1148,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     letGoHeadless(row.id);
     docs.drop(row.id);
     db.remove(row.id);
+    // A design's stage stops with the artifact whose folder holds it (core stage.ts `designTreeId`); a held version of it serves from that folder too.
+    const design = designOf(row);
+    if (design && designArtifactOf(design.tree) === row.id) {
+      deps.dropDesign(design.tree);
+    }
     store.remove(row.id);
     if (row.heldFor !== null) {
       versionMoved(row);
@@ -1392,6 +1401,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     createSheet,
     readSheet,
     shapesOf,
+    updateDesign,
     writeSheet,
     writeStage,
   } = createComponentKind({
@@ -2563,14 +2573,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ownersRead: boolean,
     ask: Omit<PictureAsk, "link"> & { png: boolean }
   ) => {
-    // An HTML design keeps no stage: no frame to draw, no story, no states file to verify.
+    // A design folder's pages are no states file: no story, no frame drawn of one, nothing to verify.
     if (
-      htmlDesignOf(row) &&
+      designOf(row) &&
       (ask.png || ask.render || ask.state || ask.story || ask.verify)
     ) {
       return problem(400, {
         code: "artifact-read-state-unfit",
-        detail: `${row.name} is an HTML design: the hub keeps no frames, stories or render of it. artifact_read({ id }) answers its pins, dials and pick.`,
+        detail: `${row.name} is a design folder: it has no stories, and the hub draws no frames of its pages. artifact_read({ id }) answers its pins, dials, pick and compile errors.`,
       });
     }
     const answer = await readSheet(row, since, ownersRead, ask);
@@ -3180,13 +3190,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /**
    * Design graph `row`'s files and the spec an `artifact_update` of its
    * edges, groups, dials or directions makes, or why it can't: a row that
-   * is no design graph, or a spec that does not hold (an HTML design's
+   * is no design graph, or a spec that does not hold (a design folder's
    * dials set CSS variables alone).
    */
   const canvasAsked = (row: ArtifactRow, input: CanvasInput) => {
-    const design = htmlDesignOf(row);
+    const design = designOf(row);
     const canvas = sheetOf(row) ?? design;
-    if (!canvas?.spec || row.source.path === undefined) {
+    if (!(canvas?.spec && "port" in row.source && row.source.path)) {
       return problem(409, {
         code: "artifact-canvas-spec-not-sheet",
         detail: `${row.name} is a ${row.kind}: edges, group, dials and directions are a design graph's.`,
@@ -3194,7 +3204,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const { files } = canvasOf(row.source.path);
     // Each direction names its file as the stage does, from the toolchain
-    // root; an HTML design's, its page as the design names it.
+    // root; a design folder's, its page as the design names it.
     const directions =
       input.directions &&
       (design
@@ -3209,12 +3219,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         detail: misfit,
       });
     }
-    const spec = specOf(row.name, {
-      edges: input.edges ?? canvas.spec.edges,
-      group: input.group ?? canvas.spec.group,
-      dials: input.dials ?? canvas.spec.dials,
-      directions: directions ?? canvas.spec.directions,
-    });
+    const spec = {
+      ...specOf(row.name, {
+        edges: input.edges ?? canvas.spec.edges,
+        group: input.group ?? canvas.spec.group,
+        dials: input.dials ?? canvas.spec.dials,
+        directions: directions ?? canvas.spec.directions,
+      }),
+      // A design folder's page is named by its title where no direction names it.
+      ...(canvas.spec.title === undefined ? {} : { title: canvas.spec.title }),
+    };
     return { files, spec };
   };
 
@@ -3617,6 +3631,90 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return askAgain(row, new Set(body.again));
     }
     return sendPage(row, body, route, { session: instance });
+  };
+
+  /** Session `instanceId` and artifact `id` as it may change it ({@link revisable}); or why not. */
+  const revisableBy = (instanceId: string, id: string) => {
+    const instance = sessionOf(instanceId);
+    if (instance instanceof ElysiaStatus) {
+      return instance;
+    }
+    const row = revisable(instance, id);
+    return row instanceof ElysiaStatus ? row : { instance, row };
+  };
+
+  /**
+   * Design graph `target` at its new canvas address (`at`): its next
+   * revision, shown again where the panel shows it. An update of what the
+   * panel shows, not a show of it: a tab that closed it stays closed
+   * (dashboard preview/closed-here.ts).
+   */
+  const canvasMoved = async (
+    target: ArtifactRow,
+    at: { machineId: string | null; source: PreviewSource }
+  ) => {
+    db.resource(target.id, at);
+    const next = stillThere(
+      db.update(target.id, {
+        revision: target.revision + 1,
+        updatedAt: new Date(),
+      }),
+      target.id
+    );
+    stampMeta(next, null);
+    if (inPanel(next)) {
+      await show(next, next.instanceId, null, true);
+    }
+    return next;
+  };
+
+  /**
+   * `artifact_update` of a design folder with html, dir or directions
+   * (component.ts `updateDesign`), the canvas's edges, groups or dials
+   * beside them: its files changed in place, where its stage serves them
+   * live, so the person's open panel takes them by its HMR, his picks and
+   * pins kept; a new revision, shown again, only where its pages or spec
+   * moved its canvas's address. Answers its stage after its pages
+   * compiled, every compile error in `errors`.
+   */
+  const designUpdate = async (
+    instanceId: string,
+    id: string,
+    input: Pick<
+      ArtifactInput,
+      "dials" | "dir" | "directions" | "edges" | "group" | "html"
+    >
+  ) => {
+    const asked = revisableBy(instanceId, id);
+    if (asked instanceof ElysiaStatus) {
+      return asked;
+    }
+    const { instance, row } = asked;
+    const answer = await changedBy(instance, row, async (target) => {
+      const changed = await updateDesign(instance, target, input);
+      if (changed instanceof ElysiaStatus) {
+        return changed;
+      }
+      const next = changed.moved
+        ? await canvasMoved(target, {
+            machineId: changed.machineId,
+            source: changed.source,
+          })
+        : target;
+      const written: DesignChanged = {
+        ...heldId(next),
+        revision: next.revision,
+        stage: { ...changed.state, errors: [] },
+        errors: errorsSaid(changed.state.errors),
+        hint: DESIGN_HINT,
+      };
+      return written;
+    });
+    if (!(answer instanceof ElysiaStatus)) {
+      askedNow(instance, row.id);
+      wroteNow(instance, row.id);
+    }
+    return answer;
   };
 
   return {
@@ -4462,6 +4560,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (found instanceof ElysiaStatus) {
         return found;
       }
+      // A design folder's html is its page, changed in place by its own route.
+      if (found.kind === "component") {
+        return problem(409, {
+          code: "artifact-update-component",
+          detail: `${found.name} is a design graph: its changes go by its own route (PATCH …/component), artifact_update's html among them for a design folder.`,
+        });
+      }
       const ownersRead = found.instanceId === instance.id;
       const forCanvas = !("html" in change || "patch" in change);
       if (forCanvas !== (found.kind === "canvas")) {
@@ -4967,14 +5072,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id: string,
       input: CanvasInput
     ) => {
-      const instance = sessionOf(instanceId);
-      if (instance instanceof ElysiaStatus) {
-        return instance;
+      const revising = revisableBy(instanceId, id);
+      if (revising instanceof ElysiaStatus) {
+        return revising;
       }
-      const row = revisable(instance, id);
-      if (row instanceof ElysiaStatus) {
-        return row;
-      }
+      const { instance, row } = revising;
       const asked = canvasAsked(row, input);
       if (asked instanceof ElysiaStatus) {
         return asked;
@@ -4982,23 +5084,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const { files, spec } = asked;
       // Its new address on the same live stage (served.ts `pinTarget`).
       const answer = await changedBy(instance, row, async (target) => {
-        db.resource(target.id, {
+        const next = await canvasMoved(target, {
           machineId: target.machineId,
           source: { ...target.source, path: canvasPath(files, spec) },
         });
-        const next = stillThere(
-          db.update(target.id, {
-            revision: target.revision + 1,
-            updatedAt: new Date(),
-          }),
-          target.id
-        );
-        stampMeta(next, null);
-        // An update of what the panel shows, not a show of it: a tab that
-        // closed it stays closed (dashboard preview/closed-here.ts).
-        if (inPanel(next)) {
-          await show(next, next.instanceId, null, true);
-        }
         const changed: {
           held?: string;
           id: string;
@@ -5016,6 +5105,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         wroteNow(instance, row.id);
       }
       return answer;
+    },
+
+    designUpdate,
+
+    /** Whether artifact `id`, as session `instanceId` may change it, is a design folder (core stage.ts `designOf`): its html goes by the component route. */
+    isDesign: (instanceId: string, id: string): boolean => {
+      const instance = sessionOf(instanceId);
+      const row =
+        instance instanceof ElysiaStatus ? instance : revisable(instance, id);
+      return !(row instanceof ElysiaStatus) && designOf(row) !== null;
     },
 
     /**
