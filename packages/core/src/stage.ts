@@ -1223,6 +1223,17 @@ export const STAGE_READY_MS = 60_000;
 /** How long a place's stage clone's git may take, each cut or step (agent `stage-clone.ts`). Ours: a fetch from the same disk of what the object pool it borrows from lacks, or of one commit where none lends. */
 export const STAGE_CLONE_GIT_MS = 60_000;
 
+/**
+ * The most a copy of a folder in no repository may hold, measured before it
+ * is made (agent `stage-clone.ts` `copyBounded`): a place's stage clone or a
+ * pin of such a folder, or a folder's pin. Past either, the copy is refused.
+ * Ours: cockpit, a large monorepo with its fonts and images, copies as
+ * 275 MiB in 7,834 files once what an install remakes is left out
+ * (2026-11-22); this holds about four times that, and stays near 2% of the
+ * 42 GB the hub's disk had free that day.
+ */
+export const STAGE_COPY_LIMIT = { bytes: 1024 ** 3, files: 50_000 } as const;
+
 /** How long a stage's install of its project inside its boundary may take (agent `stage-install.ts` `installProject`), before it starts. Ours. */
 export const STAGE_INSTALL_MS = 180_000;
 

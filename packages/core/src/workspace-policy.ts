@@ -74,7 +74,7 @@ import {
   PROTECTED_PARENTS,
   protectedFindTests,
 } from "./clone-denies";
-import { alternatesText, recordedPool } from "./object-pool";
+import { alternatesText, copiedFolderSync, recordedPool } from "./object-pool";
 import {
   accountConfigDir,
   claudeConfigDirs,
@@ -387,7 +387,8 @@ const borrowing = (
  * ({@link protectedIn}), each with nothing to stand in for it: a person's own
  * folder is never written into. A design folder keeps none: its stage alone
  * runs there, inside its boundary, and nothing on the host loads its files
- * as config. At most {@link PROTECTED_MAX}, the config
+ * as config; nor does a stage clone or pin that is a copy of a folder in no
+ * repository ({@link copiedFolderSync}), held as a design folder is. At most {@link PROTECTED_MAX}, the config
  * that crowds past it denied as the dirs that hold it ({@link collapsed}).
  */
 export const workspaceDenies = async (
@@ -398,6 +399,9 @@ export const workspaceDenies = async (
     case "design":
       return [];
     case "clone":
+      if (copiedFolderSync(workspace.id)) {
+        return [];
+      }
       return borrowing(
         cloneDenies(clone),
         clone,

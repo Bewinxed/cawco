@@ -159,11 +159,11 @@ import {
   copyBack,
   cutPin,
   dropPin,
+  followCheckout,
   inCloneTurn,
   installStage,
   isPin,
   isStageClone,
-  MIRROR_MS,
   pinFolder,
   pinnedTree,
   pinsFrom,
@@ -171,7 +171,6 @@ import {
   type StageClone,
   sameAsCheckout,
   stageCloneOf,
-  syncStageClone,
 } from "./stage-clone";
 import { designsGone, dropDesign, keepDesign } from "./stage-design";
 import { HOST_RUNTIME_ENV, stageHost } from "./stage-host/build";
@@ -368,8 +367,8 @@ interface Stage {
    */
   lookedAt: number;
   message?: string;
-  /** A place's stage's mirror of its checkout into its clone, while it is live ({@link mirrorWhileLive}). */
-  mirror?: ReturnType<typeof setInterval>;
+  /** What ends a place's stage's following of its checkout into its clone, while it is live ({@link mirrorWhileLive}). */
+  mirror?: () => void;
   /** When it last said it moved (`moved`, a module compiled; or it began to serve), `Date.now()`: a read waits on it while it moves ({@link READ_QUIET_MS}). */
   movedAt: number;
   readonly port: number;
@@ -1146,7 +1145,7 @@ function kill(stage: Stage): void {
   stage.child = undefined;
   clearInterval(stage.health);
   stage.health = undefined;
-  clearInterval(stage.mirror);
+  stage.mirror?.();
   stage.mirror = undefined;
   // No child, or one whose spawn made no process: nothing to signal.
   if (leader === undefined) {
@@ -1403,32 +1402,18 @@ const hostWord = (line: string): HostWord | null => {
 
 /**
  * A place's stage (a sheet's, or a preview's server its author reads),
- * while it is live: its clone brought in step with its checkout every
- * {@link MIRROR_MS} (stage-clone.ts `syncStageClone`), so the session's
- * edits reach the stage's watcher and an open sheet or page redraws. One
- * mirror at a time; one that fails is logged, and the next tries again.
+ * while it is live: its clone kept in step with its checkout on each change
+ * a watch of the checkout hears (stage-clone.ts `followCheckout`), so the
+ * session's edits reach the stage's watcher and an open sheet or page
+ * redraws. Ended with the stage ({@link kill}).
  */
 function mirrorWhileLive(stage: Stage): void {
-  clearInterval(stage.mirror);
+  stage.mirror?.();
+  stage.mirror = undefined;
   if (workspaceIdKind(stage.workspace.id) !== "place") {
     return;
   }
-  let busy = false;
-  stage.mirror = setInterval(() => {
-    if (busy || stage.status !== "live") {
-      return;
-    }
-    busy = true;
-    syncStageClone(stage.workspace)
-      .catch((error: unknown) =>
-        console.warn(
-          `[stage] ${stage.key}: its clone did not follow ${stage.workspace.path}: ${error instanceof Error ? error.message : String(error)}`
-        )
-      )
-      .finally(() => {
-        busy = false;
-      });
-  }, MIRROR_MS);
+  stage.mirror = followCheckout(stage.workspace);
 }
 
 /** It serves: `live`, its health look and its mirror started, the hub told. */

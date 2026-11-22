@@ -16,7 +16,7 @@ import { createHash } from "node:crypto";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { z } from "zod";
 import { objectPoolsDir, workspaceCreateFile } from "./paths/workspace";
-import { readRecord } from "./state-file";
+import { readRecord, readRecordSync } from "./state-file";
 
 /**
  * A cut's record in its state dir, `create.json`: the clone's path, written
@@ -26,9 +26,15 @@ import { readRecord } from "./state-file";
  * before pools has no `pool` until the agent converts it (agent
  * object-pool.ts `borrowFromPool`). A stage clone or pin (agent
  * stage-clone.ts `cut`) has no `origin`, and its `pool` once the cut has
- * found one that lends, before it borrows; a folder's layer has neither.
+ * found one that lends, before it borrows; a folder's layer has neither. A
+ * stage clone or pin of a folder in no repository (agent stage-clone.ts
+ * `copyCut`) is a copy of that folder, no clone: its record names the folder
+ * (`copies`) in its first write, before its boundary starts, and it is held
+ * as a plain folder ({@link copiedFolderSync}).
  */
 export const CreateRecordSchema = z.object({
+  /** The folder in no repository this tree is a copy of, as a real path. */
+  copies: z.string().optional(),
   origin: z.string().optional(),
   path: z.string().optional(),
   pool: z.string().optional(),
@@ -82,3 +88,15 @@ export const recordedPool = async (id: string): Promise<string | undefined> => {
   const pool = (await createRecordOf(id))?.pool;
   return pool && isPoolPath(pool) ? pool : undefined;
 };
+
+/**
+ * The folder workspace `id`'s tree is a copy of, as its `create.json`
+ * records it ({@link CreateRecordSchema} `copies`), read synchronously:
+ * a stage clone or pin of a folder in no repository, which its boundary
+ * holds as a plain folder, as a design folder is (agent boundary/plan.ts
+ * `kindEnv`, workspace-policy.ts `workspaceDenies`, agent layer.ts
+ * `layerOf`). Nothing for every other tree. A damaged record throws: what
+ * reads it does not guess.
+ */
+export const copiedFolderSync = (id: string): string | undefined =>
+  readRecordSync(workspaceCreateFile(id), CreateRecordSchema)?.copies;
