@@ -19,7 +19,8 @@
  *
  * Every other entry is skipped when a process has its cwd, an open file or
  * a mapped file inside it (`/proc/<pid>/cwd`, `fd`, `maps`), or when
- * anything in it changed in the last 24 hours. Otherwise:
+ * anything in it changed in the last 24 hours (`node_modules` and files bun's
+ * store hard-links never count; see `changedSince`). Otherwise:
  * - a git checkout (a clone, or a linked worktree of another repository)
  *   is skipped while another worktree of its repository stands; otherwise
  *   it first has every commit on no remote pushed to
@@ -52,7 +53,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir, hostname } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { hubDbPath } from "../packages/core/src/paths/hub";
 import {
   workspaceCarriesDir,
@@ -335,7 +336,14 @@ const openPaths = (): string[] => {
   return held;
 };
 
-/** The newest change anywhere under `path` (itself too), links not followed; stops at the first within `since`. */
+/**
+ * The newest change anywhere under `path` (itself too), links not followed;
+ * stops at the first within `since`. Only what someone wrote counts: every
+ * `node_modules` folder is left out whole, and so is any regular file with
+ * more than one link, since bun's package store hard-links its files into
+ * every install, so an install anywhere moves their ctime (and can reset
+ * their mtime) without anything in this folder changing.
+ */
 const changedSince = (path: string, since: number): string | undefined => {
   const stack = [path];
   while (stack.length > 0) {
@@ -343,10 +351,16 @@ const changedSince = (path: string, since: number): string | undefined => {
     if (at === undefined) {
       break;
     }
+    if (basename(at) === "node_modules") {
+      continue;
+    }
     let info: ReturnType<typeof lstatSync>;
     try {
       info = lstatSync(at);
     } catch {
+      continue;
+    }
+    if (info.isFile() && info.nlink > 1) {
       continue;
     }
     if (Math.max(info.mtimeMs, info.ctimeMs) > since) {
