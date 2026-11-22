@@ -76,6 +76,7 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
+import { unlessGone } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
 import { cloneDenies } from "@cawco/core/clone-denies";
 import { detach, failureOf } from "@cawco/core/detach";
@@ -114,6 +115,7 @@ import { formatFlag, poolGitEnv, standingPool } from "./object-pool";
 import { removeTree } from "./remove-tree";
 import { repoTop } from "./repo-top";
 import { forgetInstalls, installProject } from "./stage-install";
+import { WorkspaceNotHere } from "./stage-refusal";
 import { copyOwnSecrets } from "./workspace";
 import { cloneHolding } from "./workspace-records";
 
@@ -944,42 +946,71 @@ const wholeAt = async (
  * earlier form, or of another repository), and brought in step with the
  * checkout: where its stage runs. A place in no repository has a copy of its
  * folder instead ({@link copyCut}). The hub hears of it each time
- * ({@link AgentPorts.stageClone}).
+ * ({@link AgentPorts.stageClone}). {@link WorkspaceNotHere} when the cut
+ * or step failed because the place's folder went ({@link folderGone}): its
+ * workspace archived before or during it, so its preview says it is gone.
  */
 export const stageCloneOf = (
   place: WorkspaceRef,
-  { stageClone }: Pick<AgentPorts, "stageClone">
+  ports: Pick<AgentPorts, "stageClone">
 ): Promise<StageClone> => {
   const id = stageCloneId(place.id);
   return inCloneTurn(id, async () => {
-    const real = await realpath(place.path);
-    const repo = await checkoutOf(real);
-    const from = repo ?? real;
-    const kept = await keptOf(id);
-    const path =
-      (await recordedPath(id)) ??
-      expandHome(`~/.worktrees/${basename(from)}-stage-${id.slice(0, 8)}`);
-    const boundary: WorkspaceRef = { id, path };
-    const whole = await wholeAt(path, repo ? { repo } : { folder: real }, kept);
-    if (whole) {
-      await step(boundary, whole);
-    } else {
-      copied.delete(id);
-      await (repo
-        ? cut(boundary, repo, place)
-        : copyCut(boundary, real, place));
+    try {
+      return await cloneNow(id, place, ports);
+    } catch (error) {
+      if (await folderGone(place.path)) {
+        throw new WorkspaceNotHere(
+          `${place.path} is not on this machine any more, so its stage has nothing to run from.`,
+          { cause: error }
+        );
+      }
+      throw error;
     }
-    stageClone({
-      kind: "stage-clone",
-      id,
-      place: place.id,
-      path,
-      repoRoot: from,
-      tmp: workspaceScratchDir(id),
-    });
-    const sub = relative(from, real);
-    return { boundary, folder: sub ? join(path, sub) : path };
   });
+};
+
+/**
+ * Whether the folder at `path` is gone: nothing stands at it. A workspace's
+ * archive moves its clone aside before it deletes any of it (layer.ts
+ * `removeLayer`), so a cut whose fetch lost the checkout's objects partway
+ * finds its path gone once the fetch fails, as one begun after does at its
+ * first `realpath`.
+ */
+const folderGone = (path: string): Promise<boolean> =>
+  lstat(path).then(() => false, unlessGone(true));
+
+/** {@link stageCloneOf}'s cut or step, in the clone's turn. */
+const cloneNow = async (
+  id: string,
+  place: WorkspaceRef,
+  { stageClone }: Pick<AgentPorts, "stageClone">
+): Promise<StageClone> => {
+  const real = await realpath(place.path);
+  const repo = await checkoutOf(real);
+  const from = repo ?? real;
+  const kept = await keptOf(id);
+  const path =
+    (await recordedPath(id)) ??
+    expandHome(`~/.worktrees/${basename(from)}-stage-${id.slice(0, 8)}`);
+  const boundary: WorkspaceRef = { id, path };
+  const whole = await wholeAt(path, repo ? { repo } : { folder: real }, kept);
+  if (whole) {
+    await step(boundary, whole);
+  } else {
+    copied.delete(id);
+    await (repo ? cut(boundary, repo, place) : copyCut(boundary, real, place));
+  }
+  stageClone({
+    kind: "stage-clone",
+    id,
+    place: place.id,
+    path,
+    repoRoot: from,
+    tmp: workspaceScratchDir(id),
+  });
+  const sub = relative(from, real);
+  return { boundary, folder: sub ? join(path, sub) : path };
 };
 
 /**

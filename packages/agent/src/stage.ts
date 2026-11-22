@@ -171,6 +171,7 @@ import {
 import { designsGone, dropDesign, keepDesign } from "./stage-design";
 import { HOST_RUNTIME_ENV, stageHost } from "./stage-host/build";
 import { installMoved, installProject, type ProjectAt } from "./stage-install";
+import { StageRefusal, WorkspaceNotHere } from "./stage-refusal";
 import { listenerFor, type Rendered, renderCanvas } from "./stage-render";
 import { userBun } from "./user-bun";
 import { keepPlace, workspaceRefs } from "./workspace-records";
@@ -313,17 +314,6 @@ const NO_PLUGIN: [RegExp, string][] = [
   [/^angular\.json$/u, "Angular CLI"],
   [/^webpack\.config\.[cm]?[jt]s$/u, "webpack"],
 ];
-
-/** What `artifact_create` and the agent are told when a sheet cannot run, and why. */
-export class StageRefusal extends Error {}
-
-/**
- * A stage refused because the workspace it runs in is not on this machine
- * any more (archived, discarded): nothing here can start its server again,
- * so its preview says its workspace is gone (core `PreviewDown` `gone`),
- * never that the way to it failed (agent preview.ts `staged`, `pinged`).
- */
-export class WorkspaceNotHere extends StageRefusal {}
 
 /** What a stage runs: the stage host on a sheet's toolchain root, or the command a workspace preview names. */
 type Runs =

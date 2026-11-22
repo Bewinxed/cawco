@@ -53,15 +53,14 @@ import {
 } from "./preview-bridge";
 import {
   networkOf,
-  StageRefusal,
   sourceEnded,
   sourceUp,
   sourceViewer,
   sourceWakes,
   stagedSource,
-  WorkspaceNotHere,
   wakeSource,
 } from "./stage";
+import { StageRefusal, WorkspaceNotHere } from "./stage-refusal";
 
 /**
  * The listeners this process serves, each with the hub's token for the
