@@ -1,10 +1,12 @@
 import type { StatusPair } from "@cawco/core/views";
 import {
+  type FactAnswer,
   formatDay,
   formatNextClock,
   LOCAL_ZONE,
   MOCK_NOW,
   type Routine,
+  type RoutineRun,
   type RunOutcome,
 } from "./routines-data";
 
@@ -65,7 +67,7 @@ function lower(text: string): string {
 }
 
 /** The words with their first letter raised, to open a sentence or a cell. */
-export function upper(text: string): string {
+function upper(text: string): string {
   return text ? `${text[0]?.toUpperCase() ?? ""}${text.slice(1)}` : text;
 }
 
@@ -129,17 +131,85 @@ export function readRoutine(routine: Routine): RoutineReading {
   };
 }
 
-/** When it ran last, spelled out; none before its first run. */
-export function lastRunAt(routine: Routine): number | undefined {
-  return routine.runs[0]?.startedAt;
+/**
+ * What an outcome's item says on the first view: the outcome in the person's
+ * words, its answer now as a word read down one column, and one sentence of
+ * what the newest finished run found or delivered. It needs him when its
+ * routine stopped or its newest finished run failed or couldn't check;
+ * nothing else carries a mark. A run going now leaves the last answer
+ * standing until it lands.
+ */
+export interface OutcomeReading {
+  answer: string;
+  fixPrompt: string | null;
+  needsYou: boolean;
+  says: string;
+  sentence: string;
 }
 
-/** When it runs next; none while it is stopped, paused or finished. */
-export function nextRunAt(routine: Routine): number | undefined {
-  return (routine.status === "active" || routine.status === "running") &&
-    routine.schedule.nextAt !== null
-    ? routine.schedule.nextAt
-    : undefined;
+const FACT_FROM_RUN: Partial<Record<RunOutcome, FactAnswer>> = {
+  "could-not-check": "unknown",
+  failed: "unknown",
+  met: "yes",
+  "not-yet": "no",
+};
+
+function factWord(routine: Routine, run: RoutineRun): string {
+  const found = run.answer ?? FACT_FROM_RUN[run.outcome] ?? "unknown";
+  switch (found) {
+    case "yes":
+      return "Yes";
+    case "no":
+      // A fact work waits on is not true yet; any other is simply not true.
+      return routine.check ? "Not yet" : "No";
+    case "unknown":
+      return "Not known";
+  }
+}
+
+export function readOutcome(routine: Routine): OutcomeReading {
+  const { says, kind } = routine.outcome;
+  const latest = routine.runs.find((run) => run.outcome !== "running");
+
+  if (!latest) {
+    return {
+      answer: kind === "fact" ? "Not known" : "Not yet",
+      fixPrompt: null,
+      needsYou: false,
+      says,
+      sentence:
+        routine.status === "running"
+          ? "Its first run is going now."
+          : "It hasn't run yet.",
+    };
+  }
+
+  const found = `${upper(latest.oneLine)}.`;
+  const failed =
+    latest.outcome === "failed" || latest.outcome === "could-not-check";
+  const needsYou = routine.status === "stopped" || failed;
+  let answer = kind === "fact" ? factWord(routine, latest) : "Done";
+  if (kind === "delivery" && failed) {
+    answer = "Didn't deliver";
+  }
+  if (routine.status === "paused" && !needsYou) {
+    return {
+      answer: "Paused",
+      fixPrompt: null,
+      needsYou,
+      says,
+      sentence: `${routine.statusReason ?? "Paused"}. Last time: ${lower(latest.oneLine)}.`,
+    };
+  }
+  return {
+    answer,
+    fixPrompt: needsYou
+      ? `Fix the routine "${routine.name}", which answers "${says}": ${lower(latest.oneLine)}.`
+      : null,
+    needsYou,
+    says,
+    sentence: found,
+  };
 }
 
 /** The rhythm in words, with its zone named only when it is not the person's. */

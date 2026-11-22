@@ -1,10 +1,10 @@
 /**
  * A project's Routines screen (Component Story Format 3, live components):
- * one table of routines, each with its name over one sentence of what it last
- * did or is waiting for, when it last ran and runs next, and a Needs you mark
- * only where it needs the person; those that need him lead.
- * Opening a routine shows its latest run, what it does and its earlier runs;
- * opening a run shows its whole result and its session.
+ * one list of outcomes, each a fact the project depends on or what its
+ * recurring work delivered, with its answer now, and a Needs you mark only
+ * where it needs the person; those that need him lead.
+ * Opening one shows the routine behind it: its latest run, what it does and
+ * its earlier runs; opening a run shows its whole result and its session.
  */
 import { hubAs } from "#lib/cawco/hub-stand-in.js";
 import Routines from "./Routines.svelte";
@@ -16,5 +16,5 @@ export default {
   title: "Project/Routines",
 };
 
-/** The project's routines: two need me, one is running, the rest are quiet. */
+/** What's true in the project now: two answers aren't known and need me, the rest are quiet. */
 export const Live = {};

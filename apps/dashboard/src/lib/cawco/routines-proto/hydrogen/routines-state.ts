@@ -255,6 +255,8 @@ export function createRoutine(
     id,
     instructions: draft.instructions.trim(),
     name: draft.name.trim(),
+    // What it delivers is said by its name until the person words it.
+    outcome: { kind: "delivery", says: draft.name.trim() },
     runningStep: "Running its first test",
     runs: [
       {

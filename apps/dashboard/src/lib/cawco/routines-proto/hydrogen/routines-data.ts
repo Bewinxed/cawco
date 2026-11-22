@@ -32,7 +32,15 @@ export interface RunTranscript {
   title: string;
 }
 
+/**
+ * What a run found about the fact its routine answers, where the run's own
+ * outcome doesn't say it: a sweep that delivered a list of broken links found
+ * the fact untrue.
+ */
+export type FactAnswer = "yes" | "no" | "unknown";
+
 export interface RoutineRun {
+  answer?: FactAnswer;
   commandStdout?: string;
   id: string;
   /** One plain sentence of what the run did or found. */
@@ -63,6 +71,15 @@ interface RoutineTiming {
   weekday: string;
 }
 
+/**
+ * What the project gets from a routine, in the person's words: a fact it
+ * depends on, answered by each run, or what each run delivers.
+ */
+interface RoutineOutcome {
+  kind: "fact" | "delivery";
+  says: string;
+}
+
 export interface Routine {
   builtIn?: boolean;
   check?: RoutineCheck;
@@ -70,6 +87,7 @@ export interface Routine {
   id: string;
   instructions: string;
   name: string;
+  outcome: RoutineOutcome;
   runningStep?: string;
   runs: RoutineRun[];
   schedule: RoutineTiming;
@@ -117,7 +135,7 @@ const jqFailureStdout = [
 const makeJqFailureRun = (id: string, minutesAgo: number): RoutineRun => ({
   commandStdout: jqFailureStdout,
   id,
-  oneLine: "jq isn't installed on obelisk, so the check couldn't run",
+  oneLine: "The check can't run because jq is missing on obelisk",
   outcome: "could-not-check",
   resultMarkdown:
     "The check command could not run because `jq` is not installed in the sandbox on `obelisk`. Staging itself was not reached.",
@@ -143,6 +161,7 @@ export const INITIAL_ROUTINES: Routine[] = [
     instructions:
       "Confirm the staging deployment is healthy and all database migrations are applied before v2.4.0 is promoted.",
     name: "Staging health check",
+    outcome: { kind: "fact", says: "Staging is healthy" },
     runs: [
       makeJqFailureRun("run-sh-4", 18),
       makeJqFailureRun("run-sh-3", 33),
@@ -175,10 +194,11 @@ export const INITIAL_ROUTINES: Routine[] = [
     instructions:
       "Crawl every page listed in docs.cawco.dev/sitemap.xml, check that internal links and anchors resolve, and file a task in Ready for any 404 or redirect loop.",
     name: "Nightly broken-link sweep",
+    outcome: { kind: "fact", says: "Docs have no broken links" },
     runs: [
       {
         id: "run-bl-3",
-        oneLine: "docs.cawco.dev's sitemap timed out on both tries",
+        oneLine: "The sweep timed out twice reaching the docs sitemap",
         outcome: "failed",
         resultMarkdown:
           "Both attempts timed out waiting for `https://docs.cawco.dev/sitemap.xml` after 30 seconds.\n\n- **First try:** 03:00 UTC, timed out after 30s\n- **Automatic retry:** 03:02 UTC, timed out after 30s\n\nNo tasks were filed.",
@@ -209,6 +229,7 @@ export const INITIAL_ROUTINES: Routine[] = [
       },
       {
         id: "run-bl-2",
+        answer: "no",
         oneLine:
           "Found 2 broken links in the self-hosting guide and filed a task",
         outcome: "delivered",
@@ -249,6 +270,7 @@ export const INITIAL_ROUTINES: Routine[] = [
       },
       {
         id: "run-bl-1",
+        answer: "yes",
         oneLine: "All 84 pages loaded and every link worked",
         outcome: "nothing-to-report",
         resultMarkdown:
@@ -281,6 +303,7 @@ export const INITIAL_ROUTINES: Routine[] = [
     instructions:
       "Look at GitHub Releases on cawco/cloud. Confirm v2.4.0 is published (not a draft or prerelease) and has signed Linux and macOS downloads plus checksums.",
     name: "Release 2.4 watch",
+    outcome: { kind: "fact", says: "Release 2.4 is out" },
     runningStep: "Checking the release downloads on github.com/cawco/cloud",
     runs: [
       {
@@ -309,7 +332,7 @@ export const INITIAL_ROUTINES: Routine[] = [
       },
       {
         id: "run-rt-3",
-        oneLine: "Not out yet: v2.4.0 is still a draft",
+        oneLine: "v2.4.0 is still a draft",
         outcome: "not-yet",
         resultMarkdown:
           "- **Newest published release:** `v2.4.0-rc.3` (prerelease, published 5 hours ago)\n- **Draft found:** `v2.4.0`, missing its signed macOS download\n\nThe upgrade notice keeps waiting until the final release is published with both signed downloads.",
@@ -340,7 +363,7 @@ export const INITIAL_ROUTINES: Routine[] = [
       },
       {
         id: "run-rt-2",
-        oneLine: "Not out yet: only the third release candidate is published",
+        oneLine: "Only the third release candidate is published",
         outcome: "not-yet",
         resultMarkdown:
           "Checked `cawco/cloud` releases. Only `v2.4.0-rc.3` is published; there is no final `v2.4.0` yet.",
@@ -365,6 +388,7 @@ export const INITIAL_ROUTINES: Routine[] = [
     instructions:
       "List every open pull request in cawco/cloud updated in the past 24 hours. Check CI, review comments and merge conflicts, and write a morning digest of what is ready and what is blocked.",
     name: "Morning PR triage",
+    outcome: { kind: "delivery", says: "PRs triaged this morning" },
     runs: [
       {
         id: "run-mt-5",
@@ -441,10 +465,12 @@ export const INITIAL_ROUTINES: Routine[] = [
     instructions:
       "Read the pull requests merged to main today. For each change a user would notice, add one short line under Unreleased in CHANGELOG.md.",
     name: "Changelog draft",
+    outcome: { kind: "fact", says: "Changelog has the latest merge" },
     runs: [
       {
         id: "run-cd-3",
-        oneLine: "Added a changelog line for faster reconnects (#418)",
+        answer: "yes",
+        oneLine: "Added the reconnect fix (#418)",
         outcome: "delivered",
         resultMarkdown:
           "Added under **Improved** in `CHANGELOG.md`:\n\n> Reconnecting after a network drop now restores open session panes in one frame without clearing unsent drafts (#418).",
@@ -475,6 +501,7 @@ export const INITIAL_ROUTINES: Routine[] = [
       },
       {
         id: "run-cd-2",
+        answer: "yes",
         oneLine: "Nothing a user would notice was merged",
         outcome: "nothing-to-report",
         resultMarkdown:
@@ -500,6 +527,7 @@ export const INITIAL_ROUTINES: Routine[] = [
     instructions:
       "Reads the sessions that ended in the last 24 hours and writes lasting decisions and conventions into the project's memory.",
     name: "Nightly project memory",
+    outcome: { kind: "delivery", says: "Project memory curated" },
     runs: [
       {
         id: "run-nm-1",
@@ -535,6 +563,7 @@ export const INITIAL_ROUTINES: Routine[] = [
     instructions:
       "Read production webhook deliveries for the past 24 hours. Confirm nothing reached the v2 endpoint and every v3 delivery succeeded.",
     name: "Stripe webhook v3 move",
+    outcome: { kind: "fact", says: "Stripe v3 migration complete" },
     runs: [
       {
         id: "run-sv-1",

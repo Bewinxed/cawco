@@ -31,11 +31,13 @@ async function opened(
   return canvas.getByRole("button", { name });
 }
 
-/** Opens a routine by its open button, then presses a button inside it. */
+/** Opens the routine behind an outcome by its open button, then presses a button inside it. */
 const openThen =
-  (routine: string, button: string) => async (context: PlayContext) => {
+  (outcome: string, button: string) => async (context: PlayContext) => {
     await context.userEvent.click(
-      context.canvas.getByRole("button", { name: `Open ${routine}` })
+      context.canvas.getByRole("button", {
+        name: `Open the routine behind ${outcome}`,
+      })
     );
     await context.userEvent.click(await opened(context, button));
   };
@@ -47,18 +49,20 @@ export default {
   title: "Project/Routines, pressed",
 };
 
-/** Every routine at a glance, before anything is opened. */
+/** Every outcome at a glance, before anything is opened. */
 export const AtAGlance = {};
 
 /** The hub isn't live: the last reading stays, and changes wait. */
 export const LastReading = { args: { stale: true } };
 
-/** I opened the staging check that stopped. */
+/** I opened the staging check that stopped, behind "Staging is healthy". */
 export const RoutineOpened = {
   from: "AtAGlance",
   play: async ({ canvas, userEvent }: PlayContext) => {
     await userEvent.click(
-      canvas.getByRole("button", { name: "Open Staging health check" })
+      canvas.getByRole("button", {
+        name: "Open the routine behind Staging is healthy",
+      })
     );
   },
 };
@@ -66,13 +70,13 @@ export const RoutineOpened = {
 /** I opened last night's link sweep and read the session that ran it. */
 export const SessionOpened = {
   from: "AtAGlance",
-  play: openThen("Nightly broken-link sweep", "Open session"),
+  play: openThen("Docs have no broken links", "Open session"),
 };
 
 /** I opened an earlier run of the morning triage. */
 export const EarlierRunOpened = {
   from: "AtAGlance",
-  play: openThen("Morning PR triage", "Open the run from yesterday"),
+  play: openThen("PRs triaged this morning", "Open the run from yesterday"),
 };
 
 /** I asked Caw to fix the staging check, and the words are ready to send. */
@@ -80,23 +84,15 @@ export const FixWithCaw = {
   from: "AtAGlance",
   play: async ({ canvas, userEvent }: PlayContext) => {
     await userEvent.click(
-      canvas.getByRole("button", { name: "Fix Staging health check with Caw" })
+      canvas.getByRole("button", { name: "Fix with Caw: Staging is healthy" })
     );
-  },
-};
-
-/** I sorted the routines by when they run next, the soonest first. */
-export const SortedByNextRun = {
-  from: "AtAGlance",
-  play: async ({ canvas, userEvent }: PlayContext) => {
-    await userEvent.click(canvas.getByRole("button", { name: "Next run" }));
   },
 };
 
 /** I'm changing the morning triage by hand. */
 export const Editing = {
   from: "AtAGlance",
-  play: openThen("Morning PR triage", "Edit"),
+  play: openThen("PRs triaged this morning", "Edit"),
 };
 
 /** I'm adding a new routine. */

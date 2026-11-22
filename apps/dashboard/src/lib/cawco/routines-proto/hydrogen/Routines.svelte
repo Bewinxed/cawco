@@ -10,10 +10,10 @@
   import { NARROW_QUERY, PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconPlus } from "#lib/icons.js";
   import AskCawTray from "./AskCawTray.svelte";
+  import OutcomeList from "./OutcomeList.svelte";
   import RoutineDetailPane from "./RoutineDetailPane.svelte";
   import RoutineEditorPane from "./RoutineEditorPane.svelte";
   import RoutinesNotices from "./RoutinesNotices.svelte";
-  import RoutineTable from "./RoutineTable.svelte";
   import RunDetailPane from "./RunDetailPane.svelte";
   import { MOCK_MACHINE, MOCK_NOW } from "./routines-data";
   import {
@@ -229,9 +229,8 @@
         />
       {/if}
 
-      <RoutineTable
+      <OutcomeList
         headerAction={newRoutineButton}
-        now={MOCK_NOW}
         onfix={openAskCaw}
         onopen={(id) => {
           side = { routineId: id, view: "routine" };
