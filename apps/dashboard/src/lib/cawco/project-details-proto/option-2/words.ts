@@ -216,14 +216,11 @@ export const howItRunsWords = {
       holdsNothing: (_project: string) => "Nothing assigned",
       tryAgain: RETRY_CHANGE,
     } satisfies RosterWords,
-    reviewHeading: "Who marks tasks done",
-    reviewOn: {
-      name: "You, after review",
-      note: "Finished tasks wait in a review column for you.",
-    },
-    reviewOff: {
-      name: "Agents",
-      note: "Agents mark their own tasks done as they finish.",
+    /** Marking tasks done, as a kind on the roster: where finished tasks go. */
+    doneKind: {
+      name: "Marking tasks done",
+      example:
+        "With you, finished tasks wait in a review column for you. With anyone else, agents mark their own tasks done.",
     },
   },
 
