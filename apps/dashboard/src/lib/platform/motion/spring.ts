@@ -133,13 +133,21 @@ export class Release {
     }
   }
 
-  /** Speed at the last step, px/ms. */
-  velocity(): number {
+  /**
+   * Speed at the last step, px/ms; read at `now` (ms, the samples' clock),
+   * a hand that has not moved for the window is still, whatever it did
+   * before it stopped.
+   */
+  velocity(now?: number): number {
     const last = this.#samples.at(-1);
     const first = this.#samples.find(
       (sample) => last && last.t - sample.t <= VELOCITY_WINDOW
     );
-    if (!(first && last) || last.t === first.t) {
+    if (
+      !(first && last) ||
+      last.t === first.t ||
+      (now !== undefined && now - last.t > VELOCITY_WINDOW)
+    ) {
       return 0;
     }
     return (last.at - first.at) / (last.t - first.t);

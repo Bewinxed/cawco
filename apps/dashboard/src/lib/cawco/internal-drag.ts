@@ -56,14 +56,42 @@ export interface DragPoint {
   y: number;
 }
 
+/** How a drag ended: where it was let go, and the drop targets under it, innermost first. */
+export interface DragEnd {
+  at: DragPoint;
+  targets: { data: Record<string | symbol, unknown>; element: Element }[];
+}
+
+/** The pointer of a Pragmatic location. */
+export const pointOf = (input: {
+  clientX: number;
+  clientY: number;
+}): DragPoint => ({ x: input.clientX, y: input.clientY });
+
+/** A Pragmatic drop's end, from its location. */
+export const endOf = (location: {
+  current: {
+    dropTargets: { data: Record<string | symbol, unknown>; element: Element }[];
+    input: { clientX: number; clientY: number };
+  };
+}): DragEnd => ({
+  at: pointOf(location.current.input),
+  targets: location.current.dropTargets.map(({ data, element }) => ({
+    data,
+    element,
+  })),
+});
+
 /**
  * One of the dashboard's own drag sources (a task card, a kind's tile) on
  * Pragmatic drag and drop: the browser's data emptied ({@link bareDrag}),
  * {@link internalData} alone carried, and `data-dragging` on `node` while it
  * is in the air. A source that draws its own ghost passes `ghost`: the
- * browser's snapshot is turned off, every step of the pointer reaches
- * `onMove`, and `onEnd` hears where it was let go and the drop targets
- * under it, innermost first. Returns its removal.
+ * browser's snapshot is turned off, and its steps and its end are heard
+ * by a monitor of its own (Pragmatic hands a source its drop only while it
+ * is still registered, and a monitor whatever became of the source).
+ * `onEnd` hears where it was let go and the drop targets under it,
+ * innermost first. Returns its removal.
  */
 export function internalDraggable(
   node: HTMLElement,
@@ -71,18 +99,10 @@ export function internalDraggable(
     canDrag?: () => boolean;
     data: () => Record<string, unknown>;
     ghost?: boolean;
-    onEnd: (drop: {
-      at: DragPoint;
-      targets: { data: Record<string | symbol, unknown>; element: Element }[];
-    }) => void;
-    onMove?: (at: DragPoint) => void;
+    onEnd?: (drop: DragEnd) => void;
     onStart: (at: DragPoint) => void;
   }
 ): () => void {
-  const point = (input: { clientX: number; clientY: number }): DragPoint => ({
-    x: input.clientX,
-    y: input.clientY,
-  });
   return combine(
     bareDrag(node),
     draggable({
@@ -103,23 +123,14 @@ export function internalDraggable(
         if (source.ghost) {
           preventUnhandled.start();
         }
-        source.onStart(point(location.current.input));
-      },
-      onDrag: ({ location }) => {
-        source.onMove?.(point(location.current.input));
+        source.onStart(pointOf(location.current.input));
       },
       onDrop: ({ location }) => {
         delete node.dataset.dragging;
         if (source.ghost) {
           preventUnhandled.stop();
         }
-        source.onEnd({
-          at: point(location.current.input),
-          targets: location.current.dropTargets.map(({ data, element }) => ({
-            data,
-            element,
-          })),
-        });
+        source.onEnd?.(endOf(location));
       },
     })
   );
