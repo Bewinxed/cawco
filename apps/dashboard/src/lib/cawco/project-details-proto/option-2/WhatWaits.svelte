@@ -147,24 +147,30 @@
   }
 </script>
 
-<section
-  aria-label={words.waits.heading}
-  class="@container/deciders flex min-w-0 flex-col gap-space-4"
+<!-- Who decides at a glance, and who marks tasks done beside it where the
+     two fit on one line (the card's two ends), else under it; the roster and
+     the rule file's fault take a line of their own. -->
+<div
+  class="@container/deciders flex min-w-0 flex-wrap items-start justify-between gap-x-space-8 gap-y-space-4"
 >
   {#if !record.whoDecides.ok}
-    <RowFault
-      again={onreread}
-      againLabel={words.tryAgain}
-      details={record.whoDecides.error}
-      reason={words.waits.unreadTitle}
-    />
+    <div class="min-w-0 basis-full">
+      <RowFault
+        again={onreread}
+        againLabel={words.tryAgain}
+        details={record.whoDecides.error}
+        reason={words.waits.unreadTitle}
+      />
+    </div>
   {/if}
-  <!-- Who decides at a glance: each decider by its face and name with how
-       many kinds it decides, the roster itself opening in place. -->
+  <!-- Each decider by its face and name with how many kinds it decides,
+       four in one row where they fit, else two by two read down; the roster
+       itself opening in place. -->
   <div class={CARD_GROUP}>
     <ul
-      aria-label={words.waits.heading}
-      class="m-0 grid list-none grid-cols-2 gap-x-space-3 gap-y-space-2 p-0"
+      class="m-0 grid list-none grid-flow-col grid-cols-(--deciders-two) grid-rows-2 gap-x-space-3 gap-y-space-2 p-0 @min-deciders-row/deciders:grid-flow-row @min-deciders-row/deciders:grid-cols-(--deciders-four) @min-deciders-row/deciders:grid-rows-none"
+      style:--deciders-four="repeat(4, minmax(0, max-content))"
+      style:--deciders-two="repeat(2, minmax(0, max-content))"
     >
       {#each members as member (member.id)}
         {@const count = CHOICE_KINDS.filter(
@@ -197,7 +203,7 @@
     />
   </div>
   {#if showRoster || fault !== null}
-    <div class="min-w-0" transition:unfold>
+    <div class="min-w-0 basis-full" transition:unfold>
       <Roster
         asking={null}
         facts={() => null}
@@ -218,7 +224,7 @@
     </div>
   {/if}
 
-  <!-- Its own group in the section's card, under the members' cards. -->
+  <!-- Its own group in the section's card. -->
   <div class={CARD_GROUP}>
     <p class={GROUP_LABEL} id="work-path-review">
       {words.waits.reviewHeading}
@@ -251,4 +257,4 @@
       reason={refused.review}
     />
   </div>
-</section>
+</div>

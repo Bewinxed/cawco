@@ -132,11 +132,11 @@ export const howItRunsWords = {
     largeFilesGroupLabel: "Git LFS storage",
     largeFilesOwn: {
       name: "Repository default",
-      note: "Uses each repo's Git host for large files.",
+      note: "Uses each repository's Git host for large files.",
     },
     largeFilesDeclared: {
       name: "Custom server",
-      note: "Overrides every repo to use one server you set.",
+      note: "Overrides every repository to use one server you set.",
     },
     largeFilesAddress: "Server URL",
     largeFilesAddressPlaceholder: "https://lfs.example.com/project",
@@ -148,8 +148,6 @@ export const howItRunsWords = {
     heading: "Account",
     fleetRouting: "Any available",
     signedOut: "Signed out",
-    /** What naming an account does, under the chips; leaving it to any available says nothing more. */
-    scopeNamed: "Caw moves here, and agents use its connected tools.",
     signedOutAlert: (name: string) =>
       `${name} is signed out, so nothing can start.`,
     openAccounts: "Manage accounts",
@@ -171,7 +169,6 @@ export const howItRunsWords = {
       count === 1 ? "1 kind" : `${count === 0 ? "No" : count} kinds`,
     showKinds: "Show kinds",
     hideKinds: "Hide kinds",
-    heading: "Who makes the call",
     putAllBack: "Reset to defaults",
     /** What Reset to defaults puts back, said before it does. */
     resetSays: (count: number) =>

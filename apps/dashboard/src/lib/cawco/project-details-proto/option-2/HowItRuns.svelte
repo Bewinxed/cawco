@@ -3,10 +3,10 @@
    * Option 2 ("How it runs"): the project's settings, mounted inside the
    * project page's pane, which gives it the page's side edges and its
    * scroller as it gives every view. Its peer sections (SettingsSection),
-   * each one white card holding its heading and settings, stand in as many
-   * columns as fit, so every one shows in the first screen: Task sync, Run
-   * environments, Repository & Git for a code project, Account & usage
-   * limits, and What needs you. A section still reading draws its own
+   * each one white card holding its heading and settings, stand on one grid
+   * (`AREAS`), so every one shows in the first screen: Task sync, Account &
+   * usage limits, Run environments, Repository & Git for a code project,
+   * and What needs you. A section still reading draws its own
    * skeleton, one whose read failed its alert with Try again, and the
    * hub's being out of reach stands over them all.
    */
@@ -120,11 +120,36 @@
     return "";
   };
 
-  /** The sections in their order, which the columns fill down (Repository & Git, the tallest, after the account so the two columns balance): Repository & Git only for code. */
+  /** The sections in their reading order, row by row: Repository & Git only for code. */
   const SECTIONS = $derived<SectionId[]>(
     record.holdsCode
-      ? ["tasks", "places", "account", "git", "waits"]
-      : ["tasks", "places", "account", "waits"]
+      ? ["tasks", "account", "places", "git", "waits"]
+      : ["tasks", "account", "places", "waits"]
+  );
+
+  /**
+   * Where each section's card stands (SettingsSection names its area by its
+   * id), at the view's three widths. Full width: two columns each as wide as
+   * the widest option row (--spacing-c-settings-col), Task sync beside the
+   * account, the places beside Repository & Git, What needs you across both,
+   * each row's cards sharing its edges and height. Two narrower columns:
+   * every card still in the first screen at 1024, the left column Task sync,
+   * the places and What needs you, the right the account and Repository &
+   * Git, each spanning the rows that level the two columns' feet. One column
+   * (a phone): one card under another, in reading order.
+   */
+  const AREAS = $derived(
+    record.holdsCode
+      ? {
+          one: '"tasks" "account" "places" "git" "waits"',
+          two: '"tasks account" "places account" "places git" "waits git"',
+          pair: '"tasks account" "places git" "waits waits"',
+        }
+      : {
+          one: '"tasks" "account" "places" "waits"',
+          two: '"tasks account" "places waits"',
+          pair: '"tasks account" "places waits"',
+        }
   );
 </script>
 
@@ -218,12 +243,15 @@
     </Alert>
   {/if}
 
-  <!-- Every section's card in the first screen: as many columns of the
-       card's width as fit, three at most, filled down and balanced
-       (multi-column), each card whole in its column and only as tall as
-       what it holds. -->
+  <!-- Every section's card in the first screen, on the grid AREAS draws:
+       one gap between cards both ways, a row's cards stretched to its
+       height, the pair left on the page's edge under the tabs. -->
   <div
-    class="max-w-c-settings-max min-w-0 columns-(--spacing-c-settings-col) gap-x-space-4 [&>*]:mb-space-4"
+    class="grid min-w-0 max-w-c-settings-max grid-cols-1 grid-areas-(--areas-one) gap-space-4 @min-settings-two:@max-settings-pair:grid-cols-2 @min-settings-two:@max-settings-pair:grid-areas-(--areas-two) @min-settings-pair:grid-cols-(--pair-cols) @min-settings-pair:grid-areas-(--areas-pair)"
+    style:--areas-one={AREAS.one}
+    style:--areas-pair={AREAS.pair}
+    style:--areas-two={AREAS.two}
+    style:--pair-cols="repeat(2, var(--spacing-c-settings-col))"
   >
     {#each SECTIONS as section (section)}
       {@const state = stateOf(section)}
