@@ -1,31 +1,18 @@
 <script lang="ts">
   /**
-   * CawCo's design system as the shipped dashboard draws it: the theme's
-   * foundations (foundations.ts, read off theme.css, each token drawn
-   * through `var()`), then every live kit component (families.ts) in each
-   * state its states file holds, drawn in the light scheme and the dark side
-   * by side. Each scheme is a pane that
-   * says it (`data-scheme`, which the theme's dark and light variants read,
-   * and its `color-scheme`, which every `light-dark()` token follows), so one
-   * frame holds both whatever scheme the page itself is in.
+   * CawCo's design system board: presents the system's structure rather than a
+   * raw variable dump — Layer 1 primitive scales, Layer 2 semantic roles, then
+   * the core kit components in their states, light and dark side by side.
    *
-   * A component that answers the pointer draws its first state again forced
-   * into hover, focus and press: the stage rewrites every `:hover`,
-   * `:focus-visible` and `:active` rule to also match an element carrying
-   * `cawco-<state>` (stage-host canvas pseudo.ts `stateClass`), which the
-   * first control in each of those frames carries, so what the board draws
-   * is the component's own rule, never a copy of it.
-   *
-   * The components stand in sections by kind. In a section each is a card,
-   * its two panes side by side where the card is wide enough and one over
-   * the other on a phone; the cards flow in columns, so a short card never
-   * leaves a hole beside a tall one, and a component whose frames need room
-   * takes the section's whole width under them.
+   * Each scheme is a pane with `data-scheme` and `color-scheme` so one frame
+   * holds both schemes regardless of the page's own theme. Interactive
+   * controls also show their first state forced into hover, focus, and pressed
+   * via the stage's `cawco-<state>` classes.
    */
   import type { Snippet } from "svelte";
   import Foundation from "./Foundation.svelte";
   import { type Family, framesOf, GROUPS, titleOf } from "./families.js";
-  import { FOUNDATIONS } from "./foundations.js";
+  import { type Foundation as Group, ROLES, SCALES } from "./foundations.js";
 
   const SCHEMES = [
     { scheme: "light", label: "Light" },
@@ -42,7 +29,7 @@
   const CONTROL =
     'button, a[href], input, textarea, select, [role="switch"], [role="checkbox"], [role="radio"], [tabindex]:not([tabindex="-1"])';
 
-  /** Puts the stage's forced-state class on the frame's first control (stage-host canvas pseudo.ts `stateClass`). */
+  /** Puts the stage's forced-state class on the frame's first control. */
   const forced = (state: string) => (node: HTMLElement) => {
     const control = node.querySelector(CONTROL);
     const name = `cawco-${state}`;
@@ -63,16 +50,19 @@
   }));
 </script>
 
-{#snippet shell(title: string, pane: Snippet)}
+{#snippet shell(title: string, pane: Snippet, note?: string)}
   <section
     class="@container mb-space-5 flex break-inside-avoid flex-col overflow-clip rounded-lg border border-border-hairline"
     aria-label={title}
   >
-    <h3
-      class="border-b border-border-hairline bg-surface-raised px-space-4 py-space-2 type-label"
+    <header
+      class="flex flex-wrap items-baseline justify-between gap-x-space-4 gap-y-space-1 border-b border-border-hairline bg-surface-raised px-space-4 py-space-2"
     >
-      {title}
-    </h3>
+      <h3 class="type-label">{title}</h3>
+      {#if note}
+        <p class="text-ink-muted type-meta">{note}</p>
+      {/if}
+    </header>
     <div class="grid grow @phone:grid-cols-2">
       {#each SCHEMES as scheme (scheme.scheme)}
         <div
@@ -130,11 +120,28 @@
   {@render shell(one.title, pane)}
 {/snippet}
 
-{#snippet foundationCard(one: (typeof FOUNDATIONS)[number])}
+{#snippet foundationCard(one: Group)}
   {#snippet pane()}
     <Foundation foundation={one} />
   {/snippet}
-  {@render shell(one.title, pane)}
+  {@render shell(one.title, pane, one.note)}
+{/snippet}
+
+{#snippet layerSection(heading: string, summary: string, groups: Group[])}
+  <section class="flex flex-col gap-space-3" aria-label={heading}>
+    <header class="flex flex-col gap-space-row">
+      <h2 class="text-ink-strong type-label">{heading}</h2>
+      <p class="text-ink-muted type-meta">{summary}</p>
+    </header>
+    {#each groups.filter((one) => one.wide) as one (one.title)}
+      <div class="-mb-space-5">{@render foundationCard(one)}</div>
+    {/each}
+    <div class="-mb-space-5 columns-phone gap-space-5">
+      {#each groups.filter((one) => !one.wide) as one (one.title)}
+        {@render foundationCard(one)}
+      {/each}
+    </div>
+  </section>
 {/snippet}
 
 <div
@@ -143,36 +150,46 @@
   <header class="flex flex-col gap-space-1">
     <h1 class="type-title">CawCo design system</h1>
     <p class="text-ink-muted type-body">
-      The theme's foundations and every kit component the dashboard ships, in
-      its states, light and dark side by side.
+      Primitive scales, semantic roles, and core kit components in their states,
+      light and dark side by side.
     </p>
   </header>
 
-  <section class="flex flex-col gap-space-3" aria-label="Foundations">
-    <h2 class="text-ink-muted type-label">Foundations</h2>
-    {#each FOUNDATIONS.filter((one) => one.wide) as one (one.title)}
-      <div class="-mb-space-5">{@render foundationCard(one)}</div>
-    {/each}
-    <div class="-mb-space-5 columns-phone gap-space-5">
-      {#each FOUNDATIONS.filter((one) => !one.wide) as one (one.title)}
-        {@render foundationCard(one)}
-      {/each}
-    </div>
-  </section>
+  {@render layerSection(
+    "Layer 1 · Primitive scales",
+    "Raw steps declared once in theme.css: neutrals, coral, categorical marks, 4px spacing, type ramp, radii, motion, breakpoints, and z-layers.",
+    SCALES
+  )}
 
-  {#each sections as section (section.title)}
-    <section class="flex flex-col gap-space-3" aria-label={section.title}>
-      <h2 class="text-ink-muted type-label">{section.title}</h2>
-      {#if section.flowing.length > 0}
-        <div class="-mb-space-5 columns-phone gap-space-5">
-          {#each section.flowing as one (one.family.file)}
-            {@render card(one)}
-          {/each}
-        </div>
-      {/if}
-      {#each section.wide as one (one.family.file)}
-        <div class="-mb-space-5">{@render card(one)}</div>
-      {/each}
-    </section>
-  {/each}
+  {@render layerSection(
+    "Layer 2 · Semantic roles",
+    "Roles bound to Layer 1 by job across light and dark: surfaces, inks, borders, accent, status, type roles, semantic sizes, and elevations.",
+    ROLES
+  )}
+
+  <section class="flex flex-col gap-space-5" aria-label="Core components">
+    <header class="flex flex-col gap-space-row">
+      <h2 class="text-ink-strong type-label">Core components</h2>
+      <p class="text-ink-muted type-meta">
+        The canonical UI kit primitives in their states, including folded
+        Dialog, Fluid tabs, and Icon toggle.
+      </p>
+    </header>
+
+    {#each sections as section (section.title)}
+      <div class="flex flex-col gap-space-3">
+        <h3 class="text-ink-muted type-label">{section.title}</h3>
+        {#if section.flowing.length > 0}
+          <div class="-mb-space-5 columns-phone gap-space-5">
+            {#each section.flowing as one (one.family.file)}
+              {@render card(one)}
+            {/each}
+          </div>
+        {/if}
+        {#each section.wide as one (one.family.file)}
+          <div class="-mb-space-5">{@render card(one)}</div>
+        {/each}
+      </div>
+    {/each}
+  </section>
 </div>

@@ -1,12 +1,7 @@
 /**
- * The kit components the shipped dashboard draws, each by its states file
- * beside the component (lib/components/ui): the board (DesignBoard.svelte)
- * mounts every story of each as its states file does, so a state is written
- * once, in its states file, and the board and the design graph draw the same
- * thing. Which components are here was read off the production build: a kit
- * component is listed when its code reaches a chunk the shipped routes load
- * (the `/dev` benches answer 404 in a build, so what only they draw is left
- * out).
+ * The core kit components the board presents, each read from its states file
+ * beside the component (`lib/components/ui`). States are written once in their
+ * stories file so the board and the design graph draw the same thing.
  */
 import type { Component } from "svelte";
 
@@ -39,7 +34,7 @@ const MODULES = import.meta.glob<StatesFile>(
     eager: true,
   }
 );
-/** Every kit states file's own text: its exports in its order (a module's exports come back sorted by name). */
+/** Every kit states file's own text: its exports in declaration order. */
 const SOURCES = import.meta.glob<string>("../components/ui/**/*.stories.ts", {
   eager: true,
   import: "default",
@@ -49,13 +44,13 @@ const SOURCES = import.meta.glob<string>("../components/ui/**/*.stories.ts", {
 export interface Family {
   /** The component's states file, from lib/components/ui. */
   file: string;
-  /** Each frame takes its pane's whole width (a surface laid over its frame: a dialog, a sheet, a table). */
+  /** Each frame takes its pane's full width (a dialog, sheet, or table). */
   fill?: boolean;
   /** Hover, focus and press are drawn beside its first story. */
   forced?: boolean;
-  /** The stories the board draws, where the states file holds more than the board needs (a width-only twin). */
+  /** Subset of stories to draw when a file holds width-only twins. */
   pick?: string[];
-  /** Its frames need a whole row of the board. */
+  /** Takes a full row of the board. */
   wide?: boolean;
 }
 
@@ -110,21 +105,20 @@ export function titleOf(family: Family): string {
   return title.slice(title.lastIndexOf("/") + 1);
 }
 
-/** The board's sections, each the live kit components of one kind. */
+/** The board's core component groups. */
 export const GROUPS: { title: string; families: Family[] }[] = [
   {
-    title: "Actions",
+    title: "Actions and navigation",
     families: [
       { file: "button/button.stories.ts", forced: true },
-      { file: "copy-button/copy-button.stories.ts", forced: true },
       { file: "toggle/toggle.stories.ts", forced: true },
       { file: "toggle-group/toggle-group.stories.ts", forced: true },
-      { file: "fluid-tabs/fluid-tabs.stories.ts" },
       { file: "icon-toggle/icon-toggle.stories.ts", forced: true },
+      { file: "fluid-tabs/fluid-tabs.stories.ts" },
     ],
   },
   {
-    title: "Fields and picks",
+    title: "Inputs and picks",
     families: [
       { file: "input/input.stories.ts", forced: true },
       { file: "input-group/input-group.stories.ts" },
@@ -132,9 +126,7 @@ export const GROUPS: { title: string; families: Family[] }[] = [
       { file: "checkbox/checkbox.stories.ts", forced: true },
       { file: "switch/switch.stories.ts", forced: true },
       { file: "select/select.stories.ts" },
-      { file: "native-select/native-select.stories.ts" },
       { file: "option-group/option-group.stories.ts" },
-      { file: "option-group/option-tiles.stories.ts", wide: true },
     ],
   },
   {
@@ -146,55 +138,21 @@ export const GROUPS: { title: string; families: Family[] }[] = [
       { file: "spinner/spinner.stories.ts" },
       { file: "progress/progress.stories.ts" },
       { file: "skeleton/skeleton.stories.ts" },
-      { file: "thinking-indicator/thinking-indicator.stories.ts" },
-      { file: "thinking-steps/thinking-steps.stories.ts" },
       { file: "sonner/sonner.stories.ts", wide: true, fill: true },
       { file: "empty/empty-state.stories.ts" },
     ],
   },
   {
-    title: "Floating surfaces",
+    title: "Surfaces and structure",
     families: [
       { file: "popover/popover.stories.ts" },
       { file: "dropdown-menu/dropdown-menu.stories.ts" },
-      { file: "context-menu/context-menu.stories.ts", fill: true },
       { file: "tooltip/tooltip.stories.ts", fill: true },
       { file: "command/command.stories.ts" },
-      { file: "hang-card/hang-card.stories.ts", fill: true },
       { file: "dialog/dialog.stories.ts", wide: true, fill: true },
       { file: "sheet/sheet.stories.ts", wide: true, fill: true },
       { file: "drawer/drawer.stories.ts", fill: true },
-    ],
-  },
-  {
-    title: "Structure and navigation",
-    families: [
-      {
-        file: "bar-glass/bar-glass.stories.ts",
-        wide: true,
-        pick: [
-          "GroupOfThreePhone",
-          "SelectedPhone",
-          "ModeSwitchPhone",
-          "ToolbarPhone",
-          "KitInGlassPhone",
-          "Counted42OnPhone",
-        ],
-      },
-      { file: "sidebar/sidebar.stories.ts" },
-      { file: "section-header/section-header.stories.ts" },
-      { file: "machine-row/machine-row.stories.ts" },
-      { file: "collapsible/collapsible.stories.ts" },
-      { file: "resizable/resizable.stories.ts", fill: true },
-      { file: "carousel/carousel.stories.ts" },
       { file: "table/table.stories.ts", wide: true, fill: true },
-    ],
-  },
-  {
-    title: "Words",
-    families: [
-      { file: "markdown/markdown.stories.ts" },
-      { file: "morph-text/morph-text.stories.ts" },
       { file: "kbd/kbd.stories.ts" },
     ],
   },
