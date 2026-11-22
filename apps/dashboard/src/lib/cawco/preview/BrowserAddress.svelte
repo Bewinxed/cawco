@@ -28,15 +28,12 @@
     origin,
     mine,
     connecting = false,
-    unread = false,
     as = "bar",
   }: {
     /** The page in front's origin; null while it shows none. */
     origin: string | null;
     /** The stream is not drawn yet: with no origin, what the page is is not known, so the address says it connects rather than that no page is open. */
     connecting?: boolean;
-    /** Its machine gave up reading the page shown (core `BrowserRow.originUnread`): the address says it cannot be read. */
-    unread?: boolean;
     /** The person holds the browser. */
     mine: boolean;
     /** In the head (or over the stream's foot), or as More's line. */
@@ -51,12 +48,9 @@
   );
   const place = $derived(origin ? placeOf(origin) : null);
   /** What stands for the origin when there is none: no page is open, once that is known. */
-  const none = $derived.by(() => {
-    if (unread) {
-      return browserWords.addressUnread;
-    }
-    return connecting ? browserWords.connecting : browserWords.noPage;
-  });
+  const none = $derived(
+    connecting ? browserWords.connecting : browserWords.noPage
+  );
   const name = $derived(`${origin ?? none}, ${control}`);
 </script>
 

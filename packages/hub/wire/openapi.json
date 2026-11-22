@@ -37309,11 +37309,6 @@
             "description": "The origin of the page the person's view shows (neko's front window on\nthe container host, the screencast's page on the local host), as the\nmachine reads it through its own DevTools link; absent while that page\nis none (`about:blank`, no page). For the person's band alone: the gate\nnever sends it to an agent.",
             "type": "string"
           },
-          "originUnread": {
-            "description": "The machine gave up reading the page shown: its DevTools link to the\nbrowser would not open, tried with backoff until it gave up (agent\nfront-origin.ts). The band says the address cannot be read; the next\nstart of the browser reads it afresh.",
-            "const": true,
-            "type": "boolean"
-          },
           "ports": {
             "$ref": "#/components/schemas/BrowserPorts",
             "description": "One browser's ports; `http` and `media` are the container host's alone."
@@ -48261,11 +48256,6 @@
           "origin": {
             "description": "The origin of the page the person's view shows; absent while it shows none.",
             "type": "string"
-          },
-          "originUnread": {
-            "description": "Its machine gave up reading the page shown ({@link BrowserRow.originUnread}).",
-            "const": true,
-            "type": "boolean"
           },
           "passkeyRelay": {
             "$ref": "#/components/schemas/PasskeyRelayCapability",

@@ -134,7 +134,6 @@ const ListedBrowserShape = z.object({
   machineName: z.string(),
   name: z.string(),
   origin: z.string().optional(),
-  originUnread: z.literal(true).optional(),
   passkeyRelay: PasskeyRelayCapabilityShape.optional(),
   progress: z
     .object({ done: z.number(), total: z.number(), what: z.literal("image") })

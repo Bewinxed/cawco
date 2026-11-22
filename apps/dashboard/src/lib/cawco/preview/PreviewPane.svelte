@@ -762,7 +762,6 @@
     connecting={!paneBrowser.browserViewing}
     mine={!!paneBrowser.browserRow?.takeover}
     origin={paneBrowser.browserRow?.origin ?? null}
-    unread={paneBrowser.browserRow?.originUnread === true}
   />
 {/snippet}
 {#snippet addressBar()}

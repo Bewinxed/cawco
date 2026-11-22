@@ -102,12 +102,26 @@ const standAdapter = async (key: BrowserKey): Promise<BluezBus | undefined> => {
   if (!vhciAvailable()) {
     return;
   }
+  await keepAdapter(key);
+  return standBluezBus(key);
+};
+
+/**
+ * The virtual BLE adapter made when it is not up, for `who` (a browser's
+ * key, or the agent's containers that ran on past its restart). The adapter
+ * is the agent's own (its `/dev/vhci` handle) and goes as the agent stops,
+ * where a container's Chromium and its bus outlive the agent
+ * (bluez-bus.ts): Chromium takes an adapter that appears on BlueZ as its own.
+ */
+export const keepAdapter = async (who: string): Promise<void> => {
+  if (!vhciAvailable()) {
+    return;
+  }
   await passkeyInjector.ensureAdapter().catch((error: unknown) => {
     console.warn(
-      `[browser] ${key}: no virtual BLE adapter, so no passkey relay: ${error instanceof Error ? error.message : String(error)}`
+      `[browser] ${who}: no virtual BLE adapter, so no passkey relay: ${error instanceof Error ? error.message : String(error)}`
     );
   });
-  return standBluezBus(key);
 };
 
 /** Where a container in a namespace of its own reaches the machine, and so the relay on it: pasta's `--map-guest-addr`, Podman 5.3 on. */
@@ -131,6 +145,9 @@ export const RELAY_RENEW_MS = DAY_MS;
 
 /** How long neko has to answer a login. */
 const LOGIN_MS = 5000;
+
+/** How long a Chromium restarted in its running container has to answer DevTools before the container is restarted. */
+const CHROMIUM_MS = 20_000;
 
 /** How long a stop gives the container before the runtime kills it. */
 const STOP_SECONDS = 10;
@@ -363,16 +380,57 @@ const startedOn = (
     : made;
 };
 
-/** Waits until `url` answers 2xx, or throws after {@link LIVE_MS}. */
-const answers = async (url: string, what: string): Promise<void> => {
-  const until = Date.now() + LIVE_MS;
+/** Whether `url` answers 2xx within `ms`, asked again every {@link LIVE_POLL_MS}. */
+const answersWithin = async (url: string, ms: number): Promise<boolean> => {
+  const until = Date.now() + ms;
   while (Date.now() < until) {
     if (await httpAnswers(url, 2000)) {
-      return;
+      return true;
     }
     await Bun.sleep(LIVE_POLL_MS);
   }
-  throw new Error(`${what} did not answer within ${LIVE_MS / 1000} s.`);
+  return false;
+};
+
+/** Waits until `url` answers 2xx, or throws after {@link LIVE_MS}. */
+const answers = async (url: string, what: string): Promise<void> => {
+  if (!(await answersWithin(url, LIVE_MS))) {
+    throw new Error(`${what} did not answer within ${LIVE_MS / 1000} s.`);
+  }
+};
+
+/** What restarts Chromium inside its container: supervisord's own client, on neko's config. */
+const RESTART_CHROMIUM = [
+  "supervisorctl",
+  "-c",
+  "/etc/neko/supervisord.conf",
+  "restart",
+  "chromium",
+];
+
+/**
+ * Runs {@link RESTART_CHROMIUM} in `container`: answers what it printed, or
+ * throws it with its exit code.
+ */
+const restartChromium = async (
+  container: Docker.Container
+): Promise<string> => {
+  const exec = await container.exec({
+    Cmd: RESTART_CHROMIUM,
+    AttachStdout: true,
+    AttachStderr: true,
+    Tty: true,
+  });
+  const chunks: Buffer[] = [];
+  for await (const chunk of await exec.start({ Tty: true })) {
+    chunks.push(Buffer.from(chunk));
+  }
+  const said = Buffer.concat(chunks).toString();
+  const { ExitCode } = await exec.inspect();
+  if (ExitCode !== 0) {
+    throw new Error(`exit ${ExitCode}: ${said.trim()}`);
+  }
+  return said.trim();
 };
 
 /** The runtime's not-found answer. */
@@ -665,9 +723,10 @@ export class ContainerHost implements BrowserHost {
   }
 
   /**
-   * Starts the container when it is not running, and waits until neko and
-   * DevTools answer. Answers the machine's network read just before it
-   * started, where it is placed in a namespace of its own (a start makes
+   * Starts the container when it is not running, brings its Chromium back
+   * when it runs with DevTools silent ({@link #revive}), and waits until
+   * neko and DevTools answer. Answers the machine's network read just before
+   * it started, where it is placed in a namespace of its own (a start makes
    * that namespace anew); undefined when it ran already or stands on the
    * media network.
    */
@@ -678,17 +737,53 @@ export class ContainerHost implements BrowserHost {
   ): Promise<MachineNetwork | undefined> {
     const handle = this.#docker.getContainer(id);
     const state = await handle.inspect();
+    const devtools = `http://127.0.0.1:${ports.devtools}/json/version`;
     let started: MachineNetwork | undefined;
     if (!state.State.Running) {
       started =
         placement === "own-namespace" ? await machineNetwork() : undefined;
       await handle.start();
+    } else if (!(await httpAnswers(devtools, 2000))) {
+      started = await this.#revive(handle, devtools, placement);
     }
     await answers(`http://127.0.0.1:${ports.http}/health`, "neko");
-    await answers(
-      `http://127.0.0.1:${ports.devtools}/json/version`,
-      "Chromium's DevTools"
+    await answers(devtools, "Chromium's DevTools");
+    return started;
+  }
+
+  /**
+   * A running container whose Chromium's DevTools does not answer: Chromium
+   * restarted in place (`supervisorctl restart chromium`), and the container
+   * restarted when DevTools still doesn't answer within
+   * {@link CHROMIUM_MS}. supervisord's own respawn of a Chromium that died
+   * can stand with no DevTools listening (21–22 Nov 2026, after each crash
+   * on the BlueZ bus's loss, bluez-bus.ts), where a restart through its
+   * client listens again. Answers the machine's network read just before a
+   * container restart, as {@link #live} does a start.
+   */
+  async #revive(
+    handle: Docker.Container,
+    devtools: string,
+    placement: Placement
+  ): Promise<MachineNetwork | undefined> {
+    const id = handle.id.slice(0, 12);
+    const restarted = await restartChromium(handle).then(
+      (said) => `restarted (${said})`,
+      (error: unknown) =>
+        `not restarted (${error instanceof Error ? error.message : String(error)})`
     );
+    if (await answersWithin(devtools, CHROMIUM_MS)) {
+      console.info(
+        `[browser] container ${id}: DevTools did not answer; Chromium ${restarted}, and it answers again`
+      );
+      return;
+    }
+    console.warn(
+      `[browser] container ${id}: DevTools did not answer; Chromium ${restarted}, and it still doesn't answer after ${CHROMIUM_MS / 1000} s, so the container is restarted`
+    );
+    const started =
+      placement === "own-namespace" ? await machineNetwork() : undefined;
+    await handle.restart({ t: STOP_SECONDS });
     return started;
   }
 
@@ -863,21 +958,21 @@ export class ContainerHost implements BrowserHost {
     };
   }
 
+  /** Stops its container, then its BlueZ bus: Chromium aborts while it runs if the bus goes first (bluez-bus.ts). */
   async stop(record: BrowserRecord): Promise<void> {
-    stopBluezBus(record.key);
-    if (!record.container) {
-      return;
+    if (record.container) {
+      await this.#docker
+        .getContainer(record.container.id)
+        .stop({ t: STOP_SECONDS })
+        .catch((error: unknown) => {
+          // 304: already stopped; 404: gone.
+          const status = statusOf(error);
+          if (status !== 304 && status !== 404) {
+            throw error;
+          }
+        });
     }
-    await this.#docker
-      .getContainer(record.container.id)
-      .stop({ t: STOP_SECONDS })
-      .catch((error: unknown) => {
-        // 304: already stopped; 404: gone.
-        const status = statusOf(error);
-        if (status !== 304 && status !== 404) {
-          throw error;
-        }
-      });
+    await stopBluezBus(record.key);
   }
 
   /**
@@ -891,11 +986,11 @@ export class ContainerHost implements BrowserHost {
   }
 
   async remove(record: BrowserRecord): Promise<void> {
-    stopBluezBus(record.key);
     const owner = await browserOwner();
     await removeContainers(this.#docker, owner, record.key, [
       record.container?.id,
     ]);
+    await stopBluezBus(record.key);
     await this.#docker
       .getVolume(record.container?.volume ?? nameOf(owner, record.key))
       .remove()

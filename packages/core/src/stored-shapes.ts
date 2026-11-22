@@ -783,7 +783,6 @@ export const BrowserRowShape = declared(
     lastUsedAt: z.number(),
     name: z.string(),
     origin: z.string().optional(),
-    originUnread: z.literal(true).optional(),
     ports: BrowserPortsShape.optional(),
     progress: z
       .object({ done: z.number(), total: z.number(), what: z.literal("image") })
