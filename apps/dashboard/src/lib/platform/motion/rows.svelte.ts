@@ -726,30 +726,106 @@ function arrival(
   }
 }
 
-/** A copy of what left, where it was drawn, closing or shrinking away. */
+/**
+ * A grid container's columns as its rows are drawn on them: its own track
+ * sizes, or, where it takes its columns from a grid around it (`subgrid`),
+ * that grid's, when they run its whole content width. Its content box's
+ * start and width, px, against its padding edge. Read with the places, in
+ * the change's read (`plan`); none for a container that is no grid, or a
+ * subgrid of part of the grid around it.
+ */
+interface Columns {
+  gap: string;
+  start: number;
+  tracks: string;
+  width: number;
+}
+
+function columnsOf(node: HTMLElement): Columns | undefined {
+  const own = getComputedStyle(node);
+  if (!own.display.endsWith("grid")) {
+    return;
+  }
+  const start = Number.parseFloat(own.paddingInlineStart) || 0;
+  const width =
+    node.clientWidth - start - (Number.parseFloat(own.paddingInlineEnd) || 0);
+  let grid: CSSStyleDeclaration = own;
+  for (
+    let at: HTMLElement | null = node;
+    at && grid.gridTemplateColumns.startsWith("subgrid");
+    grid = getComputedStyle(at)
+  ) {
+    at = at.parentElement;
+    if (!at) {
+      return;
+    }
+  }
+  const tracks = grid.gridTemplateColumns;
+  const sizes = tracks.split(" ").map(Number.parseFloat);
+  if (sizes.some(Number.isNaN)) {
+    return;
+  }
+  const gap = Number.parseFloat(grid.columnGap) || 0;
+  const runs = sizes.reduce((sum, size) => sum + size, 0);
+  if (Math.abs(runs + gap * (sizes.length - 1) - width) > 1) {
+    return;
+  }
+  return { tracks, gap: `${gap}px`, start, width };
+}
+
+/**
+ * A copy of what left, where it was drawn, closing or shrinking away. A row
+ * across a grid's every column stands in a grid of the container's columns
+ * (`columns`), the container's content width wide, so a row drawn on them (a subgrid, or
+ * placed by its column lines) is drawn on them still: taken out of the
+ * container's flow alone, a subgrid row had no grid to take columns from,
+ * its tracks fell to none, and every cell stacked in one column the row's
+ * whole width (a repository's description drawn under its lock and time).
+ */
 function departure(
   node: HTMLElement,
   element: HTMLElement,
   was: Placed,
   at: { x: number; y: number },
-  still: boolean
+  still: boolean,
+  columns: Columns | undefined
 ) {
-  const copy = element.cloneNode(true);
-  if (!(copy instanceof HTMLElement)) {
+  const clone = element.cloneNode(true);
+  if (!(clone instanceof HTMLElement)) {
     return;
   }
-  anonymous(copy);
-  Object.assign(copy.style, {
+  anonymous(clone);
+  const place = {
     position: "absolute",
-    left: `${was.cx + at.x}px`,
     top: `${was.cy + at.y}px`,
-    width: `${was.w}px`,
     height: `${was.h}px`,
     margin: "0",
     boxSizing: "border-box",
     pointerEvents: "none",
     transform: "none",
-  });
+  };
+  let copy = clone;
+  // A row across every column: one across part of them (a card in a grid
+  // of cards) would be placed in the copy's first cell, not its own.
+  if (columns && Math.abs(was.w - columns.width) <= 1) {
+    copy = document.createElement("div");
+    copy.setAttribute("aria-hidden", "true");
+    copy.inert = true;
+    Object.assign(copy.style, place, {
+      display: "grid",
+      gridTemplateColumns: columns.tracks,
+      columnGap: columns.gap,
+      left: `${columns.start + at.x}px`,
+      width: `${columns.width}px`,
+    });
+    Object.assign(clone.style, { margin: "0", transform: "none" });
+    copy.append(clone);
+  } else {
+    Object.assign(copy.style, place, {
+      left: `${was.cx + at.x}px`,
+      width: `${was.w}px`,
+    });
+  }
   node.append(copy);
   const done = () => copy.remove();
   // A skeleton row goes in the skeleton's reveal where it stood; at once
@@ -1339,6 +1415,8 @@ class Reflow {
       }
     }
     const departures = this.#departures(placed, now, scrolled, seenNow);
+    const columns =
+      departures.length > 0 ? columnsOf(this.#node) : undefined;
     // Every style the writes need, in one pass. An element under a slide or
     // its hold has its own transforms as the slide began (`Move.own`,
     // `Move.bare`): read with its hold dropped instead, the drop laid the
@@ -1364,6 +1442,7 @@ class Reflow {
     return () =>
       this.#write(plan, {
         arrivals,
+        columns,
         departures,
         now,
         own,
@@ -1410,6 +1489,7 @@ class Reflow {
     plan: Plan,
     {
       arrivals,
+      columns,
       departures,
       now,
       own,
@@ -1418,6 +1498,7 @@ class Reflow {
       still,
     }: {
       arrivals: [HTMLElement, number][];
+      columns: Columns | undefined;
       departures: [HTMLElement, Placed, { x: number; y: number }][];
       now: Map<HTMLElement, Placed>;
       own: Transforms[];
@@ -1491,7 +1572,7 @@ class Reflow {
       arrival(element, still, height, room, revealing);
     }
     for (const [element, was, at] of departures) {
-      departure(this.#node, element, was, at, still);
+      departure(this.#node, element, was, at, still, columns);
     }
     this.#placed = now;
   }
