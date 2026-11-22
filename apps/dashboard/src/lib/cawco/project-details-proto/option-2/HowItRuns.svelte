@@ -202,13 +202,17 @@
   {@const [first, ...rest] = record.repos}
   {#if first}
     <a
-      class="inline-flex min-w-0 items-center gap-space-1 type-meta font-mono liga-none text-ink-muted no-underline hover:text-ink-strong"
+      class="mark-line min-w-0 type-meta font-mono liga-none text-ink-muted no-underline hover:text-ink-strong"
       href={first.url}
       rel="noreferrer"
       target="_blank"
     >
-      <span class="truncate">{first.owner}/{first.name}</span>
-      <IconExternalLinear aria-hidden="true" class="size-icon-sm flex-none" />
+      <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+        >{first.owner}/{first.name}</span
+      >
+      <span data-box
+        ><IconExternalLinear aria-hidden="true" class="size-icon-sm" /></span
+      >
     </a>
     {#if rest.length > 0}
       <span class="type-meta text-ink-muted">+{rest.length}</span>
