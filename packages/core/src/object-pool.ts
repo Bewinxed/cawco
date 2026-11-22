@@ -24,8 +24,9 @@ import { readRecord } from "./state-file";
  * first write, before anything borrows; and once the clone is made the URL of
  * `origin` it was cut from, as the host read it from the source. A clone cut
  * before pools has no `pool` until the agent converts it (agent
- * object-pool.ts `borrowFromPool`); a stage clone and a folder's layer have
- * neither.
+ * object-pool.ts `borrowFromPool`). A stage clone or pin (agent
+ * stage-clone.ts `cut`) has no `origin`, and its `pool` once the cut has
+ * found one that lends, before it borrows; a folder's layer has neither.
  */
 export const CreateRecordSchema = z.object({
   origin: z.string().optional(),
@@ -74,7 +75,7 @@ export const createRecordOf = (id: string): Promise<CreateRecord | undefined> =>
 /**
  * The pool workspace `id`'s clone borrows from, as its `create.json` records
  * it, when that names a pool's folder ({@link isPoolPath}); nothing for a
- * clone that borrows none, a place, a folder's layer or a stage clone. A
+ * clone or stage clone that borrows none, a place or a folder's layer. A
  * damaged record throws: what reads it does not guess.
  */
 export const recordedPool = async (id: string): Promise<string | undefined> => {

@@ -1111,7 +1111,7 @@ export const STAGE_PIN_MS = 120_000;
 /** How long a stage has to answer once started. The spec's number. */
 export const STAGE_READY_MS = 60_000;
 
-/** How long a place's stage clone's git may take, each cut or step (agent `stage-clone.ts`). Ours: a one-commit fetch from the same disk. */
+/** How long a place's stage clone's git may take, each cut or step (agent `stage-clone.ts`). Ours: a fetch from the same disk of what the object pool it borrows from lacks, or of one commit where none lends. */
 export const STAGE_CLONE_GIT_MS = 60_000;
 
 /** How long a stage's install of its project inside its boundary may take (agent `stage-install.ts` `installProject`), before it starts. Ours. */
