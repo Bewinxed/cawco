@@ -35,13 +35,13 @@ import { isSecretName, looksSecret } from "./secret-shapes";
 import { DAY_MS } from "./time";
 import { areaWords } from "./words/areas";
 import { askStanceLine } from "./words/ask-lines";
-import { commandCheckWords } from "./words/conditions";
 import { scopeWords } from "./words/memory-scope";
 import { projectAccountWords } from "./words/project-account";
 import {
   projectSettingsWords,
   type SettingsBudget,
 } from "./words/project-settings";
+import { checkWords } from "./words/routine-check";
 import { routinesWords } from "./words/routines";
 
 /** One file or document the call changes: both sides, for the diff renderers. */
@@ -1676,41 +1676,40 @@ function projectSettings(
 }
 
 /**
- * A routine's command check a session asks to make or change (hub
- * routines.ts): what it is called, its command whole under the summary as a
+ * A routine's check a session asks to make or change (hub routines.ts): what
+ * the routine is called, the check's command whole under the summary as a
  * shell call's is, since what runs is what the person approves, and the
- * stop condition its exit code answers.
+ * machines it runs on.
  */
 function commandCheck(
   toolName: string,
   input: Record<string, unknown>
 ): Presented {
   const name = text(input.title) ?? text(input.id) ?? "";
-  const command = text(input.command);
-  const stop = text(input.stop);
+  const command = text(input.check);
+  const machines = Array.isArray(input.check_on)
+    ? input.check_on.filter((one) => typeof one === "string").join(", ")
+    : null;
   return {
     summary:
       toolName === COMMAND_CHECK_CREATE_TOOL
-        ? commandCheckWords.askMake(name)
-        : commandCheckWords.askChange(name),
-    detail: [
-      commandCheckWords.askCovers,
-      ...(stop ? [commandCheckWords.askCondition(stop)] : []),
-    ].join("\n"),
+        ? checkWords.askMake(name)
+        : checkWords.askChange(name),
+    detail: checkWords.askCovers(machines || null),
     changes: [],
     ...(command?.trim() ? { command } : {}),
-    fields: fieldsOf(input, ["title", "command", "stop", "target", "id"]),
+    fields: fieldsOf(input, ["title", "check", "check_on", "target", "id"]),
   };
 }
 
-/** Whether an ask is a task tool's call that sets a routine's command: a command check. */
+/** Whether an ask is a task tool's call that sets the command a routine's check runs. */
 const isCommandCheck = (
   toolName: string,
   input: Record<string, unknown>
 ): boolean =>
   (toolName === COMMAND_CHECK_CREATE_TOOL ||
     toolName === COMMAND_CHECK_UPDATE_TOOL) &&
-  input.command !== undefined;
+  input.check !== undefined;
 
 /** A file path, however the harness keys it (Claude Code, OpenCode, pi). */
 const filePathOf = (input: Record<string, unknown>): string | undefined =>

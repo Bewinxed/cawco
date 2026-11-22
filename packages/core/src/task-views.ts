@@ -10,6 +10,7 @@ import type { LandsMode } from "./injected";
 import type { RoutineSchedule } from "./project-conversation";
 import type {
   ConditionView,
+  RoutineCheckView,
   RoutineRunView,
   RoutineTarget,
   TriggerHold,
@@ -211,6 +212,8 @@ export interface BuiltOn {
  * alone; its own read the newest 20 and how many it has had.
  */
 export interface TaskRoutine {
+  /** Its check, which gates its runs (`check:` and `check_on:`); null: every run starts its target. */
+  check: RoutineCheckView | null;
   /** The deadline past which, with no stop, it stands in Needs you, ms epoch; null: none. */
   deadline: number | null;
   /** Why it is off, in a sentence; null while on. */

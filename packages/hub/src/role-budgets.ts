@@ -250,9 +250,15 @@ import {
  * to the design graph so that the agent can use it to debug"), its legend
  * and findings said in the answer rather than the description (worker
  * 31,527, delegate 12,344 measured); both budgets are raised to it.
+ * 2026-11-22: a routine's check (the owner's pick of Hermes Agent's wake
+ * gate that day): task_create and task_update take `check` and `check_on`,
+ * a command run on named machines before each run whose output alone wakes
+ * it, in place of the `command` target, which is gone (worker 31,689
+ * measured; a delegate makes no routines). The worker's budget is raised
+ * to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 31_527,
+  worker: 31_689,
   delegate: 12_344,
   overseer: 770,
   "web-facing": 3400,

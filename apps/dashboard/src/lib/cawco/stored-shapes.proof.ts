@@ -115,8 +115,11 @@ import type {
 import type { RoutineSchedule as RoutineScheduleType } from "@cawco/core/project-conversation";
 import type { SendPayload as SendPayloadType } from "@cawco/core/protocol";
 import type {
+  CheckMachineView as CheckMachineViewType,
+  CheckOutcome as CheckOutcomeType,
   ConditionState as ConditionStateType,
   ConditionView as ConditionViewType,
+  RoutineCheckView as RoutineCheckViewType,
   RoutineOutcome as RoutineOutcomeType,
   RoutineRunState as RoutineRunStateType,
   RoutineRunView as RoutineRunViewType,
@@ -255,6 +258,8 @@ import type {
   BuiltOnOutput,
   CalledArtifactOutput,
   CanvasShapesOutput,
+  CheckMachineViewOutput,
+  CheckOutcomeOutput,
   ColdMoveOutput,
   CommandRefusalOutput,
   CommentAttachmentOutput,
@@ -345,6 +350,7 @@ import type {
   RestoreHeldWhyOutput,
   ResultArtifactOutput,
   RoutineActOutput,
+  RoutineCheckViewOutput,
   RoutineOutcomeOutput,
   RoutineRefusalOutput,
   RoutineRunStateOutput,
@@ -596,6 +602,9 @@ prove<
     Same<WaitWitnessOutput, WaitWitnessType>,
     Same<TaskAttemptOutput, TaskAttemptType>,
     Same<BuiltOnOutput, BuiltOnType>,
+    Same<CheckOutcomeOutput, CheckOutcomeType>,
+    Same<CheckMachineViewOutput, CheckMachineViewType>,
+    Same<RoutineCheckViewOutput, RoutineCheckViewType>,
     Same<RoutineOutcomeOutput, RoutineOutcomeType>,
     Same<RoutineRunStateOutput, RoutineRunStateType>,
     Same<RoutineVerdictOutput, RoutineVerdictType>,

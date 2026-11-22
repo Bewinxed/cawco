@@ -6573,38 +6573,6 @@ export const createWorkItems = ({
     },
 
     /**
-     * A workspace cut for one `command` routine run's check (routines.ts
-     * `fireCommand`): the folder `cwd` names on `machineId` copied and its
-     * boundary started, as a delegate's is, filed as that run's
-     * (workspaces.ts `routineRun`), with no work item and no session. The
-     * refusal when it could not be cut.
-     */
-    async openCheck(
-      createdBy: string,
-      cwd: string,
-      machineId: string,
-      projectId: string | null,
-      runId: string
-    ) {
-      const at = workspaces.cwdOn(machineId, cwd);
-      if (at instanceof ElysiaStatus) {
-        return at;
-      }
-      return await workspaces.openWorkspace(
-        createdBy,
-        at,
-        machineId,
-        projectId,
-        {
-          routineRun: runId,
-        }
-      );
-    },
-
-    /** A command check's workspace let go of as its run ends (workspaces.ts `closeRoutineRun`). */
-    closeCheck: (id: string) => workspaces.closeRoutineRun(id),
-
-    /**
      * What workspace `needle` serves that waits on the person
      * (workspaces.ts `waitingFrom`), each by its id and title: what an archive or
      * discard of it waits on, which the person's confirm names and an

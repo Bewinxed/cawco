@@ -61,6 +61,18 @@ export const fits = (runsOn: string, machine: PlacedMachine): boolean => {
   );
 };
 
+/**
+ * The one machine `name` names, by its machine id, hostname or the
+ * hostname's first label, never a capability; undefined when none does.
+ */
+export const machineNamed = <M extends PlacedMachine>(
+  name: string,
+  machines: readonly M[]
+): M | undefined =>
+  isCapability(name.trim())
+    ? undefined
+    : machines.find((machine) => fits(name.trim(), machine));
+
 /** What `runsOn` needs, in a sentence's words: `a Mac (apple)`, `the machine obelisk`. */
 export const runsOnWords = (runsOn: string): string =>
   isCapability(runsOn)

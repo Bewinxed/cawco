@@ -2725,7 +2725,7 @@ export const createServer = (
       await discarded(asker.id, String(input.workspace ?? ""), {
         approved: true,
       }),
-    // A routine's command check the person approved making or changing
+    // A routine's check the person approved making or changing
     // (routines.ts), as the task_create or task_update call that asked.
     task_create: async (input, asker) => {
       const made = leadRunsPort.now();
@@ -10615,12 +10615,14 @@ export const createServer = (
   // Routines (routines.ts): tasks that start on their own, each slot once.
   const routines = createRoutines({
     carry: routinesCarried,
-    // A command check made or changed by a session whose mode would ask
+    // A routine's check made or changed by a session whose mode would ask
     // before a shell command: the person's approval, as an admin write's.
     askPerson: (actor, name, input) => hubAsks.ask(actor, name, input),
-    // A command check's command, inside its own workspace's boundary.
-    runCommand: (machineId, cwd, cmd, timeoutMs, workspace, how) =>
-      runOnMachine(machineId, cwd, cmd, timeoutMs, workspace, how),
+    // A routine's check: on the machine's host, as the agent's user, in no
+    // workspace (routine-check.ts).
+    runOnHost: (machineId, cmd, timeoutMs, how) =>
+      runOnMachine(machineId, "/", cmd, timeoutMs, undefined, how),
+    machines: () => db.machineFacts(),
     caw,
     // A routine moved (paused, held, on again): its project's waits are read again.
     waitsMoved: (projectId) => {
@@ -10633,7 +10635,7 @@ export const createServer = (
         "routine moved"
       );
     },
-    // Dispatch starts every run a session does, and places a command check.
+    // Dispatch starts every run a session does, and places a probe.
     dispatch: dispatcher,
     tasks: () => tasks,
     isSetUp: (project) => isSetUp(project),

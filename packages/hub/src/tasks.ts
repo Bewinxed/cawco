@@ -618,7 +618,8 @@ export interface TaskDraft {
 export type TriggerDraft = Partial<
   Pick<
     TaskFields,
-    | "command"
+    | "check"
+    | "checkOn"
     | "dailyCapUsd"
     | "deadline"
     | "keep"
@@ -1655,7 +1656,8 @@ const patchTrigger = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
   setLine(doc, changed, "daily_cap_usd", trigger.dailyCapUsd);
   setLine(doc, changed, "mode", trigger.mode);
   setLine(doc, changed, "keep", trigger.keep);
-  setLine(doc, changed, "command", trigger.command);
+  setLine(doc, changed, "check", trigger.check);
+  setLine(doc, changed, "check_on", trigger.checkOn);
 };
 
 /** Applies a patch to a task file; answers what it changed, for the commit message, or the refusal of the first field that cannot stand. */

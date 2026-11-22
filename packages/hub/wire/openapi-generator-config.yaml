@@ -50,6 +50,7 @@ typeOverrides:
     CallerKind: OpenEnums.CallerKind
     CapPeriod: OpenEnums.CapPeriod
     CawRunningKind: OpenEnums.CawRunningKind
+    CheckMachineViewOutcome: OpenEnums.CheckMachineViewOutcome
     ClaudeLimitsErrorKind: OpenEnums.ClaudeLimitsErrorKind
     ColdMove: OpenEnums.ColdMove
     CommandAckOutcome: OpenEnums.CommandAckOutcome

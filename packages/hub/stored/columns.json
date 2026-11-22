@@ -13700,6 +13700,21 @@
       "ask"
     ]
   },
+  "task_trigger_checks.outcome": {
+    "type": "string",
+    "enum": [
+      "quiet",
+      "woke",
+      "failed",
+      "paused"
+    ]
+  },
+  "task_triggers.check_on": {
+    "type": "array",
+    "items": {
+      "type": "string"
+    }
+  },
   "task_triggers.held": {
     "type": "string",
     "enum": [
@@ -13733,8 +13748,7 @@
       "orchestrator",
       "conversation",
       "curator",
-      "trim",
-      "command"
+      "trim"
     ]
   },
   "tool_call_keys.headers": {

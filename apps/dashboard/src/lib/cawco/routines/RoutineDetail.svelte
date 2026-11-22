@@ -1,10 +1,15 @@
 <script lang="ts">
   import type { ApprovedActionView } from "@cawco/core/actions";
+  import type { CheckMachineView } from "@cawco/core/routine-kinds";
   import {
     conditionStateWords,
     conditionWords as conditions,
     verdictWords,
   } from "@cawco/core/words/conditions";
+  import {
+    checkOutcomeWords,
+    checkWords,
+  } from "@cawco/core/words/routine-check";
   import { routinesWords as words } from "@cawco/core/words/routines";
   /**
    * A routine opened in place under its row: only what the row does not say
@@ -29,6 +34,11 @@
    * Check again and Mark met (Mark met says what it reaches before it
    * goes). Its runs' Outcome is each one's verdict: Met, Not yet, Could not
    * check.
+   *
+   * A routine gated by a check shows its command next, then each machine
+   * it runs on: how it last went there and when, why when it failed, and
+   * when its output last woke the routine. A quiet check keeps no run, so
+   * these lines are all that say it ran.
    */
   import { hubSeam } from "#lib/cawco/hub-live.js";
   import { rowHref } from "#lib/cawco/links.js";
@@ -62,6 +72,30 @@
     /** The hub changed it (its condition checked again, or marked met): the page reads it again. */
     onchanged?: () => unknown;
   } = $props();
+
+  // --- its check -----------------------------------------------------------------
+
+  const check = $derived(routine.check);
+
+  /** How the check last went on a machine, in the page's status vocabulary. */
+  function checkStatus(one: CheckMachineView): Status {
+    switch (one.outcome) {
+      case "failed":
+        return "failed";
+      case "quiet":
+      case "woke":
+        return "done";
+      case "paused":
+      case null:
+        return "neutral";
+    }
+  }
+
+  /** What the status line says: how it went and when, or that it has not run there. */
+  const checkSaid = (one: CheckMachineView): string =>
+    one.outcome === null || one.checkedAt === null
+      ? checkWords.notYet
+      : `${checkOutcomeWords[one.outcome]} · ${checkWords.checked(since(one.checkedAt))}`;
 
   // --- its condition -------------------------------------------------------------
 
@@ -353,6 +387,49 @@
         {/if}
       </div>
       <RowFault reason={conditionFault} />
+    </section>
+  {/if}
+  {#if check}
+    <section
+      data-slot="check"
+      aria-labelledby="check-{routine.id}"
+      class="flex max-w-c-measure flex-col gap-space-2 pt-space-2"
+    >
+      <h4 class="m-0 type-label text-ink-strong" id="check-{routine.id}">
+        {checkWords.head}
+      </h4>
+      <p class="m-0 type-code liga-none text-ink-strong wrap-anywhere">
+        {check.command}
+      </p>
+      <p class="m-0 type-meta text-ink-muted">{checkWords.hint}</p>
+      {#if !check.approved}
+        <p class="m-0 type-body text-status-attn-ink">
+          {checkWords.unapprovedLine}
+        </p>
+      {/if}
+      <ul
+        data-slot="check-machines"
+        class="m-0 flex list-none flex-col gap-space-2 p-0"
+      >
+        {#each check.machines as one (one.machine)}
+          <li data-machine class="flex flex-col gap-space-1">
+            <span class="type-body text-ink-strong">{one.machine}</span>
+            <span class="flex flex-wrap items-center gap-x-space-2">
+              <RunStatus status={checkStatus(one)} text={checkSaid(one)} />
+              {#if one.wokeAt !== null}
+                <span class="type-meta text-ink-muted"
+                  >{checkWords.woke(since(one.wokeAt))}</span
+                >
+              {/if}
+            </span>
+            {#if one.said}
+              <span class="type-meta text-ink-row wrap-break-word"
+                >{one.said}</span
+              >
+            {/if}
+          </li>
+        {/each}
+      </ul>
     </section>
   {/if}
   <!-- The schedule drawn whole: the row's strip with its days or hours. -->

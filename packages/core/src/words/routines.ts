@@ -385,9 +385,6 @@ export const routineToolWords = {
     stage
       ? `Its task is in ${stage}, so it has ended. Move the task out of ${stage} to turn it back on.`
       : "Its task is no longer on the board, so it has ended.",
-  /** A command check whose file's command is not the one approved: its run is skipped, saying so. */
-  commandUnapproved:
-    "its command changed since it was approved, so it runs nothing until it is approved again: the owner turns the routine back on to approve the command its file holds",
   /** A run said stop: one quiet line in the project's conversation. */
   stoppedNote: (name: string): string => `Routine · ${name} stopped: done`,
   /** A run asked the owner: the line in the project's conversation, beside the question. */

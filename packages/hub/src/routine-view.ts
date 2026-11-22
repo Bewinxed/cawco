@@ -12,6 +12,7 @@ import type {
 } from "@cawco/core/project-conversation";
 import type {
   ConditionView,
+  RoutineCheckView,
   RoutineRunView,
   RoutineTarget,
 } from "@cawco/core/routine-kinds";
@@ -39,6 +40,8 @@ export interface RoutineCondition extends ConditionView {
 /** A routine, as the routes and tools answer it (times in ms), with its newest runs. */
 export interface RoutineView {
   budget: WorkBudget | null;
+  /** Its check, which gates its runs; null: every run starts its target. */
+  check: RoutineCheckView | null;
   /** Its stop condition; null for a routine with none. */
   condition: RoutineCondition | null;
   createdAt: number;
@@ -68,7 +71,7 @@ export interface RoutineView {
   nextSlot: number;
   /** Its project; null for the Fleet project's. */
   projectId: string | null;
-  /** Its task's description: what each run does (a command check's: its title). */
+  /** Its task's description: what each run does. */
   prompt: string;
   runs: RoutineRunView[];
   /** Every run it has had; `runs` holds only the newest of them. */

@@ -134,6 +134,11 @@ const REWRITES: readonly Rewrite[] = [
     migration: "0445_fleet_report_causes",
     why: "no machine links a marketplace, so the hub-only and marketplace-unlinked causes are gone: a machine's last report naming either is set to null, and the machine's next sync reports again",
   },
+  {
+    column: "task_triggers.target",
+    migration: "0470_routine_checks",
+    why: "a routine's target is never command, since a check gates any routine's runs: a trigger whose target is command is set to null with its problem saying why, so it fires nothing until its task file is rewritten, and its task index writes it again",
+  },
 ];
 
 type Schema = Record<string, unknown>;

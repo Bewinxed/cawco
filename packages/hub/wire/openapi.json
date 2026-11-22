@@ -30092,7 +30092,6 @@
                   "target": {
                     "type": "string",
                     "enum": [
-                      "command",
                       "conversation",
                       "delegate",
                       "orchestrator"
@@ -30429,7 +30428,6 @@
                   "target": {
                     "type": "string",
                     "enum": [
-                      "command",
                       "conversation",
                       "delegate",
                       "orchestrator"
@@ -37935,6 +37933,44 @@
           "notes",
           "sequence",
           "version"
+        ]
+      },
+      "CheckMachineView": {
+        "description": "A routine's check on one of its machines, as its last run there left it (times in ms).",
+        "type": "object",
+        "properties": {
+          "checkedAt": {
+            "description": "When the check last answered there; null before it has.",
+            "type": "number"
+          },
+          "machine": {
+            "description": "The machine as the routine's `check_on` names it.",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/CheckMachineViewOutcome",
+            "description": "How it last went there; null before it has run."
+          },
+          "said": {
+            "description": "Why it failed, or what paused it; null otherwise.",
+            "type": "string"
+          },
+          "wokeAt": {
+            "description": "When its output there last woke the routine; null: never.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "machine"
+        ]
+      },
+      "CheckMachineViewOutcome": {
+        "type": "string",
+        "enum": [
+          "failed",
+          "paused",
+          "quiet",
+          "woke"
         ]
       },
       "ClaudeExtraUsage": {
@@ -57318,6 +57354,32 @@
           "statements"
         ]
       },
+      "RoutineCheckView": {
+        "description": "A routine's check (task file `check:` and `check_on:`): a shell command\nthe hub runs on each machine at every slot, before any model. Only output\nwakes the routine's target; a quiet check keeps no run.",
+        "type": "object",
+        "properties": {
+          "approved": {
+            "description": "Whether its command is the one the owner approved: a changed one runs nothing until approved again.",
+            "type": "boolean"
+          },
+          "command": {
+            "description": "Its command, as its file says it.",
+            "type": "string"
+          },
+          "machines": {
+            "description": "Each machine it runs on, in its file's order.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckMachineView"
+            }
+          }
+        },
+        "required": [
+          "approved",
+          "command",
+          "machines"
+        ]
+      },
       "RoutineCondition": {
         "description": "A routine's stop condition as its view answers it: where it stands.",
         "type": "object",
@@ -57431,7 +57493,7 @@
             "type": "string"
           },
           "instanceId": {
-            "description": "The session that did the run, where it is read whole (`/session/<id>`):\na delegate, orchestrator, curator or trim run's work item's session, from\nits start; a conversation run's, once its harness read the run. Null for\na run no session took (skipped, a command check's, one that ended before\nany began).",
+            "description": "The session that did the run, where it is read whole (`/session/<id>`):\na delegate, orchestrator, curator or trim run's work item's session, from\nits start; a conversation run's, once its harness read the run. Null for\na run no session took (skipped, one that ended before any began).",
             "type": "string"
           },
           "outcome": {
@@ -57516,10 +57578,9 @@
         ]
       },
       "RoutineTarget": {
-        "description": "What a run starts: a fresh delegate, a fresh orchestrator (a session that\nmay delegate, in the project's checkout: routines.ts `fireOrchestrator`),\na message to the project's conversation, Caw, the project's memory curator\n(memory.ts), a delegate in the `curator` role that only the hub makes,\nthe unused skills and servers routine (hub unused-trim.ts), a delegate in\nthe `trimmer` role that only the hub makes too, or a shell command and no\nmodel (hub routines.ts `fireCommand`): its prompt, run in a fresh\nworkspace's boundary on its project's machine, its exit code the verdict\nof the condition it must have.",
+        "description": "What a run starts: a fresh delegate, a fresh orchestrator (a session that\nmay delegate, in the project's checkout: routines.ts `fireOrchestrator`),\na message to the project's conversation, Caw, the project's memory curator\n(memory.ts), a delegate in the `curator` role that only the hub makes, or\nthe unused skills and servers routine (hub unused-trim.ts), a delegate in\nthe `trimmer` role that only the hub makes too. A routine's check (hub\nroutine-check.ts) gates any of the first three: it decides whether a run\nstarts, never what starts.",
         "type": "string",
         "enum": [
-          "command",
           "conversation",
           "curator",
           "delegate",
@@ -57533,6 +57594,10 @@
         "properties": {
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
+          },
+          "check": {
+            "description": "Its check, which gates its runs; null: every run starts its target.",
+            "$ref": "#/components/schemas/RoutineCheckView"
           },
           "condition": {
             "description": "Its stop condition; null for a routine with none.",
@@ -57604,7 +57669,7 @@
             "type": "string"
           },
           "prompt": {
-            "description": "Its task's description: what each run does (a command check's: its title).",
+            "description": "Its task's description: what each run does.",
             "type": "string"
           },
           "runs": {
@@ -61542,6 +61607,10 @@
         "description": "A task that starts on its own, a routine (Projects spec §5.5), as a task's\nlist and its read carry it: its trigger as the hub keeps it, and its runs\nfrom the run ledger, never its attempts. A list carries its newest run\nalone; its own read the newest 20 and how many it has had.",
         "type": "object",
         "properties": {
+          "check": {
+            "description": "Its check, which gates its runs (`check:` and `check_on:`); null: every run starts its target.",
+            "$ref": "#/components/schemas/RoutineCheckView"
+          },
           "deadline": {
             "description": "The deadline past which, with no stop, it stands in Needs you, ms epoch; null: none.",
             "type": "number"
@@ -178186,42 +178255,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "workspace-continue-routine-run"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "workspace-from-live"
                 ]
               },
@@ -188585,42 +188618,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "workspace-continue-routine-run"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "workspace-from-live"
                 ]
               },
@@ -196952,42 +196949,6 @@
                 "type": "string",
                 "enum": [
                   "workspace-continue-live"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "workspace-continue-routine-run"
                 ]
               },
               "detail": {
@@ -217850,9 +217811,6 @@
           },
           "repoRoot": {
             "$ref": "#/components/schemas/MachinePath"
-          },
-          "routineRun": {
-            "type": "string"
           },
           "stageFor": {
             "type": "string"

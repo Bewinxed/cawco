@@ -19,6 +19,7 @@ import {
 } from "@cawco/core/plan";
 import { HUB_DOWNS } from "@cawco/core/preview/protocol";
 import {
+  CHECK_OUTCOMES,
   CONDITION_STATES,
   ROUTINE_OUTCOMES,
   ROUTINE_RUN_STATES,
@@ -1434,6 +1435,25 @@ const BuiltOnShape = z.object({
 });
 export type BuiltOnOutput = z.output<typeof BuiltOnShape>;
 
+const CheckOutcomeShape = z.enum(CHECK_OUTCOMES);
+export type CheckOutcomeOutput = z.output<typeof CheckOutcomeShape>;
+
+const CheckMachineViewShape = z.object({
+  checkedAt: z.number().nullable(),
+  machine: z.string(),
+  outcome: CheckOutcomeShape.nullable(),
+  said: z.string().nullable(),
+  wokeAt: z.number().nullable(),
+});
+export type CheckMachineViewOutput = z.output<typeof CheckMachineViewShape>;
+
+const RoutineCheckViewShape = z.object({
+  approved: z.boolean(),
+  command: z.string(),
+  machines: z.array(CheckMachineViewShape),
+});
+export type RoutineCheckViewOutput = z.output<typeof RoutineCheckViewShape>;
+
 const RoutineOutcomeShape = z.enum(ROUTINE_OUTCOMES);
 export type RoutineOutcomeOutput = z.output<typeof RoutineOutcomeShape>;
 
@@ -1475,6 +1495,7 @@ const RoutineTargetShape = z.enum(ROUTINE_TARGETS);
 export type RoutineTargetOutput = z.output<typeof RoutineTargetShape>;
 
 const TaskRoutineShape = z.object({
+  check: RoutineCheckViewShape.nullable(),
   deadline: z.number().nullable(),
   disabledReason: z.string().nullable(),
   enabled: z.boolean(),

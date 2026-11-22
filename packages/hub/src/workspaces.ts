@@ -209,10 +209,6 @@ const folderCopyOf = (workspace: WorkspaceRow): FolderCopy | undefined =>
  *   ({@link settleHost}), its folder untouched.
  * - `stageClone`: the clone a place's stage runs in (core
  *   `StageCloneFrame`): no work item, settled once that stage sleeps.
- * - `routineRun`: the clone a `command` routine's run runs its one command
- *   in (routines.ts `fireCommand`): no work item and no session, let go of
- *   unread (`drop`) as its run ends ({@link closeRoutineRun}), or by the
- *   settle sweep once its run is no longer live.
  *
  * The columns never name two of these at once: each is filed by its own
  * path ({@link openWorkspace}, `startHost`, {@link fileStage}).
@@ -221,8 +217,7 @@ export type Workspace =
   | { kind: "clone"; row: WorkspaceRow }
   | { kind: "folderOverlay"; row: WorkspaceRow }
   | { kind: "hostFolder"; row: WorkspaceRow }
-  | { kind: "stageClone"; row: WorkspaceRow; place: string }
-  | { kind: "routineRun"; row: WorkspaceRow; run: string };
+  | { kind: "stageClone"; row: WorkspaceRow; place: string };
 
 /** The member of {@link Workspace} `row` is. */
 export const workspaceOf = (row: WorkspaceRow): Workspace => {
@@ -231,9 +226,6 @@ export const workspaceOf = (row: WorkspaceRow): Workspace => {
   }
   if (row.stageFor) {
     return { kind: "stageClone", row, place: row.stageFor };
-  }
-  if (row.routineRun) {
-    return { kind: "routineRun", row, run: row.routineRun };
   }
   return row.kind === "folder"
     ? { kind: "folderOverlay", row }
@@ -1542,9 +1534,6 @@ export const createWorkspaces = ({
     if (member.kind === "hostFolder") {
       return await settleHost(workspace, items);
     }
-    if (member.kind === "routineRun") {
-      return await settleRoutineRun(workspace, member.run);
-    }
     if (!settlable(workspace, items)) {
       return { kind: "none" };
     }
@@ -1556,58 +1545,6 @@ export const createWorkspaces = ({
     }
     return await closeOrFail(workspace, items);
   };
-  /**
-   * A command check's workspace let go of on its machine, unread: its
-   * boundary killed, nothing carried, the clone and its records gone
-   * (`drop`), since a check's clone holds nothing of anyone's work. A
-   * failure is counted as any settle's is ({@link settleFailed}), and the
-   * sweep tries it again.
-   */
-  const dropRoutineRun = async (workspace: WorkspaceRow): Promise<Settled> => {
-    const failed = (reason: string): Settled => {
-      settleFailed(workspace, reason);
-      return { kind: "failed", reason };
-    };
-    try {
-      const closed = await closeWorkspace(workspace, "drop");
-      if (closed instanceof ElysiaStatus) {
-        return failed(closed.response.detail);
-      }
-      settleFailures.delete(workspace.id);
-      return { kind: "retired", carry: null };
-    } catch (error) {
-      return failed(error instanceof Error ? error.message : String(error));
-    }
-  };
-  /**
-   * A command check's workspace settled ({@link settle}): left alone while
-   * its run is live (queued, starting or running), else let go of
-   * ({@link dropRoutineRun}). Its run's own end closes it first
-   * ({@link closeRoutineRun}); this is for one a stopped hub, or a close
-   * that failed, left standing.
-   */
-  const settleRoutineRun = async (
-    workspace: WorkspaceRow,
-    runId: string
-  ): Promise<Settled> => {
-    const run = db.routines.run(runId);
-    if (run && run.state !== "ended" && run.state !== "skipped") {
-      return { kind: "none" };
-    }
-    return await dropRoutineRun(workspace);
-  };
-  /**
-   * THE close of a command check's workspace as its run ends (routines.ts
-   * `fireCommand`), in the workspace's turn: let go of unread
-   * ({@link dropRoutineRun}); nothing for one no longer active.
-   */
-  const closeRoutineRun = (id: string): Promise<Settled> =>
-    inWorkspaceTurn(id, async () => {
-      const [workspace] = db.workspacesNamed(id);
-      return workspace?.state === "active" && workspace.routineRun
-        ? await dropRoutineRun(workspace)
-        : { kind: "none" };
-    });
   /**
    * A host-scope workspace settled ({@link settle}): it has no clone, so
    * nothing of it closes on its machine but its scratch dir (agent
@@ -2037,9 +1974,6 @@ export const createWorkspaces = ({
         detail: `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path} on ${machineName(db, workspace.machineId)}, not a clone: there is nothing to archive or discard, and nothing was deleted.`,
       });
     }
-    if (member.kind === "routineRun") {
-      return await closeWorkspace(workspace, "drop");
-    }
     const blocked = archiveBlocked(workspace, refused);
     if (blocked) {
       return blocked;
@@ -2097,7 +2031,7 @@ export const createWorkspaces = ({
    */
   const recuttable = (workspace: WorkspaceRow): boolean => {
     const member = workspaceOf(workspace);
-    if (workspace.state !== "archived" || member.kind === "routineRun") {
+    if (workspace.state !== "archived") {
       return false;
     }
     if (member.kind === "hostFolder") {
@@ -2555,12 +2489,6 @@ export const createWorkspaces = ({
         detail: `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path}, not a clone: continue its session with handoff, or delegate with host again.`,
       });
     }
-    if (member.kind === "routineRun") {
-      return problem(409, {
-        code: "workspace-continue-routine-run",
-        detail: `Workspace ${handle(workspace.id)} runs one command check of a routine and takes no work item. Delegate without workspace to start a new one.`,
-      });
-    }
     const items = db.workItemsIn(workspace.id);
     const live = items.find((item) => LIVE.has(item.state));
     if (live) {
@@ -2673,9 +2601,7 @@ export const createWorkspaces = ({
    * (work-items.ts `ItemPlacement`), whose user layer the boundary reads from its
    * first start; `first` is that session ({@link WorkspaceFirstSession}),
    * whose spill folder it reads from then too, so its spawn hands the
-   * boundary over to no second one. `routineRun` files it as that routine
-   * run's command check ({@link Workspace} `routineRun`), which no session
-   * starts in.
+   * boundary over to no second one.
    */
   const openWorkspace = async (
     createdBy: string,
@@ -2685,11 +2611,9 @@ export const createWorkspaces = ({
     {
       account,
       first,
-      routineRun,
     }: {
       account?: string;
       first?: WorkspaceFirstSession;
-      routineRun?: string;
     } = {}
   ) => {
     const id = crypto.randomUUID();
@@ -2745,7 +2669,6 @@ export const createWorkspaces = ({
         tmp: checkout.tmp,
         state: "active",
         createdByInstanceId: createdBy,
-        ...(routineRun ? { routineRun } : {}),
       });
     } catch (error) {
       throw thrownAgain(
@@ -2821,17 +2744,11 @@ export const createWorkspaces = ({
       });
     }
     const member = workspaceOf(source);
-    if (
-      source.state === "archived" ||
-      member.kind === "hostFolder" ||
-      member.kind === "routineRun"
-    ) {
-      let why = "it is archived, its clone gone";
-      if (member.kind === "hostFolder") {
-        why = "it is a host-scope delegate's folder, not a clone";
-      } else if (member.kind === "routineRun") {
-        why = "it runs one command check of a routine";
-      }
+    if (source.state === "archived" || member.kind === "hostFolder") {
+      const why =
+        member.kind === "hostFolder"
+          ? "it is a host-scope delegate's folder, not a clone"
+          : "it is archived, its clone gone";
       return problem(409, {
         code: "workspace-from-no-branch",
         detail: `Workspace ${handle(source.id)} has no branch to cut from: ${why}. Delegate without from.`,
@@ -2984,7 +2901,6 @@ export const createWorkspaces = ({
 
   return {
     claim,
-    closeRoutineRun,
     continued,
     recut,
     recuttable,
