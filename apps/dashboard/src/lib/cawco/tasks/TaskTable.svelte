@@ -14,7 +14,7 @@
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
-  import { IconChevronDown, IconChevronUp, IconNeedsYou } from "#lib/icons.js";
+  import { IconNeedsYou } from "#lib/icons.js";
   import { plainClick } from "#lib/platform/plain-click.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   /**
@@ -189,14 +189,6 @@
   const shownIds = (): string[] =>
     table.getRowModel().rows.map((row) => row.id);
 
-  /** A sorted column's `aria-sort`; the rest say nothing. */
-  const ariaSort = (sorted: false | "asc" | "desc") => {
-    if (sorted === "asc") {
-      return "ascending";
-    }
-    return sorted === "desc" ? "descending" : undefined;
-  };
-
   function open(event: MouseEvent, id: string) {
     if (!plainClick(event)) {
       return;
@@ -223,17 +215,16 @@
           {#each group.headers as header (header.id)}
             {@const column = header.column}
             {@const sorted = column.getIsSorted()}
-            {@const sort = ariaSort(sorted)}
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               edge={column.id === "created" || column.id === "updated"
                 ? "end"
                 : undefined}
-              aria-sort={sort}
               class="w-(--col-w)"
               data-task-table-col={column.id}
               fold={FOLD[column.id]}
               scope="col"
+              {sorted}
               variant="band"
               style="--col-w: {COL_W[column.id] ?? ''}"
             >
@@ -255,24 +246,7 @@
                   }}
                 />
               {:else if column.getCanSort()}
-                <button
-                  class="select-none inline-flex items-center gap-space-1 -me-space-1 p-space-1 rounded-sm type-label tracking-caps uppercase text-ink-muted mark-line press-tint focus-inset"
-                  onclick={column.getToggleSortingHandler()}
-                  type="button"
-                >
-                  <span>{column.columnDef.header}</span>
-                  {#if sorted === "desc"}
-                    <IconChevronDown
-                      aria-hidden="true"
-                      class="size-icon-sm flex-none"
-                    />
-                  {:else if sorted === "asc"}
-                    <IconChevronUp
-                      aria-hidden="true"
-                      class="size-icon-sm flex-none"
-                    />
-                  {/if}
-                </button>
+                <Table.Sort {column} label={String(column.columnDef.header)} />
               {:else}
                 {column.columnDef.header}
               {/if}
