@@ -56,6 +56,7 @@
     onplace,
     onaddplace,
     hrefOf,
+    opening = null,
   }: SessionsStartProps = $props();
 
   const uid = $props.id();
@@ -67,7 +68,8 @@
 
   /* ── Adding a place ─────────────────────────────────────────────── */
 
-  let adding = $state(false);
+  /** The add form standing open: from the press, or open as it mounts (`opening`). */
+  let adding = $derived(opening === "folder");
   let machinePick = $state<string | null>(null);
   let pathDraft = $state("");
   let scratchRefusal = $state<string | null>(null);
@@ -113,7 +115,7 @@
   /* ── Large files ────────────────────────────────────────────────── */
 
   /** The address being written: the pick moves to it at the press, the record once it is saved. */
-  let declaring = $state(false);
+  let declaring = $derived(opening === "largeFiles");
   let lfsAddressDraft = $derived(
     record.largeFiles.kind === "declared" ? record.largeFiles.address : ""
   );
@@ -261,7 +263,9 @@
     {/each}
 
     {#if adding}
-      <li class="flex min-w-0 flex-col" data-flip data-slot="item">
+      <!-- On the list's own edges: the list reaches past them by the rows'
+           inset (RowList), the form stands on the column's. -->
+      <li class="mx-space-2 flex min-w-0 flex-col" data-flip data-slot="item">
         <form
           aria-label={words.places.addPlace}
           class={OPENED_FORM}

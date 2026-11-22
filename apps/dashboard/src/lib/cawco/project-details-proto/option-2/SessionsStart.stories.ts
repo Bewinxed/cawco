@@ -24,3 +24,13 @@ export const AccountSignedOut = { args: stageArgs("Named account signed out") };
 
 /** A writing project: no Git LFS. */
 export const NoCode = { args: stageArgs("A project with no code") };
+
+/** Adding a folder: the machine to pick and the path to type, under the folders. */
+export const AddingAFolder = {
+  args: { ...stageArgs("At rest"), opening: "folder" },
+};
+
+/** Large files on a server of my own: its address and the key it signs in with. */
+export const CustomLargeFileServer = {
+  args: { ...stageArgs("At rest"), opening: "largeFiles" },
+};
