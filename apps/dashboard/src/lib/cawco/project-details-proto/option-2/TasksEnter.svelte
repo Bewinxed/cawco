@@ -7,7 +7,7 @@
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   /**
    * Task sync: the three homes for the project's tasks as the view's one
-   * pick (PickChips), each led by its mark (CawCo's own
+   * pick (PickTiles), each led by its mark (CawCo's own
    * files, GitHub's and Linear's own logos); while tied to one, how the two
    * sides stand above them; and pressed on GitHub or Linear, the tie's setup
    * opening under the tiles. Files moves at the press (changes.ts
@@ -32,7 +32,7 @@
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import type { Change, ChangeKey } from "./changes";
   import { FORM_FIELD, FORM_LABEL, OPENED_FORM } from "./opened-form";
-  import PickChips from "./PickChips.svelte";
+  import PickTiles from "./PickTiles.svelte";
   import type { HowItRunsRecord, TaskHome } from "./records";
   import {
     GITHUB_CONNECTIONS,
@@ -222,84 +222,88 @@
     <!-- The tie as a connected thing's row (ConnectionsSection's sign-ins):
          where tasks sync, by whose sign-in, how the two sides stand; Sync
          now at its end, the rest of its acts in its ⋯. -->
-    <RowList label={words.tasks.groupLabel}>
-      <SectionRow
-        actions={[
-          {
-            label: words.tasks.changeTie,
-            icon: IconSettings,
-            disabled,
-            onselect: () =>
-              setupHome === tie.home ? closeSetup() : openSetup(tie.home),
-          },
-          {
-            label: tie.target.label,
-            icon: IconExternalLinear,
-            onselect: () => {
-              window.open(tie.target.url, "_blank", "noopener");
+    <!-- Drawn out by its glyphs' inset, so they share the card's left edge. -->
+    <div class="-ms-c-mark-inset min-w-0">
+      <RowList label={words.tasks.groupLabel}>
+        <SectionRow
+          actions={[
+            {
+              label: words.tasks.changeTie,
+              icon: IconSettings,
+              disabled,
+              onselect: () =>
+                setupHome === tie.home ? closeSetup() : openSetup(tie.home),
             },
-          },
-        ]}
-        meta={tieMeta}
-        mono
-        name={tie.target.label}
-        whole
-      >
-        {#snippet tile()}
-          <ProviderLogo provider={tie.home} />
-        {/snippet}
-        {#snippet badge()}
-          {#if syncPending || tie.sync.kind === "syncing"}
-            <Badge variant="live"
-              ><IconWorking aria-hidden="true" /><span
-                >{words.tasks.syncing}</span
-              ></Badge
-            >
-          {:else if tie.sync.kind === "first"}
-            <Badge variant="live"
-              ><IconWorking aria-hidden="true" /><span
-                >{words.tasks.firstSync}</span
-              ></Badge
-            >
-          {:else if tie.sync.kind === "refused"}
-            <Badge variant="fail"
-              ><IconError aria-hidden="true" /><span
-                >{words.tasks.syncRefused(formatAge(tie.sync.at))}</span
-              ></Badge
-            >
-          {/if}
-        {/snippet}
-        {#snippet trailing()}
-          <Button
-            {disabled}
-            icon={IconRefresh}
-            label={words.tasks.syncNow}
-            onclick={onsync}
-            pending={syncPending}
-            pendingLabel={words.tasks.syncing}
-            size="xs"
-            variant="outline"
-          />
-        {/snippet}
-        {#snippet below()}
-          {#if tie.sync.kind === "refused" && !syncPending}
-            <RowFault
-              again={onsync}
-              againLabel={words.tryAgain}
-              reason={tie.sync.words}
+            {
+              label: tie.target.label,
+              icon: IconExternalLinear,
+              onselect: () => {
+                window.open(tie.target.url, "_blank", "noopener");
+              },
+            },
+          ]}
+          meta={tieMeta}
+          mono
+          name={tie.target.label}
+          whole
+        >
+          {#snippet tile()}
+            <ProviderLogo provider={tie.home} />
+          {/snippet}
+          {#snippet badge()}
+            {#if syncPending || tie.sync.kind === "syncing"}
+              <Badge variant="live"
+                ><IconWorking aria-hidden="true" /><span
+                  >{words.tasks.syncing}</span
+                ></Badge
+              >
+            {:else if tie.sync.kind === "first"}
+              <Badge variant="live"
+                ><IconWorking aria-hidden="true" /><span
+                  >{words.tasks.firstSync}</span
+                ></Badge
+              >
+            {:else if tie.sync.kind === "refused"}
+              <Badge variant="fail"
+                ><IconError aria-hidden="true" /><span
+                  >{words.tasks.syncRefused(formatAge(tie.sync.at))}</span
+                ></Badge
+              >
+            {/if}
+          {/snippet}
+          {#snippet trailing()}
+            <Button
+              {disabled}
+              icon={IconRefresh}
+              label={words.tasks.syncNow}
+              onclick={onsync}
+              pending={syncPending}
+              pendingLabel={words.tasks.syncing}
+              size="sm"
+              variant="outline"
             />
-          {/if}
-          <RowFault
-            again={() => onretry("sync")}
-            againLabel={words.retryChange}
-            reason={refused.sync}
-          />
-        {/snippet}
-      </SectionRow>
-    </RowList>
+          {/snippet}
+          {#snippet below()}
+            {#if tie.sync.kind === "refused" && !syncPending}
+              <RowFault
+                again={onsync}
+                againLabel={words.tryAgain}
+                reason={tie.sync.words}
+              />
+            {/if}
+            <RowFault
+              again={() => onretry("sync")}
+              againLabel={words.retryChange}
+              reason={refused.sync}
+            />
+          {/snippet}
+        </SectionRow>
+      </RowList>
+    </div>
   {/if}
 
-  <PickChips
+  <PickTiles
+    cols={3}
     {disabled}
     glyph={homeGlyph}
     label={words.tasks.groupLabel}
@@ -343,14 +347,7 @@
           >{words.tasks.linkedCount(tie.linked)}</span
         >
       </p>
-      <div class="flex flex-wrap items-center gap-space-2">
-        <Button
-          {disabled}
-          label={words.tasks.leaveTie.act}
-          onclick={leaveTie}
-          size="sm"
-          variant="outline"
-        />
+      <div class="flex justify-end gap-space-2">
         <Button
           label={words.cancel}
           onclick={() => {
@@ -358,6 +355,12 @@
           }}
           size="sm"
           variant="ghost"
+        />
+        <Button
+          {disabled}
+          label={words.tasks.leaveTie.act}
+          onclick={leaveTie}
+          size="sm"
         />
       </div>
     </section>
@@ -413,7 +416,7 @@
             <Button
               href={hrefOf("connections")}
               label={words.tasks.openConnections}
-              size="xs"
+              size="sm"
               variant="outline"
             />
           </div>
@@ -421,7 +424,7 @@
           <OptionGroup
             aria-labelledby="{uid}-connection"
             {disabled}
-            glide="mark"
+            glide
             value={activeConnectionId ? [activeConnectionId] : []}
           >
             {#each setupConnections as conn (conn.id)}
@@ -462,7 +465,7 @@
             <OptionGroup
               aria-labelledby="{uid}-team"
               {disabled}
-              glide="mark"
+              glide
               value={activeTeamId ? [activeTeamId] : []}
             >
               {#each LINEAR_TEAMS as team (team.id)}
@@ -490,7 +493,7 @@
             <OptionGroup
               aria-labelledby="{uid}-board"
               {disabled}
-              glide="mark"
+              glide
               value={[githubProjectPick]}
             >
               <OptionGroupItem
@@ -518,19 +521,18 @@
         {/if}
       {/if}
 
-      <div class="flex flex-wrap items-center gap-space-2">
-        <Button
-          disabled={!canSaveTie}
-          label={words.tasks.saveTie}
-          onclick={saveTie}
-          size="sm"
-          variant="outline"
-        />
+      <div class="flex justify-end gap-space-2">
         <Button
           label={words.cancel}
           onclick={closeSetup}
           size="sm"
           variant="ghost"
+        />
+        <Button
+          disabled={!canSaveTie}
+          label={words.tasks.saveTie}
+          onclick={saveTie}
+          size="sm"
         />
       </div>
     </section>

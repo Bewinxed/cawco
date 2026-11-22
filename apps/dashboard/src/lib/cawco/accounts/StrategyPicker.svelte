@@ -20,7 +20,6 @@
     NativeSelect,
     NativeSelectOption,
   } from "#lib/components/ui/native-select/index.js";
-  import { RadioMark } from "#lib/components/ui/option-group/index.js";
   import { IconSubagent } from "#lib/icons.js";
   import { appear, crossOut } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
@@ -160,11 +159,17 @@
       >
         <div
           data-slot="top"
-          class="mark-line flex min-h-c-btn-h flex-wrap items-center gap-x-space-3 gap-y-space-2 px-space-1"
+          class="flex min-h-c-btn-h flex-wrap items-center gap-x-space-3 gap-y-space-2 px-space-1"
         >
-          <RadioMark />
           <span
-            data-box
+            aria-hidden="true"
+            class="grid size-icon-md flex-none place-items-center rounded-pill border-2 border-neutral-8 transition-[border-color] duration-(--duration-fade) ease-out group-aria-checked:border-selected-icon"
+          >
+            <span
+              class="size-space-2 scale-50 rounded-pill bg-selected-icon opacity-0 transition-[scale,opacity] duration-(--duration-toggle) ease-out group-aria-checked:scale-100 group-aria-checked:opacity-100"
+            ></span>
+          </span>
+          <span
             data-slot="words"
             class="type-label flex min-w-0 flex-auto flex-col gap-space-row text-ink-strong"
           >
@@ -176,7 +181,6 @@
           {#if strategy.id === "pinned" && checked}
             <span
               class="ms-auto max-w-full min-w-0 flex-initial"
-              data-box
               in:appear
               out:crossOut
             >

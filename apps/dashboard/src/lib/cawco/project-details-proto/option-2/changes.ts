@@ -5,14 +5,13 @@
  */
 
 import type { Account } from "@cawco/core/accounts";
-import {
-  CHOICE_KINDS,
-  type ChoiceKind,
-  type Decider,
-  type HowItRunsRecord,
-  type Landing,
-  type LargeFiles,
-  type TaskHome,
+import type {
+  ChoiceKind,
+  Decider,
+  HowItRunsRecord,
+  Landing,
+  LargeFiles,
+  TaskHome,
 } from "./records";
 
 export type StageId = "tasks" | "sessions" | "waits" | "lands";
@@ -256,11 +255,3 @@ export const pickAccounts = (record: HowItRunsRecord): Account[] =>
     reservePct: null,
     sessionReservePct: null,
   }));
-
-/** The kinds of choice this project set itself, which Reset to defaults puts back on the fleet's choice. */
-export const ownKinds = (record: HowItRunsRecord): ChoiceKind[] => {
-  const { whoDecides } = record;
-  return whoDecides.ok
-    ? CHOICE_KINDS.filter((kind) => whoDecides.rules[kind].own)
-    : [];
-};

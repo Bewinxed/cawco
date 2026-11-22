@@ -104,12 +104,6 @@ const OVERLAP = 1;
  *   card's border and fill and under its face (CardFace): its edges are
  *   parts of their own, a border's width thick, so no scale ever thickens
  *   them.
- * - `mark`: a group of raised controls (option chips, option tiles),
- *   whose pill is the pick's strong edge: twice the border's width in the
- *   selected coral (brand-solid), with no fill of its own, drawn over the
- *   chosen control's own edge and under its words (the controls' children
- *   stand over it): each control keeps its raised rest, picked or not, and
- *   the edge glides from the option left to the one chosen.
  */
 const LAYERS = `
 [data-slot^="highlight-"] {
@@ -196,23 +190,6 @@ const LAYERS = `
 :host([data-highlight="card"]) :is([data-part="corner-tr"], [data-part="corner-br"]) {
   border-right: var(--border-width) solid var(--color-brand-solid);
 }
-:host([data-highlight="mark"]) :is([data-slot="highlight-pill"], [data-slot="highlight-trail"]) {
-  z-index: 1;
-  --border-width: 2px;
-  background-color: transparent;
-}
-:host([data-highlight="mark"]) :is([data-part="corner-tl"], [data-part="corner-tr"]) {
-  border-top: var(--border-width) solid var(--color-brand-solid);
-}
-:host([data-highlight="mark"]) :is([data-part="corner-bl"], [data-part="corner-br"]) {
-  border-bottom: var(--border-width) solid var(--color-brand-solid);
-}
-:host([data-highlight="mark"]) :is([data-part="corner-tl"], [data-part="corner-bl"]) {
-  border-left: var(--border-width) solid var(--color-brand-solid);
-}
-:host([data-highlight="mark"]) :is([data-part="corner-tr"], [data-part="corner-br"]) {
-  border-right: var(--border-width) solid var(--color-brand-solid);
-}
 `;
 
 /** The layers' one sheet, made the first time a list asks for it. */
@@ -296,13 +273,8 @@ export interface HighlightOptions {
    * re-measures. Only rows with a box here are rows.
    */
   laidOut?: () => ReadonlyMap<Element, LaidOut>;
-  /**
-   * `card`: a grid of icon cards, its pill the channel card's frame.
-   * `mark`: a group of raised controls (OptionGroup `glide: "mark"`), its
-   * pill the pick's strong coral edge with no fill, drawn over the chosen
-   * control's edge and under its words.
-   */
-  look?: "card" | "mark";
+  /** `card`: a grid of icon cards, its pill the channel card's frame. */
+  look?: "card";
   /** The rows the ghost and the pill stand under. */
   rows: string;
   /** The selected row. */
@@ -707,8 +679,7 @@ export function highlight(options: HighlightOptions) {
     container.dataset.highlight = look ?? "";
     const ownIsolate = !container.classList.contains("isolate");
     container.classList.add("isolate");
-    /** Its pill drawn in parts with edges of their own: the card's frame, or the pick's strong edge. */
-    const card = look === "card" || look === "mark";
+    const card = look === "card";
     const ghost = layerOf("highlight-ghost", card);
     const trail = layerOf("highlight-trail", card);
     const pill = layerOf("highlight-pill", card);

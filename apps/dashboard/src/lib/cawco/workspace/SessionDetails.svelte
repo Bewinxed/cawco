@@ -16,7 +16,6 @@
     isEffortLevel,
   } from "@cawco/core/harness/kinds";
   import type { PermissionMode } from "@cawco/core/harness/modes";
-  import { clockWords } from "@cawco/core/words/account-lines";
   import { commonWords } from "@cawco/core/words/common";
   import { limitPickWords } from "@cawco/core/words/limit-picks";
   import { sessionStatWords } from "@cawco/core/words/session-stats";
@@ -50,7 +49,7 @@
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
   import { forcePast, pickPastLimit } from "../accounts/limit-checks.svelte";
   import { nameOf } from "../accounts/model.svelte";
-  import { type LimitRow, limitRowOf } from "../accounts/room";
+  import { chipQuota, type LimitRow, limitRowOf } from "../accounts/room";
   import { roomOf } from "../accounts/room-of";
   import {
     accountFault,
@@ -89,7 +88,6 @@
   import ContextMeter, {
     type ContextReading,
   } from "../usage/ContextMeter.svelte";
-  import { fmt } from "../usage/rings";
   import SessionStatus from "./SessionStatus.svelte";
   import { contextOf } from "./workspace.svelte";
 
@@ -438,23 +436,11 @@
    * The account's room for the model the session runs: the window that
    * binds first, its share left, and when it resets; null with no reading.
    */
-  const quota = $derived.by(() => {
-    if (!providerLimit) {
-      return null;
-    }
-    const { meter } = providerLimit;
-    return {
-      used: meter.used,
-      state: meter.state,
-      detail: sessionStatWords.limitResets(
-        meter.window.resetsAt
-          ? clockWords(Date.parse(meter.window.resetsAt))
-          : null,
-        meter.state === "stale" ? fmt(limitNow - providerLimit.seenAt) : null
-      ),
-      label: providerLimit.label,
-    };
-  });
+  const quota = $derived(
+    providerLimit
+      ? chipQuota(providerLimit, providerLimit.seenAt, limitNow)
+      : null
+  );
   function tokens(value: number) {
     if (value >= 1_000_000) {
       return `${Number((value / 1_000_000).toFixed(1))}M`;

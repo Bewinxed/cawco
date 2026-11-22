@@ -3,10 +3,10 @@
    * Option 2 ("How it runs"): the project's settings, mounted inside the
    * project page's pane, which gives it the page's side edges and its
    * scroller as it gives every view. Its peer sections (SettingsSection),
-   * each one white card holding its heading and settings, stand on one grid
-   * (`AREAS`), so every one shows in the first screen: Task sync, Account &
-   * usage limits, Run environments, Repository & Git for a code project,
-   * and What needs you. A section still reading draws its own
+   * each one white card holding its heading and settings, stand in two
+   * columns of cards (`COLUMNS`), so every one shows in the first screen:
+   * Task sync, Account & usage limits, Repository & Git for a code project,
+   * Run environments, and What needs you. A section still reading draws its own
    * skeleton, one whose read failed its alert with Try again, and the
    * hub's being out of reach stands over them all.
    */
@@ -23,7 +23,6 @@
   import AccountColumn from "./AccountColumn.svelte";
   import {
     type ChangeKey,
-    ownKinds,
     type PlacesProps,
     SECTION_READS,
     type SectionId,
@@ -32,7 +31,6 @@
   } from "./changes";
   import PlacesList from "./PlacesList.svelte";
   import RepoGit from "./RepoGit.svelte";
-  import ResetDefaults from "./ResetDefaults.svelte";
   import SettingsSection from "./SettingsSection.svelte";
   import TasksEnter from "./TasksEnter.svelte";
   import WhatWaits, { DECIDERS_COLS } from "./WhatWaits.svelte";
@@ -75,8 +73,6 @@
   );
 
   const asOfAge = $derived(formatDistanceToNow(new Date(record.asOf)));
-  /** The kinds this project set itself: the reset arrow stands while there are any. */
-  const own = $derived(ownKinds(record));
 
   /** A section's stage still being read, if any: its skeleton stands. */
   const loadingOf = (section: SectionId): boolean =>
@@ -120,37 +116,26 @@
     return "";
   };
 
-  /** The sections in their reading order, row by row: Repository & Git only for code. */
-  const SECTIONS = $derived<SectionId[]>(
-    record.holdsCode
-      ? ["tasks", "account", "git", "places", "waits"]
-      : ["tasks", "account", "places", "waits"]
-  );
-
   /**
-   * Where each section's card stands (SettingsSection names its area by its
-   * id), at the view's three widths, each card spanning the rows that level
-   * its column's foot with the other's, so the short cards stack beside the
-   * tall ones and no card stands far taller than what it holds. Full width:
-   * two columns each as wide as the widest option row
-   * (--spacing-c-settings-col), Task sync over Repository & Git beside the
-   * account over the places, What needs you across both. Two narrower
-   * columns (every card still in the first screen at 1024): Task sync, the
-   * places and What needs you beside the account over Repository & Git. One
-   * column (a phone): one card under another, in reading order.
+   * The sections as they stand: two columns, each an independent stack of
+   * cards at their own heights, so a card opening in one leaves the other
+   * column as it was; then the cards across both. Which card stands in
+   * which column is chosen so the two end nearly level at rest. Under the
+   * two-column width the columns give way and every card stands one under
+   * another in this order. Repository & Git only for code.
    */
-  const AREAS = $derived(
+  const COLUMNS = $derived<{
+    left: SectionId[];
+    right: SectionId[];
+    across: SectionId[];
+  }>(
     record.holdsCode
       ? {
-          one: '"tasks" "account" "git" "places" "waits"',
-          two: '"tasks account" "places account" "places git" "waits git"',
-          pair: '"tasks account" "git account" "git places" "waits waits"',
+          left: ["tasks", "git", "places"],
+          right: ["account", "waits"],
+          across: [],
         }
-      : {
-          one: '"tasks" "account" "places" "waits"',
-          two: '"tasks account" "places waits"',
-          pair: '"tasks account" "places waits"',
-        }
+      : { left: ["tasks", "places"], right: ["account", "waits"], across: [] }
   );
 </script>
 
@@ -169,7 +154,7 @@
         icon={IconRefresh}
         label={words.tryAgain}
         onclick={() => onreread(stage)}
-        size="xs"
+        size="sm"
         variant="outline"
       />
     </AlertAction>
@@ -177,19 +162,7 @@
 {/snippet}
 
 {#snippet waitsActs()}
-  <!-- What acts on all of Who decides: the reset arrow while a kind is
-       custom (ResetDefaults), then the fleet's defaults. -->
-  {#if own.length > 0}
-    <ResetDefaults
-      disabled={!record.hubReachable}
-      kinds={own}
-      onreset={() => {
-        for (const kind of own) {
-          onchange({ key: "decidesReset", kind });
-        }
-      }}
-    />
-  {/if}
+  <!-- What acts on all of Who decides: the way to the fleet's defaults. -->
   <Button
     href={hrefOf("fleetDecides")}
     label={words.waits.fleetDefaults}
@@ -226,6 +199,70 @@
   </div>
 {/snippet}
 
+{#snippet card(section: SectionId)}
+  {@const state = stateOf(section)}
+  {@const failed = failedOf(section)}
+  <SettingsSection
+    actions={section === "waits" && record.whoDecides.ok
+      ? waitsActs
+      : undefined}
+    announcement={announcementOf(section)}
+    id={section}
+    {state}
+    stateWords={words.stageState[state]}
+    title={words.sections[section]}
+  >
+    {#if loadingOf(section)}
+      {@render sectionSkeleton(section)}
+    {:else if failed}
+      {@render sectionReadFailed(section, failed.stage, failed.reason)}
+    {:else if section === "tasks"}
+      <TasksEnter
+        {hrefOf}
+        {onchange}
+        {onretry}
+        {onsync}
+        {pending}
+        {record}
+        {refused}
+        {syncing}
+      />
+    {:else if section === "places"}
+      <PlacesList
+        {hrefOf}
+        {movingPlaceId}
+        {onaddplace}
+        {onchange}
+        {onplace}
+        {onretry}
+        {pending}
+        {record}
+        {refused}
+      />
+    {:else if section === "git"}
+      <RepoGit {hrefOf} {onchange} {onretry} {pending} {record} {refused} />
+    {:else if section === "account"}
+      <AccountColumn
+        {hrefOf}
+        {onchange}
+        {onretry}
+        {pending}
+        {record}
+        {refused}
+      />
+    {:else}
+      <WhatWaits
+        {onchange}
+        onreread={() => onreread("waits")}
+        {onretry}
+        {pending}
+        {record}
+        {refused}
+      />
+    {/if}
+  </SettingsSection>
+{/snippet}
+
 <!-- A view of the project page: its pane gives it the page's side edges and its scroller (ProjectPage `viewPane`, pane-inset `PANE_INSET`). -->
 <section
   aria-label={words.viewLabel}
@@ -244,78 +281,23 @@
     </Alert>
   {/if}
 
-  <!-- Every section's card in the first screen, on the grid AREAS draws:
-       one gap between cards both ways, a row's cards stretched to its
-       height, the pair left on the page's edge under the tabs. -->
-  <div
-    class="grid min-w-0 max-w-c-settings-max grid-cols-1 grid-areas-(--areas-one) gap-space-4 @min-settings-two/work-path:@max-settings-pair/work-path:grid-cols-2 @min-settings-two/work-path:@max-settings-pair/work-path:grid-areas-(--areas-two) @min-settings-pair/work-path:grid-cols-(--pair-cols) @min-settings-pair/work-path:grid-areas-(--areas-pair)"
-    style:--areas-one={AREAS.one}
-    style:--areas-pair={AREAS.pair}
-    style:--areas-two={AREAS.two}
-    style:--pair-cols="repeat(2, var(--spacing-c-settings-col))"
-  >
-    {#each SECTIONS as section (section)}
-      {@const state = stateOf(section)}
-      {@const failed = failedOf(section)}
-      <SettingsSection
-        actions={section === "waits" && record.whoDecides.ok
-          ? waitsActs
-          : undefined}
-        announcement={announcementOf(section)}
-        id={section}
-        {state}
-        stateWords={words.stageState[state]}
-        title={words.sections[section]}
-      >
-        {#if loadingOf(section)}
-          {@render sectionSkeleton(section)}
-        {:else if failed}
-          {@render sectionReadFailed(section, failed.stage, failed.reason)}
-        {:else if section === "tasks"}
-          <TasksEnter
-            {hrefOf}
-            {onchange}
-            {onretry}
-            {onsync}
-            {pending}
-            {record}
-            {refused}
-            {syncing}
-          />
-        {:else if section === "places"}
-          <PlacesList
-            {hrefOf}
-            {movingPlaceId}
-            {onaddplace}
-            {onchange}
-            {onplace}
-            {onretry}
-            {pending}
-            {record}
-            {refused}
-          />
-        {:else if section === "git"}
-          <RepoGit {hrefOf} {onchange} {onretry} {pending} {record} {refused} />
-        {:else if section === "account"}
-          <AccountColumn
-            {hrefOf}
-            {onchange}
-            {onretry}
-            {pending}
-            {record}
-            {refused}
-          />
-        {:else}
-          <WhatWaits
-            {onchange}
-            onreread={() => onreread("waits")}
-            {onretry}
-            {pending}
-            {record}
-            {refused}
-          />
-        {/if}
-      </SettingsSection>
+  <!-- Every section's card in the first screen: the two columns side by
+       side on the page's edge under the tabs, one gap between cards both
+       ways; under the two-column width one card under another. -->
+  <div class="flex min-w-0 max-w-c-settings-max flex-col gap-space-4">
+    <div
+      class="flex min-w-0 flex-col gap-space-4 @min-settings-two/work-path:flex-row @min-settings-two/work-path:items-start"
+    >
+      {#each [COLUMNS.left, COLUMNS.right] as column, at (at)}
+        <div class="flex min-w-0 flex-1 basis-0 flex-col gap-space-4">
+          {#each column as section (section)}
+            {@render card(section)}
+          {/each}
+        </div>
+      {/each}
+    </div>
+    {#each COLUMNS.across as section (section)}
+      {@render card(section)}
     {/each}
   </div>
 </section>

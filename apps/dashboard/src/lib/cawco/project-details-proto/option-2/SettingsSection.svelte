@@ -39,12 +39,10 @@
   const headingId = $derived(`work-path-section-${id}`);
 </script>
 
-<!-- It stands in the view's grid area named by its id (HowItRuns `AREAS`). -->
 <section
   aria-labelledby={headingId}
-  class={["@container row-(--area) col-(--area)", SECTION_CARD]}
+  class={["@container", SECTION_CARD]}
   data-section={id}
-  style:--area={id}
   data-slot="settings-section"
   data-state={state}
 >

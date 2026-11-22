@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { AccountProvider } from "@cawco/core/accounts";
+  import type { Account, AccountProvider } from "@cawco/core/accounts";
   import { detach } from "@cawco/core/detach";
   import { limitPickWords } from "@cawco/core/words/limit-picks";
   import {
@@ -20,6 +20,11 @@
    * its way to the hub does it take no picks. Each row is a PickRow: its
    * room, or the limit it is at, checked again before a pick on it goes
    * (AccountPickRows).
+   *
+   * With `choice` in place of a session it is a project's account chip: the
+   * accounts it offers, the one named (null while the fleet routes it,
+   * which `choice.auto` names and offers as the list's first row), and the
+   * pick handed back, no session moved.
    */
 
   import NsPopover from "../spawn/NsPopover.svelte";
@@ -37,15 +42,33 @@
     switchable,
   } from "./switch.svelte";
 
+  /** A project's account, picked here in place of a session's move. */
+  interface AccountChoice {
+    accounts: Account[];
+    /** The fleet's routing: its name on the chip while nothing is named, and the list's first row. */
+    auto: { name: string };
+    /** The chip's id, which its popover hangs from. */
+    id: string;
+    /** An account's line in place of its room, where something keeps it from taking a session. */
+    note?: (id: string) => string | null;
+    /** The pick: an account's id, or null for the fleet's routing. */
+    onpick: (accountId: string | null) => void;
+    /** The account named; null while the fleet routes it. */
+    picked: string | null;
+  }
+
   let {
     instance,
+    choice,
     readonly,
     size = "regular",
     onpick,
     none,
     quota,
-  }: {
-    instance: AccountHolder;
+  }: (
+    | { instance: AccountHolder; choice?: never }
+    | { choice: AccountChoice; instance?: never }
+  ) & {
     /**
      * No move can be asked now: the hub is away. A session's state never
      * locks it: the account is the session's, and a sleeping, stopped or
@@ -86,24 +109,43 @@
   );
 
   let open = $state(false);
-  const accounts = $derived(
-    none && !instance.accountId
+  const accounts = $derived.by(() => {
+    if (choice || instance === undefined) {
+      return choice?.accounts ?? [];
+    }
+    return none && !instance.accountId
       ? signedInHere(instance, none.provider)
-      : switchable(instance)
-  );
+      : switchable(instance);
+  });
   const shown = $derived.by(() => {
+    if (choice || instance === undefined) {
+      return choice?.accounts.find((one) => one.id === choice.picked) ?? null;
+    }
     const id = shownAccount(instance);
     return (
       accountsStore.accounts?.accounts.find((one) => one.id === id) ?? null
     );
   });
-  const name = $derived(shown ? nameOf(shown) : (none?.label ?? ""));
+  const name = $derived.by(() => {
+    if (shown) {
+      return nameOf(shown);
+    }
+    return choice ? choice.auto.name : (none?.label ?? "");
+  });
   const pickable = $derived(
-    !(readonly || asking(instance)) && accounts.length > 0
+    !(readonly || (instance !== undefined && asking(instance))) &&
+      accounts.length > 0
   );
 
-  function pick(id: string) {
+  function pick(id: string | null) {
     open = false;
+    if (choice) {
+      choice.onpick(id);
+      return;
+    }
+    if (id === null || instance === undefined) {
+      return;
+    }
     if (onpick) {
       onpick(id);
       return;
@@ -138,11 +180,11 @@
   {/if}
 {/snippet}
 
-{#if shown || none}
+{#if shown || none || choice}
   {#if pickable}
     <NsPopover
       haspopup="listbox"
-      id={`details-account-${instance.id}`}
+      id={choice ? choice.id : `details-account-${instance?.id ?? ""}`}
       label={quota
         ? `Account: ${name}, ${quotaWords} of its ${quota.label} limit. ${quota.detail}`
         : `Account: ${name}`}
@@ -162,7 +204,15 @@
       <!-- The pick is the checked row from the moment it is made: the
            account it is moving to, as the chip shows it, never the one it
            is leaving. -->
-      <AccountPickRows {accounts} picked={shown?.id ?? null} {pick} />
+      <AccountPickRows
+        {accounts}
+        auto={choice
+          ? { name: choice.auto.name, onpick: () => pick(null) }
+          : undefined}
+        note={choice?.note}
+        picked={shown?.id ?? null}
+        {pick}
+      />
     </NsPopover>
   {:else}
     <!-- Nothing to pick: one account of its provider here, an ask on its
