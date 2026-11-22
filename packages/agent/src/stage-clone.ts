@@ -1,8 +1,6 @@
 /**
- * A place's stage clone: where the sheet stage or a preview's server of a
- * session with no workspace of its own runs (stage.ts), cut from the checkout
- * the session works in, or copied from its folder when that is in no
- * repository ({@link copyCut}).
+ * A place's stage clone: where the sheet stage of a session with no workspace
+ * of its own runs (stage.ts), cut from the checkout the session works in.
  *
  * A stage's toolchain writes into the tree it serves: SvelteKit's sync writes
  * the tsconfig its project extends into `node_modules` (kit 3.1
@@ -41,21 +39,11 @@
  *   lacks keeps it ({@link sameAsCheckout} names what it does not), and the
  *   next sheet cuts it again.
  *
- * A folder in no repository has no HEAD to cut at and no status to read, so
- * its stage clone is a copy of it ({@link copyCut}): the folder copied whole
- * but for what an install and the toolchain make again (layer.ts
- * `REMADE_IN_COPY`), its boundary holding it as a plain folder, as a design
- * folder is (core object-pool.ts `copiedFolderSync`: `CAWCO_FOLDER`, no
- * clone denies). It is kept in step by the same mirror, every file and link
- * of the folder named where a checkout's status names its changes
- * ({@link filesIn}); what ran in it holds it on retirement as it wrote what
- * the folder lacks (layer.ts `changesOf`).
- *
  * The checkout is only read: its status without optional locks (git writes
  * no index there), its HEAD fetched from it. Only the story file a person's
  * sheet edit names is written back.
  */
-import { constants, existsSync, type Stats } from "node:fs";
+import { constants, existsSync } from "node:fs";
 import {
   chmod,
   cp,
@@ -98,14 +86,11 @@ import { z } from "zod";
 import type { AgentPorts } from "./agent-ports";
 import { stopWorkspaceBoundary } from "./boundary/control";
 import { ensureBoundary } from "./boundary/ensure";
-import { closeBoundary } from "./boundary/stop";
 import { poolSourceOf } from "./clone";
 import { expandHome } from "./fs";
 import { gitUntil } from "./git/run";
-import { REMADE_IN_COPY } from "./layer";
 import { formatFlag, poolGitEnv, standingPool } from "./object-pool";
 import { removeTree } from "./remove-tree";
-import { repoTop } from "./repo-top";
 import { forgetInstalls, installProject } from "./stage-install";
 import { copyOwnSecrets } from "./workspace";
 import { cloneHolding } from "./workspace-records";
@@ -124,33 +109,16 @@ export interface StageClone {
 const FORM = 3;
 
 /** What the agent keeps of a stage clone beside its `create.json`, written once its cut is whole. */
-const KeptSchema = z.union([
-  z.object({
-    /** A copy of a folder in no repository ({@link copyCut}). */
-    kind: z.literal("copy"),
-    form: z.number(),
-    /** The folder it copies, as a real path. */
-    folder: z.string(),
-    /** Every file and link of the folder at the last mirror, from its root ({@link filesIn}). */
-    mirrored: z.array(z.string()),
-  }),
-  z.object({
-    /** A clone of a repository's checkout ({@link cut}): a record cut before copies names no kind. */
-    kind: z.literal("clone").default("clone"),
-    form: z.number().optional(),
-    /** The checkout's HEAD the clone is at. */
-    head: z.string(),
-    /** The paths the checkout's status named at the last mirror, from the repository's root. */
-    mirrored: z.array(z.string()),
-    /** The checkout's repository root it was cut from, as a real path. */
-    repo: z.string(),
-  }),
-]);
+const KeptSchema = z.object({
+  form: z.number().optional(),
+  /** The checkout's HEAD the clone is at. */
+  head: z.string(),
+  /** The paths the checkout's status named at the last mirror, from the repository's root. */
+  mirrored: z.array(z.string()),
+  /** The checkout's repository root it was cut from, as a real path. */
+  repo: z.string(),
+});
 type Kept = z.infer<typeof KeptSchema>;
-
-/** The folder a stage clone's paths are read from in step: its checkout's repository root, or the folder it copies. */
-const sourceOf = (kept: Kept): string =>
-  kept.kind === "copy" ? kept.folder : kept.repo;
 
 const KEPT = "stage-clone.json";
 
@@ -327,25 +295,6 @@ const placeIn = async (
 /** A file mode's permission bits (chmod(2)'s whole range). */
 const permissions = (mode: number): number => mode % 0o1_0000;
 
-/**
- * rsync's quick check: files of the same size, mode and modification time
- * (to the millisecond) are the same file. A copy's files keep the folder's
- * times ({@link copyTree}), so a copy's first mirror reads none of them.
- */
-const quickSame = (source: Stats, there: Stats): boolean =>
-  source.isFile() &&
-  there.isFile() &&
-  source.size === there.size &&
-  permissions(source.mode) === permissions(there.mode) &&
-  Math.trunc(source.mtimeMs) === Math.trunc(there.mtimeMs);
-
-/** Whether the clone's entry `there` stands as `source` is: its stamp unchanged since it was last made (`stamped`), or by the {@link quickSame} check. */
-const asMirrored = (
-  source: Stats,
-  there: Stats | undefined,
-  stamped: boolean
-): boolean => there !== undefined && (stamped || quickSame(source, there));
-
 /** Makes `path` in the clone as it is in the checkout at `repo`; whether it changed anything. */
 const mirrorOne = async (
   repo: string,
@@ -369,8 +318,7 @@ const mirrorOne = async (
     return true;
   }
   const stamp = `${source.mode} ${source.size} ${source.mtimeMs}`;
-  if (asMirrored(source, there, seen.get(path) === stamp)) {
-    seen.set(path, stamp);
+  if (seen.get(path) === stamp && there) {
     return false;
   }
   let changed = false;
@@ -502,86 +450,34 @@ const lendingPool = async (
 };
 
 /**
- * Every file and link in the folder at `root`, from its root, down every
- * folder but what a copy leaves out (layer.ts `REMADE_IN_COPY`), links never
- * followed, in order: what a copy's mirror names where a checkout's status
- * names its changes. A folder this host can't read is passed over.
- */
-const filesIn = async (root: string): Promise<string[]> => {
-  const found: string[] = [];
-  const down = async (dir: string): Promise<void> => {
-    const entries = await readdir(join(root, dir), {
-      withFileTypes: true,
-    }).catch(() => []);
-    for (const entry of entries) {
-      if (REMADE_IN_COPY.has(entry.name)) {
-        continue;
-      }
-      const path = dir ? `${dir}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) {
-        await down(path);
-      } else if (entry.isFile() || entry.isSymbolicLink()) {
-        found.push(path);
-      }
-    }
-  };
-  await down("");
-  return found.sort();
-};
-
-/**
- * What a mirror of the clone makes as its source is, and the record as it
- * stands after: a checkout's HEAD fetched and checked out when it moved, and
- * every path its status names now; a copied folder's every file and link
- * ({@link filesIn}). Every CawCo-held path of a clone's boundary is left
- * out ({@link mirrorable}); a copy's boundary holds none.
- */
-const toMirror = async (
-  boundary: WorkspaceRef,
-  kept: Kept,
-  seen: Map<string, string>
-): Promise<{ named: string[]; now: Kept }> => {
-  if (kept.kind === "copy") {
-    const paths = await filesIn(kept.folder);
-    return {
-      named: [...new Set([...paths, ...kept.mirrored])],
-      now: { ...kept, mirrored: paths },
-    };
-  }
-  const { head, paths } = await statusOf(kept.repo);
-  if (head !== kept.head) {
-    await atHead(boundary);
-    // The checkout moved every tracked file in the clone: none is as copied.
-    seen.clear();
-  }
-  return {
-    named: [...new Set([...paths, ...kept.mirrored])].filter((path) =>
-      mirrorable(boundary.path, path)
-    ),
-    now: { ...kept, head, mirrored: paths },
-  };
-};
-
-/**
- * Makes the clone as its source is ({@link toMirror}): every path named now
- * or at the last mirror. Answers the paths it changed and the record as it
- * stands now.
+ * Makes the clone as the checkout is: its HEAD when that moved, then every
+ * path its status names now or named at the last mirror. Answers the paths
+ * it changed and the record as it stands now.
  */
 const mirror = async (
   boundary: WorkspaceRef,
   kept: Kept
 ): Promise<{ changed: string[]; kept: Kept }> => {
+  const { head, paths } = await statusOf(kept.repo);
+  if (head !== kept.head) {
+    await atHead(boundary);
+  }
   const seen = copied.get(boundary.id) ?? new Map<string, string>();
   copied.set(boundary.id, seen);
-  const { named, now } = await toMirror(boundary, kept, seen);
-  const from = sourceOf(kept);
+  if (head !== kept.head) {
+    // The checkout moved every tracked file in the clone: none is as copied.
+    seen.clear();
+  }
+  const named = [...new Set([...paths, ...kept.mirrored])].filter((path) =>
+    mirrorable(boundary.path, path)
+  );
   const changed: string[] = [];
   for (const path of named) {
-    if (await mirrorOne(from, boundary.path, path, seen)) {
+    if (await mirrorOne(kept.repo, boundary.path, path, seen)) {
       changed.push(path);
     }
   }
-  return { changed, kept: now };
+  return { changed, kept: { ...kept, head, mirrored: paths } };
 };
 
 /**
@@ -598,177 +494,109 @@ const step = async (boundary: WorkspaceRef, kept: Kept): Promise<string[]> => {
   return changed;
 };
 
-/** What a cut makes: a clone of a checkout ({@link cut}) or a copy of a folder in no repository ({@link copyCut}). */
-type Making = "a clone of its checkout" | "a copy of its folder";
-
 /**
- * A stage clone or pin cut afresh at `boundary.path`: whatever stood there
- * let go first (a cut that never finished, one of an earlier form, of
- * another repository, or of the folder as it was before it became a
- * repository or stopped being one), `create` written as its `create.json`
- * before anything is there (the boundary and every scan of this machine's
- * clones find it by this record), the tree made by `make`, its boundary
- * started and its record kept. A cut that fails keeps no record, says why,
- * and is cut again whole at the next use. `made` names it on the log: a
- * place's stage clone, or a pin ({@link cutPin}).
+ * Cuts place `place`'s stage clone at `boundary.path` from the checkout at
+ * `repo` (a real path): `git init`, its alternates file as the one line of
+ * the pool it borrows ({@link lendingPool}, named in its record first), the
+ * checkout as its `origin`, its HEAD fetched and checked out
+ * ({@link atHead}), its uncommitted changes mirrored,
+ * its own secret files copied (workspace.ts `copyOwnSecrets`), its boundary
+ * started. Its projects install as its stage first needs them
+ * ({@link installStage}). A cut that fails is cut again whole at the next
+ * use, and says why. `made` names the clone on the log: a place's stage
+ * clone, or a pin ({@link cutPin}).
  */
-const cutAfresh = async (
+const cut = async (
   boundary: WorkspaceRef,
+  repo: string,
   place: WorkspaceRef,
-  cutting: { create: CreateRecord; made: "stage clone" | "pin"; is: Making },
-  make: () => Promise<{ kept: Kept; said: string }>
+  made: "stage clone" | "pin"
 ): Promise<Kept> => {
   const state = workspaceStateDir(boundary.id);
+  // A cut that never finished, one of an earlier form or of another repository: nothing of it runs on.
   await stopWorkspaceBoundary(boundary);
   await removeTree(boundary.path);
   await makeFolder(state);
   await rm(join(state, KEPT), { force: true });
   await forgetInstalls(boundary.id);
+  // Written before the clone: the boundary and every scan of this machine's clones find it by this record.
   await writeStateFile(
-    workspaceCreateFile(boundary.id),
-    JSON.stringify(cutting.create)
+    join(state, "create.json"),
+    JSON.stringify({ path: boundary.path })
   );
   const started = Date.now();
   try {
-    const { kept, said } = await make();
+    const deadline = Date.now() + STAGE_CLONE_GIT_MS;
+    const git = gitUntil(deadline);
+    const { head } = await statusOf(repo);
+    if (head === "(initial)" || !head) {
+      throw new Error(
+        `${repo} has no commit yet, and a sheet's stage runs in a clone cut from its HEAD: commit, then call again.`
+      );
+    }
+    const lending = await lendingPool(repo, deadline);
+    if (lending) {
+      // Before anything borrows: its boundary's read grant, host git's check
+      // of its alternates file and the pools' reclaim read the pool here.
+      await writeStateFile(
+        workspaceCreateFile(boundary.id),
+        JSON.stringify({
+          path: boundary.path,
+          pool: lending.pool,
+        } satisfies CreateRecord)
+      );
+    }
+    await makeFolder(dirname(boundary.path));
+    await git(
+      dirname(boundary.path),
+      "init",
+      "--quiet",
+      ...(lending ? formatFlag(lending.format) : []),
+      boundary.path
+    );
+    if (lending) {
+      await writeStateFile(
+        join(boundary.path, ".git", "objects", "info", "alternates"),
+        alternatesText(lending.pool),
+        { inPlace: true }
+      );
+    }
+    await git(boundary.path, "remote", "add", "origin", `file://${repo}`);
+    await atHead(boundary);
+    const { kept } = await mirror(boundary, {
+      form: FORM,
+      repo,
+      head,
+      mirrored: [],
+    });
+    await copyOwnSecrets(repo, boundary.path, git);
     await ensureBoundary(boundary);
     await keep(boundary.id, kept);
     console.info(
-      `[stage] ${place.id}: its ${cutting.made} ${boundary.path} ${said}, in ${((Date.now() - started) / 1000).toFixed(1)}s`
+      `[stage] ${place.id}: its ${made} ${boundary.path} cut from ${repo} at ${kept.head.slice(0, 9)} with ${kept.mirrored.length} uncommitted path(s), ${lending ? `borrowing from the object pool ${lending.pool}` : "with a store of its own"}, in ${((Date.now() - started) / 1000).toFixed(1)}s`
     );
     return kept;
   } catch (error) {
     await rm(join(state, KEPT), { force: true });
     throw new Error(
-      `The stage for ${place.path} runs in ${cutting.is}, and that could not be made: ${error instanceof Error ? error.message : String(error)}`,
+      `The stage for ${place.path} runs in a clone of its checkout, and that clone could not be made: ${error instanceof Error ? error.message : String(error)}`,
       { cause: error }
     );
   }
 };
 
-/**
- * Cuts place `place`'s stage clone at `boundary.path` from the checkout at
- * `repo` (a real path), afresh ({@link cutAfresh}): `git init`, its
- * alternates file as the one line of the pool it borrows
- * ({@link lendingPool}, named in its record first), the checkout as its
- * `origin`, its HEAD fetched and checked out ({@link atHead}), its
- * uncommitted changes mirrored, its own secret files copied (workspace.ts
- * `copyOwnSecrets`). Its projects install as its stage first needs them
- * ({@link installStage}).
- */
-const cut = (
-  boundary: WorkspaceRef,
-  repo: string,
-  place: WorkspaceRef,
-  made: "stage clone" | "pin"
-): Promise<Kept> =>
-  cutAfresh(
-    boundary,
-    place,
-    { create: { path: boundary.path }, made, is: "a clone of its checkout" },
-    async () => {
-      const deadline = Date.now() + STAGE_CLONE_GIT_MS;
-      const git = gitUntil(deadline);
-      const { head } = await statusOf(repo);
-      if (head === "(initial)" || !head) {
-        throw new Error(
-          `${repo} has no commit yet, and a sheet's stage runs in a clone cut from its HEAD: commit, then call again.`
-        );
-      }
-      const lending = await lendingPool(repo, deadline);
-      if (lending) {
-        // Before anything borrows: its boundary's read grant, host git's check
-        // of its alternates file and the pools' reclaim read the pool here.
-        await writeStateFile(
-          workspaceCreateFile(boundary.id),
-          JSON.stringify({
-            path: boundary.path,
-            pool: lending.pool,
-          } satisfies CreateRecord)
-        );
-      }
-      await makeFolder(dirname(boundary.path));
-      await git(
-        dirname(boundary.path),
-        "init",
-        "--quiet",
-        ...(lending ? formatFlag(lending.format) : []),
-        boundary.path
+/** The repository root `folder` is in, as a real path; refused in words when it is in none. */
+const repoOf = async (folder: string): Promise<string> => {
+  const top = await gitRaw(folder, ["rev-parse", "--show-toplevel"]).catch(
+    (error: Error) => {
+      throw new Error(
+        `${folder} is in no git repository, and a sheet's stage or a preview's server in a folder outside a workspace runs in a clone of the checkout, cut from its HEAD with your uncommitted changes: run git init and commit there, then call again. (${error.message})`,
+        { cause: error }
       );
-      if (lending) {
-        await writeStateFile(
-          join(boundary.path, ".git", "objects", "info", "alternates"),
-          alternatesText(lending.pool),
-          { inPlace: true }
-        );
-      }
-      await git(boundary.path, "remote", "add", "origin", `file://${repo}`);
-      await atHead(boundary);
-      const { kept } = await mirror(boundary, {
-        kind: "clone",
-        form: FORM,
-        repo,
-        head,
-        mirrored: [],
-      });
-      await copyOwnSecrets(repo, boundary.path, git);
-      return {
-        kept,
-        said: `cut from ${repo} at ${head.slice(0, 9)} with ${kept.mirrored.length} uncommitted path(s), ${lending ? `borrowing from the object pool ${lending.pool}` : "with a store of its own"}`,
-      };
     }
   );
-
-/**
- * The repository root of the checkout `folder` (a real path) is in, as a
- * real path; nothing when it is in no repository (repo-top.ts `repoTop`,
- * which refuses in words a repository git does not read as a checkout, and
- * a read that did not finish).
- */
-const checkoutOf = async (folder: string): Promise<string | undefined> => {
-  const top = await repoTop(folder, Date.now() + STAGE_CLONE_GIT_MS);
-  return top === undefined ? undefined : await realpath(top);
+  return await realpath(top.trim());
 };
-
-/**
- * Cuts `boundary.path` afresh ({@link cutAfresh}) as a copy of `from`, a
- * folder in no repository (a real path), for a place's stage clone or a pin
- * ({@link cutPin}) of a folder {@link cut} cannot clone: the folder copied
- * whole but for what an install or the toolchain makes again (layer.ts
- * `REMADE_IN_COPY`), its files keeping their times. Its `create.json` names
- * the folder it copies (core object-pool.ts `copies`) before its boundary
- * starts, so the boundary holds it as a plain folder; its record names
- * every file it mirrors ({@link filesIn}).
- */
-const copyCut = (
-  boundary: WorkspaceRef,
-  from: string,
-  place: WorkspaceRef,
-  made: "stage clone" | "pin"
-): Promise<Kept> =>
-  cutAfresh(
-    boundary,
-    place,
-    {
-      create: { path: boundary.path, copies: from },
-      made,
-      is: "a copy of its folder",
-    },
-    async () => {
-      await makeFolder(dirname(boundary.path));
-      await copyTree(from, boundary.path, REMADE_IN_COPY);
-      const kept: Kept = {
-        kind: "copy",
-        form: FORM,
-        folder: from,
-        mirrored: await filesIn(from),
-      };
-      return {
-        kept,
-        said: `copied from ${from}, which is in no repository, ${kept.mirrored.length} file(s)`,
-      };
-    }
-  );
 
 /** The clone's root as its `create.json` names it, or nothing. */
 const recordedPath = async (id: string): Promise<string | undefined> =>
@@ -779,44 +607,25 @@ const recordedPath = async (id: string): Promise<string | undefined> =>
     ).catch(() => undefined)
   )?.path;
 
-/**
- * The clone at `path`'s record when it stands whole, cut by this build's
- * form from repository `repo`, or copied from folder `folder` in none;
- * nothing when it must be cut again (a folder that became a repository, or
- * stopped being one, among them).
- */
+/** The clone at `path`'s record when it stands whole, cut by this build's form from repository `repo`; nothing when it must be cut again. */
 const wholeAt = async (
   path: string,
-  source: { repo: string } | { folder: string },
+  repo: string,
   kept: Kept | undefined
-): Promise<Kept | undefined> => {
-  if (kept?.form !== FORM) {
-    return;
-  }
-  const stands = (at: string) =>
-    stat(at).then(
-      (found) => found.isDirectory(),
-      () => false
-    );
-  if ("repo" in source) {
-    return kept.kind === "clone" &&
-      kept.repo === source.repo &&
-      (await stands(join(path, ".git")))
-      ? kept
-      : undefined;
-  }
-  return kept.kind === "copy" &&
-    kept.folder === source.folder &&
-    (await stands(path))
+): Promise<Kept | undefined> =>
+  kept?.repo === repo &&
+  kept.form === FORM &&
+  (await stat(join(path, ".git")).then(
+    (found) => found.isDirectory(),
+    () => false
+  ))
     ? kept
     : undefined;
-};
 
 /**
  * Place `place`'s stage clone, cut when it has none whole (or one of an
  * earlier form, or of another repository), and brought in step with the
- * checkout: where its stage runs. A place in no repository has a copy of its
- * folder instead ({@link copyCut}). The hub hears of it each time
+ * checkout: where its stage runs. The hub hears of it each time
  * ({@link AgentPorts.stageClone}).
  */
 export const stageCloneOf = (
@@ -825,32 +634,28 @@ export const stageCloneOf = (
 ): Promise<StageClone> => {
   const id = stageCloneId(place.id);
   return inCloneTurn(id, async () => {
-    const real = await realpath(place.path);
-    const repo = await checkoutOf(real);
-    const from = repo ?? real;
+    const repo = await repoOf(place.path);
+    const sub = relative(repo, await realpath(place.path));
     const kept = await keptOf(id);
     const path =
       (await recordedPath(id)) ??
-      expandHome(`~/.worktrees/${basename(from)}-stage-${id.slice(0, 8)}`);
+      expandHome(`~/.worktrees/${basename(repo)}-stage-${id.slice(0, 8)}`);
     const boundary: WorkspaceRef = { id, path };
-    const whole = await wholeAt(path, repo ? { repo } : { folder: real }, kept);
+    const whole = await wholeAt(path, repo, kept);
     if (whole) {
       await step(boundary, whole);
     } else {
       copied.delete(id);
-      await (repo
-        ? cut(boundary, repo, place, "stage clone")
-        : copyCut(boundary, real, place, "stage clone"));
+      await cut(boundary, repo, place, "stage clone");
     }
     stageClone({
       kind: "stage-clone",
       id,
       place: place.id,
       path,
-      repoRoot: from,
+      repoRoot: repo,
       tmp: workspaceScratchDir(id),
     });
-    const sub = relative(from, real);
     return { boundary, folder: sub ? join(path, sub) : path };
   });
 };
@@ -873,7 +678,7 @@ export const installStage = (
       );
     }
     await installProject(
-      { boundary: clone.boundary, from: root, shownAs: sourceOf(kept) },
+      { boundary: clone.boundary, from: root, shownAs: kept.repo },
       true
     );
   });
@@ -921,15 +726,14 @@ const sameEntry = async (a: string, b: string): Promise<boolean> => {
  * checkout still holds, so a retirement passes over them (workspace.ts
  * `holding`'s `skip`). What differs from the checkout (a write the stage made
  * that never reached it) still counts as held. None for a clone with no
- * record, nor for a copy of a folder, which is read against the folder
- * itself (layer.ts `changesOf`).
+ * record.
  */
 export const sameAsCheckout = async (
   id: string,
   clone: string
 ): Promise<string[]> => {
   const kept = await keptOf(id);
-  if (kept?.kind !== "clone") {
+  if (!kept) {
     return [];
   }
   const { paths } = await statusOf(clone);
@@ -997,9 +801,9 @@ export const copyBack = async (
  * leaves him the version he had. A pin never changes after its cut.
  * - A served preview's is its tree as it is now ({@link cutPin}): a clone
  *   cut at its repository's HEAD with its uncommitted changes, as a place's
- *   stage clone is ({@link cut}), or for a tree in no repository (a place's
- *   folder, a macOS copy of a folder) a copy of it without what an install
- *   makes ({@link copyCut}). Its server runs in its own boundary, as any
+ *   stage clone is ({@link cut}), or for a tree in no repository (a macOS
+ *   copy of a folder) a copy of it without what an install makes
+ *   ({@link REMADE}). Its server runs in its own boundary, as any
  *   workspace's does, installed as a stage clone is (stage.ts `treeOf`).
  * - A folder's is a copy of the folder ({@link pinFolder}).
  * A sheet has none: the person's design graph shows its workspace's stage
@@ -1033,6 +837,22 @@ const PIN = "stage-pin.json";
 
 /** Where a folder's pin keeps its copy, in the pin's state dir. */
 const PINNED_FOLDER = "folder";
+
+/**
+ * What a tree's pin leaves out of its copy: what the project's install or
+ * its toolchain makes again in the pin (stage-install.ts), never the
+ * author's own work.
+ */
+const REMADE: ReadonlySet<string> = new Set([
+  "node_modules",
+  ".svelte-kit",
+  ".astro",
+  ".nuxt",
+  ".output",
+  ".next",
+  ".turbo",
+  ".vite",
+]);
 
 const pinOf = async (pin: string): Promise<Pin | undefined> =>
   await readRecord(join(workspaceStateDir(pin), PIN), PinSchema).catch(
@@ -1069,6 +889,31 @@ const copyTree = (
     filter: (source) => source === from || !left.has(basename(source)),
   });
 
+/** The repository root `folder` is in, as a real path; nothing when it is in none. */
+const repoAt = (folder: string): Promise<string | undefined> =>
+  gitRaw(folder, ["rev-parse", "--show-toplevel"]).then(
+    (top) => realpath(top.trim()),
+    () => undefined
+  );
+
+/**
+ * Cuts pin `pin`'s tree from `from` at `boundary.path`: a copy of `from`
+ * without what an install makes ({@link REMADE}), its boundary started.
+ * For a tree in no repository, which {@link cut} cannot clone.
+ */
+const copyCut = async (boundary: WorkspaceRef, from: string): Promise<void> => {
+  const state = workspaceStateDir(boundary.id);
+  await makeFolder(state);
+  // Written before the copy: the boundary and every scan of this machine's clones find it by this record.
+  await writeStateFile(
+    join(state, "create.json"),
+    JSON.stringify({ path: boundary.path })
+  );
+  await makeFolder(dirname(boundary.path));
+  await copyTree(from, boundary.path, REMADE);
+  await ensureBoundary(boundary);
+};
+
 /**
  * Pin `pin` of tree `from` (a workspace's clone or a place's folder) cut as
  * the tree is now: a clone of its repository at HEAD with its uncommitted
@@ -1087,16 +932,18 @@ export const cutPin = (from: WorkspaceRef, pin: string): Promise<StageClone> =>
       };
     }
     const real = await realpath(from.path);
-    const repo = await checkoutOf(real);
+    const repo = await repoAt(real);
     const path = expandHome(
       `~/.worktrees/${basename(repo ?? real)}-pin-${pin.slice(0, 8)}`
     );
     const boundary: WorkspaceRef = { id: pin, path };
     const sub = repo ? relative(repo, real) : "";
     try {
-      await (repo
-        ? cut(boundary, repo, from, "pin")
-        : copyCut(boundary, real, from, "pin"));
+      if (repo) {
+        await cut(boundary, repo, from, "pin");
+      } else {
+        await copyCut(boundary, real);
+      }
       await writeStateFile(
         join(workspaceStateDir(pin), PIN),
         `${JSON.stringify({ kind: repo ? "clone" : "tree", from: from.id, sub } satisfies Pin)}\n`
@@ -1147,15 +994,10 @@ export const pinnedFolder = async (
     : undefined;
 };
 
-/**
- * Everything of pin `pin` removed: its boundary closed with its scratch and
- * door dirs (boundary/stop.ts `closeBoundary`), as a design folder's is
- * (stage-design.ts `dropDesign`), its tree at `path` (when it has one) and
- * its state dir deleted.
- */
+/** Everything of pin `pin` removed: its boundary stopped, its tree at `path` (when it has one) and its state dir deleted. */
 const dropped = async (pin: string, path: string | undefined) => {
   if (path) {
-    await closeBoundary({ id: pin, path });
+    await stopWorkspaceBoundary({ id: pin, path });
     await removeTree(path);
   }
   copied.delete(pin);
@@ -1164,8 +1006,8 @@ const dropped = async (pin: string, path: string | undefined) => {
 };
 
 /**
- * Pin `pin` removed whole, in its turn: its boundary closed, its clone or
- * copy, scratch, door and state dirs deleted. Its stages are stopped first by the
+ * Pin `pin` removed whole, in its turn: its boundary stopped, its clone or
+ * copy and its state dir deleted. Its stages are stopped first by the
  * caller (stage.ts `unpin`). Nothing for an id no pin has.
  */
 export const dropPin = (pin: string): Promise<void> =>

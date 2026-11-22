@@ -294,9 +294,7 @@ const refuseGone = async (ref: WorkspaceRef, why: string): Promise<never> => {
  * artifact, which its stage runs over as it is, recorded by its tree
  * (stage-design.ts `keepDesign`) and no layer of anything; or a delegate's layer of its
  * folder (layer.ts): a folder there, and on Linux its view running, which
- * the srt host then enters (decisions.ts `viewOfBoundary`); a stage clone's
- * or pin's copy of a folder in no repository is a folder layer of the clone
- * form (layer.ts `layerOf`), a folder there and no more. A delegate's copy that
+ * the srt host then enters (decisions.ts `viewOfBoundary`). A delegate's copy that
  * held a repository and whose `.git` is no repository any more (a deleted
  * clone a sandbox refilled with stand-ins, `stand-ins.ts`) has no boundary:
  * one would stand in there again; retirement takes it away. One that is not

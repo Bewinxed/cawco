@@ -1810,9 +1810,7 @@ const ownCommits = async (
 /**
  * What the workspace holds that is nowhere else ({@link WorkspaceHolding}),
  * read in its copy once its boundary is closed ({@link closedCloneGit}). A
- * folder's is its change set (layer.ts `changesOf`), each path one change: a
- * stage clone's copy of a folder in no repository holds what ran in it wrote
- * that the folder lacks. A
+ * folder's is its change set (layer.ts `changesOf`), each path one change. A
  * repository's: `skip` are paths `git status` passes over, its commits are
  * counted by {@link ownCommits} against `base`, and files a tracked
  * `.gitignore` covers are not read: they go with the copy. The person's own
@@ -2167,9 +2165,9 @@ const carryChanged = (
       .filter((each) => each.change === "write")
       .map((each) => each.path);
     const from =
-      layer.form === "overlay"
-        ? (layer.mounts?.[0]?.upper ?? layerDir(id))
-        : layer.path;
+      layer.form === "copy"
+        ? layer.path
+        : (layer.mounts?.[0]?.upper ?? layerDir(id));
     const left = await copyStrays(from, written, join(carry, "changes"));
     await writeFile(
       join(carry, "deleted.txt"),
@@ -2429,12 +2427,11 @@ const carryAway = async (
   const { layer } = access;
   let written: { carry: string; left: string[] };
   let checkout: CarrySource;
-  if (layer.kind === "folder") {
+  if (layer.kind === "folder" && layer.form !== "clone") {
     written = await carryChanged(request.id, layer);
     checkout = {
       id: request.id,
-      // A stage clone's or pin's copy of a folder (layer.ts `layerOf`) is a copy as a Mac's is.
-      form: layer.form === "overlay" ? "overlay" : "copy",
+      form: layer.form,
       folder: layer.folder,
       path: layer.path,
     };

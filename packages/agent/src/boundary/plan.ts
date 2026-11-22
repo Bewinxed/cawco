@@ -7,7 +7,6 @@ import { createHash } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
-import { copiedFolderSync } from "@cawco/core/object-pool";
 import { USER_LAYER_FILES, userLayerPath } from "@cawco/core/paths/claude";
 import {
   fleetHooksDir,
@@ -440,10 +439,6 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
  *   stand-ins: srt starts in its scratch dir, as a place's does, so none of
  *   srt's own mount points lands in it, and the host holds it as a folder,
  *   never asking it for a `.git`.
- * - A stage clone or pin that is a copy of a folder in no repository (core
- *   object-pool.ts `copiedFolderSync`, stage-clone.ts `copyCut`) is held as
- *   a design folder is: CawCo's copy, no repository, srt started in its
- *   scratch dir.
  * - A clone that is a delegate's copy of a folder that is no repository is
  *   held as a folder too (layer.ts); any other clone, as the repository's.
  */
@@ -458,9 +453,6 @@ const kindEnv = (
     case "design":
       return { [HOST_ENV.sandboxCwd]: scratch, [HOST_ENV.folder]: "1" };
     case "clone":
-      if (copiedFolderSync(id)) {
-        return { [HOST_ENV.sandboxCwd]: scratch, [HOST_ENV.folder]: "1" };
-      }
       return folderSync(id) ? { [HOST_ENV.folder]: "1" } : {};
   }
 };
