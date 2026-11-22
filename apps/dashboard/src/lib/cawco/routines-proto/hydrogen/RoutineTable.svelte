@@ -4,8 +4,8 @@
    * over one plain sentence of what it last did or is waiting for), when it
    * last ran, when it runs next on the person's clock, and a state column
    * that is empty unless the routine needs him, where the Needs you mark and
-   * Fix with Caw stand. The row is its open button's target; the opened
-   * routine stands beside the ledger.
+   * Fix with Caw stand. The open button at the row's end opens it; the
+   * opened routine stands beside the ledger.
    *
    * The routines that need him lead, then the rest in the order they were
    * made, until he sorts by Routine, Last run or Next run (TanStack Table's
@@ -25,6 +25,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconMaximize, IconSparkles } from "#lib/icons.js";
   import {
     lastRunAt,
@@ -182,7 +183,7 @@
           {@const last = lastRunAt(routine)}
           {@const next = nextRunAt(routine)}
           <Table.Row
-            class="group/row relative"
+            class="group/row"
             data-needs-you={reading.needsYou || undefined}
             data-picked={picked || undefined}
             data-routine-row={routine.id}
@@ -192,15 +193,7 @@
               data-routine-table-col="routine"
               variant="ledger-picks-stacks-lead"
             >
-              <!-- The row's press: it opens the routine from anywhere on
-                   its row, the open glyph at the row's end its mark. -->
-              <button
-                aria-label="Open {routine.name}"
-                class="flex w-full min-w-0 flex-col text-start after:absolute after:inset-0 focus-inset"
-                data-open-routine={routine.id}
-                onclick={() => onopen(routine.id)}
-                type="button"
-              >
+              <div class="flex w-full min-w-0 flex-col text-start">
                 <span
                   class={[
                     "min-w-0 truncate type-label",
@@ -228,7 +221,7 @@
                     >{reading.sentence}</span
                   >
                 </span>
-              </button>
+              </div>
             </Table.Cell>
             <Table.Cell
               class="w-(--col-w)"
@@ -288,8 +281,8 @@
                   </span>
                   {#if reading.fixPrompt}
                     {@const prompt = reading.fixPrompt}
-                    <!-- Over the row's press; the opened routine holds it on a phone. -->
-                    <span class="relative z-1 @max-phone/table:hidden">
+                    <!-- The opened routine holds it on a phone. -->
+                    <span class="@max-phone/table:hidden">
                       <Button
                         aria-label="Fix {routine.name} with Caw"
                         disabled={stale}
@@ -311,10 +304,21 @@
               style="--col-w: {COL_W.open}"
               variant="ledger-picks-stacks"
             >
-              <IconMaximize
-                aria-hidden="true"
-                class="inline-block size-icon-sm text-ink-muted"
-              />
+              <!-- The routine opens only here, as everywhere in the dashboard. -->
+              <Tip label="Open">
+                {#snippet children(tip)}
+                  <Button
+                    {...tip}
+                    aria-label="Open {routine.name}"
+                    data-open-routine={routine.id}
+                    icon={IconMaximize}
+                    onclick={() => onopen(routine.id)}
+                    size="icon-xs"
+                    tone="muted"
+                    variant="ghost"
+                  />
+                {/snippet}
+              </Tip>
             </Table.Cell>
           </Table.Row>
         {/each}
