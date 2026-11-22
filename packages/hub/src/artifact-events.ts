@@ -373,11 +373,16 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       return Promise.resolve();
     });
   };
+  /**
+   * Tells `instance` the person sent their picks on `artifact`. Answers the
+   * uuid of the send that carries the notice, or nothing when no send was
+   * taken.
+   */
   const signalResponses = (
     instance: InstanceRow,
     artifact: ArtifactRow,
     { since }: { since: number }
-  ): Promise<void> =>
+  ): Promise<string | undefined> =>
     artifactInOrder(`${artifact.id}:picks`, async () => {
       const { withdrawn, replaces } = await withdrawArtifactEvents(
         instance,
@@ -401,7 +406,9 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       if (sent instanceof ElysiaStatus) {
         // A problem the send path answers (a conversation gone) keeps no record of its own.
         recordUndelivered(instance, notice, [], sent.response.detail);
+        return;
       }
+      return sent?.uuid;
     });
   /**
    * The person's marks on an artifact (artifacts/service.ts

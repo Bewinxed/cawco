@@ -4894,8 +4894,9 @@ export const createServer = (
     // A page whose session has ended goes to Caw, told it is his now.
     signal: async (to, artifact, responses) => {
       let heard: string;
+      let send: string | undefined;
       if ("session" in to) {
-        await signalResponses(to.session, artifact, responses);
+        send = await signalResponses(to.session, artifact, responses);
         heard = to.session.id;
       } else {
         const told = await caw.tellYours(to.caw.projectId, {
@@ -4909,11 +4910,13 @@ export const createServer = (
           return told;
         }
         heard = told.instanceId;
+        ({ send } = told);
       }
       // A setup page sent is the approval of the AGENTS.md and delegate
-      // types the session that hears it writes from it (caw.ts `setupSent`).
-      if (artifact.projectId && isSetupPage(artifact)) {
-        caw.setupSent(artifact.projectId, heard);
+      // types the session that reads its send writes from it (caw.ts
+      // `setupSent`).
+      if (artifact.projectId && isSetupPage(artifact) && send) {
+        caw.setupSent(artifact.projectId, send);
       }
       return heard;
     },
