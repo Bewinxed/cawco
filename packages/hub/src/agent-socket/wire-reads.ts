@@ -46,7 +46,8 @@ export const registerAck = (
   revokedCredentials: string[],
   gitOrigins: string[],
   previewOrigins: HubPreviewOrigins,
-  tailnetHttps: ReturnType<TailnetHttpsService["serving"]>
+  tailnetHttps: ReturnType<TailnetHttpsService["serving"]>,
+  sshForward: boolean
 ): HubEnvelope<"register"> => ({
   verb: "register",
   machineId: envelope.machineId,
@@ -66,6 +67,8 @@ export const registerAck = (
     previewOrigins,
     // Where that loopback carries over https, while this hub serves it.
     ...(tailnetHttps ? { tailnetHttps } : {}),
+    // Or through the machine's SSH forward, the one way it reaches the hub.
+    ...(sshForward ? { sshForward: true as const } : {}),
     ...(unknownAccounts ? { unknownAccounts } : {}),
     sessions,
     instances,

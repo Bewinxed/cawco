@@ -32,6 +32,15 @@ export const CAWCO_HUB_PORT = 3456;
  */
 export const CAWCO_LOCAL_DASHBOARD_PORT = 3455;
 
+/**
+ * The hub's port a request through a machine's SSH forward is for: the
+ * agent's loopback names the dashboard's or a preview's on each request it
+ * carries there (agent hub-loopback.ts), and the hub's door for SSH
+ * forwards sends it to that listener, or refuses it (hub ssh-door.ts). A
+ * request that names none is for the hub's own port.
+ */
+export const HUB_PORT_HEADER = "x-cawco-hub-port";
+
 let gatewayPort: number | undefined;
 
 /**

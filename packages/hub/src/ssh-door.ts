@@ -20,10 +20,23 @@
  * hub-auth.ts `clientAddress`): the machine waiting to be admitted, a log
  * line, a pairing asked from it all name that host, never 127.0.0.1.
  *
+ * The machine's agent carries its loopback's dashboard and preview ports
+ * here too (agent hub-loopback.ts), each request naming the hub's port it
+ * is for ({@link HUB_PORT_HEADER}), as it carries them to the hub's own
+ * ports over the tailnet. Such a request goes to that listener on this
+ * host: the dashboard's, or a preview port's while the preview server
+ * holds it; one naming any other port is refused. It goes as the
+ * machine sent it, with none of the door's headers set or passed on:
+ * neither listener grants anything by a caller's address, and through
+ * the tailnet's HTTPS every browser reaches them from this host's
+ * loopback already (tailnet-https.ts), so a request through the door is
+ * to them what the same request over the tailnet is.
+ *
  * Every request goes on as the machine sent it, its body streamed, the
  * answer's bytes untouched: the agent's hub loopback carries the hub the
  * same way (agent hub-loopback.ts).
  */
+import { HUB_PORT_HEADER } from "@cawco/core/ports";
 import {
   causeOf,
   forwardRequest,
@@ -35,7 +48,7 @@ import {
 } from "@cawco/preview/proxy";
 import type { Server } from "bun";
 import { problemResponse } from "elysia/error";
-import { HUB_PORT } from "./config";
+import { DASHBOARD_PORT, HUB_PORT } from "./config";
 import { processSecret } from "./hub-self";
 import type { HubLifetimeShape } from "./lifetime";
 
@@ -69,13 +82,44 @@ export const viaSshForward = mark.is;
 const targetHost = (target: string): string =>
   target.slice(target.lastIndexOf("@") + 1);
 
-/** What the hub answers a request it could not carry on. */
-const unreachable = (cause: string): Response =>
+/** What the hub answers a request it could not carry on to `to`. */
+const unreachable = (to: string, cause: string): Response =>
   problemResponse(
     {
       status: 502,
       code: "hub-did-not-answer",
-      detail: `The hub did not answer on its own port (${cause}).\n`,
+      detail: `The hub did not answer at ${to} (${cause}).\n`,
+    },
+    {}
+  );
+
+/** A listener's `http` scheme, which its socket's URL names `ws`. */
+const HTTP_SCHEME = /^http/u;
+
+/** The door's own headers: set only on what it carries to the hub. */
+const DOOR_HEADERS = [
+  CLIENT_ADDRESS_HEADER,
+  SSH_RECORD_HEADER,
+  SSH_FORWARD_HEADER,
+  HUB_PORT_HEADER,
+];
+
+/** A request's headers as a listener named by {@link HUB_PORT_HEADER} reads them: the machine's, none of the door's. */
+const unmarked = (from: Headers): Headers => {
+  const headers = proxyHeaders(from);
+  for (const name of DOOR_HEADERS) {
+    headers.delete(name);
+  }
+  return headers;
+};
+
+/** What the door answers a request for a port it carries nothing to. */
+const refusedPort = (named: string): Response =>
+  problemResponse(
+    {
+      status: 403,
+      code: "door-port-refused",
+      detail: `The hub's door for SSH forwards carries the dashboard's port ${DASHBOARD_PORT} and each preview port the preview server holds, not ${JSON.stringify(named)}.\n`,
     },
     {}
   );
@@ -100,9 +144,52 @@ export interface SshDoor {
   readonly port: (id: string, target: string) => number;
 }
 
-export const createSshDoor = (lifetime: HubLifetimeShape): SshDoor => {
+/** A port as {@link HUB_PORT_HEADER} names it: decimal digits alone. */
+const PORT_TEXT = /^\d{1,5}$/u;
+
+/**
+ * The door for the hub at `127.0.0.1:HUB_PORT`. `previewAt` is where this
+ * host dials the preview listener on a port, or null when the preview
+ * server holds none there (preview.ts `servedAt`).
+ */
+export const createSshDoor = (
+  lifetime: HubLifetimeShape,
+  previewAt: (port: number) => string | null
+): SshDoor => {
   const listeners = new Map<string, Server<PreviewSocket>>();
-  const hub = `127.0.0.1:${HUB_PORT}`;
+  const hub = `http://127.0.0.1:${HUB_PORT}`;
+
+  /** The listener `named` (a {@link HUB_PORT_HEADER} value) is carried to, as `http://host:port`; null for any port but the dashboard's and a held preview port. */
+  const listenerAt = (named: string): string | null => {
+    if (!PORT_TEXT.test(named)) {
+      return null;
+    }
+    const port = Number(named);
+    return port === DASHBOARD_PORT
+      ? `http://127.0.0.1:${DASHBOARD_PORT}`
+      : previewAt(port);
+  };
+
+  /**
+   * Where a request through record `record`'s forward goes, and with what
+   * headers: the listener its {@link HUB_PORT_HEADER} names, unmarked; the
+   * hub, marked and named by `address`, when it names none; or the refusal
+   * of any other port.
+   */
+  const destination = (
+    request: Request,
+    address: string,
+    record: string
+  ): { headers: Headers; to: string } | Response => {
+    const named = request.headers.get(HUB_PORT_HEADER);
+    if (named === null) {
+      return { to: hub, headers: marked(request.headers, address, record) };
+    }
+    const to = listenerAt(named);
+    return to === null
+      ? refusedPort(named)
+      : { to, headers: unmarked(request.headers) };
+  };
 
   const open = (address: string, record: string): Server<PreviewSocket> =>
     Bun.serve<PreviewSocket>({
@@ -122,12 +209,19 @@ export const createSshDoor = (lifetime: HubLifetimeShape): SshDoor => {
       async fetch(request, door) {
         const url = new URL(request.url);
         const at = `${url.pathname}${url.search}`;
-        const headers = marked(request.headers, address, record);
+        const going = destination(request, address, record);
+        if (going instanceof Response) {
+          return going;
+        }
+        const { to, headers } = going;
         if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-          return upgradePreview(request, door, `ws://${hub}${at}`, headers, {
-            hop: HOP,
-            instanceId: null,
-          })
+          return upgradePreview(
+            request,
+            door,
+            `${to.replace(HTTP_SCHEME, "ws")}${at}`,
+            headers,
+            { hop: HOP, instanceId: null }
+          )
             ? undefined
             : problemResponse({
                 status: 400,
@@ -136,24 +230,20 @@ export const createSshDoor = (lifetime: HubLifetimeShape): SshDoor => {
               });
         }
         try {
-          const answer = await forwardRequest(
-            `http://${hub}${at}`,
-            request,
-            headers
-          );
+          const answer = await forwardRequest(`${to}${at}`, request, headers);
           return new Response(answer.body, {
             status: answer.status,
             statusText: answer.statusText,
             headers: proxyHeaders(answer.headers),
           });
         } catch (error) {
-          previewFailed(HOP, null, `${hub} didn't answer: ${causeOf(error)}`);
-          return unreachable(causeOf(error));
+          previewFailed(HOP, null, `${to} didn't answer: ${causeOf(error)}`);
+          return unreachable(to, causeOf(error));
         }
       },
       error(error) {
         previewFailed(HOP, null, causeOf(error));
-        return unreachable(causeOf(error));
+        return unreachable(hub, causeOf(error));
       },
     });
 

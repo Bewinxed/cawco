@@ -2840,7 +2840,7 @@ const attach = (
         carryHub(
           url,
           { dashboard: ack.dashboardPorts, previews: ack.previewPorts },
-          ack.hostsHub,
+          { hostsHub: ack.hostsHub, sshForward: ack.sshForward === true },
           ack.tailnetHttps
         );
         // The hub's own preview origins, which this machine's workspaces

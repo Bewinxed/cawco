@@ -4674,6 +4674,7 @@ const RegisterAckPayloadShape = declared(
     revokedCredentials: z.array(z.string()).optional(),
     sessionLimits: SessionLimitsShape.optional(),
     sessions: z.array(CarrySessionRequestShape).optional(),
+    sshForward: z.literal(true).optional(),
     tailnetHttps: TailnetServingShape.optional(),
     unknownAccounts: z.array(z.string()).optional(),
   }),

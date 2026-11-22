@@ -1,6 +1,7 @@
 import { lookup } from "node:dns/promises";
 import { networkInterfaces } from "node:os";
 import { detach } from "@cawco/core/detach";
+import { HUB_PORT_HEADER } from "@cawco/core/ports";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import type { TailnetServing } from "@cawco/core/tailnet-https";
 import {
@@ -46,6 +47,13 @@ type HubServing = NonNullable<AgentState["hubLoopback"]>;
  * Elsewhere (the LAN, no tailnet HTTPS) it carries plain http. The hub's
  * register answer and every beat's say which ({@link TailnetServing}), so it
  * follows HTTPS starting and stopping without a restart.
+ *
+ * A machine added over SSH reaches the hub at its SSH forward alone
+ * (`http://127.0.0.1:<port>`, hub ssh-tunnels.ts), and the hub says so in
+ * its register answer (`sshForward`): the loopback carries every port to
+ * that forward over plain http, each request naming the hub's port it is
+ * for ({@link HUB_PORT_HEADER}), which the hub's door for SSH forwards
+ * sends on to that listener (hub ssh-door.ts).
  */
 const HOP = "hub loopback";
 
@@ -82,8 +90,16 @@ interface HubLoopback {
 const recordHub = (serving: HubServing): void =>
   detach(recordAgentState("hubLoopback", serving), "hub loopback record");
 
-/** How the loopback reaches the hub now: plain http, or https verified against the tailnet name. */
-type Route = { secure: false } | { secure: true; serverName: string };
+/**
+ * How the loopback reaches the hub now: plain http or https verified
+ * against the tailnet name, each port to the hub's own at its address; or
+ * plain http to this machine's SSH forward on `port`, each request naming
+ * the hub's port it is for.
+ */
+type Route =
+  | { kind: "plain" }
+  | { kind: "tailnet"; serverName: string }
+  | { kind: "forward"; port: number };
 
 /**
  * The route to a hub the agent reaches at `addresses` (its host, resolved):
@@ -96,8 +112,8 @@ const routeOf = (
 ): Route => {
   const served = new Set(tailnet?.ips.map((ip) => ip.toLowerCase()));
   return tailnet && addresses.some((one) => served.has(one.toLowerCase()))
-    ? { secure: true, serverName: tailnet.name }
-    : { secure: false };
+    ? { kind: "tailnet", serverName: tailnet.name }
+    : { kind: "plain" };
 };
 
 /** `ports` as a person reads them: runs as `3457–3556`. */
@@ -140,8 +156,11 @@ const listen = (
   local: number,
   port: number,
   route: () => Route
-): Server<PreviewSocket> =>
-  Bun.serve<PreviewSocket>({
+): Server<PreviewSocket> => {
+  /** Where `now` carries this port: the hub's own, or the forward's. */
+  const target = (now: Route): string =>
+    `${hubHost}:${now.kind === "forward" ? now.port : port}`;
+  return Bun.serve<PreviewSocket>({
     hostname,
     port: local,
     websocket: previewWebSocket,
@@ -154,13 +173,20 @@ const listen = (
       headers.set("x-forwarded-proto", "http");
       headers.set("x-forwarded-host", request.headers.get("host") ?? url.host);
       const now = route();
-      const serverName = now.secure ? now.serverName : undefined;
-      const scheme = now.secure ? "s" : "";
+      const serverName = now.kind === "tailnet" ? now.serverName : undefined;
+      const scheme = now.kind === "tailnet" ? "s" : "";
+      // Through the forward every port goes to the forward's, naming the
+      // hub's port; set here alone, never taken from the browser.
+      headers.delete(HUB_PORT_HEADER);
+      if (now.kind === "forward") {
+        headers.set(HUB_PORT_HEADER, String(port));
+      }
+      const to = target(now);
       if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
         return upgradePreview(
           request,
           server,
-          `ws${scheme}://${hubHost}:${port}${at}`,
+          `ws${scheme}://${to}${at}`,
           headers,
           { hop: HOP, instanceId: null, serverName }
         )
@@ -169,7 +195,7 @@ const listen = (
       }
       let answer: Response;
       try {
-        answer = await fetch(`http${scheme}://${hubHost}:${port}${at}`, {
+        answer = await fetch(`http${scheme}://${to}${at}`, {
           method: request.method,
           headers,
           body: request.body,
@@ -178,12 +204,8 @@ const listen = (
           ...(serverName ? { tls: { serverName } } : {}),
         });
       } catch (error) {
-        previewFailed(
-          HOP,
-          null,
-          `${hubHost}:${port} didn't answer: ${causeOf(error)}`
-        );
-        return unreachable(`${hubHost}:${port}`, causeOf(error));
+        previewFailed(HOP, null, `${to} didn't answer: ${causeOf(error)}`);
+        return unreachable(to, causeOf(error));
       }
       return new Response(answer.body, {
         status: answer.status,
@@ -193,9 +215,10 @@ const listen = (
     },
     error(error) {
       previewFailed(HOP, null, causeOf(error));
-      return unreachable(`${hubHost}:${port}`, causeOf(error));
+      return unreachable(target(route()), causeOf(error));
     },
   });
+};
 
 /** The `code` an error carries, when it is an error that has one. */
 const codeOf = (error: unknown): unknown =>
@@ -247,6 +270,14 @@ async function listenAll(
   return { servers, held, absent };
 }
 
+/** What the hub's register answer says of where this machine reaches it. */
+export interface HubSays {
+  /** This machine's id is the hub's: its own computer. */
+  hostsHub: boolean;
+  /** The agent's connection came through this machine's SSH forward (hub ssh-door.ts). */
+  sshForward: boolean;
+}
+
 /**
  * Why the hub at `hubHost` (resolved, `addresses`) is on this computer, and
  * in words, or undefined when it is elsewhere: the hub's own word
@@ -254,14 +285,24 @@ async function listenAll(
  * address that is this computer's: its loopback ({@link loopbackAddress}) or
  * one of its own interfaces' (obelisk's agent reached its hub at
  * 192.168.3.100, its own LAN address, and took 3455 from its dashboard
- * socket, 2026-10-18).
+ * socket, 2026-10-18). The address says where the hub is only where the
+ * agent reaches the hub's ports at it: a connection the hub says came
+ * through this machine's SSH forward (`sshForward`) reaches the hub at that
+ * forward alone, a port on this computer's loopback whose far end is the
+ * hub's computer, so its address says nothing of where the hub is. The
+ * address is read rather than left to the hub: a hub sees a connection
+ * from a container's NAT as one from its own loopback (pasta's
+ * `--map-host-loopback`), where the agent's loopback is not the hub's.
  */
 function onThisComputer(
   addresses: string[],
-  hostsHub: boolean
+  said: HubSays
 ): { readonly kind: HubHere; readonly words: string } | undefined {
-  if (hostsHub) {
+  if (said.hostsHub) {
     return { kind: "hub-says", words: "the hub says this is its own computer" };
+  }
+  if (said.sshForward) {
+    return;
   }
   if (addresses.some(loopbackAddress)) {
     return { kind: "loopback", words: "it is this computer's loopback" };
@@ -278,8 +319,16 @@ function onThisComputer(
 }
 
 /** How a route is said in the agent's lines. */
-const routeWords = (route: Route): string =>
-  route.secure ? `over https as ${route.serverName}` : "over plain http";
+const routeWords = (route: Route): string => {
+  switch (route.kind) {
+    case "tailnet":
+      return `over https as ${route.serverName}`;
+    case "forward":
+      return `through this machine's SSH forward on port ${route.port}`;
+    case "plain":
+      return "over plain http";
+  }
+};
 
 /**
  * Serves the hub at `hubUrl` (the address the agent is connected to it on)
@@ -288,26 +337,30 @@ const routeWords = (route: Route): string =>
  * computer ({@link onThisComputer}) gets nothing: its dashboard socket listens
  * on the loopback port itself, and a listener of the agent's would only take
  * that port and relay to its own computer. A port another listener holds is
- * said once and left to it. `tailnet` is the hub's tailnet HTTPS as its
- * register answer says it ({@link routeOf}); `follow` takes each later word.
+ * said once and left to it. Through this machine's SSH forward (`said`)
+ * every port goes to the forward's; elsewhere `tailnet`, the hub's tailnet
+ * HTTPS as its register answer says it, sets the route ({@link routeOf}),
+ * and `follow` takes each later word.
  */
 async function startHubLoopback(
   hubUrl: string,
   ports: HubPorts,
-  hostsHub: boolean,
+  said: HubSays,
   tailnet: TailnetServing | undefined
 ): Promise<HubLoopback> {
-  const hubHost = new URL(hubUrl).hostname;
+  const url = new URL(hubUrl);
+  const hubHost = url.hostname;
   const addresses = (
     await lookup(hubHost.replace(BRACKETS, ""), { all: true })
   ).map((one) => one.address);
-  const here = onThisComputer(addresses, hostsHub);
+  const here = onThisComputer(addresses, said);
   if (here) {
     console.info(
       `[${HOP}] the hub at ${hubHost} is on this computer (${here.words}): its dashboard socket is localhost here, so nothing is carried`
     );
     const serving: HubServing = {
       dashboard: null,
+      forward: null,
       here: here.kind,
       hosts: [],
       hub: hubHost,
@@ -321,24 +374,30 @@ async function startHubLoopback(
       stop: async () => undefined,
     };
   }
-  const loopback = await carryElsewhere(hubHost, addresses, ports, tailnet);
+  const forward: Route | undefined = said.sshForward
+    ? { kind: "forward", port: Number(url.port) }
+    : undefined;
+  const loopback = await carryElsewhere(
+    hubHost,
+    ports,
+    (next) => forward ?? routeOf(addresses, next),
+    tailnet
+  );
   recordHub(loopback.serving());
   return loopback;
 }
 
 /**
- * The hub at `hubHost` (resolved, `addresses`), on another computer, served
- * on this one's loopback by {@link routeOf}. The probe kit's
- * hub-loopback-relay calls it straight: on one computer every address the
- * hub can stand on is this computer's own.
+ * The hub at `hubHost`, on another computer, served on this one's loopback
+ * by the route `routeFor` gives for each word on the hub's tailnet HTTPS.
  */
 async function carryElsewhere(
   hubHost: string,
-  addresses: string[],
   ports: HubPorts,
+  routeFor: (tailnet: TailnetServing | undefined) => Route,
   tailnet: TailnetServing | undefined
 ): Promise<HubLoopback> {
-  let route = routeOf(addresses, tailnet);
+  let route = routeFor(tailnet);
   /** Each loopback port, and the hub's port it is carried to. */
   const all: [local: number, hub: number][] = [
     [ports.dashboard.local, ports.dashboard.hub],
@@ -377,7 +436,7 @@ async function carryElsewhere(
   );
   return {
     follow: (next) => {
-      const now = routeOf(addresses, next);
+      const now = routeFor(next);
       if (Bun.deepEquals(now, route)) {
         return false;
       }
@@ -389,11 +448,12 @@ async function carryElsewhere(
     },
     serving: () => ({
       dashboard: ports.dashboard,
+      forward: route.kind === "forward" ? route.port : null,
       here: null,
       hosts,
       hub: hubHost,
       listeners: servers.length,
-      serverName: route.secure ? route.serverName : null,
+      serverName: route.kind === "tailnet" ? route.serverName : null,
     }),
     stop: async () => {
       await Promise.all(servers.map((server) => server.stop(true)));
@@ -406,19 +466,20 @@ let carried: { key: string; loopback: Promise<HubLoopback | null> } | undefined;
 
 /**
  * The hub at `hubUrl` answered the agent's register or beat, naming `ports`,
- * whether this machine is its own computer (`hostsHub`) and its tailnet
- * HTTPS (`tailnet`): its loopback serves that hub. Started on the first
- * register; a register with another hub address (a rediscovery repinned
- * it), other ports or another word stops the one before and starts anew;
- * otherwise the loopback follows `tailnet` as it stands.
+ * whether this machine is its own computer and reaches it through its SSH
+ * forward (`said`), and its tailnet HTTPS (`tailnet`): its loopback serves
+ * that hub. Started on the first register; a register with another hub
+ * address (a rediscovery repinned it), other ports or another word stops
+ * the one before and starts anew; otherwise the loopback follows `tailnet`
+ * as it stands.
  */
 export function carryHub(
   hubUrl: string,
   ports: HubPorts,
-  hostsHub: boolean,
+  said: HubSays,
   tailnet: TailnetServing | undefined
 ): void {
-  const key = JSON.stringify([hubUrl, ports, hostsHub]);
+  const key = JSON.stringify([hubUrl, ports, said.hostsHub, said.sshForward]);
   if (carried?.key === key) {
     followHub(tailnet);
     return;
@@ -427,7 +488,7 @@ export function carryHub(
   const start = async (): Promise<HubLoopback | null> => {
     await (await before)?.stop();
     try {
-      return await startHubLoopback(hubUrl, ports, hostsHub, tailnet);
+      return await startHubLoopback(hubUrl, ports, said, tailnet);
     } catch (error) {
       console.warn(
         `[${HOP}] the hub at ${hubUrl} isn't served on this computer's loopback: ${causeOf(error)}`

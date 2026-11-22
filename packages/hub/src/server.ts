@@ -1404,6 +1404,7 @@ export const createServer = (
     settleRefusal: () => settleRefusal,
     sleepFinished: () => sleepFinished,
     socketAddress: () => socketAddress,
+    sshRecordOf: () => sshRecordOf,
     stageHeard: () => stageHeard,
     stopDispatches: () => stopDispatches,
     streamRelay: () => streamRelay,
@@ -3368,14 +3369,17 @@ export const createServer = (
    * The SSH connection the hub holds to each machine it added over SSH
    * (ssh-tunnels.ts): the machine's agent reaches the hub through it, at
    * the door that holds every caller to a proof of what it is
-   * (ssh-door.ts), and the hub reaches its preview listeners the same way.
+   * (ssh-door.ts), its loopback reaches the hub's dashboard and preview
+   * listeners there too, and the hub reaches its preview listeners the
+   * same way.
    * Every joined machine's connection opens once the hub serves, each
    * forwarded to the door's listener for its record.
    */
   const sshTunnels = createSshTunnels({
     db: db.sshMachines,
     lifetime,
-    door: createSshDoor(lifetime),
+    // Read at each request: the preview listeners are made further on.
+    door: createSshDoor(lifetime, (port) => previewListeners.servedAt(port)),
   });
 
   /** Whether an agent's contract range holds this hub's (core runtime.ts `protocolRange`). */

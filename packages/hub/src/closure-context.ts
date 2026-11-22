@@ -1320,6 +1320,7 @@ export interface ClosureContext {
   socketAddress: (ws: AuthSocket) => string | null;
   speaksContract: (range: { max: number; min: number } | undefined) => boolean;
   spendNow: () => UsageSpend;
+  sshRecordOf: (ws: AuthSocket) => string | undefined;
   sshTunnels: SshTunnels;
   stageHeard: (machineId: string, frame: StageFrame) => void;
   stalledNow: () => string[];

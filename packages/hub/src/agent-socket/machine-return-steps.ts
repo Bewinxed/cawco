@@ -83,6 +83,7 @@ export type MachineReturnContext = Pick<
   | "settlePending"
   | "socketAddress"
   | "speaksContract"
+  | "sshRecordOf"
   | "streamRelay"
   | "streams"
   | "tailnetHttps"
@@ -639,7 +640,10 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
         ctx.db.revokedAmong(agentFrame.credentialHashes),
         ctx.hubGitOrigins(),
         ctx.hubPreviewOrigins(),
-        ctx.tailnetHttps.serving()
+        ctx.tailnetHttps.serving(),
+        // It came through its SSH add's forward: the agent carries the
+        // dashboard and previews to that forward (ssh-door.ts).
+        ctx.sshRecordOf(ws) !== undefined
       )
     );
   };

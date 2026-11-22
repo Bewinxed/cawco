@@ -826,6 +826,14 @@ export interface RegisterAckPayload {
    */
   sessions?: CarrySessionRequest[];
   /**
+   * This connection came through the machine's SSH forward (hub
+   * ssh-door.ts), so the agent reaches the hub at that forward alone: its
+   * loopback carries the dashboard and every preview port to the forward,
+   * each request naming the hub's port it is for (core ports.ts
+   * `HUB_PORT_HEADER`). Absent on any other connection.
+   */
+  sshForward?: true;
+  /**
    * The tailnet name and addresses the hub serves HTTPS on, while it does
    * ({@link TailnetServing}); every beat's ack carries it again, so the
    * agent's loopback follows HTTPS starting, stopping and moving.

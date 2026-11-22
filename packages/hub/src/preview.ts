@@ -477,6 +477,21 @@ export function createPreviewListeners(
 
     loopback,
 
+    /**
+     * Where a process on the hub's own machine dials the preview listener
+     * on `port` ({@link loopback}), or null when none of the hub's stands
+     * there: no origin keeps the port, and it is not host mode's listener.
+     * The door for SSH forwards carries a machine's preview ports by it
+     * (ssh-door.ts), so it reaches a port of this range only while the
+     * preview server holds it, never another program listening there.
+     */
+    servedAt(port: number): string | null {
+      const stands =
+        db.ports().some((row) => row.port === port) ||
+        (hostPattern() !== undefined && port === PREVIEW_PORTS.first);
+      return stands ? loopback(port) : null;
+    },
+
     /** The origin's owner ended (a session, a project, an artifact): its port is free again. */
     release: ports.release,
 
