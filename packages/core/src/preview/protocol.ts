@@ -26,12 +26,18 @@ export type PreviewSource =
        */
       stage?: { dir: string; file: string };
       /**
-       * A workspace preview's server (core `stage.ts` {@link ServeSpec}): the
-       * command the workspace's stage runs and keeps up on `port`, in `cwd`
-       * from the clone's root. A request for it wakes it when it sleeps.
+       * A preview's server (core `stage.ts` {@link ServeSpec}): the command
+       * the stage of `workspace` runs and keeps up on `port`, in `cwd` from
+       * its tree's root. A request for it wakes it when it sleeps. Every
+       * port preview made since 2026-11-22 names it; one without it is a
+       * port its session kept up by hand, which nothing starts again.
        */
       serve?: { command: string; cwd: string };
-      /** The workspace whose dev server it is: it runs in that workspace's own network. */
+      /**
+       * The workspace whose dev server it is, or the place over its session's
+       * folder (core workspace-id.ts `place`) for a session in no workspace:
+       * it runs in that tree's own network.
+       */
       workspace?: string;
       /**
        * A served preview's (`serve`) version the person is served: the id of

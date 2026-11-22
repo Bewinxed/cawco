@@ -483,28 +483,18 @@ export interface ArtifactServiceDeps {
     | undefined
   >;
   /**
-   * A workspace preview's server (agent stage.ts `ensureServed`), started or
-   * woken on the workspace's machine and waited on until its port answers:
-   * its state, or the refusal saying why it didn't start.
-   * A decision page's Previews of it wake it as the page goes out, unwaited
-   * (`warmPreviews`).
+   * A preview's server (agent stage.ts `ensureServed`), started or woken in
+   * the workspace or place `at` names, on its machine (artifact-events.ts
+   * `onStage`), and waited on until its port answers: its state, or the
+   * refusal saying why it didn't start. A decision page's Previews of it
+   * wake it as the page goes out, unwaited (`warmPreviews`).
    */
   serve: (
-    machineId: string,
-    workspace: string,
+    at: StageAt,
     serve: ServeSpec,
     /** The pin of the version the person is served (core `PreviewSource.pin`), whose server it is. */
     pin: string | undefined
-  ) => Promise<
-    | StageState
-    | Unanswered
-    | ReturnType<
-        typeof problem<
-          502,
-          { code: "artifact-serve-unstarted"; detail: string }
-        >
-      >
-  >;
+  ) => Promise<StageState | StageRefused>;
   /**
    * A served preview's page as its author has it now, for its author's
    * `artifact_read` with `png`: its workspace's own server, started by

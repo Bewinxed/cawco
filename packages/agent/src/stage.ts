@@ -48,13 +48,13 @@
  * Each change goes to the hub as a {@link StageFrame} ({@link AgentPorts.stage}),
  * which the hub keeps in the doc of each sheet the stage serves.
  *
- * A workspace preview's server (core `ServeSpec`, `artifact_create(kind:
- * "preview", port, serve)`) is a stage too, keyed by its port: its command
- * run through the same executor, on the same rules, `live` once its port
- * listens ({@link ensureServed}, {@link listens}), started by its
- * `artifact_create`, a request its preview relays, or the hub as a decision
- * page with a Preview of it goes out. It is the daemon's child,
- * so it outlives the shell, the command and the session that asked for it;
+ * A preview's server (core `ServeSpec`, `artifact_create(kind: "preview",
+ * port, serve)`), in a workspace or a place, is a stage too, keyed by its
+ * port: its command run through the same executor, on the same rules,
+ * `live` once its port listens ({@link ensureServed}, {@link listens}),
+ * started by its `artifact_create`, a request its preview relays (the
+ * person's open of it among them), or the hub as a decision page with a
+ * Preview of it goes out. It is the daemon's child, so it outlives the shell, the command and the session that asked for it;
  * the pin it runs in stops it as that pin is let go ({@link unpin}).
  */
 
@@ -368,7 +368,7 @@ interface Stage {
    */
   lookedAt: number;
   message?: string;
-  /** A place's sheet stage's mirror of its checkout into its clone, while it is live ({@link mirrorWhileLive}). */
+  /** A place's stage's mirror of its checkout into its clone, while it is live ({@link mirrorWhileLive}). */
   mirror?: ReturnType<typeof setInterval>;
   /** When it last said it moved (`moved`, a module compiled; or it began to serve), `Date.now()`: a read waits on it while it moves ({@link READ_QUIET_MS}). */
   movedAt: number;
@@ -582,11 +582,13 @@ export const closingStages = <T>(
 /**
  * The workspace whose network a preview's port is in: a pinned version's
  * server runs in its pin's boundary (a sheet is never pinned: hub
- * served.ts `pinTarget`); a place's sheet stage in its stage clone's;
+ * served.ts `pinTarget`); a place's sheet stage and server in its stage
+ * clone's;
  * every other port is in the network of the workspace the source names.
  */
 export const networkOf = (source: {
   pin?: string;
+  serve?: unknown;
   stage?: unknown;
   workspace?: string;
 }): string | undefined => {
@@ -598,7 +600,9 @@ export const networkOf = (source: {
   }
   switch (workspaceIdKind(source.workspace)) {
     case "place":
-      return source.stage ? stageCloneId(source.workspace) : source.workspace;
+      return source.stage || source.serve
+        ? stageCloneId(source.workspace)
+        : source.workspace;
     case "clone":
     case "design":
       return source.workspace;
@@ -945,8 +949,9 @@ const sheetPort = (key: string): number =>
 const serveKey = (workspace: string, port: number) => `${workspace}@${port}`;
 
 /**
- * The stage a preview's server runs as: `cwd` inside the workspace's clone
- * and a folder, the command one bounded line; refused with why otherwise.
+ * The stage a preview's server runs as: `cwd` a folder inside its tree's
+ * folder (a workspace's clone, a place's stage clone at the place's folder,
+ * a pin's clone), the command one bounded line; refused with why otherwise.
  */
 function servedFor(tree: Tree, serve: ServeSpec): ServedPlace {
   const workspace = tree.ref;
@@ -956,16 +961,16 @@ function servedFor(tree: Tree, serve: ServeSpec): ServedPlace {
       `serve.command is the shell command that starts the server, at most ${SERVE_COMMAND_LIMIT} characters, like "bun run dev --port ${serve.port}".`
     );
   }
-  const root = resolve(workspace.path, serve.cwd || ".");
-  const inside = relative(workspace.path, root);
+  const root = resolve(tree.folder, serve.cwd || ".");
+  const inside = relative(tree.folder, root);
   if (inside.startsWith("..") || isAbsolute(inside)) {
     throw new StageRefusal(
-      `serve.cwd ${serve.cwd} is outside this workspace's clone (${workspace.path}): it is a folder of the clone, from its root.`
+      `serve.cwd ${serve.cwd} is outside ${workspace.path}: it is a folder inside it, from there.`
     );
   }
   if (!existsSync(root)) {
     throw new StageRefusal(
-      `serve.cwd ${inside || "."} isn't a folder in this workspace's clone.`
+      `serve.cwd ${inside || "."} isn't a folder in ${workspace.path}.`
     );
   }
   return {
@@ -1397,17 +1402,15 @@ const hostWord = (line: string): HostWord | null => {
 };
 
 /**
- * A place's sheet stage, while it is live: its clone brought in step with
- * its checkout every {@link MIRROR_MS} (stage-clone.ts `syncStageClone`), so
- * the session's edits reach the stage's watcher and an open sheet redraws.
- * One mirror at a time; one that fails is logged, and the next tries again.
+ * A place's stage (a sheet's, or a preview's server its author reads),
+ * while it is live: its clone brought in step with its checkout every
+ * {@link MIRROR_MS} (stage-clone.ts `syncStageClone`), so the session's
+ * edits reach the stage's watcher and an open sheet or page redraws. One
+ * mirror at a time; one that fails is logged, and the next tries again.
  */
 function mirrorWhileLive(stage: Stage): void {
   clearInterval(stage.mirror);
-  if (!(
-    stage.runs.kind === "sheet" &&
-    workspaceIdKind(stage.workspace.id) === "place"
-  )) {
+  if (workspaceIdKind(stage.workspace.id) !== "place") {
     return;
   }
   let busy = false;
@@ -2428,12 +2431,14 @@ async function wake(stage: Stage, by: string, restart = true): Promise<void> {
 }
 
 /**
- * A workspace preview's server (core `ServeSpec`), started or woken and
- * waited on until its port listens: its state. The same port named with
- * another command or folder stops the one running and starts this one. A
- * server that never came up is not kept: the refusal says why, and nothing
- * runs on. With `pin` (core `PreviewSource.pin`), the server of that
- * version, in its pin's clone and network.
+ * A preview's server (core `ServeSpec`), started or woken and waited on
+ * until its port listens: its state. In a workspace, in its clone; in a
+ * place, in its stage clone (`stage-clone.ts`), the place kept so a
+ * preview's request after a restart finds its folder ({@link wakeSource}).
+ * The same port named with another command or folder stops the one running
+ * and starts this one. A server that never came up is not kept: the refusal
+ * says why, and nothing runs on. With `pin` (core `PreviewSource.pin`), the
+ * server of that version, in its pin's clone and network.
  */
 export async function ensureServed(
   ports: StagePorts,
@@ -2442,6 +2447,9 @@ export async function ensureServed(
   by = "artifact_create's serve",
   pin?: string
 ): Promise<StageState> {
+  if (workspaceIdKind(workspace.id) === "place") {
+    await keepPlace(workspace);
+  }
   return await servedOn(await treeOf(workspace, ports, pin), serve, by);
 }
 

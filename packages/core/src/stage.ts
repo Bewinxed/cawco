@@ -1158,9 +1158,11 @@ export interface StageWarm {
 }
 
 /**
- * A workspace preview's server: `command`, run by the workspace's stage
- * inside its boundary in `cwd` (from the clone's root), with `PORT` set to
- * `port`, which it serves on the boundary's loopback. Supervised as a sheet's
+ * A preview's server: `command`, run by the stage of the workspace or place
+ * it was made in, inside that stage's boundary (a place's in its stage
+ * clone, agent stage-clone.ts), in `cwd` (from the clone's root, or a
+ * place's folder), with `PORT` set to `port`, which it serves on the
+ * boundary's loopback. Supervised as a sheet's
  * Vite is: up once the port listens, looked at every {@link STAGE_HEALTH_MS},
  * started again {@link STAGE_RESTARTS} times, asleep after
  * {@link STAGE_IDLE_MS} with no viewer, stopped with its artifact and its
@@ -1175,7 +1177,7 @@ export interface ServeSpec {
 /** The longest command a preview's server takes. Our bound. */
 export const SERVE_COMMAND_LIMIT = 2000;
 
-/** The daemon's control method that starts a workspace preview's server or wakes it ({@link ServeSpec}), answering its state. */
+/** The daemon's control method that starts a preview's server or wakes it ({@link ServeSpec}) in the workspace or place its ref names, answering its state. */
 export const STAGE_SERVE = "stageServe";
 
 /**

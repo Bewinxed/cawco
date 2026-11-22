@@ -758,6 +758,16 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       }
     }
   };
+  /** Why the tree `named` (a workspace, place or design folder id) can't run a stage: it is gone ({@link stageWhere}). */
+  const goneWords = (named: string): string =>
+    workspaceIdKindOf(named) === undefined
+      ? `${named.slice(0, 8)} names no workspace, so no stage runs there.`
+      : byWorkspaceIdKind(named, {
+          clone: `The workspace ${named.slice(0, 8)} it was made in is gone, so its stage can't run.`,
+          design: `The design folder ${named.slice(0, 8)} is gone, so its stage can't run.`,
+          place:
+            "No session works in the folder it was made in any more, so CawCo can't find that folder to run its stage in.",
+        });
   /**
    * A stage method (core stage.ts) on a workspace's machine (a session's
    * own, or the one a sheet was made in), with the arguments `args` makes of
@@ -771,18 +781,18 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
   ) => {
     const where = stageWhere(at);
     if (!where) {
-      // Only a sheet's names one that can be gone: a session always has a place.
+      // Only an artifact's names one that can be gone: a session always has a place.
       const named = "workspace" in at ? at.workspace : "";
       return problem(409, {
         code: "stage-workspace-gone",
-        detail: `The sheet's workspace ${named.slice(0, 8)} is gone, so its stage can't run.`,
+        detail: goneWords(named),
       });
     }
     const { workspace, machineId } = where;
     if (machineId === undefined) {
       return problem(409, {
         code: "stage-workspace-unplaced",
-        detail: `The sheet's workspace ${workspace.id.slice(0, 8)} is on no machine the hub knows, so its stage can't run.`,
+        detail: `The workspace ${workspace.id.slice(0, 8)} it was made in is on no machine the hub knows, so its stage can't run.`,
       });
     }
     // A stage installs its project first when its lockfile moved (agent

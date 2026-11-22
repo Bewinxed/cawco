@@ -47,6 +47,20 @@ export class StageCover {
     );
   });
 
+  /**
+   * An unrecorded port preview's server stopped (pane-subject.svelte.ts
+   * `unrecorded`): its machine said nothing answers its port, or the frame
+   * got no page at all. Nothing can start it, so its cover says so and asks
+   * its session to make it again, in place of the down page's Try again or
+   * the frame's "didn't load".
+   */
+  readonly unrecordedDown = $derived.by(
+    () =>
+      this.#deps.paneSubject.unrecorded &&
+      (this.#deps.previewFrame.down === "server" ||
+        this.#deps.previewFrame.notLoaded)
+  );
+
   readonly staged = $derived.by(() =>
     this.#deps.paneSubject.artifact?.kind === "component" ||
     this.#deps.paneSubject.served

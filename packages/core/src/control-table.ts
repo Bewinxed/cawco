@@ -496,7 +496,7 @@ interface ControlTable {
   stagePins: Entry<[served: string[]], number>;
   stageRender: Entry<[ref: WorkspaceRef, ask: RenderAsk], StageRendered>;
   stageServe: Entry<
-    [workspace: string, serve: ServeSpec, pin?: string | null],
+    [ref: WorkspaceRef, serve: ServeSpec, pin?: string | null],
     StageState
   >;
   stageUnpin: Unread<[pin: string]>;

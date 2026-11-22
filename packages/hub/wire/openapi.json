@@ -54066,7 +54066,7 @@
                     "type": "number"
                   },
                   "serve": {
-                    "description": "A workspace preview's server (core `stage.ts` {@link ServeSpec}): the\ncommand the workspace's stage runs and keeps up on `port`, in `cwd`\nfrom the clone's root. A request for it wakes it when it sleeps.",
+                    "description": "A preview's server (core `stage.ts` {@link ServeSpec}): the command\nthe stage of `workspace` runs and keeps up on `port`, in `cwd` from\nits tree's root. A request for it wakes it when it sleeps. Every\nport preview made since 2026-11-22 names it; one without it is a\nport its session kept up by hand, which nothing starts again.",
                     "type": "object",
                     "properties": {
                       "command": {
@@ -54098,7 +54098,7 @@
                     ]
                   },
                   "workspace": {
-                    "description": "The workspace whose dev server it is: it runs in that workspace's own network.",
+                    "description": "The workspace whose dev server it is, or the place over its session's\nfolder (core workspace-id.ts `place`) for a session in no workspace:\nit runs in that tree's own network.",
                     "type": "string"
                   }
                 },
@@ -136203,42 +136203,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "artifact-preview-serve-outside"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "artifact-preview-unserved"
                 ]
               },
@@ -145585,42 +145549,6 @@
                 "type": "string",
                 "enum": [
                   "artifact-pin-uncut"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "artifact-serve-unstarted"
                 ]
               },
               "detail": {

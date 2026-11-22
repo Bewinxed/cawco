@@ -257,7 +257,7 @@ export const artifactCreate = {
       .min(1)
       .max(200)
       .optional()
-      .describe("Default yours; with a port, that machine's host port."),
+      .describe("A `dir`'s machine; default yours."),
     workspace: z
       .string()
       .regex(WORKSPACE_ID)
@@ -270,11 +270,11 @@ export const artifactCreate = {
           .string()
           .max(1000)
           .optional()
-          .describe("From your clone's root."),
+          .describe("From your working folder."),
       })
       .optional()
       .describe(
-        "In a workspace, the server's command: CawCo runs it with PORT and keeps it up."
+        "With a port, its server's command: CawCo runs it with PORT, keeps it up, restarts it on open."
       ),
     elements,
     mermaid,
