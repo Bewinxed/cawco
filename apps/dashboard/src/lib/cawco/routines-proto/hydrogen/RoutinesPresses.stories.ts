@@ -31,7 +31,7 @@ async function opened(
   return canvas.getByRole("button", { name });
 }
 
-/** Opens a routine by its row, then presses a button inside it. */
+/** Opens a routine by its open button, then presses a button inside it. */
 const openThen =
   (routine: string, button: string) => async (context: PlayContext) => {
     await context.userEvent.click(
