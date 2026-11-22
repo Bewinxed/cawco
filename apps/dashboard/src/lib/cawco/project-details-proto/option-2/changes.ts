@@ -139,8 +139,8 @@ export interface SessionsStartProps extends StageSends {
   movingPlaceId: string | null;
   onaddplace: (machineId: string, path: string) => void;
   onplace: (act: PlaceAct, placeId: string) => void;
-  /** A form standing open as it mounts (adding a folder, the custom large-file server): a states file reads it without the press. */
-  opening?: "folder" | "largeFiles" | null;
+  /** A form standing open as it mounts (adding a folder, the custom large-file server, a folder's Stop using said): a states file reads it without the press. */
+  opening?: "folder" | "largeFiles" | `drop:${string}` | null;
 }
 
 /**

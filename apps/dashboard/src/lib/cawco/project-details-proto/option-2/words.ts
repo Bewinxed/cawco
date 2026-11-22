@@ -82,6 +82,18 @@ export const howItRunsWords = {
     githubProjectLabel: "GitHub Project for columns",
     githubProjectNone: "Open and closed only",
     saveTie: "Start syncing",
+    /** Leaving a tie for the project's own files, said before it happens. */
+    leaveTie: {
+      says: (tracker: string) => `Syncing with ${tracker} stops.`,
+      keeps: (site: string) =>
+        `Synced tasks stay here and keep their links. Nothing is deleted on ${site}.`,
+      act: "Stop syncing",
+    },
+    /** Where a tie's tasks live, as the site is called. */
+    site: { github: "GitHub", linear: "Linear" } satisfies Record<
+      "github" | "linear",
+      string
+    >,
   },
 
   places: {
@@ -105,6 +117,10 @@ export const howItRunsWords = {
     findFolder: "Change path",
     copyToMachine: "Copy elsewhere",
     drop: "Stop using",
+    /** Stop using a folder, said before it happens. */
+    dropSays: (path: string, machine: string) =>
+      `Agents stop using ${path} on ${machine}.`,
+    dropKeeps: "The folder and its files stay.",
     repositories: "Repositories",
     largeFilesHeading: "Git LFS",
     largeFilesGroupLabel: "Git LFS storage",
@@ -146,6 +162,11 @@ export const howItRunsWords = {
   waits: {
     heading: "Who makes the call",
     putAllBack: "Reset to defaults",
+    /** What Reset to defaults puts back, said before it does. */
+    resetSays: (count: number) =>
+      count === 1
+        ? "This kind goes back to your default:"
+        : `These ${count} kinds go back to your defaults:`,
     fleetDefaults: "Manage defaults",
     unreadTitle: "Rules failed to load, so agents ask you everything.",
     members: {

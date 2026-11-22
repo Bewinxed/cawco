@@ -68,7 +68,7 @@
     onsync: () => void;
     hrefOf: (page: "accounts" | "connections" | "fleetDecides") => string;
     /** The tie's setup standing open as it mounts: a states file reads it without the press. */
-    opening?: "github" | "linear" | null;
+    opening?: "github" | "linear" | "files" | null;
   } = $props();
 
   const uid = $props.id();
@@ -76,7 +76,11 @@
   const NONE_PROJECT = "__none__";
 
   /** The tie's setup standing open, for GitHub or Linear: the pick shows it from the press. */
-  let setupHome = $derived<"github" | "linear" | null>(opening);
+  let setupHome = $derived<"github" | "linear" | null>(
+    opening === "files" ? null : opening
+  );
+  /** Leaving a tie for the project's own files, asked and not yet answered: the press first says what it stops (DESIGN.md, ceremony matches consequence). */
+  let leaving = $derived(opening === "files");
   let connectionPick = $state<string | null>(null);
   /** The Linear team picked; null for the first. */
   let teamPick = $state<string | null>(null);
@@ -143,11 +147,15 @@
     }
     if (home === "files") {
       closeSetup();
-      if (record.taskHome !== "files") {
+      if (record.tie !== null) {
+        // A tie stops: said first, with what it reaches.
+        leaving = true;
+      } else if (record.taskHome !== "files") {
         onchange({ key: "taskHome", value: "files" });
       }
       return;
     }
+    leaving = false;
     if (record.taskHome === home && record.tie?.home === home) {
       // Already tied to this home: toggle the inline setup to adjust its target.
       if (setupHome === home) {
@@ -158,6 +166,13 @@
       return;
     }
     openSetup(home);
+  }
+
+  function leaveTie() {
+    leaving = false;
+    if (!disabled) {
+      onchange({ key: "taskHome", value: "files" });
+    }
   }
 
   function saveTie() {
@@ -292,7 +307,7 @@
 
   <OptionTiles
     bind:value={
-      () => setupHome ?? record.taskHome,
+      () => (leaving ? "files" : (setupHome ?? record.taskHome)),
       (next) => {
         if (next !== null) {
           handleHomeClick(next);
@@ -315,6 +330,52 @@
     againLabel={words.retryChange}
     reason={refused.taskHome}
   />
+
+  {#if leaving && tie}
+    <!-- Leaving the tie for the project's own files: the house's opened
+         form says what it does and the tie it stops before the press. -->
+    <section
+      aria-labelledby="{uid}-leave"
+      class={OPENED_FORM}
+      data-slot="leave-tie"
+      transition:unfold
+    >
+      <div class="flex min-w-0 flex-col gap-space-1">
+        <p class="m-0 type-label text-ink-strong" id="{uid}-leave">
+          {words.tasks.leaveTie.says(words.tasks.homes[tie.home].name)}
+        </p>
+        <p class="m-0 type-meta text-pretty text-ink-muted">
+          {words.tasks.leaveTie.keeps(words.tasks.site[tie.home])}
+        </p>
+      </div>
+      <p class="mark-line m-0 flex min-w-0 items-center gap-space-2 type-meta">
+        <ProviderLogo class="flex-none" provider={tie.home} />
+        <span class="min-w-0 type-code wrap-anywhere text-ink-strong"
+          >{tie.target.label}</span
+        >
+        <span class="flex-none text-ink-muted num"
+          >{words.tasks.linkedCount(tie.linked)}</span
+        >
+      </p>
+      <div class="flex flex-wrap items-center gap-space-2">
+        <Button
+          {disabled}
+          label={words.tasks.leaveTie.act}
+          onclick={leaveTie}
+          size="sm"
+          variant="outline"
+        />
+        <Button
+          label={words.cancel}
+          onclick={() => {
+            leaving = false;
+          }}
+          size="sm"
+          variant="ghost"
+        />
+      </div>
+    </section>
+  {/if}
 
   {#if setupHome !== null}
     <!-- The tie's setup, unfolding from its tile: the house's opened form

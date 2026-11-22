@@ -5,6 +5,7 @@
  * (limit-checks.svelte.ts).
  */
 import { limitPickWords as words } from "@cawco/core/words/limit-picks";
+import { fillState, type MeterState } from "../usage";
 import { fmt } from "../usage/rings";
 import { limitChecks } from "./limit-checks.svelte";
 import type { Room } from "./room-of";
@@ -54,4 +55,17 @@ export function limitRowOf(
     limited: room?.kind === "limit",
     why: unread,
   };
+}
+
+/** An account's room as the house ring draws it (UsageRing): the share left, in the state of what is used; at its limit, the ring reached (stale while its reading is old). */
+export function meterOf(
+  room: Room | null
+): { share: number; state: MeterState } | null {
+  if (room === null) {
+    return null;
+  }
+  if (room.kind === "limit") {
+    return { share: 0, state: room.stale ? "stale" : "reached" };
+  }
+  return { share: room.percent, state: fillState(100 - room.percent) };
 }

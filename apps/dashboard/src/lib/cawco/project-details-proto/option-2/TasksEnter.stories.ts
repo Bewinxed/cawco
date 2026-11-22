@@ -34,3 +34,13 @@ export const SettingUpGitHub = {
 export const SettingUpLinear = {
   args: { opening: "linear" },
 };
+
+/** Synced with GitHub, I pressed Local files: it says what stops before it does. */
+export const LeavingGitHub = {
+  args: {
+    ...stageArgs("Tied to GitHub, in step"),
+    syncing: false,
+    onsync: () => undefined,
+    opening: "files",
+  },
+};
