@@ -182,7 +182,10 @@
   />
 
   <h3
-    class={[sectionHeadVariants({ inset: "flush" }), "mt-space-4"]}
+    class={[
+      sectionHeadVariants({ inset: "flush", rule: "group" }),
+      "mt-space-4",
+    ]}
     id="work-path-review"
   >
     {words.waits.reviewHeading}

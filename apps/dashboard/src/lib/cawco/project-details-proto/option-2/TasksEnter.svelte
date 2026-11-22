@@ -14,11 +14,6 @@
    * `withAsked`); GitHub or Linear moves at the setup's Save. A refusal
    * puts it back and stands under the tiles (RowFault).
    */
-  import {
-    Alert,
-    AlertAction,
-    AlertDescription,
-  } from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
@@ -30,7 +25,6 @@
     IconDocument,
     IconError,
     IconExternalLinear,
-    IconInfo,
     IconRefresh,
     IconSettings,
     IconWorking,
@@ -230,6 +224,7 @@
          now at its end, the rest of its acts in its ⋯. -->
     <RowList label={words.tasks.groupLabel}>
       <SectionRow
+        bare
         actions={[
           {
             label: words.tasks.changeTie,
@@ -417,20 +412,20 @@
           {/if}
         </div>
         {#if setupConnections.length === 0}
-          <Alert layout="row" variant="default">
-            <IconInfo aria-hidden="true" />
-            <AlertDescription
-              >{words.tasks.noConnection(setupHome)}</AlertDescription
+          <!-- Said on the form's own ground, the way on beside it. -->
+          <div class="flex min-w-0 flex-wrap items-center gap-space-2">
+            <p
+              class="m-0 min-w-0 flex-auto type-meta text-pretty text-ink-muted"
             >
-            <AlertAction>
-              <Button
-                href={hrefOf("connections")}
-                label={words.tasks.openConnections}
-                size="xs"
-                variant="outline"
-              />
-            </AlertAction>
-          </Alert>
+              {words.tasks.noConnection(setupHome)}
+            </p>
+            <Button
+              href={hrefOf("connections")}
+              label={words.tasks.openConnections}
+              size="xs"
+              variant="outline"
+            />
+          </div>
         {:else}
           <OptionGroup
             aria-labelledby="{uid}-connection"

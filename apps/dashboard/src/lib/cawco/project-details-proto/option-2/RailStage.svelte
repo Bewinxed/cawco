@@ -3,9 +3,9 @@
    * One numbered step of the work path: its head, then what it sets. The
    * head is the step's boundary, the house section head one level up
    * (ui/section-header `sectionHeadVariants`): its mark and title over a
-   * rule the width of its column, in the border ink where the parts inside
-   * keep the hairline, so a step ends where the next one's rule begins and
-   * no box is drawn round it.
+   * rule the width of its column in the visible border ink, as every head
+   * that divides groups on the ground draws its rule, so a step ends where
+   * the next one's rule begins and no box is drawn round it.
    *
    * The mark is the house step's ring (home/StepRow: its number in a
    * control-edged ring, the live dot while something runs); a step that is

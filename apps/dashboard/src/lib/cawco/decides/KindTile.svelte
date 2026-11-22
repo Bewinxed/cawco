@@ -9,10 +9,12 @@
    * open. Escape gives the focus back to the tile; a press elsewhere closes
    * it and lands where it lands.
    *
-   * Brief (the project's settings view), it is its glyph and name: its
-   * example is its tooltip and its hand-over's head, and this project's own
-   * is told by its deeper fill alone (the deep recess, never its holder's
-   * hue), put back from the surface's head.
+   * Brief (the project's settings view), it is its glyph and name, a
+   * control on its page's ground shown by its edge as the option chip is
+   * (raised on the control edge): its example is its tooltip and its
+   * hand-over's head, and this project's own is told by its name in the
+   * edited ink, as a dial changed from its default is (never a fill, never
+   * its holder's hue), put back from the surface's head.
    *
    * While the hub writes a hand-over or a put-back the swap glyph breathes;
    * a refusal stands under the tile in the hub's words, with Try again.
@@ -79,10 +81,13 @@
 
   const Glyph = $derived(kindGlyph(kind.id));
   const Scope = $derived(own ? IconFolder : IconGlobe);
-  /** Its surface: raised while its list is open, deeper when this project set it. */
+  /** Its surface: raised while its list is open, deeper when this project set it; brief, the option chip's at rest. */
   const surface = $derived.by(() => {
     if (handing) {
       return "bg-surface-raised inset-ring-2 inset-ring-brand-solid";
+    }
+    if (brief) {
+      return "bg-surface-raised inset-ring inset-ring-border-control";
     }
     return own
       ? "bg-(--wash,var(--color-surface-recess-deep))"
@@ -117,8 +122,8 @@
       ? `color-mix(in oklab, var(--color-mark-${holder.hue}) 8%, var(--color-surface-recess))`
       : undefined}
   >
-    <!-- Its glyph on a raised square; brief, bare on the tile, the tile
-         being the well in its card and nothing a card inside it. -->
+    <!-- Its glyph on a raised square; brief, bare on the tile, which is a
+         control and holds nothing raised inside it. -->
     <span
       class={[
         "grid flex-none place-items-center text-ink-strong",
@@ -132,8 +137,10 @@
     <div class="flex min-w-0 flex-auto flex-col">
       <span class="flex min-w-0 flex-wrap items-center gap-x-space-1">
         <span
-          class="min-w-0 type-label font-medium text-ink-strong wrap-anywhere"
-          >{kind.name}</span
+          class={[
+            "min-w-0 type-label font-medium wrap-anywhere",
+            brief && own ? "text-selected-ink" : "text-ink-strong",
+          ]}>{kind.name}</span
         >
         {#if project !== null && !brief}
           <Scope

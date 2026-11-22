@@ -129,10 +129,19 @@
 </script>
 
 <div
-  class={["grid gap-space-3", cols ?? "grid-cols-(--roster-cols)"]}
+  class={[
+    // Brief, its members stand on the ground, apart by the room between
+    // groups rather than a card's edge (`--roster-gap`).
+    "grid gap-x-(--roster-gap)",
+    brief ? "gap-y-space-5" : "gap-y-space-3",
+    cols ?? "grid-cols-(--roster-cols)",
+  ]}
   style:--roster-cols={cols
     ? undefined
-    : "repeat(auto-fill, minmax(max(min(100%, var(--spacing-c-roster-card-min)), calc((100% - 3 * var(--spacing-space-3)) / 4)), 1fr))"}
+    : "repeat(auto-fill, minmax(max(min(100%, var(--spacing-c-roster-card-min)), calc((100% - 3 * var(--roster-gap)) / 4)), 1fr))"}
+  style:--roster-gap={brief
+    ? "var(--spacing-space-6)"
+    : "var(--spacing-space-3)"}
 >
   {#each members as member (member.id)}
     {@const holds = kindsOf(member.id)}
