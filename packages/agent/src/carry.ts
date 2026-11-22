@@ -48,6 +48,7 @@ import { workspaceCarriesDir } from "@cawco/core/paths/workspace";
 import { SAFE_GIT_ENV, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { carryWords, type FolderCopy } from "@cawco/core/words/carry";
 import { holdingWords } from "@cawco/core/words/workspace-holding";
 import { hostGit } from "./git/run";
 
@@ -66,11 +67,16 @@ export interface CarryHeld {
 export type CarryCheckout = "clone" | "worktree";
 
 /**
- * What a carry was saved from: a checkout, or a workspace's folder that is
- * no git clone any more (stand-ins.ts `noRepositoryAt`), whose own entries
- * are copied as they are ({@link copyStrays}).
+ * What a carry was saved from: a checkout; a workspace's folder that is no
+ * git clone any more (stand-ins.ts `noRepositoryAt`), whose own entries are
+ * copied as they are ({@link copyStrays}); or a folder workspace's view or
+ * copy of its folder (layer.ts), whose change set is copied
+ * (workspace.ts `carryChanged`) and whose folder is left as it was.
  */
-export type CarrySource = CarryCheckout | "folder";
+export type CarrySource =
+  | CarryCheckout
+  | "folder"
+  | (FolderCopy & { /** The workspace's id. */ id: string });
 
 /**
  * Copies `entries` (paths in the folder `from`: one that is no git clone, or
@@ -229,6 +235,22 @@ export const carryReadme = async ({
   /** A folder's entries not copied ({@link copyStrays}). */
   left?: readonly string[];
 }): Promise<string> => {
+  if (typeof checkout === "object") {
+    return [
+      `# ${title}`,
+      "",
+      carryWords.folderReadme(
+        checkout.id,
+        checkout,
+        words,
+        new Date().toISOString()
+      ),
+      ...(left.length > 0
+        ? ["", "Not copied:", ...left.map((one) => `- ${one}`)]
+        : []),
+      "",
+    ].join("\n");
+  }
   if (checkout === "folder") {
     return [
       `# ${title}`,

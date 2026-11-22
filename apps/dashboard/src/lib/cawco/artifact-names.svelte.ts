@@ -4,8 +4,10 @@
  * references.ts), as the chips that draw them read them: which session's
  * panel holds the artifact, its kind, name and title, and its pins and picks.
  *
- * An artifact a pane holds (PreviewPane, {@link holdArtifact}) is read from
- * the doc that pane joins, live. Any other is asked of the hub once
+ * An artifact whose doc is joined (a pane showing it, or a comment chip's
+ * open thread: {@link holdArtifact}) is read from that doc, live, by every
+ * chip naming it. When the last holder lets it go, its last marks stand and
+ * the hub is asked again. Any other is asked of the hub once
  * (`GET /api/artifacts/<id>`, then its pins by the person's read, which
  * counts as no one's hearing), and the answer is kept for this tab; one the
  * hub holds no longer (404) is null, and its chip is its label alone. A read
@@ -48,9 +50,11 @@ export interface HeldMarks {
 
 /** Each artifact the hub answered for, or null when it holds none by that id. */
 const answered = new SvelteMap<string, NamedArtifact | null>();
-/** Each artifact's doc as a pane holds it now. */
+/** Each artifact's doc as its holders show it now. */
 const held = new SvelteMap<string, HeldMarks>();
-/** Each artifact's pins as the hub last answered them, for one no pane holds. */
+/** Each artifact's holders: its doc is live while one holds it. */
+const holders = new Map<string, Set<ArtifactHold>>();
+/** Each artifact's pins as the hub last answered them, for one nothing holds. */
 const read = new SvelteMap<string, HeldMarks>();
 /** Artifacts whose pins the hub was asked for and has answered, or refused: what a pin's chip can know of them, it knows. */
 const pinsAnswered = new SvelteSet<string>();
@@ -71,15 +75,51 @@ export function noteArtifact(id: string, named: NamedArtifact): void {
   }
 }
 
-/** A pane holds artifact `id`'s doc: its pins and picks as they stand now. */
-export function holdArtifact(id: string, marks: HeldMarks): void {
-  held.set(id, marks);
+/** One holder of an artifact's joined doc. */
+export interface ArtifactHold {
+  /** The holder let the doc go. */
+  release: () => void;
+  /** The doc's pins and picks as they stand now, read by every chip naming it. */
+  show: (marks: HeldMarks) => void;
 }
 
-/** The pane let artifact `id`'s doc go: a chip reads the hub again. */
-export function releaseArtifact(id: string): void {
-  held.delete(id);
-  read.delete(id);
+/**
+ * Something joins artifact `id`'s doc: a pane showing it, or a comment
+ * chip's open thread. Every holder joins the same live doc, so what any of
+ * them shows last is the artifact as it stands. When the last one lets go,
+ * its last marks stand until the hub answers again.
+ */
+export function holdArtifact(id: string): ArtifactHold {
+  let mine = holders.get(id);
+  if (!mine) {
+    mine = new Set();
+    holders.set(id, mine);
+  }
+  const hold: ArtifactHold = {
+    show: (marks) => {
+      if (holders.get(id)?.has(hold)) {
+        held.set(id, marks);
+      }
+    },
+    release: () => {
+      const all = holders.get(id);
+      if (!all?.delete(hold) || all.size > 0) {
+        return;
+      }
+      holders.delete(id);
+      const last = held.get(id);
+      held.delete(id);
+      if (last) {
+        read.set(id, last);
+      }
+      const named = answered.get(id);
+      if (named) {
+        askPins(id, named.instanceId);
+      }
+    },
+  };
+  mine.add(hold);
+  return hold;
 }
 
 /**
@@ -180,7 +220,7 @@ export function artifactNamed(id: string): NamedArtifact | null {
   return null;
 }
 
-/** Artifact `id`'s pins and picks: the pane's live doc, else the hub's last answer (asked once). */
+/** Artifact `id`'s pins and picks: its held doc, live, else the hub's last answer. */
 export function artifactMarks(id: string): HeldMarks | null {
   const live = held.get(id);
   if (live) {

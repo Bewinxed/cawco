@@ -16,11 +16,7 @@ import { z } from "zod";
 import { ThreadEntrySchema } from "#lib/cawco/stored-shapes.js";
 import { graceWhile } from "#lib/platform/grace-while.svelte.js";
 import { readJson, unstore, writeJson } from "#lib/platform/storage.js";
-import {
-  holdArtifact,
-  noteArtifact,
-  releaseArtifact,
-} from "../artifact-names.svelte";
+import { holdArtifact, noteArtifact } from "../artifact-names.svelte";
 import {
   type ArtifactDoc,
   type ArtifactView,
@@ -320,13 +316,14 @@ export class PaneDoc {
         z.object({ note: z.string(), why: z.string() }).nullable(),
         null
       );
+      // A chip naming this artifact, a pin or a card of it reads it live from here.
+      const hold = holdArtifact(id);
       const joined = joinArtifact(
         session,
         id,
         (next) => {
           this.view = next;
-          // A chip naming this artifact, a pin or a card of it reads it live from here.
-          holdArtifact(id, { pins: next.pins, choices: next.choices });
+          hold.show({ pins: next.pins, choices: next.choices });
           // A pin the pane's doc holds now is its own from here on: the page's
           // copy goes, so a later delete or take-back there never brings it back.
           const held = new Set(next.pins.map((pin) => pin.id));
@@ -354,7 +351,7 @@ export class PaneDoc {
         // A look waiting on its ping is written before its doc goes (the pane laid out again, closed, another artifact).
         this.#deps.writeLooks();
         joined.destroy();
-        releaseArtifact(id);
+        hold.release();
         this.doc = null;
       };
     });

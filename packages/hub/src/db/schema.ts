@@ -1759,11 +1759,13 @@ export const workspaces = sqliteTable(
      * A host-scope delegate's (work-items.ts `startHost`): no clone and no
      * boundary. `path` (and `repoRoot`) is the folder on the machine its
      * session runs in, on the host, with the machine's own network, processes
-     * and the agent user's groups. Nothing is cut, landed, held or archived
-     * for it: no machine call names its folder, its row is where its items
-     * ran. Its scratch dir is its sessions' `TMPDIR` all the same (agent
-     * host-scratch.ts), settled once nothing of it is attached (workspaces.ts
-     * `settleHost`). Never listed among a machine's active or live workspaces.
+     * and the agent user's groups. Nothing is cut, landed or held for it:
+     * no machine call names its folder. Its scratch dir is its sessions'
+     * `TMPDIR` all the same (agent host-scratch.ts); once its items have
+     * ended and nothing of it is attached, that dir goes and the row is
+     * archived, its folder untouched (workspaces.ts `settleHost`), and filed
+     * active again for its session to go on (workspaces.ts `reopenHost`).
+     * Never listed among a machine's active or live workspaces.
      */
     host: integer("host", { mode: "boolean" }).notNull().default(false),
     /**

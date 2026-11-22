@@ -1,7 +1,8 @@
 /**
  * The agent's object pools (core object-pool.ts): one bare repository per
  * origin under `~/.cawco/object-pools/`, whose objects every workspace clone
- * of that origin borrows (clone.ts `prepareClone`), so a clone stores only
+ * of that origin borrows (clone.ts `prepareClone`), and every stage clone and
+ * pin cut from a checkout of it (stage-clone.ts `cut`), so a clone stores only
  * the objects it makes itself. A clone cut whole copied the source's store
  * apart from it (1.5 to 2.5 GB a cockpit clone on ext4, 31.5 GB across 38
  * clones on 2026-11-20); a clone that borrows from a pool holds a few
@@ -19,9 +20,10 @@
  * - is written by this agent alone, on the host, and only by `git fetch`
  *   ({@link readyPool}): seeded once, as it is made, from the person's own
  *   repository's `refs/remotes/origin/*`, never from a workspace's clone,
- *   whose refs a sandbox writes; then at every cut, the remote's default
- *   branch fetched from the remote. A fetch names every object by its
- *   content, so a pool takes in no file as it lies;
+ *   whose refs a sandbox writes; then at every workspace's cut, the remote's
+ *   default branch fetched from the remote ({@link readyPool}). A stage
+ *   clone's cut fetches nothing into it ({@link standingPool}). A fetch names
+ *   every object by its content, so a pool takes in no file as it lies;
  * - never runs `gc`, `prune` or a `repack -a -d` without `-k`: its config
  *   turns automatic maintenance off and keeps unreachable objects for ever
  *   ({@link POOL_CONFIG}), every git here runs with maintenance off on top
@@ -177,6 +179,34 @@ export const readyPool = (
       `refs/remotes/origin/${base}^{commit}`
     );
     return { base, tip };
+  });
+
+/**
+ * Pool `source.pool` as it stands, for a cut that starts from a checkout's
+ * own HEAD rather than the remote's default branch (stage-clone.ts `cut`):
+ * made first when it is not there ({@link makePool}, seeded from the
+ * person's repository), and nothing fetched from the remote, so such a cut
+ * reaches no network. Answers whether it holds any ref: a pool made with no
+ * seed (from a workspace's clone, or a shallow or partial repository) holds
+ * nothing to lend until a workspace's cut fetches into it. `run` is git in
+ * the pool, with {@link poolGitEnv}.
+ */
+export const standingPool = (
+  source: PoolSource,
+  run: Git,
+  deadline: number
+): Promise<boolean> =>
+  withPool(source.pool, deadline, async () => {
+    if (!(await lstat(source.pool).catch(() => undefined))) {
+      await makePool(source, run);
+    }
+    const ref = await run(
+      source.pool,
+      "for-each-ref",
+      "--count=1",
+      "--format=%(refname)"
+    );
+    return ref !== "";
   });
 
 /**

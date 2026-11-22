@@ -13088,10 +13088,21 @@
                     "items": {
                       "type": "object",
                       "properties": {
+                        "dir": {
+                          "minLength": 2,
+                          "maxLength": 4096,
+                          "pattern": "^/",
+                          "type": "string"
+                        },
                         "file": {
                           "minLength": 1,
                           "maxLength": 1000,
                           "pattern": "\\.stories\\.[cm]?[jt]sx?$",
+                          "type": "string"
+                        },
+                        "html": {
+                          "minLength": 1,
+                          "maxLength": 524288,
                           "type": "string"
                         },
                         "line": {
@@ -13106,7 +13117,6 @@
                         }
                       },
                       "required": [
-                        "file",
                         "line",
                         "name"
                       ]
@@ -38665,6 +38675,24 @@
                   "kind": {
                     "type": "string",
                     "enum": [
+                      "commit-gone"
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "message"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
                       "missing"
                     ]
                   },
@@ -54008,6 +54036,10 @@
                 "type": "object",
                 "properties": {
                   "page": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "description": "An HTML design's (a component artifact the hub keeps, core\nstage.ts {@link htmlDesignOf}): its design graph's address on the\npage's place (`/@cawco/canvas?file=…&spec=…`), each `file` one of\nits pages under its artifact's folder. None for a page.",
                     "type": "string"
                   }
                 },
@@ -158008,6 +158040,42 @@
                   409
                 ],
                 "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "project-not-made"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
               },
               "title": {
                 "type": "string"

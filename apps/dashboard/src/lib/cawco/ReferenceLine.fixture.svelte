@@ -135,7 +135,7 @@
     named("Where the sign-in move touches the hub", "canvas")
   );
   noteArtifact("art-component", named("Reference chips", "component"));
-  holdArtifact("art-page", {
+  holdArtifact("art-page").show({
     choices: {},
     pins: [
       {

@@ -13,7 +13,7 @@
  * supervision, and its preview's doc keeps its state the same way.
  */
 
-import type { PreviewDown } from "./preview/protocol";
+import type { PreviewDown, PreviewSource } from "./preview/protocol";
 import { withoutUndefined } from "./without-undefined";
 
 /**
@@ -805,6 +805,29 @@ export function canvasOf(path: string): { files: string[]; spec: CanvasSpec } {
 }
 
 /**
+ * Where an HTML design's pages stand in its artifact's folder under the
+ * hub's artifacts root, one page per direction: its canvas's files name
+ * them from that folder (`pages/<name>.html`).
+ */
+export const DESIGN_PAGES_DIR = "pages";
+
+/**
+ * An HTML design (the owner's pick on design-workspace-release#html,
+ * 2026-11-22): a component artifact whose pages the hub keeps and serves
+ * itself, opened on the design graph like a live story with no workspace,
+ * stage or app behind it. Its canvas address is its source's `path`: its
+ * pages as the files, each a direction, and the spec. Null for any other
+ * artifact, a component on a workspace's stage among them.
+ */
+export const htmlDesignOf = (row: {
+  kind: string;
+  source: PreviewSource;
+}): { files: string[]; path: string; spec: CanvasSpec } | null =>
+  row.kind === "component" && "page" in row.source && row.source.path
+    ? { ...canvasOf(row.source.path), path: row.source.path }
+    : null;
+
+/**
  * One direction of a design (the design graph's directions): one of the
  * canvas's states files, its name as the person reads it, and the agent's
  * one line on what it tries. A canvas with two or more opens them as one
@@ -1111,7 +1134,7 @@ export const STAGE_PIN_MS = 120_000;
 /** How long a stage has to answer once started. The spec's number. */
 export const STAGE_READY_MS = 60_000;
 
-/** How long a place's stage clone's git may take, each cut or step (agent `stage-clone.ts`). Ours: a one-commit fetch from the same disk. */
+/** How long a place's stage clone's git may take, each cut or step (agent `stage-clone.ts`). Ours: a fetch from the same disk of what the object pool it borrows from lacks, or of one commit where none lends. */
 export const STAGE_CLONE_GIT_MS = 60_000;
 
 /** How long a stage's install of its project inside its boundary may take (agent `stage-install.ts` `installProject`), before it starts. Ours. */

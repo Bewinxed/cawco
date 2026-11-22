@@ -22,6 +22,7 @@
  */
 import { readWithin } from "@cawco/core/bounded";
 import { FORM_CONTROLS } from "@cawco/core/pin-name";
+import { settledMedia } from "@cawco/core/scheme-media";
 import { cropPicture, groundOf, SKIPPED } from "./picture";
 
 export type Scheme = "light" | "dark";
@@ -248,23 +249,6 @@ function carryState(pairs: Pairs) {
 /** What `:defined` reads in the copy: the copy's own built-ins, and each custom element defined on the page (marked {@link DEFINED_MARK}). */
 const DEFINED = ":is(:defined, [data-cawco-defined])";
 const DEFINED_MARK = "data-cawco-defined";
-
-/** A `prefers-color-scheme` feature in a media query. */
-const PREFERS = /\(\s*prefers-color-scheme\s*:\s*(light|dark)\s*\)/giu;
-/** Media features that always hold, and never do (range syntax: a width is never negative). */
-const ALWAYS = "(width >= 0px)";
-const NEVER = "(width < 0px)";
-
-/** `media` with each `prefers-color-scheme` feature settled for `scheme`; null when it names none. */
-function settledMedia(media: string, scheme: Scheme): string | null {
-  PREFERS.lastIndex = 0;
-  if (!PREFERS.test(media)) {
-    return null;
-  }
-  return media.replace(PREFERS, (_, said: string) =>
-    said.toLowerCase() === scheme ? ALWAYS : NEVER
-  );
-}
 
 /**
  * `rules` and every rule nested in them, as the copy reads them in

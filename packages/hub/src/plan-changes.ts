@@ -125,11 +125,11 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
     return `${opening}\n\n${open}`;
   };
 
-  /** The folder a session goes on in from `row`: its own, or its project's checkout on its machine once its workspace is archived. */
+  /** The folder a session goes on in from `row`: its own, or its project's checkout on its machine once its workspace is archived (a host-scope one's folder is the machine's own, there all the same). */
   const goOnCwd = (row: InstanceRow) => {
     const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
     const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
-    return workspace?.state === "archived"
+    return workspace?.state === "archived" && !workspace.host
       ? db
           .project(row.projectId ?? "")
           ?.places.find(

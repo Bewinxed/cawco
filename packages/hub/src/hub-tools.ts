@@ -23,6 +23,9 @@
  * - `trim_propose`: a run of the unused skills and servers routine puts the
  *   hub's trimmed starting sets to the person, each through its set's own
  *   approval (unused-trim.ts), and is told the headline to finish with.
+ * - `project_create`, for `POST /api/projects`: a new project made with
+ *   Caw from the person's words, its conversation started to set it up
+ *   (project-create.ts).
  *
  * One list, made here: the MCP server lists it to sessions (server.ts) and
  * the role budgets measure it (role-budgets.ts).
@@ -50,6 +53,11 @@ import {
   designWrittenWords,
   machinesUpdatedWords,
 } from "./presenters/hub";
+import {
+  type createProjectCreate,
+  PROJECT_CREATE,
+  PROJECT_CREATE_DEFINITION,
+} from "./project-create";
 import { FOLDER_CONTENT_LIMIT, FOLDER_ENCODINGS } from "./project-folder";
 import type { agentUpdate } from "./routes/agent-control";
 import { TRIM_PROPOSE } from "./unused-trim";
@@ -73,6 +81,7 @@ export const HUB_TOOLS: ReadonlySet<string> = new Set([
   FIND_TOOL,
   "calls_by_role",
   TRIM_PROPOSE,
+  PROJECT_CREATE,
 ]);
 
 /**
@@ -129,6 +138,8 @@ export interface HubToolsDeps {
   machineIds: () => string[];
   /** Whether the hub requires paired devices (hub-auth.ts): an install asks the person first. */
   pairing: () => boolean;
+  /** A new project for the calling session (project-create.ts). */
+  projectCreate: ReturnType<typeof createProjectCreate>;
   /** The projects, by id and name. */
   projects: () => { id: string; name: string }[];
   /** A trim run's proposals put to the person (unused-trim.ts `propose`): the headline it finishes with. */
@@ -213,6 +224,7 @@ export const createHubTools =
         );
       }),
       TRIM_PROPOSE_DEFINITION.run(() => deps.trimPropose(me(), toolUseId)),
+      PROJECT_CREATE_DEFINITION.run((asked) => deps.projectCreate(me(), asked)),
     ];
   };
 
@@ -350,4 +362,5 @@ export const HUB_DEFINITIONS = [
   findListed,
   CALLS_BY_ROLE_DEFINITION.listed(),
   TRIM_PROPOSE_DEFINITION.listed(),
+  PROJECT_CREATE_DEFINITION.listed(),
 ];

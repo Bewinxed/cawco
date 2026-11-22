@@ -108,9 +108,13 @@ globalStore = true
  * `<cache>/links/`, inside the cache's own mount, and a clone's
  * `node_modules` is symlinks into it (bun.com/docs/pm/global-store: "Package
  * files live in one shared cache; each project's node_modules is a thin tree
- * of symlinks into it"): 5.9 MB a cockpit clone, 2026-10-18. Only the
- * isolated linker uses it ("the hoisted linker does not use it"); a hoisted
- * install copies as before. A global bunfig, and never the env's
+ * of symlinks into it"), but for the packages bun's rules keep in the
+ * project's own `node_modules/.bun`, each named with its rule in
+ * workspace-modules.ts, whose files are hard links of the cache's there: in
+ * a cockpit clone 71 of 1,675 packages, so `du -sh node_modules/` counts
+ * 310 MB, 17 MB of it past what the cache holds (2026-11-22). Only the
+ * isolated linker uses the store ("the hoisted linker does not use it"); a
+ * hoisted install copies as before. A global bunfig, and never the env's
  * `BUN_INSTALL_GLOBAL_STORE`, which bun reads after every bunfig: a project
  * whose packages import what they never declare (they no longer reach its
  * root `node_modules` from the store) says `globalStore = false` in its own

@@ -85,7 +85,7 @@
         "@openuidev/lang-core": "1.0.1",
         "@pierre/diffs": "1.6.4",
         "@pierre/highlights": "0.4.0",
-        "@pierre/words": "0.2.2",
+        "@pierre/words": "0.3.0",
         "@rive-app/canvas": "2.44.0",
         "@tanstack/svelte-table": "9.2.6",
         "@tanstack/svelte-virtual": "3.13.52",
@@ -102,7 +102,7 @@
         "photoswipe": "^5.4.4",
         "rfc6902": "5.3.0",
         "socket-activation": "3.2.0",
-        "svelte-words": "^0.1.1",
+        "svelte-words": "^0.2.0",
         "tailwind-merge": "^3.7.0",
         "tailwind-variants": "^3.3.1",
         "torph": "^0.1.3",
@@ -133,7 +133,7 @@
         "paneforge": "^1.0.2",
         "playwright-core": "^1.65.0",
         "postcss": "^8.5.30",
-        "postcss-selector-parser": "^7.1.6",
+        "postcss-selector-parser": "^7.2.1",
         "svelte": "5.57.2",
         "svelte-sonner": "^1.2.3",
         "tailwindcss": "^4.3.3",
@@ -390,7 +390,6 @@
     "socket-activation",
   ],
   "patchedDependencies": {
-    "postcss-selector-parser@7.1.6": "patches/postcss-selector-parser@7.1.6.patch",
     "bits-ui@2.20.6": "patches/bits-ui@2.20.6.patch",
     "openai@7.19.0": "patches/openai@7.19.0.patch",
     "virtua@0.55.0": "patches/virtua@0.55.0.patch",
@@ -1379,7 +1378,7 @@
 
     "@pierre/theming": ["@pierre/theming@1.0.2", "", { "peerDependencies": { "@pierre/theme": "^1.1.0 || ^2.0.0", "@shikijs/themes": "^3.0.0 || ^4.0.0", "react": "^18.3.1 || ^19.0.0", "react-dom": "^18.3.1 || ^19.0.0", "shiki": "^3.0.0 || ^4.0.0" }, "optionalPeers": ["@pierre/theme", "@shikijs/themes", "react", "react-dom", "shiki"] }, "sha512-RmXLLqtx31UGcR8kZyO5hGAQ1EXz6loT1Cu0BFAGsbnBboIxp2BlomkLfWyvdT4WZXnBGyu25onL1gKpFQuSUw=="],
 
-    "@pierre/words": ["@pierre/words@0.2.2", "", { "peerDependencies": { "@pierre/highlights": ">=0.5.1", "react": "^18.3.1 || ^19.0.0" }, "optionalPeers": ["@pierre/highlights", "react"] }, "sha512-gOMolXeQzPK9IVNDimh8pronqzpFISFxp+rhobKT8NYQsTOpDLQKgr0rjwZn3I/kHLF+Sqoe2aIO/R7H71IzwQ=="],
+    "@pierre/words": ["@pierre/words@0.3.0", "", { "peerDependencies": { "@pierre/highlights": ">=0.5.1", "react": "^18.3.1 || ^19.0.0", "react-dom": "^18.3.1 || ^19.0.0" }, "optionalPeers": ["@pierre/highlights", "react", "react-dom"] }, "sha512-k38qoYj0eUCr+vGQlXlSer78q5EeG7rSge9b2ADBFvLQ0L+OJH5zAdgdgm1jqkFq2Q6zXUuBkZWB5nQgPy2iUQ=="],
 
     "@polka/url": ["@polka/url@1.0.0-next.29", "", {}, "sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww=="],
 
@@ -3251,7 +3250,7 @@
 
     "postcss": ["postcss@8.5.30", "", { "dependencies": { "nanoid": "^3.3.20", "picocolors": "^1.1.1", "source-map-js": "^1.2.2" } }, "sha512-zkd+e9S1AQHhmaBKye9zlFHWjOwVgqXl1q3ECYy8561K7qxR2cREf/STLskulBFd78k6AOFeA+ff1TtEzk9bAA=="],
 
-    "postcss-selector-parser": ["postcss-selector-parser@7.1.6", "", { "dependencies": { "cssesc": "^3.0.0", "util-deprecate": "^1.0.2" } }, "sha512-7qASPzhKF2l2KLboRZux8CCTRMdGiV08vWmyKzPz22qZ7ZjQBOeY7rNzNoCLSUiftJ7HUq0GERHmxw/t0dCdMw=="],
+    "postcss-selector-parser": ["postcss-selector-parser@7.2.1", "", { "dependencies": { "util-deprecate": "^1.0.2" } }, "sha512-GwxlMgTTXwIom+ebC7an3k6RaJDwklRQQnfiXsLPGicu8FYV/k/+1/9YY2OU2+r938H2t4X0TDxoif+HP2rjzQ=="],
 
     "powershell-utils": ["powershell-utils@0.2.1", "", {}, "sha512-C+y9x90UElAddDZmV4qOx9W53B61PO7cIqWz2dQsWlwswuq4mr8NEwytdGKboYbQlGZ3awrkTeNvcZiZNHnQ8A=="],
 
@@ -3563,7 +3562,7 @@
 
     "svelte-toolbelt": ["svelte-toolbelt@0.10.7", "", { "dependencies": { "clsx": "^2.1.1", "runed": "^0.35.1", "style-to-object": "^1.0.8" }, "peerDependencies": { "svelte": "^5.30.2" } }, "sha512-gjuUVEEpo38UJCeI1ssE3NxG31tYENczPTcTGTXf4338qAQNdR9I1oAEbQY0KQFmbdUojNIhHuRNix7ThwFNxQ=="],
 
-    "svelte-words": ["svelte-words@0.1.1", "", { "peerDependencies": { "@pierre/words": "^0.2.2", "svelte": "^5.40.0" } }, "sha512-+XDz8nE0NhwzBTO/TXw8BBVXjaaj39nK526RARRuZRbJaW6KrK+Ll1ButwQg7MWXc2jnhRgClfRmfXdtHiqOSA=="],
+    "svelte-words": ["svelte-words@0.2.0", "", { "peerDependencies": { "@pierre/words": "^0.3.0", "svelte": "^5.40.0" } }, "sha512-R0/lGYlZijJXYmMYOLG1Mb99WMG4MZht1nEUjtn5hDUXLr/9viilZWMupo9ics5vTzJeAcHPzwpyuztemRX0tw=="],
 
     "svelte2tsx": ["svelte2tsx@0.7.61", "", { "dependencies": { "dedent-js": "^1.0.1", "scule": "^1.3.0" }, "peerDependencies": { "svelte": "^3.55 || ^4.0.0-next.0 || ^4.0 || ^5.0.0-next.0", "typescript": "^4.9.4 || ^5.0.0 || ^6.0.0" } }, "sha512-EpQ/+UHITBULeUojx/LLD3uTYasZXcX1BrqlrzfLUnT9vdUhaOWK59a3ryWcFU8L0sY1SP+gRhJ2Beiis98+qw=="],
 

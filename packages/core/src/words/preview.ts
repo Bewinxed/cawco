@@ -19,18 +19,36 @@ export const previewWords = {
   /** Its machine, when the hub's last read couldn't reach it. */
   machineNotAnswering: (machine: string) => `${machine} isn't answering`,
   /**
-   * A preview whose
-   * workspace is gone (core `PreviewDown` `gone`: archived or discarded),
-   * so this version can't be shown again. `goneTitle` and `goneLine` are the
-   * pane's down state (dashboard PreviewPane); `gonePage` the sentence on
-   * the proxy's own page, read in an artifact's tab of its own and by the
-   * hub (core preview-proxy `DOWN_WORDS`).
+   * A design or served preview that can't come back (core `PreviewDown`
+   * `gone`): opening it cuts its workspace again at its last version (hub
+   * workspaces.ts `revive`), and this stands only when that can't be done.
+   * `goneTitle` heads the pane's down state (dashboard PreviewPane), over
+   * the reason's line (`goneWhy`, carried on the proxy's page as its why),
+   * or `goneLine` when the page names none; `gonePage` is the sentence on
+   * the proxy's own page, read in an artifact's tab of its own (core
+   * preview-proxy `DOWN_WORDS`).
    */
-  goneTitle: "This preview's workspace is gone",
-  goneLine:
-    "This version can't be shown again. Its session can make it again from another workspace.",
+  goneTitle: "This version can't be shown again",
+  goneLine: "Its workspace can't be built again, and the hub didn't say why.",
   gonePage:
-    "This preview's workspace is gone, so this version can't be shown again. Ask its session to make it again from another workspace.",
+    "This preview's workspace can't be built again, so this version can't be shown. Ask its session to make it again.",
+  /**
+   * Why a design can't come back (hub workspaces.ts `GoneWhy`), the pane's
+   * line under `goneTitle`: `origin` no longer holds the commit its
+   * workspace was last on, `branch` the branch that held it; its workspace
+   * was discarded; it went before its last version was recorded, or that
+   * record can't be read; or building it again failed, `why` its machine's
+   * words.
+   */
+  goneWhy: {
+    commit: (branch: string) =>
+      `Its commit, on ${branch}, is no longer on origin. Usually the branch was deleted after it was merged.`,
+    discarded:
+      "Its workspace was discarded, so no record of this version was kept.",
+    unrecorded:
+      "Its workspace was deleted before a record of this version was kept, or that record can't be read.",
+    failed: (why: string) => `Its workspace couldn't be built again (${why}).`,
+  },
   /**
    * Its one action, the session asked to make it
    * again (The Empty Starts Work Rule). `goneAskLabel` the button, `agent`
