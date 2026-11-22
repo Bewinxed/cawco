@@ -222,84 +222,81 @@
     <!-- The tie as a connected thing's row (ConnectionsSection's sign-ins):
          where tasks sync, by whose sign-in, how the two sides stand; Sync
          now at its end, the rest of its acts in its ⋯. -->
-    <!-- Drawn out by its glyphs' inset, so they share the card's left edge. -->
-    <div class="-ms-c-mark-inset min-w-0">
-      <RowList label={words.tasks.groupLabel}>
-        <SectionRow
-          actions={[
-            {
-              label: words.tasks.changeTie,
-              icon: IconSettings,
-              disabled,
-              onselect: () =>
-                setupHome === tie.home ? closeSetup() : openSetup(tie.home),
+    <RowList label={words.tasks.groupLabel}>
+      <SectionRow
+        actions={[
+          {
+            label: words.tasks.changeTie,
+            icon: IconSettings,
+            disabled,
+            onselect: () =>
+              setupHome === tie.home ? closeSetup() : openSetup(tie.home),
+          },
+          {
+            label: tie.target.label,
+            icon: IconExternalLinear,
+            onselect: () => {
+              window.open(tie.target.url, "_blank", "noopener");
             },
-            {
-              label: tie.target.label,
-              icon: IconExternalLinear,
-              onselect: () => {
-                window.open(tie.target.url, "_blank", "noopener");
-              },
-            },
-          ]}
-          meta={tieMeta}
-          mono
-          name={tie.target.label}
-          whole
-        >
-          {#snippet tile()}
-            <ProviderLogo provider={tie.home} />
-          {/snippet}
-          {#snippet badge()}
-            {#if syncPending || tie.sync.kind === "syncing"}
-              <Badge variant="live"
-                ><IconWorking aria-hidden="true" /><span
-                  >{words.tasks.syncing}</span
-                ></Badge
-              >
-            {:else if tie.sync.kind === "first"}
-              <Badge variant="live"
-                ><IconWorking aria-hidden="true" /><span
-                  >{words.tasks.firstSync}</span
-                ></Badge
-              >
-            {:else if tie.sync.kind === "refused"}
-              <Badge variant="fail"
-                ><IconError aria-hidden="true" /><span
-                  >{words.tasks.syncRefused(formatAge(tie.sync.at))}</span
-                ></Badge
-              >
-            {/if}
-          {/snippet}
-          {#snippet trailing()}
-            <Button
-              {disabled}
-              icon={IconRefresh}
-              label={words.tasks.syncNow}
-              onclick={onsync}
-              pending={syncPending}
-              pendingLabel={words.tasks.syncing}
-              size="sm"
-              variant="outline"
-            />
-          {/snippet}
-          {#snippet below()}
-            {#if tie.sync.kind === "refused" && !syncPending}
-              <RowFault
-                again={onsync}
-                againLabel={words.tryAgain}
-                reason={tie.sync.words}
-              />
-            {/if}
+          },
+        ]}
+        meta={tieMeta}
+        mono
+        name={tie.target.label}
+        whole
+      >
+        {#snippet tile()}
+          <ProviderLogo provider={tie.home} />
+        {/snippet}
+        {#snippet badge()}
+          {#if syncPending || tie.sync.kind === "syncing"}
+            <Badge variant="live"
+              ><IconWorking aria-hidden="true" /><span
+                >{words.tasks.syncing}</span
+              ></Badge
+            >
+          {:else if tie.sync.kind === "first"}
+            <Badge variant="live"
+              ><IconWorking aria-hidden="true" /><span
+                >{words.tasks.firstSync}</span
+              ></Badge
+            >
+          {:else if tie.sync.kind === "refused"}
+            <Badge variant="fail"
+              ><IconError aria-hidden="true" /><span
+                >{words.tasks.syncRefused(formatAge(tie.sync.at))}</span
+              ></Badge
+            >
+          {/if}
+        {/snippet}
+        {#snippet trailing()}
+          <Button
+            {disabled}
+            icon={IconRefresh}
+            label={words.tasks.syncNow}
+            onclick={onsync}
+            pending={syncPending}
+            pendingLabel={words.tasks.syncing}
+            size="sm"
+            variant="outline"
+          />
+        {/snippet}
+        {#snippet below()}
+          {#if tie.sync.kind === "refused" && !syncPending}
             <RowFault
-              again={() => onretry("sync")}
-              againLabel={words.retryChange}
-              reason={refused.sync}
+              again={onsync}
+              againLabel={words.tryAgain}
+              reason={tie.sync.words}
             />
-          {/snippet}
-        </SectionRow>
-      </RowList>
-    </div>
+          {/if}
+          <RowFault
+            again={() => onretry("sync")}
+            againLabel={words.retryChange}
+            reason={refused.sync}
+          />
+        {/snippet}
+      </SectionRow>
+    </RowList>
   {/if}
 
   <PickTiles

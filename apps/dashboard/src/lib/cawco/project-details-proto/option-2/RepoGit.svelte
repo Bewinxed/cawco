@@ -162,27 +162,24 @@
 
 {#if record.repos.length > 0}
   <div class={CARD_GROUP}>
-    <!-- Drawn out by its glyphs' inset, so they share the card's left edge. -->
-    <div class="-ms-c-mark-inset min-w-0">
-      <RowList divided label={words.places.repositories}>
-        {#each record.repos as repo (`${repo.host}/${repo.owner}/${repo.name}`)}
-          <SectionRow icon={IconGitRepo} mono name="{repo.owner}/{repo.name}">
-            {#snippet trailing()}
-              <Button
-                aria-label="{repo.owner}/{repo.name}"
-                href={repo.url}
-                icon={IconExternalLinear}
-                rel="noreferrer"
-                size="icon-xs"
-                target="_blank"
-                tone="quiet"
-                variant="ghost"
-              />
-            {/snippet}
-          </SectionRow>
-        {/each}
-      </RowList>
-    </div>
+    <RowList divided label={words.places.repositories}>
+      {#each record.repos as repo (`${repo.host}/${repo.owner}/${repo.name}`)}
+        <SectionRow icon={IconGitRepo} mono name="{repo.owner}/{repo.name}">
+          {#snippet trailing()}
+            <Button
+              aria-label="{repo.owner}/{repo.name}"
+              href={repo.url}
+              icon={IconExternalLinear}
+              rel="noreferrer"
+              size="icon-xs"
+              target="_blank"
+              tone="quiet"
+              variant="ghost"
+            />
+          {/snippet}
+        </SectionRow>
+      {/each}
+    </RowList>
   </div>
 {/if}
 
