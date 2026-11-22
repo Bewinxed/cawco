@@ -10,8 +10,8 @@
    * it and lands where it lands.
    *
    * Brief (the project's settings view), it is its glyph and name, a
-   * control on its page's ground shown by its edge as the option chip is
-   * (raised on the control edge): its example is its tooltip and its
+   * control on its page's ground shown by its edge alone, as the view's
+   * option tiles are: its example is its tooltip and its
    * hand-over's head, and this project's own is told by its name in the
    * edited ink, as a dial changed from its default is (never a fill, never
    * its holder's hue), put back from the surface's head.
@@ -81,13 +81,13 @@
 
   const Glyph = $derived(kindGlyph(kind.id));
   const Scope = $derived(own ? IconFolder : IconGlobe);
-  /** Its surface: raised while its list is open, deeper when this project set it; brief, the option chip's at rest. */
+  /** Its surface: raised while its list is open, deeper when this project set it; brief, its edge alone. */
   const surface = $derived.by(() => {
     if (handing) {
       return "bg-surface-raised inset-ring-2 inset-ring-brand-solid";
     }
     if (brief) {
-      return "bg-surface-raised inset-ring inset-ring-border-control";
+      return "inset-ring inset-ring-border-control";
     }
     return own
       ? "bg-(--wash,var(--color-surface-recess-deep))"
