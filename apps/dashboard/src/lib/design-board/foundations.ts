@@ -1,56 +1,34 @@
 /**
- * The foundations the board draws, read off the theme itself
- * (lib/tokens/theme.css, imported as text): every token its `@theme static`
- * block declares, by the name Tailwind reads it by, sorted into the kinds
- * the board lays out. `static` writes every one of them into the shipped
- * stylesheet, so each is in the app as it ships. Their values are never
- * read here: the board draws each through `var()` and reads what the page
- * computes, in each scheme.
+ * The foundations the board draws, read off the theme as Tailwind reads it:
+ * lib/tokens/theme.css, the text the build bundles, loaded by Tailwind itself
+ * through `readTailwindTheme`, the product's one reader of a theme. Every
+ * theme variable it holds is sorted into the kinds the board lays out by its
+ * name. The theme is `static`, so each is written into the shipped
+ * stylesheet. Their values are never read here: the board draws each through
+ * `var()` and reads what the page computes, in each scheme.
  */
-/** The theme's own text, as the build reads it. */
-const [THEME = ""] = Object.values(
-  import.meta.glob<string>("../tokens/theme.css", {
-    eager: true,
-    import: "default",
-    query: "?raw",
-  })
+import { readTailwindTheme } from "@cawco/design-tokens/tailwind-theme";
+
+const ENTRY = "theme.css";
+/** The theme's stylesheets as the build bundles them, by path from lib/tokens. */
+const SHEETS = Object.fromEntries(
+  Object.entries(
+    import.meta.glob<string>("../tokens/*.css", {
+      eager: true,
+      import: "default",
+      query: "?raw",
+    })
+  ).map(([path, text]) => [path.slice("../tokens/".length), text])
+);
+
+const THEME = await readTailwindTheme(ENTRY, (path) =>
+  Promise.resolve(SHEETS[path])
 );
 
 /** The spacing base, the step every `--spacing(n)` counts in. */
 const SPACING = "spacing";
-const COMMENT = /\/\*[\s\S]*?\*\//gu;
-/** A declaration at the start of a line: its custom property's name. */
-const DECLARED = /^\s*(--[a-z0-9-]+)\s*:/gmu;
-const STATIC_OPEN = "@theme static {";
-
-/** The `@theme static` block's text: from its brace to the brace that closes it. */
-function staticBlock(text: string): string {
-  const start = text.indexOf(STATIC_OPEN);
-  if (start < 0) {
-    throw new Error("theme.css holds no `@theme static` block to read");
-  }
-  let depth = 0;
-  for (let at = start + STATIC_OPEN.length - 1; at < text.length; at += 1) {
-    if (text[at] === "{") {
-      depth += 1;
-    } else if (text[at] === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        return text.slice(start, at);
-      }
-    }
-  }
-  throw new Error("theme.css's `@theme static` block never closes");
-}
-
-/** Every token the static theme declares, in the order it declares them. */
-const TOKENS = [
-  ...new Set(
-    [...staticBlock(THEME.replace(COMMENT, "")).matchAll(DECLARED)].map(
-      ([, name]) => name
-    )
-  ),
-];
+/** Every theme variable, in the order the theme declares it. */
+const TOKENS = THEME.tokens;
 
 const named = (test: (name: string) => boolean) => TOKENS.filter(test);
 const starts =
@@ -94,7 +72,7 @@ export interface Foundation {
 /** The colours by their family: `--color-surface-raised` stands under "surface". */
 function colourShelves(): Shelf[] {
   const families = new Map<string, string[]>();
-  for (const name of named(starts("--color-"))) {
+  for (const name of THEME.names.TokenColor) {
     const family = name.split("-")[3] ?? name;
     families.set(family, [...(families.get(family) ?? []), name]);
   }
@@ -116,14 +94,7 @@ export const FOUNDATIONS: Foundation[] = [
   {
     title: "Type",
     shelves: [
-      shelf(
-        "Faces",
-        "face",
-        named(
-          (name) =>
-            name.startsWith("--font-") && !name.startsWith("--font-weight-")
-        )
-      ),
+      shelf("Faces", "face", THEME.names.TokenFont),
       shelf(
         "Sizes",
         "size",
