@@ -28,10 +28,12 @@
   } from "#lib/components/ui/option-group/index.js";
   import {
     IconDocument,
+    IconError,
     IconExternalLinear,
     IconInfo,
     IconRefresh,
     IconSettings,
+    IconWorking,
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
@@ -239,12 +241,21 @@
         {/snippet}
         {#snippet badge()}
           {#if syncPending || tie.sync.kind === "syncing"}
-            <Badge variant="live"><span>{words.tasks.syncing}</span></Badge>
+            <Badge variant="live"
+              ><IconWorking aria-hidden="true" /><span
+                >{words.tasks.syncing}</span
+              ></Badge
+            >
           {:else if tie.sync.kind === "first"}
-            <Badge variant="live"><span>{words.tasks.firstSync}</span></Badge>
+            <Badge variant="live"
+              ><IconWorking aria-hidden="true" /><span
+                >{words.tasks.firstSync}</span
+              ></Badge
+            >
           {:else if tie.sync.kind === "refused"}
             <Badge variant="fail"
-              ><span>{words.tasks.syncRefused(formatAge(tie.sync.at))}</span
+              ><IconError aria-hidden="true" /><span
+                >{words.tasks.syncRefused(formatAge(tie.sync.at))}</span
               ></Badge
             >
           {/if}
@@ -415,7 +426,7 @@
                   }}
                   value={team.id}
                 >
-                  {team.label}
+                  <span>{team.label}</span>
                 </OptionGroupItem>
               {/each}
             </OptionGroup>
@@ -442,7 +453,7 @@
                 }}
                 value={NONE_PROJECT}
               >
-                {words.tasks.githubProjectNone}
+                <span>{words.tasks.githubProjectNone}</span>
               </OptionGroupItem>
               {#each GITHUB_PROJECTS as proj (proj.id)}
                 <OptionGroupItem
@@ -452,7 +463,7 @@
                   }}
                   value={proj.id}
                 >
-                  {proj.name}
+                  <span>{proj.name}</span>
                 </OptionGroupItem>
               {/each}
             </OptionGroup>
