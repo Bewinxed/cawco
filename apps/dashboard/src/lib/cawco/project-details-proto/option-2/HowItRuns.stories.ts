@@ -13,7 +13,7 @@ export default {
   ...shellFrame,
   title: "How it runs",
   component: HowItRunsLive,
-  args: { situation: "At rest" },
+  args: { situation: "At rest", landing: "House settle", settleMs: 700 },
 };
 
 /** Checking how Lantern web runs before handing it the week's work. */

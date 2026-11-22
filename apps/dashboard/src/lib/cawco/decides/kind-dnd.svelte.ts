@@ -26,9 +26,15 @@ import {
   dropTargetForElements,
   monitorForElements,
 } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
+import { spring as motionSpring } from "motion";
 import { tick } from "svelte";
-import { motionOk } from "#lib/platform/motion/curves.svelte.js";
-import { integrate, Release, spring } from "#lib/platform/motion/spring.js";
+import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+import {
+  integrate,
+  Release,
+  type Sample,
+  spring,
+} from "#lib/platform/motion/spring.js";
 import {
   type DragEnd,
   type DragPoint,
@@ -98,6 +104,43 @@ export const kindDrag = {
   carried: (kind: string): boolean =>
     hint.aloft?.kind === kind && hint.aloft.to !== null,
 };
+
+/**
+ * What carries a dropped tile into its place, which the owner compares on
+ * the work path's graph (its Landing dial) before one is kept: the house's
+ * settle (motion/spring.ts, --duration-settle); the same settle over
+ * --duration-settle-drag, or `ms` when the graph's dial names it; or
+ * Motion's spring at its published defaults. Each takes the hand's speed.
+ */
+export type LandingStyle = "house" | "longer" | "motion";
+export const landing = $state<{ style: LandingStyle; ms: number | null }>({
+  style: "house",
+  ms: null,
+});
+
+/** One axis of a settle, from `x0` px off its rest at `v0` px/s, on the landing in use. */
+function settlePath(x0: number, v0: number): Sample[] {
+  if (landing.style === "house") {
+    return integrate(x0, v0);
+  }
+  if (landing.style === "longer") {
+    return integrate(x0, v0, landing.ms ?? dur("--duration-settle-drag"));
+  }
+  // Motion's generator, read every frame's worth (as the house's path is
+  // read) until it says it is done, from x0 to rest.
+  const run = motionSpring({ keyframes: [x0, 0], velocity: v0 });
+  const path: Sample[] = [];
+  for (let ms = 0; ; ms += FRAME_MS) {
+    const { value, done } = run.next(ms);
+    path.push({ t: ms / 1000, x: done ? 0 : value, v: 0 });
+    if (done) {
+      return path;
+    }
+  }
+}
+
+/** How far apart the Motion spring is read, in ms: a 120Hz frame. */
+const FRAME_MS = 1000 / 120;
 
 /**
  * The tile in the hand: a copy of it in the top layer (a manual popover,
@@ -207,13 +250,13 @@ class Ghost {
       return;
     }
     const flights = [
-      ...spring(integrate(from.x - box.left, vx * 1000), [
+      ...spring(settlePath(from.x - box.left, vx * 1000), [
         {
           el: this.#node,
           frame: (x) => ({ transform: place(box.left + x, box.top) }),
         },
       ]),
-      ...spring(integrate(from.y - box.top, vy * 1000), [
+      ...spring(settlePath(from.y - box.top, vy * 1000), [
         { el: this.#lane, frame: (y) => ({ transform: place(0, y) }) },
       ]),
     ];

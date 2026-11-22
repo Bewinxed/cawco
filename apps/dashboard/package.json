@@ -46,6 +46,7 @@
     "embla-carousel-svelte": "8.6.0",
     "interactjs": "1.10.28",
     "minisearch": "7.2.0",
+    "motion": "^14.14.0",
     "pele": "1.13.0",
     "photoswipe": "^5.4.4",
     "rfc6902": "5.3.0",

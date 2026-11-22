@@ -1377,6 +1377,8 @@
   --duration-press-hold: 380ms;
   /* The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics. Also a folder tab's choice, on ease-crossfade (the owner's pick, "Slow · 400ms"). */
   --duration-settle: 400ms;
+  /* A dragged kind's tile settling into its slot when it lands on the longer settle (Who decides, the landing the owner compares on the work path's graph). */
+  --duration-settle-drag: 700ms;
   /* A tab track's glide under a mouse wheel: the second spring's response. */
   --duration-glide: 300ms;
   /* How long a done state stays up. */
