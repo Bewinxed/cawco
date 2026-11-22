@@ -1,6 +1,5 @@
 <script lang="ts">
   import { Button } from "#lib/components/ui/button/index.js";
-  import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconExternalLinear, IconTerminal } from "#lib/icons.js";
   import type { RunTranscript, TranscriptStep } from "./routines-data";
@@ -41,14 +40,6 @@
   <div class="flex flex-wrap items-center justify-between gap-space-2">
     <span class="type-label text-ink-strong">{session.title}</span>
     <div class="flex flex-none items-center gap-space-1">
-      <CopyButton
-        aria-label="Copy session details"
-        size="xs"
-        text={details}
-        variant="ghost"
-      >
-        Copy id
-      </CopyButton>
       <Tip label={details}>
         {#snippet children(tip)}
           <Button
