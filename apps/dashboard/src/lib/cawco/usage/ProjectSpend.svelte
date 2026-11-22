@@ -243,6 +243,37 @@
   </Table.Header>
 {/snippet}
 
+{#snippet summaryRow(label: string, amount: number)}
+  <Table.Row data-project-spend-row class="relative" variant="stacks">
+    <Table.Cell variant="ledger-stacks" class="@max-phone/table:col-span-full"
+      ><span
+        data-slot="name"
+        class="type-label block truncate text-ink-strong no-underline"
+        >{label}</span
+      ></Table.Cell
+    >
+    <Table.Cell
+      variant="ledger-stacks"
+      class="w-(--w)"
+      style="--w: calc(var(--spacing) * 32)"
+    ></Table.Cell>
+    <Table.Cell
+      data-num
+      edge="end"
+      variant="ledger-stacks"
+      class="w-(--w)"
+      style="--w: calc(var(--spacing) * 24)">{usd(amount)}</Table.Cell
+    >
+    <Table.Cell
+      data-col-last
+      edge="end"
+      variant="ledger-stacks"
+      class="w-(--w)"
+      style="--w: calc(var(--spacing) * 24)"
+    ></Table.Cell>
+  </Table.Row>
+{/snippet}
+
 <section aria-label="{projectName}'s spend" class="flex flex-col gap-space-5">
   {#if refused && !spend}
     <p data-slot="note" class="type-meta text-ink-muted" role="alert">
@@ -551,43 +582,6 @@
               </Table.Body>
             {/if}
             <Table.Body>
-              {#snippet summaryRow(label: string, amount: number)}
-                <Table.Row
-                  data-project-spend-row
-                  class="relative"
-                  variant="stacks"
-                >
-                  <Table.Cell
-                    variant="ledger-stacks"
-                    class="@max-phone/table:col-span-full"
-                    ><span
-                      data-slot="name"
-                      class="type-label block truncate text-ink-strong no-underline"
-                      >{label}</span
-                    ></Table.Cell
-                  >
-                  <Table.Cell
-                    variant="ledger-stacks"
-                    class="w-(--w)"
-                    style="--w: calc(var(--spacing) * 32)"
-                  ></Table.Cell>
-                  <Table.Cell
-                    data-num
-                    edge="end"
-                    variant="ledger-stacks"
-                    class="w-(--w)"
-                    style="--w: calc(var(--spacing) * 24)"
-                    >{usd(amount)}</Table.Cell
-                  >
-                  <Table.Cell
-                    data-col-last
-                    edge="end"
-                    variant="ledger-stacks"
-                    class="w-(--w)"
-                    style="--w: calc(var(--spacing) * 24)"
-                  ></Table.Cell>
-                </Table.Row>
-              {/snippet}
               {#if spend.caw.monthUsd > 0}
                 {@render summaryRow("Conversations", spend.caw.monthUsd)}
               {/if}
