@@ -44,7 +44,7 @@
     onopenrun,
   }: Props = $props();
 
-  const reading = $derived(readRoutine(routine, now));
+  const reading = $derived(readRoutine(routine));
   const latest = $derived(routine.runs[0] ?? null);
   const latestMeta = $derived(latest ? runOutcomeMeta(latest.outcome) : null);
   const earlier = $derived(routine.runs.slice(1));

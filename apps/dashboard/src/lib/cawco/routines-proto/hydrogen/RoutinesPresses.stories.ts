@@ -8,18 +8,36 @@ import Routines from "./Routines.svelte";
 interface PlayContext {
   canvas: {
     getByRole: (role: string, options: { name: string }) => Element;
+    queryByRole: (role: string, options: { name: string }) => Element | null;
   };
-  userEvent: { click: (el: Element) => Promise<void> };
+  userEvent: {
+    click: (el: Element) => Promise<void>;
+    wait: (ms: number) => Promise<void>;
+  };
 }
 
-/** Opens a routine by its expand button, then presses a button inside it. */
+/** The opened routine stands once its panel has slid in: waits up to a second for it. */
+async function opened(
+  { canvas, userEvent }: PlayContext,
+  name: string
+): Promise<Element> {
+  for (let tries = 0; tries < 20; tries += 1) {
+    const found = canvas.queryByRole("button", { name });
+    if (found) {
+      return found;
+    }
+    await userEvent.wait(50);
+  }
+  return canvas.getByRole("button", { name });
+}
+
+/** Opens a routine by its row, then presses a button inside it. */
 const openThen =
-  (routine: string, button: string) =>
-  async ({ canvas, userEvent }: PlayContext) => {
-    await userEvent.click(
-      canvas.getByRole("button", { name: `Open ${routine}` })
+  (routine: string, button: string) => async (context: PlayContext) => {
+    await context.userEvent.click(
+      context.canvas.getByRole("button", { name: `Open ${routine}` })
     );
-    await userEvent.click(canvas.getByRole("button", { name: button }));
+    await context.userEvent.click(await opened(context, button));
   };
 
 export default {
@@ -64,6 +82,14 @@ export const FixWithCaw = {
     await userEvent.click(
       canvas.getByRole("button", { name: "Fix Staging health check with Caw" })
     );
+  },
+};
+
+/** I sorted the routines by when they run next, the soonest first. */
+export const SortedByNextRun = {
+  from: "AtAGlance",
+  play: async ({ canvas, userEvent }: PlayContext) => {
+    await userEvent.click(canvas.getByRole("button", { name: "Next run" }));
   },
 };
 

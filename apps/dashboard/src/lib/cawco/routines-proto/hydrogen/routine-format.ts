@@ -2,7 +2,6 @@ import type { StatusPair } from "@cawco/core/views";
 import {
   formatDay,
   formatNextClock,
-  formatRelAge,
   LOCAL_ZONE,
   MOCK_NOW,
   type Routine,
@@ -49,9 +48,10 @@ export function runOutcomeMeta(outcome: RunOutcome): OutcomeMeta {
 }
 
 /**
- * What a routine's tile says: one plain sentence of what it last did or is
+ * What a routine's row says: one plain sentence of what it last did or is
  * waiting for, and whether that needs the person. A routine needs him when it
- * stopped, or when its newest run failed; nothing else carries a mark.
+ * stopped, or when its newest run failed; nothing else carries a mark. When
+ * it last ran stands in its own column, so the sentence carries no time.
  */
 export interface RoutineReading {
   fixPrompt: string | null;
@@ -64,14 +64,16 @@ function lower(text: string): string {
   return text ? `${text[0]?.toLowerCase() ?? ""}${text.slice(1)}` : text;
 }
 
+/** The words with their first letter raised, to open a sentence or a cell. */
+export function upper(text: string): string {
+  return text ? `${text[0]?.toUpperCase() ?? ""}${text.slice(1)}` : text;
+}
+
 function fixPrompt(routine: Routine, reason: string): string {
   return `Fix the routine "${routine.name}": ${reason}.`;
 }
 
-export function readRoutine(
-  routine: Routine,
-  now: number = MOCK_NOW
-): RoutineReading {
+export function readRoutine(routine: Routine): RoutineReading {
   const [latest] = routine.runs;
   const said = latest ? lower(latest.oneLine) : "";
 
@@ -100,7 +102,7 @@ export function readRoutine(
       fixPrompt: fixPrompt(routine, latest.oneLine),
       needsYou: true,
       running: false,
-      sentence: `Failed ${formatRelAge(latest.startedAt, now)}: ${said}.`,
+      sentence: `Failed: ${said}.`,
     };
   }
   if (routine.status === "paused") {
@@ -112,30 +114,32 @@ export function readRoutine(
     };
   }
   if (routine.status === "finished") {
-    const metAt = routine.check?.metAt;
-    const when = metAt ? ` ${formatDay(metAt)}` : "";
     return {
       fixPrompt: null,
       needsYou: false,
       running: false,
-      sentence: latest ? `Finished${when}: ${said}.` : `Finished${when}.`,
+      sentence: latest ? `Finished: ${said}.` : "Finished.",
     };
   }
-  if (!latest) {
-    return {
-      fixPrompt: null,
-      needsYou: false,
-      running: false,
-      sentence: "Hasn't run yet.",
-    };
-  }
-  const verb = routine.check ? "Looked" : "Ran";
   return {
     fixPrompt: null,
     needsYou: false,
     running: false,
-    sentence: `${verb} ${formatRelAge(latest.startedAt, now)}: ${said}.`,
+    sentence: latest ? `${upper(latest.oneLine)}.` : "Hasn't run yet.",
   };
+}
+
+/** When it ran last, spelled out; none before its first run. */
+export function lastRunAt(routine: Routine): number | undefined {
+  return routine.runs[0]?.startedAt;
+}
+
+/** When it runs next; none while it is stopped, paused or finished. */
+export function nextRunAt(routine: Routine): number | undefined {
+  return (routine.status === "active" || routine.status === "running") &&
+    routine.schedule.nextAt !== null
+    ? routine.schedule.nextAt
+    : undefined;
 }
 
 /** The rhythm in words, with its zone named only when it is not the person's. */
