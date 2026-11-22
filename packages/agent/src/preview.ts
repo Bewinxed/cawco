@@ -291,7 +291,7 @@ export function stopPreview({
  */
 const upstreamOf = async (
   instanceId: string,
-  source: { pin?: string; port: number; stage?: unknown; workspace?: string }
+  source: { port: number; stage?: unknown; workspace?: string }
 ): Promise<{ unix: string } | "host"> => {
   const network = networkOf(source);
   if (network === undefined) {
@@ -653,12 +653,11 @@ const portSource = (
   port: number,
   parts: Pick<
     Extract<PreviewSource, { port: number }>,
-    "pin" | "serve" | "stage" | "workspace"
+    "serve" | "stage" | "workspace"
   >
 ): Extract<PreviewSource, { port: number }> => ({
   port,
   ...(parts.workspace === undefined ? {} : { workspace: parts.workspace }),
-  ...(parts.pin === undefined ? {} : { pin: parts.pin }),
   ...(parts.stage === undefined ? {} : { stage: parts.stage }),
   ...(parts.serve === undefined ? {} : { serve: parts.serve }),
 });
@@ -822,14 +821,14 @@ async function start(
   options: PreviewStartArgs,
   ports: Pick<AgentPorts, "stage" | "stageClone">
 ): Promise<{ port: number }> {
-  const { instanceId, token, pin } = options;
+  const { instanceId, token } = options;
   const relayToken = Buffer.from(token);
   let source: Exclude<PreviewSource, { page: string }>;
   if ("dir" in options) {
-    source = { dir: await pinnedRoot(options.dir, pin) };
+    source = { dir: await pinnedRoot(options.dir, options.pin) };
   } else {
     const { port, workspace, stage, serve } = options;
-    source = portSource(port, { workspace, stage, serve, pin });
+    source = portSource(port, { workspace, stage, serve });
   }
   await stopNow(instanceId);
   // A workspace no boundary runs refuses the preview in so many words. A

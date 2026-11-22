@@ -152,6 +152,7 @@ import {
   STAGE_PINS,
   STAGE_RENDER,
   STAGE_SERVE,
+  STAGE_SERVE_STOP,
   STAGE_UNPIN,
   STAGE_WARM,
   STAGE_WRITE,
@@ -373,9 +374,9 @@ import {
   keepPins,
   moveStages,
   pinFolderOf,
-  pinTreeOf,
   renderStage,
   stageComponents,
+  stopServed,
   tellStages,
   unpin,
   warmStage,
@@ -3835,15 +3836,12 @@ const startDaemon = (rediscover = false) =>
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : writeSheet(ports, ref, write)
     );
-    // The version an author hands up, cut: a served preview's tree's clone (`[ref, pin]`) or a folder's copy (`[null, pin, dir]`).
-    supervisor.declareControl(STAGE_PIN, (...asked) => {
-      if (fenced()) {
-        return Promise.reject(new Error(AGENT_RESTARTING));
-      }
-      return asked[0] === null
-        ? pinFolderOf(asked[2], asked[1])
-        : pinTreeOf(asked[0], asked[1]);
-    });
+    // The version of a folder preview an author hands up, copied.
+    supervisor.declareControl(STAGE_PIN, (pin, dir) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : pinFolderOf(dir, pin)
+    );
     // The pins the hub serves from, as this machine registers: every other one let go.
     supervisor.declareControl(STAGE_PINS, keepPins);
     // A served preview's page as its author has it, drawn on its workspace's own server.
@@ -3866,12 +3864,15 @@ const startDaemon = (rediscover = false) =>
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : stageComponents(ports, ref, query ?? {})
     );
-    // A preview's server, started or woken and kept up in its workspace or place (stage.ts).
-    // With a pin, the server of the version the person is served (core `PreviewSource.pin`).
-    supervisor.declareControl(STAGE_SERVE, (ref, serve, pin) =>
+    // A preview's server, started or woken and kept up in its workspace or place (stage.ts): the one the person is served.
+    supervisor.declareControl(STAGE_SERVE, (ref, serve) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : ensureServed(ports, ref, serve, undefined, pin ?? undefined)
+        : ensureServed(ports, ref, serve)
+    );
+    // A preview's server no artifact is served from any more, stopped.
+    supervisor.declareControl(STAGE_SERVE_STOP, (workspace, port) =>
+      Promise.resolve(stopServed(workspace, port))
     );
     // A check that names another machine: the commit leaves here, and arrives there.
     supervisor.declareControl(

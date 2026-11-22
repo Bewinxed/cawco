@@ -14,7 +14,7 @@ import { stateOf, stillThere } from "./facts";
 import { unheardKeys } from "./needs";
 import { answersKept } from "./overwrite";
 import type { createPageStore } from "./page-store";
-import { pinnedAt, pinTarget, servedOf } from "./served";
+import { pinnedAt, servedOf } from "./served";
 import type { Making, WarmPreviews } from "./shapes";
 
 /** What createVersions reads of the artifact service: its deps, and the service's parts it calls, each read when called. */
@@ -31,10 +31,6 @@ export interface VersionsContext {
     name: string
   ) => ArtifactRow | undefined;
   programOf: (row: ArtifactRow) => string | undefined;
-  /** A preview's server started or woken in the workspace or place `source` names, in its pin when it names one (kinds/preview.ts `serveFirst`); nothing for any other source. */
-  serveFirst: (
-    source: PreviewSource
-  ) => ReturnType<ArtifactServiceDeps["serve"]> | Promise<undefined>;
   /** Whether a session writes `row` as one of its delegation tree (access.ts `sharesWith`). */
   sharesWith: (instance: InstanceRow, row: ArtifactRow) => boolean;
   show: (
@@ -127,12 +123,13 @@ export const createVersions = (ctx: VersionsContext) => {
    * opened it, so it is no longer waiting on the parent as handed, every
    * change its maker makes waits for the parent's artifact_show, whether the
    * panel shows it now or the person can open it from the panel's list.
-   * What a machine serves of it (a served preview's server, a folder) is
+   * What a version holds of a served preview is what its row names (its
+   * port, command, start page, title and ask): its server is the one its
+   * workspace runs, served live (served.ts `servedOf`). A folder's is
    * served from the version's own pin (core `PreviewSource.pin`), never
    * from the files its maker goes on editing. Not the owner's own change,
-   * nor a sheet's: its stage serves the workspace's files live (served.ts
-   * `pinTarget`), so a held version of it could hold nothing the panel
-   * shows.
+   * nor a sheet's: its stage serves the workspace's files live, so a held
+   * version of it could hold nothing the panel shows.
    */
   const holdsChange = (maker: InstanceRow, row: ArtifactRow): boolean =>
     row.instanceId !== maker.id &&
@@ -142,11 +139,10 @@ export const createVersions = (ctx: VersionsContext) => {
    * Where a maker's change to its parent's artifact `row` goes when it
    * {@link holdsChange}: its next version, a hidden row of its own (`heldFor`)
    * made from it whole (its doc forked, its files copied), which no list
-   * holds and nothing shows, so what the panel shows stays. What a machine
-   * serves of it is the pin the panel is served (core `PreviewSource.pin`,
-   * which never changes after its cut) until the change it holds cuts its
-   * own. One already held
-   * takes every change after. `fresh` when this call made it; null when the
+   * holds and nothing shows, so what the panel shows stays. A folder's is
+   * served from the pin the panel is served (core `PreviewSource.pin`,
+   * which never changes after its copy) until the change it holds copies
+   * its own. One already held takes every change after. `fresh` when this call made it; null when the
    * change is not held.
    */
   const holdNext = (
@@ -184,57 +180,32 @@ export const createVersions = (ctx: VersionsContext) => {
     });
     return { fresh: true, next };
   };
-  /** Pin `pin` of `source` cut on machine `machineId` ({@link pinnedSource}): the refusal, or `unpinned` for a source nothing pins. */
-  const cutOn = (machineId: string, source: PreviewSource, pin: string) => {
-    const target = pinTarget(source);
-    if (!target) {
-      return Promise.resolve("unpinned" as const);
-    }
-    return "dir" in target
-      ? deps.pinFolder(machineId, target.dir, pin)
-      : deps.pin({ workspace: target.workspace }, pin);
-  };
   /**
-   * The version of `source` its author hands up (core `PreviewSource.pin`),
-   * cut on its machine as a pin of its own beside the one the person is
-   * served: a workspace preview's tree as it is now, a folder's copy; a
-   * served preview's server started there. The source on that pin, and the
-   * server's state; a sheet, a page or a host's port as it is.
-   * Refused, nothing of the pin left, when its machine could not cut it or
-   * its server did not start: the person's pin is never touched, and he is
-   * moved onto the new one only by its row's write (db `resource`), which
-   * lets the old one go once nothing names it (`letGoMoved`).
+   * The version of `source` its author hands up (core `PreviewSource.pin`):
+   * a folder preview's folder copied on its machine as a pin of its own
+   * beside the one the person is served, and the source on that pin; any
+   * other source as it is, a served preview's server the one its workspace
+   * runs, live (served.ts `servedOf`). Refused, nothing of the pin left,
+   * when its machine could not copy it: the person's pin is never touched,
+   * and he is moved onto the new one only by its row's write (db
+   * `resource`), which lets the old one go once nothing names it
+   * (`letGoMoved`).
    */
   const pinnedSource = async (
     machineId: string | null,
     source: PreviewSource
   ) => {
-    const unpinned: { source: PreviewSource; stage: undefined } = {
-      source,
-      stage: undefined,
-    };
-    if (!machineId) {
+    if (!(machineId && "dir" in source)) {
+      const unpinned: { source: PreviewSource } = { source };
       return unpinned;
     }
     const pin = crypto.randomUUID();
-    const refused = await cutOn(machineId, source, pin);
-    if (refused === "unpinned") {
-      return unpinned;
-    }
+    const refused = await deps.pinFolder(machineId, source.dir, pin);
     if (refused) {
       deps.unpin(machineId, pin);
       return refused;
     }
-    const pinned = pinnedAt(source, pin);
-    const stage = await ctx.serveFirst(pinned);
-    if (stage instanceof ElysiaStatus) {
-      deps.unpin(machineId, pin);
-      return stage;
-    }
-    const cut: { source: PreviewSource; stage: StageState | undefined } = {
-      source: pinned,
-      stage,
-    };
+    const cut: { source: PreviewSource } = { source: pinnedAt(source, pin) };
     return cut;
   };
   /**

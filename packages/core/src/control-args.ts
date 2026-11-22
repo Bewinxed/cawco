@@ -20,7 +20,6 @@ import {
   maxValue,
   minValue,
   nonEmpty,
-  null_,
   nullable,
   number,
   object,
@@ -164,10 +163,11 @@ const MoveSnapshotResult = storedAs(
   MoveSnapshotResultShape,
   controlWords.meant.moveSnapshot
 );
+const Port = pipe(count, integer(), minValue(1), maxValue(65_535));
 const ServeSpec = object({
   command: text,
   cwd: text,
-  port: pipe(count, integer(), minValue(1), maxValue(65_535)),
+  port: Port,
 });
 const StoryValues = record(string(), unknown());
 const StoryOp = union([
@@ -201,12 +201,11 @@ const RenderAsk = object({
   ),
 });
 const PortSource = {
-  port: pipe(count, integer(), minValue(1), maxValue(65_535)),
+  port: Port,
   path: optional(text),
   stage: optional(object({ dir: text, file: text })),
   serve: optional(object({ command: text, cwd: text })),
   workspace: optional(text),
-  pin: optional(text),
 };
 const DirSource = { dir: text, path: optional(text), pin: optional(text) };
 const PreviewStarted = {
@@ -662,11 +661,9 @@ const ARGS: {
       })
     ),
   ]),
-  stageServe: tuple([WorkspaceRef, ServeSpec, maybe(named)]),
-  stagePin: union([
-    tuple([WorkspaceRef, named]),
-    tuple([null_(), named, absolute]),
-  ]),
+  stageServe: tuple([WorkspaceRef, ServeSpec]),
+  stageServeStop: tuple([text, Port]),
+  stagePin: tuple([named, absolute]),
   stagePins: tuple([texts]),
   stagePicture: tuple([
     WorkspaceRef,

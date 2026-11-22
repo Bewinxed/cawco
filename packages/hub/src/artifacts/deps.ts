@@ -392,13 +392,6 @@ export interface ArtifactServiceDeps {
     | ReturnType<typeof problem<502, { code: "picture-none"; detail: string }>>
   >;
   /**
-   * The version of a sheet or a served preview its author hands up (core
-   * `PreviewSource.pin`), cut on the machine of the workspace or place `at`
-   * names: pin `pin`'s clone of it, cut or brought in step with it once
-   * (agent stage.ts `pinTreeOf`). Refused saying why it can't.
-   */
-  pin: (at: StageAt, pin: string) => Promise<StageRefused | undefined>;
-  /**
    * The agent's reply `text` on a pin of artifact `artifactId` asks the
    * person something (`comment_reply`'s `asks`): its push, grouped per
    * artifact (push.ts `pinAsked`).
@@ -505,18 +498,12 @@ export interface ArtifactServiceDeps {
    * refusal saying why it didn't start. A decision page's Previews of it
    * wake it as the page goes out, unwaited (`warmPreviews`).
    */
-  serve: (
-    at: StageAt,
-    serve: ServeSpec,
-    /** The pin of the version the person is served (core `PreviewSource.pin`), whose server it is. */
-    pin: string | undefined
-  ) => Promise<StageState | StageRefused>;
+  serve: (at: StageAt, serve: ServeSpec) => Promise<StageState | StageRefused>;
   /**
    * A served preview's page as its author has it now, for its author's
-   * `artifact_read` with `png`: its workspace's own server, started by
+   * `artifact_read` with `png`: the server its row names, started by
    * CawCo as `artifact_create` starts it, drawn in that machine's own
-   * Chromium (agent stage.ts `drawServed`), never the pin the person is
-   * served. Refused saying why it can't.
+   * Chromium (agent stage.ts `drawServed`). Refused saying why it can't.
    */
   servedPicture: (
     at: StageAt,
@@ -584,6 +571,16 @@ export interface ArtifactServiceDeps {
   ) => Promise<SheetWritten | StageRefused>;
   /** The session's plan's steps: an open one naming a card or pin of an artifact holds its ask (needs.ts `planHolds`). */
   steps: (instanceId: string) => readonly PlanStep[];
+  /**
+   * A preview's server on machine `machineId`, on `port` of the workspace or
+   * place it runs in, stopped: no artifact is served from it any more
+   * (agent stage.ts `stopServed`). Whether one ran; undefined when the
+   * machine did not answer. Never throws.
+   */
+  stopServed: (
+    machineId: string,
+    server: { port: number; workspace: string }
+  ) => Promise<boolean | undefined>;
   /**
    * Whether a session can no longer act, ever: no one, its parent and the
    * person included, can give it a turn again. Its item ended and its

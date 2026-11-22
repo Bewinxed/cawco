@@ -54447,15 +54447,11 @@
                   "path": {
                     "type": "string"
                   },
-                  "pin": {
-                    "description": "A served preview's (`serve`) version the person is served: the id of\na clone of `workspace` cut on its machine at its HEAD with its\nuncommitted changes when its author handed this version up (its\n`artifact_create`, its `artifact_update`, its own `artifact_show`),\nand changed only by the next hand-up, never by an edit to the\nworkspace's files (agent stage-clone.ts `cutPin`). Its own server\nanswers the artifact's preview origin, in its own network; what the\nauthor reads (`artifact_read`, its renders) is the workspace as it\nis now. Absent for a sheet, served live, and for a port on a\nmachine's host, whose server is the session's own.",
-                    "type": "string"
-                  },
                   "port": {
                     "type": "number"
                   },
                   "serve": {
-                    "description": "A preview's server (core `stage.ts` {@link ServeSpec}): the command\nthe stage of `workspace` runs and keeps up on `port`, in `cwd` from\nits tree's root. A request for it wakes it when it sleeps. Every\nport preview made since 2026-11-22 names it; one without it is a\nport its session kept up by hand, which nothing starts again.",
+                    "description": "A preview's server (core `stage.ts` {@link ServeSpec}): the command\nthe stage of `workspace` runs and keeps up on `port`, in `cwd` from\nits tree's root. A request for it wakes it when it sleeps. Every\nport preview made since 2026-11-22 names it; one without it is a\nport its session kept up by hand, which nothing starts again. The\nperson is served that one server live, as its author runs it: an\nedit to its tree reaches the open preview through the dev server's\nown reload (the owner's pick on 2026-11-22, \"The agent's live\napp\").",
                     "type": "object",
                     "properties": {
                       "command": {
@@ -54471,7 +54467,7 @@
                     ]
                   },
                   "stage": {
-                    "description": "A sheet's: the workspace's stage serves the port (core `stage.ts`),\nits toolchain root `dir` from the clone's root and the sheet's story file\n`file` from that root. A request for it wakes the stage when it sleeps.\nThe person is served the workspace's stage live: every save reaches\nthe open panel through Vite's HMR, and a sheet names no `pin`.",
+                    "description": "A sheet's: the workspace's stage serves the port (core `stage.ts`),\nits toolchain root `dir` from the clone's root and the sheet's story file\n`file` from that root. A request for it wakes the stage when it sleeps.\nThe person is served the workspace's stage live: every save reaches\nthe open panel through Vite's HMR.",
                     "type": "object",
                     "properties": {
                       "dir": {
@@ -54487,7 +54483,7 @@
                     ]
                   },
                   "workspace": {
-                    "description": "The workspace whose dev server it is, or for a session in no\nworkspace the place it is staged from (core workspace-id.ts\n`place`): a sheet's over its session's folder, a served preview's\nover its app's folder's repository, or that folder in none (hub\nartifact-events.ts `placeFor`). It runs in that tree's own network.",
+                    "description": "The workspace whose dev server it is, or for a session in no\nworkspace the place it is staged from (core workspace-id.ts\n`place`): a sheet's over its session's folder, a served preview's\nover its app's folder's repository, or that folder in none (hub\nartifact-events.ts `placeFor`). It runs in that tree's own network:\na workspace's clone, or a place's stage clone kept in step with its\nfolder (agent stage-clone.ts).",
                     "type": "string"
                   }
                 },
@@ -148723,78 +148719,6 @@
               "title",
               "type"
             ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "stage-workspace-gone"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "stage-workspace-unplaced"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
           }
         ]
       },
@@ -149339,42 +149263,6 @@
                 "type": "string",
                 "enum": [
                   "artifact-show-unstarted"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "stage-said-no"
                 ]
               },
               "detail": {

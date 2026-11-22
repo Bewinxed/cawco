@@ -1,11 +1,13 @@
 /**
  * Where an artifact's source is served, read off its row: a workspace
  * preview's server ({@link servedOf}) and a component sheet's place on its
- * workspace's stage ({@link sheetOf}). A sheet is served from the
- * workspace's own stage, live with Vite's HMR: the owner's pick on how a
- * design graph follows its agent's code (2026-11-22, "Full hot reload").
- * A served preview and a folder are served from the pin its author handed
- * up ({@link pinnedAt}).
+ * workspace's stage ({@link sheetOf}). Both are served live from what
+ * their workspace or place runs: a sheet from its stage with Vite's HMR
+ * (the owner's pick on 2026-11-22, "Full hot reload"), a served preview
+ * from the one server its author runs, its edits reaching the open page
+ * through that server's own reload (the owner's pick on 2026-11-22, "The
+ * agent's live app"). Only a folder preview is served from a copy its
+ * author handed up ({@link pinnedAt}).
  */
 
 import { join } from "node:path";
@@ -13,50 +15,32 @@ import type { PreviewSource } from "@cawco/core/preview/protocol";
 import { type CanvasSpec, canvasOf } from "@cawco/core/stage";
 import type { ArtifactRow } from "../db/artifacts";
 
-/** A workspace preview's server (core `ServeSpec`): its workspace, its port, and the pin it runs in (core `PreviewSource.pin`); null for any other artifact. */
+/**
+ * A served preview's server (core `ServeSpec`) as its source names it:
+ * the workspace or place it runs in and its port, the one stage the
+ * person and its author are both served (agent stage.ts `ensureServed`);
+ * null for any other source.
+ */
+export const serverOf = (
+  source: PreviewSource
+): { port: number; workspace: string } | null =>
+  "port" in source && source.serve && source.workspace && !source.stage
+    ? { port: source.port, workspace: source.workspace }
+    : null;
+
+/** A workspace preview's server ({@link serverOf}); null for any other artifact. */
 export const servedOf = (
   row: Pick<ArtifactRow, "kind" | "source">
-): { pin?: string; port: number; workspace: string } | null =>
-  row.kind === "preview" &&
-  "port" in row.source &&
-  row.source.serve &&
-  row.source.workspace
-    ? {
-        port: row.source.port,
-        workspace: row.source.workspace,
-        ...(row.source.pin === undefined ? {} : { pin: row.source.pin }),
-      }
-    : null;
+): { port: number; workspace: string } | null =>
+  row.kind === "preview" ? serverOf(row.source) : null;
 
-/** The pin a machine serves `source` to the person from (core `PreviewSource.pin`); none for a page or a host's port. */
+/** The pin a machine serves a folder preview to the person from (core `PreviewSource.pin`); none for any other source. */
 export const servedPin = (source: PreviewSource): string | undefined =>
-  "page" in source ? undefined : source.pin;
+  "dir" in source ? source.pin : undefined;
 
-/**
- * What a machine cuts a pin of for `source`, the version its author handed
- * up that the person is served: a workspace preview's server (the app he
- * tries a flow in) from its workspace's tree, a folder from a copy of it.
- * None for a sheet: its panel shows the workspace's stage live, every save
- * through Vite's HMR (the owner's pick, 2026-11-22). None for a page or a
- * host's port, which have no tree to pin.
- */
-export const pinTarget = (
-  source: PreviewSource
-): { dir: string } | { workspace: string } | null => {
-  if ("dir" in source) {
-    return { dir: source.dir };
-  }
-  return "port" in source &&
-    source.workspace !== undefined &&
-    source.serve !== undefined &&
-    source.stage === undefined
-    ? { workspace: source.workspace }
-    : null;
-};
-
-/** `source` served from pin `pin` when a machine pins it ({@link pinTarget}); as it is otherwise. */
+/** Folder `source` served from pin `pin`, the copy its machine made of it; any other source as it is. */
 export const pinnedAt = (source: PreviewSource, pin: string): PreviewSource =>
-  pinTarget(source) && !("page" in source) ? { ...source, pin } : source;
+  "dir" in source ? { ...source, pin } : source;
 
 /** A sheet's place on its workspace's stage (core `PreviewSource`); null for any other artifact. */
 export const sheetOf = (

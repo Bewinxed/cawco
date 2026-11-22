@@ -8,7 +8,7 @@ import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow, ArtifactServed } from "../../db/artifacts";
-import { servedOf, servedPin, sheetOf } from "../served";
+import { servedOf, servedPin, serverOf, sheetOf } from "../served";
 import type { ArtifactInput, Making, StageAt, WarmPreviews } from "../shapes";
 import type { KindContext } from "./context";
 
@@ -97,7 +97,7 @@ export type PreviewKindContext = Pick<
   | "waitsOnPerson"
 >;
 
-/** A preview: a dev server or folder a machine serves live, the workspace it is made from, its server kept up while a page shows it, and let go when nothing does. */
+/** A preview: a dev server or folder a machine serves, the workspace it is made from, its server kept up while a page shows it, and stopped once no artifact is served from it. */
 export const createPreviewKind = (ctx: PreviewKindContext) => {
   const { above, db, deps, holder, ofTree, pagesShowing, waitsOnPerson } = ctx;
 
@@ -195,10 +195,9 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
         : null;
     }
     if (served) {
-      const key = served.pin ?? served.workspace;
-      return deps.stageLive(key, served.port)
+      return deps.stageLive(served.workspace, served.port)
         ? {
-            key: `${key}@${served.port}`,
+            key: `${served.workspace}@${served.port}`,
             use: () => serveFirst(row.source),
           }
         : null;
@@ -292,24 +291,23 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
   };
   /**
    * A preview's server, up before anything shows it (core `ServeSpec`), in
-   * its workspace or place on that tree's machine: its state. One that can't
-   * start is the refusal, and nothing is kept. None for any other source.
+   * its workspace or place on that tree's machine: its state. It is the one
+   * server the person is served, live. One that can't start is the refusal,
+   * and nothing is kept. None for any other source.
    */
   const serveFirst = (source: PreviewSource) =>
     "port" in source && source.serve && source.workspace
       ? deps.serve(
           { workspace: source.workspace },
-          { ...source.serve, port: source.port },
-          source.pin
+          { ...source.serve, port: source.port }
         )
       : Promise.resolve(undefined);
   /**
-   * Pin `pin` on machine `machineId` let go once no artifact is served from
-   * it (core `PreviewSource.pin`): its stages and server stop with it, and
-   * its copy goes. Looked at {@link PIN_KEPT_MS} after the last row moved
-   * off it, so a create that puts its row back as it was (service.ts
-   * `unplace`) finds the person's pin still standing. Its life is its
-   * artifacts'.
+   * Folder preview pin `pin` on machine `machineId` let go once no artifact
+   * is served from it (core `PreviewSource.pin`): its copy goes. Looked at
+   * {@link PIN_KEPT_MS} after the last row moved off it, so a create that
+   * puts its row back as it was (service.ts `unplace`) finds the person's
+   * pin still standing. Its life is its artifacts'.
    */
   const releasePin = (machineId: string | null, pin: string | null): void => {
     if (!(machineId && pin)) {
@@ -322,19 +320,61 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
     });
   };
   /**
-   * Artifact `id`'s source moved off `before` (db artifacts.ts `resource`):
-   * the pin `before` was served from let go once nothing else is served from
-   * it, unless the row names it again now. Told by the preview service once
-   * the new source answers or no screen waits on it (server.ts
-   * `onSourceMoved`).
+   * The server a served preview's source names on machine `machineId`
+   * (served.ts `serverOf`), stopped once no artifact is served from it: no
+   * row, a held next version included, names its workspace or place and
+   * port, and no create is making a preview from that tree now
+   * ({@link makingIn}), whose server may be this one before its row names
+   * it. Its tree stays, and retires by the workspace sweep once nothing
+   * runs in it (workspaces.ts `servedHold`). `what` says what happened to
+   * the artifact; the journal says the stop in one line.
    */
-  const letGoMoved = (id: string, before: ArtifactServed): void => {
-    const was = servedPin(before.source);
-    const row = db.get(id);
-    if (was === undefined || (row && servedPin(row.source) === was)) {
+  const letGoServer = (
+    machineId: string | null,
+    source: PreviewSource,
+    what: string
+  ): void => {
+    const server = serverOf(source);
+    if (!(machineId && server) || makingIn.has(server.workspace)) {
       return;
     }
-    releasePin(before.machineId, was);
+    const others = db
+      .previewing({ id: server.workspace, machineId, path: "//" })
+      .filter((row) => servedOf(row)?.port === server.port);
+    if (others.length > 0) {
+      return;
+    }
+    const tree = `${workspaceIdKindOf(server.workspace) === "place" ? "place" : "workspace"} ${server.workspace.slice(0, 8)}`;
+    detach(
+      deps.stopServed(machineId, server).then((ran) => {
+        console.info(
+          ran === undefined
+            ? `[artifacts] ${what}: its server on port ${server.port} in ${tree} was not stopped, as its machine did not answer; it sleeps once unused`
+            : `[artifacts] ${what}: its server on port ${server.port} in ${tree} ${ran ? "stopped" : "was not running"}, as no artifact is served from it; its copy retires by the workspace sweep once nothing runs in it`
+        );
+      }),
+      "preview server stop"
+    );
+  };
+  /**
+   * Artifact `id`'s source moved off `before` (db artifacts.ts `resource`):
+   * what `before` was served from let go once nothing else is served from
+   * it, unless the row names it again now: a folder's pin ({@link
+   * releasePin}), a served preview's server ({@link letGoServer}). Told by
+   * the preview service once the new source answers or no screen waits on
+   * it (server.ts `onSourceMoved`).
+   */
+  const letGoMoved = (id: string, before: ArtifactServed): void => {
+    const row = db.get(id);
+    const was = servedPin(before.source);
+    if (was !== undefined && !(row && servedPin(row.source) === was)) {
+      releasePin(before.machineId, was);
+    }
+    letGoServer(
+      before.machineId,
+      before.source,
+      `${row?.name ?? "An artifact"} (${id.slice(0, 8)}) moved to another source`
+    );
   };
   /**
    * The stages decision page `page`'s Previews run on, warmed as the page
@@ -366,7 +406,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
         one.warm.canvases.push(sheet.files);
         sheets.set(key, one);
       } else if (served) {
-        servers.set(`${served.pin ?? served.workspace}@${served.port}`, media);
+        servers.set(`${served.workspace}@${served.port}`, media);
       }
     }
     // A refused one is said as a failed one is.
@@ -513,6 +553,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
   return {
     keptUpAt,
     letGoMoved,
+    letGoServer,
     makingFor,
     makingFrom,
     makingIn,

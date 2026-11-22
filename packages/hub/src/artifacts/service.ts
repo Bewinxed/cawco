@@ -196,7 +196,7 @@ import {
 import { answersReplaced } from "./overwrite";
 import { createPageStore } from "./page-store";
 import { type Question, stillAsked } from "./questions";
-import { servedOf, servedPin, sheetOf } from "./served";
+import { servedOf, servedPin, serverOf, sheetOf } from "./served";
 import {
   type ArtifactInput,
   type ArtifactList,
@@ -844,6 +844,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const {
     keptUpAt,
     letGoMoved,
+    letGoServer,
     makingFor,
     makingFrom,
     makingIn,
@@ -981,7 +982,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     get programOf() {
       return programOf;
     },
-    serveFirst,
     sharesWith,
     get show() {
       return show;
@@ -2315,15 +2315,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * A create's server started in its author's workspace, as its author has
-   * it ({@link serveFirst}), a held next version opened first ({@link
-   * openNextFirst}), the version it hands up cut as a pin of its own and its
-   * server started there ({@link pinnedSource}), then its row placed on that
-   * pin ({@link placed}); its workspace held from the create's start until
-   * the row names it ({@link makingFrom}), as a retirement in between would
-   * end its source under the create. A refusal before the row is placed
-   * touches nothing the person is served; one of the placement lets the new
-   * pin go.
+   * A create's server started in its author's workspace or place, the one
+   * the person is served live ({@link serveFirst}), a held next version
+   * opened first ({@link openNextFirst}), a folder's version copied as a pin
+   * of its own ({@link pinnedSource}), then its row placed on its source
+   * ({@link placed}); its workspace held from the create's start until the
+   * row names it ({@link makingFrom}), as a retirement in between would end
+   * its source under the create. A refusal before the row is placed touches
+   * nothing the person is served; one of the placement lets the new pin go.
    */
   const servedAndPlaced = async (
     making: Making,
@@ -2349,28 +2348,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         source: cut.source,
       });
       if (placement instanceof ElysiaStatus) {
-        letGoPins([{ machineId: at.machineId, pin: servedPin(cut.source) }]);
+        releasePin(at.machineId, servedPin(cut.source) ?? null);
         return placement;
       }
       const served: { placement: Placement; stage: StageState | undefined } = {
-        stage: cut.stage ?? authors,
+        stage: authors,
         placement,
       };
       return served;
     } finally {
       madeFrom();
-    }
-  };
-
-  /** Each pin of `gone` let go once no row is served from it ({@link releasePin}). */
-  const letGoPins = (
-    gone: readonly {
-      machineId: string | null;
-      pin: string | null | undefined;
-    }[]
-  ): void => {
-    for (const { machineId, pin } of gone) {
-      releasePin(machineId, pin ?? null);
     }
   };
 
@@ -2499,9 +2486,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /**
    * A page's or a preview's picture for `instance`'s read: the person's view
    * of it, on its own preview origin with his pins (`deps.picture`); its
-   * author's of a served preview, its workspace's own server as it has it
-   * now (`deps.servedPicture`), since the origin serves the version the
-   * person was handed (core `PreviewSource.pin`).
+   * author's of a served preview, the server its row names as it has it
+   * now (`deps.servedPicture`), a held next version's among them, which no
+   * origin serves until it is opened.
    */
   const pictureFor = (
     instance: InstanceRow,
@@ -3857,14 +3844,23 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     letGoMoved,
     /**
      * Artifact rows gone (db `onArtifactsGone`, every way a row goes): each
-     * one's facts let go, and each pin one was served from let go once no
-     * row is served from it.
+     * one's facts let go, and what it was served from let go once no row is
+     * served from it: a folder's pin, a served preview's server, stopped
+     * now with a line in the journal (kinds/preview.ts `letGoServer`).
      */
     artifactsGone: (gone: readonly GoneArtifact[]): void => {
-      for (const { id } of gone) {
+      // An artifact and its held next version on one server stop it once.
+      const servers = new Set<string>();
+      for (const { id, machineId, name, source } of gone) {
         factsKept.delete(id);
+        releasePin(machineId, servedPin(source) ?? null);
+        const server = serverOf(source);
+        const key = server && `${machineId}:${server.workspace}@${server.port}`;
+        if (key && !servers.has(key)) {
+          servers.add(key);
+          letGoServer(machineId, source, `${name} (${id.slice(0, 8)}) deleted`);
+        }
       }
-      letGoPins(gone);
     },
 
     /** Whether a create is making a preview from workspace `id` now, its row not yet written ({@link makingIn}). */
@@ -4527,7 +4523,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const ownWay = madeOwnWay(making, input);
       if (ownWay === null) {
-        return await createShown(instance, making, input);
+        const created = await createShown(instance, making, input);
+        // A preview's create refused (its folder missing, a home folder its copy refuses, a server that didn't start) is said once in the journal.
+        if (created instanceof ElysiaStatus && input.kind === "preview") {
+          console.warn(
+            `[artifacts] preview ${input.name} of session ${instance.id.slice(0, 8)} (${sessionLabel(instance).name}) refused: ${String(created.response.detail)}`
+          );
+        }
+        return created;
       }
       const made = await ownWay;
       if (made instanceof ElysiaStatus) {
@@ -4966,7 +4969,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return row;
       }
       // Written in its workspace, whose stage the person's panel shows
-      // live (served.ts `pinTarget`), so the write reaches it at once.
+      // live (served.ts `sheetOf`), so the write reaches it at once.
       const answer = await changedBy(instance, row, async (target) => {
         const written = await writeSheet(
           target,
@@ -4992,8 +4995,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * own workspace went with no head to cut it again at (workspaces.ts
      * `revive`, `moved`). A design graph's sheet is opened on `to`'s stage
      * at the same states files, its port and toolchain root as that stage
-     * names them; a served preview's server runs in `to` from now on, its
-     * pin cut there by the open (agent stage.ts `sourceTree`). Written as
+     * names them; a served preview's server runs in `to` from now on,
+     * started there by the open (agent stage.ts `wakeSource`). Written as
      * every move of a row's source is: a revision, then the source (db
      * artifacts.ts `resource`), so every panel and tab showing it loads it
      * again (server.ts `onSourceMoved`). Refused, the row as it was, when
@@ -5034,10 +5037,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           stage: staged.opened.state,
         };
       } else if (servedOf(row)) {
-        const { pin: _pin, ...unpinned } = row.source;
         moved = {
           machineId: to.machineId,
-          source: { ...unpinned, workspace: to.id },
+          source: { ...row.source, workspace: to.id },
         };
       } else {
         return problem(409, {
@@ -5082,7 +5084,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return asked;
       }
       const { files, spec } = asked;
-      // Its new address on the same live stage (served.ts `pinTarget`).
+      // Its new address on the same live stage (served.ts `sheetOf`).
       const answer = await changedBy(instance, row, async (target) => {
         const next = await canvasMoved(target, {
           machineId: target.machineId,
@@ -5283,16 +5285,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /**
      * A stage's state, kept in the doc of each artifact served from it, by
      * its toolchain root or its port: a sheet is served from its
-     * workspace's own stage (served.ts `pinTarget`), a served preview from
-     * its pin's server (core `PreviewSource.pin`). A workspace's own server
-     * serves its author's reads of a served preview, which say their own
-     * state.
+     * workspace's own stage, a served preview from the server its
+     * workspace or place runs (served.ts), the same one its author reads.
      */
     staged: (machineId: string, frame: StageFrame): void => {
       const live = db
         .previewing({ id: frame.workspace, machineId, path: "//" })
-        .filter((row) => sheetOf(row) !== null);
-      for (const row of [...db.pinnedBy(frame.workspace), ...live]) {
+        .filter((row) => sheetOf(row) !== null || servedOf(row) !== null);
+      for (const row of live) {
         const sheet = sheetOf(row);
         const served = servedOf(row);
         const ours =
@@ -5511,9 +5511,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         by === "agent" && opens.instanceId === instance.id
           ? db.heldOf(opens.id)
           : undefined;
-      // Its author's own show hands it up again: what a machine serves of
-      // it is cut from its source as it is now (cutVersion). Anyone else's
-      // opens the version that stands, or the next one held (promote).
+      // Its author's own show hands it up again: a folder preview's folder
+      // is copied as it is now (cutVersion); a served preview's server is
+      // live already. Anyone else's opens the version that stands, or the
+      // next one held (promote).
       const authors =
         by === "agent" &&
         opens.instanceId === instance.id &&

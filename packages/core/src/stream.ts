@@ -486,12 +486,16 @@ import type { TailnetServing } from "./tailnet-https";
  * 97: a port preview's create refuses a `serve.cwd` that names no folder
  *    on the session's machine under a new code (`artifact-preview-folder`).
  *    A page built for 96 does not read that refusal, so it reloads first.
+ * 98: a port preview's source names no `pin`: it is served live from the
+ *    server its workspace or place runs (hub served.ts `servedOf`). A page
+ *    built for 97 holds a port source's `pin` to a string, so it reloads
+ *    first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 97;
+export const WIRE_PROTOCOL = 98;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

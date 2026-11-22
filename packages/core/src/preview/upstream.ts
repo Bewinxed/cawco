@@ -11,8 +11,8 @@ export type MachineSource = Exclude<PreviewSource, { page: string }>;
  * WHICH MACHINE AND WHICH SOURCE SERVE AN ORIGIN, as one string: the key a
  * preview's upstream is started for and is compared by. It names everything
  * a machine's listener serves with (the port, the workspace, a sheet's
- * stage, a served server's command, a folder, the version pinned for the
- * person) and nothing it does not (the
+ * stage, a served server's command, a folder and the copy of it pinned
+ * for the person) and nothing it does not (the
  * start page, which the frame names). Made by {@link sourceKeyOf} alone, so
  * two keys are equal exactly when the same listener would serve both.
  */
@@ -39,7 +39,6 @@ export const sourceKeyOf = (at: {
           source.stage?.file ?? null,
           source.serve?.command ?? null,
           source.serve?.cwd ?? null,
-          source.pin ?? null,
         ];
   // Cast kept, the brand's one mint: TypeScript makes a branded string only by assertion (https://github.com/microsoft/TypeScript/issues/202).
   return JSON.stringify(tuple) as SourceKey;

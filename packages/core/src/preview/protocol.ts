@@ -22,7 +22,7 @@ export type PreviewSource =
        * its toolchain root `dir` from the clone's root and the sheet's story file
        * `file` from that root. A request for it wakes the stage when it sleeps.
        * The person is served the workspace's stage live: every save reaches
-       * the open panel through Vite's HMR, and a sheet names no `pin`.
+       * the open panel through Vite's HMR.
        */
       stage?: { dir: string; file: string };
       /**
@@ -30,7 +30,11 @@ export type PreviewSource =
        * the stage of `workspace` runs and keeps up on `port`, in `cwd` from
        * its tree's root. A request for it wakes it when it sleeps. Every
        * port preview made since 2026-11-22 names it; one without it is a
-       * port its session kept up by hand, which nothing starts again.
+       * port its session kept up by hand, which nothing starts again. The
+       * person is served that one server live, as its author runs it: an
+       * edit to its tree reaches the open preview through the dev server's
+       * own reload (the owner's pick on 2026-11-22, "The agent's live
+       * app").
        */
       serve?: { command: string; cwd: string };
       /**
@@ -38,22 +42,11 @@ export type PreviewSource =
        * workspace the place it is staged from (core workspace-id.ts
        * `place`): a sheet's over its session's folder, a served preview's
        * over its app's folder's repository, or that folder in none (hub
-       * artifact-events.ts `placeFor`). It runs in that tree's own network.
+       * artifact-events.ts `placeFor`). It runs in that tree's own network:
+       * a workspace's clone, or a place's stage clone kept in step with its
+       * folder (agent stage-clone.ts).
        */
       workspace?: string;
-      /**
-       * A served preview's (`serve`) version the person is served: the id of
-       * a clone of `workspace` cut on its machine at its HEAD with its
-       * uncommitted changes when its author handed this version up (its
-       * `artifact_create`, its `artifact_update`, its own `artifact_show`),
-       * and changed only by the next hand-up, never by an edit to the
-       * workspace's files (agent stage-clone.ts `cutPin`). Its own server
-       * answers the artifact's preview origin, in its own network; what the
-       * author reads (`artifact_read`, its renders) is the workspace as it
-       * is now. Absent for a sheet, served live, and for a port on a
-       * machine's host, whose server is the session's own.
-       */
-      pin?: string;
     }
   | {
       dir: string;

@@ -55,7 +55,9 @@
  * started by its `artifact_create`, a request its preview relays (the
  * person's open of it among them), or the hub as a decision page with a
  * Preview of it goes out. It is the daemon's child, so it outlives the shell, the command and the session that asked for it;
- * the pin it runs in stops it as that pin is let go ({@link unpin}).
+ * it is the one server the person's preview of it is served from, so an
+ * edit to its tree reaches his open page through its own reload, and it
+ * stops once no artifact is served from it ({@link stopServed}).
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
@@ -157,18 +159,13 @@ import {
 } from "./preview-room";
 import {
   copyBack,
-  cutPin,
   dropPin,
   followCheckout,
   inCloneTurn,
   installStage,
-  isPin,
   isStageClone,
   pinFolder,
-  pinnedTree,
-  pinsFrom,
   pinsHeld,
-  type StageClone,
   sameAsCheckout,
   stageCloneOf,
 } from "./stage-clone";
@@ -400,11 +397,11 @@ interface Stage {
 }
 
 /**
- * Where a stage's files are: the workspace, place or pin the hub names
- * (`ref`), the folder its paths stand in for the stage (`folder`), and the
- * boundary the stage runs in. A workspace's are its own clone; a place's,
- * its stage clone (`stage-clone.ts`), brought in step with its checkout as
- * it is read; a pin's, its own clone, as its author handed it up.
+ * Where a stage's files are: the workspace or place the hub names (`ref`),
+ * the folder its paths stand in for the stage (`folder`), and the boundary
+ * the stage runs in. A workspace's are its own clone; a place's, its stage
+ * clone (`stage-clone.ts`), brought in step with its checkout as it is read
+ * and as its watch hears it change.
  */
 interface Tree {
   readonly boundary: WorkspaceRef;
@@ -413,28 +410,11 @@ interface Tree {
   readonly ref: WorkspaceRef;
 }
 
-/** Pin `pin`'s clone as a tree: named by the pin, its stages keyed by it, in its own boundary. */
-const pinTree = (pin: string, clone: StageClone, ports: StagePorts): Tree => ({
-  ref: { id: pin, path: clone.folder },
-  ports,
-  ...clone,
-});
-
-/**
- * The tree workspace or place `workspace` serves from: its own, or with
- * `pin` the version of it its author handed up (core `PreviewSource.pin`),
- * that pin's tree, cut from it now when it has none whole (a pin the hub
- * named before this machine cut pins).
- */
+/** The tree workspace or place `workspace` serves from: a workspace's own clone, a place's stage clone, a design's folder. */
 const treeOf = async (
   workspace: WorkspaceRef,
-  ports: StagePorts,
-  pin?: string
+  ports: StagePorts
 ): Promise<Tree> => {
-  if (pin !== undefined) {
-    const clone = (await pinnedTree(pin)) ?? (await cutPin(workspace, pin));
-    return pinTree(pin, clone, ports);
-  }
   switch (workspaceIdKind(workspace.id)) {
     case "place":
       return {
@@ -488,12 +468,12 @@ const installedFor = async (tree: Tree, from: string): Promise<void> => {
     case "place":
       await installStage(tree.ref, tree, root);
       return;
-    // A design folder's and a pin's `node_modules` only this makes, as a place's clone's.
+    // A design folder's `node_modules` only this makes, as a place's clone's.
     case "design":
       await installProject(at(true), true);
       return;
     case "clone":
-      await installProject(at(false), isPin(tree.ref.id));
+      await installProject(at(false), false);
       return;
   }
 };
@@ -564,7 +544,7 @@ export const closingStages = <T>(
   const { id } = request;
   if (!isStageClone(id)) {
     stopStages(id);
-    return unpinFrom(id).then(() => close(request));
+    return close(request);
   }
   return inCloneTurn(id, async () => {
     const running = stageIn(id);
@@ -579,23 +559,17 @@ export const closingStages = <T>(
 };
 
 /**
- * The workspace whose network a preview's port is in: a pinned version's
- * server runs in its pin's boundary (a sheet is never pinned: hub
- * served.ts `pinTarget`); a place's sheet stage and server in its stage
- * clone's;
- * every other port is in the network of the workspace the source names.
+ * The workspace whose network a preview's port is in: a place's sheet
+ * stage and server in its stage clone's; every other port in the network
+ * of the workspace the source names.
  */
 export const networkOf = (source: {
-  pin?: string;
   serve?: unknown;
   stage?: unknown;
   workspace?: string;
 }): string | undefined => {
   if (source.workspace === undefined) {
     return;
-  }
-  if (source.pin !== undefined) {
-    return source.pin;
   }
   switch (workspaceIdKind(source.workspace)) {
     case "place":
@@ -949,8 +923,8 @@ const serveKey = (workspace: string, port: number) => `${workspace}@${port}`;
 
 /**
  * The stage a preview's server runs as: `cwd` a folder inside its tree's
- * folder (a workspace's clone, a place's stage clone at the place's folder,
- * a pin's clone), the command one bounded line; refused with why otherwise.
+ * folder (a workspace's clone, a place's stage clone at the place's
+ * folder), the command one bounded line; refused with why otherwise.
  */
 function servedFor(tree: Tree, serve: ServeSpec): ServedPlace {
   const workspace = tree.ref;
@@ -1401,11 +1375,11 @@ const hostWord = (line: string): HostWord | null => {
 };
 
 /**
- * A place's stage (a sheet's, or a preview's server its author reads),
- * while it is live: its clone kept in step with its checkout on each change
- * a watch of the checkout hears (stage-clone.ts `followCheckout`), so the
- * session's edits reach the stage's watcher and an open sheet or page
- * redraws. Ended with the stage ({@link kill}).
+ * A place's stage (a sheet's, or a preview's server the person and its author
+ * are served), while it is live: its clone kept in step with its checkout
+ * on each change a watch of the checkout hears (stage-clone.ts
+ * `followCheckout`), so the session's edits reach the stage's watcher and an
+ * open sheet or page redraws. Ended with the stage ({@link kill}).
  */
 function mirrorWhileLive(stage: Stage): void {
   stage.mirror?.();
@@ -2113,8 +2087,8 @@ export async function renderStage(
 /**
  * A served preview's page drawn as its author has it now (core
  * `STAGE_PICTURE`), for the author's `artifact_read` with `png`: the
- * workspace's own server (never the pin the person is served) started or
- * woken as `artifact_create` starts it ({@link ensureServed}), and its page
+ * workspace's own server, the one the person is served, started or woken
+ * as `artifact_create` starts it ({@link ensureServed}), and its page
  * drawn in the machine's own Chromium through a loopback listener into the
  * workspace's network, as a canvas's render reaches its stage. A use of
  * the server.
@@ -2422,20 +2396,18 @@ async function wake(stage: Stage, by: string, restart = true): Promise<void> {
  * preview's request after a restart finds its folder ({@link wakeSource}).
  * The same port named with another command or folder stops the one running
  * and starts this one. A server that never came up is not kept: the refusal
- * says why, and nothing runs on. With `pin` (core `PreviewSource.pin`), the
- * server of that version, in its pin's clone and network.
+ * says why, and nothing runs on.
  */
 export async function ensureServed(
   ports: StagePorts,
   workspace: WorkspaceRef,
   serve: ServeSpec,
-  by = "artifact_create's serve",
-  pin?: string
+  by = "artifact_create's serve"
 ): Promise<StageState> {
   if (workspaceIdKind(workspace.id) === "place") {
     await keepPlace(workspace);
   }
-  return await servedOn(await treeOf(workspace, ports, pin), serve, by);
+  return await servedOn(await treeOf(workspace, ports), serve, by);
 }
 
 /** The server `serve` on `tree`, started or woken and waited on ({@link ensureServed}). */
@@ -2466,48 +2438,28 @@ async function servedOn(
   return stateOf(stage);
 }
 
-/** The stage a preview source names, by its key: a sheet's toolchain root, or the server on its port, in its pin when it names one (a served preview's: hub served.ts `pinTarget`); none for any other source. */
+/** The stage a preview source names, by its key: a sheet's toolchain root, or the server on its port, in the workspace or place it names; none for any other source. */
 const keyOf = (source: PreviewSource): string | null => {
   if (!("port" in source && source.workspace)) {
     return null;
   }
-  const tree = source.pin ?? source.workspace;
   if (source.stage) {
-    return sheetKey(tree, source.stage.dir);
+    return sheetKey(source.workspace, source.stage.dir);
   }
-  return source.serve ? serveKey(tree, source.port) : null;
+  return source.serve ? serveKey(source.workspace, source.port) : null;
 };
-
-/**
- * The tree a preview source is served from: its pin's clone as it stands,
- * else (one never cut whole here) the workspace it names, a pin of it cut
- * now from it as it is. {@link WorkspaceNotHere} when neither is on this
- * machine.
- */
-async function sourceTree(
-  ports: StagePorts,
-  source: { pin?: string; workspace: string }
-): Promise<Tree> {
-  const pinned =
-    source.pin === undefined ? undefined : await pinnedTree(source.pin);
-  if (source.pin !== undefined && pinned) {
-    return pinTree(source.pin, pinned, ports);
-  }
-  return await treeOf(
-    await sourceWorkspace(source.workspace),
-    ports,
-    source.pin
-  );
-}
 
 /**
  * A preview's request for a stage's page: the stage woken when it sleeps,
  * and waited on, so a page opened after its stage slept or failed (Try
  * again) loads once it is live. One in `error` starts again only for a
  * page's own load (`navigation`). A stage this daemon does not know (it
- * restarted since) is found again from the source: the sheet's own file, or
- * the server's command, in its pin's clone. Nothing for a source no stage
- * serves.
+ * restarted since, or it was stopped) is found again from the source: the
+ * sheet's own file, or the server's command, in its workspace's clone, or
+ * in its place's stage clone, cut again from the place's folder when it
+ * retired. {@link WorkspaceNotHere} when the workspace is not on this
+ * machine (archived): the hub cuts it again (hub design-revive.ts). Nothing
+ * for a source no stage serves.
  */
 export async function wakeSource(
   ports: StagePorts,
@@ -2524,10 +2476,7 @@ export async function wakeSource(
     await wake(known, "a preview's request", navigation);
     return;
   }
-  const tree = await sourceTree(ports, {
-    workspace: source.workspace,
-    ...(source.pin === undefined ? {} : { pin: source.pin }),
-  });
+  const tree = await treeOf(await sourceWorkspace(source.workspace), ports);
   if (source.stage && workspaceIdKind(source.workspace) === "design") {
     await rootStage(tree, tree.folder, "a preview's request");
   } else if (source.stage) {
@@ -2558,16 +2507,13 @@ async function sourceWorkspace(
 
 /**
  * Whether the stage a preview source names could be woken here, short of
- * waking it: known to this daemon, its pin cut whole here, or its workspace
- * on this machine to start it in. {@link WorkspaceNotHere} when neither is;
- * nothing for a source no stage serves (agent preview.ts `pinged`).
+ * waking it: known to this daemon, or its workspace on this machine to
+ * start it in. {@link WorkspaceNotHere} when neither is; nothing for a
+ * source no stage serves (agent preview.ts `pinged`).
  */
 export async function sourceWakes(source: PreviewSource): Promise<void> {
   const key = keyOf(source);
   if (!(key && "port" in source && source.workspace) || stages.has(key)) {
-    return;
-  }
-  if (source.pin !== undefined && (await pinnedTree(source.pin))) {
     return;
   }
   await sourceWorkspace(source.workspace);
@@ -2622,7 +2568,7 @@ function stopOne(stage: Stage): void {
   }
 }
 
-/** Stops every stage of workspace or pin `id`: its archive, or its pin let go. */
+/** Stops every stage of workspace, design or pin `id`: its archive, or its pin let go. */
 function stopStages(id: string): void {
   for (const stage of [...stages.values()]) {
     if (stage.workspace.id === id) {
@@ -2632,16 +2578,24 @@ function stopStages(id: string): void {
 }
 
 /**
- * The version an author hands up cut (core `STAGE_PIN`, `PreviewSource.pin`):
- * pin `pin` of tree `workspace`'s sheet or served preview, cut as the tree
- * is now beside the pin the person is served (stage-clone.ts `cutPin`),
- * which the hub moves him onto once it stands. Answers once it stands.
+ * A preview's server stopped once no artifact is served from it (core
+ * `STAGE_SERVE_STOP`): the server on `port` of workspace or place
+ * `workspace`, ended and forgotten, as the hub asks when the last artifact
+ * served from it is deleted or moved off it. Its tree stays: a workspace's
+ * clone is its work item's, and a place's stage clone retires by the
+ * hub's workspace sweep once nothing runs in it (stage-clone.ts). Answers
+ * whether one ran.
  */
-export async function pinTreeOf(
-  workspace: WorkspaceRef,
-  pin: string
-): Promise<void> {
-  await cutPin(workspace, pin);
+export function stopServed(workspace: string, port: number): boolean {
+  const stage = stages.get(serveKey(workspace, port));
+  if (stage?.runs.kind !== "serve") {
+    return false;
+  }
+  console.info(
+    `[stage] ${workspace.slice(0, 8)} ${stageWords(stage)}: stopped, as no artifact is served from it now`
+  );
+  stopOne(stage);
+  return true;
 }
 
 /** The version of folder `dir` an author hands up cut: pin `pin`'s copy of it (stage-clone.ts `pinFolder`). */
@@ -2652,8 +2606,8 @@ export async function pinFolderOf(dir: string, pin: string): Promise<void> {
 /**
  * How long a pin's cut stands before a register's list may let it go
  * ({@link keepPins}): the hub names a pin on its artifact only once its cut
- * answered, and a list it sent before then does not name it. Ours: a create's
- * cut, install and serve, with room.
+ * answered, and a list it sent before then does not name it. Ours: a
+ * folder's copy, with room.
  */
 const PIN_NAMED_MS = 10 * 60_000;
 
@@ -2700,13 +2654,6 @@ export async function unpin(pin: string): Promise<void> {
   stopStages(pin);
   await dropPin(pin);
   await dropDesign(pin);
-}
-
-/** Every pin cut from workspace `id` let go: its archive, after which none of it is served. */
-async function unpinFrom(id: string): Promise<void> {
-  for (const pin of await pinsFrom(id)) {
-    await unpin(pin);
-  }
 }
 
 /**

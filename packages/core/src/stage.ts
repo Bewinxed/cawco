@@ -1181,13 +1181,19 @@ export const SERVE_COMMAND_LIMIT = 2000;
 export const STAGE_SERVE = "stageServe";
 
 /**
- * The daemon's control method that cuts the version of an artifact its
- * author hands up (core preview/protocol.ts `PreviewSource.pin`), a pin of
- * its own beside the one the person is served: `[ref, pin]` for a
- * workspace's or place's served preview, that tree as it is now
- * (agent stage-clone.ts `cutPin`: a clone of its repository, or a copy of a
- * tree in none); `[null, pin, dir]` for a folder, a copy of `dir`
- * (`pinFolder`). Answers once the version stands.
+ * The daemon's control method that stops a preview's server (agent stage.ts
+ * `stopServed`): `[workspace, port]`, the workspace or place it runs in
+ * and its port, once no artifact is served from it. Answers whether one
+ * ran. Its tree stays, and retires by the workspace sweep once nothing runs
+ * in it.
+ */
+export const STAGE_SERVE_STOP = "stageServeStop";
+
+/**
+ * The daemon's control method that copies the version of a folder preview
+ * its author hands up (core preview/protocol.ts `PreviewSource.pin`), a pin
+ * of its own beside the one the person is served: `[pin, dir]`, a copy of
+ * `dir` (agent stage-clone.ts `pinFolder`). Answers once the copy stands.
  */
 export const STAGE_PIN = "stagePin";
 
@@ -1197,9 +1203,9 @@ export const STAGE_PINS = "stagePins";
 /**
  * The daemon's control method that draws a served preview's page as its
  * author has it now, for the author's `artifact_read` with `png` ({@link
- * ServedPicture}): `[ref, ask]`, the workspace's own server (never the pin
- * the person is served) started or woken, and its page drawn in the
- * machine's own Chromium (agent stage.ts `drawServed`).
+ * ServedPicture}): `[ref, ask]`, the workspace's own server, the one the
+ * person is served, started or woken, and its page drawn in the machine's
+ * own Chromium (agent stage.ts `drawServed`).
  */
 export const STAGE_PICTURE = "stagePicture";
 
@@ -1214,7 +1220,7 @@ export interface ServedPicture {
 /** The daemon's control method that lets a pin go once no artifact is served from it: its stages stopped, its copy removed. */
 export const STAGE_UNPIN = "stageUnpin";
 
-/** How long a pin may take to cut: a clone's fetch and mirror ({@link STAGE_CLONE_GIT_MS}), or a folder's copy. Ours. */
+/** How long a folder's pin may take to copy. Ours. */
 export const STAGE_PIN_MS = 120_000;
 
 /** How long a stage has to answer once started. The spec's number. */
@@ -1225,8 +1231,8 @@ export const STAGE_CLONE_GIT_MS = 60_000;
 
 /**
  * The most a copy of a folder in no repository may hold, measured before it
- * is made (agent `stage-clone.ts` `copyBounded`): a place's stage clone or a
- * pin of such a folder, or a folder's pin. Past either, the copy is refused.
+ * is made (agent `stage-clone.ts` `copyBounded`): a place's stage clone of
+ * such a folder, or a folder preview's pin. Past either, the copy is refused.
  * Ours: cockpit, a large monorepo with its fonts and images, copies as
  * 275 MiB in 7,834 files once what an install remakes is left out
  * (2026-11-22); this holds about four times that, and stays near 2% of the

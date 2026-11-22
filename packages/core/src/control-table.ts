@@ -490,15 +490,11 @@ interface ControlTable {
   stageDesign: Entry<[ref: WorkspaceRef, look: DesignLook], DesignOpened>;
   stageEnsure: Entry<[ref: WorkspaceRef, file: StageEnsure], StageOpened>;
   stagePicture: Entry<[ref: WorkspaceRef, ask: ServedPicture], PictureTaken>;
-  stagePin: Unread<
-    [ref: WorkspaceRef, pin: string] | [ref: null, pin: string, dir: string]
-  >;
+  stagePin: Unread<[pin: string, dir: string]>;
   stagePins: Entry<[served: string[]], number>;
   stageRender: Entry<[ref: WorkspaceRef, ask: RenderAsk], StageRendered>;
-  stageServe: Entry<
-    [ref: WorkspaceRef, serve: ServeSpec, pin?: string | null],
-    StageState
-  >;
+  stageServe: Entry<[ref: WorkspaceRef, serve: ServeSpec], StageState>;
+  stageServeStop: Entry<[workspace: string, port: number], boolean>;
   stageUnpin: Unread<[pin: string]>;
   stageWarm: Unread<[ref: WorkspaceRef, warm: StageWarm]>;
   stageWrite: Entry<[ref: WorkspaceRef, write: SheetWrite], SheetWritten>;

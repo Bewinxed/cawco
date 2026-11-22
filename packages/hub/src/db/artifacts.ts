@@ -100,7 +100,7 @@ const sourceColumnsOf = (
   sourceStageFile: "port" in source ? (source.stage?.file ?? null) : null,
   sourceServeCommand: "port" in source ? (source.serve?.command ?? null) : null,
   sourceServeCwd: "port" in source ? (source.serve?.cwd ?? null) : null,
-  sourcePin: "page" in source ? null : (source.pin ?? null),
+  sourcePin: "dir" in source ? (source.pin ?? null) : null,
 });
 
 /** A stored artifact with its source whole again. */
@@ -278,6 +278,10 @@ export interface ArtifactsDb {
   readonly ofProject: (projectId: string) => ArtifactRow[];
   /** Every page whose `state` took a change: the docs that may hold picks. */
   readonly picked: () => ArtifactRow[];
+  /** The folder previews served from pin `pin` (core `PreviewSource.pin`), held next versions too: the one that cut it, or one a held version was opened onto. */
+  readonly pinnedBy: (pin: string) => ArtifactRow[];
+  /** Every pin an artifact on machine `machineId` is served from (core `PreviewSource.pin`), held next versions' too. */
+  readonly pinsOn: (machineId: string) => string[];
   /**
    * The artifacts, any session's, that show what a workspace serves: a port
    * preview naming it (`source.workspace`), or a folder preview of its clone
@@ -285,10 +289,6 @@ export interface ArtifactsDb {
    * (shown_previews) is one of these rows, so this covers what panels show.
    * A held next version is one too: a server it shows stays up for it.
    */
-  /** The artifacts served from pin `pin` (core `PreviewSource.pin`), held next versions too: the one that cut it, or one a held version was opened onto. */
-  readonly pinnedBy: (pin: string) => ArtifactRow[];
-  /** Every pin an artifact on machine `machineId` is served from (core `PreviewSource.pin`), held next versions' too. */
-  readonly pinsOn: (machineId: string) => string[];
   readonly previewing: (workspace: {
     id: string;
     machineId: string;
@@ -352,10 +352,11 @@ export interface ArtifactsDb {
 /** An artifact row that went, and the preview origin it pointed at (schema.ts `artifacts.origin`). */
 export interface GoneArtifact {
   id: string;
-  /** The machine that served it, and the pin it was served from (core `PreviewSource.pin`): let go once no row names it. */
+  /** The machine that served it, and what it was served from (a folder's pin, a served preview's server): each let go once no row names it. */
   machineId: string | null;
+  name: string;
   origin: string;
-  pin: string | null;
+  source: PreviewSource;
 }
 
 /** What deletes rows: the database, or a transaction of it. */
@@ -379,15 +380,18 @@ const dropArtifactRows = (
   }
   const named = tx.select({ id: artifacts.id }).from(artifacts).where(where);
   const gone = tx
-    .select({
-      id: artifacts.id,
-      origin: artifacts.origin,
-      machineId: artifacts.machineId,
-      pin: artifacts.sourcePin,
-    })
+    .select()
     .from(artifacts)
     .where(or(where, inArray(artifacts.heldFor, named)))
-    .all();
+    .all()
+    .map(artifactOf)
+    .map(({ id, machineId, name, origin, source }): GoneArtifact => ({
+      id,
+      machineId,
+      name,
+      origin,
+      source,
+    }));
   if (gone.length > 0) {
     tx.delete(artifacts).where(where).run();
   }

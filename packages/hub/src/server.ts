@@ -215,6 +215,7 @@ import {
   STAGE_PINS,
   STAGE_RENDER,
   STAGE_SERVE,
+  STAGE_SERVE_STOP,
   STAGE_UNPIN,
   STAGE_WARM,
   STAGE_WRITE,
@@ -4839,7 +4840,8 @@ export const createServer = (
    * daemon ends says nothing more (agent stage.ts `stopOne`), so the hub
    * forgets it itself: a machine's own as it registers, which states each
    * stage again (agent stage.ts `tellStages`); a workspace's as it leaves
-   * `active`; a pin's as the hub lets it go (`unpin`).
+   * `active`; a pin's as the hub lets it go (`unpin`); a preview's server
+   * as the hub stops it (`stopServed`).
    */
   const workspaceStages = new Map<
     string,
@@ -5216,11 +5218,6 @@ export const createServer = (
       const staged = await onStage(at, STAGE_PICTURE, (ref) => [ref, ask]);
       return staged instanceof ElysiaStatus ? staged : staged.result;
     },
-    // The version of a served preview an author hands up, cut on its workspace's machine.
-    pin: async (at, pin) => {
-      const staged = await onStage(at, STAGE_PIN, (ref) => [ref, pin]);
-      return staged instanceof ElysiaStatus ? staged : undefined;
-    },
     // A decision page's Previews' stage warmed as it goes out; the machine answers before the warm-up runs.
     warmStage: async (at, warm) => {
       const staged = await onStage(at, STAGE_WARM, (ref) => [ref, warm]);
@@ -5319,10 +5316,23 @@ export const createServer = (
           ),
       };
     },
-    // A preview's server, run and kept up in its workspace or place on that tree's machine, in the pin of the version the person is served.
-    serve: async (at, serve, pin) => {
-      const staged = await onStage(at, STAGE_SERVE, (ref) => [ref, serve, pin]);
+    // A preview's server, run and kept up in its workspace or place on that tree's machine: the one the person is served.
+    serve: async (at, serve) => {
+      const staged = await onStage(at, STAGE_SERVE, (ref) => [ref, serve]);
       return staged instanceof ElysiaStatus ? staged : staged.result;
+    },
+    stopServed: async (machineId, { port, workspace }) => {
+      // It ends and says nothing more: forgotten here now, so it holds its tree no longer.
+      workspaceStages.get(workspace)?.ports.delete(port);
+      const asked = await callAgent(
+        machineId,
+        STAGE_SERVE_STOP,
+        [workspace, port],
+        BUSY_TIMEOUT_MS
+      );
+      return asked.kind === "answered" && asked.value.ok
+        ? asked.value.result
+        : undefined;
     },
     // A folder preview's weight and its start page's desk captures, from its folder on the machine that serves it.
     folderWeight: async (machineId, dir, path) => {
@@ -5361,7 +5371,7 @@ export const createServer = (
       const asked = await callAgent(
         machineId,
         STAGE_PIN,
-        [null, pin, dir],
+        [pin, dir],
         STAGE_PIN_MS
       );
       switch (asked.kind) {
@@ -5858,8 +5868,8 @@ export const createServer = (
   // frame's address is its origin's, which a move keeps, so only a new
   // revision loads it again: published at the revision it had, a panel kept
   // the page it loaded from the server the row moved off (an author's
-  // hand-up of a sheet, its args or story written and its pin cut, never
-  // reached the person's open panel). So each panel showing it loads again
+  // hand-up of a folder, its copy cut, never reached the person's open
+  // panel). So each panel showing it loads again
   // (`loadAgain`), and every artifact tab reads its target again once the
   // move's writer has written the row's revision beside it (`tabTarget`).
   db.onSourceMoved((move) => {

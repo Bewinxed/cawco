@@ -175,7 +175,7 @@ const writeLayer = (id: string, layer: Layer): Promise<void> =>
  * no record (a folder where workspace `id`'s clone is cut:
  * `~/.worktrees/<repo>-<id8>`, and nowhere else, so a person's own folder is
  * never taken for one), the `clone` form, with no base: a repository's
- * clone, with no folder of origin on record; or a stage clone's or pin's
+ * clone, with no folder of origin on record; or a stage clone's
  * copy of a folder in no repository (core object-pool.ts `copiedFolderSync`),
  * a folder that holds no repository, with that folder as its origin. Every
  * other clone held a repository; one whose `.git` was deleted since is read
@@ -217,7 +217,7 @@ const layerSync = (id: string): Layer | undefined => {
 };
 
 /**
- * What a stage clone's or pin's copy of a folder in no repository
+ * What a stage clone's copy of a folder in no repository
  * (stage-clone.ts `copyCut`) leaves out, by name at any depth, and never
  * counts as its own: what the project's install or its toolchain makes again
  * in the copy (stage-install.ts), and CawCo's own (`.cawco`, a stage's host:
@@ -275,7 +275,7 @@ export const ownFolderSync = (id: string, path: string): boolean => {
  * Whether workspace `id` is a copy of a folder that is no repository (read
  * from its records, synchronously, as {@link layerSync} reads: one that
  * can't be read names none): a delegate's layer of one, or a stage clone's
- * or pin's copy of one (core object-pool.ts `copiedFolderSync`).
+ * copy of one (core object-pool.ts `copiedFolderSync`).
  */
 export const folderSync = (id: string): boolean => {
   if (layerSync(id)?.kind === "folder") {
