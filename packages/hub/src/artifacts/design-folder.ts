@@ -3,8 +3,9 @@
  * an agent gave as the design's `html` or `dir` (or each direction's), under
  * its artifact's folder (`ARTIFACTS_ROOT/<id>/design`, core `DESIGN_FOLDER`),
  * completed into a Vite project the hub machine's stage runs (agent
- * stage-design.ts): a package.json naming Vite and the plugins its code
- * needs, and a Vite config naming those plugins, where the agent gave none.
+ * stage-design.ts): a package.json naming Vite, the plugins its code needs
+ * and the content kit, and a Vite config naming those plugins, where the
+ * agent gave none.
  *
  * A write replaces the design in place, so the stage's own HMR carries it to
  * the open panel: each file written only when its bytes changed (a file Vite
@@ -62,6 +63,34 @@ const TOOLCHAIN = {
   svelte: "^5.59.1",
   react: "^19.3.1",
   "react-dom": "^19.3.1",
+} as const;
+
+/**
+ * The content kit (the owner's pin on graph-general-canvas#content,
+ * 2026-11-22: "use a good set of known modern maintained libraries for each
+ * common thing, fall back to browser or html"): one library for each common
+ * kind of content, picked by its releases, its use and its licence, each its
+ * latest release as npm published it (read 2026-11-22) as a caret range.
+ * Every design's package.json names each where it names none, so a page
+ * imports it by its bare name and Vite serves the package's own published
+ * build from the stage's install: no CDN, nothing of ours in between. An
+ * import map can't stand in for it: Vite resolves every bare import of a
+ * module it serves itself, and refuses one it can't ("Failed to resolve
+ * import"), whatever a page's import map says.
+ */
+const KIT = {
+  /** Documents: Markdown to HTML. */
+  marked: "^18.2.1",
+  /** Charts. */
+  "chart.js": "^4.6.1",
+  /** Slide decks. */
+  "reveal.js": "^6.0.2",
+  /** Diagrams. */
+  mermaid: "^12.3.0",
+  /** Maths. */
+  katex: "^0.19.1",
+  /** Code, highlighted. */
+  shiki: "^4.6.0",
 } as const;
 
 /** What the design's stage makes in its folder, kept across its writes: its install's, and the stage host the daemon writes (agent stage.ts `HOST_DIR`). */
@@ -172,8 +201,8 @@ function dependenciesOf(
 /**
  * The plugins the design's code needs, by what it names and its files: the
  * Svelte plugin for Svelte, React's for React or a JSX file where no other
- * framework that writes JSX is named; each framework, and Vite and each
- * plugin, added where the design names none.
+ * framework that writes JSX is named; each framework, Vite, each plugin and
+ * each package of the {@link KIT}, added where the design names none.
  */
 function withToolchain(
   deps: Record<string, string>,
@@ -206,14 +235,20 @@ function withToolchain(
       (section === "deps" ? deps : dev)[name] = TOOLCHAIN[name];
     }
   }
+  for (const [name, range] of Object.entries(KIT)) {
+    if (!named(name)) {
+      deps[name] = range;
+    }
+  }
   return plugins;
 }
 
 /**
  * The design's package.json at its root: its own (at its root) with every
  * direction's dependencies (each folder's package.json) beside its own, and
- * Vite, the plugins its code needs and their frameworks where it names
- * none ({@link withToolchain}); or why it can't be, one sentence.
+ * Vite, the plugins its code needs, their frameworks and the content kit
+ * where it names none ({@link withToolchain}); or why it can't be, one
+ * sentence.
  */
 function rootPackage(
   files: readonly DesignFile[]

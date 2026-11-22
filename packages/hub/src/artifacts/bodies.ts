@@ -19,6 +19,7 @@ import { PREVIEW_START_PATH } from "@cawco/core/preview/protocol";
 import {
   CANVAS_SPEC_LIMITS,
   DESIGN_MAP_LIMITS,
+  DESIGN_MARKS,
   SERVE_COMMAND_LIMIT,
   STORY_FILE,
   STORY_NAME,
@@ -120,6 +121,9 @@ const designDirections = t.Optional(
     { maxItems: CANVAS_SPEC_LIMITS.files }
   )
 );
+
+/** What a design folder holds, as its agent marks it (core `DESIGN_MARKS`). */
+const designMark = t.Optional(t.UnionEnum(DESIGN_MARKS));
 
 /** A design graph's edges, groups, dials and directions (core `CanvasSpec`), as create and update take them. */
 const canvasFields = {
@@ -233,6 +237,7 @@ export const createBody = t.Object({
     ])
   ),
   dir: t.Optional(folderField),
+  content: designMark,
   port: t.Optional(t.Integer({ minimum: 1, maximum: 65_535 })),
   path: t.Optional(
     t.String({ maxLength: 2000, pattern: PREVIEW_START_PATH.source })
@@ -273,6 +278,7 @@ export const componentBody = t.Object({
   directions: designDirections,
   html: t.Optional(htmlField),
   dir: t.Optional(folderField),
+  content: designMark,
 });
 
 /** Any kind's head line. */

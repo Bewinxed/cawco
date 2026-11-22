@@ -363,6 +363,7 @@ const COMPONENT_FIELDS = [
   "dials",
   "directions",
   "dir",
+  "content",
 ] as const;
 
 /**
