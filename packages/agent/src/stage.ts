@@ -137,6 +137,7 @@ import type {
 } from "@cawco/core/workspace/controls";
 import { workspaceIdKind } from "@cawco/core/workspace-id";
 import { stageCloneId } from "@cawco/core/workspace-policy";
+import { causeOf } from "@cawco/preview/proxy";
 import { z } from "zod";
 import type { AgentPorts } from "./agent-ports";
 import { drawPage } from "./artifact-picture";
@@ -377,11 +378,19 @@ interface Stage {
   /** Settles once it is `live`, or rejects with why it is not. */
   ready?: Promise<void>;
   restarts: number;
+  /**
+   * The files, from its root, whose move its toolchain answers by starting
+   * its server again, as its host said when it began to serve (stage-host
+   * host.ts `restartsOn`): none until then, and none for a preview's server.
+   */
+  restartsOn: readonly string[];
   /** Where it runs, absolute. */
   readonly root: string;
   readonly runs: Runs;
   /** It slept: its next start is a wake (`waking`). */
   slept: boolean;
+  /** When its toolchain was last spawned (`Date.now()`), 0 before its first start: it read its folder as it stood then. */
+  startedAt: number;
   status: StageStatus;
   /** Set while the daemon itself stops it: its end is no crash. */
   stopping: boolean;
@@ -812,7 +821,9 @@ type StagePlace = Omit<
   | "lastUse"
   | "lookedAt"
   | "movedAt"
+  | "restartsOn"
   | "slept"
+  | "startedAt"
   | "stopping"
   | "viewers"
 >;
@@ -832,7 +843,9 @@ function newStage(found: StagePlace): Stage {
     lastUse: Date.now(),
     lookedAt: Date.now(),
     movedAt: 0,
+    restartsOn: [],
     slept: false,
+    startedAt: 0,
     stopping: false,
     viewers: 0,
   };
@@ -971,13 +984,34 @@ function servedFor(tree: Tree, serve: ServeSpec): ServedPlace {
 const bridgeName = (stage: Stage) =>
   `stage-${createHash("sha256").update(stage.key).digest("hex").slice(0, 12)}`;
 
-/** A request to the stage itself, next to it: through the bridge into its boundary's network, or the host's loopback on macOS. */
+/**
+ * A stage's request that got no answer at all: its connection refused, or
+ * cut before its answer was whole (Bun's fetch: "ECONNRESET: The socket
+ * connection was closed unexpectedly"). Its message names the address it
+ * went to, the way there, and the connection's own error.
+ */
+class StageUnanswered extends Error {
+  constructor(what: string, at: string, error: unknown) {
+    super(stageRenderWords.unanswered(what, at, causeOf(error)), {
+      cause: error,
+    });
+    this.name = "StageUnanswered";
+  }
+}
+
+/**
+ * A request to the stage itself, next to it: through the bridge into its
+ * boundary's network, or the host's loopback on macOS. `take` reads its
+ * answer; a request that got none, or whose answer was cut, throws
+ * {@link StageUnanswered}, `what` naming what it was to do.
+ */
 async function askStage<T>(
   stage: Stage,
   path: string,
   /** A fixed time to answer, or `"moving"`: for as long as the stage moves ({@link READ_QUIET_MS}). */
   bound: number | "moving",
-  take: (response: Response) => Promise<T>,
+  what: string,
+  take: (response: Response, cut: (error: unknown) => never) => Promise<T>,
   body?: object
 ): Promise<Bounded<T>> {
   const reached = await reachWorkspace(
@@ -985,25 +1019,33 @@ async function askStage<T>(
     stage.boundary.id,
     stage.port
   );
-  const asked = async (signal: AbortSignal) =>
-    take(
-      await fetch(
-        reached === "host"
-          ? `http://127.0.0.1:${stage.port}${path}`
-          : `http://localhost:${stage.port}${path}`,
-        {
-          signal,
-          ...(body
-            ? {
-                method: "POST",
-                body: JSON.stringify(body),
-                headers: { "content-type": "application/json" },
-              }
-            : {}),
-          ...(reached === "host" ? {} : { unix: reached }),
-        }
-      )
-    );
+  const at =
+    reached === "host"
+      ? stageRenderWords.loopback(stage.port)
+      : stageRenderWords.bridged(stage.port, stage.boundary.id.slice(0, 8));
+  const asked = async (signal: AbortSignal) => {
+    // An abort is the read's own deadline, which its bound answers.
+    const cut = (error: unknown): never => {
+      throw signal.aborted ? error : new StageUnanswered(what, at, error);
+    };
+    const response = await fetch(
+      reached === "host"
+        ? `http://127.0.0.1:${stage.port}${path}`
+        : `http://localhost:${stage.port}${path}`,
+      {
+        signal,
+        ...(body
+          ? {
+              method: "POST",
+              body: JSON.stringify(body),
+              headers: { "content-type": "application/json" },
+            }
+          : {}),
+        ...(reached === "host" ? {} : { unix: reached }),
+      }
+    ).catch(cut);
+    return take(response, cut);
+  };
   return bound === "moving"
     ? readWhileMoving(READ_QUIET_MS, () => stage.movedAt, asked)
     : readWithin(bound, asked);
@@ -1049,8 +1091,10 @@ async function answerOf<T>(
     stage,
     path,
     bound,
-    async (response) => {
-      const answer: unknown = await response.json();
+    what,
+    async (response, cut) => {
+      // Its body cut part-way is no answer; a body that is no JSON is the stage's own.
+      const answer: unknown = JSON.parse(await response.text().catch(cut));
       if (!response.ok) {
         throw new StageRefusal(
           refusalIn(answer) ??
@@ -1196,10 +1240,16 @@ async function listens(stage: Stage): Promise<boolean> {
 const healthy = (stage: Stage, waitMs: number): Promise<Bounded<boolean>> =>
   (stage.runs.kind === "serve"
     ? readWithin(waitMs, () => listens(stage))
-    : askStage(stage, HEALTH_PATH, waitMs, async (response) => {
-        await response.body?.cancel();
-        return response.ok;
-      })
+    : askStage(
+        stage,
+        HEALTH_PATH,
+        waitMs,
+        "answer its health",
+        async (response) => {
+          await response.body?.cancel();
+          return response.ok;
+        }
+      )
   ).catch(() => ({ kind: "answered", value: false }) as const);
 
 /**
@@ -1334,6 +1384,7 @@ const HostWordSchema = z.object({
   cawco: z.string(),
   errors: z.array(StageErrorSchema).optional(),
   message: z.string().optional(),
+  restartsOn: z.array(z.string()).optional(),
 });
 type HostWord = z.infer<typeof HostWordSchema>;
 const hostWord = (line: string): HostWord | null => {
@@ -1391,6 +1442,7 @@ const up = (stage: Stage) => {
 /** What the host said, kept and told to the hub; whether it said it serves. */
 const heard = (stage: Stage, word: HostWord): boolean => {
   if (word.cawco === "ready") {
+    stage.restartsOn = word.restartsOn ?? [];
     up(stage);
     return true;
   }
@@ -1649,6 +1701,7 @@ async function start(stage: Stage): Promise<void> {
   await roomFor(stage);
   const boundary = await ensureBoundary(stage.boundary);
   const [command, env] = commandOf(stage);
+  stage.startedAt = Date.now();
   const child = spawn(boundary.exec, [command], {
     cwd: stage.root,
     detached: true,
@@ -1908,7 +1961,8 @@ async function pagesLooked(
  * waited on, its project installed first: the folder is the toolchain
  * root, and the hub keeps it (stage-design.ts). Its pages `files` (from the
  * folder) are compiled on it ({@link pagesLooked}) before it answers, so
- * its state says each compile error. An agent's use: its idle time starts
+ * its state says each compile error, with the write's moves its Vite has
+ * not read ({@link movesUnread}). An agent's use: its idle time starts
  * again. Refused with why, when the folder cannot run.
  */
 export async function ensureDesign(
@@ -1919,13 +1973,52 @@ export async function ensureDesign(
   const tree = await treeOf(workspace, ports);
   const pages = look.files.map((file) => canvasFile(tree, file));
   writtenFirst(tree, pages);
+  // The hub wrote the folder before it asked: a stage spawned from here on reads it as written.
+  const asked = Date.now();
   const stage = await rootStage(tree, tree.folder, "a design's read");
   await pagesLooked(
     stage,
     pages.map((page) => relative(stage.root, page)),
-    look.moved
+    await movesUnread(stage, asked, look.moved)
   );
   return { port: stage.port, dir: stage.dir, state: stateOf(stage) };
+}
+
+/**
+ * What of the design write's moves `moved` design stage `stage` is told
+ * before its pages are looked at (host.ts `toldMoved`), the stage live now:
+ *
+ * - none when its toolchain was spawned at or after `asked`: the hub wrote
+ *   the folder before it asked, so its Vite read every file as written;
+ * - none when a move names a file its Vite starts its server again for
+ *   (`restartsOn`, its config and env files): told one, Vite closes its
+ *   server with every connection on it, the look's own among them, which
+ *   reached the daemon as a bare ECONNRESET (obelisk, 2026-11-22 12:47: a
+ *   new design's `added` named its vite.config.mjs). The stage is started
+ *   again here instead, and waited on, and its new Vite reads every file;
+ * - else every move, so a write a few milliseconds after the one before
+ *   reaches the page as Vite's watcher alone might fold it.
+ */
+async function movesUnread(
+  stage: Stage,
+  asked: number,
+  moved: DesignMoved | undefined
+): Promise<DesignMoved | undefined> {
+  if (!moved || stage.startedAt >= asked) {
+    return;
+  }
+  const restarting = [
+    ...moved.added,
+    ...moved.changed,
+    ...moved.removed,
+  ].filter((file) => stage.restartsOn.includes(file));
+  if (restarting.length === 0) {
+    return moved;
+  }
+  const why = `the design's write moved ${restarting.join(", ")}, which its Vite starts again for: starting it again`;
+  console.info(`[stage] ${stage.key}: ${why}`);
+  startAgain(stage, why);
+  await wake(stage, "a design's read");
 }
 
 /** What sheet `rel` (from the stage's root) loads, as its stage's module graph has it; null until a view has loaded it. */
@@ -2089,12 +2182,22 @@ function walkedAsEmbed(stage: Stage, files: string[]): Promise<void> {
   if (under) {
     return under;
   }
-  const walk = askStage(stage, path, WARM_WAIT_MS, async (response) => {
-    await response.text();
-    if (!response.ok) {
-      throw new Error(`its canvas page answered ${response.status}`);
+  const walk = askStage(
+    stage,
+    path,
+    WARM_WAIT_MS,
+    "serve its canvas page",
+    async (response, cut) => {
+      try {
+        await response.text();
+      } catch (error) {
+        cut(error);
+      }
+      if (!response.ok) {
+        throw new Error(`its canvas page answered ${response.status}`);
+      }
     }
-  })
+  )
     .then((asked) => {
       if (asked.kind === "unanswered") {
         throw new Error(

@@ -1,5 +1,6 @@
 import { relative } from "node:path";
 import { docMeta, getMeta, setMeta } from "@cawco/core/doc-meta";
+import { machineLabel } from "@cawco/core/machine-names";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
@@ -22,11 +23,13 @@ import {
   storyRefOf,
 } from "@cawco/core/stage";
 import { withoutUndefined } from "@cawco/core/without-undefined";
+import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { designTreeId } from "@cawco/core/workspace-id";
 import { pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow } from "../../db/artifacts";
 import { openProblem } from "../../preview-stops";
+import type { AnyProblem } from "../../refusal";
 
 import {
   COMPONENT_EXAMPLE,
@@ -115,6 +118,13 @@ const designSource = (
   workspace: tree,
   stage: { dir: opened.dir, file: files[0] ?? "" },
 });
+
+/** A design's create or update as its refusals and the hub's lines name it: its name, its tree, and whether it was being made or changed. */
+interface DesignAsk {
+  made: boolean;
+  name: string;
+  tree: string;
+}
 
 /** A design folder's directions as its canvas names them: each part's page, its name and line. */
 const designDirections = (
@@ -299,6 +309,67 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       why = error.message;
     }
     return { down, why };
+  };
+  /** Machine `machineId` by its name, as the hub's lines say it. */
+  const machineNamed = (machineId: string | undefined): string => {
+    const machine =
+      machineId === undefined
+        ? undefined
+        : deps.machines().find((one) => one.machineId === machineId);
+    return machine
+      ? machineLabel(machine.hostname)
+      : "a machine the hub doesn't know";
+  };
+  /**
+   * Design `ask`'s create or update refused at hop `hop`, which reached
+   * `at`: one line in the hub's journal naming the design, the hop, the
+   * address and the error, and the refusal answered to the agent in the
+   * same words. The refusal is each hop's own, made for this call alone
+   * (artifact-events.ts `onStage`, design-files.ts, preview-stops.ts
+   * `openProblem`): its words are written over in place, so its status,
+   * code and every other member it carries (an away machine's id) stand as
+   * its hop made them. Every hop of a design's create and update fails
+   * through here ({@link designWritten}, {@link createDesign}).
+   */
+  const designMissed = <Refusal extends AnyProblem>(
+    ask: DesignAsk,
+    hop: keyof typeof artifactToolWords.designHops,
+    at: string,
+    refusal: Refusal
+  ): Refusal => {
+    const said = artifactToolWords.designHops[hop];
+    const why = refusal.response.detail;
+    console.warn(
+      artifactToolWords.designMissedLine(ask.name, ask.tree, said, at, why)
+    );
+    Object.assign(refusal.response, {
+      detail: artifactToolWords.designMissed(ask.made, said, at, why),
+    });
+    return refusal;
+  };
+  /**
+   * The hop of a design's stage that refused `refusal` (artifact-events.ts
+   * `onStage`), and the address it reached: its folder gone from the hub's
+   * machine (409), that machine's daemon away or silent (503, 504), else
+   * the stage itself, whose own words name its hop within (its boundary,
+   * install, start, or the look at its pages, with the port and the way it
+   * asked on: agent stage.ts `askStage`).
+   */
+  const stageHop = (
+    tree: string,
+    refusal: AnyProblem
+  ): { hop: keyof typeof artifactToolWords.designHops; at: string } => {
+    const machine = machineNamed(deps.hubMachine());
+    if (refusal.status === 409) {
+      return { hop: "folder", at: `${store.designFolder(tree)} on ${machine}` };
+    }
+    if (refusal.status === 503 || refusal.status === 504) {
+      return { hop: "daemon", at: machine };
+    }
+    return {
+      hop: "stage",
+      at: `design ${tree.slice(0, 8)}'s stage on ${machine}`,
+    };
   };
   /** One write as the session reads of it: where, and what. */
   const saveSection = (change: SheetChange, edit: SheetWritten): string => {
@@ -648,6 +719,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
    * design can't run.
    */
   const designGathered = async (
+    ask: DesignAsk,
     maker: Making["maker"],
     parts: readonly DesignPartAsked[],
     places: readonly string[]
@@ -655,17 +727,23 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const files: DesignFile[] = [];
     for (const [at, part] of parts.entries()) {
       const place = places[at] ?? "";
+      const { from } = part;
       const own =
-        "html" in part.from
+        "html" in from
           ? [
               {
                 path: "index.html",
-                bytes: new TextEncoder().encode(part.from.html),
+                bytes: new TextEncoder().encode(from.html),
               },
             ]
-          : await deps.folderFiles(maker, part.from.dir);
+          : await deps.folderFiles(maker, from.dir);
       if (own instanceof ElysiaStatus) {
-        return own;
+        return designMissed(
+          ask,
+          "files",
+          `${"dir" in from ? from.dir : "its html"} on ${machineNamed(maker.machineId)}`,
+          own
+        );
       }
       files.push(
         ...own.map((one) => ({
@@ -683,17 +761,19 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     return whole;
   };
   /**
-   * Design folder `tree` written from `parts` (its files in place, so its
-   * stage's HMR carries them to the open panel) and its stage opened on
-   * them: the canvas's pages and its opened stage, or why not.
+   * Design folder `ask.tree` written from `parts` (its files in place, so
+   * its stage's HMR carries them to the open panel) and its stage opened on
+   * them: the canvas's pages and its opened stage, or why not, a hop that
+   * failed said by {@link designMissed}.
    */
   const designWritten = async (
+    ask: DesignAsk,
     maker: Making["maker"],
-    tree: string,
     parts: readonly DesignPartAsked[]
   ) => {
+    const { tree } = ask;
     const places = designPlaces(parts);
-    const whole = await designGathered(maker, parts, places);
+    const whole = await designGathered(ask, maker, parts, places);
     if (whole instanceof ElysiaStatus) {
       return whole;
     }
@@ -701,7 +781,8 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const files = places.map(designPageAt);
     const opened = await deps.design(tree, files, moved);
     if (opened instanceof ElysiaStatus) {
-      return opened;
+      const { hop, at } = stageHop(tree, opened);
+      return designMissed(ask, hop, at, opened);
     }
     return { files, ...opened };
   };
@@ -745,7 +826,8 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       return unopened;
     }
     const { before, id, tree } = designHome(making, input.name);
-    const written = await designWritten(making.maker, tree, parts);
+    const ask: DesignAsk = { name: input.name, tree, made: true };
+    const written = await designWritten(ask, making.maker, parts);
     if (written instanceof ElysiaStatus) {
       // A folder made for this create alone goes with its refusal.
       if (!before) {
@@ -772,7 +854,12 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const shown = await handOver(making, before, row);
     if (!(shown.started || before)) {
       discard(row);
-      return openProblem(shown.stop, "artifact-sheet-unshown", shown.why);
+      return designMissed(
+        ask,
+        "show",
+        `session ${making.owner.id.slice(0, 8)}'s panel`,
+        openProblem(shown.stop, "artifact-sheet-unshown", shown.why)
+      );
     }
     const made: Created = {
       ...createdOf(row, shown),
@@ -831,7 +918,11 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     if (misfit) {
       return problem(400, { code: "artifact-design-unfit", detail: misfit });
     }
-    const written = await designWritten(maker, design.tree, parts);
+    const written = await designWritten(
+      { name: row.name, tree: design.tree, made: false },
+      maker,
+      parts
+    );
     if (written instanceof ElysiaStatus) {
       return written;
     }

@@ -10,6 +10,33 @@ import { cutShort } from "./helpers";
  * them from here.
  */
 export const artifactToolWords = {
+  /**
+   * Each hop of a design folder's create or update (hub component.ts
+   * `designMissed`), as the clause its refusal names it by: its `dir` read
+   * off the maker's machine, its folder found on the hub's machine, that
+   * machine's daemon asked for its stage, the stage itself (its boundary,
+   * its install, its start and the look at its pages, each in the daemon's
+   * own words), and the panel it is shown in.
+   */
+  designHops: {
+    files: "reading its files",
+    folder: "finding its folder",
+    daemon: "asking the machine's daemon for its stage",
+    stage: "opening its stage",
+    show: "showing it in the panel",
+  },
+  /** A design folder's create or update that failed at a hop: the agent's refusal, `at` the address the hop reached, `why` what it met there. */
+  designMissed: (made: boolean, hop: string, at: string, why: string) =>
+    `The design was not ${made ? "made" : "changed"}: ${hop} (${at}) failed. ${why}`,
+  /** The same, as the hub's journal says it: one line naming the design, the hop, the address and the error. */
+  designMissedLine: (
+    name: string,
+    tree: string,
+    hop: string,
+    at: string,
+    why: string
+  ) =>
+    `[artifacts] design ${name} (${tree.slice(0, 8)}): ${hop} (${at}) failed: ${why}`,
   /** The head of `artifact_read`'s faults: what a browser met as it drew the page at this revision (core page-faults.ts). */
   faultsHead: (revision: number) =>
     `What a browser met drawing revision ${revision} (each once, the first 20):`,
