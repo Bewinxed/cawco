@@ -25,8 +25,11 @@ import {
   type ArtifactSocketEnd,
   type artifactPicture,
   type artifactSocket,
+  type StoreSocketEnd,
+  type storeSocket,
 } from "./artifacts/sync";
 import { takeErrorReport } from "./dashboard-errors";
+import type { StoreKey } from "./db/page-stores";
 import type { PreviewPassesDb } from "./db/preview-passes";
 import type { PreviewsDb } from "./db/previews";
 import { hidden } from "./hidden";
@@ -47,6 +50,7 @@ import {
   REACHED_HEADER,
   REVIVE_PATH,
   type RevivedAnswer,
+  STORE_SYNC_PATH,
   SYNC_PATH,
   serverSaid,
   TOKEN_HEADER,
@@ -83,6 +87,12 @@ export interface PreviewOriginDeps {
   /** Whether session `instanceId` still runs: a session's ticket enters only while it does. */
   sessionLive: (instanceId: string) => boolean;
   socket: ReturnType<typeof artifactSocket>;
+  /**
+   * The store of `scope` a page on origin `key` joins (artifacts/page-stores.ts):
+   * the artifact whose own origin `key` is, or its project; else why none.
+   */
+  storeOf: (key: string, scope: string) => StoreKey | string;
+  stores: ReturnType<typeof storeSocket>;
 }
 
 export interface PreviewControlDeps {
@@ -250,6 +260,8 @@ export const previewControlRoutes = (
 ) => {
   /** Each origin's doc sockets the server relays, by the hub's socket id. */
   const synced = new Map<string, ArtifactSocketEnd>();
+  /** Each page's store socket the preview server relays, by Elysia's socket id. */
+  const stored = new Map<string, StoreSocketEnd>();
 
   /** Where origin `key` stands now as a browser that reached `at` reaches it: a stale entry's next. */
   const standsAt = (
@@ -505,6 +517,42 @@ export const previewControlRoutes = (
         synced.delete(ws.id);
         if (end) {
           deps.origin.socket.close(end);
+        }
+      },
+    })
+    .ws(`${STORE_SYNC_PATH}:key/:scope`, {
+      open(ws) {
+        const { key, scope } = ws.params;
+        if (!fromServer((name) => ws.headers[name], ws.remoteAddress)) {
+          ws.close(4403, "Only this hub's preview server opens this link.");
+          return;
+        }
+        const store = deps.origin.storeOf(key, scope);
+        if (typeof store === "string") {
+          ws.close(4404, store);
+          return;
+        }
+        const end: StoreSocketEnd = {
+          data: { store },
+          send: (message) => ws.send(message),
+          close: (code, reason) => ws.close(code, reason),
+        };
+        stored.set(ws.id, end);
+        deps.origin.stores.open(end);
+      },
+      message(ws, message) {
+        const end = stored.get(ws.id);
+        if (end && typeof message === "string") {
+          deps.origin.stores.message(end, message);
+        } else if (end && message instanceof Uint8Array) {
+          deps.origin.stores.message(end, Buffer.from(message));
+        }
+      },
+      close(ws) {
+        const end = stored.get(ws.id);
+        stored.delete(ws.id);
+        if (end) {
+          deps.origin.stores.close(end);
         }
       },
     })

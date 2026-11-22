@@ -6056,6 +6056,11 @@ export const previewSettings = sqliteTable("preview_settings", {
   pattern: text("pattern"),
 });
 
+/** A Yjs update as its bytes (`Y.encodeStateAsUpdate`, or one the doc emitted). */
+const yjsUpdate = customType<{ data: Uint8Array; driverData: Uint8Array }>({
+  dataType: () => "blob",
+});
+
 /**
  * An artifact's Yjs document as its update log: every update appended in
  * order; once it holds `COMPACT_AT` updates and its doc stands quiet (hub
@@ -6069,11 +6074,49 @@ export const artifactUpdates = sqliteTable(
       .notNull()
       .references(() => artifacts.id, { onDelete: "cascade" }),
     seq: integer("seq").notNull(),
-    update: customType<{ data: Uint8Array; driverData: Uint8Array }>({
-      dataType: () => "blob",
-    })("update").notNull(),
+    update: yjsUpdate("update").notNull(),
   },
   (table) => [primaryKey({ columns: [table.artifactId, table.seq] })]
+);
+
+/**
+ * A page's store (artifacts/page-stores.ts): the Yjs document a page on
+ * the design graph keeps its own state in, over y-websocket, as its update
+ * log, kept as {@link artifactUpdates} is (appended in order, one snapshot
+ * once it holds `COMPACT_AT` and stands quiet). One per artifact (`artifact_id`,
+ * a held next version's under the artifact it is held for) and one per
+ * project (`project_id`), shared by every page of it; `store` names which,
+ * `artifact:<id>` or `project:<id>`. Each goes with what it is kept for.
+ */
+export const pageStoreUpdates = sqliteTable(
+  "page_store_updates",
+  {
+    store: text("store").notNull(),
+    artifactId: text("artifact_id").references(() => artifacts.id, {
+      onDelete: "cascade",
+    }),
+    projectId: projectColumn("project_id").references(() => projects.id, {
+      onDelete: "cascade",
+    }),
+    seq: integer("seq").notNull(),
+    update: yjsUpdate("update").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.store, table.seq] }),
+    // What a delete of its artifact or its project cascades by.
+    index("page_store_updates_artifact")
+      .on(table.artifactId)
+      .where(sql`${table.artifactId} is not null`),
+    index("page_store_updates_project")
+      .on(table.projectId)
+      .where(sql`${table.projectId} is not null`),
+    // Its columns by bare name, as every check's (migrations-check.ts
+    // `qualifiedChecks`).
+    check(
+      "page_store_updates_one_owner",
+      sql`(${sql.identifier("artifact_id")} is null) <> (${sql.identifier("project_id")} is null)`
+    ),
+  ]
 );
 
 /**

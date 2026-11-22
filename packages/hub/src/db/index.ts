@@ -62,6 +62,7 @@ import {
 import { type MoveEndingsDb, moveEndingsDb } from "./move-endings";
 import { type MovesDb, movesDb } from "./moves";
 import { type OwedMovesDb, owedMovesDb } from "./owed-moves";
+import { type PageStoresDb, pageStoresDb } from "./page-stores";
 import { type PresenceDb, presenceDb } from "./presence";
 import { type PreviewPassesDb, previewPassesDb } from "./preview-passes";
 import { type PreviewsDb, previewsDb } from "./previews";
@@ -166,6 +167,8 @@ interface HubStore {
   readonly onLogged: (listener: () => void) => void;
   /** The moves sessions owe to their next launch, one per session (owed-moves.ts). */
   readonly owedMoves: OwedMovesDb;
+  /** Pages' stores' update logs (page-stores.ts). */
+  readonly pageStores: PageStoresDb;
   /** Host mode's preview passes, one per browser (preview-access.ts). */
   readonly previewPasses: PreviewPassesDb;
   /** Each session's preview port, and the fleet's preview mode (preview.ts). */
@@ -410,6 +413,7 @@ const make = async (path: string): Promise<DbShape> => {
     heldPicks: heldPicksDb(db),
     previewPasses: previewPassesDb(db),
     documents: artifactDocumentsDb(db),
+    pageStores: pageStoresDb(db),
     streamRelay: streamRelayDb(db),
     browsers: browsersDb(db),
     actions: actionsDb(db),

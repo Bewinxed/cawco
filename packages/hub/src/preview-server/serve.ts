@@ -5,7 +5,8 @@
  * and a machine's preview relayed to its listener, each answer framed for
  * the dashboards, its overlay tag keyed, and gzipped. What only the hub
  * answers (an entry, which writes a pass; an artifact's doc socket and its
- * Send, picture, pictures and canvas; a page's shape; a page's fault report)
+ * Send, picture, pictures and canvas; a page's store's socket; a page's
+ * shape; a page's fault report)
  * is relayed to the hub as the browser sent it (wire.ts `ORIGIN_PATH`,
  * `SYNC_PATH`). Nothing a page's own open needs waits on the hub, but a
  * machine's preview's first request since this server started (the hub
@@ -61,7 +62,7 @@ import {
 import type { Server } from "bun";
 import { ElysiaStatus } from "elysia";
 import { serveCanvas } from "../artifacts/canvas";
-import { ARTIFACT_PATH } from "../artifacts/sync";
+import { ARTIFACT_PATH, STORE_PATH } from "../artifacts/sync";
 import { ARTIFACTS_ROOT, PREVIEW_PORTS_TEXT } from "../config";
 import type { ArtifactDocumentRow } from "../db/artifact-documents";
 import { decisionHostFile } from "../decision-host";
@@ -93,6 +94,7 @@ import {
   REACHED_HEADER,
   REVIVE_PATH,
   type RevivedAnswer,
+  STORE_SYNC_PATH,
   SYNC_PATH,
   TOKEN_HEADER,
   UPSTREAM_PATH,
@@ -414,10 +416,15 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     headers.set(LOCK_HEADER, lock.domain ?? "port");
     if (asksUpgrade(request)) {
       const synced = url.pathname.match(ARTIFACT_PATH);
-      if (!(synced?.[1] && key) || synced[2]) {
+      const stored = url.pathname.match(STORE_PATH)?.[1];
+      if (!key || (stored === undefined && (!synced?.[1] || synced[2]))) {
         return new Response("Not found", { status: 404 });
       }
-      const target = `ws${hubAt(`${SYNC_PATH}${encodeURIComponent(key)}/${synced[1]}${url.search}`).slice(4)}`;
+      const route =
+        stored === undefined
+          ? `${SYNC_PATH}${encodeURIComponent(key)}/${synced?.[1]}`
+          : `${STORE_SYNC_PATH}${encodeURIComponent(key)}/${stored}`;
+      const target = `ws${hubAt(`${route}${url.search}`).slice(4)}`;
       return upgradePreview(request, server, target, headers, {
         hop: "hub link",
         instanceId: key,
@@ -993,6 +1000,7 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     if (
       pathname === PREVIEW_ERRORS_PATH ||
       ARTIFACT_PATH.test(pathname) ||
+      STORE_PATH.test(pathname) ||
       PAGE_SHAPE_PATH.test(pathname)
     ) {
       return toHub(request, server, key, lock);

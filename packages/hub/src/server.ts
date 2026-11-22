@@ -345,6 +345,7 @@ import { createDesignFiles } from "./artifacts/design-files";
 import { createArtifactDocs } from "./artifacts/docs";
 import { createArtifactLane } from "./artifacts/lane";
 import { artifactPictures, artifactSend } from "./artifacts/page-posts";
+import { createPageStores } from "./artifacts/page-stores";
 import { artifactRoutes } from "./artifacts/routes";
 import {
   type Artifacts,
@@ -354,6 +355,7 @@ import {
 import {
   artifactPicture,
   artifactSocket,
+  storeSocket,
   takeSentWrites,
 } from "./artifacts/sync";
 import { takesNoInput } from "./artifacts/taker";
@@ -4626,6 +4628,8 @@ export const createServer = (
       }
     },
   });
+  // Pages' own stores (artifacts/page-stores.ts), joined on their origins.
+  const pageStores = createPageStores({ db: db.pageStores, lifetime });
 
   /**
    * What `discard_workspace` answers past its carry: the artifacts the
@@ -5611,6 +5615,27 @@ export const createServer = (
     pictures: artifactPictures(artifacts.pictures),
     send: artifactSend(artifacts.send, artifactDocs),
     socket: artifactSocket(artifactDocs),
+    // A page joins its own artifact's store, or its project's: the artifact
+    // whose own origin it is on (a held next version's, the artifact's it
+    // is held for), never one it names.
+    storeOf: (key, scope) => {
+      const origin = originOfKey(key);
+      const row = origin === null ? undefined : db.artifacts.byOrigin(origin);
+      const own = row?.heldFor ? db.artifacts.get(row.heldFor) : row;
+      if (!own) {
+        return "A store is a design's: this origin serves none.";
+      }
+      if (scope === "artifact") {
+        return { scope, id: own.id };
+      }
+      if (scope === "project" && own.projectId !== null) {
+        return { scope, id: own.projectId };
+      }
+      return scope === "project"
+        ? "This design is in no project, so it has no project's store."
+        : `No store of scope ${JSON.stringify(scope)}: artifact or project.`;
+    },
+    stores: storeSocket(pageStores),
     canvasFrom: (request, instanceId, artifactId) =>
       openDiagramAsCanvas(request, instanceId, artifactId),
     // A decision page's Preview heard a canvas of its media say its shape, or a whole screen tell its least words: kept for the next Preview of it.
@@ -5789,8 +5814,9 @@ export const createServer = (
   });
   // Every way an artifact row goes ends its own origin.
   db.onArtifactsGone((gone) => {
-    for (const { origin } of gone) {
+    for (const { id, origin } of gone) {
       previewService.end(origin);
+      pageStores.drop({ scope: "artifact", id });
     }
     artifacts.artifactsGone(gone);
   });
@@ -7911,6 +7937,8 @@ export const createServer = (
     folderMoved: boolean
   ): void => {
     projectsChanged();
+    // Its store's rows went with it, or came back: read again at the next join.
+    pageStores.drop({ scope: "project", id: projectId });
     for (const machineId of new Set(machines)) {
       placesChanged(machineId, projectId);
     }
