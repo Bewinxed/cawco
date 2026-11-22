@@ -41,7 +41,7 @@ async function ticket(): Promise<{ ticket: string } | { refused: string }> {
   return {
     refused: answer
       ? hubRefusal(answer.refused).message
-      : "The hub didn't give this browser a pass to its previews.",
+      : previewWords.passNoReason,
   };
 }
 
@@ -79,6 +79,6 @@ export async function enterBeside(origin: string): Promise<string | null> {
     cache: "no-store",
   }).then(
     () => null,
-    () => `${new URL(origin).host} didn't answer the entry`
+    () => previewWords.passNoAnswer(new URL(origin).host)
   );
 }

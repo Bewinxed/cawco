@@ -4,9 +4,9 @@
 
 import { type PreviewMode, previewMode } from "@cawco/core/comments/model";
 import type { FrameSays } from "@cawco/core/page-wire";
+import { previewWords } from "@cawco/core/words/preview";
 import { untrack } from "svelte";
 import { store, stored } from "#lib/platform/storage.js";
-import { NOT_REACHING } from "./artifact-doc";
 import type { RailSort } from "./comment-rows";
 import type { PaneDoc } from "./pane-doc.svelte";
 import type { PinComposer } from "./pin-composer.svelte";
@@ -66,11 +66,11 @@ export class PaneMode {
   /** The Comments control's title: why the comments aren't reaching the agent, else what ⇧C does. */
   readonly commentsTitle = $derived.by(() => {
     if (this.#deps.paneDoc.linkDown) {
-      return `${NOT_REACHING}. Open them to try again.`;
+      return previewWords.notReachingTitle;
     }
     return this.pinsShown
-      ? "Comments (⇧C hides the pins)"
-      : "Comments (⇧C shows the pins)";
+      ? previewWords.commentsHidePins
+      : previewWords.commentsShowPins;
   });
 
   /** The pane's mode, kept for the session and told to the page; `place` is the moved pin the next tap in Comment places again. */

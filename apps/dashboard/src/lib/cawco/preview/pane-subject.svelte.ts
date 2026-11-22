@@ -3,6 +3,7 @@
  */
 import { machineLabel } from "@cawco/core/machine-names";
 import { designOf } from "@cawco/core/stage";
+import { previewWords } from "@cawco/core/words/preview";
 import { resolveSessionTitle } from "../links";
 import { paneFleet } from "./pane-fleet";
 
@@ -32,7 +33,7 @@ export class PaneSubject {
     const machine = this.fleet.machines.find(
       (one) => one.machineId === this.owner?.machineId
     );
-    return machine ? machineLabel(machine.hostname) : "its machine";
+    return machine ? machineLabel(machine.hostname) : previewWords.itsMachine;
   });
 
   readonly ownerName = $derived(
@@ -42,7 +43,7 @@ export class PaneSubject {
           cwd: this.owner.cwd,
           id: this.owner.id,
         })
-      : "the session"
+      : previewWords.itsSession
   );
 
   readonly downPort = $derived(

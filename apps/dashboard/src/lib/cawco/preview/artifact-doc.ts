@@ -41,6 +41,7 @@ import {
   tunedRecords,
 } from "@cawco/core/tuned";
 import { commentWords } from "@cawco/core/words/comments";
+import { previewWords } from "@cawco/core/words/preview";
 import { IndexeddbPersistence } from "y-indexeddb";
 import { readAuthMessage } from "y-protocols/auth";
 import { messageAuth, WebsocketProvider } from "y-websocket";
@@ -71,11 +72,6 @@ import { openPageWrites } from "./open-pages";
  * Our call.
  */
 export const LINK_DOWN_MS = 15_000;
-
-/** A link of the comments' down past {@link LINK_DOWN_MS} (PreviewPane's `linkDown`): what happened, as the Comments control says it. */
-export const NOT_REACHING = "Comments aren't reaching the agent";
-/** …and in the Comments panel, with why as its own sentence (DESIGN.md's error formula); Try again is the way on. */
-export const LINK_DROPPED = `${NOT_REACHING}. The link to the hub dropped.`;
 
 /** The doc as the pane reads it. */
 export interface ArtifactView extends ArtifactChoices {
@@ -158,18 +154,15 @@ const refusedWhy = ({ code, reason }: { code: number; reason: string }) => {
   if (said) {
     return ENDS_SENTENCE.test(said) ? said : `${said}.`;
   }
-  return `The hub refused the link (${code}).`;
+  return previewWords.linkRefused(code);
 };
-
-/** What happens next while the link is down, and the way on. */
-const KEEPS_TRYING = "It keeps trying by itself; Try again tries now.";
 
 /** Why the link is down after {@link LINK_DOWN_MS} of reconnects: the last close's code, or attempts that never opened. */
 const downWhy = (code: number | null): string =>
-  `${code === null ? "The link to the hub didn't open" : `The link to the hub dropped (${code})`} and hasn't come back. ${KEEPS_TRYING}`;
+  code === null ? previewWords.linkNeverOpened : previewWords.linkDropped(code);
 
 /** Why the link is down when its open socket heard nothing for core `SILENT_MS`. */
-const SILENT_WHY = `The link to the hub stopped answering. ${KEEPS_TRYING}`;
+const SILENT_WHY = previewWords.linkSilent;
 
 const viewOf = (doc: Doc): ArtifactView => {
   const meta = docMeta(doc);
@@ -440,7 +433,7 @@ export function joinArtifact(
    * which keeps the person's refused writes aside, and the pane goes on in a fresh doc ({@link again}).
    */
   function refusedBy(reason: string, from: Doc) {
-    const said = reason.trim() || "The hub didn't keep it.";
+    const said = reason.trim() || previewWords.hubDidntKeep;
     // The refused doc as it stood, kept until the hub's is in: what of the
     // person's it held that the hub's doesn't is theirs to keep aside.
     const copy = new Doc();
@@ -496,7 +489,7 @@ export function joinArtifact(
     keep: (key, value) => {
       const pageHash = getMeta(doc, "pageHash");
       if (typeof pageHash !== "string") {
-        return "The page has not loaded yet, so nothing was kept.";
+        return previewWords.notKeptYet;
       }
       const entry: ChoiceEntry = {
         options: [],
@@ -515,7 +508,7 @@ export function joinArtifact(
     keepTuned: (records) => {
       const pageHash = getMeta(doc, "pageHash");
       if (typeof pageHash !== "string") {
-        return "The page has not loaded yet, so nothing was kept.";
+        return previewWords.notKeptYet;
       }
       keepTuned(doc, records, pageHash, new Date().toISOString());
       return null;

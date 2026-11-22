@@ -1053,6 +1053,9 @@ public enum Words {
         /// Asks again for what failed to be read or done.
         public static let tryAgain = "Try again"
 
+        /// Try again while it asks.
+        public static let tryingAgain = "Trying again…"
+
         /// An editor's save, once what it edits exists.
         public static let saveChanges = "Save changes"
 
@@ -1860,7 +1863,7 @@ public enum Words {
         /// A preview the hub couldn't reach, and its line's end.
         public static let cantBeReached = "This preview can't be reached"
 
-        public static let tryingAgain = "Trying again on its own."
+        public static let tryingAgain = "Trying again by itself."
 
         /// Its machine, when the hub's last read couldn't reach it.
         public static func machineNotAnswering(machine: String) -> String {
@@ -1926,12 +1929,69 @@ public enum Words {
 
         public static let crashedPage = "A script of this page threw before it loaded, and it shows nothing. Ask its session to fix it, then reload."
 
-        /// Its server is down: the port it listened on, and the way back from its session.
-        public static func nothingOnPort(port: Int) -> String {
-            "Nothing is running on port \(port)"
+        /// The pane's down state for each hop the proxy names (core `PreviewDown`; dashboard PreviewPane, its title from stage-cover.svelte.ts `downTitle`). For `server`, `machine`, `workspace` and `reach` the pane probes the page's origin by itself while it is on screen and loads the page once it answers (preview-frame.svelte.ts `DOWN_PROBES`), so their lines say the page loads; `closed` comes back only when its session shows it again. `machine` is the session's machine's label; `why` the machine's own words, a clause with no stop.
+        public enum Down {
+            public static let serverTitle = "The page's server stopped answering"
+
+            /// The server's port is known: `machine` its label.
+            public static func serverOnPort(port: Int, machine: String) -> String {
+                "Nothing is running on port \(port) on \(machine)."
+            }
+
+            public static func serverOn(machine: String) -> String {
+                "Nothing on \(machine) is serving the page."
+            }
+
+            /// A preview with a recorded start command (`serve`): its machine restarts the server by itself (core stage.ts).
+            public static let serverRestarting = "The server is starting again by itself, and the page loads once it answers."
+
+            /// Its session can be opened from here.
+            public static let serverAskSession = "Ask its session to start the server again; the page loads once it answers."
+
+            public static let serverStart = "Start the server again, and the page loads once it answers."
+
+            public static let workspaceTitle = "Its workspace isn't running"
+
+            public static let workspaceLine = "The page's server can be reached only while a session runs there. Once one does, the page loads as soon as the server answers."
+
+            public static func reachTitle(machine: String) -> String {
+                "\(machine) couldn't reach the page's server"
+            }
+
+            public static func reachLineWhy(why: String) -> String {
+                "The way to it didn't open (\(why)). The page loads once it does; if it stays shut, ask its session to show the preview again."
+            }
+
+            public static let reachLine = "The page loads once the way to it opens; if it stays shut, ask its session to show the preview again."
+
+            public static let closedTitle = "This preview is closed"
+
+            public static let closedLine = "It was deleted, or its session shows something else now. Ask its session to show it again."
+
+            public static func machineLineWhy(why: String) -> String {
+                "It serves this preview, and the hub got no answer from it (\(why)). Check that it's awake and connected; the page loads once it answers."
+            }
+
+            public static let machineLine = "It serves this preview. Check that it's awake and connected; the page loads once it answers."
         }
 
-        public static let startFromSession = "Start it again from its session, then try again."
+        /// `errorLine`'s and `crashedLine`'s `why` when the page named none.
+        public static let errorWhyUnknown = "with an error"
+
+        public static let crashedWhyUnknown = "no message"
+
+        /// The session's machine, and the session, where their names aren't known yet: said mid-sentence.
+        public static let itsMachine = "its machine"
+
+        public static let itsSession = "its session"
+
+        /// A down state's link to its session, beside Try again: `name` its title.
+        public static func openSession(name: String) -> String {
+            "Open \(name)"
+        }
+
+        /// The can't-be-reached state's link to /config/previews.
+        public static let previewSettings = "Preview settings"
 
         /// A canvas's view menu, its motion choice and its check against the design system.
         public static let canvasView = "Canvas view"
@@ -1970,6 +2030,124 @@ public enum Words {
         public static func portPassTurnedAway(host: String) -> String {
             "This preview turned the dashboard away twice: this browser kept no pass for \(host). Allow cookies for \(host) in this browser, then try again."
         }
+
+        /// The hub refused this browser a pass for the preview's origin (dashboard pass.ts): `refused` the hub's reason, a whole sentence; `passNoReason` when it gave none; `passNoAnswer` when the origin's `host` never answered the entry.
+        public static func passRefused(refused: String) -> String {
+            "The hub didn't give this browser a pass for this preview. \(refused)"
+        }
+
+        public static let passNoReason = "It didn't say why."
+
+        public static func passNoAnswer(host: String) -> String {
+            "\(host) didn't answer this browser."
+        }
+
+        /// The page's link to the hub closed and the page named no reason.
+        public static let linkClosed = "The page's link to the hub closed."
+
+        /// The head's Send: every held comment and reply in one press.
+        public static let sendUnsent = "Send everything unsent"
+
+        /// The head's and More's controls.
+        public static let undock = "Undock"
+
+        public static let openInNewTab = "Open in new tab"
+
+        public static let reload = "Reload"
+
+        /// The mode control: its menu, its name with the mode it is in, each mode and its tip (the tooltip draws the key beside it).
+        public static let mode = "Mode"
+
+        public static func modeIs(mode: String) -> String {
+            "Mode: \(mode)"
+        }
+
+        public enum Modes {
+            public static let interact = "Interact"
+
+            public static let comment = "Comment"
+
+            public static let draw = "Draw"
+
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["interact": interact, "comment": comment, "draw": draw]
+        }
+
+        public enum ModeTips {
+            public static let interact = "Interact: the page gets every click"
+
+            public static let comment = "Comment: a click pins a comment"
+
+            public static let draw = "Draw: drag to draw on the page"
+
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["interact": interact, "comment": comment, "draw": draw]
+        }
+
+        /// The comments' link to the hub (dashboard artifact-doc.ts): down past its grace, the Comments control's name (`notReaching`), its title (`notReachingTitle`) and the Comments panel's line (`notReachingLine`); why, under Show details, each with what happens next.
+        public static let notReaching = "Comments aren't reaching the agent"
+
+        public static let notReachingTitle = "Comments aren't reaching the agent. Open them to try again."
+
+        public static let notReachingLine = "Comments aren't reaching the agent. They're kept on this device and go once the link to the hub is back."
+
+        public static func linkRefused(code: Int) -> String {
+            "The hub refused the link (\(code))."
+        }
+
+        public static let linkNeverOpened = "The link to the hub hasn't opened. It keeps trying by itself; Try again tries now."
+
+        public static func linkDropped(code: Int) -> String {
+            "The link to the hub dropped (\(code)) and hasn't come back. It keeps trying by itself; Try again tries now."
+        }
+
+        public static let linkSilent = "The link to the hub stopped answering. It keeps trying by itself; Try again tries now."
+
+        /// The Comments control's title while its link is up: what ⇧C does.
+        public static let commentsHidePins = "Comments (⇧C hides the pins)"
+
+        public static let commentsShowPins = "Comments (⇧C shows the pins)"
+
+        /// A write of the pane's the hub refused without a reason.
+        public static let hubDidntKeep = "The hub didn't keep that, and didn't say why."
+
+        /// A dial or a pick kept before the pane's doc holds the page (artifact-doc.ts `keep`).
+        public static let notKeptYet = "The hub hasn't answered for this page yet, so that wasn't kept. Make the change again in a moment."
+
+        /// The page refused a comment, or a change to one, without a reason.
+        public static let commentNotKept = "The page didn't keep that comment. Send it again."
+
+        public static let changeNotKept = "The page didn't keep that, so nothing changed. Try again."
+
+        /// The pane holds no doc of the page's comments: what didn't happen, and the way back.
+        public enum LostComments {
+            public static let deleted = "This pane lost the page's comments, so the comment wasn't deleted. Reload the dashboard, then try again."
+
+            public static let reply = "This pane lost the page's comments, so the reply wasn't kept. Reload the dashboard, then reply again."
+
+            public static func resolved(resolved: Bool) -> String {
+                "This pane lost the page's comments, so the comment wasn't \(resolved ? "resolved" : "reopened"). Reload the dashboard, then try again."
+            }
+
+            public static let sent = "This pane lost the page's comments, so nothing was sent. Reload the dashboard, then send again."
+
+            public static let again = "This pane lost the page's comments, so the comment didn't go. Reload the dashboard, then try again."
+        }
+
+        /// A pin's Delete, asked under its card: what goes with it.
+        public static func deletePinBody(ink: Bool) -> String {
+            ink ? "It goes from the page with its thread and the ink it stands on. This can't be undone." : "It goes from the page with its thread. This can't be undone."
+        }
+
+        /// The composer's choice of element, as a screen reader names it.
+        public static func aboutElement(element: String) -> String {
+            "On \(element): change what this comment is about"
+        }
+
+        /// A changed line, read aloud: "<before> from … to <after>".
+        public static let changedFrom = "from"
+
+        public static let changedTo = "to"
     }
 
     public enum Offers {

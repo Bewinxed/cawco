@@ -29,13 +29,15 @@ export class StageCover {
   readonly downTitle = $derived.by(() => {
     switch (this.#deps.previewFrame.down) {
       case "server":
-        return "The page's server stopped answering";
+        return previewWords.down.serverTitle;
       case "workspace":
-        return "That workspace isn't running";
+        return previewWords.down.workspaceTitle;
       case "reach":
-        return `${this.#deps.paneSubject.ownerMachine} couldn't reach the page's server`;
+        return previewWords.down.reachTitle(
+          this.#deps.paneSubject.ownerMachine
+        );
       case "closed":
-        return "This preview is closed";
+        return previewWords.down.closedTitle;
       case "gone":
         return previewWords.goneTitle;
       case "error":

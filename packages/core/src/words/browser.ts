@@ -83,7 +83,7 @@ export const browserWords = {
   noCodecLine: (codec: string) =>
     `The browser sends ${codec} video, which this browser doesn't play. Open the panel in Chrome, Edge or Safari.`,
   tryAgain: commonWords.tryAgain,
-  tryingAgain: "Trying again…",
+  tryingAgain: commonWords.tryingAgain,
 };
 
 /**
@@ -105,6 +105,8 @@ export const passkeyWords = {
   title: "Passkey sign-in required",
   /** The line under the QR, naming the relying party. */
   scanTo: (origin: string) => `Scan with your phone to sign in to ${origin}`,
+  /** The QR, as a screen reader names it; the line under it names the relying party. */
+  qrCode: "Passkey QR code",
   /** The line when no RP origin is known. */
   scan: "Scan with your phone to sign in",
   /** The extension prompt. */

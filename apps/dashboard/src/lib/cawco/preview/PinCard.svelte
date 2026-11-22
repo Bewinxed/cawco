@@ -47,6 +47,7 @@
   import { artifactWords as words } from "@cawco/core/words/artifacts";
   import { commentWords as said } from "@cawco/core/words/comments";
   import { commonWords } from "@cawco/core/words/common";
+  import { previewWords } from "@cawco/core/words/preview";
   import { type Snippet, tick, untrack } from "svelte";
   import {
     BarGlass,
@@ -343,13 +344,7 @@
   /** The card's one question: Delete, asked under its foot. */
   const asks = new Asker<AskHereRequest>();
   /** What a delete takes with it, named before it runs (DESIGN.md, Voice). */
-  const deleteBody = $derived.by(() => {
-    const parts = [
-      "its thread",
-      pin.ink ? "the ink it stands on" : null,
-    ].filter(Boolean);
-    return `It goes from the page with ${parts.join(" and ")}. The other comments keep their numbers. This can't be undone.`;
-  });
+  const deleteBody = $derived(previewWords.deletePinBody(!!pin.ink));
   function askDelete() {
     asks.ask({
       at: "delete",

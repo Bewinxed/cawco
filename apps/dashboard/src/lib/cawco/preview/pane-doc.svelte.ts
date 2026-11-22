@@ -1,6 +1,7 @@
 /**
  * The artifact's live document as this pane holds it: its pins beside the page's own, the writes the hub refused, and the state of the links to the hub.
  */
+
 import {
   keepAside,
   type Pin,
@@ -11,6 +12,7 @@ import {
 } from "@cawco/core/comments/model";
 import { hasPinParts, isPin } from "@cawco/core/comments/validate";
 import { artifactWords } from "@cawco/core/words/artifacts";
+import { previewWords } from "@cawco/core/words/preview";
 import { untrack } from "svelte";
 import { z } from "zod";
 import { ThreadEntrySchema } from "#lib/cawco/stored-shapes.js";
@@ -69,7 +71,7 @@ function pageRepliesOf(said: unknown): RefusedReplies {
 }
 /** What closed the page's link, as the page said it (artifact.ts `closedBecause`). */
 const lostWhy = (error: unknown): string =>
-  typeof error === "string" ? error : "The page's link to the hub closed.";
+  typeof error === "string" ? error : previewWords.linkClosed;
 export interface PaneDocDeps {
   readonly instanceId: () => string;
   readonly paneNotice: PaneNotice;
@@ -240,7 +242,7 @@ export class PaneDoc {
   /** Send all: every held comment and reply let go in one write with the note; the hub's next delivery carries them (core `sendHeld`). */
   readonly sendHeldNow = (note: string): string | null => {
     if (!this.doc) {
-      return "The pane lost the page's document, so nothing was sent. Reload, then send again.";
+      return previewWords.lostComments.sent;
     }
     const refused = this.doc.sendHeld(note);
     // Gone to the hub: a refusal of it comes back (`keepRefused`).
@@ -426,7 +428,7 @@ export class PaneDoc {
     const refused = await enterBeside(origin);
     if (refused && said) {
       this.#deps.paneNotice.say({
-        message: `The hub didn't give this preview a pass: ${refused}`,
+        message: previewWords.passRefused(refused),
         again: null,
       });
     }

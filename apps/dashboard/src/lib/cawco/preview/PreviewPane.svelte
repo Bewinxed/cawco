@@ -12,6 +12,7 @@
   import { previewWords } from "@cawco/core/words/preview";
   import { sheetWords } from "@cawco/core/words/sheet";
   import { shellWords } from "@cawco/core/words/shell";
+  import { sideWords } from "@cawco/core/words/side";
   import { Portal } from "bits-ui";
   import type { Snippet } from "svelte";
   import { BarItem, BarSegments } from "#lib/components/ui/bar-glass/index.js";
@@ -55,7 +56,6 @@
   import { HEAD_PRIORITY, type HeadItem } from "../side/head";
   import SideSurface from "../side/SideSurface.svelte";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
-  import { NOT_REACHING } from "./artifact-doc";
   import BrowserAddress from "./BrowserAddress.svelte";
   import BrowserView from "./BrowserView.svelte";
   import { browserHead } from "./browser-head";
@@ -312,6 +312,24 @@
   });
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
+
+  /** The down state's way back: a gone version asks its session to make it again, a closed one opens its session, the rest Try again. */
+  const downAction = $derived.by(() => {
+    switch (previewFrame.down) {
+      case "gone":
+        return goneAsk;
+      case "closed":
+        return closedOpen;
+      case "server":
+      case "machine":
+      case "workspace":
+      case "reach":
+      case "error":
+      case "crashed":
+      case null:
+        return frameRetry;
+    }
+  });
   /** The rail, for `/`: its search field takes the keyboard. */
   let rail = $state<ReturnType<typeof CommentRail>>();
   /** The mode's glyph and word, for its one-button form. */
@@ -509,10 +527,17 @@
     <Button
       href={paneSubject.fleet.sessionHref(paneSubject.owner.id)}
       pad="none"
-      label={`Open ${paneSubject.ownerName}`}
+      label={previewWords.openSession(paneSubject.ownerName)}
       size="sm"
       variant="link"
     />
+  {/if}
+{/snippet}
+
+<!-- A closed preview comes back only as its session shows it again: no Try again, its session beside where it isn't that session's own tab. -->
+{#snippet closedOpen()}
+  {#if paneSubject.offerSession}
+    {@render sessionOpen()}
   {/if}
 {/snippet}
 
@@ -590,11 +615,11 @@
   <!-- What of the page the session hasn't heard, picks and comments alike: one press sends it all. -->
   <Button
     data-slot="send"
-    aria-label={`${commentWords.send}, ${paneDoc.unsentCount} unsent`}
+    aria-label={`${commentWords.send}, ${commentWords.heldWaiting(paneDoc.unsentCount)}`}
     onclick={() => paneSend.sendAll("panel-head")}
     pending={paneSend.sending}
     shape="capsule"
-    title="Send what the session hasn't heard"
+    title={previewWords.sendUnsent}
   >
     <PendingContent icon={IconSend} pending={paneSend.sending} />
     <span data-slot="send-label" class="in-form-compact:hidden"
@@ -728,7 +753,7 @@
     disabled={!paneCanvas.stage}
     onSelect={() => paneCanvas.giveBack(false)}
   >
-    <IconUndock /><span>Undock</span>
+    <IconUndock /><span>{previewWords.undock}</span>
   </DropdownMenu.Item>
 {/snippet}
 
@@ -739,7 +764,7 @@
       data-slot="other"
       href={`/artifact/${encodeURIComponent(paneSubject.artifact.id)}`}
       icon={IconExternalLinear}
-      label="Open in new tab"
+      label={previewWords.openInNewTab}
       props={{ rel: "noopener", target: "_blank" }}
     />
   {/if}
@@ -754,7 +779,8 @@
           class={[props.class, "mark-line"]}
           href={`/artifact/${encodeURIComponent(artifact.id)}`}
           rel="noopener"
-          target="_blank"><IconExternal /><span>Open in new tab</span></a
+          target="_blank"
+          ><IconExternal /><span>{previewWords.openInNewTab}</span></a
         >
       {/snippet}
     </DropdownMenu.Item>
@@ -766,24 +792,24 @@
 {/snippet}
 {#snippet modeMenu()}
   <DropdownMenu.Group>
-    <DropdownMenu.GroupHeading>Mode</DropdownMenu.GroupHeading>
+    <DropdownMenu.GroupHeading>{previewWords.mode}</DropdownMenu.GroupHeading>
     <DropdownMenu.RadioGroup
       onValueChange={(next) =>
         paneMode.setMode(previewMode(next) ?? "interact")}
       value={paneMode.mode}
     >
       <DropdownMenu.RadioItem value="interact"
-        ><IconInteract /><span>Interact</span><DropdownMenu.Shortcut
-          >V</DropdownMenu.Shortcut
+        ><IconInteract /><span>{previewWords.modes.interact}</span
+        ><DropdownMenu.Shortcut>V</DropdownMenu.Shortcut
         ></DropdownMenu.RadioItem
       >
       <DropdownMenu.RadioItem value="comment"
-        ><IconComment /><span>Comment</span><DropdownMenu.Shortcut
-          >C</DropdownMenu.Shortcut
+        ><IconComment /><span>{previewWords.modes.comment}</span
+        ><DropdownMenu.Shortcut>C</DropdownMenu.Shortcut
         ></DropdownMenu.RadioItem
       >
       <DropdownMenu.RadioItem value="draw"
-        ><IconPen /><span>Draw</span><DropdownMenu.Shortcut
+        ><IconPen /><span>{previewWords.modes.draw}</span><DropdownMenu.Shortcut
           >D</DropdownMenu.Shortcut
         ></DropdownMenu.RadioItem
       >
@@ -855,7 +881,9 @@
   {#if commentKit.kit}
     {@const Card = commentKit.kit.PinCard}
     <Card
-      agentName={paneSubject.owner ? paneSubject.ownerName : "The session"}
+      agentName={paneSubject.owner
+        ? paneSubject.ownerName
+        : commonWords.itsSession}
       changes={(paneDoc.view?.activity[pin.id]?.length ?? 0) > 0
         ? threadChanges
         : undefined}
@@ -910,7 +938,7 @@
   {#if paneLayout.railSheet || paneSubject.isCanvas}
     <CommentsButton
       count={paneDoc.openCount}
-      down={paneDoc.linkDown ? NOT_REACHING : null}
+      down={paneDoc.linkDown ? previewWords.notReaching : null}
       label={paneMode.commentsTitle}
       onclick={() => paneMode.showList(!paneMode.listOpen)}
       open={paneLayout.railSheet ? pinThread.railSheetOpen : paneMode.listOpen}
@@ -929,13 +957,13 @@
         : null}
       threadKey={pinThread.hungPin?.id}
       threadLabel={pinThread.hungPin
-        ? `Comment ${pinThread.hungPin.number}`
+        ? commentWords.numbered(pinThread.hungPin.number)
         : undefined}
     >
       {#snippet trigger(props)}
         <CommentsButton
           count={paneDoc.openCount}
-          down={paneDoc.linkDown ? NOT_REACHING : null}
+          down={paneDoc.linkDown ? previewWords.notReaching : null}
           label={paneMode.commentsTitle}
           open={paneMode.listOpen}
           held={paneDoc.heldCount}
@@ -950,7 +978,8 @@
 {/snippet}
 {#snippet commentsMenu()}
   <DropdownMenu.Item onSelect={() => paneMode.showList(!paneMode.listOpen)}>
-    <IconChat /><span>Comments</span>{#if paneDoc.openCount > 0}<span
+    <IconChat /><span>{commentWords.comments}</span
+    >{#if paneDoc.openCount > 0}<span
         class="ms-auto text-ink-muted num"
         data-slot="count">{paneDoc.openCount}</span
       >{/if}
@@ -961,13 +990,13 @@
   <BarItem
     data-slot="other"
     icon={IconRefreshLinear}
-    label="Reload"
+    label={previewWords.reload}
     onclick={previewFrame.reloadPage}
   />
 {/snippet}
 {#snippet reloadMenu()}
   <DropdownMenu.Item onSelect={previewFrame.reloadPage}>
-    <IconRefresh /><span>Reload</span>
+    <IconRefresh /><span>{previewWords.reload}</span>
   </DropdownMenu.Item>
 {/snippet}
 
@@ -1049,7 +1078,7 @@
   <section
     data-slot="preview-pane"
     data-preview-inset
-    aria-label={paneSubject.artifact?.title ?? "Preview"}
+    aria-label={paneSubject.artifact?.title ?? sideWords.preview}
     class="@container flex flex-col flex-1 min-h-0"
     bind:this={paneLayout.section}
   >
@@ -1067,7 +1096,7 @@
       ? undefined
       : paneMode.mode}
     items={headItems}
-    label="Preview"
+    label={sideWords.preview}
     onclose={ownTab ? paneClose.backToSession : paneClose.close}
     placement={sheet ? "sheet" : "beside"}
     subtitle={paneSheet.graphHead ? paneSheet.graphHead.line : paneDoc.headLine}
@@ -1121,7 +1150,7 @@
       }}
       src={`${previewReach.paneOrigin}${previewReach.framePlace}`}
       data-scheme={paneSubject.themedFrame ? theme.resolved : undefined}
-      title="Preview"
+      title={sideWords.preview}
       {@attach (node) => {
         if (key === previewFrame.frameKey) {
           previewFrame.iframe = node;
@@ -1180,7 +1209,7 @@
               previewReach.addressTries += 1;
             }}
             pending={previewReach.addressAsking}
-            pendingLabel="Trying again…"
+            pendingLabel={commonWords.tryingAgain}
             size="sm"
             variant="outline"
           />
@@ -1210,14 +1239,14 @@
                 previewReach.probe += 1;
               }}
               pending={previewReach.probing}
-              pendingLabel="Trying again…"
+              pendingLabel={commonWords.tryingAgain}
               size="sm"
               variant="outline"
             />
             <Button
               href="/config/previews"
               pad="none"
-              label="Preview settings"
+              label={previewWords.previewSettings}
               size="sm"
               variant="link"
             />
@@ -1425,42 +1454,45 @@
       <EmptyState
         icon={previewFrame.down === "gone" ? IconArchive : IconAlert}
         title={stageCover.downTitle}
-        action={previewFrame.down === "gone" ? goneAsk : frameRetry}
+        action={downAction}
       >
         {#snippet line()}
           {#if previewFrame.down === "gone"}
             {previewFrame.downWhy ?? previewWords.goneLine}
           {:else if previewFrame.down === "workspace"}
-            Its server can't be reached until the workspace runs again. Once a
-            session there is back, try again.
+            {previewWords.down.workspaceLine}
           {:else if previewFrame.down === "server"}
             {paneSubject.downPort
-              ? `${previewWords.nothingOnPort(paneSubject.downPort)} on ${paneSubject.ownerMachine}, so the page can't load.`
-              : `The page's server on ${paneSubject.ownerMachine} isn't running, so the page can't load.`}
+              ? previewWords.down.serverOnPort(
+                  paneSubject.downPort,
+                  paneSubject.ownerMachine
+                )
+              : previewWords.down.serverOn(paneSubject.ownerMachine)}
             {#if paneSubject.served}
-              CawCo starts it again by itself; try again in a moment.
+              {previewWords.down.serverRestarting}
             {:else if paneSubject.offerSession}
-              {previewWords.startFromSession}
+              {previewWords.down.serverAskSession}
             {:else}
-              Start it again, then try again.
+              {previewWords.down.serverStart}
             {/if}
           {:else if previewFrame.down === "reach"}
-            The way to the page's server on {paneSubject.ownerMachine} didn't open{previewFrame.downWhy
-              ? `: ${previewFrame.downWhy}`
-              : "."}
-            Try again; if it fails again, start the server again from its session.
+            {previewFrame.downWhy
+              ? previewWords.down.reachLineWhy(previewFrame.downWhy)
+              : previewWords.down.reachLine}
           {:else if previewFrame.down === "closed"}
-            Its session shows something else now, or has ended, so there is no
-            page here. Open its session to show it again.
+            {previewWords.down.closedLine}
           {:else if previewFrame.down === "error"}
-            {previewWords.errorLine(previewFrame.downWhy ?? "with an error")}
+            {previewWords.errorLine(
+              previewFrame.downWhy ?? previewWords.errorWhyUnknown
+            )}
           {:else if previewFrame.down === "crashed"}
-            {previewWords.crashedLine(previewFrame.downWhy ?? "no message")}
+            {previewWords.crashedLine(
+              previewFrame.downWhy ?? previewWords.crashedWhyUnknown
+            )}
           {:else}
-            The preview comes from {paneSubject.ownerMachine}, which isn't
-            answering the hub{previewFrame.downWhy
-              ? `: ${previewFrame.downWhy}`
-              : "."} Once it answers, try again.
+            {previewFrame.downWhy
+              ? previewWords.down.machineLineWhy(previewFrame.downWhy)
+              : previewWords.down.machineLine}
           {/if}
         {/snippet}
       </EmptyState>
@@ -1509,7 +1541,7 @@
          to half. -->
     <ThreadSheet
       label={pinThread.threadPushed && pinThread.cardPin
-        ? `Comment ${pinThread.cardPin.number}`
+        ? commentWords.numbered(pinThread.cardPin.number)
         : commentWords.comments}
       onclose={() => paneMode.showList(false)}
       onclosed={() => {
@@ -1581,7 +1613,7 @@
                and its element stand above it (what the comment is about
                in view), and goes to the whole room on a drag. -->
           <ThreadSheet
-            label={`Comment ${pinThread.cardPin.number}`}
+            label={commentWords.numbered(pinThread.cardPin.number)}
             onclose={() => pinThread.closeCard()}
             onclosed={() => {
               if (!pinThread.openPin) {
@@ -1605,7 +1637,7 @@
           {@const hovered = pinHover.hoverPin?.id === pinId}
           <PinFloat
             box={pinThread.drawnAt?.box ?? null}
-            label={`Comment ${pinThread.cardPin.number}`}
+            label={commentWords.numbered(pinThread.cardPin.number)}
             mark={pinThread.drawnAt?.mark ?? null}
             oncommit={hovered ? () => pinThread.openCard(pinId) : undefined}
             onclosed={() => {
@@ -1666,7 +1698,7 @@
           label={commonWords.tryAgain}
           onclick={previewFrame.retry}
           pending={previewFrame.retrying}
-          pendingLabel="Reloading…"
+          pendingLabel={previewWords.reloading}
           size="sm"
           variant="outline"
         />
@@ -1676,7 +1708,7 @@
           label={commonWords.tryAgain}
           onclick={paneNotice.rerun}
           pending={paneNotice.rerunning}
-          pendingLabel="Trying again…"
+          pendingLabel={commonWords.tryingAgain}
           size="sm"
           variant="outline"
         />
