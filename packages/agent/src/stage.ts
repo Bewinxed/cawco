@@ -2449,6 +2449,10 @@ const keyOf = (source: PreviewSource): string | null => {
   return source.serve ? serveKey(source.workspace, source.port) : null;
 };
 
+/** Whether a stage serves `source` (a sheet's, or a port preview's recorded command), so its server is started again by itself once it stops. */
+export const stagedSource = (source: PreviewSource): boolean =>
+  keyOf(source) !== null;
+
 /**
  * A preview's request for a stage's page: the stage woken when it sleeps,
  * and waited on, so a page opened after its stage slept or failed (Try

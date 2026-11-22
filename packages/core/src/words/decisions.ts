@@ -96,6 +96,11 @@ export const decisionsWords = {
     "its machine isn't answering the hub. Once it answers, try again.",
   previewMachineDownWhy: (why: string) =>
     `its machine isn't answering the hub (${why}). Once it answers, try again.`,
+  /** The hub's own preview server got no answer from the hub (core `PreviewDown` `hub`). */
+  previewHubDown:
+    "the hub isn't answering its own preview server. Once it answers, try again.",
+  previewHubDownWhy: (why: string) =>
+    `the hub isn't answering its own preview server (${why}). Once it answers, try again.`,
   previewReachDown:
     "the way to its server didn't open. Try again; if it fails again, start the server again from its session.",
   previewReachDownWhy: (why: string) =>

@@ -439,9 +439,13 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
         headers: decodedHeaders(answer.headers),
       });
     } catch (error) {
-      const why = `the hub didn't answer the preview server: ${causeOf(error)}`;
-      previewFailed(HOP, key ?? null, why);
-      return downResponse("machine", 502, why);
+      previewFailed(
+        HOP,
+        key ?? null,
+        `the hub didn't answer the preview server: ${causeOf(error)}`
+      );
+      // The cover's parentheses take a clause: the error's code, not its sentences.
+      return downResponse("hub", 502, codeOf(error));
     }
   };
 

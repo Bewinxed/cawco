@@ -1865,7 +1865,7 @@ public enum Words {
 
         public static let tryingAgain = "Trying again by itself."
 
-        /// Its machine, when the hub's last read couldn't reach it.
+        /// Its machine, when the hub's last read couldn't reach it: `machine` its name, or `unnamed.machine.lead`.
         public static func machineNotAnswering(machine: String) -> String {
             "\(machine) isn't answering"
         }
@@ -1931,6 +1931,15 @@ public enum Words {
 
         /// The pane's down state for each hop the proxy names (core `PreviewDown`; dashboard PreviewPane, its title from stage-cover.svelte.ts `downTitle`). For `server`, `machine`, `workspace` and `reach` the pane probes the page's origin by itself while it is on screen and loads the page once it answers (preview-frame.svelte.ts `DOWN_PROBES`), so their lines say the page loads; `closed` comes back only when its session shows it again. `machine` is the session's machine's label; `why` the machine's own words, a clause with no stop.
         public enum Down {
+            /// `hub`: the hub's own preview server couldn't reach the hub for what only the hub answers (hub preview-server serve.ts), `why` its words.
+            public static let hubTitle = "The hub isn't answering this preview"
+
+            public static func hubLineWhy(why: String) -> String {
+                "It didn't answer its own preview server (\(why)). The page loads once it does."
+            }
+
+            public static let hubLine = "It didn't answer its own preview server. The page loads once it does."
+
             public static let serverTitle = "The page's server stopped answering"
 
             /// The server's port is known: `machine` its label.
@@ -1954,6 +1963,7 @@ public enum Words {
 
             public static let workspaceLine = "The page's server can be reached only while a session runs there. Once one does, the page loads as soon as the server answers."
 
+            /// `machine` its name, or `unnamed.machine.lead`.
             public static func reachTitle(machine: String) -> String {
                 "\(machine) couldn't reach the page's server"
             }
@@ -1980,10 +1990,26 @@ public enum Words {
 
         public static let crashedWhyUnknown = "no message"
 
-        /// The session's machine, and the session, where their names aren't known yet: said mid-sentence.
-        public static let itsMachine = "its machine"
+        /// The session's machine, and the session, where their names aren't known yet: `lead` begins a sentence or stands alone as a name, `mid` stands inside one.
+        public enum Unnamed {
+            public enum Machine {
+                public static let lead = "Its machine"
 
-        public static let itsSession = "its session"
+                public static let mid = "its machine"
+
+                /// Each word by the key it stands under, for a lookup by data value.
+                public static let byKey: [String: String] = ["lead": lead, "mid": mid]
+            }
+
+            public enum Session {
+                public static let lead = "Its session"
+
+                public static let mid = "its session"
+
+                /// Each word by the key it stands under, for a lookup by data value.
+                public static let byKey: [String: String] = ["lead": lead, "mid": mid]
+            }
+        }
 
         /// A down state's link to its session, beside Try again: `name` its title.
         public static func openSession(name: String) -> String {
@@ -2953,6 +2979,13 @@ public enum Words {
 
         public static func previewMachineDownWhy(why: String) -> String {
             "its machine isn't answering the hub (\(why)). Once it answers, try again."
+        }
+
+        /// The hub's own preview server got no answer from the hub (core `PreviewDown` `hub`).
+        public static let previewHubDown = "the hub isn't answering its own preview server. Once it answers, try again."
+
+        public static func previewHubDownWhy(why: String) -> String {
+            "the hub isn't answering its own preview server (\(why)). Once it answers, try again."
         }
 
         public static let previewReachDown = "the way to its server didn't open. Try again; if it fails again, start the server again from its session."

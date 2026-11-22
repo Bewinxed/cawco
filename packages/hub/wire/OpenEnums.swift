@@ -7355,6 +7355,7 @@ public enum OpenEnums {
         case crashed
         case error
         case gone
+        case hub
         case machine
         case reach
         case server
@@ -7368,6 +7369,7 @@ public enum OpenEnums {
             case "crashed": self = .crashed
             case "error": self = .error
             case "gone": self = .gone
+            case "hub": self = .hub
             case "machine": self = .machine
             case "reach": self = .reach
             case "server": self = .server
@@ -7382,6 +7384,7 @@ public enum OpenEnums {
             case .crashed: "crashed"
             case .error: "error"
             case .gone: "gone"
+            case .hub: "hub"
             case .machine: "machine"
             case .reach: "reach"
             case .server: "server"
@@ -7394,7 +7397,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.closed, .crashed, .error, .gone, .machine, .reach, .server, .workspace]
+        public static let allCases: [Self] = [.closed, .crashed, .error, .gone, .hub, .machine, .reach, .server, .workspace]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

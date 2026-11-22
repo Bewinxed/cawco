@@ -60,6 +60,7 @@ export type PreviewSource =
 export const PREVIEW_DOWNS = [
   "server",
   "machine",
+  "hub",
   "workspace",
   "reach",
   "closed",
@@ -76,8 +77,11 @@ export const PREVIEW_DOWNS = [
  * runs for it (a sheet's stage, a served preview's command) didn't start,
  * the stage's words for why in {@link PREVIEW_WHY_META}. `machine`: the
  * machine's preview listener is not answering the hub, or the machine is
- * away. `workspace`: the port is a workspace's, and no boundary of that
- * workspace runs, so nothing in its network can answer. `reach`: the
+ * away. `hub`: the hub's own preview server could not reach the hub for
+ * what only the hub answers (an entry, an artifact's doc and its Send, a
+ * page's store), so nothing on the session's machine is at fault.
+ * `workspace`: the port is a workspace's, and no boundary of that workspace
+ * runs, so nothing in its network can answer. `reach`: the
  * machine could not open the way to the server (its listener did not start,
  * or the bridge into the workspace's network did not open); the page names
  * why in {@link PREVIEW_WHY_META}. `closed`: the session shows no preview

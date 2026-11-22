@@ -34,10 +34,12 @@ export class StageCover {
         return previewWords.down.workspaceTitle;
       case "reach":
         return previewWords.down.reachTitle(
-          this.#deps.paneSubject.ownerMachine
+          this.#deps.paneSubject.ownerMachine.lead
         );
       case "closed":
         return previewWords.down.closedTitle;
+      case "hub":
+        return previewWords.down.hubTitle;
       case "gone":
         return previewWords.goneTitle;
       case "error":
@@ -49,7 +51,7 @@ export class StageCover {
         break;
     }
     return previewWords.machineNotAnswering(
-      this.#deps.paneSubject.ownerMachine
+      this.#deps.paneSubject.ownerMachine.lead
     );
   });
 

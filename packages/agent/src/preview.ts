@@ -22,6 +22,10 @@ import type {
   SourceKey,
 } from "@cawco/core/preview/upstream";
 import {
+  DOWN_WORDS,
+  SERVER_RESTARTS_WORDS,
+} from "@cawco/core/words/preview-down";
+import {
   asksUpgrade,
   cachePreview,
   causeOf,
@@ -67,6 +71,7 @@ import {
   sourceUp,
   sourceViewer,
   sourceWakes,
+  stagedSource,
   WorkspaceNotHere,
   wakeSource,
 } from "./stage";
@@ -831,6 +836,15 @@ async function start(
     const { port, workspace, stage, serve } = options;
     source = portSource(port, { workspace, stage, serve });
   }
+  const restarts = stagedSource(source);
+  /** A server that stopped, as the proxy's own page says it: one a stage serves is started again by itself, any other only by hand. */
+  const serverDown = (why: string): Response =>
+    downResponse(
+      "server",
+      502,
+      why,
+      restarts ? SERVER_RESTARTS_WORDS : DOWN_WORDS.server
+    );
   await stopNow(instanceId);
   // A workspace no boundary runs refuses the preview in so many words. A
   // sheet's stage or a served preview's server is woken by its first
@@ -874,7 +888,7 @@ async function start(
       // command ended or never listened): its hop is the server's, in the
       // stage's own words, never the way to it.
       return error instanceof StageRefusal
-        ? downResponse("server", 502, causeOf(error))
+        ? serverDown(causeOf(error))
         : downResponse("reach", 502, causeOf(error));
     }
   };
@@ -958,7 +972,7 @@ async function start(
       });
       return ok;
     } catch (error) {
-      return downResponse("server", 502, unanswered(source, error));
+      return serverDown(unanswered(source, error));
     }
   };
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the two source modes converge here so header rewriting and HTML injection have one path.
@@ -1117,7 +1131,7 @@ async function start(
         if (again?.kind !== "answered") {
           const why = unanswered(source, error);
           previewFailed("agent listener", instanceId, why);
-          return downResponse("server", 502, why);
+          return serverDown(why);
         }
         response = again.answer;
       }
@@ -1249,7 +1263,7 @@ async function start(
     error(error) {
       const why = `the agent's listener failed serving it: ${causeOf(error)}`;
       previewFailed("agent listener", instanceId, why);
-      return downResponse("server", 502, why);
+      return serverDown(why);
     },
   });
   previews.set(instanceId, {

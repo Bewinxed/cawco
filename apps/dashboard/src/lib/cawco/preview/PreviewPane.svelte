@@ -322,6 +322,7 @@
         return closedOpen;
       case "server":
       case "machine":
+      case "hub":
       case "workspace":
       case "reach":
       case "error":
@@ -527,7 +528,7 @@
     <Button
       href={paneSubject.fleet.sessionHref(paneSubject.owner.id)}
       pad="none"
-      label={previewWords.openSession(paneSubject.ownerName)}
+      label={previewWords.openSession(paneSubject.ownerName.mid)}
       size="sm"
       variant="link"
     />
@@ -550,7 +551,9 @@
   <EmptyAsk
     byHand={sessionOpen}
     canStart={!!composer}
-    label={previewWords.goneAskLabel(composer?.agent ?? paneSubject.ownerName)}
+    label={previewWords.goneAskLabel(
+      composer?.agent ?? paneSubject.ownerName.mid
+    )}
     onask={() => composer?.ask(words)}
     reason={previewWords.goneCantAsk}
     size="sm"
@@ -881,9 +884,7 @@
   {#if commentKit.kit}
     {@const Card = commentKit.kit.PinCard}
     <Card
-      agentName={paneSubject.owner
-        ? paneSubject.ownerName
-        : commonWords.itsSession}
+      agentName={paneSubject.ownerName}
       changes={(paneDoc.view?.activity[pin.id]?.length ?? 0) > 0
         ? threadChanges
         : undefined}
@@ -1465,9 +1466,9 @@
             {paneSubject.downPort
               ? previewWords.down.serverOnPort(
                   paneSubject.downPort,
-                  paneSubject.ownerMachine
+                  paneSubject.ownerMachine.mid
                 )
-              : previewWords.down.serverOn(paneSubject.ownerMachine)}
+              : previewWords.down.serverOn(paneSubject.ownerMachine.mid)}
             {#if paneSubject.served}
               {previewWords.down.serverRestarting}
             {:else if paneSubject.offerSession}
@@ -1479,6 +1480,10 @@
             {previewFrame.downWhy
               ? previewWords.down.reachLineWhy(previewFrame.downWhy)
               : previewWords.down.reachLine}
+          {:else if previewFrame.down === "hub"}
+            {previewFrame.downWhy
+              ? previewWords.down.hubLineWhy(previewFrame.downWhy)
+              : previewWords.down.hubLine}
           {:else if previewFrame.down === "closed"}
             {previewWords.down.closedLine}
           {:else if previewFrame.down === "error"}
@@ -1509,7 +1514,7 @@
     >
       <EmptyState icon={IconAlert} title={previewWords.notLoadedTitle}>
         {#snippet line()}
-          {previewWords.notLoadedLine(paneSubject.ownerMachine)}
+          {previewWords.notLoadedLine(paneSubject.ownerMachine.mid)}
         {/snippet}
         {#snippet action()}
           {@render frameRetry()}

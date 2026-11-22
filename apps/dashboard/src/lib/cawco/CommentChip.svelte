@@ -1,5 +1,6 @@
 <script lang="ts">
   import { newAnswer, type Pin } from "@cawco/core/comments/model";
+  import { named as knownName } from "@cawco/core/named";
   import { pinName } from "@cawco/core/pin-name";
   /**
    * A comment pin's chip, wherever the dashboard draws one, and the one way
@@ -34,6 +35,7 @@
    */
   import { pinReference } from "@cawco/core/references";
   import { commentWords } from "@cawco/core/words/comments";
+  import { previewWords } from "@cawco/core/words/preview";
   import { Portal } from "bits-ui";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -443,7 +445,9 @@
     />
   </div>
   <PinCard
-    agentName={page ? sessionName(page.instanceId) : "The session"}
+    agentName={page
+      ? knownName(sessionName(page.instanceId))
+      : previewWords.unnamed.session}
     {draft}
     fromChip
     link={`${location.origin}/artifact/${encodeURIComponent(named?.artifact ?? "")}?pin=${shown.number}`}

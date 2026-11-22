@@ -16,7 +16,7 @@ export const previewWords = {
   /** A preview the hub couldn't reach, and its line's end. */
   cantBeReached: "This preview can't be reached",
   tryingAgain: "Trying again by itself.",
-  /** Its machine, when the hub's last read couldn't reach it. */
+  /** Its machine, when the hub's last read couldn't reach it: `machine` its name, or `unnamed.machine.lead`. */
   machineNotAnswering: (machine: string) => `${machine} isn't answering`,
   /**
    * A design or served preview that can't come back (core `PreviewDown`
@@ -106,6 +106,15 @@ export const previewWords = {
    * machine's own words, a clause with no stop.
    */
   down: {
+    /**
+     * `hub`: the hub's own preview server couldn't reach the hub for what
+     * only the hub answers (hub preview-server serve.ts), `why` its words.
+     */
+    hubTitle: "The hub isn't answering this preview",
+    hubLineWhy: (why: string) =>
+      `It didn't answer its own preview server (${why}). The page loads once it does.`,
+    hubLine:
+      "It didn't answer its own preview server. The page loads once it does.",
     serverTitle: "The page's server stopped answering",
     /** The server's port is known: `machine` its label. */
     serverOnPort: (port: number, machine: string) =>
@@ -121,6 +130,7 @@ export const previewWords = {
     workspaceTitle: "Its workspace isn't running",
     workspaceLine:
       "The page's server can be reached only while a session runs there. Once one does, the page loads as soon as the server answers.",
+    /** `machine` its name, or `unnamed.machine.lead`. */
     reachTitle: (machine: string) =>
       `${machine} couldn't reach the page's server`,
     reachLineWhy: (why: string) =>
@@ -138,9 +148,15 @@ export const previewWords = {
   /** `errorLine`'s and `crashedLine`'s `why` when the page named none. */
   errorWhyUnknown: "with an error",
   crashedWhyUnknown: "no message",
-  /** The session's machine, and the session, where their names aren't known yet: said mid-sentence. */
-  itsMachine: "its machine",
-  itsSession: "its session",
+  /**
+   * The session's machine, and the session, where their names aren't known
+   * yet: `lead` begins a sentence or stands alone as a name, `mid` stands
+   * inside one.
+   */
+  unnamed: {
+    machine: { lead: "Its machine", mid: "its machine" },
+    session: { lead: commonWords.itsSession, mid: "its session" },
+  },
   /** A down state's link to its session, beside Try again: `name` its title. */
   openSession: (name: string) => `Open ${name}`,
   /** The can't-be-reached state's link to /config/previews. */

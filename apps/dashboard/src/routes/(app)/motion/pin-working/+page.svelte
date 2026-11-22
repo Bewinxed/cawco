@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Pin, ThreadEntry } from "@cawco/core/comments/model";
   import { CLAUDE } from "@cawco/core/harness/claude";
+  import { named } from "@cawco/core/named";
   /**
    * PIN WORKING BENCH — a comment's thread (the real PinCard in the real
    * PinFloat, as the artifact panel stands it beside its pill) while the
@@ -181,7 +182,7 @@
         slot="pin-card"
       >
         <PinCard
-          agentName={CLAUDE.words.name}
+          agentName={named(CLAUDE.words.name)}
           {draft}
           link="/artifact/bench#pin-12"
           {live}

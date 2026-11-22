@@ -1724,6 +1724,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return `${subject} did not answer: the workspace isn't running.`;
       case "machine":
         return `${subject} did not answer: ${machine} isn't answering the hub.`;
+      case "hub":
+        return `${subject} did not answer: the hub's preview server couldn't reach the hub.`;
       case "reach":
         return `${subject} did not answer: ${machine} couldn't open the way to it.`;
       case "closed":

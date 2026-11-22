@@ -219,7 +219,7 @@ export class PaneDoc {
   readonly headLine = $derived.by(() =>
     this.view?.sentAt &&
     (!this.view.revisedAt || this.view.sentAt > this.view.revisedAt)
-      ? artifactWords.sentTo(this.#deps.paneSubject.ownerName)
+      ? artifactWords.sentTo(this.#deps.paneSubject.ownerName.mid)
       : (this.#deps.paneSubject.artifact?.ask ?? "")
   );
 

@@ -56,6 +56,7 @@ const DOWN_PROBES: BackoffPolicy = {
 const COMES_BACK: ReadonlySet<PreviewDown> = new Set([
   "server",
   "machine",
+  "hub",
   "workspace",
   "reach",
 ]);

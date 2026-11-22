@@ -475,6 +475,10 @@
         return why === null
           ? decisionsWords.previewMachineDown
           : decisionsWords.previewMachineDownWhy(why);
+      case "hub":
+        return why === null
+          ? decisionsWords.previewHubDown
+          : decisionsWords.previewHubDownWhy(why);
       case "reach":
         return why === null
           ? decisionsWords.previewReachDown

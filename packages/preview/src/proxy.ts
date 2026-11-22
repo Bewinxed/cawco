@@ -246,12 +246,15 @@ const escapeHtml = (text: string): string =>
  * it, goes in `<meta name="cawco-preview-why">` and under the sentence. The
  * pane, on the dashboard's origin, cannot read a preview origin's document,
  * so the page also posts both to its parent as `cawco:down`: nothing in it is
- * the page's, so any parent may hear it.
+ * the page's, so any parent may hear it. `words` is the page's sentence:
+ * the hop's own unless its sender knows more (agent preview.ts, a server a
+ * stage starts again by itself).
  */
 export function downResponse(
   down: PreviewDown,
   status = 502,
-  why?: string
+  why?: string,
+  words: string = DOWN_WORDS[down]
 ): Response {
   const said = why
     ? `<meta name="${PREVIEW_WHY_META}" content="${escapeHtml(why)}">`
@@ -265,7 +268,7 @@ export function downResponse(
   }).replaceAll("<", "\\u003c");
   const tell = `<script>if(window.parent!==window)window.parent.postMessage(${message},"*")</script>`;
   return new Response(
-    `<!doctype html><html><head><meta charset="utf-8"><meta name="${PREVIEW_DOWN_META}" content="${down}">${said}<title>Preview unavailable</title></head><body><p>${DOWN_WORDS[down]}</p>${detail}${tell}</body></html>`,
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="${PREVIEW_DOWN_META}" content="${down}">${said}<title>Preview unavailable</title></head><body><p>${escapeHtml(words)}</p>${detail}${tell}</body></html>`,
     {
       status,
       headers: {
