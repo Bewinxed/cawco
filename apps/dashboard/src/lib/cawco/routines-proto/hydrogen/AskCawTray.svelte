@@ -51,7 +51,7 @@
 
   <Textarea
     aria-label="Message to Caw"
-    placeholder="Describe a routine, a goal to check for, or an event trigger…"
+    placeholder="Say what should repeat, or what to change about a routine"
     bind:value={draft}
   />
 

@@ -15,8 +15,8 @@
 {#if stale}
   <Alert variant="warning">
     <AlertDescription>
-      Showing the last reading from the hub. Live ask counts and changes wait
-      until the hub reconnects.
+      This is the last reading from the hub, so it may be out of date. Changes
+      wait until the hub is back.
     </AlertDescription>
   </Alert>
 {/if}
