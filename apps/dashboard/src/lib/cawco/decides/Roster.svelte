@@ -12,15 +12,13 @@
   import type { Kind, Member } from "@cawco/core/decides";
   import { decidesWords } from "@cawco/core/words/decides";
   import { tick } from "svelte";
-  import { crossfade } from "svelte/transition";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconPen } from "#lib/icons.js";
   import {
-    dur,
-    easeOut,
-    motionOk,
-  } from "#lib/platform/motion/curves.svelte.js";
-  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+    departShared,
+    land as landFrom,
+    waiting,
+  } from "#lib/platform/motion/share.svelte.js";
   import AddCard from "./AddCard.svelte";
   import type { Facts, Fault, WhoDecides } from "./decides.svelte";
   import HandOver, { handOverWidth } from "./HandOver.svelte";
@@ -121,15 +119,33 @@
     member.type !== "you" && member.type !== "asker";
   const parkedNew = $derived(who?.parked[NEW]);
 
-  const [send, receive] = crossfade({
-    duration: () => (motionOk.current ? dur("--duration-morph") : 0),
-    easing: easeOut,
+  /**
+   * A kind's tile moves between cards as the board's cards move between
+   * columns: each card's tiles are a `reflow()` list (MemberCard), so the
+   * place it leaves closes and the place it comes to opens, and the tile
+   * flies from where it stood to its new place as a shared element
+   * (motion/share). Whatever moved it (a press, a reset, a refusal putting
+   * it back, the hub's own change), its old tile departs before the page
+   * draws the change; one a drag's ghost carried there has no flight.
+   */
+  const shareOf = (kind: string) => `kind:${kind}`;
+  /** Each kind's tile as drawn now, by kind id. */
+  const tileNodes: Record<string, HTMLElement> = {};
+  let drawnRoutes: Record<string, string> = { ...routes };
+  $effect.pre(() => {
+    const next = routes;
+    for (const kind of kinds) {
+      const node = tileNodes[kind.id];
+      if (
+        next[kind.id] !== drawnRoutes[kind.id] &&
+        node &&
+        !kindDrag.carried(kind.id)
+      ) {
+        departShared(shareOf(kind.id), node);
+      }
+    }
+    drawnRoutes = { ...next };
   });
-  /** A tile's flight between cards, but for one the drag's ghost carried there. */
-  const leave = (node: Element, params: { key: string }) =>
-    kindDrag.carried(params.key) ? { duration: 0 } : send(node, params);
-  const arrive = (node: Element, params: { key: string }) =>
-    kindDrag.carried(params.key) ? { duration: 0 } : receive(node, params);
   /** `member`'s tiles, with the slot a tile in the hand would stand in, in the kinds' order. */
   const shownOn = (member: string) => {
     const slot = kindDrag.slotIn(member);
@@ -141,7 +157,7 @@
   /**
    * After a write moved `kind`, its tile in its new place takes the focus
    * where the focus was on its tile in the old place or fell to nothing:
-   * the old one leaves inert as it flies (Svelte's outro), and is skipped.
+   * the old one's picture closes inert where it stood (reflow), and is skipped.
    */
   const land = async (kind: string, went: Promise<boolean>) => {
     if (!(await went)) {
@@ -181,12 +197,14 @@
       {#each shown as kind (kind.id)}
         {#if routes[kind.id] !== member.id}
           <!-- Where the tile in the hand will stand: its height, in its place. -->
+          <!-- A row of the card's list: it opens as the ghost comes over the
+               card and closes as it leaves; the tile the ghost lands takes
+               its place without a close. -->
           <div
             class="h-(--slot-h) rounded-well border border-dashed border-brand-solid bg-surface-hover"
+            data-flip={kindDrag.carried(kind.id) ? undefined : ""}
             data-slot-for={kind.id}
             style:--slot-h="{kindDrag.slotIn(member.id)?.height ?? 0}px"
-            in:unfold
-            out:unfold={{ ms: kindDrag.carried(kind.id) ? 0 : undefined }}
           ></div>
         {:else}
           <div
@@ -196,10 +214,23 @@
                 !kindDrag.lifted(kind.id, member.id) &&
                 "invisible",
             ]}
+            data-flip
+            data-flip-enter={waiting(shareOf(kind.id)) ||
+            kindDrag.carried(kind.id)
+              ? "own"
+              : undefined}
             data-kind={kind.id}
             data-lifted={kindDrag.lifted(kind.id, member.id) || undefined}
-            in:arrive={{ key: kind.id }}
-            out:leave={{ key: kind.id }}
+            data-share={shareOf(kind.id)}
+            {@attach landFrom(() => shareOf(kind.id))}
+            {@attach (node) => {
+              tileNodes[kind.id] = node;
+              return () => {
+                if (tileNodes[kind.id] === node) {
+                  delete tileNodes[kind.id];
+                }
+              };
+            }}
             {@attach dragKind(() => ({
               kind: kind.id,
               from: member.id,

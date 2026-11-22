@@ -10,6 +10,7 @@
   import { decidesWords } from "@cawco/core/words/decides";
   import type { Snippet } from "svelte";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import type { Facts } from "./decides.svelte";
   import MemberFace from "./MemberFace.svelte";
   import { ROSTER_WORDS, type RosterWords } from "./roster-words";
@@ -118,7 +119,9 @@
       {factsLine}
     {/if}
   </p>
-  <div class="flex min-w-0 flex-col gap-space-2">
+  <!-- Its tiles are a reflow list: a tile arriving opens its place, one
+       leaving closes it (Roster). -->
+  <div class="flex min-w-0 flex-col gap-space-2" {@attach reflow()}>
     {#if tiles}
       {@render tiles()}
     {:else}
