@@ -13,9 +13,10 @@
  *   each pass's use, each bind refused, and each machine listener that
  *   didn't answer. Nothing a page waits on goes over it.
  * - **The hub's own paths on a preview origin** ({@link ORIGIN_PATH} and
- *   {@link SYNC_PATH}): what only the hub can answer (an entry, which writes
- *   a pass; an artifact's doc socket and its Send, picture and pictures; a
- *   page's shape; a page's fault report), relayed as the browser sent it.
+ *   {@link SYNC_PATH}, {@link STORE_SYNC_PATH}): what only the hub can
+ *   answer (an entry, which writes a pass; an artifact's doc socket and its
+ *   Send, picture and pictures; a page's store's socket; a page's shape; a
+ *   page's fault report), relayed as the browser sent it.
  * - **Asks** ({@link UPSTREAM_PATH}, {@link OPEN_PATH}, {@link DOCUMENT_PATH},
  *   {@link REVIVE_PATH}): where a machine's preview is served now (the hub
  *   starts its listener on the machine), a port opened for an origin that has
@@ -38,6 +39,8 @@ export const CONTROL_PATH = `${PREVIEW_SERVER_PREFIX}/control`;
 export const ORIGIN_PATH = `${PREVIEW_SERVER_PREFIX}/origin/`;
 /** `<SYNC_PATH><key>/<artifact id>`: an artifact's doc socket joined on origin `key` (`?screen=1` for a canvas's host page). */
 export const SYNC_PATH = `${PREVIEW_SERVER_PREFIX}/sync/`;
+/** `<STORE_SYNC_PATH><key>/<scope>`: the store of scope `artifact` or `project` of the page on origin `key` (artifacts/page-stores.ts). */
+export const STORE_SYNC_PATH = `${PREVIEW_SERVER_PREFIX}/store/`;
 /** `<UPSTREAM_PATH><key>`: where machine artifact origin `key`'s preview is served now, its listener started when none serves it. */
 export const UPSTREAM_PATH = `${PREVIEW_SERVER_PREFIX}/upstream/`;
 /** `POST <OPEN_PATH><key>`: origin `key`'s port, opened when it has none. */

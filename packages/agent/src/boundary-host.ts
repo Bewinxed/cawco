@@ -271,7 +271,8 @@ const lstatOf = (path: string): Stats | undefined => {
 /**
  * Whether the folder this boundary holds is a plain folder, not a
  * repository's copy: a place (`CAWCO_PLACE`), or a delegate's copy of a
- * folder that is no repository (`CAWCO_FOLDER`, agent layer.ts).
+ * folder that is no repository or a design folder (`CAWCO_FOLDER`, agent
+ * layer.ts, boundary/plan.ts).
  */
 const plainFolder =
   process.env[HOST_ENV.place] === "1" || process.env[HOST_ENV.folder] === "1";
@@ -508,10 +509,11 @@ const markLfs = (): void => {
  * write bits is what this host takes for a mount point an earlier sandbox
  * left ({@link leftMountPoint}), and makes again at every start.
  *
- * Nothing in a folder's view (`CAWCO_FOLDER`): what this host writes there
- * lands in the view's upper, the delegate's change set, so the view's
- * stand-ins are a layer of their own beneath the folder (agent layer.ts
- * `makeStandIns`), and its folder is no repository for git-lfs to mark.
+ * Nothing in a plain folder (`CAWCO_FOLDER`): what this host writes in a
+ * folder's view lands in the view's upper, the delegate's change set, so the
+ * view's stand-ins are a layer of their own beneath the folder (agent layer.ts
+ * `makeStandIns`); a design folder keeps no denies (core workspace-policy.ts
+ * `workspaceDenies`); and neither is a repository for git-lfs to mark.
  */
 const standIn = (): void => {
   if (process.env[HOST_ENV.folder] === "1") {

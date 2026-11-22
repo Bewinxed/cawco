@@ -15,6 +15,7 @@ import {
   workspaceStateDir,
 } from "@cawco/core/paths/workspace";
 import { shellQuote } from "@cawco/core/shell-quote";
+import { isDesignTree } from "@cawco/core/stage";
 import {
   isDamagedRecord,
   readRecord,
@@ -240,13 +241,20 @@ export const keeperOf = (
 /** The keeper every new boundary and judge starts on: the current one. */
 export const sessiond = (): Promise<SessiondClient> => keepers.current();
 
-/** Why a boundary can't start: a workspace's runs a delegate, a place's (core `isPlace`) a person's own folder. */
-export const refusal = (id: string, why: string): Error =>
-  new Error(
-    isPlace(id)
-      ? `place ${id} cannot be bounded on this machine: ${why}`
-      : `workspace ${id.slice(0, 8)} cannot run a delegate on this machine: ${why}`
+/** Why a boundary can't start: a workspace's runs a delegate, a place's (core `isPlace`) a person's own folder, a design's (core stage.ts `isDesignTree`) the stage of a design folder. */
+export const refusal = (id: string, why: string): Error => {
+  if (isPlace(id)) {
+    return new Error(`place ${id} cannot be bounded on this machine: ${why}`);
+  }
+  if (isDesignTree(id)) {
+    return new Error(
+      `design ${id.slice(0, 8)}'s stage cannot run on this machine: ${why}`
+    );
+  }
+  return new Error(
+    `workspace ${id.slice(0, 8)} cannot run a delegate on this machine: ${why}`
   );
+};
 
 /**
  * `read`'s answer; a ../../core/src/state-file.ts `DamagedRecord` it finds is reported

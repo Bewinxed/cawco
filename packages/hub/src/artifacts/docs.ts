@@ -97,13 +97,13 @@ function moveTunedOut(doc: Doc): boolean {
 }
 
 /** Updates the log holds before it becomes one snapshot: y-indexeddb's and y-leveldb's `PREFERRED_TRIM_SIZE`. */
-const COMPACT_AT = 500;
+export const COMPACT_AT = 500;
 
 /** How long a doc stands quiet before its log becomes one snapshot: y-indexeddb's `_storeTimeout`. */
-const COMPACT_QUIET_MS = 1000;
+export const COMPACT_QUIET_MS = 1000;
 
 /** How long a doc no client holds stays loaded after its last use. Our choice. */
-const IDLE_MS = 5 * 60_000;
+export const IDLE_MS = 5 * 60_000;
 
 /** Who made a change: a person through a joined client, or the hub (an agent's tool, a build). */
 type ChangeOrigin = { client: ArtifactClient } | "agent" | "hub";
