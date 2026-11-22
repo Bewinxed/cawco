@@ -8,7 +8,7 @@
  * folder on the hub when that folder is where the session works, committed
  * there as any folder write is.
  *
- * The folder contract:
+ * The folder contract, for a system whose tokens are DTCG files:
  *   DESIGN.md              the prose guide: the visual-foundations answers, rules, recipes
  *   tokens.resolver.json   the DTCG 2025.10 resolver: the base set, then each theme as a
  *                          modifier's context (dtcg-resolver.ts)
@@ -22,6 +22,17 @@
  *   SKILL.md               routes any harness to the system
  *   specimens/index.html   the Foundations page, on ../tokens.css
  *   fonts/ assets/ references/ explorations/   as the work needs them
+ *
+ * A system whose tokens are the project's Tailwind v4 theme holds no token
+ * file: `manifest.json`'s `tailwind` names the stylesheet the theme is
+ * declared in, where the project keeps it (a path from the root), and that
+ * stylesheet stays the one place a token is declared. Its parts are
+ * DESIGN.md, manifest.json (`tailwind` and `files`, no `sources`: a token's
+ * declaration is its source) and SKILL.md. Nothing is generated from the
+ * theme: no tokens.css, no tokens.ts. The theme is read with Tailwind's own
+ * loader (design-tokens tailwind-theme.ts) only on a write that sets or
+ * changes `tailwind`; a token changes in the project's own commit, never
+ * through design_write or a proposal.
  *
  * Every write settles the token files (a recipe token's static `$value`
  * computed, design-tokens.ts `settle`) and checks them against the DTCG
@@ -69,6 +80,7 @@ import {
   buildTokens,
 } from "@cawco/design-tokens/design-tokens";
 import { resolverFiles, tokensIn } from "@cawco/design-tokens/dtcg-resolver";
+import { readTailwindTheme } from "@cawco/design-tokens/tailwind-theme";
 import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
@@ -100,8 +112,8 @@ const STYLESHEET = "tokens.css";
 const TYPES = "tokens.ts";
 const THEMES = "themes";
 
-/** The files every finished system holds, relative to `design/`. */
-const DESIGN_PARTS = [
+/** The files every finished system with DTCG token files holds, relative to `design/`. */
+const DTCG_PARTS = [
   "DESIGN.md",
   RESOLVER,
   TOKENS,
@@ -111,6 +123,12 @@ const DESIGN_PARTS = [
   "SKILL.md",
   "specimens/index.html",
 ] as const;
+/** The files every finished system whose tokens are a Tailwind theme holds: no token file of its own. */
+const THEME_PARTS = ["DESIGN.md", MANIFEST, "SKILL.md"] as const;
+
+/** The files a finished system of `manifest`'s kind holds, relative to `design/`. */
+const partsOf = (manifest: DesignManifest | undefined): readonly string[] =>
+  manifest?.tailwind ? THEME_PARTS : DTCG_PARTS;
 
 const TOP_FILES: ReadonlySet<string> = new Set([
   "DESIGN.md",
@@ -159,9 +177,14 @@ const fingerprint = (bytes: Uint8Array): string =>
 interface DesignManifest {
   /** Each file CawCo wrote, relative to `design/`, to its fingerprint. */
   files: Record<string, string>;
-  /** Each token's path (`color.ink`) to where its value came from. */
+  /** Each token's path (`color.ink`) to where its value came from; empty for a Tailwind theme's, whose declarations are their sources. */
   sources: Record<string, string>;
+  /** The stylesheet the project's Tailwind theme is declared in, from the root: the system's one token source, when it is one. */
+  tailwind?: string;
 }
+
+/** A Tailwind theme's path as a manifest names it: from the root, inside it, a stylesheet. */
+const TAILWIND_PATH = /\.css$/u;
 
 /** A path's leading `design/` (or `./design/`), which `design_write` drops. */
 const DESIGN_PREFIX = /^\.?\/?design\//u;
@@ -175,7 +198,9 @@ const designPath = (raw: string): { path: string } | { problem: string } => {
   const trimmed = raw.trim().replaceAll("\\", "/");
   const rel = posix.normalize(trimmed.replace(DESIGN_PREFIX, ""));
   if (trimmed.startsWith("/") || rel.startsWith("..") || rel === ".") {
-    return { problem: `${raw}: name a file inside design/, like DESIGN.md.` };
+    return {
+      problem: `${raw}: name a file inside design/, like DESIGN.md. A file outside it, a Tailwind theme among them, is the project's own code: edit it where it is, in your own commit.`,
+    };
   }
   if (rel === STYLESHEET || rel === TYPES) {
     return {
@@ -209,7 +234,10 @@ const manifestOf = (
     return;
   }
   const manifest = isRecord(parsed) ? parsed : {};
-  const { sources, files } = manifest;
+  const { sources, files, tailwind } = manifest;
+  if (tailwind !== undefined) {
+    return themeManifestOf(tailwind, sources, files, problems);
+  }
   if (!isRecord(sources)) {
     problems.push(
       'manifest.json needs "sources": an object from each token\'s path to where its value came from.'
@@ -233,6 +261,46 @@ const manifestOf = (
   }
   return {
     sources: sourced,
+    files: isRecord(files) ? stringsOf(files) : {},
+  };
+};
+
+/**
+ * A manifest naming a Tailwind theme: `tailwind` a stylesheet's path from
+ * the root, inside it, and no `sources` (the theme's declarations are its
+ * tokens' sources, so a second map of them would go stale on every token
+ * commit). Undefined with the problem otherwise.
+ */
+const themeManifestOf = (
+  tailwind: unknown,
+  sources: unknown,
+  files: unknown,
+  problems: string[]
+): DesignManifest | undefined => {
+  const path =
+    typeof tailwind === "string"
+      ? posix.normalize(tailwind.trim().replaceAll("\\", "/"))
+      : "";
+  if (
+    !TAILWIND_PATH.test(path) ||
+    path.startsWith("/") ||
+    path === ".." ||
+    path.startsWith("../")
+  ) {
+    problems.push(
+      'manifest.json\'s "tailwind" is the stylesheet the project\'s Tailwind theme is declared in: a path from the root of the repository, inside it, ending .css, like "src/app.css".'
+    );
+    return;
+  }
+  if (isRecord(sources) && Object.keys(sources).length > 0) {
+    problems.push(
+      `manifest.json names a Tailwind theme, so it has no "sources": each token's declaration in ${path} is its source. Leave "sources" out.`
+    );
+    return;
+  }
+  return {
+    tailwind: path,
+    sources: {},
     files: isRecord(files) ? stringsOf(files) : {},
   };
 };
@@ -288,12 +356,17 @@ export interface DesignStore {
   /**
    * A file's bytes from anywhere in the place the session works (its
    * repository, or the project's folder), by a path from that root or an
-   * absolute one inside it: a `design_write` file's `from`.
+   * absolute one inside it: a `design_write` file's `from`, and each
+   * stylesheet a Tailwind theme loads. `design-source-missing` when there
+   * is no such file.
    */
   source: (
     path: string
   ) => Promise<
     | Uint8Array
+    | ReturnType<
+        typeof problem<404, { code: "design-source-missing"; detail: string }>
+      >
     | ReturnType<
         typeof problem<400, { code: "design-source-outside"; detail: string }>
       >
@@ -415,6 +488,8 @@ export interface DesignWritten {
   kept: { path: string; why: string }[];
   /** The contract's parts still missing after this write. */
   missing: string[];
+  /** The Tailwind theme this write made the system's token source, as Tailwind loaded it: its path and how many theme variables it holds. */
+  tokens?: { tailwind: string; count: number };
   where: string;
   written: string[];
 }
@@ -575,10 +650,82 @@ const tokensOf = async (at: {
 /** What a write would put in design/, worked out and not yet written. */
 interface DesignPlan {
   kept: Set<string>;
+  /** The manifest the write leaves. */
+  manifest: DesignManifest;
   out: { path: string; bytes: Uint8Array }[];
   /** Whether a path holds a file once `out` is written. */
   there: (path: string) => boolean;
+  /** The Tailwind theme the write made the token source, as it loaded. */
+  tokens?: DesignWritten["tokens"];
 }
+
+/** A stylesheet the store could not read, as it answered: not the theme's fault, so answered as it is. */
+type SheetUnread = Exclude<
+  Awaited<ReturnType<DesignStore["source"]>>,
+  Uint8Array
+>;
+
+/**
+ * A Tailwind theme read where the session works ({@link DesignStore.source}):
+ * its count of theme variables, or the problem said in `problems` when it
+ * does not load or declares none. A stylesheet the store could not read
+ * (its machine, its size) is that problem, answered as it is.
+ */
+const themeOf = async (
+  store: DesignStore,
+  path: string,
+  problems: string[]
+): Promise<DesignWritten["tokens"] | SheetUnread> => {
+  let unread: SheetUnread | undefined;
+  try {
+    const theme = await readTailwindTheme(path, async (sheet) => {
+      const bytes = await store.source(sheet);
+      if (!(bytes instanceof ElysiaStatus)) {
+        return decoder.decode(bytes);
+      }
+      if (bytes.response.code === "design-source-missing") {
+        return;
+      }
+      unread = bytes;
+      throw SHEET_UNREAD;
+    });
+    if (theme.tokens.length === 0) {
+      problems.push(
+        `${path} declares no theme variables: name the stylesheet that holds the project's @theme or imports tailwindcss.`
+      );
+      return;
+    }
+    return { tailwind: path, count: theme.tokens.length };
+  } catch (error) {
+    if (unread) {
+      return unread;
+    }
+    problems.push(
+      `The Tailwind theme at ${path} does not load: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+};
+/** What stops Tailwind's load when the store could not read a stylesheet: {@link themeOf} answers the store's problem. */
+const SHEET_UNREAD = new Error("a stylesheet could not be read");
+
+/**
+ * The problems of token files in a system whose tokens are a Tailwind theme:
+ * one the call writes, or one design/ holds.
+ */
+const themeTokenFiles = (
+  tailwind: string,
+  at: { incoming: Iterable<string>; now: (path: string) => Uint8Array | null }
+): string[] => {
+  const files = [
+    ...[...at.incoming].filter(isTokenFile),
+    ...[TOKENS, RESOLVER].filter((path) => at.now(path) !== null),
+  ].filter((path, index, all) => all.indexOf(path) === index);
+  return files.length > 0
+    ? [
+        `This system's tokens are the Tailwind theme at ${tailwind}, so design/ holds no token file (${files.map((path) => `${DESIGN_DIR}/${path}`).join(", ")}). Change a token there, in your own commit.`,
+      ]
+    : [];
+};
 
 /**
  * What a build settled and generated, put among the writes: settled token
@@ -617,22 +764,22 @@ const settle = (
   }
 };
 
-/** The files a write puts down: each of `writes`, then the hub's ledger (manifest.json), the fingerprint of every file CawCo wrote as of this write. */
+/** The files a write puts down: each of `writes`, then the hub's ledger (manifest.json), the fingerprint of every file CawCo wrote as of this write, under the token source `manifest` names (a theme's path, or DTCG files' `sources`). */
 const withLedger = (
   writes: Map<string, Uint8Array>,
   recorded: DesignManifest,
-  sources: DesignManifest["sources"]
+  manifest: DesignManifest
 ) => {
   const fingerprints = { ...recorded.files };
   for (const [path, bytes] of writes) {
     fingerprints[path] = fingerprint(bytes);
   }
-  const ledger: DesignManifest = {
-    sources,
-    files: Object.fromEntries(
-      Object.entries(fingerprints).sort(([a], [b]) => a.localeCompare(b))
-    ),
-  };
+  const files = Object.fromEntries(
+    Object.entries(fingerprints).sort(([a], [b]) => a.localeCompare(b))
+  );
+  const ledger = manifest.tailwind
+    ? { tailwind: manifest.tailwind, files }
+    : { sources: manifest.sources, files };
   return [
     ...[...writes].map(([path, bytes]) => ({ path, bytes })),
     {
@@ -669,9 +816,10 @@ const contentAfter = async (
 /**
  * What writing `files` into a system would write: the person's files kept,
  * tokens.json checked against the manifest (every token has a source),
- * tokens.css generated from it, the manifest's fingerprints recorded.
- * A problem whole, with every one, when a path, the manifest or the tokens
- * do not hold.
+ * tokens.css generated from it, the manifest's fingerprints recorded; for a
+ * system whose tokens are a Tailwind theme, no token file, and the theme
+ * loaded when the write names it anew. A problem whole, with every one,
+ * when a path, the manifest or the tokens do not hold.
  */
 const planDesign = async (store: DesignStore, files: DesignFile[]) => {
   const incoming = incomingFiles(files);
@@ -679,8 +827,9 @@ const planDesign = async (store: DesignStore, files: DesignFile[]) => {
     return incoming;
   }
   const problems: string[] = [];
+  // Every part either kind of system holds: its kind is the manifest's, not read yet.
   const current = await store.read([
-    ...new Set([...DESIGN_PARTS, ...incoming.keys()]),
+    ...new Set([...DTCG_PARTS, ...incoming.keys()]),
   ]);
   if (current instanceof ElysiaStatus) {
     return current;
@@ -706,14 +855,33 @@ const planDesign = async (store: DesignStore, files: DesignFile[]) => {
 
   const given = incoming.get(MANIFEST);
   const manifest = given ? manifestOf(given, problems) : recorded;
-  const built = await tokensOf({
-    contentOf: (path) => contentAfter(store, { writes, current }, path),
-    there: (path) => writes.has(path) || now(path) !== null,
-    hasManifest: Boolean(given || recordedBytes),
-    manifest,
-    paths: [...writes.keys(), ...current.keys()],
-    problems,
-  });
+  const tailwind = manifest?.tailwind;
+  // A theme system's tokens are its theme: no token file is built or
+  // settled, and the theme is read only when this write names it anew. A
+  // theme a later commit broke is the project's build's to catch, and stops
+  // no change to DESIGN.md.
+  if (tailwind) {
+    problems.push(
+      ...themeTokenFiles(tailwind, { incoming: incoming.keys(), now })
+    );
+  }
+  const tokens =
+    tailwind && !(recordedBytes && recorded.tailwind === tailwind)
+      ? await themeOf(store, tailwind, problems)
+      : undefined;
+  if (tokens instanceof ElysiaStatus) {
+    return tokens;
+  }
+  const built = tailwind
+    ? undefined
+    : await tokensOf({
+        contentOf: (path) => contentAfter(store, { writes, current }, path),
+        there: (path) => writes.has(path) || now(path) !== null,
+        hasManifest: Boolean(given || recordedBytes),
+        manifest,
+        paths: [...writes.keys(), ...current.keys()],
+        problems,
+      });
   if (built instanceof ElysiaStatus) {
     return built;
   }
@@ -724,12 +892,15 @@ const planDesign = async (store: DesignStore, files: DesignFile[]) => {
     });
   }
   settle(built, { kept, writes, now, theirs });
-  const out = withLedger(writes, recorded, (manifest ?? recorded).sources);
+  const left = manifest ?? recorded;
+  const out = withLedger(writes, recorded, left);
   return {
     out,
     kept,
+    manifest: left,
     there: (path) =>
       out.some((file) => file.path === path) || now(path) !== null,
+    ...(tokens ? { tokens } : {}),
   } satisfies DesignPlan;
 };
 
@@ -739,7 +910,7 @@ const writeDesign = async (store: DesignStore, files: DesignFile[]) => {
   if (plan instanceof ElysiaStatus) {
     return plan;
   }
-  const { out, kept, there } = plan;
+  const { out, kept, there, manifest, tokens } = plan;
   const written = await store.write(out);
   if (written instanceof ElysiaStatus) {
     return written;
@@ -751,9 +922,10 @@ const writeDesign = async (store: DesignStore, files: DesignFile[]) => {
       path: `${DESIGN_DIR}/${path}`,
       why: KEPT_WHY,
     })),
-    missing: DESIGN_PARTS.filter((path) => !there(path)).map(
-      (path) => `${DESIGN_DIR}/${path}`
-    ),
+    missing: partsOf(manifest)
+      .filter((path) => !there(path))
+      .map((path) => `${DESIGN_DIR}/${path}`),
+    ...(tokens ? { tokens } : {}),
   } satisfies DesignWritten;
 };
 
@@ -870,13 +1042,18 @@ const previewDesign = async (store: DesignStore, files: DesignFile[]) => {
   if (before instanceof ElysiaStatus) {
     return before;
   }
-  const sourcesOf = (bytes: Uint8Array | null | undefined): string =>
-    JSON.stringify(bytes ? (manifestOf(bytes, [])?.sources ?? null) : null);
+  /** What the manifest says beyond its fingerprints: its token source, a theme's path or DTCG files' sources. */
+  const sourceOf = (bytes: Uint8Array | null | undefined): string => {
+    const read = bytes ? manifestOf(bytes, []) : undefined;
+    return JSON.stringify(
+      read ? { tailwind: read.tailwind ?? null, sources: read.sources } : null
+    );
+  };
   return out
     .filter(
       (file) =>
         file.path !== MANIFEST ||
-        sourcesOf(before.get(MANIFEST)) !== sourcesOf(file.bytes)
+        sourceOf(before.get(MANIFEST)) !== sourceOf(file.bytes)
     )
     .map((file) => ({
       path: `${DESIGN_DIR}/${file.path}`,
@@ -921,6 +1098,8 @@ const runIn =
     run(at.machineId, at.root, cmd, timeoutMs, at.workspace);
 
 const COMMAND_MS = 60_000;
+/** The exit a repository's `source` read answers when there is no such file. */
+const MISSING_EXIT = 3;
 /** Base64 per command, well under one shell argument's 128 KiB. */
 const CHUNK = 64 * 1024;
 
@@ -1079,8 +1258,14 @@ const repositoryStore = (
         });
       }
       const result = await sh(
-        `f=${shellQuote(path)}; [ -f "$f" ] || { echo "from $f: there is no such file in ${at.root}" >&2; exit 2; }; n=$(wc -c < "$f"); [ "$n" -le ${FOLDER_FILE_LIMIT} ] || { echo "from $f: it is $n bytes, past the ${FOLDER_FILE_LIMIT} one design file may weigh" >&2; exit 2; }; base64 < "$f" | tr -d '\\n'`
+        `f=${shellQuote(path)}; [ -f "$f" ] || { echo "from $f: there is no such file in ${at.root}" >&2; exit ${MISSING_EXIT}; }; n=$(wc -c < "$f"); [ "$n" -le ${FOLDER_FILE_LIMIT} ] || { echo "from $f: it is $n bytes, past the ${FOLDER_FILE_LIMIT} one design file may weigh" >&2; exit 2; }; base64 < "$f" | tr -d '\\n'`
       );
+      if (result.exitCode === MISSING_EXIT) {
+        return problem(404, {
+          code: "design-source-missing",
+          detail: result.stderr.trim(),
+        });
+      }
       if (result.exitCode !== 0) {
         return problem(400, {
           code: "design-source-unread",
@@ -1210,7 +1395,15 @@ const folderStore = (
       }
       const file = await readFolderBytes(projectId, path, FOLDER_FILE_LIMIT);
       if (file instanceof ElysiaStatus) {
-        return problem(file.status, {
+        // Held apart from the check below, so it keeps the read's whole status type.
+        const status: FolderReadStatus = file.status;
+        if (file.status === 404) {
+          return problem(404, {
+            code: "design-source-missing",
+            detail: file.response.detail,
+          });
+        }
+        return problem(status, {
           code: "design-source-unread",
           detail: file.response.detail,
         });
@@ -1316,6 +1509,8 @@ const FIRST = ["DESIGN.md", STYLESHEET] as const;
 const ON_DEMAND = [RESOLVER, MANIFEST] as const;
 /** The line between the files design/ holds and its SKILL.md's text, in the clone's answer. */
 const GUIDE_MARK = "cawco:skill-md";
+/** The line between SKILL.md's text and the manifest's, in the clone's answer. */
+const MANIFEST_MARK = "cawco:manifest-json";
 
 /** Files of design/ as a sentence names them: `a`, `a` and `b`, `a`, `b` and `c`. */
 const filesSaid = (files: readonly string[]): string => {
@@ -1325,8 +1520,14 @@ const filesSaid = (files: readonly string[]): string => {
     : (quoted[0] ?? "");
 };
 
-/** The read-first line, naming only the files design/ holds; "" when it holds none of them. */
-const readFirst = (has: Set<string>): string => {
+/** The read-first line, naming only the files design/ holds; "" when it holds none of them. A theme system's tokens are its theme: its line names it. */
+const readFirst = (has: Set<string>, tailwind: string | undefined): string => {
+  if (tailwind) {
+    const guide = has.has("DESIGN.md")
+      ? `Read ${filesSaid(["DESIGN.md"])} first. `
+      : "";
+    return `${guide}Its tokens are the Tailwind theme at \`${tailwind}\`: take every value from a token there, and add a token there before using a new value.`;
+  }
   const first = FIRST.filter((file) => has.has(file));
   const later = ON_DEMAND.filter((file) => has.has(file));
   if (first.length === 0) {
@@ -1344,9 +1545,11 @@ const readFirst = (has: Set<string>): string => {
  * project's system as the attempt's clone holds it, design/ at its root,
  * read inside its boundary as every command in a live clone is. Its usage
  * guide (design/SKILL.md) whole, then what to read first, naming only the
- * files that are there. Empty when design/ holds no guide (neither SKILL.md
- * nor DESIGN.md): a design/ of tokens alone is no system to brief. A clone
- * the machine could not read is a problem.
+ * files that are there; for a system whose tokens are a Tailwind theme, the
+ * theme its manifest names. Empty when design/ holds no manifest (no system,
+ * the one test, landed.ts) or no guide (neither SKILL.md nor DESIGN.md): a
+ * design/ of tokens alone is no system to brief. A clone the machine could
+ * not read is a problem.
  */
 export const designSection = async (
   run: Run,
@@ -1358,7 +1561,7 @@ export const designSection = async (
     root: clone.path,
     workspace: { id: clone.id, path: clone.path },
   })(
-    `for f in ${files.join(" ")}; do if [ -f ${DESIGN_DIR}/$f ]; then echo "$f"; fi; done; echo ${GUIDE_MARK}; if [ -f ${DESIGN_DIR}/SKILL.md ]; then cat ${DESIGN_DIR}/SKILL.md; fi`
+    `for f in ${files.join(" ")}; do if [ -f ${DESIGN_DIR}/$f ]; then echo "$f"; fi; done; echo ${GUIDE_MARK}; if [ -f ${DESIGN_DIR}/SKILL.md ]; then cat ${DESIGN_DIR}/SKILL.md; fi; echo; echo ${MANIFEST_MARK}; if [ -f ${DESIGN_DIR}/${MANIFEST} ]; then cat ${DESIGN_DIR}/${MANIFEST}; fi`
   );
   if (read.exitCode !== 0) {
     return problem(502, {
@@ -1371,17 +1574,22 @@ export const designSection = async (
   }
   const lines = read.stdout.split("\n");
   const mark = lines.indexOf(GUIDE_MARK);
+  const manifestAt = lines.lastIndexOf(MANIFEST_MARK);
   const has = new Set(lines.slice(0, Math.max(mark, 0)));
-  if (!GUIDES.some((file) => has.has(file))) {
+  if (!(has.has(MANIFEST) && GUIDES.some((file) => has.has(file)))) {
     return "";
   }
   const guide = has.has("SKILL.md")
     ? lines
-        .slice(mark + 1)
+        .slice(mark + 1, manifestAt)
         .join("\n")
         .trim()
     : "";
-  const first = readFirst(has);
+  const manifest = manifestOf(
+    encoder.encode(lines.slice(manifestAt + 1).join("\n")),
+    []
+  );
+  const first = readFirst(has, manifest?.tailwind);
   return [
     "## Design system",
     guide

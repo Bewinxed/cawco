@@ -17,6 +17,59 @@
 }
 
 /* The same reset, asked of each pseudo-element a rule makes (scripts/preflight.ts). */
+:where(
+  :is(
+    :where(.group\/cin)[data-asking]
+      .group-data-asking\/cin\:data-mention-field-empty\:before\:text-transparent
+  )[data-mention-field-empty]
+)::before,
+:where(
+  :is(
+    :where(.group\/cin)[data-hint-back]
+      .group-data-hint-back\/cin\:data-mention-field-empty\:before\:duration-\(--duration-fade\)
+  )[data-mention-field-empty]
+)::before,
+:where(
+  :is(
+    :where(.group\/cin)[data-hint-back]
+      .group-data-hint-back\/cin\:data-mention-field-empty\:before\:ease-out
+  )[data-mention-field-empty]
+)::before,
+:where(
+  :is(
+    :where(.group\/cin)[data-hint-back]
+      .group-data-hint-back\/cin\:data-mention-field-empty\:before\:transition-\[color\]
+  )[data-mention-field-empty]
+)::before,
+:where(
+  :is(
+    :where(.group\/cin)[data-recalling]
+      .group-data-recalling\/cin\:data-mention-field-empty\:before\:text-transparent
+  )[data-mention-field-empty]
+)::before,
+:where(
+  :is(
+    :where(.group\/deck)[data-lifted]
+      .group-data-lifted\/deck\:before\:duration-\(--duration-pick-up\)
+  )
+)::before,
+:where(
+  :is(
+    :where(.group\/deck)[data-lifted] .group-data-lifted\/deck\:before\:ease-out
+  )
+)::before,
+:where(
+  :is(
+    :where(.group\/deck)[data-lifted]
+      .group-data-lifted\/deck\:before\:opacity-100
+  )
+)::before,
+:where(
+  :is(
+    :where(.group\/dock)[data-asking]
+      .group-data-asking\/dock\:data-mention-field-empty\:before\:text-transparent
+  )[data-mention-field-empty]
+)::before,
 :where(:is(.ec-now-indicator))::before,
 :where(
   :is(.prose)
@@ -263,51 +316,6 @@
 :where(.focus-visible\:before\:outline-focus-ring:focus-visible)::before,
 :where(.focus-visible\:before\:outline-solid:focus-visible)::before,
 :where(
-  .group-data-asking\/cin\:data-mention-field-empty\:before\:text-transparent:is(
-      :where(.group\/cin)[data-asking] *
-    )[data-mention-field-empty]
-)::before,
-:where(
-  .group-data-asking\/dock\:data-mention-field-empty\:before\:text-transparent:is(
-      :where(.group\/dock)[data-asking] *
-    )[data-mention-field-empty]
-)::before,
-:where(
-  .group-data-hint-back\/cin\:data-mention-field-empty\:before\:duration-\(--duration-fade\):is(
-      :where(.group\/cin)[data-hint-back] *
-    )[data-mention-field-empty]
-)::before,
-:where(
-  .group-data-hint-back\/cin\:data-mention-field-empty\:before\:ease-out:is(
-      :where(.group\/cin)[data-hint-back] *
-    )[data-mention-field-empty]
-)::before,
-:where(
-  .group-data-hint-back\/cin\:data-mention-field-empty\:before\:transition-\[color\]:is(
-      :where(.group\/cin)[data-hint-back] *
-    )[data-mention-field-empty]
-)::before,
-:where(
-  .group-data-lifted\/deck\:before\:duration-\(--duration-pick-up\):is(
-    :where(.group\/deck)[data-lifted] *
-  )
-)::before,
-:where(
-  .group-data-lifted\/deck\:before\:ease-out:is(
-    :where(.group\/deck)[data-lifted] *
-  )
-)::before,
-:where(
-  .group-data-lifted\/deck\:before\:opacity-100:is(
-    :where(.group\/deck)[data-lifted] *
-  )
-)::before,
-:where(
-  .group-data-recalling\/cin\:data-mention-field-empty\:before\:text-transparent:is(
-      :where(.group\/cin)[data-recalling] *
-    )[data-mention-field-empty]
-)::before,
-:where(
   .has-\[select\[aria-invalid\=true\]\]\:before\:border-error-9:has(
     :is(select[aria-invalid="true"])
   )
@@ -372,6 +380,51 @@
 :where(.status-needs\:before\:bg-status-attn-bg[data-status="needs"])::before,
 :where([data-sonner-toast][data-swiping="false"][data-removed="true"])::before,
 :where([data-sonner-toast][data-swiping="true"])::before,
+:where(
+  :is(:where(.group)[data-cur] .group-data-cur\:after\:bg-selected-icon)
+)::after,
+:where(
+  :is(
+    :where(.group\/cover)[data-ready]
+      .group-data-ready\/cover\:after\:animation-paused
+  )
+)::after,
+:where(
+  :is(
+    :where(.group\/tools)[data-joined]
+      .group-data-joined\/tools\:data-open\:after\:absolute
+  ):where([data-state="open"], [data-open]:not([data-open="false"]))
+)::after,
+:where(
+  :is(
+    :where(.group\/tools)[data-joined]
+      .group-data-joined\/tools\:data-open\:after\:bg-inherit
+  ):where([data-state="open"], [data-open]:not([data-open="false"]))
+)::after,
+:where(
+  :is(
+    :where(.group\/tools)[data-joined]
+      .group-data-joined\/tools\:data-open\:after\:h-c-bar-group-pad
+  ):where([data-state="open"], [data-open]:not([data-open="false"]))
+)::after,
+:where(
+  :is(
+    :where(.group\/tools)[data-joined]
+      .group-data-joined\/tools\:data-open\:after\:inset-x-0
+  ):where([data-state="open"], [data-open]:not([data-open="false"]))
+)::after,
+:where(
+  :is(
+    :where(.group\/tools)[data-joined]
+      .group-data-joined\/tools\:data-open\:after\:pointer-events-none
+  ):where([data-state="open"], [data-open]:not([data-open="false"]))
+)::after,
+:where(
+  :is(
+    :where(.group\/tools)[data-joined]
+      .group-data-joined\/tools\:data-open\:after\:top-full
+  ):where([data-state="open"], [data-open]:not([data-open="false"]))
+)::after,
 :where(:is(.canvas-empty-action))::after,
 :where(:is(.ec-disabled))::after,
 :where(:is(.ec-icon).ec-next)::after,
@@ -475,44 +528,6 @@
   .focus-visible\:after\:outline-offset-\(--focus-ring-inset\):focus-visible
 )::after,
 :where(.focus-visible\:after\:outline-solid:focus-visible)::after,
-:where(
-  .group-data-cur\:after\:bg-selected-icon:is(:where(.group)[data-cur] *)
-)::after,
-:where(
-  .group-data-joined\/tools\:data-open\:after\:absolute:is(
-      :where(.group\/tools)[data-joined] *
-    ):where([data-state="open"], [data-open]:not([data-open="false"]))
-)::after,
-:where(
-  .group-data-joined\/tools\:data-open\:after\:bg-inherit:is(
-      :where(.group\/tools)[data-joined] *
-    ):where([data-state="open"], [data-open]:not([data-open="false"]))
-)::after,
-:where(
-  .group-data-joined\/tools\:data-open\:after\:h-c-bar-group-pad:is(
-      :where(.group\/tools)[data-joined] *
-    ):where([data-state="open"], [data-open]:not([data-open="false"]))
-)::after,
-:where(
-  .group-data-joined\/tools\:data-open\:after\:inset-x-0:is(
-      :where(.group\/tools)[data-joined] *
-    ):where([data-state="open"], [data-open]:not([data-open="false"]))
-)::after,
-:where(
-  .group-data-joined\/tools\:data-open\:after\:pointer-events-none:is(
-      :where(.group\/tools)[data-joined] *
-    ):where([data-state="open"], [data-open]:not([data-open="false"]))
-)::after,
-:where(
-  .group-data-joined\/tools\:data-open\:after\:top-full:is(
-      :where(.group\/tools)[data-joined] *
-    ):where([data-state="open"], [data-open]:not([data-open="false"]))
-)::after,
-:where(
-  .group-data-ready\/cover\:after\:animation-paused:is(
-    :where(.group\/cover)[data-ready] *
-  )
-)::after,
 :where(.katex .katex-stretchy)::after,
 :where(.katex .katex-version)::after,
 :where(.milkdown .milkdown-table-block .cell-handle .button-group)::after,

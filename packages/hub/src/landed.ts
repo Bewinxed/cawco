@@ -39,6 +39,14 @@ import type { DbShape } from "./db";
 import type { MachineCall } from "./machine-answers";
 import { projectRoot } from "./project-folder";
 
+/**
+ * What makes a place hold a design system: its manifest, the one test every
+ * reader shares (design-system.ts `theirs`, the hub's write of it). A
+ * `design/` folder alone is none: one holding notes and no manifest was
+ * read as a system, and Caw's offer refused to build one there.
+ */
+const SYSTEM = "design/manifest.json";
+
 /** A fetch of origin's default branch and a read of it; past this the machine is not going to answer. */
 const READ_MS = 30_000;
 const LAST_NEWLINE = /\n$/u;
@@ -66,8 +74,8 @@ export interface Landed {
 
 /**
  * The read of a checkout, run at its top: the branch, `yes` or `no` for
- * `design/` on it, then its latest `commits` as `sha<TAB>subject`. awk, not
- * sed's `\t`, reads `ls-remote`: BSD sed on a Mac has no `\t`.
+ * a design system on it ({@link SYSTEM}), then its latest `commits` as
+ * `sha<TAB>subject`. awk, not sed's `\t`, reads `ls-remote`: BSD sed on a Mac has no `\t`.
  */
 const readCheckout = (commits: number): string =>
   `${SAFE_GIT_SHELL}if git remote get-url origin >/dev/null 2>&1; then
@@ -80,11 +88,11 @@ else
   r="refs/heads/$b"
 fi
 printf '%s\\n' "$b"
-if [ "$(git cat-file -t "$r:design" 2>/dev/null)" = tree ]; then echo yes; else echo no; fi
+if [ "$(git cat-file -t "$r:${SYSTEM}" 2>/dev/null)" = blob ]; then echo yes; else echo no; fi
 if git rev-parse --quiet --verify "$r^{commit}" >/dev/null; then git log -${commits} --format='%H%x09%s' "$r" --; fi`;
 
-/** The read of a place in no repository, run in it: no branch, then `yes` or `no` for its `design/` folder. */
-const READ_FOLDER = "echo; if [ -d design ]; then echo yes; else echo no; fi";
+/** The read of a place in no repository, run in it: no branch, then `yes` or `no` for a design system in it. */
+const READ_FOLDER = `echo; if [ -f ${SYSTEM} ]; then echo yes; else echo no; fi`;
 
 /** One checkout's landed branch, or undefined when it cannot be read now. */
 const landedAt = async (
@@ -139,7 +147,7 @@ const landedAt = async (
 /**
  * Whether the project holds a design system, and its first readable
  * checkout's landed branch: `hasDesign` true when its folder on the hub or
- * the landed branch of any checkout has `design/`; false when none does and
+ * the landed branch of any checkout has `design/manifest.json`; false when none does and
  * every checkout answered (a project with no checkout has its folder
  * alone); null when a checkout that might have one cannot be read now.
  * The folder's refusal when the project's id names no folder.
@@ -153,7 +161,7 @@ export const projectDesign = async (
   if (root instanceof ElysiaStatus) {
     return root;
   }
-  const inFolder = existsSync(join(root, "design"));
+  const inFolder = existsSync(join(root, SYSTEM));
   if (inFolder && commits === 0) {
     return { hasDesign: true, repo: undefined };
   }

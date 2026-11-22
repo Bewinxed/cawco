@@ -1456,11 +1456,15 @@ export type PropKind =
 export type TokenKind = "token-color" | "token-size" | "token-font";
 
 /**
- * The type aliases a design system's generated `tokens.ts` exports
- * (packages/design-tokens/src/design-tokens.ts `tokenTypes`), string-literal unions of its token
- * names by DTCG `$type`, and the kind docgen reads a prop typed with each as
- * (the owner, 2026-10-16: "a component that wants suggestions types its prop
- * with one"). Only a prop so typed is offered token names.
+ * The type aliases a prop takes a design system's token names with, and the
+ * kind docgen reads a prop typed with each as (the owner, 2026-10-16: "a
+ * component that wants suggestions types its prop with one"): a DTCG
+ * system's generated `tokens.ts` exports each as a string-literal union of
+ * its names (packages/design-tokens/src/design-tokens.ts `tokenTypes`); a
+ * project whose tokens are its Tailwind theme declares each itself, as a
+ * template literal over Tailwind's namespaces (`--color-${string}`,
+ * design-tokens tailwind-theme.ts `TOKEN_NAMESPACES`). Only a prop so typed
+ * is offered token names.
  */
 export const TOKEN_TYPES = {
   TokenColor: "token-color",

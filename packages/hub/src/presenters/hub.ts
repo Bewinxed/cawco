@@ -38,6 +38,8 @@ export const designWrittenWords = (
     ? `Proposed ${listed(written.files)}: ${written.waiting}`
     : lines(
         `Wrote ${listed(written.written) || "nothing"} in ${written.where}.`,
+        written.tokens &&
+          `Its tokens: ${count(written.tokens.count, "theme variable")} in ${written.tokens.tailwind}.`,
         written.kept.map(
           (one) => `Kept ${one.path} as the person has it: ${one.why}`
         ),

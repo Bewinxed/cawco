@@ -58,7 +58,7 @@
     "@openuidev/lang-core": "1.0.1",
     "@secretlint/core": "^13.0.7",
     "@secretlint/secretlint-rule-preset-recommend": "^13.0.7",
-    "@tailwindcss/postcss": "4.3.3",
+    "@tailwindcss/postcss": "4.3.5",
     "ai": "7.0.173",
     "ajv": "^8.20.0",
     "browserslist": "4.29.3",

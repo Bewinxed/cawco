@@ -8,9 +8,9 @@
  * - the task is design-shaped: its project's template is design, brand,
  *   launch or social, or its labels hold `ui` or `design`, or its outputs
  *   are images or screens;
- * - the project has no `design/` (its folder on the hub, and the landed
- *   default branch of every checkout of it, landed.ts; a checkout that
- *   cannot be read now is asked again on the next such move);
+ * - the project has no `design/manifest.json` (its folder on the hub, and
+ *   the landed default branch of every checkout of it, landed.ts; a
+ *   checkout that cannot be read now is asked again on the next such move);
  * - no task already builds one, and the project was never offered.
  *
  * Then one card in the project's conversation: "This work needs a design
@@ -125,7 +125,7 @@ const buildWords = (sources: string[]) => ({
   labels: ["design"],
   description: `Build this project's design system from its own material${sources.length ? ` (${listed(sources)})` : ""}. Use the ${DESIGN_SKILL} skill: it says what to read, what to write to design/ with design_write, what to ask on a decision page, and how to hand in.`,
   acceptance: [
-    "- design/ holds the system the design-system skill describes, written with design_write, every token's source in manifest.json: a file:line or URL read, a decision page card, or the person's edit.",
+    "- design/ holds the system the design-system skill describes, written with design_write. Its tokens are the project's Tailwind theme where it has one, named in manifest.json; otherwise DTCG token files, every token's source in manifest.json: a file:line or URL read, a decision page card, or the person's edit.",
     "- DESIGN.md answers every visual-foundations question from the material, citing where each answer comes from.",
     "- Whatever the material can't settle was asked on one decision page, “Design decisions”, before hand-in; each pick is written with its card as the source. No question is left open in DESIGN.md or answered with a default.",
     "- The Foundations page and each recipe's sheet open as artifacts for the person to comment on and approve.",
@@ -197,7 +197,7 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
       return problem(409, {
         code: "design-system-present",
         detail:
-          "This project has a design system already (design/ on its default branch, or in its folder): a change to it is a design_write proposal, not a build.",
+          "This project has a design system already (design/manifest.json on its default branch, or in its folder): a change to it is a design_write proposal, not a build.",
       });
     }
     const view = await tasks.stages(projectId);
