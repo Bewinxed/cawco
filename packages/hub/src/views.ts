@@ -304,23 +304,25 @@ export const createViews = ({
     }
     const rows: ViewRoutinesOutput["rows"] = [];
     for (const row of db.routines.list(projectId)) {
-      const nextRuns = nextRunsOf(row.cron, row.timeZone, Date.now());
+      const zone =
+        row.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const nextRuns = row.cron ? nextRunsOf(row.cron, zone, Date.now()) : [];
       if (nextRuns instanceof ElysiaStatus) {
         return nextRuns;
       }
       rows.push({
         id: row.id,
         name: row.name,
-        target: row.target,
-        delegateType: row.delegateType,
-        enabled: row.enabled,
-        cron: row.cron,
-        timeZone: row.timeZone,
-        nextSlot: row.nextSlot.getTime(),
+        target: row.target ?? "delegate",
+        delegateType: null,
+        enabled: row.enabled && row.held === null,
+        cron: row.cron ?? "",
+        timeZone: row.timeZone ?? "",
+        nextSlot: row.nextSlot?.getTime() ?? 0,
         nextRuns,
         lastSlot: row.lastSlot?.getTime() ?? null,
         runs: db.routines.runs(row.id, runs).map((run) => ({
-          slot: slotLabel(run.slot, row.timeZone),
+          slot: slotLabel(run.slot, zone),
           state: run.state,
           outcome: run.outcome,
           reason: run.reason,

@@ -74,6 +74,7 @@ import {
   mcpRunsOn,
   skillDescription,
 } from "@cawco/core/fleet";
+import { FLEET_PROJECT_ID } from "@cawco/core/fleet-project";
 import { maskMcpServer } from "@cawco/core/fleet-secrets";
 import { CONTROL_FORGE_POST } from "@cawco/core/forge-post";
 import type { ArrivingAsk, FramePayload } from "@cawco/core/frames";
@@ -383,7 +384,6 @@ import {
 } from "./caw";
 import { stallOffer } from "./chatgpt-offer";
 import { createCompaction } from "./compaction";
-import { conditionOf, routineForWait } from "./conditions";
 import {
   ARTIFACTS_ROOT,
   BIND_HOST,
@@ -716,6 +716,7 @@ import { trashRoutes } from "./routes/trash";
 import { usageRoutes } from "./routes/usage";
 import { workItemRoutes } from "./routes/work-items";
 import { workspaceRoutes } from "./routes/workspaces";
+import { carryRoutines } from "./routine-carry";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { createRuleRows } from "./rule-rows";
 import { RuleEngine } from "./rules";
@@ -767,7 +768,9 @@ import { createStreamHub } from "./stream";
 import { createStreamRelay } from "./stream-relay";
 import { createTailnetHttps, dashboardRelay } from "./tailnet-https";
 import { createTaskApproval } from "./task-approval";
+import { normaliseTaskRef } from "./task-file";
 import { createTaskInput } from "./task-input";
+import { approvedRoutineCall } from "./task-tools";
 import {
   createTasks,
   hubActor,
@@ -2722,20 +2725,58 @@ export const createServer = (
       await discarded(asker.id, String(input.workspace ?? ""), {
         approved: true,
       }),
-    // A command check the person approved making or changing (routines.ts).
-    routine_create: (input, asker) => {
+    // A routine's command check the person approved making or changing
+    // (routines.ts), as the task_create or task_update call that asked.
+    task_create: async (input, asker) => {
       const made = leadRunsPort.now();
       if (!made) {
         throw new Error("The hub's routines aren't made yet.");
       }
-      return Promise.resolve(made.createApproved(input, asker));
+      const asked = approvedRoutineCall.create(input);
+      if (typeof asked === "string") {
+        return problem(400, {
+          code: "routine-approved-unread",
+          detail: `The approved task_create call does not read as this hub's task_create takes it, so nothing was made: ${asked}`,
+        });
+      }
+      if (asked instanceof ElysiaStatus) {
+        return asked;
+      }
+      const done = await made.createApproved(asked, asker);
+      return done instanceof ElysiaStatus
+        ? done
+        : `Made ${done.task.id}, “${done.task.title}”: a routine whose command the owner approved.`;
     },
-    routine_update: (input, asker) => {
+    task_update: async (input, asker) => {
       const made = leadRunsPort.now();
       if (!made) {
         throw new Error("The hub's routines aren't made yet.");
       }
-      return Promise.resolve(made.updateApproved(input, asker));
+      const asked = approvedRoutineCall.update(input);
+      if (typeof asked === "string") {
+        return problem(400, {
+          code: "routine-approved-unread",
+          detail: `The approved task_update call does not read as this hub's task_update takes it, so nothing was changed: ${asked}`,
+        });
+      }
+      if (asked instanceof ElysiaStatus) {
+        return asked;
+      }
+      const projectId = asker.projectId ?? FLEET_PROJECT_ID;
+      const routine = made.byTask(
+        projectId,
+        normaliseTaskRef(asked.id) ?? asked.id
+      );
+      if (!routine) {
+        return problem(404, {
+          code: "routine-unknown",
+          detail: `${asked.id} is no routine of the asking session's project.`,
+        });
+      }
+      const done = await made.update(routine.id, asked.patch, asker);
+      return done instanceof ElysiaStatus
+        ? done
+        : `Changed ${routine.taskId ?? asked.id}: its command, as the owner approved it.`;
     },
     // An install the hub asked about while it requires paired devices (hub-tools.ts).
     update_machines: async (input) => {
@@ -8693,6 +8734,8 @@ export const createServer = (
     () => Promise.resolve(undefined)
   );
   const tasks = createTasks({
+    // The routines (routines.ts), made further down: a task's routine and its runs, and a session's move of one to done.
+    routines: () => leadRunsPort.now(),
     actionMove: (projectId, taskId, to, actionId) =>
       actionMovesPort.now()(projectId, taskId, to, actionId),
     approvalRefusal: (projectId, taskId) =>
@@ -8763,11 +8806,23 @@ export const createServer = (
         const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
         return { title: boardTitle(row), item: item?.state ?? null };
       },
-      // A condition is one of the project's routines (conditions.ts); another project's reads as gone.
-      routine: (id) => {
-        const row = db.routines.get(id);
-        return row?.projectId === projectId
-          ? { name: row.name, condition: conditionOf(row, db.routines) }
+      // A routine is a task of the project with a trigger, read by its task even once the task is gone (routine-stop.ts).
+      routine: (taskId) => {
+        const row = db.routines.byTask(projectId, taskId);
+        return row?.target
+          ? {
+              id: row.id,
+              stop: row.stop,
+              enabled: row.enabled,
+              held: row.held,
+              asked: row.asked,
+              deadline: row.deadline,
+              nextSlot: row.nextSlot,
+              newest: db.routines
+                .runs(row.id, 30)
+                .find((run) => run.state === "ended"),
+              closeReason: null,
+            }
           : undefined;
       },
     }),
@@ -8778,7 +8833,10 @@ export const createServer = (
       pinHeld: (artifactId, number) =>
         artifacts.waitPin(artifactId, number) !== undefined,
       session: sessionByHandle,
-      routine: (asked) => routineForWait(db.routines, projectId, asked),
+      routine: (taskId) => {
+        const row = db.routines.byTask(projectId, taskId);
+        return row?.target ? { stop: row.stop, title: row.name } : undefined;
+      },
       githubRefusal: () =>
         githubWaitsPort.now()?.githubWaitRefusal(projectId) ??
         "the hub's GitHub poll is not up yet; try again in a moment.",
@@ -9629,6 +9687,8 @@ export const createServer = (
     },
     lifetime,
     tasks,
+    // A routine's run, under the routine's own parent (routines.ts).
+    startForHub: (request, parent) => workItems.startForHub(request, parent),
     conversationFor: (projectId, by) => caw.conversationFor(projectId, by),
     workPlace: workPlaceOf,
     pauses: (projectId) => caps.pauses(projectId),
@@ -10507,8 +10567,38 @@ export const createServer = (
       };
     },
   });
-  // Routines (routines.ts): prompts the hub runs on a schedule, once per slot.
+  // Routines made before routines were tasks: their tasks filed once each
+  // project is set up (routine-carry.ts).
+  const routinesCarried = carryRoutines({
+    db,
+    isSetUp: (project) => isSetUp(project),
+    tasks: () => tasks,
+    files: async (projectId) => {
+      // Reading a folder makes it: a project with none has no task files.
+      if (!(await hasProjectFolder(projectId))) {
+        return [];
+      }
+      const names = await folderFileNames(projectId, "tasks");
+      return names instanceof ElysiaStatus
+        ? []
+        : names.filter((name) => name.endsWith(".md"));
+    },
+    read: async (projectId, path) => {
+      const file = await readFolderFile(projectId, path);
+      return file instanceof ElysiaStatus ? undefined : file.content;
+    },
+    write: async (projectId, writes, message) => {
+      const changed = await changeFolderFiles(
+        projectId,
+        { writes, deletes: [] },
+        { author: { name: "hub" }, message }
+      );
+      return changed instanceof ElysiaStatus ? changed : undefined;
+    },
+  });
+  // Routines (routines.ts): tasks that start on their own, each slot once.
   const routines = createRoutines({
+    carry: routinesCarried,
     // A command check made or changed by a session whose mode would ask
     // before a shell command: the person's approval, as an admin write's.
     askPerson: (actor, name, input) => hubAsks.ask(actor, name, input),
@@ -10516,29 +10606,21 @@ export const createServer = (
     runCommand: (machineId, cwd, cmd, timeoutMs, workspace, how) =>
       runOnMachine(machineId, cwd, cmd, timeoutMs, workspace, how),
     caw,
-    // A condition moved: its project's waits are read again, as a pull request's are.
-    conditionMoved: (projectId) => {
+    // A routine moved (paused, held, on again): its project's waits are read again.
+    waitsMoved: (projectId) => {
       detach(
         tasks.waitsMoved(projectId).then((refused) => {
           if (refused) {
-            console.warn(
-              `[condition moved] failed: ${refused.response.detail}`
-            );
+            console.warn(`[routine moved] failed: ${refused.response.detail}`);
           }
         }),
-        "condition moved"
+        "routine moved"
       );
     },
-    // What waits on a condition: open tasks (their own or inherited waits) and live plan steps.
-    conditionWaiters: {
-      open: async (projectId, handle) =>
-        db.planStepsWaiting(handle) > 0 ||
-        (await tasks.openWaiter(projectId, handle)) !== false,
-      listed: (projectId, handle) => ({
-        tasks: tasks.waitersOf(projectId, handle),
-        steps: db.planStepsWaiting(handle),
-      }),
-    },
+    // Dispatch starts every run a session does, and places a command check.
+    dispatch: dispatcher,
+    tasks: () => tasks,
+    isSetUp: (project) => isSetUp(project),
     // The nightly memory run's brief and end (memory-run.ts).
     memoryRun,
     // A run's report lists what it handed Caw unopened.
@@ -10549,10 +10631,9 @@ export const createServer = (
     db,
     lifetime,
     anyOnline: () => onlineMachines().length > 0,
-    workPlace: workPlaceOf,
     pauses: (projectId) => caps.pauses(projectId),
     quiets: (projectId) => caps.quiets(projectId),
-    // A routine's failure, told to you, asks for its project's starters again.
+    // A routine that needs you, told to you, asks for its project's starters again.
     push: {
       routine: (said) => {
         push.routine(said);
@@ -10566,26 +10647,19 @@ export const createServer = (
       },
     },
     types: (projectId) => projectTypes.typesFor(projectId),
-    jevAccess: () => jevAccess(db),
     workItems,
-    hubCheckout: async () => {
-      const machineId = await ownMachineId;
-      if (!registry.agent(machineId)) {
-        return "the hub's machine runs no agent that is online";
-      }
-      const found = await runOnMachine(
-        machineId,
-        import.meta.dir,
-        "git rev-parse --show-toplevel",
-        15_000
-      );
-      const cwd = found.stdout.trim();
-      return found.exitCode === 0 && cwd
-        ? { machineId, cwd }
-        : `the hub does not run from a git checkout (${(found.stderr || found.stdout).trim() || `exit ${found.exitCode}`})`;
-    },
   });
   leadRunsPort.fill(routines);
+  // The person's comment on a routine's task answers the question it asked (§5.5).
+  tasks.listen((event) => {
+    if (
+      event.kind === "changed" &&
+      event.id &&
+      event.comment?.actor.mover === "you"
+    ) {
+      routines.personWrote(event.projectId, event.id);
+    }
+  });
   /** The views' one-time task table rename (view-task-tables.ts), over every project's folder. */
   const viewTaskTables = {
     dataMigrated: (name: string) => db.dataMigrated(name),
@@ -11434,7 +11508,7 @@ export const createServer = (
     artifactNamed: (instanceId, asked) => artifacts.named(instanceId, asked),
     delegationTree: (actor, query) => delegationTree.read(actor, query),
     cawTools: (actor, toolUseId) => caw.tools(actor, toolUseId),
-    routineTools: (actor, toolUseId) => routines.tools(actor, toolUseId),
+    routines,
     ingressTools: (actor) => ingress.tools(actor),
     actionTools: (actor) => actions.tools(actor),
     relayTools: (actor) => relays.tools(actor),
@@ -12573,7 +12647,7 @@ export const createServer = (
           waits.start();
           // Runs a stopped hub left live settle, then the catch-up: each routine's
           // newest missed slot, once.
-          routines.start();
+          detach(routines.start(), "routines start");
           // Off the boot path: projects that share a repository are folded into
           // its oldest (project-merge.ts), then a folder edited while the hub was
           // down is re-read once.
@@ -14132,6 +14206,13 @@ export const createServer = (
         },
       })
       .use([hubRoutes]),
-    { previews: previewListeners, profiler, tailnet: tailnetHttps }
+    {
+      previews: previewListeners,
+      profiler,
+      tailnet: tailnetHttps,
+      // Routines made before routines were tasks, filed (routine-carry.ts):
+      // the boot's own pass, and a check's on a copy of a hub's database.
+      routinesCarried,
+    }
   );
 };

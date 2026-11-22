@@ -28,7 +28,8 @@ import {
  * on it), from slice 9's first measure on.
  * 2026-10-30: one kind of session. The project's own tools (view_draft,
  * view_query, folder_read, folder_write, project_setup, project_settings,
- * routine_result, the memory write tool since removed) are a worker's wherever its folder is in a
+ * a routine run's answer since folded into task_result, the memory write
+ * tool since removed) are a worker's wherever its folder is in a
  * project, and the conversation tools of a separate role are gone (worker
  * 27,907 measured). The worker's budget is lowered to it.
  * 2026-10-31: a canvas's elements say that text wraps at its width and a
@@ -232,10 +233,16 @@ import {
  * the graph shows at its own size without widths or schemes (the owner's
  * pin on graph-general-canvas#content) (worker 31,924, delegate 12,145
  * measured); both budgets are raised to it.
+ * 2026-11-22: routines are tasks (the owner's "a routine is a task that
+ * starts on its own"): the six routine tools are gone, task_create and
+ * task_update take a routine's trigger, stop condition and how its runs go,
+ * task_result takes a run's keep, stop or ask (`run`, `routine`), and
+ * event_route_create names a routine's task (worker 31,469, delegate 12,285
+ * measured); the worker's budget is lowered to it, the delegate's raised.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 31_924,
-  delegate: 12_145,
+  worker: 31_469,
+  delegate: 12_285,
   overseer: 770,
   "web-facing": 3400,
   curator: 1550,

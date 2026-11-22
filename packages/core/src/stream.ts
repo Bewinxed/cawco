@@ -475,12 +475,20 @@ import type { TailnetServing } from "./tailnet-https";
  *    design graph's compile errors are the answer's own `errors`, said once
  *    (hub component.ts `stageSaid`). A page built for 94 reads a stage
  *    with `errors`, so it reloads first.
+ * 96: routines are tasks (Projects spec §5.5): a wait has no kind
+ *    `routine` (a wait on a routine is its task's, `tsk-N`, with its stop's
+ *    `condition`), a task's list row and read carry its `routine`, a
+ *    condition's state may be `asked`, a run's verdict is keep, stop or ask,
+ *    and a task's move, wait and tools refuse under new codes
+ *    (`task-routine-done-not-run`, `wait-routine-never-ends`,
+ *    `task-trigger-not-yours`, `dispatch-routine`). A page built for 95
+ *    reads a wait of kind `routine`, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 95;
+export const WIRE_PROTOCOL = 96;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

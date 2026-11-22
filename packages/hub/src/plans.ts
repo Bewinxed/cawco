@@ -256,8 +256,6 @@ const waitWords = (db: Pick<DbShape, "artifacts">, handle: string): string => {
       return `pin ${target.number} on ${pageNamed(db, target.artifactId)}`;
     case "session":
       return "a session's work";
-    case "routine":
-      return "a routine's condition";
     case "task":
     case "pr":
     case "run":

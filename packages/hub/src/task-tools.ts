@@ -14,15 +14,33 @@
  * failed attempt's workspace.
  * `todo_write` also writes the calling session's own plan (plans.ts): its
  * steps and its spec, with or without a project or task.
+ *
+ * A routine (§5.5) is a task with a trigger: `task_create` with `on` or
+ * `target` makes one (routines.ts `createdFor`), in the caller's project or,
+ * outside any, the Fleet project; `task_update` changes its trigger, pauses
+ * or resumes it (`enabled`); `task_start` runs it once now; `task_result`
+ * on a run answers keep, stop or ask (`routine`), a conversation's naming
+ * its `run`. The role that makes no routines is refused a trigger.
  */
 import {
+  type AttemptResult,
   RESULT_ARTIFACT_KINDS,
   type ResultArtifact,
   type ResultArtifactKind,
 } from "@cawco/core/deliverables";
+import { FLEET_PROJECT_ID } from "@cawco/core/fleet-project";
+import { SESSION_CHOSEN_MODES } from "@cawco/core/harness/modes";
 import { LANDS_MODES } from "@cawco/core/injected";
 import { PLAN_STEP_PRIORITIES, PLAN_STEP_STATUSES } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
+import {
+  MADE_ROUTINE_TARGETS,
+  ROUTINE_VERDICTS,
+  type RoutineVerdict,
+} from "@cawco/core/routine-kinds";
+import type { AttemptStart } from "@cawco/core/task-views";
+import { withoutUndefined } from "@cawco/core/without-undefined";
+import { routineToolWords } from "@cawco/core/words/routines";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import type { Artifacts } from "./artifacts/service";
@@ -45,6 +63,7 @@ import {
   taskResultWords,
   todoWrittenWords,
 } from "./presenters/tasks";
+import type { RoutineInput, RoutinePatch, Routines } from "./routines";
 import { appleSuggestion } from "./runs-on";
 import { normaliseTaskRef } from "./task-file";
 import { TASK_TOOL_NAMES } from "./task-tool-names";
@@ -65,6 +84,8 @@ export interface TaskToolContext {
    * id (artifacts/service.ts `named`), or its refusal.
    */
   artifactNamed?: SessionArtifactNamed;
+  /** The call's tool_use id, when its harness names it: a routine it makes reads its why off the call's frame. */
+  callId?: string;
   /**
    * Files "Build the design system" in the hub's words (design-offers.ts
    * `fileBuild`): a `task_create` with that title gives only its stage.
@@ -84,6 +105,8 @@ export interface TaskToolContext {
    * from; null when neither.
    */
   foundIn?: string | null;
+  /** Whether the caller may give a task a trigger (roles.ts `makesRoutines`). */
+  makesRoutines?: boolean;
   /** The project's own `runs_on` (dispatch settings): a task filed under one is not told to set its own. */
   projectRunsOn?: (projectId: string) => string | null;
   /** Retries a task whose last attempt failed, reporting to `parent` (dispatch.ts); without it task_retry refuses. */
@@ -92,6 +115,11 @@ export interface TaskToolContext {
     ref: string,
     parent: InstanceRow
   ) => ReturnType<Dispatcher["retryAttempt"]>;
+  /** The routines (routines.ts): a task with a trigger is made, changed, run and answered there. */
+  routines?: Pick<
+    Routines,
+    "answer" | "byRun" | "byTask" | "createdFor" | "runNow" | "updatedFor"
+  >;
   /** Starts an attempt at a task, reporting to `parent` (dispatch.ts); without it task_start refuses. */
   startAttempt?: (
     projectId: string,
@@ -203,27 +231,60 @@ const namesTasks = (task: TaskView): boolean =>
 
 /** What a wait names, as every task tool takes it: the one grammar task-waits.ts reads. */
 const WAIT_TARGETS =
-  "tsk-12, a card <page>#<card> (any pick settles it; <page>#<card>=<option> only that pick), a pin <page>/<number>, a GitHub PR or Actions run URL, a session handle (cockpit#5a167bde), a condition routine:<handle>, or an ISO date (UTC without offset)";
-const landsParameter = () =>
-  z
-    .enum(LANDS_MODES)
-    .describe(
-      "main, branch (cawco/<task>), pr (and a pull request) or none (outputs are the deliverable). Default: the project's."
-    );
-const runsOnParameter = () =>
-  z.string().trim().min(1).describe("apple, linux or a hostname.");
-const lines = (what?: string) =>
-  what === undefined
-    ? z.array(z.string()).optional()
-    : z.array(z.string()).optional().describe(what);
-/** The external items a task links, by URL: task_create's and task_update's one shape. */
-const linksParameter = () => lines();
-/** The project's own fields a task file carries beyond its known ones: task_create's and task_update's one shape. */
-const fieldsParameter = () =>
-  z
-    .record(z.string(), z.union([z.string(), z.array(z.string())]))
+  "tsk-12 (a routine only with a stop condition: it settles once stopped), a card <page>#<card> (any pick settles it; <page>#<card>=<option> only that pick), a pin <page>/<number>, a GitHub PR or Actions run URL, a session handle (cockpit#5a167bde), or an ISO date (UTC without offset)";
+
+/** A routine's lines (§5.5), as task_create and task_update take them: `on` or `target` makes a task one. */
+const ROUTINE_SHAPE = {
+  on: z
+    .object({
+      cron: z.string().describe("Five cron fields, like '0 9 * * 1-5'."),
+      zone: z.string().describe("An IANA zone, like Europe/London."),
+    })
     .optional()
-    .describe("Like {priority: 'high'}; '' or [] takes one out.");
+    .describe(
+      "Makes it a routine that starts on this schedule, its first run at once as a test; say why in your reply first, since the owner is told with what you said."
+    ),
+  target: z
+    .enum(MADE_ROUTINE_TARGETS)
+    .optional()
+    .describe(
+      "A routine's runs: delegate (default) or orchestrator, briefed from this task; conversation, a message to Caw; command, a sandboxed shell command, no model, exit 0 its stop, asking the owner first where your mode asks for commands."
+    ),
+  stop: z
+    .string()
+    .optional()
+    .describe(
+      "When the routine may stop, in words: each run answers keep, stop or ask (task_result routine). Tasks wait on a routine only with one."
+    ),
+  deadline: z
+    .string()
+    .optional()
+    .describe("ISO date: past it with no stop, it needs the owner."),
+  daily_cap_usd: z.number().positive().optional(),
+  mode: z
+    .enum(SESSION_CHOSEN_MODES)
+    .optional()
+    .describe("A conversation run's start mode."),
+  keep: z
+    .boolean()
+    .optional()
+    .describe("Past 7 days, only on the owner's word."),
+  command: z.string().optional().describe("A command check's command."),
+};
+
+/** A routine's deadline as a tool writes it; refused when it does not read. */
+const deadlineOf = (written: string | undefined) => {
+  if (written === undefined) {
+    return;
+  }
+  const at = new Date(written.trim());
+  return Number.isNaN(at.getTime())
+    ? problem(400, {
+        code: "routine-deadline-unfit",
+        detail: `deadline “${written}” is not a date: write an ISO 8601 date or date-time, like 2026-12-01.`,
+      })
+    : at;
+};
 
 /** An artifact named where no session can resolve it (discovery): as given. */
 const same = (asked: string): string => asked;
@@ -333,20 +394,178 @@ export const groupParameter = () =>
       "Items in one group under one parent report once, together, when all have ended; a failure reports at once."
     );
 
+/** What `task_create` takes. */
+const TASK_CREATE_INPUT = z.object({
+  title: z.string(),
+  description: z.string().optional(),
+  type: z.string().optional(),
+  lands: z.enum(LANDS_MODES).optional(),
+  budget: budgetParameter().optional(),
+  stage: z.string().optional(),
+  ...ROUTINE_SHAPE,
+});
+
+/** What `task_update` takes of a routine. */
+const TASK_UPDATE_INPUT = z.object({
+  id: z.string(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  type: z.string().nullable().optional(),
+  lands: z.enum(LANDS_MODES).nullable().optional(),
+  budget: budgetParameter().nullable().optional(),
+  enabled: z.boolean().optional(),
+  ...ROUTINE_SHAPE,
+});
+
+/** A `task_create` call with a trigger as the routine it makes; its deadline's refusal. */
+const routineCreated = (input: z.infer<typeof TASK_CREATE_INPUT>) => {
+  const deadline = deadlineOf(input.deadline);
+  if (deadline instanceof ElysiaStatus) {
+    return deadline;
+  }
+  const made: Omit<RoutineInput, "projectId"> = {
+    title: input.title,
+    description:
+      input.description ?? (input.target === "command" ? input.title : ""),
+    target: input.target ?? "delegate",
+    on: input.on ?? null,
+    stop: input.stop ?? null,
+    deadline: deadline ?? null,
+    dailyCapUsd: input.daily_cap_usd ?? null,
+    mode: input.mode ?? null,
+    keep: input.keep ?? false,
+    command: input.command ?? null,
+    type: input.type ?? null,
+    ...(input.lands ? { lands: input.lands } : {}),
+    budget: input.budget ?? null,
+  };
+  return made;
+};
+
+/** A `task_update` call as a change of its routine; its deadline's refusal. */
+const routinePatched = (
+  input: Omit<z.infer<typeof TASK_UPDATE_INPUT>, "id">
+) => {
+  const deadline = deadlineOf(input.deadline);
+  if (deadline instanceof ElysiaStatus) {
+    return deadline;
+  }
+  const patch: RoutinePatch = {
+    ...(input.title === undefined ? {} : { title: input.title }),
+    ...(input.description === undefined
+      ? {}
+      : { description: input.description }),
+    ...(input.type === undefined ? {} : { type: input.type }),
+    ...(input.lands === undefined ? {} : { lands: input.lands }),
+    ...(input.budget === undefined ? {} : { budget: input.budget }),
+    ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
+    ...(input.on === undefined ? {} : { on: input.on }),
+    ...(input.target === undefined ? {} : { target: input.target }),
+    ...(input.stop === undefined ? {} : { stop: input.stop }),
+    ...(deadline === undefined ? {} : { deadline }),
+    ...(input.daily_cap_usd === undefined
+      ? {}
+      : { dailyCapUsd: input.daily_cap_usd }),
+    ...(input.mode === undefined ? {} : { mode: input.mode }),
+    ...(input.keep === undefined ? {} : { keep: input.keep }),
+    ...(input.command === undefined ? {} : { command: input.command }),
+  };
+  return patch;
+};
+
+/** An approved `task_create` or `task_update` ask's input, read again; why it does not read. */
+export const approvedRoutineCall = {
+  create: (input: Record<string, unknown>) => {
+    const parsed = TASK_CREATE_INPUT.safeParse(input);
+    return parsed.success ? routineCreated(parsed.data) : parsed.error.message;
+  },
+  update: (input: Record<string, unknown>) => {
+    const parsed = TASK_UPDATE_INPUT.safeParse(input);
+    if (!parsed.success) {
+      return parsed.error.message;
+    }
+    const { id, ...change } = parsed.data;
+    const patch = routinePatched(change);
+    return patch instanceof ElysiaStatus ? patch : { id, patch };
+  },
+};
+
+/** Whether a call writes a routine's lines: `on` or `target` makes a task one; the rest change one. */
+const routineAsked = (input: Record<string, unknown>): boolean =>
+  Object.keys(ROUTINE_SHAPE).some((key) => input[key] !== undefined);
+const landsParameter = () =>
+  z
+    .enum(LANDS_MODES)
+    .describe(
+      "main, branch (cawco/<task>), pr (and a pull request) or none (outputs are the deliverable). Default: the project's."
+    );
+const runsOnParameter = () =>
+  z.string().trim().min(1).describe("apple, linux or a hostname.");
+const lines = (what?: string) =>
+  what === undefined
+    ? z.array(z.string()).optional()
+    : z.array(z.string()).optional().describe(what);
+/** The external items a task links, by URL: task_create's and task_update's one shape. */
+const linksParameter = () => lines();
+/** The project's own fields a task file carries beyond its known ones: task_create's and task_update's one shape. */
+const fieldsParameter = () =>
+  z
+    .record(z.string(), z.union([z.string(), z.array(z.string())]))
+    .optional()
+    .describe("Like {priority: 'high'}; '' or [] takes one out.");
+
+/** What `task_create` takes: a task, or with `on` or `target` a routine. */
+const TASK_CREATE_SHAPE = {
+  title: z.string().describe("Verb first."),
+  description: z.string().optional(),
+  acceptance: z
+    .string()
+    .optional()
+    .describe("What must be true when done, a markdown list."),
+  todos: lines("Top-level to-dos."),
+  stage: z.string().optional(),
+  type: z.string().optional().describe("The delegate type to run it."),
+  waits_on: z
+    .array(z.string())
+    .optional()
+    .describe(`What holds it until every one settles: ${WAIT_TARGETS}.`),
+  part_of: taskRef()
+    .optional()
+    .describe("The whole it is a part of: it inherits every wait of it."),
+  checks: lines(
+    "Commands whose output proves the work; `host: <command>` needs the host."
+  ),
+  outputs: lines("Files it makes that are not commits."),
+  context: lines("knowledge/ files for its brief."),
+  lands: landsParameter().optional(),
+  runs_on: runsOnParameter().optional(),
+  group: groupParameter().optional(),
+  owns: ownsParameter().optional(),
+  budget: budgetParameter().optional(),
+  labels: lines(),
+  links: linksParameter(),
+  fields: fieldsParameter(),
+  ...ROUTINE_SHAPE,
+};
+
 /**
  * The task tools, bound to the calling session; with no context, the same
  * definitions for discovery, whose handlers refuse.
  */
 export function taskTools(context: TaskToolContext | undefined) {
   /** The calling session's project, its tasks and how it acts on them; refused in discovery, and for a session in no project. */
-  const scope = () => {
+  const scope = (
+    /** A session in no project files in the Fleet project (§5.1): task_create's. */
+    fleet = false
+  ) => {
     if (!context) {
       return problem(409, {
         code: "task-tools-discovery",
         detail: "Discovery cannot execute tools",
       });
     }
-    const { projectId } = context.actor;
+    const projectId =
+      context.actor.projectId ?? (fleet ? FLEET_PROJECT_ID : null);
     if (!projectId) {
       return problem(409, {
         code: "task-session-no-project",
@@ -450,6 +669,203 @@ export function taskTools(context: TaskToolContext | undefined) {
     });
   };
 
+  /**
+   * `task_create` with a trigger: a routine, in the caller's project or the
+   * Fleet project outside any; refused to the role that makes none.
+   */
+  const routineMade = async (
+    input: z.infer<typeof TASK_CREATE_INPUT> & Record<string, unknown>,
+    format: "concise" | "detailed"
+  ) => {
+    if (!(context?.routines && context.makesRoutines)) {
+      return problem(403, {
+        code: "task-trigger-not-yours",
+        detail: context
+          ? "Your role makes no routines: hand the routine to the session that started you, which can."
+          : "Discovery cannot execute tools",
+      });
+    }
+    const made = routineCreated(input);
+    if (made instanceof ElysiaStatus) {
+      return made;
+    }
+    const done = await context.routines.createdFor(context.actor, made, {
+      approve: { ...input },
+      ...(context.callId ? { callId: context.callId } : {}),
+    });
+    if (typeof done === "string" || done instanceof ElysiaStatus) {
+      return done;
+    }
+    const projectId = context.actor.projectId ?? FLEET_PROJECT_ID;
+    const task = await context.tasks.get(projectId, done.task.id);
+    return task instanceof ElysiaStatus
+      ? task
+      : await titled(projectId, task, format);
+  };
+
+  /**
+   * `task_update` of a task's routine lines or its `enabled`: the routine
+   * changed (routines.ts `updatedFor`), its task read back, or the words a
+   * session reads while the owner approves its command; undefined for a
+   * task that is no routine and a call that makes it none.
+   */
+  const routineChanged = async (
+    projectId: string,
+    input: z.infer<typeof TASK_UPDATE_INPUT> & Record<string, unknown>
+  ) => {
+    const id = normaliseTaskRef(input.id) ?? input.id;
+    const routine = context?.routines?.byTask(projectId, id);
+    if (!(context?.routines && routine?.target)) {
+      if (input.on === undefined && input.target === undefined) {
+        return input.enabled === undefined
+          ? undefined
+          : problem(400, {
+              code: "task-not-routine",
+              detail: `${id} is no routine: enabled pauses or resumes one.`,
+            });
+      }
+      if (!context?.makesRoutines) {
+        return problem(403, {
+          code: "task-trigger-not-yours",
+          detail:
+            "Your role makes no routines: hand the routine to the session that started you, which can.",
+        });
+      }
+      // A plain task given a trigger: its lines written, the index makes it one.
+      return;
+    }
+    const { id: _id, ...change } = input;
+    const patch = routinePatched(change);
+    if (patch instanceof ElysiaStatus) {
+      return patch;
+    }
+    const done = await context.routines.updatedFor(
+      context.actor,
+      routine.id,
+      patch,
+      { ...input }
+    );
+    if (typeof done === "string" || done instanceof ElysiaStatus) {
+      return done;
+    }
+    return await context.tasks.get(projectId, id);
+  };
+
+  /** `task_create` of a plain task: in the caller's project, or the Fleet project outside any. */
+  const taskCreated = async (
+    input: z.infer<z.ZodObject<typeof TASK_CREATE_SHAPE>>,
+    format: "concise" | "detailed"
+  ) => {
+    const {
+      waits_on,
+      part_of,
+      runs_on,
+      on: _on,
+      target: _target,
+      stop: _stop,
+      deadline: _deadline,
+      daily_cap_usd: _cap,
+      mode: _mode,
+      keep: _keep,
+      command: _command,
+      ...draft
+    } = input;
+    const scoped = scope(true);
+    if (scoped instanceof ElysiaStatus) {
+      return scoped;
+    }
+    const { projectId, tasks, actor } = scoped;
+    // The design system's build carries the hub's words, never the filer's.
+    if (draft.title.trim() === BUILD_TITLE && context?.designBuild) {
+      return await context.designBuild(projectId, actor, draft.stage);
+    }
+    const task = await tasks.create(
+      projectId,
+      {
+        ...draft,
+        waitsOn: waits_on,
+        partOf: part_of,
+        ...(context?.foundIn ? { foundIn: context.foundIn } : {}),
+        runsOn: runs_on,
+      },
+      actor
+    );
+    if (task instanceof ElysiaStatus) {
+      return task;
+    }
+    const duplicates = await context?.duplicates?.(projectId, task);
+    // Suggested, never set: the session decides.
+    const suggest =
+      task.runsOn || context?.projectRunsOn?.(projectId)
+        ? undefined
+        : appleSuggestion([
+            task.title,
+            task.description,
+            task.acceptance,
+            ...task.checks,
+          ]);
+    // A verdict names the task it duplicates.
+    const named =
+      duplicates !== undefined &&
+      "duplicateOf" in duplicates &&
+      duplicates.duplicateOf !== null;
+    const answer = await titled(projectId, task, format, named);
+    if (answer instanceof ElysiaStatus) {
+      return answer;
+    }
+    return {
+      ...answer,
+      ...(duplicates ? { duplicates } : {}),
+      ...(suggest ? { suggest } : {}),
+    };
+  };
+
+  /**
+   * `task_result` on a routine's run, answered by its trigger engine
+   * (routines.ts `answer`): a conversation's names its run; a delegate's is
+   * its work item's. Undefined for an attempt's hand-in.
+   */
+  const runAnswered = (
+    summary: string,
+    run: string | undefined,
+    verdict: RoutineVerdict | undefined
+  ) => {
+    const routines = context?.routines;
+    const { workItemId } = context?.actor ?? {};
+    const answering =
+      run !== undefined ||
+      verdict !== undefined ||
+      (workItemId && routines?.byRun(workItemId));
+    if (!(routines && context && answering)) {
+      return;
+    }
+    const said = routines.answer(context.actor, {
+      summary,
+      ...withoutUndefined({ run, verdict }),
+    });
+    return said instanceof ElysiaStatus
+      ? said
+      : routineToolWords.answered(said.id, verdict ?? "keep");
+  };
+
+  /** `task_update` of a routine's lines or its `enabled`, answered; undefined for a call that changes no routine. */
+  const routineUpdated = async (
+    projectId: string,
+    input: Parameters<typeof routineChanged>[1],
+    format: "concise" | "detailed"
+  ) => {
+    if (!(routineAsked(input) || input.enabled !== undefined)) {
+      return;
+    }
+    const changed = await routineChanged(projectId, input);
+    if (changed === undefined) {
+      return;
+    }
+    return changed instanceof ElysiaStatus || typeof changed === "string"
+      ? changed
+      : await titled(projectId, changed, format);
+  };
+
   return [
     tool(
       "task_read",
@@ -529,88 +945,13 @@ export function taskTools(context: TaskToolContext | undefined) {
     tool(
       "task_create",
       "Tasks filed on your project's board: work that must outlive this conversation or run without you. Use it for follow-up work you find, or work to run later or elsewhere.",
-      {
-        title: z.string().describe("Verb first."),
-        description: z.string().optional(),
-        acceptance: z
-          .string()
-          .optional()
-          .describe("What must be true when done, a markdown list."),
-        todos: lines("Top-level to-dos."),
-        stage: z.string().optional(),
-        type: z.string().optional().describe("The delegate type to run it."),
-        waits_on: z
-          .array(z.string())
-          .optional()
-          .describe(`What holds it until every one settles: ${WAIT_TARGETS}.`),
-        part_of: taskRef()
-          .optional()
-          .describe("The whole it is a part of: it inherits every wait of it."),
-        checks: lines(
-          "Commands whose output proves the work; `host: <command>` needs the host."
-        ),
-        outputs: lines("Files it makes that are not commits."),
-        context: lines("knowledge/ files for its brief."),
-        lands: landsParameter().optional(),
-        runs_on: runsOnParameter().optional(),
-        group: groupParameter().optional(),
-        owns: ownsParameter().optional(),
-        budget: budgetParameter().optional(),
-        labels: lines(),
-        links: linksParameter(),
-        fields: fieldsParameter(),
-      },
-      async ({ waits_on, part_of, runs_on, ...draft }, format) => {
-        const scoped = scope();
-        if (scoped instanceof ElysiaStatus) {
-          return scoped;
-        }
-        const { projectId, tasks, actor } = scoped;
-        // The design system's build carries the hub's words, never the filer's.
-        if (draft.title.trim() === BUILD_TITLE && context?.designBuild) {
-          return await context.designBuild(projectId, actor, draft.stage);
-        }
-        const task = await tasks.create(
-          projectId,
-          {
-            ...draft,
-            waitsOn: waits_on,
-            partOf: part_of,
-            ...(context?.foundIn ? { foundIn: context.foundIn } : {}),
-            runsOn: runs_on,
-          },
-          actor
-        );
-        if (task instanceof ElysiaStatus) {
-          return task;
-        }
-        const duplicates = await context?.duplicates?.(projectId, task);
-        // Suggested, never set: the session decides.
-        const suggest =
-          task.runsOn || context?.projectRunsOn?.(projectId)
-            ? undefined
-            : appleSuggestion([
-                task.title,
-                task.description,
-                task.acceptance,
-                ...task.checks,
-              ]);
-        // A verdict names the task it duplicates.
-        const named =
-          duplicates !== undefined &&
-          "duplicateOf" in duplicates &&
-          duplicates.duplicateOf !== null;
-        const answer = await titled(projectId, task, format, named);
-        if (answer instanceof ElysiaStatus) {
-          return answer;
-        }
-        return {
-          ...answer,
-          ...(duplicates ? { duplicates } : {}),
-          ...(suggest ? { suggest } : {}),
-        };
-      },
-      (said) => taskCreatedWords(said, linkScope())
+      TASK_CREATE_SHAPE,
+      async (input, format) =>
+        routineAsked(input)
+          ? await routineMade(input, format)
+          : await taskCreated(input, format),
+      (said) =>
+        typeof said === "string" ? said : taskCreatedWords(said, linkScope())
     ),
     tool(
       "task_update",
@@ -639,14 +980,39 @@ export function taskTools(context: TaskToolContext | undefined) {
         labels: lines(),
         links: linksParameter(),
         fields: fieldsParameter(),
+        ...ROUTINE_SHAPE,
+        enabled: z
+          .boolean()
+          .optional()
+          .describe("A routine: false pauses it, true resumes it."),
       },
-      async ({ id, stage, reason, runs_on, ...rest }, format) => {
-        const patch = { ...rest, runsOn: runs_on };
+      async (input, format) => {
         const scoped = scope();
         if (scoped instanceof ElysiaStatus) {
           return scoped;
         }
         const { projectId, tasks, actor } = scoped;
+        const routine = await routineUpdated(projectId, input, format);
+        if (routine !== undefined) {
+          return routine;
+        }
+        const {
+          id,
+          stage,
+          reason,
+          runs_on,
+          on: _on,
+          target: _target,
+          stop: _stop,
+          deadline: _deadline,
+          daily_cap_usd: _cap,
+          mode: _mode,
+          keep: _keep,
+          command: _command,
+          enabled: _enabled,
+          ...rest
+        } = input;
+        const patch = { ...rest, runsOn: runs_on };
         if (reason !== undefined && stage === undefined) {
           return problem(400, {
             code: "task-reason-without-stage",
@@ -681,7 +1047,8 @@ export function taskTools(context: TaskToolContext | undefined) {
           moved !== undefined && "closing" in moved
         );
       },
-      (said) => taskChangedWords(said, linkScope())
+      (said) =>
+        typeof said === "string" ? said : taskChangedWords(said, linkScope())
     ),
     tool(
       "task_link",
@@ -742,6 +1109,21 @@ export function taskTools(context: TaskToolContext | undefined) {
           return scoped;
         }
         const { projectId } = scoped;
+        // A routine's start by hand is its run now (§5.5).
+        const routine = context?.routines?.byTask(
+          projectId,
+          normaliseTaskRef(id) ?? id
+        );
+        if (routine?.target && context?.routines) {
+          const run = context.routines.runNow(routine.id, context.actor);
+          return run instanceof ElysiaStatus
+            ? run
+            : routineToolWords.ranNow(
+                normaliseTaskRef(id) ?? id,
+                run.state,
+                run.reason
+              );
+        }
         if (!context?.startAttempt) {
           return problem(503, {
             code: "task-attempts-off",
@@ -750,7 +1132,8 @@ export function taskTools(context: TaskToolContext | undefined) {
         }
         return await context.startAttempt(projectId, id, context.actor);
       },
-      attemptStartWords
+      (said: string | AttemptStart) =>
+        typeof said === "string" ? said : attemptStartWords(said)
     ),
     tool(
       "task_retry",
@@ -866,13 +1249,29 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_result",
-      "Your task attempt's work, handed in for the person who asked for it: they read it to learn it is done and what needs them. Use it before finish_item.",
+      "Your task attempt's work, handed in for the person who asked for it: they read it to learn it is done and what needs them. Use it before finish_item, and on a routine's run before your turn or work ends.",
       {
         summary: z
           .string()
           .trim()
           .min(1)
-          .describe("What is done, in one line."),
+          .describe(
+            "What is done, in one line. A routine's run: a stop's evidence, an ask's question; a conversation's run, its output (NO_REPLY is silent)."
+          ),
+        run: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe(
+            "The routine run that woke you, by id; a delegate's run needs none."
+          ),
+        routine: z
+          .enum(ROUTINE_VERDICTS)
+          .optional()
+          .describe(
+            "On a routine's run: keep it going (default), stop it (its stop condition holds), or ask the owner."
+          ),
         check: z
           .array(z.string())
           .optional()
@@ -906,7 +1305,11 @@ export function taskTools(context: TaskToolContext | undefined) {
             "The thing itself where a person can use it: the screen or component running (an artifact_create preview, first, primary), a post or document as it will read, a file, a link. None for work a person cannot open."
           ),
       },
-      async ({ summary, check, artifacts }) => {
+      async ({ summary, check, artifacts, run, routine }) => {
+        const ran = runAnswered(summary, run, routine);
+        if (ran !== undefined) {
+          return ran;
+        }
         const scoped = scope();
         if (scoped instanceof ElysiaStatus) {
           return scoped;
@@ -934,7 +1337,8 @@ export function taskTools(context: TaskToolContext | undefined) {
           artifacts: handed,
         });
       },
-      taskResultWords
+      (said: string | AttemptResult) =>
+        typeof said === "string" ? said : taskResultWords(said)
     ),
     tool(
       "task_archive",

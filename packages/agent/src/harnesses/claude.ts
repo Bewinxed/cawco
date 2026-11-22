@@ -1418,7 +1418,7 @@ const OPEN_ITEMS_READ_MS = (OPEN_ITEMS_HOOK_TIMEOUT_S - 3) * 1000;
 const SCHEDULE_HOOK_TIMEOUT_S = 5;
 
 /** What a session that hands its schedules to its parent hears when it asks for a durable CronCreate. */
-const DURABLE_SCHEDULE_REFUSED = `CronCreate with durable: true is refused in this session. A durable job is written to this folder's ${projectClaudeRelative("scheduled_tasks.json")} and outlives you: once you end, it fires in whichever session next runs in this folder. A check that must run after you finish is a routine: ask the session that started you, with mcp__cawco__handoff, to make it with routine_create, naming the schedule and the prompt. A CronCreate without durable still wakes this session while it runs.`;
+const DURABLE_SCHEDULE_REFUSED = `CronCreate with durable: true is refused in this session. A durable job is written to this folder's ${projectClaudeRelative("scheduled_tasks.json")} and outlives you: once you end, it fires in whichever session next runs in this folder. A check that must run after you finish is a routine: ask the session that started you, with mcp__cawco__handoff, to make it a routine (task_create with on, a schedule), naming the schedule and what each run does. A CronCreate without durable still wakes this session while it runs.`;
 
 /**
  * Refuses a durable CronCreate to a session whose spawn says its schedules go

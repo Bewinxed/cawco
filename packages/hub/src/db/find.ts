@@ -21,13 +21,14 @@ import {
   projectTaskLabels,
   projectTasks,
   purgedSessions,
-  routineRuns,
-  routines,
   sessionPlanSteps,
+  taskRuns,
+  taskTriggers,
   workItems,
   workItemTexts,
   workspaces,
 } from "./schema";
+import { ITS_TASK, ROUTINE_NAME } from "./task-triggers";
 
 /** An artifact as the find engine reads it: its row, and whether the person changed any of its keys. */
 export type FindArtifactRow = typeof artifacts.$inferSelect & {
@@ -290,34 +291,48 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
   routines: (ids) => {
     const last = db
       .select({
-        routineId: routineRuns.routineId,
-        outcome: routineRuns.outcome,
-        endedAt: sql<number | null>`max(${routineRuns.endedAt})`,
+        triggerId: taskRuns.triggerId,
+        outcome: taskRuns.outcome,
+        endedAt: sql<number | null>`max(${taskRuns.endedAt})`,
       })
-      .from(routineRuns)
+      .from(taskRuns)
       .where(
         and(
-          sql`${routineRuns.endedAt} IS NOT NULL`,
-          ids ? inArray(routineRuns.routineId, ids) : undefined
+          sql`${taskRuns.endedAt} IS NOT NULL`,
+          ids ? inArray(taskRuns.triggerId, ids) : undefined
         )
       )
-      .groupBy(routineRuns.routineId)
+      .groupBy(taskRuns.triggerId)
       .all();
-    const byRoutine = new Map(last.map((row) => [row.routineId, row]));
+    const byRoutine = new Map(last.map((row) => [row.triggerId, row]));
+    // A routine is its task (§5.5): named by its title, said by its stop.
     return db
-      .select()
-      .from(routines)
-      .where(ids ? inArray(routines.id, ids) : undefined)
+      .select({
+        id: taskTriggers.id,
+        projectId: taskTriggers.projectId,
+        enabled: taskTriggers.enabled,
+        nextSlot: taskTriggers.nextSlot,
+        stop: taskTriggers.stop,
+        name: ROUTINE_NAME,
+      })
+      .from(taskTriggers)
+      .leftJoin(projectTasks, ITS_TASK)
+      .where(
+        and(
+          isNotNull(taskTriggers.target),
+          ids ? inArray(taskTriggers.id, ids) : undefined
+        )
+      )
       .all()
       .map((row) => {
         const run = byRoutine.get(row.id);
         return {
           id: row.id,
           name: row.name,
-          prompt: row.prompt,
+          prompt: row.stop ?? "",
           projectId: row.projectId,
           enabled: row.enabled,
-          nextSlot: row.nextSlot,
+          nextSlot: row.nextSlot ?? new Date(0),
           lastOutcome: run?.outcome ?? null,
           lastRunAt: run?.endedAt ? new Date(run.endedAt) : null,
         };

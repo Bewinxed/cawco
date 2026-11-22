@@ -230,14 +230,14 @@ export type AskRecord = z.infer<typeof ASK_RECORD> & {
 export const PROJECT_SETTINGS = "project_settings";
 
 /**
- * The routine tools a session's call of reaches the person as an approval
- * when it sets the command a check runs and the session's permission mode
- * would ask before a shell command (hub routines.ts `createdFor`,
- * `updatedWith`): an ask under the tool's own name, run by the hub once
+ * The task tools a session's call of reaches the person as an approval when
+ * it sets the command a routine's check runs and the session's permission
+ * mode would ask before a shell command (hub routines.ts `createdFor`,
+ * `updatedFor`): an ask under the tool's own name, run by the hub once
  * approved.
  */
-export const ROUTINE_CREATE_TOOL = "routine_create";
-export const ROUTINE_UPDATE_TOOL = "routine_update";
+export const COMMAND_CHECK_CREATE_TOOL = "task_create";
+export const COMMAND_CHECK_UPDATE_TOOL = "task_update";
 
 const ADMIN_WRITE_TOOL = /^admin_[a-z_]+_write$/u;
 

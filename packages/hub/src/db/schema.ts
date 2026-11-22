@@ -51,11 +51,11 @@ import {
 } from "@cawco/core/protocol";
 import { RELAY_PROVIDERS, RELAY_STATES } from "@cawco/core/relays";
 import {
-  CONDITION_STOPS,
   ROUTINE_OUTCOMES,
   ROUTINE_RUN_STATES,
   ROUTINE_TARGETS,
   ROUTINE_VERDICTS,
+  TRIGGER_HOLDS,
 } from "@cawco/core/routine-kinds";
 import { SEND_STATES } from "@cawco/core/session-messages";
 import {
@@ -6265,147 +6265,120 @@ export const projectNotes = sqliteTable(
   ]
 );
 
-/** Who a routine's run goes to: a fresh delegate of its type, or the project's conversation. */
 /**
- * What a run starts: a fresh delegate, a fresh orchestrator (a session that
- * may delegate, in the project's checkout: routines.ts `fireOrchestrator`),
- * a message to the project's Caw, or the project's memory curator
- * (memory.ts), a delegate in the `curator` role that only the hub makes.
+ * A routine's trigger (Projects spec §5.5, routines.ts): one row per task
+ * that starts on its own. Its task file says what it is (`on:`, `target:`,
+ * `stop:` and the rest, task-file.ts); this row keeps the hub's state of it
+ * and a copy of those fields as the task's index last read them, so the
+ * scheduler claims a slot in one transaction without reading the file. The
+ * copy is written by the task index (db/task-index.ts `put`) whenever the
+ * file's hash moves, and by nothing else; a changed schedule starts from
+ * now. Its id is the routine's id: a routine made before routines were
+ * tasks keeps its old id here, so its runs, event routes, actions, parents
+ * and old links name it still.
  */
-export type RoutineTarget = import("@cawco/core/routine-kinds").RoutineTarget;
-
-/**
- * A routine (Projects spec §5.5, routines.ts): a prompt the hub runs on a
- * cron schedule in a time zone. `next_slot` is the schedule's whole state:
- * a tick fires the newest slot at or before now once `next_slot` is due, and
- * moves it past now in the same transaction, so missed slots collapse into
- * one.
- */
-export const routines = sqliteTable(
-  "routines",
+export const taskTriggers = sqliteTable(
+  "task_triggers",
   {
     id: text("id").primaryKey(),
-    /** Its project; null for a routine of the fleet, run in the hub's own checkout. */
-    projectId: projectColumn("project_id").references(() => projects.id, {
-      onDelete: "cascade",
-    }),
-    name: text("name").notNull(),
-    /** Five fields, or six with seconds first (Effect's `Cron.parse`). */
-    cron: text("cron").notNull(),
-    /** An IANA zone the schedule reads in, like Europe/London. */
-    timeZone: text("time_zone").notNull(),
-    target: storedEnum(z.enum(ROUTINE_TARGETS))("target").notNull(),
-    prompt: text("prompt").notNull(),
-    /** The delegate type a `delegate` run starts; null: the fleet's default. */
-    delegateType: text("delegate_type"),
-    /** Where a `delegate` run's commits go: `none` unless the routine says. */
-    lands: storedEnum(z.enum(LANDS_MODES))("lands").notNull().default("none"),
-    /** What each run's work item may spend; one that did not read skips every run. */
-    ...budgetColumns(),
-    /** Dollars its runs may spend in a day of its time zone; null: no cap. */
+    projectId: projectKey(),
+    /**
+     * Its task, `tsk-12`. Null only while a routine carried over from before
+     * routines were tasks waits for the hub to file its task (its definition
+     * in {@link carried}): the hub files it as it starts, in a project that
+     * is set up.
+     */
+    taskId: text("task_id"),
+    /** The task file's `on:` cron as indexed; null: no schedule (event routes alone start it). */
+    cron: text("cron"),
+    /** The zone its cron reads in, as indexed; null with no schedule. */
+    timeZone: text("time_zone"),
+    /** What its runs start, as indexed (`target:`); null once its file no longer says it starts on its own. */
+    target: storedEnum(z.enum(ROUTINE_TARGETS))("target"),
+    /** Its stop condition as indexed (`stop:`); null: it runs until you end it. */
+    stop: text("stop"),
+    /** Its deadline as indexed (`deadline:`); null: none. */
+    deadline: timestamp("deadline"),
+    /** Its daily cap as indexed (`daily_cap_usd:`); null: none. */
     dailyCapUsd: real("daily_cap_usd"),
-    /**
-     * The permission mode a `conversation` run starts the project's
-     * conversation in when it has none, over the project's (caw.ts
-     * `modeFor`). Null: the project's.
-     */
+    /** A conversation run's start mode as indexed (`mode:`); null: the project's. */
     mode: storedEnum(z.enum(PERMISSION_MODES))("mode"),
+    /** Kept past a session's routine's 7 days, as indexed (`keep:`). */
+    keep: integer("keep", { mode: "boolean" }).notNull().default(false),
+    /** A command check's command as its file says it now (`command:`); null for any other target. */
+    command: text("command"),
+    /**
+     * The command as the person approved it, word for word, or as a session
+     * whose mode runs commands unasked set it through the task tools: the
+     * only command the hub runs. A file whose command differs runs nothing
+     * until it is approved again (routines.ts `fireCommand`).
+     */
+    approvedCommand: text("approved_command"),
+    /** What of its trigger fields does not read, in a sentence; null when they read. While set it fires nothing. */
+    problem: text("problem"),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-    /** Why it is off, when the hub turned it off (it expired). */
+    /** Why it is off, in a sentence, when the hub turned it off or holds it; null otherwise. */
     disabledReason: text("disabled_reason"),
-    /** `owner`, or the id of the session that made it. */
+    /** Why the hub holds it off (core `TriggerHold`): it stands in Needs you until you act. Null otherwise. */
+    held: storedEnum(z.enum(TRIGGER_HOLDS))("held"),
+    /** A run's question while it asks you (`held: asked`); null otherwise. */
+    asked: text("asked"),
+    /** `owner`, `hub`, or the id of the session that made it. */
     createdBy: sessionColumn("created_by").notNull(),
-    /**
-     * The session whose `routine_create` call made it; null for yours, the
-     * hub's, and routines made before the hub kept where.
-     */
+    /** The session whose task_create made it; null for yours and the hub's. */
     madeInInstance: sessionColumn("made_in_instance"),
-    /**
-     * What the making turn said just before its `routine_create` call, one
-     * paragraph; null when it said nothing, or the routine is not an agent's.
-     */
+    /** What the making turn said just before its call, one paragraph; null when it said nothing. */
     madeWhy: text("made_why"),
     /** How that session is named in its notice: a delegate, or another session. */
     madeBy: storedEnum(RoutineMadeBySchema)("made_by"),
-    /**
-     * When its notice went to you (routines.ts `announce`); null while it
-     * waits for its why, and on routines no session made. A hub start
-     * announces a session's routine still waiting.
-     */
+    /** When its made notice went to you; null while it waits for its why, and on routines no session made. */
     announcedAt: timestamp("announced_at"),
-    /** Kept past its expiry: set by the owner, or an agent on the owner's word. */
-    keep: integer("keep", { mode: "boolean" }).notNull().default(false),
-    /** When an agent's routine turns itself off unless kept; null for the owner's. */
+    /** When a session's routine turns itself off unless kept; null for yours, the hub's, and one with a stop condition. */
     expiresAt: timestamp("expires_at"),
-    /** The newest scheduled slot it fired (its time). */
+    /** The newest scheduled slot it fired. */
     lastSlot: timestamp("last_slot"),
-    /** The next scheduled slot. */
-    nextSlot: timestamp("next_slot").notNull(),
+    /** The next scheduled slot; null with no schedule. */
+    nextSlot: timestamp("next_slot"),
     createdAt: timestamp("created_at").notNull(),
     /**
-     * Its condition: a statement true once met, which makes it a check that
-     * tasks and plan steps wait on (`routine:<id>`, core wait-targets.ts).
-     * Each run answers met, unmet or unknown. Null on every other routine.
+     * A routine carried over from before routines were tasks, whose task the
+     * hub has yet to file: its definition as the routine kept it (JSON,
+     * routine-carry.ts reads it). Null once filed, and on every new routine.
      */
-    condition: text("condition"),
-    /** When the hub stops a condition's checks unmet; null: never, and on every other routine. */
-    deadline: timestamp("deadline"),
-    /** When its condition was met; null while unmet. */
-    metAt: timestamp("met_at"),
-    /** Who met it: the run's id, or `owner` when the person marked it met. */
-    metBy: text("met_by"),
-    /** The meeting run's evidence, one sentence; null when the person marked it. */
-    metEvidence: text("met_evidence"),
-    /**
-     * Why the hub turned its checks off (core `ConditionStop`): met, its
-     * deadline passed, or failing slots. Null while it checks, and when a
-     * person or a session paused it.
-     */
-    stopped: storedEnum(z.enum(CONDITION_STOPS))("stopped"),
+    carried: text("carried"),
   },
-  (table) => [index("routines_project").on(table.projectId)]
+  (table) => [
+    uniqueIndex("task_triggers_task").on(table.projectId, table.taskId),
+  ]
 );
 
 /**
- * How a run ended, by its delegate's `finish_item` summary or Caw's
- * `routine_result`: `silent` (`NO_REPLY`), `delivered` (its words became a
- * notice), `failed` (`AUTOMATION_FAILED`, an item that failed, or Caw's turn
- * ending without a result), `cancelled` (someone stopped it).
+ * One run of a routine (§5.5, Runs): a scheduled slot's time (ISO),
+ * `test:<made at>` for the run a new routine makes at once, `now:<when>`
+ * for a run by hand, `event:<inbound event id>` for an event's run, or
+ * `recovery:<when>` for a memory recovery. Unique on (trigger, slot,
+ * attempt): the insert is the fire, so a slot fires once, and its one retry
+ * (attempt 2) once. A run a delegate does is also an attempt at the task
+ * (its work item names the task); a conversation run, a command check and
+ * a skipped or queued run have no attempt. Read newest first and capped,
+ * apart from the project's attempts.
  */
-export type RoutineOutcome = import("@cawco/core/routine-kinds").RoutineOutcome;
-
-/**
- * One run of a routine at one slot: a scheduled slot's time (ISO), `test:<created
- * at>` for the run a new routine makes at once, `now:<when>` for a run
- * asked for by hand, or `event:<inbound event id>` for an event's run. Unique on (routine, slot, attempt): the insert is the
- * fire, so a slot fires once, and its one retry (attempt 2) once.
- */
-export const routineRuns = sqliteTable(
-  "routine_runs",
+export const taskRuns = sqliteTable(
+  "task_runs",
   {
     id: text("id").primaryKey(),
-    routineId: text("routine_id")
+    triggerId: text("trigger_id")
       .notNull()
-      .references(() => routines.id, { onDelete: "cascade" }),
+      .references(() => taskTriggers.id, { onDelete: "cascade" }),
     slot: text("slot").notNull(),
     attempt: integer("attempt").notNull().default(1),
-    /**
-     * Where the run is (core `RoutineRunState`): queued behind a live run (an
-     * event's run, which starts when the runs before it end), being started,
-     * running, ended, or skipped (nothing started).
-     */
+    /** Where the run is (core `RoutineRunState`). */
     state: storedEnum(z.enum(ROUTINE_RUN_STATES))("state").notNull(),
     workItemId: text("work_item_id"),
-    /**
-     * The session that did the run: a work item run's (delegate,
-     * orchestrator, curator, trim) its item's session, from its start; a
-     * conversation run's once its harness read the run's wake, the turn that
-     * took it then ending the run, with its `routine_result` or failed. A
-     * conversation run is the one with no work item.
-     */
+    /** The session that did the run: its work item's, or the conversation's once it read the wake. */
     instanceId: sessionColumn("instance_id"),
     outcome: storedEnum(z.enum(ROUTINE_OUTCOMES))("outcome"),
-    /** What its delegate said, when it said more than the contract's words. */
+    /** What it delivered, when it said more than the contract's words; a stop's evidence; an ask's question. */
     output: text("output"),
     /** Why it was skipped or failed, as a sentence. */
     reason: text("reason"),
@@ -6413,20 +6386,16 @@ export const routineRuns = sqliteTable(
     usd: real("usd"),
     startedAt: timestamp("started_at").notNull(),
     endedAt: timestamp("ended_at"),
-    /**
-     * What a check run answered (core `RoutineVerdict`): kept as its
-     * delegate's `routine_result` comes, read as its work item ends. Null
-     * for a run that gave none, and every run of a routine with no condition.
-     */
+    /** What it answered in its `task_result` (core `RoutineVerdict`): keep, stop or ask; null for none. */
     verdict: storedEnum(z.enum(ROUTINE_VERDICTS))("verdict"),
   },
   (table) => [
-    uniqueIndex("routine_runs_slot").on(
-      table.routineId,
+    uniqueIndex("task_runs_slot").on(
+      table.triggerId,
       table.slot,
       table.attempt
     ),
-    index("routine_runs_item").on(table.workItemId),
+    index("task_runs_item").on(table.workItemId),
   ]
 );
 
@@ -6619,9 +6588,10 @@ export const eventRoutes = sqliteTable(
     branch: text("branch"),
     /** A regular expression run over the event's title and body. */
     regex: text("regex"),
+    /** The routine it sends events to: its trigger, by id. */
     routineId: text("routine_id")
       .notNull()
-      .references(() => routines.id, { onDelete: "cascade" }),
+      .references(() => taskTriggers.id, { onDelete: "cascade" }),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     /**
      * The permission mode an event it routes starts the project's
@@ -7013,11 +6983,11 @@ export const actions = sqliteTable(
     /** The session that proposed it. */
     proposedBy: sessionColumn("proposed_by").notNull(),
     /** The routine whose run proposed it (that run's session, or one it started); null outside any routine. */
-    routineId: text("routine_id").references(() => routines.id, {
+    routineId: text("routine_id").references(() => taskTriggers.id, {
       onDelete: "set null",
     }),
     /** That routine's run. */
-    runId: text("run_id").references(() => routineRuns.id, {
+    runId: text("run_id").references(() => taskRuns.id, {
       onDelete: "set null",
     }),
     state: storedEnum(z.enum(ACTION_STATES))("state").notNull(),

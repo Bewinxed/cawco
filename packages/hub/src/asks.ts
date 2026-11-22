@@ -92,7 +92,7 @@ import { uuidOf } from "./named-uuid";
 import type { AnswerFrom } from "./pending";
 import { askEnvelope } from "./pending";
 import type { ProjectSettings } from "./project-settings";
-import type { ProblemsOf } from "./refusal";
+import type { AnyProblem, ProblemsOf } from "./refusal";
 import type { Relay } from "./relay";
 import type { Routines } from "./routines";
 import type { DiscardProblem } from "./workspace-discards";
@@ -151,7 +151,8 @@ export type ApprovedRunProblem =
   | ProblemsOf<ReturnType<ProjectSettings["runApproved"]>>
   | ProblemsOf<ReturnType<Relay["runApproved"]>>
   | ProblemsOf<ReturnType<Routines["createApproved"]>>
-  | ProblemsOf<ReturnType<Routines["updateApproved"]>>;
+  | ProblemsOf<ReturnType<Routines["update"]>>
+  | AnyProblem;
 
 /**
  * Why a write is refused before anyone is asked: an `admin_*_write` with no
@@ -209,7 +210,7 @@ export interface AsksDeps {
    * Runs an approved call as the hub for the session that asked; answers
    * what the tool said, or the problem of a run the hub makes by a path of
    * its own: a relay's opening (relay.ts `runApproved`), a command check
-   * made or changed (routines.ts `createApproved`, `updateApproved`), a project setting
+   * made or changed (routines.ts `createApproved`, `update`), a project setting
    * (project-settings.ts `runApproved`) or a discard (artifact-events.ts
    * `discarded`).
    */

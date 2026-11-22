@@ -90,6 +90,8 @@
         return conditions.failing(condition.reason);
       case "paused":
         return conditions.paused;
+      case "asked":
+        return conditions.askedLine(condition.reason);
       case "could-not-check":
         return condition.reason
           ? conditions.couldNotCheck(condition.reason)
@@ -170,14 +172,11 @@
 
   /** A run's outcome, in the page's status vocabulary: a check run's, its verdict. */
   function outcomeOf(run: RoutineRun): { status: Status; word: string } {
-    if (run.state === "ended" && run.verdict === "met") {
-      return { status: "done", word: verdictWords.met };
+    if (run.state === "ended" && run.verdict === "stop") {
+      return { status: "done", word: verdictWords.stop };
     }
-    if (run.state === "ended" && run.verdict === "unmet") {
-      return { status: "neutral", word: verdictWords.unmet };
-    }
-    if (run.state === "ended" && run.verdict === "unknown") {
-      return { status: "failed", word: verdictWords.unknown };
+    if (run.state === "ended" && run.verdict === "ask") {
+      return { status: "neutral", word: verdictWords.ask };
     }
     if (run.state === "running" || run.state === "starting") {
       return { status: "running", word: words.running };
@@ -205,7 +204,7 @@
     if (
       run.state === "skipped" ||
       run.outcome === "failed" ||
-      run.verdict === "unmet"
+      (run.verdict === "keep" && run.outcome === "silent")
     ) {
       return run.reason ?? "";
     }

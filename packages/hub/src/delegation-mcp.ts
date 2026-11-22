@@ -92,12 +92,12 @@ import {
   allows,
   CAW_TOOLS,
   changesAnyTask,
+  makesRoutines,
   memoryRoleOf,
   refusal,
   roleOf,
   TRIAGE_TOOLS,
 } from "./roles";
-import { ROUTINE_DEFINITIONS, ROUTINE_TOOLS, type Routines } from "./routines";
 import type { SessionCalls } from "./session-calls";
 import { TASK_TOOLS, type TaskToolContext, taskTools } from "./task-tools";
 import type { Tasks } from "./tasks";
@@ -106,7 +106,6 @@ import { isVerifierParent } from "./work-item-state";
 
 type ToolFactory = typeof handoffTools;
 type CawTool = ReturnType<Caw["tools"]>[number];
-type RoutineTool = ReturnType<Routines["tools"]>[number];
 type IngressTool = ReturnType<Ingress["tools"]>[number];
 type ActionTool = ReturnType<Actions["tools"]>[number];
 type RelayTool = ReturnType<Relay["tools"]>[number];
@@ -119,9 +118,8 @@ type ConnectTool = ReturnType<ConnectAsks["tools"]>[number];
 type AskTool = ReturnType<Asks["tools"]>[number];
 type AccountTool = ReturnType<AccountTools["tools"]>[number];
 
-/** A tool of a project's own groups: routines, ingress, approved actions, relays, memory. */
-type ProjectTool =
-  RoutineTool | IngressTool | ActionTool | RelayTool | MemoryTool;
+/** A tool of a project's own groups: ingress, approved actions, relays, memory. */
+type ProjectTool = IngressTool | ActionTool | RelayTool | MemoryTool;
 
 /** What `tools/list` answers one listing, and its hash (db `toolListing`). */
 interface Listing {
@@ -251,11 +249,13 @@ const endingWith = (
 /**
  * Tools that act on the caller's project: a session in none is never listed
  * them, as a leaf is never listed the spawning tools. `todo_write` stays: its
- * plan scope is the session's own.
+ * plan scope is the session's own; so does `task_create`, which files a task
+ * or routine of a session in no project in the Fleet project (§5.1).
  */
 const PROJECT_ONLY: ReadonlySet<string> = new Set([
-  ...[...TASK_TOOLS].filter((name) => name !== "todo_write"),
-  ...ROUTINE_TOOLS,
+  ...[...TASK_TOOLS].filter(
+    (name) => name !== "todo_write" && name !== "task_create"
+  ),
   ...INGRESS_TOOLS,
   ...ACTION_TOOLS,
   ...RELAY_TOOLS,
@@ -305,7 +305,6 @@ const GROUPS_DEFINED: readonly (readonly [
   [HUB_TOOLS, HUB_DEFINITIONS],
   [MEMORY_TOOLS, MEMORY_DEFINITIONS],
   [RELAY_TOOLS, RELAY_DEFINITIONS],
-  [ROUTINE_TOOLS, ROUTINE_DEFINITIONS],
   [INGRESS_TOOLS, INGRESS_DEFINITIONS],
   [ACTION_TOOLS, ACTION_DEFINITIONS],
   [ACCOUNT_TOOLS, ACCOUNT_DEFINITIONS],
@@ -344,7 +343,6 @@ export const definedTools = (
   projectFromSessionTool(),
   projectSettingsListed,
   ...CAW_DEFINITIONS,
-  ...ROUTINE_DEFINITIONS,
   ...INGRESS_DEFINITIONS,
   ...ACTION_DEFINITIONS,
   ...RELAY_DEFINITIONS,
@@ -379,8 +377,11 @@ export const listedTools = <T extends { name: string }>(
         allows(actor, tool.name) &&
         (!!actor.projectId || !PROJECT_ONLY.has(tool.name)) &&
         (tool.name !== PROJECT_FROM_SESSION || mayMakeProject(actor)) &&
-        // Only a work item hands in a result on its task.
-        (tool.name !== "task_result" || !!actor.workItemId) &&
+        // A work item hands in a result on its task; a session in a
+        // project answers a routine's run that woke it.
+        (tool.name !== "task_result" ||
+          !!actor.workItemId ||
+          !!actor.projectId) &&
         // Only a design check's verifier gives a verdict (design-verify.ts).
         (tool.name !== DESIGN_VERDICT ||
           isVerifierParent(actor.parentInstanceId))
@@ -472,6 +473,8 @@ export function createDelegationMcp(options: {
    * session, a queued delegate or a queued task start. `tool` names the call.
    */
   stopStarted?: (actor: InstanceRow, started: Started, tool: string) => void;
+  /** The routines (routines.ts): a task with a trigger is made, changed, run and answered there. */
+  routines?: TaskToolContext["routines"];
   /** Starts an attempt at a task for `task_start` (dispatch.ts). */
   startAttempt?: (
     projectId: string,
@@ -499,11 +502,6 @@ export function createDelegationMcp(options: {
    * his `folder_write` parks as a proposal is drawn at it.
    */
   cawTools?: (actor: InstanceRow | undefined, toolUseId?: string) => CawTool[];
-  /** The routine tools (routines.ts), for the roles that run a project. */
-  routineTools?: (
-    actor: InstanceRow | undefined,
-    toolUseId?: string
-  ) => RoutineTool[];
   /** The ingress tools (ingress.ts): event routes and connector polls, for the same roles. */
   ingressTools?: (actor: InstanceRow | undefined) => IngressTool[];
   /** The approved-action tools (actions.ts): proposing one exact call for you to approve. */
@@ -935,7 +933,8 @@ export function createDelegationMcp(options: {
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>,
-    cut?: AbortSignal
+    cut?: AbortSignal,
+    toolUseId?: string
   ): Promise<CallToolResult> => {
     const started = startedBy(actor, name, cut);
     const entry =
@@ -952,6 +951,13 @@ export function createDelegationMcp(options: {
           : undefined,
         retryAttempt: attemptCut(options.retryAttempt, started),
         tasks: options.tasks,
+        ...(options.routines
+          ? {
+              routines: options.routines,
+              makesRoutines: makesRoutines(actor),
+              ...(toolUseId ? { callId: toolUseId } : {}),
+            }
+          : {}),
         writePlan: options.writePlan,
         workItemTask: actor.workItemId
           ? (options.workItemTask?.(actor.workItemId) ?? null)
@@ -1051,7 +1057,6 @@ export function createDelegationMcp(options: {
     [HUB_TOOLS, options.hubTools],
     [MEMORY_TOOLS, options.memoryTools],
     [RELAY_TOOLS, options.relayTools],
-    [ROUTINE_TOOLS, options.routineTools],
     [INGRESS_TOOLS, options.ingressTools],
     [ACTION_TOOLS, options.actionTools],
     [ACCOUNT_TOOLS, options.accountTools],
@@ -1111,7 +1116,7 @@ export function createDelegationMcp(options: {
       return await projectCall(actor, name, input);
     }
     if (options.tasks && TASK_TOOLS.has(name)) {
-      return await taskCall(actor, name, input, cut);
+      return await taskCall(actor, name, input, cut, toolUseId);
     }
     return await groupCall(actor, name, input, toolUseId);
   };

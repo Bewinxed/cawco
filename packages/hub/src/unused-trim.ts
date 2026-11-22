@@ -1,13 +1,15 @@
 /**
  * The unused skills and servers routine (tsk-329 stories 14–19, 21, 23, 24):
- * a routine of the hub's own, as the memory curator is (routines.ts, target
- * `trim`), that proposes trimmed starting sets and changes none itself.
+ * a routine of the hub's own, as the memory curator is: a task the hub
+ * files with target `trim` (routines.ts), its prompt kept here, that
+ * proposes trimmed starting sets and changes none itself.
  *
  * - **Offered.** Caw suggests it at the foot of a project's Routines ledger
  *   until the person answers: Turn on makes the routine, Not now waves the
  *   suggestion away, and either is kept (db `trim_offers`), so it is never
  *   suggested there again. The fleet switch (Configure › Skills) turns it on
- *   in every project and adds the fleet-level run, a routine in no project.
+ *   in every project and adds the fleet-level run, the Fleet project's
+ *   routine, which runs in the Fleet project's folder on the hub.
  * - **A run** is code, then one call. The hub reads the count
  *   (capability-calls.ts) over {@link TRIM_DAYS} days and compares it with
  *   each starting set the project's sessions take: the project's own
