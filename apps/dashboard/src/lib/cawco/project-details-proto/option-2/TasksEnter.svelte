@@ -1,5 +1,6 @@
 <script lang="ts">
   import { repoIdentity } from "@cawco/core/protocol";
+  import { untrack } from "svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
@@ -29,6 +30,8 @@
     IconWorking,
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import type { Change, ChangeKey } from "./changes";
   import { FORM_FIELD, FORM_LABEL, OPENED_FORM } from "./opened-form";
@@ -73,6 +76,23 @@
   let setupHome = $derived<"github" | "linear" | null>(
     opening === "files" ? null : opening
   );
+  /** The tiles' order, which way a swap between their setups moves. */
+  const TILE_AT = { github: 1, linear: 2 } as const;
+  const setupSwap = new ListSwap<never>();
+  let setupWas = untrack(() => setupHome);
+  $effect.pre(() => {
+    const next = setupHome;
+    if (next !== setupWas) {
+      const was = setupWas;
+      if (next !== null && was !== null) {
+        untrack(() =>
+          setupSwap.swap([], TILE_AT[next] > TILE_AT[was] ? 1 : -1)
+        );
+      }
+      setupWas = next;
+    }
+  });
+  const leaveSetup = setupSwap.leaveView;
   /** Leaving a tie for the project's own files, asked and not yet answered: the press first says what it stops (DESIGN.md, ceremony matches consequence). */
   let leaving = $derived(opening === "files");
   let connectionPick = $state<string | null>(null);
@@ -372,165 +392,185 @@
       data-slot="setup-asks"
       transition:unfold
     >
-      <div class="flex min-w-0 flex-col gap-space-1">
-        <p
-          class="mark-line m-0 flex items-center gap-space-2 type-label text-ink-strong"
-          id="{uid}-setup"
-        >
-          <ProviderLogo class="flex-none" provider={setupHome} />
-          <span>{words.tasks.setupTitle(setupHome)}</span>
-        </p>
-        <p class="m-0 type-meta text-pretty text-ink-muted">
-          {words.tasks.setupFieldsNote}
-        </p>
-      </div>
-
-      <!-- Sign-in: its label's row holds the way to manage them, trailing. -->
-      <div class={FORM_FIELD}>
-        <div class="flex min-w-0 items-center justify-between gap-space-2">
-          <p class={FORM_LABEL} id="{uid}-connection">
-            {words.tasks.connectionLabel}
-          </p>
-          {#if setupConnections.length > 0}
-            <Button
-              class="-my-space-1"
-              href={hrefOf("connections")}
-              label={words.tasks.openConnections}
-              size="xs"
-              tone="quiet"
-              variant="ghost"
-            />
-          {/if}
-        </div>
-        {#if setupConnections.length === 0}
-          <!-- Said on the form's own ground, the way on beside it. -->
-          <div class="flex min-w-0 flex-wrap items-center gap-space-2">
-            <p
-              class="m-0 min-w-0 flex-auto type-meta text-pretty text-ink-muted"
-            >
-              {words.tasks.noConnection(setupHome)}
-            </p>
-            <Button
-              href={hrefOf("connections")}
-              label={words.tasks.openConnections}
-              size="sm"
-              variant="outline"
-            />
-          </div>
-        {:else}
-          <OptionGroup
-            aria-labelledby="{uid}-connection"
-            {disabled}
-            glide
-            value={activeConnectionId ? [activeConnectionId] : []}
+      <!-- GitHub's setup and Linear's swap sideways, from the side of the
+           tile picked (the house's list swap, motion/list-swap: the old one
+           leaves the other way, the new one comes in after it), and the form's
+           height follows the one coming in (motion/morph). -->
+      <div class="relative min-w-0" {@attach morph()}>
+        {#key setupHome}
+          <div
+            class="flex min-w-0 animate-(--setup-in) flex-col gap-space-5"
+            out:leaveSetup
+            style:--setup-in={setupSwap.rowAnim(0)}
           >
-            {#each setupConnections as conn (conn.id)}
-              <OptionGroupItem
-                onclick={(event) => {
-                  event.preventDefault();
-                  connectionPick = conn.id;
-                }}
-                value={conn.id}
+            <div class="flex min-w-0 flex-col gap-space-1">
+              <p
+                class="mark-line m-0 flex items-center gap-space-2 type-label text-ink-strong"
+                id="{uid}-setup"
               >
-                <span>{conn.name}</span>
-                <span class="type-meta text-ink-muted">{conn.account}</span>
-              </OptionGroupItem>
-            {/each}
-          </OptionGroup>
-        {/if}
-      </div>
+                <ProviderLogo class="flex-none" provider={setupHome} />
+                <span>{words.tasks.setupTitle(setupHome)}</span>
+              </p>
+              <p class="m-0 type-meta text-pretty text-ink-muted">
+                {words.tasks.setupFieldsNote}
+              </p>
+            </div>
 
-      <!-- Repository (GitHub): the New session form's repository picker, on
+            <!-- Sign-in: its label's row holds the way to manage them, trailing. -->
+            <div class={FORM_FIELD}>
+              <div
+                class="flex min-w-0 items-center justify-between gap-space-2"
+              >
+                <p class={FORM_LABEL} id="{uid}-connection">
+                  {words.tasks.connectionLabel}
+                </p>
+                {#if setupConnections.length > 0}
+                  <Button
+                    class="-my-space-1"
+                    href={hrefOf("connections")}
+                    label={words.tasks.openConnections}
+                    size="xs"
+                    tone="quiet"
+                    variant="ghost"
+                  />
+                {/if}
+              </div>
+              {#if setupConnections.length === 0}
+                <!-- Said on the form's own ground, the way on beside it. -->
+                <div class="flex min-w-0 flex-wrap items-center gap-space-2">
+                  <p
+                    class="m-0 min-w-0 flex-auto type-meta text-pretty text-ink-muted"
+                  >
+                    {words.tasks.noConnection(setupHome)}
+                  </p>
+                  <Button
+                    href={hrefOf("connections")}
+                    label={words.tasks.openConnections}
+                    size="sm"
+                    variant="outline"
+                  />
+                </div>
+              {:else}
+                <OptionGroup
+                  aria-labelledby="{uid}-connection"
+                  {disabled}
+                  glide
+                  value={activeConnectionId ? [activeConnectionId] : []}
+                >
+                  {#each setupConnections as conn (conn.id)}
+                    <OptionGroupItem
+                      onclick={(event) => {
+                        event.preventDefault();
+                        connectionPick = conn.id;
+                      }}
+                      value={conn.id}
+                    >
+                      <span>{conn.name}</span>
+                      <span class="type-meta text-ink-muted"
+                        >{conn.account}</span
+                      >
+                    </OptionGroupItem>
+                  {/each}
+                </OptionGroup>
+              {/if}
+            </div>
+
+            <!-- Repository (GitHub): the New session form's repository picker, on
            the connection's account; Team (Linear): its few teams as one pick. -->
-      {#if setupConnections.length > 0}
-        {#if setupHome === "github" && activeConnection}
-          <div class={FORM_FIELD} inert={disabled}>
-            <p class={FORM_LABEL}>{words.tasks.repoLabel}</p>
-            <RepoPicker
-              machineId={activeConnection.id}
-              machineName={activeConnection.name}
-              mark={markOwn}
-              onrepo={(url) => {
-                repoPick = url;
-              }}
-              repo={activeRepo}
-            />
-          </div>
-        {:else if setupHome === "linear"}
-          <div class={FORM_FIELD}>
-            <p class={FORM_LABEL} id="{uid}-team">{words.tasks.teamLabel}</p>
-            <OptionGroup
-              aria-labelledby="{uid}-team"
-              {disabled}
-              glide
-              value={activeTeamId ? [activeTeamId] : []}
-            >
-              {#each LINEAR_TEAMS as team (team.id)}
-                <OptionGroupItem
-                  onclick={(event) => {
-                    event.preventDefault();
-                    teamPick = team.id;
-                  }}
-                  value={team.id}
-                >
-                  <span>{team.label}</span>
-                </OptionGroupItem>
-              {/each}
-            </OptionGroup>
-          </div>
-        {/if}
+            {#if setupConnections.length > 0}
+              {#if setupHome === "github" && activeConnection}
+                <div class={FORM_FIELD} inert={disabled}>
+                  <p class={FORM_LABEL}>{words.tasks.repoLabel}</p>
+                  <RepoPicker
+                    machineId={activeConnection.id}
+                    machineName={activeConnection.name}
+                    mark={markOwn}
+                    onrepo={(url) => {
+                      repoPick = url;
+                    }}
+                    repo={activeRepo}
+                  />
+                </div>
+              {:else if setupHome === "linear"}
+                <div class={FORM_FIELD}>
+                  <p class={FORM_LABEL} id="{uid}-team">
+                    {words.tasks.teamLabel}
+                  </p>
+                  <OptionGroup
+                    aria-labelledby="{uid}-team"
+                    {disabled}
+                    glide
+                    value={activeTeamId ? [activeTeamId] : []}
+                  >
+                    {#each LINEAR_TEAMS as team (team.id)}
+                      <OptionGroupItem
+                        onclick={(event) => {
+                          event.preventDefault();
+                          teamPick = team.id;
+                        }}
+                        value={team.id}
+                      >
+                        <span>{team.label}</span>
+                      </OptionGroupItem>
+                    {/each}
+                  </OptionGroup>
+                </div>
+              {/if}
 
-        <!-- The GitHub Project its columns come from (GitHub only): linked,
+              <!-- The GitHub Project its columns come from (GitHub only): linked,
              the hub matches the board's columns to the Project's statuses. -->
-        {#if setupHome === "github"}
-          <div class={FORM_FIELD}>
-            <p class={FORM_LABEL} id="{uid}-board">
-              {words.tasks.githubProjectLabel}
-            </p>
-            <OptionGroup
-              aria-labelledby="{uid}-board"
-              {disabled}
-              glide
-              value={[githubProjectPick]}
-            >
-              <OptionGroupItem
-                onclick={(event) => {
-                  event.preventDefault();
-                  githubProjectPick = NONE_PROJECT;
-                }}
-                value={NONE_PROJECT}
-              >
-                <span>{words.tasks.githubProjectNone}</span>
-              </OptionGroupItem>
-              {#each GITHUB_PROJECTS as proj (proj.id)}
-                <OptionGroupItem
-                  onclick={(event) => {
-                    event.preventDefault();
-                    githubProjectPick = proj.id;
-                  }}
-                  value={proj.id}
-                >
-                  <span>{proj.name}</span>
-                </OptionGroupItem>
-              {/each}
-            </OptionGroup>
-          </div>
-        {/if}
-      {/if}
+              {#if setupHome === "github"}
+                <div class={FORM_FIELD}>
+                  <p class={FORM_LABEL} id="{uid}-board">
+                    {words.tasks.githubProjectLabel}
+                  </p>
+                  <OptionGroup
+                    aria-labelledby="{uid}-board"
+                    {disabled}
+                    glide
+                    value={[githubProjectPick]}
+                  >
+                    <OptionGroupItem
+                      onclick={(event) => {
+                        event.preventDefault();
+                        githubProjectPick = NONE_PROJECT;
+                      }}
+                      value={NONE_PROJECT}
+                    >
+                      <span>{words.tasks.githubProjectNone}</span>
+                    </OptionGroupItem>
+                    {#each GITHUB_PROJECTS as proj (proj.id)}
+                      <OptionGroupItem
+                        onclick={(event) => {
+                          event.preventDefault();
+                          githubProjectPick = proj.id;
+                        }}
+                        value={proj.id}
+                      >
+                        <span>{proj.name}</span>
+                      </OptionGroupItem>
+                    {/each}
+                  </OptionGroup>
+                </div>
+              {/if}
+            {/if}
 
-      <div class="flex justify-end gap-space-2">
-        <Button
-          label={words.cancel}
-          onclick={closeSetup}
-          size="sm"
-          variant="ghost"
-        />
-        <Button
-          disabled={!canSaveTie}
-          label={words.tasks.saveTie}
-          onclick={saveTie}
-          size="sm"
-        />
+            <div class="flex justify-end gap-space-2">
+              <Button
+                label={words.cancel}
+                onclick={closeSetup}
+                size="sm"
+                variant="ghost"
+              />
+              <Button
+                disabled={!canSaveTie}
+                label={words.tasks.saveTie}
+                onclick={saveTie}
+                size="sm"
+              />
+            </div>
+          </div>
+        {/key}
       </div>
     </section>
   {/if}
