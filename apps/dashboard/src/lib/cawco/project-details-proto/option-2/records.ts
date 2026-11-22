@@ -6,6 +6,7 @@
  * the view takes it whole as a prop and sends each change as an event.
  */
 
+import { type AccountProvider, CLAUDE_PROVIDER } from "@cawco/core/accounts";
 import type { AccountHue } from "@cawco/core/accounts/kinds";
 import type { BuiltInMember } from "@cawco/core/decides";
 
@@ -67,6 +68,8 @@ interface FleetAccount {
   id: string;
   /** The name it carries everywhere. */
   name: string;
+  /** Whose plan it is: Anthropic's accounts carry limits the picker reads. */
+  provider: AccountProvider;
   /** Signed in on at least one machine. */
   signedIn: boolean;
 }
@@ -154,15 +157,34 @@ const MACHINES: FleetMachine[] = [
 ];
 
 const ACCOUNTS: FleetAccount[] = [
-  { id: "acc-studio", name: "Studio Max", hue: "violet", signedIn: true },
+  {
+    id: "acc-studio",
+    name: "Studio Max",
+    hue: "violet",
+    provider: CLAUDE_PROVIDER,
+    signedIn: true,
+  },
   {
     id: "acc-northwind",
     name: "Northwind client",
     hue: "cyan",
+    provider: CLAUDE_PROVIDER,
     signedIn: true,
   },
-  { id: "acc-personal", name: "Personal Pro", hue: "amber", signedIn: false },
-  { id: "acc-codex", name: "Codex team", hue: "green", signedIn: true },
+  {
+    id: "acc-personal",
+    name: "Personal Pro",
+    hue: "amber",
+    provider: CLAUDE_PROVIDER,
+    signedIn: false,
+  },
+  {
+    id: "acc-codex",
+    name: "Codex team",
+    hue: "green",
+    provider: "openai",
+    signedIn: true,
+  },
 ];
 
 const FLEET_RULE: Record<ChoiceKind, Decider> = {

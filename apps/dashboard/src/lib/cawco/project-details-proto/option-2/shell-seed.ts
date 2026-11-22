@@ -5,6 +5,8 @@
  */
 
 import { CONTROL_GH_REPO, CONTROL_GH_REPOS } from "@cawco/core/connections";
+import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
+import type { ClaudeLimits, LimitWindow } from "@cawco/core/usage/types";
 import { standSocket } from "#lib/cawco/hub/socket.svelte.js";
 import type {
   ProjectPlace as PlaceRow,
@@ -12,6 +14,7 @@ import type {
 } from "#lib/cawco/projects.js";
 import { boardState, type Machine } from "#lib/cawco/stores/board.svelte.js";
 import { projectsState } from "#lib/cawco/stores/projects.svelte.js";
+import { adoptUsageLimits } from "#lib/cawco/stores/usage.svelte.js";
 import { page } from "$app/state";
 import { type HowItRunsRecord, SITUATIONS, type Situation } from "./records";
 import { githubReposOf } from "./tie-setup.fixture";
@@ -91,6 +94,48 @@ export function atProjectPage(projectId: string): void {
   });
 }
 
+/** A limit window of a reading, `percent` used, resetting `inMs` from now. */
+const win = (
+  group: "session" | "weekly",
+  percent: number,
+  inMs: number
+): LimitWindow => ({
+  group,
+  isActive: true,
+  kind: group === "session" ? "session" : "weekly_all",
+  percent,
+  resetsAt: new Date(Date.now() + inMs).toISOString(),
+  scopeLabel: null,
+  severity: percent >= 100 ? "critical" : "normal",
+});
+
+/** An Anthropic account's reading, taken a few minutes ago. */
+const reading = (windows: LimitWindow[]): ClaudeLimits => ({
+  error: null,
+  errorKind: null,
+  extraUsage: null,
+  fetchedAt: Date.now() - 4 * MINUTE_MS,
+  stale: false,
+  subscription: "max",
+  windows,
+});
+
+/**
+ * The fleet's limit readings the account picker reads (usageStore), as the
+ * hub's usage frame brings them: Studio Max with room, Northwind client at
+ * its 5-hour limit; Personal Pro, signed in nowhere, has none to read.
+ */
+const LIMITS: Record<string, LimitWindow[]> = {
+  "acc-studio": [
+    win("session", 38, 3 * HOUR_MS),
+    win("weekly", 54, 4 * DAY_MS),
+  ],
+  "acc-northwind": [
+    win("session", 100, HOUR_MS + 25 * MINUTE_MS),
+    win("weekly", 71, 2 * DAY_MS),
+  ],
+};
+
 /** Writes the stores the shell reads: the project, the fleet's other projects, its machines. */
 function seedShell(record: HowItRunsRecord): void {
   const own = projectRowOf(record);
@@ -128,6 +173,15 @@ function seedShell(record: HowItRunsRecord): void {
   projectsState.projectsRead = true;
   boardState.machines = record.machines.map(machineRowOf);
   boardState.fleetRead = true;
+  adoptUsageLimits({
+    claude: record.accounts.flatMap((account) => {
+      const windows = LIMITS[account.id];
+      return windows
+        ? [{ accountId: account.id, limits: reading(windows) }]
+        : [];
+    }),
+    openCodeGo: [],
+  });
 }
 
 /**

@@ -1,18 +1,20 @@
 <script lang="ts">
+  import type { Account } from "@cawco/core/accounts";
+  import AccountPickRows from "#lib/cawco/accounts/AccountPickRows.svelte";
   import { hueVar } from "#lib/cawco/accounts/model.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
-  import AccountChip, {
-    type AccountTool,
-  } from "#lib/cawco/spawn/AccountChip.svelte";
+  import NsPopover from "#lib/cawco/spawn/NsPopover.svelte";
   /**
-   * Stage 2's account: the New session form's account chip (AccountChip),
-   * its popover listing Any available first and every fleet account by its
-   * full name and hue (one signed in nowhere says Signed out on its line),
-   * what the pick does under it, the alert when
-   * the named account is signed out everywhere, and, with an account named,
-   * what its sessions do at its limit as two of the house's tiles, each led
-   * by its glyph. Every pick moves at the press (changes.ts `withAsked`); a
-   * refusal puts it back and stands under its control (RowFault).
+   * Stage 2's account: the house's account picker (AccountPickRows, the
+   * rows a session's account chip and its menus' Account submenu list),
+   * hung from a setting chip sized to its name: Any available first, then
+   * each fleet account by its dot, its name and its room, or the limit it
+   * is at (one signed in nowhere says Signed out there). Under it, what
+   * the pick does, the alert when the named account is signed out
+   * everywhere, and, with an account named, what its sessions do at its
+   * limit as two of the house's tiles, each led by its glyph. Every pick
+   * moves at the press (changes.ts `withAsked`); a refusal puts it back and
+   * stands under its control (RowFault).
    */
   import {
     Alert,
@@ -20,9 +22,15 @@
     AlertDescription,
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { OptionTiles } from "#lib/components/ui/option-group/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
-  import { IconError, IconHourglass, IconTransfer } from "#lib/icons.js";
+  import {
+    IconChevronDown,
+    IconError,
+    IconHourglass,
+    IconTransfer,
+  } from "#lib/icons.js";
   import {
     chosenAccountSignedOut,
     type HrefOf,
@@ -38,7 +46,7 @@
     hrefOf,
   }: StageSends & { hrefOf: HrefOf } = $props();
 
-  /** The account chip's popover stands open. */
+  /** The picker's popover stands open. */
   let open = $state(false);
 
   const disabled = $derived(!record.hubReachable);
@@ -49,27 +57,33 @@
           null)
   );
   const chosenSignedOut = $derived(chosenAccountSignedOut(record));
+  const shownName = $derived(chosenAccount?.name ?? words.account.fleetRouting);
 
-  /** The fleet's accounts as the chip offers them: Any available first, then each by its full name and hue. */
-  const tool = $derived<AccountTool>({
-    auto: { id: null, name: words.account.fleetRouting, why: "" },
-    value: record.account.chosen,
-    onpick: (next) => {
-      if (!disabled && next !== record.account.chosen) {
-        onchange({ key: "account", value: next });
-      }
-    },
-    options: record.accounts.map((account) => ({
-      id: account.id,
-      name: account.name,
-      nick: null,
+  /** The fleet's accounts as the picker lists them, each by the name it carries everywhere. */
+  const accounts = $derived<Account[]>(
+    record.accounts.map((account, order) => ({
+      atPlanLimit: "move",
+      createdAt: 0,
       email: null,
-      color: hueVar(account.hue),
-      disabled: false,
-      line: account.signedIn ? [] : [words.account.signedOut],
-      ring: null,
-    })),
-  });
+      hue: account.hue,
+      id: account.id,
+      identity: null,
+      kind: "subscription",
+      label: account.name,
+      neverBackup: false,
+      order,
+      provider: account.provider,
+      reservePct: null,
+      sessionReservePct: null,
+    }))
+  );
+
+  function pick(next: string | null) {
+    open = false;
+    if (!disabled && next !== record.account.chosen) {
+      onchange({ key: "account", value: next });
+    }
+  }
 </script>
 
 {#snippet limitGlyph(choice: "wait" | "move")}
@@ -89,18 +103,51 @@
   </h3>
 
   <div class="flex min-w-0" inert={disabled}>
-    <!-- Full width of its column, as Project details' own account field
-         (ProjectDetails.svelte, data-account-select: w-full); its label takes
-         the room so the chevron sits at the end, as a select's does. -->
-    <AccountChip
-      class="w-full [&_[data-slot=chip-label]]:flex-1 [&_[data-slot=chip-label]]:text-start"
-      id="work-path"
+    <NsPopover
+      align="start"
+      fit
+      haspopup="listbox"
+      id="work-path-account"
+      label={`${words.account.heading}: ${shownName}`}
       onchange={(next) => {
         open = next;
       }}
       {open}
-      {tool}
-    />
+      rows="[data-pick-row]"
+      triggerClass={chipVariants({
+        variant: "setting",
+        class: "min-w-0 max-w-full",
+      })}
+      triggerData={{ "data-tool": true, "data-account-chip": true }}
+      width="calc(var(--spacing) * 64)"
+    >
+      {#snippet trigger()}
+        {#if chosenAccount}
+          <span
+            aria-hidden="true"
+            class="size-space-2 flex-none rounded-pill bg-(--c)"
+            data-slot="dot"
+            style:--c={hueVar(chosenAccount.hue)}
+          ></span>
+        {/if}
+        <span data-account-chip data-slot="chip-label">{shownName}</span>
+        <IconChevronDown data-slot="chevron" />
+      {/snippet}
+      <AccountPickRows
+        {accounts}
+        auto={{
+          name: words.account.fleetRouting,
+          detail: "",
+          onpick: () => pick(null),
+        }}
+        note={(id) =>
+          record.accounts.find((one) => one.id === id)?.signedIn === false
+            ? words.account.signedOut
+            : null}
+        pick={(id) => pick(id)}
+        picked={record.account.chosen}
+      />
+    </NsPopover>
   </div>
   <RowFault
     again={() => onretry("account")}
