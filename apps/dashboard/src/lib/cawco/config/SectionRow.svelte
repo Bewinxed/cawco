@@ -33,7 +33,6 @@
     hue,
     tile,
     mono = false,
-    bare = false,
     whole = false,
     badge,
     rollout,
@@ -58,12 +57,6 @@
     /** Replaces the icon tile, for a harness logo or an OS mark. */
     tile?: Snippet;
     mono?: boolean;
-    /**
-     * Its mark bare in the lead column, for a list standing on the page's
-     * ground with nothing raised round it but its controls (the project's
-     * work path): no raised tile under the glyph.
-     */
-    bare?: boolean;
     /** Its meta read whole, wrapping at any character, never cut short (a folder's path). */
     whole?: boolean;
     badge?: Snippet;
@@ -108,8 +101,7 @@
   >
     <span
       data-slot="tile"
-      class="inline-flex size-c-mark flex-none items-center justify-center rounded-sm text-ink-muted not-data-bare:bg-surface-raised not-data-bare:shadow-tile [&>*]:size-icon-md [&>*]:flex-none max-phone:row-span-full max-phone:self-center"
-      data-bare={bare || undefined}
+      class="inline-flex size-c-mark flex-none items-center justify-center rounded-sm bg-surface-raised text-ink-muted shadow-tile [&>*]:size-icon-md [&>*]:flex-none max-phone:row-span-full max-phone:self-center"
       data-share={href ? `icon:${href}` : undefined}
       style:color={hue}
       {@attach land(() => {

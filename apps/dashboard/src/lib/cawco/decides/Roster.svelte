@@ -75,9 +75,8 @@
     cols?: string;
     /**
      * Each member and kind by its name alone, its line (a member's job, a
-     * kind's example) in the house tooltip, and a kind this project set
-     * marked by its deeper fill alone: no scope glyph, and no put-back of
-     * its own, the surface's head putting them all back (the project's
+     * kind's example) in the house tooltip, and no put-back of a kind's
+     * own, the surface's head putting them all back (the project's
      * settings view).
      */
     brief?: boolean;
@@ -129,19 +128,10 @@
 </script>
 
 <div
-  class={[
-    // Brief, its members stand on the ground, apart by the room between
-    // groups rather than a card's edge (`--roster-gap`).
-    "grid gap-x-(--roster-gap)",
-    brief ? "gap-y-space-5" : "gap-y-space-3",
-    cols ?? "grid-cols-(--roster-cols)",
-  ]}
+  class={["grid gap-space-3", cols ?? "grid-cols-(--roster-cols)"]}
   style:--roster-cols={cols
     ? undefined
-    : "repeat(auto-fill, minmax(max(min(100%, var(--spacing-c-roster-card-min)), calc((100% - 3 * var(--roster-gap)) / 4)), 1fr))"}
-  style:--roster-gap={brief
-    ? "var(--spacing-space-6)"
-    : "var(--spacing-space-3)"}
+    : "repeat(auto-fill, minmax(max(min(100%, var(--spacing-c-roster-card-min)), calc((100% - 3 * var(--spacing-space-3)) / 4)), 1fr))"}
 >
   {#each members as member (member.id)}
     {@const holds = kindsOf(member.id)}

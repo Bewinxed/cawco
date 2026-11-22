@@ -1,11 +1,11 @@
 <script lang="ts">
   /**
-   * One numbered step of the work path: its head, then what it sets. The
-   * head is the step's boundary, the house section head one level up
-   * (ui/section-header `sectionHeadVariants`): its mark and title over a
-   * rule the width of its column in the visible border ink, as every head
-   * that divides groups on the ground draws its rule, so a step ends where
-   * the next one's rule begins and no box is drawn round it.
+   * One numbered step of the work path: its head on the page's ground,
+   * then what it sets standing raised on it, as Configure's sections stand
+   * (config/SectionFrame: the recessed ground holding one raised body). A
+   * step whose parts are cards of their own (Who decides' members, as its
+   * page draws them) takes `cards`: they stand on the ground under the head
+   * with no body round them, so no card stands inside another.
    *
    * The mark is the house step's ring (home/StepRow: its number in a
    * control-edged ring, the live dot while something runs); a step that is
@@ -17,6 +17,7 @@
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconError, IconWarningTriangle } from "#lib/icons.js";
   import type { StageId, StageState } from "./changes";
+  import { STEP_BODY } from "./step-body";
 
   let {
     n,
@@ -26,6 +27,7 @@
     id,
     announcement = "",
     actions,
+    cards = false,
     children,
   }: {
     /** 1-based position along the work path. */
@@ -39,6 +41,8 @@
     announcement?: string;
     /** What acts on the whole step, at the head's end. */
     actions?: Snippet;
+    /** Its parts are cards of their own, standing on the ground: no body round them. */
+    cards?: boolean;
     children: Snippet;
   } = $props();
 
@@ -47,13 +51,13 @@
 
 <section
   aria-labelledby={headingId}
-  class="flex min-w-0 flex-col gap-space-4"
+  class="flex min-w-0 flex-col gap-space-3"
   data-slot="stage"
   data-stage={id}
   data-state={state}
 >
   <header
-    class="mark-line flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 border-b border-border pb-space-2"
+    class="mark-line flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2"
   >
     <span
       aria-hidden="true"
@@ -89,7 +93,7 @@
 
   <!-- Its own container: its parts fit the column it stands in, whether
        the view runs one column or two. -->
-  <div class="@container min-w-0">
+  <div class={["@container min-w-0", !cards && STEP_BODY]}>
     {@render children()}
     <span aria-live="polite" class="sr-only" role="status">{announcement}</span>
   </div>

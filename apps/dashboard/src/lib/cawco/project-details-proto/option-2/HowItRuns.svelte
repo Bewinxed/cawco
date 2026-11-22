@@ -283,6 +283,7 @@
       stateWords={words.stageState[waitsState]}
       title={words.stages.waits}
       actions={record.whoDecides.ok ? waitsActs : undefined}
+      cards
     >
       {#if loading.includes("waits")}
         {@render stageSkeleton("waits")}

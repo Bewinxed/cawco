@@ -43,6 +43,7 @@
   import { IconAgent, IconEye } from "#lib/icons.js";
   import type { StageSends } from "./changes";
   import { CHOICE_KINDS, type ChoiceKind, type Decider } from "./records";
+  import { STEP_BODY } from "./step-body";
   import { howItRunsWords as words } from "./words";
 
   let {
@@ -153,7 +154,7 @@
 
 <section
   aria-label={words.waits.heading}
-  class="@container/deciders flex min-w-0 flex-col gap-space-2"
+  class="@container/deciders flex min-w-0 flex-col gap-space-3"
 >
   {#if !record.whoDecides.ok}
     <RowFault
@@ -181,45 +182,46 @@
     said={words.waits.roster}
   />
 
-  <h3
-    class={[
-      sectionHeadVariants({ inset: "flush", rule: "group" }),
-      "mt-space-4",
-    ]}
-    id="work-path-review"
-  >
-    {words.waits.reviewHeading}
-  </h3>
-  <OptionTiles
-    bind:value={
-      () => (record.reviewBeforeDone ? "review" : "agents"),
-      (next) => {
-        if (next !== null && (next === "review") !== record.reviewBeforeDone) {
-          onchange({ key: "review", value: next === "review" });
+  <!-- Its own part, in the step's body as every other step's parts
+       stand (STEP_BODY), under the members' cards. -->
+  <div class={["flex min-w-0 flex-col gap-space-2", STEP_BODY]}>
+    <h3 class={sectionHeadVariants({ inset: "flush" })} id="work-path-review">
+      {words.waits.reviewHeading}
+    </h3>
+    <OptionTiles
+      bind:value={
+        () => (record.reviewBeforeDone ? "review" : "agents"),
+        (next) => {
+          if (
+            next !== null &&
+            (next === "review") !== record.reviewBeforeDone
+          ) {
+            onchange({ key: "review", value: next === "review" });
+          }
         }
       }
-    }
-    cols={2}
-    disabled={!record.hubReachable}
-    glide="fill"
-    glyph={reviewGlyph}
-    label={words.waits.reviewHeading}
-    options={[
-      {
-        id: "review",
-        name: words.waits.reviewOn.name,
-        note: words.waits.reviewOn.note,
-      },
-      {
-        id: "agents",
-        name: words.waits.reviewOff.name,
-        note: words.waits.reviewOff.note,
-      },
-    ]}
-  />
-  <RowFault
-    again={() => onretry("review")}
-    againLabel={words.retryChange}
-    reason={refused.review}
-  />
+      cols={2}
+      disabled={!record.hubReachable}
+      glide="fill"
+      glyph={reviewGlyph}
+      label={words.waits.reviewHeading}
+      options={[
+        {
+          id: "review",
+          name: words.waits.reviewOn.name,
+          note: words.waits.reviewOn.note,
+        },
+        {
+          id: "agents",
+          name: words.waits.reviewOff.name,
+          note: words.waits.reviewOff.note,
+        },
+      ]}
+    />
+    <RowFault
+      again={() => onretry("review")}
+      againLabel={words.retryChange}
+      reason={refused.review}
+    />
+  </div>
 </section>
