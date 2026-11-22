@@ -29,6 +29,7 @@
   import {
     IconClose,
     IconCopy,
+    IconError,
     IconExternalLinear,
     IconFolderGit,
     IconFolderOpen,
@@ -38,6 +39,7 @@
     IconLargeFilesServer,
     IconPlus,
     IconTransfer,
+    IconWorking,
   } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import type { PlaceAct, SessionsStartProps } from "./changes";
@@ -237,9 +239,17 @@
       >
         {#snippet badge()}
           {#if place.missing}
-            <Badge variant="fail"><span>{words.places.missing}</span></Badge>
+            <Badge variant="fail"
+              ><IconError aria-hidden="true" /><span
+                >{words.places.missing}</span
+              ></Badge
+            >
           {:else if moving}
-            <Badge variant="live"><span>{words.places.moving}</span></Badge>
+            <Badge variant="live"
+              ><IconWorking aria-hidden="true" /><span
+                >{words.places.moving}</span
+              ></Badge
+            >
           {:else if offline}
             <Badge variant="attn"><span>{words.places.away}</span></Badge>
           {/if}

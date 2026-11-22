@@ -11,7 +11,8 @@
    *
    * Brief (the project's settings view), it is its glyph and name: its
    * example is its tooltip and its hand-over's head, and this project's own
-   * is told by its deeper fill alone, put back from the surface's head.
+   * is told by its deeper fill alone (the deep recess, never its holder's
+   * hue), put back from the surface's head.
    *
    * While the hub writes a hand-over or a put-back the swap glyph breathes;
    * a refusal stands under the tile in the hub's words, with Try again.
@@ -112,12 +113,19 @@
     ]}
     data-handing={handing || undefined}
     data-slot="kind-tile"
-    style:--wash={own && !handing && holder.hue !== null
+    style:--wash={own && !handing && !brief && holder.hue !== null
       ? `color-mix(in oklab, var(--color-mark-${holder.hue}) 8%, var(--color-surface-recess))`
       : undefined}
   >
+    <!-- Its glyph on a raised square; brief, bare on the tile, the tile
+         being the well in its card and nothing a card inside it. -->
     <span
-      class="grid size-8 flex-none place-items-center rounded-xs bg-surface-raised text-ink-strong shadow-tile"
+      class={[
+        "grid flex-none place-items-center text-ink-strong",
+        brief
+          ? "size-icon-md"
+          : "size-8 rounded-xs bg-surface-raised shadow-tile",
+      ]}
     >
       <Glyph aria-hidden="true" class="size-icon-sm" />
     </span>
