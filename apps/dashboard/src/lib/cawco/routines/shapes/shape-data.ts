@@ -43,9 +43,7 @@ interface ShapeWait {
   holds: { id: string; title: string }[];
   /** A command answers it, or a model judges it. */
   how: "command" | "model";
-  /** What the latest look said, as it said it. */
-  said: string;
-  /** Who said it: "the command", or the model's run. */
+  /** Who gave the newest look's words: the command, or the model. */
   saidBy: string;
   statement: string;
   /** Plan steps that wait on it. */
@@ -85,6 +83,8 @@ export interface ShapeRoutine {
   name: string;
   /** Its next run on the person's clock, or why there is none. */
   next: string;
+  /** Minutes until its next run, to order a column by: 0 while one runs. */
+  nextIn: number;
   /** Paused, finished or stopped: it recedes. */
   off: boolean;
   paused: boolean;
@@ -168,14 +168,14 @@ export const ROUTINES: ShapeRoutine[] = [
     off: false,
     lane: "soon",
     next: "12:00",
+    nextIn: 20,
     does: "Checks GitHub for Bun's latest release, and lets the dashboard's move to Bun's test runner start once 1.4.0 is out.",
     wait: {
       statement: "Bun 1.4.0 is released on GitHub.",
       how: "command",
       command:
         "curl -fsS https://api.github.com/repos/oven-sh/bun/releases/latest | jq -e '.tag_name == \"bun-v1.4.0\"'",
-      said: "false",
-      saidBy: "The command printed this and exited 1",
+      saidBy: "The command answered",
       holds: [
         {
           id: "tsk-451",
@@ -235,7 +235,8 @@ export const ROUTINES: ShapeRoutine[] = [
     running: false,
     off: false,
     lane: "today",
-    next: "Today 18:00",
+    next: "18:00",
+    nextIn: 380,
     does: "Installs last night's nightly on obelisk, runs the smoke test, and tells Caw only when something breaks.",
     wait: null,
     action: null,
@@ -282,6 +283,7 @@ export const ROUTINES: ShapeRoutine[] = [
     off: false,
     lane: "later",
     next: "Fri 17:00",
+    nextIn: 8960,
     does: "Finds issues in bewinxed/cockpit with no activity in 60 days and proposes closing them, with a closing comment for each.",
     wait: null,
     action: {
@@ -334,13 +336,13 @@ export const ROUTINES: ShapeRoutine[] = [
     off: true,
     lane: "off",
     next: "Finished on 19 Nov",
+    nextIn: 99_999,
     does: "Asks preview.cawco.dev for its health page, and lets the landing copy pass start once it answers.",
     wait: {
       statement: "preview.cawco.dev/health answers 200.",
       how: "command",
       command: "curl -fsS -o /dev/null https://preview.cawco.dev/health",
-      said: "",
-      saidBy: "The command exited 0",
+      saidBy: "The command answered",
       holds: [{ id: "tsk-430", title: "Rewrite the landing's first fold" }],
       steps: 0,
       until: "Met on 19 Nov at 16:20; it has stopped looking for good.",
@@ -389,13 +391,13 @@ export const ROUTINES: ShapeRoutine[] = [
     off: false,
     lane: "off",
     next: "Stopped on 20 Nov",
+    nextIn: 99_999,
     does: "Reads GitHub's changelog and the Event Streams docs, and judges whether Event Streams is generally available.",
     wait: {
       statement: "GitHub Event Streams is generally available.",
       how: "model",
       command: null,
-      said: "The changelog still lists Event Streams as a public preview, last updated 12 Nov.",
-      saidBy: "The model's run said, on 20 Nov",
+      saidBy: "The model answered",
       holds: [
         {
           id: "tsk-448",
@@ -448,6 +450,7 @@ export const ROUTINES: ShapeRoutine[] = [
     off: false,
     lane: "event",
     next: "When an issue opens",
+    nextIn: 99_999,
     does: "Tells Caw about each new issue in bewinxed/cockpit, and Caw files it as a task in Triage.",
     wait: null,
     action: null,
@@ -483,6 +486,7 @@ export const ROUTINES: ShapeRoutine[] = [
     off: false,
     lane: "later",
     next: "Tomorrow 03:00",
+    nextIn: 920,
     does: "Reads what you told agents since its last run and keeps the project's rules and lessons current. CawCo's own: what it does is fixed.",
     wait: null,
     action: null,
@@ -529,6 +533,7 @@ export const ROUTINES: ShapeRoutine[] = [
     off: false,
     lane: "soon",
     next: "Running now",
+    nextIn: 0,
     does: "Writes release notes for what landed on main since the last nightly, in the changelog's voice, and opens them for you to read.",
     wait: null,
     action: null,
@@ -573,6 +578,7 @@ export const ROUTINES: ShapeRoutine[] = [
     off: true,
     lane: "off",
     next: "Paused",
+    nextIn: 99_999,
     does: "Drafts the week's changelog as a post for @cawco_dev and asks you to approve it before it goes out.",
     wait: null,
     action: null,
@@ -608,7 +614,8 @@ export const ROUTINES: ShapeRoutine[] = [
     running: false,
     off: false,
     lane: "today",
-    next: "Today 13:00",
+    next: "13:00",
+    nextIn: 80,
     does: "Runs the phone pairing end-to-end test on main and reports only a failure, with the failing step and its screenshot.",
     wait: null,
     action: null,
@@ -653,6 +660,7 @@ export const ROUTINES: ShapeRoutine[] = [
     off: false,
     lane: "later",
     next: "Mon 09:00",
+    nextIn: 2720,
     does: "Counts what this project's sessions call, and proposes unlisting the skills and servers nobody called in 30 days. Nothing changes until you approve. CawCo's own: what it does is fixed.",
     wait: null,
     action: null,
@@ -688,6 +696,7 @@ export const ROUTINES: ShapeRoutine[] = [
     off: false,
     lane: "soon",
     next: "12:15",
+    nextIn: 35,
     does: "Checks our open pull requests on other people's repositories, and tells Caw when a maintainer comments, reviews or merges one.",
     wait: null,
     action: null,
@@ -734,6 +743,15 @@ export const ROUTINES: ShapeRoutine[] = [
     paused: false,
   },
 ];
+
+/** One of the project's routines, by its id, for a states file. */
+export function named(id: string): ShapeRoutine {
+  const routine = ROUTINES.find((one) => one.id === id);
+  if (!routine) {
+    throw new Error(`No routine ${id} in the shape's data`);
+  }
+  return routine;
+}
 
 /** The lanes the By when shape lays routines out in, in order. */
 export const LANES: { lane: Lane; label: string; line: string }[] = [

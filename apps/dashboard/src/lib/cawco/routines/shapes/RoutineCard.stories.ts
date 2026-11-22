@@ -3,15 +3,7 @@
  * waiting for something, running, asking for the person, and receded.
  */
 import RoutineCard from "./RoutineCard.svelte";
-import { ROUTINES } from "./shape-data";
-
-const named = (id: string) => {
-  const routine = ROUTINES.find((one) => one.id === id);
-  if (!routine) {
-    throw new Error(`No routine ${id} in the shape's data`);
-  }
-  return routine;
-};
+import { named } from "./shape-data";
 
 export default {
   title: "Routines shapes/Routine card",

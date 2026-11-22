@@ -75,6 +75,7 @@
       ago: null,
       lane: "soon",
       next: "Running now",
+      nextIn: 0,
     }));
   }
 
@@ -124,6 +125,9 @@
   const CARDS =
     "repeat(auto-fill, minmax(min(100%, var(--spacing-c-board-col-min)), 1fr))";
 
+  /** The columns whose cards say their next run's time. */
+  const timed = new Set(["soon", "today", "later"]);
+
   /** A column's name, read out with how many routines it holds. */
   const laneLabel = (label: string, count: number): string =>
     `${label}, ${count} ${count === 1 ? "routine" : "routines"}`;
@@ -133,9 +137,10 @@
   }
 </script>
 
-{#snippet card(routine: ShapeRoutine)}
+{#snippet card(routine: ShapeRoutine, next: string | null = null)}
   <li class="min-w-0">
     <RoutineCard
+      {next}
       onact={act}
       onopen={(id) => {
         openId = id;
@@ -164,7 +169,9 @@
     style:--cols="minmax(var(--spacing-c-board-col-min), 1fr)"
   >
     {#each LANES as lane (lane.lane)}
-      {@const inLane = routines.filter((one) => one.lane === lane.lane)}
+      {@const inLane = routines
+        .filter((one) => one.lane === lane.lane)
+        .toSorted((a, b) => a.nextIn - b.nextIn)}
       <section
         aria-label={laneLabel(lane.label, inLane.length)}
         class="flex min-w-0 flex-col gap-space-1 self-start rounded-lg bg-surface-recess p-space-1 inset-ring inset-ring-border-hairline"
@@ -188,7 +195,10 @@
         </header>
         <ol class="m-0 flex list-none flex-col gap-space-1 p-0">
           {#each inLane as routine (routine.id)}
-            {@render card(routine)}
+            {@render card(
+              routine,
+              timed.has(lane.lane) && !routine.running ? routine.next : null
+            )}
           {/each}
         </ol>
       </section>

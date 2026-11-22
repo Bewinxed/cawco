@@ -19,12 +19,15 @@
   let {
     routine,
     selected = false,
+    next = null,
     onopen,
     onact,
   }: {
     routine: ShapeRoutine;
     /** It stands open beside the page. */
     selected?: boolean;
+    /** Its next run on my clock, where the page lays routines out by when. */
+    next?: string | null;
     onopen: (id: string) => void;
     /** Its ask's one act was pressed. */
     onact: (id: string) => void;
@@ -36,7 +39,7 @@
   data-asks={routine.ask ? "" : undefined}
   data-off={routine.off ? "" : undefined}
   data-selected={selected ? "" : undefined}
-  class="group/card flex min-w-0 flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 shadow-tile transition-[background-color] duration-(--duration-control) ease-out data-selected:bg-selected-bg"
+  class="group/card flex h-full min-w-0 flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 shadow-tile transition-[background-color] duration-(--duration-control) ease-out data-selected:bg-selected-bg"
 >
   <header class="mark-line flex min-h-c-btn-h-xs items-center gap-space-2">
     {#if routine.ask}
@@ -61,6 +64,11 @@
     >
       {routine.name}
     </h3>
+    {#if next}
+      <span class="num flex-none type-meta text-ink-subtle" data-num
+        >{next}</span
+      >
+    {/if}
     <Button
       aria-label="Open {routine.name}"
       class="-me-space-1 flex-none"
@@ -74,8 +82,8 @@
   <p
     class="m-0 line-clamp-2 type-meta wrap-anywhere text-ink-muted group-data-asks/card:text-ink-strong group-data-off/card:not-group-data-asks/card:text-ink-subtle"
   >
-    {routine.sentence}{#if routine.ago}<span class="text-ink-subtle">
-        · {routine.ago}</span
+    {routine.sentence}{#if routine.ago}<span class="text-ink-subtle"
+        >{` · ${routine.ago}`}</span
       >{/if}
   </p>
   {#if routine.ask}

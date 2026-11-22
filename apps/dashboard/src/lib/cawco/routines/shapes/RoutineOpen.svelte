@@ -93,6 +93,34 @@
     <div
       class="flex flex-col gap-space-7 px-space-5 pt-space-2 pb-space-8 max-phone:px-space-4"
     >
+      {#if phone}
+        <div class="flex flex-wrap gap-space-2">
+          <Button
+            label="Run now"
+            onclick={() => onrun(routine.id)}
+            size="sm"
+            variant="outline"
+          />
+          <Button
+            label={routine.paused ? "Resume" : "Pause"}
+            onclick={() => onpause(routine.id)}
+            size="sm"
+            variant="outline"
+          />
+          <Button
+            label="Edit"
+            onclick={() => onedit(routine.id)}
+            size="sm"
+            variant="outline"
+          />
+          <Button
+            label="Change with Caw"
+            onclick={() => onchange(routine.id)}
+            size="sm"
+            variant="outline"
+          />
+        </div>
+      {/if}
       {#if routine.ask}
         <section
           aria-label="Needs you"
@@ -179,7 +207,22 @@
               />
             {/if}
           </div>
-          <p class="m-0 type-body wrap-anywhere text-ink-row">{newest.words}</p>
+          {#if routine.wait}
+            <figure class="m-0 flex flex-col gap-space-1">
+              <figcaption class="type-meta text-ink-subtle">
+                {routine.wait.saidBy}:
+              </figcaption>
+              <blockquote
+                class="m-0 border-s-2 border-border-hairline ps-space-3 type-body wrap-anywhere text-ink-row"
+              >
+                {newest.words}
+              </blockquote>
+            </figure>
+          {:else}
+            <p class="m-0 type-body wrap-anywhere text-ink-row">
+              {newest.words}
+            </p>
+          {/if}
         </section>
       {/if}
 
@@ -204,18 +247,6 @@
               Exit 0 means it's met. 124, 126, 127 or a signal mean it couldn't
               check. Anything else means not yet.
             </p>
-          {/if}
-          {#if wait.said}
-            <figure class="m-0 flex flex-col gap-space-1">
-              <figcaption class="type-meta text-ink-subtle">
-                {wait.saidBy}:
-              </figcaption>
-              <blockquote
-                class="m-0 border-s-2 border-border-hairline ps-space-3 type-body text-ink-row"
-              >
-                {wait.said}
-              </blockquote>
-            </figure>
           {/if}
           {@render facts([
             [
@@ -258,7 +289,7 @@
             {/each}
           </ol>
           <Button
-            class="self-start"
+            class="-ms-space-2 self-start"
             label="All {routine.runsTotal} runs"
             size="xs"
             variant="ghost"
