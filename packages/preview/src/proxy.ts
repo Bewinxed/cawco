@@ -644,6 +644,33 @@ export function cachePreview(
 }
 
 /**
+ * `answer` marked `no-transform`, to go to the browser as its server and
+ * CawCo sent it. Cloudflare, before host mode's names on the owner's, writes
+ * its Web Analytics beacon into each HTML page it proxies (`<script
+ * type="module" src="https://static.cloudflareinsights.com/beacon.min.js/…"
+ * data-cf-beacon>`), so every load of a preview loaded a script of no one's
+ * asking, refused where that host is blocked (`net::ERR_CONNECTION_REFUSED`
+ * on each load, obelisk, 2026-11-22). "If you have a `Cache-Control` header
+ * set to `public, no-transform`, Cloudflare proxy will not be able to modify
+ * the original payload … the Beacon script will not be automatically
+ * injected" (developers.cloudflare.com/web-analytics/faq/). Set after
+ * {@link compressed}, which gzips nothing marked so.
+ */
+export function untransformed(answer: Response): Response {
+  const said = answer.headers.get("cache-control");
+  if (directives(said).has("no-transform")) {
+    return answer;
+  }
+  const headers = new Headers(answer.headers);
+  headers.set("cache-control", said ? `${said}, no-transform` : "no-transform");
+  return new Response(answer.body, {
+    status: answer.status,
+    statusText: answer.statusText,
+    headers,
+  });
+}
+
+/**
  * What {@link compressed} gzips, by media type: text, scripts, JSON, wasm and
  * SVG. An event stream is text too, but gzip holds its events back until a
  * block fills, so it goes as it is.
@@ -1048,17 +1075,20 @@ export function decodedHeaders(input: Headers): Headers {
 
 export interface PreviewSocket {
   closed: boolean;
+  /** The upstream's close, heard before this socket opened: said to it once it opens. */
+  ended?: { code: number; reason: string };
   headers: Headers;
   /** The hop relaying it and the preview's session, for its failure's line; null for a hop that serves no one session (the agent's hub loopback). */
   hop: string;
   instanceId: string | null;
   /** Nothing listens at `url` any more: the hop forgets where it sent it (the hub's stale machine listener). */
   nothingListens?: () => void;
-  opened: boolean;
-  /** What the upstream said that this socket has not taken yet, in order ({@link sendInOrder}). */
+  /** What the upstream said that this socket has not taken yet, in order ({@link sendInOrder}); what it said before this socket opened among it. */
   owed?: (string | ArrayBuffer)[];
-  pending: (string | Uint8Array<ArrayBuffer>)[];
+  /** The subprotocol the upstream picked of {@link protocols}, once it opened; "" when it picked none. */
   protocol: string;
+  /** The subprotocols the browser offered, in its order, offered to the upstream as they came. */
+  protocols: string[];
   /** The viewer's own release, once its socket opened; said when it closes. */
   release?: () => void;
   /**
@@ -1067,6 +1097,7 @@ export interface PreviewSocket {
    * hub-loopback.ts); the URL's own host when absent.
    */
   serverName?: string;
+  /** The socket to `url`, open before this one is ({@link openUpstream}). */
   upstream?: WebSocket;
   url: string;
   /**
@@ -1103,14 +1134,128 @@ const failureOf = (event: Event): string =>
   "no reason given";
 
 /**
- * A browser's WebSocket upgrade, relayed to `url` with `headers`. The Host in
- * `headers` goes on as the hop set it, as its HTTP requests' does: the agent
- * names the app's own `localhost:<port>` beside the Origin it rewrites to
- * match, and a server that checks one against the other (Vite's HMR, a
- * dashboard's `/ws` gate) refuses the socket when they differ. A `ws+unix://`
- * URL alone would say `Host: localhost`, and a TCP one `127.0.0.1:<port>`.
+ * How long a hop waits for its upstream to take a socket before it refuses
+ * the browser's. Our call: a dev server answers an upgrade at once, and each
+ * hop behind this one answers within its own wait; a browser holds every
+ * other socket to the same address until this one answers (core
+ * `notUpYet`), so the wait is short.
  */
-export function upgradePreview(
+const SOCKET_OPEN_MS = 10_000;
+
+/**
+ * Opens `data`'s socket to its `url`: null once it opened, its upstream in
+ * `data.upstream` and its pick of the offered subprotocols in
+ * `data.protocol`; else why it didn't, the socket closed. What the upstream
+ * says before the relayed socket opens is kept in `data.owed`, and a close
+ * in `data.ended`, for {@link previewWebSocket} `open`. `signal`: the
+ * browser's request, whose going ends the wait.
+ */
+export function openUpstream(
+  data: PreviewSocket,
+  signal?: AbortSignal
+): Promise<string | null> {
+  const upstream = new ProxyWebSocket(data.url, {
+    protocols: data.protocols,
+    headers: Object.fromEntries(data.headers),
+    // Bun's client verifies against `serverName` from 1.4.4; 1.4.3's
+    // ignored it (measured; oven-sh/bun#43635).
+    ...(data.serverName ? { tls: { serverName: data.serverName } } : {}),
+  });
+  data.upstream = upstream;
+  upstream.binaryType = "arraybuffer";
+  // Its `binaryType` makes every frame text or an ArrayBuffer.
+  upstream.onmessage = ({ data: frame }: MessageEvent<unknown>) => {
+    if (typeof frame === "string" || frame instanceof ArrayBuffer) {
+      data.owed ??= [];
+      data.owed.push(frame);
+    }
+  };
+  upstream.onclose = (event) => {
+    data.ended = { code: event.code, reason: event.reason };
+  };
+  return new Promise((settle) => {
+    const done = (why: string | null): void => {
+      clearTimeout(deadline);
+      signal?.removeEventListener("abort", gone);
+      upstream.onopen = null;
+      upstream.onerror = null;
+      if (why !== null) {
+        upstream.onmessage = null;
+        upstream.onclose = null;
+        upstream.close();
+        data.upstream = undefined;
+      }
+      settle(why);
+    };
+    const failed = (why: string): void => {
+      previewFailed(
+        data.hop,
+        data.instanceId,
+        `its WebSocket to ${data.url} didn't open: ${why}`
+      );
+      done(why);
+    };
+    const gone = (): void => done("the browser went before it opened");
+    const deadline = setTimeout(
+      () => failed(`no answer within ${SOCKET_OPEN_MS / 1000} s`),
+      SOCKET_OPEN_MS
+    );
+    signal?.addEventListener("abort", gone, { once: true });
+    upstream.onopen = () => {
+      data.protocol = upstream.protocol;
+      done(null);
+    };
+    upstream.onerror = (event) => {
+      const why = failureOf(event);
+      if (why === NOT_CONNECTED) {
+        data.nothingListens?.();
+      }
+      failed(why);
+    };
+    if (signal?.aborted) {
+      gone();
+    }
+  });
+}
+
+/** A browser's WebSocket upgrade a hop refused: its status and why. */
+export interface SocketRefused {
+  status: 400 | 502;
+  why: string;
+}
+
+/** {@link SocketRefused} as a plain answer. */
+export const socketRefusal = ({ status, why }: SocketRefused): Response =>
+  new Response(`${why}\n`, {
+    status,
+    headers: {
+      "cache-control": "no-store",
+      "content-type": "text/plain; charset=utf-8",
+    },
+  });
+
+/**
+ * A browser's WebSocket upgrade, relayed to `url` with `headers`: the
+ * upstream's socket opened first, and the browser's taken only once it has.
+ * A socket's open is a client's word that its server is there: Vite's
+ * client, its server gone, pings it with a `vite-ping` socket each second
+ * and reloads the page at the first one that opens ("if (await ping())
+ * return; … location.reload()", vite/dist/client/client.mjs
+ * `waitForSuccessfulPingInternal`). Taken before its upstream answered, the
+ * socket opened at every hop while the dev server was down, and the page
+ * reloaded onto the hop's refusal (obelisk, 2026-11-22). An upstream that
+ * doesn't open is the browser's refused upgrade ({@link SocketRefused}),
+ * which its client reads as the server still gone.
+ *
+ * The Host in `headers` goes on as the hop set it, as its HTTP requests'
+ * does: the agent names the app's own `localhost:<port>` beside the Origin
+ * it rewrites to match, and a server that checks one against the other
+ * (Vite's HMR, a dashboard's `/ws` gate) refuses the socket when they
+ * differ. A `ws+unix://` URL alone would say `Host: localhost`, and a TCP
+ * one `127.0.0.1:<port>`. The wait is bounded by {@link SOCKET_OPEN_MS},
+ * never by the server's idle limit.
+ */
+export async function upgradePreview(
   request: Request,
   server: Server<PreviewSocket>,
   url: string,
@@ -1119,9 +1264,11 @@ export function upgradePreview(
     PreviewSocket,
     "viewer" | "hop" | "instanceId" | "nothingListens" | "serverName"
   >
-): boolean {
-  const protocol =
-    request.headers.get("sec-websocket-protocol")?.split(",")[0]?.trim() ?? "";
+): Promise<SocketRefused | undefined> {
+  const protocols = (request.headers.get("sec-websocket-protocol") ?? "")
+    .split(",")
+    .map((one) => one.trim())
+    .filter(Boolean);
   for (const name of [
     "sec-websocket-key",
     "sec-websocket-version",
@@ -1130,18 +1277,31 @@ export function upgradePreview(
   ]) {
     headers.delete(name);
   }
-  return server.upgrade(request, {
-    headers: protocol ? { "sec-websocket-protocol": protocol } : undefined,
-    data: {
-      url,
-      protocol,
-      headers,
-      pending: [],
-      closed: false,
-      opened: false,
-      ...at,
-    },
-  });
+  const data: PreviewSocket = {
+    url,
+    protocols,
+    protocol: "",
+    headers,
+    closed: false,
+    ...at,
+  };
+  server.timeout(request, 0);
+  const why = await openUpstream(data, request.signal);
+  if (why !== null) {
+    return { status: 502, why: `The preview's socket didn't open: ${why}.` };
+  }
+  if (
+    server.upgrade(request, {
+      headers: data.protocol
+        ? { "sec-websocket-protocol": data.protocol }
+        : undefined,
+      data,
+    })
+  ) {
+    return;
+  }
+  data.upstream?.close();
+  return { status: 400, why: "WebSocket upgrade failed" };
 }
 
 /**
@@ -1198,30 +1358,20 @@ const sendOwed = (socket: PreviewSocketEnd): void => {
   }
 };
 
+/**
+ * The relay between a socket and its upstream, which {@link openUpstream}
+ * opened before it: what the upstream said meanwhile goes first, and a
+ * close it heard meanwhile closes the socket.
+ */
 export const previewWebSocket = {
   open(socket: PreviewSocketEnd) {
     const { data } = socket;
+    const { upstream } = data;
+    if (!upstream) {
+      socket.close(1011, "Preview connection failed");
+      return;
+    }
     data.release = data.viewer?.();
-    const upstream = new ProxyWebSocket(data.url, {
-      protocols: data.protocol ? [data.protocol] : [],
-      headers: Object.fromEntries(data.headers),
-      // Bun's client verifies against `serverName` from 1.4.4; 1.4.3's
-      // ignored it (measured; oven-sh/bun#43635).
-      ...(data.serverName ? { tls: { serverName: data.serverName } } : {}),
-    });
-    data.upstream = upstream;
-    upstream.binaryType = "arraybuffer";
-    upstream.onopen = () => {
-      data.opened = true;
-      if (data.closed) {
-        upstream.close();
-        return;
-      }
-      for (const message of data.pending) {
-        upstream.send(message);
-      }
-      data.pending.length = 0;
-    };
     upstream.onmessage = (event) => {
       if (!data.closed) {
         sendInOrder(socket, event.data as string | ArrayBuffer);
@@ -1233,29 +1383,26 @@ export const previewWebSocket = {
       socket.close(sendable(event.code), event.reason);
     upstream.onerror = (event) => {
       // The viewer went first (a reload, a closed pane): `close` below closed
-      // an upstream still connecting, and Bun says so as an error ("WebSocket
-      // is closed before the connection is established"). Nothing failed.
+      // the upstream, and Bun may say so as an error. Nothing failed.
       if (data.closed) {
         return;
       }
-      const why = failureOf(event);
       previewFailed(
         data.hop,
         data.instanceId,
-        `its WebSocket to ${data.url} ${data.opened ? "broke" : "didn't open"}: ${why}`
+        `its WebSocket to ${data.url} broke: ${failureOf(event)}`
       );
-      if (!data.opened && why === NOT_CONNECTED) {
-        data.nothingListens?.();
-      }
       socket.close(1011, "Preview connection failed");
     };
+    sendOwed(socket);
+    if (data.ended) {
+      socket.close(sendable(data.ended.code), data.ended.reason);
+    }
   },
   message(socket: PreviewSocketEnd, message: string | Buffer<ArrayBuffer>) {
-    const { upstream, pending } = socket.data;
+    const { upstream } = socket.data;
     if (upstream?.readyState === WebSocket.OPEN) {
       upstream.send(message);
-    } else if (upstream?.readyState === WebSocket.CONNECTING) {
-      pending.push(message);
     }
   },
   drain(socket: PreviewSocketEnd) {
@@ -1265,7 +1412,6 @@ export const previewWebSocket = {
     socket.data.closed = true;
     socket.data.release?.();
     socket.data.release = undefined;
-    socket.data.pending.length = 0;
     socket.data.owed = undefined;
     socket.data.upstream?.close(sendable(code), reason);
   },

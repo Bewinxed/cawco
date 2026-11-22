@@ -11,6 +11,7 @@ import {
   previewFailed,
   previewWebSocket,
   proxyHeaders,
+  socketRefusal,
   upgradePreview,
 } from "@cawco/preview/proxy";
 import type { Server } from "bun";
@@ -183,15 +184,14 @@ const listen = (
       }
       const to = target(now);
       if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-        return upgradePreview(
+        const refused = await upgradePreview(
           request,
           server,
           `ws${scheme}://${to}${at}`,
           headers,
           { hop: HOP, instanceId: null, serverName }
-        )
-          ? undefined
-          : new Response("WebSocket upgrade failed", { status: 400 });
+        );
+        return refused && socketRefusal(refused);
       }
       let answer: Response;
       try {

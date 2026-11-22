@@ -43,6 +43,7 @@ import {
   previewWebSocket,
   proxyHeaders,
   RELAY_HEADER,
+  socketRefusal,
   upgradePreview,
   versionAssets,
   versionedFile,
@@ -62,6 +63,7 @@ import {
 import {
   networkOf,
   StageRefusal,
+  sourceEnded,
   sourceUp,
   sourceViewer,
   sourceWakes,
@@ -544,15 +546,14 @@ async function toNeko(
     headers.delete(name);
   }
   if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-    return upgradePreview(
+    const refusedSocket = await upgradePreview(
       request,
       server,
       `ws://127.0.0.1:${http}${at}`,
       headers,
       { hop: "agent browser listener", instanceId: null }
-    )
-      ? undefined
-      : refused(400, "WebSocket upgrade failed");
+    );
+    return refusedSocket && refused(refusedSocket.status, refusedSocket.why);
   }
   let response: Response;
   try {
@@ -878,6 +879,34 @@ async function start(
     }
   };
   /**
+   * A request to a stage's server that nothing answered while the stage
+   * stood live: its server ended under it before its supervisor heard (Vite
+   * killed, and the page's own client reloading it at once). The stage is
+   * looked at now (stage.ts `sourceEnded`); one found ended is starting
+   * again, and the request is held through it as `staged` holds a load of a
+   * stage that is starting, then asked once more: `answered`, or the
+   * stage's refusal, `refused`. Null when it is not asked again: a stage
+   * that still serves, a source no stage serves, or a request with a body,
+   * which is sent once.
+   */
+  const afterRestart = async (
+    request: Request,
+    ask: () => Promise<Response>
+  ): Promise<{ kind: "answered" | "refused"; answer: Response } | null> => {
+    if (request.body !== null || !(await sourceEnded(source))) {
+      return null;
+    }
+    const asleep = await staged(request);
+    if (asleep) {
+      return { kind: "refused", answer: asleep };
+    }
+    try {
+      return { kind: "answered", answer: await ask() };
+    } catch {
+      return null;
+    }
+  };
+  /**
    * The hub's ping (hub preview.ts `pingSession`), answered as a load of
    * the page would be met, short of waking a stage: "ok", or the down page
    * the load would get, which the hub reads (core `downOf`). A folder
@@ -1038,19 +1067,24 @@ async function start(
           upstream === "host"
             ? `ws://127.0.0.1:${source.port}${at}`
             : `ws+unix://${upstream.unix}:${at}`;
-        return upgradePreview(request, server, ws, headers, {
-          hop: "agent listener",
-          instanceId,
-          // A page's open socket (its HMR) is a viewer: the stage stays awake for it.
-          ...((source.stage || source.serve) && source.workspace
-            ? { viewer: () => sourceViewer(source) }
-            : {}),
-        })
-          ? undefined
-          : new Response("WebSocket upgrade failed", { status: 400 });
+        const socketRefused = await upgradePreview(
+          request,
+          server,
+          ws,
+          headers,
+          {
+            hop: "agent listener",
+            instanceId,
+            // A page's open socket (its HMR) is a viewer: the stage stays awake for it.
+            ...((source.stage || source.serve) && source.workspace
+              ? { viewer: () => sourceViewer(source) }
+              : {}),
+          }
+        );
+        return socketRefused && socketRefusal(socketRefused);
       }
-      try {
-        response = await fetch(
+      const ask = (): Promise<Response> =>
+        fetch(
           upstream === "host"
             ? `http://127.0.0.1:${source.port}${at}`
             : `http://localhost:${source.port}${at}`,
@@ -1062,6 +1096,8 @@ async function start(
             ...(upstream === "host" ? {} : { unix: upstream.unix }),
           }
         );
+      try {
+        response = await ask();
       } catch (error) {
         // Nothing answered: the workspace closed under it, or its server is down.
         const network = networkOf(source);
@@ -1074,9 +1110,16 @@ async function start(
           await closeBridge(instanceId);
           return downResponse("workspace", 503);
         }
-        const why = unanswered(source, error);
-        previewFailed("agent listener", instanceId, why);
-        return downResponse("server", 502, why);
+        const again = await afterRestart(request, ask);
+        if (again?.kind === "refused") {
+          return again.answer;
+        }
+        if (again?.kind !== "answered") {
+          const why = unanswered(source, error);
+          previewFailed("agent listener", instanceId, why);
+          return downResponse("server", 502, why);
+        }
+        response = again.answer;
       }
     } else {
       // A file at its folder's key (core `versionAssets`), or the page's own address.

@@ -215,19 +215,21 @@ export const createSshDoor = (
         }
         const { to, headers } = going;
         if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-          return upgradePreview(
+          const refused = await upgradePreview(
             request,
             door,
             `${to.replace(HTTP_SCHEME, "ws")}${at}`,
             headers,
             { hop: HOP, instanceId: null }
-          )
-            ? undefined
-            : problemResponse({
-                status: 400,
-                code: "websocket-upgrade-failed",
-                detail: "WebSocket upgrade failed",
-              });
+          );
+          return (
+            refused &&
+            problemResponse({
+              status: refused.status,
+              code: "websocket-upgrade-failed",
+              detail: refused.why,
+            })
+          );
         }
         try {
           const answer = await forwardRequest(`${to}${at}`, request, headers);

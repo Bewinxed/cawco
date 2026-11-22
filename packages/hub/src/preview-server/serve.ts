@@ -56,6 +56,7 @@ import {
   previewFailed,
   proxyHeaders,
   RELAY_HEADER,
+  socketRefusal,
   upgradePreview,
   versionedFile,
 } from "@cawco/preview/proxy";
@@ -414,13 +415,12 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
           ? `${SYNC_PATH}${encodeURIComponent(key)}/${synced?.[1]}`
           : `${STORE_SYNC_PATH}${encodeURIComponent(key)}/${stored}`;
       const target = `ws${hubAt(`${route}${url.search}`).slice(4)}`;
-      return upgradePreview(request, server, target, headers, {
+      const refused = await upgradePreview(request, server, target, headers, {
         hop: "hub link",
         instanceId: key,
         viewer: () => env.watch(key),
-      })
-        ? undefined
-        : new Response("WebSocket upgrade failed", { status: 400 });
+      });
+      return refused && socketRefusal(refused);
     }
     try {
       const answer = await fetch(
@@ -729,14 +729,19 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     const headers = upstreamHeaders(request, direct);
     headers.set(RELAY_HEADER, at.token);
     if (asksUpgrade(request)) {
-      return upgradePreview(request, server, `ws://${upstream}`, headers, {
-        hop: HOP,
-        instanceId: key,
-        nothingListens: () => upstreams.unreachable(key, at),
-        viewer: () => env.watch(key),
-      })
-        ? undefined
-        : new Response("WebSocket upgrade failed", { status: 400 });
+      const refused = await upgradePreview(
+        request,
+        server,
+        `ws://${upstream}`,
+        headers,
+        {
+          hop: HOP,
+          instanceId: key,
+          nothingListens: () => upstreams.unreachable(key, at),
+          viewer: () => env.watch(key),
+        }
+      );
+      return refused && socketRefusal(refused);
     }
     let response: Response;
     try {

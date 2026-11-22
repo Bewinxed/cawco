@@ -2529,6 +2529,32 @@ export function sourceUp(source: PreviewSource): boolean {
   return key === null || stages.get(key)?.status === "live";
 }
 
+/**
+ * A preview's request through the stage a source names went unanswered:
+ * whether the stage has ended. One that stood live is looked at now, as its
+ * next health look would ({@link looked}): a server that ended is started
+ * again ({@link crashed}) before the request is answered, never at the next
+ * beat up to {@link STAGE_HEALTH_MS} later. False for a stage that still
+ * serves, and for a source no stage serves (agent preview.ts
+ * `afterRestart`).
+ */
+export async function sourceEnded(source: PreviewSource): Promise<boolean> {
+  const key = keyOf(source);
+  const stage = key ? stages.get(key) : undefined;
+  if (!stage) {
+    return false;
+  }
+  if (stage.status === "live") {
+    const look = await healthy(stage, HEALTH_WAIT_MS);
+    // One that serves keeps its restarts' count: only a whole look's time
+    // live starts it afresh.
+    if (stage.status === "live" && !(look.kind === "answered" && look.value)) {
+      looked(stage, look);
+    }
+  }
+  return stage.status !== "live";
+}
+
 /** A viewer opened a socket through a preview of a stage: it stays awake until the answer's release. */
 export function sourceViewer(source: PreviewSource): () => void {
   const key = keyOf(source);
