@@ -19,6 +19,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconCloudCross, IconError, IconRefresh } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import AccountColumn from "./AccountColumn.svelte";
   import {
@@ -119,24 +120,32 @@
   /**
    * The sections as they stand: two columns, each an independent stack of
    * cards at their own heights, so a card opening in one leaves the other
-   * column as it was; then the cards across both. Which card stands in
-   * which column is chosen so the two end nearly level at rest. Under the
-   * two-column width the columns give way and every card stands one under
-   * another in this order. Repository & Git only for code.
+   * column as it was. Which card stands in which column is chosen so the
+   * two end nearly level at rest. Under the two-column width the columns
+   * give way and every card stands one under another in this order.
+   * Repository & Git only for code.
    */
-  const COLUMNS = $derived<{
-    left: SectionId[];
-    right: SectionId[];
-    across: SectionId[];
-  }>(
-    record.holdsCode
-      ? {
-          left: ["tasks", "git", "places"],
-          right: ["account", "waits"],
-          across: [],
-        }
-      : { left: ["tasks", "places"], right: ["account", "waits"], across: [] }
+  /** The columns' row stands at its full width, where each column is as wide as its widest option row (measured with the house's frame observer). */
+  let full = $state(false);
+  const measureFull = frameSize(
+    (node: HTMLElement) =>
+      node.clientWidth >=
+      Number.parseFloat(getComputedStyle(node).maxWidth) - 1,
+    (next: boolean) => {
+      full = next;
+    }
   );
+  const COLUMNS = $derived.by<{ left: SectionId[]; right: SectionId[] }>(() => {
+    if (!record.holdsCode) {
+      return { left: ["tasks", "places"], right: ["account", "waits"] };
+    }
+    // At full width the folders sit over What needs you, the account under
+    // the repository; narrower, the taller tiles and the roster's one card a
+    // row level the columns the other way round.
+    return full
+      ? { left: ["tasks", "git", "account"], right: ["places", "waits"] }
+      : { left: ["tasks", "git", "places"], right: ["account", "waits"] };
+  });
 </script>
 
 {#snippet sectionReadFailed(section: SectionId, stage: StageId, reason: string)}
@@ -284,20 +293,16 @@
   <!-- Every section's card in the first screen: the two columns side by
        side on the page's edge under the tabs, one gap between cards both
        ways; under the two-column width one card under another. -->
-  <div class="flex min-w-0 max-w-c-settings-max flex-col gap-space-4">
-    <div
-      class="flex min-w-0 flex-col gap-space-4 @min-settings-two/work-path:flex-row @min-settings-two/work-path:items-start"
-    >
-      {#each [COLUMNS.left, COLUMNS.right] as column, at (at)}
-        <div class="flex min-w-0 flex-1 basis-0 flex-col gap-space-4">
-          {#each column as section (section)}
-            {@render card(section)}
-          {/each}
-        </div>
-      {/each}
-    </div>
-    {#each COLUMNS.across as section (section)}
-      {@render card(section)}
+  <div
+    class="flex min-w-0 max-w-c-settings-max flex-col gap-space-4 @min-settings-two/work-path:flex-row @min-settings-two/work-path:items-start"
+    {@attach measureFull}
+  >
+    {#each [COLUMNS.left, COLUMNS.right] as column, at (at)}
+      <div class="flex min-w-0 flex-1 basis-0 flex-col gap-space-4">
+        {#each column as section (section)}
+          {@render card(section)}
+        {/each}
+      </div>
     {/each}
   </div>
 </section>
