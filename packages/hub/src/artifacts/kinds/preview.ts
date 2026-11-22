@@ -5,7 +5,9 @@ import type { PreviewSource } from "@cawco/core/preview/protocol";
 import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
 import type { StageWarm } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { ElysiaStatus, problem } from "elysia";
+import { stagePlaceRef } from "../../caw";
 import type { ArtifactRow, ArtifactServed } from "../../db/artifacts";
 import { servedOf, servedPin, sheetOf } from "../served";
 import type { ArtifactInput, Making, StageAt, WarmPreviews } from "../shapes";
@@ -19,25 +21,24 @@ const previewProblem = (input: ArtifactInput): string | null => {
   if (input.port === undefined && input.workspace !== undefined) {
     return "workspace goes with a port, not a dir.";
   }
-  if (input.machine !== undefined && input.workspace !== undefined) {
-    return "A workspace's port is on the workspace's machine: pass workspace for a workspace's server, or machine for a port on that machine's host.";
-  }
   if (input.serve !== undefined && input.port === undefined) {
     return "serve goes with the port it serves on, not a dir.";
   }
-  if (input.serve !== undefined && input.machine !== undefined) {
-    return "serve runs in a workspace, and machine names a port on a machine's host outside one: pass serve with your workspace's port.";
+  if (input.port !== undefined && input.machine !== undefined) {
+    return "machine goes with a dir. A port's server runs where you work: CawCo runs serve's command in your workspace, or in your folder on your machine, so leave machine out.";
   }
   return null;
 };
 
 /**
- * Why a preview of a workspace's port with nothing named to serve it is
- * refused: a server the agent starts in its own shell ends with that shell,
- * the command or the session, and the person is left with a dead preview.
+ * Why a preview of a port with nothing named to serve it is refused, in a
+ * workspace or out of one: a server the agent starts in its own shell ends
+ * with that shell, the command or the session, and the person is left with
+ * a dead preview nothing can start again (the owner's word on 2026-11-22:
+ * "record the command for every preview").
  */
 const NOT_SERVED =
-  'A preview of a port in a workspace names what serves it: serve: { command, cwd }, like { "command": "bun run dev --port 5195", "cwd": "apps/web" }. CawCo runs it in the workspace and keeps it up for as long as the preview and the workspace last; a server started in your own shell ends with it.';
+  'A preview of a port names the command that starts its server: serve: { command, cwd }, like { "command": "bun run dev --port 5195", "cwd": "apps/web" }, cwd from your workspace\'s root or your folder. CawCo runs it with PORT set, keeps it up while the preview is used, and starts it again whenever the person opens the preview; a server started in your own shell ends with it.';
 
 /** The machine a hostname, its label or its id names. */
 const machineNamed = (
@@ -51,7 +52,7 @@ const machineNamed = (
       machineLabel(machine.hostname) === nameOrId
   )?.machineId;
 
-/** A workspace port's source: refused without what serves it ({@link NOT_SERVED}). */
+/** A port's source in workspace or place `workspace`: refused without what serves it ({@link NOT_SERVED}). */
 const servedSource = (input: ArtifactInput, workspace: string) => {
   if (!input.serve || input.port === undefined) {
     return problem(400, {
@@ -118,9 +119,9 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
    * THE ONE READ OF WHAT THE HUB KEEPS UP FOR THE PERSON: each stage on a
    * machine in `online` that serves him an artifact waiting on him (itself,
    * or a decision page showing it, {@link waitsOnPerson}), its maker awake
-   * ({@link makerAwake}), its workspace active to run it in and the stage
-   * live now (`stageLive`), by the stage's key, with the use that keeps it
-   * up: a served preview's server ({@link serveFirst}), a sheet's stage (a
+   * ({@link makerAwake}), its workspace or place able to run it
+   * ({@link runsIn}) and the stage live now (`stageLive`), by the stage's
+   * key, with the use that keeps it up: a served preview's server ({@link serveFirst}), a sheet's stage (a
    * design graph's, or a component a page's Preview shows) with its
    * canvases compiled (agent stage.ts `warmStage`), each a use that restarts
    * the stage's idle time. Read off served previews alone, a design graph
@@ -145,7 +146,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
         online.has(row.machineId) &&
         makerAwake(row) &&
         (waitsOnPerson(row) || (pages.get(row.id) ?? []).some(waitsOnPerson)) &&
-        deps.workspaces(workspace).some((one) => one.state === "active")
+        runsIn(workspace)
       ) {
         const kept = keptUp(row);
         if (kept) {
@@ -154,6 +155,22 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
       }
     }
     return stages;
+  };
+  /**
+   * Whether tree `workspace` stands to run a stage in: a workspace while it
+   * is active; a place always, its folder the person's own (core
+   * workspace-id.ts `place`), its stage in its stage clone.
+   */
+  const runsIn = (workspace: string): boolean => {
+    switch (workspaceIdKindOf(workspace)) {
+      case "place":
+        return true;
+      case "clone":
+      case "design":
+        return deps.workspaces(workspace).some((one) => one.state === "active");
+      case undefined:
+        return false;
+    }
   };
   /**
    * The live stage serving `row` ({@link waitingStages}), by its key, with
@@ -183,7 +200,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
       return deps.stageLive(key, served.port)
         ? {
             key: `${key}@${served.port}`,
-            use: () => serveFirst(row.source, row.machineId),
+            use: () => serveFirst(row.source),
           }
         : null;
     }
@@ -275,15 +292,14 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
     };
   };
   /**
-   * A workspace preview's server, up before anything shows it (core
-   * `ServeSpec`): its state. One that can't start is the refusal, and nothing
-   * is kept. None for any other source.
+   * A preview's server, up before anything shows it (core `ServeSpec`), in
+   * its workspace or place on that tree's machine: its state. One that can't
+   * start is the refusal, and nothing is kept. None for any other source.
    */
-  const serveFirst = (source: PreviewSource, machineId: string | null) =>
-    "port" in source && source.serve && source.workspace && machineId
+  const serveFirst = (source: PreviewSource) =>
+    "port" in source && source.serve && source.workspace
       ? deps.serve(
-          machineId,
-          source.workspace,
+          { workspace: source.workspace },
           { ...source.serve, port: source.port },
           source.pin
         )
@@ -364,10 +380,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
       detach(deps.warmStage(at, warm).then(warmed), "stage warm-up");
     }
     for (const media of servers.values()) {
-      detach(
-        serveFirst(media.source, media.machineId).then(warmed),
-        "stage warm-up"
-      );
+      detach(serveFirst(media.source).then(warmed), "stage warm-up");
     }
   };
   /**
@@ -381,25 +394,16 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
 
   /**
    * The source a preview input names, on the machine that serves it: a
-   * workspace's port on the workspace's machine, in its network; a port or a
-   * folder on the machine `machine` names, else the session's.
+   * port's server run in a workspace ({@link portSource}); a folder on the
+   * machine `machine` names, else the session's.
    */
   const previewSource = (instance: InstanceRow, input: ArtifactInput) => {
     const misfit = previewProblem(input);
     if (misfit) {
       return problem(400, { code: "artifact-preview-fields", detail: misfit });
     }
-    const at = input.path === undefined ? {} : { path: input.path };
-    const inWorkspace = workspaceSource(instance, input);
-    if (inWorkspace) {
-      return inWorkspace;
-    }
-    if (input.serve) {
-      return problem(400, {
-        code: "artifact-preview-serve-outside",
-        detail:
-          "serve runs in a workspace, and this session runs in none: show a server on this machine's host by its port alone, which you keep running.",
-      });
+    if (input.port !== undefined) {
+      return portSource(instance, input, input.port);
     }
     const machineId =
       input.machine === undefined
@@ -411,40 +415,50 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
         detail: `No machine named ${input.machine} is known to this hub.`,
       });
     }
-    if (input.port !== undefined && ownPort(input.port, machineId)) {
+    const source: PreviewSource = {
+      dir: input.dir ?? "",
+      ...(input.path === undefined ? {} : { path: input.path }),
+    };
+    return { machineId, source };
+  };
+  /**
+   * A port's source, its server's command recorded ({@link servedSource}):
+   * in the workspace named, else the session's own, on that workspace's
+   * machine and in its network; for a session in no workspace, in the place
+   * over the folder it works in (caw.ts `stagePlaceRef`) on its machine,
+   * whose stage clone the command runs in (agent stage-clone.ts), never on
+   * the bare host. A place's port that is CawCo's own is refused: its
+   * network may be the host's.
+   */
+  const portSource = (
+    instance: InstanceRow,
+    input: ArtifactInput,
+    port: number
+  ) => {
+    const workspace = workspaceFor(instance, input.workspace);
+    if (workspace instanceof ElysiaStatus) {
+      return workspace;
+    }
+    if (!workspace && ownPort(port, instance.machineId)) {
       return problem(400, {
         code: "artifact-preview-own-port",
         detail: artifactToolWords.previewOfOwnPort,
       });
     }
-    const source: PreviewSource =
-      input.port === undefined
-        ? { dir: input.dir ?? "", ...at }
-        : { port: input.port, ...at };
-    return { machineId, source };
-  };
-  /**
-   * A workspace port's source, on the workspace's machine, in its network;
-   * none for a machine named (its host's port) or a session in no
-   * workspace that names none.
-   */
-  const workspaceSource = (instance: InstanceRow, input: ArtifactInput) => {
-    const workspace =
-      input.port === undefined || input.machine !== undefined
-        ? undefined
-        : workspaceFor(instance, input.workspace);
-    if (!workspace || workspace instanceof ElysiaStatus) {
-      return workspace;
-    }
-    const served = servedSource(input, workspace.id);
+    const tree = workspace ?? {
+      id: stagePlaceRef(instance).id,
+      machineId: instance.machineId,
+    };
+    const served = servedSource(input, tree.id);
     return served instanceof ElysiaStatus
       ? served
-      : { machineId: workspace.machineId, source: served };
+      : { machineId: tree.machineId, source: served };
   };
   /**
    * The workspace a port preview's server runs in, with its machine: the one
    * named, which must be the session's own or one of its delegates', else the
-   * session's own; none for a session outside a workspace that names none.
+   * session's own; none for a session outside a workspace that names none,
+   * whose server runs in its place ({@link portSource}).
    */
   const workspaceFor = (instance: InstanceRow, needle: string | undefined) => {
     const mine = deps.ownWorkspace(instance);

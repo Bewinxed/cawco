@@ -662,7 +662,7 @@ const ARGS: {
       })
     ),
   ]),
-  stageServe: tuple([text, ServeSpec, maybe(named)]),
+  stageServe: tuple([WorkspaceRef, ServeSpec, maybe(named)]),
   stagePin: union([
     tuple([WorkspaceRef, named]),
     tuple([null_(), named, absolute]),

@@ -590,7 +590,7 @@ const repoOf = async (folder: string): Promise<string> => {
   const top = await gitRaw(folder, ["rev-parse", "--show-toplevel"]).catch(
     (error: Error) => {
       throw new Error(
-        `${folder} is in no git repository, and a sheet's stage runs in a clone of the checkout it shows, cut from its HEAD with your uncommitted changes: run git init and commit there, then call again. (${error.message})`,
+        `${folder} is in no git repository, and a sheet's stage or a preview's server in a folder outside a workspace runs in a clone of the checkout, cut from its HEAD with your uncommitted changes: run git init and commit there, then call again. (${error.message})`,
         { cause: error }
       );
     }

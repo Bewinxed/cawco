@@ -1900,6 +1900,15 @@ public enum Words {
 
         public static let goneCantAsk = "Its session isn't open here, so it can only be asked from there."
 
+        /// A port preview made before every one recorded the command that starts its server (core `PreviewSource.serve`), its server stopped: nothing can start it again. `unrecordedTitle` heads the pane's cover (dashboard PreviewPane), over `unrecordedLine`; its action is `goneAskLabel`, which puts `unrecordedAskWords` in its session's composer, unsent, `name` the artifact's.
+        public static let unrecordedTitle = "This preview's server stopped"
+
+        public static let unrecordedLine = "No command to start it was kept with this preview, so it can't be started again from here."
+
+        public static func unrecordedAskWords(name: String) -> String {
+            "Show me \(name) again: its server stopped and no command to start it was kept, so make the preview again with serve set to the command that starts its server."
+        }
+
         /// A preview whose server answered its page with an error status (core `PreviewDown` `error`: a route that isn't there any more answers 404, a render that throws answers 500), `why` the status and the error's first line. A preview whose page threw before it loaded and shows nothing (`crashed`), `why` what it threw. `…Title` and `…Line` are the pane's down state (dashboard PreviewPane); `…Page` the sentence on CawCo's own page in their place, read in an artifact's tab of its own (core preview-proxy `DOWN_WORDS`).
         public static let errorTitle = "The page's server answered with an error"
 

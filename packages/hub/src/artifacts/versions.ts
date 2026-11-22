@@ -31,10 +31,9 @@ export interface VersionsContext {
     name: string
   ) => ArtifactRow | undefined;
   programOf: (row: ArtifactRow) => string | undefined;
-  /** A workspace preview's server started or woken on the machine that serves `source`, in its pin when it names one (kinds/preview.ts `serveFirst`); nothing for any other source. */
+  /** A preview's server started or woken in the workspace or place `source` names, in its pin when it names one (kinds/preview.ts `serveFirst`); nothing for any other source. */
   serveFirst: (
-    source: PreviewSource,
-    machineId: string | null
+    source: PreviewSource
   ) => ReturnType<ArtifactServiceDeps["serve"]> | Promise<undefined>;
   /** Whether a session writes `row` as one of its delegation tree (access.ts `sharesWith`). */
   sharesWith: (instance: InstanceRow, row: ArtifactRow) => boolean;
@@ -227,7 +226,7 @@ export const createVersions = (ctx: VersionsContext) => {
       return refused;
     }
     const pinned = pinnedAt(source, pin);
-    const stage = await ctx.serveFirst(pinned, machineId);
+    const stage = await ctx.serveFirst(pinned);
     if (stage instanceof ElysiaStatus) {
       deps.unpin(machineId, pin);
       return stage;

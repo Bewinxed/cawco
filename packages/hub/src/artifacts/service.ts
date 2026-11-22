@@ -135,7 +135,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { commentsFull } from "@cawco/core/words/comment-lines";
 import { decidesWords } from "@cawco/core/words/decides";
-import { designArtifactOf } from "@cawco/core/workspace-id";
+import { designArtifactOf, workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { type FolderWeight, pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus, problem } from "elysia";
 import type { Doc } from "yjs";
@@ -1712,7 +1712,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       "port" in source
         ? artifactToolWords.serverOnPort(
             source.port,
-            source.workspace
+            source.workspace && workspaceIdKindOf(source.workspace) !== "place"
               ? `in workspace ${source.workspace.slice(0, 8)}`
               : `on ${machine}`
           )
@@ -2332,7 +2332,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   ) => {
     const madeFrom = makingFrom(at.source);
     try {
-      const authors = await serveFirst(at.source, at.machineId);
+      const authors = await serveFirst(at.source);
       if (authors instanceof ElysiaStatus) {
         return authors;
       }

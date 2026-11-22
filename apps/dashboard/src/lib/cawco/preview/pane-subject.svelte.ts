@@ -69,6 +69,19 @@ export class PaneSubject {
       : null
   );
 
+  /**
+   * A port preview made before every one recorded the command that starts
+   * its server (core `PreviewSource.serve`): its session kept the server up
+   * by hand, and nothing starts it again once it stops.
+   */
+  readonly unrecorded = $derived(
+    this.artifact?.kind === "preview" &&
+      !!this.source &&
+      "port" in this.source &&
+      !this.source.serve &&
+      !this.source.stage
+  );
+
   readonly isSheet = $derived(this.artifact?.kind === "component");
 
   /**
