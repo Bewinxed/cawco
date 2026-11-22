@@ -10,6 +10,7 @@
  * embed's address, the framer an embed allows) is made here.
  */
 import { PICTURES_TAG } from "@cawco/core/decisions-library";
+import type { PreviewUnavailable } from "@cawco/core/preview/protocol";
 import { OVERLAY_PATH } from "@cawco/core/preview/routes";
 import { causeOf, injectOverlay, versionAssets } from "@cawco/preview/proxy";
 import { z } from "zod";
@@ -28,6 +29,7 @@ export type StoredPiece =
   | (ServedMedia & {
       embedKey?: string;
       embedPath?: string;
+      unavailable?: PreviewUnavailable;
       unopened?: string;
     })
   | null;

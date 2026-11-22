@@ -26,15 +26,22 @@ import { CdpLink } from "./cdp-takeover";
 
 /**
  * How a link that would not open, or closed, is opened again while the
- * browser is live: from 2 s, doubling to a minute, eight times in a row;
- * then it gives up, and the band says the address cannot be read
- * (`BrowserRow.originUnread`) until the browser starts again. It used to
- * try every 5 s for ever, with a log line each time (tsk-399). Our call.
+ * browser is live: from 2 s, doubling to a minute. Each failure first has
+ * the registry check the browser ({@link Watch.lost}): one whose DevTools
+ * stopped answering is brought back, and one that can't be is no longer
+ * live, which ends its watch ({@link syncOrigins}). So it never gives up
+ * while the browser is live; the minute's cap bounds what a link that fails
+ * on a browser whose DevTools answers costs. It used to give up after eight
+ * tries and leave a dead Chromium recorded live until its idle stop, half
+ * an hour later (21–22 Nov 2026).
  */
 const RELINK: BackoffPolicy = {
   firstMs: 2000,
   mostMs: 60_000,
-  giveUp: { afterTries: 8 },
+  giveUp: {
+    never:
+      "the link is how the daemon learns its browser's Chromium died: each failure has the browser checked and brought back, and one that can't be is no longer live, which ends the watch",
+  },
 };
 
 interface Page {
@@ -53,6 +60,8 @@ interface Watch {
   /** The host it was opened on: a browser moved into a container (same ports) is watched afresh. */
   host: BrowserHostKind;
   link?: CdpLink;
+  /** The registry's check of a browser whose link failed: settled once it answers again, or is no longer live (browsers.ts `reviveBrowser`). */
+  lost: (key: BrowserKey) => Promise<void>;
   origin?: string;
   pages: Map<string, Page>;
   /** The link's opens that failed in a row ({@link RELINK}). */
@@ -77,10 +86,6 @@ export const frontTarget = (key: BrowserKey): string | undefined =>
 /** The origin `key`'s view shows now; undefined for none. */
 export const frontOrigin = (key: BrowserKey): string | undefined =>
   watches.get(key)?.origin;
-
-/** Whether reading `key`'s page shown was given up ({@link RELINK}). */
-export const frontUnread = (key: BrowserKey): boolean =>
-  watches.get(key)?.relinks.gaveUp ?? false;
 
 /** A page's origin as the band names it: a web page's alone (`about:blank`, the browser's own pages and a blank tab name none). */
 const originOf = (url: string): string | undefined => {
@@ -197,7 +202,11 @@ const open = (key: BrowserKey, watch: Watch): void => {
     });
 };
 
-/** The link would not open, or closed: opened again after its wait, or given up, which the hub is told. */
+/**
+ * The link would not open, or closed: the browser checked and, where its
+ * DevTools stopped answering, brought back ({@link Watch.lost}), then the
+ * link opened again after its wait ({@link RELINK}).
+ */
 const retry = (
   key: BrowserKey,
   watch: Watch,
@@ -208,22 +217,21 @@ const retry = (
   }
   clearTimeout(watch.retry);
   const step = watch.relinks.failed();
-  if (step.kind === "gave-up") {
-    console.warn(
-      `[browser] ${key}'s page origin is not read (${why}); given up after ${step.tries} tries over ${Math.round(step.failingMs / 1000)} s, until the browser starts again`
-    );
-    watch.heard(key);
-    return;
-  }
+  const ms = step.kind === "wait" ? step.ms : RELINK.mostMs;
   console.warn(
-    `[browser] ${key}'s page origin is not read (${why}); trying again in ${Math.round(step.ms / 1000)} s`
+    `[browser] ${key}'s DevTools link failed (${why}); the browser is checked, and the link opened again ${Math.round(ms / 1000)} s after`
   );
-  watch.retry = setTimeout(() => {
-    if (!(watch.closed || watch.link)) {
-      open(key, watch);
+  watch.lost(key).finally(() => {
+    if (watch.closed || watch.link) {
+      return;
     }
-  }, step.ms);
-  watch.retry.unref?.();
+    watch.retry = setTimeout(() => {
+      if (!(watch.closed || watch.link)) {
+        open(key, watch);
+      }
+    }, ms);
+    watch.retry.unref?.();
+  });
 };
 
 const close = (key: BrowserKey, watch: Watch): void => {
@@ -237,11 +245,13 @@ const close = (key: BrowserKey, watch: Watch): void => {
  * The live browsers, their DevTools addresses and hosts: each gets its
  * watch; a browser no longer live, or now on another host or address (a
  * local browser moved into a container keeps its ports), loses the one it
- * had, its origin with it, and is watched afresh.
+ * had, its origin with it, and is watched afresh. `heard` is told an
+ * origin's change; `lost` checks a browser whose link failed.
  */
 export const syncOrigins = (
   live: Map<BrowserKey, { devtools: string; host: BrowserHostKind }>,
-  heard: (key: BrowserKey) => void
+  heard: (key: BrowserKey) => void,
+  lost: (key: BrowserKey) => Promise<void>
 ): void => {
   for (const [key, watch] of watches) {
     const now = live.get(key);
@@ -256,6 +266,7 @@ export const syncOrigins = (
         devtools,
         heard,
         host,
+        lost,
         pages: new Map(),
         relinks: new Backoff(RELINK),
         closed: false,

@@ -109,6 +109,12 @@
         prompt: "gap-(--btn-gap) rounded-sm px-space-3 type-label",
         "prompt-wide": "gap-(--btn-gap) rounded-sm px-space-4 type-label",
         "square-24": "h-6 w-6",
+        /* A word that opens what it says (an outcome line's answer, a
+           folded count): set as the words around it, at the label size in
+           their weight, wrapping where they wrap, at least 24px tall; open,
+           it takes no fill of its own, since the row it opens from carries
+           the selected tint. */
+        word: "h-auto min-h-6 justify-start gap-space-2 px-space-2 py-0.5 text-start font-normal whitespace-normal aria-expanded:not-aria-current-page:bg-transparent",
       },
       /** A control inset in a composer shell takes its concentric corner:
           the shell's radius less its inset and its edge; the prominent

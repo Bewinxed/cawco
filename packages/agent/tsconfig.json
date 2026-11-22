@@ -21,6 +21,7 @@
   ],
   "references": [
     { "path": "../core" },
+    { "path": "../design-tokens" },
     { "path": "../jsonl-parser" },
     { "path": "../preview" },
     { "path": "../hub" },

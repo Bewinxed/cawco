@@ -16,8 +16,14 @@ import { themeVariablesCss } from "@cawco/core/theme-css";
 
 const HOST = new URL("./host.ts", import.meta.url).pathname;
 
-/** The libraries bundled whole into the host, each with where it comes from: their licences head the file. */
-const BUNDLED: [name: string, home: string][] = [
+/**
+ * The libraries bundled whole into the host, each with where it comes from
+ * and, when the host does not import it itself, the module it is bundled
+ * through: their licences head the file. Each is resolved only while the
+ * host is built ({@link notice}): this module is imported by every agent,
+ * and a compiled binary has no packages to resolve from.
+ */
+const BUNDLED: [name: string, home: string, through?: string][] = [
   ["@code-inspector/core", "https://github.com/zh-lx/code-inspector"],
   ["svelte2tsx", "https://github.com/sveltejs/language-tools"],
   ["vue-component-meta", "https://github.com/vuejs/language-tools"],
@@ -27,14 +33,21 @@ const BUNDLED: [name: string, home: string][] = [
     "https://github.com/styleguidist/react-docgen-typescript",
   ],
   ["@jridgewell/trace-mapping", "https://github.com/jridgewell/sourcemaps"],
+  // The agent reaches tailwindcss only through @cawco/design-tokens, whose dependency it is.
+  [
+    "tailwindcss",
+    "https://github.com/tailwindlabs/tailwindcss",
+    "@cawco/design-tokens/tailwind-theme",
+  ],
 ];
 const LICENCE_FILES = ["LICENSE", "LICENSE.md", "license", "LICENCE"];
 
 /** Each bundled library's licence, as its package ships it. */
 const notice = async (): Promise<string> => {
   const parts = await Promise.all(
-    BUNDLED.map(async ([name, home]) => {
-      const pkg = join(Bun.resolveSync(`${name}/package.json`, HOST), "..");
+    BUNDLED.map(async ([name, home, through]) => {
+      const from = through ? Bun.resolveSync(through, HOST) : HOST;
+      const pkg = join(Bun.resolveSync(`${name}/package.json`, from), "..");
       const file = LICENCE_FILES.map((one) => join(pkg, one)).find(
         (one) => Bun.file(one).size > 0
       );

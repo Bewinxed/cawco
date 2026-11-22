@@ -5,18 +5,16 @@ export const ROUTINE_TARGETS = [
   "conversation",
   "curator",
   "trim",
-  "command",
 ] as const;
 /**
  * What a run starts: a fresh delegate, a fresh orchestrator (a session that
  * may delegate, in the project's checkout: routines.ts `fireOrchestrator`),
  * a message to the project's conversation, Caw, the project's memory curator
- * (memory.ts), a delegate in the `curator` role that only the hub makes,
+ * (memory.ts), a delegate in the `curator` role that only the hub makes, or
  * the unused skills and servers routine (hub unused-trim.ts), a delegate in
- * the `trimmer` role that only the hub makes too, or a shell command and no
- * model (hub routines.ts `fireCommand`): its prompt, run in a fresh
- * workspace's boundary on its project's machine, its exit code the verdict
- * of the condition it must have.
+ * the `trimmer` role that only the hub makes too. A routine's check (hub
+ * routine-check.ts) gates any of the first three: it decides whether a run
+ * starts, never what starts.
  */
 export type RoutineTarget = (typeof ROUTINE_TARGETS)[number];
 
@@ -25,8 +23,46 @@ export const MADE_ROUTINE_TARGETS = [
   "delegate",
   "orchestrator",
   "conversation",
-  "command",
 ] as const satisfies readonly RoutineTarget[];
+
+/** Every {@link CheckOutcome}. */
+export const CHECK_OUTCOMES = ["quiet", "woke", "failed", "paused"] as const;
+/**
+ * How a routine's check went on one machine, the last time it ran there
+ * (hub routine-check.ts): quiet (its trimmed stdout was empty, or its last
+ * non-empty line was `{"wakeAgent": false}`), woke (its output went to the
+ * routine's target), failed (a non-zero exit, a timeout, a machine that is
+ * away or unknown), or paused (its machine was paused, so it did not run).
+ */
+export type CheckOutcome = (typeof CHECK_OUTCOMES)[number];
+
+/** A routine's check on one of its machines, as its last run there left it (times in ms). */
+export interface CheckMachineView {
+  /** When the check last answered there; null before it has. */
+  checkedAt: number | null;
+  /** The machine as the routine's `check_on` names it. */
+  machine: string;
+  /** How it last went there; null before it has run. */
+  outcome: CheckOutcome | null;
+  /** Why it failed, or what paused it; null otherwise. */
+  said: string | null;
+  /** When its output there last woke the routine; null: never. */
+  wokeAt: number | null;
+}
+
+/**
+ * A routine's check (task file `check:` and `check_on:`): a shell command
+ * the hub runs on each machine at every slot, before any model. Only output
+ * wakes the routine's target; a quiet check keeps no run.
+ */
+export interface RoutineCheckView {
+  /** Whether its command is the one the owner approved: a changed one runs nothing until approved again. */
+  approved: boolean;
+  /** Its command, as its file says it. */
+  command: string;
+  /** Each machine it runs on, in its file's order. */
+  machines: CheckMachineView[];
+}
 
 /** Every {@link RoutineRunState}. */
 export const ROUTINE_RUN_STATES = [
@@ -143,8 +179,7 @@ export interface RoutineRunView {
    * The session that did the run, where it is read whole (`/session/<id>`):
    * a delegate, orchestrator, curator or trim run's work item's session, from
    * its start; a conversation run's, once its harness read the run. Null for
-   * a run no session took (skipped, a command check's, one that ended before
-   * any began).
+   * a run no session took (skipped, one that ended before any began).
    */
   instanceId: string | null;
   outcome: RoutineOutcome | null;

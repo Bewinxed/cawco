@@ -1,64 +1,41 @@
 /**
- * Tailwind writes a `group-*` variant as `X:is(:where(.group)[state] *)`
- * and a `peer-*` one as `X:is(:where(.peer)[state] ~ *)`: the state is an
- * ancestor's or an earlier sibling's of a universal. Chrome keys a rule's
- * invalidation to the compound right of the state, and here that is the
- * universal: the state coming or going restyled every element the group
- * holds, or every sibling after the peer ("Invalidation set invalidates
- * subtree"). The converted tree wrote 427 rules that way where main's
- * component styles named their element, and a tab switch restyled up to
- * twice what main's did. Tailwind writes the shape on purpose and has no
- * setting for another (tailwindlabs/tailwindcss#16214: "It is not currently
- * possible to override these for labelled group/peer variants or for the
- * `group-*` or `peer-*` implementations as a whole").
+ * A `group-*` or `peer-*` variant's state is an ancestor's or an earlier
+ * sibling's, and Chrome keys a rule's invalidation to the compound right of
+ * that state. Tailwind writes a positive one with the utility there,
+ * `:is(:where(.group)[state] .x)` (since 4.3.4, tailwindlabs/tailwindcss
+ * #20513, "Improve style invalidation performance of `group-*` and `peer-*`
+ * variants"), so the state coming or going restyles only what carries `.x`.
  *
- * So, where the rules enter the build (vite.config.ts `groupsByCombinator`),
- * each such `:is()` is written as the combinator it stands for: `X:is(A *)`
- * as `A X`, `X:is(P ~ *)` as `P ~ X`. They match the same elements at the
- * same weight (an `:is()` weighs what its argument weighs), and Chrome keys
- * them to X: one element restyled where Tailwind's shape restyled 202, in a
- * group of 200. A compound under several groups (`X:is(A *):is(B *)`) holds
- * where one ancestor is A and one is B, one over the other either way or the
- * same element, so it is written as every such chain, `:is(A B, B A,
- * A:is(B)) X`, each A's weight and B's. A peer's ancestors are its
- * sibling's, so a group over a peer is `A P ~ X`, and a group on a compound
- * after a sibling combinator (`S ~ X:is(A *)`) goes before them all
- * (`A S ~ X`).
+ * A negated one (`not-group-*`: `X:not(:is(A *))`) still stands on a
+ * universal, and Chrome keyed it to the universal: a session row made
+ * current restyled every element in it, a tab chosen every element in the
+ * tab (tab-return 1c's pointerup: "Invalidation set invalidates subtree on
+ * DIV.group/session-row (by [data-current])", "… on SPAN.group/ff-tab (by
+ * [data-tab-item-selected])"). So, where the rules enter the build
+ * (vite.config.ts `groupNegationsByClass`), its universal is written as the
+ * compound's own class, weightless: `X:not(:is(A :where(.x)))`. It matches
+ * what it matched (X carries `.x`, so "not under A" and "not under A with
+ * `.x`" are the same for it) at the same weight, and Chrome keys it to `.x`.
+ * The compound's class is its own, or, where a positive group variant
+ * wrapped the compound (`:is(G .x):not(:is(A *))`), the one its `:is()`
+ * ends on.
  *
- * A group's or peer's state negated (`not-group-*`: `X:not(:is(A *))`) has
- * no combinator to stand for it, and Chrome keyed it to the universal just
- * the same: a session row made current restyled every element in it, a tab
- * chosen every element in the tab (tab-return 1c's pointerup: "Invalidation
- * set invalidates subtree on DIV.group/session-row (by [data-current])",
- * "… on SPAN.group/ff-tab (by [data-tab-item-selected])"). Its universal is
- * written as the compound's own class, weightless: `X:not(:is(A
- * :where(.x)))`. It matches what it matched (X carries `.x`, so "not under
- * A" and "not under A with `.x`" are the same for it) at the same weight,
- * and Chrome keys it to `.x`.
- *
- * A group's or peer's `:is()` anywhere else fails the build, as does a sheet
- * with none: Tailwind writing them another way would leave them all.
+ * A group's or peer's `:is()` on a universal anywhere else fails the build,
+ * as does a sheet with no negated one: Tailwind writing them another way
+ * would leave them all.
  */
-import postcss, { type AtRule } from "postcss";
+import postcss from "postcss";
 import parser from "postcss-selector-parser";
 
 /** What a selector holds: its simple selectors and combinators. */
 type Node = parser.Selector["nodes"][number];
 
-const DESCENDANT = " ";
-const SIBLING = new Set(["~", "+"]);
-const AROUND = new Set([DESCENDANT, ...SIBLING]);
+const AROUND = new Set([" ", "~", "+"]);
 const KEYFRAMES = /keyframes$/iu;
 const IS = ":is(";
 
-/** What a group's `:is(A *)` or a peer's `:is(P ~ *)` stands on: A or P, and the combinator. */
-interface Anchor {
-  combinator: string;
-  nodes: Node[];
-}
-
-/** A group's or a peer's `:is()`'s anchor; null for any other node. */
-function anchorOf(node: Node): Anchor | null {
+/** The universal a group's `:is(A *)` or a peer's `:is(P ~ *)` stands on; null for any other node. */
+function universalOf(node: Node): parser.Universal | null {
   if (
     node.type !== "pseudo" ||
     node.value !== ":is" ||
@@ -66,207 +43,103 @@ function anchorOf(node: Node): Anchor | null {
   ) {
     return null;
   }
-  const argument = node.nodes[0].nodes;
+  const argument = node.nodes[0]?.nodes ?? [];
   const last = argument.at(-1);
   const joint = argument.at(-2);
-  if (
-    argument.length < 3 ||
-    last?.type !== "universal" ||
-    joint?.type !== "combinator" ||
-    !AROUND.has(joint.value)
-  ) {
-    return null;
-  }
-  return { combinator: joint.value, nodes: argument.slice(0, -2) };
+  return argument.length >= 3 &&
+    last?.type === "universal" &&
+    joint?.type === "combinator" &&
+    AROUND.has(joint.value)
+    ? last
+    : null;
 }
 
-const isCompound = (nodes: Node[]): boolean =>
-  nodes.every((node) => node.type !== "combinator");
-const copy = (nodes: Node[]): Node[] => nodes.map((node) => node.clone());
-const descendant = (): Node => parser.combinator({ value: DESCENDANT });
-
-/** `:is(…)` of one complex selector. */
-function wrapped(nodes: Node[]): Node {
-  const inner = parser.selector({ value: "" });
-  for (const node of copy(nodes)) {
-    inner.append(node);
-  }
-  const pseudo = parser.pseudo({ value: ":is" });
-  pseudo.append(inner);
-  return pseudo;
-}
-
-/** Every non-empty subset of `items`, the whole last. */
-function subsets<T>(items: T[]): T[][] {
-  const all: T[][] = [[]];
-  for (const item of items) {
-    for (const some of all.slice()) {
-      all.push([...some, item]);
-    }
-  }
-  return all.slice(1);
-}
-
-/**
- * Every way anchors can stand over one another: chains of blocks, the
- * outermost first, a block's anchors on one element.
- */
-function orderings<T>(items: T[]): T[][][] {
-  if (items.length === 0) {
-    return [[]];
-  }
-  return subsets(items).flatMap((block) =>
-    orderings(items.filter((item) => !block.includes(item))).map((tail) => [
-      block,
-      ...tail,
-    ])
+/** A selector's compounds, the combinators between them left out. */
+const compoundsOf = (selector: parser.Selector): Node[][] =>
+  selector.nodes.reduce<Node[][]>(
+    (compounds, node) => {
+      if (node.type === "combinator") {
+        compounds.push([]);
+      } else {
+        compounds.at(-1)?.push(node);
+      }
+      return compounds;
+    },
+    [[]]
   );
-}
-
-/** One element under every anchor of a block: the first as written when it is a compound, the others as `:is()`. */
-function onOneElement(block: Node[][]): Node[] {
-  const [first, ...others] = block;
-  const head = isCompound(first) ? copy(first) : [wrapped(first)];
-  return [...head, ...others.map(wrapped)];
-}
-
-/** The groups' anchors before X: `A ` for one, `:is(A B, B A, A:is(B)) ` for several. */
-function groupsBefore(groups: Node[][]): Node[] {
-  if (groups.length === 0) {
-    return [];
-  }
-  if (groups.length === 1) {
-    return [...copy(groups[0]), descendant()];
-  }
-  const chains = parser.pseudo({ value: ":is" });
-  for (const chain of orderings(groups)) {
-    const inner = parser.selector({ value: "" });
-    chain.forEach((block, i) => {
-      if (i > 0) {
-        inner.append(descendant());
-      }
-      for (const node of onOneElement(block)) {
-        inner.append(node);
-      }
-    });
-    chains.append(inner);
-  }
-  return [chains, descendant()];
-}
-
-/** The peer's anchor before X: `P ~ `, as `:is(P) ~ ` under a group when P is not a compound. */
-function peerBefore(peer: Anchor | undefined, grouped: boolean): Node[] {
-  if (!peer) {
-    return [];
-  }
-  const nodes =
-    grouped && !isCompound(peer.nodes)
-      ? [wrapped(peer.nodes)]
-      : copy(peer.nodes);
-  return [...nodes, parser.combinator({ value: peer.combinator })];
-}
-
-/** A selector's compounds and the combinators between them. */
-function compoundsOf(selector: parser.Selector): {
-  compounds: Node[][];
-  joints: parser.Combinator[];
-} {
-  const compounds: Node[][] = [[]];
-  const joints: parser.Combinator[] = [];
-  for (const node of selector.nodes) {
-    if (node.type === "combinator") {
-      joints.push(node);
-      compounds.push([]);
-    } else {
-      compounds.at(-1)?.push(node);
-    }
-  }
-  return { compounds, joints };
-}
 
 /**
- * The selector with its groups' and peer's `:is()` as combinators; null when
- * it has none. Throws where they cannot be written so.
+ * The class a compound's element carries: its own, else the one a positive
+ * group's or peer's `:is(G .x)` in it ends on.
  */
-function unwrapped(selector: parser.Selector): Node[] | null {
-  const { compounds, joints } = compoundsOf(selector);
-  const at = compounds.findIndex((compound) => compound.some(anchorOf));
-  if (at === -1) {
-    return null;
+function classOf(compound: Node[]): parser.ClassName | undefined {
+  const own = compound.find((node) => node.type === "class");
+  if (own?.type === "class") {
+    return own;
   }
-  const groups: Node[][] = [];
-  const peers: Anchor[] = [];
-  const own: Node[] = [];
-  for (const node of compounds[at]) {
-    const anchor = anchorOf(node);
-    if (!anchor) {
-      own.push(node);
-    } else if (anchor.combinator === DESCENDANT) {
-      groups.push(anchor.nodes);
-    } else {
-      peers.push(anchor);
+  for (const node of compound) {
+    if (node.type !== "pseudo" || node.value !== ":is") {
+      continue;
+    }
+    const [only] = node.nodes;
+    const subject = only ? compoundsOf(only).at(-1) : undefined;
+    const found = subject?.find((one) => one.type === "class");
+    if (only && node.nodes.length === 1 && found?.type === "class") {
+      return found;
     }
   }
-  const placed =
-    compounds.every((compound, i) => i === at || !compound.some(anchorOf)) &&
-    joints.slice(0, at).every((joint) => SIBLING.has(joint.value)) &&
-    peers.length <= 1 &&
-    (peers.length === 0 || at === 0);
-  if (!placed) {
-    throw new Error(
-      `a group's or peer's :is() where no combinator can stand for it: ${selector}`
-    );
-  }
-  const subject = own.length > 0 ? copy(own) : [parser.universal()];
-  const rest = compounds.flatMap((compound, i) => [
-    ...(i > 0 ? [joints[i - 1].clone()] : []),
-    ...(i === at ? subject : copy(compound)),
-  ]);
-  return [
-    ...groupsBefore(groups),
-    ...peerBefore(peers[0], groups.length > 0),
-    ...rest,
-  ];
 }
+
+/** The universal of each group's or peer's `:is()` a `:not()` in the compound negates on its own. */
+const negatedUniversals = (compound: Node[]): parser.Universal[] =>
+  compound.flatMap((node) =>
+    node.type === "pseudo" && node.value === ":not"
+      ? node.nodes.flatMap((argument) => {
+          const [only] = argument.nodes;
+          const universal =
+            only && argument.nodes.length === 1 ? universalOf(only) : null;
+          return universal ? [universal] : [];
+        })
+      : []
+  );
 
 /**
  * Each group's or peer's `:is()` a `:not()` in the selector negates, its
- * universal written as its compound's own class, weightless; how many.
- * Throws for one in a compound with no class.
+ * universal written as its compound's class, weightless; how many. Throws
+ * for one in a compound with no class, and for a group's or peer's `:is()`
+ * on a universal outside a `:not()`.
  */
 function namedNegations(selector: parser.Selector): number {
   let named = 0;
-  for (const compound of compoundsOf(selector).compounds) {
-    const own = compound.find((node) => node.type === "class");
-    for (const node of compound) {
-      if (node.type !== "pseudo" || node.value !== ":not") {
-        continue;
-      }
-      for (const argument of node.nodes) {
-        const [only] = argument.nodes;
-        if (argument.nodes.length !== 1 || !anchorOf(only)) {
-          continue;
-        }
-        if (!own) {
-          throw new Error(
-            `a group's or peer's negated :is() in a compound with no class to key it to: ${selector}`
-          );
-        }
-        const universal = (only as parser.Pseudo).nodes[0].nodes.at(-1);
-        const name = parser.selector({ value: "" });
+  for (const compound of compoundsOf(selector)) {
+    if (compound.some((node) => universalOf(node))) {
+      throw new Error(
+        `a group's or peer's :is() on a universal outside a :not(), which Tailwind writes on the utility since 4.3.4: ${selector}`
+      );
+    }
+    const universals = negatedUniversals(compound);
+    const own = universals.length > 0 ? classOf(compound) : undefined;
+    if (universals.length > 0 && !own) {
+      throw new Error(
+        `a group's or peer's negated :is() in a compound with no class to key it to: ${selector}`
+      );
+    }
+    for (const universal of universals) {
+      const name = parser.selector({ value: "" });
+      if (own) {
         name.append(own.clone());
-        const where = parser.pseudo({ value: ":where" });
-        where.append(name);
-        universal?.replaceWith(where);
-        named += 1;
       }
+      const where = parser.pseudo({ value: ":where" });
+      where.append(name);
+      universal.replaceWith(where);
+      named += 1;
     }
   }
   return named;
 }
 
-/** `css` with every group's and peer's `:is()` written as its combinator, and how many selectors changed. */
-export function groupsAsCombinators(
+/** `css` with every negated group's and peer's `:is()` keyed to its compound's class, and how many selectors changed. */
+export function groupNegationsKeyed(
   css: string,
   from: string
 ): { css: string; rewritten: number } {
@@ -274,14 +147,6 @@ export function groupsAsCombinators(
   let rewritten = 0;
   const rewrite = parser((selectors) => {
     selectors.each((selector) => {
-      const nodes = unwrapped(selector);
-      if (nodes) {
-        selector.removeAll();
-        for (const node of nodes) {
-          selector.append(node);
-        }
-        rewritten += 1;
-      }
       rewritten += namedNegations(selector);
     });
   });
@@ -289,7 +154,9 @@ export function groupsAsCombinators(
     const { parent } = rule;
     if (
       !rule.selector.includes(IS) ||
-      (parent?.type === "atrule" && KEYFRAMES.test((parent as AtRule).name))
+      (parent?.type === "atrule" &&
+        "name" in parent &&
+        KEYFRAMES.test(String(parent.name)))
     ) {
       return;
     }

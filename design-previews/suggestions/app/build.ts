@@ -32,7 +32,7 @@ const Icons = (await fromDashboard("unplugin-icons/vite")).default;
 const { writeHouseFaces } = await import(
   join(DASHBOARD, "scripts/house-faces.ts")
 );
-const { groupsByCombinator, proseNotByClass } = await import(
+const { groupNegationsByClass, proseNotByClass } = await import(
   join(DASHBOARD, "vite.config.ts")
 );
 const { CSS_TARGET } = await import(
@@ -63,7 +63,7 @@ const config = {
   plugins: [
     tailwindcss(),
     proseNotByClass(),
-    groupsByCombinator(),
+    groupNegationsByClass(),
     svelte({
       preprocess: vitePreprocess(),
       compilerOptions: { experimental: { async: true } },

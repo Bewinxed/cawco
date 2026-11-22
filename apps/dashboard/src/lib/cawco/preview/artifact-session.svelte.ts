@@ -266,11 +266,17 @@ export class ArtifactSession implements PaneFleet {
       sameRevision &&
       previous.state === frame.state &&
       JSON.stringify(previous.artifact) === JSON.stringify(frame.artifact) &&
-      JSON.stringify(previous.artifacts) === JSON.stringify(frame.artifacts)
+      JSON.stringify(previous.artifacts) === JSON.stringify(frame.artifacts) &&
+      JSON.stringify(previous.unavailable) === JSON.stringify(frame.unavailable)
     ) {
       return;
     }
-    this.#preview = { ...(sameRevision ? previous : {}), ...frame };
+    this.#preview = {
+      ...(sameRevision ? previous : {}),
+      ...frame,
+      // The hub's word on whether it can be shown is each frame's whole.
+      unavailable: frame.unavailable,
+    };
   }
 
   /**

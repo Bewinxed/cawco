@@ -496,12 +496,21 @@ import type { TailnetServing } from "./tailnet-https";
  *    refuse under new codes (`artifact-folder-unfit`,
  *    `artifact-update-not-folder`, `artifact-folder-unread`). A page built
  *    for 98 holds a folder source's `pin` to a string, so it reloads first.
+ * 100: a routine's target is never `command`: a check (`check:` and
+ *    `check_on:`) gates a routine's runs instead, and a routine's view and
+ *    a task's `routine` carry its `check` (core routine-kinds.ts
+ *    `RoutineCheckView`). A page built for 99 reads neither, so it reloads
+ *    first.
+ * 101: a browser's row carries no `originUnread`: a machine no longer gives
+ *    up reading a live browser's page, it brings the browser back or calls
+ *    it not live (agent front-origin.ts, browsers.ts `reviveBrowser`). A
+ *    page built for 100 may read it, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 99;
+export const WIRE_PROTOCOL = 101;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

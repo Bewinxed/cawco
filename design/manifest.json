@@ -1,0 +1,7 @@
+{
+  "tailwind": "apps/dashboard/src/lib/tokens/theme.css",
+  "files": {
+    "DESIGN.md": "sha256:5f3719d3f75129dc187606718840ec1728af5f1718053c3ef1626592d121582c",
+    "SKILL.md": "sha256:d684317ff80377e0835f5e2e10400715e19d54608bf86e88b2aec2563c607103"
+  }
+}

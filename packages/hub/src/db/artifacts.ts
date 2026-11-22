@@ -297,6 +297,8 @@ export interface ArtifactsDb {
    * version is one too: a server it shows stays up for it.
    */
   readonly previewing: (workspace: string) => ArtifactRow[];
+  /** The ids of every artifact machine `machineId` serves or kept the files of: a port preview, a sheet, a folder preview (by `artifacts_machine_dir`). */
+  readonly previewsOn: (machineId: string) => string[];
   /** A project's page of a name, whichever session wrote it, or none now ({@link projectPage}). */
   readonly projectPage: (
     projectId: string,
@@ -704,6 +706,18 @@ export const artifactsDb = (
       .orderBy(desc(artifacts.createdAt))
       .all()
       .map(artifactOf),
+  previewsOn: (machineId) =>
+    db
+      .select({ id: artifacts.id })
+      .from(artifacts)
+      .where(
+        and(
+          eq(artifacts.machineId, machineId),
+          or(isNotNull(artifacts.sourcePort), isNotNull(artifacts.sourceDir))
+        )
+      )
+      .all()
+      .map((row) => row.id),
   remove: (id) => {
     drop(db, eq(artifacts.id, id));
   },

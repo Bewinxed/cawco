@@ -10,8 +10,7 @@
  * - **The file**: its title from the routine's name; its description from
  *   its prompt, each heading a level deeper so none starts a section of
  *   the file ({@link fitDescription}; the hub's own routines keep theirs in code and write one
- *   sentence for the person; a command check's command is its `command:`
- *   line); its type, its landing written out (`lands: none` where the
+ *   sentence for the person); its type, its landing written out (`lands: none` where the
  *   routine landed nothing, since a task's default is the project's), its
  *   budget, and its trigger lines. A routine whose condition was met is
  *   filed in the project's first done stage, its evidence its reason;
@@ -139,7 +138,8 @@ const draftOf = (
       dailyCapUsd: row.dailyCapUsd,
       mode: row.mode,
       keep: row.keep || null,
-      command: row.command,
+      check: row.command,
+      checkOn: row.checkOn ?? [],
     },
   };
 };
@@ -176,8 +176,6 @@ const descriptionOf = (row: TriggerRow, carried: Carried): string => {
       return CURATOR_SAID;
     case "trim":
       return routineToolWords.trimSaid;
-    case "command":
-      return "Runs its command; it stops once the command exits 0.";
     case "conversation":
     case "delegate":
     case "orchestrator":

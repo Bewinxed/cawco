@@ -24,6 +24,18 @@ export class PaneSubject {
 
   readonly source = $derived(this.preview?.source);
 
+  /**
+   * Why the hub knows what the panel shows can't be shown now (core
+   * `PreviewUnavailable`: its machine away or paused, its workspace
+   * retired, its version gone): the pane draws it and asks nothing of the
+   * preview's origin, no address, no frame, no probe, until the hub's next
+   * word on the panel says it can. Null while the hub knows nothing in its
+   * way.
+   */
+  readonly unavailable = $derived(
+    this.preview?.state === "open" ? (this.preview.unavailable ?? null) : null
+  );
+
   readonly artifact = $derived(this.preview?.artifact);
 
   readonly owner = $derived.by(() =>

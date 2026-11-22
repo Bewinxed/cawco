@@ -74,7 +74,9 @@
  *   `on:` (a cron and its zone); event routes may name it too, or instead.
  *   `stop:` is the stop condition the agent that made it wrote, `deadline:`
  *   the day past which, with no stop, it stands in Needs you, and
- *   `daily_cap_usd:`, `mode:`, `keep:` and `command:` say how its runs go.
+ *   `daily_cap_usd:`, `mode:` and `keep:` say how its runs go. `check:` is
+ *   a shell command run on each machine `check_on:` lists before every
+ *   run, whose output alone starts it (routine-check.ts).
  *   The hub keeps its slots, its runs and whether it is on (db
  *   `task_triggers`), never in the file. What of these lines does not read
  *   holds its trigger ({@link ParsedTask} `triggerUnread`).
@@ -131,7 +133,8 @@ export const TASK_FIELDS = [
   "daily_cap_usd",
   "mode",
   "keep",
-  "command",
+  "check",
+  "check_on",
 ] as const;
 export type TaskField = (typeof TASK_FIELDS)[number];
 
@@ -155,7 +158,8 @@ const TRIGGER_FIELDS = [
   "daily_cap_usd",
   "mode",
   "keep",
-  "command",
+  "check",
+  "check_on",
 ] as const satisfies readonly TaskField[];
 
 export interface TaskFields {
@@ -163,9 +167,11 @@ export interface TaskFields {
   accounts: string[];
   /** What an attempt may spend before the hub stops it; null: the project's default. */
   budget: WorkBudget | null;
+  /** A routine's check (`check:`): the shell command its runs are gated by, routine-check.ts; null: none. */
+  check: string | null;
+  /** The machines a routine's check runs on (`check_on:`), each a hostname or machine id; empty: none. */
+  checkOn: string[];
   checks: string[];
-  /** A command check's shell command (`command:`); null for every other target. */
-  command: string | null;
   /** Project folder files its attempt's brief carries (memory.ts `contextFor`): the conversation's pick, `knowledge/…`. */
   context: string[];
   /** Dollars a routine's runs may spend a day of its zone (`daily_cap_usd:`); null: no cap. */
@@ -563,7 +569,8 @@ const FIELD_KEYS = {
   daily_cap_usd: "dailyCapUsd",
   mode: "mode",
   keep: "keep",
-  command: "command",
+  check: "check",
+  check_on: "checkOn",
 } as const satisfies Record<TaskField, keyof TaskFields>;
 
 /** A front matter field's value, as {@link TaskFields} holds it. */
@@ -635,7 +642,8 @@ const emptyFields = (): TaskFields => ({
   dailyCapUsd: null,
   mode: null,
   keep: null,
-  command: null,
+  check: null,
+  checkOn: [],
 });
 
 /** How `waits_on:` is written. */
@@ -996,8 +1004,11 @@ const readTriggerField = (
     case "keep":
       fields.keep = readKeep(line, problems);
       return true;
-    case "command":
-      fields.command = scalarOf(line);
+    case "check":
+      fields.check = scalarOf(line);
+      return true;
+    case "check_on":
+      fields.checkOn = readList("check_on", line, problems);
       return true;
     default:
       return false;

@@ -606,6 +606,7 @@ import {
 import { hasOwnOrigin, servedByMachine } from "./preview-machine";
 import { previewRoutes } from "./preview-routes";
 import { createPreviewService } from "./preview-service";
+import { createPreviewUnavailable } from "./preview-unavailable";
 import { createCaps } from "./project-caps";
 import { createProjectCreate } from "./project-create";
 import {
@@ -1680,6 +1681,8 @@ export const createServer = (
     callFs: () => callFs,
     decisionsChanged: () => decisionsChanged,
     previewService: () => previewService,
+    previewUnavailable: () => previewUnavailable,
+    previewsOnMachineMoved: () => previewsOnMachineMoved,
     anchors: () => anchors,
     decisions: () => decisions,
     hubAsks: () => hubAsks,
@@ -2722,7 +2725,7 @@ export const createServer = (
       await discarded(asker.id, String(input.workspace ?? ""), {
         approved: true,
       }),
-    // A routine's command check the person approved making or changing
+    // A routine's check the person approved making or changing
     // (routines.ts), as the task_create or task_update call that asked.
     task_create: async (input, asker) => {
       const made = leadRunsPort.now();
@@ -5009,6 +5012,8 @@ export const createServer = (
     finished: (instance) => overForGood(instance),
     acknowledged: () => noticesSeen.ids(),
     needsMoved: () => artifactLane.moved(),
+    previewsMoved: (ids) => previewsMoved(ids),
+    unavailable: (row) => previewUnavailable(row),
     questionsMoved: (artifactId) =>
       registry.broadcast({
         verb: "frames",
@@ -5656,6 +5661,7 @@ export const createServer = (
         : { key };
     },
     originOf: originKeyOf,
+    unavailable: (row) => previewUnavailable(row),
     program: (id) => artifacts.programServed(id),
     row: (id) => db.artifacts.get(id),
     seed: artifactDocs.seed,
@@ -5747,6 +5753,72 @@ export const createServer = (
     rowAt: (origin) => db.artifacts.byOrigin(origin),
     shownWaitMs: SHOWN_WAIT_MS,
   });
+  /**
+   * Why the hub knows an artifact's preview can't be shown now, from its
+   * own records (preview-unavailable.ts): every record a surface frames a
+   * preview from carries it.
+   */
+  const previewUnavailable = createPreviewUnavailable({
+    connected: (machineId) => !!registry.agent(machineId),
+    folder: (id) => artifacts.folderFiles(id),
+    machineName: (machineId) => machineName(machineId),
+    offline: (machineId) => machineFault(machineId, "offline", { next: false }),
+    paused: (machineId) => machinePause.words(machineId) ?? undefined,
+    retired: (id) => db.workspacesNamed(id)[0]?.state === "archived",
+    wontComeBack: (id) => workItems.wontComeBack(id),
+  });
+  /**
+   * Whether artifacts `ids` can be shown may have moved (their machine came
+   * or went, their workspace retired or came back, their files moved in or
+   * were lost): every session's panel showing one is published again at
+   * its revision, and every decision page showing one takes its media again
+   * (artifacts service `versionMoved`, which tells a page only when what it
+   * draws moved). The one way a surface hears it; nothing polls.
+   */
+  const previewsMoved = (ids: readonly string[]): void => {
+    const moved = new Set(ids);
+    if (moved.size === 0) {
+      return;
+    }
+    for (const [instanceId, target] of previewTargets) {
+      if (moved.has(target.artifact.id)) {
+        publishPreview(instanceId, "open", target);
+      }
+    }
+    for (const id of moved) {
+      const row = db.artifacts.get(id);
+      if (row) {
+        artifacts.versionMoved(row);
+      }
+    }
+  };
+  /** What machine `machineId` serves (its previews and folder previews), told again ({@link previewsMoved}): it came, went, or its pause moved. */
+  const previewsOnMachineMoved = (machineId: string): void => {
+    previewsMoved(db.artifacts.previewsOn(machineId));
+  };
+  /**
+   * What workspace `workspace` serves, told again ({@link previewsMoved}):
+   * it retired, or came back. What a workspace it was cut from served is
+   * told too, while that one is retired: a version whose work went on here
+   * comes back here (workspaces.ts `openedIn`).
+   */
+  const previewsOfWorkspaceMoved = (workspace: WorkspaceRow): void => {
+    const seen = new Set<string>();
+    let at: WorkspaceRow | undefined = workspace;
+    while (at && !seen.has(at.id)) {
+      seen.add(at.id);
+      const from: string | null = at.cutFromWorkspace;
+      at = from === null ? undefined : db.workspacesNamed(from)[0];
+      if (at?.state !== "archived") {
+        at = undefined;
+      }
+    }
+    previewsMoved(
+      [...seen].flatMap((id) =>
+        db.artifacts.previewing(id).map((row) => row.id)
+      )
+    );
+  };
   /** A design opened after its workspace went, brought back (design-revive.ts). */
   const reviveServed = createDesignRevive({
     moveServed: (id, to) => artifacts.moveServed(id, to),
@@ -8386,6 +8458,8 @@ export const createServer = (
         if (workspace.state !== "active") {
           workspaceStages.delete(workspace.id);
         }
+        // Whether what it serves can be shown moves with it.
+        previewsOfWorkspaceMoved(workspace);
       },
     },
     // What a landing reads of the hub (landing-run.ts `LandingsHub`).
@@ -9305,6 +9379,8 @@ export const createServer = (
       cutForPause(row.id, machineId, until);
     }
     workItems.pauseChanged(machineId);
+    // Paused, it serves no preview: every surface showing one says so.
+    previewsOnMachineMoved(machineId);
     return stopped;
   };
 
@@ -9322,6 +9398,7 @@ export const createServer = (
     // A copy due an update was held by the pause alone: it goes now
     // (tool-installs.ts `keepCopiesOn`).
     keepCopiesOn(machineId);
+    previewsOnMachineMoved(machineId);
   };
   // Each project's conversation: a session its events reach (caw.ts).
   const caw = createCaw({
@@ -10538,12 +10615,14 @@ export const createServer = (
   // Routines (routines.ts): tasks that start on their own, each slot once.
   const routines = createRoutines({
     carry: routinesCarried,
-    // A command check made or changed by a session whose mode would ask
+    // A routine's check made or changed by a session whose mode would ask
     // before a shell command: the person's approval, as an admin write's.
     askPerson: (actor, name, input) => hubAsks.ask(actor, name, input),
-    // A command check's command, inside its own workspace's boundary.
-    runCommand: (machineId, cwd, cmd, timeoutMs, workspace, how) =>
-      runOnMachine(machineId, cwd, cmd, timeoutMs, workspace, how),
+    // A routine's check: on the machine's host, as the agent's user, in no
+    // workspace (routine-check.ts).
+    runOnHost: (machineId, cmd, timeoutMs, how) =>
+      runOnMachine(machineId, "/", cmd, timeoutMs, undefined, how),
+    machines: () => db.machineFacts(),
     caw,
     // A routine moved (paused, held, on again): its project's waits are read again.
     waitsMoved: (projectId) => {
@@ -10556,7 +10635,7 @@ export const createServer = (
         "routine moved"
       );
     },
-    // Dispatch starts every run a session does, and places a command check.
+    // Dispatch starts every run a session does, and places a probe.
     dispatch: dispatcher,
     tasks: () => tasks,
     isSetUp: (project) => isSetUp(project),
@@ -13939,9 +14018,10 @@ export const createServer = (
           }
           // A preview outlives its machine's socket, without an upstream,
           // until the register that brings the machine back points it at a
-          // listener again or a request starts one. Nothing is published;
-          // the panes keep the page they have.
+          // listener again or a request starts one. Every surface showing
+          // what it serves draws its machine away, from the hub's word.
           previewService.machineGone(machineId);
+          previewsOnMachineMoved(machineId);
           // The install may well still be running out there, but its reply can no
           // longer arrive on this socket — and the register that follows carries
           // the machine's own account of what landed.

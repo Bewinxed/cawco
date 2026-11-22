@@ -160,10 +160,27 @@ export class PreviewFrame {
    * (a reload of the frame) as its way back; it stands until a load serves
    * the page again.
    */
-  down = $state<PreviewDown | null>(null);
+  proxyDown = $state<Down | null>(null);
 
-  /** The machine's own words for a `reach` failure, or why a `gone` version can't come back, from the proxy's page. */
-  downWhy = $state<string | null>(null);
+  /**
+   * What the hub knows keeps the page from being shown (pane-subject's
+   * `unavailable`): no frame loads while it stands, and it goes as the
+   * hub's next word on the panel says the page can be shown.
+   */
+  readonly hubDown = $derived.by(() => this.#deps.paneSubject.unavailable);
+
+  /** The hub's word stands: no frame is asked for. */
+  readonly hubHeld = $derived(this.hubDown !== null);
+
+  /** The hop that keeps the page from being shown: the hub's word first, else the proxy's page in the frame. */
+  readonly down = $derived<PreviewDown | null>(
+    this.hubDown?.down ?? this.proxyDown?.down ?? null
+  );
+
+  /** The hub's or the machine's own words for it: a `reach` failure's, why a `gone` version can't come back. */
+  readonly downWhy = $derived(
+    this.hubDown ? this.hubDown.why : (this.proxyDown?.why ?? null)
+  );
 
   /**
    * The frame has settled: its page is up, or the proxy's down page said
@@ -186,7 +203,9 @@ export class PreviewFrame {
    * machine coming back starts a listener for the previews being looked at
    * alone (the hub's register starts none). The tries count across the
    * loads, so a hop that stays down is asked ever less often; a page that
-   * says it is ready starts the count again.
+   * says it is ready starts the count again. A hop the hub said
+   * ({@link hubDown}) is never probed: no frame stands, and the hub's next
+   * word on the panel loads it.
    */
   downTries = 0;
 
@@ -328,7 +347,8 @@ export class PreviewFrame {
       untrack(() => this.post({ type: message }));
     });
     $effect(() => {
-      const hop = this.down;
+      // Only a hop the proxy said: the hub's own word moves by itself.
+      const hop = this.proxyDown?.down;
       const origin = this.#deps.previewReach.paneOrigin;
       const seen = pageVisible.current && this.#deps.onScreen();
       track(this.downProbe);
@@ -363,6 +383,16 @@ export class PreviewFrame {
         this.downTries = 0;
       }
     });
+    // The hub's word that it can't be shown takes the frame down, and its
+    // word that it can loads it afresh: either way a new load.
+    $effect(() => {
+      if (this.hubHeld) {
+        untrack(() => {
+          this.standing = null;
+          this.reload += 1;
+        });
+      }
+    });
     // The origin answers again after a probe found it unreached: the frame
     // holds the browser's own error page, so it loads again.
     $effect(() => {
@@ -378,8 +408,7 @@ export class PreviewFrame {
         this.loaded = false;
         this.pageHeld = false;
         // A new load says again whether it is served.
-        this.down = null;
-        this.downWhy = null;
+        this.proxyDown = null;
         // A pick the old page asked for has no page left to answer.
         this.picking = null;
       }
@@ -523,8 +552,7 @@ export class PreviewFrame {
 
   /** The proxy's page says which hop failed (`cawco:down`, frame-down.ts): the pane cannot read a preview origin's document. */
   heardDown(said: Down) {
-    this.down = said.down;
-    this.downWhy = said.why;
+    this.proxyDown = said;
     this.retrying = false;
     this.#shown();
   }
@@ -562,7 +590,10 @@ export class PreviewFrame {
     }
     const current = this.loadedKey === this.frameKey;
     let word: { ok: true } | { ok: false; error: ShownFailure } | null = null;
-    if (this.#deps.paneSubject.isCanvas) {
+    if (this.hubDown) {
+      // The hub's own word: no frame was asked for.
+      word = { ok: false, error: this.hubDown.down };
+    } else if (this.#deps.paneSubject.isCanvas) {
       word =
         this.#deps.paneCanvas.stage?.connected &&
         this.#deps.paneCanvas.stage.at === "panel"
@@ -639,8 +670,7 @@ export class PreviewFrame {
 
   /** The page answers: whatever the proxy said of an earlier load is over. */
   answered() {
-    this.down = null;
-    this.downWhy = null;
+    this.proxyDown = null;
   }
 
   /** The page said it is ready, from `origin`. */

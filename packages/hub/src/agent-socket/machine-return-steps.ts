@@ -65,6 +65,7 @@ export type MachineReturnContext = Pick<
   | "nameStoredSessions"
   | "pending"
   | "previewService"
+  | "previewsOnMachineMoved"
   | "pushAgents"
   | "readLaunchDirs"
   | "recordSessionAddress"
@@ -172,6 +173,9 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
       ws.remoteAddress,
       agentFrame.previews
     );
+    // Back: every surface showing what it serves draws it again, its frame
+    // loading now the hub says it can be reached.
+    ctx.previewsOnMachineMoved(message.machineId);
   };
 
   const homeStampsReset = (ret: MachineReturn): void => {

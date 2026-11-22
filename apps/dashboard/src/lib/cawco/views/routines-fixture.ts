@@ -55,6 +55,7 @@ const run = (
 
 const base = {
   budget: null,
+  check: null,
   condition: null,
   createdAt: now - 30 * DAY_MS,
   createdBy: "owner",
@@ -266,6 +267,60 @@ export const CONDITION_TIMED_OUT: Routine = {
     nextAt: null,
     deadline: now - DAY_MS,
   },
+};
+
+/**
+ * A daily CVE scan gated by a check on two machines: quiet on one this
+ * morning, its new findings on the other woke Caw yesterday, and one
+ * machine away once.
+ */
+export const CHECK_GATED: Routine = {
+  ...base,
+  id: "9b2e4c71-0a5d-4f3e-8c6b-1d7a2e9f4c30",
+  name: "New CVEs on the homelab",
+  enabled: true,
+  target: "conversation",
+  prompt:
+    "Read the new findings, file a task for each one with a fix, and tell me about the rest.",
+  cron: "0 7 * * *",
+  nextRuns: weekOf(7, [0, 1, 2, 3, 4, 5, 6]),
+  nextSlot: weekOf(7, [0, 1, 2, 3, 4, 5, 6])[0] ?? now,
+  schedule: {
+    cron: "0 7 * * *",
+    nextAt: weekOf(7, [0, 1, 2, 3, 4, 5, 6])[0] ?? now,
+    timeZone: base.timeZone,
+    words: "At 07:00, every day (Europe/London)",
+  },
+  check: {
+    command: "~/bin/grype-new --since-last-report",
+    approved: true,
+    machines: [
+      {
+        machine: "obelisk-of-light",
+        checkedAt: now - 2 * HOUR_MS,
+        outcome: "quiet",
+        said: null,
+        wokeAt: now - 26 * HOUR_MS,
+      },
+      {
+        machine: "uwucloud",
+        checkedAt: now - 2 * HOUR_MS,
+        outcome: "failed",
+        said: "The command could not be run: uwucloud stopped answering (timeout).",
+        wokeAt: null,
+      },
+    ],
+  },
+  runs: [
+    run(
+      "v1",
+      26 * HOUR_MS,
+      4,
+      "delivered",
+      "3 new CVEs on obelisk-of-light: filed tsk-14 for openssl 3.0.13 (CVE-2024-5535); libexpat and zlib have no fix yet."
+    ),
+  ],
+  runsTotal: 1,
 };
 
 /** The reads the page makes, answered: `routines` its ledger, `offered` whether Caw suggests the routine. */

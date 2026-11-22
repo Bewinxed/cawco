@@ -17,7 +17,9 @@ import {
   PLAN_STEP_PRIORITIES,
   PLAN_STEP_STATUSES,
 } from "@cawco/core/plan";
+import { HUB_DOWNS } from "@cawco/core/preview/protocol";
 import {
+  CHECK_OUTCOMES,
   CONDITION_STATES,
   ROUTINE_OUTCOMES,
   ROUTINE_RUN_STATES,
@@ -132,7 +134,6 @@ const ListedBrowserShape = z.object({
   machineName: z.string(),
   name: z.string(),
   origin: z.string().optional(),
-  originUnread: z.literal(true).optional(),
   passkeyRelay: PasskeyRelayCapabilityShape.optional(),
   progress: z
     .object({ done: z.number(), total: z.number(), what: z.literal("image") })
@@ -218,6 +219,16 @@ const TailnetOriginShape = z.object({
 });
 export type TailnetOriginOutput = z.output<typeof TailnetOriginShape>;
 
+const HubDownShape = z.enum(HUB_DOWNS);
+export type HubDownOutput = z.output<typeof HubDownShape>;
+
+const PreviewUnavailableShape = z.object({
+  down: HubDownShape,
+  machine: z.string().optional(),
+  why: z.string().nullable(),
+});
+export type PreviewUnavailableOutput = z.output<typeof PreviewUnavailableShape>;
+
 const PreviewFrameShape = z.object({
   artifact: z.object({
     ask: z.string().optional(),
@@ -238,6 +249,7 @@ const PreviewFrameShape = z.object({
   stage: StageStateShape.optional(),
   state: z.enum(["open", "closed"]),
   tailnet: TailnetOriginShape.optional(),
+  unavailable: PreviewUnavailableShape.optional(),
 });
 export type PreviewFrameOutput = z.output<typeof PreviewFrameShape>;
 
@@ -979,6 +991,7 @@ const DecisionMediaShape = z
     kind: z.string(),
     revision: z.number(),
     shapes: CanvasShapesShape.optional(),
+    unavailable: PreviewUnavailableShape.optional(),
   })
   .nullable();
 export type DecisionMediaOutput = z.output<typeof DecisionMediaShape>;
@@ -1421,6 +1434,25 @@ const BuiltOnShape = z.object({
 });
 export type BuiltOnOutput = z.output<typeof BuiltOnShape>;
 
+const CheckOutcomeShape = z.enum(CHECK_OUTCOMES);
+export type CheckOutcomeOutput = z.output<typeof CheckOutcomeShape>;
+
+const CheckMachineViewShape = z.object({
+  checkedAt: z.number().nullable(),
+  machine: z.string(),
+  outcome: CheckOutcomeShape.nullable(),
+  said: z.string().nullable(),
+  wokeAt: z.number().nullable(),
+});
+export type CheckMachineViewOutput = z.output<typeof CheckMachineViewShape>;
+
+const RoutineCheckViewShape = z.object({
+  approved: z.boolean(),
+  command: z.string(),
+  machines: z.array(CheckMachineViewShape),
+});
+export type RoutineCheckViewOutput = z.output<typeof RoutineCheckViewShape>;
+
 const RoutineOutcomeShape = z.enum(ROUTINE_OUTCOMES);
 export type RoutineOutcomeOutput = z.output<typeof RoutineOutcomeShape>;
 
@@ -1462,6 +1494,7 @@ const RoutineTargetShape = z.enum(ROUTINE_TARGETS);
 export type RoutineTargetOutput = z.output<typeof RoutineTargetShape>;
 
 const TaskRoutineShape = z.object({
+  check: RoutineCheckViewShape.nullable(),
   deadline: z.number().nullable(),
   disabledReason: z.string().nullable(),
   enabled: z.boolean(),

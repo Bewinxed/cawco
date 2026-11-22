@@ -430,6 +430,12 @@ export const artifactRead = {
         "A preview or page drawn in this state (its link's ?query or #hash); a component frame, adding its style delta."
       ),
     render: z.boolean().optional().describe("Draws it now."),
+    layout: z
+      .boolean()
+      .optional()
+      .describe(
+        "With a component state: the frame with its alignment guides drawn, and their numbers (text edges, near-misses, spacing against tokens)."
+      ),
     verify: z.boolean().optional().describe("Asks the design verifier."),
   },
 };

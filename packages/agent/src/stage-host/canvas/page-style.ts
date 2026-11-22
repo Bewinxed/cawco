@@ -119,6 +119,27 @@ html.cawco-stage-page .cawco-canvas { display: flex; flex-direction: column; ali
   inline-size: calc(var(--ring-w) + 2 * var(--ring-out)); block-size: calc(var(--ring-h) + 2 * var(--ring-out));
   border: var(--spacing-c-change-ring-width) solid var(--color-c-change-ring); border-radius: var(--radius-sm); }
 .cawco-lit-ring[hidden] { display: none; }
+/* The alignment guides (guides.ts): a layer of the stage's own over the drawing, at its px, taking no press. One hue per kind of
+   edge, a near-miss and an off-token spacing in red with its px, an on-token spacing washed green (theme.css --color-c-guide-*). */
+.cawco-guides { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: 100%; block-size: 100%;
+  overflow: visible; pointer-events: none; z-index: 1; }
+.cawco-guides[hidden] { display: none; }
+.cawco-guides line { stroke-width: var(--spacing-c-guide-line); shape-rendering: crispEdges; }
+.cawco-guides [data-kind="start"] { stroke: var(--color-c-guide-start); }
+.cawco-guides [data-kind="end"] { stroke: var(--color-c-guide-end); }
+.cawco-guides [data-kind="centre"] { stroke: var(--color-c-guide-centre); }
+.cawco-guides [data-kind="baseline"] { stroke: var(--color-c-guide-baseline); stroke-dasharray: 2 2; }
+.cawco-guides rect[data-kind="surface"] { fill: none; stroke: var(--color-c-guide-surface); stroke-width: var(--spacing-c-guide-line); }
+.cawco-guides rect[data-kind="on-token"] { fill: var(--color-c-guide-on-token-wash); }
+.cawco-guides rect[data-kind="off-token"] { fill: var(--color-c-guide-off-token-wash); }
+/* A gap handed out of free room (an auto margin, space-between): off every token too, drawn as its outline alone, dashed, so a
+   wide stretch of it never floods the drawing red. */
+.cawco-guides rect[data-kind="free"] { fill: none; stroke: var(--color-c-guide-miss); stroke-width: var(--spacing-c-guide-line);
+  stroke-dasharray: 4 3; }
+.cawco-guides line[data-kind="miss"] { stroke: var(--color-c-guide-miss); stroke-width: var(--spacing-c-guide-miss-line); }
+/* A px said over the drawing: the miss red, haloed in the page's ground so it reads over any line or word under it. */
+.cawco-guides text { font: var(--type-meta); font-variant-numeric: tabular-nums; fill: var(--color-c-guide-miss); text-anchor: middle;
+  dominant-baseline: central; paint-order: stroke; stroke: var(--color-surface-page); stroke-width: 3px; stroke-linejoin: round; }
 /* A decision page's Preview (by=embed) and a map's card (by=map), drawn by the stage (stage.ts bootColumn): each story it
    names a drawing, one under another, each at its own width, 1 CSS px per px. A drawing of no width of its own answers
    its story's width conditions at the canvas's width (canvas width.ts). */

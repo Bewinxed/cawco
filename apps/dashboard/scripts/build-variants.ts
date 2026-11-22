@@ -31,7 +31,7 @@ import { Glob } from "bun";
 import { formatText, formattedAlike } from "../../../scripts/fmt";
 
 // Read at run time beyond its imports; check.ts keys the check on them.
-export const checkReads = ["apps/dashboard/src/", "design/", "DESIGN.md"];
+export const checkReads = ["apps/dashboard/src/", "design/"];
 
 const OUT = "src/lib/tokens/variants.css";
 /** The components, and the shared sheets beside them (spawn/ns-theme.css): every selector a state is read in. */

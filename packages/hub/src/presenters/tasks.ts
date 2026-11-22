@@ -206,9 +206,22 @@ const routineLines = (routine: TaskRoutine, now: number): string[] => {
     ...(routine.problem
       ? [`Its routine lines do not read: ${routine.problem}`]
       : []),
+    ...checkLines(routine.check, now),
     ...runsLines(routine, zone, now),
   ];
 };
+
+/** A routine's check on its task's answer: its command, then each machine as its last run there left it. */
+const checkLines = (check: TaskRoutine["check"], now: number): string[] =>
+  check
+    ? [
+        `Check: \`${check.command}\`${check.approved ? "" : " (changed since approved: it runs nothing until the owner approves it)"}`,
+        ...check.machines.map(
+          (one) =>
+            `  - ${one.machine}: ${one.checkedAt === null ? "not checked yet" : `${one.outcome ?? "checked"} ${ago(one.checkedAt, now)}`}${one.said ? `; ${quote(one.said, 300)}` : ""}${one.wokeAt === null ? "" : `, last woke it ${ago(one.wokeAt, now)}`}`
+        ),
+      ]
+    : [];
 
 /** A routine's runs on its task's answer: its own read's newest runs, a list's newest run alone. */
 const runsLines = (

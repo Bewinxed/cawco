@@ -4,6 +4,7 @@
     type PreviewMode,
     previewMode,
   } from "@cawco/core/comments/model";
+  import { named } from "@cawco/core/named";
   import { pinName } from "@cawco/core/pin-name";
   import { STAGE_READY_MS } from "@cawco/core/stage";
   import { browserWords } from "@cawco/core/words/browser";
@@ -321,17 +322,23 @@
     }
     return paneSubject.offerSession ? "askSession" : "start";
   });
-  /** The down state's way back: a gone version asks its session to make it again, a closed one opens its session, the rest Try again. */
+  /**
+   * The down state's way back: a gone version asks its session to make it
+   * again, a closed one opens its session, the rest Try again; none for a
+   * machine or workspace the hub says is away, whose page loads by itself
+   * as the hub's next word says it is back.
+   */
   const downAction = $derived.by(() => {
     switch (previewFrame.down) {
       case "gone":
         return goneAsk;
       case "closed":
         return closedOpen;
-      case "server":
       case "machine":
-      case "hub":
       case "workspace":
+        return previewFrame.hubHeld ? undefined : frameRetry;
+      case "server":
+      case "hub":
       case "reach":
       case "error":
       case "crashed":
@@ -339,6 +346,12 @@
         return frameRetry;
     }
   });
+  /** The machine its down state names: the one the hub said serves it, else the session's. */
+  const downMachine = $derived(
+    previewFrame.hubDown?.machine
+      ? named(previewFrame.hubDown.machine)
+      : paneSubject.ownerMachine
+  );
   /** The rail, for `/`: its search field takes the keyboard. */
   let rail = $state<ReturnType<typeof CommentRail>>();
   /** The mode's glyph and word, for its one-button form. */
@@ -749,7 +762,6 @@
     connecting={!paneBrowser.browserViewing}
     mine={!!paneBrowser.browserRow?.takeover}
     origin={paneBrowser.browserRow?.origin ?? null}
-    unread={paneBrowser.browserRow?.originUnread === true}
   />
 {/snippet}
 {#snippet addressBar()}
@@ -1361,7 +1373,7 @@
       {/if}
     </div>
   {/if}
-  {#if stageCover.staged?.status === "error"}
+  {#if stageCover.staged?.status === "error" && !previewFrame.hubHeld}
     {@const staged = stageCover.staged}
     <!-- The stage or the server didn't start, or failed its restarts: where the page would be. -->
     <div
@@ -1450,14 +1462,14 @@
       </EmptyState>
     </div>
   {/if}
-  {#if previewFrame.down && !stageCover.unrecordedDown && stageCover.staged?.status !== "error" && !stageCover.neverDrawn}
-    <!-- What happened, why and the way back, where the page would be (every frame's down state); a stage in error says it above. -->
+  {#if previewFrame.down && (previewFrame.hubHeld || (!stageCover.unrecordedDown && stageCover.staged?.status !== "error" && !stageCover.neverDrawn))}
+    <!-- What happened, why and the way back, where the page would be (every frame's down state): the hub's word before any frame, else the proxy's page in it; a stage in error says it above. -->
     <FrameDown
       action={downAction}
       class="absolute inset-0 pt-(--side-room,0px)"
       down={previewFrame.down}
       names={{
-        machine: paneSubject.ownerMachine,
+        machine: downMachine,
         port: paneSubject.downPort,
         server: serverBack,
       }}

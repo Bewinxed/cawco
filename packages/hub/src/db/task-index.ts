@@ -22,6 +22,9 @@ import type { Tx } from "./tx";
  * what `task_triggers` copies, so the scheduler reads no file.
  */
 export interface TriggerIndex {
+  /** Its check's machines (`check_on:`); null with no check. */
+  checkOn: string[] | null;
+  /** Its check's command (`check:`), the `command` column; null with no check. */
   command: string | null;
   cron: string | null;
   dailyCapUsd: number | null;

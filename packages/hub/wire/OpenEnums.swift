@@ -1785,6 +1785,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/CheckMachineViewOutcome`.
+    public enum CheckMachineViewOutcome: OpenEnum {
+        case failed
+        case paused
+        case quiet
+        case woke
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "failed": self = .failed
+            case "paused": self = .paused
+            case "quiet": self = .quiet
+            case "woke": self = .woke
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .failed: "failed"
+            case .paused: "paused"
+            case .quiet: "quiet"
+            case .woke: "woke"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.failed, .paused, .quiet, .woke]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/ClaudeLimitsErrorKind`.
     public enum ClaudeLimitsErrorKind: OpenEnum {
         case noReading
@@ -4639,6 +4683,50 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.pairing, .trusted]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/HubDown`.
+    public enum HubDown: OpenEnum {
+        case closed
+        case gone
+        case machine
+        case workspace
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "closed": self = .closed
+            case "gone": self = .gone
+            case "machine": self = .machine
+            case "workspace": self = .workspace
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .closed: "closed"
+            case .gone: "gone"
+            case .machine: "machine"
+            case .workspace: "workspace"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.closed, .gone, .machine, .workspace]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -8211,7 +8299,6 @@ public enum OpenEnums {
 
     /// `#/components/schemas/RoutineTarget`.
     public enum RoutineTarget: OpenEnum {
-        case command
         case conversation
         case curator
         case delegate
@@ -8222,7 +8309,6 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
-            case "command": self = .command
             case "conversation": self = .conversation
             case "curator": self = .curator
             case "delegate": self = .delegate
@@ -8234,7 +8320,6 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
-            case .command: "command"
             case .conversation: "conversation"
             case .curator: "curator"
             case .delegate: "delegate"
@@ -8248,7 +8333,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.command, .conversation, .curator, .delegate, .orchestrator, .trim]
+        public static let allCases: [Self] = [.conversation, .curator, .delegate, .orchestrator, .trim]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

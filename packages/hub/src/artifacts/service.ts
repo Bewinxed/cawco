@@ -581,6 +581,15 @@ const pictureRefusal = (row: ArtifactRow, ask: PictureAsk, drawn: boolean) => {
           : `${row.name} is a ${row.kind}: a state's link draws a preview or a page.`,
     });
   }
+  if (ask.layout && !(row.kind === "component" && ask.state)) {
+    return problem(400, {
+      code: "artifact-read-state-unfit",
+      detail:
+        row.kind === "component"
+          ? "layout lays the alignment guides over one frame: name it, { id, layout: true, state: { story, interaction?, scheme?, width? } }."
+          : `${row.name} is a ${row.kind}: layout reads a design graph's frame.`,
+    });
+  }
   if (ask.state && row.kind !== "component") {
     return problem(400, {
       code: "artifact-read-state-unfit",
@@ -1190,6 +1199,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
     });
     deps.needsMoved();
+    deps.previewsMoved([id]);
   };
   const folderMove = createFolderMove({
     db,
@@ -1202,6 +1212,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     write: (id, files) => {
       store.writeFolder(id, files);
       folderStamped(id);
+      // Its files kept now: every surface showing it frames it.
+      deps.previewsMoved([id]);
     },
   });
 
@@ -1227,9 +1239,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         .filter((page) => page.kind === "page" && mediaOf(page).includes(id))
         .map((page) => [page.id, page])
     );
-    // The version it stands at now, so a move told twice is heard once.
+    // The version it stands at now, and whether it can be shown
+    // (preview-unavailable.ts), so a move told twice is heard once.
     const now = newestVersion(artifact);
-    const at = `${id}@${now.id}:${now.revision}`;
+    const at = `${id}@${now.id}:${now.revision}:${JSON.stringify(deps.unavailable(now))}`;
     for (const page of pages.values()) {
       const meta = docMeta(docs.doc(page.id));
       if (meta.get("mediaAt") !== at) {
@@ -3832,6 +3845,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   return {
+    /** Every decision page showing artifact `row` takes its media again when what it draws moved ({@link versionMoved}). */
+    versionMoved,
+
+    /** Folder preview `id`'s files: kept where the hub serves them, or why they can't be shown again (doc `meta.sourceGone`, {@link sourceSeen}). */
+    folderFiles: (id: string): { gone: string | null; kept: boolean } => {
+      if (store.hasFolder(id)) {
+        return { kept: true, gone: null };
+      }
+      const gone = db.get(id)
+        ? (docMeta(docs.doc(id)).get("sourceGone")?.why ?? null)
+        : null;
+      return { kept: false, gone };
+    },
+
     /**
      * Needs you's artifacts (needs.ts): each waiting on the person, oldest
      * first, one put away with Not now marked `parked` until it is raised
@@ -5077,6 +5104,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const drawn =
         png ||
         ask.png === true ||
+        ask.layout === true ||
         ask.link !== undefined ||
         ask.save !== undefined;
       const unfit = pictureRefusal(row, ask, drawn);

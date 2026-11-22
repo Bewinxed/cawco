@@ -248,7 +248,7 @@ const ROUTINE_SHAPE = {
     .enum(MADE_ROUTINE_TARGETS)
     .optional()
     .describe(
-      "A routine's runs: delegate (default) or orchestrator, briefed from this task; conversation, a message to Caw; command, a sandboxed shell command, no model, exit 0 its stop, asking the owner first where your mode asks for commands."
+      "A routine's runs: delegate (default) or orchestrator, briefed from this task; conversation, a message to Caw. A check gates any of them."
     ),
   stop: z
     .string()
@@ -269,7 +269,17 @@ const ROUTINE_SHAPE = {
     .boolean()
     .optional()
     .describe("Past 7 days, only on the owner's word."),
-  command: z.string().optional().describe("A command check's command."),
+  check: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      "Gates the routine: one shell line run before each run on every check_on machine, as the agent's user, unsandboxed, no model. Empty stdout, or a last line {\"wakeAgent\": false}, is quiet: no run. Other stdout is the run's input. Non-zero exit fails it. It keeps its own state. null removes it."
+    ),
+  check_on: z
+    .array(z.string())
+    .optional()
+    .describe("The check's machines, by hostname or id."),
 };
 
 /** A routine's deadline as a tool writes it; refused when it does not read. */
@@ -417,6 +427,28 @@ const TASK_UPDATE_INPUT = z.object({
   ...ROUTINE_SHAPE,
 });
 
+/** Why a `task_update` of `id`, a task that is no routine and that the call makes none, cannot set a routine's line; undefined when it sets none. */
+const notRoutine = (
+  id: string,
+  input: Pick<
+    z.infer<typeof TASK_UPDATE_INPUT>,
+    "check" | "check_on" | "enabled"
+  >
+) => {
+  if (input.check !== undefined || input.check_on !== undefined) {
+    return problem(400, {
+      code: "task-not-routine",
+      detail: `${id} is no routine: a check gates a routine's runs, so give on or target with it.`,
+    });
+  }
+  return input.enabled === undefined
+    ? undefined
+    : problem(400, {
+        code: "task-not-routine",
+        detail: `${id} is no routine: enabled pauses or resumes one.`,
+      });
+};
+
 /** A `task_create` call with a trigger as the routine it makes; its deadline's refusal. */
 const routineCreated = (input: z.infer<typeof TASK_CREATE_INPUT>) => {
   const deadline = deadlineOf(input.deadline);
@@ -425,8 +457,7 @@ const routineCreated = (input: z.infer<typeof TASK_CREATE_INPUT>) => {
   }
   const made: Omit<RoutineInput, "projectId"> = {
     title: input.title,
-    description:
-      input.description ?? (input.target === "command" ? input.title : ""),
+    description: input.description ?? "",
     target: input.target ?? "delegate",
     on: input.on ?? null,
     stop: input.stop ?? null,
@@ -434,7 +465,8 @@ const routineCreated = (input: z.infer<typeof TASK_CREATE_INPUT>) => {
     dailyCapUsd: input.daily_cap_usd ?? null,
     mode: input.mode ?? null,
     keep: input.keep ?? false,
-    command: input.command ?? null,
+    check: input.check ?? null,
+    checkOn: input.check_on ?? null,
     type: input.type ?? null,
     ...(input.lands ? { lands: input.lands } : {}),
     budget: input.budget ?? null,
@@ -468,7 +500,8 @@ const routinePatched = (
       : { dailyCapUsd: input.daily_cap_usd }),
     ...(input.mode === undefined ? {} : { mode: input.mode }),
     ...(input.keep === undefined ? {} : { keep: input.keep }),
-    ...(input.command === undefined ? {} : { command: input.command }),
+    ...(input.check === undefined ? {} : { check: input.check }),
+    ...(input.check_on === undefined ? {} : { checkOn: input.check_on }),
   };
   return patch;
 };
@@ -717,12 +750,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     const routine = context?.routines?.byTask(projectId, id);
     if (!(context?.routines && routine?.target)) {
       if (input.on === undefined && input.target === undefined) {
-        return input.enabled === undefined
-          ? undefined
-          : problem(400, {
-              code: "task-not-routine",
-              detail: `${id} is no routine: enabled pauses or resumes one.`,
-            });
+        return notRoutine(id, input);
       }
       if (!context?.makesRoutines) {
         return problem(403, {
@@ -767,7 +795,8 @@ export function taskTools(context: TaskToolContext | undefined) {
       daily_cap_usd: _cap,
       mode: _mode,
       keep: _keep,
-      command: _command,
+      check: _check,
+      check_on: _checkOn,
       ...draft
     } = input;
     const scoped = scope(true);
@@ -1008,7 +1037,8 @@ export function taskTools(context: TaskToolContext | undefined) {
           daily_cap_usd: _cap,
           mode: _mode,
           keep: _keep,
-          command: _command,
+          check: _check,
+          check_on: _checkOn,
           enabled: _enabled,
           ...rest
         } = input;

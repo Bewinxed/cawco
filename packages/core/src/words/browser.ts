@@ -11,8 +11,6 @@ export const browserWords = {
   view: "Browser",
   /** The head's address: the page in front, or none. */
   noPage: "No page open",
-  /** The machine gave up reading the address of the page shown (agent front-origin.ts): the stream still shows the page. */
-  addressUnread: "Address can't be read",
   /** The head's address: who has control (its name, and More's line). */
   agentDriving: "The agent is driving",
   youHaveControl: "You have control",

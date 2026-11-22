@@ -44,6 +44,7 @@ import {
   STAGE_DIALS_WRITTEN,
   STAGE_DIFFERENCES,
   STAGE_FAULT,
+  STAGE_GUIDES,
   STAGE_LAID,
   STAGE_LET_GO,
   STAGE_LOAD,
@@ -63,6 +64,7 @@ import {
   type StageDialsWritten,
   type StageDifferences,
   type StageFault,
+  type StageGuides,
   type StageLaid,
   type StageLetGo,
   type StageLoad,
@@ -214,6 +216,7 @@ export interface FrameSaysBodies {
   [CANVAS_EMBED_SEEN]: Bare;
   [STAGE_COMPARE]: StageCompare;
   [STAGE_DIALS]: StageDials;
+  [STAGE_GUIDES]: StageGuides;
   [STAGE_LET_GO]: StageLetGo;
   [STAGE_LOAD]: StageLoad;
   [STAGE_PAUSE]: StagePause;

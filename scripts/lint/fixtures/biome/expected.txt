@@ -112,3 +112,7 @@ hub-timers-named/packages/hub/src/planted.ts:11:1 hub-timers-named
 hub-timers-named/packages/hub/src/planted.ts:12:1 hub-timers-named
 control-loop-keyed-reads/packages/hub/src/planted.ts:19:22 control-loop-keyed-reads
 control-loop-keyed-reads/packages/hub/src/planted.ts:20:23 control-loop-keyed-reads
+resolve-when-used/packages/agent/src/planted.ts:2:23 resolve-when-used
+resolve-when-used/packages/agent/src/planted.ts:6:38 resolve-when-used
+resolve-when-used/packages/agent/src/planted.ts:7:21 resolve-when-used
+resolve-when-used/packages/agent/src/planted.ts:8:25 resolve-when-used

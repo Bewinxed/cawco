@@ -3,7 +3,7 @@
    * The ways on under a fault's words (RegionFault, the decision card's
    * DecisionFault): one action leads, Try again, or Reload page once the
    * rebuild threw again at once, with Show details quiet under it, and the
-   * error word for word under both once it is open (design/
+   * error word for word under both once it is open (design/references/
    * fault-references.md, BitePal and Vocabulary).
    */
   import { commonWords } from "@cawco/core/words/common";
