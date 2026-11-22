@@ -9,6 +9,8 @@ import type { TaskRoutine } from "@cawco/core/task-views";
 
 /** One routine as the view reads it: its task's id and title, and its trigger. */
 export interface RoutineItem {
+  /** The ready answers its run's question offers; empty when it asks none. */
+  choices: string[];
   /** Its task is done: a run stopped it, its work finished. */
   done: boolean;
   id: string;

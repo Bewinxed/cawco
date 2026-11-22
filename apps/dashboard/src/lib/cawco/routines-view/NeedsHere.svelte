@@ -2,7 +2,8 @@
   /**
    * What a routine that needs him shows under its name, so he acts without
    * opening it: a run's question with what the run found that led to it,
-   * answered in the field under it (the routine runs again once he has);
+   * answered by one press on one of its ready answers, or Other… and a
+   * field (the routine runs again once he has);
    * or why it was turned off, and the one press that turns it back on.
    * The hub's answer stands where the act was: done in a sentence, or its
    * refusal with the act still there to try again (DESIGN.md, Flow).
@@ -33,6 +34,10 @@
 
   /** What he is typing: the field's own, until he sends it. */
   let answer = $state("");
+  /** He pressed Other…: the field stands open. */
+  let writing = $state(false);
+  /** The ready answer he pressed; null for one he wrote. */
+  let pressed = $state<string | null>(null);
   const fieldId = $derived(`answer-${item.id}`);
   const questionId = $derived(`question-${item.id}`);
   const found = $derived(
@@ -45,6 +50,7 @@
     event.preventDefault();
     const text = answer.trim();
     if (text.length > 0) {
+      pressed = null;
       onanswer(text);
     }
   }
@@ -59,37 +65,74 @@
     <p data-slot="done" class="type-meta text-ink-muted">{act.said}</p>
   {:else}
     {#if found}
-      <p class="type-body text-ink-muted">{found}</p>
+      <p
+        class={[
+          "type-body",
+          standing === "asks" ? "text-status-attn-ink" : "text-ink-muted",
+        ]}
+      >
+        {found}
+      </p>
     {/if}
     {#if standing === "asks"}
-      <p id={questionId} class="type-body text-ink-strong">
+      <!-- The screen's headline: the run's question, its ready answers the
+           strongest buttons under it, one press each; Other… opens a field
+           only when none of them is his answer. -->
+      <p id={questionId} class="type-title text-pretty text-ink-strong">
         {item.routine.needs?.said}
       </p>
-      <form class="flex flex-col gap-space-2" onsubmit={send}>
-        <label class="sr-only" for={fieldId}>{words.ask.fieldLabel}</label>
-        <div class="flex min-w-0 items-center gap-space-2">
+      <div class="flex flex-wrap items-center gap-space-2">
+        {#each item.choices as choice (choice)}
+          <Button
+            aria-describedby={questionId}
+            disabled={act.kind === "pending" && pressed !== choice}
+            label={choice}
+            onclick={() => {
+              pressed = choice;
+              onanswer(choice);
+            }}
+            pending={act.kind === "pending" && pressed === choice}
+            pendingLabel={words.ask.sending}
+            variant="outline"
+          />
+        {/each}
+        <Button
+          aria-expanded={writing}
+          disabled={act.kind === "pending"}
+          label={words.ask.other}
+          onclick={() => {
+            writing = !writing;
+          }}
+          variant="outline"
+        />
+      </div>
+      {#if writing}
+        <form class="flex min-w-0 items-center gap-space-2" onsubmit={send}>
+          <label class="sr-only" for={fieldId}>{words.ask.fieldLabel}</label>
           <Input
             id={fieldId}
             aria-describedby={questionId}
             class="min-w-0 flex-1"
             disabled={act.kind === "pending"}
             bind:value={answer}
+            {@attach (field) => field.focus()}
           />
           <Button
             disabled={answer.trim().length === 0}
             label={words.ask.send}
-            pending={act.kind === "pending"}
+            pending={act.kind === "pending" && pressed === null}
             pendingLabel={words.ask.sending}
-            size="sm"
             type="submit"
           />
-        </div>
-        {#if act.kind === "refused"}
-          <RowFault reason={act.said} />
-        {:else}
-          <p class="type-meta text-ink-muted">{words.ask.askedAt(askedAt)}</p>
-        {/if}
-      </form>
+        </form>
+      {/if}
+      {#if act.kind === "refused"}
+        <RowFault reason={act.said} />
+      {:else}
+        <p class="type-meta text-status-attn-ink">
+          {words.ask.askedAt(askedAt)}
+        </p>
+      {/if}
     {:else}
       <div class="flex flex-col items-start gap-space-2">
         <Button

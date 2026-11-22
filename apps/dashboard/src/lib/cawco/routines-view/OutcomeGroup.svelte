@@ -21,8 +21,7 @@
    */
   import { routineOutcomeWords as words } from "@cawco/core/words/routine-outcomes";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { OpenButton } from "#lib/components/ui/open-button/index.js";
-  import { IconChevronDown } from "#lib/icons.js";
+  import { IconChevronDown, IconMaximize } from "#lib/icons.js";
   import NeedsHere from "./NeedsHere.svelte";
   import {
     type ActState,
@@ -95,23 +94,24 @@
   class={[
     "grid content-start gap-space-3",
     surface === "always" &&
-      "rounded-lg bg-surface-raised p-space-3 shadow-tile @min-[36rem]/view:p-space-4",
+      "rounded-lg p-space-3 shadow-tile @min-[36rem]/view:p-space-4",
+    surface === "always" &&
+      (outcome.standing === "asks" ? "bg-status-attn-bg" : "bg-surface-raised"),
     surface === "wide" &&
       "@min-[36rem]/view:rounded-lg @min-[36rem]/view:bg-surface-raised @min-[36rem]/view:p-space-4 @min-[36rem]/view:shadow-tile",
   ]}
 >
   <div data-slot="head" class="grid grid-cols-lead-fluid-end items-start">
-    {#if needsHim(outcome.standing)}
-      <!-- What needs him is marked once, on the routine that does, just under. -->
-      <span aria-hidden="true"></span>
-    {:else}
-      <StandingMark standing={outcome.standing} />
-    {/if}
+    <!-- An outcome carries no glyph: what needs him is marked once, on the
+         routine that does, and what is fine stays quiet. -->
+    <span aria-hidden="true"></span>
     <div class="flex min-w-0 flex-col gap-space-1">
       <h3
         class={[
-          "type-row text-pretty wrap-break-word",
-          outcome.sentence === null ? "text-ink-muted" : "text-ink-strong",
+          "text-pretty wrap-break-word",
+          needsHim(outcome.standing)
+            ? "type-row text-ink-strong"
+            : "type-label text-ink-muted",
         ]}
       >
         {sentence}
@@ -134,7 +134,7 @@
           class="group/fold"
           size="icon-xs"
           title={disclosureLabel}
-          variant="outline"
+          variant="ghost"
           onclick={() => {
             unfolded = !unfolded;
           }}
@@ -162,26 +162,57 @@
 
 {#snippet row(item: RoutineItem, needs: boolean)}
   {@const standing = standingOf(item)}
+  {@const current = opened === item.id}
   <li
     data-routine={item.id}
     class={[
-      "mark-line grid grid-cols-lead-fluid-end items-center gap-y-space-2",
+      "grid gap-y-space-2",
       !needs && fold === "narrow" && !unfolded && "@max-[36rem]/view:hidden",
     ]}
   >
-    <StandingMark going={goingNow(item)} {standing} />
-    <span class="type-body text-pretty wrap-break-word text-ink-row"
-      >{item.title}</span
+    <!-- The row is the item: a press anywhere on it opens the routine, its
+         hover and press the row's own; the Maximize glyph at its end is the
+         cue, the house's open icon with no box of its own. -->
+    <div
+      class="group/row relative isolate mark-line grid grid-cols-lead-fluid-end items-center"
     >
-    <span data-box class="grid justify-self-end">
-      <OpenButton
-        current={opened === item.id}
-        name={item.title}
-        onopen={() => onopen(item.id)}
-      />
-    </span>
+      <button
+        data-box
+        aria-label={words.open(item.title)}
+        aria-pressed={current}
+        class={[
+          "press-tint focus-inset absolute -inset-x-space-2 inset-y-0 -z-1 rounded-sm",
+          current ? "bg-selected-bg" : "hover:bg-surface-hover",
+        ]}
+        onclick={() => onopen(item.id)}
+        type="button"
+      ></button>
+      <span data-box class="pointer-events-none grid">
+        {#if needsHim(standing) || goingNow(item)}
+          <StandingMark going={goingNow(item)} {standing} />
+        {/if}
+      </span>
+      <span
+        class={[
+          "pointer-events-none text-pretty wrap-break-word",
+          needs ? "type-row text-ink-strong" : "type-body text-ink-muted",
+        ]}>{item.title}</span
+      >
+      <span
+        data-box
+        aria-hidden="true"
+        class={[
+          "pointer-events-none grid size-c-btn-h-xs place-items-center justify-self-end",
+          current
+            ? "text-selected-ink"
+            : "text-ink-muted group-hover/row:text-ink-strong",
+        ]}
+      >
+        <IconMaximize class="size-icon-sm" />
+      </span>
+    </div>
     {#if needs}
-      <div data-box class="col-start-2 col-end-4 @min-[36rem]/view:pb-space-2">
+      <div class="ps-c-row-lead @min-[36rem]/view:pb-space-2">
         <NeedsHere
           act={actOf(item.id)}
           askedAt={timeOf(

@@ -47,6 +47,8 @@ export const routineOutcomeWords = {
       `Asked at ${time}. It runs again once you answer.`,
     /** The field's name, read out; the field shows no words of its own. */
     fieldLabel: "Your answer",
+    /** Beside the run's ready answers: write another one. */
+    other: "Other…",
     send: "Send answer",
     sending: "Sending…",
     /** After his answer: the routine runs again on its schedule. */
@@ -60,6 +62,9 @@ export const routineOutcomeWords = {
     /** After it was turned on again. */
     on: (next: string) => `On again. It runs ${next}.`,
   },
+
+  /** A routine's row, read out: the whole row opens it. */
+  open: (routine: string) => `Open ${routine}`,
 
   /** The disclosure that shows an outcome's routines where room is short. */
   show: (count: number) =>

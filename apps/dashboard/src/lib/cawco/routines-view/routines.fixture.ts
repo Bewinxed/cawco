@@ -70,6 +70,7 @@ export const ROUTINES: RoutineItem[] = [
     id: "tsk-412",
     title: "PR sweep",
     outcome: PRS,
+    choices: [],
     done: false,
     routine: routine(
       "rtn-pr-sweep",
@@ -87,6 +88,7 @@ export const ROUTINES: RoutineItem[] = [
     id: "tsk-388",
     title: "Nightly staging check",
     outcome: STAGING,
+    choices: ["Restart staging now", "Wait for the deploy"],
     done: false,
     routine: routine(
       "rtn-staging",
@@ -113,6 +115,7 @@ export const ROUTINES: RoutineItem[] = [
     id: "tsk-391",
     title: "Uptime ping",
     outcome: STAGING,
+    choices: [],
     done: false,
     routine: routine(
       "rtn-uptime",
@@ -131,6 +134,7 @@ export const ROUTINES: RoutineItem[] = [
     id: "tsk-397",
     title: "Migration check",
     outcome: MIGRATIONS,
+    choices: [],
     done: false,
     routine: routine(
       "rtn-migrations",
@@ -156,6 +160,7 @@ export const ROUTINES: RoutineItem[] = [
     id: "tsk-399",
     title: "Schema drift check",
     outcome: MIGRATIONS,
+    choices: [],
     done: false,
     routine: routine(
       "rtn-drift",
@@ -173,6 +178,7 @@ export const ROUTINES: RoutineItem[] = [
     id: "tsk-415",
     title: "Dependency updates",
     outcome: PRS,
+    choices: [],
     done: false,
     routine: routine(
       "rtn-deps",
@@ -190,6 +196,7 @@ export const ROUTINES: RoutineItem[] = [
     id: "tsk-417",
     title: "Stale branch clean-up",
     outcome: PRS,
+    choices: [],
     done: false,
     routine: routine(
       "rtn-branches",
@@ -207,6 +214,7 @@ export const ROUTINES: RoutineItem[] = [
     id: "tsk-361",
     title: "Legacy stores sweep",
     outcome: RUNES,
+    choices: [],
     done: true,
     routine: routine(
       "rtn-stores",
@@ -226,6 +234,7 @@ export const ROUTINES: RoutineItem[] = [
     id: "tsk-362",
     title: "Svelte 4 syntax sweep",
     outcome: RUNES,
+    choices: [],
     done: true,
     routine: routine(
       "rtn-syntax",
@@ -245,6 +254,7 @@ export const ROUTINES: RoutineItem[] = [
     id: "tsk-301",
     title: "Nightly memory run",
     outcome: null,
+    choices: [],
     done: false,
     routine: routine(
       "rtn-memory",
@@ -263,6 +273,7 @@ export const ROUTINES: RoutineItem[] = [
     id: "tsk-344",
     title: "Weekly report",
     outcome: null,
+    choices: [],
     done: false,
     routine: routine(
       "rtn-weekly",
