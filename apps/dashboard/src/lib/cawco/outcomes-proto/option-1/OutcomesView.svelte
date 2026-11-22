@@ -32,8 +32,9 @@
    * (shared part S11) folds it a step at a time until it fits: Caw's
    * suggestion to one line; then, in outcomes that wait on nothing, the
    * true lines to "2 others are true"; then the same in the outcome that
-   * waits, the line its ask concerns kept. A line that is not true never
-   * folds.
+   * waits, the line its ask concerns kept; then a met outcome's words at
+   * the foot to their short form ("All 2 are true"). A line that is not
+   * true never folds.
    *
    * A line opens from its answer word, as a card hanging from its row,
    * beside the tile on the side with more room, the view live around it;
@@ -152,7 +153,7 @@
         box &&
         bento &&
         bento.offsetHeight + foot > box.clientHeight + 1 &&
-        step < 3
+        step < 4
       ) {
         step += 1;
       }
@@ -450,6 +451,7 @@
               }}
               {openLine}
               {outcome}
+              short={step >= 4}
               spelled={spelled.includes(outcome.id)}
             />
           {/each}

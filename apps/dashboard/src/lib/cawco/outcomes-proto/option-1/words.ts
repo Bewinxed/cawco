@@ -33,9 +33,11 @@ export const outcomesWords = {
   doneWhen: "Done when:",
   /** A met outcome's words, on its folded line at the foot: said once, its count of lines in it. */
   met: (count: number) => `All ${count} true now, still being checked`,
+  /** The same, short, where the Room rule's last step needs the line. */
+  metShort: (count: number) => `All ${count} are true`,
   /** The press on a met outcome's words, or a folded count: its lines, spelled out in place. */
-  showLines: (sentence: string) =>
-    `${sentence.replace(STOP, "")}: show every line`,
+  showLines: (sentence: string, words: string) =>
+    `${sentence.replace(STOP, "")}: ${words.toLowerCase()}. Show every line`,
   /** The true lines the Room rule folds under an outcome's unsettled ones. */
   andTrue: (count: number) =>
     count === 1 ? "1 other is true" : `${count} others are true`,

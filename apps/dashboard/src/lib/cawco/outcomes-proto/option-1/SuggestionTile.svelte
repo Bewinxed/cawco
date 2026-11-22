@@ -39,7 +39,7 @@
   class={[
     "flex flex-col rounded-lg border border-dashed border-border-control",
     folded
-      ? "gap-space-2 py-space-2 ps-space-3 pe-space-2 @max-phone/view:my-space-2"
+      ? "gap-space-2 py-space-2 ps-space-3 pe-space-2 @max-phone/view:my-space-1"
       : "gap-space-3 p-space-4 @max-phone/view:my-space-2 @max-phone/view:gap-space-2 @max-phone/view:p-space-3",
   ]}
 >

@@ -64,21 +64,25 @@
 {/snippet}
 
 {#if onopen}
-  <Button
-    aria-expanded={open}
-    aria-label={outcomesWords.why(sentence, answer)}
-    class="-mx-space-2 max-w-full"
-    data-answer={answer.kind}
-    data-line-open
-    fit="word"
-    onclick={onopen}
-    press="pressable"
-    size="xs"
-    tone="muted"
-    variant="ghost"
-  >
-    {@render word()}
-  </Button>
+  <!-- The button's inset reaches past the column on either side, so its
+       words start on the column's edge and keep the column's whole width. -->
+  <span class="-mx-space-2 flex min-w-0">
+    <Button
+      aria-expanded={open}
+      aria-label={outcomesWords.why(sentence, answer)}
+      class="max-w-full"
+      data-answer={answer.kind}
+      data-line-open
+      fit="word"
+      onclick={onopen}
+      press="pressable"
+      size="xs"
+      tone="muted"
+      variant="ghost"
+    >
+      {@render word()}
+    </Button>
+  </span>
 {:else}
   <span
     data-answer={answer.kind}

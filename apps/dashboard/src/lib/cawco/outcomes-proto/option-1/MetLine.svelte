@@ -16,6 +16,7 @@
   let {
     outcome,
     spelled = false,
+    short = false,
     openLine = null,
     ontoggle,
     onopenline,
@@ -24,12 +25,19 @@
     outcome: Outcome;
     /** Its lines stand spelled out under it. */
     spelled?: boolean;
+    /** The Room rule's last step: its words in short, so they stand beside the sentence. */
+    short?: boolean;
     openLine?: string | null;
     ontoggle: () => void;
     onopenline: (line: string, row: HTMLElement) => void;
     onopenoutcome: () => void;
   } = $props();
 
+  const words = $derived(
+    short
+      ? outcomesWords.metShort(outcome.lines.length)
+      : outcomesWords.met(outcome.lines.length)
+  );
   const headId = $derived(`met-${outcome.id}`);
   const linesId = $derived(`met-lines-${outcome.id}`);
 </script>
@@ -61,10 +69,10 @@
         <Button
           aria-controls={linesId}
           aria-expanded={spelled}
-          aria-label={outcomesWords.showLines(outcome.sentence)}
+          aria-label={outcomesWords.showLines(outcome.sentence, words)}
           class="-mx-space-2"
           fit="word"
-          label={outcomesWords.met(outcome.lines.length)}
+          label={words}
           onclick={ontoggle}
           press="pressable"
           size="xs"

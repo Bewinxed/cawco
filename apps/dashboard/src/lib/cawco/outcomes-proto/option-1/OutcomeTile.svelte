@@ -125,7 +125,10 @@
         <li data-slot="folded" class="col-span-2 -mx-space-2">
           <Button
             aria-expanded={false}
-            aria-label={outcomesWords.showLines(outcome.sentence)}
+            aria-label={outcomesWords.showLines(
+              outcome.sentence,
+              outcomesWords.andTrue(shown.folded)
+            )}
             fit="word"
             label={outcomesWords.andTrue(shown.folded)}
             onclick={onunfold}
