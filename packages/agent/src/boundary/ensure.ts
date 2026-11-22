@@ -113,11 +113,11 @@ import {
 } from "@cawco/core/paths/workspace";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { listedPid } from "@cawco/core/signal";
-import { isDesignTree } from "@cawco/core/stage";
 import { readRecord } from "@cawco/core/state-file";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import { workspaceIdKind, workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { systemProgram, workspaceNeeds } from "@cawco/core/workspace-needs";
-import { isPlace, workspacePolicy } from "@cawco/core/workspace-policy";
+import { workspacePolicy } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { ensureGateToken } from "../browser/gate";
 import { isGitDir } from "../git-dir";
@@ -290,7 +290,7 @@ const refuseGone = async (ref: WorkspaceRef, why: string): Promise<never> => {
  * over, which stays as the person keeps it, with its folder recorded as one a
  * sandbox writes ({@link keepPlaceFolder}) and what its repository borrows
  * recorded at its first hold ({@link keepBorrowedObjects}); a design folder
- * (core stage.ts `isDesignTree`), the folder the hub keeps for a design
+ * (core workspace-id.ts `design`), the folder the hub keeps for a design
  * artifact, which its stage runs over as it is, recorded by its tree
  * (stage-design.ts `keepDesign`) and no layer of anything; or a delegate's layer of its
  * folder (layer.ts): a folder there, and on Linux its view running, which
@@ -306,13 +306,15 @@ const placeReady = async (ref: WorkspaceRef): Promise<void> => {
     await refuseGone(ref, `${ref.path} is not a folder`);
     return;
   }
-  if (isPlace(ref.id)) {
-    await keepPlaceFolder(ref);
-    await keepBorrowedObjects(ref);
-    return;
-  }
-  if (isDesignTree(ref.id)) {
-    return;
+  switch (workspaceIdKind(ref.id)) {
+    case "place":
+      await keepPlaceFolder(ref);
+      await keepBorrowedObjects(ref);
+      return;
+    case "design":
+      return;
+    case "clone":
+      break;
   }
   const layer = await layerOf(ref.id, ref.path);
   if (!layer) {
@@ -840,7 +842,8 @@ const launch = async (
   // overlays (layer.ts): nothing of the boundary's is written into it from
   // here (no copied inodes, no stand-ins, no exclude lines). The srt host
   // makes the view's stand-ins inside it, into its upper.
-  const own = !isPlace(ref.id) && ownFolderSync(ref.id, ref.path);
+  const own =
+    workspaceIdKind(ref.id) === "clone" && ownFolderSync(ref.id, ref.path);
   const procId = boundaryProcId(ref.id, gen);
   if (linux) {
     // Only with no sandbox of the workspace running: a handover starts this
@@ -1560,7 +1563,7 @@ const rearmOne = async (id: string): Promise<boolean> => {
   // A person's own folder gets no stand-ins, and nothing is listed in its
   // exclude; nor does the folder a Linux view overlays (layer.ts), whose
   // stand-ins are in its upper: only a folder of the workspace's own does.
-  const own = !isPlace(id) && ownFolderSync(id, ref.path);
+  const own = workspaceIdKindOf(id) === "clone" && ownFolderSync(id, ref.path);
   if (own && process.platform === "linux") {
     // Before anything is armed: each mount point a running sandbox left
     // where a file stands in holds that file's stand-in now, in place; one
@@ -1842,12 +1845,14 @@ const readWorkspaces = async (): Promise<{
       });
       continue;
     }
-    const created = isPlace(id)
-      ? undefined
-      : await readRecord(
-          join(stateDir(id), "create.json"),
-          z.object({ path: z.string().optional() })
-        ).catch(() => undefined);
+    // A clone and a design folder are recorded by their `create.json`; a place has none.
+    const created =
+      workspaceIdKindOf(id) === "place"
+        ? undefined
+        : await readRecord(
+            join(stateDir(id), "create.json"),
+            z.object({ path: z.string().optional() })
+          ).catch(() => undefined);
     const cli =
       created?.path !== undefined &&
       attachedIn(id, created.path, live, commands);

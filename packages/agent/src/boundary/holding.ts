@@ -5,7 +5,7 @@
 
 import { join } from "node:path";
 import { commandLines } from "@cawco/core/process-identity";
-import { isPlace } from "@cawco/core/workspace-policy";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import type { HeldProc } from "../keepers";
 import { inView, overlaySync, ownFolderSync } from "../layer";
 import { sessionOfProc } from "../proc-id";
@@ -163,8 +163,15 @@ export const attachedProcs = (
     if (!(proc.alive && sessionOfProc(proc.procId))) {
       return false;
     }
-    if (isPlace(id)) {
-      return commands.byPid.get(proc.pid)?.includes(hook) ?? false;
+    switch (workspaceIdKindOf(id)) {
+      case "place":
+        return commands.byPid.get(proc.pid)?.includes(hook) ?? false;
+      // No session runs in a design folder: its stage alone does.
+      case "design":
+      case undefined:
+        return false;
+      case "clone":
+        break;
     }
     // A Linux view's path is the person's folder, where their own sessions
     // and every other view's run too: its sessions are those in its view.
@@ -217,7 +224,7 @@ export const liveWhy = async (
       id,
       path,
       facts.procs,
-      isPlace(id) ? await facts.commands() : NO_COMMANDS
+      workspaceIdKindOf(id) === "place" ? await facts.commands() : NO_COMMANDS
     )
   ) {
     return "a session there is attached";

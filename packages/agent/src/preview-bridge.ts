@@ -36,8 +36,8 @@ import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { until } from "@cawco/core/until";
 import { newTail, saidTail, writeTail } from "@cawco/core/words/helpers";
 import { DOWN_WORDS } from "@cawco/core/words/preview-down";
+import { isWorkspaceId } from "@cawco/core/workspace-id";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
-import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import type { Subprocess } from "bun";
 import { listeners, workspaceNetworks } from "./boundary/sandboxes";
 import { bridgeRelay } from "./bridge-relay";
@@ -84,12 +84,6 @@ const BRIDGE_START_MS = 3000;
 
 /** The most of a bridge's stderr kept, to say why it did not start. */
 const STDERR_KEPT = 2000;
-
-/** A workspace's id, or a place's (core `isPlace`): a sheet's stage runs in either. */
-const WORKSPACE_ID = new RegExp(
-  `^(?:[0-9a-f-]{36}|[0-9a-f]{8}${PLACE_SUFFIX})$`,
-  "u"
-);
 
 /**
  * What a bridge reaches: `port` of workspace `workspace`, in the network of
@@ -361,7 +355,8 @@ export const reachWorkspace = async (
   workspace: string,
   port: number
 ): Promise<string | "host"> => {
-  if (!WORKSPACE_ID.test(workspace)) {
+  // A stage runs in a boundary of any kind (core workspace-id.ts): a clone's, a place's stage clone's, a design folder's.
+  if (!isWorkspaceId(workspace)) {
     throw new Error(`${workspace} is not a workspace id.`);
   }
   if (onHost.get(instanceId) === workspace) {

@@ -91,15 +91,12 @@ import {
   holdsNothing,
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import {
   refuseShortOfWorkspace,
   systemProgram,
 } from "@cawco/core/workspace-needs";
-import {
-  excludedPaths,
-  IGNORED_STATUS,
-  isPlace,
-} from "@cawco/core/workspace-policy";
+import { excludedPaths, IGNORED_STATUS } from "@cawco/core/workspace-policy";
 import { stopWorkspaceBoundary, whileBoundaryClosed } from "./boundary/control";
 import { addAccount, addSpill } from "./boundary/decisions";
 import { ensureBoundary } from "./boundary/ensure";
@@ -620,7 +617,10 @@ export const poolHeldClones = async (): Promise<void> => {
   try {
     await unfinishedCleared;
     for (const ref of await workspaceRefs()) {
-      if (isPlace(ref.id) || (await readLayer(ref.id).catch(() => undefined))) {
+      if (
+        workspaceIdKindOf(ref.id) !== "clone" ||
+        (await readLayer(ref.id).catch(() => undefined))
+      ) {
         continue;
       }
       await borrowFromPool(ref, async () => {
@@ -686,7 +686,7 @@ const sweepUnmarked = async (): Promise<void> => {
 /** Workspace `id`'s clone, when a cut of a build before the mark left it ({@link clearUnmarkedHusks}). */
 const clearUnmarked = async (id: string): Promise<void> => {
   if (
-    isPlace(id) ||
+    workspaceIdKindOf(id) !== "clone" ||
     (await readLayer(id).catch(() => undefined)) ||
     (await cutMark(id).catch(() => undefined))
   ) {

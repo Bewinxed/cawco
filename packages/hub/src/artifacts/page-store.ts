@@ -137,7 +137,7 @@ export const createPageStore = (root: string) => {
     /**
      * A held next version's files: a copy of `from`'s, when it has any. A
      * design's folder is not copied: the version's source names the same
-     * one, which its stage serves live (core stage.ts `designTreeId`).
+     * one, which its stage serves live (core workspace-id.ts `designTreeId`).
      */
     copy: (from: string, to: string) => {
       if (existsSync(folder(from))) {

@@ -31,11 +31,8 @@ import {
 import { join, posix } from "node:path";
 import { LOCKFILES } from "@cawco/core/deps";
 import { makeFolderSync } from "@cawco/core/folders";
-import {
-  DESIGN_FOLDER,
-  type DesignMoved,
-  designArtifactOf,
-} from "@cawco/core/stage";
+import { DESIGN_FOLDER, type DesignMoved } from "@cawco/core/stage";
+import { designArtifactOf } from "@cawco/core/workspace-id";
 import { z } from "zod";
 
 /** One file of a design: its path from the design's folder, its bytes. */

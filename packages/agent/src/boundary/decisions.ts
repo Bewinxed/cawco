@@ -17,8 +17,9 @@ import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import type { ProcSpec } from "@cawco/core/sessiond";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import { workspaceIdKind } from "@cawco/core/workspace-id";
 import { workspaceNeeds } from "@cawco/core/workspace-needs";
-import { isPlace, workspaceSpills } from "@cawco/core/workspace-policy";
+import { workspaceSpills } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import { ensureView, layerOf, viewArgv } from "../layer";
 import { gateOf } from "./exec";
@@ -173,13 +174,14 @@ export const checkBoundaryHost = (): void => {
 /**
  * The view a Linux boundary's srt host runs in (layer.ts): its spec entered
  * into the workspace's view namespace, so srt's binds of the folder are the
- * view's overlay. Nothing for a place, a copy, or on macOS.
+ * view's overlay. Nothing for a place, a design folder, a copy, or on
+ * macOS: only a clone (core workspace-id.ts) has a layer.
  */
 export const viewOfBoundary = async (
   ref: WorkspaceRef,
   spec: ProcSpec
 ): Promise<ProcSpec> => {
-  if (process.platform !== "linux" || isPlace(ref.id)) {
+  if (process.platform !== "linux" || workspaceIdKind(ref.id) !== "clone") {
     return spec;
   }
   const layer = await layerOf(ref.id, ref.path);

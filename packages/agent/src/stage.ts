@@ -6,7 +6,7 @@
  * sees and writes what the workspace's commands do and listens on the
  * boundary's loopback, which the preview bridge reaches (`preview-bridge.ts`).
  * A session with no workspace of its own has its stage in a place over the
- * folder it works in (core `isPlace`, hub `stagePlaceRef`), and the stage
+ * folder it works in (core workspace-id.ts `place`, hub `stagePlaceRef`), and the stage
  * runs in that place's stage clone (`stage-clone.ts`): a clone of the
  * checkout cut from its HEAD with its uncommitted changes and kept in step
  * with it, in a boundary of its own, so the toolchain writes its own tree
@@ -86,7 +86,6 @@ import {
   type DesignOpened,
   type DesignQuery,
   HEALTH_PATH,
-  isDesignTree,
   PAGE_FILE,
   PAGES_PATH,
   REPORT_PATH,
@@ -136,7 +135,8 @@ import type {
   WorkspaceArchive,
   WorkspaceRef,
 } from "@cawco/core/workspace/controls";
-import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
+import { workspaceIdKind } from "@cawco/core/workspace-id";
+import { stageCloneId } from "@cawco/core/workspace-policy";
 import { z } from "zod";
 import type { AgentPorts } from "./agent-ports";
 import { drawPage } from "./artifact-picture";
@@ -427,13 +427,29 @@ const treeOf = async (
     const clone = (await pinnedTree(pin)) ?? (await cutPin(workspace, pin));
     return pinTree(pin, clone, ports);
   }
-  if (isPlace(workspace.id)) {
-    return { ref: workspace, ports, ...(await stageCloneOf(workspace, ports)) };
+  switch (workspaceIdKind(workspace.id)) {
+    case "place":
+      return {
+        ref: workspace,
+        ports,
+        ...(await stageCloneOf(workspace, ports)),
+      };
+    case "design":
+      await keepDesign(workspace);
+      return {
+        ref: workspace,
+        ports,
+        folder: workspace.path,
+        boundary: workspace,
+      };
+    case "clone":
+      return {
+        ref: workspace,
+        ports,
+        folder: workspace.path,
+        boundary: workspace,
+      };
   }
-  if (isDesignTree(workspace.id)) {
-    await keepDesign(workspace);
-  }
-  return { ref: workspace, ports, folder: workspace.path, boundary: workspace };
 };
 
 /**
@@ -454,14 +470,24 @@ const installedFor = async (tree: Tree, from: string): Promise<void> => {
   if (running && running.status !== "asleep" && running.status !== "error") {
     return;
   }
-  const design = isDesignTree(tree.ref.id);
-  await (isPlace(tree.ref.id)
-    ? installStage(tree.ref, tree, root)
-    : installProject(
-        { boundary: tree.boundary, from: root, shownAs: tree.ref.path, design },
-        // A pin's and a design folder's `node_modules` only this makes, as a place's clone's.
-        isPin(tree.ref.id) || design
-      ));
+  const at = (design: boolean): ProjectAt => ({
+    boundary: tree.boundary,
+    from: root,
+    shownAs: tree.ref.path,
+    design,
+  });
+  switch (workspaceIdKind(tree.ref.id)) {
+    case "place":
+      await installStage(tree.ref, tree, root);
+      return;
+    // A design folder's and a pin's `node_modules` only this makes, as a place's clone's.
+    case "design":
+      await installProject(at(true), true);
+      return;
+    case "clone":
+      await installProject(at(false), isPin(tree.ref.id));
+      return;
+  }
 };
 
 /** Where a stage's project installs: its boundary and its folder. */
@@ -469,7 +495,7 @@ const projectOf = (stage: Stage): ProjectAt => ({
   boundary: stage.boundary,
   from: stage.root,
   shownAs: stage.boundary.path,
-  design: isDesignTree(stage.workspace.id),
+  design: workspaceIdKind(stage.workspace.id) === "design",
 });
 
 /**
@@ -478,12 +504,19 @@ const projectOf = (stage: Stage): ProjectAt => ({
  * its stage clone, cut again or brought in step with its checkout first.
  */
 const installFor = async (stage: Stage): Promise<void> => {
-  if (isPlace(stage.workspace.id)) {
-    const clone = await stageCloneOf(stage.workspace, stage.ports);
-    await installStage(stage.workspace, clone, stage.root);
-    return;
+  switch (workspaceIdKind(stage.workspace.id)) {
+    case "place": {
+      const clone = await stageCloneOf(stage.workspace, stage.ports);
+      await installStage(stage.workspace, clone, stage.root);
+      return;
+    }
+    case "design":
+      await installProject(projectOf(stage), true);
+      return;
+    case "clone":
+      await installProject(projectOf(stage), false);
+      return;
   }
-  await installProject(projectOf(stage), isDesignTree(stage.workspace.id));
 };
 
 /** Whether a stage's project moved past its install; a look that fails is no move, and the start after says why. */
@@ -554,9 +587,13 @@ export const networkOf = (source: {
   if (source.pin !== undefined) {
     return source.pin;
   }
-  return source.stage && isPlace(source.workspace)
-    ? stageCloneId(source.workspace)
-    : source.workspace;
+  switch (workspaceIdKind(source.workspace)) {
+    case "place":
+      return source.stage ? stageCloneId(source.workspace) : source.workspace;
+    case "clone":
+    case "design":
+      return source.workspace;
+  }
 };
 
 const stages = new Map<string, Stage>();
@@ -706,7 +743,7 @@ const storyPath = (tree: Tree, file: string): string => {
  * folder's page (core `PAGE_FILE`), else a story file ({@link storyPath}).
  */
 const canvasFile = (tree: Tree, file: string): string => {
-  if (!isDesignTree(tree.ref.id)) {
+  if (workspaceIdKind(tree.ref.id) !== "design") {
     return storyPath(tree, file);
   }
   const abs = inTree(tree, file, "a design's canvas names its pages in it.");
@@ -834,7 +871,7 @@ function stageFor(tree: Tree, story: string, rootOnly = false): StagePlace {
   const deps = dependencyNames(root, top);
   const framework =
     FRAMEWORK_PACKAGES.find(([, name]) => deps.has(name))?.[0] ?? null;
-  const design = isDesignTree(tree.ref.id);
+  const design = workspaceIdKind(tree.ref.id) === "design";
   if (!(framework || design)) {
     throw new StageRefusal(
       `${dir}'s package.json names none of Svelte, Vue, React, Solid or Preact, the frameworks a sheet mounts. ${AS_PAGE}`
@@ -1316,7 +1353,10 @@ const hostWord = (line: string): HostWord | null => {
  */
 function mirrorWhileLive(stage: Stage): void {
   clearInterval(stage.mirror);
-  if (!(stage.runs.kind === "sheet" && isPlace(stage.workspace.id))) {
+  if (!(
+    stage.runs.kind === "sheet" &&
+    workspaceIdKind(stage.workspace.id) === "place"
+  )) {
     return;
   }
   let busy = false;
@@ -1746,7 +1786,7 @@ async function start(stage: Stage): Promise<void> {
 async function stageAtRoot(found: StagePlace, by: string): Promise<Stage> {
   let stage = stages.get(found.key);
   if (!stage) {
-    if (isPlace(found.workspace.id)) {
+    if (workspaceIdKind(found.workspace.id) === "place") {
       await keepPlace(found.workspace);
     }
     stage = newStage(found);
@@ -1937,13 +1977,14 @@ export async function writeSheet(
       SheetWrittenSchema,
       { ...write, files }
     );
-  const done = isPlace(workspace.id)
-    ? await inCloneTurn(tree.boundary.id, async () => {
-        const made = await written();
-        await copyBack(workspace, tree, join(stage.root, made.file));
-        return made;
-      })
-    : await written();
+  const done =
+    workspaceIdKind(workspace.id) === "place"
+      ? await inCloneTurn(tree.boundary.id, async () => {
+          const made = await written();
+          await copyBack(workspace, tree, join(stage.root, made.file));
+          return made;
+        })
+      : await written();
   return { ...done, file: join(stage.dir, done.file) };
 }
 
@@ -2089,7 +2130,7 @@ export async function warmStage(
     if (!first) {
       return;
     }
-    if (isDesignTree(tree.ref.id)) {
+    if (workspaceIdKind(tree.ref.id) === "design") {
       const stage = await rootStage(tree, tree.folder, warm.by);
       await Promise.all(
         canvases.map((pages) =>
@@ -2391,7 +2432,7 @@ export async function wakeSource(
     workspace: source.workspace,
     ...(source.pin === undefined ? {} : { pin: source.pin }),
   });
-  if (source.stage && isDesignTree(source.workspace)) {
+  if (source.stage && workspaceIdKind(source.workspace) === "design") {
     await rootStage(tree, tree.folder, "a preview's request");
   } else if (source.stage) {
     await storyStage(

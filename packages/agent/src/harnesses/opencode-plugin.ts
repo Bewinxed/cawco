@@ -26,7 +26,6 @@ import {
 } from "@cawco/core/paths/workspace";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
 import { writeStateFile } from "@cawco/core/state-file";
-import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { JUDGE_SCRIPT } from "../boundary/hook-judge";
 import { CHROME_DEVTOOLS } from "../browser/door";
 import {
@@ -91,7 +90,6 @@ const pluginSettings = (): PluginSettings => ({
   machineData: machineDataHome(),
   mcpConnectMs: MCP_CONNECT_MS,
   openItemsTool: OPEN_ITEMS_TOOL,
-  placeSuffix: PLACE_SUFFIX,
   pluginId: CAWCO_PLUGIN_ID,
   quietDir: OPENCODE_QUIET_DIR,
   sendNowMetadata: SEND_NOW_METADATA,

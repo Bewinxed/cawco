@@ -124,7 +124,6 @@ import {
   canvasOf,
   canvasPath,
   type DesignQuery,
-  designArtifactOf,
   designOf,
   type EmbedShape,
   STAGE_IDLE_MS,
@@ -136,6 +135,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { commentsFull } from "@cawco/core/words/comment-lines";
 import { decidesWords } from "@cawco/core/words/decides";
+import { designArtifactOf } from "@cawco/core/workspace-id";
 import { type FolderWeight, pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus, problem } from "elysia";
 import type { Doc } from "yjs";
@@ -1148,7 +1148,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     letGoHeadless(row.id);
     docs.drop(row.id);
     db.remove(row.id);
-    // A design's stage stops with the artifact whose folder holds it (core stage.ts `designTreeId`); a held version of it serves from that folder too.
+    // A design's stage stops with the artifact whose folder holds it (core workspace-id.ts `designTreeId`); a held version of it serves from that folder too.
     const design = designOf(row);
     if (design && designArtifactOf(design.tree) === row.id) {
       deps.dropDesign(design.tree);

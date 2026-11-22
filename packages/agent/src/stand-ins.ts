@@ -51,7 +51,7 @@ import { projectClaudeDir } from "@cawco/core/paths/claude";
 import { workspaceStateDir } from "@cawco/core/paths/workspace";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
-import { isPlace } from "@cawco/core/workspace-policy";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { z } from "zod";
 import { excludeStandIns, gitIn, infoExcludeOf } from "./checkout-exclude";
 import { isGitDir } from "./git-dir";
@@ -411,11 +411,12 @@ const strayReader = async (path: string, placed: readonly string[]) => {
  */
 export const removeStandIns = async (ref: WorkspaceRef): Promise<void> => {
   // A place, a person's own folder, has no stand-ins: an empty dir or file at
-  // a deny path there is theirs. Gone, or a delegate's clone that is no git
+  // a deny path there is theirs; nor has a design folder, which keeps no
+  // clone denies (core workspace-policy.ts `workspaceDenies`). Gone, or a delegate's clone that is no git
   // clone any more: a husk goes whole with its workspace's archive
   // (workspace.ts `closeClone`), and any other such folder is kept.
   if (
-    isPlace(ref.id) ||
+    workspaceIdKindOf(ref.id) !== "clone" ||
     !(await statOf(ref.path)) ||
     (await noRepositoryAt(ref.path))
   ) {

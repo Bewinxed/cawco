@@ -36,7 +36,7 @@
  * - Every credential store (`credentialStores`) is denied for reading and
  *   writing, even inside an allowed tree. On Linux so are the host's runtime
  *   dirs, with every daemon's socket, and the journal.
- * - A design folder's tree (core stage.ts `isDesignTree`) writes its folder
+ * - A design folder's tree (core workspace-id.ts `design`) writes its folder
  *   under the hub's artifacts root, which lies in the hub's data dir, a
  *   store: the store above that folder alone is no write deny of its
  *   (`designStoresOpen`), the deeper entry deciding as it does for reads.
@@ -108,9 +108,9 @@ import {
 } from "./paths/workspace";
 import { SAFE_GIT_ENV, safeGitArgv } from "./safe-git";
 import { hostEnvironment } from "./session-env";
-import { isDesignTree } from "./stage";
 import { readRecord } from "./state-file";
 import type { WorkspaceRef } from "./workspace/controls";
+import { workspaceIdKind, workspaceIdKindOf } from "./workspace-id";
 import { type Policy, resolveDenied, resolveReal } from "./workspace-judge";
 import { findProgram, hostJavaHome, startedPath } from "./workspace-needs";
 
@@ -180,28 +180,20 @@ export const excludedPaths = (
 };
 
 /**
- * A place: the workspace id the hub gives the boundary of a person's own
- * folder, never a delegate's. A session with no workspace of its own has
- * one over the folder it works in, which names its stage (hub
- * `stagePlaceRef`; the stage itself runs in a clone of that checkout, agent
- * stage-clone.ts). It is a person's own folder, not a disposable clone, so its
- * boundary never writes into it (no stand-ins, no copied inodes, no exclude
- * lines): its policy denies what is there ({@link workspaceDenies},
- * {@link ownerOnlyIn}, {@link linkedIn}), its judge refuses protected config
- * by name (`protectConfig`), and its guard checks each command
- * (boundary/place-guard.ts `placeGuard`). Every place's id ends {@link PLACE_SUFFIX},
- * Caw's and a session's stage place alike. The suffix stays `-caw`, the one
- * it had when only Caw had a place, so the place records already on disk
- * still read as places.
- */
-export const PLACE_SUFFIX = "-caw";
-export const isPlace = (id: string): boolean => id.endsWith(PLACE_SUFFIX);
-
-/**
  * The workspace id of place `placeId`'s stage clone (agent stage-clone.ts),
- * as its machine and the hub both name it: a workspace id of its own, never
- * a place's, its first 8 characters its own hash, so its scratch and door
- * dirs are its own and not the place's.
+ * as its machine and the hub both name it: a workspace id of the clone kind
+ * (core workspace-id.ts), never a place's, its first 8 characters its own
+ * hash, so its scratch and door dirs are its own and not the place's.
+ *
+ * A place (core workspace-id.ts `place`) is the workspace id the hub gives
+ * the boundary of a person's own folder, never a delegate's. A session with
+ * no workspace of its own has one over the folder it works in, which names
+ * its stage (hub `stagePlaceRef`). It is a person's own folder, not a
+ * disposable clone, so its boundary never writes into it (no stand-ins, no
+ * copied inodes, no exclude lines): its policy denies what is there
+ * ({@link workspaceDenies}, {@link ownerOnlyIn}, {@link linkedIn}), its judge
+ * refuses protected config by name (`protectConfig`), and its guard checks
+ * each command (boundary/place-guard.ts `placeGuard`).
  */
 export const stageCloneId = (placeId: string): string => {
   const hex = createHash("sha256").update(`stage\0${placeId}`).digest("hex");
@@ -401,23 +393,24 @@ const borrowing = (
 export const workspaceDenies = async (
   workspace: WorkspaceRef
 ): Promise<readonly CloneDeny[]> => {
-  if (isDesignTree(workspace.id)) {
-    return [];
-  }
   const clone = resolveReal(workspace.path);
-  if (!isPlace(workspace.id)) {
-    return borrowing(
-      cloneDenies(clone),
-      clone,
-      await recordedPool(workspace.id)
-    );
+  switch (workspaceIdKind(workspace.id)) {
+    case "design":
+      return [];
+    case "clone":
+      return borrowing(
+        cloneDenies(clone),
+        clone,
+        await recordedPool(workspace.id)
+      );
+    case "place":
+      return collapsed(await protectedIn(clone), clone, PROTECTED_MAX).map(
+        (path) => ({
+          path,
+          empty: { kind: "none" },
+        })
+      );
   }
-  return collapsed(await protectedIn(clone), clone, PROTECTED_MAX).map(
-    (path) => ({
-      path,
-      empty: { kind: "none" },
-    })
-  );
 };
 
 /**
@@ -648,18 +641,30 @@ const borrowedObjects = async (
   id: string,
   writable: readonly string[]
 ): Promise<string[]> => {
-  const listed: unknown[] = isPlace(id)
-    ? ((await readRecord(
-        workspaceBorrowedObjectsFile(id),
-        z.array(z.unknown())
-      )) ?? [])
-    : await poolOf(id);
+  const listed = await listedObjects(id);
   return listed.filter(
     (dir): dir is string =>
       typeof dir === "string" &&
       isAbsolute(dir) &&
       !writable.some((root) => within(dir, root))
   );
+};
+
+/** The objects dirs workspace `id` borrows as recorded ({@link borrowedObjects}): a design folder is no repository, and borrows none. */
+const listedObjects = async (id: string): Promise<unknown[]> => {
+  switch (workspaceIdKind(id)) {
+    case "place":
+      return (
+        (await readRecord(
+          workspaceBorrowedObjectsFile(id),
+          z.array(z.unknown())
+        )) ?? []
+      );
+    case "clone":
+      return await poolOf(id);
+    case "design":
+      return [];
+  }
 };
 
 /** Workspace `id`'s recorded pool ({@link borrowedObjects}) at its real path, when it is a folder there. */
@@ -717,17 +722,19 @@ const clonesDir = (home: string): string => join(home, ".worktrees");
  */
 const workspaceWritten = async (home: string): Promise<string[]> => {
   const ids = await readdir(workspacesDir()).catch(unlessGone<string[]>([]));
-  const places = ids.filter(isPlace);
+  const places = ids.filter((id) => workspaceIdKindOf(id) === "place");
   const designs = await Promise.all(
-    ids.filter(isDesignTree).map(async (id) => {
-      const created = await readRecord(
-        join(workspacesDir(), id, "create.json"),
-        z.object({ path: z.unknown().optional() })
-      ).catch(() => undefined);
-      return typeof created?.path === "string" && isAbsolute(created.path)
-        ? [resolveReal(created.path)]
-        : [];
-    })
+    ids
+      .filter((id) => workspaceIdKindOf(id) === "design")
+      .map(async (id) => {
+        const created = await readRecord(
+          join(workspacesDir(), id, "create.json"),
+          z.object({ path: z.unknown().optional() })
+        ).catch(() => undefined);
+        return typeof created?.path === "string" && isAbsolute(created.path)
+          ? [resolveReal(created.path)]
+          : [];
+      })
   );
   const folders = await Promise.all(
     places.map(async (id) => {
@@ -1385,7 +1392,7 @@ const ancestorManifests = (clone: string, home: string): string[] => {
 
 /**
  * The credential stores a workspace's writes are denied in: every one, but
- * for a design folder's tree (core stage.ts `isDesignTree`) the stores that
+ * for a design folder's tree (core workspace-id.ts `design`) the stores that
  * hold its folder (the hub's data dir, where its artifacts root lies). Its
  * writes are its folder alone (`allowWrite`), so nothing else in those
  * stores opens; and a deny above the folder would refuse every write in it
@@ -1397,7 +1404,7 @@ const designStoresOpen = (
   clone: string,
   stores: readonly string[]
 ): readonly string[] =>
-  isDesignTree(id)
+  workspaceIdKind(id) === "design"
     ? stores.filter((store) => !(clone !== store && within(clone, store)))
     : stores;
 
@@ -1469,7 +1476,7 @@ export const workspacePolicy = async (
   ]);
   // A place: what only its owner may read in it is hidden from the
   // shell and file tools in it, for reading and writing (`ownerOnlyIn`).
-  const lead = isPlace(workspace.id);
+  const lead = workspaceIdKind(workspace.id) === "place";
   // At most `OWNER_ONLY_MAX`, past it denied as the dirs that hold them.
   const ownerOnly = lead
     ? collapsed(await ownerOnlyIn(clone), clone, OWNER_ONLY_MAX)

@@ -6,7 +6,7 @@
 import { readdir } from "node:fs/promises";
 import { workspacesDir } from "@cawco/core/paths/workspace";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
-import { isPlace } from "@cawco/core/workspace-policy";
+import { workspaceIdKindOf } from "@cawco/core/workspace-id";
 import { recordAgentState } from "../agent-state";
 import { boundaryProcId, isBoundaryOf, isJudgeOf } from "../proc-id";
 import { addAccount, addSpill, behindGate } from "./decisions";
@@ -58,7 +58,7 @@ import {
 export const settleGonePlaces = async (): Promise<void> => {
   try {
     const ids = (await readdir(workspacesDir()).catch(() => [])).filter(
-      isPlace
+      (id) => workspaceIdKindOf(id) === "place"
     );
     for (const id of ids) {
       const held = await readHeld(id).catch(() => undefined);

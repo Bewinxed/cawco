@@ -81,7 +81,7 @@ import { noticeWords } from "@cawco/core/words/notices";
 import { projectWords } from "@cawco/core/words/project";
 import { conversationWords } from "@cawco/core/words/project-conversation";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
-import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
+import { placeIdOf } from "@cawco/core/workspace-id";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import type { Blocks } from "./blocks";
@@ -263,10 +263,9 @@ export const cleanSpawn = ({
 export const stagePlaceRef = (
   row: Pick<InstanceRow, "machineId" | "cwd">
 ): WorkspaceRef => ({
-  id: `${createHash("sha256")
-    .update(`${row.machineId}\0${row.cwd}`)
-    .digest("hex")
-    .slice(0, 8)}${PLACE_SUFFIX}`,
+  id: placeIdOf(
+    createHash("sha256").update(`${row.machineId}\0${row.cwd}`).digest("hex")
+  ),
   path: row.cwd,
 });
 

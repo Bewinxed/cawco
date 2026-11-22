@@ -62,7 +62,7 @@ export interface Policy {
   /** The user's home dir: what `~` names in a path a tool is handed. */
   readonly home: string;
   /**
-   * A place, a person's own folder (workspace-policy.ts `isPlace`): the
+   * A place, a person's own folder (core workspace-id.ts `place`): the
    * config a host program loads from a folder, by path from the dir it is
    * found in (clone-denies.ts `PROTECTED_CONFIG`), each refused for writing
    * at any depth, whether it exists or not ({@link protectedConfig}). Its
