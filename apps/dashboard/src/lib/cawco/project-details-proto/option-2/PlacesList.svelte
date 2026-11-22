@@ -186,9 +186,9 @@
             <Badge variant="attn"><span>{words.places.away}</span></Badge>
           {/if}
           {#if place.kind === "start"}
-            <!-- Where sessions start: the one marked place, a pill. -->
-            <Badge variant="brand"><span>{words.places.startsHere}</span></Badge
-            >
+            <!-- Where sessions start: the one marked place, a quiet pill (a
+                 fact, nothing that waits on him). -->
+            <Badge><span>{words.places.startsHere}</span></Badge>
           {:else if place.kind === "hub"}
             <!-- Why it has no menu: the hub keeps it. -->
             <span class="type-meta text-ink-muted">{words.places.hubOwn}</span>

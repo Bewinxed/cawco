@@ -171,13 +171,13 @@
 {/snippet}
 
 {#snippet waitsActs()}
-  <!-- What acts on all of Who decides: the way to the fleet's defaults. -->
+  <!-- What acts on all of Who decides: the way to the fleet's defaults,
+       drawn as a press at rest, at the head's own height (its xs). -->
   <Button
     href={hrefOf("fleetDecides")}
     label={words.waits.fleetDefaults}
     size="xs"
-    tone="quiet"
-    variant="ghost"
+    variant="outline"
   />
 {/snippet}
 

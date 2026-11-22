@@ -3,8 +3,8 @@
    * The list a section's rows sit in: 2px apart, no hairlines, one hover
    * ghost gliding from row to row (components/ui/highlight). `divided`: a
    * list in a card (a project's settings), its rows meeting at a hairline
-   * between each, drawn straight: the row's rounding (its flash) stays off
-   * the edge the hairline runs along. Rows arriving,
+   * between each that runs from the rows' content edge to their content
+   * edge (the card's own), not across the ghost's bleed. Rows arriving,
    * leaving or moving, and the lines under them, reflow on the house timing
    * (motion/rows.svelte.ts).
    */
@@ -26,7 +26,7 @@
     class={[
       "flex list-none flex-col p-0 my-0",
       divided
-        ? "[&>li:not(:first-child)]:rounded-t-none [&>li:not(:first-child)]:border-t [&>li:not(:first-child)]:border-border-hairline"
+        ? "[&>li]:relative [&>li:not(:first-child)]:before:absolute [&>li:not(:first-child)]:before:inset-x-space-2 [&>li:not(:first-child)]:before:top-0 [&>li:not(:first-child)]:before:border-t [&>li:not(:first-child)]:before:border-border-hairline"
         : "gap-space-row",
     ]}
     {@attach reflow()}
