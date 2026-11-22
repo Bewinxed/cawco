@@ -272,6 +272,12 @@ export interface ArtifactRead {
   /** What this update changed on the page, each by its link (`[label](cawco:change/<artifact>/<anchor>)`): what the agent names each to the person by. */
   marked?: string[];
   missing?: string[];
+  /**
+   * Another session of your delegation tree wrote it after your last write
+   * (service.ts `movedSince`): its link and when. What you read is its
+   * version, which the later write made; said once.
+   */
+  movedBy?: { at: string; by: string };
   /** Its slug, what every artifact tool takes. */
   name: string;
   /** A canvas, as you read it: one line per element (core `canvasOutline`). */

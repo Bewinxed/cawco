@@ -206,6 +206,13 @@ export interface DocMeta {
   stage: StageState;
   /** Its title, as the session last named it. */
   title: string;
+  /**
+   * Each session that wrote it (a create of its kind and name, an update, a
+   * revision), by id, and the newest write it knows of: its own, or a later
+   * one by another session that its read was told of (hub artifacts
+   * service `movedSince`).
+   */
+  writers: Record<string, string>;
   /** When the agent's last write to a canvas landed (hub artifacts/canvas.ts): a picture posted before it (`pictureAt`) shows the drawing as it was before that write. */
   wroteAt: string;
 }
@@ -260,6 +267,7 @@ export const META_WRITERS = {
   stage: "hub",
   title: "hub",
   wroteAt: "hub",
+  writers: "hub",
 } as const satisfies { [K in DocMetaKey]-?: "hub" | "person" | "canvas" };
 
 /** The keys a client writes: the person's on any artifact, his canvas screen's on a canvas. */

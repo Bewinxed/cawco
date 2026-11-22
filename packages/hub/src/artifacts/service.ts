@@ -677,6 +677,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     revisable,
     sees,
     sessionOf,
+    sharesWith,
     showable,
     takes,
     viewable,
@@ -1023,6 +1024,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return programOf;
     },
     serveFirst,
+    sharesWith,
     get show() {
       return show;
     },
@@ -1069,14 +1071,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * A create into another session's panel ({@link ownerFor}) that would
-   * land on an artifact of that kind and name made by a maker still at
-   * work: refused, so delegates sharing the panel of the session they
-   * report to never write over each other's. It lands on one this maker
-   * made, one whose maker acts no more ({@link actsNoMore}), or a
-   * project's page (the project's by its name); a name is the artifact's
-   * identity in a panel (schema.ts `artifacts_instance_name`). Landing on
-   * one its holder opened, the change waits as its next version
-   * ({@link holdNext}), as its own maker's would.
+   * land on an artifact of that kind and name: refused when it is its
+   * holder's own reading (`meta.reading`), or its maker is still at work
+   * outside the creating session's delegation tree, so two trees sharing
+   * one panel (a project's Caw's) never write over each other's. It lands
+   * on one this maker made, one any session of its delegation tree made,
+   * at work or ended ({@link sharesWith}: the later write wins, and the
+   * earlier writer hears it on its next read, {@link movedSince}), one
+   * whose maker acts no more ({@link actsNoMore}), or a project's page
+   * (the project's by its name); a name is the artifact's identity in a
+   * panel (schema.ts `artifacts_instance_name`). Landing on one its holder
+   * opened, the change waits as its next version ({@link holdNext}), as
+   * its own maker's would.
    */
   const nameTaken = ({ lands, maker, owner }: Making, input: ArtifactInput) => {
     if (lands || owner.id === maker.id) {
@@ -1087,7 +1093,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return;
     }
     const by = deps.instance(found.madeBy ?? owner.id);
-    if (!by || actsNoMore(by)) {
+    if (factsOf(found).reading) {
+      return problem(409, {
+        code: "artifact-name-taken",
+        detail: artifactToolWords.nameReading(
+          named(found),
+          sessionNamed(found.madeBy ?? owner.id)
+        ),
+      });
+    }
+    if (!by || actsNoMore(by) || deps.tree(maker).has(by.id)) {
       return;
     }
     return problem(409, {
@@ -2793,6 +2808,76 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     deps.needsMoved();
   };
 
+  /**
+   * Session `writer` wrote artifact `id` (a create of its kind and name, an
+   * update, a revision): its write is the newest it knows of (doc
+   * `meta.writers`), so a later write by another session of its tree is
+   * one its next read hears ({@link movedSince}).
+   */
+  const wroteNow = (writer: InstanceRow, id: string): void => {
+    const row = db.get(id);
+    if (!row) {
+      return;
+    }
+    const root = row.heldFor ?? row.id;
+    const at = new Date().toISOString();
+    docs.transact(root, "hub", (doc) =>
+      setMeta(doc, "writers", {
+        ...getMeta(doc, "writers"),
+        [writer.id]: at,
+      })
+    );
+  };
+
+  /**
+   * What `reader`'s read of `row` hears of the artifact's version moving
+   * under it: the newest write by another session after the newest one
+   * the reader knows of (doc `meta.writers`), said once. Nothing for a
+   * session that never wrote it, or when nothing moved since. Sessions of
+   * one tree write one artifact in turn (access.ts `sharesWith`): the later
+   * write wins, and the earlier writer hears of it here before it writes
+   * again.
+   */
+  const movedSince = (
+    reader: InstanceRow,
+    row: ArtifactRow
+  ): { movedBy?: { at: string; by: string } } => {
+    const root = row.heldFor ?? row.id;
+    const writers = getMeta(docs.doc(root), "writers") ?? {};
+    const known = writers[reader.id];
+    if (known === undefined) {
+      return {};
+    }
+    const newest = Object.entries(writers)
+      .filter(([writer, wrote]) => writer !== reader.id && wrote > known)
+      .reduce<[string, string] | undefined>(
+        (best, one) => (best && best[1] >= one[1] ? best : one),
+        undefined
+      );
+    if (!newest) {
+      return {};
+    }
+    const [by, at] = newest;
+    docs.transact(root, "hub", (doc) =>
+      setMeta(doc, "writers", {
+        ...getMeta(doc, "writers"),
+        [reader.id]: at,
+      })
+    );
+    return { movedBy: { at, by: sessionNamed(by) } };
+  };
+
+  /** Reading `row` goes ({@link discard}), and its maker's panel hears it: closed when it showed it, its list again otherwise. */
+  const dropReading = (row: ArtifactRow): void => {
+    const shown = inPanel(row);
+    discard(row);
+    if (shown && row.instanceId !== null) {
+      deps.close(row.instanceId);
+    } else {
+      relistOf(row);
+    }
+  };
+
   /** Whether what the person wrote on `row` goes to its session by itself (needs.ts `sendsItself`). */
   const sendsItself = (row: ArtifactRow): boolean =>
     answeredWhole(row, withMedia(row, factsOf(row)));
@@ -3252,6 +3337,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const said = heldId(row);
     askedNow(instance, said.id);
+    wroteNow(instance, said.id);
     const routes = await routesOf(instance, said.id, program);
     if (routes instanceof ElysiaStatus) {
       return routes;
@@ -3928,6 +4014,50 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
     },
 
+    /**
+     * Session `instanceId`'s work item ended: each artifact it made for its
+     * own reading (`meta.reading`) goes ({@link discard}), so a probe or a
+     * states check of its own never outlives its work. One the session
+     * made and handed up stays, its tree's to go on writing.
+     */
+    itemEnded: (instanceId: string): void => {
+      for (const row of db.ofInstance(instanceId)) {
+        if (factsOf(row).reading) {
+          dropReading(row);
+        }
+      }
+    },
+
+    /**
+     * The hub started: each reading whose maker's work item had ended
+     * already goes ({@link discard}), those it kept before readings went
+     * with their maker's item included. Only a session's own artifacts in
+     * its own panel are read for the mark, so one read of the rows and one
+     * doc per ended maker's own.
+     */
+    readingsLeft: (): void => {
+      const judged = new Map<string, boolean>();
+      const ended = (id: string): boolean => {
+        let over = judged.get(id);
+        if (over === undefined) {
+          const maker = deps.instance(id);
+          over = !!maker && deps.itemEnded(maker);
+          judged.set(id, over);
+        }
+        return over;
+      };
+      for (const row of db.asking()) {
+        if (
+          row.instanceId !== null &&
+          (row.madeBy ?? row.instanceId) === row.instanceId &&
+          ended(row.instanceId) &&
+          factsOf(row).reading
+        ) {
+          dropReading(row);
+        }
+      }
+    },
+
     /** The whole id of the artifact a session names by its name, handle or id ({@link whole}). */
     named: (instanceId: string, asked: string) => namedIn(instanceId, asked),
 
@@ -4336,6 +4466,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const shown = linked(made);
       askedNow(instance, shown.id);
+      wroteNow(instance, shown.id);
       return shown;
     },
 
@@ -4382,6 +4513,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return answer;
       }
       askedNow(instance, found.id);
+      wroteNow(instance, found.id);
       return heldAnswer(answer);
     },
 
@@ -4579,6 +4711,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return revised;
       }
       askedNow(instance, found.id);
+      wroteNow(instance, found.id);
       return heldAnswer(revised);
     },
 
@@ -4725,10 +4858,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (unfit) {
         return unfit;
       }
-      const told = await readOf(instance, row, since, drawn, ask);
-      if (told instanceof ElysiaStatus) {
-        return told;
+      const answered = await readOf(instance, row, since, drawn, ask);
+      if (answered instanceof ElysiaStatus) {
+        return answered;
       }
+      const told = { ...answered, ...movedSince(instance, row) };
       if (ask.save === undefined) {
         const answer: ArtifactRead | ComponentRead = told;
         return answer;
@@ -4776,6 +4910,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       });
       if (!(answer instanceof ElysiaStatus)) {
         askedNow(instance, row.id);
+        wroteNow(instance, row.id);
       }
       return answer;
     },
@@ -4865,6 +5000,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       });
       if (!(answer instanceof ElysiaStatus)) {
         askedNow(instance, row.id);
+        wroteNow(instance, row.id);
       }
       return answer;
     },
@@ -4892,6 +5028,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       // Every view of the panel hears the frame again with the new ask; nothing reloads.
       relistOf(row);
       askedNow(instance, row.id);
+      wroteNow(instance, row.id);
       const asked: { ask: string; id: string } = { id: row.id, ask };
       return asked;
     },
@@ -4918,6 +5055,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const kept = title.trim();
       db.update(row.id, { title: kept, updatedAt: new Date() });
       docs.transact(row.id, "hub", (doc) => setMeta(doc, "title", kept));
+      wroteNow(instance, row.id);
       relistOf(row);
       const titled: { id: string; title: string } = { id: row.id, title: kept };
       return titled;

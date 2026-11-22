@@ -471,6 +471,7 @@ export const artifactReadWords = (
     sentWords(read, now),
     read.draft && "The person has it open in the composer and has not sent it.",
     read.held && artifactToolWords.readsNext(read.held),
+    read.movedBy && artifactToolWords.movedBy(read.movedBy.by, read.movedBy.at),
     pickLines(read, now),
     !!read.faults?.length && [
       artifactToolWords.faultsHead(read.revision),

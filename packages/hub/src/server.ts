@@ -8444,6 +8444,8 @@ export const createServer = (
         plans.itemEnded(item);
         projectStarters.itemEnded(item);
         designVerify.itemEnded(item);
+        // Its own readings go with its work (artifact_create's `reading`).
+        artifacts.itemEnded(item.instanceId);
         // A design proposal made in its clone has nowhere to land now.
         detach(designSystem.itemEnded(), "design proposals of an ended item");
         watchPort.now()?.itemEnded(item);
@@ -12453,6 +12455,8 @@ export const createServer = (
       },
       // Marks the person wrote just before the hub went down still go.
       { name: "artifact marks", run: () => artifacts.resumeMarks() },
+      // Readings whose maker's item ended while the hub was down, or before they went with it.
+      { name: "ended readings", run: () => artifacts.readingsLeft() },
       { name: "tool releases", run: () => toolReleases.start() },
       {
         name: "relay journey watch",

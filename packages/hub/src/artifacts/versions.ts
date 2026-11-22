@@ -36,6 +36,8 @@ export interface VersionsContext {
     source: PreviewSource,
     machineId: string | null
   ) => ReturnType<ArtifactServiceDeps["serve"]> | Promise<undefined>;
+  /** Whether a session writes `row` as one of its delegation tree (access.ts `sharesWith`). */
+  sharesWith: (instance: InstanceRow, row: ArtifactRow) => boolean;
   show: (
     row: ArtifactRow,
     panel?: string | null,
@@ -325,9 +327,10 @@ export const createVersions = (ctx: VersionsContext) => {
   };
   /**
    * An update of artifact `row` (access.ts `revisable`; `change`, given where it
-   * goes): its maker's, while the parent's panel shows it, goes to its next
-   * version ({@link holdNext}); anyone else's (its owner's, or a session of
-   * the project its writers left it in) to its newest version
+   * goes): its maker's or another session's of its delegation tree
+   * (access.ts `sharesWith`), while the parent's panel shows it, goes to
+   * its next version ({@link holdNext}); anyone else's (its owner's, or a
+   * session of the project its writers left it in) to its newest version
    * ({@link newestVersion}), so a change beside a held one joins it there
    * and artifact_show opens both, never one over the other.
    */
@@ -336,7 +339,10 @@ export const createVersions = (ctx: VersionsContext) => {
     row: ArtifactRow,
     change: (target: ArtifactRow) => Promise<T>
   ): Promise<T> => {
-    const holding = row.madeBy === instance.id ? holdNext(instance, row) : null;
+    const holding =
+      row.madeBy === instance.id || ctx.sharesWith(instance, row)
+        ? holdNext(instance, row)
+        : null;
     const owner = holder(row);
     if (!(holding && owner)) {
       return await change(newestVersion(row));

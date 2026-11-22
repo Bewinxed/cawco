@@ -205,10 +205,16 @@ import {
  * memory_note's answer becoming a sentence and artifact_update pointing at
  * artifact_create's elements and ask in place of repeating them (worker
  * 31,314, delegate 11,845 measured). No budget is raised.
+ * 2026-11-22: a delegation tree writes one artifact (artifact_create's name
+ * and artifact_update say whoever in the tree made it, the later write
+ * winning), and a reading is deleted when its maker's work item ends, so
+ * one screen reaches the owner once (his "One per screen" on card "Stop the
+ * duplicate stories?") (worker 31,346, delegate 11,877 measured); both
+ * budgets are raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 31_330,
-  delegate: 11_860,
+  worker: 31_346,
+  delegate: 11_877,
   overseer: 770,
   "web-facing": 3400,
   curator: 1550,

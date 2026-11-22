@@ -34293,6 +34293,22 @@
               "type": "string"
             }
           },
+          "movedBy": {
+            "description": "Another session of your delegation tree wrote it after your last write\n(service.ts `movedSince`): its link and when. What you read is its\nversion, which the later write made; said once.",
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "by": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "by"
+            ]
+          },
           "name": {
             "description": "Its slug, what every artifact tool takes.",
             "type": "string"

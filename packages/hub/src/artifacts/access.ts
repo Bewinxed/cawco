@@ -3,6 +3,7 @@ import {
   artifactStopHref,
 } from "@cawco/core/artifact-needs";
 import { readPins } from "@cawco/core/comments/model";
+import { getMeta } from "@cawco/core/doc-meta";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
@@ -106,8 +107,9 @@ export const createAccess = (ctx: AccessContext) => {
     });
   /**
    * Whether `row` is another session's of `instance`'s delegation tree in
-   * the same project ({@link ArtifactServiceDeps.tree}): the tree reads it,
-   * its owner alone changes it.
+   * the same project ({@link ArtifactServiceDeps.tree}): the tree reads it
+   * and writes it ({@link sharesWith}); its holder alone shows, sends,
+   * promotes and deletes it.
    */
   const inTree = (instance: InstanceRow, row: ArtifactRow): boolean => {
     const owner = holder(row);
@@ -118,6 +120,21 @@ export const createAccess = (ctx: AccessContext) => {
       deps.tree(instance).has(owner.id)
     );
   };
+  /**
+   * Whether `instance` writes `row` as one of its delegation tree: another
+   * session of the tree holds it ({@link inTree}), whether its maker is at
+   * work or ended, and it is no one's own reading (`meta.reading`), which
+   * stays its maker's alone. The owner's pick of 2026-11-22 (card "Stop the
+   * duplicate stories?", "One per screen"): a design one tree builds is one
+   * artifact, updated in place by whichever of its sessions writes next,
+   * after one screen of the repository picker reached him as
+   * `location-picker` and `location-picker-now` when a sibling's create of
+   * the same name was refused while its maker was still at work.
+   */
+  const sharesWith = (instance: InstanceRow, row: ArtifactRow): boolean =>
+    row.heldFor === null &&
+    inTree(instance, row) &&
+    getMeta(docs.doc(row.id), "reading") !== true;
   /**
    * The other sessions of `instance`'s delegation tree that hold an
    * artifact, in the tree's order, each with its row and its artifacts,
@@ -432,7 +449,8 @@ export const createAccess = (ctx: AccessContext) => {
   };
   /**
    * Artifact `id` for a change: the session owns it or made it (a delegate
-   * goes on updating and reading what it handed to its parent), or its
+   * goes on updating and reading what it handed to its parent), another
+   * session of its delegation tree holds it ({@link sharesWith}), or its
    * writers left it in the session's project ({@link leftFor}).
    */
   const revisable = (instance: InstanceRow, asked: string) => {
@@ -444,7 +462,7 @@ export const createAccess = (ctx: AccessContext) => {
     if (row?.madeBy === instance.id) {
       return row;
     }
-    if (row && leftFor(instance, row)) {
+    if (row && (sharesWith(instance, row) || leftFor(instance, row))) {
       return row;
     }
     return own(instance, id);
@@ -677,6 +695,7 @@ export const createAccess = (ctx: AccessContext) => {
     revisable,
     sees,
     sessionOf,
+    sharesWith,
     showable,
     takes,
     viewable,

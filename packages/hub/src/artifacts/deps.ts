@@ -559,9 +559,10 @@ export interface ArtifactServiceDeps {
   stranded: (instance: InstanceRow) => boolean;
   /**
    * Every session of `instance`'s delegation tree (delegation-tree.ts
-   * `treeSessions`): each reads, never changes, the others' artifacts of
-   * its project; one up a writer whose work item ended deletes that
-   * writer's ({@link ArtifactServiceDeps.stranded}).
+   * `treeSessions`): each reads and writes the others' artifacts of its
+   * project, their own readings aside (access.ts `sharesWith`); one up a
+   * writer whose work item ended deletes that writer's
+   * ({@link ArtifactServiceDeps.stranded}).
    */
   tree: (instance: InstanceRow) => Set<string>;
   /** Pin `pin` on machine `machineId` let go: no artifact is served from it any more (agent stage.ts `unpin`). Never throws. */

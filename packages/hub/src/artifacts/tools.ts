@@ -182,7 +182,7 @@ export const artifactCreate = {
       .string()
       .regex(ARTIFACT_NAME)
       .describe(
-        "Like onboarding. The same kind and name again replaces it, picks kept."
+        "Like onboarding. The same kind and name again replaces it, picks kept, whoever in your delegation tree made it."
       ),
     program: z
       .string()
@@ -269,7 +269,7 @@ export const artifactCreate = {
       .boolean()
       .optional()
       .describe(
-        "true: yours to read alone. It never reaches the person or your parent, and goes with your workspace."
+        "true: yours alone, like a states check or a probe: never the person's or your parent's, deleted when your work item ends."
       ),
   },
 };
@@ -277,7 +277,7 @@ export const artifactCreate = {
 export const artifactUpdate = {
   name: "artifact_update" as const,
   description:
-    "Changes an artifact of yours, or one a cold session of your project left. Use it to revise one the person has open.",
+    "Changes an artifact of yours or your delegation tree's, or one a cold session of your project left. Use it to revise one the person has open; the later write wins.",
   input: {
     id,
     elements: elements.describe(
