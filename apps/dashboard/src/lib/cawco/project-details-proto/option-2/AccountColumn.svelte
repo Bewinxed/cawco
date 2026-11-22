@@ -169,12 +169,6 @@
       reason={refused.account}
     />
 
-    {#if record.account.chosen !== null}
-      <p class="m-0 type-meta text-pretty text-ink-muted">
-        {words.account.scopeNamed}
-      </p>
-    {/if}
-
     {#if chosenSignedOut && chosenAccount}
       <Alert layout="row" variant="destructive">
         <IconError aria-hidden="true" />

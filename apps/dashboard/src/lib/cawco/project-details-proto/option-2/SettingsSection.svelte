@@ -39,10 +39,12 @@
   const headingId = $derived(`work-path-section-${id}`);
 </script>
 
+<!-- It stands in the view's grid area named by its id (HowItRuns `AREAS`). -->
 <section
   aria-labelledby={headingId}
-  class={["@container break-inside-avoid", SECTION_CARD]}
+  class={["@container row-(--area) col-(--area)", SECTION_CARD]}
   data-section={id}
+  style:--area={id}
   data-slot="settings-section"
   data-state={state}
 >
@@ -65,7 +67,7 @@
       </span>
     {/if}
     <h2 class="m-0 min-w-0 type-row text-ink-strong" id={headingId}>
-      {title}{#if stateWords}<span class="sr-only"> — {stateWords}</span>{/if}
+      {title}{#if stateWords}<span class="sr-only">, {stateWords}</span>{/if}
     </h2>
     {#if actions}
       <span class="ms-auto flex flex-none items-center gap-space-1" data-box>
