@@ -35,7 +35,7 @@
  * second exit over it.
  */
 import { motionOk } from "./curves.svelte";
-import { integrate, spring } from "./spring";
+import { integrate, Release, spring } from "./spring";
 
 /** The edge a surface came in from, and leaves through. */
 type Edge = "left" | "right" | "top" | "bottom";
@@ -56,8 +56,6 @@ const SLOPE = 0.7;
 const COMMIT = 0.3;
 /** A flick: short but fast still counts, in px/ms. */
 const FLICK = 0.3;
-/** Samples older than this say nothing about the release, in ms. */
-const VELOCITY_WINDOW = 80;
 /** Past rest, a third of the finger's travel shows, and never more than a quarter of the surface. */
 const RESIST = 0.35;
 const RESIST_MAX = 0.25;
@@ -82,7 +80,7 @@ export function dragToDismiss({ edge, dismiss, fade }: DragToDismiss) {
     let offset = 0;
     let size = 0;
     let scrim: HTMLElement | null = null;
-    let samples: Array<{ at: number; t: number }> = [];
+    const hand = new Release();
     let settling: Animation[] = [];
     /** A drag just ended: the click it would end in is not a tap. */
     let dragged = false;
@@ -137,16 +135,7 @@ export function dragToDismiss({ edge, dismiss, fade }: DragToDismiss) {
     };
 
     /** Release velocity toward the edge, px/ms. */
-    const velocity = () => {
-      const last = samples.at(-1);
-      const first = samples.find(
-        (sample) => last && last.t - sample.t <= VELOCITY_WINDOW
-      );
-      if (!(first && last) || last.t === first.t) {
-        return 0;
-      }
-      return (last.at - first.at) / (last.t - first.t);
-    };
+    const velocity = () => hand.velocity();
 
     /** Spring from where the surface is drawn to `target`, at `v` px/ms. */
     function settle(target: number, v: number) {
@@ -236,7 +225,7 @@ export function dragToDismiss({ edge, dismiss, fade }: DragToDismiss) {
       scrim = fade?.() ?? null;
       base = current();
       stopAll();
-      samples = [];
+      hand.clear();
     };
 
     const onMove = (event: PointerEvent) => {
@@ -251,13 +240,7 @@ export function dragToDismiss({ edge, dismiss, fade }: DragToDismiss) {
       }
       offset = base + sign * (along(event) - startAlong);
       paint(offset);
-      samples.push({ at: offset, t: event.timeStamp });
-      while (
-        samples.length > 2 &&
-        event.timeStamp - samples[0].t > VELOCITY_WINDOW
-      ) {
-        samples.shift();
-      }
+      hand.push(offset, event.timeStamp);
     };
 
     const onEnd = (event: PointerEvent) => {

@@ -110,3 +110,42 @@ export function sampleAt(path: Sample[], seconds: number): Sample {
   const f = (seconds - a.t) / (b.t - a.t);
   return { t: seconds, x: a.x + (b.x - a.x) * f, v: a.v + (b.v - a.v) * f };
 }
+
+/** Samples older than this say nothing about the release, in ms. */
+const VELOCITY_WINDOW = 80;
+
+/**
+ * The hand's speed at release along one axis: where it was drawn at each
+ * step, the last 80ms of them, read as px/ms. What `integrate` takes as the
+ * settle's starting speed (×1000) for anything a hand lets go of.
+ */
+export class Release {
+  #samples: Array<{ at: number; t: number }> = [];
+
+  /** The hand drew it at `at` px, at `t` ms. */
+  push(at: number, t: number) {
+    this.#samples.push({ at, t });
+    while (
+      this.#samples.length > 2 &&
+      t - this.#samples[0].t > VELOCITY_WINDOW
+    ) {
+      this.#samples.shift();
+    }
+  }
+
+  /** Speed at the last step, px/ms. */
+  velocity(): number {
+    const last = this.#samples.at(-1);
+    const first = this.#samples.find(
+      (sample) => last && last.t - sample.t <= VELOCITY_WINDOW
+    );
+    if (!(first && last) || last.t === first.t) {
+      return 0;
+    }
+    return (last.at - first.at) / (last.t - first.t);
+  }
+
+  clear() {
+    this.#samples = [];
+  }
+}

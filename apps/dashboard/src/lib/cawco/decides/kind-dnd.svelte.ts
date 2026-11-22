@@ -7,13 +7,14 @@
  * The page draws the drag itself, in four parts:
  *
  * - Lift: the tile comes off its card as a ghost (a copy of it in the top
- *   layer) a little larger, on the overlay's shadow, and its place on the
- *   card stays as a dashed outline.
- * - Carry: the ghost follows the pointer on a spring and leans with the
- *   pointer's sideways speed, upright again as it slows.
+ *   layer) on the overlay's shadow, and its place on the card stays as a
+ *   dashed outline.
+ * - Carry: the ghost tracks the pointer 1:1, as every hand-driven surface
+ *   does (motion/drag.svelte.ts).
  * - Hover: the card under it is edged, and a slot opens on it where the
  *   tile will stand, the tile's own height, in the kinds' order.
- * - Landing: let go over another card, the ghost settles into that slot and
+ * - Landing: let go over another card, the ghost settles into that slot on
+ *   the house's settle (motion/spring.ts), from the hand's speed, and
  *   stays there until the hand-over is answered; taken, the tile stands in
  *   its place without a second flight; refused, or let go anywhere else, the
  *   ghost goes back into its outline on the card it came from.
@@ -23,8 +24,8 @@
  */
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
 import { tick } from "svelte";
-import { Spring } from "svelte/motion";
 import { motionOk } from "#lib/platform/motion/curves.svelte.js";
+import { integrate, Release, spring } from "#lib/platform/motion/spring.js";
 import { type DragPoint, internalDraggable } from "../internal-drag";
 import { coarse } from "../workspace/dnd.svelte";
 
@@ -89,39 +90,26 @@ export const kindDrag = {
     hint.aloft?.kind === kind && hint.aloft.to !== null,
 };
 
-/** How far the ghost leans at most, in degrees, and per px/ms of sideways speed. */
-const LEAN_MAX = 9;
-const LEAN_PER_SPEED = 5;
-/** How much larger the ghost stands while held. */
-const LIFT_SCALE = 0.04;
-/** A pointer still for this long has stopped: the ghost straightens. */
-const STILL_MS = 60;
-
 /**
  * The tile in the hand: a copy of it in the top layer (a manual popover,
  * above every dialog and outside every container that would clip or
- * re-anchor a fixed box), driven by three springs: where it stands, its
- * lean, and its lift.
+ * re-anchor a fixed box), on the overlay's shadow. It tracks the pointer
+ * 1:1, as every hand-driven surface does (motion/drag.svelte.ts), and where
+ * it is put down it settles on the house's settle (motion/spring.ts) from
+ * the speed the hand let it go at.
  */
 class Ghost {
   readonly #node: HTMLElement;
   readonly #offset: DragPoint;
-  readonly #pos: Spring<{ x: number; y: number; w: number }>;
-  readonly #lean = new Spring(0, { stiffness: 0.12, damping: 0.45 });
-  readonly #lift = new Spring(0, { stiffness: 0.2, damping: 0.6 });
-  #last: { x: number; t: number } | null = null;
-  #frame = 0;
-  /** Where it is settling: the box it lands in, read every frame, so a slot still opening is followed. */
-  #aim: (() => Element | null) | null = null;
-  #settled: (() => void) | null = null;
+  /** Where it is drawn: its box's top-left corner in the viewport. */
+  #at: DragPoint;
+  readonly #handX = new Release();
+  readonly #handY = new Release();
 
   constructor(source: HTMLElement, at: DragPoint) {
     const box = source.getBoundingClientRect();
     this.#offset = { x: at.x - box.left, y: at.y - box.top };
-    this.#pos = new Spring(
-      { x: box.left, y: box.top, w: box.width },
-      { stiffness: 0.24, damping: 0.74 }
-    );
+    this.#at = { x: box.left, y: box.top };
     const copy = source.cloneNode(true);
     if (!(copy instanceof HTMLElement)) {
       throw new TypeError("A tile's copy is an element");
@@ -153,7 +141,6 @@ class Ghost {
       transition: motionOk.current
         ? "box-shadow var(--duration-control) var(--ease-out)"
         : "none",
-      transformOrigin: `${this.#offset.x}px ${this.#offset.y}px`,
       willChange: "transform",
     });
     node.append(copy);
@@ -164,90 +151,66 @@ class Ghost {
     requestAnimationFrame(() => {
       node.style.boxShadow = "var(--shadow-overlay)";
     });
-    this.#to(this.#lift, 1);
-    this.#frame = requestAnimationFrame(this.#loop);
   }
 
   /** The pointer moved to `at`. */
   move(at: DragPoint) {
-    if (this.#aim) {
-      return;
-    }
+    this.#at = { x: at.x - this.#offset.x, y: at.y - this.#offset.y };
     const now = performance.now();
-    if (this.#last && motionOk.current) {
-      const speed = (at.x - this.#last.x) / Math.max(1, now - this.#last.t);
-      this.#lean.target = Math.max(
-        -LEAN_MAX,
-        Math.min(LEAN_MAX, speed * LEAN_PER_SPEED)
-      );
-    }
-    this.#last = { x: at.x, t: now };
-    this.#to(this.#pos, {
-      x: at.x - this.#offset.x,
-      y: at.y - this.#offset.y,
-      w: this.#pos.target.w,
-    });
+    this.#handX.push(this.#at.x, now);
+    this.#handY.push(this.#at.y, now);
+    this.#draw();
   }
 
-  /** Settles into the box `aim` finds: upright, at rest, its shadow down. Answers once it is still there. */
-  settle(aim: () => Element | null): Promise<void> {
-    this.#aim = aim;
-    this.#to(this.#lean, 0);
-    this.#to(this.#lift, 0);
+  /**
+   * Settles into the box `aim` finds, its shadow down: the house's settle
+   * along the line from where it is to there, starting at the hand's speed
+   * along that line. Answers once it is at rest.
+   */
+  async settle(aim: () => Element | null): Promise<void> {
     this.#node.style.boxShadow = "none";
-    return new Promise((done) => {
-      this.#settled = done;
-    });
+    const box = aim()?.getBoundingClientRect();
+    if (!box) {
+      return;
+    }
+    const from = this.#at;
+    const dx = from.x - box.left;
+    const dy = from.y - box.top;
+    const distance = Math.hypot(dx, dy);
+    const along = { x: dx / distance, y: dy / distance };
+    const speed =
+      this.#handX.velocity() * along.x + this.#handY.velocity() * along.y;
+    this.#handX.clear();
+    this.#handY.clear();
+    this.#at = { x: box.left, y: box.top };
+    this.#node.style.width = `${box.width}px`;
+    if (!motionOk.current || distance < 0.5) {
+      this.#draw();
+      return;
+    }
+    const [flight] = spring(integrate(distance, speed * 1000), [
+      {
+        el: this.#node,
+        frame: (x) => ({
+          transform: place(box.left + along.x * x, box.top + along.y * x),
+        }),
+      },
+    ]);
+    await flight.finished;
+    this.#draw();
+    flight.cancel();
   }
 
   remove() {
-    cancelAnimationFrame(this.#frame);
     this.#node.remove();
   }
 
-  #to<T>(spring: Spring<T>, value: T) {
-    // A set that a later one supersedes settles as aborted, which Spring
-    // itself takes (svelte/motion spring.js `d.promise.catch(noop)`).
-    spring.set(value, { instant: !motionOk.current });
-  }
-
-  readonly #loop = () => {
-    if (this.#aim) {
-      const box = this.#aim()?.getBoundingClientRect();
-      if (box) {
-        const { x, y, w } = this.#pos.target;
-        if (x !== box.left || y !== box.top || w !== box.width) {
-          this.#to(this.#pos, { x: box.left, y: box.top, w: box.width });
-        }
-      }
-      const { current, target } = this.#pos;
-      if (
-        Math.abs(current.x - target.x) < 0.5 &&
-        Math.abs(current.y - target.y) < 0.5 &&
-        Math.abs(current.w - target.w) < 0.5 &&
-        this.#lift.current < 0.02 &&
-        Math.abs(this.#lean.current) < 0.2
-      ) {
-        this.#settled?.();
-        this.#settled = null;
-      }
-    } else if (
-      this.#last &&
-      performance.now() - this.#last.t > STILL_MS &&
-      this.#lean.target !== 0
-    ) {
-      this.#lean.target = 0;
-    }
-    this.#draw();
-    this.#frame = requestAnimationFrame(this.#loop);
-  };
-
   #draw() {
-    const { x, y, w } = this.#pos.current;
-    this.#node.style.width = `${w}px`;
-    this.#node.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${this.#lean.current}deg) scale(${1 + LIFT_SCALE * this.#lift.current})`;
+    this.#node.style.transform = place(this.#at.x, this.#at.y);
   }
 }
+
+const place = (x: number, y: number) => `translate3d(${x}px, ${y}px, 0)`;
 
 /** The tile in the hand now; one at a time. */
 let ghost: Ghost | null = null;
