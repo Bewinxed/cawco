@@ -12,8 +12,8 @@
   import AskCawTray from "./AskCawTray.svelte";
   import RoutineDetailPane from "./RoutineDetailPane.svelte";
   import RoutineEditorPane from "./RoutineEditorPane.svelte";
-  import RoutineList from "./RoutineList.svelte";
   import RoutinesNotices from "./RoutinesNotices.svelte";
+  import RoutineTable from "./RoutineTable.svelte";
   import RunDetailPane from "./RunDetailPane.svelte";
   import { MOCK_MACHINE, MOCK_NOW } from "./routines-data";
   import {
@@ -229,7 +229,7 @@
         />
       {/if}
 
-      <RoutineList
+      <RoutineTable
         headerAction={newRoutineButton}
         now={MOCK_NOW}
         onfix={openAskCaw}

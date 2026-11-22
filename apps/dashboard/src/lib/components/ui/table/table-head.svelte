@@ -59,16 +59,22 @@
     variant,
     edge,
     fold,
+    sorted,
     children,
     ...restProps
   }: WithElementRef<HTMLThAttributes> & {
     variant?: TableHeadVariant;
     edge?: TableHeadEdge;
     fold?: TableHeadFold;
+    /** The way its ledger is sorted by this column, said as `aria-sort`. */
+    sorted?: false | "asc" | "desc";
   } = $props();
+
+  const ARIA_SORT = { asc: "ascending", desc: "descending" } as const;
 </script>
 
 <th
+  aria-sort={sorted ? ARIA_SORT[sorted] : undefined}
   class={cn(tableHeadVariants({ variant, edge, fold }), className)}
   data-slot="table-head"
   bind:this={ref}
