@@ -8,7 +8,8 @@
  * (`routine:<id>`) names the task:
  *
  * - **The file**: its title from the routine's name; its description from
- *   its prompt (the hub's own routines keep theirs in code and write one
+ *   its prompt, each heading a level deeper so none starts a section of
+ *   the file ({@link fitDescription}; the hub's own routines keep theirs in code and write one
  *   sentence for the person; a command check's command is its `command:`
  *   line); its type, its landing written out (`lands: none` where the
  *   routine landed nothing, since a task's default is the project's), its
@@ -156,6 +157,18 @@ const budgetOf = (carried: Carried): WorkBudget | null => {
   return Object.keys(budget).length > 0 ? budget : null;
 };
 
+/** A heading line of level two or deeper: in a task file's description it would start a section of its own. */
+const SUB_HEADING = /^(#{2,})(?=\s)/gmu;
+
+/**
+ * A routine's prompt as its task's description: each heading a level
+ * deeper (`## Steps` → `### Steps`), since a `## ` line in a task file
+ * starts a section of its own (tasks.ts refuses it), so the prompt's own
+ * outline keeps its shape under the task's title.
+ */
+const fitDescription = (prompt: string): string =>
+  prompt.replace(SUB_HEADING, "#$1");
+
 /** What a carried routine's task says it does. */
 const descriptionOf = (row: TriggerRow, carried: Carried): string => {
   switch (row.target) {
@@ -169,7 +182,7 @@ const descriptionOf = (row: TriggerRow, carried: Carried): string => {
     case "delegate":
     case "orchestrator":
     case null:
-      return carried.prompt;
+      return fitDescription(carried.prompt);
   }
 };
 

@@ -10,6 +10,12 @@
  * process.ts) reads its folders beside its database, so it writes only
  * there. Nothing outside `<scratch>` is written.
  *
+ * The hub it opens is inert: it serves nothing and dials no machine
+ * (hub-in-process.ts), and every outbound call it would make (a model's,
+ * a service's) is refused here before it leaves and counted: one is a
+ * failure. Its start-up writes (a boot sweep, sends kept, expired relay
+ * sessions dropped) land on the copy alone, as `migrations:check --db`'s do.
+ *
  * It prints the counts it read before the hub opened the copy, after 0464
  * applied, and after the routines were carried over (one pass, then a
  * second that must file none), and a `FAIL:` line for each thing that did
@@ -160,6 +166,27 @@ console.log(
 
 // --- the hub opens the copy: 0464 applies ---------------------------------------
 
+/** Every outbound call the hub tried, refused before it left. */
+const outbound: string[] = [];
+/** Where a call was going. */
+const urlOf = (input: RequestInfo | URL): string => {
+  if (input instanceof Request) {
+    return input.url;
+  }
+  return input instanceof URL ? input.href : input;
+};
+const refused: typeof fetch = Object.assign(
+  (input: RequestInfo | URL): Promise<Response> => {
+    const url = urlOf(input);
+    outbound.push(url);
+    return Promise.reject(
+      new Error(`routines-carry-check: no outbound call (${url})`)
+    );
+  },
+  { preconnect: (_url: string | URL): void => undefined }
+);
+globalThis.fetch = refused;
+
 const home = join(scratch, "home");
 mkdirSync(home, { recursive: true });
 const { db, hub, lifetime } = await hubInProcess(dbPath, home);
@@ -270,6 +297,11 @@ console.log(
 console.log(
   `Fleet project: ${db.project("00000000-0000-4000-8000-00000000f1ee")?.name ?? "missing"}`
 );
+if (outbound.length > 0) {
+  fail(
+    `the hub tried ${outbound.length} outbound call(s): ${[...new Set(outbound)].join(", ")}`
+  );
+}
 raw.close();
 lifetime.close();
 console.log(failures.length === 0 ? "ok" : `${failures.length} failure(s)`);

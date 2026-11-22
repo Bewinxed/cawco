@@ -1149,11 +1149,44 @@ export const createRoutines = ({
       );
       settle(run.id, { outcome: "failed", reason, output: null, usd: null });
     };
-    runStarted(routine, run).then(
+    startedOpen(routine, run).then(
       (refused) => refused && failed(refused.response.detail),
       (error: unknown) =>
         failed(error instanceof Error ? error.message : String(error))
     );
+  };
+
+  /**
+   * A run started only while its routine's task is open and waits on
+   * nothing unsettled (an event's run, a test, a run by hand, as a slot's
+   * is); else it is skipped, saying why.
+   */
+  const startedOpen = async (routine: RoutineRow, run: RoutineRunRow) => {
+    const task = routine.taskId
+      ? await tasks().get(routine.projectId, routine.taskId)
+      : undefined;
+    const why = shutWhy(task);
+    if (why) {
+      skipRun(routine, run, why);
+      return;
+    }
+    return await runStarted(routine, run);
+  };
+
+  /** Why a routine's task takes no run now: gone, closed, or held by a wait; nothing when it is open. */
+  const shutWhy = (
+    task:
+      Awaited<ReturnType<ReturnType<RoutineDeps["tasks"]>["get"]>> | undefined
+  ): string | undefined => {
+    if (!task || task instanceof ElysiaStatus) {
+      return "its task is not in the project";
+    }
+    if (task.kind === "done" || task.kind === "dropped") {
+      return `its task is in ${task.stage}, a ${task.kind} stage`;
+    }
+    return task.waits.every((wait) => wait.settled)
+      ? undefined
+      : "its task waits on something not settled yet";
   };
 
   /** Files and fires an unscheduled run: a test, a run by hand, a retry. */
@@ -2361,11 +2394,7 @@ export const createRoutines = ({
   /** Whether a read of a routine's task lets it fire: it is there, open, and waits on nothing unsettled. */
   const openFor = (
     task: Awaited<ReturnType<ReturnType<RoutineDeps["tasks"]>["get"]>>
-  ): boolean =>
-    !(task instanceof ElysiaStatus) &&
-    task.kind !== "done" &&
-    task.kind !== "dropped" &&
-    task.waits.every((wait) => wait.settled);
+  ): boolean => shutWhy(task) === undefined;
 
   /** A due routine's newest due slot claimed, and its run fired or its skip said. */
   const fireDue = (routine: RoutineRow, now: number): void => {
@@ -2512,10 +2541,17 @@ export const createRoutines = ({
   const start = async (): Promise<void> => {
     // Routines made before routines were tasks are filed first: their
     // runs left live then resume under their tasks.
-    const count = await carry.carry();
-    console.log(
-      `[routines] carried over at start: ${count.filed} filed, ${count.waiting} waiting for their project's setup, ${count.waitsRewritten} task files' waits rewritten`
-    );
+    try {
+      const count = await carry.carry();
+      console.log(
+        `[routines] carried over at start: ${count.filed} filed, ${count.waiting} waiting for their project's setup, ${count.waitsRewritten} task files' waits rewritten`
+      );
+    } catch (error) {
+      // The rest runs: a routine not carried over waits for the next look.
+      console.error(
+        `[routines] carrying routines over failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
     for (const run of store.liveRuns()) {
       resume(run);
     }
