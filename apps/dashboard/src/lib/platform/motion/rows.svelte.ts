@@ -1415,8 +1415,7 @@ class Reflow {
       }
     }
     const departures = this.#departures(placed, now, scrolled, seenNow);
-    const columns =
-      departures.length > 0 ? columnsOf(this.#node) : undefined;
+    const columns = departures.length > 0 ? columnsOf(this.#node) : undefined;
     // Every style the writes need, in one pass. An element under a slide or
     // its hold has its own transforms as the slide began (`Move.own`,
     // `Move.bare`): read with its hold dropped instead, the drop laid the
