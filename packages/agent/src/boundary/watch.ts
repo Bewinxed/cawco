@@ -5,6 +5,7 @@
 
 import { type FSWatcher, lstatSync, watch } from "node:fs";
 import { dirname, join } from "node:path";
+import { isDesignTree } from "@cawco/core/stage";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { isGitDirSync } from "../git-dir";
@@ -119,8 +120,9 @@ const goneStops = new Set<string>();
 export const stoppedAsGone = (procId: string): boolean =>
   goneStops.delete(procId);
 
-/** Whether workspace `id` holds a plain folder, not a repository's copy: a place, or a copy of a folder that is no repository (layer.ts), as the host's `plainFolder` (boundary-host.ts). */
-const plainFolder = (id: string): boolean => isPlace(id) || folderSync(id);
+/** Whether workspace `id` holds a plain folder, not a repository's copy: a place, a copy of a folder that is no repository (layer.ts), or a design folder (core stage.ts `isDesignTree`), as the host's `plainFolder` (boundary-host.ts). */
+const plainFolder = (id: string): boolean =>
+  isPlace(id) || isDesignTree(id) || folderSync(id);
 
 /**
  * Why workspace `id`'s folder at `path` is no longer there to hold, when it

@@ -18,6 +18,7 @@ import { workspacesDir, workspaceTmpDir } from "@cawco/core/paths/workspace";
 import { HUB_PREVIEWS_ENV } from "@cawco/core/preview/hub-previews";
 import { standalone } from "@cawco/core/runtime";
 import type { ProcSpec } from "@cawco/core/sessiond";
+import { isDesignTree } from "@cawco/core/stage";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type { Policy } from "@cawco/core/workspace-judge";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
@@ -372,6 +373,11 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
     denies: join(generationDir(id, gen), "denies.json"),
   };
   const place = isPlace(id);
+  // A design folder (core stage.ts `isDesignTree`): the hub's folder of the
+  // design's files, no repository and no layer, which nothing of the host
+  // loads, so it gets no stand-ins; srt starts in its scratch dir, as a
+  // place's does, so none of srt's own mount points lands in it.
+  const design = isDesignTree(id);
   return {
     files: [
       [files.settings, settings],
@@ -428,9 +434,11 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         ...(place
           ? { [HOST_ENV.sandboxCwd]: policy.scratch, [HOST_ENV.place]: "1" }
           : {}),
-        // A delegate's copy of a folder that is no repository: the host
-        // holds it as a folder, never asking it for a `.git` (layer.ts).
-        ...(folderSync(id) ? { [HOST_ENV.folder]: "1" } : {}),
+        ...(design ? { [HOST_ENV.sandboxCwd]: policy.scratch } : {}),
+        // A delegate's copy of a folder that is no repository, or a design
+        // folder: the host holds it as a folder, never asking it for a
+        // `.git` (layer.ts).
+        ...(folderSync(id) || design ? { [HOST_ENV.folder]: "1" } : {}),
       },
     },
   };
