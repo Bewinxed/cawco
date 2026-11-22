@@ -1,11 +1,16 @@
 <script lang="ts">
   /**
-   * One numbered stage on Option 2's vertical work-path rail: its decorative
-   * node on the leading axis (neutral ring with numeral when settled, blue
-   * breathing LiveDot when busy, yellow warning glyph when away, crimson
-   * alert glyph when faulted), its title and optional trailing meta, the
-   * hairline vertical connector down to the next stage (omitted after the
-   * last stage), and its content indented to the title's start edge.
+   * One numbered step of the work path: its head, then what it sets. The
+   * head is the step's boundary, the house section head one level up
+   * (ui/section-header `sectionHeadVariants`): its mark and title over a
+   * rule the width of its column, in the border ink where the parts inside
+   * keep the hairline, so a step ends where the next one's rule begins and
+   * no box is drawn round it.
+   *
+   * The mark is the house step's ring (home/StepRow: its number in a
+   * control-edged ring, the live dot while something runs); a step that is
+   * offline or needs fixing wears the status glyph in its status ink on
+   * that ring, the words in the heading's accessible name.
    */
   import type { Snippet } from "svelte";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
@@ -17,25 +22,19 @@
     title,
     state,
     stateWords,
-    meta,
-    last = false,
     id,
     announcement = "",
     place = "",
     children,
   }: {
-    /** 1-based position along the pipeline rail. */
+    /** 1-based position along the work path. */
     n: number;
     title: string;
     state: StageState;
     /** Spoken in the heading's accessible name when state is not settled. */
     stateWords?: string;
-    /** Optional trailing summary aligned with the stage title. */
-    meta?: Snippet;
-    /** True on the final stage (Stage 4 for code projects, Stage 3 otherwise). */
-    last?: boolean;
     id: StageId;
-    /** Polite live-region text announcing state changes for this stage. */
+    /** Polite live-region text announcing state changes for this step. */
     announcement?: string;
     /** Where it stands on the view's grid (HowItRuns `PLACES`). */
     place?: string;
@@ -47,72 +46,45 @@
 
 <section
   aria-labelledby={headingId}
-  class={[
-    "grid min-w-0 grid-cols-auto-fluid gap-x-space-2 @field-group:gap-x-space-3",
-    place,
-  ]}
+  class={["flex min-w-0 flex-col gap-space-4", place]}
   data-slot="stage"
   data-stage={id}
   data-state={state}
 >
-  <!-- Row 1, Col 1: decorative rail node (state words live in the heading). -->
-  <span
-    aria-hidden="true"
-    class={[
-      "mark-line inline-grid size-icon-lg flex-none place-items-center self-center justify-self-center rounded-pill border transition-control",
-      state === "settled" &&
-        "border-border-control bg-surface-raised text-ink-muted",
-      state === "busy" && "border-status-live-glyph bg-status-live-bg",
-      state === "away" &&
-        "border-status-attn-glyph bg-status-attn-bg text-status-attn-glyph",
-      state === "fault" &&
-        "border-status-fail-glyph bg-status-fail-bg text-status-fail-glyph",
-    ]}
-    data-box
-    data-slot="step-number"
-  >
-    {#if state === "busy"}
-      <LiveDot size="row" tone="live" />
-    {:else if state === "away"}
-      <IconWarningTriangle class="size-icon-sm" />
-    {:else if state === "fault"}
-      <IconError class="size-icon-sm" />
-    {:else}
-      <span class="type-meta font-medium leading-none num">{n}</span>
-    {/if}
-  </span>
-
-  <!-- Row 1, Col 2: stage title + optional trailing standing summary. -->
   <header
-    class="flex min-w-0 flex-wrap items-center justify-between gap-x-space-3 gap-y-space-1"
+    class="mark-line flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 border-b border-border pb-space-2"
   >
-    <h2 id={headingId} class="m-0 type-body font-medium text-ink-strong">
+    <span
+      aria-hidden="true"
+      class="mark-line grid size-icon-md flex-none place-items-center"
+      data-box
+    >
+      {#if state === "busy"}
+        <LiveDot />
+      {:else if state === "away"}
+        <IconWarningTriangle class="size-icon-md text-status-attn-glyph" />
+      {:else if state === "fault"}
+        <IconError class="size-icon-md text-status-fail-glyph" />
+      {:else}
+        <span
+          class="box-border grid size-full place-items-center rounded-pill border border-border-control type-meta leading-none text-ink-muted num"
+          data-box
+          data-slot="step-number">{n}</span
+        >
+      {/if}
+    </span>
+    <h2
+      class="m-0 min-w-0 type-body font-medium text-ink-strong"
+      id={headingId}
+    >
       {title}{#if stateWords}<span class="sr-only"> — {stateWords}</span>{/if}
     </h2>
-    {#if meta}
-      <div
-        class="flex min-w-0 items-center gap-space-2 type-meta text-ink-muted"
-      >
-        {@render meta()}
-      </div>
-    {/if}
   </header>
 
-  <!-- Row 2, Col 1: hairline connector down to the next node (none after last). -->
-  <div aria-hidden="true" class="flex flex-col items-center">
-    {#if !last}
-      <!-- From the wide line the stages stand two to a row (HowItRuns): a
-           connector there would join 1 to 3, so it goes. -->
-      <span class="my-space-1 w-px flex-1 bg-border-hairline @wide:hidden"
-      ></span>
-    {/if}
-  </div>
-
-  <!-- Row 2, Col 2: stage body aligned to the title's leading edge. -->
   <!-- Its own container: its parts fit the column it stands in, whether
        the view runs one column or two. -->
-  <div class={["@container min-w-0 pt-space-3", !last && "pb-space-7"]}>
+  <div class="@container min-w-0">
     {@render children()}
-    <span class="sr-only" aria-live="polite" role="status">{announcement}</span>
+    <span aria-live="polite" class="sr-only" role="status">{announcement}</span>
   </div>
 </section>

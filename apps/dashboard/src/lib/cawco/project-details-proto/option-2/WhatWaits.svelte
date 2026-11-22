@@ -42,7 +42,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { OptionTiles } from "#lib/components/ui/option-group/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
-  import { IconAgent, IconChevronRight, IconEye } from "#lib/icons.js";
+  import { IconAgent, IconEye } from "#lib/icons.js";
   import type { HrefOf, StageSends } from "./changes";
   import { CHOICE_KINDS, type ChoiceKind, type Decider } from "./records";
   import { howItRunsWords as words } from "./words";
@@ -190,13 +190,13 @@
           variant="ghost"
         />
       {/if}
-      <a
-        class="mark-line inline-flex items-center gap-space-1 type-meta text-link-ink hover:underline"
+      <Button
         href={hrefOf("fleetDecides")}
-      >
-        <span>{words.waits.fleetDefaults}</span>
-        <IconChevronRight aria-hidden="true" class="size-icon-sm flex-none" />
-      </a>
+        label={words.waits.fleetDefaults}
+        size="xs"
+        tone="quiet"
+        variant="ghost"
+      />
     </span>
   </div>
 
@@ -225,9 +225,12 @@
     said={words.waits.roster}
   />
 
-  <h4 class={[sectionHeadVariants({ inset: "flush" }), "mt-space-3"]}>
+  <h3
+    class={[sectionHeadVariants({ inset: "flush" }), "mt-space-4"]}
+    id="work-path-review"
+  >
     {words.waits.reviewHeading}
-  </h4>
+  </h3>
   <OptionTiles
     bind:value={
       () => (record.reviewBeforeDone ? "review" : "agents"),
@@ -239,6 +242,7 @@
     }
     cols={2}
     disabled={!record.hubReachable}
+    glide
     glyph={reviewGlyph}
     label={words.waits.reviewHeading}
     options={[

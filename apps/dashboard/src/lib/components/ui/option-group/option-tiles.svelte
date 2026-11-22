@@ -7,7 +7,12 @@
    * on the recessed fill, never the focus ring.
    *
    * `cols` across, `colsPhone` under the phone line (one a row by default:
-   * stacked).
+   * stacked). With `wraps`, `cols` is the most across: a row narrower than
+   * `cols` tiles at the choice tile's least width
+   * (`--spacing-c-choice-tile-min`) stands fewer, down to one.
+   *
+   * With `glide`, the pick is the kit's selection pill (OptionGroup
+   * `glide`): it slides from the tile left to the one chosen.
    *
    * `glyph`, drawn for each option's id, leads its tile with a mark of what
    * picking it does, on its name's line; the note then hangs under the
@@ -26,6 +31,8 @@
     disabled = false,
     digits = false,
     glyph,
+    glide = false,
+    wraps = false,
   }: {
     value: T | null;
     options: { disabled?: boolean; id: T; name: string; note?: string }[];
@@ -38,7 +45,18 @@
     disabled?: boolean;
     /** Each tile wears its digit, which picks it. */
     digits?: boolean;
+    /** The pick slides from tile to tile (OptionGroup `glide`). */
+    glide?: boolean;
+    /** Fewer across where `cols` tiles would stand under the choice tile's least width. */
+    wraps?: boolean;
   } = $props();
+
+  /** The grid's tracks: `cols` equal ones, or with `wraps` as many as hold the least width, `cols` at most. */
+  const tracks = $derived(
+    wraps
+      ? `repeat(auto-fit, minmax(min(100%, max(var(--spacing-c-choice-tile-min), calc((100% - ${cols - 1} * var(--spacing-space-2)) / ${cols}))), 1fr))`
+      : `repeat(${cols}, minmax(0, 1fr))`
+  );
 </script>
 
 <OptionGroup
@@ -50,8 +68,11 @@
     }
   }
   {disabled}
+  {glide}
   layout="tiles"
-  style="--tiles-cols: repeat({cols}, minmax(0, 1fr)); --tiles-cols-phone: repeat({colsPhone}, minmax(0, 1fr))"
+  style="--tiles-cols: {tracks}; --tiles-cols-phone: {wraps
+    ? tracks
+    : `repeat(${colsPhone}, minmax(0, 1fr))`}"
 >
   {#each options as option, at (option.id)}
     <OptionGroupItem
