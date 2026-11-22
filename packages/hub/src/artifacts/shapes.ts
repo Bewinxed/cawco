@@ -15,6 +15,7 @@ import type {
   CanvasDial,
   CanvasEdge,
   CanvasShapes,
+  DesignMark,
   SheetRead,
   SheetWeight,
   StageState,
@@ -75,6 +76,8 @@ export interface ArtifactInput {
    * person's own composer canvas (`draft`), which asks them nothing.
    */
   ask?: string | undefined;
+  /** What a design folder holds (core `DESIGN_MARKS`): a screen where it names none. */
+  content?: DesignMark | undefined;
   /** A design graph's dials: a CSS variable on every frame, or an arg. */
   dials?: CanvasDial[] | undefined;
   dir?: string | undefined;

@@ -12985,6 +12985,15 @@
                     "maxLength": 160,
                     "type": "string"
                   },
+                  "content": {
+                    "enum": [
+                      "chart",
+                      "deck",
+                      "document",
+                      "screen"
+                    ],
+                    "type": "string"
+                  },
                   "dials": {
                     "maxItems": 24,
                     "type": "array",

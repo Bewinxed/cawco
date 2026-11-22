@@ -20,6 +20,7 @@ import { PREVIEW_START_PATH } from "@cawco/core/preview/protocol";
 import {
   CANVAS_SPEC_LIMITS,
   DESIGN_MAP_LIMITS,
+  DESIGN_MARKS,
   GRAPH_WIDTHS_SAID,
   INTERACTIONS,
   SERVE_COMMAND_LIMIT,
@@ -169,6 +170,14 @@ const designDirections = z
   .max(CANVAS_SPEC_LIMITS.files)
   .optional();
 
+/** What a design folder holds, as its agent marks it (core `DESIGN_MARKS`). */
+const designMark = z
+  .enum(DESIGN_MARKS)
+  .optional()
+  .describe(
+    "A design folder's: a document, chart or deck shows at its own size; default screen."
+  );
+
 const mermaid = z
   .string()
   .min(1)
@@ -229,6 +238,7 @@ export const artifactCreate = {
       "Two or more directions of one design, a states file or page each: one graph switching between them; their pick is artifact_read's `picked`."
     ),
     dir: z.string().startsWith("/").max(4096).optional().describe("Absolute."),
+    content: designMark,
     port: z
       .number()
       .int()
@@ -340,6 +350,7 @@ export const artifactUpdate = {
     directions: designDirections.describe(
       "A design folder's directions again, replaced in place."
     ),
+    content: designMark.describe("Sent with html, dir or directions."),
     patch: z
       .array(
         z.union([

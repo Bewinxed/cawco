@@ -12,9 +12,36 @@ You choose the form the work needs:
 
 Leave `node_modules` and `.git` out of the folder: the stage installs its own.
 
+## Mark what you made
+
+A design is a **screen** unless you mark it: the graph draws a screen at its widths and in light or dark. Content that a person reads rather than operates takes `content` on the create:
+
+- `"document"`: prose, with any diagrams, maths and code inside it;
+- `"chart"`: one chart or a few beside each other;
+- `"deck"`: slides.
+
+The graph shows marked content at the panel's own width, in the person's own scheme, with comments and your dials; it offers no widths and no light or dark. Write it to read at that one width: a document holds its text to a column of about 70ch, a chart fills the width it gets, a deck scales its slides to the frame. The mark stands across `artifact_update` until you send another; `"screen"` takes it off.
+
+## The content kit
+
+Every design's package.json names one maintained library for each common kind of content, so a page imports any of them by its bare name with no package.json of its own and no CDN; Vite serves each package's own published build from the stage's install:
+
+| Content | Import | With it |
+| --- | --- | --- |
+| Documents (Markdown) | `import { marked } from "marked"` | `marked.parse(text)` |
+| Charts | `import Chart from "chart.js/auto"` | `new Chart(canvas, { type, data, options })` |
+| Slide decks | `import Reveal from "reveal.js"` | `import "reveal.js/reveal.css"`, a theme such as `import "reveal.js/theme/white.css"`, then `new Reveal({ embedded: true }).initialize()` over `.reveal > .slides > section` |
+| Diagrams | `import mermaid from "mermaid"` | `mermaid.initialize({ startOnLoad: false })`, then `const { svg } = await mermaid.render(id, source)` |
+| Maths | `import katex from "katex"` | `import "katex/dist/katex.min.css"`, then `katex.renderToString(tex)` |
+| Code | `import { codeToHtml } from "shiki"` | `await codeToHtml(code, { lang, theme })` |
+
+Import a package's CSS from the page's module script, as above: Vite resolves a bare import there and leaves a `<link href>` as written. Write the module inline (`<script type="module">` in the page) or as a file beside it.
+
+A `package.json` of your own may name another version of a kit package, which replaces the kit's, or any other npm package. Content the kit doesn't cover is plain HTML, CSS and SVG, which every page can draw.
+
 ## Open it
 
-`artifact_create({ kind: "component", name, title, does: "judge", ask, html })`, or with `dir`. Directions are one form each: `directions: [{ html, name, line }, { dir, name, line }]`, `html` and `dir` left out of the call; each direction is a folder of its own, and their package.json files name the same range for any package they share.
+`artifact_create({ kind: "component", name, title, does: "judge", ask, html })`, or with `dir`, and `content` for a document, chart or deck. Directions are one form each: `directions: [{ html, name, line }, { dir, name, line }]`, `html` and `dir` left out of the call; each direction is a folder of its own, and their package.json files name the same range for any package they share.
 
 The create answers `errors`: every compile error in the pages and what they import, compiled before any browser loads them. A folder that can't install (a package.json that doesn't parse, a package that isn't there) refuses the create in the installer's words.
 
@@ -24,6 +51,8 @@ The create answers `errors`: every compile error in the pages and what they impo
 
 ## Write the page for the graph
 
+A screen is written for the graph's widths and schemes; marked content keeps to its one width (above).
+
 - **One page is one state.** The graph draws it at its widths (390, 768, 1440, 1920) as the frame's own viewport, so the page's media queries and `vw` answer each one; a width wider than the panel is scaled to fit. The page scrolls inside the frame as on a device. Write it responsive, never at one fixed width.
 - **Dark is the page's CSS.** The graph's scheme reaches the page as its preferred colour scheme: style dark with `@media (prefers-color-scheme: dark)` or `light-dark()` under `:root { color-scheme: light dark }`. A script's `matchMedia` hears the browser's own scheme in Chromium, so keep the scheme in CSS. A page that names no dark draws light in both.
 - **A dial is a CSS variable.** Each dial's target is `{ cssVar: "--radius" }`, set on the page's root; the page reads it (`border-radius: var(--radius)`) and declares its default on `:root`, which the dial shows as written. An `arg` dial is refused: a page has no props.
@@ -32,4 +61,4 @@ The create answers `errors`: every compile error in the pages and what they impo
 
 ## What comes back
 
-`artifact_read` answers their pins, their dial values (`dials`), with directions their `picked`, and the stage's `errors`. A pin anchors on the element they pointed at and carries no `file:line`: find the element by what the pin names. The hub draws no frame of the page and keeps no render report, so read it yourself at each width and in both schemes before you open it. Save into code, the Animation face, Compare and the states' Map stay with live stories: a page has no states file to write and no move to play.
+`artifact_read` answers their pins, their dial values (`dials`), with directions their `picked`, and the stage's `errors`. A pin anchors on the element they pointed at and carries no `file:line`: find the element by what the pin names. The hub draws no frame of the page and keeps no render report, so read it yourself before you open it: a screen at each width and in both schemes, marked content at the panel's width (600, and 390 for a phone) in both. Save into code, the Animation face, Compare and the states' Map stay with live stories: a page has no states file to write and no move to play.

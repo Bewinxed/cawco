@@ -162,8 +162,8 @@ import {
   type CanvasInput,
   CREATE_SHAPE,
   canvasProblem,
-  DESIGN_HINT,
   designDialsProblem,
+  designHint,
   directionsStaged,
   errorsSaid,
   pagesAsked,
@@ -3682,7 +3682,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     id: string,
     input: Pick<
       ArtifactInput,
-      "dials" | "dir" | "directions" | "edges" | "group" | "html"
+      "content" | "dials" | "dir" | "directions" | "edges" | "group" | "html"
     >
   ) => {
     const asked = revisableBy(instanceId, id);
@@ -3706,7 +3706,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         revision: next.revision,
         stage: { ...changed.state, errors: [] },
         errors: errorsSaid(changed.state.errors),
-        hint: DESIGN_HINT,
+        hint: designHint(changed.spec.content),
       };
       return written;
     });

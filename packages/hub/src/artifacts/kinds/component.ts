@@ -7,6 +7,7 @@ import {
   type CanvasSpec,
   canvasPath,
   type DesignOpened,
+  designContentOf,
   designOf,
   designTreeId,
   GRAPH_WIDTHS_SAID,
@@ -21,6 +22,7 @@ import {
   type StoryOp,
   storyRefOf,
 } from "@cawco/core/stage";
+import { withoutUndefined } from "@cawco/core/without-undefined";
 import { pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow } from "../../db/artifacts";
@@ -29,8 +31,8 @@ import { openProblem } from "../../preview-stops";
 import {
   COMPONENT_EXAMPLE,
   canvasProblem,
-  DESIGN_HINT,
   type DesignPartAsked,
+  designHint,
   designPageAt,
   designPartsOf,
   designPlaces,
@@ -478,6 +480,12 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     if (misfit) {
       return problem(400, { code: "artifact-sheet-unfit", detail: misfit });
     }
+    if (designContentOf(input.content)) {
+      return problem(400, {
+        code: "artifact-sheet-unfit",
+        detail: `A live story is a component or a screen, which the graph draws at its widths: content marks a design folder (html or dir) as a ${input.content}.`,
+      });
+    }
     const said = ctx.askedOf(input);
     return said instanceof ElysiaStatus ? said : { asked, directions, said };
   };
@@ -748,6 +756,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     }
     const spec = {
       ...specOf(input.name, { ...input, directions }),
+      ...withoutUndefined({ content: designContentOf(input.content) }),
       title: said.title,
     };
     const source = designSource(tree, written.opened, files, spec);
@@ -769,7 +778,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       ...createdOf(row, shown),
       stage: { ...written.opened.state, errors: [] },
       errors: errorsSaid(written.opened.state.errors),
-      hint: DESIGN_HINT,
+      hint: designHint(spec.content),
     };
     return made;
   };
@@ -786,7 +795,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     row: ArtifactRow,
     input: Pick<
       ArtifactInput,
-      "dials" | "dir" | "directions" | "edges" | "group" | "html"
+      "content" | "dials" | "dir" | "directions" | "edges" | "group" | "html"
     >
   ) => {
     const design = designOf(row);
@@ -808,6 +817,13 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         group: input.group ?? design.spec.group,
         dials: input.dials ?? design.spec.dials,
         directions,
+      }),
+      // A mark stands until one is sent again: "screen" takes it off.
+      ...withoutUndefined({
+        content:
+          input.content === undefined
+            ? design.spec.content
+            : designContentOf(input.content),
       }),
       title: row.title,
     };
@@ -1087,7 +1103,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
               : null,
           }
         : {}),
-      hint: DESIGN_HINT,
+      hint: designHint(design?.spec.content),
     };
     return read;
   };

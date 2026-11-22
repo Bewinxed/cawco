@@ -26,7 +26,9 @@
    * the same state in the direction he came from, and Pick, the head's one
    * prominent action, picks the one in front (the artifact's `picked`).
    * The page loads no states file up front: the one in front is asked for
-   * (`link.load`) while its sheet has not come.
+   * (`link.load`) while its sheet has not come. A design folder its agent
+   * marked a document, chart or deck (the spec's `content`) is read at the
+   * stage's own width in the panel's scheme: its view offers neither.
    *
    * No bar of its own (DESIGN.md, The Title Bars Follow Liquid Glass
    * Rule): the artifact panel's head floats over the graph, which runs to
@@ -94,6 +96,7 @@
   import { motionOk, rise } from "#lib/platform/motion/curves.svelte.js";
   import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
   import { track } from "#lib/platform/track.js";
+  import { theme } from "#lib/theme.svelte.js";
   import PreviewTools from "../preview/PreviewTools.svelte";
   import type { SheetInspector } from "../preview/sheet-inspector.svelte";
   import ThreadSheet from "../preview/ThreadSheet.svelte";
@@ -631,12 +634,18 @@
    * user can click mobile/tab/desktop/wide"), or a device's.
    */
   let widthPick = $state<"adapt" | number>("adapt");
+  /**
+   * A design folder marked a document, chart or deck (the spec's
+   * `content`): read at its own size, the stage's width, in the panel's
+   * scheme, so neither the widths nor the scheme are offered.
+   */
+  const content = $derived(spec.content !== undefined);
   /** Under this the drawing is said to stand scaled: a scale a pixel's rounding short of 1:1 is 1:1. */
   const SCALED_UNDER = 0.995;
   /** The stage's own width, px: what Adapt draws at. */
   let stageAcross = $state(0);
   const width = $derived.by(() => {
-    if (widthPick !== "adapt") {
+    if (widthPick !== "adapt" && !content) {
       return widthPick;
     }
     return stageAcross > 0 ? stageAcross : null;
@@ -777,7 +786,7 @@
   // The view first, so the state reached on a new page is laid out at it.
   $effect(() => {
     const view = {
-      scheme,
+      scheme: content ? theme.resolved : scheme,
       width,
       motion: reduce ? "reduce" : "on",
       fit: !actual,
@@ -1769,6 +1778,35 @@
 {/snippet}
 
 {#snippet viewButton()}
+  {#if content}
+    {@render contentView()}
+  {:else}
+    {@render screenViewButton()}
+  {/if}
+{/snippet}
+
+<!-- A content design's view: the dials alone, where it has any; its
+     width is the stage's and its scheme the panel's. -->
+{#snippet contentView()}
+  {#if tunable}
+    <BarGlass form="group">
+      {@render dialsItem()}
+    </BarGlass>
+  {/if}
+{/snippet}
+
+{#snippet dialsItem()}
+  <BarItem
+    icon={IconTuningLinear}
+    label={words.dialsFace}
+    onclick={() => {
+      rising = rising === "dials" ? null : "dials";
+    }}
+    pressed={rising === "dials"}
+  />
+{/snippet}
+
+{#snippet screenViewButton()}
   <BarGlass form="group">
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
@@ -1850,6 +1888,14 @@
      light or dark; the dials; Compare; the scale, itself Actual size, while
      the drawing stands scaled, or while Actual size is on. -->
 {#snippet viewTools()}
+  {#if content}
+    {@render contentView()}
+  {:else}
+    {@render screenViewTools()}
+  {/if}
+{/snippet}
+
+{#snippet screenViewTools()}
   <div class="flex items-center gap-space-2">
     <BarSegments
       label={words.width}
@@ -1873,14 +1919,7 @@
         }}
       />
       {#if tunable}
-        <BarItem
-          icon={IconTuningLinear}
-          label={words.dialsFace}
-          onclick={() => {
-            rising = rising === "dials" ? null : "dials";
-          }}
-          pressed={rising === "dials"}
-        />
+        {@render dialsItem()}
       {/if}
       {#if canCompare}
         <BarItem
