@@ -15,8 +15,8 @@ import { tv } from "#lib/utils.js";
  * BarSegments (ui/bar-glass), the glass its list and each segment a bar
  * item, since a groove there drew its hover as the groove's own colour by
  * day, its ring and thumb only once measured, and its segments under a
- * finger's 44px. The kit's Tabs and single ToggleGroup draw it from the
- * slots below; the fluid Tabs' segmented track (fluid-tabs/TabsList) takes
+ * finger's 44px. The single ToggleGroup draws it from the slots below; the
+ * fluid Tabs' segmented track (fluid-tabs/TabsList) takes
  * {@link SEGMENTED_TRACK} and reads the same properties. By day
  * `surface-hover` is the groove's own colour, so a hover there drew nothing:
  * a segment's hover is `groove-hover`, a step darker by day (away from the
@@ -58,7 +58,7 @@ export const segmentedVariants = tv({
 });
 
 /**
- * Slides the thumb of a segmented group (tabs, single toggle group) under
+ * Slides the thumb of a segmented group (single toggle group) under
  * its selected item, gliding its position and its size together over
  * --duration-pop on --ease-in-out, the way the new-session ghost follows the
  * hover. A change caught mid-glide starts from where the thumb is on

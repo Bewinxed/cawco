@@ -14,7 +14,6 @@
    * draws one (`layout="ledger" stickyBand`, its band's heads sticky at
    * `z-2`), so what opens there stands over a sticky band (layer-stack).
    */
-  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
@@ -138,25 +137,30 @@
     {/if}
 
     {#if shows("alert-dialog")}
-      <AlertDialog.Root bind:open={open["alert-dialog"]}>
-        <AlertDialog.Trigger data-open="alert-dialog">
+      <Dialog.Root bind:open={open["alert-dialog"]}>
+        <Dialog.Trigger data-open="alert-dialog">
           {#snippet child({ props })}
             <Button {...props} size="sm" variant="outline">Alert dialog</Button>
           {/snippet}
-        </AlertDialog.Trigger>
-        <AlertDialog.Content>
-          <AlertDialog.Header>
-            <AlertDialog.Title>Alert dialog</AlertDialog.Title>
-          </AlertDialog.Header>
-          <AlertDialog.Footer>
-            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-            <AlertDialog.Action
-              data-inside="alert-dialog"
-              onclick={() => inside("alert-dialog")}>Press</AlertDialog.Action
+        </Dialog.Trigger>
+        <Dialog.Content role="alertdialog" showCloseButton={false}>
+          <Dialog.Header>
+            <Dialog.Title>Alert dialog</Dialog.Title>
+          </Dialog.Header>
+          <Dialog.Footer>
+            <Button
+              onclick={() => {
+                open["alert-dialog"] = false;
+              }}
+              variant="outline">Cancel</Button
             >
-          </AlertDialog.Footer>
-        </AlertDialog.Content>
-      </AlertDialog.Root>
+            <Button
+              data-inside="alert-dialog"
+              onclick={() => inside("alert-dialog")}>Press</Button
+            >
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog.Root>
     {/if}
 
     {#if shows("drawer")}

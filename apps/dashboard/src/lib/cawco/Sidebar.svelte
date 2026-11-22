@@ -15,30 +15,42 @@
    * dot on its corner) rather than in a text pill.
    */
   import { projectEndWords } from "@cawco/core/words/project-ends";
+  import { shellWords } from "@cawco/core/words/shell";
   import { sidebarWords } from "@cawco/core/words/sidebar";
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   import { Button } from "#lib/components/ui/button/index.js";
-  import CawLoopSwitcher from "#lib/components/ui/CawLoopSwitcher.svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { IconToggle } from "#lib/components/ui/icon-toggle/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import SoundSwitcher from "#lib/components/ui/SoundSwitcher.svelte";
   import * as Sheet from "#lib/components/ui/sheet/index.js";
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import ThemeSwitcher from "#lib/components/ui/ThemeSwitcher.svelte";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconArchive,
     IconBox,
     IconFiles,
+    IconMoon,
+    IconPause,
+    IconPlay,
     IconPlus,
     IconSearch,
     IconSettings,
+    IconSound,
+    IconSoundOff,
+    IconSun,
   } from "#lib/icons.js";
+  import {
+    cawLoop,
+    setCawLoop,
+    setSound,
+    sound,
+  } from "#lib/platform/feel.svelte.js";
   import { type IdleBuild, whenIdle } from "#lib/platform/idle-build.svelte.js";
   import { track } from "#lib/platform/track.js";
+  import { theme, toggleTheme } from "#lib/theme.svelte.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
   import { type BranchOptions, branch } from "../platform/motion/branch.svelte";
@@ -571,6 +583,22 @@
   const fleetCount = $derived(heldFleetCount());
   /** A project row's link in the rail: its end's tray hands the focus back to it. */
   const railLinkId = (projectId: string) => `rail-project-${projectId}`;
+
+  const themeLabels = {
+    light: shellWords.lightMode,
+    dark: shellWords.darkMode,
+    system: "System",
+  };
+  const isDark = $derived(theme.resolved === "dark");
+  const themeLabel = $derived(
+    themeLabels[theme.current] || shellWords.lightMode
+  );
+  const soundLabel = $derived(sound.on ? "Turn sound off" : "Turn sound on");
+  const cawLoopLabel = $derived(
+    cawLoop.on
+      ? "Caw moves while the project works"
+      : "Caw holds still while the project works"
+  );
 </script>
 
 {#snippet pending(rows: number)}
@@ -1077,9 +1105,31 @@
               </Button>
             {/snippet}
           </Tip>
-          <ThemeSwitcher />
-          <SoundSwitcher />
-          <CawLoopSwitcher />
+          <IconToggle
+            active={isDark}
+            label={themeLabel}
+            off={IconSun}
+            on={IconMoon}
+            onclick={toggleTheme}
+          />
+          <IconToggle
+            active={sound.on}
+            ariaLabel="Sound"
+            label={soundLabel}
+            off={IconSoundOff}
+            on={IconSound}
+            onclick={() => setSound(!sound.on)}
+            pressed={sound.on}
+          />
+          <IconToggle
+            active={cawLoop.on}
+            ariaLabel="Caw moves while the project works"
+            label={cawLoopLabel}
+            off={IconPause}
+            on={IconPlay}
+            onclick={() => setCawLoop(!cawLoop.on)}
+            pressed={cawLoop.on}
+          />
         </div>
       </div>
     {/if}

@@ -1,6 +1,6 @@
 <script lang="ts" module>
-  import { SEGMENTED_TRACK } from "#lib/components/ui/tabs/thumb.js";
   import { tv } from "#lib/utils.js";
+  import { SEGMENTED_TRACK } from "./thumb.js";
 
   /**
    * The track's recipe (DESIGN.md, Fluid tabs and Folder tabs). Its size
@@ -35,7 +35,7 @@
           "[--px:var(--spacing-c-segment-pad-x)] coarse:[--item:calc(var(--spacing)_*_7)]",
       },
       variant: {
-        /* The kit's one segmented recipe (tabs/thumb.ts): its groove, pad,
+        /* The kit's one segmented recipe (fluid-tabs/thumb.ts): its groove, pad,
            segment height and concentric corners, on a page's ground (in a
            bar's glass the switch is BarSegments); the chosen segment
            lifted in surface-lift. */

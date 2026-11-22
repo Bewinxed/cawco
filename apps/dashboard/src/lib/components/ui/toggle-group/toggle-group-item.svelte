@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ToggleGroup as ToggleGroupPrimitive } from "bits-ui";
-  import { segmentedVariants } from "#lib/components/ui/tabs/thumb.js";
+  import { segmentedVariants } from "#lib/components/ui/fluid-tabs/thumb.js";
   import { cn } from "#lib/utils.js";
 
   let {

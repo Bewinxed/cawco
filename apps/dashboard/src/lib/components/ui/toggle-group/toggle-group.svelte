@@ -3,7 +3,7 @@
   import {
     segmentedVariants,
     slideThumb,
-  } from "#lib/components/ui/tabs/thumb.js";
+  } from "#lib/components/ui/fluid-tabs/thumb.js";
   import { cn } from "#lib/utils.js";
 
   const { group, thumb: thumbLook } = segmentedVariants();

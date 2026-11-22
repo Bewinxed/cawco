@@ -2,7 +2,7 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  const tabsContentVariants = tv({
+  const tabPanelVariants = tv({
     base: "focus-inset flex-1 rounded-lg type-body",
     variants: {
       layout: {
@@ -12,7 +12,7 @@
     },
   });
 
-  type TabsContentLayout = VariantProps<typeof tabsContentVariants>["layout"];
+  type TabPanelLayout = VariantProps<typeof tabPanelVariants>["layout"];
 
   /** What a Tab can land on inside a panel. */
   const FOCUSABLE =
@@ -29,22 +29,34 @@
    * goes from the tabs straight to what the panel holds. Read as the panel
    * changes; a `tabindex` the caller gives wins.
    */
-  import { Tabs as TabsPrimitive } from "bits-ui";
+  import type { Snippet } from "svelte";
+  import type { HTMLAttributes } from "svelte/elements";
   import { cn } from "#lib/utils.js";
+  import { useTabs } from "./context.svelte";
 
   let {
     ref = $bindable(null),
+    value,
     class: className,
     layout,
     tabindex,
+    children,
     ...restProps
-  }: TabsPrimitive.ContentProps & { layout?: TabsContentLayout } = $props();
+  }: HTMLAttributes<HTMLDivElement> & {
+    ref?: HTMLDivElement | null;
+    value: string;
+    layout?: TabPanelLayout;
+    children?: Snippet;
+  } = $props();
+
+  const tabs = useTabs();
+  const active = $derived(tabs.value === value);
 
   /** The panel holds something a Tab lands on. */
   let holds = $state(false);
   $effect(() => {
     const panel = ref;
-    if (!panel) {
+    if (!(panel && active)) {
       return;
     }
     const read = () => {
@@ -62,10 +74,17 @@
   });
 </script>
 
-<TabsPrimitive.Content
-  class={cn(tabsContentVariants({ layout }), className)}
+<div
+  class={cn(tabPanelVariants({ layout }), !active && "hidden", className)}
   data-slot="tabs-content"
+  data-state={active ? "active" : "inactive"}
+  hidden={!active || undefined}
+  role="tabpanel"
   tabindex={tabindex ?? (holds ? -1 : 0)}
-  bind:ref
+  bind:this={ref}
   {...restProps}
-/>
+>
+  {#if active}
+    {@render children?.()}
+  {/if}
+</div>

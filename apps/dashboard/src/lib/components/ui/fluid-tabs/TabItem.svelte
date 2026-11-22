@@ -139,6 +139,7 @@
     href,
     class: className,
     lead,
+    after,
     trail,
     onclick,
     flush,
@@ -153,6 +154,8 @@
     href?: string;
     /** Custom leading content, in the icon's place. */
     lead?: Snippet;
+    /** Inline trailing content inside the tab button (e.g. a count). */
+    after?: Snippet;
     /** Content after the label: a close control, a count. */
     trail?: Snippet;
     onclick?: (event: MouseEvent) => void;
@@ -590,6 +593,9 @@
         data-text={label}
       ></span>
     </span>
+    {#if after}
+      {@render after()}
+    {/if}
   </svelte:element>
   {#if trail}
     {@render trail()}

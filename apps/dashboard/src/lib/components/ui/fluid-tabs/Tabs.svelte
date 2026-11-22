@@ -8,6 +8,10 @@
   const tabsVariants = tv({
     variants: {
       fill: { none: "background-none p-0" },
+      layout: {
+        /** Tabs whose chosen pane scrolls on its own (TabPanel's `column`). */
+        column: "flex min-h-0 flex-col gap-space-2",
+      },
     },
   });
 
@@ -47,6 +51,7 @@
     values,
     boxes,
     fill,
+    layout,
     strip,
     class: className,
     children,
@@ -112,7 +117,7 @@
 </script>
 
 <div
-  class={cn(tabsVariants({ fill }), strip?.root, className)}
+  class={cn(tabsVariants({ fill, layout }), strip?.root, className)}
   data-size={size}
   data-slot="tabs"
   data-variant={variant}

@@ -71,7 +71,7 @@ Durations, curves and scales are root tokens (`design/tokens/cawco.tokens.json`,
 - Model list swap on a harness change (`lib/platform/motion/list-swap.svelte.ts`, used by `ModelSection.svelte`): old rows leave together over `--dur-exit`; new rows enter over `--dur-pop`, `--dur-stagger` apart, starting once the old rows are out; staggers stop growing after row `STAGGER_CAP` 9 and at most `LEAVING` 8 old rows animate. Rows travel `--pop-rise` (`ns-in-r`, `ns-in-l`, `ns-out-l`, `ns-out-r` in `src/design.css`).
 - Travelling highlights (`components/ui/highlight`, attached by `ModelSection.svelte`, `PermissionSection.svelte`, `NsPopover.svelte`, `NsPopoverGroup.svelte`): the hover ghost glides on `--dur-ghost` and `--ease-in-out`; the selected pill glides on `--dur-control` and `--ease-drawer` (`highlight.svelte.ts`, its transitions).
 - Effort: bars light `--dur-stagger` apart (`EffortPips.svelte`); the fill and pip move over `--ns-fill-ms` (`--dur-toggle`) on `--ease-in-out`; the knob grows over `--dur-morph` on `--ease-out`.
-- Segmented thumb (location source) moves over `--dur-pop` on `--ease-in-out` (the kit ToggleGroup's `slideThumb`, `components/ui/tabs/thumb.ts`); the prompt's height eases over `--dur-pop` on `--ease-in-out` (`PromptEditor.svelte`).
+- Segmented thumb (location source) moves over `--dur-pop` on `--ease-in-out` (the kit ToggleGroup's `slideThumb`, `components/ui/fluid-tabs/thumb.ts`); the prompt's height eases over `--dur-pop` on `--ease-in-out` (`PromptEditor.svelte`).
 
 ### Reduced motion
 

@@ -1,7 +1,7 @@
 <script lang="ts" module>
   import type { VariantProps } from "tailwind-variants";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
-  import { segmentedVariants } from "#lib/components/ui/tabs/thumb.js";
+  import { segmentedVariants } from "#lib/components/ui/fluid-tabs/thumb.js";
   import { tv } from "#lib/utils.js";
 
   /**
@@ -32,7 +32,7 @@
    *   focus ring hugging it.
    * - `segment`: a segment of a segmented group that opens what the group
    *   has no room for (the repository picker's "+N" owners): the kit's
-   *   segment (tabs/thumb), pressed with the tint as a toggle item is, its
+   *   segment (fluid-tabs/thumb), pressed with the tint as a toggle item is, its
    *   groove hover held while it is open, its words numerals;
    *   `segment-compact` on the compact segment, beside compact toggle
    *   items.

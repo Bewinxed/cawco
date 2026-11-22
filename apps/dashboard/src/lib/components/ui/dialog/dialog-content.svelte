@@ -38,6 +38,10 @@
       phone line), its body scrolling inside. */
   const dialogContentVariants = tv({
     variants: {
+      size: {
+        default: "",
+        sm: "phone:max-w-80",
+      },
       width: {
         form: "phone:max-w-128",
         report: "phone:max-w-168",
@@ -106,11 +110,13 @@
     children,
     showCloseButton = true,
     bodyClass,
+    size,
     width,
     bodyPad,
     body: bodyLook,
     restoreScrollDelay = 0,
     modal = true,
+    role = "dialog",
     /* Off: see popover-content.svelte. */
     preventOverflowTextSelection = false,
     ...restProps
@@ -128,6 +134,8 @@
        * landing there while it waits; Close and Esc put it away.
        */
       modal?: boolean;
+      /** `"alertdialog"` for confirmations that require an explicit choice (stays open on outside press). */
+      role?: "dialog" | "alertdialog";
     } = $props();
 
   // A dialog whose body changes (a step, an error, a result) tweens to its
@@ -184,9 +192,11 @@
        travels its own height (`--sheet-away`, the kit sheet's). -->
   <DialogPrimitive.Content
     {preventOverflowTextSelection}
-    class={cn(tray.tray(), dialogContentVariants({ width }), className)}
+    class={cn(tray.tray(), dialogContentVariants({ size, width }), className)}
     data-slot="dialog-content"
-    interactOutsideBehavior={modal ? "close" : "ignore"}
+    interactOutsideBehavior={modal && role !== "alertdialog"
+      ? "close"
+      : "ignore"}
     preventScroll={modal}
     {restoreScrollDelay}
     trapFocus={modal}
@@ -198,8 +208,7 @@
            content: one that holds nothing says false, to a screen reader too. -->
       <div
         {...props}
-        aria-modal={modal ? "true" : "false"}
-        role="dialog"
+        {...{ role, "aria-modal": modal ? "true" : "false" }}
         style:pointer-events={pressable(open)}
         style:--sheet-away="translate3d(0, 100%, 0)"
       >

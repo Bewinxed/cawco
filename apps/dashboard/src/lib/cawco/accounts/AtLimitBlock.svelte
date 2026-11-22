@@ -32,9 +32,13 @@
   import ModelSection from "#lib/cawco/spawn/ModelSection.svelte";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
+  import {
+    TabItem,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
-  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import { IconArrowUpRight, IconWarningTriangle } from "#lib/icons.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { hueVar, nameOf, TERMS_URL } from "./model.svelte";
@@ -172,43 +176,41 @@
         class="flex flex-wrap items-center justify-between gap-space-3 py-space-2 text-pretty text-ink-row"
       >
         <span id="{id}-at-limit">{words.atLimit}</span>
-        <Tabs.Root
+        <Tabs
           onValueChange={(value) => {
             if (isMethod(value)) {
               atLimit.compaction.atLimit = value;
             }
           }}
           value={atLimit.compaction.atLimit}
+          values={COMPACT_METHODS}
         >
-          <Tabs.List aria-labelledby="{id}-at-limit">
+          <TabsList aria-labelledby="{id}-at-limit">
             {#each COMPACT_METHODS as method (method)}
-              <Tabs.Trigger value={method}>
-                {words.methods[method]}
-              </Tabs.Trigger>
+              <TabItem label={words.methods[method]} value={method} />
             {/each}
-          </Tabs.List>
-        </Tabs.Root>
+          </TabsList>
+        </Tabs>
       </div>
       <div
         class="flex flex-wrap items-center justify-between gap-space-3 py-space-2 text-pretty text-ink-row"
       >
         <span id="{id}-cold-move">{words.coldMove}</span>
-        <Tabs.Root
+        <Tabs
           onValueChange={(value) => {
             if (isColdMove(value)) {
               atLimit.compaction.coldMove = value;
             }
           }}
           value={atLimit.compaction.coldMove}
+          values={COLD_MOVES}
         >
-          <Tabs.List aria-labelledby="{id}-cold-move">
+          <TabsList aria-labelledby="{id}-cold-move">
             {#each COLD_MOVES as move (move)}
-              <Tabs.Trigger value={move}>
-                {words.coldMoves[move]}
-              </Tabs.Trigger>
+              <TabItem label={words.coldMoves[move]} value={move} />
             {/each}
-          </Tabs.List>
-        </Tabs.Root>
+          </TabsList>
+        </Tabs>
       </div>
       {#if summarises}
         <div class="flex flex-col gap-space-3 py-space-2" in:unfold out:unfold>

@@ -48,10 +48,15 @@
   import type { Attachment } from "svelte/attachments";
   import { Button } from "#lib/components/ui/button/index.js";
   import EmptyState from "#lib/components/ui/empty/empty-state.svelte";
+  import {
+    TabItem,
+    TabPanel,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import Skeleton from "#lib/components/ui/skeleton/skeleton.svelte";
-  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import {
     IconChevronDown,
     IconChevronRight,
@@ -521,29 +526,51 @@
            each segment its noun and its count, equal widths. The phone's one
            list: the chosen list fills what is left of the drawer with its own
            scroll. -->
-        <Tabs.Root bind:value={list} class="flex-1" layout="column">
-          <Tabs.List aria-label="Artifacts or attachments" class="mt-space-1">
-            <Tabs.Trigger data-files-segment="artifacts" value="artifacts">
-              <span>Artifacts</span>
-              {#if artifactsCount}
-                <span class="num text-ink-muted" data-files-head-count
-                  >{artifactsCount}</span
-                >
-              {/if}
-            </Tabs.Trigger>
-            <Tabs.Trigger data-files-segment="attachments" value="attachments">
-              <span>Attachments</span>
-              {#if attachmentsCount}
-                <span class="num text-ink-muted" data-files-head-count
-                  >{attachmentsCount}</span
-                >
-              {/if}
-            </Tabs.Trigger>
-          </Tabs.List>
+        <Tabs
+          class="flex-1"
+          layout="column"
+          onValueChange={(next) => {
+            list = next;
+          }}
+          value={list}
+          values={["artifacts", "attachments"]}
+        >
+          <TabsList
+            aria-label="Artifacts or attachments"
+            class="mt-space-1"
+            fill
+          >
+            <TabItem
+              data-files-segment="artifacts"
+              label="Artifacts"
+              value="artifacts"
+            >
+              {#snippet after()}
+                {#if artifactsCount}
+                  <span class="num text-ink-muted" data-files-head-count
+                    >{artifactsCount}</span
+                  >
+                {/if}
+              {/snippet}
+            </TabItem>
+            <TabItem
+              data-files-segment="attachments"
+              label="Attachments"
+              value="attachments"
+            >
+              {#snippet after()}
+                {#if attachmentsCount}
+                  <span class="num text-ink-muted" data-files-head-count
+                    >{attachmentsCount}</span
+                  >
+                {/if}
+              {/snippet}
+            </TabItem>
+          </TabsList>
           <!-- A region's only overflow is its scroller (The 44 Touch Rule:
                nothing around it clips its scrollbar or its rows' touch
                areas). -->
-          <Tabs.Content
+          <TabPanel
             data-files-region="artifacts"
             layout="column"
             value="artifacts"
@@ -559,15 +586,15 @@
               </div>
             {/if}
             {@render artifactsBody()}
-          </Tabs.Content>
-          <Tabs.Content
+          </TabPanel>
+          <TabPanel
             data-files-region="attachments"
             layout="column"
             value="attachments"
           >
             {@render attachmentsBody()}
-          </Tabs.Content>
-        </Tabs.Root>
+          </TabPanel>
+        </Tabs>
       {:else}
         <!-- The two regions share the panel's height. Each track starts at
              its floor (its head and a card, two rows, one, or its own words)
