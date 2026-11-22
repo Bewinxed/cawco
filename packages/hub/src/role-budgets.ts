@@ -216,9 +216,14 @@ import {
  * throwaway mockup (the owner's pick on design-workspace-release#html),
  * paid for in part by `does` no longer naming a page where no stage runs
  * (worker 31,365, delegate 11,896 measured); both budgets are raised to it.
+ * 2026-11-22: project_create, so a session makes a new project when the
+ * person asks for one in chat (session 39baa754, "make a project for my
+ * homelab"): POST /api/projects' own ask, made with Caw from the person's
+ * words, its conversation's link answered (worker 31,676 measured; a
+ * delegate is listed none). The worker's budget is raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 31_365,
+  worker: 31_676,
   delegate: 11_896,
   overseer: 770,
   "web-facing": 3400,

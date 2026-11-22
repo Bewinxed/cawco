@@ -607,6 +607,7 @@ import { servedByMachine } from "./preview-machine";
 import { previewRoutes } from "./preview-routes";
 import { createPreviewService } from "./preview-service";
 import { createCaps } from "./project-caps";
+import { createProjectCreate } from "./project-create";
 import {
   isTypeFile,
   makeProjectDelegateTypes,
@@ -1511,10 +1512,10 @@ export const createServer = (
     workspaceArchived: () => workspaceArchived,
     workspaceRetire: () => workspaceRetire,
     addProjectPlace: () => addProjectPlace,
-    askedProjectName: () => askedProjectName,
     askerOf: () => askerOf,
     caps: () => caps,
     createOrJoinProject: () => createOrJoinProject,
+    newProject: () => newProject,
     deletedProjects: () => deletedProjects,
     forgottenProjects: () => forgottenProjects,
     presenceSaid: () => presenceSaid,
@@ -2296,7 +2297,7 @@ export const createServer = (
     machineCustody,
     forget: forgetMachineRuntime,
   } = createMachineRuntime((machineId) => machineName(machineId));
-  const { askedProjectName, createOrJoinProject, leadHome, workPlaceOf } =
+  const { createOrJoinProject, leadHome, newProject, workPlaceOf } =
     createProjectJoining(ctx);
   const { learnCheckout, runOnMachine, stopCommands } =
     createMachineCommands(ctx);
@@ -11193,6 +11194,12 @@ export const createServer = (
         name: project.name,
       })),
     trimPropose: (actor, toolUseId) => trim.propose(actor, toolUseId),
+    projectCreate: createProjectCreate({
+      instance: (id) => db.getInstancesByIds([id])[0],
+      machines: board.machines,
+      machineName,
+      newProject,
+    }),
   });
   // The account router as an orchestrator reads it, and a move of one of
   // its delegates to an account the person named (account-tools.ts).

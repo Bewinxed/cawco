@@ -178,7 +178,7 @@ const onlineNames = (machines: Machine[]): string =>
  * ambiguous or (unless `offline`) offline name is refused with the machines
  * online now.
  */
-function resolveMachine(
+export function resolveMachine(
   machines: Machine[],
   target: string,
   offline = false

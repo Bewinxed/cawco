@@ -2,12 +2,12 @@
  * THE ONCE-PER-CALL RULE for the tools that start or send something
  * (decision page workflows-future: "A delegate, handoff or page call carries
  * a key, so a turn retried after a cut finds the item it already started").
- * A `delegate`, `handoff` or `artifact_create` call that carries its
+ * A `delegate`, `handoff`, `artifact_create` or `project_create` call that carries its
  * harness's key for the call runs once per calling session and key: a call
  * that comes again under the same key while the first runs is answered that
  * call's answer as it comes, and once answered, the same answer, with no
  * second item, message or page made. The workflow engine replayed a step the
- * same way (20d367743); here it is the three calls.
+ * same way (20d367743); here it is these four calls.
  *
  * The key is what each harness sends again when it retries a call:
  * - Claude Code names every MCP `tools/call` by its tool_use id in `_meta`
@@ -43,6 +43,8 @@ const KEYED_TOOLS: ReadonlySet<string> = new Set([
   "delegate",
   "handoff",
   "artifact_create",
+  // A second run would make a second project (project-create.ts).
+  "project_create",
 ]);
 
 /** Where Claude Code names a call's tool use in `tools/call`'s `_meta`. */
