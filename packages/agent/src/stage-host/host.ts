@@ -541,9 +541,11 @@ const fieldOf = (from: unknown, name: string): unknown =>
  * threw it from, a line of Vite's code (line 7669 of a one-line App.tsx,
  * Vite 8.3.6), and its `frame` is empty. A gathered error's message is its
  * reason on its first line ("[PARSE_ERROR] Unexpected token") over its
- * diagnostic drawn around the place, and its `loc` that place. Its message
+ * diagnostic drawn around the place (its header names the file from where
+ * Vite runs), and its `loc` that place, the file absolute. Its message
  * becomes the gathered reasons, one a line, the first's first; its place
- * the first's; its frame the first's own, else the first's drawing. Vite's
+ * the first's; its frame the first's own, else one drawn from the file at
+ * that place ({@link codeFrame}), as Vite draws its own. Vite's
  * page error (`prepareError`) and the stage's keep ({@link keepSent}) then
  * read the module's own words and place, on every path a transform throws by.
  */
@@ -556,23 +558,28 @@ function gatheredSaid(error: unknown): void {
   const said = errors
     .map((one: unknown) => fieldOf(one, "message"))
     .filter((one): one is string => typeof one === "string");
-  const [opening] = said;
-  if (opening === undefined) {
+  if (said.length === 0) {
     return;
   }
   const reasons = said.map((one) => one.trim().split("\n")[0] ?? "");
-  const drawing = opening.trim().split("\n").slice(1).join("\n");
-  const frame = fieldOf(first, "frame");
+  const own = fieldOf(first, "frame");
   const loc = fieldOf(first, "loc");
+  const file = fieldOf(loc, "file");
+  const line = fieldOf(loc, "line");
+  const column = fieldOf(loc, "column");
   Reflect.set(error, "message", reasons.join("\n"));
-  if (typeof frame === "string" && frame !== "") {
-    Reflect.set(error, "frame", frame);
-  } else if (drawing !== "") {
-    Reflect.set(error, "frame", drawing);
-  }
   // Its module's id stays the one Vite gave: the gathered error's may be the bare name.
   if (loc) {
     Reflect.set(error, "loc", loc);
+  }
+  const placed =
+    typeof file === "string" &&
+    typeof line === "number" &&
+    typeof column === "number";
+  const drawn = placed ? codeFrame(resolve(root, file), line, column) : null;
+  const frame = typeof own === "string" && own !== "" ? own : drawn;
+  if (frame) {
+    Reflect.set(error, "frame", frame);
   }
 }
 
