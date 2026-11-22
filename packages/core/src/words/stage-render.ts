@@ -96,6 +96,18 @@ export const stageRenderWords = {
   /** A read of the stage that waited while it compiled, until nothing on it compiled for `quiet` seconds (agent stage.ts `READ_QUIET_MS`): what it was to do, and how long it waited in all. */
   stoppedMoving: (what: string, quiet: number, waited: number) =>
     `The stage did not ${what}: it compiled nothing for ${quiet} s, after ${Math.round(waited)} s of waiting. Its errors, if any, stand in the canvas's stage state; read the canvas again to retry.`,
+  /**
+   * A read of the stage whose request got no answer at all, its connection
+   * refused or cut (agent stage.ts `askStage`): what it was to do, the
+   * address it went to and the way there, and the connection's own error.
+   */
+  unanswered: (what: string, at: string, cause: string) =>
+    `The stage did not ${what}: its request to ${at} got no answer (${cause}).`,
+  /** {@link stageRenderWords.unanswered}'s address: the stage's port inside its boundary, reached through the daemon's bridge into that boundary's network. */
+  bridged: (port: number, boundary: string) =>
+    `port ${port} in ${boundary}'s boundary, through the daemon's bridge into its network`,
+  /** {@link stageRenderWords.unanswered}'s address where boundaries share the host's network (macOS). */
+  loopback: (port: number) => `port ${port} on this machine's loopback`,
   /** The page itself never loaded. */
   notLoaded: (seconds: number) =>
     `The stage's page did not load within ${seconds} s: its stage is up but did not serve it. Read the design graph without render to see its stage's state and errors.`,
