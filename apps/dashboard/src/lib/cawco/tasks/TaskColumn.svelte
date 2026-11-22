@@ -31,6 +31,7 @@
     reread,
   } from "#lib/platform/motion/rows.svelte.js";
   import { land } from "#lib/platform/motion/share.svelte.js";
+  import type { CardAnswer } from "./card-answer";
   import { markOf } from "./stage-look";
   import TaskCard from "./TaskCard.svelte";
 
@@ -54,7 +55,10 @@
     picked,
     onpick,
     picking = false,
+    answerOf = () => null,
   }: {
+    /** A card's task repeats: its answer now; null for a one-off task. */
+    answerOf?: (id: string) => CardAnswer | null;
     /** The board's Archived rail: its cards are archived tasks, and its kind line says so. */
     archived?: boolean;
     /** Whether a card is picked for a bulk change; without it, no card is pickable. */
@@ -200,6 +204,7 @@
         data-picked={on || undefined}
       >
         <TaskCard
+          answer={answerOf(task.id)}
           date={dateOf(task.id)}
           href={hrefOf(task.id)}
           {onopen}

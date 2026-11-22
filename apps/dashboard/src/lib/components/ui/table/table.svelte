@@ -36,6 +36,8 @@
           "@max-phone/table:block @max-phone/table:h-auto @max-phone/table:w-auto @max-phone/table:border-none @max-phone/table:p-0",
         "ledger-picks-stacks":
           "@max-phone/table:block @max-phone/table:h-auto @max-phone/table:w-auto @max-phone/table:min-w-0 @max-phone/table:border-none @max-phone/table:p-0 group-data-picked/row:@max-phone/table:bg-transparent",
+        "ledger-picks-stacks-lead":
+          "@max-phone/table:block @max-phone/table:h-auto @max-phone/table:w-auto @max-phone/table:min-w-0 @max-phone/table:border-none @max-phone/table:p-0 group-data-picked/row:@max-phone/table:bg-transparent",
         "matrix-stacks": "@max-phone/table:border-l-none",
         "matrix-stacks-under":
           "@max-phone/table:border-l-none @max-phone/table:pt-0",

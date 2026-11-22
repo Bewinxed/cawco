@@ -23,7 +23,7 @@
    */
   import { bringIntoStrip, bringIntoView } from "@cawco/core/bring-into-view";
   import type { StageKind } from "@cawco/core/views";
-  import { tick } from "svelte";
+  import { type Snippet, tick } from "svelte";
   import {
     type Stage,
     stageLabel,
@@ -32,6 +32,7 @@
   import { IconArchive } from "#lib/icons.js";
   import { dur } from "#lib/platform/motion/curves.svelte.js";
   import { boardDrag, stageDropTarget } from "./board-dnd.svelte.js";
+  import type { CardAnswer } from "./card-answer";
   import NewTaskForm from "./NewTaskForm.svelte";
   import TaskColumn from "./TaskColumn.svelte";
 
@@ -51,7 +52,13 @@
     archived = [],
     picked,
     onpick,
+    answerOf,
+    newTaskFields,
   }: {
+    /** A card's task repeats: its answer now; null for a one-off task (TaskColumn). */
+    answerOf?: (id: string) => CardAnswer | null;
+    /** More of a new task, asked under its title (NewTaskForm `fields`). */
+    newTaskFields?: Snippet;
     /** Whether a task is picked for a bulk change (task-select). */
     picked?: (id: string) => boolean;
     /** Ticks or unticks one; `range`, with Shift: the board's cards in order. */
@@ -168,6 +175,7 @@
   look?: Pick<Stage, "color" | "icon">
 )}
   <TaskColumn
+    {answerOf}
     {cards}
     closed={open !== null && name !== boardDrag.from && !open.has(name)}
     {dateOf}
@@ -191,7 +199,12 @@
 {/snippet}
 
 {#snippet addTask()}
-  <NewTaskForm oncreate={add} stage={newIn ?? ""} bind:open={adding} />
+  <NewTaskForm
+    fields={newTaskFields}
+    oncreate={add}
+    stage={newIn ?? ""}
+    bind:open={adding}
+  />
 {/snippet}
 
 <!-- On a phone the page is the one scroller and the board is as tall as its

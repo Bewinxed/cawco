@@ -36,6 +36,12 @@
    * where the task is; the rest are listed, disabled, so the stages read in
    * order. The hub checks the move again either way.
    *
+   * A task that repeats brings three parts of its own, each drawn only when
+   * given: under the title, why it needs you and the act (`notice`); a Runs
+   * tab between Review and Details (`runs`), its runs where a one-off
+   * task's sessions are listed, so Details lists no Sessions; and at the
+   * head of Details, how it repeats (`detailsHead`).
+   *
    * The outside items it links open its details (TaskExternalLinks): its
    * record first, each with the comments carried from it; a link whose read
    * failed is read again from its source (the tracker's sync for the record
@@ -124,7 +130,16 @@
     switcher,
     todo = null,
     pageOf = () => null,
+    notice,
+    runs,
+    detailsHead,
   }: {
+    /** Under the title: why it needs you and the act, for a task that repeats. */
+    notice?: Snippet;
+    /** A Runs tab between Review and Details, in place of Details' Sessions: a task that repeats. */
+    runs?: Snippet;
+    /** At the head of Details: how a task that repeats repeats. */
+    detailsHead?: Snippet;
     /** A decision page of the project's, by its artifact: its name in Decisions; null when the project lists none by it. */
     pageOf?: (artifactId: string) => string | null;
     projectId: string;
@@ -245,7 +260,7 @@
    * is one, else Details. Each task, and each to-do it is opened at, starts
    * unpicked.
    */
-  let picked = $derived.by<"review" | "details" | null>(() => {
+  let picked = $derived.by<"review" | "runs" | "details" | null>(() => {
     track(taskId, todo);
     return null;
   });
@@ -602,16 +617,24 @@
         </p>
       {/if}
       <RowFault reason={stageProblem} />
-      {#if reviewable}
+      {@render notice?.()}
+      {#if reviewable || runs}
         <Tabs
           onValueChange={(next) => {
-            picked = next === "details" ? "details" : "review";
+            picked = next === "details" || next === "runs" ? next : "review";
           }}
           size="compact"
           value={view}
         >
-          <TabsList aria-label="Review or details">
-            <TabItem label="Review" value="review" />
+          <TabsList
+            aria-label={runs ? "Review, runs or details" : "Review or details"}
+          >
+            {#if reviewable}
+              <TabItem label="Review" value="review" />
+            {/if}
+            {#if runs}
+              <TabItem label="Runs" value="runs" />
+            {/if}
             <TabItem label="Details" value="details" />
           </TabsList>
         </Tabs>
@@ -644,6 +667,14 @@
         <Skeleton class="w-11/12" line="body" />
         <Skeleton class="w-3/5" line="body" />
       </div>
+    {:else if view === "runs" && runs}
+      <div
+        data-slot="task-runs"
+        class="flex flex-auto flex-col gap-space-2 border-t border-t-border-hairline pt-space-3 px-(--pane-inline) pb-space-6"
+        in:arriveBody
+      >
+        {@render runs()}
+      </div>
     {:else if view === "review"}
       <div class="flex min-h-0 flex-auto flex-col" in:arriveBody>
         <TaskReview
@@ -671,6 +702,8 @@
           task={shown}
           {tasks}
         />
+
+        {@render detailsHead?.()}
 
         {#if shown.problems.length > 0}
           <Alert variant="warning">
@@ -769,7 +802,7 @@
           <RowFault reason={edgeProblem} />
         </div>
 
-        {#if shown.attempts.length > 0 || flags.startProblem}
+        {#if !runs && (shown.attempts.length > 0 || flags.startProblem)}
           <section class="flex flex-col gap-space-2">
             <h3 class={sectionHeadVariants({ inset: "flush" })}>
               Sessions

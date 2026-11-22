@@ -35,6 +35,12 @@
          */
         "ledger-picks-stacks":
           "type-meta num h-c-ledger-row-h border-b border-b-border-hairline px-space-3 py-0 text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg",
+        /**
+         * `ledger-picks-stacks` leading its row: its words wrap to a second
+         * line (a name over its sentence), on the row's spacing.
+         */
+        "ledger-picks-stacks-lead":
+          "type-meta num h-c-ledger-row-h whitespace-normal border-b border-b-border-hairline px-space-3 py-space-2 text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg",
         /** A generated view's cell, label text over a hairline. */
         view: "type-label num h-c-ledger-row-h border-b border-b-border-hairline px-space-3 text-ink-muted",
         /** A generated view's lead column, on the row's spacing; its words wrap. */
