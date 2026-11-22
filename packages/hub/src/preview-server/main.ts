@@ -20,6 +20,7 @@ import { detach } from "@cawco/core/detach";
 import { makeFolder } from "@cawco/core/folders";
 import { previewServerSocket } from "@cawco/core/paths/hub";
 import { unhandled } from "@cawco/core/unhandled";
+import { dataOf, reached, refusalText, succeeded } from "../client";
 import { LOCAL_DASHBOARD_PORT } from "../config";
 import { labelOf, originFor } from "../preview-hosts";
 import { createStaleTabs } from "../preview-stale";
@@ -28,7 +29,7 @@ import { openHubLink } from "./link";
 import { createListeners } from "./listeners";
 import { createServe, createUpstreams } from "./serve";
 import { openPreviewStore } from "./store";
-import { type HubSays, OPEN_PATH, OpenedSchema } from "./wire";
+import type { HubSays } from "./wire";
 
 /** How often an origin's use and a pass's use are said to the hub at most, ms: a minute (hub preview.ts `USE_WRITE_MS`, preview-access.ts `TOUCH_EVERY_MS`). */
 const SAID_EVERY_MS = 60_000;
@@ -136,17 +137,23 @@ export const startPreviewServer = async (): Promise<void> => {
     standsAt: async (key, at) => {
       let port = listeners.portOf(key);
       if (port === undefined) {
-        const answer = await link
-          .ask(`${OPEN_PATH}${encodeURIComponent(key)}`, { method: "POST" })
+        const answer = await link.hub["__cawco-preview"]
+          .open({ key })
+          .post()
+          .then(reached)
           .catch(() => null);
-        const said = answer
-          ? OpenedSchema.safeParse(await answer.json().catch(() => null)).data
-          : undefined;
-        const opened = said?.port;
-        if (opened === undefined) {
-          return { refused: said?.detail ?? "the hub opened no port for it" };
+        if (!answer) {
+          return { refused: "the hub opened no port for it" };
         }
-        port = opened;
+        if (!succeeded(answer)) {
+          return {
+            refused: refusalText({
+              status: answer.status,
+              value: answer.error?.value,
+            }),
+          };
+        }
+        ({ port } = dataOf(answer));
       }
       const pattern = listeners.hostPattern();
       const named =

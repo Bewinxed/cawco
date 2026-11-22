@@ -112,6 +112,16 @@ export const fetchDefaultBranch = async (
 
 export type Git = (root: string, ...args: string[]) => Promise<string>;
 
+/** A git run by {@link gitUntil} that exited non-zero: its status, which some commands answer by (`ls-remote --exit-code`'s 2 for no matching ref). */
+export class GitExited extends Error {
+  readonly exitCode: number;
+  constructor(message: string, exitCode: number) {
+    super(message);
+    this.name = "GitExited";
+    this.exitCode = exitCode;
+  }
+}
+
 /** An argv run in a workspace's copy, in a directory there, with the directory its spawn starts in (workspace.ts `CopyAccess`). */
 type CopyRun = (
   cwd: string,
@@ -154,11 +164,13 @@ export const gitUntil =
         signal,
         killSignal: "SIGKILL",
       });
+      if (signalCode) {
+        throw new Error(`git ${args[0]} was ended by ${signalCode}`);
+      }
       if (code !== 0) {
-        throw new Error(
-          signalCode
-            ? `git ${args[0]} was ended by ${signalCode}`
-            : `git ${args[0]} failed: ${withoutCredential(stderr.trim())}`
+        throw new GitExited(
+          `git ${args[0]} failed: ${withoutCredential(stderr.trim())}`,
+          code
         );
       }
       return stdout.trim();
