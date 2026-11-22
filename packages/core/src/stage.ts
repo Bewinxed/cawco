@@ -874,8 +874,32 @@ export interface CanvasDirection {
   name: string;
 }
 
+/**
+ * What a design folder holds besides a screen, as its agent marks it (the
+ * owner's pin on graph-general-canvas#content, 2026-11-22): a document, a
+ * chart or a slide deck, each read at its own size. A design that names none
+ * is a screen, which the graph draws at its widths and in either scheme.
+ */
+const DESIGN_CONTENTS = ["document", "chart", "deck"] as const;
+export type DesignContent = (typeof DESIGN_CONTENTS)[number];
+
+/** What an agent may mark a design folder as: a screen (the default, marked to undo another mark) or one of {@link DESIGN_CONTENTS}. */
+export const DESIGN_MARKS = ["screen", ...DESIGN_CONTENTS] as const;
+export type DesignMark = (typeof DESIGN_MARKS)[number];
+
+/** The content a mark names on the canvas's spec: none for a screen. */
+export const designContentOf = (
+  mark: DesignMark | undefined
+): DesignContent | undefined => DESIGN_CONTENTS.find((one) => one === mark);
+
 /** What a canvas page is told besides its files: the agent's edges and groups, its dials, its directions. */
 export interface CanvasSpec {
+  /**
+   * A design folder's content ({@link DESIGN_CONTENTS}): the graph frames
+   * it at the stage's own width in the panel's scheme, with no width or
+   * scheme to choose; none for a screen.
+   */
+  content?: DesignContent;
   dials?: CanvasDial[];
   /** The directions of one design, each one of its states files. */
   directions?: CanvasDirection[];
@@ -975,6 +999,7 @@ export const canvasSpecOf = (value: unknown): CanvasSpec => {
       )
     : undefined;
   return withoutUndefined({
+    content: DESIGN_CONTENTS.find((one) => one === value.content),
     dials: Array.isArray(value.dials)
       ? value.dials.flatMap((one) => dialOf(one) ?? [])
       : undefined,

@@ -203,7 +203,8 @@ export const updateComponent = async (
   artifact: string,
   body: Static<typeof componentBody>
 ) => {
-  const { edges, group, dials, directions, args, story, html, dir } = body;
+  const { edges, group, dials, directions, args, story, html, dir, content } =
+    body;
   // A design folder's pages, changed in place, the canvas's own spec beside them.
   if (
     html !== undefined ||
@@ -218,12 +219,20 @@ export const updateComponent = async (
       });
     }
     return await artifacts.designUpdate(instanceId, artifact, {
+      content,
       edges,
       group,
       dials,
       directions,
       html,
       dir,
+    });
+  }
+  if (content !== undefined) {
+    return problem(400, {
+      code: "artifact-component-change-mixed",
+      detail:
+        "content marks a design folder as it is written: send it with the design's html, dir or directions.",
     });
   }
   const canvas = [edges, group, dials, directions].some(

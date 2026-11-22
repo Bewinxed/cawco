@@ -15,6 +15,7 @@ import {
   type CanvasDirection,
   type CanvasEdge,
   type CanvasSpec,
+  type DesignContent,
   type FrameRender,
   framesAlike,
   GRAPH_WIDTHS_SAID,
@@ -45,7 +46,7 @@ export const COMPONENT_EXAMPLE =
   'artifact_create({ kind: "component", name: "pairing", title: "Pairing a phone", does: "judge", ask: "Judge pairing a phone: scan the code, approve it, and pin what reads wrong", file: "src/lib/Pairing.stories.ts", dials: [{ name: "answer", label: "What the phone answers", kind: "select", options: ["Approved", "Denied", "No answer"], target: { arg: "answer" } }] })';
 
 /** What `artifact_create` takes, said whole when a body is malformed or names no `title`, `does` or `ask`. */
-export const CREATE_SHAPE = `artifact_create takes kind, name (a slug, for tools and URLs), title (a few plain words that name it to the person), does (pick | judge | try | draw), ask (one line, what the person does here) and that kind's fields. A design graph: { kind: "component", name, title, does: "judge", ask, file, edges?, group?, dials?, directions? }; directions [{ file, name, line }], one per states file of one design, two or more (file may then be left out; a direction that differs only by a value is a dial); a design folder, for work with no project behind it, a stack with no stage or a throwaway idea: { kind: "component", name, title, does: "judge", ask, html (one page) or dir (a folder: index.html at its top and anything it loads, React, Svelte or TypeScript with a package.json for its npm imports), dials?, directions? }, each direction { html or dir, name, line }, its dials cssVar alone, artifact_update with html, dir or directions changing it in place; edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle" | "text" | "action", label?, group?, min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`;
+export const CREATE_SHAPE = `artifact_create takes kind, name (a slug, for tools and URLs), title (a few plain words that name it to the person), does (pick | judge | try | draw), ask (one line, what the person does here) and that kind's fields. A design graph: { kind: "component", name, title, does: "judge", ask, file, edges?, group?, dials?, directions? }; directions [{ file, name, line }], one per states file of one design, two or more (file may then be left out; a direction that differs only by a value is a dial); a design folder, for work with no project behind it, a stack with no stage or a throwaway idea: { kind: "component", name, title, does: "judge", ask, html (one page) or dir (a folder: index.html at its top and anything it loads, React, Svelte or TypeScript with a package.json for its npm imports), content? ("document" | "chart" | "deck", each shown at its own size; a screen where it names none), dials?, directions? }, each direction { html or dir, name, line }, its dials cssVar alone, artifact_update with html, dir or directions changing it in place; edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle" | "text" | "action", label?, group?, min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`;
 
 /** An example of a design's directions, quoted by their refusals. */
 const DIRECTIONS_EXAMPLE =
@@ -269,7 +270,8 @@ export function storyDirectionsOf(
 }
 
 /** What a design folder's create answers beside its link: what the person can do there, and its next reads. */
-export const DESIGN_HINT = `The design graph shows each page at ${GRAPH_WIDTHS_SAID} wide, light and dark, with its cssVar dials and the person's pins, served by Vite. artifact_update({ id, html | dir | directions }) changes it in place, and the open panel takes the change by hot reload, picks and pins kept; \`errors\` names each compile error, which the page shows too. artifact_read({ id }) answers their pins, dials and pick.`;
+export const designHint = (content: DesignContent | undefined): string =>
+  `The design graph shows ${content ? `this ${content} at the panel's own width, in the person's scheme,` : `each page at ${GRAPH_WIDTHS_SAID} wide, light and dark,`} with its cssVar dials and the person's pins, served by Vite. artifact_update({ id, html | dir | directions }) changes it in place, and the open panel takes the change by hot reload, picks and pins kept; \`errors\` names each compile error, which the page shows too. artifact_read({ id }) answers their pins, dials and pick.`;
 
 /** The canvas's spec its page is given: its name, edges, groups, dials and directions (each its states file as the stage names it). */
 export const specOf = (name: string, input: CanvasInput): CanvasSpec => ({

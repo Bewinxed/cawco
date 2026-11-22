@@ -227,10 +227,15 @@ import {
  * owner's pins on graph-general-canvas: "the agent should choose as it
  * needs", "hot reload, no versions") (worker 31,840, delegate 12,060
  * measured); both budgets are raised to it.
+ * 2026-11-22: artifact_create and artifact_update take `content`, an
+ * agent's mark that its design folder is a document, chart or deck, which
+ * the graph shows at its own size without widths or schemes (the owner's
+ * pin on graph-general-canvas#content) (worker 31,924, delegate 12,145
+ * measured); both budgets are raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 31_840,
-  delegate: 12_060,
+  worker: 31_924,
+  delegate: 12_145,
   overseer: 770,
   "web-facing": 3400,
   curator: 1550,
