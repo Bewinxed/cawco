@@ -10,6 +10,8 @@ export type ServiceKey = "github" | "slack" | "linear" | "cloudflare";
 export type RunTrigger = "schedule" | "event" | "manual" | "creation-test";
 export type ScheduleCadence =
   "hourly" | "daily" | "weekdays" | "weekly" | "custom" | "events";
+export type ScheduleUnit =
+  "minute" | "hour" | "day" | "weekday" | "week" | "events" | "cron";
 
 export type RunOutcome =
   | "delivered"
@@ -49,10 +51,12 @@ export interface RoutineDoneWhen {
 interface RoutineTiming {
   cadence: ScheduleCadence;
   cron?: string;
+  every?: number;
   nextAt: number | null;
   rhythm: string;
   time: string;
   timezone: string;
+  unit?: ScheduleUnit;
   weekday: string;
 }
 
@@ -127,6 +131,7 @@ export interface Routine {
   builtIn?: boolean;
   doneWhen?: RoutineDoneWhen;
   executor: RoutineExecutor;
+  guardrail?: string;
   id: string;
   instructions: string;
   limits: RoutineLimits;
@@ -331,10 +336,12 @@ export const INITIAL_ROUTINES: Routine[] = [
     schedule: {
       cadence: "custom",
       cron: "*/15 * * * *",
+      every: 15,
       nextAt: null,
       rhythm: "Every 15 minutes",
       time: "00:00",
       timezone: LOCAL_ZONE,
+      unit: "minute",
       weekday: "Mon",
     },
     status: "stopped",
@@ -348,6 +355,8 @@ export const INITIAL_ROUTINES: Routine[] = [
       label: "Single session · Claude Code",
       mode: "delegate",
     },
+    guardrail:
+      "Only file tasks for new 404s or redirect loops on docs.cawco.dev.",
     id: "rtn-broken-links",
     instructions:
       "Crawl every route listed in docs.cawco.dev/sitemap.xml, verify internal links and anchor hashes resolve cleanly, and file a task in Ready if any 404 or redirect loop appears.",
@@ -612,6 +621,8 @@ export const INITIAL_ROUTINES: Routine[] = [
       label: "Orchestrating session · Claude Code",
       mode: "orchestrator",
     },
+    guardrail:
+      "Only propose a Slack digest when at least one release PR is blocked.",
     id: "rtn-morning-triage",
     instructions:
       "List every open PR in cawco/cloud updated in the past 24 hours. Check CI status, review comments, and merge conflicts. Summarize blockers clearly and propose a Slack post to #engineering-releases if any release PR is blocked.",
@@ -741,6 +752,7 @@ export const INITIAL_ROUTINES: Routine[] = [
       label: "Single session · Claude Code",
       mode: "delegate",
     },
+    guardrail: "Skip internal refactors and lockfile-only bumps.",
     id: "rtn-changelog-draft",
     instructions:
       "Read the merged PR diff and commit message. If the change is user-facing, append one concise bullet under Unreleased in CHANGELOG.md and propose a GitHub comment confirming the wording. Skip internal refactors and lockfile-only bumps.",
@@ -1149,4 +1161,20 @@ export function formatNextClock(at: number, now: number = MOCK_NOW): string {
 
 export function daysUntil(at: number, now: number = MOCK_NOW): number {
   return Math.max(1, Math.ceil((at - now) / DAY_MS));
+}
+
+export function formatRelNext(at: number, now: number = MOCK_NOW): string {
+  const diff = Math.max(0, at - now);
+  if (diff < MINUTE_MS) {
+    return "in <1m";
+  }
+  if (diff < HOUR_MS) {
+    return `in ${Math.round(diff / MINUTE_MS)}m`;
+  }
+  const hours = Math.round(diff / HOUR_MS);
+  if (hours < 24) {
+    return `in ~${hours}h`;
+  }
+  const days = Math.round(diff / DAY_MS);
+  return `in ~${days}d`;
 }

@@ -215,6 +215,22 @@
     }
   }
 
+  function extendRoutineDate(id: string, days: number | null): void {
+    updateRoutine(id, (one) => extendCheckDateState(one, days));
+  }
+
+  function keepRoutine(id: string): void {
+    updateRoutine(id, keepRoutineState);
+  }
+
+  function markRoutineDone(id: string): void {
+    updateRoutine(id, (one) => markRoutineDoneState(one, nextId("run-done")));
+  }
+
+  function toggleRoutinePause(id: string): void {
+    updateRoutine(id, toggleRoutinePauseState);
+  }
+
   function turnOnSuggestion(): void {
     if (board.suggestion && !stale) {
       board.routines = [
@@ -286,18 +302,14 @@
       onedit={(id) => {
         side = { routineId: id, view: "edit" };
       }}
-      onextenddate={(id, days) =>
-        updateRoutine(id, (one) => extendCheckDateState(one, days))}
-      onkeep={(id) => updateRoutine(id, keepRoutineState)}
-      onmarkdone={(id) =>
-        updateRoutine(id, (one) =>
-          markRoutineDoneState(one, nextId("run-done"))
-        )}
+      onextenddate={extendRoutineDate}
+      onkeep={keepRoutine}
+      onmarkdone={markRoutineDone}
       onopenrun={(routineId, runId) => {
         side = { backToList: false, routineId, runId, view: "run" };
       }}
       onrunnow={runRoutineNow}
-      ontogglepause={(id) => updateRoutine(id, toggleRoutinePauseState)}
+      ontogglepause={toggleRoutinePause}
       ontogglerule={toggleRule}
       phone={phoneLayout}
       routine={openRoutine}
@@ -311,12 +323,12 @@
 {#snippet mainWorkspace()}
   <main
     class={[
-      "flex min-h-0 flex-1 flex-col overflow-y-auto pt-0 pb-space-7 max-phone:overflow-visible",
+      "flex min-h-0 flex-1 flex-col overflow-y-auto pt-0 pb-space-3 max-phone:overflow-visible",
       PANE_INSET,
     ]}
     data-slot="routines-workspace"
   >
-    <div class="flex flex-col gap-space-4">
+    <div class="flex flex-col gap-space-3">
       <RoutinesNotices askOpen={ask.open} {stale} bind:notice={ask.notice} />
 
       {#if ask.open}
@@ -365,18 +377,18 @@
           onacknowledge={(id) => handleAction("acknowledge", id)}
           onapprove={(id) => handleAction("approve", id)}
           oncancelaction={(id) => handleAction("cancel", id)}
+          ondelete={deleteRoutine}
           ondeny={(id) => handleAction("deny", id)}
           ondismisssuggestion={() => {
             board.suggestion = null;
           }}
-          onextenddate={(id, days) =>
-            updateRoutine(id, (one) => extendCheckDateState(one, days))}
+          onedit={(id) => {
+            side = { routineId: id, view: "edit" };
+          }}
+          onextenddate={extendRoutineDate}
           onfixwithcaw={(prompt) => openAskCaw(prompt)}
-          onkeep={(id) => updateRoutine(id, keepRoutineState)}
-          onmarkdone={(id) =>
-            updateRoutine(id, (one) =>
-              markRoutineDoneState(one, nextId("run-done"))
-            )}
+          onkeep={keepRoutine}
+          onmarkdone={markRoutineDone}
           onopenroutine={(id) => {
             side = { routineId: id, view: "routine" };
           }}
@@ -385,6 +397,7 @@
           }}
           onresumerule={toggleRule}
           onrunnow={runRoutineNow}
+          ontogglepause={toggleRoutinePause}
           onturnonsuggestion={turnOnSuggestion}
           routines={board.routines}
           rules={board.rules}

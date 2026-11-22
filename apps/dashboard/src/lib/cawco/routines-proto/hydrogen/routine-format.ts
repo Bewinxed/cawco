@@ -1,4 +1,6 @@
+import { DAY_MS } from "@cawco/core/time";
 import type { StatusPair } from "@cawco/core/views";
+import type { BadgeVariant } from "#lib/components/ui/badge/index.js";
 import {
   type ActionState,
   type ApprovedAction,
@@ -8,6 +10,7 @@ import {
   formatDay,
   formatNextClock,
   formatRelAge,
+  formatRelNext,
   LOCAL_ZONE,
   MOCK_NOW,
   type Routine,
@@ -31,12 +34,27 @@ export type StatusGlyphKind =
   | "clock"
   | "error"
   | "hourglass"
+  | "needs-you"
   | "neutral"
   | "not-yet"
   | "pause"
   | "running"
   | "success"
   | "warning";
+
+type RoutineTileState =
+  "needs-you" | "running" | "ran-fine" | "coming-up" | "paused" | "finished";
+
+export interface RoutineTileStateDescriptor {
+  ariaLabel: string;
+  badgeLabel: string | null;
+  badgeVariant: BadgeVariant;
+  glyph: StatusGlyphKind;
+  kind: RoutineTileState;
+  tone: StatusTone;
+  tooltip: string;
+  word: string;
+}
 
 export type RoutineAsk =
   | {
@@ -219,67 +237,281 @@ export function runOutcomeMeta(outcome: RunOutcome): StatusDescriptor {
   return RUN_OUTCOMES[outcome];
 }
 
-export function routineStatusMeta(
+export function isHealthyOutcome(outcome: RunOutcome): boolean {
+  return (
+    outcome === "delivered" ||
+    outcome === "nothing-to-report" ||
+    outcome === "met" ||
+    outcome === "not-yet"
+  );
+}
+
+function deriveNeedsYouState(
   routine: Routine,
-  now: number = MOCK_NOW
-): StatusDescriptor {
-  if (routine.status === "running") {
-    return { badge: "live", glyph: "running", label: "Running", tone: "live" };
-  }
+  asks: RoutineAsk[]
+): RoutineTileStateDescriptor {
+  const hasFailure = asks.some(
+    (one) => one.kind === "stopped" || one.kind === "run-failed"
+  );
+  const hasApproval = asks.some((one) => one.kind === "action-waiting");
+  const onlyUnkept = asks.length === 1 && asks[0]?.kind === "agent-unkept";
+  let badgeLabel = "Needs you";
+  let badgeVariant: BadgeVariant = "attn-count";
   if (routine.status === "stopped") {
+    badgeLabel = "Stopped";
+    badgeVariant = "fail";
+  } else if (hasFailure) {
+    badgeLabel = "Failed";
+    badgeVariant = "fail";
+  } else if (hasApproval) {
+    badgeLabel = "Requires approval";
+    badgeVariant = "attn-count";
+  }
+  const detail = routine.statusReason ?? asks[0]?.sentence ?? "Waiting on you";
+  let glyph: StatusGlyphKind = "needs-you";
+  if (hasFailure) {
+    glyph = "error";
+  } else if (onlyUnkept) {
+    glyph = "hourglass";
+  }
+  return {
+    ariaLabel: `Needs you: ${detail}`,
+    badgeLabel,
+    badgeVariant,
+    glyph,
+    kind: "needs-you",
+    tone: hasFailure ? "fail" : "attn",
+    tooltip: `Needs you · ${detail}`,
+    word: "Needs you",
+  };
+}
+
+function deriveInactiveState(
+  routine: Routine
+): RoutineTileStateDescriptor | null {
+  if (routine.status === "running") {
+    const detail = routine.runningStep ?? "Running now";
     return {
-      badge: "fail",
-      glyph: "error",
-      label: routine.statusReason ?? "Stopped by CawCo",
-      tone: "fail",
+      ariaLabel: `Running: ${detail}`,
+      badgeLabel: "Running",
+      badgeVariant: "live",
+      glyph: "running",
+      kind: "running",
+      tone: "live",
+      tooltip: `Running · ${detail}`,
+      word: "Running",
+    };
+  }
+  if (routine.status === "paused") {
+    const detail = routine.statusReason ?? "Paused by you";
+    return {
+      ariaLabel: `Paused: ${detail}`,
+      badgeLabel: null,
+      badgeVariant: "secondary",
+      glyph: "pause",
+      kind: "paused",
+      tone: "idle",
+      tooltip: `Paused · ${detail}`,
+      word: "Paused",
     };
   }
   if (routine.status === "finished") {
     const metAt = routine.doneWhen?.metAt;
     const day = metAt ? ` ${formatDay(metAt)}` : "";
+    const detail = routine.doneWhen?.markedDoneByOwner
+      ? `Done${day}; you said so`
+      : `Done${day}`;
     return {
-      badge: "done",
+      ariaLabel: `Finished: ${detail}`,
+      badgeLabel: null,
+      badgeVariant: "done",
       glyph: "success",
-      label: routine.doneWhen?.markedDoneByOwner
-        ? `Done${day}; you said so`
-        : `Done${day}`,
+      kind: "finished",
       tone: "done",
+      tooltip: `Finished · ${detail}`,
+      word: "Finished",
     };
+  }
+  return null;
+}
+
+export function deriveRoutineState(
+  routine: Routine,
+  asks: RoutineAsk[],
+  now: number = MOCK_NOW
+): RoutineTileStateDescriptor {
+  if (asks.length > 0) {
+    return deriveNeedsYouState(routine, asks);
+  }
+  const fixed = deriveInactiveState(routine);
+  if (fixed) {
+    return fixed;
+  }
+
+  const [latest] = routine.runs;
+  const ranRecently =
+    latest !== undefined &&
+    isHealthyOutcome(latest.outcome) &&
+    now - latest.startedAt <= DAY_MS &&
+    (routine.schedule.nextAt === null ||
+      now - latest.startedAt <= routine.schedule.nextAt - now);
+
+  if (ranRecently && latest) {
+    const age = formatRelAge(latest.startedAt, now);
+    return {
+      ariaLabel: `Ran fine ${age}`,
+      badgeLabel: null,
+      badgeVariant: "done",
+      glyph: "success",
+      kind: "ran-fine",
+      tone: "done",
+      tooltip: `Ran fine · ${age}`,
+      word: "Ran fine",
+    };
+  }
+
+  const nextDetail =
+    routine.schedule.nextAt === null
+      ? routine.schedule.rhythm
+      : formatNextClock(routine.schedule.nextAt, now);
+  return {
+    ariaLabel: `Coming up: ${nextDetail}`,
+    badgeLabel: null,
+    badgeVariant: "secondary",
+    glyph: "clock",
+    kind: "coming-up",
+    tone: "idle",
+    tooltip: `Coming up · ${nextDetail}`,
+    word: "Coming up",
+  };
+}
+
+const STATE_SORT_ORDER: Record<RoutineTileState, number> = {
+  "needs-you": 0,
+  running: 1,
+  "coming-up": 2,
+  "ran-fine": 3,
+  paused: 4,
+  finished: 5,
+};
+
+function askSeverityRank(asks: RoutineAsk[], routine: Routine): number {
+  if (routine.status === "stopped") {
+    return 0;
+  }
+  if (asks.some((one) => one.kind === "run-failed")) {
+    return 1;
+  }
+  if (asks.some((one) => one.kind === "action-waiting")) {
+    return 2;
+  }
+  return 3;
+}
+
+export function sortRoutinesForBento<
+  T extends {
+    asks: RoutineAsk[];
+    routine: Routine;
+    state: RoutineTileStateDescriptor;
+  },
+>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const orderDiff =
+      STATE_SORT_ORDER[a.state.kind] - STATE_SORT_ORDER[b.state.kind];
+    if (orderDiff !== 0) {
+      return orderDiff;
+    }
+    if (a.state.kind === "needs-you") {
+      const sevDiff =
+        askSeverityRank(a.asks, a.routine) - askSeverityRank(b.asks, b.routine);
+      if (sevDiff !== 0) {
+        return sevDiff;
+      }
+    }
+    const aNext = a.routine.schedule.nextAt;
+    const bNext = b.routine.schedule.nextAt;
+    if (aNext !== null && bNext !== null) {
+      return aNext - bNext;
+    }
+    if (aNext !== null) {
+      return -1;
+    }
+    if (bNext !== null) {
+      return 1;
+    }
+    return a.routine.name.localeCompare(b.routine.name);
+  });
+}
+
+export function tileConditionText(
+  routine: Routine,
+  rules: EventRule[]
+): string | null {
+  if (routine.doneWhen) {
+    return `Done when: ${routine.doneWhen.statement}`;
+  }
+  if (routine.guardrail) {
+    return `Run when: ${routine.guardrail}`;
+  }
+  const [firstRule] = rules;
+  if (firstRule) {
+    return eventRuleSentence(firstRule, routine.schedule.cadence !== "events");
+  }
+  return null;
+}
+
+export function tileNextAndRunsText(
+  routine: Routine,
+  now: number = MOCK_NOW
+): { exact: string | undefined; text: string } {
+  const runsCount = `${routine.runs.length} ${routine.runs.length === 1 ? "run" : "runs"}`;
+  if (routine.status === "running") {
+    return { exact: undefined, text: `Running now · ${runsCount}` };
   }
   if (routine.status === "paused") {
+    return { exact: undefined, text: `Paused · ${runsCount}` };
+  }
+  if (routine.status === "finished") {
+    const met = routine.doneWhen?.metAt
+      ? `Done ${formatDay(routine.doneWhen.metAt)}`
+      : "Finished";
+    return { exact: undefined, text: `${met} · ${runsCount}` };
+  }
+  if (routine.status === "stopped") {
+    return { exact: undefined, text: `Stopped · ${runsCount}` };
+  }
+  if (routine.schedule.nextAt !== null) {
     return {
-      badge: "secondary",
-      glyph: "pause",
-      label: routine.statusReason ?? "Paused",
-      tone: "idle",
+      exact: formatNextClock(routine.schedule.nextAt, now),
+      text: `Next ${formatRelNext(routine.schedule.nextAt, now)} · ${runsCount}`,
     };
   }
-  const [latest] = routine.runs;
-  if (
-    latest &&
-    (latest.outcome === "failed" || latest.outcome === "could-not-check")
-  ) {
-    return {
-      badge: "fail",
-      glyph: "error",
-      label: "Last run failed",
-      tone: "fail",
-    };
+  return {
+    exact: undefined,
+    text: `${routine.schedule.rhythm} · ${runsCount}`,
+  };
+}
+
+export function runActionEntries(
+  run: RoutineRun,
+  linkedActions: ApprovedAction[]
+): { id: string; label: string; detail: string; timeOffset?: string }[] {
+  const toolSteps = (run.session?.entries ?? [])
+    .filter((entry) => entry.kind === "tool")
+    .map((entry) => ({
+      detail: entry.text,
+      id: entry.id,
+      label: entry.label,
+      timeOffset: entry.timeOffset,
+    }));
+  if (toolSteps.length > 0) {
+    return toolSteps;
   }
-  if (
-    routine.origin.by === "session" &&
-    !routine.origin.kept &&
-    routine.origin.expiresAt
-  ) {
-    const days = daysUntil(routine.origin.expiresAt, now);
-    return {
-      badge: "attn",
-      glyph: "hourglass",
-      label: `Turns off in ${days} ${days === 1 ? "day" : "days"}`,
-      tone: "attn",
-    };
-  }
-  return { badge: "secondary", glyph: "clock", label: "On", tone: "idle" };
+  return linkedActions.map((act) => ({
+    detail: act.exactCall,
+    id: act.id,
+    label: `${serviceName(act.service)} · ${act.sentence}`,
+  }));
 }
 
 export function actionStateMeta(
@@ -342,19 +574,6 @@ export function doneWhenStatusSentence(
     case "paused":
       return `Waiting for: ${target}. Paused.`;
   }
-}
-
-export function comingUpTimeLabel(
-  routine: Routine,
-  now: number = MOCK_NOW
-): string {
-  if (routine.status === "running") {
-    return "Running now";
-  }
-  if (routine.schedule.nextAt === null) {
-    return routine.schedule.rhythm;
-  }
-  return formatNextClock(routine.schedule.nextAt, now);
 }
 
 export function findSoonestRoutine(

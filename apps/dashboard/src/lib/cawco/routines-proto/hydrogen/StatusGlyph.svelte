@@ -6,6 +6,7 @@
     IconClock,
     IconError,
     IconHourglass,
+    IconNeedsYou,
     IconNeutral,
     IconNotYet,
     IconPause,
@@ -28,6 +29,7 @@
   > = {
     error: IconError,
     warning: IconWarningTriangle,
+    "needs-you": IconNeedsYou,
     hourglass: IconHourglass,
     success: IconSuccess,
     pause: IconPause,

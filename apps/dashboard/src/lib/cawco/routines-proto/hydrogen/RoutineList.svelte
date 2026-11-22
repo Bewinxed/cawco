@@ -1,44 +1,44 @@
 <script lang="ts">
   import { DAY_MS } from "@cawco/core/time";
   import type { Snippet } from "svelte";
+  import StatTile from "#lib/cawco/StatTile.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { IconClose, IconSparkles } from "#lib/icons.js";
+  import RoutineTile from "./RoutineTile.svelte";
   import {
-    IconChevronDown,
-    IconChevronRight,
-    IconClose,
-    IconMaximize,
-    IconRepeat,
-    IconSparkles,
-  } from "#lib/icons.js";
-  import { unfold } from "#lib/platform/motion/fold.svelte.js";
-  import ExactCallDisclosure from "./ExactCallDisclosure.svelte";
-  import RoutineAskList from "./RoutineAskList.svelte";
-  import {
-    comingUpTimeLabel,
     deriveRoutineAsks,
+    deriveRoutineState,
     findSoonestRoutine,
-    type RoutineAsk,
-    routineStatusMeta,
-    runOutcomeMeta,
-    type StatusGlyphKind,
-    type StatusTone,
+    isHealthyOutcome,
+    sortRoutinesForBento,
   } from "./routine-format";
   import {
     type ApprovedAction,
     type CawSuggestion,
     type EventRule,
     type EventSource,
-    formatExactClock,
     formatNextClock,
-    formatRelAge,
     MOCK_NOW,
     type Routine,
-    type RoutineRun,
   } from "./routines-data";
-  import ScheduledActionCard from "./ScheduledActionCard.svelte";
-  import StatusGlyph from "./StatusGlyph.svelte";
+  import type { RoutineTileCallbacks } from "./routines-state";
+
+  interface Props extends RoutineTileCallbacks {
+    actions: ApprovedAction[];
+    headerAction?: Snippet;
+    now?: number;
+    ondismisssuggestion: () => void;
+    onturnonsuggestion: () => void;
+    routines: Routine[];
+    rules: EventRule[];
+    selectedRoutineId: string | null;
+    selectedRunId: string | null;
+    sources: EventSource[];
+    stale?: boolean;
+    suggestion: CawSuggestion | null;
+  }
 
   let {
     routines,
@@ -63,65 +63,15 @@
     onresumerule,
     onextenddate,
     onmarkdone,
+    ontogglepause,
+    onedit,
+    ondelete,
     onturnonsuggestion,
     ondismisssuggestion,
-  }: {
-    routines: Routine[];
-    actions: ApprovedAction[];
-    rules: EventRule[];
-    sources: EventSource[];
-    suggestion: CawSuggestion | null;
-    selectedRoutineId: string | null;
-    selectedRunId: string | null;
-    stale?: boolean;
-    now?: number;
-    headerAction?: Snippet;
-    onopenroutine: (id: string) => void;
-    onopenrun: (routineId: string, runId: string) => void;
-    onfixwithcaw: (prompt: string) => void;
-    onrunnow: (id: string) => void;
-    onkeep: (id: string) => void;
-    onapprove: (actionId: string) => void;
-    ondeny: (actionId: string) => void;
-    oncancelaction: (actionId: string) => void;
-    onacknowledge: (actionId: string) => void;
-    onresumerule: (ruleId: string) => void;
-    onextenddate: (id: string, days: number | null) => void;
-    onmarkdone: (id: string) => void;
-    onturnonsuggestion: () => void;
-    ondismisssuggestion: () => void;
-  } = $props();
+  }: Props = $props();
 
-  let showQuiet = $state(false);
-
-  function askLeadStatus(
-    routine: Routine,
-    asks: RoutineAsk[]
-  ): { glyph: StatusGlyphKind; label: string; tone: StatusTone } {
-    if (
-      asks.some((one) => one.kind === "stopped" || one.kind === "run-failed")
-    ) {
-      return { glyph: "error", label: "Needs attention", tone: "fail" };
-    }
-    if (
-      asks.some(
-        (one) =>
-          one.kind === "action-waiting" ||
-          one.kind === "action-check" ||
-          one.kind === "trigger-fault"
-      )
-    ) {
-      return { glyph: "warning", label: "Waiting on you", tone: "attn" };
-    }
-    if (asks.some((one) => one.kind === "agent-unkept")) {
-      return { glyph: "hourglass", label: "Keep or let expire", tone: "attn" };
-    }
-    return routineStatusMeta(routine, now);
-  }
-
-  const needsYouRows = $derived.by(() => {
-    const list: { asks: RoutineAsk[]; routine: Routine }[] = [];
-    for (const routine of routines) {
+  const sortedTiles = $derived.by(() => {
+    const items = routines.map((routine) => {
       const asks = deriveRoutineAsks({
         actions,
         now,
@@ -129,526 +79,202 @@
         rules,
         sources,
       });
-      if (asks.length > 0) {
-        list.push({ asks, routine });
-      }
-    }
-    return list;
-  });
-
-  const totalAsks = $derived(
-    needsYouRows.reduce((sum, item) => sum + item.asks.length, 0)
-  );
-
-  const comingUpRows = $derived.by(() => {
-    const active = routines.filter(
-      (one) => one.status === "running" || one.status === "active"
-    );
-    const sorted = [...active].sort((a, b) => {
-      const aRun = a.status === "running" ? 0 : 1;
-      const bRun = b.status === "running" ? 0 : 1;
-      if (aRun !== bRun) {
-        return aRun - bRun;
-      }
-      if (a.schedule.nextAt !== null && b.schedule.nextAt !== null) {
-        return a.schedule.nextAt - b.schedule.nextAt;
-      }
-      if (a.schedule.nextAt !== null) {
-        return -1;
-      }
-      if (b.schedule.nextAt !== null) {
-        return 1;
-      }
-      return a.name.localeCompare(b.name);
+      const state = deriveRoutineState(routine, asks, now);
+      return {
+        asks,
+        routine,
+        rules: rules.filter((rule) => rule.routineId === routine.id),
+        scheduledActions: actions.filter(
+          (one) => one.routineId === routine.id && one.state === "approved"
+        ),
+        state,
+      };
     });
-    return sorted.map((routine) => ({
-      routine,
-      scheduledActions: actions.filter(
-        (one) => one.routineId === routine.id && one.state === "approved"
-      ),
-    }));
+    return sortRoutinesForBento(items);
   });
 
-  const soonest = $derived(findSoonestRoutine(routines));
-
-  const ranFineRuns = $derived.by(() => {
-    const items: {
-      ranActions: ApprovedAction[];
-      routine: Routine;
-      run: RoutineRun;
-    }[] = [];
+  const needsYouCount = $derived(
+    sortedTiles.filter((item) => item.state.kind === "needs-you").length
+  );
+  const totalAsks = $derived(
+    sortedTiles.reduce((sum, item) => sum + item.asks.length, 0)
+  );
+  const needsYouUnit = $derived.by(() => {
+    if (stale) {
+      return "paused";
+    }
+    if (totalAsks === 0) {
+      return "all clear";
+    }
+    return `${totalAsks} ${totalAsks === 1 ? "ask" : "asks"}`;
+  });
+  const runningCount = $derived(
+    routines.filter((one) => one.status === "running").length
+  );
+  const activeCount = $derived(
+    routines.filter(
+      (one) => one.status === "active" || one.status === "running"
+    ).length
+  );
+  const healthyRuns24h = $derived.by(() => {
+    let count = 0;
     for (const routine of routines) {
       for (const run of routine.runs) {
-        if (now - run.startedAt > DAY_MS) {
-          continue;
+        if (now - run.startedAt <= DAY_MS && isHealthyOutcome(run.outcome)) {
+          count += 1;
         }
-        const healthy =
-          run.outcome === "delivered" ||
-          run.outcome === "nothing-to-report" ||
-          run.outcome === "met" ||
-          (run.outcome === "not-yet" && routine.status !== "stopped");
-        if (!healthy) {
-          continue;
-        }
-        const ranActions = run.proposedActionIds
-          ? actions.filter(
-              (one) =>
-                run.proposedActionIds?.includes(one.id) && one.state === "ran"
-            )
-          : [];
-        items.push({ ranActions, routine, run });
       }
     }
-    return items.sort((a, b) => b.run.startedAt - a.run.startedAt);
+    return count;
   });
-
-  const quietRoutines = $derived(
-    routines.filter(
-      (one) => one.status === "paused" || one.status === "finished"
-    )
-  );
+  const soonest = $derived(findSoonestRoutine(routines));
 </script>
 
-{#snippet routineCardRow(
-  routine: Routine,
-  glyph: StatusGlyphKind,
-  tone: StatusTone,
-  glyphTitle: string,
-  headerTrail: Snippet,
-  bodyContent: Snippet,
-  rowOpener?: Snippet
-)}
-  {@const selected = selectedRoutineId === routine.id && selectedRunId === null}
-  <li
-    class={[
-      "flex items-start gap-space-3 border-b border-b-border-hairline px-space-3 py-space-3 transition-[background-color] duration-(--duration-control) ease-out last:border-b-0",
-      selected ? "bg-selected-bg" : "hover:bg-surface-hover",
-    ]}
-    data-routine-row={routine.id}
-    data-selected={selected || undefined}
+<div class="flex flex-col gap-space-3" data-slot="routine-bento-view">
+  <header
+    class="flex flex-wrap items-center justify-between gap-space-2"
+    data-slot="routines-header"
+  >
+    <div class="mark-line flex min-w-0 flex-wrap items-center gap-space-2">
+      <h2 class="m-0 type-label text-ink-strong">Routines</h2>
+      <Badge data-box size="tally" variant="secondary">
+        <span>{routines.length}</span>
+      </Badge>
+      {#if soonest}
+        <span class="type-meta text-ink-muted tabular-nums max-phone:hidden">
+          Next: {soonest.name} ({formatNextClock(soonest.at, now)})
+        </span>
+      {/if}
+    </div>
+    {@render headerAction?.()}
+  </header>
+
+  <div
+    class="grid grid-cols-(--stat-cols) gap-space-3"
+    data-slot="routines-counts"
+    style:--stat-cols={"repeat(auto-fit, minmax(max(min(100%, var(--spacing-c-stat-tile-min)), calc((100% - 3 * var(--spacing-space-3)) / 4)), 1fr))"}
+  >
+    <StatTile
+      label="Needs you"
+      tone={needsYouCount > 0 && !stale ? "attn" : "neutral"}
+      unit={needsYouUnit}
+      value={stale ? "—" : needsYouCount}
+    />
+    <StatTile
+      label="Running"
+      tone={runningCount > 0 ? "live" : "neutral"}
+      unit={runningCount > 0 ? "live now" : "idle"}
+      value={runningCount}
+    />
+    <StatTile
+      label="Active"
+      tone="neutral"
+      unit="of {routines.length}"
+      value={activeCount}
+    />
+    <StatTile
+      label="Ran fine · 24h"
+      tone={healthyRuns24h > 0 ? "done" : "neutral"}
+      unit={healthyRuns24h === 1 ? "run" : "runs"}
+      value={healthyRuns24h}
+    />
+  </div>
+
+  <div
+    class="rounded-lg bg-surface-recess p-space-1 inset-ring inset-ring-border-hairline"
+    data-slot="routines-bento"
   >
     <div
-      class="flex w-c-row-lead flex-none items-center justify-center pt-space-1"
-      title={glyphTitle}
+      class="grid grid-cols-(--bento-cols) gap-space-1"
+      style:--bento-cols={"repeat(auto-fill, minmax(max(min(100%, var(--spacing-c-board-col-min)), calc((100% - 3 * var(--spacing-space-1)) / 4)), 1fr))"}
     >
-      <StatusGlyph {glyph} {tone} />
-    </div>
+      {#each sortedTiles as item (item.routine.id)}
+        <RoutineTile
+          asks={item.asks}
+          {now}
+          {onacknowledge}
+          {onapprove}
+          {oncancelaction}
+          {ondelete}
+          {ondeny}
+          {onedit}
+          {onextenddate}
+          {onfixwithcaw}
+          {onkeep}
+          {onmarkdone}
+          {onopenroutine}
+          {onopenrun}
+          {onresumerule}
+          {onrunnow}
+          {ontogglepause}
+          routine={item.routine}
+          rules={item.rules}
+          scheduledActions={item.scheduledActions}
+          {selectedRoutineId}
+          {selectedRunId}
+          {stale}
+          tileState={item.state}
+        />
+      {/each}
 
-    <div class="flex min-w-0 flex-1 flex-col gap-space-1">
-      <div
-        class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-row"
-      >
-        <span
-          class={[
-            "min-w-0 type-label wrap-anywhere",
-            selected ? "text-selected-ink" : "text-ink-strong",
-          ]}
-          data-slot="routine-name"
+      {#if suggestion}
+        <article
+          class="flex min-w-0 flex-col gap-space-1 rounded-sm bg-surface-well px-space-3 pt-space-2 pb-space-3 text-ink-strong inset-ring inset-ring-border-hairline"
+          data-slot="caw-suggestion"
         >
-          {routine.name}
-        </span>
-        {@render headerTrail()}
-      </div>
-      {@render bodyContent()}
-    </div>
-
-    {#if rowOpener}
-      <div class="flex flex-none items-center">
-        {@render rowOpener()}
-      </div>
-    {/if}
-  </li>
-{/snippet}
-
-{#snippet openRoutineIcon(routine: Routine)}
-  <Tip label="Open {routine.name}">
-    {#snippet children(tip)}
-      <Button
-        {...tip}
-        aria-label="Open {routine.name}"
-        data-open-routine={routine.id}
-        icon={IconMaximize}
-        onclick={() => onopenroutine(routine.id)}
-        size="icon-sm"
-        tone="quiet"
-        variant="ghost"
-      />
-    {/snippet}
-  </Tip>
-{/snippet}
-
-<div class="flex flex-col gap-space-5" data-slot="routine-list">
-  {#if needsYouRows.length > 0}
-    <section
-      aria-labelledby="routines-group-needs"
-      class="flex flex-col gap-space-2"
-      data-routine-group="needs"
-    >
-      <div class="flex flex-wrap items-center justify-between gap-space-2">
-        <div class="mark-line flex items-center gap-space-2">
-          <h2 class="m-0 type-label text-ink-strong" id="routines-group-needs">
-            Needs you
-          </h2>
-          {#if !stale}
-            <Badge data-box size="tally" variant="attn-count">
-              <span>{totalAsks}</span>
-            </Badge>
-          {/if}
-        </div>
-        {@render headerAction?.()}
-      </div>
-
-      <div class="overflow-hidden rounded-lg bg-surface-raised shadow-tile">
-        <ul class="m-0 list-none p-0">
-          {#each needsYouRows as { routine, asks } (routine.id)}
-            {@const lead = askLeadStatus(routine, asks)}
-            {#snippet trail()}
-              {@render openRoutineIcon(routine)}
-            {/snippet}
-            {#snippet askBody()}
-              <RoutineAskList
-                {asks}
-                {onacknowledge}
-                {onapprove}
-                {ondeny}
-                {onextenddate}
-                {onfixwithcaw}
-                {onkeep}
-                {onmarkdone}
-                {onresumerule}
-                {onrunnow}
-                {routine}
-                {stale}
-                variant="row"
-              />
-            {/snippet}
-            {@render routineCardRow(
-              routine,
-              lead.glyph,
-              lead.tone,
-              lead.label,
-              trail,
-              askBody
-            )}
-          {/each}
-        </ul>
-      </div>
-    </section>
-  {:else if routines.length > 0}
-    <div
-      class="flex flex-wrap items-center justify-between gap-space-2"
-      data-slot="nothing-needs-you"
-    >
-      <p class="m-0 type-body text-ink-muted tabular-nums">
-        {#if stale}
-          Hub offline · live asks paused.
-        {:else if soonest}
-          <span class="text-ink-strong">Nothing needs you.</span>
-          <span>
-            Next: {soonest.name} ({formatNextClock(soonest.at, now)}).
-          </span>
-        {:else}
-          <span class="text-ink-strong">Nothing needs you.</span>
-        {/if}
-      </p>
-      {@render headerAction?.()}
-    </div>
-  {/if}
-
-  {#if comingUpRows.length > 0 || suggestion}
-    <section
-      aria-labelledby="routines-group-coming-up"
-      class="flex flex-col gap-space-2"
-      data-routine-group="coming-up"
-    >
-      <div class="mark-line flex items-center gap-space-2">
-        <h2 class="m-0 type-label text-ink-muted" id="routines-group-coming-up">
-          Coming up
-        </h2>
-        {#if comingUpRows.length > 0}
-          <Badge data-box size="tally" variant="secondary">
-            <span>{comingUpRows.length}</span>
-          </Badge>
-        {/if}
-      </div>
-
-      <div class="overflow-hidden rounded-lg bg-surface-raised shadow-tile">
-        <ul class="m-0 list-none p-0">
-          {#each comingUpRows as { routine, scheduledActions } (routine.id)}
-            {@const isRunning = routine.status === "running"}
-            {#snippet timeTrail()}
-              <span
-                class={[
-                  "flex-none type-meta tabular-nums",
-                  isRunning ? "text-status-live-ink" : "text-ink-strong",
-                ]}
-                title={routine.schedule.nextAt
-                  ? formatExactClock(routine.schedule.nextAt)
-                  : undefined}
+          <header
+            class="flex min-h-c-badge-h items-center justify-between gap-space-2"
+          >
+            <div class="mark-line flex min-w-0 flex-1 items-center gap-space-2">
+              <IconSparkles class="size-icon-md flex-none text-ink-muted" />
+              <h3
+                class="m-0 min-w-0 flex-1 overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong"
+                title={suggestion.title}
               >
-                {comingUpTimeLabel(routine, now)}
-              </span>
-            {/snippet}
-            {#snippet comingBody()}
-              <p
-                class={[
-                  "m-0 type-meta line-clamp-1 wrap-anywhere",
-                  isRunning && routine.runningStep
-                    ? "text-status-live-ink"
-                    : "text-ink-muted",
-                ]}
-                data-slot="routine-summary"
-              >
-                {isRunning && routine.runningStep
-                  ? routine.runningStep
-                  : routine.summary}
-              </p>
-              {#each scheduledActions as action (action.id)}
-                <ScheduledActionCard
-                  {action}
-                  oncancel={oncancelaction}
-                  {stale}
-                />
-              {/each}
-            {/snippet}
-            {#snippet opener()}
-              {@render openRoutineIcon(routine)}
-            {/snippet}
-            {@render routineCardRow(
-              routine,
-              isRunning ? "running" : "clock",
-              isRunning ? "live" : "idle",
-              isRunning ? "Running now" : "Scheduled",
-              timeTrail,
-              comingBody,
-              opener
-            )}
-          {/each}
-
-          {#if suggestion}
-            <li
-              class="flex items-center gap-space-3 border-t border-t-border-hairline bg-surface-recess px-space-3 py-space-3"
-              data-slot="caw-suggestion"
-              title={suggestion.detail}
-            >
-              <div
-                class="flex w-c-row-lead flex-none items-center justify-center"
-              >
-                <IconSparkles class="size-icon-md flex-none text-ink-muted" />
-              </div>
-              <div
-                class="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-space-3 gap-y-space-2"
-              >
-                <p class="m-0 min-w-0 type-meta text-ink-strong wrap-anywhere">
-                  <span class="font-medium">Caw suggests:</span>
-                  <span> {suggestion.title}</span>
-                  <span aria-hidden="true" class="text-ink-subtle"> · </span>
-                  <span class="text-ink-muted tabular-nums">
-                    {suggestion.nextLabel}
-                  </span>
-                </p>
-                <div class="flex flex-none items-center gap-space-1">
+                {suggestion.title}
+              </h3>
+            </div>
+            <div class="flex flex-none items-center gap-space-1">
+              <Badge variant="raised"><span>Suggested</span></Badge>
+              <Tip label="Not now">
+                {#snippet children(tip)}
                   <Button
+                    {...tip}
+                    aria-label="Dismiss suggestion"
                     disabled={stale}
-                    label="Turn on"
-                    onclick={onturnonsuggestion}
-                    size="xs"
-                    variant="outline"
+                    icon={IconClose}
+                    onclick={ondismisssuggestion}
+                    size="icon-xs"
+                    tone="quiet"
+                    variant="ghost"
                   />
-                  <Tip label="Not now">
-                    {#snippet children(tip)}
-                      <Button
-                        {...tip}
-                        aria-label="Not now"
-                        disabled={stale}
-                        icon={IconClose}
-                        onclick={ondismisssuggestion}
-                        size="icon-xs"
-                        tone="quiet"
-                        variant="ghost"
-                      />
-                    {/snippet}
-                  </Tip>
-                </div>
-              </div>
-            </li>
-          {/if}
-        </ul>
-      </div>
-    </section>
-  {/if}
+                {/snippet}
+              </Tip>
+            </div>
+          </header>
 
-  {#if ranFineRuns.length > 0}
-    <section
-      aria-labelledby="routines-group-ran-fine"
-      class="flex flex-col gap-space-2"
-      data-routine-group="ran-fine"
-    >
-      <div class="mark-line flex items-center gap-space-2">
-        <h2 class="m-0 type-label text-ink-muted" id="routines-group-ran-fine">
-          Ran fine
-        </h2>
-        <Badge data-box size="tally" variant="secondary">
-          <span>{ranFineRuns.length}</span>
-        </Badge>
-      </div>
+          <p class="m-0 line-clamp-2 type-meta text-ink-muted wrap-anywhere">
+            {suggestion.detail}
+          </p>
 
-      <div class="overflow-hidden rounded-lg bg-surface-raised shadow-tile">
-        <ul class="m-0 list-none p-0">
-          {#each ranFineRuns as item (item.run.id)}
-            {@const meta = runOutcomeMeta(item.run.outcome)}
-            {@const selected = selectedRunId === item.run.id}
-            <li
-              class={[
-                "flex items-start gap-space-3 border-b border-b-border-hairline px-space-3 py-space-3 transition-[background-color] duration-(--duration-control) ease-out last:border-b-0",
-                selected ? "bg-selected-bg" : "hover:bg-surface-hover",
-              ]}
-              data-ran-row={item.run.id}
-              data-selected={selected || undefined}
-            >
-              <div
-                class="flex w-c-row-lead flex-none items-center justify-center pt-space-1"
-                title={meta.label}
-              >
-                <StatusGlyph glyph={meta.glyph} tone={meta.tone} />
-              </div>
+          <p class="m-0 type-meta text-ink-subtle tabular-nums">
+            {suggestion.nextLabel}
+          </p>
 
-              <div class="flex min-w-0 flex-1 flex-col gap-space-1">
-                <div
-                  class="flex flex-wrap items-baseline justify-between gap-x-space-3 gap-y-space-row"
-                >
-                  <p
-                    class="m-0 min-w-0 flex-1 type-meta text-ink-muted wrap-anywhere"
-                  >
-                    <span
-                      class={[
-                        "type-label",
-                        selected ? "text-selected-ink" : "text-ink-strong",
-                      ]}
-                    >
-                      {item.routine.name}
-                    </span>
-                    <span aria-hidden="true"> · </span>
-                    <span>{item.run.oneLine}</span>
-                  </p>
-                  <span
-                    class="flex-none type-meta text-ink-muted tabular-nums"
-                    title={formatExactClock(item.run.startedAt)}
-                  >
-                    {formatRelAge(item.run.startedAt, now)}
-                  </span>
-                </div>
-
-                {#each item.ranActions as action (action.id)}
-                  <ExactCallDisclosure
-                    {action}
-                    showOutcome={true}
-                    showResponse={true}
-                  />
-                {/each}
-              </div>
-
-              <div class="flex flex-none items-center">
-                <Tip
-                  label="Open run · {item.routine.name} ({formatRelAge(
-                    item.run.startedAt,
-                    now
-                  )})"
-                >
-                  {#snippet children(tip)}
-                    <Button
-                      {...tip}
-                      aria-label="Open run from {formatRelAge(
-                        item.run.startedAt,
-                        now
-                      )} for {item.routine.name}"
-                      data-open-run={item.run.id}
-                      icon={IconMaximize}
-                      onclick={() => onopenrun(item.routine.id, item.run.id)}
-                      size="icon-sm"
-                      tone="quiet"
-                      variant="ghost"
-                    />
-                  {/snippet}
-                </Tip>
-              </div>
-            </li>
-          {/each}
-        </ul>
-      </div>
-    </section>
-  {/if}
-
-  {#if quietRoutines.length > 0}
-    <section class="flex flex-col gap-space-2" data-routine-group="quiet">
-      <div>
-        <button
-          aria-expanded={showQuiet}
-          class="mark-line press-tint inline-flex items-center gap-space-1 rounded-sm px-space-2 py-space-1 type-meta text-ink-muted transition-[background-color,color] duration-(--duration-control) ease-out hover:bg-surface-hover hover:text-ink-strong"
-          data-slot="toggle-quiet"
-          onclick={() => {
-            showQuiet = !showQuiet;
-          }}
-          type="button"
-        >
-          {#if showQuiet}
-            <IconChevronDown class="size-icon-sm flex-none" />
-          {:else}
-            <IconChevronRight class="size-icon-sm flex-none" />
-          {/if}
-          <span class="tabular-nums">
-            {quietRoutines.length} paused or done · {showQuiet
-              ? "hide"
-              : "show"}
-          </span>
-        </button>
-      </div>
-
-      {#if showQuiet}
-        <div
-          class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
-          transition:unfold
-        >
-          <ul class="m-0 list-none p-0">
-            {#each quietRoutines as routine (routine.id)}
-              {@const status = routineStatusMeta(routine, now)}
-              {#snippet quietTrail()}
-                <span class="flex-none type-meta text-ink-muted">
-                  {status.label}
-                </span>
-              {/snippet}
-              {#snippet quietBody()}
-                <p
-                  class="m-0 type-meta text-ink-muted line-clamp-1 wrap-anywhere"
-                >
-                  {routine.summary}
-                </p>
-              {/snippet}
-              {#snippet opener()}
-                {@render openRoutineIcon(routine)}
-              {/snippet}
-              {@render routineCardRow(
-                routine,
-                status.glyph,
-                status.tone,
-                status.label,
-                quietTrail,
-                quietBody,
-                opener
-              )}
-            {/each}
-          </ul>
-        </div>
+          <footer
+            class="mt-auto flex items-center justify-between gap-space-2 border-t border-t-border-hairline pt-space-2"
+          >
+            <span class="type-meta text-ink-subtle">Caw suggestion</span>
+            <Button
+              disabled={stale}
+              label="Turn on"
+              onclick={onturnonsuggestion}
+              size="xs"
+              variant="outline"
+            />
+          </footer>
+        </article>
       {/if}
-    </section>
-  {/if}
-
-  {#if routines.length === 0}
-    <div
-      class="mark-line flex items-center gap-space-2 type-body text-ink-muted"
-    >
-      <IconRepeat class="size-icon-md flex-none" />
-      <span>No routines yet.</span>
     </div>
-  {/if}
+  </div>
 </div>

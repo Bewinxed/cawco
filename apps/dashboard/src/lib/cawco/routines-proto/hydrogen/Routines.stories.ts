@@ -1,8 +1,9 @@
 /**
  * A project's Routines screen (Component Story Format 3, live components):
- * one outcome-grouped view (Needs you, Coming up, Ran fine, and collapsed
- * paused or done), with live side surfaces for opening a routine, reading a
- * run's Result and Session, editing by hand, and asking Caw.
+ * one full-width bento of routines (each routine shown once with its state,
+ * inline asks, one-line runs, and quick controls) under a count strip, with
+ * live side surfaces for opening a routine, reading a run's Result and Session,
+ * editing by hand, and asking Caw.
  */
 import { hubAs } from "#lib/cawco/hub-stand-in.js";
 import Routines from "./Routines.svelte";

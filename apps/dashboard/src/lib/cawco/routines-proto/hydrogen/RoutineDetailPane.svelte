@@ -16,15 +16,18 @@
   import InlineConfirm from "./InlineConfirm.svelte";
   import PaneFrame from "./PaneFrame.svelte";
   import RoutineAskList from "./RoutineAskList.svelte";
+  import RoutineConfirm, {
+    type RoutineConfirmKind,
+  } from "./RoutineConfirm.svelte";
   import RoutineSpendDisclosure from "./RoutineSpendDisclosure.svelte";
   import RunHistoryRow from "./RunHistoryRow.svelte";
   import {
     deriveRoutineAsks,
+    deriveRoutineState,
     doneWhenStatusSentence,
     eventRuleSentence,
     formatHeldSummary,
     nextRunSummary,
-    routineStatusMeta,
   } from "./routine-format";
   import {
     type ApprovedAction,
@@ -88,8 +91,7 @@
     ontogglerule,
   }: Props = $props();
 
-  type ConfirmKind =
-    "delete" | "pause-held" | "mark-done" | "check-again" | null;
+  type ConfirmKind = RoutineConfirmKind | "mark-done" | "check-again";
   let confirm = $state<ConfirmKind>(null);
   let showSpend = $state(false);
   let showAllRuns = $state(false);
@@ -104,13 +106,13 @@
     seenId = routine.id;
   });
 
-  const status = $derived(routineStatusMeta(routine, now));
   const next = $derived(nextRunSummary(routine, now));
   const doneWhen = $derived(routine.doneWhen ?? null);
   const doneWhenLine = $derived(doneWhenStatusSentence(routine, now));
   const asks = $derived(
     deriveRoutineAsks({ actions, now, routine, rules, sources })
   );
+  const status = $derived(deriveRoutineState(routine, asks, now));
   const attachedRules = $derived(
     rules.filter((rule) => rule.routineId === routine.id)
   );
@@ -197,9 +199,9 @@
     <div class="flex flex-wrap items-center gap-space-2">
       <StatusBadge
         glyph={status.glyph}
-        label={status.label}
+        label={status.badgeLabel ?? status.word}
         tone={status.tone}
-        variant={status.badge}
+        variant={status.badgeVariant}
       />
       {#if routine.status === "running" && routine.runningStep}
         <span class="type-meta text-status-live-ink">
@@ -220,6 +222,14 @@
         variant="outline"
       />
     {/if}
+    <Button
+      disabled={stale}
+      icon={IconPen}
+      label={routine.builtIn ? "Edit schedule" : "Edit"}
+      onclick={() => onedit(routine.id)}
+      size="sm"
+      variant="outline"
+    />
     <Button
       disabled={stale}
       icon={IconSparkles}
@@ -276,64 +286,14 @@
     </DropdownMenu.Root>
   </div>
 
-  {#if confirm === "pause-held" && doneWhen}
-    <InlineConfirm
-      confirmLabel="Pause routine"
-      oncancel={() => {
-        confirm = null;
-      }}
-      onconfirm={() => {
-        confirm = null;
-        ontogglepause(routine.id);
-      }}
-      title="Pause while work is waiting?"
-    >
-      <p class="m-0 text-ink-muted">
-        Pausing stops checks. Waiting work stays blocked until you resume or
-        mark it done: {formatHeldSummary(
-          doneWhen.heldTasks,
-          doneWhen.heldSteps,
-          true
-        )}.
-      </p>
-    </InlineConfirm>
-  {/if}
-
-  {#if confirm === "delete"}
-    <InlineConfirm
-      confirmLabel="Delete for good"
-      confirmVariant="destructive"
-      oncancel={() => {
-        confirm = null;
-      }}
-      onconfirm={() => {
-        confirm = null;
-        ondelete(routine.id);
-      }}
-      title='Delete "{routine.name}"?'
-      tone="fail"
-    >
-      <ul class="m-0 flex flex-col gap-space-1 ps-space-4">
-        <li>Stops running right away. This cannot be undone.</li>
-        <li>
-          Deletes its {routine.runs.length} recorded
-          {routine.runs.length === 1 ? "run" : "runs"} with the routine.
-        </li>
-        {#if attachedRules.length > 0}
-          <li>
-            Deletes {attachedRules.length} event
-            {attachedRules.length === 1 ? "rule" : "rules"} feeding it.
-          </li>
-        {/if}
-        {#if doneWhen && hasHeldWork && doneWhen.standing !== "met"}
-          <li>
-            Leaves waiting work blocked until you free or repoint it ({doneWhen.heldTasks
-              .map((t) => t.id)
-              .join(", ")}).
-          </li>
-        {/if}
-      </ul>
-    </InlineConfirm>
+  {#if confirm === "pause-held" || confirm === "delete"}
+    <RoutineConfirm
+      attachedRuleCount={attachedRules.length}
+      {ondelete}
+      {ontogglepause}
+      {routine}
+      bind:confirm
+    />
   {/if}
 
   {#if asks.length > 0}
@@ -388,6 +348,13 @@
     {#if routine.instructions && routine.instructions !== routine.summary}
       <p class="m-0 max-w-c-measure type-meta text-ink-muted text-pretty">
         {routine.instructions}
+      </p>
+    {/if}
+
+    {#if routine.guardrail}
+      <p class="m-0 max-w-c-measure type-meta text-ink-muted text-pretty">
+        <span class="font-medium text-ink-strong">Only run when: </span>
+        <span>{routine.guardrail}</span>
       </p>
     {/if}
 

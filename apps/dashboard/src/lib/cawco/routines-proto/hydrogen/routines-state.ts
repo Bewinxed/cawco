@@ -19,6 +19,7 @@ import {
   type Routine,
   type RoutineRun,
   type ScheduleCadence,
+  type ScheduleUnit,
 } from "./routines-data";
 
 export const PROJECT_VIEWS: BarView[] = [
@@ -112,66 +113,138 @@ export interface RoutineDraftSubmit {
   doneWhenStatement: string;
   executorMode: "delegate" | "orchestrator";
   giveUpDate: string;
+  guardrail: string;
   harness: string;
   instructions: string;
   name: string;
+  scheduleEvery: number;
+  scheduleUnit: ScheduleUnit;
   time: string;
   timezone: string;
   weekday: string;
 }
 
+export const SCHEDULE_UNIT_OPTIONS: { id: ScheduleUnit; text: string }[] = [
+  { id: "day", text: "day" },
+  { id: "weekday", text: "weekday" },
+  { id: "week", text: "week" },
+  { id: "hour", text: "hour" },
+  { id: "minute", text: "minute" },
+  { id: "events", text: "matching event" },
+  { id: "cron", text: "custom cron" },
+];
+
+export const SCHEDULE_EVERY_OPTIONS = [1, 2, 3, 4, 6, 12, 15, 30].map((n) => ({
+  id: String(n),
+  text: String(n),
+}));
+
+const SCHEDULE_UNIT_SET = new Set<string>(
+  SCHEDULE_UNIT_OPTIONS.map((one) => one.id)
+);
+
+export interface RoutineTileCallbacks {
+  onacknowledge: (actionId: string) => void;
+  onapprove: (actionId: string) => void;
+  oncancelaction: (actionId: string) => void;
+  ondelete: (id: string) => void;
+  ondeny: (actionId: string) => void;
+  onedit: (id: string) => void;
+  onextenddate: (id: string, days: number | null) => void;
+  onfixwithcaw: (prompt: string) => void;
+  onkeep: (id: string) => void;
+  onmarkdone: (id: string) => void;
+  onopenroutine: (id: string) => void;
+  onopenrun: (routineId: string, runId: string) => void;
+  onresumerule: (ruleId: string) => void;
+  onrunnow: (id: string) => void;
+  ontogglepause: (id: string) => void;
+}
+
+export function isScheduleUnit(
+  value: string | undefined
+): value is ScheduleUnit {
+  return value !== undefined && SCHEDULE_UNIT_SET.has(value);
+}
+
+function cadenceFromScheduleUnit(
+  unit: ScheduleUnit,
+  every: number
+): ScheduleCadence {
+  switch (unit) {
+    case "minute":
+    case "cron":
+      return "custom";
+    case "hour":
+      return every === 1 ? "hourly" : "custom";
+    case "day":
+      return every === 1 ? "daily" : "custom";
+    case "weekday":
+      return "weekdays";
+    case "week":
+      return "weekly";
+    case "events":
+      return "events";
+  }
+}
+
 export function describeDraftSchedule(
   draft: Pick<
     RoutineDraftSubmit,
-    "cadence" | "cron" | "time" | "timezone" | "weekday"
+    "cron" | "scheduleEvery" | "scheduleUnit" | "time" | "timezone" | "weekday"
   >
 ): { nextLabel: string; rhythm: string } {
-  const zone = draft.timezone === LOCAL_ZONE ? "" : ` (${draft.timezone})`;
+  const zone = draft.timezone === LOCAL_ZONE ? "" : ` ${draft.timezone}`;
   const hm = draft.time || "09:00";
   const day = draft.weekday || "Mon";
+  const n = Math.max(1, draft.scheduleEvery);
   const expr = draft.cron.trim();
-  const byCadence: Record<
-    ScheduleCadence,
-    { nextLabel: string; rhythm: string }
-  > = {
-    custom: {
-      nextLabel: expr
-        ? "Today 21:30 on your clock"
-        : "Enter a 5-field cron expression",
-      rhythm: expr ? `Custom (${expr})${zone}` : "Custom schedule",
-    },
-    daily: {
-      nextLabel: `Tomorrow ${hm} on your clock`,
-      rhythm: `Daily at ${hm}${zone}`,
-    },
-    events: {
-      nextLabel: "Waits for matching events",
-      rhythm: "Only when a matching event arrives",
-    },
-    hourly: {
-      nextLabel: "Today 22:00 on your clock",
-      rhythm: `Hourly at :00${zone}`,
-    },
-    weekdays: {
-      nextLabel: `Mon ${hm} on your clock`,
-      rhythm: `Weekdays at ${hm}${zone}`,
-    },
-    weekly: {
-      nextLabel: `Next ${day} ${hm} on your clock`,
-      rhythm: `Every ${day} at ${hm}${zone}`,
-    },
-  };
-  return byCadence[draft.cadence];
-}
 
-export const CADENCES: { label: string; value: ScheduleCadence }[] = [
-  { label: "Hourly", value: "hourly" },
-  { label: "Daily", value: "daily" },
-  { label: "Weekdays", value: "weekdays" },
-  { label: "Weekly", value: "weekly" },
-  { label: "Custom", value: "custom" },
-  { label: "Events only", value: "events" },
-];
+  switch (draft.scheduleUnit) {
+    case "minute":
+      return {
+        nextLabel: `In ${n}m on your clock`,
+        rhythm: n === 1 ? "Every minute" : `Every ${n} minutes`,
+      };
+    case "hour":
+      return {
+        nextLabel:
+          n === 1 ? "Today 22:00 on your clock" : `In ${n}h on your clock`,
+        rhythm: n === 1 ? `Hourly at :00${zone}` : `Every ${n} hours${zone}`,
+      };
+    case "day":
+      return {
+        nextLabel: `Tomorrow ${hm} on your clock`,
+        rhythm:
+          n === 1 ? `Daily at ${hm}${zone}` : `Every ${n} days at ${hm}${zone}`,
+      };
+    case "weekday":
+      return {
+        nextLabel: `Mon ${hm} on your clock`,
+        rhythm: `Weekdays at ${hm}${zone}`,
+      };
+    case "week":
+      return {
+        nextLabel: `Next ${day} ${hm} on your clock`,
+        rhythm:
+          n === 1
+            ? `Every ${day} at ${hm}${zone}`
+            : `Every ${n} weeks (${day}) at ${hm}${zone}`,
+      };
+    case "events":
+      return {
+        nextLabel: "Waits for matching events",
+        rhythm: "Only when a matching event arrives",
+      };
+    case "cron":
+      return {
+        nextLabel: expr
+          ? "Today 21:30 on your clock"
+          : "Enter a 5-field cron expression",
+        rhythm: expr ? `Custom (${expr})${zone}` : "Custom schedule",
+      };
+  }
+}
 
 export const WEEKDAY_OPTIONS = [
   "Mon",
@@ -200,10 +273,30 @@ export const HARNESS_OPTIONS = [
 
 const WHITESPACE = /\s+/u;
 const TODAY_ISO = "2026-11-21";
-const CADENCE_SET = new Set<string>(CADENCES.map((one) => one.value));
 
-export function isCadence(value: string | undefined): value is ScheduleCadence {
-  return value !== undefined && CADENCE_SET.has(value);
+function unitFromRoutine(editing: Routine): {
+  every: number;
+  unit: ScheduleUnit;
+} {
+  if (editing.schedule.unit) {
+    return { every: editing.schedule.every ?? 1, unit: editing.schedule.unit };
+  }
+  switch (editing.schedule.cadence) {
+    case "hourly":
+      return { every: 1, unit: "hour" };
+    case "daily":
+      return { every: 1, unit: "day" };
+    case "weekdays":
+      return { every: 1, unit: "weekday" };
+    case "weekly":
+      return { every: 1, unit: "week" };
+    case "events":
+      return { every: 1, unit: "events" };
+    case "custom":
+      return editing.schedule.cron === "*/15 * * * *"
+        ? { every: 15, unit: "minute" }
+        : { every: 1, unit: "cron" };
+  }
 }
 
 export function initialDraftFromRoutine(
@@ -211,21 +304,25 @@ export function initialDraftFromRoutine(
 ): RoutineDraftSubmit {
   if (!editing) {
     return {
-      cadence: "weekdays",
+      cadence: "daily",
       cron: "*/15 * * * *",
       doneWhenCommand: "",
       doneWhenMethod: "model",
       doneWhenStatement: "",
       executorMode: "delegate",
       giveUpDate: "",
+      guardrail: "",
       harness: "Project default",
       instructions: "",
       name: "",
+      scheduleEvery: 1,
+      scheduleUnit: "day",
       time: "09:00",
       timezone: LOCAL_ZONE,
       weekday: "Mon",
     };
   }
+  const { every, unit } = unitFromRoutine(editing);
   return {
     cadence: editing.schedule.cadence,
     cron: editing.schedule.cron ?? "*/15 * * * *",
@@ -237,9 +334,12 @@ export function initialDraftFromRoutine(
     giveUpDate: editing.doneWhen?.giveUpAt
       ? new Date(editing.doneWhen.giveUpAt).toISOString().slice(0, 10)
       : "",
+    guardrail: editing.guardrail ?? "",
     harness: editing.executor.harness ?? "Project default",
     instructions: editing.instructions,
     name: editing.name,
+    scheduleEvery: every,
+    scheduleUnit: unit,
     time: editing.schedule.time,
     timezone: editing.schedule.timezone,
     weekday: editing.schedule.weekday,
@@ -250,7 +350,6 @@ export type BadDraftField =
   "name" | "statement" | "command" | "instructions" | "date" | "cron" | null;
 
 export function validateRoutineDraft(input: {
-  cadence: ScheduleCadence;
   cleanName: string;
   cron: string;
   doneWhenCommand: string;
@@ -260,6 +359,7 @@ export function validateRoutineDraft(input: {
   instructions: string;
   isBuiltIn: boolean;
   isCommandRun: boolean;
+  scheduleUnit: ScheduleUnit;
 }): { field: BadDraftField; reason: string } | null {
   if (!input.cleanName) {
     return {
@@ -294,7 +394,7 @@ export function validateRoutineDraft(input: {
       reason: "Describe what each run should do.",
     };
   }
-  if (input.cadence === "custom") {
+  if (input.scheduleUnit === "cron") {
     const parts = input.cron.trim().split(WHITESPACE).filter(Boolean);
     if (parts.length !== 5) {
       return {
@@ -377,13 +477,19 @@ function buildScheduleFromDraft(
   rhythm: string,
   nextAt: number | null
 ): Routine["schedule"] {
+  const cadence = cadenceFromScheduleUnit(
+    draft.scheduleUnit,
+    draft.scheduleEvery
+  );
   return {
-    cadence: draft.cadence,
-    cron: draft.cadence === "custom" ? draft.cron : undefined,
+    cadence,
+    cron: draft.scheduleUnit === "cron" ? draft.cron : undefined,
+    every: draft.scheduleEvery,
     nextAt,
     rhythm,
     time: draft.time,
     timezone: draft.timezone,
+    unit: draft.scheduleUnit,
     weekday: draft.weekday,
   };
 }
@@ -398,7 +504,7 @@ export function applyRoutineEdit(
     one.status === "paused" ||
     one.status === "stopped" ||
     one.status === "finished" ||
-    draft.cadence === "events";
+    draft.scheduleUnit === "events";
   const schedule = buildScheduleFromDraft(
     draft,
     rhythm,
@@ -412,6 +518,7 @@ export function applyRoutineEdit(
     ...one,
     doneWhen: buildDoneWhenFromDraft(draft, giveUpAt, one.doneWhen),
     executor: buildExecutorFromDraft(draft),
+    guardrail: draft.guardrail.trim() || undefined,
     instructions: draft.instructions,
     name: draft.name,
     schedule,
@@ -433,6 +540,7 @@ export function createRoutineRecord(input: {
   return {
     doneWhen: buildDoneWhenFromDraft(draft, input.giveUpAt),
     executor: buildExecutorFromDraft(draft),
+    guardrail: draft.guardrail.trim() || undefined,
     id: input.id,
     instructions: draft.instructions,
     limits: {
@@ -457,7 +565,7 @@ export function createRoutineRecord(input: {
     schedule: buildScheduleFromDraft(
       draft,
       input.rhythm,
-      draft.cadence === "events" ? null : MOCK_NOW + HOUR_MS
+      draft.scheduleUnit === "events" ? null : MOCK_NOW + HOUR_MS
     ),
     status: "running",
     statusReason: null,

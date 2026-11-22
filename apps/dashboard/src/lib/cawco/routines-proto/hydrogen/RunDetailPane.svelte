@@ -7,7 +7,15 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import { IconPlay, IconSparkles, IconTick } from "#lib/icons.js";
+  import {
+    IconChevronDown,
+    IconChevronRight,
+    IconPlay,
+    IconSparkles,
+    IconTick,
+    IconWarningTriangle,
+  } from "#lib/icons.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import CommandOutputBlock from "./CommandOutputBlock.svelte";
   import ExactCallDisclosure from "./ExactCallDisclosure.svelte";
   import PaneFrame from "./PaneFrame.svelte";
@@ -15,6 +23,7 @@
   import {
     actionStateMeta,
     commandFailureLabel,
+    runActionEntries,
     runOutcomeMeta,
     serviceName,
     triggerLabel,
@@ -64,11 +73,13 @@
   }: Props = $props();
 
   let activeTab = $state<"result" | "session">("result");
+  let actionsOpen = $state(false);
   let seenRunId = "";
 
   $effect(() => {
     if (seenRunId && seenRunId !== run.id) {
       activeTab = "result";
+      actionsOpen = false;
     }
     seenRunId = run.id;
   });
@@ -76,11 +87,15 @@
   const outcome = $derived(runOutcomeMeta(run.outcome));
   const triggeredBy = $derived(run.triggerDetail ?? triggerLabel(run.trigger));
   const cmdFail = $derived(commandFailureLabel(run));
+  const hasIssue = $derived(
+    run.outcome === "failed" || run.outcome === "could-not-check"
+  );
   const linkedActions = $derived(
     run.proposedActionIds
       ? actions.filter((one) => run.proposedActionIds?.includes(one.id))
       : []
   );
+  const actionSteps = $derived(runActionEntries(run, linkedActions));
 
   const metaParts = $derived.by(() => {
     const parts = [
@@ -128,6 +143,12 @@
         tone={outcome.tone}
         variant={outcome.badge}
       />
+      {#if hasIssue}
+        <Badge variant="fail">
+          <IconWarningTriangle aria-hidden="true" />
+          <span>{cmdFail ? cmdFail : "1 issue"}</span>
+        </Badge>
+      {/if}
       <Badge variant="secondary"><span>{triggeredBy}</span></Badge>
       {#if run.retriedOnce}
         <Badge variant="attn"><span>Retried once</span></Badge>
@@ -159,6 +180,59 @@
 
   {#if activeTab === "result" || !run.session}
     <div class="flex flex-col gap-space-4" data-slot="run-result">
+      {#if actionSteps.length > 0}
+        <div class="flex flex-col gap-space-2">
+          <button
+            aria-expanded={actionsOpen}
+            class="mark-line press-tint inline-flex self-start items-center gap-space-1 rounded-sm px-space-2 py-space-1 type-meta text-ink-muted transition-[background-color,color] duration-(--duration-control) ease-out hover:bg-surface-hover hover:text-ink-strong"
+            data-slot="ran-actions-toggle"
+            onclick={() => {
+              actionsOpen = !actionsOpen;
+            }}
+            type="button"
+          >
+            {#if actionsOpen}
+              <IconChevronDown class="size-icon-sm flex-none" />
+            {:else}
+              <IconChevronRight class="size-icon-sm flex-none" />
+            {/if}
+            <span class="tabular-nums">
+              Ran {actionSteps.length}
+              {actionSteps.length === 1 ? "action" : "actions"}
+            </span>
+          </button>
+
+          {#if actionsOpen}
+            <ol
+              class="m-0 flex list-none flex-col gap-space-2 rounded-well border border-border-well bg-surface-well p-space-3"
+              transition:unfold
+            >
+              {#each actionSteps as step (step.id)}
+                <li class="flex flex-col gap-space-row">
+                  <div class="flex items-baseline justify-between gap-space-2">
+                    <span
+                      class="font-mono type-meta text-ink-strong wrap-anywhere"
+                    >
+                      {step.label}
+                    </span>
+                    {#if step.timeOffset}
+                      <span
+                        class="flex-none font-mono type-meta text-ink-subtle tabular-nums"
+                      >
+                        +{step.timeOffset}
+                      </span>
+                    {/if}
+                  </div>
+                  <span class="type-meta text-ink-muted wrap-anywhere">
+                    {step.detail}
+                  </span>
+                </li>
+              {/each}
+            </ol>
+          {/if}
+        </div>
+      {/if}
+
       <article
         class="flex flex-col gap-space-3 rounded-lg border border-border-well bg-surface-well p-space-4"
       >

@@ -40,6 +40,7 @@
           open = !open;
         }}
         size="xs"
+        tone="quiet"
         variant="ghost"
       />
     </div>
@@ -52,6 +53,7 @@
           open = !open;
         }}
         size="xs"
+        tone="quiet"
         variant="ghost"
       />
     </div>

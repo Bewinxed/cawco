@@ -16,6 +16,7 @@
     serviceName,
   } from "./routine-format";
   import type { Routine } from "./routines-data";
+  import ServiceMark from "./ServiceMark.svelte";
 
   let {
     asks,
@@ -35,7 +36,7 @@
     asks: RoutineAsk[];
     routine: Routine;
     stale?: boolean;
-    variant?: "row" | "pane";
+    variant?: "row" | "pane" | "tile";
     onfixwithcaw: (prompt: string) => void;
     onrunnow: (routineId: string) => void;
     onkeep: (routineId: string) => void;
@@ -49,25 +50,37 @@
 
   let confirmingDoneId = $state<string | null>(null);
   const doneWhen = $derived(routine.doneWhen ?? null);
+  const isTile = $derived(variant === "tile");
 </script>
 
 <ul
-  class="m-0 flex list-none flex-col gap-space-2 p-0"
+  class={[
+    "m-0 flex list-none flex-col p-0",
+    isTile
+      ? "gap-space-1 rounded-xs bg-needs-ground px-space-2 py-space-2"
+      : "gap-space-2",
+  ]}
   data-slot="routine-asks"
 >
   {#each asks as ask (ask.id)}
     <li
       class={[
-        "flex flex-col gap-space-2",
+        "flex flex-col",
+        isTile
+          ? "gap-space-1 border-t border-t-border-hairline pt-space-1 first:border-t-0 first:pt-0"
+          : "gap-space-2",
         variant === "pane" &&
           "rounded-well border border-border-hairline bg-surface-raised p-space-3",
       ]}
       data-ask={ask.kind}
     >
       {#if ask.kind === "action-waiting"}
-        <p class="m-0 type-meta text-ink-strong wrap-anywhere">
-          {ask.sentence}
-        </p>
+        <div class="mark-line flex items-start gap-space-2">
+          <ServiceMark service={ask.action.service} size="sm" />
+          <p class="m-0 min-w-0 flex-1 type-meta text-ink-strong wrap-anywhere">
+            {ask.sentence}
+          </p>
+        </div>
         <ExactCallDisclosure action={ask.action} />
         <PeerAnswerRow
           disabled={stale}
@@ -76,7 +89,7 @@
         />
       {:else if ask.kind === "action-check"}
         <div
-          class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-2"
+          class="flex flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1"
         >
           <p class="m-0 min-w-0 flex-1 type-meta text-ink-strong wrap-anywhere">
             {ask.sentence}
@@ -98,18 +111,22 @@
             <span> {ask.action.serviceResponse}</span>
           </p>
         {/if}
-        <ExactCallDisclosure
-          action={ask.action}
-          showResponse={variant === "row"}
-        />
+        {#if !isTile}
+          <ExactCallDisclosure
+            action={ask.action}
+            showResponse={variant === "row"}
+          />
+        {/if}
       {:else if ask.kind === "stopped"}
         <div
-          class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-2"
+          class="flex flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1"
         >
-          <p class="m-0 min-w-0 flex-1 type-meta text-ink-strong wrap-anywhere">
+          <p
+            class="m-0 min-w-0 flex-1 type-meta text-status-fail-ink wrap-anywhere"
+          >
             {ask.sentence}
           </p>
-          <div class="flex flex-none flex-wrap items-center gap-space-2">
+          <div class="flex flex-none flex-wrap items-center gap-space-1">
             {#if ask.timedOut && onextenddate}
               <Button
                 disabled={stale}
@@ -172,12 +189,14 @@
         {/if}
       {:else if ask.kind === "run-failed"}
         <div
-          class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-2"
+          class="flex flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1"
         >
-          <p class="m-0 min-w-0 flex-1 type-meta text-ink-strong wrap-anywhere">
+          <p
+            class="m-0 min-w-0 flex-1 type-meta text-status-fail-ink wrap-anywhere"
+          >
             {ask.sentence}
           </p>
-          <div class="flex flex-none items-center gap-space-2">
+          <div class="flex flex-none items-center gap-space-1">
             {#if variant === "pane"}
               <Button
                 disabled={stale}
@@ -200,7 +219,7 @@
         </div>
       {:else if ask.kind === "agent-unkept"}
         <div
-          class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-2"
+          class="flex flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1"
         >
           <p class="m-0 min-w-0 flex-1 type-meta text-ink-strong wrap-anywhere">
             {ask.sentence}
@@ -224,7 +243,7 @@
         {/if}
       {:else if ask.kind === "trigger-fault"}
         <div
-          class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-2"
+          class="flex flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1"
         >
           <p class="m-0 min-w-0 flex-1 type-meta text-ink-strong wrap-anywhere">
             {ask.sentence}
