@@ -1811,7 +1811,7 @@ const holding = async (
     }
     return {
       ...NOTHING_HELD,
-      dirty: (await changesOf(access.layer)).length,
+      dirty: (await changesOf(workspace.id, access.layer)).length,
     };
   }
   // A copy already deleted (an archive that died after its removal) holds nothing.
@@ -2135,7 +2135,7 @@ const carryChanged = (
   layer: Layer
 ): Promise<{ carry: string; left: string[] }> =>
   intoCarry(id, async (carry) => {
-    const changed = await changesOf(layer);
+    const changed = await changesOf(id, layer);
     const written = changed
       .filter((each) => each.change === "write")
       .map((each) => each.path);
