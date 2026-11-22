@@ -132,6 +132,10 @@ html.cawco-stage-page .cawco-canvas { display: flex; flex-direction: column; ali
 .cawco-guides rect[data-kind="surface"] { fill: none; stroke: var(--color-c-guide-surface); stroke-width: var(--spacing-c-guide-line); }
 .cawco-guides rect[data-kind="on-token"] { fill: var(--color-c-guide-on-token-wash); }
 .cawco-guides rect[data-kind="off-token"] { fill: var(--color-c-guide-off-token-wash); }
+/* A gap handed out of free room (an auto margin, space-between): off every token too, drawn as its outline alone, dashed, so a
+   wide stretch of it never floods the drawing red. */
+.cawco-guides rect[data-kind="free"] { fill: none; stroke: var(--color-c-guide-miss); stroke-width: var(--spacing-c-guide-line);
+  stroke-dasharray: 4 3; }
 .cawco-guides line[data-kind="miss"] { stroke: var(--color-c-guide-miss); stroke-width: var(--spacing-c-guide-miss-line); }
 /* A px said over the drawing: the miss red, haloed in the page's ground so it reads over any line or word under it. */
 .cawco-guides text { font: var(--type-meta); font-variant-numeric: tabular-nums; fill: var(--color-c-guide-miss); text-anchor: middle;

@@ -5353,10 +5353,30 @@ const LayoutBoxShape = declared(
 );
 export type LayoutBoxOutput = z.output<typeof LayoutBoxShape>;
 
+const EdgeKindShape = declared(
+  z.enum(EDGE_KINDS),
+  "EdgeKind",
+  "packages/core/src/layout-guides.ts"
+);
+export type EdgeKindOutput = z.output<typeof EdgeKindShape>;
+
+const GuideLineShape = declared(
+  z.object({
+    at: z.number(),
+    from: z.number(),
+    kind: EdgeKindShape.exclude(["surface"]),
+    to: z.number(),
+  }),
+  "GuideLine",
+  "packages/core/src/layout-guides.ts"
+);
+export type GuideLineOutput = z.output<typeof GuideLineShape>;
+
 const LayoutGroupShape = declared(
   LayoutPlaceShape.extend({
     box: LayoutBoxShape,
     id: z.number(),
+    lines: z.array(GuideLineShape),
     parent: z.number().nullable(),
     text: z.object({
       baselines: z.array(z.number()),
@@ -5372,18 +5392,11 @@ const LayoutGroupShape = declared(
 export type LayoutGroupOutput = z.output<typeof LayoutGroupShape>;
 
 const MissSideShape = declared(
-  LayoutPlaceShape.extend({ at: z.number() }),
+  LayoutPlaceShape.extend({ at: z.number(), box: LayoutBoxShape }),
   "MissSide",
   "packages/core/src/layout-guides.ts"
 );
 export type MissSideOutput = z.output<typeof MissSideShape>;
-
-const EdgeKindShape = declared(
-  z.enum(EDGE_KINDS),
-  "EdgeKind",
-  "packages/core/src/layout-guides.ts"
-);
-export type EdgeKindOutput = z.output<typeof EdgeKindShape>;
 
 const NearMissShape = declared(
   z.object({
@@ -5403,6 +5416,7 @@ const SpacingReadShape = declared(
   LayoutPlaceShape.extend({
     box: LayoutBoxShape,
     count: z.number(),
+    free: z.literal(true).optional(),
     kind: z.enum(["padding", "gap"]),
     px: z.number(),
     side: z.enum(["top", "right", "bottom", "left", "x", "y"]),

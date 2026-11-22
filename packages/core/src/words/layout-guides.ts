@@ -29,7 +29,7 @@ const missLine = (miss: NearMiss): string =>
   `- ${miss.kind}, ${miss.apart}px apart (${miss.within === "group" ? "in one group" : "across surfaces"}): ${miss.a.at} ${placed(miss.a)} | ${miss.b.at} ${placed(miss.b)}`;
 
 const spacingLine = (one: SpacingRead): string =>
-  `- ${one.kind === "gap" ? `gap ${one.side === "x" ? "across" : "down"}` : `padding-${one.side}`} ${one.px}px in ${placed(one)}${one.count > 1 ? `, ${one.count} times` : ""}`;
+  `- ${one.kind === "gap" ? `gap ${one.side === "x" ? "across" : "down"}` : `padding-${one.side}`} ${one.px}px in ${placed(one)}${one.free ? ", handed out of free room (an auto margin or space-between)" : ""}${one.count > 1 ? `, ${one.count} times` : ""}`;
 
 export const layoutWords = {
   /** The read's lines: its head, the gate's three findings, and where the rest is. */
@@ -39,7 +39,7 @@ export const layoutWords = {
     const tokens = Object.entries(read.tokens);
     return [
       `Layout, as the alignment guides read it (drawing ${read.width}×${read.height} px; ${read.groups.length} groups, one per surface):`,
-      "Its picture's guides: text starts blue, ends magenta, centres violet, baselines teal and dashed, surface edges amber; near-misses red; a padding or gap washed green on a token, red off every one with its px.",
+      "Its picture's guides: text starts blue, ends magenta, centres violet, baselines teal and dashed, surface edges amber; near-misses red; a padding or gap washed green on a token, red off every one with its px, dashed red where free room hands it out.",
       tokens.length > 0
         ? `Spacing tokens matched: ${tokens.map(([name, px]) => `${name} ${px}`).join(", ")}.`
         : "The page declares no spacing tokens, so every padding and gap is off-token.",

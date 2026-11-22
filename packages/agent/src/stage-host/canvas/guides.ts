@@ -33,6 +33,7 @@
 
 import {
   type EdgeKind,
+  type GuideLine,
   LAYOUT_LIMITS,
   type LayoutBox,
   type LayoutGroup,
@@ -192,6 +193,8 @@ function distinct(values: number[]): number[] {
 /** One edge as a near-miss is found among: where it stands, the surface it belongs to (the group's own, or one standing in it), and its element. */
 interface Edge {
   at: number;
+  /** The box the edge bounds: a text line's, a surface's. */
+  box: LayoutBox;
   owner: number;
   place: LayoutPlace;
 }
@@ -216,6 +219,7 @@ interface Run {
 interface Reading {
   box: LayoutBox;
   el: Element;
+  lines: GuideLine[];
   parent: number | null;
   runs: Run[];
   scan: Map<ScanKind, Edge[]>;
@@ -276,6 +280,53 @@ function chainsOf(runs: readonly Run[]): Run[][] {
     }
   }
   return chains;
+}
+
+/** The box round `runs`. */
+function boxOfRuns(runs: readonly Run[]): LayoutBox {
+  const left = Math.min(...runs.map((run) => run.left));
+  const top = Math.min(...runs.map((run) => run.top));
+  return {
+    x: px(left),
+    y: px(top),
+    w: px(Math.max(...runs.map((run) => run.right)) - left),
+    h: px(Math.max(...runs.map((run) => run.bottom)) - top),
+  };
+}
+
+/** A group's guide lines as its text is read: each edge once by its kind and place, running over every line that stands on it. */
+class Guides {
+  readonly #by = new Map<string, GuideLine>();
+
+  add(kind: GuideLine["kind"], at: number, from: number, to: number): void {
+    const known = [...this.#by.values()].find(
+      (one) => one.kind === kind && Math.abs(one.at - at) < SAME_EDGE
+    );
+    if (known) {
+      known.from = Math.min(known.from, px(from));
+      known.to = Math.max(known.to, px(to));
+      return;
+    }
+    this.#by.set(`${kind}|${px(at)}`, {
+      kind,
+      at: px(at),
+      from: px(from),
+      to: px(to),
+    });
+  }
+
+  lines(): GuideLine[] {
+    return [...this.#by.values()];
+  }
+
+  /** The distinct places of `kind`'s edges. */
+  ats(kind: GuideLine["kind"]): number[] {
+    return distinct(
+      [...this.#by.values()]
+        .filter((one) => one.kind === kind)
+        .map((one) => one.at)
+    );
+  }
 }
 
 /** A text line's span and its start, by the line it stands on. */
@@ -382,6 +433,7 @@ class LayoutReader {
     this.#readings.push({
       box: this.boxIn(el.getBoundingClientRect()),
       el,
+      lines: [],
       parent,
       runs: [],
       scan: new Map(),
@@ -450,11 +502,13 @@ class LayoutReader {
       const rtl = style.direction === "rtl";
       this.scanOf(outer, "start").push({
         at: rtl ? box.x + box.w : box.x,
+        box,
         owner: id,
         place,
       });
       this.scanOf(outer, "end").push({
         at: rtl ? box.x : box.x + box.w,
+        box,
         owner: id,
         place,
       });
@@ -544,34 +598,32 @@ class LayoutReader {
       return;
     }
     const outer = reading.parent;
-    const edges: Record<ScanKind, number[]> = {
-      start: [],
-      end: [],
-      centre: [],
-      baseline: [],
-    };
+    const guides = new Guides();
     const lines = linesOf(reading.runs);
     const spans: Span[] = [];
     for (const [index, line] of lines.entries()) {
       for (const chain of chainsOf(line)) {
-        const span = this.#chainSaid(id, outer, chain, edges);
+        const span = this.#chainSaid(id, outer, chain, guides);
         if (span) {
           spans.push({ ...span, line: index });
         }
       }
-      this.#baselinesSaid(id, line, edges);
+      this.#baselinesSaid(id, line, guides);
     }
+    reading.lines = guides.lines();
     reading.text = {
-      starts: distinct(edges.start),
+      starts: guides.ats("start"),
       stacked: stackedStarts(spans),
-      ends: distinct(edges.end),
-      centres: distinct(edges.centre),
-      baselines: distinct(edges.baseline),
+      ends: guides.ats("end"),
+      centres: guides.ats("centre"),
+      baselines: guides.ats("baseline"),
     };
-    const first = lines[0]?.[0];
-    if (first && outer !== null) {
+    const [firstLine] = lines;
+    const first = firstLine?.[0];
+    if (firstLine && first && outer !== null) {
       this.scanOf(outer, "baseline").push({
         at: first.baseline,
+        box: boxOfRuns(firstLine),
         owner: id,
         place: this.placeOf(first.el),
       });
@@ -583,15 +635,21 @@ class LayoutReader {
     id: number,
     outer: number | null,
     chain: readonly Run[],
-    edges: Record<ScanKind, number[]>
+    guides: Guides
   ): Omit<Span, "line"> | null {
     const edge = chainEdge(chain);
     if (!edge) {
       return null;
     }
     const kind = edge.first.align;
-    const said = { at: edge.at, owner: id, place: this.placeOf(edge.first.el) };
-    edges[kind].push(edge.at);
+    const box = boxOfRuns(chain);
+    const said = {
+      at: edge.at,
+      box,
+      owner: id,
+      place: this.placeOf(edge.first.el),
+    };
+    guides.add(kind, edge.at, box.y, box.y + box.h);
     this.scanOf(id, kind).push(said);
     if (outer !== null) {
       this.scanOf(outer, kind).push(said);
@@ -606,17 +664,16 @@ class LayoutReader {
   }
 
   /** A line's distinct baselines kept in `edges` and said to its group: two a near-miss apart are runs that should sit on one. */
-  #baselinesSaid(
-    id: number,
-    line: readonly Run[],
-    edges: Record<ScanKind, number[]>
-  ): void {
+  #baselinesSaid(id: number, line: readonly Run[], guides: Guides): void {
     for (const at of distinct(line.map((run) => run.baseline))) {
-      const run = line.find((one) => Math.abs(one.baseline - at) < SAME_EDGE);
-      edges.baseline.push(at);
+      const on = line.filter((one) => Math.abs(one.baseline - at) < SAME_EDGE);
+      const [run] = on;
       if (run) {
+        const box = boxOfRuns(on);
+        guides.add("baseline", at, box.x, box.x + box.w);
         this.scanOf(id, "baseline").push({
           at,
+          box,
           owner: id,
           place: this.placeOf(run.el),
         });
@@ -683,6 +740,7 @@ export function readLayout(
     id,
     ...reader.placeOf(reading.el),
     box: reading.box,
+    lines: reading.lines,
     parent: reading.parent,
     text: reading.text,
   }));
@@ -742,8 +800,8 @@ function nearMisses(
       apart: px(apart),
       within: a.owner === b.owner ? "group" : "siblings",
       group,
-      a: { at: px(a.at), ...a.place },
-      b: { at: px(b.at), ...b.place },
+      a: { at: px(a.at), box: a.box, ...a.place },
+      b: { at: px(b.at), box: b.box, ...b.place },
     });
   }
 }
@@ -795,8 +853,8 @@ function rowMisses(
         apart: px(gap),
         within: "siblings",
         group,
-        a: { at: px(mine[nearest] ?? 0), ...placeOf(a.el) },
-        b: { at: px(theirs[nearest] ?? 0), ...placeOf(b.el) },
+        a: { at: px(mine[nearest] ?? 0), box: a.box, ...placeOf(a.el) },
+        b: { at: px(theirs[nearest] ?? 0), box: b.box, ...placeOf(b.el) },
       });
     }
   }
@@ -830,7 +888,8 @@ type Keep = (
   kind: SpacingRead["kind"],
   side: SpacingRead["side"],
   value: number,
-  box: LayoutBox
+  box: LayoutBox,
+  free?: boolean
 ) => void;
 
 const lengthOf = (value: string): number => Number.parseFloat(value) || 0;
@@ -878,54 +937,119 @@ const sharedAcross = (a: LayoutBox, b: LayoutBox): number =>
 const sharedDown = (a: LayoutBox, b: LayoutBox): number =>
   Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
 
-/** Of the boxes `before` a child at `box`, the nearest above it sharing some of its width, and the nearest beside it sharing some of its height (to its left, or its right in a right-to-left row). */
+/** A child as its container's gaps are read: its element and its box. */
+interface Child {
+  box: LayoutBox;
+  el: Element;
+}
+
+/** Of the children `before` one at `box`, the nearest above it sharing some of its width, and the nearest beside it sharing some of its height (to its left, or its right in a right-to-left row). */
 function neighboursOf(
   box: LayoutBox,
-  before: readonly LayoutBox[]
-): { above: LayoutBox | null; beside: LayoutBox | null } {
-  let above: LayoutBox | null = null;
-  let beside: LayoutBox | null = null;
-  const nearer = (b: LayoutBox, now: LayoutBox | null) =>
-    !now || Math.abs(b.x - box.x) < Math.abs(now.x - box.x);
-  for (const b of before) {
+  before: readonly Child[]
+): { above: Child | null; beside: Child | null } {
+  let above: Child | null = null;
+  let beside: Child | null = null;
+  const nearer = (b: LayoutBox, now: Child | null) =>
+    !now || Math.abs(b.x - box.x) < Math.abs(now.box.x - box.x);
+  for (const one of before) {
+    const b = one.box;
     if (sharedAcross(b, box) > 0 && b.y + b.h <= box.y + SAME_EDGE) {
-      above = !above || b.y + b.h > above.y + above.h ? b : above;
+      above = !above || b.y + b.h > above.box.y + above.box.h ? one : above;
     } else if (
       sharedDown(b, box) > 0 &&
       sharedAcross(b, box) <= SAME_EDGE &&
       nearer(b, beside)
     ) {
-      beside = b;
+      beside = one;
     }
   }
   return { above, beside };
 }
 
+/** Distributed room: `space-between`, `space-around`, `space-evenly`. */
+const SPREAD = /^space-/u;
+
+/** Whether `el`'s margin on `side` is `auto`, as its computed value says (a used value hides it); never where the browser has no typed style. */
+const autoMargin = (el: Element, side: string): boolean =>
+  "computedStyleMap" in el &&
+  el.computedStyleMap().get(side)?.toString() === "auto";
+
+/**
+ * Whether the room between two children along `axis` is handed out of
+ * their container's free room rather than written as a length: the
+ * container spreads its items along it, or either child's margin on that
+ * axis is `auto`.
+ */
+function freeRoom(
+  container: CSSStyleDeclaration,
+  axis: "x" | "y",
+  pair: readonly Element[]
+): boolean {
+  const flex = container.display.includes("flex");
+  const main = container.flexDirection.startsWith("row") ? "x" : "y";
+  const spread =
+    (flex && axis === main) || container.display.includes("grid")
+      ? SPREAD.test(
+          axis === "x" || flex
+            ? container.justifyContent
+            : container.alignContent
+        )
+      : false;
+  const sides =
+    axis === "x"
+      ? ["margin-left", "margin-right"]
+      : ["margin-top", "margin-bottom"];
+  return (
+    spread || pair.some((el) => sides.some((side) => autoMargin(el, side)))
+  );
+}
+
 /** The gaps between `el`'s children: each child to the nearest one before it above and beside it. */
-function gapsOf(el: Element, children: readonly LayoutBox[], keep: Keep): void {
-  for (const [at, box] of children.entries()) {
+function gapsOf(
+  el: Element,
+  style: CSSStyleDeclaration,
+  children: readonly Child[],
+  keep: Keep
+): void {
+  for (const [at, { box, el: child }] of children.entries()) {
     const { above, beside } = neighboursOf(box, children.slice(0, at));
     if (above) {
-      const from = above.y + above.h;
-      const x = Math.max(above.x, box.x);
-      keep(el, "gap", "y", box.y - from, {
-        x: px(x),
-        y: px(from),
-        w: px(Math.min(above.x + above.w, box.x + box.w) - x),
-        h: px(box.y - from),
-      });
+      const from = above.box.y + above.box.h;
+      const x = Math.max(above.box.x, box.x);
+      keep(
+        el,
+        "gap",
+        "y",
+        box.y - from,
+        {
+          x: px(x),
+          y: px(from),
+          w: px(Math.min(above.box.x + above.box.w, box.x + box.w) - x),
+          h: px(box.y - from),
+        },
+        freeRoom(style, "y", [above.el, child])
+      );
     }
     if (beside) {
-      const leftOf = beside.x + beside.w <= box.x + SAME_EDGE;
-      const from = leftOf ? beside.x + beside.w : box.x + box.w;
-      const to = leftOf ? box.x : beside.x;
-      const y = Math.max(beside.y, box.y);
-      keep(el, "gap", "x", to - from, {
-        x: px(from),
-        y: px(y),
-        w: px(to - from),
-        h: px(Math.min(beside.y + beside.h, box.y + box.h) - y),
-      });
+      const b = beside.box;
+      const leftOf = b.x + b.w <= box.x + SAME_EDGE;
+      const from = leftOf ? b.x + b.w : box.x + box.w;
+      const to = leftOf ? box.x : b.x;
+      const y = Math.max(b.y, box.y);
+      keep(
+        el,
+        "gap",
+        "x",
+        to - from,
+        {
+          x: px(from),
+          y: px(y),
+          w: px(to - from),
+          h: px(Math.min(b.y + b.h, box.y + box.h) - y),
+        },
+        freeRoom(style, "x", [beside.el, child])
+      );
     }
   }
 }
@@ -947,7 +1071,7 @@ function spacingOf(
   placeOf: (el: Element) => LayoutPlace
 ): SpacingRead[] {
   const kept = new Map<string, SpacingRead>();
-  const keep: Keep = (el, kind, side, value, box) => {
+  const keep: Keep = (el, kind, side, value, box, free) => {
     if (value < SAME_EDGE) {
       return;
     }
@@ -966,6 +1090,7 @@ function spacingOf(
       token: tokenFor(tokens, value),
       box,
       count: 1,
+      ...(free ? { free: true as const } : {}),
     });
   };
   for (const el of walked) {
@@ -974,9 +1099,9 @@ function spacingOf(
       paddingsOf(el, box, styleOf(el), keep);
       const children = laidChildren(el, styleOf).flatMap((child) => {
         const one = boxes.get(child);
-        return one ? [one] : [];
+        return one ? [{ el: child, box: one }] : [];
       });
-      gapsOf(el, children.slice(0, CHILDREN_READ), keep);
+      gapsOf(el, styleOf(el), children.slice(0, CHILDREN_READ), keep);
     }
   }
   return [...kept.values()];
@@ -1018,44 +1143,49 @@ const svgLabel = (words: string, x: number, y: number): SVGTextElement => {
   return one;
 };
 
-/** A group's guides: its surface's edge, each text edge a line its height, each baseline a line its width. */
+/** A group's guides: its surface's edge, and each text edge over the lines that stand on it (a baseline across its line). */
 function groupGuides(group: LayoutGroup): SVGElement[] {
-  const { box, text } = group;
-  const down = (kind: EdgeKind) => (at: number) =>
-    svgLine(kind, at, box.y, at, box.y + box.h);
   return [
-    ...(group.parent === null ? [] : [svgRect("surface", box)]),
-    ...text.starts.map(down("start")),
-    ...text.ends.map(down("end")),
-    ...text.centres.map(down("centre")),
-    ...text.baselines.map((at) =>
-      svgLine("baseline", box.x, at, box.x + box.w, at)
+    ...(group.parent === null ? [] : [svgRect("surface", group.box)]),
+    ...group.lines.map((one) =>
+      one.kind === "baseline"
+        ? svgLine(one.kind, one.from, one.at, one.to, one.at)
+        : svgLine(one.kind, one.at, one.from, one.at, one.to)
     ),
   ];
 }
 
-/** A near-miss's two edges in red across the group it was found in, and its px at the second; none where the group is gone. */
-function missGuides(
-  miss: NearMiss,
-  groups: readonly LayoutGroup[]
-): { label: SVGTextElement | null; lines: SVGLineElement[] } {
-  const box = groups[miss.group]?.box;
-  if (!box) {
-    return { lines: [], label: null };
-  }
+/** A near-miss's two edges in red over both boxes they bound, and its px by the second. */
+function missGuides(miss: NearMiss): {
+  label: SVGTextElement;
+  lines: SVGLineElement[];
+} {
+  const { a, b } = miss;
   // A baseline's and a row's are y; every other kind's is x.
   const across = miss.kind === "baseline" || miss.kind === "surface";
+  const from = across ? Math.min(a.box.x, b.box.x) : Math.min(a.box.y, b.box.y);
+  const to = across
+    ? Math.max(a.box.x + a.box.w, b.box.x + b.box.w)
+    : Math.max(a.box.y + a.box.h, b.box.y + b.box.h);
   return {
-    lines: [miss.a.at, miss.b.at].map((at) =>
+    lines: [a.at, b.at].map((at) =>
       across
-        ? svgLine("miss", box.x, at, box.x + box.w, at)
-        : svgLine("miss", at, box.y, at, box.y + box.h)
+        ? svgLine("miss", from, at, to, at)
+        : svgLine("miss", at, from, at, to)
     ),
     label: across
-      ? svgLabel(`${miss.apart}`, box.x + box.w, miss.b.at)
-      : svgLabel(`${miss.apart}`, miss.b.at, box.y),
+      ? svgLabel(`${miss.apart}`, to, b.at)
+      : svgLabel(`${miss.apart}`, b.at, from),
   };
 }
+
+/** A spacing's shade: on a token, off every one, or handed out of free room. */
+const spacingKind = (one: SpacingRead): string => {
+  if (one.token) {
+    return "on-token";
+  }
+  return one.free ? "free" : "off-token";
+};
 
 /**
  * The guides drawn for `read` in `svg`, sized to the frame: spacing shaded
@@ -1064,7 +1194,7 @@ function missGuides(
  * in red over both its edges, the px labels over all.
  */
 export function drawGuides(svg: SVGSVGElement, read: LayoutRead): void {
-  const misses = read.nearMisses.map((miss) => missGuides(miss, read.groups));
+  const misses = read.nearMisses.map(missGuides);
   const labels = document.createElementNS(SVG, "g");
   labels.dataset.kind = "labels";
   labels.append(
@@ -1079,12 +1209,10 @@ export function drawGuides(svg: SVGSVGElement, read: LayoutRead): void {
             ),
           ]
     ),
-    ...misses.flatMap((one) => (one.label ? [one.label] : []))
+    ...misses.map((one) => one.label)
   );
   svg.replaceChildren(
-    ...read.spacing.map((one) =>
-      svgRect(one.token ? "on-token" : "off-token", one.box)
-    ),
+    ...read.spacing.map((one) => svgRect(spacingKind(one), one.box)),
     ...read.groups.flatMap(groupGuides),
     ...misses.flatMap((one) => one.lines),
     labels
