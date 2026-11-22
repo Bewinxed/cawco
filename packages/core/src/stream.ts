@@ -471,12 +471,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    create and update refuse under new codes (`artifact-design-unfit`,
  *    `artifact-design-unread`, `artifact-update-component`). A page built
  *    for 93 opens a design at its page's place, so it reloads first.
+ * 95: an artifact's read and create answer its stage without `errors`: a
+ *    design graph's compile errors are the answer's own `errors`, said once
+ *    (hub component.ts `stageSaid`). A page built for 94 reads a stage
+ *    with `errors`, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 94;
+export const WIRE_PROTOCOL = 95;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

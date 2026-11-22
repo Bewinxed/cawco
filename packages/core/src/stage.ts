@@ -1332,6 +1332,24 @@ export interface StageError {
   sheets: string[];
 }
 
+/** A toolchain's summary line over the errors it lists ("Transform failed with 1 error:", Rolldown's "Build failed with 2 errors:"), which names none of them. */
+const ERRORS_SUMMARY = /^\S.* failed with \d+ errors?:$/u;
+
+/**
+ * The line of a stage error's message that names what is wrong: its first
+ * line that holds words, past a toolchain's summary line. Rolldown's
+ * compile error opens "Transform failed with 1 error:" and says its reason
+ * two lines down ("[PARSE_ERROR] Expected `>` but found `<`"), its own
+ * diagnostic drawing under it; a message of one line is that line.
+ */
+export const stageErrorReason = (message: string): string => {
+  const lines = message
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  return lines.find((line) => !ERRORS_SUMMARY.test(line)) ?? lines[0] ?? "";
+};
+
 /**
  * One named export of a story file: a story, by its export's 1-based place,
  * with its `args` as the file writes them. A literal arg (a string, number,

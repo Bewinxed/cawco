@@ -47,6 +47,7 @@ import {
   READ_HINT,
   renderSaid,
   specOf,
+  stageSaid,
   stateAmbiguity,
   stateSaid,
   storiesSaid,
@@ -699,7 +700,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const report = drawnHeld(row, drawn.report);
     const made: Created = {
       ...createdOf(row, shown),
-      stage: { ...sheetState(row, opened.state), errors: [] },
+      stage: stageSaid(sheetState(row, opened.state)),
       render: {
         ...renderSaid(report, undrawn, undefined, plansUnread, spec),
         weight: weightSaid(opened.weight),
@@ -863,7 +864,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     }
     const made: Created = {
       ...createdOf(row, shown),
-      stage: { ...written.opened.state, errors: [] },
+      stage: stageSaid(written.opened.state),
       errors: errorsSaid(written.opened.state.errors),
       hint: designHint(spec.content),
     };
@@ -1099,7 +1100,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const read: ComponentRead = {
       ...base,
       state: picks,
-      ...(stage ? { stage: { ...stage, errors: [] } } : {}),
+      ...(stage ? { stage: stageSaid(stage) } : {}),
       ...(unreached ? { unreached } : {}),
       errors: errorsSaid(stage?.errors ?? []),
       ...(report
@@ -1182,7 +1183,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const read: ComponentRead = {
       ...base,
       state: picks,
-      ...(state ? { stage: { ...state, errors: [] } } : {}),
+      ...(state ? { stage: stageSaid(state) } : {}),
       ...(unreached ? { unreached } : {}),
       errors: errorsSaid(state?.errors ?? []),
       ...(Object.hasOwn(base.state, "dials") ? { dials: dials.value } : {}),

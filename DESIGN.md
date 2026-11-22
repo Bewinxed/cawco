@@ -15,8 +15,7 @@
 - Running work shows a live mark and names what is running.
 - Live marks breathe in step; finished things are still.
 
-## Facts and empty states
-- A fact with a shape is drawn: a schedule as times on a line, a budget as a meter, outcomes as marks. Words are for what has no shape.
+## Empty states
 - An empty state's one action starts the work that would fill it, with the agent already asking and the words editable. Where that cannot start, it says why and offers the way by hand.
 
 ## Colour, focus and type

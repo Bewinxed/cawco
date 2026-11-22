@@ -18,7 +18,6 @@ import type {
   DesignMark,
   SheetRead,
   SheetWeight,
-  StageState,
   StageUnreached,
   StoryOp,
 } from "@cawco/core/stage";
@@ -31,6 +30,7 @@ import type {
   errorsSaid,
   movesSaid,
   renderSaid,
+  StageSaid,
   StateAsk,
   stateSaid,
   storiesSaid,
@@ -311,8 +311,8 @@ export interface ArtifactRead {
   seq: number;
   /** A sheet as its stage reads it: its stories with their args, its meta, and each component's props. */
   sheet?: SheetRead;
-  /** A sheet's stage: its status, and the compile errors standing in the modules the sheet imports. A served preview's: its server's status, and why it is in `error`. */
-  stage?: StageState;
+  /** A sheet's stage: its status (the compile errors standing in the modules the sheet imports are a design graph's `errors`). A served preview's: its server's status, and why it is in `error`. */
+  stage?: StageSaid;
   /** Every key, or with `since` only those changed after it; a canvas's is empty. */
   state: Record<string, ReadEntry>;
   /** A design graph's stage the read couldn't reach: which hop, why, and since when; `stage` is then the doc's last word of it. */
@@ -532,8 +532,8 @@ export interface Created {
   routes?: Record<string, string>;
   /** A sheet as its stage reads it: its stories with their args, its meta, and each component's props. */
   sheet?: SheetRead;
-  /** A sheet's stage, or a served preview's server, as it stands once started. */
-  stage?: StageState;
+  /** A sheet's stage, or a served preview's server, as it stands once started; a sheet's compile errors are `errors`. */
+  stage?: StageSaid;
   /** A draft canvas's origin on the tailnet name while the hub serves HTTPS there (core `PreviewAddress`). */
   tailnet?: PreviewAddress["tailnet"];
   /** What it is named by to the person. */
@@ -654,7 +654,7 @@ export interface DesignChanged {
   hint: string;
   id: string;
   revision: number;
-  stage: StageState;
+  stage: StageSaid;
 }
 
 /** What `artifact_update` answers for a design graph's write: nothing past the story it wrote (design graph §4, G2). */

@@ -28,6 +28,8 @@ import {
   type SheetWeight,
   type StageError,
   type StageErrorKind,
+  type StageState,
+  stageErrorReason,
   storyRefOf,
 } from "@cawco/core/stage";
 import { cutShort } from "@cawco/core/words/helpers";
@@ -606,19 +608,39 @@ export interface ErrorSaid {
   frame?: string;
   kind?: StageErrorKind;
   line: number | null;
-  message: string | undefined;
+  message: string;
 }
 
-/** Each section's problem as an answer says it: its kind (optional on the wire, as `StageError` has it), file, place, message, and its code frame when it has one. */
+/** The most of a code frame an answer carries: a frame is a few lines around the place, and one of minified code is a line this long or longer. */
+const FRAME_MAX = 1200;
+
+/**
+ * Each section's problem as an answer says it: its kind (optional on the
+ * wire, as `StageError` has it), file, place, the line of its message that
+ * names it whole (core `stageErrorReason`), and its code frame when it has
+ * one, kept to {@link FRAME_MAX}.
+ */
 export const errorsSaid = (errors: StageError[]): ErrorSaid[] =>
   errors.map((one) => ({
     ...(one.kind ? { kind: one.kind } : {}),
     file: one.file,
     line: one.line,
     column: one.column,
-    message: cutShort(one.message.split("\n")[0] ?? "", 300),
-    ...(one.frame ? { frame: one.frame } : {}),
+    message: stageErrorReason(one.message),
+    ...(one.frame ? { frame: cutShort(one.frame, FRAME_MAX) } : {}),
   }));
+
+/** A stage as an answer says it: its compile errors are the answer's own `errors` ({@link errorsSaid}), said once. */
+export type StageSaid = WithoutErrors<StageState>;
+
+/** Each of union `T`'s members without its `errors`. */
+type WithoutErrors<T> = T extends unknown ? Omit<T, "errors"> : never;
+
+/** Stage `state` as an answer says it ({@link StageSaid}). */
+export const stageSaid = ({
+  errors: _errors,
+  ...said
+}: StageState): StageSaid => said;
 
 /** What a design graph's answers point at next. */
 export const READ_HINT =
