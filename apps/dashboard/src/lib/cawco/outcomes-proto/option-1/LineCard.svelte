@@ -56,14 +56,14 @@
   class="flex flex-col gap-space-5"
 >
   {#if sheet}
-    <LineAnswer answer={line.answer} />
+    <LineAnswer answer={line.answer} found={line.found} />
   {:else}
     <header class="flex items-start gap-space-3">
       <div class="flex min-w-0 flex-1 flex-col gap-space-1">
         <h2 class="m-0 type-row font-medium text-pretty text-ink-strong">
           {line.sentence}
         </h2>
-        <LineAnswer answer={line.answer} />
+        <LineAnswer answer={line.answer} found={line.found} />
       </div>
       <Button
         aria-label={outcomesWords.close}

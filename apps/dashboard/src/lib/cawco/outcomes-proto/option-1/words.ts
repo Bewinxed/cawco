@@ -1,36 +1,19 @@
 /**
- * Outcomes' words for this prototype (option 1). The answer words are
- * Fable's (2026-11-22); the rest are placeholders that show what their
- * place says. The product's copy lands in `packages/core/src/words/**`
+ * Outcomes' words for this prototype (option 1). A line's finding and the
+ * words that sum an outcome up are Fable's (2026-11-22); the rest are
+ * placeholders that show what their place says. A line carries no answer
+ * word: its glyph says done, not done or unknown, and its finding says what
+ * the newest check found. The product's copy lands in `packages/core/src/words/**`
  * once a direction is picked.
  */
-import type { Answer } from "./outcomes";
-
 /** A sentence's closing full stop, dropped where it runs on after a colon. */
 const STOP = /\.$/u;
-
-/** A line's answer in words: the word a glance reads (S1). */
-const answerWord = (answer: Answer): string => {
-  switch (answer.kind) {
-    case "holds":
-      return "True";
-    case "fails":
-      return "False";
-    case "unknown":
-      return "Not known";
-    case "held":
-      return `Was true ${answer.on}`;
-    case "failed":
-      return `Was false ${answer.on}`;
-    default:
-      return answer satisfies never;
-  }
-};
 
 export const outcomesWords = {
   view: "Outcomes",
   say: "Say an outcome",
-  doneWhen: "Done when:",
+  /** Read out over an outcome's lines, never drawn: the nesting shows it. */
+  doneWhen: "Done when",
   /** A met outcome's words, on its folded line at the foot: said once, its count of lines in it. */
   met: (count: number) => `All ${count} true now, still being checked`,
   /** The same, short, where the Room rule's last step needs the line. */
@@ -45,10 +28,9 @@ export const outcomesWords = {
   asks: (from: string) => `${from} asks:`,
   open: (what: string) => `Open ${what}`,
   close: "Close",
-  answer: answerWord,
-  /** The answer word's name as the button that opens its line's explanation. */
-  why: (sentence: string, answer: Answer) =>
-    `${sentence.replace(STOP, "")}: ${answerWord(answer).toLowerCase()}. Show why`,
+  /** The finding's name as the button that opens its line's explanation: it holds the finding's own words. */
+  why: (sentence: string, found: string) =>
+    `${sentence.replace(STOP, "")}: ${found}. Show why`,
   whyHead: "Why",
   saidBy: (by: string) => `${by}'s run said:`,
   readRun: "Read the whole run",

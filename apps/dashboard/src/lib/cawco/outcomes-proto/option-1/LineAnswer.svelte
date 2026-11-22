@@ -1,16 +1,4 @@
-<script lang="ts">
-  /**
-   * A line's answer, read by glyph, then word, then hue (DESIGN.md, State),
-   * in quiet weight: a check for True, a cross for False, the dotted ring
-   * for Not known, and the history glyph for an answer nothing checks any
-   * more, said in the past with its day. None of them is loud: only the
-   * Needs you mark competes for attention.
-   *
-   * With `onopen` it is the line's one way in: a quiet button whose words
-   * are the answer, opening the card that explains it (its name says the
-   * line, the answer and "Show why").
-   */
-  import { Button } from "#lib/components/ui/button/index.js";
+<script lang="ts" module>
   import {
     IconError,
     IconHistory,
@@ -18,76 +6,49 @@
     IconSuccess,
   } from "#lib/icons.js";
   import type { Answer } from "./outcomes";
-  import { outcomesWords } from "./words";
 
-  let {
-    answer,
-    sentence = "",
-    open = false,
-    onopen,
-  }: {
-    answer: Answer;
-    /** The line's sentence, for the button's name. */
-    sentence?: string;
-    /** Its card hangs open now. */
-    open?: boolean;
-    onopen?: () => void;
-  } = $props();
-
-  const GLYPH = {
+  /** A line's answer as its glyph: done, not done, not known, or no longer checked. */
+  export const GLYPH = {
     holds: IconSuccess,
     fails: IconError,
     unknown: IconNotYet,
     held: IconHistory,
     failed: IconHistory,
   } as const;
-  const TONE = {
+  export const TONE = {
     holds: "text-status-done-glyph",
     fails: "text-status-fail-glyph",
     unknown: "text-status-idle-glyph",
     held: "text-ink-subtle",
     failed: "text-status-fail-glyph",
   } as const;
-  const Glyph = $derived(GLYPH[answer.kind]);
-  const INK = $derived(
-    answer.kind === "fails" || answer.kind === "failed"
-      ? "text-status-fail-ink"
-      : "text-ink-muted"
-  );
+  /** The finding's ink: a line that is not done reads in the failure's ink; one done, quiet. */
+  export const inkOf = (answer: Answer): string => {
+    if (answer.kind === "fails" || answer.kind === "failed") {
+      return "text-status-fail-ink";
+    }
+    return answer.kind === "holds" ? "text-ink-muted" : "text-ink-row";
+  };
 </script>
 
-{#snippet word()}
+<script lang="ts">
+  /**
+   * A line's answer as the card's head draws it: its glyph (DESIGN.md,
+   * status reads by glyph, then word, then hue), then what the newest check
+   * found, in a few words. The glyph says done, not done or not known; the
+   * words say what is going on.
+   */
+  let { answer, found }: { answer: Answer; found: string } = $props();
+
+  const Glyph = $derived(GLYPH[answer.kind]);
+</script>
+
+<span
+  data-answer={answer.kind}
+  class="mark-line inline-flex min-w-0 items-start gap-space-2 type-label"
+>
   <span class="mark-cell">
     <Glyph aria-hidden="true" class="size-icon-md {TONE[answer.kind]}" />
   </span>
-  <span class="min-w-0 text-start {INK}">{outcomesWords.answer(answer)}</span>
-{/snippet}
-
-{#if onopen}
-  <!-- The button's inset reaches past the column on either side, so its
-       words start on the column's edge and keep the column's whole width. -->
-  <span class="-mx-space-2 flex min-w-0">
-    <Button
-      aria-expanded={open}
-      aria-label={outcomesWords.why(sentence, answer)}
-      class="max-w-full"
-      data-answer={answer.kind}
-      data-line-open
-      fit="word"
-      onclick={onopen}
-      press="pressable"
-      size="xs"
-      tone="muted"
-      variant="ghost"
-    >
-      {@render word()}
-    </Button>
-  </span>
-{:else}
-  <span
-    data-answer={answer.kind}
-    class="mark-line inline-flex min-w-0 items-start gap-space-2 type-label"
-  >
-    {@render word()}
-  </span>
-{/if}
+  <span class="min-w-0 {inkOf(answer)}">{found}</span>
+</span>

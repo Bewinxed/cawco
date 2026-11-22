@@ -81,6 +81,8 @@ export interface Ask {
 export interface Line {
   answer: Answer;
   checker: Checker | null;
+  /** What the newest check found, in a few words; for an answer nothing checks any more, what it last found with its date. The glyph carries the answer; these words carry the finding. */
+  found: string;
   id: string;
   sentence: string;
   /** When nothing checks it: what Caw suggests. */

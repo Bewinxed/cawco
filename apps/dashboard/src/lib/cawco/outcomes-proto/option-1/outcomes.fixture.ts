@@ -29,6 +29,7 @@ const MAIN: Outcome = {
   lines: [
     {
       id: "main-checks",
+      found: "14 checks passed",
       sentence: "Every commit on main passes its checks",
       answer: { kind: "holds" },
       why: {
@@ -46,6 +47,7 @@ const MAIN: Outcome = {
     },
     {
       id: "main-skips",
+      found: "None skipped",
       sentence: "No check has been skipped for a day",
       answer: { kind: "holds" },
       why: {
@@ -71,6 +73,7 @@ const PULLS: Outcome = {
   lines: [
     {
       id: "pulls-answered",
+      found: "#412 and #415 unanswered",
       sentence: "Every open pull request has our answer",
       answer: { kind: "fails" },
       why: {
@@ -101,6 +104,7 @@ const PULLS: Outcome = {
     },
     {
       id: "pulls-age",
+      found: "Oldest is 9 hours",
       sentence: "None has waited a day",
       answer: { kind: "holds" },
       why: {
@@ -126,6 +130,7 @@ const STAGING: Outcome = {
   lines: [
     {
       id: "staging-healthy",
+      found: "502 twice at 02:14",
       sentence: "Staging is healthy",
       answer: { kind: "unknown" },
       why: {
@@ -152,6 +157,7 @@ const STAGING: Outcome = {
     },
     {
       id: "staging-assets",
+      found: "All 6 published",
       sentence: "Release assets are published",
       answer: { kind: "holds" },
       why: {
@@ -169,6 +175,7 @@ const STAGING: Outcome = {
     },
     {
       id: "staging-demo-account",
+      found: "Signed in on 12 Nov",
       sentence: "The demo account signs in",
       answer: { kind: "held", on: "12 Nov" },
       why: {
@@ -195,6 +202,7 @@ const DOCS: Outcome = {
   lines: [
     {
       id: "docs-readme",
+      found: "All 11 ran",
       sentence: "Every command in the README runs as written",
       answer: { kind: "holds" },
       why: {
@@ -212,6 +220,7 @@ const DOCS: Outcome = {
     },
     {
       id: "docs-settings",
+      found: "Not checked yet",
       sentence: "No page names a removed setting",
       answer: { kind: "unknown" },
       why: { kind: "quiet", reason: "Nothing checks this." },
@@ -232,6 +241,7 @@ const SIGNUPS: Outcome = {
   lines: [
     {
       id: "signups-count",
+      found: "61 of 100 last week",
       sentence: "Last week's signups from search reached 100",
       answer: { kind: "fails" },
       why: {
@@ -256,6 +266,7 @@ const SIGNUPS: Outcome = {
     },
     {
       id: "signups-speed",
+      found: "Slowest 1.4 seconds",
       sentence: "Every landing page loads in under two seconds",
       answer: { kind: "holds" },
       why: {
@@ -273,6 +284,7 @@ const SIGNUPS: Outcome = {
     },
     {
       id: "signups-report",
+      found: "Delivered Monday",
       sentence: "The weekly report was delivered",
       answer: { kind: "holds" },
       why: {
