@@ -43,6 +43,18 @@ export interface LayoutBox {
 }
 
 /**
+ * One guide a group draws: a text edge of `kind` at `at`, running from
+ * `from` to `to` over the lines that stand on it (y for a start, end or
+ * centre; x for a baseline).
+ */
+export interface GuideLine {
+  at: number;
+  from: number;
+  kind: Exclude<EdgeKind, "surface">;
+  to: number;
+}
+
+/**
  * One group: a surface and what stands on it. `text` holds the distinct x
  * of every text line's start (and of those stacked in a column), the end
  * and centre of text set to end or centre, and the distinct y of every
@@ -54,6 +66,8 @@ export interface LayoutGroup extends LayoutPlace {
   box: LayoutBox;
   /** Its index in `groups`. */
   id: number;
+  /** Each of its text edges as the guides draw it, over the lines on it. */
+  lines: GuideLine[];
   /** The group it stands in; null for the drawing's root. */
   parent: number | null;
   text: {
@@ -70,9 +84,10 @@ export interface LayoutGroup extends LayoutPlace {
   };
 }
 
-/** One side of a near-miss: where its edge stands and the element it is an edge of. */
+/** One side of a near-miss: where its edge stands, the element it is an edge of, and the box that edge bounds (a text line's, a surface's). */
 export interface MissSide extends LayoutPlace {
   at: number;
+  box: LayoutBox;
 }
 
 /**
@@ -97,11 +112,14 @@ export interface NearMiss {
  * across, `y` down), measured between their boxes. `token` names the
  * spacing token it equals; null when it is off every one. `count` how many
  * times the same written spacing stands in the drawing (a list's rows);
- * `box` is its first.
+ * `box` is its first. `free`: a gap its container hands out of its free
+ * room (an auto margin, or `space-between` and its kin) rather than one
+ * written as a length.
  */
 export interface SpacingRead extends LayoutPlace {
   box: LayoutBox;
   count: number;
+  free?: true;
   kind: "padding" | "gap";
   px: number;
   side: "top" | "right" | "bottom" | "left" | "x" | "y";

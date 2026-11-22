@@ -253,6 +253,7 @@ import type {
 } from "./install";
 import type {
   EdgeKind as EdgeKindType,
+  GuideLine as GuideLineType,
   LayoutBox as LayoutBoxType,
   LayoutGroup as LayoutGroupType,
   LayoutPlace as LayoutPlaceType,
@@ -594,6 +595,7 @@ import type {
   GhTokenOutput,
   GitChangesOutput,
   GithubProjectOutput,
+  GuideLineOutput,
   HarnessBlockTypeOutput,
   HarnessCapabilitiesOutput,
   HarnessConfigKindOutput,
@@ -1353,9 +1355,10 @@ prove<
     Same<StageOpenedOutput, StageOpenedType>,
     Same<LayoutPlaceOutput, LayoutPlaceType>,
     Same<LayoutBoxOutput, LayoutBoxType>,
+    Same<EdgeKindOutput, EdgeKindType>,
+    Same<GuideLineOutput, GuideLineType>,
     Same<LayoutGroupOutput, LayoutGroupType>,
     Same<MissSideOutput, MissSideType>,
-    Same<EdgeKindOutput, EdgeKindType>,
     Same<NearMissOutput, NearMissType>,
     Same<SpacingReadOutput, SpacingReadType>,
     Same<LayoutReadOutput, LayoutReadType>,
