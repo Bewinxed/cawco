@@ -910,6 +910,11 @@
   /** Where a row's trailing ink ends: the path field's edge and Browse's (1px each), the field's inset and Browse's own. */
   const REPO_END =
     "calc(var(--spacing-space-2) + var(--spacing-space-3) + 2px)";
+  /**
+   * An owner chip's insides (the avatar, the login, the count) at the
+   * house's smallest inline step, on the kit segment's own side room.
+   */
+  const CHIP = "gap-space-1";
   /** A row: its lead, name and description, lock and time on the list's columns (a subgrid). */
   const ROW =
     "group mark-line col-span-full grid grid-cols-subgrid items-center gap-y-space-1 rounded-sm border-none bg-transparent py-space-2 pe-(--repo-end) ps-0 text-start select-none";
@@ -974,11 +979,12 @@
               line = read;
             })}
           >
-            <ToggleGroup.Item data-login={ALL} value={ALL}>
+            <ToggleGroup.Item class={CHIP} data-login={ALL} value={ALL}>
               {@render allChip()}
             </ToggleGroup.Item>
             {#each strip.shown as one (one.owner.login)}
               <ToggleGroup.Item
+                class={CHIP}
                 data-flip="pop"
                 data-login={one.owner.login}
                 value={one.owner.login}
@@ -1064,6 +1070,7 @@
               <span aria-hidden="true" class="basis-full"></span>
               {#each strip.hidden as one (one.owner.login)}
                 <ToggleGroup.Item
+                  class={CHIP}
                   data-login={one.owner.login}
                   disabled
                   inert
@@ -1084,13 +1091,18 @@
        list the lock and the time go to the description's line, so the
        name has the row's width. A row's trailing ink ends where Browse's
        does under it: the path field's edge and the button's (1px each),
-       the field's inset and the button's. -->
+       the field's inset and the button's, inside the scrollbar's gutter.
+       The gutter stands whether the list scrolls or not: kept only while
+       it scrolled, it came and went as one owner's list replaced every
+       owner's (the height's morph clips the list as it travels, the closing
+       rows overflow it after), and every row's columns jumped its width
+       three times in one switch. -->
   <div
     bind:this={listbox}
     data-slot="repo-list"
     aria-busy={reading || undefined}
     aria-label={spawnWords.location.repositories}
-    class="fai-scroll @container/repos relative grid max-h-72 auto-rows-max grid-cols-(--repo-cols) content-start overflow-y-auto overscroll-contain motion-safe:transition-[grid-template-columns] motion-safe:duration-(--duration-panel) motion-safe:ease-in-out"
+    class="fai-scroll @container/repos relative grid max-h-72 scrollbar-gutter-stable auto-rows-max grid-cols-(--repo-cols) content-start overflow-y-auto overscroll-contain motion-safe:transition-[grid-template-columns] motion-safe:duration-(--duration-panel) motion-safe:ease-in-out"
     id={`${uid}-list`}
     role="listbox"
     style:--repo-cols={REPO_COLS}
