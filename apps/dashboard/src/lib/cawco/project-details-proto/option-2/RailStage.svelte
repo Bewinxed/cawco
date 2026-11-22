@@ -21,6 +21,7 @@
     last = false,
     id,
     announcement = "",
+    place = "",
     children,
   }: {
     /** 1-based position along the pipeline rail. */
@@ -36,6 +37,8 @@
     id: StageId;
     /** Polite live-region text announcing state changes for this stage. */
     announcement?: string;
+    /** Where it stands on the view's grid (HowItRuns `PLACES`). */
+    place?: string;
     children: Snippet;
   } = $props();
 
@@ -44,7 +47,10 @@
 
 <section
   aria-labelledby={headingId}
-  class="grid grid-cols-auto-fluid gap-x-space-2 @field-group:gap-x-space-3"
+  class={[
+    "grid min-w-0 grid-cols-auto-fluid gap-x-space-2 @field-group:gap-x-space-3",
+    place,
+  ]}
   data-slot="stage"
   data-stage={id}
   data-state={state}
@@ -103,7 +109,9 @@
   </div>
 
   <!-- Row 2, Col 2: stage body aligned to the title's leading edge. -->
-  <div class={["min-w-0 pt-space-3", !last && "pb-space-7"]}>
+  <!-- Its own container: its parts fit the column it stands in, whether
+       the view runs one column or two. -->
+  <div class={["@container min-w-0 pt-space-3", !last && "pb-space-7"]}>
     {@render children()}
     <span class="sr-only" aria-live="polite" role="status">{announcement}</span>
   </div>
