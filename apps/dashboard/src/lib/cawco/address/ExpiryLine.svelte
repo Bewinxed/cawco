@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Key expiry drawn, not written (DESIGN.md, The Show Don't Tell Rule):
+   * Key expiry drawn as a line:
    * today's mark at the line's start, the day it lapses at its end, the
    * days between as its length. Switched off, the line runs on past the
    * end with no stop, and says so.

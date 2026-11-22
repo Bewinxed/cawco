@@ -2,7 +2,11 @@
  * What stands over the page while its stage starts, compiles or fails: the cover's waiting, the down page's words, and the never-drawn time limit.
  */
 import { detach } from "@cawco/core/detach";
-import { STAGE_CLONE_MS, STAGE_READY_MS } from "@cawco/core/stage";
+import {
+  STAGE_CLONE_MS,
+  STAGE_READY_MS,
+  stageErrorReason,
+} from "@cawco/core/stage";
 import { previewWords } from "@cawco/core/words/preview";
 import { sheetWords } from "@cawco/core/words/sheet";
 import { removeArtifact } from "../artifact-api";
@@ -153,11 +157,12 @@ export class StageCover {
 
   neverDrawn = $state(false);
 
-  /** What the stage last said of a page never drawn: its own message, else the first compile error's line. */
+  /** What the stage last said of a page never drawn: its own message, else the first compile error's reason. */
   readonly stageSaid = $derived(
     this.staged?.message ??
-      this.compileErrors[0]?.message.split("\n")[0] ??
-      null
+      (this.compileErrors[0]
+        ? stageErrorReason(this.compileErrors[0].message)
+        : null)
   );
 
   /** The never-drawn canvas's Remove: destructive, so asked in place under it (AskHere, The Open Page Rule). */
