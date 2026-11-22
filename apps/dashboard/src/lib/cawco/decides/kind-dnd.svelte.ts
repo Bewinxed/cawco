@@ -22,11 +22,20 @@
  * Not offered under a coarse pointer, for the board's reason: a long press
  * there scrolls, and the tile's press does the same job by tap.
  */
-import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
+import {
+  dropTargetForElements,
+  monitorForElements,
+} from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
 import { tick } from "svelte";
 import { motionOk } from "#lib/platform/motion/curves.svelte.js";
 import { integrate, Release, spring } from "#lib/platform/motion/spring.js";
-import { type DragPoint, internalDraggable } from "../internal-drag";
+import {
+  type DragEnd,
+  type DragPoint,
+  endOf,
+  internalDraggable,
+  pointOf,
+} from "../internal-drag";
 import { coarse } from "../workspace/dnd.svelte";
 
 interface KindDrag {
@@ -179,7 +188,8 @@ class Ghost {
     const distance = Math.hypot(dx, dy);
     const along = { x: dx / distance, y: dy / distance };
     const speed =
-      this.#handX.velocity() * along.x + this.#handY.velocity() * along.y;
+      this.#handX.velocity(performance.now()) * along.x +
+      this.#handY.velocity(performance.now()) * along.y;
     this.#handX.clear();
     this.#handY.clear();
     this.#at = { x: box.left, y: box.top };
@@ -267,6 +277,7 @@ export function dragKind(
     if (coarse()) {
       return;
     }
+    monitorKinds();
     return internalDraggable(node, {
       ghost: true,
       canDrag: () => params().held && hint.aloft === null,
@@ -284,26 +295,50 @@ export function dragKind(
           height: node.getBoundingClientRect().height,
         };
       },
-      onMove: (at) => ghost?.move(at),
-      onEnd: ({ targets }) => {
-        const drag = hint.aloft;
-        hint.over = null;
-        if (drag === null) {
-          return;
-        }
-        const card = targets.find((one) => asCard(one.data) !== null);
-        const to = card ? asCard(card.data) : null;
-        const take = card ? takers.get(card.element) : undefined;
-        if (to !== null && take && to !== drag.from) {
-          land(drag, to, take);
-          return;
-        }
-        setDown(tileOn(drag.from, drag.kind)).then(() => {
-          hint.aloft = null;
-        });
-      },
     });
   };
+}
+
+/**
+ * Where a drag ends, however it ends: let go over a card, over nothing,
+ * outside the window, or cancelled (Escape, the window losing the drag).
+ * Pragmatic always ends a drag with `onDrop`; a monitor hears it even when
+ * the tile it started from was drawn again mid-drag, which the tile's own
+ * `onDrop` would not (adapter/element-adapter `dispatchEventToSource` reads
+ * the source from its registry at the drop).
+ */
+function end({ targets }: DragEnd) {
+  const drag = hint.aloft;
+  hint.over = null;
+  if (drag === null) {
+    ghost?.remove();
+    ghost = null;
+    return;
+  }
+  const card = targets.find((one) => asCard(one.data) !== null);
+  const to = card ? asCard(card.data) : null;
+  const take = card ? takers.get(card.element) : undefined;
+  if (to !== null && take && to !== drag.from) {
+    land(drag, to, take);
+    return;
+  }
+  setDown(tileOn(drag.from, drag.kind)).then(() => {
+    hint.aloft = null;
+  });
+}
+
+/** The one monitor of kind drags, from the first tile that can be dragged on. */
+let monitoring = false;
+function monitorKinds() {
+  if (monitoring) {
+    return;
+  }
+  monitoring = true;
+  monitorForElements({
+    canMonitor: ({ source }) => asDrag(source.data) !== null,
+    onDrag: ({ location }) => ghost?.move(pointOf(location.current.input)),
+    onDrop: ({ location }) => end(endOf(location)),
+  });
 }
 
 /**
