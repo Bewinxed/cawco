@@ -1,5 +1,6 @@
 <script lang="ts">
   import { repoIdentity } from "@cawco/core/protocol";
+  import { untrack } from "svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import RepoPicker from "#lib/cawco/spawn/RepoPicker.svelte";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
@@ -55,6 +56,7 @@
     onretry,
     onsync,
     hrefOf,
+    opening = null,
   }: {
     record: HowItRunsRecord;
     pending: ChangeKey[];
@@ -64,6 +66,8 @@
     onretry: (key: ChangeKey) => void;
     onsync: () => void;
     hrefOf: (page: "accounts" | "connections" | "fleetDecides") => string;
+    /** The tie's setup standing open as it mounts: a states file reads it without the press. */
+    opening?: "github" | "linear" | null;
   } = $props();
 
   const HOMES: readonly TaskHome[] = ["files", "github", "linear"];
@@ -71,7 +75,7 @@
   const LEAVE_ALONE = "__leave__";
 
   /** The tie's setup standing open, for GitHub or Linear: the pick shows it from the press. */
-  let setupHome = $state<"github" | "linear" | null>(null);
+  let setupHome = $state<"github" | "linear" | null>(untrack(() => opening));
   let connectionPick = $state<string | null>(null);
   /** The Linear team picked; null for the first. */
   let teamPick = $state<string | null>(null);

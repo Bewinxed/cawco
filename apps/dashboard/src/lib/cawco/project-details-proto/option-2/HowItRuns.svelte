@@ -72,6 +72,18 @@
 
   const asOfAge = $derived(formatDistanceToNow(new Date(record.asOf)));
 
+  /**
+   * Each stage's place on the two-column grid from the wide line: three
+   * rows, the short stages one each, the tall ones two, staggered so a
+   * column's next stage starts where its first ends.
+   */
+  const PLACES: Record<StageId, string> = {
+    tasks: "@wide:col-start-1 @wide:row-start-1",
+    sessions: "@wide:col-start-2 @wide:row-span-2 @wide:row-start-1",
+    waits: "@wide:col-start-1 @wide:row-span-2 @wide:row-start-2",
+    lands: "@wide:col-start-2 @wide:row-start-3",
+  };
+
   const stageStateOf = (stage: StageId): StageState => {
     if (loading.includes(stage)) {
       return "settled";
@@ -184,9 +196,12 @@
   {/if}
 
   <!-- The stages in their order on one grid: one column, the rail running
-       down it; from the wide line two, side by side in rows (1 and 2, then
-       3 and 4), each pair's heads on one line and their bodies on one top
-       edge, the rail's connectors put away (RailStage). -->
+       down it; from the wide line two columns, read across and down (1 and
+       2 on the top edge, 3 under 1, 4 under 2), the rail's connectors put
+       away (RailStage). The short stages (Tasks enter, Work lands) take one
+       row each and the tall ones (Sessions start, What waits) two, so each
+       column fills under its first stage rather than waiting for the row
+       beside it to end (PLACES). -->
   <div
     class="grid min-w-0 grid-cols-1 items-start gap-x-space-7 @wide:grid-cols-2"
   >
@@ -194,6 +209,7 @@
     <RailStage
       announcement={announcementOf("tasks")}
       id="tasks"
+      place={PLACES.tasks}
       n={1}
       state={tasksState}
       stateWords={words.stageState[tasksState]}
@@ -221,6 +237,7 @@
     <RailStage
       announcement={announcementOf("sessions")}
       id="sessions"
+      place={PLACES.sessions}
       n={2}
       state={sessionsState}
       stateWords={words.stageState[sessionsState]}
@@ -249,6 +266,7 @@
     <RailStage
       announcement={announcementOf("waits")}
       id="waits"
+      place={PLACES.waits}
       last={!record.holdsCode}
       n={3}
       state={waitsState}
@@ -278,6 +296,7 @@
       <RailStage
         announcement={announcementOf("lands")}
         id="lands"
+        place={PLACES.lands}
         last
         n={4}
         state={landsState}

@@ -24,3 +24,8 @@ export const SyncedWithGitHub = {
     onsync: () => undefined,
   },
 };
+
+/** Pressed on GitHub Issues: its setup open, the repository picked in the New session form's picker. */
+export const SettingUpGitHub = {
+  args: { opening: "github" },
+};
