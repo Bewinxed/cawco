@@ -16,10 +16,11 @@
  *   {@link SYNC_PATH}): what only the hub can answer (an entry, which writes
  *   a pass; an artifact's doc socket and its Send, picture and pictures; a
  *   page's shape; a page's fault report), relayed as the browser sent it.
- * - **Asks** ({@link UPSTREAM_PATH}, {@link OPEN_PATH}, {@link DOCUMENT_PATH}):
- *   where a machine's preview is served now (the hub starts its listener on
- *   the machine), a port opened for an origin that has none, and a document
- *   the hub hasn't built yet.
+ * - **Asks** ({@link UPSTREAM_PATH}, {@link OPEN_PATH}, {@link DOCUMENT_PATH},
+ *   {@link REVIVE_PATH}): where a machine's preview is served now (the hub
+ *   starts its listener on the machine), a port opened for an origin that has
+ *   none, a document the hub hasn't built yet, and the workspace a preview's
+ *   machine said is gone made again.
  */
 import { timingSafeEqual } from "node:crypto";
 import { isRecord } from "@cawco/core/is-record";
@@ -43,6 +44,13 @@ export const UPSTREAM_PATH = `${PREVIEW_SERVER_PREFIX}/upstream/`;
 export const OPEN_PATH = `${PREVIEW_SERVER_PREFIX}/open/`;
 /** `POST <DOCUMENT_PATH><id>`: artifact `id`'s document built now. */
 export const DOCUMENT_PATH = `${PREVIEW_SERVER_PREFIX}/document/`;
+/**
+ * `POST <REVIVE_PATH><key>`: the workspace machine origin `key`'s preview is
+ * served from, which its machine said is gone (agent preview.ts `staged`),
+ * cut again at its last version (hub workspaces.ts `revive`); answers
+ * {@link RevivedAnswer}.
+ */
+export const REVIVE_PATH = `${PREVIEW_SERVER_PREFIX}/revive/`;
 
 /** The header every request from the preview server carries: {@link previewServerToken}. */
 export const TOKEN_HEADER = "x-cawco-preview-server";
@@ -108,6 +116,28 @@ export type ServerSays =
 export type UpstreamAnswer =
   | { ok: true; upstream: Upstream }
   | { ok: false; down: PreviewDown; error: string; stop: PreviewStop };
+
+/**
+ * {@link REVIVE_PATH}'s answer: the workspace is on its machine again (the
+ * request goes on to its listener), or why the preview can't come back,
+ * `down` the hop the proxy's page names and `why` the words under it: `gone`
+ * for a version that can't be cut again, `machine` while its machine is away.
+ */
+export type RevivedAnswer =
+  { ok: true } | { ok: false; down: "gone" | "machine"; why: string | null };
+
+const RevivedAnswerSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true) }),
+  z.object({
+    ok: z.literal(false),
+    down: z.enum(["gone", "machine"]),
+    why: z.string().nullable(),
+  }),
+]);
+
+/** Whether `said` is {@link REVIVE_PATH}'s answer. */
+export const isRevivedAnswer = (said: unknown): said is RevivedAnswer =>
+  RevivedAnswerSchema.safeParse(said).success;
 
 const TailnetServingSchema = z.object({
   ips: z.array(z.string()),

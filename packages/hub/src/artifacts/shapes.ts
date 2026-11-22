@@ -109,8 +109,7 @@ export interface ArtifactInput {
   program?: string | undefined;
   /**
    * Made for its maker's own reading (`meta.reading`): it stays in its
-   * maker's panel, never handed up, never the person's, and it holds no
-   * workspace (service.ts `owedToPerson`).
+   * maker's panel, never handed up, never the person's.
    */
   reading?: boolean | undefined;
   /**

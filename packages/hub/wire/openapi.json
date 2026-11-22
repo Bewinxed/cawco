@@ -38665,6 +38665,24 @@
                   "kind": {
                     "type": "string",
                     "enum": [
+                      "commit-gone"
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "message"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
                       "missing"
                     ]
                   },

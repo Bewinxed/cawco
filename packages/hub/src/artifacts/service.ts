@@ -189,7 +189,7 @@ import {
 import { answersReplaced } from "./overwrite";
 import { createPageStore } from "./page-store";
 import { type Question, stillAsked } from "./questions";
-import { type ServedOwed, servedOf, servedPin, sheetOf } from "./served";
+import { servedOf, servedPin, sheetOf } from "./served";
 import {
   type ArtifactInput,
   type ArtifactList,
@@ -785,8 +785,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * `try` its session put before him ({@link putBeforePerson}: not handed
    * up or held, its session neither ended nor moved on) that he hasn't sent
    * since its last revision ({@link sentOf}), the owner's rule of
-   * 2026-11-04 that a preview he hasn't sent is still his to judge. What
-   * holds a workspace is {@link owedToPerson}, not this.
+   * 2026-11-04 that a preview he hasn't sent is still his to judge. No
+   * artifact holds its workspace: one opened after its workspace went
+   * brings it back (workspaces.ts `revive`). What refuses a workspace's
+   * archive or discard on purpose (`waitingOnPerson`).
    */
   const waitsOnPerson = (row: ArtifactRow): boolean => {
     if (row.does === "try" && !sentOf(row) && putBeforePerson(row)) {
@@ -801,32 +803,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         sessionsOf(row, kept)
       ) !== null
     );
-  };
-
-  /**
-   * THE ONE RULE OF WHAT HOLDS A WORKSPACE FOR THE PERSON, read by
-   * everything that deletes a workspace or refuses to (`servedOwed`,
-   * `waitingOnPerson`; workspaces.ts `holdsOf`): an artifact a session put
-   * in a panel holds the workspace serving it for as long as its row stands
-   * there. Two things release it: the artifact is deleted (db
-   * `onArtifactsGone`), or a newer version moves its source to another
-   * workspace or folder (db artifacts.ts `resource`, promote included; the
-   * hub's `onSourceMoved`). Nothing the person does on it releases it, nor
-   * a session's turn or item ending, nor time: a pin starts a conversation
-   * on the design, it does not end their use of it. On 2026-11-22 the
-   * owner's first pin on design graph `project-details-work-path` released
-   * its workspace, and the replies to his comments stood under "This
-   * preview's workspace is gone"; the three rules before (a look, a seen
-   * mark, an act since its put) each released a workspace the person was
-   * still using. A next version held for its parent holds as the version
-   * the person will see once it is opened. Never held: the person's own
-   * draft, a design check's verifier's working material, a maker's own
-   * reading (`meta.reading`), and an option's media on a decision page,
-   * which is held through its page while the page stands (`servedOwed`).
-   */
-  const owedToPerson = (row: ArtifactRow): boolean => {
-    const facts = withMedia(row, factsOf(row));
-    return !(facts.draft || facts.verifier || facts.reading || facts.media);
   };
 
   /**
@@ -1163,10 +1139,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     docs.drop(row.id);
     db.remove(row.id);
     store.remove(row.id);
-    const served = media.flatMap((id) => db.get(id)?.machineId ?? []);
-    if (served.length > 0) {
-      deps.mediaFreed?.([...new Set(served)]);
-    }
     if (row.heldFor !== null) {
       versionMoved(row);
     }
@@ -3744,70 +3716,42 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /**
      * Of `served` (the artifacts a workspace serves: workspaces.ts
-     * `servedFrom`), each one the person is still owed ({@link
-     * owedToPerson}), a held next version as the artifact it is held for,
-     * and every decision page he is still owed that shows one of them as a
+     * `servedFrom`), each one waiting on the person ({@link
+     * waitsOnPerson}), a held next version as the artifact it is held for,
+     * and every decision page waiting on him that shows one of them as a
      * Canvas or Preview piece: what a workspace's archive or discard on
-     * purpose refuses on.
+     * purpose refuses on. Nothing here holds a workspace.
      */
     waitingOnPerson: (served: readonly ArtifactRow[]): ArtifactRow[] => {
       if (served.length === 0) {
         return [];
       }
       const pages = pagesShowing();
-      const owed = new Map<string, ArtifactRow>();
+      const onPerson = new Map<string, ArtifactRow>();
       for (const one of served) {
         const id = one.heldFor ?? one.id;
-        if (owedToPerson(one)) {
-          owed.set(id, db.get(id) ?? one);
+        const shown = db.get(id) ?? one;
+        if (waitsOnPerson(shown)) {
+          onPerson.set(id, shown);
         }
         for (const page of pages.get(id) ?? []) {
-          if (owedToPerson(page)) {
-            owed.set(page.id, page);
+          if (waitsOnPerson(page)) {
+            onPerson.set(page.id, page);
           }
         }
       }
-      return [...owed.values()];
+      return [...onPerson.values()];
     },
 
     /**
-     * Of `served` (workspaces.ts `servedFrom`), each one its workspace's
-     * retirement still waits on, with why (workspaces.ts `holdsOf`): the
-     * person is still owed it, or a decision page showing it ({@link
-     * owedToPerson}); or it is a folder preview, which no stage serves,
-     * that a view of the person's had on screen less than {@link
-     * STAGE_IDLE_MS} ago, as a stage stays up that long after its last use.
-     * Nothing else of a row holds: whatever else it shows is held while its
-     * stage runs (agent stage.ts sleeps one unused for half an hour), and
-     * the artifact stays in its list, saying its workspace was archived once
-     * it was (the owner's rule, 2026-11-15: "once nothing in it is unique").
-     */
-    servedOwed: (served: readonly ArtifactRow[]): ServedOwed[] => {
-      if (served.length === 0) {
-        return [];
-      }
-      const pages = pagesShowing();
-      return served.flatMap((one): ServedOwed[] => {
-        const showing = pages.get(one.heldFor ?? one.id) ?? [];
-        if (owedToPerson(one) || showing.some(owedToPerson)) {
-          return [{ row: one, why: "owed" }];
-        }
-        const looked = factsOf(one).lookedAt;
-        return "dir" in one.source &&
-          looked !== null &&
-          Date.now() - Date.parse(looked) < STAGE_IDLE_MS
-          ? [{ row: one, why: "looked" }]
-          : [];
-      });
-    },
-
-    /**
-     * Keeps up each stage on a machine in `online` that serves the person
-     * an artifact waiting on him, itself or by a decision page showing it
-     * (preview.ts `waitingStages`): a preview's server or a sheet's stage,
-     * a design graph's among them, started or woken as a page going out
-     * warms it, which also restarts its idle time (agent stage.ts `used`),
-     * so it never sleeps under something he has yet to answer. On
+     * Keeps up each live stage on a machine in `online` that serves the
+     * person an artifact waiting on him, itself or by a decision page
+     * showing it (preview.ts `waitingStages`): a preview's server or a
+     * sheet's stage, a design graph's among them, its idle time restarted
+     * (agent stage.ts `used`), so it never sleeps for want of use under
+     * something he has yet to answer while its maker is awake. One asleep
+     * (its machine's 8 live previews, agent stage.ts `roomFor`) is woken by
+     * his next open, never here. On
      * 2026-11-08 the frames of plan page fdbe3bf8 were asleep when he
      * opened it; on 2026-11-21 design graph 4a3c2d92 was dark, its sheet
      * no server. Each stage is asked once per {@link KEEP_UP_MS}, a third of what puts it to sleep:
@@ -4877,6 +4821,82 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         wroteNow(instance, row.id);
       }
       return answer;
+    },
+
+    /**
+     * Artifact `id`'s source moved to workspace `to`, the later workspace its
+     * own workspace's work went on in and landed, as it is opened after its
+     * own workspace went with no head to cut it again at (workspaces.ts
+     * `revive`, `moved`). A design graph's sheet is opened on `to`'s stage
+     * at the same states files, its port and toolchain root as that stage
+     * names them; a served preview's server runs in `to` from now on, its
+     * pin cut there by the open (agent stage.ts `sourceTree`). Written as
+     * every move of a row's source is: a revision, then the source (db
+     * artifacts.ts `resource`), so every panel and tab showing it loads it
+     * again (server.ts `onSourceMoved`). Refused, the row as it was, when
+     * `to`'s stage can't open it.
+     */
+    moveServed: async (id: string, to: { id: string; machineId: string }) => {
+      const row = db.get(id);
+      if (!(row && "port" in row.source)) {
+        return problem(404, {
+          code: "artifact-not-served",
+          detail: `No design or served preview ${id} to move.`,
+        });
+      }
+      const sheet = sheetOf(row);
+      const [first] = sheet?.files ?? [];
+      let moved: {
+        machineId: string;
+        source: PreviewSource;
+        stage?: StageState;
+      };
+      if (sheet && first !== undefined) {
+        const staged = await deps.stage(
+          { workspace: to.id },
+          first,
+          sheet.files
+        );
+        if (staged instanceof ElysiaStatus) {
+          return staged;
+        }
+        moved = {
+          machineId: staged.machineId,
+          source: {
+            ...row.source,
+            port: staged.opened.port,
+            workspace: to.id,
+            stage: { dir: staged.opened.dir, file: staged.opened.file },
+          },
+          stage: staged.opened.state,
+        };
+      } else if (servedOf(row)) {
+        const { pin: _pin, ...unpinned } = row.source;
+        moved = {
+          machineId: to.machineId,
+          source: { ...unpinned, workspace: to.id },
+        };
+      } else {
+        return problem(409, {
+          code: "artifact-not-served",
+          detail: `${row.name} is no design graph or served preview, so it is not served from a workspace.`,
+        });
+      }
+      const next = stillThere(
+        db.update(row.id, {
+          revision: row.revision + 1,
+          updatedAt: new Date(),
+        }),
+        row.id
+      );
+      db.resource(row.id, { machineId: moved.machineId, source: moved.source });
+      if (moved.stage) {
+        writeStage(next, moved.stage);
+      }
+      console.log(
+        `[artifacts] ${row.name} (${row.id.slice(0, 8)}): moved to workspace ${to.id.slice(0, 8)}, where its workspace's work went on and landed`
+      );
+      return next;
     },
 
     /**

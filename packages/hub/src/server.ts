@@ -455,6 +455,7 @@ import {
   designOfferRoutes,
   designShaped,
 } from "./design-offers";
+import { createDesignRevive } from "./design-revive";
 import { createDesignSystem, designSection } from "./design-system";
 import { createDesignVerify } from "./design-verify";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
@@ -527,6 +528,7 @@ import {
   awayProblem,
   type CallAnswer,
   type ControlResult,
+  CUT_COMMIT_GONE,
   failedProblem,
   type MachineCall,
   MachineProblem,
@@ -5060,12 +5062,6 @@ export const createServer = (
         publishPreview(instanceId, "open", now);
       }
     },
-    // A page gone owes its media no longer: their workspaces settle now.
-    mediaFreed: (machineIds) => {
-      for (const machineId of machineIds) {
-        workItems.settleShown(machineId);
-      }
-    },
     browse: (instance, row) => browseAt(instance, row),
     picture: (instance, row, drawn) => pictureOf(instance, row, drawn),
     keepPicture: (instance, path, png) => keepPicture(instance, path, png),
@@ -5150,6 +5146,8 @@ export const createServer = (
       const staged = await onStage(at, STAGE_WARM, (ref) => [ref, warm]);
       return staged instanceof ElysiaStatus ? staged : undefined;
     },
+    stageLive: (key, port) =>
+      workspaceStages.get(key)?.ports.get(port)?.status === "live",
     stageComponents: async (at, ask) => {
       const staged = await onStage(at, STAGE_COMPONENTS, (ref) => [ref, ask]);
       return staged instanceof ElysiaStatus ? staged : staged.result;
@@ -5743,19 +5741,17 @@ export const createServer = (
     shownWaitMs: SHOWN_WAIT_MS,
     sourceSeen: (id, gone) => artifacts.sourceSeen(id, gone),
   });
-  // Every way an artifact row goes ends its own origin, and the workspace
-  // that served it is held by it no longer: its machine's settle soon.
+  /** A design opened after its workspace went, brought back (design-revive.ts). */
+  const reviveServed = createDesignRevive({
+    moveServed: (id, to) => artifacts.moveServed(id, to),
+    revive: (id) => workItems.revive(id),
+  });
+  // Every way an artifact row goes ends its own origin.
   db.onArtifactsGone((gone) => {
     for (const { origin } of gone) {
       previewService.end(origin);
     }
     artifacts.artifactsGone(gone);
-    const machines = new Set(gone.flatMap((one) => one.machineId ?? []));
-    soon(() => {
-      for (const machineId of machines) {
-        workItems.settleShown(machineId);
-      }
-    });
   });
   /**
    * Session `instanceId`'s panel loads what it shows again: its target at a
@@ -5790,11 +5786,6 @@ export const createServer = (
     }
     soon(() => artifactSessions.moved({ kind: "shown" }));
     detach(previewService.moved(move), "preview source move");
-    // A newer version served from elsewhere holds the old one's workspace no longer.
-    const { machineId } = move.before;
-    if (machineId) {
-      soon(() => workItems.settleShown(machineId));
-    }
   });
 
   /**
@@ -8240,10 +8231,15 @@ export const createServer = (
         );
       case "answered":
         if (!answer.value.ok) {
+          // A cut again's commit gone from origin keeps its kind as its code
+          // (core `CutCommitGone`): a design served from it can't come back
+          // (workspaces.ts `revive`).
           throw new MachineProblem(
             failedProblem(
               answer.value,
-              "machine-call-failed",
+              answer.value.refusal?.kind === "commit-gone"
+                ? CUT_COMMIT_GONE
+                : "machine-call-failed",
               `${method} failed on ${machineName(machineId)}`
             )
           );
@@ -8338,9 +8334,6 @@ export const createServer = (
       // or discard (workspaces.ts `waitingFrom`); the artifacts service is
       // made above.
       waitingOnPerson: (served) => artifacts.waitingOnPerson(served),
-      // What it serves that its retirement still waits on (workspaces.ts
-      // `owedFrom`); released as the person answers the page that showed it.
-      servedOwed: (served) => artifacts.servedOwed(served),
       makingFrom: (id) => artifacts.makingFrom(id),
       // A routine's or design check's run, or a parent gone or over for
       // good, never decides the work its clone holds (workspaces.ts
@@ -13635,6 +13628,14 @@ export const createServer = (
             return row && servedByMachine(row)
               ? previewService.reach(row)
               : undefined;
+          },
+          // The workspace a machine said is gone, as the person opens what
+          // it served: cut again at its last version (design-revive.ts).
+          revive: (key) => {
+            const origin = originOfKey(key);
+            const row =
+              origin === null ? undefined : db.artifacts.byOrigin(origin);
+            return row && servedByMachine(row) ? reviveServed(row) : undefined;
           },
           unreachable: (key, upstream) =>
             previewService.unreachable(key, upstream),

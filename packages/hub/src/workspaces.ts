@@ -11,7 +11,11 @@ import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { knowsNotControl } from "@cawco/core/session/controls";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
-import type { StageCloneFrame } from "@cawco/core/stage";
+import {
+  STAGE_CLONE_MS,
+  STAGE_READY_MS,
+  type StageCloneFrame,
+} from "@cawco/core/stage";
 import { WorkspaceCheckoutSchema } from "@cawco/core/stored-shapes";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { workWords } from "@cawco/core/words/work";
@@ -43,7 +47,6 @@ import {
 } from "@cawco/core/workspace/controls";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
-import type { ServedOwed } from "./artifacts/served";
 import type { DbShape } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
 import {
@@ -55,6 +58,7 @@ import {
 import { soon } from "./lifetime";
 import type { MachineCall } from "./machine-answers";
 import {
+  CUT_COMMIT_GONE,
   MALFORMED_REPLY,
   MachineProblem,
   thrownAgain,
@@ -329,6 +333,31 @@ export type Settled =
  * What workspaces read of the hub that work items read nothing of: the hub
  * hands it to createWorkItems as one `forWorkspaces`, passed on whole.
  */
+/**
+ * Why a design whose workspace went can't come back as it is opened
+ * (workspaces.ts `revive`): `origin` no longer holds the commit it retired
+ * on (`commit`, the branch that held it); it was discarded; it retired with
+ * no head the hub can place (`unrecorded`); its machine is away
+ * (`offline`, which passes once the machine answers); or its cut again
+ * failed for another reason, `why` its machine's words.
+ */
+export type GoneWhy =
+  | { kind: "commit"; branch: string }
+  | { kind: "discarded" }
+  | { kind: "unrecorded" }
+  | { kind: "offline" }
+  | { kind: "failed"; why: string };
+
+/**
+ * What opening a design whose workspace went did (workspaces.ts `revive`):
+ * the workspace it opens in is on its machine now (cut again, or there all
+ * along), `moved` when that is a later workspace its work went on in; or
+ * why it can't come back.
+ */
+export type Revived =
+  | { kind: "here"; workspace: WorkspaceRow; moved?: true }
+  | { kind: "gone"; why: GoneWhy };
+
 export interface WorkspacesHub {
   /**
    * The Claude account session `instanceId`'s next launch on `machineId`
@@ -355,13 +384,6 @@ export interface WorkspacesHub {
    */
   readonly sendWakes: (instanceId: string) => boolean;
   /**
-   * Of the artifacts a workspace serves, those its retirement still waits
-   * on, with why (artifacts service `servedOwed`): it, or a decision page
-   * showing it, stands in a panel until it is deleted or its source moves, or
-   * it is a folder preview looked at within the half hour ({@link owedFrom}).
-   */
-  readonly servedOwed: (served: readonly ArtifactRow[]) => ServedOwed[];
-  /**
    * Why the stages of `key` on machine `machineId` hold the clone they run
    * in, in words (server.ts `stageHold`): `key` a workspace's id for its
    * preview servers and sheets, a place's for its stage clone. One starts,
@@ -380,10 +402,10 @@ export interface WorkspacesHub {
    */
   readonly starterGone: (parentInstanceId: string) => boolean;
   /**
-   * Of the artifacts a workspace serves, those the person is still owed,
-   * with the decision pages he is still owed that show one of them
-   * (artifacts service `waitingOnPerson`): its archive or discard refuses
-   * while any is ({@link servedFrom}).
+   * Of the artifacts a workspace serves, those waiting on the person (what
+   * Needs you lists), with the decision pages waiting on him that show one
+   * of them (artifacts service `waitingOnPerson`): its archive or discard on
+   * purpose refuses while any is ({@link servedFrom}).
    */
   readonly waitingOnPerson?: (served: readonly ArtifactRow[]) => ArtifactRow[];
   /** A workspace was settled on its machine, archived or held: the dashboards draw it so. */
@@ -453,7 +475,6 @@ export const createWorkspaces = ({
   notPaused,
   report,
   sendWakes,
-  servedOwed,
   stageRuns,
   starterGone,
   waitingOnPerson,
@@ -884,9 +905,10 @@ export const createWorkspaces = ({
    * THE ONE READ OF WHAT A WORKSPACE SERVES: the artifacts, any session's,
    * whose row names it (db artifacts.ts `previewing`: a port preview or a
    * sheet naming it, a folder preview inside its clone or scratch dir), a
-   * held next version among them. Its retirement waits on those that hold
-   * it ({@link owedFrom}); its archive or discard, on purpose, refuses
-   * while any of them, or a decision page showing one, waits on the person
+   * held next version among them. None of them holds it: once its work is
+   * over and no stage runs in it, it goes, and opening one of them brings it
+   * back ({@link revive}). Its archive or discard, on purpose, refuses while
+   * any of them, or a decision page showing one, waits on the person
    * ({@link waitingFrom}). A Linux view's path is the person's folder, so a
    * folder preview there is not the workspace's; a port preview naming it
    * is.
@@ -907,28 +929,27 @@ export const createWorkspaces = ({
     return [...rows.values()];
   };
   /**
-   * What a workspace serves that its retirement still waits on, with why
-   * (artifacts service `servedOwed`). On 2026-11-15 a workspace was held by
-   * every artifact row naming it, and a row lives until someone deletes it:
-   * 106 finished workspaces on one machine were kept "for what they serve",
-   * 92 of them with no folder left.
+   * How long a workspace cut again for a design being opened ({@link
+   * revive}) is held for that open's stage to start and be heard: a place's
+   * clone and install, then its start (core `STAGE_CLONE_MS`,
+   * `STAGE_READY_MS`), what the panel's cover waits for at most. Once its
+   * machine says the stage runs, the stage holds it (`stageRuns`).
    */
-  const owedFrom = (workspace: WorkspaceRow): ServedOwed[] =>
-    servedOwed(servedFrom(workspace));
-  /** Why an artifact owed ({@link owedFrom}) holds its workspace, in words. */
-  const OWED_WORDS: Record<ServedOwed["why"], string> = {
-    looked: "was on the person's screen less than half an hour ago",
-    owed: "stands in a panel: it holds its workspace until it is deleted or a newer version is served from elsewhere",
-  };
+  const REVIVE_START_MS = STAGE_CLONE_MS + STAGE_READY_MS;
+  /** Each workspace cut again for an open, by when ({@link revive}): held {@link REVIVE_START_MS} for the open's stage. */
+  const revivedAt = new Map<string, number>();
   /**
    * THE ONE READ OF WHAT A WORKSPACE SERVES THAT HOLDS IT, in words, or
    * nothing: a stage running in it (`stageRuns`: a preview's server or a
-   * sheet in use, which sleeps half an hour after its last use), an
-   * artifact it serves standing in a panel ({@link owedFrom}: until it is
-   * deleted or its source moves), or a preview being made from it. A
-   * draft, a reading, a verifier's material or a page's media alone holds
-   * nothing, and once its workspace goes it stays in its lists, saying so.
-   * The hub keeps awake only what waits on the person (artifacts service
+   * sheet in use, which sleeps half an hour after its last use), an open
+   * that just cut it again starting its stage ({@link revivedAt}), or a
+   * preview being made from it. No artifact holds it (the owner's pick on
+   * 2026-11-22, "Comes back when you open it"): four rules that guessed
+   * when the person was done with a design (a look, a seen mark, an act
+   * since its put, its row standing) each closed one he was using, or kept
+   * 0.7 GB per design on a disk 96% full. Opening one whose workspace went
+   * cuts it again at its last version ({@link revive}). The hub keeps awake
+   * only what waits on the person, its maker awake (artifacts service
    * `keepWaitingUp`).
    */
   const servedHold = (workspace: WorkspaceRow): string | undefined => {
@@ -936,9 +957,12 @@ export const createWorkspaces = ({
     if (stage) {
       return stage;
     }
-    const [owed] = owedFrom(workspace);
-    if (owed) {
-      return `the artifact ${owed.row.name} ${OWED_WORDS[owed.why]}`;
+    const revived = revivedAt.get(workspace.id);
+    if (revived !== undefined) {
+      if (Date.now() - revived < REVIVE_START_MS) {
+        return "it was cut again for a design being opened, and that design's stage is starting";
+      }
+      revivedAt.delete(workspace.id);
     }
     // A create's server started there before its row names it: on
     // 2026-11-04 a hand-up's workspace retired between the two, its server
@@ -2321,6 +2345,117 @@ export const createWorkspaces = ({
       }
     });
   /**
+   * Why an archived workspace that is not cut again ({@link recuttable})
+   * can't come back for what it served, read as {@link archivedWords}
+   * reads it: discarded (a discard keeps no head, and its carry is let go
+   * of), or retired with no head the hub can place (one before heads were
+   * kept, or one kept unread).
+   */
+  const goneWhyOf = (workspace: WorkspaceRow): GoneWhy =>
+    workspace.carry ? { kind: "discarded" } : { kind: "unrecorded" };
+  /**
+   * The workspace what `workspace` served is opened in now: itself, or, when
+   * it retired with no head because its work went on in a workspace cut
+   * from it that landed it (its `cutFromLanded`), that one, followed on
+   * while each is the same ({@link archivedWords}). None when the chain
+   * ends nowhere (a loop, or a row gone).
+   */
+  const openedIn = (workspace: WorkspaceRow): WorkspaceRow => {
+    const seen = new Set<string>([workspace.id]);
+    let at = workspace;
+    while (at.state === "archived" && !recuttable(at)) {
+      const taker = db
+        .workspacesCutFrom(at.id)
+        .find((cut) => cut.cutFromLanded === true);
+      if (!taker || seen.has(taker.id)) {
+        return at;
+      }
+      seen.add(taker.id);
+      at = taker;
+    }
+    return at;
+  };
+  /**
+   * Why cutting `workspace` again failed, for the person: its machine
+   * away (it comes back once the machine answers), `origin` no longer
+   * holding its commit (core `CutCommitGone`, server.ts `callMachine`), or
+   * any other refusal in its machine's words.
+   */
+  const cutFailed = (workspace: WorkspaceRow, error: unknown): GoneWhy => {
+    if (error instanceof MachineProblem) {
+      const { problem: said } = error;
+      if (said.status === 503) {
+        return { kind: "offline" };
+      }
+      const head = headOf(workspace);
+      if (said.response.code === CUT_COMMIT_GONE && head) {
+        return { kind: "commit", branch: head.branch };
+      }
+      return { kind: "failed", why: said.response.detail };
+    }
+    return {
+      kind: "failed",
+      why: error instanceof Error ? error.message : String(error),
+    };
+  };
+  /**
+   * THE ONE WAY A DESIGN WHOSE WORKSPACE WENT COMES BACK: the person opened
+   * something workspace `id` serves (a design graph's stage, a served
+   * preview's server) and its machine answered that the workspace is not
+   * there (agent preview.ts `staged`, `gone`). In the workspace's turn, after
+   * any settle or cut queued before it, it is cut again at the version the
+   * hub recorded as it retired ({@link recut}: same id, same path, its
+   * carry's commits and uncommitted changes), the cut a handoff or follow-up
+   * to a finished delegate makes; then held {@link REVIVE_START_MS} while
+   * the open starts its stage, which holds it from then until it sleeps
+   * (`stageRuns`), and it retires again by the same rule as any workspace.
+   * A workspace whose work landed through a later one cut from it, with no
+   * head of its own, is opened in that later one ({@link openedIn}, `moved`:
+   * its caller moves the artifact's source there). The owner's pick on
+   * 2026-11-22, "Comes back when you open it". Answers `here` when the
+   * workspace is on its machine (active, held, or cut again now), or why it
+   * can't come back ({@link GoneWhy}).
+   */
+  const revive = async (id: string): Promise<Revived> => {
+    const [named] = db.workspacesNamed(id);
+    if (!named) {
+      return { kind: "gone", why: { kind: "unrecorded" } };
+    }
+    const target = openedIn(named);
+    const moved = target.id === named.id ? {} : { moved: true as const };
+    return await inWorkspaceTurn(target.id, async (): Promise<Revived> => {
+      const [now] = db.workspacesNamed(target.id);
+      if (!now) {
+        return { kind: "gone", why: { kind: "unrecorded" } };
+      }
+      if (now.state !== "archived") {
+        return { kind: "here", workspace: now, ...moved };
+      }
+      if (!recuttable(now)) {
+        return { kind: "gone", why: goneWhyOf(now) };
+      }
+      goingOn.add(now.id);
+      try {
+        const cut = await recut(now);
+        if (cut instanceof ElysiaStatus) {
+          return {
+            kind: "gone",
+            why: { kind: "failed", why: cut.response.detail },
+          };
+        }
+        revivedAt.set(cut.id, Date.now());
+        console.log(
+          `[workspaces] ${cut.id}: cut again for a design being opened from it`
+        );
+        return { kind: "here", workspace: cut, ...moved };
+      } catch (error) {
+        return { kind: "gone", why: cutFailed(now, error) };
+      } finally {
+        goingOn.delete(now.id);
+      }
+    });
+  };
+  /**
    * Whether a send from `origin` to session `instanceId` reopens a finished
    * item whose workspace retired ({@link recuttable}), or is in a turn that
    * may be retiring it (its settle, run as its session fell asleep): from
@@ -2837,7 +2972,7 @@ export const createWorkspaces = ({
     holdsProjectOn,
     heldWork,
     unlandedOf,
-    owedFrom,
+    revive,
     settleOn,
     discardUnfiled,
     fileStage,

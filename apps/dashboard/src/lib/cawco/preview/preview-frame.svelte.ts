@@ -150,23 +150,23 @@ export class PreviewFrame {
    */
   down = $state<PreviewDown | null>(null);
 
-  /** The machine's own words for a `reach` failure, from the proxy's page. */
+  /** The machine's own words for a `reach` failure, or why a `gone` version can't come back, from the proxy's page. */
   downWhy = $state<string | null>(null);
 
   /**
    * The frame has settled: its page is up, or the proxy's down page said
    * why it is not (`down`), a gone workspace's among them. What is the
    * hub's, not the page's (the pins and their threads, read from the pane's
-   * own doc), waits on this and no more: under "This preview's workspace is
-   * gone" the person still reads and answers every reply in their threads.
+   * own doc), waits on this and no more: under a version that can't come
+   * back the person still reads and answers every reply in their threads.
    */
   readonly settled = $derived(this.connected || this.down !== null);
 
   /*
    * A down page comes back by itself: while the frame stands on the proxy's
    * down page (any hop but `closed`, which only a show reopens; `gone`,
-   * whose workspace no longer is: only its session making it again brings
-   * it back, as a new open; and `error` and `crashed`, whose server answers:
+   * whose version can't be cut again: only its session making it again
+   * brings it back, as a new open; and `error` and `crashed`, whose server answers:
    * its page is what is broken, and Try again loads it once its session fixed it) in a pane
    * someone has on screen, the origin's ping is probed on the unreached
    * state's backoff (`PROBES`), and once

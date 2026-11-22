@@ -84,12 +84,15 @@ import { type HubLink, hubOrigin } from "./link";
 import type { PreviewStore } from "./store";
 import {
   DOCUMENT_PATH,
+  isRevivedAnswer,
   isUpstreamAnswer,
   LOCK_HEADER,
   OPEN_PATH,
   OpenedSchema,
   ORIGIN_PATH,
   REACHED_HEADER,
+  REVIVE_PATH,
+  type RevivedAnswer,
   SYNC_PATH,
   TOKEN_HEADER,
   UPSTREAM_PATH,
@@ -110,6 +113,14 @@ const STOP_STATUS: Record<PreviewStop["kind"], number> = {
   closed: 404,
   failed: 502,
 };
+
+/** The status a machine's listener answers a preview whose workspace is gone with (agent preview.ts `staged`). */
+const GONE_STATUS = 410;
+
+/** Whether `request` is a page's own load (`Sec-Fetch-Mode: navigate`): the person opening it, never a request of a page already open. */
+const opens = (request: Request): boolean =>
+  request.method === "GET" &&
+  request.headers.get("sec-fetch-mode") === "navigate";
 
 /** How long the machine's listener has to answer the ping's relay. Our call: under the pane's own 10 s for the whole probe. */
 const PING_RELAY_MS = 5000;
@@ -347,6 +358,42 @@ const downstreamHeaders = (response: Response, direct: boolean): Headers => {
 export function createServe(env: ServeEnv, upstreams: Upstreams) {
   /** The hub's origin on loopback, for a relayed request. */
   const hubAt = (path: string): string => `${hubOrigin()}${path}`;
+
+  /**
+   * Each machine origin whose workspace the hub is cutting again for an
+   * open ({@link revive}), since when, and the hub's answer on its way: one
+   * ask per origin at a time, every open of it waiting on that one, and the
+   * origin's ping saying its page is held meanwhile (core
+   * `PREVIEW_HELD_HEADER`), so a decision page's Preview waits on it as on
+   * a server still compiling.
+   */
+  const reviving = new Map<
+    string,
+    { answer: Promise<RevivedAnswer>; since: number }
+  >();
+  /** The workspace machine origin `key` is served from, which its machine said is gone, cut again by the hub (wire.ts `REVIVE_PATH`), or why it can't be. */
+  const revive = (key: string): Promise<RevivedAnswer> => {
+    const under = reviving.get(key);
+    if (under) {
+      return under.answer;
+    }
+    const answer = env.link
+      .ask(`${REVIVE_PATH}${encodeURIComponent(key)}`, { method: "POST" })
+      .then(async (said): Promise<RevivedAnswer> => {
+        const read: unknown = await said.json();
+        return isRevivedAnswer(read)
+          ? read
+          : { ok: false, down: "gone", why: null };
+      })
+      .catch((error: unknown): RevivedAnswer => ({
+        ok: false,
+        down: "machine",
+        why: `the hub didn't answer: ${causeOf(error)}`,
+      }))
+      .finally(() => reviving.delete(key));
+    reviving.set(key, { answer, since: Date.now() });
+    return answer;
+  };
 
   /**
    * A hub-owned path on origin `key` relayed to the hub as the browser sent
@@ -741,7 +788,68 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
       );
     }
     const answer = await relay(request, server, key, reached.upstream, direct);
-    return answer && withKeyedOverlay(env, answer);
+    const served =
+      answer && opens(request)
+        ? await afterGone(request, server, key, answer, direct)
+        : answer;
+    return served && withKeyedOverlay(env, served);
+  }
+
+  /**
+   * The person's open of a machine preview (its page's own load, never a
+   * request of a page already open, which never brings a workspace back by
+   * itself) answered `gone` by its machine (agent preview.ts `staged`: the
+   * workspace that serves it is not there): the workspace cut again by the
+   * hub ({@link revive}), the open held meanwhile as a sleeping server's is
+   * while it wakes, and relayed again once it is back, to wherever the row
+   * serves it now (a design moved to the later workspace its work went on
+   * in). When it can't come back, the proxy's page names why (core
+   * preview.ts `goneWhy`). Any other answer as it came.
+   */
+  async function afterGone(
+    request: Request,
+    server: Server<ListenerSocket>,
+    key: string,
+    answer: Response,
+    direct: boolean
+  ): Promise<Response | undefined> {
+    if (answer.status !== GONE_STATUS) {
+      return answer;
+    }
+    const text = await answer.text();
+    const kept = new Response(text, {
+      status: answer.status,
+      headers: answer.headers,
+    });
+    if (downOf(text)?.down !== "gone") {
+      return kept;
+    }
+    const back = await revive(key);
+    if (!back.ok) {
+      previewFailed(
+        HOP,
+        key,
+        `its workspace can't come back: ${back.why ?? back.down}`
+      );
+      return downResponse(
+        back.down,
+        back.down === "gone" ? GONE_STATUS : STOP_STATUS.away,
+        back.why ?? undefined
+      );
+    }
+    const row = env.store.rowAt(key);
+    if (!(row && servedByMachine(row))) {
+      return kept;
+    }
+    const reached = await upstreams.reach(key, row);
+    if (!reached.ok) {
+      return downResponse(
+        reached.down,
+        STOP_STATUS[reached.stop.kind],
+        reached.down === "reach" ? reached.error : undefined
+      );
+    }
+    return relay(request, server, key, reached.upstream, direct);
   }
 
   /** A canvas by its id on origin `key` (`/__cawco/canvas/<id>/`, `?embed=1` in a decision page); null for any other path. */
@@ -871,7 +979,9 @@ export function createServe(env: ServeEnv, upstreams: Upstreams) {
     const url = new URL(request.url);
     const { pathname } = url;
     if (pathname === PREVIEW_PING_PATH) {
-      return pingOrigin(key);
+      // Its workspace cut again for an open: the page is held meanwhile.
+      const under = reviving.get(key);
+      return under ? ping(String(Date.now() - under.since)) : pingOrigin(key);
     }
     if (pathname === OVERLAY_PATH) {
       return overlayResponse(

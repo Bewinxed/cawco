@@ -118,6 +118,13 @@ type AnswerFrame = Pick<
   "ok" | "result" | "error" | "refusal" | "unanswered" | "failed"
 >;
 
+/**
+ * The code of a machine's refusal to cut a workspace again because `origin`
+ * no longer holds the commit it retired on (core frames.ts `ControlRefusal`
+ * `commit-gone`, server.ts `callMachine`).
+ */
+export const CUT_COMMIT_GONE = "workspace-commit-gone";
+
 /** The code a machine's answer that does not parse against its reply's schema fails at ({@link answerOf}). */
 export const MALFORMED_REPLY = "machine-reply-malformed";
 

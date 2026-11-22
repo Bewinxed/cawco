@@ -6451,30 +6451,15 @@ export const createWorkItems = ({
       return read && { ...read, live: LIVE.has(item.state) };
     },
 
-    /**
-     * The artifacts workspace `id` serves that still hold its retirement
-     * (workspaces.ts `owedFrom`), each once by its artifact's own id and title (a
-     * held next version by the artifact it is held for): what
-     * `stop_delegate` names. Empty for a workspace the hub does not hold.
-     */
-    serving: (id: string): { id: string; title: string }[] => {
-      const [workspace] = db.workspacesNamed(id);
-      if (!workspace) {
-        return [];
-      }
-      const titled = new Map<string, string>();
-      for (const { row } of workspaces.owedFrom(workspace)) {
-        titled.set(row.heldFor ?? row.id, row.title);
-      }
-      return [...titled].map(([one, title]) => ({ id: one, title }));
-    },
-
     /** Every held workspace, with what it holds and where ({@link HeldWork}), newest first. */
     heldWorkspaces: (): HeldWork[] =>
       db.heldWorkspaces().filter(workspaces.isHeld).map(workspaces.heldWork),
 
     /** The sweep's look at the workspaces on a machine (workspaces.ts `settleOn`). */
     settleOn: workspaces.settleOn,
+
+    /** A workspace a design is opened from cut again when it went, or why it can't come back (workspaces.ts `revive`). */
+    revive: workspaces.revive,
 
     /**
      * The workspace of session `instanceId`'s item settled soon
@@ -6527,17 +6512,6 @@ export const createWorkItems = ({
         member.place === key &&
         member.row.state === "active"
       ) {
-        workspaces.settleSoon(workspace.id);
-      }
-    },
-
-    /**
-     * Each active workspace on `machineId` settled soon (workspaces.ts
-     * `settleSoon`): an artifact served there went, moved its source off,
-     * or a page owing it went, and with it a hold.
-     */
-    settleShown(machineId: string): void {
-      for (const workspace of db.activeWorkspacesOn(machineId)) {
         workspaces.settleSoon(workspace.id);
       }
     },

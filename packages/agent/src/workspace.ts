@@ -87,6 +87,7 @@ import type {
 import {
   type CONTROL_WORKSPACE_AT,
   type CONTROL_WORKSPACE_CREATE,
+  CutCommitGone,
   holdsNothing,
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
@@ -1275,11 +1276,15 @@ const applyCarried = async (
   }
 };
 
+/** git's words for a fetch of a branch `origin` doesn't have (git 2.x `fetch-pack`: "couldn't find remote ref refs/heads/…"). */
+const NO_REMOTE_REF = /couldn't find remote ref/iu;
+
 /**
  * A cut again's commit in the new clone at `path` ({@link WorkspaceCut}):
  * `origin`'s branch that held it fetched, unless it is `base`, which the
- * clone has; refused when that branch no longer holds it, since a cut
- * anywhere else would leave the workspace's commits behind.
+ * clone has; refused (core `CutCommitGone`) when that branch is gone from
+ * `origin` or no longer holds it, since a cut anywhere else would leave the
+ * workspace's commits behind.
  */
 const fetchCut = async (
   path: string,
@@ -1288,6 +1293,11 @@ const fetchCut = async (
   cut: WorkspaceCut,
   git: Git
 ): Promise<void> => {
+  const gone = (cause: Error, why: string) =>
+    new CutCommitGone(
+      `workspace ${id} is not cut again: ${cut.commit.slice(0, 9)}, the commit its clone was on when it retired, is not on origin (${why}), and a cut anywhere else would leave its commits behind`,
+      { cause }
+    );
   if (cut.branch !== base) {
     await git(
       path,
@@ -1296,7 +1306,11 @@ const fetchCut = async (
       "--no-tags",
       "origin",
       `+refs/heads/${cut.branch}:refs/remotes/origin/${cut.branch}`
-    );
+    ).catch((error: Error) => {
+      throw NO_REMOTE_REF.test(error.message)
+        ? gone(error, `its branch ${cut.branch} is gone from origin`)
+        : error;
+    });
   }
   await git(
     path,
@@ -1305,10 +1319,7 @@ const fetchCut = async (
     cut.commit,
     `origin/${cut.branch}`
   ).catch((error: Error) => {
-    throw new Error(
-      `workspace ${id} is not cut again: origin's ${cut.branch} no longer holds ${cut.commit.slice(0, 9)}, the commit its clone was on when it retired, and a cut anywhere else would leave its commits behind`,
-      { cause: error }
-    );
+    throw gone(error, `origin's ${cut.branch} doesn't hold it`);
   });
 };
 

@@ -600,11 +600,14 @@ export interface HarnessFailed {
  * where it refused it: `not-running`, the agent runs no process for the
  * session (a session asleep, ended, or not this machine's); `missing`, the
  * path an `fs` request names is not there (its error's `ENOENT`);
+ * `commit-gone`, a workspace's cut again found `origin` no longer holds the
+ * commit it retired on (core workspace/controls.ts `CutCommitGone`);
  * `unknown`, any other refusal, its message as it was said.
  */
 export type ControlRefusal =
   | { kind: "not-running"; message: string }
   | { kind: "missing"; message: string }
+  | { kind: "commit-gone"; message: string }
   | {
       kind: "unknown";
       message: string;

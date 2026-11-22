@@ -33,9 +33,10 @@
  * - sleeps once {@link STAGE_IDLE_MS} pass with no viewer (an open socket
  *   through a preview of it) and no use (a request, an agent's read, a
  *   decision page's warm-up); the next use wakes it;
- * - sleeps, the least recently used with no viewer first, when another
- *   starts and the machine would otherwise be left short of memory or run
- *   more than {@link MAX_LIVE} ({@link roomFor}, preview-room.ts);
+ * - sleeps, the one with no viewer looked at least recently first (a
+ *   preview's request or viewer; never a warm-up or an agent's read), when
+ *   another starts and the machine would otherwise be left short of memory
+ *   or run more than {@link MAX_LIVE} ({@link roomFor}, preview-room.ts);
  * - stops when its workspace is archived ({@link stopStages}), and with the
  *   daemon ({@link endStages}); the next daemon starts it on its first use,
  *   so an agent's restart, an update's included, starts no stage nobody
@@ -346,6 +347,14 @@ interface Stage {
   readonly key: string;
   /** The last request, viewer, agent read or warm-up: its idle time counts from here. */
   lastUse: number;
+  /**
+   * The last look at it: a preview's request or a viewer, never a warm-up
+   * (the hub's keep-up or a page going out) or an agent's read; its start
+   * when none came yet. What {@link roomFor} puts to sleep first is the one
+   * looked at least recently (the owner's pick on 2026-11-22, "Up to 8,
+   * oldest put to sleep": "the one nobody has looked at longest").
+   */
+  lookedAt: number;
   message?: string;
   /** A place's sheet stage's mirror of its checkout into its clone, while it is live ({@link mirrorWhileLive}). */
   mirror?: ReturnType<typeof setInterval>;
@@ -730,6 +739,7 @@ type StagePlace = Omit<
   | "errors"
   | "restarts"
   | "lastUse"
+  | "lookedAt"
   | "movedAt"
   | "slept"
   | "stopping"
@@ -749,6 +759,7 @@ function newStage(found: StagePlace): Stage {
     errors: [],
     restarts: 0,
     lastUse: Date.now(),
+    lookedAt: Date.now(),
     movedAt: 0,
     slept: false,
     stopping: false,
@@ -1460,7 +1471,7 @@ function keepMeasuring(): void {
  * Room for `stage` to start: while the machine's free memory, less what
  * `stage` is expected to take (preview-room.ts `expectedBytes`), would fall
  * under its margin (`marginOf`), or {@link MAX_LIVE} others are live, the
- * least recently used live stage with no viewer is put to sleep
+ * live stage with no viewer looked at least recently (`lookedAt`) is put to sleep
  * ({@link sleep}), one line each. One with a viewer is in use: a page open
  * on it reconnects, and would wake it again at once. A start is never
  * refused: when nothing is left to put to sleep it starts anyway, said.
@@ -1504,7 +1515,7 @@ function weigh(stage: Stage): void {
   const short = () => free - cost < margin || live >= MAX_LIVE;
   const sleepers = others
     .filter((one) => one.status === "live" && one.viewers === 0)
-    .sort((a, b) => a.lastUse - b.lastUse);
+    .sort((a, b) => a.lookedAt - b.lookedAt);
   for (const one of sleepers) {
     if (!short()) {
       return;
@@ -2266,6 +2277,7 @@ export async function wakeSource(
   }
   const known = stages.get(key);
   if (known) {
+    known.lookedAt = Date.now();
     await wake(known, "a preview's request", navigation);
     return;
   }
@@ -2337,6 +2349,7 @@ export function sourceViewer(source: PreviewSource): () => void {
 function viewing(stage: Stage): () => void {
   stage.viewers += 1;
   stage.lastUse = Date.now();
+  stage.lookedAt = Date.now();
   // What keeps a stage awake, said as it changes.
   console.info(
     `[stage] ${stage.workspace.id.slice(0, 8)} ${stage.dir}: ${stage.viewers} viewer(s)`
