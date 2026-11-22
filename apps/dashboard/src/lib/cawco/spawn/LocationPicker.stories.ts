@@ -26,4 +26,4 @@ export default {
 };
 
 /** Choosing where a new session works: your GitHub repositories, latest first. */
-export const Live = {};
+export const Live = { args: { answer: "listed" } };
