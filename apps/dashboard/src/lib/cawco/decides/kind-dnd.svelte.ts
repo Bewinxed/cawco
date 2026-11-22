@@ -26,6 +26,7 @@ import {
   dropTargetForElements,
   monitorForElements,
 } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
+import { HOUR_MS } from "@cawco/core/time";
 import { spring as motionSpring } from "motion";
 import { tick } from "svelte";
 import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
@@ -160,6 +161,8 @@ class Ghost {
   readonly #offset: DragPoint;
   /** Where it is drawn: its box's top-left corner in the viewport. */
   #at: DragPoint;
+  /** The animation that holds it where the hand is, from its lift until it is let go. */
+  #carry: Animation | null = null;
   readonly #handX = new Release();
   readonly #handY = new Release();
 
@@ -207,7 +210,15 @@ class Ghost {
     node.showPopover();
     this.#node = node;
     this.#lane = lane;
-    this.#draw();
+    // Carried on an animation the compositor holds: each step of the hand
+    // retargets it (`move`). Written to its inline transform instead, every
+    // step restyled the ghost and layerized the whole page on the main
+    // thread (1.2ms a frame on the work path, dragging), however little
+    // moved.
+    this.#carry = node.animate(this.#pose(), {
+      duration: CARRY_MS,
+      fill: "forwards",
+    });
     requestAnimationFrame(() => {
       node.style.boxShadow = "var(--shadow-overlay)";
     });
@@ -219,7 +230,10 @@ class Ghost {
     const now = performance.now();
     this.#handX.push(this.#at.x, now);
     this.#handY.push(this.#at.y, now);
-    this.#draw();
+    const effect = this.#carry?.effect;
+    if (effect instanceof KeyframeEffect) {
+      effect.setKeyframes(this.#pose());
+    }
   }
 
   /**
@@ -247,6 +261,7 @@ class Ghost {
     this.#node.style.width = `${box.width}px`;
     if (!motionOk.current) {
       this.#draw();
+      this.#carry?.cancel();
       return;
     }
     const flights = [
@@ -267,6 +282,9 @@ class Ghost {
     for (const flight of flights) {
       flight.startTime = start;
     }
+    // Under the settle's own animations from this frame on, the carry ends.
+    this.#carry?.cancel();
+    this.#carry = null;
     await Promise.all(flights.map((flight) => flight.finished));
     this.#draw();
     for (const flight of flights) {
@@ -275,7 +293,14 @@ class Ghost {
   }
 
   remove() {
+    this.#carry?.cancel();
     this.#node.remove();
+  }
+
+  /** Where the hand holds it now, as the carry's two keyframes (it stands still between steps). */
+  #pose(): Keyframe[] {
+    const transform = place(this.#at.x, this.#at.y);
+    return [{ transform }, { transform }];
   }
 
   #draw() {
@@ -284,6 +309,9 @@ class Ghost {
 }
 
 const place = (x: number, y: number) => `translate3d(${x}px, ${y}px, 0)`;
+
+/** The carry's length: longer than any drag, so it holds until it is let go. */
+const CARRY_MS = HOUR_MS;
 
 /** The tile in the hand now; one at a time. */
 let ghost: Ghost | null = null;
