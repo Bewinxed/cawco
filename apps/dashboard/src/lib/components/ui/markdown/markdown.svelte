@@ -151,23 +151,24 @@
    * frame. Anywhere else it is drawn whole.
    */
   const ends = $derived(blockEnds(source));
-  let upto = $state(
-    untrack(() =>
-      !streaming && stepping()
-        ? (ends[0] ?? source.length)
-        : Number.POSITIVE_INFINITY
-    )
+  /** Whether it draws in steps: settled, and mounted by a step. */
+  const steps = untrack(() => !streaming && stepping());
+  /** How far it is drawn: a new source starts again from its first block. */
+  let upto = $derived(
+    steps ? (ends[0] ?? source.length) : Number.POSITIVE_INFINITY
   );
   const content = $derived(
     upto >= source.length ? drawn : written(source.slice(0, upto))
   );
   $effect(() => {
+    // Read so a new source steps in again.
+    const blocks = ends;
     if (untrack(() => upto >= source.length)) {
       return;
     }
     return draw({
       step: () => {
-        const next = ends.find((end) => end > upto);
+        const next = blocks.find((end) => end > upto);
         upto = next ?? source.length;
         return upto < source.length;
       },

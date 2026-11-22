@@ -21,8 +21,10 @@
  * JavaScript (`@plugin`, `@config`) is never run: each loads as a plugin
  * that adds nothing, so a theme key only a plugin adds is not read.
  */
-import { posix } from "node:path";
 import type { TokenType } from "@cawco/core/stage";
+// The POSIX path functions with no Node built-in, so the reader runs in a
+// browser (the design board) as in the binary.
+import { posix } from "pathe";
 import { __unstable__loadDesignSystem } from "tailwindcss";
 // Text imports: the bundler embeds Tailwind's four stylesheets, so the
 // compiled binary and the stage host load them with no package on disk.

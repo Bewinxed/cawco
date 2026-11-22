@@ -35,6 +35,7 @@ import {
   VENDOR_IMPORTED_SHEETS,
 } from "./vendor-sheets.ts";
 import { leaveOutShiki } from "./vite/leave-out-shiki.ts";
+import { textImports } from "./vite/text-imports.ts";
 import { namedInSources, tokensInlined } from "./vite/tokens-inlined.ts";
 
 /**
@@ -499,6 +500,7 @@ export default defineConfig(({ command }) => {
   return {
     plugins: [
       leaveOutShiki(),
+      textImports(),
       workspacePackagesWatched(),
       linkedRebundle(),
       houseFaces(),

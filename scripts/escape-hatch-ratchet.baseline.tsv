@@ -806,4 +806,3 @@ suppression	svelte-ignore a11y_no_static_element_interactions	apps/dashboard/src
 suppression	svelte-ignore a11y_no_static_element_interactions	apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte	1
 suppression	svelte-ignore state_referenced_locally	apps/dashboard/src/lib/cawco/fault/FaultActions.svelte	1
 suppression	svelte-ignore state_referenced_locally	apps/dashboard/src/lib/cawco/fault/LineFault.svelte	1
-suppression	svelte-ignore state_referenced_locally	apps/dashboard/src/lib/components/ui/carousel/carousel.svelte	1

@@ -20,24 +20,55 @@
     ...restProps
   }: WithElementRef<CarouselProps> = $props();
 
-  // svelte-ignore state_referenced_locally
-  let carouselState = $state<EmblaContext>({
+  /** What Embla reports; the props are read through the context's getters, so a prop set on the live carousel reaches its content. */
+  const embla = $state<
+    Pick<
+      EmblaContext,
+      | "api"
+      | "canScrollNext"
+      | "canScrollPrev"
+      | "scrollSnaps"
+      | "selectedIndex"
+    >
+  >({
     api: undefined,
-    scrollPrev,
-    scrollNext,
-    orientation,
     canScrollNext: false,
     canScrollPrev: false,
-    handleKeyDown,
-    options: opts,
-    plugins,
-    onInit,
     scrollSnaps: [],
     selectedIndex: 0,
-    scrollTo,
   });
 
-  setEmblaContext(carouselState);
+  const carouselState: EmblaContext = setEmblaContext({
+    get api() {
+      return embla.api;
+    },
+    get canScrollNext() {
+      return embla.canScrollNext;
+    },
+    get canScrollPrev() {
+      return embla.canScrollPrev;
+    },
+    get scrollSnaps() {
+      return embla.scrollSnaps;
+    },
+    get selectedIndex() {
+      return embla.selectedIndex;
+    },
+    get orientation() {
+      return orientation;
+    },
+    get options() {
+      return opts;
+    },
+    get plugins() {
+      return plugins;
+    },
+    scrollPrev,
+    scrollNext,
+    scrollTo,
+    handleKeyDown,
+    onInit,
+  });
 
   function scrollPrev() {
     carouselState.api?.scrollPrev();
@@ -55,9 +86,9 @@
     if (!carouselState.api) {
       return;
     }
-    carouselState.selectedIndex = carouselState.api.selectedScrollSnap();
-    carouselState.canScrollNext = carouselState.api.canScrollNext();
-    carouselState.canScrollPrev = carouselState.api.canScrollPrev();
+    embla.selectedIndex = carouselState.api.selectedScrollSnap();
+    embla.canScrollNext = carouselState.api.canScrollNext();
+    embla.canScrollPrev = carouselState.api.canScrollPrev();
   }
 
   function handleKeyDown(e: KeyboardEvent) {
@@ -71,11 +102,11 @@
   }
 
   function onInit(event: CustomEvent<CarouselAPI>) {
-    carouselState.api = event.detail;
-    setApi(carouselState.api);
+    embla.api = event.detail;
+    setApi(event.detail);
 
-    carouselState.scrollSnaps = carouselState.api.scrollSnapList();
-    carouselState.api.on("select", onSelect);
+    embla.scrollSnaps = event.detail.scrollSnapList();
+    event.detail.on("select", onSelect);
     onSelect();
   }
 

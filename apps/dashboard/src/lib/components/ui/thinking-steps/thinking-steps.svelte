@@ -1,7 +1,6 @@
 <script lang="ts">
   // Native port of fluidfunctionalism.com/r/base/thinking-steps.json.
   import { Collapsible } from "bits-ui";
-  import { untrack } from "svelte";
   import { cn } from "#lib/utils.js";
   import { provideRootOpen } from "../collapsible/opened";
   import {
@@ -22,7 +21,8 @@
     defaultOpen?: boolean;
     open?: boolean;
   } = $props();
-  let internalOpen = $state(untrack(() => defaultOpen));
+  // Follows `defaultOpen`; a click overrides it until the prop changes.
+  let internalOpen = $derived(defaultOpen);
   const inherited = getSizeContext();
   const resolvedSize = $derived(size ?? inherited?.() ?? "default");
   setSizeContext(() => resolvedSize);
