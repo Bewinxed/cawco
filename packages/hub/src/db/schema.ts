@@ -51,6 +51,7 @@ import {
 } from "@cawco/core/protocol";
 import { RELAY_PROVIDERS, RELAY_STATES } from "@cawco/core/relays";
 import {
+  CHECK_OUTCOMES,
   ROUTINE_OUTCOMES,
   ROUTINE_RUN_STATES,
   ROUTINE_TARGETS,
@@ -1760,14 +1761,6 @@ export const workspaces = sqliteTable(
      * delegate's.
      */
     stageFor: text("stage_for"),
-    /**
-     * The routine run whose command runs in this workspace: a `command`
-     * routine's check (routines.ts `fireCommand`), cut for that one run and
-     * let go of unread (`drop`) as it ends. It takes no work item and no
-     * session; the settle sweep drops one whose run is no longer live
-     * (workspaces.ts `settle`). Null for every other workspace.
-     */
-    routineRun: text("routine_run"),
     /**
      * A host-scope delegate's (work-items.ts `startHost`): no clone and no
      * boundary. `path` (and `repoRoot`) is the folder on the machine its
@@ -6364,15 +6357,23 @@ export const taskTriggers = sqliteTable(
     mode: storedEnum(z.enum(PERMISSION_MODES))("mode"),
     /** Kept past a session's routine's 7 days, as indexed (`keep:`). */
     keep: integer("keep", { mode: "boolean" }).notNull().default(false),
-    /** A command check's command as its file says it now (`command:`); null for any other target. */
+    /** Its check's command as its file says it now (`check:`); null: no check gates its runs. */
     command: text("command"),
+    /** The machines its check runs on, as its file names them (`check_on:`); null with no check. */
+    checkOn: storedJson(z.array(z.string()))("check_on"),
     /**
-     * The command as the person approved it, word for word, or as a session
-     * whose mode runs commands unasked set it through the task tools: the
-     * only command the hub runs. A file whose command differs runs nothing
-     * until it is approved again (routines.ts `fireCommand`).
+     * Its check's command as the person approved it, word for word, or as a
+     * session whose mode runs commands unasked set it through the task
+     * tools: the only command the hub runs. A file whose command differs
+     * runs nothing until it is approved again (routine-check.ts).
      */
     approvedCommand: text("approved_command"),
+    /**
+     * When its check last answered quiet on every machine with none failing
+     * (routine-check.ts): a quiet slot keeps no run, so a failing streak
+     * counts only the runs after it.
+     */
+    quietAt: timestamp("quiet_at"),
     /** What of its trigger fields does not read, in a sentence; null when they read. While set it fires nothing. */
     problem: text("problem"),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
@@ -6418,8 +6419,8 @@ export const taskTriggers = sqliteTable(
  * `recovery:<when>` for a memory recovery. Unique on (trigger, slot,
  * attempt): the insert is the fire, so a slot fires once, and its one retry
  * (attempt 2) once. A run a delegate does is also an attempt at the task
- * (its work item names the task); a conversation run, a command check and
- * a skipped or queued run have no attempt. Read newest first and capped,
+ * (its work item names the task); a conversation run and a skipped or
+ * queued run have no attempt; a slot its check found quiet keeps no run. Read newest first and capped,
  * apart from the project's attempts.
  */
 export const taskRuns = sqliteTable(
@@ -6447,6 +6448,12 @@ export const taskRuns = sqliteTable(
     endedAt: timestamp("ended_at"),
     /** What it answered in its `task_result` (core `RoutineVerdict`): keep, stop or ask; null for none. */
     verdict: storedEnum(z.enum(ROUTINE_VERDICTS))("verdict"),
+    /**
+     * What its routine's check found on the machines that woke it, the run's
+     * input (routine-check.ts `checkInput`): its retry is given the same.
+     * Null for a run no check woke.
+     */
+    checkInput: text("check_input"),
   },
   (table) => [
     uniqueIndex("task_runs_slot").on(
@@ -6462,6 +6469,35 @@ export const taskRuns = sqliteTable(
     // `WHERE` (sqlite.org/partialindex.html).
     index("task_runs_state").on(table.state, table.triggerId),
   ]
+);
+
+/**
+ * A routine's check on one machine (routine-check.ts), as its last run there
+ * left it: one row per routine per machine its `check_on:` names. A quiet
+ * check keeps no run, so this row is all that says it ran. A machine taken
+ * out of `check_on:` loses its row at the next slot.
+ */
+export const taskTriggerChecks = sqliteTable(
+  "task_trigger_checks",
+  {
+    triggerId: text("trigger_id")
+      .notNull()
+      .references(() => taskTriggers.id, { onDelete: "cascade" }),
+    /** The machine as `check_on:` names it. */
+    machine: text("machine").notNull(),
+    checkedAt: timestamp("checked_at").notNull(),
+    /** How it went (core `CheckOutcome`). */
+    outcome: storedEnum(z.enum(CHECK_OUTCOMES))("outcome").notNull(),
+    /** Why it failed, or what paused it; null otherwise. */
+    said: text("said"),
+    /** When its output there last woke the routine; null: never. */
+    wokeAt: timestamp("woke_at"),
+    /** Slots in a row it failed there: at three the routine turns off. */
+    failing: integer("failing").notNull().default(0),
+    /** The slot its newest failure was counted for, so a retry of that slot counts once. */
+    failedSlot: text("failed_slot"),
+  },
+  (table) => [primaryKey({ columns: [table.triggerId, table.machine] })]
 );
 
 /**

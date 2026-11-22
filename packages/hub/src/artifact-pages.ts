@@ -91,6 +91,7 @@ export type ArtifactPagesContext = Pick<
   | "machineName"
   | "previewListeners"
   | "previewService"
+  | "previewUnavailable"
   | "readMachineMedia"
   | "registry"
   | "streams"
@@ -234,7 +235,8 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       open ? frameAddress(instanceId, target) : toldAddress(instanceId, target),
       artifactIds(instanceId),
       ctx.artifacts.stageFor(target.artifact.id),
-      pageProject(target.artifact.id)
+      pageProject(target.artifact.id),
+      ctx.previewUnavailable(ctx.db.artifacts.get(target.artifact.id))
     );
 
   const publishPreview = (
@@ -251,7 +253,10 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       state === "open" ? toldAddress(instanceId, target) : null,
       artifactIds(instanceId),
       ctx.artifacts.stageFor(target.artifact.id),
-      pageProject(target.artifact.id)
+      pageProject(target.artifact.id),
+      state === "open"
+        ? ctx.previewUnavailable(ctx.db.artifacts.get(target.artifact.id))
+        : null
     );
     ctx.streams.sequence(instanceId, frame);
     ctx.artifactSessions.moved({ kind: "shown", instanceId });

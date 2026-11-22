@@ -80,6 +80,7 @@ export class PreviewReach {
 
   readonly unnamedId = $derived.by(() =>
     this.#deps.paneSubject.preview?.state === "open" &&
+    !this.#deps.paneSubject.unavailable &&
     this.#deps.paneSubject.preview.artifact.kind !== "browser" &&
     !namesOrigin(this.#deps.paneSubject.preview)
       ? this.#deps.paneSubject.preview.artifact.id
@@ -95,10 +96,12 @@ export class PreviewReach {
       : null
   );
 
-  // A browser is drawn here from its stream (BrowserView), never framed from an origin.
+  // A browser is drawn here from its stream (BrowserView), never framed
+  // from an origin; one the hub says can't be shown is framed from none.
   readonly route = $derived.by(() => {
     if (
       !this.#deps.paneSubject.preview ||
+      this.#deps.paneSubject.unavailable ||
       this.#deps.paneSubject.preview.artifact.kind === "browser"
     ) {
       return null;

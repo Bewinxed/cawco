@@ -13,7 +13,12 @@
  * supervision, and its preview's doc keeps its state the same way.
  */
 
-import type { PreviewDown, PreviewSource } from "./preview/protocol";
+import type { LayoutRead } from "./layout-guides";
+import type {
+  PreviewDown,
+  PreviewSource,
+  PreviewUnavailable,
+} from "./preview/protocol";
 import { withoutUndefined } from "./without-undefined";
 import { workspaceIdKindOf } from "./workspace-id";
 
@@ -232,6 +237,13 @@ export type DecisionMedia = {
   revision: number;
   /** A design graph's shapes as embeds said them and as its stage drew its stories: a Preview's skeleton stands at them. */
   shapes?: CanvasShapes;
+  /**
+   * Why the hub knows this version can't be shown now (hub
+   * preview-unavailable.ts): the Preview draws it in its place, and the hub
+   * opened no origin for it (no `embed`). The page's media are served
+   * again as it moves (artifacts service `versionMoved`).
+   */
+  unavailable?: PreviewUnavailable;
 } | null;
 
 /**
@@ -325,6 +337,8 @@ interface RenderState {
 /** What {@link STAGE_RENDER} is asked: the canvas's states files and spec, and a picture of one state, or of the stage in view. */
 export interface RenderAsk {
   files: string[];
+  /** The alignment guides (core layout-guides.ts) laid over `state`'s picture, and their read answered. */
+  layout?: boolean;
   /** A picture: of `state` when it names one, else the stage in view. */
   png?: boolean;
   spec?: CanvasSpec;
@@ -417,6 +431,8 @@ export interface SectionUndrawn {
  * draw before its limit; and the state's picture when one was asked.
  */
 export interface StageRendered {
+  /** The state's layout as its alignment guides read it, when `layout` was asked. */
+  layout?: LayoutRead;
   /** True when the page's plan (each states file's first story) could not be read: no section's `first` is known, which is not the same as none having one. */
   plansUnread?: true;
   png?: string;
@@ -1440,11 +1456,15 @@ export type PropKind =
 export type TokenKind = "token-color" | "token-size" | "token-font";
 
 /**
- * The type aliases a design system's generated `tokens.ts` exports
- * (packages/design-tokens/src/design-tokens.ts `tokenTypes`), string-literal unions of its token
- * names by DTCG `$type`, and the kind docgen reads a prop typed with each as
- * (the owner, 2026-10-16: "a component that wants suggestions types its prop
- * with one"). Only a prop so typed is offered token names.
+ * The type aliases a prop takes a design system's token names with, and the
+ * kind docgen reads a prop typed with each as (the owner, 2026-10-16: "a
+ * component that wants suggestions types its prop with one"): a DTCG
+ * system's generated `tokens.ts` exports each as a string-literal union of
+ * its names (packages/design-tokens/src/design-tokens.ts `tokenTypes`); a
+ * project whose tokens are its Tailwind theme declares each itself, as a
+ * template literal over Tailwind's namespaces (`--color-${string}`,
+ * design-tokens tailwind-theme.ts `TOKEN_NAMESPACES`). Only a prop so typed
+ * is offered token names.
  */
 export const TOKEN_TYPES = {
   TokenColor: "token-color",

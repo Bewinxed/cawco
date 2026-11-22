@@ -1,0 +1,36 @@
+language js
+
+// A package is resolved when it is used, never as its module is imported.
+// The compiled binary carries no node_modules: a `Bun.resolveSync` at a
+// module's top level throws `Cannot find package` there, and every process
+// that imports the module dies at start. On 2026-11-22 the stage host's
+// build (packages/agent/src/stage-host/build.ts) resolved tailwindcss's
+// licence at its top level; every agent imports it, so the hub machine's
+// agent never came up on 0.1.13-nightly.8518 and the update rolled back.
+// A resolve inside a function, an arrow, a method or a getter runs only
+// when it is called, which in a binary is a source checkout's path alone.
+
+pattern called_later() {
+  or {
+    JsFunctionBody(),
+    JsArrowFunctionExpression(),
+    JsFunctionExpression(),
+    JsMethodObjectMember(),
+    JsGetterObjectMember(),
+    JsSetterObjectMember(),
+    JsMethodClassMember(),
+    JsGetterClassMember(),
+    JsSetterClassMember()
+  }
+}
+
+or {
+  `Bun.resolveSync($...)`,
+  `Bun.resolve($...)`,
+  `import.meta.resolve($...)`,
+  `require.resolve($...)`
+} as $hit where {
+  $filename <: r".*packages/[^/]+/src/.*",
+  $hit <: not within called_later(),
+  register_diagnostic(span=$hit, message="This resolves a package as the module is imported, and a compiled binary has no packages to resolve from: every process that imports this module dies at start there. Resolve it inside the function that uses it.")
+}

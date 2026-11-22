@@ -50,6 +50,7 @@ typeOverrides:
     CallerKind: OpenEnums.CallerKind
     CapPeriod: OpenEnums.CapPeriod
     CawRunningKind: OpenEnums.CawRunningKind
+    CheckMachineViewOutcome: OpenEnums.CheckMachineViewOutcome
     ClaudeLimitsErrorKind: OpenEnums.ClaudeLimitsErrorKind
     ColdMove: OpenEnums.ColdMove
     CommandAckOutcome: OpenEnums.CommandAckOutcome
@@ -114,6 +115,7 @@ typeOverrides:
     HookCommandHandlerShell: OpenEnums.HookCommandHandlerShell
     HookEvent: OpenEnums.HookEvent
     HubAuthMode: OpenEnums.HubAuthMode
+    HubDown: OpenEnums.HubDown
     ImageFormat: OpenEnums.ImageFormat
     ImageMediaType: OpenEnums.ImageMediaType
     ImageProviderId: OpenEnums.ImageProviderId

@@ -22,6 +22,7 @@ import { realpath } from "node:fs/promises";
 import { join } from "node:path";
 import type { PictureSize } from "@cawco/core/decisions-library";
 import { detach } from "@cawco/core/detach";
+import type { PreviewUnavailable } from "@cawco/core/preview/protocol";
 import { folderKey } from "@cawco/preview/proxy";
 import type { ServedMedia } from "./artifacts/shapes";
 import { ARTIFACTS_ROOT } from "./config";
@@ -60,6 +61,8 @@ export interface ArtifactDocumentsDeps {
   row: (id: string) => ArtifactRow | undefined;
   /** The doc's seed (artifacts/docs.ts `seed`), read whole: only when the doc moved since the document was built. */
   seed: (id: string) => { maps: string; state: string };
+  /** Why the hub knows a piece's version can't be shown now (preview-unavailable.ts); null while nothing stands in the way. */
+  unavailable: (row: ArtifactRow | undefined) => PreviewUnavailable | null;
 }
 
 /** Whether an artifact's document is one the hub carries state into: a page's or a canvas's. */
@@ -82,6 +85,12 @@ export const createArtifactDocuments = (deps: ArtifactDocumentsDeps) => {
       return held;
     }
     const row = deps.row(held.id);
+    // One the hub knows can't be shown is drawn so, its origin unopened:
+    // its Preview loads no frame (preview-unavailable.ts).
+    const unavailable = deps.unavailable(row);
+    if (unavailable) {
+      return { ...held, unavailable };
+    }
     // A page no session or project holds frames no embed.
     const embed = row && owner ? deps.embedOf(row) : undefined;
     if (!embed) {

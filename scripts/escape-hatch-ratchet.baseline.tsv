@@ -111,7 +111,6 @@ as-cast	Action	packages/cli/src/browser.ts	1
 as-cast	Anchorable	packages/preview/src/overlay/anchor-names.ts	1
 as-cast	AppState["zoom"]["value"]	packages/agent/src/canvas-host/scene.ts	1
 as-cast	ArrayBuffer | string | Uint8Array<ArrayBuffer>	packages/preview/src/overlay/doc-worker.ts	1
-as-cast	AtRule	apps/dashboard/group-selectors.ts	1
 as-cast	AtRule	apps/dashboard/scripts/specificity-trap.ts	1
 as-cast	AtRule	scripts/codemods/tokens-to-theme.proof.ts	1
 as-cast	AttachmentRecord	packages/jsonl-parser/src/text.ts	1
@@ -239,7 +238,6 @@ as-cast	Parameters<Query["applyFlagSettings"]>[0]	packages/agent/src/harnesses/c
 as-cast	Parameters<typeof codeMarks>[0]	packages/hub/scripts/stored-compat.ts	1
 as-cast	Parameters<typeof featuresOf>[0]	scripts/house-faces.ts	1
 as-cast	Parameters<typeof titleFor>[0]	packages/hub/scripts/migrations-check.ts	1
-as-cast	parser.Pseudo	apps/dashboard/group-selectors.ts	1
 as-cast	Partial<ArtifactRef> | null | undefined	packages/preview/src/overlay/artifact.ts	1
 as-cast	Partial<Box> | null	packages/preview/src/overlay/embeds.ts	1
 as-cast	Partial<CSSMediaRule>	packages/preview/src/overlay/schemes.ts	1

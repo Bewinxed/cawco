@@ -19,19 +19,33 @@
  *
  * Each file's props are kept by its content's hash: a read of a file that
  * has not changed costs a hash; an HMR update of it reads it again.
+ *
+ * A prop typed with a token type is offered the design system's names
+ * (core `TOKEN_TYPES`): a DTCG system's generated `tokens.ts` declares each
+ * as a union of its names, read as the prop's options; a project whose
+ * tokens are its Tailwind theme declares each as a template literal over
+ * Tailwind's namespaces (`--color-${string}`), and its options are the
+ * theme's names, read live from the stylesheet `design/manifest.json`
+ * names, with Tailwind's own loader (design-tokens tailwind-theme.ts).
  */
 // biome-ignore-all lint/suspicious/noBitwiseOperators: TypeScript's checker says what a type and a symbol are in bit flags (`ts.TypeFlags`, `ts.SymbolFlags`), read with `&`.
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join, relative, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import {
   type ComponentDoc,
   type PropKind,
   type PropMeta,
   TOKEN_TYPES,
   type TokenKind,
+  type TokenType,
 } from "@cawco/core/stage";
+import {
+  readTailwindTheme,
+  type TailwindTheme,
+  TOKEN_NAMESPACES,
+} from "@cawco/design-tokens/tailwind-theme";
 import type TS from "typescript";
 
 /** svelte2tsx's shims for the code it writes, read beside it at build time (build.ts). */
@@ -75,6 +89,83 @@ function tokenKindOf(text: string): TokenKind | undefined {
   return Object.entries(TOKEN_TYPES).find(([type]) => type === name)?.[1];
 }
 const QUALIFIED = /^(?:import\(["'][^"']*["']\)|[A-Za-z_$][\w$]*)\./u;
+
+/** Each token kind's type. */
+const TYPE_OF: Record<TokenKind, TokenType> = {
+  "token-color": "TokenColor",
+  "token-size": "TokenSize",
+  "token-font": "TokenFont",
+};
+const isTokenKind = (kind: PropKind): kind is TokenKind => kind in TYPE_OF;
+
+/** A template literal's member as a reader prints it: `` `--color-${string}` ``, the name before `-${string}` captured. */
+const TEMPLATE_MEMBER = /^`--([\w-]+)-\$\{string\}`$/u;
+/** A choice of literals inside a template literal, as TypeScript keeps it unexpanded: `${"spacing" | "radius"}`. */
+const TEMPLATE_CHOICE = /\$\{((?:\s*"[\w-]*"\s*\|?)+)\}/u;
+
+/** A type's text split at its top-level `|`, none inside a template literal's backticks. */
+const unionMembers = (text: string): string[] => {
+  const members: string[] = [];
+  let quoted = false;
+  let current = "";
+  for (const char of text) {
+    if (char === "`") {
+      quoted = !quoted;
+    }
+    if (char === "|" && !quoted) {
+      members.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  members.push(current.trim());
+  return members.filter((one) => one && one !== "undefined" && one !== "null");
+};
+
+/** A template literal with a choice in it, one member a choice (`` `--${"a" | "b"}-${string}` `` is two). */
+const expanded = (member: string): string[] => {
+  const choice = TEMPLATE_CHOICE.exec(member);
+  if (!choice) {
+    return [member];
+  }
+  return (choice[1] ?? "")
+    .split("|")
+    .map((one) => one.trim().slice(1, -1))
+    .flatMap((one) => expanded(member.replace(choice[0], one)));
+};
+
+/**
+ * The token kind a template-literal type is, and the variable names it
+ * takes (`--color-`): every member `` `--<namespace>-${string}` `` over one
+ * kind's Tailwind namespaces, a project's prefix before it (`--tw-color-`).
+ * Undefined for any other type. How a Tailwind project types a token prop:
+ * readers print such an alias as its template, not its name.
+ */
+function templateTokenOf(
+  text: string
+): { kind: TokenKind; prefixes: string[] } | undefined {
+  const members = unionMembers(text).flatMap(expanded);
+  const named = members.map((one) => TEMPLATE_MEMBER.exec(one)?.[1]);
+  const types = named.map((name) =>
+    name
+      ? Object.values(TYPE_OF).find((type) =>
+          TOKEN_NAMESPACES[type].some(
+            (space) =>
+              name === space.slice(2) || name.endsWith(`-${space.slice(2)}`)
+          )
+        )
+      : undefined
+  );
+  const [first] = types;
+  if (!first || types.some((type) => type !== first)) {
+    return;
+  }
+  return {
+    kind: TOKEN_TYPES[first],
+    prefixes: named.map((name) => `--${name}-`),
+  };
+}
 
 /** A prop typed with a token alias, its names its options; an enum otherwise. */
 const enumOf = (
@@ -274,6 +365,13 @@ function svelteKind(
     // alias's name in a union it is part of.
     return enumOf(checker.typeToString(type), raw, literalValues);
   }
+  // A token type with no literal members: a Tailwind theme's, its names
+  // filled in from the theme ({@link withTokenNames}).
+  const token =
+    templateTokenOf(raw)?.kind ?? tokenKindOf(checker.typeToString(type));
+  if (token) {
+    return { kind: token, raw };
+  }
   if (members.some((one) => one.getCallSignatures().length > 0)) {
     return { kind: "function", raw };
   }
@@ -468,6 +566,11 @@ function vueKind(
   ) {
     return { kind: "boolean", raw: "boolean" };
   }
+  // A template literal over a token kind's namespaces, before its backticks read as a literal.
+  const template = templateTokenOf(raw);
+  if (template) {
+    return { kind: template.kind, raw };
+  }
   const options = literals(members);
   if (options) {
     return { kind: "enum", raw, options };
@@ -480,6 +583,11 @@ function vueKind(
   const named = vueEnum(schema);
   if (named && tokenKindOf(raw)) {
     return enumOf(raw, raw, named);
+  }
+  // A token alias with no literal members: its names filled in from the theme.
+  const token = tokenKindOf(raw);
+  if (token) {
+    return { kind: token, raw };
   }
   if (members.every((one) => one === "string" || one === "number")) {
     return { kind: members.includes("string") ? "string" : "number", raw };
@@ -620,6 +728,14 @@ function reactKind(type: DocgenType): {
   if (SLOT_TYPE.test(raw) || type.name === "node" || type.name === "element") {
     return { kind: "slot", raw };
   }
+  // A template literal over a token kind's namespaces: react-docgen reads an
+  // imported alias through to it, as a literal whose value is the template,
+  // and react-docgen-typescript prints its expansion.
+  const shown = type.name === "literal" ? String(type.value ?? "") : raw;
+  const template = templateTokenOf(shown);
+  if (template) {
+    return { kind: template.kind, raw: shown };
+  }
   if (real.every((one) => one.name === "boolean" || one.name === "bool")) {
     return { kind: "boolean", raw: "boolean" };
   }
@@ -633,6 +749,10 @@ function reactKind(type: DocgenType): {
   if (options) {
     // react-docgen-typescript's `raw` is the type as declared (`TokenColor`).
     return enumOf(raw, raw, options);
+  }
+  const token = tokenKindOf(raw);
+  if (token) {
+    return { kind: token, raw };
   }
   if (real.every((one) => one.name === "string" || one.name === "number")) {
     return {
@@ -763,6 +883,152 @@ const TYPED_OPTIONS = {
     !one.parent?.fileName.includes("node_modules"),
 };
 
+/* --- A Tailwind theme's names --------------------------------------- */
+
+/** The repository the stage runs in: the first folder from the toolchain root up that holds git's `.git`; the toolchain root when none does. */
+const repository = (() => {
+  let at = root;
+  while (!existsSync(join(at, ".git")) && dirname(at) !== at) {
+    at = dirname(at);
+  }
+  return existsSync(join(at, ".git")) ? at : root;
+})();
+
+/** The stylesheet `design/manifest.json` names as the system's Tailwind theme, from the repository's root; undefined when it names none. */
+const themeEntry = (): string | undefined => {
+  try {
+    const manifest: unknown = JSON.parse(
+      readFileSync(join(repository, "design", "manifest.json"), "utf8")
+    );
+    return typeof manifest === "object" &&
+      manifest !== null &&
+      "tailwind" in manifest &&
+      typeof manifest.tailwind === "string"
+      ? manifest.tailwind
+      : undefined;
+  } catch {
+    // No manifest, or one that is no JSON: no theme to read.
+    return undefined;
+  }
+};
+
+/** A stylesheet's text by its path from the repository's root (or an absolute one inside it); undefined when there is none. */
+const sheetText = (path: string): string | undefined => {
+  const full = isAbsolute(path) ? path : join(repository, path);
+  const from = relative(repository, full);
+  if (from.startsWith("..") || isAbsolute(from)) {
+    return;
+  }
+  try {
+    return readFileSync(full, "utf8");
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error.code === "ENOENT" || error.code === "EISDIR")
+    ) {
+      return;
+    }
+    throw error;
+  }
+};
+
+const hashOf = (text: string | undefined): string =>
+  createHash("sha1")
+    .update(text ?? "\0")
+    .digest("hex");
+
+/** The theme as last read: its entry, the hash of each stylesheet it read (null when it did not load: read again on the next ask), and its names or why it did not load. */
+interface ThemeRead {
+  entry: string;
+  read: Promise<{
+    hashes: [path: string, hash: string][] | null;
+    theme: TailwindTheme | { problem: string };
+  }>;
+}
+let themeRead: ThemeRead | undefined;
+
+/** The project's Tailwind theme, read again only when a stylesheet it read has changed; undefined when its manifest names none. */
+async function tailwindTheme(): Promise<
+  TailwindTheme | { problem: string } | undefined
+> {
+  const entry = themeEntry();
+  if (!entry) {
+    return;
+  }
+  if (themeRead?.entry === entry) {
+    const last = await themeRead.read;
+    if (
+      last.hashes?.every(([path, hash]) => hashOf(sheetText(path)) === hash)
+    ) {
+      return last.theme;
+    }
+  }
+  const read = (async () => {
+    try {
+      const theme = await readTailwindTheme(entry, (path) =>
+        Promise.resolve(sheetText(path))
+      );
+      return {
+        theme,
+        hashes: theme.files
+          .filter((path) => !path.startsWith("tailwindcss/"))
+          .map((path): [string, string] => [path, hashOf(sheetText(path))]),
+      };
+    } catch (error) {
+      return {
+        theme: {
+          problem: `The Tailwind theme at ${entry} does not load: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
+        },
+        hashes: null,
+      };
+    }
+  })();
+  themeRead = { entry, read };
+  return (await read).theme;
+}
+
+/**
+ * A doc whose token props have no options yet (a Tailwind theme's types,
+ * {@link templateTokenOf}) with the theme's names filled in, read live: an
+ * alias is offered its kind's names, a template only those it takes. A
+ * theme that does not load says so in the doc's note.
+ */
+async function withTokenNames(doc: ComponentDoc): Promise<ComponentDoc> {
+  const open = doc.props.some(
+    (one) => isTokenKind(one.type.name) && one.options === undefined
+  );
+  if (!open) {
+    return doc;
+  }
+  const theme = await tailwindTheme();
+  if (!theme || "problem" in theme) {
+    const why =
+      theme?.problem ??
+      "No Tailwind theme is named in design/manifest.json, so its token props are offered no names.";
+    return { ...doc, note: doc.note ? `${doc.note} ${why}` : why };
+  }
+  return {
+    ...doc,
+    props: doc.props.map((one) => {
+      if (!isTokenKind(one.type.name) || one.options !== undefined) {
+        return one;
+      }
+      const type = TYPE_OF[one.type.name];
+      const prefixes = templateTokenOf(one.type.raw)?.prefixes;
+      const names = theme.names[type];
+      return {
+        ...one,
+        options: prefixes
+          ? names.filter((name) =>
+              prefixes.some((prefix) => name.startsWith(prefix))
+            )
+          : names,
+      };
+    }),
+  };
+}
+
 /* --- The one door ---------------------------------------------------- */
 
 /**
@@ -806,11 +1072,11 @@ export function propsOf(
   const key = `${file}#${name}`;
   const hit = kept.get(key);
   if (hit?.hash === hash) {
-    return hit.doc;
+    return hit.doc.then(withTokenNames);
   }
   const doc = docOf(file, name, text);
   kept.set(key, { doc, hash });
-  return doc;
+  return doc.then(withTokenNames);
 }
 
 /** Component `file`'s props read by its framework's docgen; a read that fails says why in `note`. */

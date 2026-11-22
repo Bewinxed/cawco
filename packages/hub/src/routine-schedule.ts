@@ -126,7 +126,7 @@ export const triggerIndexOf = (
   parsed: Pick<ParsedTask, "fields" | "triggerUnread">,
   now: number = Date.now()
 ): TriggerIndex => {
-  const { on, stop, deadline, dailyCapUsd, mode, keep, command } =
+  const { on, stop, deadline, dailyCapUsd, mode, keep, check, checkOn } =
     parsed.fields;
   const target = parsed.fields.target ?? "delegate";
   const problems = parsed.triggerUnread ? [parsed.triggerUnread] : [];
@@ -139,10 +139,9 @@ export const triggerIndexOf = (
       nextSlot = Cron.next(cron, new Date(now));
     }
   }
-  if (target === "command" && !command) {
-    problems.push(
-      "target: command runs a shell command, and the file has no command: line."
-    );
+  const checkProblem = checkLinesProblem(check, checkOn);
+  if (checkProblem) {
+    problems.push(checkProblem);
   }
   return {
     cron: on?.cron ?? null,
@@ -153,8 +152,23 @@ export const triggerIndexOf = (
     dailyCapUsd,
     mode,
     keep: keep ?? false,
-    command: target === "command" ? command : null,
+    command: check,
+    checkOn: check ? checkOn : null,
     problem: problems.join(" ") || null,
     nextSlot,
   };
+};
+
+/** Why a routine's `check:` and `check_on:` lines cannot stand together, or nothing: each needs the other. */
+export const checkLinesProblem = (
+  check: string | null,
+  checkOn: readonly string[]
+): string | undefined => {
+  if (check && checkOn.length === 0) {
+    return "check: runs on the machines check_on: lists, and no check_on: is given.";
+  }
+  if (!check && checkOn.length > 0) {
+    return "check_on: lists the machines a check runs on, and no check: is given.";
+  }
+  return undefined;
 };

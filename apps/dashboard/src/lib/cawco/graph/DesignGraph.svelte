@@ -72,6 +72,7 @@
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import {
     IconAdaptLinear,
+    IconAlignLeft,
     IconBranchingLinear,
     IconChevronDown,
     IconChevronLeft,
@@ -657,6 +658,8 @@
       : "light"
   );
   let reduce = $state(false);
+  /** The alignment guides over the drawing (the head's More): every edge, near-miss and spacing the stage page measures, at the width and scheme shown. */
+  let guides = $state(false);
   /** Actual size: a width wider than the stage drawn 1:1, the page scrolling across it; off, it is scaled to fit the stage. */
   let actual = $state(false);
   const still = $derived(reduce || !motionOk.current);
@@ -795,6 +798,16 @@
     untrack(() => {
       if (loads > 0) {
         link.view(view);
+      }
+    });
+  });
+  // The guides as he set them, said again to every page that loads: a new page draws none until told.
+  $effect(() => {
+    const on = guides;
+    const { loads } = link;
+    untrack(() => {
+      if (loads > 0) {
+        link.guides(on);
       }
     });
   });
@@ -1877,6 +1890,10 @@
 {#snippet moreItems()}
   <DropdownMenu.CheckboxItem bind:checked={reduce}
     ><IconPause /><span>{words.reduceMotion}</span></DropdownMenu.CheckboxItem
+  >
+  <DropdownMenu.CheckboxItem bind:checked={guides}
+    ><IconAlignLeft /><span>{words.alignmentGuides}</span
+    ></DropdownMenu.CheckboxItem
   >
 {/snippet}
 

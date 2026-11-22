@@ -79,6 +79,9 @@
     // A script a workspace runs alone (the judge, its server, the log shim)
     // imports Node's built-ins and the script beside it alone.
     "./scripts/lint/standalone-scripts.grit",
+    // A package is resolved inside the function that uses it, never at a
+    // module's top level: a compiled binary has none to resolve from.
+    "./scripts/lint/resolve-when-used.grit",
     // Every retry takes its waits from packages/core/src/backoff.ts: capped
     // exponential with jitter, and an end it names (tsk-399).
     "./scripts/lint/retry-through-backoff.grit",

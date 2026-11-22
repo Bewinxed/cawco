@@ -47,6 +47,7 @@ import type { DeviceKind as DeviceKindType } from "./hub-auth";
 import { IMAGE_FORMATS, IMAGE_PROVIDERS } from "./image-generation";
 import { LANDS_MODES } from "./injected";
 import { COMMAND_STEPS, INSTALL_CHECKS, SSH_STEPS } from "./install";
+import { EDGE_KINDS } from "./layout-guides";
 import type { MachinePath as MachinePathType } from "./machine-path";
 import { isMachinePath } from "./machine-path";
 import { MOVE_JOB_STEPS } from "./move";
@@ -782,7 +783,6 @@ export const BrowserRowShape = declared(
     lastUsedAt: z.number(),
     name: z.string(),
     origin: z.string().optional(),
-    originUnread: z.literal(true).optional(),
     ports: BrowserPortsShape.optional(),
     progress: z
       .object({ done: z.number(), total: z.number(), what: z.literal("image") })
@@ -5338,6 +5338,116 @@ const StageOpenedShape = declared(
 export const StageOpenedSchema = StageOpenedShape;
 export type StageOpenedOutput = z.output<typeof StageOpenedShape>;
 
+const LayoutPlaceShape = declared(
+  z.object({ el: z.string(), source: z.string().nullable() }),
+  "LayoutPlace",
+  "packages/core/src/layout-guides.ts"
+);
+export type LayoutPlaceOutput = z.output<typeof LayoutPlaceShape>;
+
+const LayoutBoxShape = declared(
+  z.object({ h: z.number(), w: z.number(), x: z.number(), y: z.number() }),
+  "LayoutBox",
+  "packages/core/src/layout-guides.ts"
+);
+export type LayoutBoxOutput = z.output<typeof LayoutBoxShape>;
+
+const EdgeKindShape = declared(
+  z.enum(EDGE_KINDS),
+  "EdgeKind",
+  "packages/core/src/layout-guides.ts"
+);
+export type EdgeKindOutput = z.output<typeof EdgeKindShape>;
+
+const GuideLineShape = declared(
+  z.object({
+    at: z.number(),
+    from: z.number(),
+    kind: EdgeKindShape.exclude(["surface"]),
+    to: z.number(),
+  }),
+  "GuideLine",
+  "packages/core/src/layout-guides.ts"
+);
+export type GuideLineOutput = z.output<typeof GuideLineShape>;
+
+const LayoutGroupShape = declared(
+  LayoutPlaceShape.extend({
+    box: LayoutBoxShape,
+    id: z.number(),
+    lines: z.array(GuideLineShape),
+    parent: z.number().nullable(),
+    text: z.object({
+      baselines: z.array(z.number()),
+      centres: z.array(z.number()),
+      ends: z.array(z.number()),
+      stacked: z.array(z.number()),
+      starts: z.array(z.number()),
+    }),
+  }),
+  "LayoutGroup",
+  "packages/core/src/layout-guides.ts"
+);
+export type LayoutGroupOutput = z.output<typeof LayoutGroupShape>;
+
+const MissSideShape = declared(
+  LayoutPlaceShape.extend({ at: z.number(), box: LayoutBoxShape }),
+  "MissSide",
+  "packages/core/src/layout-guides.ts"
+);
+export type MissSideOutput = z.output<typeof MissSideShape>;
+
+const NearMissShape = declared(
+  z.object({
+    a: MissSideShape,
+    apart: z.number(),
+    b: MissSideShape,
+    group: z.number(),
+    kind: EdgeKindShape,
+    within: z.enum(["group", "siblings"]),
+  }),
+  "NearMiss",
+  "packages/core/src/layout-guides.ts"
+);
+export type NearMissOutput = z.output<typeof NearMissShape>;
+
+const SpacingReadShape = declared(
+  LayoutPlaceShape.extend({
+    box: LayoutBoxShape,
+    count: z.number(),
+    free: z.literal(true).optional(),
+    kind: z.enum(["padding", "gap"]),
+    px: z.number(),
+    side: z.enum(["top", "right", "bottom", "left", "x", "y"]),
+    token: z.string().nullable(),
+  }),
+  "SpacingRead",
+  "packages/core/src/layout-guides.ts"
+);
+export type SpacingReadOutput = z.output<typeof SpacingReadShape>;
+
+const LayoutReadShape = declared(
+  z.object({
+    groups: z.array(LayoutGroupShape),
+    height: z.number(),
+    leftOut: z
+      .object({
+        groups: z.number().optional(),
+        nearMisses: z.number().optional(),
+        sheets: z.number().optional(),
+        spacing: z.number().optional(),
+      })
+      .optional(),
+    nearMisses: z.array(NearMissShape),
+    spacing: z.array(SpacingReadShape),
+    tokens: z.record(z.string(), z.number()),
+    width: z.number(),
+  }),
+  "LayoutRead",
+  "packages/core/src/layout-guides.ts"
+);
+export type LayoutReadOutput = z.output<typeof LayoutReadShape>;
+
 const SweepStepShape = declared(
   z.enum(["load", "draw", "probe", "move", "post"]),
   "SweepStep",
@@ -5370,6 +5480,7 @@ export type SectionUndrawnOutput = z.output<typeof SectionUndrawnShape>;
 
 const StageRenderedShape = declared(
   z.object({
+    layout: LayoutReadShape.optional(),
     plansUnread: z.literal(true).optional(),
     png: z.string().optional(),
     report: RenderReportShape,

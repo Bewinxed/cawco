@@ -47,6 +47,10 @@ export function takePreview(frame: FrameOf<"preview">): void {
   const next = {
     ...(sameRevision ? previous : {}),
     ...drawn,
+    // The hub's word on whether it can be shown is each frame's whole: one
+    // that says nothing of it takes the last one away (core
+    // `PreviewFrame.unavailable`).
+    unavailable: drawn.unavailable,
   };
   if (!equal(previous, next)) {
     previewsState.previews[frame.instanceId] = next;

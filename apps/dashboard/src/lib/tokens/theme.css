@@ -344,6 +344,25 @@
   );
   /* The ring round what a revision changed that the person hasn't looked at (the artifact panel's surface brief, Changed since you looked): the done glyph's green, drawn on the element's own shape outside its box, so it never covers what the element says; never coral (The One Target Rule). */
   --color-c-change-ring: var(--color-status-done-glyph);
+  /* The design graph's alignment guides (stage guides.ts), one hue per kind of edge from the identity marks, which hold contrast on paper and at night: a text line's start, end and centre, its baseline, a surface's edge. Coral and the marks' red are left out: red is a near-miss's, coral the act's. */
+  --color-c-guide-start: var(--color-mark-6);
+  --color-c-guide-end: var(--color-mark-8);
+  --color-c-guide-centre: var(--color-mark-7);
+  --color-c-guide-baseline: var(--color-mark-5);
+  --color-c-guide-surface: var(--color-mark-3);
+  /* Two edges a few px apart that should be one, and a padding or gap off every spacing token: the fail glyph's red, the one alarm on the guides. */
+  --color-c-guide-miss: var(--color-status-fail-glyph);
+  /* A padding or gap shaded: on a spacing token in the done glyph's green, off every one in the miss red, each washed so the drawing reads through. */
+  --color-c-guide-on-token-wash: color-mix(
+    in oklab,
+    var(--color-status-done-glyph) 14%,
+    transparent
+  );
+  --color-c-guide-off-token-wash: color-mix(
+    in oklab,
+    var(--color-c-guide-miss) 30%,
+    transparent
+  );
   --color-brand-ink: var(--color-coral-11);
   /* Brand ink under the pointer: the most saturated vermillion a word can take and still hold 4.5:1 on the pane (4.78:1 by day, 7.65:1 at night). brand-hover measures 3.9:1 by day and is for fills. */
   --color-brand-ink-strong: light-dark(oklch(55% 0.165 33), oklch(76% 0.12 34));
@@ -959,6 +978,9 @@
   --spacing-c-change-ring-width: 2px;
   /* How far outside the changed element's box its ring stands, so the line never touches its words or its own border. */
   --spacing-c-change-ring-offset: 3px;
+  /* An alignment guide's line (stage guides.ts): a hairline, so the edges it marks stay readable under it; a near-miss's twice that. */
+  --spacing-c-guide-line: 1px;
+  --spacing-c-guide-miss-line: 2px;
   /* How far the changed ring's ping spreads outward, past the ring, as it fades over --dur-loop. */
   --spacing-c-change-ping-spread: 10px;
   --focus-ring-width: 2px;
@@ -1047,6 +1069,11 @@
   --spacing-c-menu-item-h: 32px;
   /* A sheet's height cap (DESIGN.md Drawer: "It is as tall as its content, up to 85vh"). */
   --spacing-c-sheet-max-h: 85vh;
+  /* An outcome line's answer column (Outcomes option 1, the bento): its glyph and "Was false 12 Nov" on one line beside the line's sentence, so the words line up down a tile; a little narrower in a phone's column. */
+  --spacing-c-line-answer-w: 132px;
+  --spacing-c-line-answer-w-narrow: 128px;
+  /* A line opened as a sheet from the foot (Outcomes under 640): at most this share of the screen, the line it opened kept in the part above it. */
+  --spacing-c-line-sheet-h: 70dvh;
   /* The peek sheet's height on a touch screen: fixed, so it holds its size from the first frame. */
   --spacing-c-peek-sheet-h: 80dvh;
   /* The peek sheet's width with a fine pointer, beside the page, and the room the page gives it at its trailing edge while it stands open (the peek's surface brief, Peek: "a sheet from the right beside the home it was opened from"). */
@@ -1253,6 +1280,8 @@
   --spacing-c-deck-gap: 12px;
   /* Caw's still box in the cawco address tray, standing on its top edge (Family) or over its card (status card). */
   --spacing-c-address-caw: 64px;
+  /* An outcome line's answer column (outcomes-proto option 2): one fixed width down a tile, so every answer word starts on one x; it holds "Held on 12 Nov" with its glyph. */
+  --spacing-c-answer-w: 112px;
   /* The QR on the address tray's phone step: the address a phone opens once. */
   --spacing-c-address-qr: 112px;
   /* The tallest the address tray's Raw well stands before it scrolls. */

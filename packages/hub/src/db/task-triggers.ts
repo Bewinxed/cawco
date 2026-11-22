@@ -14,10 +14,16 @@ import {
   inArray,
   isNotNull,
   isNull,
+  notInArray,
   sql,
 } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { projectTasks, taskRuns, taskTriggers } from "./schema";
+import {
+  projectTasks,
+  taskRuns,
+  taskTriggerChecks,
+  taskTriggers,
+} from "./schema";
 import type { Tx } from "./tx";
 
 /** A routine's name: its task's title, else its task's id while the index holds no row of it. */
@@ -40,6 +46,9 @@ export type TriggerRow = typeof taskTriggers.$inferSelect;
 export type RoutineRow = TriggerRow & { name: string };
 
 export type RoutineRunRow = typeof taskRuns.$inferSelect;
+
+/** A routine's check on one machine, as its last run there left it. */
+export type CheckRow = typeof taskTriggerChecks.$inferSelect;
 
 /**
  * What a run is filed as: started; queued behind a live run (an event's
@@ -67,6 +76,8 @@ export interface TaskTriggersDb {
   ) => RoutineRow | undefined;
   /** Routines carried over from before routines were tasks whose task is not filed yet. */
   readonly carried: () => TriggerRow[];
+  /** A routine's check on each machine, as its last run there left it. */
+  readonly checks: (routineId: string) => CheckRow[];
   /**
    * The next queued run, taken in one transaction while the routine has no
    * run going: its oldest by arrival, filed as `decide` says now. Nothing
@@ -90,6 +101,8 @@ export interface TaskTriggersDb {
     routineId: string;
     slot: Date;
   }) => RoutineRunRow | undefined;
+  /** A run that kept nothing: a quiet check's, deleted. */
+  readonly deleteRun: (id: string) => void;
   /**
    * A carried routine's task filed (routine-carry.ts): the trigger the index
    * made for the new file gives way to the carried one, which takes its
@@ -104,6 +117,14 @@ export interface TaskTriggersDb {
     routineId: string;
     slot: string;
   }) => RoutineRunRow | undefined;
+  /**
+   * A slot's check kept, in one transaction: each machine's row written
+   * whole, and the rows of machines `check_on` no longer names deleted.
+   */
+  readonly keepChecks: (
+    routineId: string,
+    rows: Omit<CheckRow, "triggerId">[]
+  ) => void;
   /**
    * Routines with a filed task, of a project or every project, oldest
    * first; `all` takes in those whose file no longer makes them one.
@@ -307,6 +328,7 @@ export const taskTriggersDb = (db: BunSQLiteDatabase): TaskTriggersDb => {
                   mode: made.mode,
                   keep: made.keep,
                   command: made.command,
+                  checkOn: made.checkOn,
                   problem: made.problem,
                 }
               : {}),
@@ -347,6 +369,39 @@ export const taskTriggersDb = (db: BunSQLiteDatabase): TaskTriggersDb => {
       return done ? get(done.id) : undefined;
     },
     run: (id) => db.select().from(taskRuns).where(eq(taskRuns.id, id)).get(),
+    deleteRun: (id) => {
+      db.delete(taskRuns).where(eq(taskRuns.id, id)).run();
+    },
+    checks: (routineId) =>
+      db
+        .select()
+        .from(taskTriggerChecks)
+        .where(eq(taskTriggerChecks.triggerId, routineId))
+        .all(),
+    keepChecks: (routineId, rows) =>
+      db.transaction((tx) => {
+        tx.delete(taskTriggerChecks)
+          .where(
+            and(
+              eq(taskTriggerChecks.triggerId, routineId),
+              notInArray(
+                taskTriggerChecks.machine,
+                rows.map((row) => row.machine)
+              )
+            )
+          )
+          .run();
+        for (const row of rows) {
+          const kept = { ...row, triggerId: routineId };
+          tx.insert(taskTriggerChecks)
+            .values(kept)
+            .onConflictDoUpdate({
+              target: [taskTriggerChecks.triggerId, taskTriggerChecks.machine],
+              set: kept,
+            })
+            .run();
+        }
+      }),
     runOfItem: (workItemId) =>
       db
         .select()

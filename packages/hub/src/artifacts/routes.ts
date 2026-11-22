@@ -179,6 +179,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           ),
           ...readFields.properties,
           render: t.Optional(t.BooleanString()),
+          layout: t.Optional(t.BooleanString()),
           verify: t.Optional(t.BooleanString()),
         }),
       },

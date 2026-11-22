@@ -6470,6 +6470,9 @@ export const createWorkItems = ({
     /** A workspace a design is opened from cut again when it went, or why it can't come back (workspaces.ts `revive`). */
     revive: workspaces.revive,
 
+    /** Why what a workspace served can't come back as it is opened, from the hub's records alone; null when it can (workspaces.ts `wontComeBack`). */
+    wontComeBack: workspaces.wontComeBack,
+
     /**
      * The workspace of session `instanceId`'s item settled soon
      * (workspaces.ts `settleSoon`): its session went to sleep, stopped or failed, so
@@ -6568,38 +6571,6 @@ export const createWorkItems = ({
         )
       );
     },
-
-    /**
-     * A workspace cut for one `command` routine run's check (routines.ts
-     * `fireCommand`): the folder `cwd` names on `machineId` copied and its
-     * boundary started, as a delegate's is, filed as that run's
-     * (workspaces.ts `routineRun`), with no work item and no session. The
-     * refusal when it could not be cut.
-     */
-    async openCheck(
-      createdBy: string,
-      cwd: string,
-      machineId: string,
-      projectId: string | null,
-      runId: string
-    ) {
-      const at = workspaces.cwdOn(machineId, cwd);
-      if (at instanceof ElysiaStatus) {
-        return at;
-      }
-      return await workspaces.openWorkspace(
-        createdBy,
-        at,
-        machineId,
-        projectId,
-        {
-          routineRun: runId,
-        }
-      );
-    },
-
-    /** A command check's workspace let go of as its run ends (workspaces.ts `closeRoutineRun`). */
-    closeCheck: (id: string) => workspaces.closeRoutineRun(id),
 
     /**
      * What workspace `needle` serves that waits on the person

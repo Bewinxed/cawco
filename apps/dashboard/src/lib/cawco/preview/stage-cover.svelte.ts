@@ -52,10 +52,13 @@ export class StageCover {
    * the stage. The doc's word is the agent's last frame, which can trail the
    * stage (a frame missed, a version opened over another's); a page that
    * answered is the stage serving. One that answered and then went silent is
-   * the proxy's `down`, never a wait again.
+   * the proxy's `down`, never a wait again. Nor while the hub says the page
+   * can't be shown: no frame is asked for.
    */
   readonly awaited = $derived.by(() =>
-    this.#deps.previewFrame.connected ? null : this.staged
+    this.#deps.previewFrame.connected || this.#deps.previewFrame.hubHeld
+      ? null
+      : this.staged
   );
 
   /** A down stage's own words stand unfolded (Show details). */

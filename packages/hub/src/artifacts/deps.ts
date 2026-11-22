@@ -3,6 +3,7 @@ import type { ChoiceEntry } from "@cawco/core/choices";
 import type { Member } from "@cawco/core/decides";
 import type { DecisionCard } from "@cawco/core/decisions";
 import type { PlanStep } from "@cawco/core/plan";
+import type { PreviewUnavailable } from "@cawco/core/preview/protocol";
 import type { PreviewAddress } from "@cawco/core/preview/routes";
 import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
 import type {
@@ -404,6 +405,8 @@ export interface ArtifactServiceDeps {
    * when it has none; refused when every port is taken.
    */
   previewAddress: (instanceId: string) => PreviewAddress | ListenerProblem;
+  /** Whether artifacts `ids` can be shown moved (their files kept or lost): every surface showing them is told again (server.ts `previewsMoved`). */
+  previewsMoved: (ids: readonly string[]) => void;
   /**
    * A session closed one of artifact `artifactId`'s questions to the person
    * (taken or withdrawn): every screen listing a session's questions reads
@@ -574,6 +577,8 @@ export interface ArtifactServiceDeps {
    * ({@link ArtifactServiceDeps.stranded}).
    */
   tree: (instance: InstanceRow) => Set<string>;
+  /** Why the hub knows artifact `row` can't be shown now (preview-unavailable.ts); null while nothing stands in the way. */
+  unavailable: (row: ArtifactRow | undefined) => PreviewUnavailable | null;
   /**
    * A design graph drawn by its workspace's daemon in the machine's own
    * Chromium (agent stage.ts `renderStage`): the stage's report once every

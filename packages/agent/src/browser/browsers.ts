@@ -48,9 +48,14 @@ import { isBrowserKey } from "@cawco/core/browser";
 import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { makeFolder } from "@cawco/core/folders";
 import type { AgentPorts } from "../agent-ports";
-import { ContainerHost, nekoSession, RELAY_RENEW_MS } from "./container-host";
+import {
+  ContainerHost,
+  keepAdapter,
+  nekoSession,
+  RELAY_RENEW_MS,
+} from "./container-host";
 import { followsNetwork, machineNetwork, startAgainDue } from "./egress";
-import { frontOrigin, frontUnread, syncOrigins } from "./front-origin";
+import { frontOrigin, syncOrigins } from "./front-origin";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
 import { startHubProxy } from "./hub-proxy";
 import { LocalHost } from "./local-host";
@@ -70,6 +75,7 @@ import {
   browserDir,
   browsersDir,
   forgetBrowser,
+  httpAnswers,
   type MachineNetwork,
   type Progress,
   portsOf,
@@ -92,6 +98,9 @@ const TICK_MS = 60_000;
 
 /** How often the machine's network is read ({@link followNetwork}): our call, a few seconds of a page failing at most. */
 const NETWORK_POLL_MS = 5000;
+
+/** How long a running browser's DevTools has to answer whether it is up. */
+const DEVTOOLS_ASK_MS = 2000;
 
 let runtime: Runtime | { missing: string } | undefined;
 let runtimeAt = 0;
@@ -161,9 +170,6 @@ const rowOf = (record: BrowserRecord): BrowserRow => {
     ...(record.state === "live" && frontOrigin(record.key)
       ? { origin: frontOrigin(record.key) }
       : {}),
-    ...(record.state === "live" && frontUnread(record.key)
-      ? { originUnread: true as const }
-      : {}),
   };
 };
 
@@ -211,7 +217,9 @@ const tell = async (ports: BrowserPorts): Promise<void> => {
           ])
       ),
       // A page's origin that settled is told as any change is.
-      () => told(ports)
+      () => told(ports),
+      // A link that failed: the browser checked, and brought back.
+      (key) => reviveBrowser(ports, key)
     );
   }
   const frame = await browserFrame(ports);
@@ -478,10 +486,23 @@ const markAway = async (
 };
 
 /**
+ * Whether `record`'s browser, running on `host`, answers on its DevTools: a
+ * container can run on with its Chromium dead, or respawned listening on no
+ * DevTools port (container-host.ts `#revive`).
+ */
+const devtoolsAnswers = (
+  record: BrowserRecord,
+  host: BrowserHost
+): Promise<boolean> =>
+  httpAnswers(`${host.devtoolsUrl(record)}/json/version`, DEVTOOLS_ASK_MS);
+
+/**
  * Whether `record`'s browser, live, stands as a start asks: running, its
- * relay credential good, and its preview-name rules as the hub wants them
- * now unless `rules` keeps them; a change another session's hold defers is
- * noted for its release ({@link rulesAtRelease}).
+ * DevTools answering, its relay credential good, and its preview-name rules
+ * as the hub wants them now unless `rules` keeps them; a change another
+ * session's hold defers is noted for its release ({@link rulesAtRelease}).
+ * One whose DevTools is silent is started again on its host, which brings
+ * its Chromium back.
  */
 const standsAsAsked = async (
   record: BrowserRecord,
@@ -492,6 +513,7 @@ const standsAsAsked = async (
   if (!(
     record.state === "live" &&
     (await host.running(record)) &&
+    (await devtoolsAnswers(record, host)) &&
     (await host.servesItsPorts(record)) &&
     !relayDue(record, relay)
   )) {
@@ -777,9 +799,11 @@ export const removeBrowser = async (
 /**
  * Reads every record against its host: a browser that is not running is
  * asleep, whatever its record last said (an agent restart ends a local
- * Chromium; a machine restart, a container).
+ * Chromium; a machine restart, a container). A live one that runs with its
+ * DevTools silent is revived ({@link reviveBrowser}).
  */
 const readBack = async (ports: BrowserPorts): Promise<void> => {
+  const silent: BrowserKey[] = [];
   for (const record of await allBrowsers()) {
     if (starting.has(record.key)) {
       continue;
@@ -801,11 +825,69 @@ const readBack = async (ports: BrowserPorts): Promise<void> => {
       }
       if (!(await host.running(now))) {
         await writeBrowser({ ...now, state: "asleep", takeover: null });
+      } else if (now.state === "live" && !(await devtoolsAnswers(now, host))) {
+        silent.push(now.key);
       }
     }).catch((error: unknown) =>
       console.warn(`[browser] ${record.key} was not read back: ${why(error)}`)
     );
   }
+  for (const key of silent) {
+    await reviveBrowser(ports, key);
+  }
+};
+
+/** Each browser's revival under way ({@link reviveBrowser}), by key. */
+const reviving = new Map<BrowserKey, Promise<void>>();
+
+/**
+ * `key`'s browser checked on its host, as its record says it is live but
+ * its DevTools may not answer (the daemon's link to it failed,
+ * front-origin.ts; a tick found it silent, {@link readBack}): under its
+ * lock, so a start or a stop under way ends first. Still live and running
+ * with its DevTools silent, it is started again on its host
+ * ({@link launch}): its row says it starts meanwhile, and a container keeps
+ * its container (no relay is asked for, so it is not made again for one),
+ * its Chromium restarted in place and then the container itself
+ * (container-host.ts `#revive`); one that doesn't come back is failed, with
+ * why. One that no longer runs is asleep. Settles once that is done, and
+ * never rejects: a failure is said in the log. One revival at a time each.
+ */
+const reviveBrowser = (ports: BrowserPorts, key: BrowserKey): Promise<void> => {
+  const under = reviving.get(key);
+  if (under) {
+    return under;
+  }
+  const revival = withBrowser(key, async () => {
+    const record = await readBrowser(key);
+    if (record?.state !== "live") {
+      return;
+    }
+    const host = await hostOf(record);
+    if (!host) {
+      await markAway(record, ports);
+      return;
+    }
+    if (!(await host.running(record))) {
+      await writeBrowser({ ...record, state: "asleep", takeover: null });
+      told(ports);
+      return;
+    }
+    if (await devtoolsAnswers(record, host)) {
+      return;
+    }
+    console.warn(
+      `[browser] ${key} is live but its DevTools does not answer: started again`
+    );
+    const held = (await host.heldSlots?.()) ?? new Set<number>();
+    await launch(ports, record, host, undefined, held);
+  })
+    .catch((error: unknown) =>
+      console.warn(`[browser] ${key} was not revived: ${why(error)}`)
+    )
+    .finally(() => reviving.delete(key));
+  reviving.set(key, revival);
+  return revival;
 };
 
 /**
@@ -1260,6 +1342,15 @@ export const watchBrowsers = async (
         : `[browser] runtime ${found.kind} ${found.version} (API ${found.api}${found.rootless ? `, rootless${found.rootlessNetwork ? ` on ${found.rootlessNetwork}` : ""}` : ""}) at ${found.endpoint}`
     );
     await tick(ports);
+    // Containers that ran on past the agent's last stop get the virtual BLE
+    // adapter that stopped with it, so their passkey relay holds.
+    if (
+      (await allBrowsers()).some(
+        (record) => record.host === "container" && record.state === "live"
+      )
+    ) {
+      await keepAdapter("the live containers");
+    }
   } catch (error) {
     stop();
     throw error;

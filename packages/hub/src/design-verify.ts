@@ -50,7 +50,7 @@
  *   task. In a chat, a round is asked of an artifact (`artifact_read({
  *   verify: true })`, or the panel's Verify): keyed on the artifact, on the
  *   tree of the workspace its stage runs in, when that repository holds a
- *   system (`design/DESIGN.md` or `design/SKILL.md`). The same verifier
+ *   system (`design/manifest.json`). The same verifier
  *   judges it; its verdict goes to the session that asked, as one message,
  *   and nothing is held or finished.
  */
@@ -88,9 +88,8 @@ const CHECKING = "being checked against the design system";
 const VERIFIER_BRIEF = "You are the design system verifier";
 /** A chat round's key in `design_checks.item_id`: the artifact it judges. */
 const ARTIFACT_KEY = "artifact:";
-/** Whether the clone holds a design system to judge against: one line, `system`, when it does. */
-const HAS_SYSTEM =
-  "if [ -f design/DESIGN.md ] || [ -f design/SKILL.md ]; then echo system; fi";
+/** Whether the clone holds a design system to judge against (its manifest, the one test, hub landed.ts): one line, `system`, when it does. */
+const HAS_SYSTEM = "if [ -f design/manifest.json ]; then echo system; fi";
 /** The patch's name in the verifier's `$TMPDIR/inputs/`. */
 const PATCH = "design-check.patch";
 /** The most of a page's HTML a brief carries. */
@@ -105,7 +104,8 @@ const COMMAND_MS = 120_000;
  * `TMPDIR` (its scratch dir, the same path on the host, where the
  * verifier's inputs are read from). Run inside the clone's boundary, git
  * the safe way (core safe-git.ts). Three lines: head, tree, the patch's
- * path or nothing.
+ * path or nothing; then design/manifest.json as the tree has it, when it
+ * has one.
  */
 const SNAPSHOT = [
   SAFE_GIT_SHELL,
@@ -118,6 +118,7 @@ const SNAPSHOT = [
   "head=$(git rev-parse HEAD)",
   `out=""; if [ "$tree" != "$(git rev-parse 'HEAD^{tree}')" ]; then out="$(mktemp -d)/${PATCH}"; git diff --cached --binary HEAD > "$out"; fi`,
   'printf \'%s\\n%s\\n%s\\n\' "$head" "$tree" "$out"',
+  "if [ -f design/manifest.json ]; then cat design/manifest.json; fi",
 ].join("\n");
 
 /**
@@ -248,8 +249,37 @@ interface Snapshot {
   head: string;
   /** The patch of what the tree adds to `head`, on the builder's machine; null when the tree is the commit's. */
   patch: string | null;
+  /** The stylesheet the system's Tailwind theme is declared in, as its manifest names it; null for a system of DTCG token files. */
+  tailwind: string | null;
   tree: string;
 }
+
+/** The Tailwind theme a manifest's text names; null for none, or a manifest that is no JSON. */
+const tailwindOf = (manifest: string): string | null => {
+  try {
+    const read: unknown = JSON.parse(manifest);
+    return typeof read === "object" &&
+      read !== null &&
+      "tailwind" in read &&
+      typeof read.tailwind === "string"
+      ? read.tailwind
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+/** A brief's `## The system`, for the system's kind. */
+const systemSection = (at: Snapshot): string =>
+  at.tailwind
+    ? `## The system\n\ndesign/ as the work has it: DESIGN.md (the rules and recipes) and SKILL.md. Its tokens are the project's Tailwind theme, declared by hand in \`${at.tailwind}\`, and the work's own changes to that file are part of what you judge. Load the design-system skill with the Skill tool and read its references/tailwind.md: how a theme system holds its tokens.`
+    : "## The system\n\ndesign/ as the work has it: DESIGN.md (the rules and recipes), tokens.resolver.json and its token files, the generated tokens.css, specimens/, SKILL.md. Load the design-system skill with the Skill tool: its references/css.md holds the CSS practices the work must follow.";
+
+/** What a brief's `## How` judges against, for the system's kind; with a theme, what to judge in the work's own diff of it. */
+const judgedAgainst = (at: Snapshot): string =>
+  at.tailwind
+    ? `Judge it as a designer against DESIGN.md and the theme: a value that is no token, a role used for the wrong job, a rule DESIGN.md states broken. In the work's own diff of \`${at.tailwind}\`, judge three things: a raw value where the theme has a token for it; a token the work added that repeats an existing token's value, or that stands outside Tailwind's namespace for its kind (a colour outside \`--color-*\`, a radius outside \`--radius-*\`); a shared token's value changed when the task did not ask for it. Nothing that would not block the work: no nits, no suggestions.`
+    : "Judge it as a designer against DESIGN.md, the tokens and the CSS practices: a value that is no token, a role used for the wrong job, a rule DESIGN.md states broken, a practice css.md asks for not followed. Nothing that would not block the work: no nits, no suggestions.";
 
 export const createDesignVerify = (deps: DesignVerifyDeps) => {
   const { db, workItems } = deps;
@@ -284,13 +314,14 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     machineId: string;
     path: string;
   }): Promise<Snapshot> => {
-    const [head = "", tree = "", patch = ""] = (
+    const [head = "", tree = "", patch = "", ...manifest] = (
       await command(workspace, SNAPSHOT)
     ).split("\n");
     return {
       head: head.trim(),
       tree: tree.trim(),
       patch: patch.trim() || null,
+      tailwind: tailwindOf(manifest.join("\n")),
     };
   };
 
@@ -333,8 +364,8 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     return [
       `${VERIFIER_BRIEF} for project “${project}”. A builder session handed in ${task.id} “${task.title}”. Before the person sees it, you judge it against the project's design system. You never edit or fix the work: you judge, and the builder fixes.`,
       `## The work\n\nThe builder's work sits on commit ${at.head}, on top of origin/${base}; its objects are in your clone. ${setUp}\n\nThe task:\n\n${task.description.trim() || "(no description)"}\n\nThe builder's hand-in:\n\n${result?.summary.trim() || "(none)"}\n\nWhat it shows:\n\n${artifactsOf(result?.artifacts ?? [], deps.artifact)}`,
-      "## The system\n\ndesign/ as the work has it: DESIGN.md (the rules and recipes), tokens.resolver.json and its token files, the generated tokens.css, specimens/, SKILL.md. Load the design-system skill with the Skill tool: its references/css.md holds the CSS practices the work must follow.",
-      "## How\n\nRender what the work changed in your own workspace: a component or screen with artifact_create kind component on your stage, read with artifact_read (what was drawn, a state's computed-style delta with state, the moves' animations; render: true draws it in the machine's browser when no panel has); a page with artifact_create kind page. Read the computed styles of the elements it touched, and judge them as a designer against DESIGN.md, the tokens and the CSS practices: a value that is no token, a role used for the wrong job, a rule DESIGN.md states broken, a practice css.md asks for not followed. Nothing that would not block the work: no nits, no suggestions.",
+      systemSection(at),
+      `## How\n\nRender what the work changed in your own workspace: a component or screen with artifact_create kind component on your stage, read with artifact_read (what was drawn, a state's computed-style delta with state, the moves' animations; render: true draws it in the machine's browser when no panel has); a page with artifact_create kind page. Read the computed styles of the elements it touched. ${judgedAgainst(at)}`,
       "## Your answer\n\nCall design_verdict once. Each finding is a must-fix tied to one element: its file and line, its CSS selector, what is wrong and what the system says instead. No findings is a pass. When the result offers variants, name the one that holds to the system best in `pick`, and why. design_verdict puts your clone back as it was cut (the uncommitted part reversed, your own branch checked out again) and finishes your item: then end your turn.",
     ].join("\n\n");
   };
@@ -351,8 +382,8 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     return [
       `${VERIFIER_BRIEF}. A session asked you, in a chat, to judge its ${artifact.kind} “${artifact.name}” against the project's design system. You never edit or fix the work: you judge, and the session fixes.`,
       `## The work\n\nIt sits on commit ${at.head}, on top of origin/${base}; its objects are in your clone. ${setUp} Its states files: ${artifact.files.map((file) => `\`${file}\``).join(", ") || "(none named)"}.`,
-      "## The system\n\ndesign/ as the work has it: DESIGN.md (the rules and recipes), tokens.resolver.json and its token files, the generated tokens.css, specimens/, SKILL.md. Load the design-system skill with the Skill tool: its references/css.md holds the CSS practices the work must follow.",
-      "## How\n\nOpen its states files with artifact_create kind component on your own stage, then read what was drawn with artifact_read: each frame, each forced state's computed-style delta with state, the moves' animations; render: true draws it in the machine's browser. Judge it as a designer against DESIGN.md, the tokens and the CSS practices: a value that is no token, a role used for the wrong job, a rule DESIGN.md states broken, a practice css.md asks for not followed. Nothing that would not block the work: no nits, no suggestions.",
+      systemSection(at),
+      `## How\n\nOpen its states files with artifact_create kind component on your own stage, then read what was drawn with artifact_read: each frame, each forced state's computed-style delta with state, the moves' animations; render: true draws it in the machine's browser. ${judgedAgainst(at)}`,
       "## Your answer\n\nCall design_verdict once. Each finding is a must-fix tied to one element: its file and line, its CSS selector, what is wrong and what the system says instead. No findings is a pass. design_verdict puts your clone back as it was cut (the uncommitted part reversed, your own branch checked out again) and finishes your item: then end your turn.",
     ].join("\n\n");
   };
@@ -709,7 +740,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
         return `The workspace ${short(artifact.workspaceId)} its stage ran in is gone, so “${artifact.name}” can't be checked.`;
       }
       if (!(await command(workspace, HAS_SYSTEM)).includes("system")) {
-        return "This repository holds no design system (no design/DESIGN.md or design/SKILL.md), so there is nothing to check it against.";
+        return "This repository holds no design system (no design/manifest.json), so there is nothing to check it against.";
       }
       const latest = db.designChecks.latest(key);
       if (latest?.state === "checking") {

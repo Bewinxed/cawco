@@ -6,6 +6,7 @@
  * shapes from here, so neither imports the other.
  */
 
+import type { LayoutRead } from "@cawco/core/layout-guides";
 import {
   type AnimationRead,
   type CanvasGraph,
@@ -338,6 +339,12 @@ export interface CanvasState {
    * None on a column's page.
    */
   lacks?: (key: string) => { h: number; w: number } | null;
+  /**
+   * The alignment guides turned on over state `key`'s drawing, for its
+   * picture, and what they read (core layout-guides.ts); null when the
+   * stage doesn't stand at it. None on a column's page.
+   */
+  layout?: (key: string) => LayoutRead | null;
   loaded: () => string[];
   /** State `key`'s drawing as it stands, for its picture; null when the stage doesn't stand at it. None on a column's page. */
   picture?: (key: string) => FramePictureRead | null;

@@ -1520,7 +1520,6 @@
             connecting={streamState.kind !== "live"}
             {mine}
             origin={browser?.origin ?? null}
-            unread={browser?.originUnread === true}
           />
         </div>
         {#if driving}

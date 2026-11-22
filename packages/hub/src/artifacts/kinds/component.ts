@@ -1,5 +1,6 @@
 import { relative } from "node:path";
 import { docMeta, getMeta, setMeta } from "@cawco/core/doc-meta";
+import type { LayoutRead } from "@cawco/core/layout-guides";
 import { machineLabel } from "@cawco/core/machine-names";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import type { InstanceRow } from "@cawco/core/protocol";
@@ -1047,6 +1048,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     let undrawn: SectionUndrawn[] = [];
     let plansUnread: true | undefined;
     let png: string | undefined;
+    let layout: LayoutRead | undefined;
     if (sheet) {
       const at: StageAt = { workspace: sheet.workspace };
       // A bare story name two states files export reads no one frame: refused, before any draw, with the `file:Story` names to send.
@@ -1059,17 +1061,18 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         });
       }
       // A draw asked of a stage that answered: refused in its own words when it can't be made.
-      if (opened && (ask.render || ask.png)) {
+      if (opened && (ask.render || ask.png || ask.layout)) {
         const rendered = await deps.stageRender(at, {
           files: sheet.files,
           spec: sheet.spec,
           ...(ask.state ? { state: ask.state } : {}),
-          ...(ask.png ? { png: true } : {}),
+          ...(ask.png || ask.layout ? { png: true } : {}),
+          ...(ask.layout ? { layout: true } : {}),
         });
         if (rendered instanceof ElysiaStatus) {
           return rendered;
         }
-        ({ report, png, undrawn, plansUnread } = rendered);
+        ({ report, png, undrawn, plansUnread, layout } = rendered);
       }
       if (report) {
         report = drawnHeld(row, report);
@@ -1140,7 +1143,8 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
             },
           }
         : {}),
-      ...(ask.png ? { png: png ?? null } : {}),
+      ...(ask.png || ask.layout ? { png: png ?? null } : {}),
+      ...(layout ? { layout } : {}),
       hint: READ_HINT,
     };
     return read;

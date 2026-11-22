@@ -9,12 +9,19 @@ FROM ghcr.io/m1k1o/neko/chromium:3.2.0
 # desktop's pointer (xorg.conf). ibus-gtk3 is Chromium's input method
 # (chromium.conf's GTK_IM_MODULE), its module alone, with no ibus daemon.
 # bluez: BLE stack for passkey proximity relay (virtual HCI adapter, agent
-# passkey-inject.ts).
+# passkey-inject.ts). curl: the health check below.
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends socat xserver-xorg-input-mouse ibus-gtk3 bluez; \
+    apt-get install -y --no-install-recommends socat xserver-xorg-input-mouse ibus-gtk3 bluez curl; \
     apt-get clean -y; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+
+# Healthy while Chromium's DevTools answers, which is what the agent's gate
+# needs of the browser. The base image's check asks neko's /health, which
+# goes on answering while Chromium is dead (21-22 Nov 2026: "(healthy)" for
+# the half hour a respawned Chromium listened on no DevTools port).
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -fsS -m 4 -o /dev/null http://127.0.0.1:9223/json/version || exit 1
 
 # A desktop with a mouse and no touchscreen (xorg.conf). neko connects to its
 # touchscreen driver's socket at start unless told not to, and stops when the

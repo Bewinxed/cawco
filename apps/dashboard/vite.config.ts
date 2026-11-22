@@ -26,7 +26,7 @@ import {
 } from "vite";
 import { z } from "zod";
 import { firstPaintChunks } from "./first-paint-chunks.ts";
-import { groupsAsCombinators } from "./group-selectors.ts";
+import { groupNegationsKeyed } from "./group-selectors.ts";
 import { precompressAll } from "./precompress-adapter.ts";
 import { publicOrigin } from "./public-origin.js";
 import { FACES_DIR, writeHouseFaces } from "./scripts/house-faces.ts";
@@ -440,21 +440,21 @@ export const proseNotByClass = (): Plugin => ({
 });
 
 /**
- * Tailwind's `group-*` and `peer-*` rules, each `:is(A *)` written as the
- * combinator it stands for (group-selectors.ts says why), where app.css
- * enters the build with Tailwind's rules in it. A sheet with none, or one in
- * a place no combinator can take, fails the build here.
+ * Tailwind's negated `group-*` and `peer-*` rules, each `:not(:is(A *))`
+ * keyed to its compound's class (group-selectors.ts says why), where app.css
+ * enters the build with Tailwind's rules in it. A sheet with none, or a
+ * group's `:is()` on a universal outside a `:not()`, fails the build here.
  */
-export const groupsByCombinator = (): Plugin => ({
-  name: "cawco-groups-by-combinator",
+export const groupNegationsByClass = (): Plugin => ({
+  name: "cawco-group-negations-by-class",
   transform(code, id) {
     if (!APP_CSS.test(id)) {
       return null;
     }
-    const { css, rewritten } = groupsAsCombinators(code, id);
+    const { css, rewritten } = groupNegationsKeyed(code, id);
     if (rewritten === 0) {
       throw new Error(
-        `no group-* or peer-* :is() was found in ${id}: re-read how Tailwind writes them and update group-selectors.ts`
+        `no negated group-* or peer-* :is() was found in ${id}: re-read how Tailwind writes them and update group-selectors.ts`
       );
     }
     return { code: css, map: null };
@@ -507,7 +507,7 @@ export default defineConfig(({ command }) => {
       runningVersion(),
       tailwindcss(),
       proseNotByClass(),
-      groupsByCombinator(),
+      groupNegationsByClass(),
       tokensInPlace(),
       sveltekit({
         preprocess: vitePreprocess(),

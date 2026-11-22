@@ -209,7 +209,7 @@ export interface AsksDeps {
   /**
    * Runs an approved call as the hub for the session that asked; answers
    * what the tool said, or the problem of a run the hub makes by a path of
-   * its own: a relay's opening (relay.ts `runApproved`), a command check
+   * its own: a relay's opening (relay.ts `runApproved`), a routine's check
    * made or changed (routines.ts `createApproved`, `update`), a project setting
    * (project-settings.ts `runApproved`) or a discard (artifact-events.ts
    * `discarded`).

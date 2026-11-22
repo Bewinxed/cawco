@@ -385,6 +385,23 @@ export interface StageCompare {
   show: "kept" | "compared";
 }
 
+/**
+ * Pane → page: the alignment guides (core layout-guides.ts) laid over the
+ * drawing, or taken off. The page measures the drawing as it stands and
+ * again as it lays out anew, at whatever width and scheme it is drawn.
+ */
+export const STAGE_GUIDES = "cawco:stage-guides";
+export interface StageGuides {
+  on: boolean;
+}
+
+/** A {@link StageGuides} as it crossed the frame; null when it is none. */
+export function stageGuidesOf(value: unknown): StageGuides | null {
+  return isRecord(value) && typeof value.on === "boolean"
+    ? { on: value.on }
+    : null;
+}
+
 /** A box of a drawing, in its own px: unscaled, from its top-left corner. */
 export interface DrawingBox {
   h: number;
