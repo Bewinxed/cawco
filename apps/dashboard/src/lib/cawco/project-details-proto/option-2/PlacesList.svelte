@@ -151,114 +151,109 @@
 </script>
 
 <div class="flex min-w-0 flex-col gap-space-3">
-  <!-- Drawn out by its glyphs' inset, so they share the card's left edge. -->
-  <div class="-ms-c-mark-inset min-w-0">
-    <RowList divided label={words.places.heading}>
-      {#each record.places as place (place.id)}
-        {@const machine = place.machineId
-          ? (machinesById.get(place.machineId) ?? null)
-          : null}
-        {@const offline = machine !== null && !machine.online}
-        {@const moving = movingPlaceId === place.id}
-        <SectionRow
-          actions={place.kind === "hub" ? [] : actsOf(place)}
-          icon={machine ? machineIcon(machine.os) : IconHubFolder}
-          code
-          meta={place.path}
-          name={machine ? machine.name : words.places.hub}
-          note={place.missing
-            ? { text: words.places.missingTip, tone: "fail" }
-            : undefined}
-          whole
-        >
-          {#snippet badge()}
-            {#if place.missing}
-              <Badge variant="fail"
-                ><IconError aria-hidden="true" /><span
-                  >{words.places.missing}</span
-                ></Badge
-              >
-            {:else if moving}
-              <Badge variant="live"
-                ><IconWorking aria-hidden="true" /><span
-                  >{words.places.moving}</span
-                ></Badge
-              >
-            {:else if offline}
-              <Badge variant="attn"><span>{words.places.away}</span></Badge>
-            {/if}
-            {#if place.kind === "start"}
-              <!-- Where sessions start: the one marked place, a pill. -->
-              <Badge variant="brand"
-                ><span>{words.places.startsHere}</span></Badge
-              >
-            {:else if place.kind === "hub"}
-              <!-- Why it has no menu: the hub keeps it. -->
-              <span class="type-meta text-ink-muted">{words.places.hubOwn}</span
-              >
-            {/if}
-          {/snippet}
-          {#snippet trailing()}
-            {#if place.missing}
-              <Button
-                {disabled}
-                icon={IconFolderOpen}
-                label={words.places.findFolder}
-                onclick={() => onplace("find", place.id)}
-                size="sm"
-                variant="outline"
-              />
-            {/if}
-          {/snippet}
-          {#snippet below()}
-            {#if dropping === place.id}
-              <div class="flex min-w-0 flex-col gap-space-2" transition:unfold>
-                <p class="m-0 type-meta text-pretty text-ink-strong">
-                  {words.places.dropSays(
-                    place.path,
-                    machine ? machine.name : words.places.hub
-                  )}
-                  <span class="text-ink-muted">{words.places.dropKeeps}</span>
-                </p>
-                <div class="flex justify-end gap-space-2">
-                  <Button
-                    label={words.cancel}
-                    onclick={() => {
-                      dropping = null;
-                    }}
-                    size="sm"
-                    variant="ghost"
-                  />
-                  <Button
-                    {disabled}
-                    label={words.places.drop}
-                    onclick={() => {
-                      dropping = null;
-                      onplace("drop", place.id);
-                    }}
-                    size="sm"
-                  />
-                </div>
+  <RowList divided label={words.places.heading}>
+    {#each record.places as place (place.id)}
+      {@const machine = place.machineId
+        ? (machinesById.get(place.machineId) ?? null)
+        : null}
+      {@const offline = machine !== null && !machine.online}
+      {@const moving = movingPlaceId === place.id}
+      <SectionRow
+        actions={place.kind === "hub" ? [] : actsOf(place)}
+        icon={machine ? machineIcon(machine.os) : IconHubFolder}
+        code
+        meta={place.path}
+        name={machine ? machine.name : words.places.hub}
+        note={place.missing
+          ? { text: words.places.missingTip, tone: "fail" }
+          : undefined}
+        whole
+      >
+        {#snippet badge()}
+          {#if place.missing}
+            <Badge variant="fail"
+              ><IconError aria-hidden="true" /><span
+                >{words.places.missing}</span
+              ></Badge
+            >
+          {:else if moving}
+            <Badge variant="live"
+              ><IconWorking aria-hidden="true" /><span
+                >{words.places.moving}</span
+              ></Badge
+            >
+          {:else if offline}
+            <Badge variant="attn"><span>{words.places.away}</span></Badge>
+          {/if}
+          {#if place.kind === "start"}
+            <!-- Where sessions start: the one marked place, a pill. -->
+            <Badge variant="brand"><span>{words.places.startsHere}</span></Badge
+            >
+          {:else if place.kind === "hub"}
+            <!-- Why it has no menu: the hub keeps it. -->
+            <span class="type-meta text-ink-muted">{words.places.hubOwn}</span>
+          {/if}
+        {/snippet}
+        {#snippet trailing()}
+          {#if place.missing}
+            <Button
+              {disabled}
+              icon={IconFolderOpen}
+              label={words.places.findFolder}
+              onclick={() => onplace("find", place.id)}
+              size="sm"
+              variant="outline"
+            />
+          {/if}
+        {/snippet}
+        {#snippet below()}
+          {#if dropping === place.id}
+            <div class="flex min-w-0 flex-col gap-space-2" transition:unfold>
+              <p class="m-0 type-meta text-pretty text-ink-strong">
+                {words.places.dropSays(
+                  place.path,
+                  machine ? machine.name : words.places.hub
+                )}
+                <span class="text-ink-muted">{words.places.dropKeeps}</span>
+              </p>
+              <div class="flex justify-end gap-space-2">
+                <Button
+                  label={words.cancel}
+                  onclick={() => {
+                    dropping = null;
+                  }}
+                  size="sm"
+                  variant="ghost"
+                />
+                <Button
+                  {disabled}
+                  label={words.places.drop}
+                  onclick={() => {
+                    dropping = null;
+                    onplace("drop", place.id);
+                  }}
+                  size="sm"
+                />
               </div>
-            {/if}
-          {/snippet}
-        </SectionRow>
-      {/each}
-      {#if !adding}
-        <!-- The list's last row adds to it, in the rows' shape, its plus in
-             the row's lead. -->
-        <SectionRow
-          icon={IconPlus}
-          name={words.places.addPlace}
-          onpress={disabled
-            ? undefined
-            : () => {
-                adding = true;
-              }}
-        />
-      {/if}
-    </RowList>
-  </div>
+            </div>
+          {/if}
+        {/snippet}
+      </SectionRow>
+    {/each}
+    {#if !adding}
+      <!-- The list's last row adds to it, in the rows' shape, its plus in
+           the row's lead. -->
+      <SectionRow
+        icon={IconPlus}
+        name={words.places.addPlace}
+        onpress={disabled
+          ? undefined
+          : () => {
+              adding = true;
+            }}
+      />
+    {/if}
+  </RowList>
 
   {#if adding}
     <form

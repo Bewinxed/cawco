@@ -783,10 +783,6 @@
   /* The narrowest the design graph's stage stands beside its room on a desk (spec: at 1440 the stage never under 600px); under it the room becomes the drawer. */
   --spacing-c-graph-stage-min: 600px;
   --spacing-c-mark: 26px;
-  /* How far a row's glyph stands in from its mark tile's edge: a list in a card is drawn this far out, so its rows' glyphs share the card's left edge with its title. */
-  --spacing-c-mark-inset: calc(
-    (var(--spacing-c-mark) - var(--spacing-icon-md)) / 2
-  );
   --spacing-c-row-mark: 18px;
   --spacing-c-pill-h: 24px;
   --spacing-c-pill-gap: 6px;
