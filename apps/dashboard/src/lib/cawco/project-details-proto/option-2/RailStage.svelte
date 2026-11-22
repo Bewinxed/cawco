@@ -24,7 +24,6 @@
     stateWords,
     id,
     announcement = "",
-    place = "",
     children,
   }: {
     /** 1-based position along the work path. */
@@ -36,8 +35,6 @@
     id: StageId;
     /** Polite live-region text announcing state changes for this step. */
     announcement?: string;
-    /** Where it stands on the view's grid (HowItRuns `PLACES`). */
-    place?: string;
     children: Snippet;
   } = $props();
 
@@ -46,7 +43,7 @@
 
 <section
   aria-labelledby={headingId}
-  class={["flex min-w-0 flex-col gap-space-4", place]}
+  class="flex min-w-0 flex-col gap-space-4"
   data-slot="stage"
   data-stage={id}
   data-state={state}

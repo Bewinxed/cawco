@@ -72,18 +72,6 @@
 
   const asOfAge = $derived(formatDistanceToNow(new Date(record.asOf)));
 
-  /**
-   * Each stage's place on the two-column grid from the wide line: three
-   * rows, the short stages one each, the tall ones two, staggered so a
-   * column's next stage starts where its first ends.
-   */
-  const PLACES: Record<StageId, string> = {
-    tasks: "@wide:col-start-1 @wide:row-start-1",
-    sessions: "@wide:col-start-2 @wide:row-span-2 @wide:row-start-1",
-    waits: "@wide:col-start-1 @wide:row-span-2 @wide:row-start-2",
-    lands: "@wide:col-start-2 @wide:row-start-3",
-  };
-
   const stageStateOf = (stage: StageId): StageState => {
     if (loading.includes(stage)) {
       return "settled";
@@ -195,20 +183,19 @@
     </Alert>
   {/if}
 
-  <!-- The steps in their order on one grid: one column; from the wide line
-       two columns, read across and down (1 and 2 on the top edge, 3 under
-       1, 4 under 2), each step bounded by its own head's rule. The short stages (Tasks enter, Work lands) take one
-       row each and the tall ones (Sessions start, What waits) two, so each
-       column fills under its first stage rather than waiting for the row
-       beside it to end (PLACES). -->
+  <!-- The steps in their order, one column; from the wide line two
+       newspaper columns (multi-column layout), filled down and balanced:
+       where tasks live and where agents run in the first, what needs you
+       and where code goes in the second. Each step stands whole in its
+       column (break-inside: avoid), so the page reads 1 to 4 in source
+       order and no column waits on the height of a step beside it. -->
   <div
-    class="grid min-w-0 grid-cols-1 items-start gap-x-space-8 gap-y-space-8 @wide:grid-cols-2"
+    class="min-w-0 columns-1 gap-x-space-8 @wide:columns-2 [&>*]:mb-space-8 [&>*]:break-inside-avoid"
   >
     <!-- Stage 1: Tasks enter -->
     <RailStage
       announcement={announcementOf("tasks")}
       id="tasks"
-      place={PLACES.tasks}
       n={1}
       state={tasksState}
       stateWords={words.stageState[tasksState]}
@@ -236,7 +223,6 @@
     <RailStage
       announcement={announcementOf("sessions")}
       id="sessions"
-      place={PLACES.sessions}
       n={2}
       state={sessionsState}
       stateWords={words.stageState[sessionsState]}
@@ -265,7 +251,6 @@
     <RailStage
       announcement={announcementOf("waits")}
       id="waits"
-      place={PLACES.waits}
       n={3}
       state={waitsState}
       stateWords={words.stageState[waitsState]}
@@ -294,7 +279,6 @@
       <RailStage
         announcement={announcementOf("lands")}
         id="lands"
-        place={PLACES.lands}
         n={4}
         state={landsState}
         stateWords={words.stageState[landsState]}
