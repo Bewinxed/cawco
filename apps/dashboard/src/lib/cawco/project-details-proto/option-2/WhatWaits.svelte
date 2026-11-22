@@ -1,11 +1,12 @@
 <script lang="ts" module>
   /**
    * The deciders' four cards balanced on their lines, inside a
-   * `@container/deciders`: four across where four fit, else two by two,
-   * never one alone on a line.
+   * `@container/deciders`: four across where four fit, else two by two from
+   * the kinds' line (a column of the view's two holds two), never one alone
+   * on a line; one a line only where two would crush a tile's words.
    */
   export const DECIDERS_COLS =
-    "grid-cols-1 @min-roster-two/deciders:@max-roster-four/deciders:grid-cols-2 @min-roster-four/deciders:grid-cols-4";
+    "grid-cols-1 @min-kinds/deciders:grid-cols-2 @min-roster-four/deciders:grid-cols-4";
 </script>
 
 <script lang="ts">
@@ -158,14 +159,20 @@
   aria-labelledby="work-path-deciders"
   class="@container/deciders flex min-w-0 flex-col gap-space-2"
 >
+  <!-- The section head every step's parts wear, its hairline under the
+       whole line: the heading at its start, how the project stands and what
+       to do about it pushed to its end. -->
   <div
-    class="flex min-w-0 flex-wrap items-center justify-between gap-x-space-3 gap-y-space-1"
+    class={[
+      sectionHeadVariants({ inset: "flush" }),
+      "flex-wrap gap-x-space-3 gap-y-space-1",
+    ]}
   >
-    <h3 class={sectionHeadVariants({ inset: "flush" })} id="work-path-deciders">
+    <h3 class="m-0 type-label" id="work-path-deciders">
       {words.waits.heading}
     </h3>
     <span
-      class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
+      class="ms-auto flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
     >
       {#if rules !== null}
         <span class="type-meta text-ink-muted num">
