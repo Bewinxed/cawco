@@ -5,14 +5,15 @@
  * tokenizing is synchronous, so a block paints on the frame it has its text
  * and a growing block is tokenized again whole (a stream tokenizer would hold
  * back the last, unfinished line, which is the line a stream is writing). The
- * house code theme (code-theme.ts) paints tokens as references to the house
+ * house code theme (core code-theme.ts) paints tokens as references to the house
  * syntax tokens, so changing theme repaints without tokenizing again.
  */
+
+import { codeTheme } from "@cawco/core/code-theme";
 import type { codeToTokens as CodeToTokens, Lang } from "@pierre/highlights";
-import { codeTheme } from "../code-theme";
 
 interface AgentCodeToken {
-  /** A `var(--code-syntax-*)` reference (code-theme.ts), resolved by CSS. */
+  /** A `var(--code-syntax-*)` reference (core code-theme.ts), resolved by CSS. */
   color?: string;
   content: string;
   offset: number;

@@ -1,16 +1,18 @@
 /**
  * The one syntax theme every code surface paints with: a transcript's code
- * well (tool-cards/agent-code.ts) and a diff (@pierre/diffs, DiffView and
- * DiffModal). It is a Zed-format theme in Highlights' CSS-palette form, so a
- * token's colour is a reference (`var(--code-syntax-token-keyword)`), never a
- * value; design.css points each of those variables at a house code token
- * (DESIGN.md: "Syntax colours code blocks and diffs"), and those carry both
- * appearances through light-dark(). Changing theme therefore repaints without
- * tokenizing a line again, and a diff's shadow root reads the same variables,
- * since custom properties inherit into it. Light and dark are one theme.
+ * well (dashboard tool-cards/agent-code.ts) and a diff (@pierre/diffs,
+ * diff-theme.svelte.ts), whose calls hold it to Highlights' Theme; a design
+ * folder's page reads it as the choosing-preview-libraries skill's
+ * kit/code-theme.json (hub bundled-skills.ts). It is a Zed-format theme in
+ * Highlights' CSS-palette form, so a token's colour is a reference
+ * (`var(--code-syntax-token-keyword)`), never a value; the dashboard's
+ * lib/tokens/libraries.css points each of those variables at a house code
+ * token (DESIGN.md: "Syntax colours code blocks and diffs"), and those carry
+ * both appearances through light-dark(). Changing theme therefore repaints
+ * without tokenizing a line again, and a diff's shadow root reads the same
+ * variables, since custom properties inherit into it. Light and dark are one
+ * theme.
  */
-import type { Theme } from "@pierre/highlights";
-
 export const CODE_THEME = "cawco-code";
 
 const CODE_VARIABLE_PREFIX = "--code-syntax-";
@@ -21,7 +23,7 @@ const CODE_VARIABLE_PREFIX = "--code-syntax-";
  * (createCSSVariablesTheme), so the diff and the transcript colour a token
  * alike.
  */
-export const codeTheme: Theme = {
+export const codeTheme = {
   name: CODE_THEME,
   appearance: "dark",
   cssVariables: { prefix: CODE_VARIABLE_PREFIX },
@@ -53,4 +55,4 @@ export const codeTheme: Theme = {
       link_uri: "token-link",
     },
   },
-};
+} as const;

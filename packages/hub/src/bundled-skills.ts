@@ -8,8 +8,9 @@
  *   kind's skill), `decision-page` (§5.8), `inline-block` (the block library
  *   an agent draws in its reply, tsk-330), the planning skills and the design skills,
  *   `design-explore` and `design-graph` among them: every agent's
- *   design graph is built by them, and one skill per kind of event the
- *   project's conversation hears (caw.ts `EVENT_SKILLS`).
+ *   design graph is built by them, `choosing-preview-libraries` (the
+ *   libraries and house look a preview draws with), and one skill per kind
+ *   of event the project's conversation hears (caw.ts `EVENT_SKILLS`).
  * - {@link TEMPLATE_SKILLS} are each project template's starter skills: bound
  *   to every project made from that template (`projects.template`) and
  *   placed at each of its checkouts and workspaces, as a project's own skills
@@ -22,10 +23,11 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { codeTheme } from "@cawco/core/code-theme";
 import { hashFiles } from "@cawco/core/file-hash";
 import type { FleetSkillPayload, SkillFile } from "@cawco/core/fleet";
 import { runtimeTree, standalone } from "@cawco/core/runtime";
-import { themeVariablesCss } from "@cawco/core/theme-css";
+import { houseCss, themeVariablesCss } from "@cawco/core/theme-css";
 import type { StagesTemplate } from "@cawco/core/views";
 
 export const BUNDLED_SKILLS = [
@@ -41,6 +43,7 @@ export const BUNDLED_SKILLS = [
   "design-explore",
   "design-system",
   "design-graph",
+  "choosing-preview-libraries",
   // One per kind of event the project's conversation hears, named in each
   // send's context line (caw.ts `EVENT_SKILLS`).
   "project-routine-run",
@@ -97,19 +100,29 @@ const filesUnder = (root: string, dir = root): SkillFile[] =>
 /**
  * Files a skill carries that are written when it is read, not kept in git:
  * the decision-page kit's tokens, generated from the dashboard's theme.css
- * (the one file the token values are written in). Its `mockup.mjs` reads
- * `kit/tokens.css` beside it on every machine the skill is synced to.
+ * (the one file the token values are written in), which its `mockup.mjs`
+ * reads beside it on every machine the skill is synced to; and the
+ * choosing-preview-libraries kit, the house look (tokens and libraries.css)
+ * and the house code theme a design folder's page copies in.
  */
-const generatedFiles = (name: string): SkillFile[] =>
-  name === "decision-page"
-    ? [
-        {
-          path: "kit/tokens.css",
-          contentBase64: Buffer.from(themeVariablesCss()).toString("base64"),
-          executable: false,
-        },
-      ]
-    : [];
+const generatedFiles = (name: string): SkillFile[] => {
+  const file = (path: string, text: string): SkillFile => ({
+    path,
+    contentBase64: Buffer.from(text).toString("base64"),
+    executable: false,
+  });
+  switch (name) {
+    case "decision-page":
+      return [file("kit/tokens.css", themeVariablesCss())];
+    case "choosing-preview-libraries":
+      return [
+        file("kit/house.css", houseCss()),
+        file("kit/code-theme.json", `${JSON.stringify(codeTheme, null, 2)}\n`),
+      ];
+    default:
+      return [];
+  }
+};
 
 /** Read once per process: the files change only with a new CawCo. */
 const loaded = new Map<string, FleetSkillPayload>();

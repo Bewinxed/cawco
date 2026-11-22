@@ -171,7 +171,15 @@ interface Transformed {
 /** What the stage uses of the project's dev server: Vite's own API, its Environment API from Vite 6 on. */
 interface DevServer {
   close: () => Promise<void>;
-  config: { base: string };
+  /** Its resolved config: what Vite starts again for when it moves (its `handleHMRUpdate`), besides its base. */
+  config: {
+    base: string;
+    configFile?: string;
+    configFileDependencies: string[];
+    /** The dir its env files are read from; `false` (Vite 7 on) reads none. */
+    envDir: string | false;
+    mode: string;
+  };
   environments: {
     client: {
       /** Vite's optimizer of the project's dependencies: its `browserHash` names the deps it last built (each served at `?v=<hash>`); each dependency found since, with the build that bundles it while it runs. */
@@ -284,10 +292,17 @@ interface NuxtKit {
   loadNuxt: (options: object) => Promise<Nuxt>;
 }
 
-/** A toolchain once it serves: its port, what it is, and how it ends. */
+/** A toolchain once it serves: its port, what it is, how it ends, and the files it starts again for. */
 interface Started {
   close: () => Promise<void>;
   port: number;
+  /**
+   * The files, from the root, whose move Vite answers by starting its server
+   * again ({@link restartsOn}): its restart closes every connection it holds,
+   * a request it is answering among them. None for Astro and Nuxt, which no
+   * design runs on.
+   */
+  restartsOn: string[];
   version: string;
 }
 
@@ -4613,10 +4628,37 @@ async function startVite(): Promise<Started> {
       typeof address === "object" && address ? address.port : undefined,
       "Vite"
     ),
+    restartsOn: restartsOn(started.config),
     version: `vite ${vite.version}`,
     close: () => started.close(),
   };
 }
+
+/**
+ * The files, from the root, whose move Vite answers by starting its whole
+ * server again (Vite 8.3 server/hmr.ts `handleHMRUpdate`: its config file,
+ * each file the config loads, and the env files of its mode,
+ * `getEnvFilesForMode`), which closes every connection it holds
+ * (`createServerCloseFn` destroys each open socket). The daemon starts the
+ * stage again itself for a write that moves one (agent stage.ts
+ * `ensureDesign`), so no look waits on a server that is closing under it.
+ */
+const restartsOn = (config: DevServer["config"]): string[] => {
+  const env =
+    config.envDir === false
+      ? []
+      : [
+          ".env",
+          ".env.local",
+          `.env.${config.mode}`,
+          `.env.${config.mode}.local`,
+        ].map((name) => resolve(config.envDir || root, name));
+  return [
+    ...(config.configFile ? [config.configFile] : []),
+    ...config.configFileDependencies,
+    ...env,
+  ].map((file) => relative(root, file).split(sep).join("/"));
+};
 
 /**
  * The project's Astro, from its own config, by Astro's `dev()`: "Programmatic
@@ -4646,6 +4688,7 @@ async function startAstro(): Promise<Started> {
   });
   return {
     port: onPort(started.address.port, "Astro"),
+    restartsOn: [],
     version: `astro ${version}`,
     close: () => started.stop(),
   };
@@ -4720,6 +4763,7 @@ async function startNuxt(): Promise<Started> {
   await nuxtKit.buildNuxt(nuxt);
   return {
     port,
+    restartsOn: [],
     version: `nuxt ${version}`,
     close: () => nuxt.close(),
   };
@@ -4736,6 +4780,7 @@ try {
   const started = await STARTS[toolchain]();
   say("ready", {
     port: started.port,
+    restartsOn: started.restartsOn,
     toolchain: started.version,
     runtime:
       typeof Bun === "undefined"

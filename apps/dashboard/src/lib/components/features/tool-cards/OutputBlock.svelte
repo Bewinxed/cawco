@@ -2,7 +2,7 @@
   import { detach } from "@cawco/core/detach";
   /**
    * The one code surface the console opens into — a tool result's output and a
-   * markdown fence share it, on the house code theme (code-theme.ts): a
+   * markdown fence share it, on the house code theme (core code-theme.ts): a
    * token's colour names a syntax role, design.css maps each role to a house
    * code token that carries both appearances, so a theme switch repaints
    * without tokenizing a line again; a grammar Highlights has no lexer for

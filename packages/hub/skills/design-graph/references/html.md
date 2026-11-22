@@ -22,22 +22,9 @@ A design is a **screen** unless you mark it: the graph draws a screen at its wid
 
 The graph shows marked content at the panel's own width, in the person's own scheme, with comments and your dials; it offers no widths and no light or dark. Write it to read at that one width: a document holds its text to a column of about 70ch, a chart fills the width it gets, a deck scales its slides to the frame. The mark stands across `artifact_update` until you send another; `"screen"` takes it off.
 
-## The content kit
+## Packages
 
-Every design's package.json names one maintained library for each common kind of content, so a page imports any of them by its bare name with no package.json of its own and no CDN; Vite serves each package's own published build from the stage's install:
-
-| Content | Import | With it |
-| --- | --- | --- |
-| Documents (Markdown) | `import { marked } from "marked"` | `marked.parse(text)` |
-| Charts | `import Chart from "chart.js/auto"` | `new Chart(canvas, { type, data, options })` |
-| Slide decks | `import Reveal from "reveal.js"` | `import "reveal.js/reveal.css"`, a theme such as `import "reveal.js/theme/white.css"`, then `new Reveal({ embedded: true }).initialize()` over `.reveal > .slides > section` |
-| Diagrams | `import mermaid from "mermaid"` | `mermaid.initialize({ startOnLoad: false })`, then `const { svg } = await mermaid.render(id, source)` |
-| Maths | `import katex from "katex"` | `import "katex/dist/katex.min.css"`, then `katex.renderToString(tex)` |
-| Code | `import { codeToHtml } from "shiki"` | `await codeToHtml(code, { lang, theme })` |
-
-Import a package's CSS from the page's module script, as above: Vite resolves a bare import there and leaves a `<link href>` as written. Write the module inline (`<script type="module">` in the page) or as a file beside it.
-
-A `package.json` of your own may name another version of a kit package, which replaces the kit's, or any other npm package. Content the kit doesn't cover is plain HTML, CSS and SVG, which every page can draw.
+The stage installs only Vite, the framework plugin and what the folder's `package.json` names. Before a page imports a package, read the `choosing-preview-libraries` skill: the library for each kind of content, its `package.json` line, and CawCo's look for it.
 
 ## Open it
 
