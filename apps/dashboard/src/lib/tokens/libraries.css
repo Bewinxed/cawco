@@ -1,0 +1,90 @@
+/* The house look of the libraries CawCo draws with, on its tokens
+   (theme.css): Highlights' code and Pele's diagrams and charts. Plain CSS,
+   so one sheet serves the dashboard and the decision host (design.css
+   imports it) and a design folder's page (the choosing-preview-libraries
+   skill's kit/house.css, hub bundled-skills.ts). */
+@layer base {
+  :root {
+    /* The house code theme (core code-theme.ts): each role its Highlights
+       palette names (the --code-syntax- prefix), on the syntax token
+       DESIGN.md gives it. On the root because every code surface reads them:
+       a transcript's well, and a diff, whose shadow root inherits them. */
+    --code-syntax-foreground: var(--color-code-ink);
+    --code-syntax-background: var(--color-code-bg);
+    --code-syntax-token-keyword: var(--color-code-keyword);
+    --code-syntax-token-function: var(--color-code-fn);
+    --code-syntax-token-link: var(--color-code-fn);
+    --code-syntax-token-string: var(--color-code-string);
+    --code-syntax-token-string-expression: var(--color-code-string);
+    --code-syntax-token-constant: var(--color-code-number);
+    --code-syntax-token-comment: var(--color-code-comment);
+    --code-syntax-token-parameter: var(--color-code-ink);
+    --code-syntax-token-punctuation: var(--color-code-ink);
+  }
+}
+
+@layer components {
+  /* Pele's diagram (pele.run/theming: its variables, then its classes),
+     drawn straight on its card's ground with no panel of its own (The
+     Frame Recesses Rule): a node raised (The Frame Recesses Rule) with a
+     control's edge and the 8px of an item inside a surface, its name in the
+     label role in strong ink; an edge and its arrowhead 1px in muted ink,
+     its words in meta; a subgraph the recess with a hairline, its title in
+     the label role, muted; a highlight strong ink, never coral (The Coral Is
+     Where You Act Rule); weights never above 500 (The 500 Ceiling Rule).
+     The same in a reply's markdown, where Words writes the diagram
+     (ui/markdown/mermaid.svelte.ts). */
+  [data-slot="diagram"],
+  [data-markdown="mermaid"],
+  .pele {
+    --pele-bg: var(--color-surface-raised);
+    --pele-fg: var(--color-ink-strong);
+    --pele-muted: var(--color-ink-muted);
+    --pele-line: var(--color-ink-muted);
+    --pele-surface: var(--color-surface-raised);
+    --pele-surface-alt: var(--color-surface-recess);
+    --pele-border: var(--color-border-control);
+    --pele-accent: var(--color-ink-strong);
+    --pele-critical: var(--color-status-fail-ink);
+    --pele-error: var(--color-status-fail-ink);
+    --pele-font: var(--font-sans);
+    --pele-font-mono: var(--font-mono);
+    --pele-title-weight: var(--font-weight-medium);
+    --pele-heading-weight: var(--font-weight-medium);
+    --pele-bold-weight: var(--font-weight-medium);
+    --pele-radius: var(--radius-sm);
+    --pele-series-1: var(--color-chart-1);
+    --pele-series-2: var(--color-chart-2);
+    --pele-series-3: var(--color-chart-3);
+    --pele-series-4: var(--color-chart-4);
+    --pele-series-5: var(--color-chart-5);
+    --pele-series-6: var(--color-chart-brand);
+    --pele-series-7: var(--color-ink-muted);
+    --pele-series-8: var(--color-border-contrast);
+
+    & > svg {
+      display: block;
+    }
+    & .pele-node .pele-label {
+      font-weight: var(--font-weight-medium);
+    }
+    & .pele-edge path,
+    & .pele-edge line,
+    & .pele-edge polyline {
+      stroke-width: 1px;
+    }
+    & .pele-edge-label {
+      font-size: var(--text-meta);
+      fill: var(--color-ink-muted);
+    }
+    & .pele-cluster > rect,
+    & .pele-cluster > path {
+      stroke: var(--color-border-hairline);
+    }
+    & .pele-cluster-label {
+      font-size: var(--text-label);
+      font-weight: var(--font-weight-medium);
+      fill: var(--color-ink-muted);
+    }
+  }
+}

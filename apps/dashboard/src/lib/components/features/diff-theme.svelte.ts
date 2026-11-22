@@ -1,11 +1,13 @@
 /**
  * What every diff is drawn with, in one place, so no FileDiff falls back to
- * a library default: the house code theme, tokenized by Highlights (code-theme.ts) in place of the
+ * a library default: the house code theme, tokenized by Highlights (core code-theme.ts) in place of the
  * library's own palette, the app's scheme in place of the OS's, and long
  * lines wrapped in place of scrolled (diffs.com: "Long line handling:
  * 'scroll' (default) or 'wrap'") — a diff stands in a column and never
  * scrolls sideways.
  */
+
+import { CODE_THEME, codeTheme } from "@cawco/core/code-theme";
 import {
   FileDiff,
   type FileDiffOptions,
@@ -13,7 +15,6 @@ import {
 } from "@pierre/diffs";
 import { untrack } from "svelte";
 import { theme } from "#lib/theme.svelte.js";
-import { CODE_THEME, codeTheme } from "./code-theme";
 
 registerCustomTheme(CODE_THEME, () => Promise.resolve(codeTheme), "zed");
 

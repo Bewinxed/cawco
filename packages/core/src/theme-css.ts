@@ -7,6 +7,7 @@
  */
 // A text import: the bundler embeds theme.css, so this works where the
 // repository is not on disk (the compiled binary) and in a browser bundle.
+import libraries from "../../../apps/dashboard/src/lib/tokens/libraries.css" with { type: "text" };
 import theme from "../../../apps/dashboard/src/lib/tokens/theme.css" with { type: "text" };
 
 const STATIC = "@theme static {";
@@ -40,3 +41,11 @@ export function themeVariablesCss(): string {
   const after = bodyAt(css, overrides + OVERRIDES.length - 1);
   return `@layer theme {\n  :root {${variables}  }\n${after}}\n`;
 }
+
+/**
+ * The house look as a page outside the dashboard takes it: the tokens
+ * ({@link themeVariablesCss}) and the house look of the libraries CawCo
+ * draws with on them (libraries.css: Highlights' code variables, Pele's
+ * diagrams).
+ */
+export const houseCss = (): string => `${themeVariablesCss()}\n${libraries}`;

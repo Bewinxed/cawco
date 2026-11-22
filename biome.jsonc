@@ -372,7 +372,8 @@
       // house tokens are declared once, in the dashboard's theme.css
       // (Tailwind's @theme): core theme-css.ts reads that file as text, the
       // one source every page CawCo serves outside the dashboard takes them
-      // from.
+      // from, and the house look of the libraries CawCo draws with
+      // (libraries.css) the same way.
       "includes": ["packages/core/**", "!**/*.jsonc"],
       "linter": {
         "rules": {
@@ -394,6 +395,7 @@
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
                       "!**/apps/dashboard/src/lib/tokens/theme.css",
+                      "!**/apps/dashboard/src/lib/tokens/libraries.css",
                     ],
                     "message": "A member imports another's file through that member's manifest (@cawco/<name>/…), never by a path into its folder.",
                   },
