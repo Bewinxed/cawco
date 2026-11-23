@@ -114,7 +114,9 @@
   </span>
   <div class="grid min-w-0">
     <span class="type-label font-medium text-ink-strong">{named.name}</span>
-    <span class="type-meta text-ink-muted text-pretty">{named.what}</span>
+    {#if "what" in named}
+      <span class="type-meta text-ink-muted text-pretty">{named.what}</span>
+    {/if}
   </div>
   <div
     class="col-start-2 min-w-0 max-phone:col-span-full max-phone:col-start-1"

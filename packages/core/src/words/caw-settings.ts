@@ -15,24 +15,21 @@ export const cawSettingsWords = {
   switchOn: "Caw is awake",
   /** The switch's words while he is off. */
   switchOff: "Caw is asleep",
-  /** What it means while he is awake, in one line on the hero. */
-  awakeLine: "Each trigger starts a short session that reports where it acted.",
-  /** What it means while he is asleep, in one line on the hero. */
+  /** What it means while he is asleep, in one line under the hero: the switch's consequence. */
   asleepLine: "Triggers wait on their task, routine or page until Caw wakes.",
   /** The hub has not said whether he is on yet. */
   reading: "Reading…",
   /** The hub is out of reach: what shows is what it said last, and the controls are sunk. */
   hubAway:
     "The hub isn't answering, so these are its last settings and can't be changed yet.",
+  /** What Caw may change in the project: the heading. */
+  changes: "What Caw can change",
   /** His chat's settings: the heading. */
   chat: "Your chat with Caw",
   /** Whether Caw may propose changes to Who decides: the switch's label. */
-  proposes: "Caw can propose who decides changes",
-  /** What it means while on. */
-  proposesOn:
-    "Caw can propose a change to who decides. It reaches you to approve or decline.",
-  /** What it means while off. */
-  proposesOff: "Caw only reads who decides.",
+  proposes: "Propose changes to who decides",
+  /** What follows a proposal, under the switch. */
+  proposesHint: "You approve or decline each one.",
   /** What stands when the switch's change was refused. */
   proposesUnchanged: (on: boolean) =>
     on ? "Caw can still propose changes" : "Caw still only reads who decides",
@@ -83,7 +80,6 @@ export const triggerKindWords = {
   },
   "routine-results": {
     name: "Routine results",
-    what: "A routine's runs and its reports",
   },
   "task-moves": {
     name: "Task moves",

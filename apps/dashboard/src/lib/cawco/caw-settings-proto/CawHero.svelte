@@ -50,11 +50,9 @@
   /** Asleep only once the hub says so; awake while it is read. */
   const asleep = $derived(lead.on === false);
   const SCENES = [
-    { asleep: false, scene: "/caw/hero-awake.webp", line: words.awakeLine },
-    { asleep: true, scene: "/caw/hero-asleep.webp", line: words.asleepLine },
+    { asleep: false, scene: "/caw/hero-awake.webp" },
+    { asleep: true, scene: "/caw/hero-asleep.webp" },
   ] as const;
-  const fade =
-    "col-start-1 row-start-1 transition-opacity duration-(--duration-fade) ease-out data-hidden:opacity-0";
 </script>
 
 <section
@@ -111,21 +109,12 @@
       </span>
     </BarGlass>
   </div>
-  <div
-    class={[
-      "flex flex-col gap-space-3 pt-space-3",
-      sheet ? "px-4" : "px-space-4",
-    ]}
-  >
-    <span class="grid">
-      {#each SCENES as one (one.scene)}
-        <span
-          aria-hidden={one.asleep !== asleep}
-          class={[fade, "type-meta text-pretty text-ink-muted"]}
-          data-hidden={one.asleep !== asleep || undefined}>{one.line}</span
-        >
-      {/each}
-    </span>
+  <div class={["flex flex-col gap-space-3", sheet ? "px-4" : "px-space-4"]}>
+    {#if asleep}
+      <p class="m-0 pt-space-3 type-meta text-pretty text-ink-muted">
+        {words.asleepLine}
+      </p>
+    {/if}
     <!-- What the switch says after it: the stops parked there once its
          confirm is pressed, a refusal. -->
     <CawLeadSwitch

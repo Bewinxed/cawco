@@ -7,9 +7,9 @@
    * - A hero picture of Caw awake or asleep across the panel's top
    *   (CawHero), his one switch on its faded lower edge with the line of
    *   what that state means; it crossfades as he turns.
+   * - What Caw can change: whether he may propose changes to Who decides.
    * - Your chat with Caw: what it runs as (RunsAs: account, harness and
-   *   model, mode), the project's Caw, which every kind of trigger falls
-   *   back to; and whether Caw may propose changes to Who decides.
+   *   model, mode), the project's Caw.
    * - Triggers: each kind (TriggerRow) and what its short sessions start
    *   as, each picker inline, inherited or the project's own.
    *
@@ -24,7 +24,7 @@
   import type { SwitchedLead } from "#lib/cawco/project/CawLeadSwitch.svelte";
   import { sheetScroller } from "#lib/components/ui/drawer/sheet-head.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
-  import { IconBolt, IconChat, IconCloudCross } from "#lib/icons.js";
+  import { IconBolt, IconChat, IconCloudCross, IconPen } from "#lib/icons.js";
   import SwitchField from "../config/SwitchField.svelte";
   import CawHero from "./CawHero.svelte";
   import type {
@@ -46,6 +46,7 @@
     hubAway = false,
     refusedKind = null,
     refusedChat = null,
+    refusedProposes = null,
     proposesDecides,
     onchat,
     onproposes,
@@ -70,6 +71,8 @@
     refusedKind?: { kind: TriggerKind; words: string } | null;
     /** His chat's last change, refused: the hub's words. */
     refusedChat?: string | null;
+    /** His proposing switch's last change, refused: the hub's words. */
+    refusedProposes?: string | null;
     /** A change to what his chat runs as. */
     onchat: (patch: Partial<TriggerLayer>) => void;
     /** Whether Caw may propose changes to Who decides (the project's `cawProposesDecides`). */
@@ -120,6 +123,27 @@
         <span>{words.hubAway}</span>
       </p>
     {/if}
+    <section data-slot="changes" class="grid gap-space-2">
+      <SectionHeader
+        hue={HEAD}
+        icon={IconPen}
+        label={words.changes}
+        level={3}
+      />
+      <SwitchField
+        checked={proposesDecides}
+        disabled={hubAway}
+        hint={words.proposesHint}
+        id={`caw-proposes-${projectId}`}
+        label={words.proposes}
+        onchange={onproposes}
+      />
+      {#if refusedProposes}
+        <p data-slot="refused" class="m-0 type-meta text-error-11" role="alert">
+          {refusedProposes}
+        </p>
+      {/if}
+    </section>
     <section data-slot="chat" class="grid gap-space-2">
       <SectionHeader hue={HEAD} icon={IconChat} label={words.chat} level={3} />
       <RunsAs
@@ -133,14 +157,6 @@
         model={chat.model}
         onchange={onchat}
         readonly={hubAway}
-      />
-      <SwitchField
-        checked={proposesDecides}
-        disabled={hubAway}
-        hint={proposesDecides ? words.proposesOn : words.proposesOff}
-        id={`caw-proposes-${projectId}`}
-        label={words.proposes}
-        onchange={onproposes}
       />
       {#if refusedChat}
         <p data-slot="refused" class="m-0 type-meta text-error-11" role="alert">
