@@ -611,13 +611,13 @@
                  or repeat, thumbnail or not. Closing, the pane shrinks back
                  into this row (PreviewPane.svelte). The button is the whole
                  card (its ::after), so the card is what focus lights: the
-                 card's own border takes the keyboard's ring, and the button
+                 card's own ring takes the keyboard's ring, and the button
                  draws nothing. Neither
                  line sets the card's width, so the card fits any row it
                  stands in. -->
             <div
               data-slot="preview-tool"
-              class="relative flex items-center gap-space-2 max-w-110 min-h-20 p-space-2 my-space-2 border border-ui rounded-sm bg-bg shadow-sm not-has-[[data-slot=page-thumb]]:w-fit has-hover:bg-ui has-focus-visible:outline-2 has-focus-visible:outline-accent has-focus-visible:-outline-offset-2"
+              class="relative flex items-center gap-space-2 max-w-110 min-h-20 p-space-2 my-space-2 ring ring-ui rounded-sm bg-bg shadow-sm not-has-[[data-slot=page-thumb]]:w-fit has-hover:bg-ui has-focus-visible:outline-2 has-focus-visible:outline-accent has-focus-visible:-outline-offset-2"
               data-artifact={called?.id}
               data-share="preview:{m.instanceId}"
               data-share-ttl="10000"

@@ -152,7 +152,7 @@
   <div class="grid place-items-center p-space-4">
     <!-- biome-ignore lint/security/useIframeSandbox: a /motion bench framing the dashboard's own route; it needs scripts and its origin, and with both a sandbox holds nothing back. -->
     <iframe
-      class="rounded-lg border border-ui-2 bg-bg-2"
+      class="rounded-lg ring ring-ui-2 bg-bg-2"
       height="844"
       src={frameSrc}
       title="Phone sheet"

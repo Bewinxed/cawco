@@ -67,7 +67,7 @@
   </div>
 {:else if flow.step === "answers"}
   <p
-    class="m-0 min-w-0 rounded-sm border border-ui-2 bg-bg-2 px-space-3 py-space-4 text-start type-title font-mono wrap-anywhere text-tx select-all"
+    class="m-0 min-w-0 rounded-sm ring ring-ui-2 bg-bg-2 px-space-3 py-space-4 text-start type-title font-mono wrap-anywhere text-tx select-all"
     data-slot="answers-address"
   >
     {flow.address}
@@ -112,7 +112,7 @@
   >
     <IconLock aria-label="Secure" class="size-icon-md flex-none text-green" />
     <p
-      class="m-0 min-w-0 flex-1 rounded-sm border border-ui-2 bg-bg-2 px-space-3 py-space-4 text-start type-label font-mono wrap-anywhere text-tx select-all"
+      class="m-0 min-w-0 flex-1 rounded-sm ring ring-ui-2 bg-bg-2 px-space-3 py-space-4 text-start type-label font-mono wrap-anywhere text-tx select-all"
     >
       {flow.secureAddress}
     </p>
@@ -122,7 +122,7 @@
     <!-- The address, named once, large and mono: Open beside it, and Copy
          only where this page has a clipboard; elsewhere it selects whole. -->
     <div
-      class="flex min-w-0 flex-wrap items-center gap-space-2 rounded-sm border border-ui-2 bg-bg-2 py-space-2 ps-space-3 pe-space-2"
+      class="flex min-w-0 flex-wrap items-center gap-space-2 rounded-sm ring ring-ui-2 bg-bg-2 py-space-2 ps-space-3 pe-space-2"
       data-slot="live-address"
     >
       <code

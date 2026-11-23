@@ -99,7 +99,7 @@
       </div>
       {#if slot}
         <div
-          class="w-full min-w-0 rounded-sm border border-ui-2 bg-bg-2 p-space-3 text-start"
+          class="w-full min-w-0 rounded-sm ring ring-ui-2 bg-bg-2 p-space-3 text-start"
           data-slot="slot"
           transition:unfold
         >

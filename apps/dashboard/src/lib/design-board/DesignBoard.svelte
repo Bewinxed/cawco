@@ -68,9 +68,7 @@
         <p class="max-w-measure text-tx-2 type-body">{note}</p>
       {/if}
     </header>
-    <div
-      class="grid overflow-clip rounded-lg border border-ui @phone:grid-cols-2"
-    >
+    <div class="grid overflow-clip rounded-lg ring ring-ui @phone:grid-cols-2">
       {#each SCHEMES as scheme (scheme.scheme)}
         <div
           data-scheme={scheme.scheme}

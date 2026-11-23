@@ -31,7 +31,7 @@
   <ContextMenu.Root open>
     <ContextMenu.Trigger>
       <div
-        class="rounded-sm border border-ui-2 px-space-3 py-space-2 type-label"
+        class="rounded-sm ring ring-ui-2 px-space-3 py-space-2 type-label"
         bind:this={row}
       >
         Fix tray chip overflow

@@ -177,7 +177,7 @@
   >
     <div
       data-slot="tile"
-      class="relative grid rounded-sm border border-ui bg-bg p-space-3 shadow-sm"
+      class="relative grid rounded-sm ring ring-ui bg-bg p-space-3 shadow-sm"
     >
       {#key view}
         <div

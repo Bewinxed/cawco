@@ -482,7 +482,7 @@
       </h4>
       <div
         data-slot="runs-ledger"
-        class="overflow-hidden rounded-sm border border-ui bg-bg"
+        class="overflow-hidden rounded-sm ring ring-ui bg-bg"
       >
         <!-- Result is the column this ledger exists for and keeps its floor
              (c-ledger-title-min): Took folds under 576px, When and Outcome
@@ -614,7 +614,7 @@
       <h4 class="m-0 type-label text-tx" id="actions-{routine.id}">
         {words.columnActions}
       </h4>
-      <div class="overflow-hidden rounded-sm border border-ui bg-bg">
+      <div class="overflow-hidden rounded-sm ring ring-ui bg-bg">
         <ActionsTable {actions} label={words.columnActions} />
       </div>
     </section>

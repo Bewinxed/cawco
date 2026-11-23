@@ -230,7 +230,7 @@
         {#if dial.kind === "color"}
           <span
             data-box
-            class="checker block size-space-3 flex-none overflow-clip rounded-xs border border-ui-2"
+            class="checker block size-space-3 flex-none overflow-clip rounded-xs ring ring-ui-2"
             ><span
               class="block size-full bg-(--was)"
               style:--was={paint(String(was ?? ""))}

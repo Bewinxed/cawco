@@ -14,10 +14,7 @@
   const name = $derived(data.name);
 </script>
 
-<div
-  data-slot="machine"
-  class="size-full rounded-lg border border-ui-2 bg-bg-2"
->
+<div data-slot="machine" class="size-full rounded-lg ring ring-ui-2 bg-bg-2">
   <h3
     class="m-0 truncate px-space-3 pt-space-2 type-label text-tx-2"
     title={name}

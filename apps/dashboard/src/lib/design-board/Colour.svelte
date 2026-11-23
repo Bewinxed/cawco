@@ -26,7 +26,7 @@
     <figcaption class="text-tx-2 type-meta">
       Base: grounds, edges, text
     </figcaption>
-    <div class="overflow-clip rounded-lg border border-ui bg-bg">
+    <div class="overflow-clip rounded-lg ring ring-ui bg-bg">
       <div class="flex flex-col gap-space-1 p-space-4">
         <p class="text-tx type-label">
           tx · Deploy the hub to obelisk-of-light
@@ -42,17 +42,17 @@
         </p>
         <div class="flex flex-wrap gap-space-2">
           <span
-            class="rounded-sm border border-ui bg-bg px-space-2 text-tx type-meta"
+            class="rounded-sm ring ring-ui bg-bg px-space-2 text-tx type-meta"
           >
             ui · edge
           </span>
           <span
-            class="rounded-sm border border-ui-2 bg-ui px-space-2 text-tx type-meta"
+            class="rounded-sm ring ring-ui-2 bg-ui px-space-2 text-tx type-meta"
           >
             ui-2 · hover
           </span>
           <span
-            class="rounded-sm border border-ui-3 bg-ui-2 px-space-2 text-tx type-meta"
+            class="rounded-sm ring ring-ui-3 bg-ui-2 px-space-2 text-tx type-meta"
           >
             ui-3 · pressed
           </span>

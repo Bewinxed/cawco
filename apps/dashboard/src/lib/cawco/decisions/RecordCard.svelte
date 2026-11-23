@@ -224,7 +224,7 @@
                   {#if option.recommended}
                     <span
                       data-slot="tag"
-                      class="type-meta rounded-xs border border-ui px-space-1 text-tx-2"
+                      class="type-meta rounded-xs ring ring-ui px-space-1 text-tx-2"
                       >{words.recommended}</span
                     >
                   {/if}

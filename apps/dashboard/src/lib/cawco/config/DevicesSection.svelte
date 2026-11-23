@@ -163,7 +163,7 @@
     />
     {#if confirming === "on"}
       <div
-        class="flex max-w-measure flex-col gap-space-3 rounded-sm border border-ui bg-bg p-space-3 shadow-sm"
+        class="flex max-w-measure flex-col gap-space-3 rounded-sm ring ring-ui bg-bg p-space-3 shadow-sm"
         transition:unfold
       >
         <p data-slot="lead" class="type-body text-tx">
@@ -214,7 +214,7 @@
       </div>
     {:else if confirming === "off"}
       <div
-        class="flex max-w-measure flex-col gap-space-3 rounded-sm border border-ui bg-bg p-space-3 shadow-sm"
+        class="flex max-w-measure flex-col gap-space-3 rounded-sm ring ring-ui bg-bg p-space-3 shadow-sm"
         transition:unfold
       >
         <p data-slot="lead" class="type-body text-tx">

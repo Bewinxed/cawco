@@ -350,7 +350,7 @@
          newer one is sitting on the same machine behind it. -->
           <div
             data-slot="tool"
-            class="flex flex-col gap-space-1 rounded-sm border border-ui bg-bg-2 p-space-2"
+            class="flex flex-col gap-space-1 rounded-sm ring ring-ui bg-bg-2 p-space-2"
           >
             <span class="text-sm font-normal text-tx-2"
               >claude on this machine</span
@@ -393,7 +393,7 @@
         {#if group.faults[0]?.detail}
           {#if group.cause === "unknown"}
             <pre
-              class="max-h-48 overflow-auto rounded-sm border border-ui bg-bg-2 p-space-2 font-mono text-sm wrap-anywhere whitespace-pre-wrap text-tx">{group
+              class="max-h-48 overflow-auto rounded-sm ring ring-ui bg-bg-2 p-space-2 font-mono text-sm wrap-anywhere whitespace-pre-wrap text-tx">{group
                 .faults[0].detail}</pre>
           {:else}
             <button
@@ -417,7 +417,7 @@
               {#each shown as fault (fault.scope + fault.key)}
                 {#if fault.detail}
                   <pre
-                    class="max-h-48 overflow-auto rounded-sm border border-ui bg-bg-2 p-space-2 font-mono text-sm wrap-anywhere whitespace-pre-wrap text-tx"><span
+                    class="max-h-48 overflow-auto rounded-sm ring ring-ui bg-bg-2 p-space-2 font-mono text-sm wrap-anywhere whitespace-pre-wrap text-tx"><span
                       class="block text-tx-2">{faultLabel(fault)}</span
                     >{fault.detail}</pre>
                 {/if}

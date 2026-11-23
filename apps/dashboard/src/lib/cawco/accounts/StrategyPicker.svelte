@@ -137,7 +137,7 @@
         data-slot="strategy-picker-card"
         aria-checked={checked}
         aria-label={words.card(strategy.label, strategy.line)}
-        class="group flex min-w-0 flex-col gap-space-3 rounded-sm border border-ui-2 select-none bg-transparent p-space-3 text-start transition-[border-color,background-color] duration-(--duration-base) ease-out not-aria-checked:hover:border-ui-2 aria-checked:border-accent aria-checked:bg-ui/45 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-2 motion-safe:transition-pick-card motion-safe:active:transform-(--card-press)"
+        class="group flex min-w-0 flex-col gap-space-3 rounded-sm ring ring-ui-2 select-none bg-transparent p-space-3 text-start transition-[border-color,background-color] duration-(--duration-base) ease-out not-aria-checked:hover:ring-ui-2 aria-checked:ring-accent aria-checked:bg-ui/45 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-2 motion-safe:transition-pick-card motion-safe:active:transform-(--card-press)"
         style:--card-press="scale(var(--press-scale))"
         onclick={(event) => {
           if (!(
@@ -163,7 +163,7 @@
         >
           <span
             aria-hidden="true"
-            class="grid size-icon-md flex-none place-items-center rounded-pill border-2 border-tx-2 transition-[border-color] duration-(--duration-base) ease-out group-aria-checked:border-accent"
+            class="grid size-icon-md flex-none place-items-center rounded-pill ring-2 ring-tx-2 transition-[border-color] duration-(--duration-base) ease-out group-aria-checked:ring-accent"
           >
             <span
               class="size-space-2 scale-50 rounded-pill bg-accent opacity-0 transition-[scale,opacity] duration-(--duration-base) ease-out group-aria-checked:scale-100 group-aria-checked:opacity-100"

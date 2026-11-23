@@ -135,7 +135,7 @@
   >
     <div
       data-slot="tile"
-      class="grid grid-cols-1 gap-space-2 rounded-sm border border-ui bg-bg p-space-3 shadow-sm"
+      class="grid grid-cols-1 gap-space-2 rounded-sm ring ring-ui bg-bg p-space-3 shadow-sm"
     >
       <p
         data-slot="title"

@@ -23,7 +23,7 @@
         "in-bar":
           "group-data-bar:min-w-0 group-data-bar:overflow-clip group-data-bar:concentric-xs",
         /** A plain field: the small corner, the control's edge, field pads. */
-        field: "rounded-sm border border-tx-2 px-space-3 py-space-2",
+        field: "rounded-sm ring ring-tx-2 px-space-3 py-space-2",
       },
       /** `end`: its value at its end, before its mark, as a number field
           writes its figure (the design graph's Controls: a select whose
@@ -33,7 +33,7 @@
           its ink held over the placeholder's. */
       chosen: {
         selected:
-          "data-on:data-placeholder:text-accent data-on:border-transparent data-on:bg-ui data-on:text-accent",
+          "data-on:data-placeholder:text-accent data-on:ring-transparent data-on:bg-ui data-on:text-accent",
       },
     },
   });
@@ -73,16 +73,16 @@
     "press-tint transition-control",
     "mark-line flex w-fit",
     "items-center justify-between gap-1.5 whitespace-nowrap",
-    "border border-tx-2 [--hit-edge:1px]",
+    "ring ring-tx-2 [--hit-edge:1px]",
     "bg-bg px-3 text-tx",
     "type-body disabled:cursor-not-allowed",
-    "disabled:opacity-50 aria-invalid:border-red",
+    "disabled:opacity-50 aria-invalid:ring-red",
     "data-placeholder:text-tx-2",
     "[&>[data-slot=select-value]]:line-clamp-1",
     "[&>[data-slot=select-value]]:flex",
     "[&>[data-slot=select-value]]:items-center",
     "[&>[data-slot=select-value]]:gap-1.5",
-    "dark:aria-invalid:border-red/50",
+    "dark:aria-invalid:ring-red/50",
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
     selectTriggerVariants({ size, measure, tone, look, chosen, align }),

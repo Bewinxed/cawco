@@ -861,7 +861,7 @@
           <button
             data-slot="search"
             aria-haspopup="dialog"
-            class="select-none mark-line press-tint focus-inset flex items-center gap-space-2 w-full min-h-control-lg px-space-3 border border-ui-2 rounded-sm bg-bg type-body text-tx-2 text-start cursor-text"
+            class="select-none mark-line press-tint focus-inset flex items-center gap-space-2 w-full min-h-control-lg px-space-3 ring ring-ui-2 rounded-sm bg-bg type-body text-tx-2 text-start cursor-text"
             data-share="jump"
             onclick={() => onsearch()}
             type="button"

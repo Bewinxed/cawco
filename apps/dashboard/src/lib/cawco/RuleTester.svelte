@@ -93,7 +93,7 @@
          selection tint, as a search's matched words do. -->
     <div
       data-slot="grid"
-      class="relative grid max-h-40 overflow-y-auto rounded-sm border border-ui type-body"
+      class="relative grid max-h-40 overflow-y-auto rounded-sm ring ring-ui type-body"
     >
       <p
         data-slot="layer"

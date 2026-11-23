@@ -158,7 +158,7 @@
 </script>
 
 <figure
-  class="group flex flex-col min-w-0 m-0 border border-ui-2 rounded-sm bg-bg-2 overflow-hidden"
+  class="group flex flex-col min-w-0 m-0 ring ring-ui-2 rounded-sm bg-bg-2 overflow-hidden"
   data-kind={kind}
   data-compact={compact || undefined}
 >

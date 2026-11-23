@@ -469,7 +469,7 @@
        sizes it. -->
   <span
     class={[
-      "relative grid aspect-(--shape) place-items-center overflow-clip rounded-sm bg-bg-2 after:pointer-events-none after:absolute after:inset-0 after:rounded-inherit after:border after:border-ui-2",
+      "relative grid aspect-(--shape) place-items-center overflow-clip rounded-sm bg-bg-2 after:pointer-events-none after:absolute after:inset-0 after:rounded-inherit after:ring after:ring-ui-2",
       waiting && "mask-(--hole-mask)",
     ]}
     data-files-thumb={pictured(artifact) ? "picture" : "glyph"}

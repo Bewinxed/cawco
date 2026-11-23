@@ -166,7 +166,7 @@
             {#each shelf.names as name (name)}
               <li class="flex min-w-0 items-center gap-space-2">
                 <span
-                  class="size-5 flex-none rounded-xs border border-ui"
+                  class="size-5 flex-none rounded-xs ring ring-ui"
                   {@attach probe(shelf.kind, name)}
                 ></span>
                 <span class="truncate type-meta">{short(name)}</span>
@@ -286,7 +286,7 @@
                 <span
                   class={[
                     "block size-16 bg-bg",
-                    shelf.kind === "radius" && "border border-ui-2",
+                    shelf.kind === "radius" && "ring ring-ui-2",
                     shelf.kind === "shadow" && "rounded-sm",
                   ]}
                   {@attach probe(shelf.kind, name)}
@@ -325,7 +325,7 @@
               {@const path = curve(readings.get(name))}
               <li class="mark-line flex w-28 flex-col gap-space-2">
                 <span
-                  class="block size-16 rounded-sm border border-ui p-space-1"
+                  class="block size-16 rounded-sm ring ring-ui p-space-1"
                   data-box
                   {@attach probe(shelf.kind, name)}
                 >

@@ -1057,7 +1057,7 @@
            pointer and the keyboard can scroll, over the row's cover. -->
         <pre
           data-slot="args"
-          class="focus-inset relative col-start-2 col-end-4 row-4 mx-0 my-space-2 max-h-48 overflow-auto overscroll-contain rounded-xs border border-ui-2 bg-bg-2 px-space-3 py-space-2 type-code whitespace-pre text-tx">{call.args}</pre>
+          class="focus-inset relative col-start-2 col-end-4 row-4 mx-0 my-space-2 max-h-48 overflow-auto overscroll-contain rounded-xs ring ring-ui-2 bg-bg-2 px-space-3 py-space-2 type-code whitespace-pre text-tx">{call.args}</pre>
         <span
           data-where
           data-slot="meta"

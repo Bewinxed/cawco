@@ -1110,8 +1110,9 @@
    in (ui/elevated sets --surface-level from its parent's). Level 0 is the
    page. In light the ground turns to the raised white at level 1 and the
    shadow alone carries every level after it; in dark each level is lighter,
-   and the shadow deepens with it. Its edge is a ring in the same shadow,
-   so the shadow and the edge read as one line, never a border on top. What stands inside a surface without
+   and the shadow deepens with it. Its edge is a translucent ring laid over
+   a tight contact shadow, so the edge darkens where the shadow falls under
+   it and fades on top: one line, never a border on top of a shadow. What stands inside a surface without
    rising (a dialog's body, a fade over its head) takes its ground from
    --surface-ground, which the surface computes at its own level. */
 @property --surface-level {
@@ -1129,9 +1130,10 @@
   );
   background-color: var(--surface-ground);
   box-shadow:
-    0 calc(var(--surface-level) * 2px) calc(var(--surface-level) * 6px)
-      light-dark(oklch(29.5% 0 0 / 0.1), oklch(0% 0 0 / 0.45)),
-    0 0 0 1px var(--color-ui-2);
+    0 0 0 1px var(--color-ui-2),
+    0 1px 2px light-dark(oklch(0% 0 0 / 0.1), oklch(0% 0 0 / 0.5)),
+    0 calc(var(--surface-level) * 3px) calc(var(--surface-level) * 8px)
+      light-dark(oklch(0% 0 0 / 0.08), oklch(0% 0 0 / 0.45));
 }
 
 /* Primary coral fill sheen and hover state derived from --color-accent. */

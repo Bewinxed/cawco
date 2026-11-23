@@ -55,7 +55,7 @@
 </script>
 
 <div
-  class="relative h-211 w-97.5 max-w-full flex-none overflow-clip rounded-xl border border-ui bg-bg"
+  class="relative h-211 w-97.5 max-w-full flex-none overflow-clip rounded-xl ring ring-ui bg-bg"
   data-frame="phone"
 >
   <div class="grid content-start gap-space-3 px-space-1 pt-space-4">

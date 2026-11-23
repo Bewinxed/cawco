@@ -74,7 +74,7 @@
   data-address-phone={direction}
 >
   <div
-    class="relative h-195 overflow-clip rounded-xl border border-ui bg-bg"
+    class="relative h-195 overflow-clip rounded-xl ring ring-ui bg-bg"
     data-phone-screen
   >
     <div class="grid content-start gap-space-3 px-space-1 pt-space-4">

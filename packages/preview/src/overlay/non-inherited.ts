@@ -47,7 +47,7 @@ export const NON_INHERITED: ReadonlySet<string> = new Set([
   "baseline-shift",
   "baseline-source",
   "block-size",
-  "border",
+  "ring",
   "border-block",
   "border-block-color",
   "border-block-end",

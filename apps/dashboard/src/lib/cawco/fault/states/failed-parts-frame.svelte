@@ -58,7 +58,7 @@
     </p>
     {#if pill}
       <div
-        class="flex h-control-md max-w-(--composer-w) items-center rounded-lg border border-ui-2 bg-bg px-space-3 text-tx-2 shadow-sm type-body"
+        class="flex h-control-md max-w-(--composer-w) items-center rounded-lg ring ring-ui-2 bg-bg px-space-3 text-tx-2 shadow-sm type-body"
       >
         Write to Claude Code
       </div>

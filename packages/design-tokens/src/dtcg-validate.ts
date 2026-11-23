@@ -244,7 +244,7 @@ const CHECKS: Record<string, (value: unknown) => string | null> = {
     return null;
   },
   border: (v) =>
-    fields("border", v, {
+    fields("ring", v, {
       color: colour,
       width: dimension,
       style: strokeStyle,

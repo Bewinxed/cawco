@@ -525,7 +525,7 @@
          inside has focus (`field-edge`). -->
     <div
       data-slot="field"
-      class="field-edge transition-control min-h-80 rounded-sm border bg-bg px-space-2 py-space-1 shadow-sm"
+      class="field-edge transition-control min-h-80 rounded-sm ring bg-bg px-space-2 py-space-1 shadow-sm"
     >
       <!-- Crepe reads its text once, when it is made: it waits for a draft
            kept for this file to be back. -->

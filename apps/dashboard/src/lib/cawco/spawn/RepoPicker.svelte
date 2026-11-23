@@ -958,7 +958,7 @@
 <div data-slot="repo-picker" class="grid min-w-0 gap-space-2">
   <label
     data-slot="location-section-field"
-    class="field-edge flex h-control-lg min-w-0 items-center gap-space-3 rounded-sm border bg-bg pe-space-3 shadow-sm transition-control"
+    class="field-edge flex h-control-lg min-w-0 items-center gap-space-3 rounded-sm ring bg-bg pe-space-3 shadow-sm transition-control"
   >
     <span class="grid w-row-compact flex-none place-items-center self-stretch"
       ><Search class="size-icon-md text-tx-2" /></span

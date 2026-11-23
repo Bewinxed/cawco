@@ -837,7 +837,7 @@
       {#if seek.unfound}
         <!-- The dock's raised line, as the not-caught-up line floats (Behind). -->
         <p
-          class="max-w-full py-space-2 px-space-3 border border-ui rounded-sm bg-bg shadow-lg text-sm font-normal text-tx-2 text-center text-balance"
+          class="max-w-full py-space-2 px-space-3 ring ring-ui rounded-sm bg-bg shadow-lg text-sm font-normal text-tx-2 text-center text-balance"
           data-open-at={seek.unfound}
           in:rise={"--duration-slow"}
           out:rise={"--duration-base"}

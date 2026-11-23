@@ -74,7 +74,7 @@
 >
   <div
     aria-hidden="true"
-    class="absolute inset-space-3 rounded-lg border border-ui bg-bg"
+    class="absolute inset-space-3 rounded-lg ring ring-ui bg-bg"
   ></div>
   <div
     class={[

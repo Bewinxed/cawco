@@ -40,7 +40,7 @@
 
 <div class="bg-bg p-space-4">
   <div
-    class="relative flex h-(--frame-h) w-(--frame-w) flex-col overflow-clip rounded-lg border border-ui bg-bg shadow-sm timeline-scope-transcript-head"
+    class="relative flex h-(--frame-h) w-(--frame-w) flex-col overflow-clip rounded-lg ring ring-ui bg-bg shadow-sm timeline-scope-transcript-head"
     style:--face-top={"calc(var(--spacing-control-md) + 2 * var(--spacing-space-2))"}
     style:--frame-h={`${height}px`}
     style:--frame-w={`${width}px`}

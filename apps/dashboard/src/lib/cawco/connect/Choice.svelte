@@ -38,7 +38,7 @@
         {id}
         type="button"
         aria-label="{label}: {chosen?.words}"
-        class="select-none pressable touch-hit mark-line inline-flex h-control-sm max-w-full items-center gap-space-1 rounded-sm border border-ui-2 bg-bg px-space-2 type-label text-tx shadow-sm transition-control hover:bg-ui"
+        class="select-none pressable touch-hit mark-line inline-flex h-control-sm max-w-full items-center gap-space-1 rounded-sm ring ring-ui-2 bg-bg px-space-2 type-label text-tx shadow-sm transition-control hover:bg-ui"
       >
         <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
           ><MorphText text={chosen?.words ?? ""} /></span

@@ -105,7 +105,7 @@
 {:else}
   <div class="bg-bg p-space-4">
     <div
-      class="relative flex w-(--frame-w) flex-col overflow-clip rounded-lg border border-ui bg-bg shadow-sm"
+      class="relative flex w-(--frame-w) flex-col overflow-clip rounded-lg ring ring-ui bg-bg shadow-sm"
       style:--frame-w={`${width}px`}
     >
       <div

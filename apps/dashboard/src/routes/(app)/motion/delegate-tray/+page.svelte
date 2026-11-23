@@ -369,7 +369,7 @@
       <div class="pointer-events-none absolute inset-x-space-3 top-space-3 z-2">
         <div
           data-slot="details-card"
-          class="pointer-events-auto w-104 max-w-full overflow-hidden rounded-lg border border-ui-2 bg-bg shadow-lg"
+          class="pointer-events-auto w-104 max-w-full overflow-hidden rounded-lg ring ring-ui-2 bg-bg shadow-lg"
         >
           <SessionDetails
             dir={1}

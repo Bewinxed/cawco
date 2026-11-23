@@ -1378,7 +1378,7 @@
          the field the person tapped stands over the keyboard. -->
     <div
       bind:this={screenBox}
-      class="relative h-(--screen-h) w-(--screen-w) translate-y-(--keyboard-shift) overflow-hidden in-data-framed:rounded-sm in-data-framed:border in-data-framed:border-ui not-in-data-framed:not-in-data-fill:in-data-[form=phone]:rounded-xl not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border-ui not-in-data-framed:not-in-data-fill:in-data-[form=phone]:shadow-md"
+      class="relative h-(--screen-h) w-(--screen-w) translate-y-(--keyboard-shift) overflow-hidden in-data-framed:rounded-sm in-data-framed:ring in-data-framed:ring-ui not-in-data-framed:not-in-data-fill:in-data-[form=phone]:rounded-xl not-in-data-framed:not-in-data-fill:in-data-[form=phone]:ring not-in-data-framed:not-in-data-fill:in-data-[form=phone]:ring-ui not-in-data-framed:not-in-data-fill:in-data-[form=phone]:shadow-md"
       data-slot="browser-screen"
       style:--keyboard-shift="{-keyboardShift}px"
       style:--screen-h="{screen.h}px"
@@ -1471,7 +1471,7 @@
              pressed, or a step at a time by the arrow keys. -->
         <button
           aria-label={browserWords.overview}
-          class="absolute end-space-3 top-space-3 z-1 aspect-(--page-ratio) w-22 touch-none overflow-hidden rounded-xs border border-tx-2 bg-bg p-0 shadow-sm"
+          class="absolute end-space-3 top-space-3 z-1 aspect-(--page-ratio) w-22 touch-none overflow-hidden rounded-xs ring ring-tx-2 bg-bg p-0 shadow-sm"
           data-slot="browser-overview"
           onkeydown={overviewKey}
           onpointerdown={overviewAt}
@@ -1482,7 +1482,7 @@
           <canvas bind:this={overviewCanvas} class="absolute inset-0 size-full"
           ></canvas>
           <div
-            class="absolute start-(--view-x) top-(--view-y) h-(--view-h) w-(--view-w) rounded-xs border-2 border-accent"
+            class="absolute start-(--view-x) top-(--view-y) h-(--view-h) w-(--view-w) rounded-xs ring-2 ring-accent"
             style:--view-h="{Math.min(100, (screen.h / pageBox.h) * 100)}%"
             style:--view-w="{Math.min(100, (screen.w / pageBox.w) * 100)}%"
             style:--view-x="{(pageBox.x / pageBox.w) * 100}%"

@@ -75,7 +75,7 @@
    */
   const glass = (layout: string) =>
     cn(
-      "rounded-pill border border-ui-2 bg-bg/72 p-space-2 shadow-sm backdrop-blur-glass backdrop-saturate-160 concentric-in r-inset-space-2 r-outer-pill reduced-transparency:bg-bg reduced-transparency:backdrop-filter-none",
+      "rounded-pill ring ring-ui-2 bg-bg/72 p-space-2 shadow-sm backdrop-blur-glass backdrop-saturate-160 concentric-in r-inset-space-2 r-outer-pill reduced-transparency:bg-bg reduced-transparency:backdrop-filter-none",
       layout
     );
 

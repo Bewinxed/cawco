@@ -111,7 +111,7 @@
       aria-describedby={row.reason
         ? `${uid}-perm-${row.value}-reason`
         : undefined}
-      class="ns-in press-tint transition-control relative flex select-none h-control-lg w-full items-center gap-space-3 rounded-xs border group-data-embedded:rounded-xs border-transparent bg-transparent px-space-2 py-space-2 text-start text-tx aria-checked:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+      class="ns-in press-tint transition-control relative flex select-none h-control-lg w-full items-center gap-space-3 rounded-xs ring group-data-embedded:rounded-xs ring-transparent bg-transparent px-space-2 py-space-2 text-start text-tx aria-checked:text-accent disabled:cursor-not-allowed disabled:opacity-50"
       data-fh="1"
       data-perm={row.value}
       disabled={row.disabled}

@@ -27,19 +27,19 @@
   >
     <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
     <li
-      class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill border border-ui-2 bg-bg px-space-2 py-space-1 type-meta text-tx"
+      class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill ring ring-ui-2 bg-bg px-space-2 py-space-1 type-meta text-tx"
     >
       <IconLaptop aria-hidden="true" class="size-icon-md text-tx-2" />
       <span class="min-w-0 wrap-anywhere">obelisk</span>
     </li>
     <li
-      class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill border border-accent bg-ui px-space-2 py-space-1 type-meta text-accent"
+      class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill ring ring-accent bg-ui px-space-2 py-space-1 type-meta text-accent"
     >
       <IconPlus aria-hidden="true" class="size-icon-sm" />
       <span class="whitespace-nowrap">cawco</span>
     </li>
     <li
-      class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill border border-ui-2 bg-bg px-space-2 py-space-1 type-meta text-tx"
+      class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill ring ring-ui-2 bg-bg px-space-2 py-space-1 type-meta text-tx"
     >
       <IconPhone aria-hidden="true" class="size-icon-md text-tx-2" />
       <span class="min-w-0 wrap-anywhere">your phone</span>

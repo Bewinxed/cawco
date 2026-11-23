@@ -17,7 +17,7 @@
   } = $props();
 </script>
 
-<div class="w-sm max-w-full overflow-clip rounded-lg border border-ui-2 bg-bg">
+<div class="w-sm max-w-full overflow-clip rounded-lg ring ring-ui-2 bg-bg">
   <Command.Root value="" shouldFilter={false}>
     <Command.Input
       placeholder="Find a session, task or machine"

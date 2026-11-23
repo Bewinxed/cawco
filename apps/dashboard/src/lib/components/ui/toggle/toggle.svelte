@@ -7,7 +7,7 @@
     variants: {
       variant: {
         default: "bg-transparent",
-        outline: "border border-ui-2 bg-transparent [--hit-edge:1px]",
+        outline: "ring ring-ui-2 bg-transparent [--hit-edge:1px]",
       },
       size: {
         default:

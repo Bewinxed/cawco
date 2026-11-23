@@ -412,7 +412,7 @@
       aria-valuenow={Math.round(span.from)}
       aria-valuetext={ms(span.from)}
       class={[
-        "absolute inset-y-0 start-(--from) w-(--wide) touch-none rounded-xs border",
+        "absolute inset-y-0 start-(--from) w-(--wide) touch-none rounded-xs ring",
         BAR[track.kind],
         selected && "ring-2 ring-tx",
         holding?.id === run.id && holding.part === "body"

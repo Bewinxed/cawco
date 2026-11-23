@@ -251,7 +251,7 @@
       {#each FILTERS as one (one.value)}
         {@const count = find.counts[one.value]}
         <button
-          class="group/chip select-none inline-flex items-center gap-space-2 h-space-6 px-space-3 border border-ui-2 rounded-pill bg-bg type-label text-tx-2 transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] aria-pressed:border-transparent aria-pressed:bg-ui aria-pressed:text-accent aria-pressed-false:hover:bg-ui motion-safe:active:scale-(--press-scale) disabled:opacity-50"
+          class="group/chip select-none inline-flex items-center gap-space-2 h-space-6 px-space-3 ring ring-ui-2 rounded-pill bg-bg type-label text-tx-2 transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] aria-pressed:ring-transparent aria-pressed:bg-ui aria-pressed:text-accent aria-pressed-false:hover:bg-ui motion-safe:active:scale-(--press-scale) disabled:opacity-50"
           aria-pressed={find.whose === one.value}
           disabled={count === 0 && one.value !== "all"}
           onclick={() => find.filter(one.value)}

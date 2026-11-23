@@ -165,7 +165,7 @@
       <section
         data-slot="needs"
         aria-label="Its session asks"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-orange/40 rounded-sm bg-bg-2/45"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 ring ring-orange/40 rounded-sm bg-bg-2/45"
       >
         <h3
           data-slot="head"
@@ -198,7 +198,7 @@
       <section
         data-slot="needs"
         aria-label="An approved action"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-orange/40 rounded-sm bg-bg-2/45"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 ring ring-orange/40 rounded-sm bg-bg-2/45"
       >
         <h3
           data-slot="head"
@@ -239,7 +239,7 @@
         {#if proposed}
           <pre
             data-slot="args"
-            class="max-h-48 m-0 py-space-2 px-space-3 overflow-auto border border-ui-2 rounded-sm bg-bg-2 type-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere">{action.args}</pre>
+            class="max-h-48 m-0 py-space-2 px-space-3 overflow-auto ring ring-ui-2 rounded-sm bg-bg-2 type-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere">{action.args}</pre>
         {/if}
         <RowFault reason={actionProblem[action.id] ?? null} />
         <div
@@ -293,7 +293,7 @@
       <section
         data-slot="needs"
         aria-label={commonWords.itsSession}
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-orange/40 rounded-sm bg-bg-2/45"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 ring ring-orange/40 rounded-sm bg-bg-2/45"
         data-reason="failed"
       >
         <h3
@@ -341,7 +341,7 @@
       <section
         data-slot="needs"
         aria-label="Waits on"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-ui rounded-sm bg-bg-2"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 ring ring-ui rounded-sm bg-bg-2"
       >
         <h3
           data-slot="head"
@@ -421,7 +421,7 @@
       <section
         data-slot="needs"
         aria-label="Built on a decision that moved"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-ui rounded-sm bg-bg-2"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 ring ring-ui rounded-sm bg-bg-2"
       >
         <ul class="flex flex-col gap-space-1 m-0 p-0 list-none">
           {#each builtOn as moved (moved.target)}

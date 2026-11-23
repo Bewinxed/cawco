@@ -1111,7 +1111,7 @@
     bind:this={paneLayout.section}
   >
     <div
-      class="relative flex flex-col flex-1 min-h-0 overflow-hidden border border-ui-2 rounded-sm bg-bg-2"
+      class="relative flex flex-col flex-1 min-h-0 overflow-hidden ring ring-ui-2 rounded-sm bg-bg-2"
       bind:this={paneLayout.well}
     >
       {@render framed()}

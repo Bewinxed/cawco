@@ -195,7 +195,7 @@
       data-slot="track"
       data-focus={focused || undefined}
       data-ready={ready || undefined}
-      class="group touch-hit hit-edge-hair relative h-control-sm max-phone:h-9.5 cursor-ew-resize touch-none rounded-sm border border-ui-2 bg-bg shadow-none transition-control-ring select-none not-data-ready:transition-none data-focus:outline-solid data-focus:outline-2 data-focus:outline-accent data-focus:-outline-offset-2"
+      class="group touch-hit hit-edge-hair relative h-control-sm max-phone:h-9.5 cursor-ew-resize touch-none rounded-sm ring ring-ui-2 bg-bg shadow-none transition-control-ring select-none not-data-ready:transition-none data-focus:outline-solid data-focus:outline-2 data-focus:outline-accent data-focus:-outline-offset-2"
       onpointercancel={() => {
         draft = null;
         drag = false;

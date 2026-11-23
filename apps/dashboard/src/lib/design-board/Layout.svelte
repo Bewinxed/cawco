@@ -48,7 +48,7 @@
       {#each LAYERS as layer, index (layer.token)}
         <div
           class={[
-            "surface col-start-1 row-start-1 h-28 w-64 translate-x-(--plane-x) translate-y-(--plane-y) rounded-lg border border-ui-2 p-space-3",
+            "surface col-start-1 row-start-1 h-28 w-64 translate-x-(--plane-x) translate-y-(--plane-y) rounded-lg p-space-3",
             layer.z,
           ]}
           style:--surface-level={2}

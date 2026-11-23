@@ -13,4 +13,4 @@
  * hyphen, and only one longer than a whole line wraps inside it.
  */
 export const PROSE =
-  "prose prose-sm max-w-none wrap-break-word prose-pre:overflow-x-auto prose-pre:rounded-sm prose-pre:border prose-pre:border-ui-2 prose-pre:bg-bg-2 prose-pre:text-tx prose-code:type-meta prose-code:text-tx prose-code:before:content-none prose-code:after:content-none prose-chip:inline-block prose-chip:max-w-full prose-chip:rounded-xs prose-chip:bg-bg-2 prose-chip:px-c-code-chip-pad-x prose-chip:wrap-anywhere prose-chip:inset-ring prose-chip:inset-ring-ui";
+  "prose prose-sm max-w-none wrap-break-word prose-pre:overflow-x-auto prose-pre:rounded-sm prose-pre:ring prose-pre:ring-ui-2 prose-pre:bg-bg-2 prose-pre:text-tx prose-code:type-meta prose-code:text-tx prose-code:before:content-none prose-code:after:content-none prose-chip:inline-block prose-chip:max-w-full prose-chip:rounded-xs prose-chip:bg-bg-2 prose-chip:px-c-code-chip-pad-x prose-chip:wrap-anywhere prose-chip:inset-ring prose-chip:inset-ring-ui";

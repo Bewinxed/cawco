@@ -46,15 +46,15 @@
   class={cn(
     "group/native-select relative isolate w-fit rounded-sm has-[select:disabled]:opacity-50",
     "has-[select:focus-visible]:outline-2 has-[select:focus-visible]:outline-accent has-[select:focus-visible]:outline-solid has-[select:focus-visible]:-outline-offset-2",
-    "before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-tx-2 before:bg-bg before:shadow-sm before:transition-control",
-    "has-[select[aria-invalid=true]]:before:border-red dark:has-[select[aria-invalid=true]]:before:border-red/50",
+    "before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:ring before:ring-tx-2 before:bg-bg before:shadow-sm before:transition-control",
+    "has-[select[aria-invalid=true]]:before:ring-red dark:has-[select[aria-invalid=true]]:before:ring-red/50",
     nativeSelectVariants({ measure }),
     className
   )}
   data-slot="native-select-wrapper"
 >
   <select
-    class="h-(--select-h) w-full focus-visible:outline-off min-w-0 overflow-hidden text-ellipsis whitespace-nowrap select-none appearance-none rounded-sm border border-transparent bg-transparent pr-space-8 pl-3 type-body text-tx [--select-h:var(--spacing-control-md)] [--select-reach:max(calc((var(--select-h)-var(--spacing-control-lg))/2),calc(var(--hit-gap-y,var(--spacing-control-lg))/-2))] selection:bg-accent selection:text-on-accent placeholder:text-tx-2 disabled:pointer-events-none disabled:cursor-not-allowed coarse:mt-(--select-reach) coarse:mb-(--select-reach) coarse:h-[calc(var(--select-h)-2*var(--select-reach))]"
+    class="h-(--select-h) w-full focus-visible:outline-off min-w-0 overflow-hidden text-ellipsis whitespace-nowrap select-none appearance-none rounded-sm ring ring-transparent bg-transparent pr-space-8 pl-3 type-body text-tx [--select-h:var(--spacing-control-md)] [--select-reach:max(calc((var(--select-h)-var(--spacing-control-lg))/2),calc(var(--hit-gap-y,var(--spacing-control-lg))/-2))] selection:bg-accent selection:text-on-accent placeholder:text-tx-2 disabled:pointer-events-none disabled:cursor-not-allowed coarse:mt-(--select-reach) coarse:mb-(--select-reach) coarse:h-[calc(var(--select-h)-2*var(--select-reach))]"
     data-slot="native-select"
     bind:this={ref}
     bind:value

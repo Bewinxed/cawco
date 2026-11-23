@@ -70,7 +70,7 @@
        leading and his trailing. -->
   <span
     aria-hidden="true"
-    class="checker grid size-space-6 grid-flow-col overflow-clip rounded-xs border border-ui-2 shadow-sm"
+    class="checker grid size-space-6 grid-flow-col overflow-clip rounded-xs ring ring-ui-2 shadow-sm"
   >
     {#if was !== null}
       <span class="block size-full bg-(--was)" style:--was={was}></span>

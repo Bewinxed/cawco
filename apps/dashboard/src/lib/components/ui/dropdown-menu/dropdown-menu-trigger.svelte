@@ -27,7 +27,7 @@
       },
       look: {
         attach:
-          "hit-edge-hair grid size-control-md place-items-center concentric-xs border border-ui-2 bg-bg text-tx-2 transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-ui hover:text-tx group-inert/ctrls:not-aria-invalid:border-tx-2 group-inert/ctrls:shadow-sm motion-safe:pressed:scale-(--press-scale) motion-safe:transition-[background-color,color,scale]",
+          "hit-edge-hair grid size-control-md place-items-center concentric-xs ring ring-ui-2 bg-bg text-tx-2 transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-ui hover:text-tx group-inert/ctrls:not-aria-invalid:ring-tx-2 group-inert/ctrls:shadow-sm motion-safe:pressed:scale-(--press-scale) motion-safe:transition-[background-color,color,scale]",
       },
     },
   });

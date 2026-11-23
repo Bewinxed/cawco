@@ -622,7 +622,7 @@
       >
         <MemberFace member={face} size={56} />
         <span
-          class="absolute -end-space-1 -bottom-space-1 grid size-6 place-items-center rounded-full border border-ui bg-bg text-tx shadow-sm"
+          class="absolute -end-space-1 -bottom-space-1 grid size-6 place-items-center rounded-full ring ring-ui bg-bg text-tx shadow-sm"
         >
           <IconPen aria-hidden="true" class="size-icon-sm" />
         </span>

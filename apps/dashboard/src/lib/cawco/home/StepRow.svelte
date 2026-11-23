@@ -56,7 +56,7 @@
         <span
           data-slot="step-number"
           aria-hidden="true"
-          class="box-border grid size-full place-items-center rounded-pill border border-ui-2 type-meta leading-none num before:content-data-n"
+          class="box-border grid size-full place-items-center rounded-pill ring ring-ui-2 type-meta leading-none num before:content-data-n"
           data-n={n}
         ></span>
       {/if}

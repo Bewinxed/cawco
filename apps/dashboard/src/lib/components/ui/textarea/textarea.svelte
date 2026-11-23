@@ -38,8 +38,8 @@
             stand a boxed row's inset in (`c-field-inline-inset`, space-3
             less its edge), on the text column of the rows beside it. */
         prose:
-          "min-h-0 border-transparent bg-transparent px-space-3 py-space-1 shadow-none hover:bg-ui",
-        note: "max-h-50 min-h-control-md min-w-0 border-transparent bg-transparent px-0 py-space-2 leading-lg shadow-none placeholder-shown:truncate",
+          "min-h-0 ring-transparent bg-transparent px-space-3 py-space-1 shadow-none hover:bg-ui",
+        note: "max-h-50 min-h-control-md min-w-0 ring-transparent bg-transparent px-0 py-space-2 leading-lg shadow-none placeholder-shown:truncate",
       },
     },
   });
@@ -122,8 +122,8 @@
       "bg-surface-raised px-3 text-ink-strong",
       "type-body placeholder:text-ink-muted",
       "disabled:cursor-not-allowed disabled:opacity-50",
-      "aria-invalid:border-red",
-      "dark:aria-invalid:border-red/50",
+      "aria-invalid:ring-red",
+      "dark:aria-invalid:ring-red/50",
       textareaVariants({ face, text, height, resize, fill, look, measure }),
       placement
     )}

@@ -92,7 +92,7 @@
       </span>
       <Slider.Thumb
         aria-label={words.bounce}
-        class="pointer-hit touch-hit block size-space-4 cursor-ew-resize rounded-pill border border-ui-2 bg-bg shadow-sm focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-2"
+        class="pointer-hit touch-hit block size-space-4 cursor-ew-resize rounded-pill ring ring-ui-2 bg-bg shadow-sm focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-2"
         index={0}
       />
     </Slider.Root>

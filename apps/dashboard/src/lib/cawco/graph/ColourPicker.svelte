@@ -54,7 +54,7 @@
     }
   };
   const thumb =
-    "block size-space-4 rounded-pill border-2 border-bg shadow-sm outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-1";
+    "block size-space-4 rounded-pill ring-2 ring-bg shadow-sm outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-1";
 </script>
 
 <ColorPicker.Root

@@ -154,7 +154,6 @@
 :where(.before\:border-accent)::before,
 :where(.before\:border-t)::before,
 :where(.before\:border-t-ui)::before,
-:where(.before\:border-tx-2)::before,
 :where(.before\:border-ui)::before,
 :where(.before\:border-ui-2)::before,
 :where(.before\:border-x)::before,
@@ -189,6 +188,10 @@
 :where(.before\:left-\(--gap-from\))::before,
 :where(.before\:opacity-0)::before,
 :where(.before\:pointer-events-none)::before,
+:where(.before\:ring)::before,
+:where(.before\:ring-tx-2)::before,
+:where(.before\:ring-ui)::before,
+:where(.before\:ring-ui-2)::before,
 :where(.before\:rounded-inherit)::before,
 :where(.before\:rounded-lg)::before,
 :where(.before\:rounded-pill)::before,
@@ -219,9 +222,9 @@
 )::before,
 :where(.contrast-more\:before\:backdrop-filter-none)::before,
 :where(.contrast-more\:before\:bg-bg)::before,
-:where(.contrast-more\:before\:border-tx-2)::before,
+:where(.contrast-more\:before\:ring-tx-2)::before,
 :where(
-  .dark\:has-\[select\[aria-invalid\=true\]\]\:before\:border-red\/50:where(
+  .dark\:has-\[select\[aria-invalid\=true\]\]\:before\:ring-red\/50:where(
       .dark,
       .dark *,
       [data-scheme="dark"],
@@ -332,7 +335,7 @@
 :where(.focus-visible\:before\:outline-accent:focus-visible)::before,
 :where(.focus-visible\:before\:outline-solid:focus-visible)::before,
 :where(
-  .has-\[select\[aria-invalid\=true\]\]\:before\:border-red:has(
+  .has-\[select\[aria-invalid\=true\]\]\:before\:ring-red:has(
     :is(select[aria-invalid="true"])
   )
 )::before,
@@ -401,7 +404,7 @@
 )::before,
 :where(.reduced-transparency\:before\:backdrop-filter-none)::before,
 :where(.reduced-transparency\:before\:bg-bg)::before,
-:where(.reduced-transparency\:before\:border-tx-2)::before,
+:where(.reduced-transparency\:before\:ring-tx-2)::before,
 :where(.status-failed\:before\:bg-bg-2[data-status="failed"])::before,
 :where(.status-needs\:before\:bg-bg-2[data-status="needs"])::before,
 :where([data-sonner-toast][data-swiping="false"][data-removed="true"])::before,
@@ -486,7 +489,6 @@
 :where(.after\:border-accent)::after,
 :where(.after\:border-s)::after,
 :where(.after\:border-t)::after,
-:where(.after\:border-ui)::after,
 :where(.after\:border-ui-2)::after,
 :where(.after\:content-rest)::after,
 :where(.after\:duration-\(--duration-base\))::after,
@@ -502,6 +504,9 @@
 :where(.after\:opacity-\(--shade-seen\))::after,
 :where(.after\:opacity-0)::after,
 :where(.after\:pointer-events-none)::after,
+:where(.after\:ring)::after,
+:where(.after\:ring-ui)::after,
+:where(.after\:ring-ui-2)::after,
 :where(.after\:rounded-\[inherit\])::after,
 :where(.after\:rounded-inherit)::after,
 :where(.after\:rounded-pill)::after,

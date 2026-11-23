@@ -466,7 +466,7 @@
       {#key `${search}:${generation}`}
         <!-- biome-ignore lint/security/useIframeSandbox: a /motion bench framing the dashboard's own route; it needs scripts and its origin, and with both a sandbox holds nothing back. -->
         <iframe
-          class="h-211 w-97.5 rounded-lg border border-ui bg-bg"
+          class="h-211 w-97.5 rounded-lg ring ring-ui bg-bg"
           src="/motion/caw-notices?frame&{search}"
           title="Caw's panel on a 390px phone"
         ></iframe>
