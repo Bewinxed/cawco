@@ -22,6 +22,7 @@
  *   both sides keep every byte (an H6 is seven or eight #s in the file).
  */
 import type { ExternalActor, ExternalState } from "@cawco/core/external-items";
+import { outsideFences } from "@cawco/core/markdown-code";
 import type { Stage } from "@cawco/core/task-views";
 import type { TrackerTarget } from "@cawco/core/trackers";
 import type { StageKind } from "@cawco/core/views";
@@ -261,26 +262,16 @@ export const stageFor = (
   );
 };
 
-const FENCE = /^\s*(```|~~~)/u;
 const HEADING = /^(#{2,})(?=\s|$)/u;
 
-/** Each heading line outside a code fence, its #s counted and changed by `change`. */
-const headings = (text: string, change: (level: number) => number): string => {
-  let fenced = false;
-  return text
-    .split("\n")
-    .map((line) => {
-      if (FENCE.test(line)) {
-        fenced = !fenced;
-        return line;
-      }
-      const found = fenced ? null : HEADING.exec(line);
-      return found
-        ? `${"#".repeat(change(found[1].length))}${line.slice(found[1].length)}`
-        : line;
-    })
-    .join("\n");
-};
+/** Each heading line outside fenced code, its #s counted and changed by `change`. */
+const headings = (text: string, change: (level: number) => number): string =>
+  outsideFences(text, (line) => {
+    const found = HEADING.exec(line);
+    return found
+      ? `${"#".repeat(change(found[1].length))}${line.slice(found[1].length)}`
+      : line;
+  });
 
 /** Text from a tracker as a task file holds it: every heading below H1 `by` levels deeper. */
 export const intoFile = (text: string, by: 1 | 2): string =>

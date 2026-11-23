@@ -77,6 +77,7 @@ import type { OfferedMode } from "@cawco/core/harness/modes";
 import { runsCommandsUnasked } from "@cawco/core/harness/traits";
 import type { LandsMode } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
+import { outsideFences } from "@cawco/core/markdown-code";
 import type {
   RoutineMadeBy,
   RoutineSchedule,
@@ -194,12 +195,15 @@ const RUNS_SHOWN = 20;
 /** The longest delivered output its line on the routine's thread carries. */
 const NOTE_MAX = 4000;
 
+/** A heading at or above a comment entry's own `###` (tasks.ts `commentText` refuses `##` and `###`). */
+const ENTRY_HEADING = /^#{1,3}(?=\s)/u;
+
 /**
  * A run's words as a task comment takes them: its headings set below a
- * comment entry's own (tasks.ts refuses `#`, `##` and `###` inside one).
+ * comment entry's own, its fenced code (a check's shell command) as written.
  */
 const threadBody = (text: string): string =>
-  text.replace(/^#{1,3}(?=\s)/gmu, "####");
+  outsideFences(text, (line) => line.replace(ENTRY_HEADING, "####"));
 
 /** A conversation run's skip while Caw is off: a routine is Caw acting on his own (Caw on / Caw off). */
 const CAW_OFF = "Caw is off, so only your words wake him";

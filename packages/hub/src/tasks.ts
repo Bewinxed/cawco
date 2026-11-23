@@ -72,6 +72,7 @@ import {
 } from "@cawco/core/external-items";
 import { PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
+import { closeFences, someLineOutsideFences } from "@cawco/core/markdown-code";
 import { todoProgress } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { markdownLink, taskLink } from "@cawco/core/references";
@@ -760,7 +761,8 @@ const sameNumber: Exclusive = (name, rel) => {
 };
 const LIST_LIMIT = 50;
 const TYPE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/u;
-const SECTION_LINE = /^##\s/mu;
+/** A line that opens a section of the task file, outside fenced code. */
+const SECTION_LINE = /^##\s/u;
 const TODO_MARKER_START = /^\[td-\d+\]/u;
 const LINE_BREAK = /[\r\n]/u;
 
@@ -928,7 +930,11 @@ const oneLine = (what: string, text: string, limit: number) => {
   return trimmed;
 };
 
-/** A description or acceptance criteria: free text that must not open a section of its own. */
+/**
+ * A description or acceptance criteria: free text that must not open a
+ * section of its own. A fence it leaves open is closed, so it ends inside
+ * this text and not in the sections after it.
+ */
 const block = (what: string, text: string) => {
   if (text.length > TEXT_LIMIT) {
     return problem(400, {
@@ -936,13 +942,13 @@ const block = (what: string, text: string) => {
       detail: `The ${what} is ${text.length} characters long; it stops at ${TEXT_LIMIT}.`,
     });
   }
-  if (SECTION_LINE.test(text)) {
+  if (someLineOutsideFences(text, SECTION_LINE)) {
     return problem(400, {
       code: "task-text-heading",
       detail: `The ${what} holds a "## " heading, which would start a section of its own in the task file; use "### " inside it.`,
     });
   }
-  return text.trim();
+  return closeFences(text.trim());
 };
 
 /** Acceptance criteria as {@link block} takes them, and refused past the criteria one judgement reads. */
@@ -1153,7 +1159,8 @@ const extraFieldsOf = (fields: Record<string, ExtraValue>) => {
   return read;
 };
 
-const COMMENT_ENTRY_LINE = /^###\s/mu;
+/** A line that opens a comment entry, outside fenced code. */
+const COMMENT_ENTRY_LINE = /^###\s/u;
 
 /** A comment's text: markdown that opens neither a section nor a comment entry of its own. */
 const commentText = (text: string) => {
@@ -1167,7 +1174,7 @@ const commentText = (text: string) => {
       detail: "The comment is empty; write a few words.",
     });
   }
-  if (COMMENT_ENTRY_LINE.test(written)) {
+  if (someLineOutsideFences(written, COMMENT_ENTRY_LINE)) {
     return problem(400, {
       code: "task-comment-heading",
       detail:

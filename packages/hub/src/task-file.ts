@@ -97,6 +97,7 @@ import {
 import { type FrontMatterLine, frontMatterBlock } from "@cawco/core/fleet";
 import { type OfferedMode, PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
+import { fencedLines } from "@cawco/core/markdown-code";
 import { isOneOf } from "@cawco/core/one-of";
 import type { TaskTodo } from "@cawco/core/plan";
 import { ROUTINE_TARGETS, type RoutineTarget } from "@cawco/core/routine-kinds";
@@ -323,7 +324,6 @@ const BUDGET_ENTRY =
 const SECTION = /^##\s+(.*?)(?:\s+#+)?\s*$/u;
 const SPACES = /\s+/gu;
 const TITLE = /^#\s+(.*?)(?:\s+#+)?\s*$/u;
-const FENCE = /^\s*(```|~~~)/u;
 const SEQUENCE_ITEM = /^\s*-\s+(.*)$/u;
 const BARE_SCALAR = /^[A-Za-z0-9_][A-Za-z0-9_ ./@+-]*$/u;
 const BARE_ITEM = /^[A-Za-z0-9_][A-Za-z0-9_./@+-]*$/u;
@@ -1199,13 +1199,10 @@ const commentEntries = (
       });
     }
   };
-  let fenced = false;
+  const fenced = fencedLines(lines);
   for (let at = section.at + 1; at < section.end; at += 1) {
     const raw = (lines[at] ?? "").replace(CR, "");
-    if (FENCE.test(raw)) {
-      fenced = !fenced;
-    }
-    const heading = fenced ? undefined : COMMENT_HEADING.exec(raw)?.[1];
+    const heading = fenced[at] ? undefined : COMMENT_HEADING.exec(raw)?.[1];
     const head = heading === undefined ? undefined : commentHeading(heading);
     if (head) {
       close(at);
@@ -1221,13 +1218,9 @@ const commentEntries = (
 /** The body's `## ` sections, skipping anything inside a code fence. */
 const sectionsOf = (lines: string[]): BodySection[] => {
   const sections: BodySection[] = [];
-  let fenced = false;
+  const fenced = fencedLines(lines);
   for (const [at, line] of lines.entries()) {
-    if (FENCE.test(line)) {
-      fenced = !fenced;
-      continue;
-    }
-    const heading = fenced ? undefined : SECTION.exec(line.replace(CR, ""));
+    const heading = fenced[at] ? undefined : SECTION.exec(line.replace(CR, ""));
     if (heading) {
       const last = sections.at(-1);
       if (last) {
@@ -1299,13 +1292,10 @@ const todosOf = (lines: string[], section: BodySection | undefined) => {
   }
   const stack: { indent: number; children: number; path: string }[] = [];
   let topLevel = 0;
-  let fenced = false;
+  const fenced = fencedLines(lines);
   for (let line = section.at + 1; line < section.end; line += 1) {
     const raw = lines[line].replace(CR, "");
-    if (FENCE.test(raw)) {
-      fenced = !fenced;
-    }
-    const box = fenced ? undefined : TODO_LINE.exec(raw);
+    const box = fenced[line] ? undefined : TODO_LINE.exec(raw);
     if (!box) {
       continue;
     }
