@@ -10,6 +10,9 @@
   /** What carries a dragged kind's tile into its slot, as the graph's Landing dial names it (kind-dnd `landing`). */
   export type Landing = "House settle" | "Longer settle" | "Motion spring";
 
+  /** The grid the frame is drawn on: today's tokens, or the 4px base (grid-4px.css), the frame's document's. */
+  export type Grid = "Current" | "4px base";
+
   /** How the stages were read: all at once, one still on its way, or one refused. */
   export type Reading =
     | "Every stage read"
@@ -50,6 +53,7 @@
     type StageId,
     withAsked,
   } from "./changes";
+  import gridFourSheet from "./grid-4px.css?url";
   import HowItRuns from "./HowItRuns.svelte";
   import { type HowItRunsRecord, SITUATIONS, type Situation } from "./records";
   import { projectRowOf } from "./shell-seed";
@@ -61,6 +65,7 @@
     reading = "Every stage read",
     landing: landingDial = "House settle",
     settleMs = null,
+    grid = "Current",
   }: {
     situation: Situation;
     answer?: HubAnswer;
@@ -68,6 +73,8 @@
     landing?: Landing;
     /** The longer settle's length, in ms; none: --duration-settle-drag. */
     settleMs?: number | null;
+    /** The 4px base's line-heights, steps and Row, for judging beside today's. */
+    grid?: Grid;
   } = $props();
 
   // The roster's drags land on the dial's landing, for the owner to feel each.
@@ -193,6 +200,14 @@
     },
   ]);
 </script>
+
+<!-- The 4px base is the document's, as the scheme is: its sheet re-pins
+     the root's tokens while the dial stands on it. -->
+<svelte:head>
+  {#if grid === "4px base"}
+    <link href={gridFourSheet} rel="stylesheet" />
+  {/if}
+</svelte:head>
 
 <!-- The frame is the window: the shell fills it, as it fills the page. -->
 <div class="flex h-dvh w-dvw min-w-0">

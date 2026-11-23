@@ -1,0 +1,114 @@
+/* The work path on a 4px base, for the owner to judge beside today's grid
+   (the live story's Grid dial, how-it-runs-live.svelte). A preview only:
+   theme.css is untouched. Paths 1–3 of tsk-477's research
+   (assets/4aaf5c05/alignment-research.md).
+
+   The grid is the document's, as the colour scheme is: the fixture links
+   this sheet into the frame's document while the dial stands on the 4px
+   base, and takes it out at the dial's next turn. Its base tokens stand
+   on the root, where theme.css declares them and builds its other tokens
+   from them (`--type-*`, `--row-tall-h`, the `--spacing-c-*` sums): a
+   custom property is substituted where it is declared, so each of those
+   follows through its own formula, as a change to theme.css would, and
+   the layers the frame portals to the body read them alike. The stage
+   draws each frame in a document of its own. In `overrides`, over
+   theme.css's layer and SectionRow's utilities. */
+
+@layer overrides {
+  :root {
+    /* 1. Each text role's line box a length on the base (theme.css's
+       ratios give 16.8, 18.2, 21, 21.7, 19.2 and 22.4px). Leading-ui and
+       leading-kpi stay ratios: buttons, caps and eleven runs of other
+       sizes read them, so title, kpi and row take their 24px in their own
+       shorthands. */
+    --leading-meta: calc(var(--spacing) * 4);
+    --leading-label: calc(var(--spacing) * 5);
+    --leading-body: calc(var(--spacing) * 5);
+    --leading-code: calc(var(--spacing) * 5);
+    --leading-prose: calc(var(--spacing) * 6);
+    --type-row: 500 var(--text-row) / calc(var(--spacing) * 6) var(--font-sans);
+    --type-title: 500 var(--text-title) / calc(var(--spacing) * 6)
+      var(--font-sans);
+    --type-kpi: 500 var(--text-kpi) / calc(var(--spacing) * 6) var(--font-sans);
+    /* theme.css sums two meta lines as size × ratio; a length line-height
+       is a line's height itself. */
+    --spacing-c-draft-col-h: calc(
+      5 * var(--spacing-space-1) + var(--spacing-space-2) +
+        var(--spacing-c-btn-h-sm) + 2 * var(--leading-meta)
+    );
+
+    /* 2. The eight steps re-pinned on the base: 4 8 12 16 20 24 28 32
+       (today 4 7 11 14 18 21 25 32). */
+    --spacing-space-1: calc(var(--spacing) * 1);
+    --spacing-space-2: calc(var(--spacing) * 2);
+    --spacing-space-3: calc(var(--spacing) * 3);
+    --spacing-space-4: calc(var(--spacing) * 4);
+    --spacing-space-5: calc(var(--spacing) * 5);
+    --spacing-space-6: calc(var(--spacing) * 6);
+    --spacing-space-7: calc(var(--spacing) * 7);
+    --spacing-space-8: calc(var(--spacing) * 8);
+  }
+
+  /* 3. The Row: a section list (RowList's `ul` of SectionRows) is the
+     grid, its tracks set once, and each row takes them as a subgrid
+     (columns only), so every row's tile, text and controls start on the
+     list's edges whatever they hold. The insets are tracks, not the row's
+     padding, which on a subgrid would push the edge items off their
+     tracks. What a row opens under it (its note, Stop using's confirm)
+     starts on the text's track. The list, not each row, is the
+     `section-row` container: a row that is a size container lays out on
+     its own and so cannot be a subgrid ("forced to establish an
+     independent formatting context … the grid container is not a
+     subgrid", CSS Grid 2 §9). The text stays one cell at every width
+     (SectionRow's phone arrangement splits it across the row's own grid,
+     which a shared track cannot hold). */
+  ul:has(> li[data-slot="item"] > [data-slot="row"]) {
+    display: grid;
+    grid-template-columns:
+      [in] var(--spacing-space-2) [lead] var(--spacing-c-mark)
+      var(--spacing-space-3) [body] minmax(0, 1fr) var(--spacing-space-3)
+      [trail] auto [trail-end] var(--spacing-space-2) [out];
+    column-gap: 0;
+    container: section-row / inline-size;
+  }
+
+  ul > li[data-slot="item"]:has(> [data-slot="row"]) {
+    container-type: normal;
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+    align-content: start;
+  }
+
+  li[data-slot="item"] > [data-slot="row"] {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+    grid-template-rows: auto;
+    align-items: center;
+    column-gap: 0;
+    padding-inline: 0;
+
+    & > [data-slot="tile"] {
+      grid-column: lead;
+      grid-row: 1;
+    }
+
+    & > [data-slot="text"] {
+      display: flex;
+      grid-column: body;
+      grid-row: 1;
+    }
+
+    & > [data-slot="controls"] {
+      grid-column: trail;
+      grid-row: 1;
+      justify-self: end;
+    }
+  }
+
+  li[data-slot="item"] > [data-slot="row"] ~ div {
+    grid-column: body / trail-end;
+    padding-inline: 0;
+  }
+}

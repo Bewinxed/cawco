@@ -48,3 +48,11 @@ export const TasksFailedToRead = { args: { reading: "Tasks failed to read" } };
 
 /** The server refuses every change I make: each pick moves, then comes back with why. */
 export const ServerRefuses = { args: { answer: "refuses it" } };
+
+/** The same screen with its text lines and spacing on a 4px base, and the folders on shared tracks. */
+export const OnFourPixelBase = { args: { grid: "4px base" } };
+
+/** On the 4px base, a folder gone missing: its Change path widens every folder's trailing column. */
+export const FolderMissingOnFourPixelBase = {
+  args: { grid: "4px base", situation: "Two stages in trouble" },
+};
