@@ -52,7 +52,6 @@ import {
   CONTROL_GH_TOKEN,
   pushOnlyProvider,
 } from "@cawco/core/connections";
-import { CONTINUATION_CANCELLED } from "@cawco/core/continuation";
 import type { ControlReply } from "@cawco/core/control-replies";
 import type {
   AddressedControl,

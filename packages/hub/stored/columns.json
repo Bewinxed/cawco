@@ -6124,6 +6124,34 @@
       "leaf"
     ]
   },
+  "fleet_trigger_settings.harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi",
+      "codex"
+    ]
+  },
+  "fleet_trigger_settings.kind": {
+    "type": "string",
+    "enum": [
+      "comments",
+      "routine-results",
+      "task-moves",
+      "inbound-events"
+    ]
+  },
+  "fleet_trigger_settings.mode": {
+    "type": "string",
+    "enum": [
+      "default",
+      "acceptEdits",
+      "plan",
+      "bypassPermissions",
+      "fullSend"
+    ]
+  },
   "folder_moves.stage": {
     "anyOf": [
       {
@@ -6573,6 +6601,19 @@
       "dontAsk",
       "auto",
       "fullSend"
+    ]
+  },
+  "held_triggers.thing_kind": {
+    "type": "string",
+    "enum": [
+      "artifact",
+      "card",
+      "connection",
+      "event",
+      "project",
+      "routine",
+      "session",
+      "task"
     ]
   },
   "image_settings.provider": {
@@ -11843,6 +11884,34 @@
   "project_task_edges.kind": {
     "type": "string",
     "const": "waits_on"
+  },
+  "project_trigger_settings.harness": {
+    "type": "string",
+    "enum": [
+      "claude",
+      "opencode",
+      "pi",
+      "codex"
+    ]
+  },
+  "project_trigger_settings.kind": {
+    "type": "string",
+    "enum": [
+      "comments",
+      "routine-results",
+      "task-moves",
+      "inbound-events"
+    ]
+  },
+  "project_trigger_settings.mode": {
+    "type": "string",
+    "enum": [
+      "default",
+      "acceptEdits",
+      "plan",
+      "bypassPermissions",
+      "fullSend"
+    ]
   },
   "projects.account_at_limit": {
     "type": "string",
