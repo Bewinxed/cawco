@@ -173,6 +173,7 @@
 :where(.before\:glass-backdrop)::before,
 :where(.before\:h-\(--cast-h\))::before,
 :where(.before\:h-\(--fade-len\))::before,
+:where(.before\:h-0\.5)::before,
 :where(.before\:h-c-edge-fade-len)::before,
 :where(.before\:h-px)::before,
 :where(.before\:hidden)::before,

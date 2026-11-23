@@ -68,6 +68,7 @@
     short = false,
     tone,
     bare = false,
+    fill = false,
   }: (
     | { instance: AccountHolder; choice?: never }
     | { choice: AccountChoice; instance?: never }
@@ -116,6 +117,8 @@
      * of pickers, where the tooltip around the chip names it.
      */
     bare?: boolean;
+    /** The chip takes its container's width, its chevron at the end: a column of pickers. */
+    fill?: boolean;
   } = $props();
   /** The chip's figure: what the account has left, as its rows say it ("38% left"). */
   const quotaWords = $derived(
@@ -126,7 +129,10 @@
       variant: "setting",
       size,
       tone,
-      class: "min-w-0 max-w-full",
+      class: [
+        "min-w-0 max-w-full",
+        fill && "flex-1 [&>[data-slot=chevron]]:ms-auto",
+      ],
     })
   );
 
