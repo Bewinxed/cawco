@@ -5,7 +5,7 @@
   /** Its callers' looks: a description at the body size; read out but not
       drawn (`visible: false`) on a sheet whose content says it on screen. */
   const drawerDescriptionVariants = tv({
-    base: "text-ink-muted type-label",
+    base: "text-tx-2 type-label",
     variants: {
       text: { body: "type-body" },
       visible: { true: "", false: "sr-only" },

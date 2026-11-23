@@ -618,7 +618,7 @@
     <g data-slot="round">
       {#each arcSlots.filter((k) => roundLow(k) === low) as k (k)}
         <path
-          class="rim-arc fill-none stroke-status-attn"
+          class="rim-arc fill-none stroke-orange"
           d={arcPath(k)}
           pathLength="1"
           transition:drawn
@@ -626,7 +626,7 @@
       {/each}
       {#each lapSlots.filter((k) => roundLow(k) === low) as k (k)}
         <path
-          class="rim-arc fill-none stroke-status-fail"
+          class="rim-arc fill-none stroke-red"
           d={arcPath(k)}
           pathLength="1"
           transition:drawn
@@ -635,7 +635,7 @@
       {#if ringClosed}
         <path
           data-slot="whole"
-          class="rim-arc fill-none stroke-status-fail"
+          class="rim-arc fill-none stroke-red"
           d={low ? ROUND_HALF.low : ROUND_HALF.high}
           pathLength="1"
           transition:drawn
@@ -659,7 +659,7 @@
     <g data-slot="standing">
       {#each arcSlots.filter((k) => standLow(k) === low) as k (k)}
         <path
-          class="rim-arc fill-none stroke-status-attn"
+          class="rim-arc fill-none stroke-orange"
           d={outlinePath(k)}
           pathLength="1"
           transition:drawn
@@ -667,7 +667,7 @@
       {/each}
       {#each lapSlots.filter((k) => standLow(k) === low) as k (k)}
         <path
-          class="rim-arc fill-none stroke-status-fail"
+          class="rim-arc fill-none stroke-red"
           d={outlinePath(k)}
           pathLength="1"
           transition:drawn
@@ -676,7 +676,7 @@
       {#if ringClosed}
         <path
           data-slot="whole"
-          class="rim-arc fill-none stroke-status-fail"
+          class="rim-arc fill-none stroke-red"
           d={low ? STAND_HALF.low : STAND_HALF.high}
           pathLength="1"
           transition:drawn

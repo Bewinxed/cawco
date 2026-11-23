@@ -107,7 +107,7 @@
 {#snippet running(ring: RingAccount)}
   <div class="flex flex-col gap-space-1">
     {#if ring.sessions.length > 0}
-      <span class="type-meta font-medium text-ink-muted"
+      <span class="type-meta font-medium text-tx-2"
         >Running
         <span data-slot="count" class="mono-figure ms-space-1"
           >{ring.sessions.length}</span
@@ -118,23 +118,20 @@
           {@const project = projectOf(row)}
           <div
             data-slot="session"
-            class="type-meta flex justify-between gap-space-4 py-space-1 text-ink-strong"
+            class="type-meta flex justify-between gap-space-4 py-space-1 text-tx"
           >
             <span data-slot="what" class="min-w-0 truncate"
               >{#if project}
-                <span data-slot="project" class="text-ink-muted">{project}</span
-                >
+                <span data-slot="project" class="text-tx-2">{project}</span>
               {/if}
               {titleOf(row)}</span
             >
-            <span class="mono-figure flex-none text-ink-muted"
-              >{tokens(row)}</span
-            >
+            <span class="mono-figure flex-none text-tx-2">{tokens(row)}</span>
           </div>
         {/each}
       </div>
     {:else}
-      <span class="type-meta px-0 py-space-1 text-ink-muted"
+      <span class="type-meta px-0 py-space-1 text-tx-2"
         >No sessions running</span
       >
     {/if}
@@ -152,7 +149,7 @@
        Frame Recesses Rule). -->
   <div
     data-slot="tile"
-    class="flex min-w-0 flex-col gap-space-3 border-t border-t-border-hairline pt-space-4"
+    class="flex min-w-0 flex-col gap-space-3 border-t border-t-ui pt-space-4"
     data-account={ring.id}
     data-limit={ring.state === "limit" || undefined}
     data-tile
@@ -170,7 +167,7 @@
       <span class="flex min-w-0 flex-col gap-space-1">
         <span
           data-slot="value"
-          class="type-title num text-ink-strong data-muted:text-ink-muted"
+          class="type-title num text-tx data-muted:text-tx-2"
           data-muted={ring.state === "limit" || ring.state === "stale"
             ? true
             : undefined}
@@ -178,16 +175,16 @@
             <!-- mark-line: a mark set in running text, beside the figure's digits -->
             <span
               aria-hidden="true"
-              class="me-space-1 inline-grid size-icon-md align-middle text-ink-muted"
+              class="me-space-1 inline-grid size-icon-md align-middle text-tx-2"
               data-box><IconRefresh class="size-full" /></span
             >
           {/if}
           <Figure text={figure.figure} /></span
         >
-        <small class="type-meta text-ink-muted">{figure.label}</small>
+        <small class="type-meta text-tx-2">{figure.label}</small>
       </span>
     </div>
-    <p class="m-0 type-body text-ink-strong" data-status>
+    <p class="m-0 type-body text-tx" data-status>
       <Words parts={say} />
     </p>
     <RingsKey {ring} />
@@ -198,10 +195,10 @@
 <section
   data-slot="limits-block-card"
   aria-labelledby="limits-title"
-  class="flex flex-col gap-space-4 rounded-lg bg-surface-raised p-space-6 shadow-sm max-phone:p-space-4"
-  style:--ring-ground="var(--color-surface-raised)"
+  class="flex flex-col gap-space-4 rounded-lg bg-bg p-space-6 shadow-sm max-phone:p-space-4"
+  style:--ring-ground="var(--color-bg)"
 >
-  <h2 data-slot="title" class="type-label text-ink-muted" id="limits-title">
+  <h2 data-slot="title" class="type-label text-tx-2" id="limits-title">
     Limits
   </h2>
 
@@ -230,24 +227,24 @@
           <p class="flex flex-wrap items-baseline gap-space-3">
             <span
               data-slot="num"
-              class="type-kpi num tracking-tight text-ink-strong data-muted:text-ink-muted"
+              class="type-kpi num tracking-tight text-tx data-muted:text-tx-2"
               data-lead-figure
               data-muted={claude?.stale || undefined}
               >{#if lead.back}
                 <!-- mark-line: a mark set in running text, beside the figure's digits -->
                 <span
                   aria-hidden="true"
-                  class="me-space-1 inline-grid size-icon-lg align-middle text-ink-muted"
+                  class="me-space-1 inline-grid size-icon-lg align-middle text-tx-2"
                   data-box><IconRefresh class="size-full" /></span
                 >
               {/if}
               <Figure text={lead.figure} /></span
             >
-            <span class="type-body text-ink-muted">{lead.of}</span>
+            <span class="type-body text-tx-2">{lead.of}</span>
           </p>
           <p
             data-slot="sentence"
-            class="type-body max-w-ch-60 text-ink-strong"
+            class="type-body max-w-ch-60 text-tx"
             data-lead
           >
             <Words parts={lead.say} />
@@ -255,9 +252,7 @@
         </div>
       {/if}
 
-      <div
-        class="mark-line type-label flex items-center gap-space-2 text-ink-strong"
-      >
+      <div class="mark-line type-label flex items-center gap-space-2 text-tx">
         <span
           data-slot="glyph"
           aria-hidden="true"
@@ -274,7 +269,7 @@
               <span
                 {...props}
                 aria-label="Delegates go to {claude.delegate?.name}. {why}"
-                class="type-meta ms-auto whitespace-nowrap text-ink-muted"
+                class="type-meta ms-auto whitespace-nowrap text-tx-2"
                 data-delegates
                 role="img"
                 ><Words
@@ -303,16 +298,15 @@
           {/each}
         </div>
         {#if extraText}
-          <p class="type-body flex gap-space-3 text-ink-strong">
-            <span
-              data-slot="limits-block-label"
-              class="type-label text-ink-strong">Extra usage</span
+          <p class="type-body flex gap-space-3 text-tx">
+            <span data-slot="limits-block-label" class="type-label text-tx"
+              >Extra usage</span
             >{extraText}
           </p>
         {/if}
       {:else if claudeUnknown}
         <div
-          class="type-body flex flex-wrap items-center gap-space-3 text-ink-muted"
+          class="type-body flex flex-wrap items-center gap-space-3 text-tx-2"
         >
           <p>{claudeUnknown.reason}</p>
           {#if claudeUnknown.signIn}
@@ -328,9 +322,7 @@
       {/if}
 
       {#if openCode || (spend && spend.all > 0)}
-        <div
-          class="mark-line type-label flex items-center gap-space-2 text-ink-strong"
-        >
+        <div class="mark-line type-label flex items-center gap-space-2 text-tx">
           <span
             data-slot="glyph"
             aria-hidden="true"
@@ -353,10 +345,9 @@
           </div>
         {/if}
         {#if spend && spend.all > 0}
-          <p class="type-body flex gap-space-3 text-ink-strong">
-            <span
-              data-slot="limits-block-label"
-              class="type-label text-ink-strong">Spend</span
+          <p class="type-body flex gap-space-3 text-tx">
+            <span data-slot="limits-block-label" class="type-label text-tx"
+              >Spend</span
             ><span
               ><span class="mono-figure">{money(spend.today)}</span>
               today, <span class="mono-figure">{money(spend.week)}</span>

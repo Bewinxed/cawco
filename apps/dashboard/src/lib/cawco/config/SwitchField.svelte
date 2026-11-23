@@ -29,17 +29,13 @@
     bind:checked
   />
   <span class="flex min-w-0 flex-col gap-space-1">
-    <label
-      data-slot="switch-field-label"
-      class="type-label text-ink-strong"
-      for={id}>{label}</label
+    <label data-slot="switch-field-label" class="type-label text-tx" for={id}
+      >{label}</label
     >
     {#if typeof hint === "string"}
-      <span class="type-meta max-w-measure text-ink-muted">{hint}</span>
+      <span class="type-meta max-w-measure text-tx-2">{hint}</span>
     {:else if hint}
-      <span class="type-meta max-w-measure text-ink-muted"
-        >{@render hint()}</span
-      >
+      <span class="type-meta max-w-measure text-tx-2">{@render hint()}</span>
     {/if}
   </span>
 </div>

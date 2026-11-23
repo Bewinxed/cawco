@@ -364,7 +364,7 @@
         where
       )}
       <span class={STACKED}>
-        <code data-slot="num" class="num type-code text-ink-strong"
+        <code data-slot="num" class="num type-code text-tx"
           >{toolStatus.version ?? "—"}</code
         >
         <Popover.Root>
@@ -381,20 +381,18 @@
             width="widest"
           >
             <header
-              class="flex items-baseline gap-space-1 border-b border-border-hairline px-space-3 py-space-2"
+              class="flex items-baseline gap-space-1 border-b border-ui px-space-3 py-space-2"
             >
-              <span class="type-label text-ink-strong">{head}</span>
+              <span class="type-label text-tx">{head}</span>
               {#if toolStatus.method}
-                <code class="ml-auto shrink-0 type-code text-ink-muted"
+                <code class="ml-auto shrink-0 type-code text-tx-2"
                   >{toolStatus.method}</code
                 >
               {/if}
             </header>
             <pre
               class="max-h-56 overflow-auto px-space-3 py-space-2 type-code whitespace-pre-wrap wrap-anywhere">{toolStatus.detail}</pre>
-            <footer
-              class="border-t border-border-hairline px-space-3 py-space-2"
-            >
+            <footer class="border-t border-ui px-space-3 py-space-2">
               {@render installAct("Retry", toolWords.updating, false)}
             </footer>
           </Popover.Content>
@@ -406,12 +404,10 @@
            CawCo keeps current has no Reinstall: its own update is the one
            path. -->
       <span class="flex items-center gap-space-2">
-        <span
-          class="mark-line inline-flex items-center gap-space-1 text-ink-strong"
-        >
+        <span class="mark-line inline-flex items-center gap-space-1 text-tx">
           <IconCheck
             aria-label="Current"
-            class="size-icon-md shrink-0 text-status-done"
+            class="size-icon-md shrink-0 text-green"
           />
         </span>
         {#if !kept}
@@ -426,7 +422,7 @@
       <!-- An update keeps the copy's version in ink beside its progress. -->
       <span class={STACKED}>
         {#if toolStatus?.version}
-          <code data-slot="num" class="num type-code text-ink-strong"
+          <code data-slot="num" class="num type-code text-tx"
             >{toolStatus.version}</code
           >
         {/if}
@@ -470,16 +466,16 @@
             width="widest"
           >
             <header
-              class="flex items-baseline gap-space-1 border-b border-border-hairline px-space-3 py-space-2"
+              class="flex items-baseline gap-space-1 border-b border-ui px-space-3 py-space-2"
             >
-              <span class="type-label text-ink-strong"
+              <span class="type-label text-tx"
                 >{spec.name}
                 {outdated
                   ? `${toolStatus?.version} is out of date`
                   : "did not install"}</span
               >
               {#if toolStatus?.method}
-                <code class="ml-auto shrink-0 type-code text-ink-muted"
+                <code class="ml-auto shrink-0 type-code text-tx-2"
                   >{toolStatus.method}</code
                 >
               {/if}
@@ -488,13 +484,11 @@
               <pre
                 class="max-h-56 overflow-auto px-space-3 py-space-2 type-code whitespace-pre-wrap wrap-anywhere">{toolStatus.detail}</pre>
             {:else}
-              <p class="px-space-3 py-space-2 type-body text-ink-muted">
+              <p class="px-space-3 py-space-2 type-body text-tx-2">
                 The machine did not say why.
               </p>
             {/if}
-            <footer
-              class="border-t border-border-hairline px-space-3 py-space-2"
-            >
+            <footer class="border-t border-ui px-space-3 py-space-2">
               {@render installAct(
                 outdated && !kept ? "Update" : "Retry",
                 outdated ? toolWords.updating : "Installing…",
@@ -520,7 +514,7 @@
           </Badge>
         </Popover.Trigger>
         <Popover.Content align="start" frame="panel-high" width="wide">
-          <p class="type-body text-ink-strong">
+          <p class="type-body text-tx">
             {toolStatus?.detail ?? "No install method for this platform."}
           </p>
         </Popover.Content>
@@ -592,7 +586,7 @@
         class="flex items-center justify-between gap-space-2 @phone/table:min-h-control-lg"
       >
         <span
-          class="mark-line flex min-w-0 items-start gap-space-2 type-meta text-ink-muted"
+          class="mark-line flex min-w-0 items-start gap-space-2 type-meta text-tx-2"
           data-signin={state}
         >
           <!-- On the words' first line; a phone's narrow card may wrap them. -->
@@ -600,7 +594,7 @@
             {#if state === "signed-in" && flow?.phase === "signed-in"}
               <Check />
             {:else if state === "signed-in"}
-              <IconCheck class="size-icon-md text-status-done" />
+              <IconCheck class="size-icon-md text-green" />
             {:else if state === "waiting"}
               <LiveDot />
             {:else if state === "unknown"}
@@ -618,7 +612,7 @@
                 label={toolWords.signinUnknownHead(spec.name, where)}
                 onchange={(next) => showRead(key, next)}
                 open={readOpen === key}
-                triggerClass="pointer-hit touch-hit rounded-xs text-ink-muted transition-colors hover:text-ink-strong"
+                triggerClass="pointer-hit touch-hit rounded-xs text-tx-2 transition-colors hover:text-tx"
                 width="calc(var(--spacing) * 85)"
               >
                 {#snippet trigger()}
@@ -634,7 +628,7 @@
             <!-- Where focus lands once a sign-in here signs in (`closeFocus`). -->
             <span
               id="tool-signin-state-{key}"
-              class="min-w-0 rounded-xs text-pretty focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-accent-ink focus-visible:outline-offset-2"
+              class="min-w-0 rounded-xs text-pretty focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
               tabindex="-1">{SIGNIN_WORDS[state]}</span
             >
           {/if}
@@ -666,7 +660,7 @@
               </span>
             {/snippet}
             <div class="flex flex-col gap-space-3 p-space-2">
-              <p data-slot="title" class="type-label text-ink-strong">
+              <p data-slot="title" class="type-label text-tx">
                 {toolWords.signinTitle(spec.name, where)}
               </p>
               {#if flow}
@@ -696,11 +690,11 @@
 {#snippet signinFrame(title: string, words: string)}
   {@const { sentence, lines } = quotedScreen(words)}
   <div class="flex flex-col gap-space-3 p-space-2">
-    <p data-slot="title" class="type-label text-ink-strong">{title}</p>
-    <p class="type-meta text-pretty text-ink-strong">{sentence}</p>
+    <p data-slot="title" class="type-label text-tx">{title}</p>
+    <p class="type-meta text-pretty text-tx">{sentence}</p>
     {#if lines}
       <pre
-        class="max-h-56 overflow-auto type-code whitespace-pre-wrap wrap-anywhere text-ink-muted">{lines}</pre>
+        class="max-h-56 overflow-auto type-code whitespace-pre-wrap wrap-anywhere text-tx-2">{lines}</pre>
     {/if}
   </div>
 {/snippet}
@@ -746,13 +740,13 @@
               {#if hasMark(spec.id)}
                 <HarnessLogo data-box harness={spec.id} />
               {/if}
-              <h2 id="tool-{spec.id}" class="type-label text-ink-strong">
+              <h2 id="tool-{spec.id}" class="type-label text-tx">
                 {spec.name}
               </h2>
               <a
                 data-box
                 aria-label="{spec.name} homepage"
-                class="pointer-hit touch-hit pressable text-ink-muted transition-colors hover:text-ink-strong"
+                class="pointer-hit touch-hit pressable text-tx-2 transition-colors hover:text-tx"
                 href={spec.homepage}
                 rel="noreferrer"
                 target="_blank"
@@ -760,12 +754,12 @@
               >
                 <IconExternal class="size-icon-sm" />
               </a>
-              <span data-slot="num" class="num type-meta text-ink-muted"
+              <span data-slot="num" class="num type-meta text-tx-2"
                 >{installedOn(spec)}/{machines.length} installed{#if cantRunOn(spec) > 0}{` · ${toolWords.cantRunCount(cantRunOn(spec))}`}{/if}{#if spec.signin && signedInOn(spec) > 0}{` · ${toolWords.signedInCount(signedInOn(spec))}`}{/if}</span
               >
             </span>
             <label
-              class="mark-line flex items-center gap-space-2 type-label text-ink-muted"
+              class="mark-line flex items-center gap-space-2 type-label text-tx-2"
             >
               <Switch
                 data-box
@@ -829,7 +823,7 @@
                     data-slot="num"
                     class={[
                       "num type-code",
-                      v?.version ? "text-ink-strong" : "text-ink-muted",
+                      v?.version ? "text-tx" : "text-tx-2",
                     ]}>{v?.version ?? "—"}</code
                   >
                 </span>
@@ -862,7 +856,7 @@
                  machine's never past half the line; why they are here
                  stays whole. -->
             <p
-              class="flex min-w-0 type-meta whitespace-nowrap text-ink-muted"
+              class="flex min-w-0 type-meta whitespace-nowrap text-tx-2"
               title="{where} {names}{toolWords.unknownHarnessesTail}"
             >
               <span class="max-w-1/2 truncate">{where}</span><span

@@ -340,7 +340,7 @@
         {#if refused}
           <p
             data-slot="refused"
-            class="type-meta m-0 max-w-measure grow basis-72 text-pretty text-status-fail"
+            class="type-meta m-0 max-w-measure grow basis-72 text-pretty text-red"
             role="status"
           >
             {refused}
@@ -378,5 +378,5 @@
 {/if}
 
 {#snippet newer()}
-  <p class="m-0 p-space-3 type-meta text-ink-muted">{words.newer}</p>
+  <p class="m-0 p-space-3 type-meta text-tx-2">{words.newer}</p>
 {/snippet}

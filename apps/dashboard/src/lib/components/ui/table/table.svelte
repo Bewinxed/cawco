@@ -23,13 +23,13 @@
       row: {
         /** Spaced and ruled, the body's last one too (a section follows it). */
         stacks:
-          "@max-phone/table:grid @max-phone/table:grid-cols-(--card-cols) @max-phone/table:items-center @max-phone/table:gap-x-space-3 @max-phone/table:gap-y-space-1 @max-phone/table:border-b @max-phone/table:border-b-border-hairline @max-phone/table:px-space-3 @max-phone/table:py-space-2 @max-phone/table:[&:is(tbody>tr):last-child]:border-b",
+          "@max-phone/table:grid @max-phone/table:grid-cols-(--card-cols) @max-phone/table:items-center @max-phone/table:gap-x-space-3 @max-phone/table:gap-y-space-1 @max-phone/table:border-b @max-phone/table:border-b-ui @max-phone/table:px-space-3 @max-phone/table:py-space-2 @max-phone/table:[&:is(tbody>tr):last-child]:border-b",
         /** Its cells carry its spacing; ruled but the last. */
         "stacks-ruled":
-          "@max-phone/table:grid @max-phone/table:grid-cols-(--card-cols) @max-phone/table:items-center @max-phone/table:border-b @max-phone/table:border-b-border-hairline @max-phone/table:last:border-b-none @max-phone/table:[&:is(tbody>tr):last-child]:border-b-none",
+          "@max-phone/table:grid @max-phone/table:grid-cols-(--card-cols) @max-phone/table:items-center @max-phone/table:border-b @max-phone/table:border-b-ui @max-phone/table:last:border-b-none @max-phone/table:[&:is(tbody>tr):last-child]:border-b-none",
         /** Picked, spaced, ruled but the last. */
         "picks-stacks":
-          "@max-phone/table:grid @max-phone/table:grid-cols-(--card-cols) @max-phone/table:items-center @max-phone/table:gap-x-space-2 @max-phone/table:gap-y-space-1 @max-phone/table:border-b @max-phone/table:border-b-border-hairline data-[state=selected]:data-picked:@max-phone/table:bg-accent-wash @max-phone/table:px-space-3 @max-phone/table:py-space-2 data-picked:@max-phone/table:bg-accent-wash @max-phone/table:last:border-b-none",
+          "@max-phone/table:grid @max-phone/table:grid-cols-(--card-cols) @max-phone/table:items-center @max-phone/table:gap-x-space-2 @max-phone/table:gap-y-space-1 @max-phone/table:border-b @max-phone/table:border-b-ui data-[state=selected]:data-picked:@max-phone/table:bg-ui @max-phone/table:px-space-3 @max-phone/table:py-space-2 data-picked:@max-phone/table:bg-ui @max-phone/table:last:border-b-none",
       },
       cell: {
         "ledger-stacks":
@@ -60,7 +60,7 @@
         "@max-sm/table:block @max-sm/table:[&>*]:flex @max-sm/table:[&_th:not(:first-child)]:hidden",
       row: {
         stacks:
-          "@max-sm/table:grid @max-sm/table:grid-cols-(--card-cols) @max-sm/table:items-center @max-sm/table:gap-x-space-3 @max-sm/table:gap-y-space-1 @max-sm/table:border-b @max-sm/table:border-b-border-hairline @max-sm/table:px-space-3 @max-sm/table:py-space-2 @max-sm/table:[&:is(tbody>tr):last-child]:border-b-none",
+          "@max-sm/table:grid @max-sm/table:grid-cols-(--card-cols) @max-sm/table:items-center @max-sm/table:gap-x-space-3 @max-sm/table:gap-y-space-1 @max-sm/table:border-b @max-sm/table:border-b-ui @max-sm/table:px-space-3 @max-sm/table:py-space-2 @max-sm/table:[&:is(tbody>tr):last-child]:border-b-none",
       },
       cell: {
         ledger:

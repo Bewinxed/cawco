@@ -44,11 +44,11 @@
       </div>
     {:else}
       <div class="flex flex-col gap-space-2" data-case="content" in:reveal>
-        <p class="type-label m-0 text-ink-strong">Pricing tiers</p>
-        <p class="type-body m-0 text-ink-strong">
+        <p class="type-label m-0 text-tx">Pricing tiers</p>
+        <p class="type-body m-0 text-tx">
           Three plans, each a step up from the last.
         </p>
-        <p class="type-meta m-0 text-ink-muted">Updated 3d ago</p>
+        <p class="type-meta m-0 text-tx-2">Updated 3d ago</p>
       </div>
     {/if}
   </div>
@@ -71,7 +71,7 @@
     {:else}
       {#each ["Harbour", "Lantern", "Quay"] as name (name)}
         <div
-          class="type-label flex h-control-md items-center px-space-3 text-ink-strong"
+          class="type-label flex h-control-md items-center px-space-3 text-tx"
           data-case="row"
           data-flip
         >

@@ -2,7 +2,7 @@
  * What the person hasn't looked at since an update changed it (PRD §5.7,
  * "Pointing and what changed"; core comments.ts `ArtifactChanges`), as the
  * host names it (`cawco:changes`): each changed element ringed where it
- * stands, a `--color-status-done` line `--focus-ring-width` heavy standing
+ * stands, a `--color-green` line `--focus-ring-width` heavy standing
  * `--spacing-space-1` outside its box at its own radius grown by as
  * much, so it follows the element's shape and never covers what it says;
  * in the page's own document as the pins are, never taking a press.
@@ -142,7 +142,7 @@ export function startChanges(deps: ChangesDeps): Changes {
 
   const look = () => ({
     ...deps.chrome.tokens({
-      ring: ["--color-status-done"],
+      ring: ["--color-green"],
       offset: ["--spacing-space-1", "width"],
       spread: ["--spacing-space-3", "width"],
     }),

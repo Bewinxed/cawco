@@ -31,12 +31,12 @@
   <!-- The plan's name as the plan proposal draws it: one line, the title
        word, the ring and the figure, none of them cut. -->
   <span
-    class="mark-line inline-flex items-center gap-space-1 type-label whitespace-nowrap text-ink-strong"
+    class="mark-line inline-flex items-center gap-space-1 type-label whitespace-nowrap text-tx"
     data-name-row
   >
     <span data-slot="name-lead">{planWords.plan}</span>
     <span data-box><TaskRing done={3} size="md" total={12} /></span>
-    <span class="text-ink-muted num">{planWords.figure(3, 12)}</span>
+    <span class="text-tx-2 num">{planWords.figure(3, 12)}</span>
   </span>
 {/snippet}
 

@@ -74,7 +74,7 @@
 </script>
 
 <div class="flex flex-col gap-space-3" {@attach clock.watch}>
-  <p data-slot="started" class="m-0 type-meta text-ink-muted">
+  <p data-slot="started" class="m-0 type-meta text-tx-2">
     {install.route === "ssh"
       ? `over SSH · started ${timeOf(install.startedAt)}`
       : `by a command · listening since ${timeOf(install.startedAt)}`}
@@ -96,7 +96,7 @@
             aria-hidden="true"
             data-box
             class={[
-              "pointer-events-none absolute start-space-2 top-space-6 -bottom-space-2 w-px -translate-x-1/2 origin-top bg-border-hairline transition-[scale] duration-(--duration-base) ease-out",
+              "pointer-events-none absolute start-space-2 top-space-6 -bottom-space-2 w-px -translate-x-1/2 origin-top bg-ui transition-[scale] duration-(--duration-base) ease-out",
               row.state === "done" ? "scale-y-100" : "scale-y-0",
             ]}
           ></span>
@@ -109,7 +109,7 @@
           <span
             class={[
               "min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-label",
-              row.state === "future" ? "text-ink-muted" : "text-ink-strong",
+              row.state === "future" ? "text-tx-2" : "text-tx",
             ]}>{row.words}</span
           >
           {#if time.text}
@@ -117,7 +117,7 @@
               data-slot="time"
               class={[
                 "num flex-none whitespace-nowrap type-meta",
-                time.past ? "text-status-attn" : "text-ink-muted",
+                time.past ? "text-orange" : "text-tx-2",
               ]}>{time.text}</span
             >
           {/if}
@@ -138,9 +138,7 @@
                 <span
                   class={[
                     "type-meta",
-                    check.state === "failed"
-                      ? "text-status-fail"
-                      : "text-ink-muted",
+                    check.state === "failed" ? "text-red" : "text-tx-2",
                   ]}>{check.words}</span
                 >
               </li>

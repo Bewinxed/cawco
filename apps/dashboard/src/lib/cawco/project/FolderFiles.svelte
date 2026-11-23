@@ -31,13 +31,13 @@
     <li>
       <a
         aria-current={shown === path ? "page" : undefined}
-        class="group/file mark-line press-tint type-label inline-flex min-h-control-sm max-w-full items-center gap-space-2 rounded-sm border border-border-control bg-surface-raised px-space-3 text-ink-strong transition-[background-color] duration-(--duration-fast) ease-out focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-2 text-center no-underline aria-current-page:bg-accent-wash aria-current-page:text-accent-ink"
+        class="group/file mark-line press-tint type-label inline-flex min-h-control-sm max-w-full items-center gap-space-2 rounded-sm border border-ui-2 bg-bg px-space-3 text-tx transition-[background-color] duration-(--duration-fast) ease-out focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-2 text-center no-underline aria-current-page:bg-ui aria-current-page:text-accent"
         data-folder-chip={path}
         href={folderFileHref(projectId, path)}
       >
         <IconDocument
           data-slot="file-icon"
-          class="size-icon-md flex-none text-ink-muted group-aria-current-page/file:text-accent-ink"
+          class="size-icon-md flex-none text-tx-2 group-aria-current-page/file:text-accent"
         />
         <bdi
           data-slot="path"

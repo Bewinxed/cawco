@@ -32,23 +32,20 @@
     aria-hidden="true"
     class={[
       place,
-      "size-1.5 rounded-pill border border-ink-muted bg-surface-raised ring-dot-cut ring-surface-raised",
+      "size-1.5 rounded-pill border border-tx-2 bg-bg ring-dot-cut ring-bg",
     ]}
     data-dot="held"
   ></span>
 {:else}
   <span
     aria-hidden="true"
-    class={[
-      place,
-      "size-1.5 rounded-pill bg-status-attn ring-dot-cut ring-surface-raised",
-    ]}
+    class={[place, "size-1.5 rounded-pill bg-orange ring-dot-cut ring-bg"]}
     data-dot="unread"
     data-unread
   >
     <!-- The needs-you dot's echo: three loops, then still. -->
     <span
-      class="absolute inset-0 rounded-pill bg-status-attn opacity-0 motion-safe:opacity-100 motion-safe:animate-ping"
+      class="absolute inset-0 rounded-pill bg-orange opacity-0 motion-safe:opacity-100 motion-safe:animate-ping"
       data-echo
     ></span>
   </span>

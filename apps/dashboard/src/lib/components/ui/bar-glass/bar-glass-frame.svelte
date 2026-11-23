@@ -37,12 +37,12 @@
 
 <div
   bind:this={shell}
-  class="@container/shell contain-layout w-(--frame-w) min-h-(--frame-h) bg-surface-recess pbe-space-8"
+  class="@container/shell contain-layout w-(--frame-w) min-h-(--frame-h) bg-bg-2 pbe-space-8"
   style:--frame-h={height === undefined ? undefined : `${height}px`}
   style:--frame-w={`${width}px`}
 >
   <div
-    class="flex h-control-lg items-center bg-surface-raised border-b border-b-border-hairline pe-space-6 @max-desk/shell:pe-space-3"
+    class="flex h-control-lg items-center bg-bg border-b border-b-ui pe-space-6 @max-desk/shell:pe-space-3"
   >
     <div class="ms-auto flex min-w-0 items-center @max-desk/shell:self-stretch">
       <BarGlass {joined}>
@@ -51,12 +51,12 @@
             <span
               data-slot="bar-symbol"
               aria-hidden="true"
-              class="block rounded-pill bg-ink-muted"
+              class="block rounded-pill bg-tx-2"
             ></span>
           </BarItem>
         {/snippet}
         <BarItem label="Jump to session" layout="desk" tip={false}>
-          <IconSearch aria-hidden="true" class="size-icon-md text-ink-muted" />
+          <IconSearch aria-hidden="true" class="size-icon-md text-tx-2" />
         </BarItem>
         <BarItem
           icon={IconServerLinear}

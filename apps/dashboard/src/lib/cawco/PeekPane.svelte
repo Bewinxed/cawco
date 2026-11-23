@@ -361,7 +361,7 @@
           {#if machine}
             <span
               data-box
-              class="inline-flex flex-none text-ink-muted"
+              class="inline-flex flex-none text-tx-2"
               aria-label={host}
               role="img"
               title={host}><OsMark class="size-space-4" os={machine.os} /></span
@@ -422,12 +422,12 @@
     <!-- The state word in its own status ink: failed in crimson, needs you
          in spark's (DESIGN.md, Tertiary: status). -->
     <span
-      class="shrink-0 text-ink-muted tone-fail:font-medium tone-fail:text-status-fail tone-attn:font-medium tone-attn:text-status-attn"
+      class="shrink-0 text-tx-2 tone-fail:font-medium tone-fail:text-red tone-attn:font-medium tone-attn:text-orange"
       data-tone={stateTone}>{stateLabel}</span
     >
     {#if activity === "working" && tool}
       <span
-        class="mark-line flex min-w-0 items-center gap-1.5 text-ink-muted"
+        class="mark-line flex min-w-0 items-center gap-1.5 text-tx-2"
         data-box
       >
         <span class="shrink-0">{toolWord(tool.name)}</span>
@@ -474,14 +474,14 @@
     <!-- The house alert (DESIGN.md, Alert: "a compact tinted row, never a
          slab"), in the needs-you pair, inset on the peek's own margins. -->
     <div
-      class="mx-4 mb-3 flex flex-col gap-2 rounded-sm bg-status-attn-bg px-3 py-2.5 text-status-attn"
+      class="mx-4 mb-3 flex flex-col gap-2 rounded-sm bg-bg-2 px-3 py-2.5 text-orange"
     >
       <p class="type-body">{summary}</p>
       {#if !question && request.presentation.command}
         <!-- What runs, under why: Approve here is made on the command. -->
         <code
           data-slot="block"
-          class="block truncate whitespace-pre border-l-2 border-border-hairline ps-2 font-(family-name:--font-mono) type-meta text-ink-muted"
+          class="block truncate whitespace-pre border-l-2 border-ui ps-2 font-(family-name:--font-mono) type-meta text-tx-2"
           >{request.presentation.command.trim().split("\n")[0]}</code
         >
       {/if}
@@ -540,23 +540,17 @@
 
   {#if failed}
     <!-- The failure as the house alert, in the failed pair. -->
-    <p
-      class="mx-4 mb-3 rounded-sm bg-status-fail-bg px-3 py-2.5 type-body text-status-fail"
-    >
+    <p class="mx-4 mb-3 rounded-sm bg-bg-2 px-3 py-2.5 type-body text-red">
       {row?.lastError || "Failed without saying why."}
     </p>
   {:else if row?.damaged}
     <!-- A damaged record that does not stop the session (its wake-ups), or
          one whose process still runs: said where its failure would be. -->
-    <p
-      class="mx-4 mb-3 rounded-sm bg-status-fail-bg px-3 py-2.5 type-body text-status-fail"
-    >
+    <p class="mx-4 mb-3 rounded-sm bg-bg-2 px-3 py-2.5 type-body text-red">
       {damagedWords(row.damaged)}
     </p>
   {:else if stale}
-    <p
-      class="border-t border-border-control/50 px-4 py-3 type-meta text-ink-muted"
-    >
+    <p class="border-t border-ui-2/50 px-4 py-3 type-meta text-tx-2">
       {UNKNOWN_HINT}
     </p>
   {/if}
@@ -565,7 +559,7 @@
        Capped, because a peek is a glance — a forty-step plan scrolls inside
        its own section rather than pushing the tail off. -->
   {#if progress && progress.total > 0}
-    <div class="flex flex-col border-t border-border-control/50 pb-3">
+    <div class="flex flex-col border-t border-ui-2/50 pb-3">
       <p class="px-4 pt-3 pb-space-1 type-label">
         {planWords.plan} · {progress.done} of {progress.total}
       </p>
@@ -586,7 +580,7 @@
        and drawing the next row over them. -->
   {#key target.viewId}
     <div
-      class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto border-t border-border-control/50 px-4 py-3 [&>*]:shrink-0"
+      class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto border-t border-ui-2/50 px-4 py-3 [&>*]:shrink-0"
       {@attach followTail()}
     >
       {#if session?.loading && tail.length === 0}
@@ -595,7 +589,7 @@
         </p>
       {:else if session?.readFault && tail.length === 0}
         <!-- A read that failed is not a session with nothing to say. -->
-        <p class="type-meta text-status-fail">
+        <p class="type-meta text-red">
           Couldn't read this session: {session.readFault.message}
         </p>
       {:else if tail.length === 0 && !session?.streaming}
@@ -603,7 +597,7 @@
       {:else}
         {#each tail as message, index (message.id ?? index)}
           {#if message.type === "tool.use" || message.type === "tool.handoff"}
-            <p class="flex items-baseline gap-1.5 type-meta text-ink-muted">
+            <p class="flex items-baseline gap-1.5 type-meta text-tx-2">
               <span class="shrink-0"
                 >{toolWord(message.metadata?.toolName ?? message.content)}</span
               >
@@ -625,7 +619,7 @@
             </p>
           {:else if message.type === "result.error"}
             <!-- A failed turn's last words are the agent's too: flat. -->
-            <p class="line-clamp-3 type-body wrap-break-word text-status-fail">
+            <p class="line-clamp-3 type-body wrap-break-word text-red">
               {plainMarkdown(message.content)}
             </p>
           {:else}

@@ -685,7 +685,7 @@
     <p
       data-wait
       data-slot="refused"
-      class="mt-space-2 text-sm font-normal text-status-fail"
+      class="mt-space-2 text-sm font-normal text-red"
       role="status"
     >
       {takeRefused ?? refused}
@@ -693,7 +693,7 @@
   {:else if !out && offline}
     <p
       data-slot="wait"
-      class="mt-space-2 text-sm font-normal text-ink-muted"
+      class="mt-space-2 text-sm font-normal text-tx-2"
       role="status"
     >
       Machine offline — can't answer yet.
@@ -701,7 +701,7 @@
   {:else if !(out || reachable)}
     <p
       data-slot="wait"
-      class="mt-space-2 text-sm font-normal text-ink-muted"
+      class="mt-space-2 text-sm font-normal text-tx-2"
       role="status"
     >
       Reconnecting — can't answer yet.
@@ -721,7 +721,7 @@
      (2.01px, 0.39px), then none. -->
 {#snippet title(text: string)}
   <h2
-    class="mark-line flex items-center gap-space-2 mb-space-2 text-base font-medium text-ink-strong opacity-0 blur-(length:--spacing-space-1) transition-fade-blur motion-safe:translate-y-space-2 group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
+    class="mark-line flex items-center gap-space-2 mb-space-2 text-base font-medium text-tx opacity-0 blur-(length:--spacing-space-1) transition-fade-blur motion-safe:translate-y-space-2 group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
     style:--part="0"
     style:--part-delay="calc(var(--part) * calc(var(--duration-fast) / 2))"
   >
@@ -802,18 +802,15 @@
     >
       <p
         data-slot="lede"
-        class="type-body text-ink-strong mb-space-2 max-w-measure wrap-anywhere text-pretty"
+        class="type-body text-tx mb-space-2 max-w-measure wrap-anywhere text-pretty"
       >
         {browserAsk.reason}
       </p>
-      <p
-        data-slot="browser-meta"
-        class="mb-space-2 min-w-0 text-sm text-ink-muted"
-      >
+      <p data-slot="browser-meta" class="mb-space-2 min-w-0 text-sm text-tx-2">
         <!-- Broken only after its dots, never inside a label. -->
         <code
           data-slot="browser-origin"
-          class="min-w-0 type-code text-ink-strong break-words"
+          class="min-w-0 type-code text-tx break-words"
           ><OriginText origin={browserAsk.origin} /></code
         >
       </p>
@@ -856,10 +853,7 @@
       </div>
       <!-- What the answer reaches, before the person commits to it: the
            permission card's own line for that. -->
-      <p
-        data-slot="detail"
-        class="text-base font-normal text-ink-muted mb-space-2"
-      >
+      <p data-slot="detail" class="text-base font-normal text-tx-2 mb-space-2">
         No agent can see or use this browser until you hand it back.
       </p>
     </div>
@@ -946,7 +940,7 @@
       {#if presentation.detail}
         <p
           data-slot="detail"
-          class="text-base font-normal text-ink-muted mb-space-2 wrap-anywhere group-data-railed/body:ps-space-2"
+          class="text-base font-normal text-tx-2 mb-space-2 wrap-anywhere group-data-railed/body:ps-space-2"
         >
           {presentation.detail}
         </p>
@@ -959,7 +953,7 @@
              does. -->
         <p
           data-slot="lede"
-          class="type-body text-ink-strong mb-space-2 max-w-measure wrap-anywhere text-pretty group-data-railed/body:ps-space-2"
+          class="type-body text-tx mb-space-2 max-w-measure wrap-anywhere text-pretty group-data-railed/body:ps-space-2"
           id="{claimId}-q{qi}"
           bind:this={ledes[qi]}
         >
@@ -980,7 +974,7 @@
                 class="block min-w-0 wrap-anywhere text-pretty">{label}</span
               >{#if description}<span
                   data-slot="opt-desc"
-                  class="block type-meta text-ink-muted wrap-anywhere text-pretty"
+                  class="block type-meta text-tx-2 wrap-anywhere text-pretty"
                   >{description}</span
                 >{/if}</span
             >
@@ -1138,7 +1132,7 @@
            made on. -->
       <p
         data-slot="lede"
-        class="text-base font-medium leading-base text-ink-strong mb-space-1 max-w-measure wrap-anywhere text-pretty"
+        class="text-base font-medium leading-base text-tx mb-space-1 max-w-measure wrap-anywhere text-pretty"
       >
         {presentation.summary}
       </p>
@@ -1146,7 +1140,7 @@
       {#if presentation.detail}
         <p
           data-slot="detail"
-          class="text-base font-normal text-ink-muted mb-space-2 whitespace-pre-line"
+          class="text-base font-normal text-tx-2 mb-space-2 whitespace-pre-line"
         >
           {presentation.detail}
         </p>
@@ -1155,12 +1149,12 @@
            one line, cut with an ellipsis, until its chevron opens it whole. -->
       {#if command}
         <div
-          class="group/cmd flex items-start gap-space-2 border-s-2 border-s-border-hairline py-space-1 ps-space-3 mb-space-2"
+          class="group/cmd flex items-start gap-space-2 border-s-2 border-s-ui py-space-1 ps-space-3 mb-space-2"
           data-open={commandOpen || undefined}
         >
           <code
             data-slot="cmd-text"
-            class="flex-auto min-w-0 font-mono text-base text-ink-muted overflow-hidden text-ellipsis whitespace-pre group-data-open/cmd:text-ink-strong group-data-open/cmd:whitespace-pre-wrap group-data-open/cmd:wrap-anywhere"
+            class="flex-auto min-w-0 font-mono text-base text-tx-2 overflow-hidden text-ellipsis whitespace-pre group-data-open/cmd:text-tx group-data-open/cmd:whitespace-pre-wrap group-data-open/cmd:wrap-anywhere"
             bind:this={commandLine}
             >{commandOpen ? command : command.trim().split("\n")[0]}</code
           >
@@ -1215,18 +1209,18 @@
            name over its value, values that run long scrolling in place. -->
       {#if presentation.fields.length > 0}
         <dl
-          class="flex flex-col gap-space-2 mb-space-3 p-space-3 rounded-sm bg-surface-recess"
+          class="flex flex-col gap-space-2 mb-space-3 p-space-3 rounded-sm bg-bg-2"
         >
           {#each presentation.fields as field, i (`${i}:${field.key}`)}
             <div
               data-slot="prompt-field"
               class="flex flex-col gap-space-1 min-w-0"
             >
-              <dt class="text-base font-medium text-ink-muted">
+              <dt class="text-base font-medium text-tx-2">
                 {field.key}
               </dt>
               <dd
-                class="max-h-50 overflow-auto font-(family-name:--font-mono) text-sm text-ink-strong whitespace-pre-wrap break-words"
+                class="max-h-50 overflow-auto font-(family-name:--font-mono) text-sm text-tx whitespace-pre-wrap break-words"
               >
                 {field.value}
               </dd>
@@ -1301,10 +1295,8 @@
              --spacing-space-4). The permission scope actually being granted is
              consequential text — it reads at --text-base, never the
              10.25px micro-label step. -->
-        <div class="mt-space-8 pt-space-4 border-t border-t-border-hairline">
-          <p
-            class="text-base font-normal text-ink-muted mb-space-2 max-w-measure"
-          >
+        <div class="mt-space-8 pt-space-4 border-t border-t-ui">
+          <p class="text-base font-normal text-tx-2 mb-space-2 max-w-measure">
             This would allow <span
               class="font-(family-name:--font-mono) text-base">{rule.full}</span
             >

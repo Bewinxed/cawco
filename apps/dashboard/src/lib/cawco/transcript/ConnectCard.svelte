@@ -332,7 +332,7 @@
         aria-label={connect.again
           ? askWords.reconnectAskFrom(asker)
           : askWords.connectAskFrom(asker)}
-        class="rail-hang mt-space-1 mb-space-2 flex flex-col gap-space-2 min-w-0 rounded-sm border border-border-hairline bg-surface-raised p-space-3 shadow-sm scroll-my-space-4"
+        class="rail-hang mt-space-1 mb-space-2 flex flex-col gap-space-2 min-w-0 rounded-sm border border-ui bg-bg p-space-3 shadow-sm scroll-my-space-4"
       >
         <!-- Who connects to what: Caw&Co, the arrow between, the service. -->
         <div
@@ -341,15 +341,15 @@
           aria-hidden="true"
         >
           <CawFace size={20} status="idle" />
-          <IconTransfer class="size-icon-md flex-none text-ink-muted" />
+          <IconTransfer class="size-icon-md flex-none text-tx-2" />
           {#if Mark}
             <Mark class="size-icon-lg flex-none" />
           {:else}
-            <IconKey class="size-icon-lg flex-none text-status-attn" />
+            <IconKey class="size-icon-lg flex-none text-orange" />
           {/if}
         </div>
         <h3
-          class="m-0 type-label font-medium text-ink-strong text-balance wrap-anywhere"
+          class="m-0 type-label font-medium text-tx text-balance wrap-anywhere"
         >
           {connect.again
             ? askWords.reconnectTitle(connect.server)
@@ -366,12 +366,12 @@
             role="alert"
           >
             <p
-              class="m-0 max-w-measure text-base font-medium leading-base text-ink-strong text-balance wrap-anywhere"
+              class="m-0 max-w-measure text-base font-medium leading-base text-tx text-balance wrap-anywhere"
             >
               {failed.happened}
             </p>
             <p
-              class="m-0 max-w-measure text-base text-ink-muted text-pretty wrap-anywhere"
+              class="m-0 max-w-measure text-base text-tx-2 text-pretty wrap-anywhere"
             >
               {failed.next}
             </p>
@@ -392,7 +392,7 @@
                 <p
                   id={detailsId}
                   data-slot="details"
-                  class="m-0 self-stretch text-start type-meta font-mono whitespace-pre-wrap wrap-anywhere text-ink-muted"
+                  class="m-0 self-stretch text-start type-meta font-mono whitespace-pre-wrap wrap-anywhere text-tx-2"
                   transition:unfold
                 >
                   {failed.details}
@@ -404,7 +404,7 @@
           {#if reach}
             <p
               data-slot="connect-reach"
-              class="m-0 max-w-measure text-base leading-base text-ink-strong text-pretty wrap-anywhere"
+              class="m-0 max-w-measure text-base leading-base text-tx text-pretty wrap-anywhere"
             >
               {reach}
             </p>
@@ -412,14 +412,14 @@
           <p class="m-0 min-w-0 text-sm">
             <ConnectAddress url={connect.url} />
           </p>
-          <p class="m-0 max-w-measure text-base text-ink-muted text-pretty">
+          <p class="m-0 max-w-measure text-base text-tx-2 text-pretty">
             {askWords.connectReach(connect.server)}
           </p>
         {/if}
         {#if signingIn}
           <p
             data-slot="wait"
-            class="m-0 text-sm text-ink-muted"
+            class="m-0 text-sm text-tx-2"
             role="status"
             transition:unfold
           >
@@ -428,7 +428,7 @@
         {:else if !(reachable || done)}
           <p
             data-slot="wait"
-            class="m-0 text-sm text-ink-muted"
+            class="m-0 text-sm text-tx-2"
             role="status"
             transition:unfold
           >
@@ -437,7 +437,7 @@
         {:else if declineRefused}
           <p
             data-slot="wait"
-            class="m-0 text-sm text-status-fail wrap-anywhere"
+            class="m-0 text-sm text-red wrap-anywhere"
             role="alert"
             transition:unfold
           >

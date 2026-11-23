@@ -88,7 +88,7 @@
 <div
   data-slot="perms"
   aria-label={spawnWords.permissionModes}
-  class="group relative grid gap-space-1 rounded-sm border border-border-control bg-surface-raised p-space-1 shadow-sm data-embedded:rounded-none data-embedded:border-none data-embedded:border-current data-embedded:bg-transparent data-embedded:p-0 data-embedded:shadow-none"
+  class="group relative grid gap-space-1 rounded-sm border border-ui-2 bg-bg p-space-1 shadow-sm data-embedded:rounded-none data-embedded:border-none data-embedded:border-current data-embedded:bg-transparent data-embedded:p-0 data-embedded:shadow-none"
   data-embedded={embedded || undefined}
   role="radiogroup"
   tabindex="-1"
@@ -97,7 +97,7 @@
   <span
     data-slot="fill"
     aria-hidden="true"
-    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-control-lg translate-y-(--fill-y) rounded-xs bg-accent-wash group-data-embedded:rounded-xs opacity-0 group-data-embedded:inset-x-0 group-data-embedded:top-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:duration-(--duration-base) motion-safe:ease-in-out"
+    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-control-lg translate-y-(--fill-y) rounded-xs bg-ui group-data-embedded:rounded-xs opacity-0 group-data-embedded:inset-x-0 group-data-embedded:top-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:duration-(--duration-base) motion-safe:ease-in-out"
     data-shown={rows.some((row) => row.value === value) || undefined}
     style:--fill-y={`calc(${index} * (var(--spacing-control-lg) + var(--spacing-space-1)))`}
   ></span>
@@ -111,7 +111,7 @@
       aria-describedby={row.reason
         ? `${uid}-perm-${row.value}-reason`
         : undefined}
-      class="ns-in press-tint transition-control relative flex select-none h-control-lg w-full items-center gap-space-3 rounded-xs border group-data-embedded:rounded-xs border-transparent bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-checked:text-accent-ink disabled:cursor-not-allowed disabled:opacity-50"
+      class="ns-in press-tint transition-control relative flex select-none h-control-lg w-full items-center gap-space-3 rounded-xs border group-data-embedded:rounded-xs border-transparent bg-transparent px-space-2 py-space-2 text-start text-tx aria-checked:text-accent disabled:cursor-not-allowed disabled:opacity-50"
       data-fh="1"
       data-perm={row.value}
       disabled={row.disabled}
@@ -126,7 +126,7 @@
       <span data-slot="text" class="min-w-0 flex-1">
         <span data-slot="name" class="type-label block">{row.name}</span>
         <span
-          class="type-meta block truncate text-ink-subtle in-aria-checked:text-accent-ink"
+          class="type-meta block truncate text-tx-2 in-aria-checked:text-accent"
           >{row.desc}</span
         >
       </span>
@@ -134,7 +134,7 @@
            whichever mode is chosen. -->
       <span aria-hidden="true" class="grid size-icon-md flex-none">
         {#if on}
-          <Check class="ns-check size-icon-md text-accent-ink" />
+          <Check class="ns-check size-icon-md text-accent" />
         {/if}
       </span>
       {#if row.reason}

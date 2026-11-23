@@ -69,7 +69,7 @@
         true: "shadow-none",
       },
       /** The tab's menu hangs on the tab's own surface, as the session card's head is. */
-      surface: { recess: "[--hang-surface:var(--color-surface-recess)]" },
+      surface: { recess: "[--hang-surface:var(--color-bg-2)]" },
     },
     /** Shut, it stands behind the cut past its own height and its shadow's reach (motion/hang). */
     compoundVariants: [

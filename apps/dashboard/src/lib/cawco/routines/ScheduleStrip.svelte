@@ -192,7 +192,7 @@
   >
     <span
       data-slot="schedule-bar"
-      class="@container relative block h-space-2 rounded-xs bg-border-control"
+      class="@container relative block h-space-2 rounded-xs bg-ui-2"
     >
       {#each schedule.runs as at, i (at)}
         {@const nextRun = i === 0 && !paused}
@@ -200,9 +200,9 @@
           data-run-tick
           class={[
             "absolute start-(--at) w-space-1 translate-x-(--keep) rounded-xs",
-            nextRun && "-inset-y-space-1 bg-ink-strong",
+            nextRun && "-inset-y-space-1 bg-tx",
             !nextRun && "inset-y-0",
-            !nextRun && (paused ? "bg-ink-subtle" : "bg-ink-muted"),
+            !nextRun && (paused ? "bg-tx-2" : "bg-tx-2"),
           ]}
           data-at={at / schedule.span}
           data-next={nextRun ? "" : undefined}
@@ -221,7 +221,7 @@
       <span
         bind:this={markRow}
         aria-hidden="true"
-        class="@container relative block h-(--marks-h) type-meta num text-ink-subtle"
+        class="@container relative block h-(--marks-h) type-meta num text-tx-2"
         style:--marks-h={"calc(var(--spacing-space-1) + var(--leading-sm))"}
       >
         {#each marks as mark (mark.at)}
@@ -233,7 +233,7 @@
             style:--keep={KEEP}
           >
             <span
-              class="absolute top-0 start-0 h-space-1 w-px translate-x-(--keep) bg-ink-subtle"
+              class="absolute top-0 start-0 h-space-1 w-px translate-x-(--keep) bg-tx-2"
             ></span>
             <span
               data-mark-label

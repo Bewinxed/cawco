@@ -28,7 +28,6 @@ import {
   ACCOUNT_HUES,
   type AccountHue,
 } from "../packages/core/src/accounts/kinds";
-import { STATUS_PAIRS } from "../packages/core/src/views";
 import {
   CssEvaluator,
   type CssToken,
@@ -77,14 +76,14 @@ interface Pair {
 }
 
 const IDENTITY_HUES = [55, 85, 115, 145, 175, 205, 235, 265, 295, 330];
-const ACCOUNT_MARK: Record<AccountHue, number> = {
-  orange: 1,
-  amber: 2,
-  green: 3,
-  cyan: 4,
-  blue: 5,
-  violet: 6,
-  rose: 7,
+const ACCOUNT_MARK: Record<AccountHue, string> = {
+  orange: "orange",
+  amber: "yellow",
+  green: "green",
+  cyan: "cyan",
+  blue: "blue",
+  violet: "purple",
+  rose: "magenta",
 };
 const CODE_INKS = [
   "code-syntax-foreground",
@@ -95,13 +94,13 @@ const CODE_INKS = [
   "code-syntax-token-comment",
 ];
 const CODE_GROUNDS: [string, string[]][] = [
-  ["surface-recess", ["surface-recess"]],
-  ["diff-add", ["surface-recess", "diffs-bg-addition-override"]],
-  ["diff-del", ["surface-recess", "diffs-bg-deletion-override"]],
+  ["bg-2", ["bg-2"]],
+  ["diff-add", ["bg-2", "diffs-bg-addition-override"]],
+  ["diff-del", ["bg-2", "diffs-bg-deletion-override"]],
   [
     "diff-add-emphasis",
     [
-      "surface-recess",
+      "bg-2",
       "diffs-bg-addition-override",
       "diffs-bg-addition-emphasis-override",
     ],
@@ -109,26 +108,25 @@ const CODE_GROUNDS: [string, string[]][] = [
   [
     "diff-del-emphasis",
     [
-      "surface-recess",
+      "bg-2",
       "diffs-bg-deletion-override",
       "diffs-bg-deletion-emphasis-override",
     ],
   ],
 ];
-const weekRim = (mark: number) =>
-  `light-dark(color-mix(in oklch, {color.mark-${mark}}, oklch(0% 0 0) 32%), color-mix(in oklch, {color.mark-${mark}}, oklch(100% 0 0) 63%))`;
+const weekRim = (mark: string) =>
+  `light-dark(color-mix(in oklch, {color.${mark}}, oklch(0% 0 0) 40%), color-mix(in oklch, {color.${mark}}, oklch(100% 0 0) 70%))`;
 
 const S = {
   action: "DESIGN.md, Colour: coral is the act",
   brandInk: "DESIGN.md, Colour: coral ink and wash",
   selected: "DESIGN.md, Colour: coral marks what is selected",
-  inkSolid: "the ink-strong fill (theme.css)",
+  inkSolid: "the tx fill (theme.css)",
   chips: "DESIGN.md, Colour: status hues (each chip 4.5:1)",
   syntax: "syntax colours (libraries.css + design.css diff washes)",
-  strongEdge:
-    "token border-strong (theme.css, non-text 3:1 WCAG 2.2 SC 1.4.11)",
+  strongEdge: "token tx-2 (theme.css, non-text 3:1 WCAG 2.2 SC 1.4.11)",
   inks: "the text inks (theme.css)",
-  subtle: "token ink-subtle (theme.css)",
+  subtle: "token tx-2 (theme.css)",
   identity: "DESIGN.md, Colour: identity hues; utility identity-ink",
   rim: "session tabs' status rim (design.css pane-tab-rims)",
   recall: "the recall wheel's rows (Composer), text 4.5:1 (WCAG 2.2 SC 1.4.3)",
@@ -143,6 +141,9 @@ const S = {
   breath: "DESIGN.md, Motion: live marks breathe; token breath-floor",
   nest: "token nest-ink ('about 2.3:1 to 2.5:1')",
 };
+
+/** The inks that carry a status: fail, needs you, done, live. */
+const STATUS_INKS = ["red", "orange", "green", "cyan"];
 
 const PAIRS: Pair[] = [
   // Text inks on the surfaces they stand on.
@@ -159,8 +160,8 @@ const PAIRS: Pair[] = [
       fg: ink,
       bg: [bg],
       floor: TEXT,
-      source: S.subtle,
-    })
+      source: S.inks,
+    }))
   ),
   // White on coral: accent fill, its sheen stops, and hover.
   ...(
@@ -192,27 +193,29 @@ const PAIRS: Pair[] = [
     source: S.action,
   })),
   // Coral text and selection ink on surfaces it sits on.
-  ...["surface-page", "surface-raised", "accent-wash"].map((bg) => ({
-    label: `accent-ink on ${bg}`,
-    fg: "accent-ink",
+  ...["bg", "bg-2", "ui"].map((bg) => ({
+    label: `accent on ${bg}`,
+    fg: "accent",
     bg: [bg],
     floor: TEXT,
-    source: bg === "accent-wash" ? S.selected : S.brandInk,
+    source: bg === "ui" ? S.selected : S.brandInk,
   })),
   {
-    label: "surface-page on ink-strong",
-    fg: "surface-page",
-    bg: ["ink-strong"],
+    label: "bg on tx",
+    fg: "bg",
+    bg: ["tx"],
     floor: TEXT,
     source: S.inkSolid,
   },
-  ...STATUS_PAIRS.map((s) => ({
-    label: `status-${s} on status-${s}-bg`,
-    fg: `status-${s}`,
-    bg: [`status-${s}-bg`],
-    floor: TEXT,
-    source: S.chips,
-  })),
+  ...STATUS_INKS.flatMap((ink) =>
+    ["bg", "bg-2"].map((bg) => ({
+      label: `${ink} on ${bg}`,
+      fg: ink,
+      bg: [bg],
+      floor: TEXT,
+      source: S.chips,
+    }))
+  ),
   ...CODE_INKS.flatMap((ink) =>
     CODE_GROUNDS.map(([name, bg]) => ({
       label: `${ink} on ${name}`,
@@ -223,190 +226,166 @@ const PAIRS: Pair[] = [
     }))
   ),
   ...IDENTITY_HUES.map((h) => ({
-    label: `identity-ink at hue ${h} on surface-hover`,
+    label: `identity-ink at hue ${h} on ui`,
     fg: `light-dark(oklch(48% 0.12 ${h}), oklch(74% 0.11 ${h}))`,
-    bg: ["surface-hover"],
+    bg: ["ui"],
     floor: TEXT,
     source: S.identity,
   })),
   // Non-text: edges, rings, rims, marks.
-  ...["surface-page", "surface-raised", "surface-recess", "surface-sunk"].map(
-    (bg) => ({
-      label: `border-strong on ${bg}`,
-      fg: "border-strong",
-      bg: [bg],
-      floor: UI,
-      source: S.strongEdge,
-    })
-  ),
+  ...["bg", "bg-2"].map((bg) => ({
+    label: `tx-2 edge on ${bg}`,
+    fg: "tx-2",
+    bg: [bg],
+    floor: UI,
+    source: S.strongEdge,
+  })),
   // The quiet control edge: no 3:1 floor, held to its shipped figures.
   {
-    label: "border-control on surface-raised",
-    fg: "border-control",
-    bg: ["surface-raised"],
+    label: "ui-2 on bg",
+    fg: "ui-2",
+    bg: ["bg"],
     floor: { light: 1.36, dark: 1.43 },
-    source: "token border-control (theme.css)",
+    source: "token ui-2 (theme.css)",
   },
-  ...["surface-page", "surface-raised", "surface-recess", "surface-hover"].map(
-    (bg) => ({
-      label: `accent-ink focus ring on ${bg}`,
-      fg: "accent-ink",
-      bg: [bg],
-      floor: UI,
-      source: S.ring,
-    })
-  ),
-  {
-    label: "accent hairline on surface-raised",
+  ...["bg", "bg-2", "ui"].map((bg) => ({
+    label: `accent focus ring on ${bg}`,
     fg: "accent",
-    bg: ["surface-raised"],
+    bg: [bg],
+    floor: UI,
+    source: S.ring,
+  })),
+  {
+    label: "accent hairline on bg",
+    fg: "accent",
+    bg: ["bg"],
     floor: UI,
     source: S.hairline,
   },
-  ...STATUS_PAIRS.flatMap((s) =>
-    [
-      ["surface-raised"],
-      ["surface-page"],
-      ["surface-hover"],
-      ["accent-wash"],
-      ["status-attn-bg"],
-    ].map((bg) => ({
-      label: `status-${s} on ${bg[0]}`,
-      fg: `status-${s}`,
+  ...STATUS_INKS.flatMap((ink) =>
+    [["bg"], ["ui"], ["bg-2"]].map((bg) => ({
+      label: `${ink} glyph on ${bg[0]}`,
+      fg: ink,
       bg,
       floor: UI,
       source: S.glyphs,
     }))
   ),
-  {
-    label: "status-done on status-done-bg",
-    fg: "status-done",
-    bg: ["status-done-bg"],
-    floor: UI,
-    source: S.glyphs,
-  },
   // Every breather at its floor, on every surface it stands on.
   ...[
-    "status-live",
-    "ink-muted",
-    "mark-1",
-    "mark-2",
-    "mark-3",
-    "mark-4",
-    "mark-5",
-    "mark-6",
-    "mark-7",
+    "tx-2",
+    "red",
+    "orange",
+    "yellow",
+    "green",
+    "cyan",
+    "blue",
+    "purple",
+    "magenta",
   ].flatMap((ink) =>
-    ["surface-page", "surface-raised", "surface-recess", "surface-sunk"].map(
-      (bg) => ({
-        label: `${ink} at breath-floor on ${bg}`,
-        fg: ink,
-        fgOpacity: "motion.breath-floor",
-        bg: [bg],
-        floor: UI,
-        source: S.breath,
-      })
-    )
+    ["bg", "bg-2"].map((bg) => ({
+      label: `${ink} at breath-floor on ${bg}`,
+      fg: ink,
+      fgOpacity: "motion.breath-floor",
+      bg: [bg],
+      floor: UI,
+      source: S.breath,
+    }))
   ),
-  // The chosen session tab's rim over surface-recess, read against sunk and neighbours.
+  // The chosen session tab's rim over bg-2, read against sunk and neighbours.
   ...(
     [
-      ["status-live", { light: 0.97, dark: 0.78 }],
-      ["status-attn", { light: 0.97, dark: 0.78 }],
-      ["status-fail", { light: 0.97, dark: 0.78 }],
-      ["ink-muted", { light: 0.86, dark: 0.54 }],
+      ["cyan", { light: 0.97, dark: 0.78 }],
+      ["orange", { light: 0.97, dark: 0.78 }],
+      ["red", { light: 0.97, dark: 0.78 }],
+      ["tx-2", { light: 0.86, dark: 0.62 }],
     ] as const
   ).flatMap(([ink, mix]) =>
-    (
-      [
-        ["top, against surface-sunk", "surface-sunk"],
-        ["side, against surface-recess", "surface-recess"],
-      ] as const
-    ).map(([where, against]) => ({
+    ([["against bg-2", "bg-2"]] as const).map(([where, against]) => ({
       label: `${ink} rim: ${where}`,
       fg: ink,
       fgOpacity: mix,
-      bg: ["surface-recess"],
+      bg: ["bg-2"],
       against: [against],
       floor: UI,
       source: S.rim,
     }))
   ),
-  // The recall wheel's rows on the grown shape (surface-raised, grown.ts).
+  // The recall wheel's rows on the grown shape (bg, grown.ts).
   ...(
     [
-      ["ink-strong", "a row's words"],
-      ["ink-muted", "a row's time"],
+      ["tx", "a row's words"],
+      ["tx-2", "a row's time"],
     ] as const
   ).map(([ink, what]) => ({
-    label: `${ink} (${what}) at the top row's 94% on surface-raised`,
+    label: `${ink} (${what}) at the top row's 94% on bg`,
     fg: ink,
     fgOpacity: 0.94,
-    bg: ["surface-raised"],
+    bg: ["bg"],
     floor: TEXT,
     source: S.recall,
   })),
   ...(
     [
-      ["accent-ink", "the pick"],
-      ["ink-subtle", "an empty draft's hint"],
+      ["accent", "the pick"],
+      ["tx-2", "an empty draft's hint"],
     ] as const
   ).map(([ink, what]) => ({
-    label: `${ink} (${what}) on surface-raised`,
+    label: `${ink} (${what}) on bg`,
     fg: ink,
-    bg: ["surface-raised"],
+    bg: ["bg"],
     floor: TEXT,
     source: S.recall,
   })),
-  // Accounts (mapped to categorical marks 1..7): disc, rim and week sector on border-control.
+  // Accounts (mapped to categorical marks 1..7): disc, rim and week sector on ui-2.
   ...ACCOUNT_HUES.flatMap((hue) => {
     const mark = ACCOUNT_MARK[hue];
     return [
       {
-        label: `account ${hue} (mark-${mark}) disc on border-control`,
-        fg: `mark-${mark}`,
-        bg: ["border-control"],
+        label: `account ${hue} (${mark}) disc on ui-2`,
+        fg: mark,
+        bg: ["ui-2"],
         floor: 3.9,
         source: S.dial,
       },
       {
-        label: `account ${hue} (mark-${mark}) week rim on border-control`,
+        label: `account ${hue} (${mark}) week rim on ui-2`,
         fg: weekRim(mark),
-        bg: ["border-control"],
+        bg: ["ui-2"],
         floor: 7.8,
         source: `${S.dial}; ${S.week}`,
       },
       {
-        label: `account ${hue} (mark-${mark}) week rim against its disc`,
+        label: `account ${hue} (${mark}) week rim against its disc`,
         fg: weekRim(mark),
-        bg: [`mark-${mark}`],
+        bg: [mark],
         floor: { light: 1.9, dark: 1.8 },
         source: S.dial,
       },
       {
-        label: `account ${hue} (mark-${mark}) at stale opacity on border-control`,
-        fg: `mark-${mark}`,
+        label: `account ${hue} (${mark}) at stale opacity on ui-2`,
+        fg: mark,
         fgOpacity: 0.82,
-        bg: ["border-control"],
+        bg: ["ui-2"],
         floor: UI,
         source: S.stale,
       },
     ];
   }),
   {
-    label: "ring-track-spent on meter-wash-over (over surface-raised)",
+    label: "ring-track-spent on meter-wash-over (over bg)",
     fg: "light-dark(oklch(80.5% 0.016 80), oklch(48.8% 0.012 74))",
     bg: [
-      "surface-raised",
-      "light-dark(color-mix(in oklch, {color.status-fail} 6%, transparent), color-mix(in oklch, {color.status-fail} 10%, transparent))",
+      "bg",
+      "light-dark(color-mix(in oklch, {color.red} 6%, transparent), color-mix(in oklch, {color.red} 10%, transparent))",
     ],
     floor: { light: 1.6, dark: 2 },
     source: S.spent,
   },
   {
-    label: "nest-ink on surface-page",
+    label: "nest-ink on bg",
     fg: "nest-ink",
-    bg: ["surface-page"],
+    bg: ["bg"],
     floor: 2.3,
     source: S.nest,
   },
@@ -438,7 +417,7 @@ for (const file of [THEME, LIBRARIES, DESIGN]) {
     }
   });
 }
-/** A token path (`color.surface-page`) as the stylesheets name it: its last segment, under `--color-` or as it stands. */
+/** A token path (`color.bg`) as the stylesheets name it: its last segment, under `--color-` or as it stands. */
 const lookup = (path: string): CssToken | undefined => {
   const leaf = path.split(".").at(-1) ?? path;
   for (const name of [`color-${leaf}`, leaf]) {

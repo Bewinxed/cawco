@@ -114,10 +114,7 @@
   provideConfig(new ConfigStore());
 </script>
 
-<div
-  class="flex min-h-0 min-w-0 flex-auto bg-surface-recess"
-  data-bench="tool-signin"
->
+<div class="flex min-h-0 min-w-0 flex-auto bg-bg-2" data-bench="tool-signin">
   <div class="flex min-h-0 py-space-2 pl-space-4 max-desk:hidden">
     <ConfigRail current="cli-tools" />
   </div>

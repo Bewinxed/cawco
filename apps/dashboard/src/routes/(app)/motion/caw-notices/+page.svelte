@@ -423,7 +423,7 @@
       class="grid max-w-95 justify-items-start gap-space-4"
     >
       <h1 class="type-title m-0">Caw's notices</h1>
-      <div class="type-meta grid gap-space-1 text-ink-muted">
+      <div class="type-meta grid gap-space-1 text-tx-2">
         <span>Fixture</span>
         <ToggleGroup.Root
           onValueChange={(next) => {
@@ -445,7 +445,7 @@
           >
         </ToggleGroup.Root>
       </div>
-      <div class="type-meta grid gap-space-1 text-ink-muted">
+      <div class="type-meta grid gap-space-1 text-tx-2">
         <span>Width</span>
         <ToggleGroup.Root
           onValueChange={(next) => {
@@ -466,7 +466,7 @@
       {#key `${search}:${generation}`}
         <!-- biome-ignore lint/security/useIframeSandbox: a /motion bench framing the dashboard's own route; it needs scripts and its origin, and with both a sandbox holds nothing back. -->
         <iframe
-          class="h-211 w-97.5 rounded-lg border border-border-hairline bg-surface-page"
+          class="h-211 w-97.5 rounded-lg border border-ui bg-bg"
           src="/motion/caw-notices?frame&{search}"
           title="Caw's panel on a 390px phone"
         ></iframe>

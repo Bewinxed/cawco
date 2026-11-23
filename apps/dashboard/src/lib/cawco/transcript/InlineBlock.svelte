@@ -228,7 +228,7 @@
       <div
         aria-hidden="true"
         data-slot="fossil-veil"
-        class="pointer-events-none absolute inset-0 bg-surface-page/72"
+        class="pointer-events-none absolute inset-0 bg-bg/72"
       ></div>
       <div class="absolute inset-0 grid place-items-center">
         <BarGlass form="group">
@@ -296,17 +296,14 @@
   {/if}
   {#if !streaming && dropped.length > 0}
     <figcaption
-      class="mt-space-2 type-meta text-ink-muted wrap-anywhere"
+      class="mt-space-2 type-meta text-tx-2 wrap-anywhere"
       data-block-dropped={dropped.join(", ")}
     >
       {transcriptWords.blockDropped(dropped)}
     </figcaption>
   {/if}
   {#if said}
-    <p
-      class="mt-space-2 type-meta text-status-fail wrap-anywhere"
-      role="status"
-    >
+    <p class="mt-space-2 type-meta text-red wrap-anywhere" role="status">
       {said}
     </p>
   {/if}

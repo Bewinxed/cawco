@@ -31,7 +31,7 @@
 
 <div class="p-space-4">
   <div
-    class="relative h-(--frame-h) w-(--frame-w) overflow-hidden rounded-t-lg border-b border-b-border-hairline bg-surface-raised"
+    class="relative h-(--frame-h) w-(--frame-w) overflow-hidden rounded-t-lg border-b border-b-ui bg-bg"
     data-slot="canvas-stage"
     style:--frame-h={`${height}px`}
     style:--frame-w={`${width}px`}

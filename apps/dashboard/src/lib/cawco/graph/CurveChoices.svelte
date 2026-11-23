@@ -69,9 +69,9 @@
   <!-- The spring's one setting: how far it overshoots. -->
   <div
     bind:this={bounceRow}
-    class="flex min-w-0 items-center gap-space-3 border-t border-border-hairline px-space-3 pt-space-2 pb-space-1"
+    class="flex min-w-0 items-center gap-space-3 border-t border-ui px-space-3 pt-space-2 pb-space-1"
   >
-    <span class="type-label text-ink-muted">{words.bounce}</span>
+    <span class="type-label text-tx-2">{words.bounce}</span>
     <Slider.Root
       class="relative flex h-control-sm min-w-0 flex-1 touch-none items-center select-none"
       max={spring.most}
@@ -87,18 +87,16 @@
       type="single"
       value={held ?? Math.min(spring.most, spring.bounce)}
     >
-      <span
-        class="relative h-space-1 w-full overflow-clip rounded-pill bg-surface-hover"
-      >
-        <Slider.Range class="absolute h-full rounded-pill bg-ink-muted" />
+      <span class="relative h-space-1 w-full overflow-clip rounded-pill bg-ui">
+        <Slider.Range class="absolute h-full rounded-pill bg-tx-2" />
       </span>
       <Slider.Thumb
         aria-label={words.bounce}
-        class="pointer-hit touch-hit block size-space-4 cursor-ew-resize rounded-pill border border-border-control bg-surface-raised shadow-sm focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-2"
+        class="pointer-hit touch-hit block size-space-4 cursor-ew-resize rounded-pill border border-ui-2 bg-bg shadow-sm focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-2"
         index={0}
       />
     </Slider.Root>
-    <span class="w-space-6 text-end type-meta text-ink-muted num"
+    <span class="w-space-6 text-end type-meta text-tx-2 num"
       >{Math.round((held ?? spring.bounce) * 100)}%</span
     >
   </div>

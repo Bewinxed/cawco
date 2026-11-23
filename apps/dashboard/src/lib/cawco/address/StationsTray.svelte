@@ -255,7 +255,7 @@
       >
         <h2
           id={titleId}
-          class="m-0 min-w-0 type-title text-balance text-ink-strong"
+          class="m-0 min-w-0 type-title text-balance text-tx"
           data-slot="title"
         >
           <MorphText text={words.title} wrap />
@@ -271,7 +271,7 @@
       </div>
       {#if tray.step === "finding"}
         <p
-          class="mark-line m-0 flex items-start gap-space-2 type-meta text-ink-muted"
+          class="mark-line m-0 flex items-start gap-space-2 type-meta text-tx-2"
         >
           <span class="mark-cell"><LiveDot /></span>
           <span class="mark-text">Looking at this computer's networks…</span>
@@ -279,7 +279,7 @@
       {:else if tray.step === "unsupported"}
         <div class="grid gap-space-3" in:arrive>
           {#each words.lines as line (line)}
-            <p class="m-0 type-body text-pretty text-ink-muted">
+            <p class="m-0 type-body text-pretty text-tx-2">
               <Words text={line} />
             </p>
           {/each}
@@ -307,7 +307,7 @@
             {@const open = state === "open" || state === "failed"}
             {#if state !== "todo"}
               <li
-                class="grid min-w-0 border-t border-t-border-hairline first:border-t-0"
+                class="grid min-w-0 border-t border-t-ui first:border-t-0"
                 data-station={station}
                 data-state={state}
               >
@@ -316,7 +316,7 @@
                    optional station not done. -->
                 <button
                   aria-expanded={open || shown === station}
-                  class="mark-line press-tint focus-inset group/station grid min-h-control-lg grid-cols-(--station-cols) items-center gap-x-space-2 rounded-sm px-space-2 text-start enabled:hover:bg-surface-hover disabled:cursor-default"
+                  class="mark-line press-tint focus-inset group/station grid min-h-control-lg grid-cols-(--station-cols) items-center gap-x-space-2 rounded-sm px-space-2 text-start enabled:hover:bg-ui disabled:cursor-default"
                   disabled={open}
                   onclick={() => press(station, state)}
                   style:--station-cols={STATION_COLS}
@@ -329,17 +329,17 @@
                     {#if state === "done"}
                       <IconSuccess
                         aria-label="Done"
-                        class="size-icon-md text-status-done"
+                        class="size-icon-md text-green"
                       />
                     {:else if state === "failed"}
                       <IconError
                         aria-label="Failed"
-                        class="size-icon-md text-status-fail"
+                        class="size-icon-md text-red"
                       />
                     {:else if state === "skipped"}
                       <IconNeutral
                         aria-label="Not done"
-                        class="size-icon-md text-ink-muted"
+                        class="size-icon-md text-tx-2"
                       />
                     {:else if state === "open" && tray.waiting}
                       <LiveDot />
@@ -348,25 +348,23 @@
                         class={[
                           "box-border grid size-icon-md place-items-center rounded-pill border type-meta leading-none num before:content-data-n",
                           state === "open"
-                            ? "border-accent text-accent-ink"
-                            : "border-border-control text-ink-muted",
+                            ? "border-accent text-accent"
+                            : "border-ui-2 text-tx-2",
                         ]}
                         aria-hidden="true"
                         data-n={index + 1}
                       ></span>
                     {/if}
                   </span>
-                  <span class="type-label text-ink-strong"
-                    >{NAMES[station]}</span
-                  >
+                  <span class="type-label text-tx">{NAMES[station]}</span>
                   <span
-                    class="min-w-0 overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+                    class="min-w-0 overflow-clip type-meta text-ellipsis whitespace-nowrap text-tx-2"
                     title={LINES[station](state)}
                     >{open ? "" : LINES[station](state)}</span
                   >
                   <span
                     data-box
-                    class="grid size-icon-md place-items-center text-ink-muted"
+                    class="grid size-icon-md place-items-center text-tx-2"
                   >
                     {#if open || shown === station}
                       <IconChevronDown
@@ -432,7 +430,7 @@
                   >
                     <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
                     {#each factsFor(tray, STEP_OF[station]) as fact (fact.text)}
-                      <li class="type-meta text-ink-muted">
+                      <li class="type-meta text-tx-2">
                         <Words text={fact.text} />
                       </li>
                     {/each}
@@ -445,7 +443,7 @@
             <!-- The stations not reached yet: one line together, each
                  opening as it is reached. -->
             <li
-              class="mark-line grid min-h-control-lg grid-cols-(--station-cols) items-center gap-x-space-2 border-t border-t-border-hairline px-space-2 type-meta text-ink-muted"
+              class="mark-line grid min-h-control-lg grid-cols-(--station-cols) items-center gap-x-space-2 border-t border-t-ui px-space-2 type-meta text-tx-2"
               data-slot="ahead"
               style:--station-cols={STATION_COLS}
             >
@@ -453,7 +451,7 @@
                 class="mark-cell grid size-icon-md place-items-center"
                 data-box
               >
-                <IconNotYet class="size-icon-md text-ink-subtle" />
+                <IconNotYet class="size-icon-md text-tx-2" />
               </span>
               <span class="col-start-2 col-end-4 min-w-0"
                 >Then {ahead.map((one) => NAMES[one]).join(" · ")}</span
@@ -464,10 +462,10 @@
       {/if}
       {#if live}
         <div
-          class="grid min-w-0 gap-space-3 border-t border-t-border-hairline pt-space-3"
+          class="grid min-w-0 gap-space-3 border-t border-t-ui pt-space-3"
           in:arrive
         >
-          <p class="m-0 type-body text-ink-muted">
+          <p class="m-0 type-body text-tx-2">
             On any device signed in to {tray.facts.domain}.
           </p>
           <AddressList {tray} />

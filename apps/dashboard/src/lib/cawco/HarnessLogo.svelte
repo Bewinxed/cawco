@@ -22,7 +22,7 @@
 
   /**
    * The marks drawn in one ink: Codex's (OpenAI's) ships black, which
-   * vanishes on the dark theme, so it is filled with `--color-ink-strong`
+   * vanishes on the dark theme, so it is filled with `--color-tx`
    * and follows the theme, as ProviderLogo's single-ink marks do.
    */
   const INK: ReadonlySet<MarkedCli> = new Set(["codex"]);
@@ -46,7 +46,7 @@
 
 <span
   data-slot="harness-logo"
-  class="inline-flex size-icon-md flex-none text-inherit data-ink:text-ink-strong data-ink:[&_path]:fill-current"
+  class="inline-flex size-icon-md flex-none text-inherit data-ink:text-tx data-ink:[&_path]:fill-current"
   data-harness-logo={harness}
   data-ink={INK.has(harness) || undefined}
   {...rest}><Mark class="size-full" /></span

@@ -20,7 +20,7 @@
           rule, a hook's command, a sample to test against), on top of
           growing a line at a time. */
       resize: { block: "resize-y" },
-      fill: { page: "bg-surface-page" },
+      fill: { page: "bg-bg" },
       /** Its line length held to the reading measure (DESIGN.md: running text 60 to 72ch). */
       measure: {
         reading: "max-w-measure",
@@ -38,7 +38,7 @@
             stand a boxed row's inset in (`c-field-inline-inset`, space-3
             less its edge), on the text column of the rows beside it. */
         prose:
-          "min-h-0 border-transparent bg-transparent px-space-3 py-space-1 shadow-none hover:bg-surface-hover",
+          "min-h-0 border-transparent bg-transparent px-space-3 py-space-1 shadow-none hover:bg-ui",
         note: "max-h-50 min-h-control-md min-w-0 border-transparent bg-transparent px-0 py-space-2 leading-lg shadow-none placeholder-shown:truncate",
       },
     },
@@ -122,8 +122,8 @@
       "bg-surface-raised px-3 text-ink-strong",
       "type-body placeholder:text-ink-muted",
       "disabled:cursor-not-allowed disabled:opacity-50",
-      "aria-invalid:border-status-fail",
-      "dark:aria-invalid:border-status-fail/50",
+      "aria-invalid:border-red",
+      "dark:aria-invalid:border-red/50",
       textareaVariants({ face, text, height, resize, fill, look, measure }),
       placement
     )}

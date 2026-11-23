@@ -36,7 +36,7 @@
 {#snippet row(item: AskItem, kids: number)}
   <div
     data-slot="row"
-    class="mark-line flex min-h-row-compact items-center gap-space-2 py-0 pe-space-2 ps-space-2 text-ink-strong"
+    class="mark-line flex min-h-row-compact items-center gap-space-2 py-0 pe-space-2 ps-space-2 text-tx"
   >
     {#if item.lead.kind === "session"}
       <SessionMark
@@ -49,7 +49,7 @@
     {:else if item.lead.kind === "machine"}
       <span
         data-slot="lead"
-        class="inline-grid size-(--lead-size) flex-none place-items-center text-ink-muted"
+        class="inline-grid size-(--lead-size) flex-none place-items-center text-tx-2"
         data-box
         style:--lead-size="var(--mark-size, var(--spacing-space-4))"
         ><OsMark class="size-icon-md" os={item.lead.os} /></span
@@ -57,7 +57,7 @@
     {:else}
       <span
         data-slot="lead"
-        class="inline-grid size-(--lead-size) flex-none place-items-center text-ink-muted"
+        class="inline-grid size-(--lead-size) flex-none place-items-center text-tx-2"
         data-box
         style:--lead-size="var(--mark-size, var(--spacing-space-4))"
         ><item.lead.icon aria-hidden="true" class="size-icon-md" /></span
@@ -69,7 +69,7 @@
       >{item.title}</span
     >
     {#if item.status}
-      <span class="flex-none type-meta whitespace-nowrap text-ink-muted"
+      <span class="flex-none type-meta whitespace-nowrap text-tx-2"
         >{item.status}</span
       >
     {/if}

@@ -109,8 +109,7 @@
       label="Zoom out"
       onclick={() => zoomBy(zoomOut)}
     />
-    {#if figure}<span
-        class="min-w-space-8 text-center type-meta num text-ink-strong"
+    {#if figure}<span class="min-w-space-8 text-center type-meta num text-tx"
         >{Math.round(zoom * 100)}%</span
       >{/if}
     <BarItem icon={IconPlus} label="Zoom in" onclick={() => zoomBy(zoomIn)} />

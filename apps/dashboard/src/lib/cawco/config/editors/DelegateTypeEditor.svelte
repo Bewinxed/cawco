@@ -46,7 +46,7 @@
     $props();
 
   const store = configStore();
-  const HUE = "var(--color-mark-4)";
+  const HUE = "var(--color-cyan)";
 
   const name = $derived(type?.name ?? null);
 
@@ -242,16 +242,16 @@
       placeholder={words.namePlaceholder}
       bind:value={draft.name}
     />
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       {name ? words.nameKept : words.nameRule}
     </p>
     {#if problemFor("name")}
-      <p class="type-meta text-status-fail" in:appear>{problem}</p>
+      <p class="type-meta text-red" in:appear>{problem}</p>
     {:else if duplicate}
-      <p class="type-meta text-status-fail" in:appear>{duplicate}</p>
+      <p class="type-meta text-red" in:appear>{duplicate}</p>
     {/if}
     {#if form.failed}
-      <p class="type-meta text-status-fail" role="alert" in:appear>
+      <p class="type-meta text-red" role="alert" in:appear>
         {form.failed}
       </p>
     {/if}
@@ -286,7 +286,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconCpu} label={words.runsOn}>
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       {words.runsOnNote}
     </p>
     <Choice
@@ -332,7 +332,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconKey} label={words.reach}>
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       {words.reachNote}
     </p>
     <Field id="type-skills" label={words.skills}>

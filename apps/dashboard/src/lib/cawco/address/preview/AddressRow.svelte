@@ -45,38 +45,38 @@
   <button
     data-box
     aria-label="Open {title}"
-    class="press-tint focus-inset absolute inset-0 rounded-inherit hover:bg-surface-hover"
+    class="press-tint focus-inset absolute inset-0 rounded-inherit hover:bg-ui"
     data-slot="cover"
     onclick={onopen}
     type="button"
   ></button>
   <span
     data-box
-    class="pointer-events-none relative col-1 row-1 grid h-4.5 w-row-compact place-items-center self-center text-ink-muted"
+    class="pointer-events-none relative col-1 row-1 grid h-4.5 w-row-compact place-items-center self-center text-tx-2"
     data-slot="lead"
   >
     {#if done}
-      <IconSuccess aria-hidden="true" class="size-icon-md text-status-done" />
+      <IconSuccess aria-hidden="true" class="size-icon-md text-green" />
     {:else}
       <IconLink aria-hidden="true" class="size-icon-md" />
     {/if}
   </span>
   <span
-    class="mark-text pointer-events-none relative col-2 row-1 min-w-0 self-center overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong"
+    class="mark-text pointer-events-none relative col-2 row-1 min-w-0 self-center overflow-clip type-label text-ellipsis whitespace-nowrap text-tx"
     data-slot="name">{title}</span
   >
   <span
-    class="mark-text pointer-events-none relative col-3 row-1 self-center type-meta num text-ink-muted"
+    class="mark-text pointer-events-none relative col-3 row-1 self-center type-meta num text-tx-2"
     data-slot="wait">2 min</span
   >
   <RowLine
     data-box
-    class="pointer-events-none relative col-start-2 col-end-4 row-2 type-body text-ink-strong"
+    class="pointer-events-none relative col-start-2 col-end-4 row-2 type-body text-tx"
     data-slot="want"
     {line}
   />
   <span
-    class="pointer-events-none relative col-start-2 col-end-4 row-3 overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+    class="pointer-events-none relative col-start-2 col-end-4 row-3 overflow-clip type-meta text-ellipsis whitespace-nowrap text-tx-2"
     data-slot="meta">Onboarding · {domain}</span
   >
 </div>

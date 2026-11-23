@@ -78,7 +78,7 @@
 
 <div
   bind:this={root}
-  class="flex min-h-0 w-full flex-auto flex-col bg-surface-page p-space-4"
+  class="flex min-h-0 w-full flex-auto flex-col bg-bg p-space-4"
 >
   <ViewRoutines
     {blocks}

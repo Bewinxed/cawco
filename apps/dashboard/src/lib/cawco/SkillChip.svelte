@@ -58,7 +58,7 @@
     data-tip={facts}
     role="img"
   >
-    <IconToolSkill aria-hidden="true" class="text-ink-muted" />
+    <IconToolSkill aria-hidden="true" class="text-tx-2" />
     <span data-slot="label">{skill.name}</span>
   </span>
 {:else}
@@ -76,7 +76,7 @@
     type="button"
     bind:this={panel.chip}
   >
-    <IconToolSkill aria-hidden="true" class="text-ink-muted" />
+    <IconToolSkill aria-hidden="true" class="text-tx-2" />
     <span data-slot="label">{skill.name}</span>
   </button><Portal>
     <HoverPanel
@@ -95,23 +95,23 @@
           <div data-slot="head" class="mark-line flex items-center gap-space-2">
             <IconToolSkill
               aria-hidden="true"
-              class="size-icon-md flex-none text-ink-muted"
+              class="size-icon-md flex-none text-tx-2"
             />
             <span
               data-slot="title"
-              class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-base font-medium text-ink-strong"
+              class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-base font-medium text-tx"
               >{skill.name}</span
             >
           </div>
           {#if skill.description}
             <p
               data-slot="description"
-              class="m-0 type-body text-pretty text-ink-strong"
+              class="m-0 type-body text-pretty text-tx"
             >
               {skill.description}
             </p>
           {/if}
-          <p data-slot="source" class="m-0 type-meta text-ink-muted">
+          <p data-slot="source" class="m-0 type-meta text-tx-2">
             {sourceWords(skill)}
           </p>
         </div>

@@ -30,10 +30,6 @@ const starts =
   (...prefixes: string[]) =>
   (name: string) =>
     prefixes.some((prefix) => name.startsWith(prefix));
-const exact =
-  (...names: string[]) =>
-  (name: string) =>
-    names.includes(name);
 
 /** How the board draws a specimen: what property it sets and how it previews it. */
 export type Kind =
@@ -62,7 +58,7 @@ interface Shelf {
 
 export interface Foundation {
   /** Drawn in use, on real pieces, in place of its shelves. */
-  inUse?: "spacing" | "elevation" | "layout";
+  inUse?: "colour" | "spacing" | "elevation" | "layout";
   /** Short line stating what this group decides. */
   note: string;
   shelves: Shelf[];
@@ -80,27 +76,11 @@ const shelf = (title: string, kind: Kind, names: string[]): Shelf => ({
 /** Semantic roles: what a screen reaches for first across light and dark. */
 export const ROLES: Foundation[] = [
   {
-    title: "Colour roles",
-    note: "24 semantic roles across light and dark: 6 surfaces, 3 inks (≥4.5:1), 3 borders, 4 coral accents, and 4 status pairs.",
+    title: "Colour",
+    note: "Flexoki's model on a neutral base: 8 base roles (bg, bg-2, ui, ui-2, ui-3, tx-3, tx-2, tx), Flexoki's 8 inks, and Caw coral. No tinted fills.",
     wide: true,
-    shelves: [
-      shelf("Surfaces", "colour", named(starts("--color-surface-"))),
-      shelf("Inks", "colour", named(starts("--color-ink-"))),
-      shelf("Borders", "colour", named(starts("--color-border-"))),
-      shelf(
-        "Accent (Caw coral)",
-        "colour",
-        named(
-          exact(
-            "--color-accent",
-            "--color-accent-ink",
-            "--color-accent-wash",
-            "--color-on-accent"
-          )
-        )
-      ),
-      shelf("Status", "colour", named(starts("--color-status-"))),
-    ],
+    inUse: "colour",
+    shelves: [],
   },
   {
     title: "Typography",
@@ -119,7 +99,7 @@ export const ROLES: Foundation[] = [
   },
   {
     title: "Spacing",
-    note: "Six steps on a 4px unit: 1, 2, 3, 4, 6 and 8 (4 to 32px). Each padding and gap is measured off the real piece and named by its step; red is off the scale.",
+    note: "Six steps on a 4px unit: 4, 8, 12, 16, 24 and 32px. The lines mark the spaces that set each piece's rhythm.",
     wide: true,
     inUse: "spacing",
     shelves: [],
@@ -128,18 +108,6 @@ export const ROLES: Foundation[] = [
 
 /** Palette, shape, motion, and layout vocabulary supporting the roles. */
 export const SCALES: Foundation[] = [
-  {
-    title: "Marks and brand art",
-    note: "7 perceptually even categorical marks for accounts, tools, and syntax, plus 3 mascot/art pigments.",
-    shelves: [
-      shelf("Categorical marks", "colour", named(starts("--color-mark-"))),
-      shelf(
-        "Brand art pigments",
-        "colour",
-        named(exact("--color-spark", "--color-paper", "--color-crow-ink"))
-      ),
-    ],
-  },
   {
     title: "Elevation",
     note: "One ladder. Each surface takes its level from the one it opens in: a panel one step, a popover, menu or dialog two. Light turns white at level 1 and lets the shadow carry the rest; dark lightens each level.",

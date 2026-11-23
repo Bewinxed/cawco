@@ -46,7 +46,7 @@
 
 {#if flow.step === "start" && flow.network === "netbird"}
   <div class="grid min-w-0 gap-space-1" data-slot="key-field">
-    <label class="type-label text-ink-strong" for={keyId}>Setup key</label>
+    <label class="type-label text-tx" for={keyId}>Setup key</label>
     <Input
       id={keyId}
       autocomplete="off"
@@ -67,7 +67,7 @@
   </div>
 {:else if flow.step === "answers"}
   <p
-    class="m-0 min-w-0 rounded-sm border border-border-control bg-surface-sunk px-space-3 py-space-4 text-start type-title font-mono wrap-anywhere text-ink-strong select-all"
+    class="m-0 min-w-0 rounded-sm border border-ui-2 bg-bg-2 px-space-3 py-space-4 text-start type-title font-mono wrap-anywhere text-tx select-all"
     data-slot="answers-address"
   >
     {flow.address}
@@ -83,12 +83,12 @@
   >
     {#if flow.phoneOpened}
       <p
-        class="mark-line m-0 flex min-w-0 items-center justify-start gap-space-2 py-space-2 type-label text-ink-strong"
+        class="mark-line m-0 flex min-w-0 items-center justify-start gap-space-2 py-space-2 type-label text-tx"
         data-slot="phone-name"
         in:arrive
         out:depart
       >
-        <IconPhone aria-hidden="true" class="size-icon-md text-ink-muted" />
+        <IconPhone aria-hidden="true" class="size-icon-md text-tx-2" />
         <span class="min-w-0">{PEER}</span>
       </p>
     {:else}
@@ -110,12 +110,9 @@
     class="mark-line flex min-w-0 items-center gap-space-2"
     data-slot="secure-address"
   >
-    <IconLock
-      aria-label="Secure"
-      class="size-icon-md flex-none text-status-done"
-    />
+    <IconLock aria-label="Secure" class="size-icon-md flex-none text-green" />
     <p
-      class="m-0 min-w-0 flex-1 rounded-sm border border-border-control bg-surface-sunk px-space-3 py-space-4 text-start type-label font-mono wrap-anywhere text-ink-strong select-all"
+      class="m-0 min-w-0 flex-1 rounded-sm border border-ui-2 bg-bg-2 px-space-3 py-space-4 text-start type-label font-mono wrap-anywhere text-tx select-all"
     >
       {flow.secureAddress}
     </p>
@@ -125,11 +122,11 @@
     <!-- The address, named once, large and mono: Open beside it, and Copy
          only where this page has a clipboard; elsewhere it selects whole. -->
     <div
-      class="flex min-w-0 flex-wrap items-center gap-space-2 rounded-sm border border-border-control bg-surface-sunk py-space-2 ps-space-3 pe-space-2"
+      class="flex min-w-0 flex-wrap items-center gap-space-2 rounded-sm border border-ui-2 bg-bg-2 py-space-2 ps-space-3 pe-space-2"
       data-slot="live-address"
     >
       <code
-        class="min-w-0 flex-1 type-title font-mono wrap-anywhere text-ink-strong select-all"
+        class="min-w-0 flex-1 type-title font-mono wrap-anywhere text-tx select-all"
         >{flow.address}</code
       >
       <span class="flex flex-none gap-space-1">
@@ -161,7 +158,7 @@
       <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
       {#each doneMarks(flow, form) as mark, index (index)}
         <li
-          class="mark-line flex min-w-0 flex-wrap items-center gap-x-space-2 type-body text-ink-strong"
+          class="mark-line flex min-w-0 flex-wrap items-center gap-x-space-2 type-body text-tx"
           data-mark={mark.kind}
         >
           <span class="mark-cell w-icon-md">
@@ -171,27 +168,24 @@
                   {#if mark.lock}
                     <IconLock
                       aria-label="Secure"
-                      class="size-icon-md text-status-done"
+                      class="size-icon-md text-green"
                     />
                   {:else}
                     <IconSuccess
                       aria-label="Done"
-                      class="size-icon-md text-status-done"
+                      class="size-icon-md text-green"
                     />
                   {/if}
                 </span>
               {:else if mark.kind === "wait"}
                 <LiveDot />
               {:else if mark.kind === "no"}
-                <IconNeutral
-                  aria-label="No"
-                  class="size-icon-md text-ink-muted"
-                />
+                <IconNeutral aria-label="No" class="size-icon-md text-tx-2" />
               {:else}
                 <IconNotYet
                   aria-hidden="false"
                   aria-label="Not yet"
-                  class="size-icon-md text-ink-subtle"
+                  class="size-icon-md text-tx-2"
                   role="img"
                 />
               {/if}

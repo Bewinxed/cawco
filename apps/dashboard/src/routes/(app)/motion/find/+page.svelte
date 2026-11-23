@@ -255,17 +255,15 @@
 {#if inCaw}
   <!-- Caw's panel docked beside the project page (CawFloat's docked card),
        its bar floating over the conversation as ProjectConversation's does. -->
-  <div
-    class="absolute inset-0 flex justify-end bg-surface-sunk text-ink-strong"
-  >
+  <div class="absolute inset-0 flex justify-end bg-bg-2 text-tx">
     <div
-      class="relative flex min-h-0 w-95 m-space-6 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-sm max-phone:m-0 max-phone:w-full max-phone:rounded-none"
+      class="relative flex min-h-0 w-95 m-space-6 flex-col overflow-hidden rounded-lg bg-bg shadow-sm max-phone:m-0 max-phone:w-full max-phone:rounded-none"
     >
       <div
         class="relative flex h-full min-h-0 flex-auto flex-col"
         style:--bar-room="var(--spacing-control-lg)"
       >
-        <BarFloat tint="bg-surface-recess">
+        <BarFloat tint="bg-bg-2">
           {#snippet trailing()}
             <BarGlass form="group">
               <BarItem icon={IconListRowsLinear} label="Session details" />
@@ -294,14 +292,14 @@
   </div>
 {:else}
   <div
-    class="@container/leaf absolute inset-0 flex flex-col text-ink-strong"
+    class="@container/leaf absolute inset-0 flex flex-col text-tx"
     onclickcapture={benchClick(leaf)}
   >
-    <div class="bg-surface-sunk">
+    <div class="bg-bg-2">
       <PaneTabs {leaf} />
     </div>
     <div
-      class="relative flex min-h-0 min-w-0 flex-auto overflow-hidden bg-surface-recess"
+      class="relative flex min-h-0 min-w-0 flex-auto overflow-hidden bg-bg-2"
     >
       {#each ids as id (id)}
         {@const shown = leaf.active === id}

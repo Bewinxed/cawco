@@ -27,7 +27,7 @@
 </script>
 
 {#snippet tick()}
-  <IconSuccess aria-hidden="true" class="size-icon-sm text-status-done" />
+  <IconSuccess aria-hidden="true" class="size-icon-sm text-green" />
 {/snippet}
 
 <p
@@ -39,7 +39,7 @@
     center && "justify-center",
     "gap-x-space-2",
     !wrap && "gap-y-space-1",
-    "type-meta text-ink-muted",
+    "type-meta text-tx-2",
   ]}
 >
   <span class="mark-cell">

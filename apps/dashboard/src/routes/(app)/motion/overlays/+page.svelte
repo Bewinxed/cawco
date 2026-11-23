@@ -89,7 +89,7 @@
 
 <main
   class={[
-    "type-body relative grid grow gap-space-4 p-space-4 text-ink-strong",
+    "type-body relative grid grow gap-space-4 p-space-4 text-tx",
     // The ledger right under the openers, where what they open stands.
     ledger && "content-start",
   ]}
@@ -239,7 +239,7 @@
       <ContextMenu.Root bind:open={open["context-menu"]}>
         <ContextMenu.Trigger>
           <div
-            class="rounded-sm border border-border-control px-space-3 py-space-2"
+            class="rounded-sm border border-ui-2 px-space-3 py-space-2"
             data-open="context-menu"
           >
             Context menu
@@ -285,7 +285,7 @@
        lands on it once the overlay has gone, and the shell's own chrome (the
        top bar, the burger) stays the shell's. -->
   <button
-    class="select-none absolute inset-0 z-0 grid items-box-end justify-items-center border-none border-current bg-transparent p-space-4 text-ink-muted"
+    class="select-none absolute inset-0 z-0 grid items-box-end justify-items-center border-none border-current bg-transparent p-space-4 text-tx-2"
     data-page
     onclick={() => {
       counts.page += 1;

@@ -979,7 +979,7 @@
               <p
                 id={`${message.id}-edit-cost`}
                 data-slot="edit-cost"
-                class="mt-space-2 text-sm font-normal text-ink-muted text-pretty"
+                class="mt-space-2 text-sm font-normal text-tx-2 text-pretty"
               >
                 Sending goes back to this message and replaces everything after
                 it in the conversation.
@@ -1017,7 +1017,7 @@
             {#if editError}
               <p
                 data-slot="reason"
-                class="mt-space-2 text-sm font-normal text-status-fail text-pretty"
+                class="mt-space-2 text-sm font-normal text-red text-pretty"
                 role="alert"
               >
                 {editError}
@@ -1125,7 +1125,7 @@
               <p
                 data-slot="reason"
                 data-going={line === SENDING_AGAIN || undefined}
-                class="mark-line flex items-start gap-space-2 text-sm font-normal text-status-fail data-going:text-ink-muted"
+                class="mark-line flex items-start gap-space-2 text-sm font-normal text-red data-going:text-tx-2"
               >
                 {#if line === SENDING_AGAIN}
                   <span class="mark-cell"><LiveDot /></span>

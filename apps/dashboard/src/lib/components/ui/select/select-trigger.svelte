@@ -16,14 +16,14 @@
       measure: { share: "min-w-0 basis-0" },
       /** `edited`: a value the person changed from what it was, in the
           edit's ink (the design graph's clip editor). */
-      tone: { strong: "text-ink-strong", edited: "text-accent-ink" },
+      tone: { strong: "text-tx", edited: "text-accent" },
       look: {
         /** In a view's bar: it shrinks, takes the bar's control corner, and
             clips the name it morphs while its width follows. */
         "in-bar":
           "group-data-bar:min-w-0 group-data-bar:overflow-clip group-data-bar:concentric-xs",
         /** A plain field: the small corner, the control's edge, field pads. */
-        field: "rounded-sm border border-border-strong px-space-3 py-space-2",
+        field: "rounded-sm border border-tx-2 px-space-3 py-space-2",
       },
       /** `end`: its value at its end, before its mark, as a number field
           writes its figure (the design graph's Controls: a select whose
@@ -33,7 +33,7 @@
           its ink held over the placeholder's. */
       chosen: {
         selected:
-          "data-on:data-placeholder:text-accent-ink data-on:border-transparent data-on:bg-accent-wash data-on:text-accent-ink",
+          "data-on:data-placeholder:text-accent data-on:border-transparent data-on:bg-ui data-on:text-accent",
       },
     },
   });
@@ -73,16 +73,16 @@
     "press-tint transition-control",
     "mark-line flex w-fit",
     "items-center justify-between gap-1.5 whitespace-nowrap",
-    "border border-border-strong [--hit-edge:1px]",
-    "bg-surface-raised px-3 text-ink-strong",
+    "border border-tx-2 [--hit-edge:1px]",
+    "bg-bg px-3 text-tx",
     "type-body disabled:cursor-not-allowed",
-    "disabled:opacity-50 aria-invalid:border-status-fail",
-    "data-placeholder:text-ink-muted",
+    "disabled:opacity-50 aria-invalid:border-red",
+    "data-placeholder:text-tx-2",
     "[&>[data-slot=select-value]]:line-clamp-1",
     "[&>[data-slot=select-value]]:flex",
     "[&>[data-slot=select-value]]:items-center",
     "[&>[data-slot=select-value]]:gap-1.5",
-    "dark:aria-invalid:border-status-fail/50",
+    "dark:aria-invalid:border-red/50",
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
     selectTriggerVariants({ size, measure, tone, look, chosen, align }),
@@ -105,10 +105,10 @@
   >
   {#if mark === "chevron"}
     <IconChevronDown
-      class="size-icon-md text-ink-muted pointer-events-none motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-out in-data-[state=open]:rotate-180"
+      class="size-icon-md text-tx-2 pointer-events-none motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-out in-data-[state=open]:rotate-180"
       data-mark="chevron"
     />
   {:else}
-    <IconUnfold class="size-icon-md text-ink-muted pointer-events-none" />
+    <IconUnfold class="size-icon-md text-tx-2 pointer-events-none" />
   {/if}
 </SelectPrimitive.Trigger>

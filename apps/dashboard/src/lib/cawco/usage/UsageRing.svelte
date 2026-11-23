@@ -41,14 +41,14 @@
   viewBox="0 0 16 16"
 >
   <circle
-    class="fill-none stroke-border-control"
+    class="fill-none stroke-ui-2"
     cx="8"
     cy="8"
     r={RADIUS}
     stroke-width={STROKE}
   ></circle>
   <circle
-    class="fill-none stroke-ink-muted group-state-near/ring:stroke-status-attn group-state-over/ring:stroke-status-fail group-state-reached/ring:stroke-status-fail group-state-stale/ring:stroke-ink-subtle motion-safe:transition-[stroke-dasharray] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
+    class="fill-none stroke-tx-2 group-state-near/ring:stroke-orange group-state-over/ring:stroke-red group-state-reached/ring:stroke-red group-state-stale/ring:stroke-tx-2 motion-safe:transition-[stroke-dasharray] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
     cx="8"
     cy="8"
     pathLength="100"

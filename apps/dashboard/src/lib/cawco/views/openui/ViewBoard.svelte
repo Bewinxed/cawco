@@ -10,7 +10,7 @@
 
 <div class="flex min-w-0 flex-col gap-space-2">
   {#if props.title}
-    <h3 data-slot="title" class="type-title text-ink-strong">
+    <h3 data-slot="title" class="type-title text-tx">
       {String(props.title)}
     </h3>
   {/if}

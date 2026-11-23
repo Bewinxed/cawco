@@ -385,7 +385,7 @@
       {/each}
     </div>
   {:else if entries.length === 0}
-    <p class="m-0 px-space-3 py-space-2 type-meta text-ink-muted" data-flip>
+    <p class="m-0 px-space-3 py-space-2 type-meta text-tx-2" data-flip>
       {sidebarWords.recentNone}
     </p>
   {:else}

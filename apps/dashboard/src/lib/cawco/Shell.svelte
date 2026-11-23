@@ -1458,7 +1458,7 @@
 
 <a
   data-slot="skip"
-  class="sr-only z-(--z) rounded-sm bg-surface-raised px-space-4 py-space-2 shadow-sm focus:not-sr-only focus:absolute focus:start-space-4 focus:top-space-4"
+  class="sr-only z-(--z) rounded-sm bg-bg px-space-4 py-space-2 shadow-sm focus:not-sr-only focus:absolute focus:start-space-4 focus:top-space-4"
   style:--z="calc(var(--layer-top) - 10)"
   href="#main-content">Skip to content</a
 >
@@ -1483,7 +1483,7 @@
     data-slot="shell"
     data-first-paint={firstRender.held || undefined}
     data-first-render={!firstRender.held || undefined}
-    class="@container/shell relative flex h-dvh w-full bg-surface-recess overflow-hidden"
+    class="@container/shell relative flex h-dvh w-full bg-bg-2 overflow-hidden"
     style:height={floor.bottom > 0 ? `${floor.bottom}px` : null}
   >
     <!-- The rail holds the screen's leading edge, so it keeps a landscape
@@ -1494,7 +1494,7 @@
       data-full={full || undefined}
       data-away={(railHidden && !railLeaving) || undefined}
       data-leaving={railLeaving || undefined}
-      class="hidden desk:flex data-full:hidden data-away:hidden relative data-leaving:absolute data-leaving:inset-y-0 data-leaving:start-0 data-leaving:z-10 w-(--sidebar-width) grow-0 shrink-0 basis-(--sidebar-width) min-w-0 ps-(--rail-inset) bg-surface-page border-e border-e-border-hairline"
+      class="hidden desk:flex data-full:hidden data-away:hidden relative data-leaving:absolute data-leaving:inset-y-0 data-leaving:start-0 data-leaving:z-10 w-(--sidebar-width) grow-0 shrink-0 basis-(--sidebar-width) min-w-0 ps-(--rail-inset) bg-bg border-e border-e-ui"
       style="--sidebar-width: var(--rail-w, {firstWidth === null
         ? 'calc(var(--spacing) * 57)'
         : `${firstWidth}px`})"
@@ -1517,7 +1517,7 @@
         aria-valuemax={RAIL_MAX}
         aria-valuemin={RAIL_MIN}
         aria-valuenow={railWidth}
-        class="pointer-hit hit-gap-x-space-1 absolute inset-y-0 end-0 w-1.5 translate-x-1/2 cursor-col-resize touch-none select-none z-5 hover:bg-border-control"
+        class="pointer-hit hit-gap-x-space-1 absolute inset-y-0 end-0 w-1.5 translate-x-1/2 cursor-col-resize touch-none select-none z-5 hover:bg-ui-2"
         onkeydown={resizeKey}
         onpointerdown={startDrag}
         role="slider"
@@ -1644,7 +1644,7 @@
         <button
           data-slot="burger"
           aria-label={sidebarWords.openNavigation}
-          class="select-none desk:hidden size-control-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--duration-fast) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-space-3 max-desk:justify-items-start max-desk:focus-inset max-desk:pt-(--burger-drop) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto group-data-under/top:pointer-events-auto"
+          class="select-none desk:hidden size-control-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-tx transition-[background] duration-(--duration-fast) ease-in-out hover:bg-ui motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-space-3 max-desk:justify-items-start max-desk:focus-inset max-desk:pt-(--burger-drop) max-desk:text-tx-2 max-desk:group-data-floating/top:pointer-events-auto group-data-under/top:pointer-events-auto"
           onclick={() => {
             railOpen = true;
           }}
@@ -1712,7 +1712,7 @@
                     workspace.focusedLeafId === leaf.id) ||
                     undefined}
                   data-seam={i > 0 || undefined}
-                  style:--seam-line="-1px 0 0 var(--color-border-hairline)"
+                  style:--seam-line="-1px 0 0 var(--color-ui)"
                 >
                   <!-- The group the keyboard belongs to, as the group says
                        it: a hairline rail down the leading edge, where
@@ -1720,7 +1720,7 @@
                        stray line at the start of the shelf). -->
                   <span
                     aria-hidden="true"
-                    class="absolute inset-y-0 start-0 w-space-1 bg-ink-muted opacity-0 z-2 pointer-events-none group-data-focused/col:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--duration-fast) motion-safe:ease-out"
+                    class="absolute inset-y-0 start-0 w-space-1 bg-tx-2 opacity-0 z-2 pointer-events-none group-data-focused/col:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--duration-fast) motion-safe:ease-out"
                   ></span>
                   <RegionBoundary face="strip" part="tabs">
                     <PaneTabs hosted {leaf} />
@@ -1748,7 +1748,7 @@
               {#if configSection}
                 <span
                   data-slot="title"
-                  class="ms-space-2 min-w-0 self-center truncate type-label text-ink-strong"
+                  class="ms-space-2 min-w-0 self-center truncate type-label text-tx"
                   >{configSection}</span
                 >
               {/if}
@@ -1811,10 +1811,7 @@
                 barGlass.toggle("jump");
               }}
             >
-              <IconSearch
-                aria-hidden="true"
-                class="size-icon-md text-ink-muted"
-              />
+              <IconSearch aria-hidden="true" class="size-icon-md text-tx-2" />
             </BarItem>
             <MachinesButton />
           </BarGlass>
@@ -1851,7 +1848,7 @@
         <!-- The scroll edge effect under the bar floating over the page:
              what scrolls beneath it blurs and fades into the shell's ground,
              from the first scroll (HeadFade, as BarFloat draws it). -->
-        <HeadFade band="var(--spacing-control-lg)" tint="bg-surface-recess" />
+        <HeadFade band="var(--spacing-control-lg)" tint="bg-bg-2" />
       {/if}
       <HubBand />
 
@@ -1874,7 +1871,7 @@
         data-slot="shell-content"
         data-floating={floating || undefined}
         data-under={under || undefined}
-        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto data-under:pt-control-lg data-under:scroll-timeline-transcript-head pe-(--content-end) max-desk:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-desk:data-floating:bg-linear-to-b max-desk:data-floating:from-surface-sunk max-desk:data-floating:to-surface-sunk max-desk:data-floating:bg-top max-desk:data-floating:bg-size-(--shelf-band-size) max-desk:data-floating:bg-no-repeat"
+        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto data-under:pt-control-lg data-under:scroll-timeline-transcript-head pe-(--content-end) max-desk:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-desk:data-floating:bg-linear-to-b max-desk:data-floating:from-bg-2 max-desk:data-floating:to-bg-2 max-desk:data-floating:bg-top max-desk:data-floating:bg-size-(--shelf-band-size) max-desk:data-floating:bg-no-repeat"
         data-safe={!onSession || undefined}
         data-safe-bottom
         id="main-content"

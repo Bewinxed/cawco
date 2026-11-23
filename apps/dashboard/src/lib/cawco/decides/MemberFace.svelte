@@ -34,9 +34,7 @@
     aria-hidden="true"
     class={[
       "grid flex-none place-items-center overflow-hidden rounded-(--corner) size-(--side)",
-      member.hue === null
-        ? "bg-surface-sunk text-ink-muted"
-        : "bg-(--face) text-surface-page",
+      member.hue === null ? "bg-bg-2 text-tx-2" : "bg-(--face) text-bg",
     ]}
     style:--corner="{size * 0.28}px"
     style:--side="{size}px"

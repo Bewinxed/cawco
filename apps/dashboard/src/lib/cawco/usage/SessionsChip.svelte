@@ -212,7 +212,7 @@
     <div data-slot="sessions-chip-card" class="flex flex-col" bind:this={card}>
       <p
         data-slot="head"
-        class="px-space-3 pt-space-2 pb-space-1 text-ink-strong type-meta font-medium"
+        class="px-space-3 pt-space-2 pb-space-1 text-tx type-meta font-medium"
         data-flyover-head
       >
         {name}
@@ -223,7 +223,7 @@
           <li>
             <a
               data-slot="item"
-              class="h-row transition-[background-color] duration-(--duration-fast) ease-out flex items-center gap-space-2 px-space-3 py-0 text-ink-strong no-underline hover:bg-surface-hover"
+              class="h-row transition-[background-color] duration-(--duration-fast) ease-out flex items-center gap-space-2 px-space-3 py-0 text-tx no-underline hover:bg-ui"
               data-session-link={session.id}
               href={conversationHref(session.id, boardStore.instanceIndex)}
               onclick={opened}
@@ -236,7 +236,7 @@
               >
               <span
                 data-slot="project"
-                class="type-meta max-w-2/5 min-w-0 flex-initial truncate text-ink-muted"
+                class="type-meta max-w-2/5 min-w-0 flex-initial truncate text-tx-2"
                 >{projectOfRow(session)}</span
               >
             </a>

@@ -475,7 +475,7 @@
                over it. -->
           <span
             data-slot="glyph"
-            class="col-start-1 row-start-1 grid place-items-center {d.color} data-err:text-status-fail"
+            class="col-start-1 row-start-1 grid place-items-center {d.color} data-err:text-red"
             data-err={failed || undefined}
             in:glyphIn
             out:glyphOut
@@ -507,7 +507,7 @@
            chevron stay inside the row. -->
       {#if d.label}
         <span
-          class="font-medium text-ink-strong text-base flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+          class="font-medium text-tx text-base flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
           >{d.label}</span
         >
       {/if}
@@ -517,7 +517,7 @@
       <span
         class={[
           d.objectIsMono && "font-(family-name:--font-mono)",
-          "text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-1",
+          "text-tx-2 overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-1",
         ]}
         title={[d.object, d.detail].filter(Boolean).join(" ") || undefined}
       >
@@ -529,7 +529,7 @@
              still names them). -->
         {#if d.detail}
           <span
-            class="text-ink-subtle group-state-open/trow:data-told:hidden"
+            class="text-tx-2 group-state-open/trow:data-told:hidden"
             data-told={d.expanded === "prose" || undefined}
             >{` ${d.detail}`}</span
           >
@@ -544,23 +544,23 @@
       {/if}
       <!-- One chain, so a fact arriving with its result fades in (Svelte plays
            a local intro only when a block that already ran switches). A fact
-           is a measurement, not a verdict: it reads in --color-ink-strong, the ink
+           is a measurement, not a verdict: it reads in --color-tx, the ink
            that gives a number presence without passing judgement on it.
            Green is reserved for the added side of a `diff` fact — the one
            measurement that carries a direction — and every diff row agrees
            on that reading, whether it came back as `+38 −2` or a lone `+38`. -->
       {#if d.fact && d.factTone === "diff"}
-        <span class="text-ink-strong num flex-none" in:factIn
+        <span class="text-tx num flex-none" in:factIn
           >{#each factParts(d.fact) as part, i (i)}
             <span
               data-add={part.add || undefined}
-              class="not-data-del:data-add:text-status-done data-del:text-status-fail"
+              class="not-data-del:data-add:text-green data-del:text-red"
               data-del={part.del || undefined}>{part.text}</span
             >
           {/each}</span
         >
       {:else if d.fact}
-        <span class="text-ink-strong num flex-none" in:factIn>{d.fact}</span>
+        <span class="text-tx num flex-none" in:factIn>{d.fact}</span>
       {/if}
     {/snippet}
     {#snippet chips()}
@@ -617,7 +617,7 @@
                  stands in. -->
             <div
               data-slot="preview-tool"
-              class="relative flex items-center gap-space-2 max-w-110 min-h-20 p-space-2 my-space-2 border border-border-hairline rounded-sm bg-surface-raised shadow-sm not-has-[[data-slot=page-thumb]]:w-fit has-hover:bg-surface-hover has-focus-visible:outline-2 has-focus-visible:outline-accent-ink has-focus-visible:-outline-offset-2"
+              class="relative flex items-center gap-space-2 max-w-110 min-h-20 p-space-2 my-space-2 border border-ui rounded-sm bg-bg shadow-sm not-has-[[data-slot=page-thumb]]:w-fit has-hover:bg-ui has-focus-visible:outline-2 has-focus-visible:outline-accent has-focus-visible:-outline-offset-2"
               data-artifact={called?.id}
               data-share="preview:{m.instanceId}"
               data-share-ttl="10000"
@@ -631,7 +631,7 @@
                 aria-disabled={busy || !called || undefined}
                 aria-label={preview?.title || name}
                 data-slot="artifact-open"
-                class="select-none flex items-center gap-space-2 flex-1 min-w-0 border-none border-current p-space-2 bg-transparent text-ink-strong text-base font-medium text-start coarse:min-h-control-lg after:absolute after:inset-0 after:rounded-sm focus-visible:outline-off"
+                class="select-none flex items-center gap-space-2 flex-1 min-w-0 border-none border-current p-space-2 bg-transparent text-tx text-base font-medium text-start coarse:min-h-control-lg after:absolute after:inset-0 after:rounded-sm focus-visible:outline-off"
                 onclick={whileIdle(
                   () => busy || !called,
                   () => {
@@ -646,7 +646,7 @@
               >
                 <span
                   data-slot="mark"
-                  class="size-4.5 shrink-0 grid place-items-center rounded-xs text-surface-page bg-mark-overlay bg-mark-4"
+                  class="size-4.5 shrink-0 grid place-items-center rounded-xs text-bg bg-mark-overlay bg-cyan"
                   ><IconWindow class="size-icon-sm" /></span
                 >
                 <!-- The name wraps, whole, and breaks inside a word only
@@ -666,7 +666,7 @@
                     /></span
                   ><span
                     data-slot="artifact-path"
-                    class="truncate text-ink-muted contain-inline-size type-meta font-(family-name:--font-mono)"
+                    class="truncate text-tx-2 contain-inline-size type-meta font-(family-name:--font-mono)"
                     >{preview?.source
                       ? previewPlace(preview.source)
                       : (called?.kind ?? "")}</span
@@ -681,7 +681,7 @@
               <!-- What happened and the way back, under the row that asked;
                    the row itself is still the way to open it. -->
               <p
-                class="max-w-110 mb-space-2 text-status-fail text-sm font-normal"
+                class="max-w-110 mb-space-2 text-red text-sm font-normal"
                 role="alert"
               >
                 Couldn't open {name}: {openFailed.get(callId(m))}
@@ -702,7 +702,7 @@
               aria-controls={opened.has(callId(m)) ? body : undefined}
               aria-expanded={disclosed.get()}
               data-slot="trow"
-              class="select-none group/trow rail-line press-tint w-full min-h-6.5 coarse:min-h-control-lg text-base font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
+              class="select-none group/trow rail-line press-tint w-full min-h-6.5 coarse:min-h-control-lg text-base font-medium text-tx bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
               data-state={disclosed.get() ? "open" : "closed"}
               onclick={() => disclosed.set(!disclosed.get())}
               type="button"
@@ -712,7 +712,7 @@
                    is unchanged. -->
               <span
                 data-slot="chev"
-                class="flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-out group-state-open/trow:rotate-90"
+                class="flex-none grid place-items-center text-tx-2 motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-out group-state-open/trow:rotate-90"
                 data-box><IconChevronRight class="size-icon-md block" /></span
               >
             </button>
@@ -741,7 +741,7 @@
                            text column. Nothing in it is cut or capped. -->
                       <ol
                         data-slot="pin-exchange"
-                        class="flex flex-col gap-space-3 m-0 mt-space-1 mb-space-3 ms-(--fields-start) p-space-3 list-none rounded-sm bg-surface-recess"
+                        class="flex flex-col gap-space-3 m-0 mt-space-1 mb-space-3 ms-(--fields-start) p-space-3 list-none rounded-sm bg-bg-2"
                         style:--fields-start={"calc(var(--x-hang) - var(--spacing-space-3))"}
                       >
                         {#each exchange as said (said.key)}
@@ -757,7 +757,7 @@
                             >
                             <span
                               aria-hidden="true"
-                              class="mark-cell text-ink-muted data-you:text-accent-ink"
+                              class="mark-cell text-tx-2 data-you:text-accent"
                               data-box
                               data-you={said.by === "person" || undefined}
                               ><Speaker class="size-icon-sm" /></span
@@ -770,7 +770,7 @@
                                 <p class="flex flex-wrap gap-space-1 m-0">
                                   {#each said.files as file, i (i)}
                                     <code
-                                      class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-surface-recess type-code"
+                                      class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-bg-2 type-code"
                                       >{file}</code
                                     >
                                   {/each}
@@ -795,7 +795,7 @@
                         {#if refusal}
                           <p
                             data-slot="refusal"
-                            class="ms-(--diffs-inset) text-base text-status-fail wrap-anywhere"
+                            class="ms-(--diffs-inset) text-base text-red wrap-anywhere"
                           >
                             {refusal}
                           </p>
@@ -821,18 +821,18 @@
                            at the row's text column; the well reaches out past
                            them by its own padding. -->
                       <div
-                        class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ms-(--fields-start) p-space-3 rounded-sm bg-surface-recess"
+                        class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ms-(--fields-start) p-space-3 rounded-sm bg-bg-2"
                         style:--fields-start={"calc(var(--x-hang) - var(--spacing-space-3))"}
                       >
                         <div
                           data-slot="tool-group-field"
                           class="flex flex-col gap-space-1 min-w-0"
                         >
-                          <span class="text-base font-medium text-ink-muted"
+                          <span class="text-base font-medium text-tx-2"
                             >result</span
                           >
                           <pre
-                            class="max-h-75 overflow-auto type-code liga-none text-ink-strong whitespace-pre-wrap break-word">{result.text}</pre>
+                            class="max-h-75 overflow-auto type-code liga-none text-tx whitespace-pre-wrap break-word">{result.text}</pre>
                         </div>
                       </div>
                     {:else if d.expanded === "prose" && !failed}
@@ -846,7 +846,7 @@
                       </div>
                     {:else}
                       <div
-                        class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ms-(--fields-start) p-space-3 rounded-sm bg-surface-recess"
+                        class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ms-(--fields-start) p-space-3 rounded-sm bg-bg-2"
                         style:--fields-start={"calc(var(--x-hang) - var(--spacing-space-3))"}
                       >
                         {#each fields as f (f.key)}
@@ -854,11 +854,11 @@
                             data-slot="tool-group-field"
                             class="flex flex-col gap-space-1 min-w-0"
                           >
-                            <span class="text-base font-medium text-ink-muted"
+                            <span class="text-base font-medium text-tx-2"
                               >{f.key}</span
                             >
                             <pre
-                              class="max-h-75 overflow-auto type-code liga-none text-ink-strong whitespace-pre-wrap break-word">{f.text}</pre>
+                              class="max-h-75 overflow-auto type-code liga-none text-tx whitespace-pre-wrap break-word">{f.text}</pre>
                           </div>
                         {/each}
                         {#if result}
@@ -866,15 +866,15 @@
                             data-slot="tool-group-field"
                             class="flex flex-col gap-space-1 min-w-0"
                           >
-                            <span class="text-base font-medium text-ink-muted"
+                            <span class="text-base font-medium text-tx-2"
                               >result</span
                             >
                             <pre
-                              class="max-h-75 overflow-auto type-code liga-none text-ink-strong whitespace-pre-wrap break-word">{result.text}</pre>
+                              class="max-h-75 overflow-auto type-code liga-none text-tx whitespace-pre-wrap break-word">{result.text}</pre>
                             {#if result.more}
                               <span
                                 data-slot="more"
-                                class="text-sm font-normal text-ink-muted"
+                                class="text-sm font-normal text-tx-2"
                                 >… {result.more.toLocaleString()} more chars</span
                               >
                             {/if}
@@ -889,7 +889,7 @@
           {:else}
             <div
               data-slot="trow"
-              class="rail-line w-full min-h-6.5 coarse:min-h-control-lg text-base font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
+              class="rail-line w-full min-h-6.5 coarse:min-h-control-lg text-base font-medium text-tx bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
             >
               {@render line()}
             </div>

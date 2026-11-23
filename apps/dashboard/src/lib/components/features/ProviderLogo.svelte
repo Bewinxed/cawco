@@ -58,7 +58,7 @@
    * (GitHub on the clone controls, OpenAI on the Codex tab). A caller never
    * tints a mark: it may only place it. Multi-colour marks keep their brand
    * colours. A mark drawn in one ink (see `INK`) ships as fixed black, which
-   * vanishes on the dark theme, so it is filled with `--color-ink-strong` instead and
+   * vanishes on the dark theme, so it is filled with `--color-tx` instead and
    * follows the theme. A model nobody here has a logo for renders nothing, and
    * the caller keeps whatever it had been showing instead.
    */
@@ -126,6 +126,6 @@
     aria-hidden="true"
     data-slot="provider-logo"
     data-ink={INK.has(key) || undefined}
-    class={INK.has(key) ? cn("text-ink-strong", classes) : classes}
+    class={INK.has(key) ? cn("text-tx", classes) : classes}
   />
 {/if}

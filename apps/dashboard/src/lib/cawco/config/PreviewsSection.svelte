@@ -86,19 +86,13 @@
   {section}
 >
   <div data-slot="group" class="flex flex-col gap-space-2">
-    <p
-      data-slot="note"
-      class="type-meta max-w-measure text-pretty text-ink-muted"
-    >
+    <p data-slot="note" class="type-meta max-w-measure text-pretty text-tx-2">
       A previewed app runs on an origin of its own, so it never shares the
       dashboard's storage or sign-ins. Every open preview moves to the new
       address once this is saved.
     </p>
-    <p
-      data-slot="note"
-      class="type-meta max-w-measure text-pretty text-ink-muted"
-    >
-      On a computer running CawCo, open <code class="type-code text-ink-strong"
+    <p data-slot="note" class="type-meta max-w-measure text-pretty text-tx-2">
+      On a computer running CawCo, open <code class="type-code text-tx"
         >http://localhost:3455</code
       >; previews there run in their own process on Chrome, Edge and Brave.
     </p>
@@ -150,34 +144,34 @@
         <!-- Where the browser's one pass to every preview is kept, once host mode stands. -->
         <p
           data-slot="note"
-          class="type-meta max-w-measure text-pretty text-ink-muted wrap-anywhere"
+          class="type-meta max-w-measure text-pretty text-tx-2 wrap-anywhere"
         >
           Each browser keeps one pass to every preview, a cookie on <code
-            class="type-code text-ink-strong">{settings.passDomain}</code
+            class="type-code text-tx">{settings.passDomain}</code
           > and every name under it.
         </p>
       {/if}
       <!-- What the names need before Save, where the operator sets them. -->
       <div class="flex flex-col gap-space-2">
-        <p class="type-label text-ink-strong">Before you save</p>
+        <p class="type-label text-tx">Before you save</p>
         <p
           data-slot="note"
-          class="type-meta max-w-measure text-pretty text-ink-muted"
+          class="type-meta max-w-measure text-pretty text-tx-2"
         >
           Every name the pattern makes has to reach the hub's port {firstPort}.
           Behind Cloudflare, with the dashboard on a tunnel already:
         </p>
         <ol
           data-slot="note"
-          class="type-meta flex max-w-measure flex-col gap-space-1 ps-space-4 text-ink-muted list-decimal"
+          class="type-meta flex max-w-measure flex-col gap-space-1 ps-space-4 text-tx-2 list-decimal"
         >
           {#if byPort}
             <li>
               In DNS, add a proxied CNAME record for each port of the range,
-              <code class="type-code text-ink-strong">p-{firstPort}</code>
-              to <code class="type-code text-ink-strong">p-{lastPort}</code>,
-              whose target is your tunnel,
-              <code class="type-code text-ink-strong"
+              <code class="type-code text-tx">p-{firstPort}</code>
+              to <code class="type-code text-tx">p-{lastPort}</code>, whose
+              target is your tunnel,
+              <code class="type-code text-tx"
                 >&lt;tunnel-id&gt;.cfargotunnel.com</code
               >. No wildcard is needed, so one you already use elsewhere stays
               as it is.
@@ -185,13 +179,12 @@
             <li>
               In Networking › Tunnels › your tunnel › Routes, add a published
               application for each of those names, service
-              <code class="type-code text-ink-strong"
-                >http://localhost:{firstPort}</code
+              <code class="type-code text-tx">http://localhost:{firstPort}</code
               >
               on the hub's machine.
             </li>
             <li>
-              Set the pattern to <code class="type-code text-ink-strong"
+              Set the pattern to <code class="type-code text-tx"
                 >https://p-{"{port}"}.example.com</code
               >
               and save.
@@ -199,39 +192,36 @@
           {:else}
             <li>
               In DNS, add a proxied CNAME record named <code
-                class="type-code text-ink-strong">*</code
+                class="type-code text-tx">*</code
               >
               whose target is your tunnel,
-              <code class="type-code text-ink-strong"
+              <code class="type-code text-tx"
                 >&lt;tunnel-id&gt;.cfargotunnel.com</code
               >. Records you already have keep their own targets.
             </li>
             <li>
               In Networking › Tunnels › your tunnel › Routes, add a published
-              application: hostname <code class="type-code text-ink-strong"
+              application: hostname <code class="type-code text-tx"
                 >*.example.com</code
               >, service
-              <code class="type-code text-ink-strong"
-                >http://localhost:{firstPort}</code
+              <code class="type-code text-tx">http://localhost:{firstPort}</code
               >
               on the hub's machine.
             </li>
             <li>
               Set the pattern to
-              <code class="type-code text-ink-strong"
+              <code class="type-code text-tx"
                 >https://p-{"{session}"}.example.com</code
               >
               and save. Keep {"{session}"} in the first label: Cloudflare's free certificate
               covers one level of subdomain, not
-              <code class="type-code text-ink-strong"
-                >*.previews.example.com</code
-              >.
+              <code class="type-code text-tx">*.previews.example.com</code>.
             </li>
           {/if}
         </ol>
         <p
           data-slot="note"
-          class="type-meta max-w-measure text-pretty text-ink-muted"
+          class="type-meta max-w-measure text-pretty text-tx-2"
         >
           Leave these names out of Cloudflare Access, or any sign-in in front of
           them. The hub locks them itself: a name opens only for the dashboard
@@ -240,7 +230,7 @@
         </p>
         <p
           data-slot="note"
-          class="type-meta max-w-measure text-pretty text-ink-muted"
+          class="type-meta max-w-measure text-pretty text-tx-2"
         >
           Without Cloudflare: point the pattern's names ({byPort
             ? "one per port"

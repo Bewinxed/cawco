@@ -114,11 +114,11 @@ const LAYERS = `
   z-index: -1;
   opacity: 0;
   will-change: opacity;
-  background-color: var(--color-accent-wash);
+  background-color: var(--color-ui);
 }
 [data-slot="highlight-ghost"] {
   display: none;
-  background-color: var(--ghost, var(--color-surface-hover));
+  background-color: var(--ghost, var(--color-ui));
   transition: opacity var(--duration-fast) var(--ease-out);
 }
 @media (hover: hover) {

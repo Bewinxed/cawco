@@ -40,7 +40,7 @@
 
 <main
   data-slot="pairing"
-  class="flex min-h-dvh flex-col items-center justify-center gap-space-4 bg-surface-page px-space-4 py-space-8"
+  class="flex min-h-dvh flex-col items-center justify-center gap-space-4 bg-bg px-space-4 py-space-8"
 >
   <div
     data-slot="caw-80"
@@ -60,27 +60,25 @@
         {#if stage.kind === "waiting"}
           <h1
             data-slot="title"
-            class="m-0 type-title text-center text-balance text-ink-strong"
+            class="m-0 type-title text-center text-balance text-tx"
           >
             Pair this browser
           </h1>
-          <p
-            class="m-0 max-w-104 type-body text-center text-pretty text-ink-muted"
-          >
+          <p class="m-0 max-w-104 type-body text-center text-pretty text-tx-2">
             This hub requires paired devices. Approve this code on a paired
             device, in Needs you or Configure › Devices.
           </p>
           <p
             data-num
             data-slot="code"
-            class="num m-0 rounded-sm bg-surface-recess px-space-4 py-space-3 type-kpi font-(family-name:--font-mono) text-ink-strong select-all"
+            class="num m-0 rounded-sm bg-bg-2 px-space-4 py-space-3 type-kpi font-(family-name:--font-mono) text-tx select-all"
           >
             <span class="sr-only">Pairing code </span>{stage.userCode}
           </p>
           <p
             data-num
             data-slot="meta"
-            class="num mark-line m-0 flex items-start justify-center gap-space-2 type-meta text-center text-pretty text-ink-muted"
+            class="num mark-line m-0 flex items-start justify-center gap-space-2 type-meta text-center text-pretty text-tx-2"
           >
             <span class="mark-cell"><LiveDot /></span><span
               >Waiting for approval… The code expires {left < 60_000
@@ -91,13 +89,11 @@
         {:else if stage.kind === "denied"}
           <h1
             data-slot="title"
-            class="m-0 type-title text-center text-balance text-ink-strong"
+            class="m-0 type-title text-center text-balance text-tx"
           >
             Pairing was denied
           </h1>
-          <p
-            class="m-0 max-w-104 type-body text-center text-pretty text-ink-muted"
-          >
+          <p class="m-0 max-w-104 type-body text-center text-pretty text-tx-2">
             A paired device denied this browser. If that was a mistake, start
             again and approve the new code.
           </p>
@@ -105,20 +101,18 @@
         {:else if stage.kind === "expired"}
           <h1
             data-slot="title"
-            class="m-0 type-title text-center text-balance text-ink-strong"
+            class="m-0 type-title text-center text-balance text-tx"
           >
             The code expired
           </h1>
-          <p
-            class="m-0 max-w-104 type-body text-center text-pretty text-ink-muted"
-          >
+          <p class="m-0 max-w-104 type-body text-center text-pretty text-tx-2">
             Nobody approved it within 10 minutes. Start again for a new code.
           </p>
           <Button onclick={startPairing}>Start pairing</Button>
         {:else if stage.kind === "failed"}
           <h1
             data-slot="title"
-            class="m-0 type-title text-center text-balance text-ink-strong"
+            class="m-0 type-title text-center text-balance text-tx"
           >
             Pairing didn't start
           </h1>
@@ -130,13 +124,13 @@
         {:else}
           <h1
             data-slot="title"
-            class="m-0 type-title text-center text-balance text-ink-strong"
+            class="m-0 type-title text-center text-balance text-tx"
           >
             Pair this browser
           </h1>
           <p
             aria-live="polite"
-            class="mark-line m-0 flex max-w-104 items-start justify-center gap-space-2 type-body text-center text-pretty text-ink-muted"
+            class="mark-line m-0 flex max-w-104 items-start justify-center gap-space-2 type-body text-center text-pretty text-tx-2"
           >
             <span class="mark-cell"><LiveDot /></span><span
               >Asking the hub for a code…</span

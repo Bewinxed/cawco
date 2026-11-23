@@ -158,7 +158,7 @@
 </script>
 
 <figure
-  class="group flex flex-col min-w-0 m-0 border border-border-control rounded-sm bg-surface-sunk overflow-hidden"
+  class="group flex flex-col min-w-0 m-0 border border-ui-2 rounded-sm bg-bg-2 overflow-hidden"
   data-kind={kind}
   data-compact={compact || undefined}
 >
@@ -166,7 +166,7 @@
     <figcaption
       data-slot="row"
       data-with-body={kind !== "file" || undefined}
-      class="flex items-center gap-space-2 min-h-control-sm ps-space-3 pe-space-1 text-ink-muted data-with-body:border-b data-with-body:border-b-border-control mark-line"
+      class="flex items-center gap-space-2 min-h-control-sm ps-space-3 pe-space-1 text-tx-2 data-with-body:border-b data-with-body:border-b-ui-2 mark-line"
     >
       <IconDocument class="flex-none size-icon-md" />
       <bdi
@@ -176,7 +176,7 @@
       >
       {#if kind === "file"}
         <a
-          class="inline-flex flex-none items-center gap-space-1 h-space-6 px-space-2 rounded-sm type-label text-ink-strong no-underline hover:bg-surface-hover mark-line press-tint focus-inset"
+          class="inline-flex flex-none items-center gap-space-1 h-space-6 px-space-2 rounded-sm type-label text-tx no-underline hover:bg-ui mark-line press-tint focus-inset"
           data-box
           {href}
           rel="noopener"
@@ -196,7 +196,7 @@
       class="p-space-3 not-data-roomy:group-data-compact:p-space-2 data-roomy:px-space-4 data-roomy:pb-space-4"
     >
       {#if problem || postProblem}
-        <p class="m-0 type-meta text-status-fail">
+        <p class="m-0 type-meta text-red">
           {problem ?? postProblem}
         </p>
       {:else if read && content === null}
@@ -218,7 +218,7 @@
         <div
           data-slot="markdown"
           in:reveal
-          style:--markdown-fade={"linear-gradient(to bottom, var(--color-ink-strong) calc(100% - var(--spacing-space-6)), transparent)"}
+          style:--markdown-fade={"linear-gradient(to bottom, var(--color-tx) calc(100% - var(--spacing-space-6)), transparent)"}
           class="group-data-compact:max-h-24 group-data-compact:overflow-hidden group-data-compact:mask-(--markdown-fade)"
         >
           <MessageBody source={content} />

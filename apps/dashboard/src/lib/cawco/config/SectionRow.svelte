@@ -92,13 +92,13 @@
 >
   <div
     data-slot="row"
-    class="group/row relative row-cells min-h-control-lg gap-y-space-1 rounded-sm py-space-2 transition-control data-two:min-h-14 has-link-active:bg-surface-hover light:has-link-active:bg-surface-pressed light:has-link-active:inks-strong"
+    class="group/row relative row-cells min-h-control-lg gap-y-space-1 rounded-sm py-space-2 transition-control data-two:min-h-14 has-link-active:bg-ui light:has-link-active:bg-ui-2 light:has-link-active:inks-strong"
     data-off={enabled === false || undefined}
     data-two={meta !== undefined || undefined}
   >
     <span
       data-slot="tile"
-      class="col-start-2 inline-flex size-row-compact flex-none items-center justify-center rounded-sm bg-surface-raised text-ink-muted shadow-sm [&>*]:size-icon-md [&>*]:flex-none @max-xs/rows:row-span-2 @max-xs/rows:self-center"
+      class="col-start-2 inline-flex size-row-compact flex-none items-center justify-center rounded-sm bg-bg text-tx-2 shadow-sm [&>*]:size-icon-md [&>*]:flex-none @max-xs/rows:row-span-2 @max-xs/rows:self-center"
       data-share={href ? `icon:${href}` : undefined}
       style:color={hue}
       {@attach land(() => {
@@ -125,7 +125,7 @@
       >
         {#if href}
           <a
-            class="truncate text-inherit no-underline outline-off in-data-mono:type-code after:absolute after:inset-0 after:rounded-inherit focus-visible:after:outline-solid focus-visible:after:outline-2 focus-visible:after:outline-accent-ink focus-visible:after:-outline-offset-2"
+            class="truncate text-inherit no-underline outline-off in-data-mono:type-code after:absolute after:inset-0 after:rounded-inherit focus-visible:after:outline-solid focus-visible:after:outline-2 focus-visible:after:outline-accent focus-visible:after:-outline-offset-2"
             data-link
             data-share="title:{href}"
             {href}
@@ -197,7 +197,7 @@
       {#if note}
         <p
           data-slot="note"
-          class="mark-line flex items-start gap-space-2 type-meta wrap-anywhere text-ink-muted tone-fail:text-status-fail"
+          class="mark-line flex items-start gap-space-2 type-meta wrap-anywhere text-tx-2 tone-fail:text-red"
           data-flip
           data-tone={note.tone}
           role={note.tone === "fail" ? "alert" : "status"}

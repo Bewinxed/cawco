@@ -249,10 +249,7 @@
 
 {#snippet conversation()}
   <!-- The pane: its turns under the floating bar, then the composer docked over its foot. -->
-  <div
-    class="relative flex min-h-0 flex-auto flex-col bg-surface-raised"
-    data-slot="pane"
-  >
+  <div class="relative flex min-h-0 flex-auto flex-col bg-bg" data-slot="pane">
     <div
       class={[
         "min-h-0 flex-auto overflow-hidden px-space-6 max-desk:px-space-4",
@@ -322,7 +319,7 @@
 {#if caw}
   <!-- A project's page with Caw's panel docked beside it, a conversation's width. -->
   <div
-    class="flex h-(--fixture-h) overflow-clip bg-surface-sunk text-ink-strong"
+    class="flex h-(--fixture-h) overflow-clip bg-bg-2 text-tx"
     data-slot="caw-fixture"
     style:--fixture-h="{height}px"
   >
@@ -330,17 +327,17 @@
       class="flex min-w-0 flex-auto flex-col gap-space-4 p-space-6 max-desk:hidden"
     >
       <h1 class="type-title m-0">Cawco-Dev</h1>
-      <p class="type-body m-0 text-ink-muted">
+      <p class="type-body m-0 text-tx-2">
         31 tasks · 4 in review · 2 sessions working
       </p>
     </div>
     <div
-      class="relative m-space-2 flex w-95 flex-none flex-col overflow-clip rounded-lg bg-surface-raised shadow-sm max-desk:m-0 max-desk:w-full max-desk:rounded-none"
+      class="relative m-space-2 flex w-95 flex-none flex-col overflow-clip rounded-lg bg-bg shadow-sm max-desk:m-0 max-desk:w-full max-desk:rounded-none"
       data-caw-panel
       style:--bar-room="var(--spacing-control-lg)"
     >
       <div class="absolute inset-x-0 top-0 z-2">
-        <BarFloat tint="bg-surface-raised">
+        <BarFloat tint="bg-bg">
           {#snippet trailing()}
             <BarGlass form="group">
               <BarItem
@@ -374,7 +371,7 @@
   </div>
 {:else}
   <div
-    class="relative isolate flex h-(--fixture-h) flex-col overflow-clip bg-surface-sunk text-ink-strong"
+    class="relative isolate flex h-(--fixture-h) flex-col overflow-clip bg-bg-2 text-tx"
     data-slot="session-fixture"
     style:--fixture-h="{height}px"
   >
@@ -391,7 +388,7 @@
                 {#if live.length > 0}
                   <IconNeedsYou
                     aria-hidden="true"
-                    class="size-icon-md text-status-attn"
+                    class="size-icon-md text-orange"
                   />
                 {/if}
               {/snippet}
@@ -403,10 +400,7 @@
         <BarGlass form="group">
           <BarItem count={100} icon={IconFilesLinear} label="Files, 100" />
           <BarItem label="Jump to session">
-            <IconSearch
-              aria-hidden="true"
-              class="size-icon-md text-ink-muted"
-            />
+            <IconSearch aria-hidden="true" class="size-icon-md text-tx-2" />
           </BarItem>
           <BarItem count={4} icon={IconServerLinear} label="4 machines" />
         </BarGlass>

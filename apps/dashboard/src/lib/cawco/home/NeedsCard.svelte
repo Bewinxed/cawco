@@ -691,9 +691,7 @@
 </script>
 
 {#snippet dot()}
-  <span data-slot="dot" aria-hidden="true" class="flex-none text-ink-muted"
-    >·</span
-  >
+  <span data-slot="dot" aria-hidden="true" class="flex-none text-tx-2">·</span>
 {/snippet}
 
 <!-- A meta line's project: its folder in the project's hue, its name a
@@ -710,7 +708,7 @@
       class="size-icon-md flex-none"
       style="color: var(--color-mark-{project.hue})"
     />
-    <span data-slot="project-name" class="type-label text-ink-strong"
+    <span data-slot="project-name" class="type-label text-tx"
       >{project.name}</span
     >
   </span>
@@ -792,10 +790,7 @@
         />
       {:else if item.kind === "desk"}
         {#if item.done}
-          <IconSuccess
-            aria-hidden="true"
-            class="size-icon-md text-status-done"
-          />
+          <IconSuccess aria-hidden="true" class="size-icon-md text-green" />
         {:else if onPhone()}
           <!-- The device asked about: this phone, or this computer. -->
           <IconPhone aria-hidden="true" class="size-icon-md" />
@@ -804,10 +799,7 @@
         {/if}
       {:else if item.kind === "tailnet"}
         {#if item.done}
-          <IconSuccess
-            aria-hidden="true"
-            class="size-icon-md text-status-done"
-          />
+          <IconSuccess aria-hidden="true" class="size-icon-md text-green" />
         {:else}
           <IconTailnetHttps aria-hidden="true" class="size-icon-md" />
         {/if}
@@ -869,7 +861,7 @@
                 data-needs-card-peek
                 {...tip}
                 aria-label="Peek {item.title}"
-                class="select-none touch-hit pointer-hit focus-inset grid size-space-6 place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press) coarse:after:start-(--peek-hit-start) coarse:after:end-(--peek-hit-end)"
+                class="select-none touch-hit pointer-hit focus-inset grid size-space-6 place-items-center rounded-xs border-none border-current bg-transparent p-0 text-tx-2 transition-tint-press hover:bg-ui hover:text-tx motion-safe:active:transform-(--peek-press) coarse:after:start-(--peek-hit-start) coarse:after:end-(--peek-hit-end)"
                 onclick={peekAsk}
                 {onkeydown}
                 style:--peek-hit-end={"calc((var(--spacing-space-6) - var(--spacing-control-lg)) / 2 + var(--peek-ink))"}
@@ -899,7 +891,7 @@
                 data-needs-card-not-now
                 {...tip}
                 aria-label={artifactWords.notNowNamed(item.title)}
-                class="select-none touch-hit pointer-hit focus-inset grid size-space-6 place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--x-press) coarse:after:start-(--x-hit-start) coarse:after:end-(--x-hit-end)"
+                class="select-none touch-hit pointer-hit focus-inset grid size-space-6 place-items-center rounded-xs border-none border-current bg-transparent p-0 text-tx-2 transition-tint-press hover:bg-ui hover:text-tx motion-safe:active:transform-(--x-press) coarse:after:start-(--x-hit-start) coarse:after:end-(--x-hit-end)"
                 onclick={notNow}
                 style:--x-hit-end={"calc((var(--spacing-space-6) - var(--spacing-control-lg)) / 2 + var(--peek-ink))"}
                 style:--x-hit-start={"calc((var(--spacing-space-6) - var(--spacing-control-lg)) / 2 - var(--peek-ink))"}
@@ -921,7 +913,7 @@
            an ellipsis. -->
         <code
           data-slot="needs-command"
-          class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-1 mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-sm text-ellipsis whitespace-pre text-ink-muted"
+          class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-1 mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-ui ps-space-2 font-mono text-sm text-ellipsis whitespace-pre text-tx-2"
           >{item.request.presentation.command.trim().split("\n")[0]}</code
         >
       {/if}
@@ -931,7 +923,7 @@
            domain is at its end), broken only after its dots. -->
         <code
           data-slot="needs-origin"
-          class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-1 mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-sm wrap-break-word whitespace-normal text-ink-muted"
+          class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-1 mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-ui ps-space-2 font-mono text-sm wrap-break-word whitespace-normal text-tx-2"
           ><OriginText origin={item.request.browserAsk.origin} /></code
         >
       {/if}
@@ -948,7 +940,7 @@
           data-where
           data-slot="meta"
           class={[
-            "mark-line pointer-events-none relative col-start-2 col-end-4 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted",
+            "mark-line pointer-events-none relative col-start-2 col-end-4 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-tx-2",
             lined ? "row-4" : "row-3",
           ]}
         >
@@ -967,7 +959,7 @@
           data-where
           data-slot="meta"
           class={[
-            "mark-line pointer-events-none relative col-start-2 row-3 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted",
+            "mark-line pointer-events-none relative col-start-2 row-3 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-tx-2",
             sends ? "col-end-3" : "col-end-4",
           ]}
         >
@@ -1047,14 +1039,14 @@
           class="pointer-events-none relative col-start-2 col-end-4 row-3 mx-0 mt-space-2 mb-0 grid grid-cols-(--call-cols) gap-x-space-3 type-meta"
           style:--call-cols="auto minmax(0, 1fr)"
         >
-          <dt class="text-ink-muted">Runs</dt>
-          <dd class="m-0 wrap-anywhere text-ink-strong">{call.when}</dd>
-          <dt class="text-ink-muted">Through</dt>
-          <dd class="m-0 wrap-anywhere text-ink-strong">{call.through}</dd>
-          <dt class="text-ink-muted">Tool</dt>
+          <dt class="text-tx-2">Runs</dt>
+          <dd class="m-0 wrap-anywhere text-tx">{call.when}</dd>
+          <dt class="text-tx-2">Through</dt>
+          <dd class="m-0 wrap-anywhere text-tx">{call.through}</dd>
+          <dt class="text-tx-2">Tool</dt>
           <dd
             data-slot="tool"
-            class="m-0 font-(family-name:--font-mono) wrap-anywhere text-ink-strong"
+            class="m-0 font-(family-name:--font-mono) wrap-anywhere text-tx"
           >
             {call.tool}
           </dd>
@@ -1065,11 +1057,11 @@
            pointer and the keyboard can scroll, over the row's cover. -->
         <pre
           data-slot="args"
-          class="focus-inset relative col-start-2 col-end-4 row-4 mx-0 my-space-2 max-h-48 overflow-auto overscroll-contain rounded-xs border border-border-control bg-surface-sunk px-space-3 py-space-2 type-code whitespace-pre text-ink-strong">{call.args}</pre>
+          class="focus-inset relative col-start-2 col-end-4 row-4 mx-0 my-space-2 max-h-48 overflow-auto overscroll-contain rounded-xs border border-ui-2 bg-bg-2 px-space-3 py-space-2 type-code whitespace-pre text-tx">{call.args}</pre>
         <span
           data-where
           data-slot="meta"
-          class="mark-line pointer-events-none relative col-start-2 col-end-4 row-5 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+          class="mark-line pointer-events-none relative col-start-2 col-end-4 row-5 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-tx-2"
         >
           {#if item.project}
             {@render projectMark(item.project)}
@@ -1085,7 +1077,7 @@
            stands; its steps follow. -->
         <span
           data-slot="meta"
-          class="pointer-events-none relative col-start-2 col-end-4 row-3 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+          class="pointer-events-none relative col-start-2 col-end-4 row-3 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-tx-2"
           >{meta}</span
         >
         {#if todos.length > 0}
@@ -1110,7 +1102,7 @@
                 {#if !one.done}
                   <span
                     data-slot="step-note"
-                    class="col-start-2 min-w-0 type-meta wrap-anywhere text-ink-muted"
+                    class="col-start-2 min-w-0 type-meta wrap-anywhere text-tx-2"
                     >{one.note}</span
                   >
                   {#if one.command}
@@ -1151,7 +1143,7 @@
         <span
           data-where
           data-slot="meta"
-          class="mark-line pointer-events-none relative col-start-2 col-end-4 row-3 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+          class="mark-line pointer-events-none relative col-start-2 col-end-4 row-3 flex min-w-0 items-center gap-space-1 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-tx-2"
         >
           {#if item.project}
             {@render projectMark(item.project)}
@@ -1174,7 +1166,7 @@
         >
           <span
             data-slot="meta"
-            class="pointer-events-none me-auto min-w-0 flex-none overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+            class="pointer-events-none me-auto min-w-0 flex-none overflow-hidden type-meta text-ellipsis whitespace-nowrap text-tx-2"
             >{meta}</span
           >
           {#if person.refusal}
@@ -1182,7 +1174,7 @@
                to turn it on are the whole point of it. -->
             <p
               data-slot="desk-refusal"
-              class="type-meta m-0 w-full text-pretty wrap-anywhere text-status-fail"
+              class="type-meta m-0 w-full text-pretty wrap-anywhere text-red"
               role="alert"
             >
               {person.refusal.title}. {person.refusal.message}

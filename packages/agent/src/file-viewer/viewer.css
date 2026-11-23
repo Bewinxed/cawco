@@ -13,8 +13,8 @@ body {
   min-block-size: 100dvh;
   display: flex;
   flex-direction: column;
-  background: var(--color-surface-recess);
-  color: var(--color-ink-strong);
+  background: var(--color-bg-2);
+  color: var(--color-tx);
   font: var(--font-weight-normal) var(--text-base) / var(--leading-base)
     var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -28,22 +28,22 @@ body {
   column-gap: var(--spacing-space-3);
   row-gap: var(--spacing-space-1);
   padding: var(--spacing-space-3) var(--spacing-space-4);
-  background: var(--color-surface-page);
-  border-block-end: 1px solid var(--color-border-hairline);
+  background: var(--color-bg);
+  border-block-end: 1px solid var(--color-ui);
 }
 .file-name {
   margin: 0;
   min-inline-size: 0;
   font: var(--font-weight-medium) var(--text-lg) / var(--leading-lg)
     var(--font-sans);
-  color: var(--color-ink-strong);
+  color: var(--color-tx);
   overflow-wrap: anywhere;
 }
 .file-meta {
   margin: 0;
   font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm)
     var(--font-sans);
-  color: var(--color-ink-muted);
+  color: var(--color-tx-2);
   font-variant-numeric: tabular-nums;
 }
 .file-meta span + span::before {
@@ -54,14 +54,14 @@ body {
   margin-inline-start: auto;
   font: var(--font-weight-medium) var(--text-base) / var(--leading-base)
     var(--font-sans);
-  color: var(--color-accent-ink);
+  color: var(--color-accent);
   text-underline-offset: 0.2em;
 }
 .file-download:hover {
-  color: var(--color-accent-ink);
+  color: var(--color-accent);
 }
 .file-download:focus-visible {
-  outline: 1px solid var(--color-accent-ink);
+  outline: 1px solid var(--color-accent);
   outline-offset: var(--spacing-space-1);
   border-radius: var(--radius-xs);
 }
@@ -75,7 +75,7 @@ body {
   max-inline-size: var(--spacing-measure);
   font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm)
     var(--font-sans);
-  color: var(--color-ink-muted);
+  color: var(--color-tx-2);
   text-align: center;
 }
 
@@ -97,7 +97,7 @@ body {
   position: relative;
   inline-size: 100%;
   overflow: clip;
-  background: var(--color-surface-raised);
+  background: var(--color-bg);
   box-shadow: var(--shadow-sm);
 }
 .page-canvas {
@@ -126,14 +126,14 @@ body {
   );
   margin-inline: auto;
   padding-block: var(--spacing-space-3);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-control);
+  background: var(--color-bg);
+  border: 1px solid var(--color-ui-2);
   border-radius: var(--radius-sm);
 }
 .lines {
   font: var(--font-weight-normal) var(--text-sm) / var(--leading-base)
     var(--font-mono);
-  color: var(--color-ink-strong);
+  color: var(--color-tx);
 }
 .line {
   display: grid;
@@ -147,12 +147,12 @@ body {
 .line::before {
   content: attr(data-line);
   text-align: end;
-  color: var(--color-ink-subtle);
+  color: var(--color-tx-2);
   font-variant-numeric: tabular-nums;
   user-select: none;
 }
 .line:target {
-  background: var(--color-accent-wash);
+  background: var(--color-ui);
 }
 
 /* A file with no viewer: what it is, and its download. */
@@ -165,8 +165,8 @@ body {
   gap: var(--spacing-space-2);
   max-inline-size: 60ch;
   padding: var(--spacing-space-4);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-control);
+  background: var(--color-bg);
+  border: 1px solid var(--color-ui-2);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
 }
@@ -174,7 +174,7 @@ body {
   margin: 0;
   font: var(--font-weight-medium) var(--text-sm) / var(--leading-sm)
     var(--font-sans);
-  color: var(--color-ink-muted);
+  color: var(--color-tx-2);
 }
 .file-card .file-name {
   font: var(--font-weight-medium) var(--text-lg) / var(--leading-lg)
@@ -182,7 +182,7 @@ body {
 }
 .file-line {
   margin: 0;
-  color: var(--color-ink-muted);
+  color: var(--color-tx-2);
   text-wrap: pretty;
 }
 .file-card .file-download {

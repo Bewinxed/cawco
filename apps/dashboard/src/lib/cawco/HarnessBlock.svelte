@@ -116,12 +116,12 @@
          said again. -->
     <p
       data-slot="progress"
-      class="mark-line flex min-w-0 items-center gap-space-2 type-meta text-ink-strong"
+      class="mark-line flex min-w-0 items-center gap-space-2 type-meta text-tx"
       role="status"
     >
       <span class="mark-cell grid w-icon-md place-items-center"
         >{#if paused && !running}<IconNotYet
-            class="size-icon-md text-ink-muted"
+            class="size-icon-md text-tx-2"
           />{:else}<Spinner />{/if}</span
       ><span class="min-w-0"
         >{#if paused && !running}{toolUpdateWords.autoPaused(
@@ -140,12 +140,12 @@
   {:else}
     <p
       data-slot="why"
-      class="mark-line type-meta flex items-start gap-space-2 text-ink-strong wrap-anywhere"
+      class="mark-line type-meta flex items-start gap-space-2 text-tx wrap-anywhere"
     >
       <span class="mark-cell"
         ><IconWarningTriangle
           aria-hidden="true"
-          class="size-icon-md flex-none text-status-attn"
+          class="size-icon-md flex-none text-orange"
         /></span
       >
       <span class="min-w-0">{block.why}</span>
@@ -172,7 +172,7 @@
   {#if refused}
     <p
       data-slot="error"
-      class="type-meta text-status-fail whitespace-pre-line wrap-anywhere"
+      class="type-meta text-red whitespace-pre-line wrap-anywhere"
       role="alert"
       in:appear
     >
@@ -181,7 +181,7 @@
   {:else if block.fix.phase === "failed"}
     <p
       data-slot="error"
-      class="type-meta text-status-fail whitespace-pre-line wrap-anywhere"
+      class="type-meta text-red whitespace-pre-line wrap-anywhere"
       role="alert"
       in:appear
     >

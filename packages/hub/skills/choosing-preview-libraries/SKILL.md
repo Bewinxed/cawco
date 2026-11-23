@@ -31,6 +31,6 @@ Words and Highlights hand back bytes that the next call overwrites: decode each 
 2. Link the sheet from the page: `<link rel="stylesheet" href="./house.css">`. It declares CawCo's tokens (`--color-*`, `--font-*`, `--radius-*`, `--text-*`) for both schemes, the code colours Highlights' house theme reads, and Pele's look on every drawing it makes.
 3. Highlight code with the house theme: `import theme from "./code-theme.json"`, passed as `theme`.
 4. Give Pele the page's face: `fontFamily: getComputedStyle(element).fontFamily`, so its labels measure in the font they draw in.
-5. Style prose and slides with the tokens, as `color: var(--color-ink-strong)` and `font-family: var(--font-sans)`.
+5. Style prose and slides with the tokens, as `color: var(--color-tx)` and `font-family: var(--font-sans)`.
 
 Done when every package the page imports is named in its `package.json`, and the create answers no `errors`.

@@ -61,7 +61,7 @@
 
 <div
   data-slot="group"
-  class="@container/tools flex flex-col gap-space-3 border-t border-border-hairline pt-space-4 first:border-t-0 first:pt-0"
+  class="@container/tools flex flex-col gap-space-3 border-t border-ui pt-space-4 first:border-t-0 first:pt-0"
 >
   <SectionHeader {hue} {icon} label={heading} level={2}>
     {#snippet right()}
@@ -84,7 +84,7 @@
     </div>
 
     <div class="flex min-w-0 flex-col gap-space-1">
-      <h3 class="m-0 type-label text-ink-muted" id="{id}-agents">
+      <h3 class="m-0 type-label text-tx-2" id="{id}-agents">
         {words.onEachAgent}
       </h3>
       <ul
@@ -93,21 +93,19 @@
       >
         {#each shown as line (line.harness)}
           <li
-            class="flex min-h-14 items-center gap-x-space-3 border-b border-border-hairline py-space-1 last:border-b-0"
+            class="flex min-h-14 items-center gap-x-space-3 border-b border-ui py-space-1 last:border-b-0"
             data-state={line.state}
           >
             <span
-              class="grid w-row-compact flex-none place-items-center text-ink-muted"
+              class="grid w-row-compact flex-none place-items-center text-tx-2"
             >
               <HarnessLogo harness={line.harness} />
             </span>
             <span class="flex min-w-0 flex-auto flex-col">
-              <span class="truncate type-label text-ink-strong"
+              <span class="truncate type-label text-tx"
                 >{harnessName(line.harness)}</span
               >
-              <span class="type-meta text-pretty text-ink-muted"
-                >{line.tools}</span
-              >
+              <span class="type-meta text-pretty text-tx-2">{line.tools}</span>
             </span>
             <Tip label={words.states[line.state]} tap>
               {#snippet children(tip)}
@@ -118,13 +116,11 @@
                   role="img"
                 >
                   {#if line.state === "allowed"}
-                    <IconTick class="size-icon-md text-status-done" data-box />
+                    <IconTick class="size-icon-md text-green" data-box />
                   {:else if line.state === "denied"}
-                    <IconMinus class="size-icon-md text-ink-subtle" data-box />
+                    <IconMinus class="size-icon-md text-tx-2" data-box />
                   {:else}
-                    <span class="type-meta text-ink-subtle"
-                      >{words.states.none}</span
-                    >
+                    <span class="type-meta text-tx-2">{words.states.none}</span>
                   {/if}
                 </span>
               {/snippet}

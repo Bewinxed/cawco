@@ -167,13 +167,13 @@
        floats over the parts, which run to the card's top beneath it and
        blur and fade under it as they scroll (HeadFade), clearing it at
        rest by the body's top padding. -->
-  <HeadFade band="var(--spacing-control-lg)" tint="bg-surface-raised" />
+  <HeadFade band="var(--spacing-control-lg)" tint="bg-bg" />
   <header
     data-slot="plan-head"
     class="absolute inset-x-0 top-0 z-2 flex h-control-lg items-center gap-space-2 pe-space-2 ps-space-4"
   >
     <h2
-      class="flex-auto min-w-0 m-0 truncate text-base font-medium text-ink-strong"
+      class="flex-auto min-w-0 m-0 truncate text-base font-medium text-tx"
       id={titleId}
     >
       {cardTitle}
@@ -191,17 +191,14 @@
     style:--more-px="0"
   >
     {#if todosOnly && plan?.taskId}
-      <p
-        data-slot="plan-task"
-        class="m-0 min-w-0 truncate type-code text-ink-subtle"
-      >
+      <p data-slot="plan-task" class="m-0 min-w-0 truncate type-code text-tx-2">
         {plan.taskId}
       </p>
     {/if}
     {#if steps.length > 0}
       {#if stepsHeaded}
         <h3
-          class="m-0 type-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline"
+          class="m-0 type-body font-medium text-tx not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-ui"
         >
           {planWords.steps}
         </h3>
@@ -212,10 +209,10 @@
     {#if showsTodos && plan?.taskId}
       {#if !todosOnly}
         <h3
-          class="m-0 type-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline"
+          class="m-0 type-body font-medium text-tx not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-ui"
         >
           {planWords.todos}
-          <span class="type-code text-ink-subtle">{plan.taskId}</span>
+          <span class="type-code text-tx-2">{plan.taskId}</span>
         </h3>
       {/if}
       <PlanTree nodes={todos} />

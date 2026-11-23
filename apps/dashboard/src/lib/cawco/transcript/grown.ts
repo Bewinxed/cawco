@@ -12,7 +12,7 @@
  * to it, so it comes up out of the pill with the shape and folds back into
  * it. The wheel's rows stand inside its sides at their height (`inset`).
  *
- * Its edge is the pill's border (`--color-border-control`), and stays the border
+ * Its edge is the pill's border (`--color-ui-2`), and stays the border
  * while the field has keyboard focus: the grown composer draws no ring.
  *
  * The room over its top row is where a wheel row rolling past it goes out of
@@ -247,14 +247,14 @@ export class GrownShape {
     this.#path = document.createElementNS(SVG_NS, "path");
     this.#svg.innerHTML = `<defs>
       <linearGradient id="${fill}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" style="stop-color: var(--color-surface-raised); ${clear}"/>
-        <stop offset="0.2" style="stop-color: var(--color-surface-raised)"/>
-        <stop offset="1" style="stop-color: var(--color-surface-raised)"/>
+        <stop offset="0" style="stop-color: var(--color-bg); ${clear}"/>
+        <stop offset="0.2" style="stop-color: var(--color-bg)"/>
+        <stop offset="1" style="stop-color: var(--color-bg)"/>
       </linearGradient>
       <linearGradient id="${edge}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="${fade ? 0.04 : 0}" style="stop-color: var(--color-border-control); ${clear}"/>
-        <stop offset="0.32" style="stop-color: var(--color-border-control)"/>
-        <stop offset="1" style="stop-color: var(--color-border-control)"/>
+        <stop offset="${fade ? 0.04 : 0}" style="stop-color: var(--color-ui-2); ${clear}"/>
+        <stop offset="0.32" style="stop-color: var(--color-ui-2)"/>
+        <stop offset="1" style="stop-color: var(--color-ui-2)"/>
       </linearGradient>
     </defs>`;
     this.#path.setAttribute("fill", `url(#${fill})`);

@@ -89,7 +89,7 @@
     }
   };
   const OPTION =
-    "group row-cells row-start-1 rounded-sm border-none bg-transparent px-0 py-space-2 text-start text-ink-strong select-none press-tint transition-control aria-disabled:cursor-not-allowed";
+    "group row-cells row-start-1 rounded-sm border-none bg-transparent px-0 py-space-2 text-start text-tx select-none press-tint transition-control aria-disabled:cursor-not-allowed";
 </script>
 
 {#snippet inside()}
@@ -105,7 +105,7 @@
   >
     <span
       data-slot="name"
-      class="min-w-0 truncate type-label text-ink-strong group-aria-disabled:opacity-50 group-data-limited:text-ink-muted"
+      class="min-w-0 truncate type-label text-tx group-aria-disabled:opacity-50 group-data-limited:text-tx-2"
       ><bdi>{name}</bdi></span
     >
     {#if detail && meter}
@@ -140,7 +140,7 @@
     {:else}
       <IconCheck
         aria-hidden="true"
-        class="size-icon-md text-accent-ink opacity-0 group-aria-checked:opacity-100 group-aria-selected:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--duration-fast) motion-safe:ease-out"
+        class="size-icon-md text-accent opacity-0 group-aria-checked:opacity-100 group-aria-selected:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--duration-fast) motion-safe:ease-out"
       />
     {/if}
   </span>

@@ -68,7 +68,7 @@
 
 {#if drawer}
   <div
-    class="relative h-37 w-(--frame-w) overflow-clip bg-surface-page"
+    class="relative h-37 w-(--frame-w) overflow-clip bg-bg"
     style:--frame-w={`${width}px`}
     bind:this={layer}
   >
@@ -103,9 +103,9 @@
     {/if}
   </div>
 {:else}
-  <div class="bg-surface-page p-space-4">
+  <div class="bg-bg p-space-4">
     <div
-      class="relative flex w-(--frame-w) flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-sm"
+      class="relative flex w-(--frame-w) flex-col overflow-clip rounded-lg border border-ui bg-bg shadow-sm"
       style:--frame-w={`${width}px`}
     >
       <div

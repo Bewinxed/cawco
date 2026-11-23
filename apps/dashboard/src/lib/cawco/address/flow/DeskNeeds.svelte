@@ -56,7 +56,7 @@
   class="grid w-95 max-w-full content-start gap-space-2"
   data-frame="needs"
 >
-  <h2 id="flow-needs-head" class="m-0 px-space-3 type-label text-ink-muted">
+  <h2 id="flow-needs-head" class="m-0 px-space-3 type-label text-tx-2">
     Needs you
   </h2>
   <div class="grid gap-space-1">

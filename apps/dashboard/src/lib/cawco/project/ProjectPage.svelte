@@ -1597,7 +1597,7 @@
         data-wide={needsYou.length === 0 || undefined}
         aria-hidden="true"
         class={[
-          "h-control-sm w-px flex-none bg-border-hairline",
+          "h-control-sm w-px flex-none bg-ui",
           needsYou.length === 0 && "max-phone:hidden",
         ]}
       ></span>
@@ -1711,7 +1711,7 @@
 {#snippet tableBody(_block: string)}
   <div class="flex flex-col gap-space-3">
     {#if adding}
-      <div class="max-w-144 rounded-lg bg-surface-raised p-space-3 shadow-sm">
+      <div class="max-w-144 rounded-lg bg-bg p-space-3 shadow-sm">
         <NewTaskForm
           oncreate={(title, stage) => board.create(title, stage)}
           stage={newIn ?? ""}
@@ -1737,7 +1737,7 @@
 {/snippet}
 <!-- A task view's block counts the tasks it shows. -->
 {#snippet taskCount()}
-  <span data-slot="num" class="type-meta num text-ink-subtle"
+  <span data-slot="num" class="type-meta num text-tx-2"
     >{shownTasks.length}</span
   >
 {/snippet}
@@ -1763,11 +1763,10 @@
           <!-- The tab already says `draft`; the bar says what it is and
                offers the two answers, kept together on one row. -->
           <div
-            class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2 rounded-lg bg-surface-recess px-space-3 py-space-2 inset-ring inset-ring-border-hairline"
+            class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2 rounded-lg bg-bg-2 px-space-3 py-space-2 inset-ring inset-ring-ui"
             out:crossOut
           >
-            <span
-              class="type-label min-w-0 shrink grow basis-56 text-ink-strong"
+            <span class="type-label min-w-0 shrink grow basis-56 text-tx"
               >{viewsWords.drafted(viewLabel(view.name))}</span
             >
             <div class="flex flex-none gap-space-2">
@@ -1806,11 +1805,11 @@
           >
             <span
               aria-hidden="true"
-              class="grid flex-none place-items-center text-ink-muted"
+              class="grid flex-none place-items-center text-tx-2"
               data-box><IconArtifactSheet class="size-icon-md" /></span
             >
             <h2
-              class="type-label m-0 min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
+              class="type-label m-0 min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap text-tx"
             >
               {viewLabel(view.name)}
             </h2>
@@ -2074,7 +2073,7 @@
 
 {#if !project}
   <div class="flex flex-1 items-center justify-center p-space-6">
-    <p class="type-body text-ink-muted">
+    <p class="type-body text-tx-2">
       No such project. It may have been removed; pick another from the rail.
     </p>
   </div>
@@ -2366,7 +2365,7 @@
       >
         {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
           <div
-            class="flex flex-col gap-space-2 rounded-lg bg-surface-recess p-space-2 inset-ring inset-ring-border-hairline"
+            class="flex flex-col gap-space-2 rounded-lg bg-bg-2 p-space-2 inset-ring inset-ring-ui"
           >
             <Skeleton class="w-3/5" line="label" />
             <Skeleton class="w-full" height="card" radius="chip" />

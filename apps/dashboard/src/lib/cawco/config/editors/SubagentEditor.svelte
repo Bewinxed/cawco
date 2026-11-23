@@ -36,7 +36,7 @@
   let { agent }: { agent: FleetAgent | null } = $props();
 
   const store = configStore();
-  const HUE = "var(--color-mark-1)";
+  const HUE = "var(--color-orange)";
 
   /** The docs' own shape: two required fields, then a role line and its rules. */
   const TEMPLATE = `---
@@ -191,10 +191,10 @@ You are a <role>, working in one repository at a time.
   title={agent ? agent.name : "New subagent"}
 >
   {#snippet header()}
-    <h1 data-slot="title" class="type-title wrap-anywhere text-ink-strong">
+    <h1 data-slot="title" class="type-title wrap-anywhere text-tx">
       {agent ? agent.name : front.name || "New subagent"}
     </h1>
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       The file is the definition. It lands at
       <span class="type-code"
         >{fleetClaudeLabel("agents", `${target ?? "name"}.md`)}</span
@@ -203,7 +203,7 @@ You are a <role>, working in one repository at a time.
       it.
     </p>
     {#if refused}
-      <p class="type-meta text-status-fail" role="alert" in:appear>
+      <p class="type-meta text-red" role="alert" in:appear>
         {refused}
       </p>
     {/if}
@@ -211,13 +211,13 @@ You are a <role>, working in one repository at a time.
 
   <EditorSection hue={HUE} icon={IconDocument} label="Definition">
     {#snippet right()}
-      <span data-slot="num" class="num type-meta max-w-measure text-ink-muted"
+      <span data-slot="num" class="num type-meta max-w-measure text-tx-2"
         >{claims.join(" · ")}</span
       >
     {/snippet}
     {#if conflict}
       <div class="flex flex-col gap-space-2" in:unfold out:unfold>
-        <p class="type-meta text-status-attn">
+        <p class="type-meta text-orange">
           {memoryWords.changedElsewhere}
         </p>
         {#key conflict.hash}
@@ -249,11 +249,11 @@ You are a <role>, working in one repository at a time.
       </div>
     {/if}
     {#if problem}
-      <p class="type-meta text-status-attn">
+      <p class="type-meta text-orange">
         Not storable yet — {problem}.
       </p>
     {:else if front.description}
-      <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-measure text-tx-2">
         {front.description}
       </p>
     {/if}

@@ -511,9 +511,8 @@
       <div bind:this={noteField}>
         <div class="flex flex-col gap-space-2">
           <!-- Its field has its id, as every field of a page does, and `data-cawco-unkept`: the overlay keeps a page's named fields as answers of their own (preview overlay/fields.ts `keyOf`), and the note is this card's, written through `cawco.note` alone. Named by this line. -->
-          <span
-            class="type-label text-ink-muted"
-            id={`decision-${id}-note-label`}>Note</span
+          <span class="type-label text-tx-2" id={`decision-${id}-note-label`}
+            >Note</span
           >
           <Textarea
             bind:ref={field}
@@ -532,7 +531,7 @@
     </div>
     {#if advice}
       <p
-        class="type-body max-w-measure text-pretty text-ink-muted wrap-anywhere"
+        class="type-body max-w-measure text-pretty text-tx-2 wrap-anywhere"
         data-slot="why"
       >
         <Words text={advice} />

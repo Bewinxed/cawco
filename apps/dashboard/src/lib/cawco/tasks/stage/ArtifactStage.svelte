@@ -40,7 +40,7 @@
   <div
     data-slot="cover"
     aria-hidden="true"
-    class="flex-1 p-space-4 border border-border-control rounded-sm bg-surface-recess"
+    class="flex-1 p-space-4 border border-ui-2 rounded-sm bg-bg-2"
     out:revealOut
   >
     <Skeleton class="w-2/5" data-slot="block" line="body" radius="text" />

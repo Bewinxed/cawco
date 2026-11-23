@@ -20,7 +20,7 @@
       look: {
         split:
           "z-1 bg-transparent after:w-space-3 after:left-[calc(50%+var(--spacing-space-4))] data-hidden:hidden data-expanded:after:left-px data-expanded:after:w-1.5 data-expanded:after:translate-x-0",
-        grid: "bg-border-hairline not-active-keyboard:not-active-pointer:hover:bg-border-control active-keyboard:bg-ink-muted active-pointer:bg-ink-muted motion-safe:transition-[background-color] motion-safe:duration-(--duration-fast) motion-safe:ease-out motion-reduce:transition-off",
+        grid: "bg-ui not-active-keyboard:not-active-pointer:hover:bg-ui-2 active-keyboard:bg-tx-2 active-pointer:bg-tx-2 motion-safe:transition-[background-color] motion-safe:duration-(--duration-fast) motion-safe:ease-out motion-reduce:transition-off",
       },
     },
   });
@@ -61,7 +61,7 @@
 <PaneResizer
   class={cn(
     "relative flex w-px select-none items-center",
-    "justify-center bg-border-control after:absolute after:inset-y-0",
+    "justify-center bg-ui-2 after:absolute after:inset-y-0",
     "after:left-1/2 after:w-space-1 after:-translate-x-1/2",
     "data-[direction=vertical]:h-px",
     "data-[direction=vertical]:w-full",
@@ -80,8 +80,6 @@
   {@attach orient}
 >
   {#if withHandle}
-    <div
-      class="h-6 w-space-1 rounded-pill bg-border-control z-1 flex shrink-0"
-    ></div>
+    <div class="h-6 w-space-1 rounded-pill bg-ui-2 z-1 flex shrink-0"></div>
   {/if}
 </PaneResizer>

@@ -55,11 +55,11 @@
 
   /** The app's own ramp, by position — the SDK's `color` is not a CSS colour. */
   const SWATCH = [
-    "var(--color-status-live)",
-    "var(--color-mark-5)",
-    "var(--color-status-attn)",
-    "var(--color-ink-subtle)",
-    "var(--color-ink-strong)",
+    "var(--color-cyan)",
+    "var(--color-blue)",
+    "var(--color-orange)",
+    "var(--color-tx-2)",
+    "var(--color-tx)",
   ];
   const swatch = (index: number): string => SWATCH[index % SWATCH.length];
 
@@ -127,39 +127,37 @@
         role="progressbar">{usage ? `${shown}%` : "—"}</span
       >
       {#if recentlyCompacted}
-        <IconCompact class="size-icon-sm text-ink-muted" />
+        <IconCompact class="size-icon-sm text-tx-2" />
       {/if}
     {/if}
   </Popover.Trigger>
 
   <Popover.Content align="end" frame="panel" pad="none" side="top">
     <div
-      class="mark-line flex items-center gap-2 border-b border-border-control px-3 py-2.5"
+      class="mark-line flex items-center gap-2 border-b border-ui-2 px-3 py-2.5"
     >
-      <IconWindow class="size-icon-md text-ink-muted" />
+      <IconWindow class="size-icon-md text-tx-2" />
       <span class="type-label">Context window</span>
       {#if usage}
         <span
           class={[
             "ml-auto type-label tabular-nums",
-            band === "critical" && "text-status-fail",
-            band === "warn" && "text-status-attn",
-            band !== "critical" && band !== "warn" && "text-ink-muted",
+            band === "critical" && "text-red",
+            band === "warn" && "text-orange",
+            band !== "critical" && band !== "warn" && "text-tx-2",
           ]}>{usage.percentage}%</span
         >
       {/if}
     </div>
 
     {#if !usage}
-      <p class="px-3 py-4 type-label text-ink-muted">
+      <p class="px-3 py-4 type-label text-tx-2">
         No reading yet. A session has to be running to report what its window
         holds.
       </p>
     {:else}
       <div class="px-3 py-2.5">
-        <div
-          class="flex h-1.5 w-full overflow-hidden rounded-full bg-surface-recess"
-        >
+        <div class="flex h-1.5 w-full overflow-hidden rounded-full bg-bg-2">
           {#each usage.categories as category, index (category.name)}
             <span
               class="h-full"
@@ -168,15 +166,13 @@
             ></span>
           {/each}
         </div>
-        <p class="mt-2 type-label tabular-nums text-ink-muted">
+        <p class="mt-2 type-label tabular-nums text-tx-2">
           {usage.totalTokens.toLocaleString()}
           of {usage.maxTokens.toLocaleString()} tokens used
         </p>
       </div>
 
-      <ul
-        class="max-h-56 overflow-y-auto border-t border-border-control px-3 py-2"
-      >
+      <ul class="max-h-56 overflow-y-auto border-t border-ui-2 px-3 py-2">
         {#each usage.categories as category, index (category.name)}
           <li class="flex items-center gap-2 py-space-1 type-label">
             <span
@@ -184,7 +180,7 @@
               style:background-color={swatch(index)}
             ></span>
             <span class="min-w-0 flex-1 truncate">{category.name}</span>
-            <span class="tabular-nums text-ink-muted"
+            <span class="tabular-nums text-tx-2"
               >{compact(category.tokens)}</span
             >
           </li>
@@ -194,7 +190,7 @@
 
     {#if compacting}
       <p
-        class="mark-line flex items-center gap-2 border-t border-border-control px-3 py-2 type-label"
+        class="mark-line flex items-center gap-2 border-t border-ui-2 px-3 py-2 type-label"
       >
         <span class="breathe loops inline-flex" data-box {@attach loopInStep}
           ><IconCompact class="size-space-4" /></span
@@ -202,9 +198,7 @@
         <span>Compacting now — the session is rewriting its own context.</span>
       </p>
     {:else if compaction}
-      <p
-        class="border-t border-border-control px-3 py-2 type-label text-ink-muted"
-      >
+      <p class="border-t border-ui-2 px-3 py-2 type-label text-tx-2">
         {#if compaction.result === "failed"}
           Last compaction failed{compaction.error
             ? `: ${compaction.error}`

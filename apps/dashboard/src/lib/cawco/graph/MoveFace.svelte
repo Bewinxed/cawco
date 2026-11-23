@@ -714,12 +714,12 @@
 
   /** Each kind's swatch in the key: its bar's wash and edge. */
   const BAR: Record<ClipKind, string> = {
-    size: "bg-mark-4/22 border-mark-4",
-    move: "bg-mark-5/22 border-mark-5",
-    fade: "bg-mark-1/22 border-mark-1",
-    tint: "bg-mark-6/22 border-mark-6",
-    effect: "bg-mark-3/22 border-mark-3",
-    other: "bg-ink-muted/22 border-ink-muted",
+    size: "bg-cyan/22 border-cyan",
+    move: "bg-blue/22 border-blue",
+    fade: "bg-orange/22 border-orange",
+    tint: "bg-purple/22 border-purple",
+    effect: "bg-green/22 border-green",
+    other: "bg-tx-2/22 border-tx-2",
   };
   /** The drawer's head line while the move has no rows to play. */
   const peekLine = $derived.by(() => {
@@ -738,7 +738,7 @@
       .length
   );
   const bare =
-    "pointer-hit touch-hit grid size-control-sm flex-none place-items-center rounded-sm text-ink-strong transition-control can-hover:hover:bg-surface-hover";
+    "pointer-hit touch-hit grid size-control-sm flex-none place-items-center rounded-sm text-tx transition-control can-hover:hover:bg-ui";
 </script>
 
 {#snippet title()}
@@ -753,7 +753,7 @@
           aria-label={move.kind === "none"
             ? words.chooseMove
             : `${words.moves}: ${words.move(move.from, move.to)}`}
-          class="mark-line pointer-hit touch-hit -ms-space-2 inline-flex h-control-sm max-w-full min-w-0 items-center gap-space-1 rounded-sm px-space-2 type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover"
+          class="mark-line pointer-hit touch-hit -ms-space-2 inline-flex h-control-sm max-w-full min-w-0 items-center gap-space-1 rounded-sm px-space-2 type-label text-tx transition-control can-hover:hover:bg-ui"
           data-slot="move-title"
           type="button"
         >
@@ -764,7 +764,7 @@
           >
           <IconChevronDown
             aria-hidden="true"
-            class="size-icon-sm flex-none text-ink-muted"
+            class="size-icon-sm flex-none text-tx-2"
             data-box
           />
         </button>
@@ -869,7 +869,7 @@
     <!-- As wide as its widest reading, so nothing beside it moves while
          it counts (the move's name on a phone shifted at each figure). -->
     <span
-      class="ms-space-1 min-w-(--time-w) type-code whitespace-nowrap text-ink-muted num"
+      class="ms-space-1 min-w-(--time-w) type-code whitespace-nowrap text-tx-2 num"
       data-slot="time"
       style:--time-w="{timeWidth}ch"
       >{words.playhead(figure(handle), figure(Math.round(length)))}</span
@@ -877,7 +877,7 @@
     {#if still}
       <!-- Why Play lands the move at its end: the reader asked for less motion. -->
       <span
-        class="ms-space-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted"
+        class="ms-space-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-tx-2"
         >{words.motionReduced}</span
       >
     {/if}
@@ -890,7 +890,7 @@
        where a row's settings stand. -->
   <span
     aria-hidden="true"
-    class="pointer-events-none absolute inset-y-0 start-(--at) end-0 bg-surface-recess"
+    class="pointer-events-none absolute inset-y-0 start-(--at) end-0 bg-bg-2"
     data-slot="past-end"
     style:--at={pct(length)}
   ></span>
@@ -898,7 +898,7 @@
     {#if figured.has(mark) && mark > 0}
       <span
         aria-hidden="true"
-        class="pointer-events-none absolute inset-y-0 start-(--at) w-px -translate-x-1/2 bg-border-hairline rtl:translate-x-1/2"
+        class="pointer-events-none absolute inset-y-0 start-(--at) w-px -translate-x-1/2 bg-ui rtl:translate-x-1/2"
         style:--at={pct(mark)}
       ></span>
     {/if}
@@ -908,7 +908,7 @@
 {#snippet playheadLine()}
   <span
     aria-hidden="true"
-    class="pointer-events-none absolute inset-y-0 start-(--at) z-1 w-px -translate-x-1/2 bg-ink-strong rtl:translate-x-1/2"
+    class="pointer-events-none absolute inset-y-0 start-(--at) z-1 w-px -translate-x-1/2 bg-tx rtl:translate-x-1/2"
     data-slot="playhead"
     style:--at={pct(Math.min(playhead, length))}
   ></span>
@@ -919,10 +919,10 @@
        animation's row says what it changes in words, its run and its
        parts; open, all in selected ink. -->
   {@const name = {
-    open: "text-accent-ink",
-    rest: "text-ink-strong",
+    open: "text-accent",
+    rest: "text-tx",
   }[tone]}
-  {@const rest = tone === "open" ? "text-accent-ink" : "text-ink-muted"}
+  {@const rest = tone === "open" ? "text-accent" : "text-tx-2"}
   <span class="min-w-0 truncate">
     {#if line.part}
       <span class={name}>{propertyName(line.part.property)}</span>
@@ -945,20 +945,20 @@
   <div
     bind:this={overview}
     aria-label={words.overview}
-    class="relative h-space-2 w-full cursor-ew-resize touch-none rounded-pill bg-surface-hover"
+    class="relative h-space-2 w-full cursor-ew-resize touch-none rounded-pill bg-ui"
     data-slot="overview"
     onpointerdown={overviewDrag}
     role="presentation"
   >
     <span
       aria-hidden="true"
-      class="absolute inset-y-0 start-(--from) w-(--wide) rounded-pill border border-border-control bg-surface-raised"
+      class="absolute inset-y-0 start-(--from) w-(--wide) rounded-pill border border-ui-2 bg-bg"
       style:--from="{(viewFrom / scale) * 100}%"
       style:--wide="{(viewSpan / scale) * 100}%"
     ></span>
     <span
       aria-hidden="true"
-      class="absolute inset-y-0 start-(--at) w-px bg-ink-strong"
+      class="absolute inset-y-0 start-(--at) w-px bg-tx"
       style:--at="{(Math.min(playhead, length) / scale) * 100}%"
     ></span>
   </div>
@@ -978,7 +978,7 @@
     {#if move.kind === "ready" && clips.length > 0}
       <div class="flex min-h-control-md min-w-0 items-center gap-space-3">
         {@render transport()}
-        <span class="min-w-0 flex-1 truncate type-label text-ink-strong"
+        <span class="min-w-0 flex-1 truncate type-label text-tx"
           >{words.move(move.from, move.to)}</span
         >
       </div>
@@ -986,7 +986,7 @@
         {@render overviewStrip()}
       {/if}
     {:else}
-      <p class="m-0 min-w-0 truncate type-label text-ink-muted">
+      <p class="m-0 min-w-0 truncate type-label text-tx-2">
         {peekLine}
       </p>
     {/if}
@@ -1035,18 +1035,18 @@
     </header>
 
     {#if move.kind === "none"}
-      <p class="m-0 max-w-measure type-body text-ink-muted text-pretty">
+      <p class="m-0 max-w-measure type-body text-tx-2 text-pretty">
         {words.noMove(move.state)}
       </p>
     {:else if move.kind === "reading"}
-      <p class="m-0 type-meta text-ink-muted" role="status">
+      <p class="m-0 type-meta text-tx-2" role="status">
         {words.reading}
       </p>
     {:else if move.kind === "failed"}
       <!-- Why it didn't play, and the way back: Try again plays it once
          more from its from state, as it played on arrival. -->
       <div class="flex min-w-0 flex-col items-start gap-space-3" role="alert">
-        <p class="m-0 type-body text-status-fail wrap-anywhere">
+        <p class="m-0 type-body text-red wrap-anywhere">
           {words.moveFailed(move.why)}
         </p>
         <Button onclick={onretry} size="sm" variant="outline"
@@ -1054,7 +1054,7 @@
         >
       </div>
     {:else if clips.length === 0}
-      <p class="m-0 type-body text-ink-muted text-pretty">
+      <p class="m-0 type-body text-tx-2 text-pretty">
         {words.nothingAnimated(move.from, move.to)}
       </p>
     {:else}
@@ -1080,7 +1080,7 @@
           }}
         >
           <div
-            class="sticky top-0 z-2 col-span-full grid min-h-control-md grid-cols-subgrid bg-surface-raised"
+            class="sticky top-0 z-2 col-span-full grid min-h-control-md grid-cols-subgrid bg-bg"
           >
             <div class="flex min-w-0 items-center">
               {@render transport()}
@@ -1121,7 +1121,7 @@
                 >
                   {#each marks as mark (mark)}
                     <span
-                      class="absolute start-(--at) bottom-0 h-space-1 w-px -translate-x-1/2 bg-border-control rtl:translate-x-1/2"
+                      class="absolute start-(--at) bottom-0 h-space-1 w-px -translate-x-1/2 bg-ui-2 rtl:translate-x-1/2"
                       data-mark={mark}
                       style:--at={pct(mark)}
                     ></span>
@@ -1130,7 +1130,7 @@
                            lane stands from that end, so the lane's clip never
                            cuts it (its "0" stood half outside). -->
                       <span
-                        class="absolute start-(--at) top-0 -translate-x-(--shift) text-ink-muted rtl:translate-x-(--shift) coarse:top-space-2"
+                        class="absolute start-(--at) top-0 -translate-x-(--shift) text-tx-2 rtl:translate-x-(--shift) coarse:top-space-2"
                         style:--at={pct(mark)}
                         style:--shift={shiftOf(mark)}>{figure(mark)}</span
                       >
@@ -1148,7 +1148,7 @@
                     figure(Math.round(length))
                   )}
                   class={[
-                    "pointer-hit bottom-0 block h-space-4 w-space-2 cursor-ew-resize rounded-pill bg-ink-strong shadow-sm focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-2 coarse:w-space-3",
+                    "pointer-hit bottom-0 block h-space-4 w-space-2 cursor-ew-resize rounded-pill bg-tx shadow-sm focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-2 coarse:w-space-3",
                     (handle < viewFrom || handle > viewTo) && "invisible",
                   ]}
                   data-slot="playhead-head"
@@ -1162,7 +1162,7 @@
                     aria-valuemax={Math.round(length)}
                     aria-valuemin={0}
                     aria-valuenow={Math.round(loopFrom)}
-                    class="pointer-hit touch-hit absolute top-0 start-(--at) z-1 block h-space-3 w-space-1 -translate-x-1/2 cursor-ew-resize touch-none rounded-pill bg-ink-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-2 rtl:translate-x-1/2"
+                    class="pointer-hit touch-hit absolute top-0 start-(--at) z-1 block h-space-3 w-space-1 -translate-x-1/2 cursor-ew-resize touch-none rounded-pill bg-tx-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-2 rtl:translate-x-1/2"
                     data-slot="repeat-from"
                     onkeydown={loopKey}
                     onpointerdown={dragAlong(setLoopFrom, () => rulerLane)}
@@ -1183,13 +1183,13 @@
               {@const open = !folded.includes(entry.group)}
               <!-- The agent's group: the house section head over its rows, its chevron folding them. -->
               <div
-                class="col-span-full flex min-h-control-md min-w-0 items-center border-t border-border-hairline"
+                class="col-span-full flex min-h-control-md min-w-0 items-center border-t border-ui"
                 data-slot="clip-group"
               >
                 <button
                   aria-expanded={open}
                   aria-label={words.groupFold(entry.group, open)}
-                  class="mark-line pointer-hit touch-hit flex h-control-sm min-w-0 items-center rounded-sm pe-space-2 type-meta text-ink-muted transition-control can-hover:hover:bg-surface-hover"
+                  class="mark-line pointer-hit touch-hit flex h-control-sm min-w-0 items-center rounded-sm pe-space-2 type-meta text-tx-2 transition-control can-hover:hover:bg-ui"
                   onclick={() => foldGroup(entry.group)}
                   type="button"
                 >
@@ -1224,7 +1224,7 @@
                 data-slot="clip"
                 data-selected={chosen || undefined}
                 class={[
-                  "col-span-full grid min-w-0 grid-cols-subgrid border-t border-border-hairline",
+                  "col-span-full grid min-w-0 grid-cols-subgrid border-t border-ui",
                 ]}
                 {...lights(track)}
               >
@@ -1240,7 +1240,7 @@
                     type="button"
                     aria-expanded={open}
                     aria-label={name}
-                    class="pointer-hit touch-hit flex h-control-sm min-w-0 flex-1 items-center rounded-sm pe-space-1 text-start type-label transition-control data-chosen:bg-accent-wash can-hover:not-data-chosen:hover:bg-surface-hover"
+                    class="pointer-hit touch-hit flex h-control-sm min-w-0 flex-1 items-center rounded-sm pe-space-1 text-start type-label transition-control data-chosen:bg-ui can-hover:not-data-chosen:hover:bg-ui"
                     data-chosen={chosen || undefined}
                     onclick={() => press(line)}
                     title={name}
@@ -1254,7 +1254,7 @@
                         class={[
                           "size-icon-sm transition-transform duration-(--duration-fast) ease-out rtl:-scale-x-100",
                           open && "rotate-90 rtl:-rotate-90",
-                          chosen ? "text-accent-ink" : "text-ink-muted",
+                          chosen ? "text-accent" : "text-tx-2",
                         ]}
                       />
                     </span>
@@ -1350,12 +1350,12 @@
              swatch the bar's own wash and edge, then its word. -->
         <ul
           aria-label={words.kindsKey}
-          class="m-0 flex list-none flex-wrap gap-x-space-4 gap-y-space-1 border-t border-border-hairline p-0 pt-space-3"
+          class="m-0 flex list-none flex-wrap gap-x-space-4 gap-y-space-1 border-t border-ui p-0 pt-space-3"
           data-slot="kinds"
         >
           {#each kindsShown as kind (kind)}
             <li
-              class="mark-line flex items-center gap-space-1 type-meta text-ink-muted"
+              class="mark-line flex items-center gap-space-1 type-meta text-tx-2"
             >
               <span
                 aria-hidden="true"

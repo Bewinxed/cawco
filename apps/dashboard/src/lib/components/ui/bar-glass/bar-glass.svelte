@@ -148,7 +148,7 @@
   {...attributes}
   data-slot="tools"
   class={[
-    "group/tools relative isolate flex items-center gap-space-1 p-space-1 rounded-pill concentric-row r-inset-space-1 r-join-xs hit-gap-x-space-1 coarse:gap-space-4 coarse:hit-gap-x-space-4 before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:bg-surface-raised/72 before:shadow-sm before:glass-backdrop before:pointer-events-none contrast-more:before:border-border-strong contrast-more:before:bg-surface-raised contrast-more:before:backdrop-filter-none reduced-transparency:before:border-border-strong reduced-transparency:before:bg-surface-raised reduced-transparency:before:backdrop-filter-none",
+    "group/tools relative isolate flex items-center gap-space-1 p-space-1 rounded-pill concentric-row r-inset-space-1 r-join-xs hit-gap-x-space-1 coarse:gap-space-4 coarse:hit-gap-x-space-4 before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-ui before:bg-bg/72 before:shadow-sm before:glass-backdrop before:pointer-events-none contrast-more:before:border-tx-2 contrast-more:before:bg-bg contrast-more:before:backdrop-filter-none reduced-transparency:before:border-tx-2 reduced-transparency:before:bg-bg reduced-transparency:before:backdrop-filter-none",
     // A title's words may take two lines on a phone (ArtifactMenu): its
     // ground grows with them.
     form === "title" ? "before:hidden min-h-control-md" : "h-control-md",
@@ -184,7 +184,7 @@
     data-slot="join"
     aria-hidden="true"
     class={[
-      "absolute pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--duration-base) ease-out [--r:var(--r-outer)] group-data-joined/tools:opacity-100 group-data-joined/tools:duration-(--duration-slow) before:absolute before:inset-0 before:bg-surface-raised before:clip-join",
+      "absolute pointer-events-none opacity-0 bg-ui-2 clip-path-(--join-edge) transition-[opacity] duration-(--duration-base) ease-out [--r:var(--r-outer)] group-data-joined/tools:opacity-100 group-data-joined/tools:duration-(--duration-slow) before:absolute before:inset-0 before:bg-bg before:clip-join",
       flare === "start"
         ? "-start-(--f) end-0"
         : "start-0 -end-(--f) -scale-x-100",

@@ -125,7 +125,7 @@
 
 <div
   data-bench-pane
-  class="h-dvh w-(--pane-w) bg-surface-recess pt-space-2"
+  class="h-dvh w-(--pane-w) bg-bg-2 pt-space-2"
   style:--pane-w={`${width}px`}
 >
   <PreviewPane

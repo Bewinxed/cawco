@@ -27,10 +27,10 @@
       {#if typeof part === "string"}
         {part}
       {:else if "strong" in part}
-        <b class="font-medium text-ink-strong">{part.strong}</b>
+        <b class="font-medium text-tx">{part.strong}</b>
       {:else if "figure" in part}
         <!-- A time never wraps (the usage popover's surface brief, the dial wall). -->
-        <b class="mono-figure font-medium whitespace-nowrap text-ink-strong"
+        <b class="mono-figure font-medium whitespace-nowrap text-tx"
           >{part.figure}</b
         >
       {:else}
@@ -38,7 +38,7 @@
           data-slot="dot"
           class="me-space-1 inline-block size-1.5 rounded-pill bg-(color:--c) align-middle"
           style:--c={part.color}
-        ></span><b class="font-medium text-ink-strong">{part.account}</b>
+        ></span><b class="font-medium text-tx">{part.account}</b>
       {/if}
     {/each}</span
   >

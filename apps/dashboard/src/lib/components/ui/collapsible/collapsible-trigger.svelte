@@ -29,8 +29,8 @@
       look: {
         head: "rail-line press-tint coarse:min-h-control-lg min-h-6.5 min-w-0 rounded-xs text-start font-medium text-base transition-[color] duration-(--duration-fast) ease-out",
         note: "rail-line inline-flex text-start",
-        fold: "mark-line press-tint type-label inline-flex items-center gap-space-1 rounded-xs py-space-1 text-start text-ink-muted transition-[color] duration-(--duration-fast) ease-out hover:text-ink-strong",
-        chevron: "press-tint grid place-items-center text-ink-muted",
+        fold: "mark-line press-tint type-label inline-flex items-center gap-space-1 rounded-xs py-space-1 text-start text-tx-2 transition-[color] duration-(--duration-fast) ease-out hover:text-tx",
+        chevron: "press-tint grid place-items-center text-tx-2",
         opener:
           "focus-inset static block text-start after:absolute after:inset-0",
       },

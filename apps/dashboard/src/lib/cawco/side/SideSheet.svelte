@@ -850,7 +850,7 @@
            card in a card). -->
       <div
         data-slot="sheet"
-        class="relative flex flex-1 flex-col min-h-0 pt-space-3 rounded-t-lg bg-surface-sunk shadow-lg"
+        class="relative flex flex-1 flex-col min-h-0 pt-space-3 rounded-t-lg bg-bg-2 shadow-lg"
         style:--sheet-hidden="{hidden}px"
         {@attach land(() => share, { mode: "clip" })}
       >

@@ -20,7 +20,7 @@
 
 {#snippet tag()}
   <span
-    class="absolute end-space-2 top-space-2 text-ink-subtle tabular-nums type-meta"
+    class="absolute end-space-2 top-space-2 text-tx-2 tabular-nums type-meta"
     data-level-tag
   ></span>
 {/snippet}
@@ -39,16 +39,16 @@
 
 <div class="grid gap-space-6 @phone:grid-cols-2">
   <figure class="flex min-w-0 flex-col gap-space-2">
-    <figcaption class="text-ink-muted type-meta">
+    <figcaption class="text-tx-2 type-meta">
       A menu from a popover over a panel
     </figcaption>
     <div class="relative rounded-lg p-space-4" {@attach levelOf}>
       {@render tag()}
-      <p class="text-ink-muted type-meta">The page</p>
+      <p class="text-tx-2 type-meta">The page</p>
       <Elevated look="panel" class="mt-space-3" {@attach levelOf}>
         {@render tag()}
         <p class="type-label">Machines</p>
-        <p class="text-ink-muted type-meta">A panel in the page's flow</p>
+        <p class="text-tx-2 type-meta">A panel in the page's flow</p>
         <div class="ms-space-6 mt-space-3 w-60">
           <Elevated {@attach levelOf}>
             {@render tag()}
@@ -68,16 +68,14 @@
   </figure>
 
   <figure class="flex min-w-0 flex-col gap-space-2">
-    <figcaption class="text-ink-muted type-meta">
-      A list from a dialog
-    </figcaption>
+    <figcaption class="text-tx-2 type-meta">A list from a dialog</figcaption>
     <div class="relative rounded-lg p-space-4" {@attach levelOf}>
       {@render tag()}
-      <p class="text-ink-muted type-meta">The page</p>
+      <p class="text-tx-2 type-meta">The page</p>
       <Elevated look="dialog" class="mt-space-3" {@attach levelOf}>
         {@render tag()}
         <p class="type-title">Add a machine</p>
-        <p class="text-ink-muted type-body">Pick where it joins from.</p>
+        <p class="text-tx-2 type-body">Pick where it joins from.</p>
         <div class="ms-space-6 mt-space-3 w-56">
           <Elevated {@attach levelOf}>
             {@render tag()}

@@ -243,7 +243,7 @@
 {#snippet well(source: string)}
   <div
     data-slot="well"
-    class="max-h-105 overflow-auto p-space-3 border border-border-hairline rounded-sm bg-surface-recess"
+    class="max-h-105 overflow-auto p-space-3 border border-ui rounded-sm bg-bg-2"
   >
     <ToolProse {source} />
   </div>
@@ -259,14 +259,14 @@
         <Skeleton class="w-full" height="block" />
       </div>
     {:else if before.kind === "missing"}
-      <p class="text-base text-ink-muted" role="alert" in:reveal>
+      <p class="text-base text-tx-2" role="alert" in:reveal>
         The version this {removes ? "removed" : "replaced"} can't be shown:
         {before.why}.
       </p>
     {:else if before.kind === "unchanged"}
       <p
         data-slot="memory-body-label"
-        class="text-base font-medium text-ink-muted"
+        class="text-base font-medium text-tx-2"
         in:reveal
       >
         Saved unchanged: the content matched what was there.
@@ -281,21 +281,19 @@
       </div>
     {/if}
     {#if footer}
-      <span data-slot="foot" class="type-code text-ink-muted num">{footer}</span
-      >
+      <span data-slot="foot" class="type-code text-tx-2 num">{footer}</span>
     {/if}
   {:else if action === "get" && parsed.kind === "doc"}
     {@render well(parsed.content)}
     {#if footer}
-      <span data-slot="foot" class="type-code text-ink-muted num">{footer}</span
-      >
+      <span data-slot="foot" class="type-code text-tx-2 num">{footer}</span>
     {/if}
   {:else if action === "list_docs" && listed.kind === "loading"}
     <div out:revealOut>
       <Skeleton class="w-full" height="block" />
     </div>
   {:else if action === "list_docs" && listed.kind === "missing"}
-    <p class="text-base text-ink-muted" role="alert" in:reveal>
+    <p class="text-base text-tx-2" role="alert" in:reveal>
       The documents it listed can't be shown: {listed.why}.
     </p>
   {:else if action === "list_docs" && listed.kind === "docs"}
@@ -305,24 +303,24 @@
           <Collapsible.Trigger data-doc class="group w-full" look="head">
             <span
               data-slot="path"
-              class="flex-auto min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono) text-ink-strong"
+              class="flex-auto min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono) text-tx"
               >{doc.path}</span
             >
             {#if doc.updatedAt}
               <span
                 data-slot="meta"
-                class="flex-none text-sm font-normal text-ink-muted num"
+                class="flex-none text-sm font-normal text-tx-2 num"
                 >{day(doc.updatedAt)}</span
               >
             {/if}
             <span
               data-slot="meta"
-              class="flex-none text-sm font-normal text-ink-muted num"
+              class="flex-none text-sm font-normal text-tx-2 num"
               >{lines(doc.content)} lines</span
             >
             <span
               data-slot="chev"
-              class="flex-none grid place-items-center text-ink-muted transition-[rotate] duration-(--duration-fast) ease-out motion-reduce:transition-off group-state-open:rotate-90"
+              class="flex-none grid place-items-center text-tx-2 transition-[rotate] duration-(--duration-fast) ease-out motion-reduce:transition-off group-state-open:rotate-90"
               data-box><IconChevronRight class="size-icon-sm block" /></span
             >
           </Collapsible.Trigger>

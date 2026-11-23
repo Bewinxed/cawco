@@ -89,71 +89,34 @@
   --spacing-measure: 72ch;
 
   /* =========================================================================
-     Colour — 24 semantic roles, 7 categorical marks, 3 brand art pigments
+     Colour — Flexoki's model on a neutral base (stephango.com/flexoki, MIT):
+     8 base roles, Flexoki's 8 inks, and Caw coral. Light, then dark.
      ========================================================================= */
-
-  /* Surfaces (6): frame recesses, content sits raised, sunk holds shelves. */
-  --color-surface-page: light-dark(
-    oklch(96.6% 0.008 85),
-    oklch(18.4% 0.004 70)
-  );
-  --color-surface-raised: light-dark(
-    oklch(99.3% 0.004 85),
-    oklch(24.8% 0.006 70)
-  );
-  --color-surface-recess: light-dark(
-    oklch(96.6% 0.008 85),
-    oklch(21% 0.005 70)
-  );
-  --color-surface-sunk: light-dark(oklch(92% 0.011 83), oklch(15.6% 0.004 70));
-  --color-surface-hover: light-dark(oklch(92% 0.011 83), oklch(28.2% 0.007 70));
-  --color-surface-pressed: light-dark(
-    oklch(85.4% 0.014 82),
-    oklch(31.4% 0.008 70)
-  );
-
-  /* Inks (3): every ink holds >=4.5:1 on every surface it sits on. */
-  --color-ink-strong: light-dark(oklch(29.5% 0.01 70), oklch(93.4% 0.01 82));
-  --color-ink-muted: light-dark(oklch(49.5% 0.014 74), oklch(77.8% 0.012 78));
-  --color-ink-subtle: light-dark(oklch(50.8% 0.014 74), oklch(68.5% 0.012 76));
-
-  /* Borders (3): hairline -> control -> strong (>=3:1 UI boundary). */
-  --color-border-hairline: light-dark(
-    oklch(93.6% 0.01 84),
-    oklch(29.5% 0.007 70)
-  );
-  --color-border-control: light-dark(
-    oklch(89% 0.013 82),
-    oklch(35.2% 0.009 70)
-  );
-  --color-border-strong: light-dark(oklch(52% 0.016 76), oklch(58.5% 0.014 76));
-
-  /* Accent (4): Caw coral marks where you act and what you chose. */
-  --color-accent: light-dark(oklch(55.5% 0.17 33), oklch(55.5% 0.165 33));
-  --color-accent-ink: light-dark(oklch(50% 0.155 32), oklch(78.5% 0.115 34));
-  --color-accent-wash: light-dark(oklch(92.5% 0.048 42), oklch(33% 0.068 38));
-  --color-on-accent: oklch(100% 0 0);
-
-  /* Status (8): four states (live, attn, done, fail) x ink/glyph and wash.
-     Each chromatic token holds >=4.5:1 on its bg and >=3:1 on surfaces. */
-  --color-status-live: light-dark(oklch(42% 0.135 252), oklch(78% 0.105 245));
-  --color-status-live-bg: light-dark(oklch(88% 0.042 245), oklch(30% 0.06 252));
-  --color-status-attn: light-dark(oklch(44% 0.115 78), oklch(85% 0.125 92));
-  --color-status-attn-bg: light-dark(oklch(92% 0.095 95), oklch(31% 0.06 90));
-  --color-status-done: light-dark(oklch(41% 0.125 150), oklch(78% 0.12 152));
-  --color-status-done-bg: light-dark(oklch(90% 0.05 152), oklch(30% 0.06 152));
-  --color-status-fail: light-dark(oklch(45% 0.17 18), oklch(77% 0.13 18));
-  --color-status-fail-bg: light-dark(oklch(91% 0.05 18), oklch(31% 0.07 18));
-
-  /* Categorical marks (7): perceptually even hues for accounts, tools, syntax. */
-  --color-mark-1: light-dark(oklch(53% 0.15 47.4), oklch(70% 0.15 47.4));
-  --color-mark-2: light-dark(oklch(50% 0.115 86.8), oklch(70% 0.12 86.8));
-  --color-mark-3: light-dark(oklch(50% 0.132 121.2), oklch(70% 0.135 121.2));
-  --color-mark-4: light-dark(oklch(51% 0.093 186.7), oklch(70% 0.095 186.7));
-  --color-mark-5: light-dark(oklch(51% 0.14 251.4), oklch(70% 0.145 251.4));
-  --color-mark-6: light-dark(oklch(51% 0.15 292.5), oklch(70% 0.155 292.5));
-  --color-mark-7: light-dark(oklch(51% 0.165 349.8), oklch(70.5% 0.17 349.8));
-
+  /* Base (8): two grounds, three interface greys, three text greys.
+     Flexoki's lightness steps with the warmth taken out; muted text
+     moved to hold 4.5:1 on every ground. */
+  --color-bg: light-dark(oklch(99% 0 0), oklch(17% 0 0));
+  --color-bg-2: light-dark(oklch(95.4% 0 0), oklch(22.3% 0 0));
+  --color-ui: light-dark(oklch(91.7% 0 0), oklch(27.3% 0 0));
+  --color-ui-2: light-dark(oklch(88.1% 0 0), oklch(32.1% 0 0));
+  --color-ui-3: light-dark(oklch(84.6% 0 0), oklch(36.5% 0 0));
+  --color-tx-3: light-dark(oklch(77.2% 0 0), oklch(45.3% 0 0));
+  --color-tx-2: light-dark(oklch(50% 0 0), oklch(69% 0 0));
+  --color-tx: light-dark(oklch(17% 0 0), oklch(84.6% 0 0));
+  /* Inks (8): Flexoki's hues, their lightness moved just past what
+     4.5:1 text needs on both grounds. Red fails, orange asks,
+     green is done, cyan is live; all eight mark accounts, charts and code. */
+  --color-red: light-dark(oklch(47% 0.165 27.8), oklch(68% 0.169 28.4));
+  --color-orange: light-dark(oklch(52% 0.152 45), oklch(70% 0.154 49.3));
+  --color-yellow: light-dark(oklch(50% 0.12 85.8), oklch(72% 0.146 87.5));
+  --color-green: light-dark(oklch(48% 0.13 122.9), oklch(72% 0.124 119.4));
+  --color-cyan: light-dark(oklch(50.5% 0.086 186.7), oklch(70% 0.1 186.6));
+  --color-blue: light-dark(oklch(47% 0.131 254.8), oklch(69% 0.11 247));
+  --color-purple: light-dark(oklch(45% 0.145 294.8), oklch(68% 0.11 291));
+  --color-magenta: light-dark(oklch(48% 0.161 349.8), oklch(70% 0.156 350.5));
+  /* Caw coral (2): where you act and what you chose, and what stands on it. */
+  --color-accent: light-dark(oklch(51% 0.17 33), oklch(70% 0.15 36));
+  --color-on-accent: light-dark(oklch(100% 0 0), oklch(17% 0 0));
   /* Brand art pigments (3): mascot, favicon, OG art. */
   --color-spark: #f2d36b;
   --color-paper: #f4f0e6;
@@ -199,23 +162,17 @@
   --radius-pill: 999px;
 
   --shadow-sm:
-    0 1px 3px
-      light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55)),
-    0 1px 1px
-      light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55)),
-    inset 0 0 0 1px light-dark(transparent, oklch(93.4% 0.01 82 / 0.07));
+    0 1px 3px light-dark(oklch(29.5% 0 0 / 0.09), oklch(18.4% 0 0 / 0.55)),
+    0 1px 1px light-dark(oklch(29.5% 0 0 / 0.09), oklch(18.4% 0 0 / 0.55)),
+    inset 0 0 0 1px light-dark(transparent, oklch(93.4% 0 0 / 0.07));
   --shadow-md:
-    0 3px 10px
-      light-dark(oklch(29.5% 0.01 70 / 0.14), oklch(18.4% 0.004 70 / 0.66)),
-    0 1px 2px
-      light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55)),
-    inset 0 0 0 1px light-dark(transparent, oklch(93.4% 0.01 82 / 0.07));
+    0 3px 10px light-dark(oklch(29.5% 0 0 / 0.14), oklch(18.4% 0 0 / 0.66)),
+    0 1px 2px light-dark(oklch(29.5% 0 0 / 0.09), oklch(18.4% 0 0 / 0.55)),
+    inset 0 0 0 1px light-dark(transparent, oklch(93.4% 0 0 / 0.07));
   --shadow-lg:
-    0 18px 48px
-      light-dark(oklch(29.5% 0.01 70 / 0.2), oklch(18.4% 0.004 70 / 0.76)),
-    0 2px 6px
-      light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55)),
-    inset 0 0 0 1px light-dark(transparent, oklch(93.4% 0.01 82 / 0.07));
+    0 18px 48px light-dark(oklch(29.5% 0 0 / 0.2), oklch(18.4% 0 0 / 0.76)),
+    0 2px 6px light-dark(oklch(29.5% 0 0 / 0.09), oklch(18.4% 0 0 / 0.55)),
+    inset 0 0 0 1px light-dark(transparent, oklch(93.4% 0 0 / 0.07));
 
   /* =========================================================================
      Motion — 4 durations, 3 curves
@@ -1162,20 +1119,17 @@
 @utility surface {
   --surface-ground: light-dark(
     oklch(
-      from var(--color-surface-page)
-        calc(l + min(var(--surface-level), 1) * 0.027) c h
+      from var(--color-bg) calc(l + min(var(--surface-level), 1) * 0.027) c h
     ),
-    oklch(
-      from var(--color-surface-page) calc(l + var(--surface-level) * 0.025) c h
-    )
+    oklch(from var(--color-bg) calc(l + var(--surface-level) * 0.025) c h)
   );
   background-color: var(--surface-ground);
   box-shadow:
     0 calc(var(--surface-level) * 2px) calc(var(--surface-level) * 6px)
-      light-dark(oklch(29.5% 0.01 70 / 0.1), oklch(0% 0 0 / 0.45)),
+      light-dark(oklch(29.5% 0 0 / 0.1), oklch(0% 0 0 / 0.45)),
     0 0 0 1px
       light-dark(
-        oklch(29.5% 0.01 70 / calc(min(var(--surface-level), 1) * 0.06)),
+        oklch(29.5% 0 0 / calc(min(var(--surface-level), 1) * 0.06)),
         oklch(100% 0 0 / calc(var(--surface-level) * 0.03))
       );
 }
@@ -1249,7 +1203,7 @@
 @layer theme {
   :root.dark,
   [data-scheme="dark"] {
-    --breath-floor: 0.63;
+    --breath-floor: 0.66;
   }
 
   [data-scheme="light"] {

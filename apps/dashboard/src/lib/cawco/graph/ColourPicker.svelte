@@ -54,7 +54,7 @@
     }
   };
   const thumb =
-    "block size-space-4 rounded-pill border-2 border-surface-page shadow-sm outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-1";
+    "block size-space-4 rounded-pill border-2 border-bg shadow-sm outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-1";
 </script>
 
 <ColorPicker.Root
@@ -78,7 +78,7 @@
     {#if dropper}
       <ColorPicker.EyeDropperTrigger
         aria-label={words.eyedropper}
-        class="pointer-hit grid size-control-sm flex-none place-items-center rounded-sm text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong press-tint"
+        class="pointer-hit grid size-control-sm flex-none place-items-center rounded-sm text-tx-2 transition-control hover:bg-ui hover:text-tx press-tint"
       >
         <IconPipette class="size-icon-md" />
       </ColorPicker.EyeDropperTrigger>
@@ -89,7 +89,7 @@
         class="relative flex h-space-3 w-full touch-none items-center"
       >
         <ColorPicker.ChannelSliderTrack
-          class="h-space-3 w-full rounded-pill inset-ring inset-ring-border-hairline"
+          class="h-space-3 w-full rounded-pill inset-ring inset-ring-ui"
         />
         <ColorPicker.ChannelSliderThumb
           aria-label={words.hue}
@@ -106,7 +106,7 @@
           size="var(--spacing-space-2)"
         />
         <ColorPicker.ChannelSliderTrack
-          class="relative h-space-3 w-full rounded-pill inset-ring inset-ring-border-hairline"
+          class="relative h-space-3 w-full rounded-pill inset-ring inset-ring-ui"
         />
         <ColorPicker.ChannelSliderThumb
           aria-label={words.alpha}

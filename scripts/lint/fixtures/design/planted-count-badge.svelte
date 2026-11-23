@@ -11,13 +11,13 @@
 </script>
 
 <span
-  class="absolute start-0 top-0 h-icon-sm min-w-icon-sm rounded-pill bg-ink-strong text-surface-page num"
+  class="absolute start-0 top-0 h-icon-sm min-w-icon-sm rounded-pill bg-tx text-bg num"
   >{count}</span
 >
 <span
-  class="inline-grid h-space-4 min-w-space-4 rounded-xs bg-accent-wash text-accent-ink tabular-nums"
+  class="inline-grid h-space-4 min-w-space-4 rounded-xs bg-ui text-accent tabular-nums"
   >{count}</span
 >
 <Badge size="corner">{count}</Badge>
 <Badge size="tally" variant="brand">{count}</Badge>
-<span class="text-ink-muted num">{count}</span>
+<span class="text-tx-2 num">{count}</span>

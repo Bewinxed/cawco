@@ -717,18 +717,18 @@
           <li
             data-account-setup-done={place < step || undefined}
             aria-current={place === step ? "step" : undefined}
-            class="group mark-line flex min-h-control-md items-center gap-space-3 rounded-sm px-space-3 type-label text-ink-muted transition-[background-color,color] duration-(--duration-base) ease-out @max-phone/setup:px-space-2 data-account-setup-done:text-ink-strong data-cur:bg-accent-wash data-cur:not-data-account-setup-done:text-accent-ink"
+            class="group mark-line flex min-h-control-md items-center gap-space-3 rounded-sm px-space-3 type-label text-tx-2 transition-[background-color,color] duration-(--duration-base) ease-out @max-phone/setup:px-space-2 data-account-setup-done:text-tx data-cur:bg-ui data-cur:not-data-account-setup-done:text-accent"
             data-cur={place === step || undefined}
           >
             {#if place < step}
               <IconSuccess
                 aria-hidden="true"
-                class="size-icon-md flex-none text-status-done"
+                class="size-icon-md flex-none text-green"
               />
             {:else}
               <span
                 aria-hidden="true"
-                class="grid size-icon-md flex-none place-items-center after:size-space-2 after:rounded-pill after:bg-border-strong after:transition-[background-color] after:duration-(--duration-base) after:ease-out group-data-cur:after:bg-accent-ink"
+                class="grid size-icon-md flex-none place-items-center after:size-space-2 after:rounded-pill after:bg-tx-2 after:transition-[background-color] after:duration-(--duration-base) after:ease-out group-data-cur:after:bg-accent"
                 data-box
               ></span>
             {/if}
@@ -774,9 +774,7 @@
                 })}
               {:else if at === "atLimit" && pair}
                 <section class="flex min-w-0 flex-col">
-                  <h2
-                    class="type-title mb-space-4 text-balance text-ink-strong"
-                  >
+                  <h2 class="type-title mb-space-4 text-balance text-tx">
                     {words.steps.atLimit}
                   </h2>
                   <AtLimitBlock
@@ -789,12 +787,10 @@
               {:else if at === "done" && pair}
                 {@const line = routingLine(pair, { yours, delegates })}
                 <section class="flex min-w-0 flex-col">
-                  <h2
-                    class="type-title mb-space-4 text-balance text-ink-strong"
-                  >
+                  <h2 class="type-title mb-space-4 text-balance text-tx">
                     {words.setUp(nameOf(pair[0]), nameOf(pair[1]))}
                   </h2>
-                  <p data-slot="lead" class="text-pretty text-ink-muted">
+                  <p data-slot="lead" class="text-pretty text-tx-2">
                     {limits && atLimit.move && !onePlan
                       ? words.withMoves(line)
                       : line}
@@ -807,7 +803,7 @@
         {#if refused}
           <p
             data-slot="refused"
-            class="type-meta mt-space-3 text-status-fail"
+            class="type-meta mt-space-3 text-red"
             role="alert"
             in:appear
           >
@@ -857,14 +853,14 @@
     {#each pickGroups as group (group.label)}
       <h3
         data-slot="ghead"
-        class="type-label px-space-3 pt-space-4 pb-space-1 text-ink-muted first-of-type:pt-0"
+        class="type-label px-space-3 pt-space-4 pb-space-1 text-tx-2 first-of-type:pt-0"
         id="pick-{group.id}"
       >
         {group.label}
       </h3>
       {@render choiceRows(group.rows, group.id)}
     {:else}
-      <p class="type-meta px-space-4 py-space-3 text-ink-muted">
+      <p class="type-meta px-space-4 py-space-3 text-tx-2">
         {words.noMatch(query.trim())}
       </p>
     {/each}
@@ -888,7 +884,7 @@
             data-choice
             {...props}
             aria-disabled={free ? undefined : "true"}
-            class="select-none mark-line grid min-h-control-lg w-full grid-cols-(--choice-cols) items-center gap-space-3 border-none border-current bg-transparent pr-space-4 pl-space-3 text-start text-inherit active:not-aria-disabled:bg-surface-hover focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-accent-ink focus-visible:-outline-offset-2 aria-disabled:opacity-50"
+            class="select-none mark-line grid min-h-control-lg w-full grid-cols-(--choice-cols) items-center gap-space-3 border-none border-current bg-transparent pr-space-4 pl-space-3 text-start text-inherit active:not-aria-disabled:bg-ui focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2 aria-disabled:opacity-50"
             onclick={(event) => {
               if (free) {
                 choose(
@@ -904,23 +900,23 @@
           >
             <span
               data-slot="ptile"
-              class="grid size-6.5 flex-none place-items-center rounded-sm bg-surface-raised shadow-sm"
+              class="grid size-6.5 flex-none place-items-center rounded-sm bg-bg shadow-sm"
               data-box><ProviderMark provider={row.provider} /></span
             >
             <span
               data-slot="plabel"
-              class="type-label min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
+              class="type-label min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-tx"
               >{label}</span
             >
             <span
               data-slot="chev"
               aria-hidden="true"
-              class="flex text-ink-subtle"
+              class="flex text-tx-2"
               data-box><IconChevronRight class="size-icon-md" /></span
             >
           </button>
         {/snippet}
-        <li class="[li+&]:border-t [li+&]:border-t-border-hairline">
+        <li class="[li+&]:border-t [li+&]:border-t-ui">
           {#if free}
             {@render button({})}
           {:else}
@@ -944,11 +940,11 @@
   <section class="flex min-w-0 flex-col">
     {#if choice}
       <h2
-        class="mark-line type-title mb-space-4 flex items-center gap-space-3 text-balance text-ink-strong"
+        class="mark-line type-title mb-space-4 flex items-center gap-space-3 text-balance text-tx"
       >
         <span
           data-slot="ptile"
-          class="grid size-6.5 flex-none place-items-center rounded-sm bg-surface-raised shadow-sm"
+          class="grid size-6.5 flex-none place-items-center rounded-sm bg-bg shadow-sm"
           data-box
           {@attach land(() =>
             choice ? `provider:${keyOf(choice)}` : undefined
@@ -960,14 +956,14 @@
     {#if joined || (signedIn > 0 && choice?.signin !== "device-code")}
       <div
         data-slot="signed-as"
-        class="mark-line mb-space-4 flex items-start gap-space-3 rounded-sm bg-surface-raised px-space-4 py-space-3"
+        class="mark-line mb-space-4 flex items-start gap-space-3 rounded-sm bg-bg px-space-4 py-space-3"
         in:unfold
         out:unfold
       >
         <span class="mark-cell"
           ><IconSuccess
             aria-hidden="true"
-            class="size-icon-md flex-none text-status-done"
+            class="size-icon-md flex-none text-green"
           /></span
         >
         {#if joined}
@@ -1015,14 +1011,14 @@
           {@const rows = rowsOn(machine)}
           {#if choice?.signin === "device-code" && rows.others.length > 0}
             <li
-              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-phone/setup:grid-areas-(--mrow-areas-stack) @max-phone/setup:grid-cols-(--mrow-cols-two) data-device:items-box-start"
+              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-ui py-space-3 @max-phone/setup:grid-areas-(--mrow-areas-stack) @max-phone/setup:grid-cols-(--mrow-cols-two) data-device:items-box-start"
               data-device
             >
               <span
                 class="col-(--area) row-(--area) flex min-w-0 flex-col"
                 style:--area="name"
                 ><b
-                  class="type-label min-w-0 truncate text-ink-strong group-data-device:leading-control-sm"
+                  class="type-label min-w-0 truncate text-tx group-data-device:leading-control-sm"
                   >{name}</b
                 >{#if rows.codex}<SigninFor
                     harnesses={rows.others}
@@ -1041,7 +1037,7 @@
                 />
               </div>
               <span
-                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted data-warn:text-status-attn"
+                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-tx-2 data-warn:text-orange"
                 data-warn={state === "mismatch" || undefined}
                 style:--area="st"
               >
@@ -1057,7 +1053,7 @@
             {@const codex = codexOn(machine.machineId)}
             <!-- Codex's own sign-in, under the machine's first, named once. -->
             <li
-              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 py-space-3 not-data-again:border-t not-data-again:border-t-border-hairline @max-phone/setup:grid-areas-(--mrow-areas-stack) @max-phone/setup:grid-cols-(--mrow-cols-two) data-device:items-box-start"
+              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 py-space-3 not-data-again:border-t not-data-again:border-t-ui @max-phone/setup:grid-areas-(--mrow-areas-stack) @max-phone/setup:grid-cols-(--mrow-cols-two) data-device:items-box-start"
               data-again={rows.others.length > 0 || undefined}
               data-device
             >
@@ -1066,7 +1062,7 @@
                 style:--area="name"
                 ><b
                   class={[
-                    "type-label min-w-0 truncate text-ink-strong",
+                    "type-label min-w-0 truncate text-tx",
                     rows.others.length > 0 && "sr-only",
                   ]}>{name}</b
                 ><SigninFor harnesses={["codex"]} /></span
@@ -1084,7 +1080,7 @@
                 />
               </div>
               <span
-                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted data-warn:text-status-attn"
+                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-tx-2 data-warn:text-orange"
                 data-warn={codex?.phase === "mismatch" || undefined}
                 style:--area="st"
               >
@@ -1103,15 +1099,15 @@
               paste !== undefined &&
               (paste.phase !== "idle" || paste.url !== null)}
             <li
-              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-border-hairline py-space-3 @max-phone/setup:grid-areas-(--mrow-areas-stack) @max-phone/setup:grid-cols-(--mrow-cols-two) data-paste:grid-areas-(--mrow-areas-stack) data-paste:grid-cols-(--mrow-cols-two)"
+              class="group grid grid-areas-(--mrow-areas) grid-cols-(--mrow-cols) items-center gap-x-space-3 gap-y-space-1 border-t border-t-ui py-space-3 @max-phone/setup:grid-areas-(--mrow-areas-stack) @max-phone/setup:grid-cols-(--mrow-cols-two) data-paste:grid-areas-(--mrow-areas-stack) data-paste:grid-cols-(--mrow-cols-two)"
               data-paste
             >
               <b
-                class="col-(--area) row-(--area) type-label min-w-0 truncate text-ink-strong group-data-device:leading-control-sm"
+                class="col-(--area) row-(--area) type-label min-w-0 truncate text-tx group-data-device:leading-control-sm"
                 style:--area="name">{name}</b
               >
               <span
-                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted data-ok:not-data-warn:text-status-done data-warn:text-status-attn"
+                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-tx-2 data-ok:not-data-warn:text-green data-warn:text-orange"
                 data-ok={done || undefined}
                 data-warn={state === "mismatch" || undefined}
                 style:--area="st"
@@ -1119,7 +1115,7 @@
                 {#if done}
                   <IconSuccess
                     aria-hidden="true"
-                    class="size-icon-sm text-status-done"
+                    class="size-icon-sm text-green"
                   /><span>{words.signedIn}</span>
                 {:else if paste?.phase === "mismatch" || state === "mismatch"}
                   {@render someoneElse()}
@@ -1208,7 +1204,7 @@
               {#if paste?.problem}
                 <p
                   data-slot="row-problem"
-                  class="col-(--area) row-(--area) type-meta text-status-fail"
+                  class="col-(--area) row-(--area) type-meta text-red"
                   role="alert"
                   in:appear
                   style:--area="problem"
@@ -1218,7 +1214,7 @@
               {:else if paste?.phase === "mismatch"}
                 <p
                   data-slot="row-warn"
-                  class="col-(--area) row-(--area) type-meta text-status-attn"
+                  class="col-(--area) row-(--area) type-meta text-orange"
                   role="alert"
                   in:appear
                   style:--area="problem"
@@ -1229,9 +1225,7 @@
             </li>
           {/if}
         {:else}
-          <li
-            class="type-meta border-t border-t-border-hairline px-0 py-space-3 text-ink-muted"
-          >
+          <li class="type-meta border-t border-t-ui px-0 py-space-3 text-tx-2">
             {words.none(harnessWords(choice?.provider ?? CLAUDE_PROVIDER))}
           </li>
         {/each}
@@ -1242,11 +1236,11 @@
 
 {#snippet nameIt()}
   <section class="flex min-w-0 flex-col">
-    <h2 class="type-title mb-space-4 text-balance text-ink-strong">
+    <h2 class="type-title mb-space-4 text-balance text-tx">
       {words.steps.nameIt}
     </h2>
     <div class="mb-space-4 flex min-w-0 flex-col items-start gap-space-2">
-      <span data-slot="account-setup-label" class="type-label text-ink-strong"
+      <span data-slot="account-setup-label" class="type-label text-tx"
         >{words.howItShows}</span
       >
       <div class="flex max-w-90 min-w-0 items-center gap-space-3">
@@ -1257,11 +1251,11 @@
     <div class="mb-space-4 flex min-w-0 flex-col items-start gap-space-2">
       <label
         data-slot="account-setup-label"
-        class="type-label text-ink-strong"
+        class="type-label text-tx"
         for="setup-nickname"
       >
         {words.nickname}
-        <span class="font-normal text-ink-muted">{words.optional}</span>
+        <span class="font-normal text-tx-2">{words.optional}</span>
       </label>
       <Input
         autocomplete="off"
@@ -1273,7 +1267,7 @@
       />
     </div>
     <div class="mb-space-4 flex min-w-0 flex-col items-start gap-space-2">
-      <span data-slot="account-setup-label" class="type-label text-ink-strong"
+      <span data-slot="account-setup-label" class="type-label text-tx"
         >{accountsWords.colour}</span
       >
       <Swatches bind:value={hue} />
@@ -1287,7 +1281,7 @@
   onchoice: (choice: StrategyChoice) => void
 )}
   <section class="flex min-w-0 flex-col">
-    <h2 class="type-title mb-space-4 text-balance text-ink-strong">
+    <h2 class="type-title mb-space-4 text-balance text-tx">
       {heading}
     </h2>
     {#if pair}

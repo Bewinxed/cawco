@@ -327,13 +327,13 @@
 {#snippet columns(brings: string, forgot: string)}
   <span
     data-slot="brings"
-    class="overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted @max-desk/forgotten:hidden"
+    class="overflow-clip type-meta text-ellipsis whitespace-nowrap text-tx-2 @max-desk/forgotten:hidden"
     title={brings}>{brings}</span
   >
   <span
     data-box
     data-slot="when"
-    class="num overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted @max-desk/forgotten:hidden"
+    class="num overflow-clip type-meta text-ellipsis whitespace-nowrap text-tx-2 @max-desk/forgotten:hidden"
     ><span class="sr-only">{projectEndWords.forgottenAt(forgot)}</span><span
       aria-hidden="true">{forgot}</span
     ></span
@@ -363,13 +363,13 @@
       data-forgotten-none
       style:--narrow-cols={COLUMNS_NARROW}
     >
-      <span class="grid place-items-center text-ink-muted" data-box>
+      <span class="grid place-items-center text-tx-2" data-box>
         <IconArchive aria-hidden="true" class="size-icon-md" />
       </span>
-      <span class="block min-w-0 type-label text-ink-strong"
+      <span class="block min-w-0 type-label text-tx"
         >{projectEndWords.noneTitle}</span
       >
-      <p class="col-start-2 m-0 min-w-0 type-meta text-pretty text-ink-muted">
+      <p class="col-start-2 m-0 min-w-0 type-meta text-pretty text-tx-2">
         {projectEndWords.noneBody}
       </p>
     </div>
@@ -385,7 +385,7 @@
            reader hears each cell's own words instead. -->
       <li
         aria-hidden="true"
-        class="col-span-full grid grid-cols-subgrid border-b border-border-hairline py-space-2 type-label tracking-caps text-ink-muted uppercase @max-desk/forgotten:hidden"
+        class="col-span-full grid grid-cols-subgrid border-b border-ui py-space-2 type-label tracking-caps text-tx-2 uppercase @max-desk/forgotten:hidden"
         data-forgotten-heads
       >
         <span class="col-start-2">{projectEndWords.headProject}</span>
@@ -401,7 +401,7 @@
           {@const count = projectTrashWords.heldEntry(one.rows.length)}
           {@const forgot = when(one.forgottenAt)}
           <li
-            class="col-span-full grid grid-cols-subgrid border-b border-border-hairline last:border-b-0"
+            class="col-span-full grid grid-cols-subgrid border-b border-ui last:border-b-0"
             data-flip
             data-held-row={item.key}
           >
@@ -411,7 +411,7 @@
             >
               <span
                 data-slot="mark"
-                class="grid place-items-center self-center text-status-attn @max-desk/forgotten:row-span-3 @max-desk/forgotten:self-start @max-desk/forgotten:pt-space-2"
+                class="grid place-items-center self-center text-orange @max-desk/forgotten:row-span-3 @max-desk/forgotten:self-start @max-desk/forgotten:pt-space-2"
                 data-box
               >
                 <IconWarningTriangle aria-hidden="true" class="size-icon-md" />
@@ -422,17 +422,17 @@
                 {#if one.live}
                   <a
                     aria-label={projectTrashWords.heldOpenProject(one.name)}
-                    class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong no-underline hover:text-accent-ink"
+                    class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-tx no-underline hover:text-accent"
                     href={`/project/${encodeURIComponent(one.id)}`}
                     title={one.name}>{one.name}</a
                   >
                 {:else}
                   <span
-                    class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong"
+                    class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-tx"
                     title={one.name}>{one.name}</span
                   >
                   <span
-                    class="mt-space-1 block type-meta text-pretty text-ink-muted"
+                    class="mt-space-1 block type-meta text-pretty text-tx-2"
                     data-slot="detail"
                     >{projectTrashWords.heldProjectGone(one.name)}</span
                   >
@@ -441,7 +441,7 @@
               {@render columns(count, forgot)}
               <span
                 data-slot="facts"
-                class="col-start-2 hidden type-meta text-pretty text-ink-muted @max-desk/forgotten:block"
+                class="col-start-2 hidden type-meta text-pretty text-tx-2 @max-desk/forgotten:block"
                 >{projectTrashWords.heldFacts(one.rows.length, forgot)}</span
               >
               <div
@@ -484,7 +484,7 @@
                  scrolls in its own place. -->
             <ul
               aria-label={projectTrashWords.heldListLabel(one.name)}
-              class="col-start-2 -col-end-1 m-0 grid max-h-48 list-none gap-space-1 overflow-y-auto p-0 pb-space-2 type-meta break-words text-ink-muted"
+              class="col-start-2 -col-end-1 m-0 grid max-h-48 list-none gap-space-1 overflow-y-auto p-0 pb-space-2 type-meta break-words text-tx-2"
               data-slot="held"
             >
               {#each one.rows as row, at (at)}
@@ -508,7 +508,7 @@
           {@const refusal = refusalOf(one.id)}
           {@const holder = refusal ? holderOf(one) : null}
           <li
-            class="col-span-full grid grid-cols-subgrid border-b border-border-hairline last:border-b-0"
+            class="col-span-full grid grid-cols-subgrid border-b border-ui last:border-b-0"
             data-flip
             data-forgotten-row={one.id}
           >
@@ -518,7 +518,7 @@
             >
               <span
                 data-slot="mark"
-                class="grid place-items-center self-center text-ink-muted @max-desk/forgotten:row-span-3 @max-desk/forgotten:self-start @max-desk/forgotten:pt-space-2"
+                class="grid place-items-center self-center text-tx-2 @max-desk/forgotten:row-span-3 @max-desk/forgotten:self-start @max-desk/forgotten:pt-space-2"
                 data-box
               >
                 <IconFolder aria-hidden="true" class="size-icon-md" />
@@ -526,7 +526,7 @@
               <div data-box data-slot="name" class="min-w-0">
                 {#if named}
                   <span
-                    class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong"
+                    class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-tx"
                     title={one.name}>{one.name}</span
                   >
                 {:else if !isNaming(one)}
@@ -536,7 +536,7 @@
                   <span
                     class={[
                       "block overflow-clip type-label text-ellipsis whitespace-nowrap",
-                      one.hints?.heading ? "text-ink-strong" : "text-ink-muted",
+                      one.hints?.heading ? "text-tx" : "text-tx-2",
                     ]}>{one.hints?.heading ?? projectEndWords.unnamed}</span
                   >
                 {:else}
@@ -568,14 +568,14 @@
                   <!-- It wraps rather than cut: its end ("files changed …")
                      is often all that tells two stubs apart. -->
                   <span
-                    class="mt-space-1 block type-meta text-pretty text-ink-muted"
+                    class="mt-space-1 block type-meta text-pretty text-tx-2"
                     data-slot="detail"
                     title={detailOf(one)}>{detailOf(one)}</span
                   >
                 {/if}
                 {#if one.brings.tasksIn}
                   <span
-                    class="mt-space-1 block overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+                    class="mt-space-1 block overflow-clip type-meta text-ellipsis whitespace-nowrap text-tx-2"
                     >{projectEndWords.tasksIn(
                       one.brings.tasksIn.name,
                       one.brings.tasksIn.tasks
@@ -588,7 +588,7 @@
                  named, since the heads are gone. -->
               <span
                 data-slot="facts"
-                class="col-start-2 hidden type-meta text-pretty text-ink-muted @max-desk/forgotten:block"
+                class="col-start-2 hidden type-meta text-pretty text-tx-2 @max-desk/forgotten:block"
                 >{projectEndWords.factsLine(facts, forgot)}</span
               >
               <div

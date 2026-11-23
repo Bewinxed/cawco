@@ -140,7 +140,7 @@
         {#each slots as slot (slot)}
           <li
             class={[
-              "min-h-control-lg content-center items-center not-last:border-b not-last:border-border-hairline",
+              "min-h-control-lg content-center items-center not-last:border-b not-last:border-ui",
               glyphed ? "row-cells pe-space-3" : "grid grid-cols-1 px-space-3",
             ]}
           >
@@ -156,14 +156,14 @@
         {#each items as { key, suggestion, Glyph } (key)}
           <li
             class={[
-              "not-last:border-b not-last:border-border-hairline",
+              "not-last:border-b not-last:border-ui",
               glyphed && "row-cells",
             ]}
           >
             <button
               data-slot="suggestion"
               class={[
-                "group/item mark-line press-tint focus-inset w-full min-h-control-lg content-center items-start rounded-sm py-space-3 text-start type-body text-ink-strong select-none transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover",
+                "group/item mark-line press-tint focus-inset w-full min-h-control-lg content-center items-start rounded-sm py-space-3 text-start type-body text-tx select-none transition-[background-color] duration-(--duration-fast) ease-out hover:bg-ui",
                 glyphed
                   ? "row-cells pe-space-3"
                   : "grid grid-cols-1 px-space-3",
@@ -176,7 +176,7 @@
                   >{#if Glyph}<Glyph
                       aria-hidden="true"
                       data-suggestion-glyph
-                      class="size-icon-md text-ink-muted transition-[color] duration-(--duration-fast) ease-out group-hover/item:text-ink-strong"
+                      class="size-icon-md text-tx-2 transition-[color] duration-(--duration-fast) ease-out group-hover/item:text-tx"
                     />{/if}</span
                 >
               {/if}
@@ -200,7 +200,7 @@
         {#each slots as slot (slot)}
           <li
             class={[
-              "min-h-14 content-center items-start rounded-sm bg-surface-raised px-space-4 py-space-3 shadow-sm",
+              "min-h-14 content-center items-start rounded-sm bg-bg px-space-4 py-space-3 shadow-sm",
               glyphed ? "rows-grid gap-x-space-3" : "grid grid-cols-1",
             ]}
             style:--row-cols={glyphed
@@ -249,7 +249,7 @@
             <button
               data-slot="suggestion"
               class={[
-                "mark-line press-tint w-full min-h-14 content-center items-start rounded-sm bg-surface-raised px-space-4 py-space-3 text-start text-ink-strong shadow-sm select-none transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover",
+                "mark-line press-tint w-full min-h-14 content-center items-start rounded-sm bg-bg px-space-4 py-space-3 text-start text-tx shadow-sm select-none transition-[background-color] duration-(--duration-fast) ease-out hover:bg-ui",
                 glyphed ? "rows-grid gap-x-space-3" : "grid grid-cols-1",
               ]}
               onclick={() => onpick(suggestion)}
@@ -263,7 +263,7 @@
                   >{#if Glyph}<Glyph
                       aria-hidden="true"
                       data-suggestion-glyph
-                      class="size-icon-md text-ink-strong"
+                      class="size-icon-md text-tx"
                     />{/if}</span
                 >
               {/if}
@@ -276,7 +276,7 @@
                 {#if suggestion.reason}
                   <span
                     data-slot="suggestion-reason"
-                    class="type-meta text-pretty wrap-anywhere text-ink-muted group-data-[placement=composer]/suggestions:hidden"
+                    class="type-meta text-pretty wrap-anywhere text-tx-2 group-data-[placement=composer]/suggestions:hidden"
                     >{suggestion.reason}</span
                   >
                 {/if}
@@ -330,7 +330,7 @@
               data-slot="suggestion"
               class={chipVariants({
                 class:
-                  "inline-grid min-w-control-lg grid-cols-[auto_minmax(0,auto)] content-center items-start border-border-strong select-none motion-safe:transition-[border-color,background-color,transform] motion-safe:enabled:active:[transform:scale(var(--press-scale))] motion-safe:enabled:data-pressed:[transform:scale(var(--press-scale))]",
+                  "inline-grid min-w-control-lg grid-cols-[auto_minmax(0,auto)] content-center items-start border-tx-2 select-none motion-safe:transition-[border-color,background-color,transform] motion-safe:enabled:active:[transform:scale(var(--press-scale))] motion-safe:enabled:data-pressed:[transform:scale(var(--press-scale))]",
               })}
               onclick={() => onpick(suggestion)}
               type="button"
@@ -340,7 +340,7 @@
                   ><Glyph
                     aria-hidden="true"
                     data-suggestion-glyph
-                    class="size-icon-md text-ink-muted"
+                    class="size-icon-md text-tx-2"
                   /></span
                 >
               {/if}

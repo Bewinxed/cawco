@@ -258,8 +258,8 @@
       font-family: var(--font-mono);
       font-size: var(--text-base);
       line-height: var(--leading-lg);
-      background: var(--color-surface-recess);
-      box-shadow: inset 0 0 0 1px var(--color-border-hairline);
+      background: var(--color-bg-2);
+      box-shadow: inset 0 0 0 1px var(--color-ui);
       padding-block: 0;
       padding-inline: var(--spacing-space-1);
       border-radius: var(--radius-xs);
@@ -269,7 +269,7 @@
       font-size: var(--text-base);
       font-weight: var(--font-weight-normal);
       line-height: var(--leading-base);
-      color: var(--color-ink-strong);
+      color: var(--color-tx);
     }
     & .prose > * {
       margin-block-start: var(--spacing-space-3);
@@ -289,7 +289,7 @@
       font-size: var(--text-base);
       line-height: var(--leading-lg);
       font-weight: var(--font-weight-medium);
-      color: var(--color-ink-strong);
+      color: var(--color-tx);
     }
     & .prose > h1:where(:not(:first-child)),
     & .prose > h2:where(:not(:first-child)),
@@ -303,7 +303,7 @@
       font-family: var(--font-mono);
       font-size: var(--text-base);
       line-height: var(--leading-base);
-      background: var(--color-surface-recess);
+      background: var(--color-bg-2);
       border-radius: var(--radius-sm);
       padding: var(--spacing-space-3);
       overflow-x: auto;
@@ -347,12 +347,12 @@
     [data-slot="msg"] .prose h4,
     [data-slot="msg"] .prose h5,
     [data-slot="msg"] .prose h6 {
-      color: var(--color-ink-muted);
+      color: var(--color-tx-2);
     }
     [data-slot="msg"] .prose {
-      --tw-prose-body: var(--color-ink-muted);
-      --tw-prose-headings: var(--color-ink-muted);
-      --tw-prose-bold: var(--color-ink-muted);
+      --tw-prose-body: var(--color-tx-2);
+      --tw-prose-headings: var(--color-tx-2);
+      --tw-prose-bold: var(--color-tx-2);
     }
   }
   /* A turn in a well: its words run to the well's edge, and a code span
@@ -363,7 +363,7 @@
   /* biome-ignore lint/style/noDescendingSpecificity: a code block's own code
      (`.prose > pre code`) keeps no background over this one, as it should. */
   [data-slot="well"] [data-slot="msg"] code {
-    background: var(--color-surface-raised);
+    background: var(--color-bg);
   }
   /* A pane's own face (a snippet Who does not render) in the mark's box. */
   [data-slot="dot"][data-face] svg {
@@ -385,7 +385,7 @@
       outline: none;
     }
     &:focus-visible::after {
-      outline: 2px solid var(--color-accent-ink);
+      outline: 2px solid var(--color-accent);
       outline-offset: -2px;
     }
   }
@@ -418,7 +418,7 @@
     font-weight: var(--font-weight-medium);
     letter-spacing: var(--tracking-caps);
     text-transform: uppercase;
-    color: var(--color-ink-muted);
+    color: var(--color-tx-2);
   }
   /* A split's panes glide together while paneforge marks one collapsing or
      expanding; a drag stays 1:1. Each pane asks it of itself and its
@@ -488,23 +488,23 @@
      there rather than on the host. Every value is an app token, so the editor
      follows light and dark with everything else. */
   [data-slot="crepe-host"] .milkdown {
-    --crepe-color-background: var(--color-surface-recess);
-    --crepe-color-on-background: var(--color-ink-strong);
-    --crepe-color-surface: var(--color-surface-raised);
-    --crepe-color-surface-low: var(--color-surface-recess);
-    --crepe-color-on-surface: var(--color-ink-strong);
-    --crepe-color-on-surface-variant: var(--color-ink-muted);
-    --crepe-color-outline: var(--color-ink-muted);
-    --crepe-color-primary: var(--color-ink-strong);
-    --crepe-color-secondary: var(--color-surface-hover);
-    --crepe-color-on-secondary: var(--color-ink-strong);
-    --crepe-color-inverse: var(--color-ink-strong);
-    --crepe-color-on-inverse: var(--color-surface-raised);
-    --crepe-color-inline-code: var(--color-ink-strong);
-    --crepe-color-inline-area: var(--color-surface-recess);
-    --crepe-color-error: var(--color-ink-strong);
-    --crepe-color-hover: var(--color-surface-hover);
-    --crepe-color-selected: var(--color-surface-hover);
+    --crepe-color-background: var(--color-bg-2);
+    --crepe-color-on-background: var(--color-tx);
+    --crepe-color-surface: var(--color-bg);
+    --crepe-color-surface-low: var(--color-bg-2);
+    --crepe-color-on-surface: var(--color-tx);
+    --crepe-color-on-surface-variant: var(--color-tx-2);
+    --crepe-color-outline: var(--color-tx-2);
+    --crepe-color-primary: var(--color-tx);
+    --crepe-color-secondary: var(--color-ui);
+    --crepe-color-on-secondary: var(--color-tx);
+    --crepe-color-inverse: var(--color-tx);
+    --crepe-color-on-inverse: var(--color-bg);
+    --crepe-color-inline-code: var(--color-tx);
+    --crepe-color-inline-area: var(--color-bg-2);
+    --crepe-color-error: var(--color-tx);
+    --crepe-color-hover: var(--color-ui);
+    --crepe-color-selected: var(--color-ui);
 
     --crepe-base-font-size: var(--text-base);
     --crepe-font-title: var(--font-sans);
@@ -606,13 +606,13 @@
     padding: var(--spacing-space-2) var(--spacing-space-3)
       var(--spacing-space-3);
     margin-block: var(--spacing-space-2);
-    background: var(--color-surface-recess);
-    border: 1px solid var(--color-border-hairline);
+    background: var(--color-bg-2);
+    border: 1px solid var(--color-ui);
     border-radius: var(--radius-sm);
   }
   [data-slot="crepe-host"] .milkdown .cm-editor,
   [data-slot="crepe-host"] .milkdown .cm-gutters {
-    background: var(--color-surface-recess);
+    background: var(--color-bg-2);
   }
   [data-slot="crepe-host"] .milkdown :is(button, input, [role="button"]) {
     border-radius: var(--radius-sm);
@@ -620,7 +620,7 @@
     line-height: var(--leading-lg);
   }
   [data-slot="crepe-host"] .milkdown button {
-    border: 1px solid var(--color-border-control);
+    border: 1px solid var(--color-ui-2);
     box-shadow: var(--shadow-sm);
   }
   /* Crepe's own focus styles give way to the app's: its controls take the
@@ -628,7 +628,7 @@
      caret being its focus (DESIGN.md, The Caret Rule); the host's frame
      steps its edge (MemoryEditor, `field-edge`). */
   [data-slot="crepe-host"] .milkdown :focus-visible {
-    outline: 2px solid var(--color-accent-ink);
+    outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
   [data-slot="crepe-host"]
@@ -646,11 +646,11 @@
     }
   }
   [data-slot="crepe-host"] .milkdown :is(button, [role="button"]):active {
-    background: var(--color-surface-hover);
+    background: var(--color-ui);
     box-shadow: inset 0 1px 1px
       light-dark(
-        oklch(from var(--color-ink-strong) l c h / 0.09),
-        oklch(from var(--color-surface-page) l c h / 0.55)
+        oklch(from var(--color-tx) l c h / 0.09),
+        oklch(from var(--color-bg) l c h / 0.55)
       );
   }
   /* The block handle's open item: by day a step past its hover, with its glyph
@@ -660,10 +660,10 @@
     .milkdown
     .milkdown-block-handle
     .operation-item.active {
-    background: var(--color-surface-pressed);
+    background: var(--color-ui-2);
 
     & svg {
-      fill: light-dark(var(--color-ink-strong), var(--color-ink-muted));
+      fill: light-dark(var(--color-tx), var(--color-tx-2));
     }
   }
   /* The slash menu's chosen group tab takes the selected wash, apart from its
@@ -674,8 +674,8 @@
     .tab-group
     ul
     li.selected {
-    background: var(--color-accent-wash);
-    color: var(--color-accent-ink);
+    background: var(--color-ui);
+    color: var(--color-accent);
   }
   /* Milkdown renders its own toolbar and menus, so they cannot carry
      `.touch-hit`; under a finger they keep a 44px box. */
@@ -713,7 +713,7 @@
     width: calc(var(--spacing) * 25);
     height: calc(var(--spacing) * 1.5);
     border-radius: var(--radius-pill);
-    background: var(--color-border-control);
+    background: var(--color-ui-2);
     margin: 0;
     opacity: 1;
   }
@@ -876,8 +876,8 @@
 }
 @layer components {
   [data-screen-edge] {
-    --edge-top-under: var(--color-surface-raised);
-    --edge-bottom-under: var(--color-surface-recess);
+    --edge-top-under: var(--color-bg);
+    --edge-bottom-under: var(--color-bg-2);
     --edge-top-background: var(--edge-top-under);
     --edge-bottom-background: var(--edge-bottom-under);
     /* biome-ignore lint/plugin/no-raw-motion: a step a millisecond long is no beat: it ends in transitionend, where ScreenEdges reads the colour, and a 0s change fires none. */
@@ -889,24 +889,24 @@
   }
   :root[data-bar~="floating"] [data-screen-edge],
   :root[data-bar~="hosting"] [data-screen-edge] {
-    --edge-top-under: var(--color-surface-sunk);
+    --edge-top-under: var(--color-bg-2);
   }
   @media (width < --theme(--breakpoint-desk)),
     (pointer: coarse) and (orientation: portrait) {
     :root[data-bar~="hosting"] [data-screen-edge] {
-      --edge-top-under: var(--color-surface-raised);
+      --edge-top-under: var(--color-bg);
     }
   }
   :root[data-scrim~="open"] [data-screen-edge],
   :root[data-scrim~="lightbox"] [data-screen-edge] {
     --edge-top-background: color-mix(
       in srgb,
-      var(--color-surface-page) 72%,
+      var(--color-bg) 72%,
       var(--edge-top-under)
     );
     --edge-bottom-background: color-mix(
       in srgb,
-      var(--color-surface-page) 72%,
+      var(--color-bg) 72%,
       var(--edge-bottom-under)
     );
     --edge-top-fade: var(--duration-slow);
@@ -917,19 +917,19 @@
     --edge-bottom-fade: var(--duration-base);
   }
   :root[data-kit-sheet~="bottom"] [data-screen-edge] {
-    --edge-bottom-background: var(--color-surface-raised);
+    --edge-bottom-background: var(--color-bg);
     /* biome-ignore lint/plugin/no-raw-motion: a step a millisecond long is no beat: it ends in transitionend, where ScreenEdges reads the colour, and a 0s change fires none. */
     --edge-bottom-fade: 1ms;
   }
   :root[data-kit-sheet~="side"] [data-screen-edge] {
-    --edge-top-background: var(--color-surface-raised);
-    --edge-bottom-background: var(--color-surface-raised);
+    --edge-top-background: var(--color-bg);
+    --edge-bottom-background: var(--color-bg);
     --edge-shown: 0;
     --edge-show-fade: 0s;
   }
   :root[data-kit-sheet~="rail"] [data-screen-edge] {
-    --edge-top-background: var(--color-surface-page);
-    --edge-bottom-background: var(--color-surface-page);
+    --edge-top-background: var(--color-bg);
+    --edge-bottom-background: var(--color-bg);
   }
 }
 
@@ -955,7 +955,7 @@
     svg {
     inline-size: var(--spacing-icon-sm);
     block-size: var(--spacing-icon-sm);
-    color: var(--color-surface-page);
+    color: var(--color-bg);
   }
   [data-delegate-tail-kind="stream"] [data-slot="text"] * {
     display: inline;
@@ -1048,7 +1048,7 @@
             ) *
             100%
         ),
-      var(--color-border-control)
+      var(--color-ui-2)
     );
   }
   /* A pinned card follows its tab as the strip scrolls, frame by frame, on a
@@ -1096,23 +1096,23 @@
    kit recipes above). */
 @layer utilities {
   .prose {
-    --tw-prose-body: var(--color-ink-strong);
-    --tw-prose-headings: var(--color-ink-strong);
-    --tw-prose-lead: var(--color-ink-muted);
-    --tw-prose-links: var(--color-accent-ink);
-    --tw-prose-bold: var(--color-ink-strong);
-    --tw-prose-counters: var(--color-ink-muted);
-    --tw-prose-bullets: oklch(from var(--color-ink-muted) l c h / 0.55);
-    --tw-prose-hr: var(--color-border-control);
-    --tw-prose-quotes: var(--color-ink-muted);
-    --tw-prose-quote-borders: var(--color-border-control);
-    --tw-prose-captions: var(--color-ink-muted);
-    --tw-prose-kbd: var(--color-ink-strong);
-    --tw-prose-code: var(--color-ink-strong);
-    --tw-prose-pre-code: var(--color-ink-strong);
-    --tw-prose-pre-bg: var(--color-surface-recess);
-    --tw-prose-th-borders: var(--color-border-control);
-    --tw-prose-td-borders: var(--color-border-control);
+    --tw-prose-body: var(--color-tx);
+    --tw-prose-headings: var(--color-tx);
+    --tw-prose-lead: var(--color-tx-2);
+    --tw-prose-links: var(--color-accent);
+    --tw-prose-bold: var(--color-tx);
+    --tw-prose-counters: var(--color-tx-2);
+    --tw-prose-bullets: oklch(from var(--color-tx-2) l c h / 0.55);
+    --tw-prose-hr: var(--color-ui-2);
+    --tw-prose-quotes: var(--color-tx-2);
+    --tw-prose-quote-borders: var(--color-ui-2);
+    --tw-prose-captions: var(--color-tx-2);
+    --tw-prose-kbd: var(--color-tx);
+    --tw-prose-code: var(--color-tx);
+    --tw-prose-pre-code: var(--color-tx);
+    --tw-prose-pre-bg: var(--color-bg-2);
+    --tw-prose-th-borders: var(--color-ui-2);
+    --tw-prose-td-borders: var(--color-ui-2);
 
     --tw-prose-invert-body: var(--tw-prose-body);
     --tw-prose-invert-headings: var(--tw-prose-headings);
@@ -1186,30 +1186,30 @@
        night: the calendar takes the page's scheme instead. */
     & .ec {
       color-scheme: inherit;
-      --ec-bg-color: var(--color-surface-raised);
-      --ec-text-color: var(--color-ink-strong);
-      --ec-border-color: var(--color-border-hairline);
-      --ec-color-400: var(--color-border-control);
-      --ec-color-300: var(--color-border-hairline);
-      --ec-color-200: var(--color-surface-hover);
-      --ec-color-100: var(--color-surface-recess);
-      --ec-color-50: var(--color-surface-recess);
-      --ec-button-bg-color: var(--color-surface-raised);
-      --ec-button-border-color: var(--color-border-control);
-      --ec-button-text-color: var(--color-ink-strong);
-      --ec-button-active-bg-color: var(--color-surface-hover);
-      --ec-button-active-border-color: var(--color-border-control);
-      --ec-button-active-text-color: var(--color-ink-strong);
-      --ec-today-bg-color: var(--color-surface-recess);
-      --ec-highlight-color: var(--color-surface-hover);
-      --ec-event-bg-color: var(--color-surface-raised);
-      --ec-event-text-color: var(--color-ink-strong);
-      --ec-bg-event-color: var(--color-surface-recess);
+      --ec-bg-color: var(--color-bg);
+      --ec-text-color: var(--color-tx);
+      --ec-border-color: var(--color-ui);
+      --ec-color-400: var(--color-ui-2);
+      --ec-color-300: var(--color-ui);
+      --ec-color-200: var(--color-ui);
+      --ec-color-100: var(--color-bg-2);
+      --ec-color-50: var(--color-bg-2);
+      --ec-button-bg-color: var(--color-bg);
+      --ec-button-border-color: var(--color-ui-2);
+      --ec-button-text-color: var(--color-tx);
+      --ec-button-active-bg-color: var(--color-ui);
+      --ec-button-active-border-color: var(--color-ui-2);
+      --ec-button-active-text-color: var(--color-tx);
+      --ec-today-bg-color: var(--color-bg-2);
+      --ec-highlight-color: var(--color-ui);
+      --ec-event-bg-color: var(--color-bg);
+      --ec-event-text-color: var(--color-tx);
+      --ec-bg-event-color: var(--color-bg-2);
       --ec-bg-event-opacity: 1;
       --ec-event-col-gap: var(--spacing-space-1);
       --ec-now-indicator-color: var(--color-accent);
-      --ec-popup-bg-color: var(--color-surface-raised);
-      color: var(--color-ink-strong);
+      --ec-popup-bg-color: var(--color-bg);
+      color: var(--color-tx);
       font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm)
         var(--font-sans);
     }
@@ -1238,7 +1238,7 @@
     }
     & .ec-main {
       border-radius: var(--radius-lg);
-      background: var(--color-surface-raised);
+      background: var(--color-bg);
       box-shadow: var(--shadow-sm);
     }
     & .ec-day-head,
@@ -1246,7 +1246,7 @@
     & .ec-all-day {
       font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm)
         var(--font-sans);
-      color: var(--color-ink-muted);
+      color: var(--color-tx-2);
     }
     /* A chip: as tall as the library makes its slot (a task is a half-hour
        event, one slot), the title in the label role on one line, cut short
@@ -1283,17 +1283,17 @@
       white-space: nowrap;
     }
     & .ec-event.chip-set {
-      background: var(--color-surface-raised);
-      color: var(--color-ink-strong);
-      box-shadow: inset 0 0 0 1px var(--color-border-control);
+      background: var(--color-bg);
+      color: var(--color-tx);
+      box-shadow: inset 0 0 0 1px var(--color-ui-2);
     }
     & .ec-event.chip-done {
-      background: var(--color-status-done-bg);
-      color: var(--color-status-done);
+      background: var(--color-bg-2);
+      color: var(--color-green);
     }
     & .ec-event.chip-attn {
-      background: var(--color-status-attn-bg);
-      color: var(--color-status-attn);
+      background: var(--color-bg-2);
+      color: var(--color-orange);
     }
     /* In the phone's list a chip is inset on both sides of its day: the
        library sizes an event at its day's full width, so its width gives way
@@ -1321,7 +1321,7 @@
       display: inline-flex;
       align-items: center;
       min-height: var(--spacing-space-6);
-      color: var(--color-ink-subtle);
+      color: var(--color-tx-2);
 
       &:focus-visible {
         outline-offset: -2px;

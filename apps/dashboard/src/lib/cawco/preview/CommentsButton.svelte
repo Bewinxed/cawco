@@ -100,7 +100,7 @@
          the count, taking no room. -->
     <IconEyeClosedLinear
       aria-hidden="true"
-      class="pointer-events-none absolute end-space-1 bottom-space-1 size-icon-sm rounded-pill bg-surface-raised text-ink-muted"
+      class="pointer-events-none absolute end-space-1 bottom-space-1 size-icon-sm rounded-pill bg-bg text-tx-2"
       data-slot="pins-hidden"
     />
   {/if}

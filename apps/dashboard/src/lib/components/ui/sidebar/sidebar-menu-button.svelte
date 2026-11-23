@@ -3,12 +3,12 @@
   import { tv } from "#lib/utils.js";
 
   const sidebarMenuButtonVariants = tv({
-    base: "peer/menu-button group/menu-button mark-line focus-inset press-tint flex w-full select-none items-center gap-2 overflow-hidden rounded-sm px-3 py-2 text-left type-label transition-[width,height,padding,color,background-color] duration-(--duration-base) ease-out hover:text-ink-strong active:text-ink-strong disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:font-medium data-active:text-accent-ink data-open:hover:text-ink-strong [&>span:last-child]:min-w-0 [&>span:last-child]:overflow-clip [&>span:last-child]:text-ellipsis [&>span:last-child]:whitespace-nowrap [&>svg]:size-icon-md [&>svg]:shrink-0 data-active:[&_svg]:text-accent-ink",
+    base: "peer/menu-button group/menu-button mark-line focus-inset press-tint flex w-full select-none items-center gap-2 overflow-hidden rounded-sm px-3 py-2 text-left type-label transition-[width,height,padding,color,background-color] duration-(--duration-base) ease-out hover:text-tx active:text-tx disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:font-medium data-active:text-accent data-open:hover:text-tx [&>span:last-child]:min-w-0 [&>span:last-child]:overflow-clip [&>span:last-child]:text-ellipsis [&>span:last-child]:whitespace-nowrap [&>svg]:size-icon-md [&>svg]:shrink-0 data-active:[&_svg]:text-accent",
     variants: {
       variant: {
-        default: "hover:text-ink-strong",
+        default: "hover:text-tx",
         outline:
-          "bg-surface-page shadow-[0_0_0_1px_var(--color-border-control)] hover:text-ink-strong hover:shadow-[0_0_0_1px_var(--color-border-control)]",
+          "bg-bg shadow-[0_0_0_1px_var(--color-ui-2)] hover:text-tx hover:shadow-[0_0_0_1px_var(--color-ui-2)]",
       },
       size: {
         default: "h-row type-label",

@@ -3,24 +3,24 @@
 
 @layer components {
   :root {
-    background: light-dark(oklch(99.3% 0.004 85), oklch(24.8% 0.006 70));
+    background: light-dark(oklch(99% 0 0), oklch(17% 0 0));
   }
   :root[data-bar~="floating"],
   :root[data-bar~="hosting"] {
-    background: light-dark(oklch(92% 0.011 83), oklch(15.6% 0.004 70));
+    background: light-dark(oklch(95.4% 0 0), oklch(22.3% 0 0));
   }
   @media (width < --theme(--breakpoint-desk)),
     (pointer: coarse) and (orientation: portrait) {
     :root[data-bar~="hosting"] {
-      background: light-dark(oklch(99.3% 0.004 85), oklch(24.8% 0.006 70));
+      background: light-dark(oklch(99% 0 0), oklch(17% 0 0));
     }
   }
   :root[data-scrim~="open"],
   :root[data-scrim~="lightbox"] {
     background: color-mix(
       in srgb,
-      light-dark(oklch(96.6% 0.008 85), oklch(18.4% 0.004 70)) calc(72%),
-      light-dark(oklch(99.3% 0.004 85), oklch(24.8% 0.006 70))
+      light-dark(oklch(99% 0 0), oklch(17% 0 0)) calc(72%),
+      light-dark(oklch(99% 0 0), oklch(17% 0 0))
     );
   }
   :root:where(
@@ -33,8 +33,8 @@
     )[data-scrim~="lightbox"] {
     background: color-mix(
       in srgb,
-      light-dark(oklch(96.6% 0.008 85), oklch(18.4% 0.004 70)) calc(72%),
-      light-dark(oklch(92% 0.011 83), oklch(15.6% 0.004 70))
+      light-dark(oklch(99% 0 0), oklch(17% 0 0)) calc(72%),
+      light-dark(oklch(95.4% 0 0), oklch(22.3% 0 0))
     );
   }
   @media (width < --theme(--breakpoint-desk)),
@@ -43,33 +43,33 @@
     :root:where([data-bar~="hosting"])[data-scrim~="lightbox"] {
       background: color-mix(
         in srgb,
-        light-dark(oklch(96.6% 0.008 85), oklch(18.4% 0.004 70)) calc(72%),
-        light-dark(oklch(99.3% 0.004 85), oklch(24.8% 0.006 70))
+        light-dark(oklch(99% 0 0), oklch(17% 0 0)) calc(72%),
+        light-dark(oklch(99% 0 0), oklch(17% 0 0))
       );
     }
   }
   :root[data-kit-sheet~="side"] {
-    background: light-dark(oklch(99.3% 0.004 85), oklch(24.8% 0.006 70));
+    background: light-dark(oklch(99% 0 0), oklch(17% 0 0));
   }
   :root[data-kit-sheet~="rail"] {
-    background: light-dark(oklch(96.6% 0.008 85), oklch(18.4% 0.004 70));
+    background: light-dark(oklch(99% 0 0), oklch(17% 0 0));
   }
   body {
-    background: light-dark(oklch(96.6% 0.008 85), oklch(21% 0.005 70));
+    background: light-dark(oklch(95.4% 0 0), oklch(22.3% 0 0));
   }
   :root[data-scrim~="open"] body,
   :root[data-scrim~="lightbox"] body {
     background: color-mix(
       in srgb,
-      light-dark(oklch(96.6% 0.008 85), oklch(18.4% 0.004 70)) calc(72%),
-      light-dark(oklch(96.6% 0.008 85), oklch(21% 0.005 70))
+      light-dark(oklch(99% 0 0), oklch(17% 0 0)) calc(72%),
+      light-dark(oklch(95.4% 0 0), oklch(22.3% 0 0))
     );
   }
   :root[data-kit-sheet~="bottom"] body,
   :root[data-kit-sheet~="side"] body {
-    background: light-dark(oklch(99.3% 0.004 85), oklch(24.8% 0.006 70));
+    background: light-dark(oklch(99% 0 0), oklch(17% 0 0));
   }
   :root[data-kit-sheet~="rail"] body {
-    background: light-dark(oklch(96.6% 0.008 85), oklch(18.4% 0.004 70));
+    background: light-dark(oklch(99% 0 0), oklch(17% 0 0));
   }
 }

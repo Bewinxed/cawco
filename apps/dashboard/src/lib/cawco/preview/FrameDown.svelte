@@ -81,7 +81,7 @@
   data-slot="down"
   data-down={down}
   class={cn(
-    "min-w-0 overflow-auto overscroll-contain px-space-6 bg-surface-sunk",
+    "min-w-0 overflow-auto overscroll-contain px-space-6 bg-bg-2",
     className
   )}
   role="alert"

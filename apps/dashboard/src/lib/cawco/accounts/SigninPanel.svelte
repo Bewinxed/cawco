@@ -89,19 +89,19 @@
     role="alert"
     in:appear
   >
-    <p class="type-meta text-pretty wrap-anywhere text-status-fail">
+    <p class="type-meta text-pretty wrap-anywhere text-red">
       {sentence}
     </p>
     {#if lines}
       <pre
-        class="type-code whitespace-pre-wrap wrap-anywhere text-ink-muted">{lines}</pre>
+        class="type-code whitespace-pre-wrap wrap-anywhere text-tx-2">{lines}</pre>
     {/if}
   </div>
 {/snippet}
 
 <div data-slot="panel" class="flex flex-col gap-space-3" bind:this={panel}>
   {#if !online}
-    <p class="type-meta text-ink-muted">{words.offline(machine)}</p>
+    <p class="type-meta text-tx-2">{words.offline(machine)}</p>
   {/if}
   <div data-slot="row" class="flex min-w-0 items-center gap-space-2">
     {#if flow.url}
@@ -130,7 +130,7 @@
           : "outline"}
       />
     {/if}
-    <span class="type-meta text-ink-muted">{words.thenPaste}</span>
+    <span class="type-meta text-tx-2">{words.thenPaste}</span>
   </div>
   {#if flow.problem && flow.url === null}
     <!-- No link to paste a code from: the refusal stands under the way on,
@@ -174,7 +174,7 @@
   {:else if flow.phase === "signed-in"}
     <p
       data-slot="got"
-      class="type-meta flex items-start gap-space-2 self-start rounded-xs text-ink-muted focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-accent-ink focus-visible:outline-offset-2"
+      class="type-meta flex items-start gap-space-2 self-start rounded-xs text-tx-2 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
       role="status"
       tabindex="-1"
       bind:this={outcome}
@@ -185,7 +185,7 @@
       {:else}
         <span
           >{words.signedInAs}
-          <b class="font-medium text-ink-strong"
+          <b class="font-medium text-tx"
             >{flow.email ?? expected ?? words.theAccount}</b
           ></span
         >
@@ -194,7 +194,7 @@
   {:else if flow.phase === "mismatch"}
     <p
       data-slot="warn"
-      class="mark-line type-meta flex items-start gap-space-2 text-status-attn"
+      class="mark-line type-meta flex items-start gap-space-2 text-orange"
       role="alert"
       in:appear
     >

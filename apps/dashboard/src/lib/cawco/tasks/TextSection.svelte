@@ -81,7 +81,7 @@
         bind:value={draft}
       />
       {#if problem}
-        <p class="type-meta text-status-fail" role="alert">{problem}</p>
+        <p class="type-meta text-red" role="alert">{problem}</p>
       {/if}
       <div data-slot="actions" class="flex justify-end gap-space-1">
         <Button
@@ -108,7 +108,7 @@
       <Markdown source={text} />
     </div>
   {:else}
-    <p data-slot="text-section-empty" class="type-body text-ink-subtle">
+    <p data-slot="text-section-empty" class="type-body text-tx-2">
       {empty}
     </p>
   {/if}

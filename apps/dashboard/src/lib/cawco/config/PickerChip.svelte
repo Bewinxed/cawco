@@ -71,7 +71,7 @@
             class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap num"
             ><MorphText text={chosen} /></span
           >
-          <IconUnfold class="text-ink-muted" />
+          <IconUnfold class="text-tx-2" />
         </Button>
       {/snippet}
     </Popover.Trigger>
@@ -81,7 +81,7 @@
       aria-label="{label}: {chosen}"
       look="chip"
     >
-      <span class="text-ink-muted">{label}</span>
+      <span class="text-tx-2">{label}</span>
       <span data-slot="num" class="min-w-0 truncate num"
         ><MorphText text={chosen} /></span
       >
@@ -111,7 +111,7 @@
         {#if option.group && option.group !== options[index - 1]?.group}
           <span
             data-slot="group"
-            class="pt-space-2 px-space-3 pb-space-1 type-meta text-ink-muted"
+            class="pt-space-2 px-space-3 pb-space-1 type-meta text-tx-2"
             >{option.group}</span
           >
         {/if}
@@ -120,7 +120,7 @@
           aria-selected={isChosen(option.value)}
           class={menuItemVariants({
             class:
-              "flex items-center gap-space-2 w-full px-space-3 text-start type-label text-ink-strong focus-inset select-none",
+              "flex items-center gap-space-2 w-full px-space-3 text-start type-label text-tx focus-inset select-none",
           })}
           data-menu-item
           onclick={() => {

@@ -27,11 +27,11 @@
   } = $props();
 
   const MARKS = [
-    { key: "done", icon: IconSuccess, ink: "text-status-done" },
-    { key: "current", icon: IconWorking, ink: "text-status-live" },
-    { key: "failed", icon: IconError, ink: "text-status-fail" },
-    { key: "stopped", icon: IconStopped, ink: "text-ink-muted" },
-    { key: "future", icon: IconNotYet, ink: "text-ink-subtle" },
+    { key: "done", icon: IconSuccess, ink: "text-green" },
+    { key: "current", icon: IconWorking, ink: "text-cyan" },
+    { key: "failed", icon: IconError, ink: "text-red" },
+    { key: "stopped", icon: IconStopped, ink: "text-tx-2" },
+    { key: "future", icon: IconNotYet, ink: "text-tx-2" },
   ] as const;
 </script>
 

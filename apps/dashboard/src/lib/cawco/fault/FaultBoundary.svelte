@@ -120,7 +120,7 @@
           style:--dock-foot={"calc(var(--spacing-space-4) + var(--safe-bottom, 0px))"}
         >
           <div
-            class="pointer-events-auto w-(--composer-w) min-w-0 rounded-lg border border-border-control bg-surface-raised px-space-3 shadow-sm max-desk:mx-space-3 max-desk:w-auto max-desk:flex-1"
+            class="pointer-events-auto w-(--composer-w) min-w-0 rounded-lg border border-ui-2 bg-bg px-space-3 shadow-sm max-desk:mx-space-3 max-desk:w-auto max-desk:flex-1"
           >
             <LineFault
               again={rebuild.again}
@@ -135,7 +135,7 @@
       {:else if face === "strip"}
         <div
           data-bar-over={barOver || undefined}
-          class="relative z-1 flex min-h-control-md min-w-0 flex-none items-center bg-surface-sunk px-space-3 max-desk:data-bar-over:pt-(--bar-room)"
+          class="relative z-1 flex min-h-control-md min-w-0 flex-none items-center bg-bg-2 px-space-3 max-desk:data-bar-over:pt-(--bar-room)"
           style:--bar-room={"calc(var(--spacing-control-lg) + var(--spacing-space-3))"}
         >
           <div class="min-w-0 flex-1">

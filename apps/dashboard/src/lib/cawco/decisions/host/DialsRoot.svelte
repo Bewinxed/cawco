@@ -49,10 +49,7 @@
   <div
     {...{ [DIALS_ROOT]: "" }}
     data-theme={scheme.now}
-    class={[
-      "type-body text-ink-strong antialiased",
-      scheme.now === "dark" && "dark",
-    ]}
+    class={["type-body text-tx antialiased", scheme.now === "dark" && "dark"]}
   >
     <BitsConfig defaultPortalTo={layer}>
       <!-- Undocked, a box over the page inset by --spacing-space-4 that takes no

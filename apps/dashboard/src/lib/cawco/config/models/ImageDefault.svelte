@@ -148,7 +148,7 @@
 <!-- The way to put something right: a link in the meta line it follows. -->
 {#snippet fixLink(fix: ImageFix)}
   <a
-    class="mark-line touch-hit pointer-hit inline-flex items-center gap-space-1 type-meta whitespace-nowrap text-accent-ink no-underline transition-[opacity] duration-(--duration-fast) ease-out hover:text-accent-ink active:opacity-72"
+    class="mark-line touch-hit pointer-hit inline-flex items-center gap-space-1 type-meta whitespace-nowrap text-accent no-underline transition-[opacity] duration-(--duration-fast) ease-out hover:text-accent active:opacity-72"
     href={fixHref(fix)}
   >
     <span>{fix.label}</span>
@@ -158,7 +158,7 @@
 
 <div
   data-slot="group"
-  class="@container/images flex flex-col gap-space-2 border-t border-border-hairline pt-space-4"
+  class="@container/images flex flex-col gap-space-2 border-t border-ui pt-space-4"
   data-group="images"
 >
   <SectionHeader {hue} icon={IconImage} label={words.heading} level={2}>
@@ -166,7 +166,7 @@
       <SaveLine {phase} {words} />
     {/snippet}
   </SectionHeader>
-  <p data-slot="note" class="m-0 type-meta max-w-measure text-ink-muted">
+  <p data-slot="note" class="m-0 type-meta max-w-measure text-tx-2">
     {words.note}
   </p>
 
@@ -187,10 +187,8 @@
               <ProviderMark provider={MARKS[provider]} />
             </span>
             <span class="flex min-w-0 flex-col gap-space-1">
-              <span class="type-label text-ink-strong"
-                >{words.name(provider)}</span
-              >
-              <span class="type-meta text-ink-muted text-pretty"
+              <span class="type-label text-tx">{words.name(provider)}</span>
+              <span class="type-meta text-tx-2 text-pretty"
                 >{words.runsOn(provider)}</span
               >
               {#if stands.of > 0}
@@ -201,22 +199,22 @@
                   <!-- Every machine: the tick. Short of that, the warning glyph,
                    in the attention hue only on the provider calls go to. -->
                   {#if stands.ready === stands.of}
-                    <IconTick class="size-icon-sm flex-none text-status-done" />
-                    <span class="text-ink-muted">{stands.words}</span>
+                    <IconTick class="size-icon-sm flex-none text-green" />
+                    <span class="text-tx-2">{stands.words}</span>
                   {:else}
                     <IconWarningTriangle
                       aria-hidden="true"
                       class={[
                         "size-icon-sm flex-none",
                         provider === value.provider
-                          ? "text-status-attn"
-                          : "text-ink-subtle",
+                          ? "text-orange"
+                          : "text-tx-2",
                       ]}
                     />
                     <span
                       class={provider === value.provider
-                        ? "text-status-attn"
-                        : "text-ink-muted"}>{stands.words}</span
+                        ? "text-orange"
+                        : "text-tx-2"}>{stands.words}</span
                     >
                   {/if}
                 </span>
@@ -228,10 +226,7 @@
       <!-- The Gemini API's own setting, under its option (the last), tied
            to it by the rule down its lead edge; it waits, disabled, while
            another provider is chosen. -->
-      <div
-        class="ms-space-4 border-s border-border-hairline ps-space-3"
-        data-slot="model"
-      >
+      <div class="ms-space-4 border-s border-ui ps-space-3" data-slot="model">
         <Field id="images-model" label={words.model}>
           <Select.Root
             disabled={value.provider !== MODEL_PROVIDER}
@@ -248,9 +243,9 @@
                   {#snippet children()}
                     <span>{words.modelName(one)}</span>
                     {#if index === 0}
-                      <span class="text-ink-muted">{words.modelDefault}</span>
+                      <span class="text-tx-2">{words.modelDefault}</span>
                     {/if}
-                    <span class="num ms-auto ps-space-3 text-ink-muted"
+                    <span class="num ms-auto ps-space-3 text-tx-2"
                       >{words.modelPrice(one)}</span
                     >
                   {/snippet}
@@ -269,7 +264,7 @@
 
     <div class="flex min-w-0 flex-col gap-space-4" data-slot="chosen">
       <div class="flex min-w-0 flex-col gap-space-1">
-        <h3 class="m-0 type-label text-ink-muted" id="images-machines">
+        <h3 class="m-0 type-label text-tx-2" id="images-machines">
           {words.machinesHead(value.provider)}
         </h3>
         {#if chosen.length === 0}
@@ -290,33 +285,31 @@
               {@const fix = lack ? words.fix(lack) : null}
               {@const state = stateOf(machine)}
               <li
-                class="flex min-h-14 items-center gap-x-space-3 border-b border-border-hairline py-space-1 last:border-b-0"
+                class="flex min-h-14 items-center gap-x-space-3 border-b border-ui py-space-1 last:border-b-0"
                 data-lack={lack?.kind}
                 data-state={state}
               >
                 <span
-                  class="grid w-row-compact flex-none place-items-center text-ink-muted"
+                  class="grid w-row-compact flex-none place-items-center text-tx-2"
                 >
                   <OsMark class="size-icon-md" os={machine.os} />
                 </span>
                 <span class="flex min-w-0 flex-auto flex-col">
                   <span
                     class="truncate type-label"
-                    class:text-ink-muted={state === "offline"}
-                    class:text-ink-strong={state !== "offline"}
-                    >{machine.name}</span
+                    class:text-tx-2={state === "offline"}
+                    class:text-tx={state !== "offline"}>{machine.name}</span
                   >
                   {#if state === "offline"}
-                    <span class="type-meta text-ink-muted">{words.offline}</span
-                    >
+                    <span class="type-meta text-tx-2">{words.offline}</span>
                   {:else if lack}
                     <span
                       class="flex min-w-0 flex-wrap items-baseline gap-x-space-2"
                     >
                       <span
                         class="min-w-0 type-meta text-pretty"
-                        class:text-ink-muted={state !== "not-ready"}
-                        class:text-ink-strong={state === "not-ready"}
+                        class:text-tx-2={state !== "not-ready"}
+                        class:text-tx={state === "not-ready"}
                         >{words.lack(lack)}</span
                       >
                       {#if fix}
@@ -335,22 +328,17 @@
                       role="img"
                     >
                       {#if state === "ready"}
-                        <IconTick
-                          class="size-icon-md text-status-done"
-                          data-box
-                        />
+                        <IconTick class="size-icon-md text-green" data-box />
                       {:else if state === "installing"}
                         <LiveDot data-box data-pulse size="row" tone="muted" />
                       {:else if state === "offline"}
                         <!-- The machine list's offline mark: a still dot in the presence-off ink. -->
-                        <span
-                          class="size-1.5 rounded-pill bg-ink-subtle"
-                          data-box
+                        <span class="size-1.5 rounded-pill bg-tx-2" data-box
                         ></span>
                       {:else}
                         <IconWarningTriangle
                           aria-hidden="true"
-                          class="size-icon-md text-status-attn"
+                          class="size-icon-md text-orange"
                           data-box
                         />
                       {/if}

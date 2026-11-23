@@ -3,11 +3,11 @@
   import { tv } from "#lib/utils.js";
 
   const tableRowVariants = tv({
-    base: "border-b transition-colors data-[state=selected]:bg-surface-recess",
+    base: "border-b transition-colors data-[state=selected]:bg-bg-2",
     variants: {
       variant: {
         /** The header's band: no rule, on the band surface. */
-        band: "border-0 bg-surface-recess",
+        band: "border-0 bg-bg-2",
         /*
          * A body's last row: TableBody's `[&_tr:last-child]:border-0` (0,2,1)
          * writes every side's width and style there. Where a row's own bottom
@@ -40,7 +40,7 @@
          * the card's raised one, an open slot at the card's end.
          */
         offered:
-          "border-b-none bg-surface-page [&:is(tbody>tr):last-child]:border-b-none",
+          "border-b-none bg-bg [&:is(tbody>tr):last-child]:border-b-none",
       },
       /** A row whose subject is away (an offline machine). */
       inactive: { true: "opacity-50" },

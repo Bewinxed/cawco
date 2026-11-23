@@ -131,14 +131,14 @@
 
 <svelte:head><title>Pin working bench · CawCo</title></svelte:head>
 
-<main class="flex h-dvh flex-col bg-surface-recess">
+<main class="flex h-dvh flex-col bg-bg-2">
   <header class="flex flex-none flex-wrap gap-space-2 p-space-2">
     <button data-bench="work" onclick={bench.work} type="button">Work</button>
     <button data-bench="land" onclick={bench.land} type="button">Land</button>
     <button data-bench="rest" onclick={bench.rest} type="button">Rest</button>
   </header>
   <div
-    class="@container relative min-h-0 flex-auto bg-surface-raised"
+    class="@container relative min-h-0 flex-auto bg-bg"
     data-slot="pin-room"
     {@attach measureRoom}
   >

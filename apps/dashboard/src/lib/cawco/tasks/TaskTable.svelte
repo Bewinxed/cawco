@@ -212,7 +212,7 @@
      the title across the card, then id, stage, to-dos and age. -->
 <div
   data-slot="ledger"
-  class="group/ledger overflow-hidden rounded-lg bg-surface-raised shadow-sm"
+  class="group/ledger overflow-hidden rounded-lg bg-bg shadow-sm"
   data-pickable={onpick ? "" : undefined}
   style:--card-cols={onpick ? "auto auto auto 1fr auto" : "auto auto 1fr auto"}
 >
@@ -256,7 +256,7 @@
                 />
               {:else if column.getCanSort()}
                 <button
-                  class="select-none inline-flex items-center gap-space-1 -me-space-1 p-space-1 rounded-sm type-label tracking-caps uppercase text-ink-muted mark-line press-tint focus-inset"
+                  class="select-none inline-flex items-center gap-space-1 -me-space-1 p-space-1 rounded-sm type-label tracking-caps uppercase text-tx-2 mark-line press-tint focus-inset"
                   onclick={column.getToggleSortingHandler()}
                   type="button"
                 >
@@ -327,7 +327,7 @@
                   }}
                 />
               {:else if cell.column.id === "id"}
-                <span data-slot="id" class="type-code liga-none text-ink-subtle"
+                <span data-slot="id" class="type-code liga-none text-tx-2"
                   >{task.id}</span
                 >
               {:else if cell.column.id === "title"}
@@ -339,20 +339,20 @@
                 >
                   <span
                     data-slot="name"
-                    class="min-w-0 type-label text-ink-strong truncate"
+                    class="min-w-0 type-label text-tx truncate"
                     >{task.title}</span
                   >
                 </a>
               {:else if cell.column.id === "stage"}
                 <span
                   data-slot="stage"
-                  class="inline-flex items-center gap-space-1 min-w-0 text-ink-strong mark-line"
+                  class="inline-flex items-center gap-space-1 min-w-0 text-tx mark-line"
                   data-kind={task.kind ?? "none"}
                 >
                   {#if task.kind === "you"}
                     <IconNeedsYou
                       aria-hidden="true"
-                      class="size-icon-sm flex-none text-status-attn"
+                      class="size-icon-sm flex-none text-orange"
                     />
                   {/if}
                   <span class="type-label">{stageLabel(task.stage)}</span>

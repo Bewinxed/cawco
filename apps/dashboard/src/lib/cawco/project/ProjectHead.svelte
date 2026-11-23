@@ -263,7 +263,7 @@
          sits inside the name's box, which the title clips to one line. -->
     <h1
       data-slot="title"
-      class="-mx-space-1 min-w-0 shrink grow truncate type-title text-ink-strong"
+      class="-mx-space-1 min-w-0 shrink grow truncate type-title text-tx"
     >
       {#if draft !== null}
         <RenameField
@@ -279,7 +279,7 @@
       {:else}
         <button
           data-slot="name"
-          class="select-none press-tint block max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover focus-visible:-outline-offset-2"
+          class="select-none press-tint block max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--duration-fast) ease-out hover:bg-ui focus-visible:-outline-offset-2"
           onclick={editName}
           title="Rename {project.name}"
           type="button"

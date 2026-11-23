@@ -82,7 +82,7 @@
       {@const length = postLength(text)}
       <li
         data-slot="post-card-card"
-        class="relative flex flex-col gap-space-2 rounded-sm bg-surface-raised px-space-4 py-space-3 shadow-sm group-data-compact:px-space-3 group-data-compact:py-space-2 not-first:before:absolute not-first:before:start-(--joint-x) not-first:before:bottom-full not-first:before:h-(--joint-reach) not-first:before:w-space-1 not-first:before:bg-border-control"
+        class="relative flex flex-col gap-space-2 rounded-sm bg-bg px-space-4 py-space-3 shadow-sm group-data-compact:px-space-3 group-data-compact:py-space-2 not-first:before:absolute not-first:before:start-(--joint-x) not-first:before:bottom-full not-first:before:h-(--joint-reach) not-first:before:w-space-1 not-first:before:bg-ui-2"
         data-part={index}
         style:--joint-reach="calc(var(--spacing-space-2) + 1px)"
         style:--joint-x={"calc(var(--spacing-space-4) + var(--spacing-row-compact) / 2 - var(--spacing-space-1) / 2)"}
@@ -94,22 +94,22 @@
           <span
             data-slot="mark"
             aria-hidden="true"
-            class="grid size-6.5 flex-none place-items-center rounded-xs bg-surface-hover type-meta font-medium text-ink-strong"
+            class="grid size-6.5 flex-none place-items-center rounded-xs bg-ui type-meta font-medium text-tx"
             data-box>{handle.slice(0, 1).toUpperCase()}</span
           >
           <span
-            class="min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong"
+            class="min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap text-tx"
             >{post.account}</span
           >
           {#if parts.length > 1}
-            <span data-slot="num" class="num ms-auto type-meta text-ink-muted"
+            <span data-slot="num" class="num ms-auto type-meta text-tx-2"
               >{index + 1}/{parts.length}</span
             >
           {/if}
         </div>
         <p
           data-slot="text"
-          class="m-0 type-body wrap-anywhere whitespace-pre-wrap text-ink-strong group-data-compact:line-clamp-3"
+          class="m-0 type-body wrap-anywhere whitespace-pre-wrap text-tx group-data-compact:line-clamp-3"
         >
           {text}
         </p>
@@ -117,7 +117,7 @@
           <span
             data-num
             data-slot="count"
-            class="num self-end type-meta text-ink-muted data-over:text-status-fail"
+            class="num self-end type-meta text-tx-2 data-over:text-red"
             data-over={length > POST_LIMIT || undefined}
             title={words.countTitle}>{length}/{POST_LIMIT}</span
           >
@@ -129,17 +129,17 @@
     <dl class="m-0 flex flex-col gap-space-1">
       {#if post.community}
         <div class="flex flex-col gap-space-1">
-          <dt class="type-meta text-ink-muted">{words.community}</dt>
-          <dd data-slot="name" class="m-0 type-label text-ink-strong">
+          <dt class="type-meta text-tx-2">{words.community}</dt>
+          <dd data-slot="name" class="m-0 type-label text-tx">
             {post.community}
           </dd>
         </div>
       {/if}
       {#if media.length > 0}
         <div class="flex flex-col gap-space-1">
-          <dt class="type-meta text-ink-muted">{words.media}</dt>
+          <dt class="type-meta text-tx-2">{words.media}</dt>
           <!-- mark-line: each media file stands on its own, a picture or a player, beside no words -->
-          <dd class="m-0 flex flex-wrap gap-space-2 type-meta text-ink-strong">
+          <dd class="m-0 flex flex-wrap gap-space-2 type-meta text-tx">
             {#each media as file (file)}
               {@const kind = deliverableKind(file)}
               {#if kind === "image"}
@@ -167,11 +167,8 @@
         </div>
       {:else if post.media}
         <div class="flex flex-col gap-space-1">
-          <dt class="type-meta text-ink-muted">{words.mediaPlan}</dt>
-          <dd
-            data-slot="sentence"
-            class="m-0 type-body text-pretty text-ink-strong"
-          >
+          <dt class="type-meta text-tx-2">{words.mediaPlan}</dt>
+          <dd data-slot="sentence" class="m-0 type-body text-pretty text-tx">
             {post.media.plan}
           </dd>
         </div>

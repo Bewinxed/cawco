@@ -31,20 +31,20 @@
   ] as const;
   /** Each surface's background, written out whole. */
   const BACKGROUND = {
-    "surface-page": "bg-surface-page",
-    "surface-raised": "bg-surface-raised",
-    "surface-recess": "bg-surface-recess",
-    "surface-recess-deep": "bg-surface-sunk",
-    "surface-well": "bg-surface-sunk",
+    "surface-page": "bg-bg",
+    "surface-raised": "bg-bg",
+    "surface-recess": "bg-bg-2",
+    "surface-recess-deep": "bg-bg-2",
+    "surface-well": "bg-bg-2",
   } as const satisfies Record<(typeof SURFACES)[number], string>;
   /** The transcript's tool inks (tool-cards/descriptors.ts INKS), written out whole. */
   const INKS = [
-    "text-mark-1",
-    "text-mark-4",
-    "text-mark-5",
-    "text-mark-3",
-    "text-mark-6",
-    "text-ink-muted",
+    "text-orange",
+    "text-cyan",
+    "text-blue",
+    "text-green",
+    "text-purple",
+    "text-tx-2",
   ] as const;
 
   /**

@@ -274,13 +274,13 @@
           {#if group.origin === "hub"}
             <span
               data-slot="tag"
-              class="inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-sm font-normal whitespace-nowrap text-ink-muted"
+              class="inline-flex items-center gap-space-1 rounded-pill bg-bg px-space-2 py-px text-sm font-normal whitespace-nowrap text-tx-2"
               >at the hub</span
             >
           {:else if machine}
             <span
               data-slot="tag"
-              class="mark-line inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-sm font-normal whitespace-nowrap text-ink-muted"
+              class="mark-line inline-flex items-center gap-space-1 rounded-pill bg-bg px-space-2 py-px text-sm font-normal whitespace-nowrap text-tx-2"
             >
               <OsMark class="size-icon-md shrink-0" os={machine.os} />
               <span
@@ -292,7 +292,7 @@
           {:else}
             <span
               data-slot="tag"
-              class="inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-sm font-normal whitespace-nowrap text-ink-muted"
+              class="inline-flex items-center gap-space-1 rounded-pill bg-bg px-space-2 py-px text-sm font-normal whitespace-nowrap text-tx-2"
               >{group.machineId}</span
             >
           {/if}
@@ -350,38 +350,38 @@
          newer one is sitting on the same machine behind it. -->
           <div
             data-slot="tool"
-            class="flex flex-col gap-space-1 rounded-sm border border-border-hairline bg-surface-recess p-space-2"
+            class="flex flex-col gap-space-1 rounded-sm border border-ui bg-bg-2 p-space-2"
           >
-            <span class="text-sm font-normal text-ink-muted"
+            <span class="text-sm font-normal text-tx-2"
               >claude on this machine</span
             >
             {#if toolchain.used}
               <span class="flex flex-wrap items-baseline gap-space-2">
                 <code
-                  class="font-mono text-sm font-medium wrap-anywhere text-ink-strong"
+                  class="font-mono text-sm font-medium wrap-anywhere text-tx"
                   >{toolchain.used.path}</code
                 >
-                <span class="num text-sm font-normal text-ink-muted"
+                <span class="num text-sm font-normal text-tx-2"
                   >{toolchain.used.version ?? "version unknown"}</span
                 >
                 <span
-                  class="rounded-pill bg-surface-raised px-space-2 py-0 text-sm font-normal text-ink-muted"
+                  class="rounded-pill bg-bg px-space-2 py-0 text-sm font-normal text-tx-2"
                   >ran this sync</span
                 >
               </span>
             {/if}
             {#each toolchain.others as other (other.path)}
               <span class="flex flex-wrap items-baseline gap-space-2">
-                <code class="font-mono text-sm wrap-anywhere text-ink-strong"
+                <code class="font-mono text-sm wrap-anywhere text-tx"
                   >{other.path}</code
                 >
-                <span class="num text-sm font-normal text-ink-muted"
+                <span class="num text-sm font-normal text-tx-2"
                   >{other.version ?? "version unknown"}</span
                 >
               </span>
             {/each}
             {#if toolchain.shadowed}
-              <p class="pt-space-1 text-sm font-normal text-ink-strong">
+              <p class="pt-space-1 text-sm font-normal text-tx">
                 A newer claude is installed on this machine and is not the one
                 PATH resolves first. Until that changes, updating again will not
                 help.
@@ -393,7 +393,7 @@
         {#if group.faults[0]?.detail}
           {#if group.cause === "unknown"}
             <pre
-              class="max-h-48 overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-sm wrap-anywhere whitespace-pre-wrap text-ink-strong">{group
+              class="max-h-48 overflow-auto rounded-sm border border-ui bg-bg-2 p-space-2 font-mono text-sm wrap-anywhere whitespace-pre-wrap text-tx">{group
                 .faults[0].detail}</pre>
           {:else}
             <button
@@ -417,8 +417,8 @@
               {#each shown as fault (fault.scope + fault.key)}
                 {#if fault.detail}
                   <pre
-                    class="max-h-48 overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-sm wrap-anywhere whitespace-pre-wrap text-ink-strong"><span
-                      class="block text-ink-muted">{faultLabel(fault)}</span
+                    class="max-h-48 overflow-auto rounded-sm border border-ui bg-bg-2 p-space-2 font-mono text-sm wrap-anywhere whitespace-pre-wrap text-tx"><span
+                      class="block text-tx-2">{faultLabel(fault)}</span
                     >{fault.detail}</pre>
                 {/if}
               {/each}
@@ -508,7 +508,7 @@
         {#if result}
           <p
             data-slot="result"
-            class="text-sm font-normal wrap-anywhere tone-fail:text-status-fail"
+            class="text-sm font-normal wrap-anywhere tone-fail:text-red"
             data-flip
             data-tone={result.tone}
             role={result.tone === "fail" ? "alert" : "status"}

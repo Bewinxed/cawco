@@ -234,7 +234,7 @@
   {/if}
   {#each Object.entries(unpushable) as [machineId, why] (machineId)}
     {@const machine = machines.find((row) => row.machineId === machineId)}
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       {machine ? machineLabel(machine.hostname) : machineId}
       — {why}.
     </p>
@@ -242,10 +242,10 @@
 
   <div
     data-slot="group"
-    class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-4"
+    class="flex flex-col gap-space-2 border-t border-t-ui pt-space-4"
   >
     <SectionHeader hue={HUE} icon={IconLaptop} label="On machines" />
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       The definition files each machine really has, read live off its disk. One
       the fleet does not keep can be adopted into it, and every other machine
       gets it.
@@ -254,20 +254,20 @@
          in any order, and one listed above another would push the rows
          already drawn down the page. -->
     {#if online.length === 0}
-      <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-measure text-tx-2">
         No machine is online to ask.
       </p>
     {:else if Object.keys(reading).length > 0}
       <p
         data-slot="note"
-        class="mark-line type-meta flex max-w-measure items-center gap-space-2 text-ink-muted"
+        class="mark-line type-meta flex max-w-measure items-center gap-space-2 text-tx-2"
         role="status"
       >
         <Spinner class="shrink-0" />
         <span>Asking the machines…</span>
       </p>
     {:else if discovered.length === 0}
-      <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-measure text-tx-2">
         No machine has any subagent files yet.
       </p>
     {:else}
@@ -288,12 +288,12 @@
             {/snippet}
             {#snippet trailing()}
               {#if same}
-                <span class="type-meta whitespace-nowrap text-ink-muted"
+                <span class="type-meta whitespace-nowrap text-tx-2"
                   >Managed · in sync</span
                 >
               {:else}
                 {#if stored}
-                  <span class="type-meta whitespace-nowrap text-status-attn"
+                  <span class="type-meta whitespace-nowrap text-orange"
                     >Managed · differs</span
                   >
                 {/if}

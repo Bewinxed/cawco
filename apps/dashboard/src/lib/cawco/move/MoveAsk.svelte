@@ -17,7 +17,7 @@
 <div class="grid gap-space-2 min-w-0">
   {#each ask.lines as line, i (i)}
     <p
-      class="m-0 type-body text-ink-strong text-pretty data-follows:text-ink-muted"
+      class="m-0 type-body text-tx text-pretty data-follows:text-tx-2"
       data-follows={i > 0 || undefined}
     >
       {line}
@@ -43,7 +43,7 @@
     </Collapsible.Trigger>
     <Collapsible.Content reveal>
       <pre
-        class="mx-0 mb-0 mt-space-1 p-space-3 rounded-sm bg-surface-recess type-code text-ink-strong whitespace-pre-wrap wrap-anywhere">{ask.details.join(
+        class="mx-0 mb-0 mt-space-1 p-space-3 rounded-sm bg-bg-2 type-code text-tx whitespace-pre-wrap wrap-anywhere">{ask.details.join(
           "\n"
         )}</pre>
     </Collapsible.Content>

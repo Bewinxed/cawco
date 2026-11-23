@@ -25,18 +25,18 @@
   }}
 >
   {#snippet lead()}
-    <IconSuccess aria-hidden="true" class="size-icon-md text-status-done" />
+    <IconSuccess aria-hidden="true" class="size-icon-md text-green" />
   {/snippet}
   <button
     type="button"
     data-slot="name"
-    class="select-none pe-(--x-room) min-w-0 overflow-clip text-start text-ellipsis whitespace-nowrap rounded-xs type-label text-ink-strong focus-inset"
+    class="select-none pe-(--x-room) min-w-0 overflow-clip text-start text-ellipsis whitespace-nowrap rounded-xs type-label text-tx focus-inset"
     onclick={() => {
       onchoose();
       connect.openInstall(install.id, null);
     }}>{name} is in the fleet.</button
   >
-  <span data-slot="sub" class="type-meta text-ink-muted">
+  <span data-slot="sub" class="type-meta text-tx-2">
     {install.route === "ssh" ? "Added over SSH" : "Added by a command"}
   </span>
 </NoticeRow>

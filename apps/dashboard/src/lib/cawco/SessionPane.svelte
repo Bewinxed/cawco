@@ -2159,7 +2159,7 @@
       {/if}
       {#if veiled}
         <div
-          class="absolute inset-0 z-4 flex flex-col bg-surface-recess"
+          class="absolute inset-0 z-4 flex flex-col bg-bg-2"
           in:crossIn
           out:reveal
         >
@@ -2173,20 +2173,20 @@
     {#if continuedTo}
       <p
         data-slot="continued"
-        class="mx-auto mt-0 mb-space-4 flex max-w-full justify-center gap-space-1 px-space-3 py-space-2 text-center type-meta text-ink-muted"
+        class="mx-auto mt-0 mb-space-4 flex max-w-full justify-center gap-space-1 px-space-3 py-space-2 text-center type-meta text-tx-2"
         in:crossIn
         out:crossOut
       >
         <span class="flex-none whitespace-nowrap">{CONTINUED_IN}</span>
         <a
-          class="touch-hit pointer-hit min-w-0 text-accent-ink underline-offset-2 hover:underline"
+          class="touch-hit pointer-hit min-w-0 text-accent underline-offset-2 hover:underline"
           href={rowHref(continuedTo.id)}
           ><span class="block truncate">{continuedTo.title}</span></a
         >
       </p>
     {:else if !fault && (unaddressable || readOnly)}
       <p
-        class="mx-auto mt-0 mb-space-4 px-space-3 py-space-2 text-center type-meta text-ink-muted"
+        class="mx-auto mt-0 mb-space-4 px-space-3 py-space-2 text-center type-meta text-tx-2"
         in:crossIn
         out:crossOut
       >
@@ -2213,7 +2213,7 @@
 <div
   data-slot="pane"
   data-find-view={viewId}
-  class="relative flex min-h-0 min-w-0 flex-auto flex-col @container bg-surface-recess"
+  class="relative flex min-h-0 min-w-0 flex-auto flex-col @container bg-bg-2"
   {@attach measurePane}
 >
   {#if prestart}

@@ -19,7 +19,7 @@
    */
   export const dialogTrayVariants = tv({
     slots: {
-      tray: "surface fixed phone:top-1/2 phone:left-1/2 z-(--layer-float) flex phone:max-h-dvh-85 w-full phone:max-w-112 phone:-translate-x-1/2 phone:-translate-y-1/2 flex-col phone:rounded-xl phone:bg-surface-recess phone:p-1.5 outline-none phone:motion-safe:data-closed:animate-rise-out phone:motion-safe:data-open:animate-rise-in max-phone:inset-x-0 max-phone:bottom-0 max-phone:max-h-vh-85 max-phone:w-full max-phone:rounded-t-lg max-phone:border-border-hairline max-phone:border-t max-phone:motion-reduce:data-closed:animate-fade-out max-phone:motion-reduce:data-closed:anim-dur-fast max-phone:motion-reduce:data-open:animate-fade-in max-phone:motion-reduce:data-open:anim-dur-fast max-phone:motion-safe:data-closed:animate-sheet-out max-phone:motion-safe:data-open:animate-sheet-in",
+      tray: "surface fixed phone:top-1/2 phone:left-1/2 z-(--layer-float) flex phone:max-h-dvh-85 w-full phone:max-w-112 phone:-translate-x-1/2 phone:-translate-y-1/2 flex-col phone:rounded-xl phone:bg-bg-2 phone:p-1.5 outline-none phone:motion-safe:data-closed:animate-rise-out phone:motion-safe:data-open:animate-rise-in max-phone:inset-x-0 max-phone:bottom-0 max-phone:max-h-vh-85 max-phone:w-full max-phone:rounded-t-lg max-phone:border-ui max-phone:border-t max-phone:motion-reduce:data-closed:animate-fade-out max-phone:motion-reduce:data-closed:anim-dur-fast max-phone:motion-reduce:data-open:animate-fade-in max-phone:motion-reduce:data-open:anim-dur-fast max-phone:motion-safe:data-closed:animate-sheet-out max-phone:motion-safe:data-open:animate-sheet-in",
       body: "phone:rounded-lg bg-(--surface-ground) phone:p-space-4 max-phone:px-4 max-phone:pb-[calc(--spacing(4)+var(--safe-bottom))]",
       /** The sheet's grabber, the drawer's own (ui/drawer), under the phone line only. */
       grabber: "phone:hidden",
@@ -65,7 +65,7 @@
   const dialogBodyVariants = tv({
     slots: {
       frame:
-        "relative flex min-h-0 flex-1 flex-col phone:coarse:pb-[calc(var(--spacing-space-4)-var(--hit-foot))] type-body text-ink-strong coarse:[--hit-foot:calc((var(--spacing-control-lg)-var(--spacing-space-6))/2+1px/2)] max-phone:coarse:pb-[calc(--spacing(4)+var(--safe-bottom)-var(--hit-foot))]",
+        "relative flex min-h-0 flex-1 flex-col phone:coarse:pb-[calc(var(--spacing-space-4)-var(--hit-foot))] type-body text-tx coarse:[--hit-foot:calc((var(--spacing-control-lg)-var(--spacing-space-6))/2+1px/2)] max-phone:coarse:pb-[calc(--spacing(4)+var(--safe-bottom)-var(--hit-foot))]",
       grid: "grid min-h-0 flex-1 gap-6 overflow-y-auto overscroll-contain coarse:pb-(--hit-foot)",
     },
     variants: {

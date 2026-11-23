@@ -137,7 +137,7 @@
             <span
               aria-hidden="true"
               data-box
-              class="block size-icon-sm flex-none rounded-full border border-border-hairline bg-(--paint)"
+              class="block size-icon-sm flex-none rounded-full border border-ui bg-(--paint)"
               style:--paint={paint(option)}
             ></span>
             {words[at]}

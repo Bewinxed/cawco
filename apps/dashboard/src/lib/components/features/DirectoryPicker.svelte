@@ -184,7 +184,7 @@
   </Collapsible.Trigger>
 
   <Collapsible.Content>
-    <div class="mt-2 flex flex-col gap-2 border-t border-border-control pt-2">
+    <div class="mt-2 flex flex-col gap-2 border-t border-ui-2 pt-2">
       <div class="flex items-center gap-2">
         <Button
           aria-label="Parent directory"
@@ -195,7 +195,7 @@
         >
           <IconArrowUp />
         </Button>
-        <span class="truncate font-mono type-meta text-ink-muted" title={path}
+        <span class="truncate font-mono type-meta text-tx-2" title={path}
           >{path}</span
         >
       </div>
@@ -222,7 +222,7 @@
             {:else if errorMessage}
               <span
                 data-slot="block"
-                class="block px-2 py-space-1 type-meta text-status-fail"
+                class="block px-2 py-space-1 type-meta text-red"
                 >{errorMessage}</span
               >
             {:else}
@@ -246,7 +246,7 @@
                 {:else}
                   <span
                     data-slot="block"
-                    class="block px-2 py-space-1 type-meta text-ink-muted"
+                    class="block px-2 py-space-1 type-meta text-tx-2"
                     >No subdirectories.</span
                   >
                 {/each}

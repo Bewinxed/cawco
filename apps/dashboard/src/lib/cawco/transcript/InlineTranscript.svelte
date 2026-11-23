@@ -147,7 +147,7 @@
          row above it. -->
     <div
       data-slot="inner"
-      class="mt-space-2 mb-0 ms-(--well-start) me-0 p-space-1 rounded-sm bg-surface-recess"
+      class="mt-space-2 mb-0 ms-(--well-start) me-0 p-space-1 rounded-sm bg-bg-2"
       style:--well-start="var(--well-at, 0)"
       style:--rail-head="var(--rail)"
       style:--rail-gap="var(--spacing-space-4)"
@@ -155,14 +155,14 @@
       {#if loading}
         <p
           data-slot="inline-transcript-empty"
-          class="mark-line flex items-center gap-space-2 p-space-2 text-sm font-normal text-ink-muted"
+          class="mark-line flex items-center gap-space-2 p-space-2 text-sm font-normal text-tx-2"
         >
           <LiveDot /><span>Loading its transcript…</span>
         </p>
       {:else if shown.length === 0 && fault}
         <p
           data-slot="inline-transcript-empty"
-          class="p-space-2 text-sm font-normal text-ink-muted"
+          class="p-space-2 text-sm font-normal text-tx-2"
         >
           {#if fault.reason !== "offline"}
             Its transcript couldn't be read:
@@ -189,7 +189,7 @@
       {:else if shown.length === 0}
         <p
           data-slot="inline-transcript-empty"
-          class="p-space-2 text-sm font-normal text-ink-muted"
+          class="p-space-2 text-sm font-normal text-tx-2"
         >
           {id
             ? "Nothing in its transcript yet."

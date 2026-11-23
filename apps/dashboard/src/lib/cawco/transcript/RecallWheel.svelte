@@ -920,7 +920,7 @@
     <div
       data-slot="ghost"
       aria-selected={k === pick}
-      class="group/ghost absolute bottom-0 h-control-md py-(--ghost-pad) grid grid-cols-(--ghost-cols) gap-x-space-3 items-baseline font-sans text-(length:--ghost-size) leading-lg text-ink-strong origin-bottom invisible will-change-(--ghost-moves) transition-[color] duration-(--duration-fast) ease-out data-own:text-transparent aria-selected:not-data-draft:not-data-none:text-accent-ink"
+      class="group/ghost absolute bottom-0 h-control-md py-(--ghost-pad) grid grid-cols-(--ghost-cols) gap-x-space-3 items-baseline font-sans text-(length:--ghost-size) leading-lg text-tx origin-bottom invisible will-change-(--ghost-moves) transition-[color] duration-(--duration-fast) ease-out data-own:text-transparent aria-selected:not-data-draft:not-data-none:text-accent"
       data-k={k}
       id="{id}-{k}"
       onclick={() => pickRow(k)}
@@ -934,7 +934,7 @@
       style:--ghost-size="calc(var(--spacing) * 4)"
       style:--ghost-moves="translate, rotate, scale, opacity"
     >
-      <span class="min-w-0 truncate group-data-none/ghost:text-ink-muted">
+      <span class="min-w-0 truncate group-data-none/ghost:text-tx-2">
         {#if entry.kind === "none"}
           {query.trim()
             ? "Nothing you sent here matches"
@@ -943,7 +943,7 @@
           {#if draft}
             {oneLine(draft)}
           {:else}
-            <span class="text-ink-subtle">Your draft · type to search</span>
+            <span class="text-tx-2">Your draft · type to search</span>
           {/if}
         {:else if entry.parts}
           {#each entry.parts as part, p (p)}
@@ -962,7 +962,7 @@
       <!-- specificity-trap: as the row's ink, `data-own` stands only on a draft. -->
       <span
         data-slot="num"
-        class="num text-sm font-normal text-ink-muted whitespace-nowrap transition-[color] duration-(--duration-fast) ease-out group-data-own/ghost:text-transparent group-aria-selected/ghost:group-not-data-draft/ghost:text-accent-ink"
+        class="num text-sm font-normal text-tx-2 whitespace-nowrap transition-[color] duration-(--duration-fast) ease-out group-data-own/ghost:text-transparent group-aria-selected/ghost:group-not-data-draft/ghost:text-accent"
         >{meta(entry.entry)}</span
       >
     </div>
@@ -978,15 +978,12 @@
     style:width="{measured.line.width}px"
   >
     <span
-      class="mark-line inline-flex items-center gap-space-1 max-w-9/20 py-space-1 px-space-2 rounded-pill bg-surface-recess inset-ring-1 inset-ring-border-hairline text-sm font-medium text-ink-strong whitespace-nowrap"
+      class="mark-line inline-flex items-center gap-space-1 max-w-9/20 py-space-1 px-space-2 rounded-pill bg-bg-2 inset-ring-1 inset-ring-ui text-sm font-medium text-tx whitespace-nowrap"
       {@attach measureChip}
     >
-      <IconSearch
-        aria-hidden="true"
-        class="flex-none size-icon-sm text-ink-muted"
-      />
+      <IconSearch aria-hidden="true" class="flex-none size-icon-sm text-tx-2" />
       <span class="min-w-0 overflow-clip text-ellipsis">{query}</span>
-      <span data-slot="num" class="num text-ink-muted"
+      <span data-slot="num" class="num text-tx-2"
         >{rows[0]?.kind === "none" ? 0 : pickable}</span
       >
     </span>

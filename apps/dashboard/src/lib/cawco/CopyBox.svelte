@@ -37,7 +37,7 @@
 </script>
 
 <div
-  class="flex h-control-md min-w-0 items-center gap-space-2 rounded-sm border border-border-control bg-surface-hover pe-space-1 ps-space-3 data-wrap:h-auto data-wrap:min-h-control-md data-wrap:flex-wrap data-wrap:gap-y-space-1 data-wrap:py-space-1"
+  class="flex h-control-md min-w-0 items-center gap-space-2 rounded-sm border border-ui-2 bg-ui pe-space-1 ps-space-3 data-wrap:h-auto data-wrap:min-h-control-md data-wrap:flex-wrap data-wrap:gap-y-space-1 data-wrap:py-space-1"
   data-wrap={wrap || undefined}
 >
   <span class="sr-only">{label}:</span>
@@ -46,7 +46,7 @@
          words and never inside one; a word wider than the box scrolls the
          command sideways. -->
     <code
-      class="min-w-0 basis-full overflow-x-auto overscroll-x-contain type-meta whitespace-normal text-ink-strong"
+      class="min-w-0 basis-full overflow-x-auto overscroll-x-contain type-meta whitespace-normal text-tx"
       title={text}
       >{#each words as word, index (index)}{#if index > 0}{" "}{/if}<span
           data-slot="word"
@@ -54,7 +54,7 @@
         >{/each}</code
     >
   {:else}
-    <code class="min-w-0 flex-1 truncate type-meta text-ink-strong" title={text}
+    <code class="min-w-0 flex-1 truncate type-meta text-tx" title={text}
       >{text}</code
     >
   {/if}
@@ -66,11 +66,7 @@
     type="button"
     variant="outline"
   >
-    <Documents
-      aria-hidden="true"
-      class="size-icon-sm text-ink-muted"
-      data-box
-    />
+    <Documents aria-hidden="true" class="size-icon-sm text-tx-2" data-box />
     <span aria-live="polite">{said}</span>
   </Button>
 </div>

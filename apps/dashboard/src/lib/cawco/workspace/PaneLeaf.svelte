@@ -405,7 +405,7 @@
      before this: a full-width identity bar clipped in half. -->
 <section
   data-slot="leaf"
-  class="@container/leaf relative flex min-h-0 min-w-0 flex-auto flex-col overflow-hidden bg-surface-recess"
+  class="@container/leaf relative flex min-h-0 min-w-0 flex-auto flex-col overflow-hidden bg-bg-2"
   data-leaf={leaf.id}
   onfocusincapture={() => workspace.focus(leaf.id)}
   onpointerdowncapture={() => workspace.focus(leaf.id)}
@@ -422,7 +422,7 @@
     data-pane-leaf-shown={railShown || undefined}
     data-slot="rail"
     aria-hidden="true"
-    class="pointer-events-none absolute inset-y-0 start-0 z-2 w-space-1 bg-ink-muted opacity-0 data-pane-leaf-shown:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--duration-fast) motion-safe:ease-out"
+    class="pointer-events-none absolute inset-y-0 start-0 z-2 w-space-1 bg-tx-2 opacity-0 data-pane-leaf-shown:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--duration-fast) motion-safe:ease-out"
   ></span>
 
   <!-- Full size puts the strip away with the rail (full-size.svelte.ts). -->
@@ -444,7 +444,7 @@
     <div
       data-slot="drop-preview"
       aria-hidden="true"
-      class="pointer-events-none absolute z-3 border border-border-control bg-surface-hover opacity-90 motion-safe:transition-[inset] motion-safe:duration-(--duration-base) motion-safe:ease-in-out"
+      class="pointer-events-none absolute z-3 border border-ui-2 bg-ui opacity-90 motion-safe:transition-[inset] motion-safe:duration-(--duration-base) motion-safe:ease-in-out"
       style:inset={previewInset}
       transition:previewFade
     ></div>

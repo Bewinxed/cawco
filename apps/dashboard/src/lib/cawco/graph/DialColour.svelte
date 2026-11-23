@@ -70,7 +70,7 @@
        leading and his trailing. -->
   <span
     aria-hidden="true"
-    class="checker grid size-space-6 grid-flow-col overflow-clip rounded-xs border border-border-control shadow-sm"
+    class="checker grid size-space-6 grid-flow-col overflow-clip rounded-xs border border-ui-2 shadow-sm"
   >
     {#if was !== null}
       <span class="block size-full bg-(--was)" style:--was={was}></span>
@@ -115,7 +115,7 @@
   <button
     aria-expanded={open}
     aria-label={words.pick(label)}
-    class="pointer-hit touch-hit grid place-items-center rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-1"
+    class="pointer-hit touch-hit grid place-items-center rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-1"
     data-vaul-no-drag
     onclick={() => {
       open = !open;
@@ -165,7 +165,7 @@
     </Popover.Root>
   {/if}
   {#if refused}
-    <p class="m-0 type-meta text-status-fail" id="{uid}-refused">
+    <p class="m-0 type-meta text-red" id="{uid}-refused">
       {words.notAColour}
     </p>
   {/if}

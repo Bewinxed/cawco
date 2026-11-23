@@ -46,7 +46,7 @@
         data-stale={ring.state === "stale" || undefined}
       >
         <circle
-          class="fill-(--c) group-data-limit/glyph:fill-border-control"
+          class="fill-(--c) group-data-limit/glyph:fill-ui-2"
           cx="5"
           cy="5"
           r={row.glyph === "disc" ? 4.5 : 4.25}
@@ -55,15 +55,15 @@
     {:else}
       <span data-box></span>
     {/if}
-    <span data-slot="rings-key-label" class="font-medium text-ink-strong"
+    <span data-slot="rings-key-label" class="font-medium text-tx"
       >{row.label}</span
     >
     <span
       data-slot="value"
-      class="mark-text font-medium whitespace-nowrap text-ink-strong"
+      class="mark-text font-medium whitespace-nowrap text-tx"
       data-key-value>{@render said(row.value)}</span
     >
-    <span class="mark-text min-w-0 justify-self-box-end text-end text-ink-muted"
+    <span class="mark-text min-w-0 justify-self-box-end text-end text-tx-2"
       >{@render said(row.reset)}</span
     >
   {/each}

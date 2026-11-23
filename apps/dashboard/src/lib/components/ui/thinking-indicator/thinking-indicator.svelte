@@ -59,7 +59,7 @@
 
 <span
   class={cn(
-    "flex items-center gap-space-2 px-space-3 py-space-2 font-family-inherit font-normal text-ink-muted",
+    "flex items-center gap-space-2 px-space-3 py-space-2 font-family-inherit font-normal text-tx-2",
     thinkingIndicatorVariants({ fit }),
     className
   )}
@@ -130,7 +130,7 @@
           >{word}
           {#if motion.current}
             <span
-              class="loops motion-safe:pointer-events-none motion-safe:absolute motion-safe:inset-y-0 motion-safe:start-0 motion-safe:text-ink-strong motion-safe:sheen-band motion-safe:animate-thinking-sheen"
+              class="loops motion-safe:pointer-events-none motion-safe:absolute motion-safe:inset-y-0 motion-safe:start-0 motion-safe:text-tx motion-safe:sheen-band motion-safe:animate-thinking-sheen"
               data-slot="sheen"
               ><span
                 class="loops motion-safe:inline-block motion-safe:animate-thinking-sheen-hold"

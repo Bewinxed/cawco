@@ -65,12 +65,12 @@
      own (DESIGN.md, The Frame Recesses Rule). -->
 <div class="flex flex-col gap-space-2">
   <div class="flex flex-wrap items-baseline justify-between gap-space-2">
-    <span class="type-label text-ink-strong">Try it</span>
+    <span class="type-label text-tx">Try it</span>
     <span
       aria-live="polite"
       class="type-meta transition-colors duration-(--duration-slow) ease-out {firing
-        ? 'text-status-done'
-        : 'text-ink-muted'}"
+        ? 'text-green'
+        : 'text-tx-2'}"
       role="status"
     >
       {verdict}
@@ -93,7 +93,7 @@
          selection tint, as a search's matched words do. -->
     <div
       data-slot="grid"
-      class="relative grid max-h-40 overflow-y-auto rounded-sm border border-border-hairline type-body"
+      class="relative grid max-h-40 overflow-y-auto rounded-sm border border-ui type-body"
     >
       <p
         data-slot="layer"

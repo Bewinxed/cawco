@@ -69,15 +69,15 @@
     /* Drawn at 16px: its hit area reaches 44px under a finger and 24px
        under a fine pointer (DESIGN.md, The 44 Touch Rule, The 24 Pointer
        Rule). */
-    "touch-hit pointer-hit border-border-strong [--hit-edge:1px]",
+    "touch-hit pointer-hit border-tx-2 [--hit-edge:1px]",
     "disabled:cursor-not-allowed disabled:opacity-50",
     "group-data-[disabled=true]/field:opacity-50",
-    "aria-invalid:border-status-fail",
+    "aria-invalid:border-red",
     "aria-invalid:aria-checked:border-accent",
     "data-checked:border-accent data-checked:bg-accent",
-    "data-checked:text-on-accent dark:not-data-checked:bg-border-control/30",
+    "data-checked:text-on-accent dark:not-data-checked:bg-ui-2/30",
     "dark:data-checked:bg-accent",
-    "dark:aria-invalid:border-status-fail/50",
+    "dark:aria-invalid:border-red/50",
     checkboxVariants({ reveal }),
     className
   )}

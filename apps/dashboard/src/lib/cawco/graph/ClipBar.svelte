@@ -324,24 +324,24 @@
 
   /** Each kind's bar: its wash and its edge, as whole classes. */
   const BAR: Record<ClipKind, string> = {
-    size: "bg-mark-4/22 border-mark-4",
-    move: "bg-mark-5/22 border-mark-5",
-    fade: "bg-mark-1/22 border-mark-1",
-    tint: "bg-mark-6/22 border-mark-6",
-    effect: "bg-mark-3/22 border-mark-3",
-    other: "bg-ink-muted/22 border-ink-muted",
+    size: "bg-cyan/22 border-cyan",
+    move: "bg-blue/22 border-blue",
+    fade: "bg-orange/22 border-orange",
+    tint: "bg-purple/22 border-purple",
+    effect: "bg-green/22 border-green",
+    other: "bg-tx-2/22 border-tx-2",
   };
   /** Each kind's ink: an end's mark. */
   const INK: Record<ClipKind, string> = {
-    size: "bg-mark-4",
-    move: "bg-mark-5",
-    fade: "bg-mark-1",
-    tint: "bg-mark-6",
-    effect: "bg-mark-3",
-    other: "bg-ink-muted",
+    size: "bg-cyan",
+    move: "bg-blue",
+    fade: "bg-orange",
+    tint: "bg-purple",
+    effect: "bg-green",
+    other: "bg-tx-2",
   };
   const ring =
-    "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-2";
+    "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-2";
   const ms = (t: number) => words.ms(figureOf(Math.round(t), lang));
   /**
    * An end's grip, px wide, and the most it takes a pointer's press: the
@@ -386,7 +386,7 @@
       <!-- Its timing as the engine ran it, under the tuned bar. -->
       <span
         aria-hidden="true"
-        class="absolute inset-y-0 start-(--from) w-(--wide) rounded-xs border border-dashed border-ink-muted"
+        class="absolute inset-y-0 start-(--from) w-(--wide) rounded-xs border border-dashed border-tx-2"
         data-slot="was"
         style:--from={pct(run.ran.from)}
         style:--wide={len(run.ran.to - run.ran.from)}
@@ -397,7 +397,7 @@
            gesture takes the bar before it. -->
       <span
         aria-hidden="true"
-        class="absolute inset-y-0 start-(--at) border-s border-dashed border-border-control"
+        class="absolute inset-y-0 start-(--at) border-s border-dashed border-ui-2"
         data-slot="floor"
         style:--at={pct(run.floor)}
       ></span>
@@ -414,7 +414,7 @@
       class={[
         "absolute inset-y-0 start-(--from) w-(--wide) touch-none rounded-xs border",
         BAR[track.kind],
-        selected && "ring-2 ring-ink-strong",
+        selected && "ring-2 ring-tx",
         holding?.id === run.id && holding.part === "body"
           ? "cursor-grabbing"
           : "cursor-grab",
@@ -464,7 +464,7 @@
             end === "start"
               ? "coarse:-translate-x-full coarse:justify-items-end coarse:rtl:translate-x-full"
               : "coarse:translate-x-full coarse:justify-items-start coarse:rtl:-translate-x-full",
-            "focus-inset focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink",
+            "focus-inset focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent",
           ]}
           data-run-end={end}
           data-slot={end}
@@ -524,7 +524,7 @@
       {#each { length: times } as _, ghost (ghost)}
         <span
           aria-hidden="true"
-          class="pointer-events-none absolute inset-y-0 start-(--from) w-(--wide) rounded-xs border border-dashed border-ink-muted"
+          class="pointer-events-none absolute inset-y-0 start-(--from) w-(--wide) rounded-xs border border-dashed border-tx-2"
           data-slot="repeat-ghost"
           style:--from={pct(span.to + ghost * period)}
           style:--wide={len(period)}
@@ -533,7 +533,7 @@
       <!-- Held inside the lane at its end: past it, it widened the face's scroller. -->
       <span
         aria-hidden="true"
-        class="pointer-events-none absolute inset-y-0 start-(--from) grid place-items-center ps-space-1 text-ink-muted"
+        class="pointer-events-none absolute inset-y-0 start-(--from) grid place-items-center ps-space-1 text-tx-2"
         style:--from="min({pct(span.to + times * period)}, calc(100% -
         var(--spacing-icon-sm) - var(--spacing-space-1)))"
       >

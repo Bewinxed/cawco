@@ -29,14 +29,12 @@
   aria-labelledby={captionId}
   class="flex min-w-0 flex-col gap-space-2"
 >
-  <p class="m-0 type-meta text-ink-muted" id={captionId}>
+  <p class="m-0 type-meta text-tx-2" id={captionId}>
     {table.change === "joins"
       ? words.listedCaption(table.days)
       : words.unlistedCaption(table.days)}
   </p>
-  <div
-    class="overflow-hidden rounded-sm border border-border-hairline bg-surface-raised"
-  >
+  <div class="overflow-hidden rounded-sm border border-ui bg-bg">
     <Table.Root aria-labelledby={captionId} layout="ledger">
       <Table.Header>
         <Table.Row variant="band">
@@ -60,10 +58,10 @@
             <Table.Cell rule="top" variant="ledger">
               <span class="flex min-w-0 items-baseline gap-space-2">
                 <span
-                  class="min-w-0 truncate font-mono text-ink-strong"
+                  class="min-w-0 truncate font-mono text-tx"
                   title={row.name}>{row.name}</span
                 >
-                <span class="flex-none text-ink-subtle"
+                <span class="flex-none text-tx-2"
                   >{row.kind === "skill"
                     ? words.kindSkill
                     : words.kindServer}</span
@@ -77,8 +75,7 @@
               variant="ledger"
             >
               {#if row.lastAt === null}
-                <span class="text-ink-subtle">{words.noCallIn(table.days)}</span
-                >
+                <span class="text-tx-2">{words.noCallIn(table.days)}</span>
               {:else}
                 <time
                   class="num"

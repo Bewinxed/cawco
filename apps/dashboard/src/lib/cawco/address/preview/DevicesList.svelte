@@ -14,15 +14,13 @@
     class="flex flex-wrap items-center justify-between gap-space-3 py-space-3"
   >
     <span class="grid gap-space-1">
-      <span class="type-label text-ink-strong">{label}</span>
-      <span class="type-meta text-ink-muted">{line}</span>
+      <span class="type-label text-tx">{label}</span>
+      <span class="type-meta text-tx-2">{line}</span>
     </span>
   </div>
 {/snippet}
 
-<div
-  class="grid [&>div]:border-border-hairline [&>div:not(:last-child)]:border-b"
->
+<div class="grid [&>div]:border-ui [&>div:not(:last-child)]:border-b">
   {@render setting("Paired devices", "3 devices can open this dashboard")}
   {@render children()}
   {@render setting(

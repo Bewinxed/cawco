@@ -116,7 +116,7 @@
 <div class="flex flex-col">
   <p
     data-slot="order-list-label"
-    class="type-meta px-space-1 pt-0 pb-space-2 text-ink-muted"
+    class="type-meta px-space-1 pt-0 pb-space-2 text-tx-2"
     id="order-label"
   >
     {words.order}
@@ -146,7 +146,7 @@
             order.length
           )}
           aria-roledescription={words.draggable}
-          class="type-label relative flex min-h-space-8 w-full cursor-grab touch-none items-center gap-space-3 rounded-sm border-none border-current bg-surface-hover px-space-3 text-start text-ink-strong select-none group-data-held:cursor-grabbing group-data-held:bg-surface-raised group-data-held:shadow-md focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:-outline-offset-2 coarse:min-h-control-lg"
+          class="type-label relative flex min-h-space-8 w-full cursor-grab touch-none items-center gap-space-3 rounded-sm border-none border-current bg-ui px-space-3 text-start text-tx select-none group-data-held:cursor-grabbing group-data-held:bg-bg group-data-held:shadow-md focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:-outline-offset-2 coarse:min-h-control-lg"
           data-id={account.id}
           onkeydown={(event) => nudge(event, account.id)}
           onpointerdown={(event) => grab(event, account.id)}

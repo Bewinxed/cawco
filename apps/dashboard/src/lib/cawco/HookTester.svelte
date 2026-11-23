@@ -65,12 +65,12 @@
     <Badge class="shrink-0" tone={KIND_TONE[kind]} variant="outline"
       ><span>{KIND_LABEL[kind]}</span></Badge
     >
-    <span class="type-meta text-ink-muted">{KIND_HOW[kind]}</span>
+    <span class="type-meta text-tx-2">{KIND_HOW[kind]}</span>
   </div>
 
   {#if info?.suggests && info.suggests.length > 0}
     <div class="flex flex-col gap-space-2" in:unfold out:unfold>
-      <span class="type-label text-ink-muted">Real values</span>
+      <span class="type-label text-tx-2">Real values</span>
       <div class={chipsVariants()}>
         {#each info.suggests as suggestion (suggestion)}
           <button
@@ -87,7 +87,7 @@
     </div>
   {/if}
 
-  <label class="flex flex-col gap-space-2 type-label text-ink-muted">
+  <label class="flex flex-col gap-space-2 type-label text-tx-2">
     Try it — {info?.filters ?? "the value this event carries"}
     <Input
       autocomplete="off"
@@ -108,10 +108,7 @@
       out:unfold
     >
       {#key hit}
-        <span
-          class={hit ? "text-status-done" : "text-ink-muted"}
-          in:crossIn
-          out:crossOut
+        <span class={hit ? "text-green" : "text-tx-2"} in:crossIn out:crossOut
           >{hit
             ? "Matches — this hook would fire."
             : "No match — this hook would stay quiet for this value."}</span

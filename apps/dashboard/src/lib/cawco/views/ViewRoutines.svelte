@@ -827,7 +827,7 @@
   <Table.Cell class="w-(--col-state)" {rule} variant="list"
     ><span
       data-slot="lead"
-      class="grid w-row-compact place-items-center text-ink-muted"
+      class="grid w-row-compact place-items-center text-tx-2"
       ><ProviderLogo provider={service} /></span
     ></Table.Cell
   >
@@ -839,15 +839,12 @@
   {@const said = metaOf(id)}
   <!-- Drawn only above 0 (DESIGN.md, The Earned Count Rule). -->
   {#if said.count > 0}
-    <span data-num data-slot="count" class="num type-meta text-ink-subtle"
+    <span data-num data-slot="count" class="num type-meta text-tx-2"
       >{said.count}</span
     >
   {/if}
   {#if said.needs > 0}
-    <span
-      data-slot="needs"
-      class="inline-flex text-status-attn"
-      title={said.said}
+    <span data-slot="needs" class="inline-flex text-orange" title={said.said}
       ><IconNeedsYou aria-hidden="true" class="size-icon-sm" /><span
         class="sr-only">, {said.said}</span
       ></span
@@ -975,7 +972,7 @@
             <span
               data-slot="lead"
               aria-label={rowLead.said}
-              class="grid w-row-compact place-items-center text-ink-muted lead-expiring:text-status-attn lead-paused:text-ink-subtle"
+              class="grid w-row-compact place-items-center text-tx-2 lead-expiring:text-orange lead-paused:text-tx-2"
               data-lead={leadOf(routine)}
               role="img"><rowLead.glyph class="size-icon-md" /></span
             >
@@ -984,7 +981,7 @@
             <Collapsible.Trigger data-opener class="max-w-full" look="opener">
               <span
                 data-slot="name"
-                class="block truncate type-label text-ink-muted group-data-enabled:text-ink-strong group-data-enabled:group-state-open:text-ink-strong"
+                class="block truncate type-label text-tx-2 group-data-enabled:text-tx group-data-enabled:group-state-open:text-tx"
                 >{routine.name}</span
               >
             </Collapsible.Trigger>
@@ -1009,14 +1006,14 @@
             {/if}
             <span
               data-slot="sub"
-              class="block truncate type-meta text-ink-muted"
+              class="block truncate type-meta text-tx-2"
               title={line.title}
             >
               {#if !drawn}
                 <span data-slot="sub-words">{line.words}</span>
               {/if}
               {#if line.off}
-                <span class="text-status-attn"
+                <span class="text-orange"
                   >{drawn ? line.off : `· ${line.off}`}</span
                 >
               {/if}
@@ -1061,7 +1058,7 @@
             <span
               data-slot="time"
               data-num
-              class="num inline-flex max-w-full type-meta text-ink-muted tabular-nums whitespace-nowrap data-paused:text-ink-subtle"
+              class="num inline-flex max-w-full type-meta text-tx-2 tabular-nums whitespace-nowrap data-paused:text-tx-2"
               data-paused={routine.enabled ? undefined : ""}
               title={next.title ?? undefined}>{next.text}</span
             >
@@ -1076,7 +1073,7 @@
         {#if refusal}
           <!-- What the hub refused of an act on it, under it, until acted on. -->
           <tr data-routine-refusal>
-            <td class="p-0 group-state-open:bg-surface-sunk" colspan={span}>
+            <td class="p-0 group-state-open:bg-bg-2" colspan={span}>
               <RowFault
                 again={() => again(routine, refusal.act)}
                 end="var(--spacing-space-3)"
@@ -1088,11 +1085,11 @@
         {/if}
         {#if deleting === routine.id}
           <tr>
-            <td class="p-0 group-state-open:bg-surface-sunk" colspan={span}>
+            <td class="p-0 group-state-open:bg-bg-2" colspan={span}>
               <fieldset
                 data-slot="row-ask"
                 aria-label={words.removeLabel(routine.name)}
-                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-none px-space-3 pt-0 pb-space-2 type-meta text-ink-strong"
+                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-none px-space-3 pt-0 pb-space-2 type-meta text-tx"
               >
                 <span>{words.removeAsk(routine.name)}</span>
                 <Button
@@ -1115,7 +1112,7 @@
           </tr>
         {/if}
         <tr>
-          <td class="p-0 group-state-open:bg-surface-sunk" colspan={span}>
+          <td class="p-0 group-state-open:bg-bg-2" colspan={span}>
             <Collapsible.Content fade reveal>
               <RoutineDetail
                 actions={actionsOf(routine)}
@@ -1147,13 +1144,13 @@
         <span
           data-slot="suggestion-edge"
           aria-hidden="true"
-          class="pointer-events-none absolute inset-0 outline-1 -outline-offset-1 outline-border-strong outline-dashed data-card-last:rounded-b-lg"
+          class="pointer-events-none absolute inset-0 outline-1 -outline-offset-1 outline-tx-2 outline-dashed data-card-last:rounded-b-lg"
           data-card-last={trimRefused ? undefined : ""}
         ></span>
         <span
           data-slot="lead"
           aria-label={words.trimLabel}
-          class="grid w-row-compact place-items-center text-ink-muted"
+          class="grid w-row-compact place-items-center text-tx-2"
           role="img"><SuggestionGlyph class="size-icon-md" /></span
         >
       </Table.Cell>
@@ -1167,7 +1164,7 @@
           data-slot="name-line"
           class="flex flex-wrap items-center gap-x-space-2 gap-y-space-1 type-label"
         >
-          <span data-slot="name" class="min-w-0 truncate text-ink-strong"
+          <span data-slot="name" class="min-w-0 truncate text-tx"
             >{words.trimName}</span
           >
           <span data-slot="trim-chip" class="flex h-lh shrink-0 items-center"
@@ -1177,7 +1174,7 @@
         </span>
         <span
           data-slot="sub"
-          class="block whitespace-normal text-pretty type-meta text-ink-muted"
+          class="block whitespace-normal text-pretty type-meta text-tx-2"
           >{words.trimReason}</span
         >
         <!-- On a narrow ledger, Turn on under why, on the name's edge. -->
@@ -1243,7 +1240,7 @@
       <Glyph
         data-starter-glyph
         aria-hidden="true"
-        class="size-icon-md flex-none text-ink-muted"
+        class="size-icon-md flex-none text-tx-2"
       />
       <span>{text}</span>
     </button>
@@ -1477,16 +1474,14 @@
             >
               {@render sourceLead(route.service, rule)}
               <Table.Cell {rule} variant="list">
-                <span
-                  data-slot="name"
-                  class="block truncate type-label text-ink-strong"
+                <span data-slot="name" class="block truncate type-label text-tx"
                   >{routines.find((each) => each.id === route.routineId)
                     ?.name ?? route.routineId}</span
                 >
                 <span
                   data-sub
                   data-slot="code"
-                  class="block truncate type-code liga-none text-ink-muted"
+                  class="block truncate type-code liga-none text-tx-2"
                   >{eventOf(route)}</span
                 >
               </Table.Cell>
@@ -1513,14 +1508,10 @@
             >
               {@render sourceLead(poll.service.toLowerCase(), rule)}
               <Table.Cell {rule} variant="list">
-                <span
-                  data-slot="name"
-                  class="block truncate type-label text-ink-strong"
+                <span data-slot="name" class="block truncate type-label text-tx"
                   >{poll.what}</span
                 >
-                <span
-                  data-slot="sub"
-                  class="block truncate type-meta text-ink-muted"
+                <span data-slot="sub" class="block truncate type-meta text-tx-2"
                   >{#if poll.tool}<span
                       data-slot="code"
                       class="type-code liga-none">{poll.tool}</span
@@ -1556,7 +1547,7 @@
 
 {#snippet actionsBody()}
   {#if actions.length === 0}
-    <p class="m-0 max-w-measure p-space-3 type-meta text-pretty text-ink-muted">
+    <p class="m-0 max-w-measure p-space-3 type-meta text-pretty text-tx-2">
       {words.noActions}
     </p>
   {:else}
@@ -1573,7 +1564,7 @@
           variant="ghost">{words.moreActions(actionsLeft)}</Button
         >
         {#if actionsFault}
-          <p class="m-0 type-meta text-status-fail" role="status">
+          <p class="m-0 type-meta text-red" role="status">
             {actionsFault}
           </p>
         {/if}

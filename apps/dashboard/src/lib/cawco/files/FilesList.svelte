@@ -547,7 +547,7 @@
             >
               {#snippet after()}
                 {#if artifactsCount}
-                  <span class="num text-ink-muted" data-files-head-count
+                  <span class="num text-tx-2" data-files-head-count
                     >{artifactsCount}</span
                   >
                 {/if}
@@ -560,7 +560,7 @@
             >
               {#snippet after()}
                 {#if attachmentsCount}
-                  <span class="num text-ink-muted" data-files-head-count
+                  <span class="num text-tx-2" data-files-head-count
                     >{attachmentsCount}</span
                   >
                 {/if}
@@ -634,11 +634,11 @@
               data-files-head
             >
               <h3
-                class="type-label mark-line flex min-w-0 flex-auto items-center gap-space-3 text-ink-strong"
+                class="type-label mark-line flex min-w-0 flex-auto items-center gap-space-3 text-tx"
                 id="{uid}-artifacts"
               >
                 <span
-                  class="grid w-row-compact flex-none place-items-center text-ink-muted"
+                  class="grid w-row-compact flex-none place-items-center text-tx-2"
                   data-box
                   ><IconLayers aria-hidden="true" class="size-icon-md" /></span
                 >
@@ -648,7 +648,7 @@
                 >
                 {#if artifactsCount}
                   <span
-                    class="num type-meta ms-auto flex-none whitespace-nowrap text-ink-muted"
+                    class="num type-meta ms-auto flex-none whitespace-nowrap text-tx-2"
                     data-files-head-count>{artifactsCount}</span
                   >
                 {/if}
@@ -667,12 +667,12 @@
             data-files-rule
           >
             <h3
-              class="type-label mark-line flex min-h-control-sm flex-none items-center gap-space-3 ps-(--lead-pad) pe-space-3 text-ink-strong"
+              class="type-label mark-line flex min-h-control-sm flex-none items-center gap-space-3 ps-(--lead-pad) pe-space-3 text-tx"
               data-files-head
               id="{uid}-attachments"
             >
               <span
-                class="grid w-row-compact flex-none place-items-center text-ink-muted"
+                class="grid w-row-compact flex-none place-items-center text-tx-2"
                 data-box
                 ><IconPaperclip aria-hidden="true" class="size-icon-md" /></span
               >
@@ -682,7 +682,7 @@
               >
               {#if attachmentsCount}
                 <span
-                  class="num type-meta ms-auto flex-none whitespace-nowrap text-ink-muted"
+                  class="num type-meta ms-auto flex-none whitespace-nowrap text-tx-2"
                   data-files-head-count>{attachmentsCount}</span
                 >
               {/if}
@@ -703,7 +703,7 @@
   {#if artifacts && artifacts.length > 0}
     <Rail
       axis="x"
-      class="flex flex-none gap-space-1 rounded-sm concentric-in r-outer-sm r-inset-space-1 bg-surface-sunk p-space-1"
+      class="flex flex-none gap-space-1 rounded-sm concentric-in r-outer-sm r-inset-space-1 bg-bg-2 p-space-1"
       itemClass="touch-hit press-tint grid size-space-6 place-items-center"
       items={VIEWS}
       label={filesWords.artifactsView}
@@ -793,7 +793,7 @@
         <!-- A region with nothing made offers to ask for it, on the same
              line, wrapping under the words when the line is short. -->
         <div
-          class="type-meta flex min-h-control-sm flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1 px-space-3 wrap-anywhere text-ink-muted"
+          class="type-meta flex min-h-control-sm flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1 px-space-3 wrap-anywhere text-tx-2"
           in:reveal
         >
           <span>Nothing made yet</span>
@@ -807,7 +807,7 @@
         </div>
       {:else if shownHits && cards.length === 0}
         <p
-          class="type-meta flex min-h-control-sm items-center px-space-3 wrap-anywhere text-ink-muted"
+          class="type-meta flex min-h-control-sm items-center px-space-3 wrap-anywhere text-tx-2"
           data-files-none
           in:crossIn
         >
@@ -824,7 +824,7 @@
              card's edge, never past it. -->
         <div
           aria-busy={searching || undefined}
-          class="kit-edge-fade-block fade-len-row min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
+          class="kit-edge-fade-block fade-len-row min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-ui-2 scrollbar-track-transparent"
           data-files-scroll
           id="{uid}-artifacts-scroll"
           in:reveal
@@ -865,7 +865,7 @@
                 class="flex min-h-control-lg items-center gap-space-3 ps-(--lead-pad) pe-space-3"
               >
                 <span
-                  class="grid w-row-compact flex-none place-items-center text-ink-muted"
+                  class="grid w-row-compact flex-none place-items-center text-tx-2"
                   data-box><Skeleton cell="glyph" radius="text" /></span
                 >
                 <Skeleton
@@ -890,7 +890,7 @@
         <!-- The Empty Starts Work Rule's by-hand way: a person sends
              attachments, so the composer's own Attach is offered. -->
         <div
-          class="type-meta flex min-h-control-sm flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1 px-space-3 wrap-anywhere text-ink-muted"
+          class="type-meta flex min-h-control-sm flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1 px-space-3 wrap-anywhere text-tx-2"
           in:reveal
         >
           <span>Nothing attached yet</span>
@@ -904,7 +904,7 @@
         </div>
       {:else if attachmentHits.length === 0}
         <p
-          class="type-meta flex min-h-control-sm items-center px-space-3 wrap-anywhere text-ink-muted"
+          class="type-meta flex min-h-control-sm items-center px-space-3 wrap-anywhere text-tx-2"
           data-files-none
           in:crossIn
         >
@@ -912,7 +912,7 @@
         </p>
       {:else}
         <div
-          class="kit-edge-fade-block fade-len-row min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
+          class="kit-edge-fade-block fade-len-row min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-ui-2 scrollbar-track-transparent"
           data-files-scroll
           id="{uid}-attachments-scroll"
           in:reveal
@@ -934,7 +934,7 @@
                     <a
                       class={menuItemVariants({
                         class:
-                          "relative flex min-h-control-lg w-full items-center gap-space-3 border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset",
+                          "relative flex min-h-control-lg w-full items-center gap-space-3 border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-tx no-underline select-none focus-inset",
                       })}
                       data-menu-item
                       download={file.name}
@@ -951,7 +951,7 @@
                     <span
                       class={menuItemVariants({
                         class:
-                          "relative flex min-h-control-lg w-full cursor-default items-center gap-space-3 border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset",
+                          "relative flex min-h-control-lg w-full cursor-default items-center gap-space-3 border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-tx no-underline select-none focus-inset",
                       })}
                       data-menu-item
                       title={file.name}
@@ -963,7 +963,7 @@
                   <button
                     class={menuItemVariants({
                       class:
-                        "relative flex min-h-control-lg w-full items-center gap-space-3 border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset",
+                        "relative flex min-h-control-lg w-full items-center gap-space-3 border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-tx no-underline select-none focus-inset",
                     })}
                     data-menu-item
                     onclick={(event) =>
@@ -1001,13 +1001,13 @@
 
 {#snippet attachmentFace(file: AttachmentRow)}
   <span
-    class="grid size-row-compact flex-none place-items-center overflow-clip text-ink-muted"
+    class="grid size-row-compact flex-none place-items-center overflow-clip text-tx-2"
     data-box
   >
     {#if file.picture}
       <img
         alt=""
-        class="size-row-compact max-w-none rounded-sm bg-surface-sunk object-cover -outline-offset-1 outline-1 outline-ink-strong/10"
+        class="size-row-compact max-w-none rounded-sm bg-bg-2 object-cover -outline-offset-1 outline-1 outline-tx/10"
         decoding="async"
         loading="lazy"
         src={file.picture}
@@ -1018,7 +1018,7 @@
   </span>
   <span class="flex min-w-0 flex-auto flex-col">
     <span class="type-label min-w-0 truncate">{file.name}</span>
-    <span class="type-meta truncate text-ink-muted"
+    <span class="type-meta truncate text-tx-2"
       >{file.kind} · {file.who}{#if file.at !== null}
         · <span class="num">{formatAgeShort(file.at)}</span>{/if}</span
     >

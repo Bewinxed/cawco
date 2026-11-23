@@ -72,7 +72,7 @@
         size="sm"
         variant="ghost"
       />
-      <span aria-live="polite" class="type-label text-ink-muted num">
+      <span aria-live="polite" class="type-label text-tx-2 num">
         {transcriptWords.blockSlideCount(at + 1, count)}
       </span>
       <Button
@@ -85,9 +85,7 @@
       />
     </span>
     {#if caption}
-      <span class="min-w-0 type-meta text-ink-muted wrap-anywhere"
-        >{caption}</span
-      >
+      <span class="min-w-0 type-meta text-tx-2 wrap-anywhere">{caption}</span>
     {/if}
   </figcaption>
 {/snippet}
@@ -101,7 +99,7 @@
   <!-- Its slides stand in the kit's well, so a slide reads as one, and the
        tallest one's room is the well's. -->
   <div
-    class="min-w-0 overflow-clip rounded-sm border border-border-control bg-surface-sunk"
+    class="min-w-0 overflow-clip rounded-sm border border-ui-2 bg-bg-2"
     data-slot="slides-well"
   >
     {#if media.still}

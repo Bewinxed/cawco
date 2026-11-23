@@ -82,24 +82,21 @@
   data-slot="block-video"
 >
   {#if !source}
-    <p
-      class="m-0 type-meta text-ink-muted wrap-anywhere"
-      data-slot="media-gone"
-    >
+    <p class="m-0 type-meta text-tx-2 wrap-anywhere" data-slot="media-gone">
       {transcriptWords.blockFileUnshown(file)}
     </p>
   {:else if media.still}
     {#if still}
       <img
         alt={caption || name}
-        class="block h-auto max-w-full rounded-sm outline-1 -outline-offset-1 outline-ink-strong/10"
+        class="block h-auto max-w-full rounded-sm outline-1 -outline-offset-1 outline-tx/10"
         data-slot="clip-still"
         src={still}
       />
     {:else}
       <!-- mark-line: the glyph stands above its word -->
       <div
-        class="grid aspect-16/9 w-full place-items-center content-center gap-space-1 rounded-sm bg-surface-recess text-ink-muted"
+        class="grid aspect-16/9 w-full place-items-center content-center gap-space-1 rounded-sm bg-bg-2 text-tx-2"
         data-slot="clip-still"
       >
         <IconVideo class="size-icon-md" />
@@ -112,7 +109,7 @@
     </div>
   {/if}
   {#if caption}
-    <figcaption class="mt-space-2 type-meta text-ink-muted wrap-anywhere">
+    <figcaption class="mt-space-2 type-meta text-tx-2 wrap-anywhere">
       {caption}
     </figcaption>
   {/if}

@@ -856,7 +856,7 @@
 {#snippet wait()}
   <!-- The well's wait (BrowserView.svelte's wait): one muted meta line at the well's top, `--spacing-space-4` in, after the live dot, arriving after the wait grace. The well stands it over its piece and holds it at the page's top while any of the piece is in view (Well.svelte `status`), so a frame taller than the view says it however far it is scrolled, never from a middle below the fold or under the page's foot. The live region stands throughout; its line comes and goes inside it. -->
   <p
-    class="m-0 p-space-4 text-ink-muted type-meta"
+    class="m-0 p-space-4 text-tx-2 type-meta"
     data-slot="wait-row"
     role="status"
   >
@@ -900,7 +900,7 @@
       <iframe
         bind:this={frame}
         class={[
-          "block rounded-xs border-0 bg-surface-page outline-1 -outline-offset-1 outline-ink-strong/10 transition-opacity duration-(--duration-base) not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)",
+          "block rounded-xs border-0 bg-bg outline-1 -outline-offset-1 outline-tx/10 transition-opacity duration-(--duration-base) not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)",
           screenTall === null && "max-h-vb-80",
           picture === undefined ? "w-full" : "flex-none",
           tall === null && screenTall === null && "aspect-16/10",
@@ -918,9 +918,9 @@
         }}
         src={pageAddress}
         style:--fade="var(--spacing-row)"
-        style:--fade-above={"linear-gradient(transparent, var(--color-ink-strong) var(--fade))"}
-        style:--fade-below={"linear-gradient(var(--color-ink-strong) calc(100% - var(--fade)), transparent)"}
-        style:--fade-both={"linear-gradient(transparent, var(--color-ink-strong) var(--fade), var(--color-ink-strong) calc(100% - var(--fade)), transparent)"}
+        style:--fade-above={"linear-gradient(transparent, var(--color-tx) var(--fade))"}
+        style:--fade-below={"linear-gradient(var(--color-tx) calc(100% - var(--fade)), transparent)"}
+        style:--fade-both={"linear-gradient(transparent, var(--color-tx) var(--fade), var(--color-tx) calc(100% - var(--fade)), transparent)"}
         style:block-size={framedHeight}
         style:inline-size={picture === undefined ? undefined : `${picture}px`}
         title={named()}
@@ -990,20 +990,14 @@
           style:--held-h={heldHeight}
         >
           {#if fault.kind === "unreached"}
-            <p class="type-label text-ink-strong wrap-anywhere">
+            <p class="type-label text-tx wrap-anywhere">
               {decisionsWords.previewUnreached(named())}
             </p>
-            <p
-              class="type-meta text-status-fail wrap-anywhere"
-              data-slot="embed-cause"
-            >
+            <p class="type-meta text-red wrap-anywhere" data-slot="embed-cause">
               {fault.cause}
             </p>
           {:else}
-            <p
-              class="type-label text-ink-strong wrap-anywhere"
-              data-slot="embed-cause"
-            >
+            <p class="type-label text-tx wrap-anywhere" data-slot="embed-cause">
               {fault.line}
             </p>
           {/if}
@@ -1024,7 +1018,7 @@
           <iframe
             bind:this={frame}
             class={[
-              "block w-full rounded-xs border-0 bg-surface-page outline-1 -outline-offset-1 outline-ink-strong/10 transition-opacity duration-(--duration-base)",
+              "block w-full rounded-xs border-0 bg-bg outline-1 -outline-offset-1 outline-tx/10 transition-opacity duration-(--duration-base)",
               tall === null &&
                 screenTall === null &&
                 (screen ? "aspect-16/10 max-h-vb-80" : "h-0"),
@@ -1096,7 +1090,7 @@
       class="flex flex-wrap items-center gap-space-3 w-full"
       role="alert"
     >
-      <p class="flex-1 min-w-0 m-0 type-meta text-status-fail wrap-anywhere">
+      <p class="flex-1 min-w-0 m-0 type-meta text-red wrap-anywhere">
         {held.unopened}
       </p>
       <Button
@@ -1113,10 +1107,7 @@
     </div>
   {:else}
     <!-- One line in its well where the preview would stand, never a slab of its size. -->
-    <p
-      data-slot="media-gone"
-      class="type-meta w-full text-ink-muted wrap-anywhere"
-    >
+    <p data-slot="media-gone" class="type-meta w-full text-tx-2 wrap-anywhere">
       {held
         ? `The ${held.kind} this card shows can't be opened here now.`
         : "What this card showed is gone."}

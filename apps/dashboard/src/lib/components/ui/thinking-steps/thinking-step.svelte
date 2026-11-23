@@ -14,14 +14,14 @@
    * (a move's steps: done, running, failed, waiting on the person, stopped).
    */
   const thinkingStepIcon = tv({
-    base: "grid h-lh min-h-icon-md w-icon-md place-items-center status-ahead:text-ink-subtle",
+    base: "grid h-lh min-h-icon-md w-icon-md place-items-center status-ahead:text-tx-2",
     variants: {
       ink: {
-        done: "text-status-done",
-        active: "text-ink-strong",
-        fail: "text-status-fail",
-        attn: "text-status-attn",
-        muted: "text-ink-muted",
+        done: "text-green",
+        active: "text-tx",
+        fail: "text-red",
+        attn: "text-orange",
+        muted: "text-tx-2",
       },
     },
   });
@@ -176,7 +176,7 @@
         {/key}</span
       >
       {#if !isLast}
-        <span class="w-px flex-1 bg-border-hairline" in:draw></span>
+        <span class="w-px flex-1 bg-ui" in:draw></span>
       {/if}
     </div>
     <!-- A new step fades in; an active step's words carry the light: its

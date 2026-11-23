@@ -334,7 +334,7 @@
         data-files-ghost
       >
         <span
-          class="grid w-row-compact flex-none place-items-center text-ink-muted"
+          class="grid w-row-compact flex-none place-items-center text-tx-2"
           data-box><Skeleton cell="glyph" radius="text" /></span
         >
         <Skeleton
@@ -386,9 +386,9 @@
       class={view === "list"
         ? menuItemVariants({
             class:
-              "relative flex min-h-control-lg w-full min-w-0 items-center gap-space-3 rounded-sm border-none border-current bg-transparent ps-(--lead-pad) pe-space-3 text-start text-ink-strong select-none focus-inset",
+              "relative flex min-h-control-lg w-full min-w-0 items-center gap-space-3 rounded-sm border-none border-current bg-transparent ps-(--lead-pad) pe-space-3 text-start text-tx select-none focus-inset",
           })
-        : "select-none relative col-start-(--lane) row-end-(--span) grid min-w-0 grid-cols-1 gap-space-1 rounded-lg border-none border-current bg-transparent px-space-1 pt-space-1 pb-space-2 text-start text-ink-strong focus-inset"}
+        : "select-none relative col-start-(--lane) row-end-(--span) grid min-w-0 grid-cols-1 gap-space-1 rounded-lg border-none border-current bg-transparent px-space-1 pt-space-1 pb-space-2 text-start text-tx focus-inset"}
       data-artifact={artifact.id}
       data-files-card
       data-flip
@@ -420,14 +420,14 @@
   <span
     data-slot="needs-dot"
     aria-hidden="true"
-    class="pointer-events-none absolute z-5 top-(--dot-at) right-(--dot-at) size-1.5 rounded-pill bg-status-attn"
+    class="pointer-events-none absolute z-5 top-(--dot-at) right-(--dot-at) size-1.5 rounded-pill bg-orange"
   ></span>
   <span
     data-ping
     data-echo
     data-slot="needs-dot"
     aria-hidden="true"
-    class="pointer-events-none absolute z-5 top-(--dot-at) right-(--dot-at) size-1.5 rounded-pill bg-status-attn opacity-0"
+    class="pointer-events-none absolute z-5 top-(--dot-at) right-(--dot-at) size-1.5 rounded-pill bg-orange opacity-0"
   ></span>
 {/snippet}
 
@@ -453,7 +453,7 @@
      marks it (FindRow `.reason`). -->
 {#snippet within(card: ArtifactCard)}
   “{#each card.within ?? [] as part, j (j)}{#if part.matched}<mark
-        class="bg-transparent font-medium text-ink-strong">{part.text}</mark
+        class="bg-transparent font-medium text-tx">{part.text}</mark
       >{:else}{part.text}{/if}{/each}”
 {/snippet}
 
@@ -469,7 +469,7 @@
        sizes it. -->
   <span
     class={[
-      "relative grid aspect-(--shape) place-items-center overflow-clip rounded-sm bg-surface-sunk after:pointer-events-none after:absolute after:inset-0 after:rounded-inherit after:border after:border-border-control",
+      "relative grid aspect-(--shape) place-items-center overflow-clip rounded-sm bg-bg-2 after:pointer-events-none after:absolute after:inset-0 after:rounded-inherit after:border after:border-ui-2",
       waiting && "mask-(--hole-mask)",
     ]}
     data-files-thumb={pictured(artifact) ? "picture" : "glyph"}
@@ -478,7 +478,7 @@
       ? "calc(calc(var(--spacing) * 1.5) / 2 + calc(var(--spacing) * 0.375))"
       : undefined}
     style:--hole-mask={waiting
-      ? "radial-gradient(circle at 100% 0, transparent calc(var(--hole) - calc(1px / 4)), var(--color-ink-strong) calc(var(--hole) + calc(1px / 4)))"
+      ? "radial-gradient(circle at 100% 0, transparent calc(var(--hole) - calc(1px / 4)), var(--color-tx) calc(var(--hole) + calc(1px / 4)))"
       : undefined}
   >
     {#if artifact.thumbnail && pictured(artifact)}
@@ -492,7 +492,7 @@
         src={thumbnailUrl(artifact.id, artifact.thumbnail, theme.resolved)}
       />
     {:else}
-      <Glyph aria-hidden="true" class="size-icon-lg text-ink-subtle" />
+      <Glyph aria-hidden="true" class="size-icon-lg text-tx-2" />
     {/if}
   </span>
   {#if waiting}
@@ -506,7 +506,7 @@
     >
   {/if}
   <span class="mark-line flex min-w-0 items-center gap-space-1 px-space-1">
-    <Glyph aria-hidden="true" class="size-icon-md flex-none text-ink-muted" />
+    <Glyph aria-hidden="true" class="size-icon-md flex-none text-tx-2" />
     <span
       data-slot="name"
       class="type-label min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap"
@@ -514,13 +514,13 @@
     >
   </span>
   <span
-    class="type-meta flex min-w-0 gap-space-1 px-space-1 whitespace-nowrap text-ink-muted"
+    class="type-meta flex min-w-0 gap-space-1 px-space-1 whitespace-nowrap text-tx-2"
   >
     <span class="num flex-none">{age}</span>{@render metaParts(artifact, true)}
   </span>
   {#if card.within}
     <span
-      class="type-meta line-clamp-2 wrap-anywhere px-space-1 text-ink-subtle"
+      class="type-meta line-clamp-2 wrap-anywhere px-space-1 text-tx-2"
       data-files-within>{@render within(card)}</span
     >
   {/if}
@@ -532,7 +532,7 @@
   <!-- Its kind's glyph in the lead column, the dot just off the glyph's
        top-right corner, clear of its ink. -->
   <span
-    class="relative grid size-row-compact flex-none place-items-center text-ink-muted"
+    class="relative grid size-row-compact flex-none place-items-center text-tx-2"
     data-box
     style:--dot-at={"calc((var(--spacing-row-compact) - var(--spacing-icon-md)) / 2 - calc(var(--spacing) * 1.5))"}
   >
@@ -545,17 +545,15 @@
     >
     {#if said}
       <span
-        class="type-meta flex min-w-0 gap-space-1 whitespace-nowrap text-ink-muted"
+        class="type-meta flex min-w-0 gap-space-1 whitespace-nowrap text-tx-2"
         >{@render metaParts(artifact, false)}</span
       >
     {/if}
     {#if card.within}
-      <span class="type-meta truncate text-ink-subtle" data-files-within
+      <span class="type-meta truncate text-tx-2" data-files-within
         >{@render within(card)}</span
       >
     {/if}
   </span>
-  <span class="num type-meta flex-none whitespace-nowrap text-ink-muted"
-    >{age}</span
-  >
+  <span class="num type-meta flex-none whitespace-nowrap text-tx-2">{age}</span>
 {/snippet}

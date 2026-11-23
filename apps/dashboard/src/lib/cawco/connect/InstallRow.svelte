@@ -142,7 +142,7 @@
   data-state={install.state}
   aria-haspopup="dialog"
   aria-label="{name}: {line}. Open"
-  class="select-none group/install flex h-14 w-full items-center gap-space-2 rounded-sm px-space-2 text-start text-ink-strong transition-control hover:bg-surface-hover press-tint focus-inset"
+  class="select-none group/install flex h-14 w-full items-center gap-space-2 rounded-sm px-space-2 text-start text-tx transition-control hover:bg-ui press-tint focus-inset"
   onclick={(event) => connect.openInstall(install.id, event.currentTarget)}
   {@attach clock.watch}
 >
@@ -154,7 +154,7 @@
         "transition-[border-color] duration-(--duration-fast) ease-out",
         install.returning === null &&
           install.state !== "joined" &&
-          "border border-dashed border-border-control shadow-none",
+          "border border-dashed border-ui-2 shadow-none",
       ],
     })}
     style:color={machineHue(index, install.state === "joined")}
@@ -165,7 +165,7 @@
       <span
         data-slot="name"
         data-box
-        class="flex min-w-0 flex-1 whitespace-nowrap type-label text-ink-strong"
+        class="flex min-w-0 flex-1 whitespace-nowrap type-label text-tx"
         ><span class="min-w-0 overflow-clip text-ellipsis">{split[0]}</span
         >{#if split[1]}<span class="flex-none">{split[1]}</span>{/if}</span
       >
@@ -186,7 +186,7 @@
       data-slot="step"
       class={[
         "mark-line flex min-w-0 items-center gap-space-2 type-meta",
-        past ? "text-status-attn" : "text-ink-muted",
+        past ? "text-orange" : "text-tx-2",
       ]}
     >
       <StepMark state={lead} size="sm" />

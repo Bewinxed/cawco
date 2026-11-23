@@ -482,9 +482,8 @@
       <div data-slot="meta" class="flex flex-wrap items-center gap-space-2">
         <!-- Its id, which no bar prints: the facts' first, as the board's
              card leads with it. -->
-        <span
-          data-slot="id"
-          class="type-meta font-mono liga-none text-ink-subtle">{taskId}</span
+        <span data-slot="id" class="type-meta font-mono liga-none text-tx-2"
+          >{taskId}</span
         >
         {#if shown}
           <!-- What the skeleton stood for, in its reveal. -->
@@ -511,7 +510,7 @@
                   >
                     <span>{stageLabel(stage.name)}</span>
                     {#if stage.kind === "you"}
-                      <IconNeedsYou class="text-status-attn" />
+                      <IconNeedsYou class="text-orange" />
                     {/if}
                   </Select.Item>
                 {/each}
@@ -522,7 +521,7 @@
             {:else if flags.queued}
               <Badge variant="secondary"><span>Queued</span></Badge>
             {/if}
-            <span class="type-meta text-ink-muted whitespace-nowrap">
+            <span class="type-meta text-tx-2 whitespace-nowrap">
               Created
               <time
                 datetime={new Date(shown.createdAt).toISOString()}
@@ -582,7 +581,7 @@
       {:else}
         <h2 data-slot="title" class="m-0 type-title">
           <button
-            class="select-none block w-(--title-w) -mx-space-1 p-space-1 rounded-sm type-title text-ink-strong text-start text-balance hover:enabled:bg-surface-hover press-tint focus-inset"
+            class="select-none block w-(--title-w) -mx-space-1 p-space-1 rounded-sm type-title text-tx text-start text-balance hover:enabled:bg-ui press-tint focus-inset"
             disabled={!shown}
             onclick={() => {
               titleDraft = shown?.title ?? "";
@@ -597,8 +596,8 @@
       {/if}
       <RowFault again={saveTitle} reason={titleProblem} />
       {#if decided}
-        <p data-slot="decided" class="m-0 type-meta text-ink-muted">
-          Decided on <a class="text-accent-ink" href={decided.href}
+        <p data-slot="decided" class="m-0 type-meta text-tx-2">
+          Decided on <a class="text-accent" href={decided.href}
             >{decided.question
               ? `${decided.page} › ${decided.question}`
               : decided.page}</a
@@ -662,7 +661,7 @@
       <div
         data-slot="task-body"
         in:arriveBody
-        class="flex flex-auto flex-col gap-space-4 pt-space-3 px-(--pane-inline) pb-space-6 border-t border-t-border-hairline"
+        class="flex flex-auto flex-col gap-space-4 pt-space-3 px-(--pane-inline) pb-space-6 border-t border-t-ui"
       >
         <TaskNeeds
           ended={false}
@@ -781,7 +780,7 @@
                 <span
                   data-num
                   data-slot="count"
-                  class="num ms-auto type-meta text-ink-subtle"
+                  class="num ms-auto type-meta text-tx-2"
                   >{shown.attempts.length}</span
                 >
               {/if}
@@ -796,7 +795,7 @@
                 <li>
                   <a
                     data-slot="session"
-                    class="flex flex-wrap items-center gap-space-2 py-space-2 px-space-3 rounded-sm bg-surface-recess text-ink-strong no-underline hover:bg-surface-hover mark-line press-tint focus-inset"
+                    class="flex flex-wrap items-center gap-space-2 py-space-2 px-space-3 rounded-sm bg-bg-2 text-tx no-underline hover:bg-ui mark-line press-tint focus-inset"
                     href={rowHref(attempt.instanceId)}
                     onclick={(event) => {
                       event.preventDefault();
@@ -820,7 +819,7 @@
                       <span>{word}</span>
                     </Badge>
                     <time
-                      class="ms-auto type-meta text-ink-muted"
+                      class="ms-auto type-meta text-tx-2"
                       datetime={new Date(
                         attempt.endedAt ?? attempt.startedAt
                       ).toISOString()}
@@ -829,8 +828,7 @@
                       )}</time
                     >
                     {#if attempt.endedHow}
-                      <span
-                        class="basis-full type-meta text-ink-muted wrap-anywhere"
+                      <span class="basis-full type-meta text-tx-2 wrap-anywhere"
                         >{attempt.endedHow}</span
                       >
                     {/if}

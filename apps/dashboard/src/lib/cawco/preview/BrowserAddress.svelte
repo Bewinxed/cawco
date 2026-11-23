@@ -80,13 +80,13 @@
   <BarGlass form="group">
     <div
       aria-label={name}
-      class="mark-line flex h-row-compact min-w-0 max-w-80 items-center gap-space-1 ps-space-2 pe-space-3 type-meta text-ink-strong"
+      class="mark-line flex h-row-compact min-w-0 max-w-80 items-center gap-space-1 ps-space-2 pe-space-3 type-meta text-tx"
       data-mine={mine || undefined}
       data-slot="browser-address"
       role="status"
       title={origin ? `${origin} · ${control}` : control}
     >
-      <span aria-hidden="true" class="mark-cell flex-none text-ink-muted"
+      <span aria-hidden="true" class="mark-cell flex-none text-tx-2"
         >{@render glyph()}</span
       >
       <!-- The place on one line: what leads the domain gives way first,
@@ -98,11 +98,11 @@
         data-slot="browser-origin"
       >
         {#if place}
-          {#if place.scheme}<span class="flex-none text-ink-muted"
+          {#if place.scheme}<span class="flex-none text-tx-2"
               >{place.scheme}</span
             >{/if}
           <span
-            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted"
+            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-tx-2"
             >{place.lead}</span
           ><span class="flex-none whitespace-nowrap">{place.domain}</span>
         {:else}

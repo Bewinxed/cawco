@@ -27,7 +27,7 @@ This is a literal record of the New Session form's implementation contracts as b
 
 ### Desktop geometry
 
-`NewSessionPopover`'s surface (the kit popover's content, `data-ns-popover`) hangs from its trigger on the float layer, `--pop-w` wide (`min(var(--c-new-session-pop-w), 100vw - 1.5 × --space-8)`) and capped at `--pop-max-h` (the room under the trigger, less 2px), on `bg-surface-recess` (its `look="new-session"`), the form's body raised on it.
+`NewSessionPopover`'s surface (the kit popover's content, `data-ns-popover`) hangs from its trigger on the float layer, `--pop-w` wide (`min(var(--c-new-session-pop-w), 100vw - 1.5 × --space-8)`) and capped at `--pop-max-h` (the room under the trigger, less 2px), on `bg-bg-2` (its `look="new-session"`), the form's body raised on it.
 
 - The head and the footer are `flex: none`; the body between them is `flex: 0 1 auto; min-height: 0; overflow: auto`, so a capped card or popover scrolls its body and keeps Close and Start in view (Form `[data-slot="body"]`; `SessionFooter.svelte`). The body's flex basis must stay `auto`: a zero basis collapsed the card to its padding in WebKit.
 - The body carries the house edge fade, `.kit-edge-fade-block` (Form `[data-slot="body"]`; `app.css` `.kit-edge-fade-block`): while it scrolls, the edge with more behind it fades over `--fade-len`, and a body that fits fades neither. macOS hides overlay scrollbars, so this edge is the capped form's one sign that it scrolls.

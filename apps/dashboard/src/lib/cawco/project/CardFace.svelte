@@ -35,7 +35,7 @@
 >
   <span
     data-slot="tile"
-    class="inline-grid size-6.5 flex-none place-items-center rounded-sm bg-surface-raised shadow-sm [&>*]:size-icon-md"
+    class="inline-grid size-6.5 flex-none place-items-center rounded-sm bg-bg shadow-sm [&>*]:size-icon-md"
     style:color={hue}><Icon /></span
   >
   {@render aside?.()}
@@ -43,8 +43,7 @@
 {#if art}
   <span class="relative z-2 mb-space-2 self-center">{@render art()}</span>
 {/if}
-<span
-  data-slot="name"
-  class="type-label relative z-2 font-medium text-ink-strong">{name}</span
+<span data-slot="name" class="type-label relative z-2 font-medium text-tx"
+  >{name}</span
 >
-<span data-slot="meta" class="relative z-2 text-ink-muted">{meta}</span>
+<span data-slot="meta" class="relative z-2 text-tx-2">{meta}</span>

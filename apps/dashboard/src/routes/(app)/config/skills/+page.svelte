@@ -761,14 +761,14 @@
         {/each}
       </RowList>
     {/if}
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       {words.degraded}
     </p>
   </div>
 
   <div
     data-slot="group"
-    class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-4"
+    class="flex flex-col gap-space-2 border-t border-t-ui pt-space-4"
   >
     <SectionHeader hue={HUE} icon={IconShop} label={words.marketplaces} />
     {#if marketplaces.length + links.length === 0}
@@ -888,13 +888,13 @@
                     {/each}
                   </div>
                 {:else if unread[row.name]}
-                  <p class="type-meta text-status-attn" role="alert" in:reveal>
+                  <p class="type-meta text-orange" role="alert" in:reveal>
                     {unread[row.name]}
                   </p>
                 {:else if (listings[row.name] ?? []).length === 0}
                   <p
                     data-slot="note"
-                    class="type-meta max-w-measure text-ink-muted"
+                    class="type-meta max-w-measure text-tx-2"
                     in:reveal
                   >
                     {words.listsNothing}
@@ -904,7 +904,7 @@
                     {#each listings[row.name] as plugin (plugin.name)}
                       {@const id = `${plugin.name}@${row.name}`}
                       <li
-                        class="flex flex-wrap items-center gap-space-2 py-space-2 not-first:border-t not-first:border-t-border-hairline"
+                        class="flex flex-wrap items-center gap-space-2 py-space-2 not-first:border-t not-first:border-t-ui"
                       >
                         <span
                           data-slot="text"
@@ -913,20 +913,19 @@
                           <span
                             class="flex flex-wrap items-baseline gap-space-2"
                           >
-                            <span class="type-label text-ink-strong"
-                              >{plugin.name}</span
+                            <span class="type-label text-tx">{plugin.name}</span
                             >
                             {#if plugin.version}
                               <span
                                 data-slot="note"
-                                class="type-meta max-w-measure text-ink-muted"
+                                class="type-meta max-w-measure text-tx-2"
                                 >{plugin.version}</span
                               >
                             {/if}
                             {#if plugin.category}
                               <span
                                 data-slot="note"
-                                class="type-meta max-w-measure text-ink-muted"
+                                class="type-meta max-w-measure text-tx-2"
                                 >{plugin.category}</span
                               >
                             {/if}
@@ -934,7 +933,7 @@
                           {#if plugin.description}
                             <span
                               data-slot="note"
-                              class="type-meta max-w-measure text-ink-muted"
+                              class="type-meta max-w-measure text-tx-2"
                               >{plugin.description}</span
                             >
                           {/if}
@@ -942,7 +941,7 @@
                         {#if installed(id)}
                           <span
                             data-slot="note"
-                            class="type-meta max-w-measure text-ink-muted"
+                            class="type-meta max-w-measure text-tx-2"
                             >{words.added}</span
                           >
                         {:else}
@@ -971,7 +970,7 @@
 
   <div
     data-slot="group"
-    class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-4"
+    class="flex flex-col gap-space-2 border-t border-t-ui pt-space-4"
   >
     <SectionHeader hue={HUE} icon={IconLayers} label={words.plugins} />
     {#if plugins.length === 0}
@@ -1073,7 +1072,7 @@
         {/each}
       </RowList>
     {/if}
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       {words.pluginOff}
     </p>
   </div>

@@ -223,10 +223,7 @@
 
 <!-- The settings draw in place under their card (SetupPopover), and the
      page grows to hold them whole: a frame is as tall as its page. -->
-<div
-  class="relative bg-surface-page p-space-4 max-desk:p-space-4"
-  {@attach holdsPanels}
->
+<div class="relative bg-bg p-space-4 max-desk:p-space-4" {@attach holdsPanels}>
   <WhoRoster
     facts={(member) => who.facts(member, who.lead?.project ?? undefined)}
     {project}

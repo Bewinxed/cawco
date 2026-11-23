@@ -117,7 +117,7 @@
   {#each projects as entry (entry.project.id)}
     <div
       data-slot="group"
-      class="flex flex-col gap-space-2 border-t border-border-hairline pt-space-4"
+      class="flex flex-col gap-space-2 border-t border-ui pt-space-4"
     >
       <SectionHeader
         hue={section.hue}

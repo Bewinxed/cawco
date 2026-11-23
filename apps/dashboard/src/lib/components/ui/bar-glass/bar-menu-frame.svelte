@@ -69,12 +69,12 @@
 {/snippet}
 
 <div
-  class="@container/shell relative min-h-(--frame-h) w-full contain-layout bg-surface-recess p-space-3"
+  class="@container/shell relative min-h-(--frame-h) w-full contain-layout bg-bg-2 p-space-3"
   style:--frame-h={`${height}px`}
 >
   <div
     aria-hidden="true"
-    class="absolute inset-space-3 rounded-lg border border-border-hairline bg-surface-raised"
+    class="absolute inset-space-3 rounded-lg border border-ui bg-bg"
   ></div>
   <div
     class={[

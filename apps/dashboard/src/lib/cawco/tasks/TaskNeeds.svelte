@@ -165,26 +165,26 @@
       <section
         data-slot="needs"
         aria-label="Its session asks"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn/40 rounded-sm bg-status-attn-bg/45"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-orange/40 rounded-sm bg-bg-2/45"
       >
         <h3
           data-slot="head"
-          class="flex items-center gap-space-2 m-0 type-label text-status-attn mark-line"
+          class="flex items-center gap-space-2 m-0 type-label text-orange mark-line"
         >
           <IconNeedsYou
             data-task-needs-glyph
-            class="flex-none size-icon-md text-status-attn"
+            class="flex-none size-icon-md text-orange"
           />
           <span>Its session asks you</span>
           <span
             data-slot="when"
-            class="ms-auto type-meta text-ink-muted whitespace-nowrap"
+            class="ms-auto type-meta text-tx-2 whitespace-nowrap"
             >{blocked.request.raisedAt
               ? ago(blocked.request.raisedAt)
               : ""}</span
           >
         </h3>
-        <p class="m-0 type-body text-ink-strong">
+        <p class="m-0 type-body text-tx">
           {blocked.request.presentation.summary}
         </p>
         <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
@@ -198,22 +198,22 @@
       <section
         data-slot="needs"
         aria-label="An approved action"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn/40 rounded-sm bg-status-attn-bg/45"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-orange/40 rounded-sm bg-bg-2/45"
       >
         <h3
           data-slot="head"
-          class="flex items-center gap-space-2 m-0 type-label text-status-attn mark-line"
+          class="flex items-center gap-space-2 m-0 type-label text-orange mark-line"
         >
           {#if proposed}
             <IconNeedsYou
               data-task-needs-glyph
-              class="flex-none size-icon-md text-status-attn"
+              class="flex-none size-icon-md text-orange"
             />
             <span>Approve {action.tool} on {action.connection}</span>
           {:else}
             <IconError
               data-task-needs-glyph
-              class="flex-none size-icon-md text-status-fail"
+              class="flex-none size-icon-md text-red"
             />
             <span
               >{action.state === "unknown"
@@ -223,11 +223,11 @@
           {/if}
           <span
             data-slot="when"
-            class="ms-auto type-meta text-ink-muted whitespace-nowrap"
+            class="ms-auto type-meta text-tx-2 whitespace-nowrap"
             >{ago(action.endedAt ?? action.createdAt)}</span
           >
         </h3>
-        <p class="m-0 type-body text-ink-strong">
+        <p class="m-0 type-body text-tx">
           {#if action.state === "unknown"}
             Check {action.service}.
           {:else if action.state === "failed"}
@@ -239,7 +239,7 @@
         {#if proposed}
           <pre
             data-slot="args"
-            class="max-h-48 m-0 py-space-2 px-space-3 overflow-auto border border-border-control rounded-sm bg-surface-sunk type-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere">{action.args}</pre>
+            class="max-h-48 m-0 py-space-2 px-space-3 overflow-auto border border-ui-2 rounded-sm bg-bg-2 type-meta font-mono liga-none whitespace-pre-wrap wrap-anywhere">{action.args}</pre>
         {/if}
         <RowFault reason={actionProblem[action.id] ?? null} />
         <div
@@ -293,16 +293,16 @@
       <section
         data-slot="needs"
         aria-label={commonWords.itsSession}
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn/40 rounded-sm bg-status-attn-bg/45"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-orange/40 rounded-sm bg-bg-2/45"
         data-reason="failed"
       >
         <h3
           data-slot="head"
-          class="flex items-center gap-space-2 m-0 type-label text-status-attn mark-line"
+          class="flex items-center gap-space-2 m-0 type-label text-orange mark-line"
         >
           <IconError
             data-task-needs-glyph
-            class="flex-none size-icon-md text-status-fail"
+            class="flex-none size-icon-md text-red"
           />
           <span
             >{lastAttempt.state === "cancelled"
@@ -311,12 +311,12 @@
           >
           <span
             data-slot="when"
-            class="ms-auto type-meta text-ink-muted whitespace-nowrap"
+            class="ms-auto type-meta text-tx-2 whitespace-nowrap"
             >{ago(lastAttempt.endedAt ?? lastAttempt.startedAt)}</span
           >
         </h3>
         {#if lastAttempt.endedHow}
-          <p class="m-0 type-body text-ink-strong">{lastAttempt.endedHow}</p>
+          <p class="m-0 type-body text-tx">{lastAttempt.endedHow}</p>
         {/if}
         <RowFault reason={retryProblem} />
         <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
@@ -341,15 +341,15 @@
       <section
         data-slot="needs"
         aria-label="Waits on"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-border-hairline rounded-sm bg-surface-recess"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-ui rounded-sm bg-bg-2"
       >
         <h3
           data-slot="head"
-          class="flex items-center gap-space-2 m-0 type-label text-ink-strong mark-line"
+          class="flex items-center gap-space-2 m-0 type-label text-tx mark-line"
         >
           <IconLock
             data-task-needs-glyph
-            class="flex-none size-icon-md text-ink-muted"
+            class="flex-none size-icon-md text-tx-2"
           />
           <span
             >Waits on {blockers.length === 1
@@ -363,11 +363,10 @@
               <div class="flex items-center gap-space-2 min-w-0">
                 {#if wait.kind === "task"}
                   <span
-                    class="flex-none type-meta font-mono liga-none text-ink-muted"
+                    class="flex-none type-meta font-mono liga-none text-tx-2"
                     >{wait.target}</span
                   >
-                  <span
-                    class="flex-auto min-w-0 type-label text-ink-strong truncate"
+                  <span class="flex-auto min-w-0 type-label text-tx truncate"
                     >{titleOf(wait.target) ?? wait.label}</span
                   >
                 {:else}
@@ -383,17 +382,17 @@
                       />
                     {:else if wait.href.startsWith("http")}
                       <a
-                        class="text-ink-strong"
+                        class="text-tx"
                         href={wait.href}
                         rel="noreferrer"
                         target="_blank">{wait.label}</a
                       >
                     {:else}
-                      <span class="text-ink-strong">{wait.label}</span>
+                      <span class="text-tx">{wait.label}</span>
                     {/if}
                   </span>
                 {/if}
-                <span class="flex-none type-meta text-ink-muted"
+                <span class="flex-none type-meta text-tx-2"
                   >{wait.flag ? `Blocked: ${wait.flag}` : wait.state}</span
                 >
                 {#if wait.kind === "task" && titleOf(wait.target)}
@@ -422,13 +421,13 @@
       <section
         data-slot="needs"
         aria-label="Built on a decision that moved"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-border-hairline rounded-sm bg-surface-recess"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-ui rounded-sm bg-bg-2"
       >
         <ul class="flex flex-col gap-space-1 m-0 p-0 list-none">
           {#each builtOn as moved (moved.target)}
             {@const drawn = referenceOf(moved.href)}
             <li
-              class="flex flex-wrap items-baseline gap-space-1 min-w-0 type-label text-ink-strong"
+              class="flex flex-wrap items-baseline gap-space-1 min-w-0 type-label text-tx"
             >
               <span>Built on</span>
               {#if drawn.draw === "element"}

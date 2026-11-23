@@ -341,7 +341,7 @@
   position={narrowToasts.current ? "top-center" : "bottom-right"}
 />
 
-<div class="flex min-h-dvh flex-col bg-surface-recess">
+<div class="flex min-h-dvh flex-col bg-bg-2">
   <div
     class="flex flex-wrap items-center gap-space-3 px-space-6 pt-space-4 max-desk:px-space-4"
   >
@@ -358,7 +358,7 @@
       </TabsList>
     </Tabs>
     {#if view === "project"}
-      <label class="flex items-center gap-space-2 type-label text-ink-muted">
+      <label class="flex items-center gap-space-2 type-label text-tx-2">
         Step
         <NativeSelect
           aria-label="Step"
@@ -382,7 +382,7 @@
     <div
       class="flex min-w-0 items-center gap-space-3 pt-space-4 ps-space-6 pe-space-6 max-desk:px-space-4"
     >
-      <h1 class="m-0 me-auto type-title text-balance text-ink-strong">
+      <h1 class="m-0 me-auto type-title text-balance text-tx">
         {pageName}
       </h1>
       <DropdownMenu.Root>
@@ -488,7 +488,7 @@
     <!-- Where the app goes once a project's page is gone (stop-work's end,
          route.spoke): the home stands for it here. -->
     <div class="px-space-6 pt-space-4 max-desk:px-space-4">
-      <h1 class="m-0 type-title text-ink-strong">Home</h1>
+      <h1 class="m-0 type-title text-tx">Home</h1>
     </div>
   {:else}
     <ForgottenPage

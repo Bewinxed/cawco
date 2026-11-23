@@ -177,31 +177,25 @@
   data-slot="block-preview"
 >
   {#if page === null}
-    <p
-      class="m-0 type-meta text-ink-muted wrap-anywhere"
-      data-slot="media-gone"
-    >
+    <p class="m-0 type-meta text-tx-2 wrap-anywhere" data-slot="media-gone">
       {transcriptWords.blockPageMissing(asked)}
     </p>
   {:else if problem}
-    <p
-      class="m-0 type-meta text-ink-muted wrap-anywhere"
-      data-slot="media-gone"
-    >
+    <p class="m-0 type-meta text-tx-2 wrap-anywhere" data-slot="media-gone">
       {transcriptWords.blockPageFailed(title, problem)}
     </p>
   {:else if media.still}
     {#if still}
       <img
         alt={title}
-        class="block aspect-16/10 w-full rounded-sm object-cover object-top outline-1 -outline-offset-1 outline-ink-strong/10"
+        class="block aspect-16/10 w-full rounded-sm object-cover object-top outline-1 -outline-offset-1 outline-tx/10"
         data-slot="page-still"
         src={still}
       />
     {:else}
       <!-- mark-line: the glyph stands above the page's title -->
       <div
-        class="grid aspect-16/10 w-full place-items-center content-center gap-space-1 rounded-sm bg-surface-recess px-space-3 text-ink-muted"
+        class="grid aspect-16/10 w-full place-items-center content-center gap-space-1 rounded-sm bg-bg-2 px-space-3 text-tx-2"
         data-slot="page-still"
       >
         <IconArtifactPageLinear class="size-icon-md" />
@@ -210,7 +204,7 @@
     {/if}
   {:else}
     <div
-      class="relative aspect-16/10 w-full overflow-clip rounded-sm bg-surface-raised outline-1 -outline-offset-1 outline-ink-strong/10"
+      class="relative aspect-16/10 w-full overflow-clip rounded-sm bg-bg outline-1 -outline-offset-1 outline-tx/10"
     >
       {#if served}
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: its load greets the page. -->
@@ -245,7 +239,7 @@
     </div>
   {/if}
   {#if caption}
-    <figcaption class="mt-space-2 type-meta text-ink-muted wrap-anywhere">
+    <figcaption class="mt-space-2 type-meta text-tx-2 wrap-anywhere">
       {caption}
     </figcaption>
   {/if}

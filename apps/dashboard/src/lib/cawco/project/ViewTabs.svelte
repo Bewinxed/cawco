@@ -288,7 +288,7 @@
   {:else if view.count > 0}
     <!-- The Decisions tab's trail: the pages still waiting for picks, as
          Needs you's number. -->
-    <span data-slot="tab-num" class="ms-space-1 type-meta num text-ink-muted"
+    <span data-slot="tab-num" class="ms-space-1 type-meta num text-tx-2"
       >{view.count}</span
     >
   {/if}

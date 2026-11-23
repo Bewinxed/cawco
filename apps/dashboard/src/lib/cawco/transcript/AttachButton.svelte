@@ -135,7 +135,7 @@
   <button
     data-att-btn
     aria-label="Attach a file or image"
-    class="select-none touch-hit hit-edge-hair size-control-md flex-none grid place-items-center concentric-xs border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] duration-(--duration-fast) ease-out motion-safe:transition-[background-color,color,scale] hover:bg-surface-hover hover:text-ink-strong motion-safe:active:scale-(--press-scale) group-inert/ctrls:border-border-strong group-inert/ctrls:shadow-sm"
+    class="select-none touch-hit hit-edge-hair size-control-md flex-none grid place-items-center concentric-xs border border-ui-2 bg-bg text-tx-2 transition-[background-color,color] duration-(--duration-fast) ease-out motion-safe:transition-[background-color,color,scale] hover:bg-ui hover:text-tx motion-safe:active:scale-(--press-scale) group-inert/ctrls:border-tx-2 group-inert/ctrls:shadow-sm"
     onclick={() => input?.click()}
     type="button"
   >

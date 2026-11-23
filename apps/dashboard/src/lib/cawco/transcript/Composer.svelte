@@ -790,7 +790,7 @@
   const GROUND_H =
     "calc(var(--dock-foot, 0px) + var(--layer-foot) + var(--spacing-space-8))";
   const LAYER_GROUND =
-    "linear-gradient(to top, var(--color-surface-recess) calc(var(--dock-foot, 0px) + var(--layer-foot)), color-mix(in oklch, var(--color-surface-recess) 0%, transparent))";
+    "linear-gradient(to top, var(--color-bg-2) calc(var(--dock-foot, 0px) + var(--layer-foot)), color-mix(in oklch, var(--color-bg-2) 0%, transparent))";
   /** The offers standing on the tray row: each conversation's, built, the one written to seen. */
   const offerStack = new OfferStack({
     showing: () => showing,
@@ -977,8 +977,7 @@
             : `Show the question from ${ask.asker}: ${summary}`}
           class={chipVariants({
             variant: "tray",
-            class:
-              "touch-hit w-full min-w-0 text-status-attn before:bg-status-attn-bg",
+            class: "touch-hit w-full min-w-0 text-orange before:bg-bg-2",
           })}
           data-tray-chip
           onclick={() => grown.restoreAsk()}
@@ -1127,7 +1126,7 @@
            machine's words, and the way on. -->
       <div
         data-slot="relaunch-error"
-        class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-status-fail text-sm font-normal wrap-anywhere group-data-drawing/dock:relative group-data-drawing/dock:z-2"
+        class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-red text-sm font-normal wrap-anywhere group-data-drawing/dock:relative group-data-drawing/dock:z-2"
         role="alert"
         transition:unfold
       >
@@ -1144,7 +1143,7 @@
     {:else if sender.sendNotice}
       <div
         data-slot="send-error"
-        class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-status-fail text-sm font-normal group-data-drawing/dock:relative group-data-drawing/dock:z-2"
+        class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-red text-sm font-normal group-data-drawing/dock:relative group-data-drawing/dock:z-2"
         role="alert"
         transition:unfold
       >
@@ -1169,7 +1168,7 @@
       </div>
     {:else if sender.signInNote}
       <p
-        class="pointer-events-auto px-space-3 text-ink-muted text-sm font-normal"
+        class="pointer-events-auto px-space-3 text-tx-2 text-sm font-normal"
         role="status"
         transition:unfold
       >
@@ -1181,7 +1180,7 @@
            sign-in's note takes. -->
       <p
         data-slot="composer-note"
-        class="pointer-events-auto px-space-3 text-ink-muted text-sm font-normal"
+        class="pointer-events-auto px-space-3 text-tx-2 text-sm font-normal"
         transition:unfold
       >
         {note}
@@ -1248,7 +1247,7 @@
         <div
           data-composer-shown={queued.edit.shown || undefined}
           data-slot="edit-row"
-          class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-sm font-medium text-ink-muted pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:blur-(length:--spacing-space-1) [&_[data-keep]]:transition-fade-blur [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-space-2 motion-safe:[&_[data-keep]]:transition-fade-slide-blur coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:filter-none data-composer-shown:[&_[data-keep]]:delay-(--duration-fast)"
+          class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-sm font-medium text-tx-2 pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:blur-(length:--spacing-space-1) [&_[data-keep]]:transition-fade-blur [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-space-2 motion-safe:[&_[data-keep]]:transition-fade-slide-blur coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:filter-none data-composer-shown:[&_[data-keep]]:delay-(--duration-fast)"
           bind:this={queued.editRow}
           style:--edit-inset="{queued.edit.inset}px"
           style:bottom="{queued.edit.base}px"
@@ -1256,7 +1255,7 @@
         >
           <span
             data-slot="what"
-            class="inline-flex items-center gap-space-2 me-auto text-ink-strong opacity-0 blur-(length:--spacing-space-1) transition-fade-blur before:size-1.5 before:rounded-pill before:bg-accent-ink motion-safe:translate-y-space-2 motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none"
+            class="inline-flex items-center gap-space-2 me-auto text-tx opacity-0 blur-(length:--spacing-space-1) transition-fade-blur before:size-1.5 before:rounded-pill before:bg-accent motion-safe:translate-y-space-2 motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none"
             >Editing your queued message</span
           >
           <!-- A touch screen has no Esc: a button keeps the message as it
@@ -1398,7 +1397,7 @@
             data-slot="menu"
             class={floatingSurface({
               class:
-                "absolute inset-x-0 bottom-(--menu-foot) max-h-80 overflow-hidden p-0 origin-bottom [&_[data-slot=command]]:bg-transparent [&_[data-slot=command-list]]:max-h-80 [&_[data-slot=command-list]]:overflow-y-auto [&_[data-slot=command-list]]:overscroll-contain [&_[data-slot=command-list]]:p-space-1 [&_[data-slot=command-group]]:py-space-1 [&_[data-slot=command-group]]:px-0 [&_[data-slot=command-group]+[data-slot=command-group]]:border-t [&_[data-slot=command-group]+[data-slot=command-group]]:border-t-border-hairline [&_[data-slot=command-item]]:flex [&_[data-slot=command-item]]:items-baseline [&_[data-slot=command-item]]:gap-space-2 [&_[data-slot=command-item]]:min-h-control-sm [&_[data-slot=command-item]]:py-space-1 [&_[data-slot=command-item]]:px-space-2 [&_[data-slot=command-item]]:rounded-sm [&_[data-slot=command-item]]:text-ink-strong coarse:[&_[data-slot=command-item]]:min-h-control-lg",
+                "absolute inset-x-0 bottom-(--menu-foot) max-h-80 overflow-hidden p-0 origin-bottom [&_[data-slot=command]]:bg-transparent [&_[data-slot=command-list]]:max-h-80 [&_[data-slot=command-list]]:overflow-y-auto [&_[data-slot=command-list]]:overscroll-contain [&_[data-slot=command-list]]:p-space-1 [&_[data-slot=command-group]]:py-space-1 [&_[data-slot=command-group]]:px-0 [&_[data-slot=command-group]+[data-slot=command-group]]:border-t [&_[data-slot=command-group]+[data-slot=command-group]]:border-t-ui [&_[data-slot=command-item]]:flex [&_[data-slot=command-item]]:items-baseline [&_[data-slot=command-item]]:gap-space-2 [&_[data-slot=command-item]]:min-h-control-sm [&_[data-slot=command-item]]:py-space-1 [&_[data-slot=command-item]]:px-space-2 [&_[data-slot=command-item]]:rounded-sm [&_[data-slot=command-item]]:text-tx coarse:[&_[data-slot=command-item]]:min-h-control-lg",
             })}
             data-side="top"
             data-state="open"
@@ -1421,13 +1420,13 @@
                         <!-- A command, in the code face. -->
                         <span
                           data-slot="e-label"
-                          class="font-(family-name:--font-mono) font-medium text-ink-strong whitespace-nowrap flex-none"
+                          class="font-(family-name:--font-mono) font-medium text-tx whitespace-nowrap flex-none"
                           >{entry.label}</span
                         >
                         {#if entry.detail}
                           <span
                             data-slot="e-detail"
-                            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-sm font-normal text-ink-muted flex-auto"
+                            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-sm font-normal text-tx-2 flex-auto"
                             >{entry.detail}</span
                           >
                         {/if}
@@ -1515,10 +1514,10 @@
           style:--roll-move="0 var(--roll-y)"
           style:--roll-clip={"inset(calc(100vmax * -1) calc(100vmax * -1) var(--roll-y))"}
           style:--fold-clip={"inset(calc(100vmax * -1) calc(100vmax * -1) calc(var(--field-pad) + var(--roll-y, 0px)))"}
-          style:--cue-top-fade={"linear-gradient(to bottom, transparent, var(--color-ink-strong) var(--cue-run))"}
-          style:--cue-bottom-fade={"linear-gradient(to top, transparent, var(--color-ink-strong) var(--cue-run))"}
-          style:--cue-both-fade={"linear-gradient(to bottom, transparent, var(--color-ink-strong) var(--cue-run), var(--color-ink-strong) calc(100% - var(--cue-run)), transparent)"}
-          style:--fold-fade={"linear-gradient(to right, var(--color-ink-strong) calc(100% - calc(var(--spacing) * 18) - var(--spacing-space-8)), transparent calc(100% - calc(var(--spacing) * 18)))"}
+          style:--cue-top-fade={"linear-gradient(to bottom, transparent, var(--color-tx) var(--cue-run))"}
+          style:--cue-bottom-fade={"linear-gradient(to top, transparent, var(--color-tx) var(--cue-run))"}
+          style:--cue-both-fade={"linear-gradient(to bottom, transparent, var(--color-tx) var(--cue-run), var(--color-tx) calc(100% - var(--cue-run)), transparent)"}
+          style:--fold-fade={"linear-gradient(to right, var(--color-tx) calc(100% - calc(var(--spacing) * 18) - var(--spacing-space-8)), transparent calc(100% - calc(var(--spacing) * 18)))"}
           style:--field-pad="calc((var(--cin-ctl) - 1lh) / 2)"
           style:--cue-run="1lh"
           onclick={(event) => {
@@ -1620,7 +1619,7 @@
             <span
               data-slot="flight"
               aria-hidden="true"
-              class="absolute inset-0 z-2 grid grid-cols-1 content-unsafe-end items-unsafe-end py-(--field-pad) px-0 font-sans text-input-floor leading-lg text-ink-strong whitespace-pre-wrap wrap-break-word pointer-events-none clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
+              class="absolute inset-0 z-2 grid grid-cols-1 content-unsafe-end items-unsafe-end py-(--field-pad) px-0 font-sans text-input-floor leading-lg text-tx whitespace-pre-wrap wrap-break-word pointer-events-none clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
               style:--flight-clip={"inset(0 calc(-1 * var(--spacing-space-2)) 0 calc(-1 * var(--spacing-space-3)))"}
             >
               <span
@@ -1650,7 +1649,7 @@
             <span
               data-slot="more"
               aria-hidden="true"
-              class="absolute end-0 bottom-0 z-2 flex items-center justify-end w-18 h-(--cin-ctl) text-ink-muted text-sm font-normal num whitespace-nowrap pointer-events-none opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-asking/dock:invisible group-data-asking/cin:invisible"
+              class="absolute end-0 bottom-0 z-2 flex items-center justify-end w-18 h-(--cin-ctl) text-tx-2 text-sm font-normal num whitespace-nowrap pointer-events-none opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-asking/dock:invisible group-data-asking/cin:invisible"
               >+{fieldFold.lines - 1}
               {fieldFold.lines === 2 ? "line" : "lines"}</span
             >

@@ -32,9 +32,9 @@
   let {
     words,
     state = null,
-    stateClass = "text-ink-muted",
+    stateClass = "text-tx-2",
     glyph: Glyph,
-    tone = "text-ink-muted",
+    tone = "text-tx-2",
     hue,
     mark,
   }: {
@@ -66,7 +66,7 @@
     {#if mark}
       {@render mark()}
     {:else if Glyph}
-      <Glyph class={cn("block size-icon-sm", hue && "text-surface-page")} />
+      <Glyph class={cn("block size-icon-sm", hue && "text-bg")} />
     {/if}
   </span>
 {/if}

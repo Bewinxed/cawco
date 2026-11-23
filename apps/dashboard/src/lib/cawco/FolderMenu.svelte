@@ -106,11 +106,11 @@
       </ContextMenu.SubTrigger>
       <ContextMenu.SubContent frame="panel-high" pad="card" width="wide">
         <div class="flex items-center justify-between pb-2 pl-space-1">
-          <span class="type-label text-ink-muted">Colour</span>
+          <span class="type-label text-tx-2">Colour</span>
           {#if pickedHue !== undefined}
             <button
-              class="select-none rounded-full px-2 py-0.5 type-label text-ink-muted
-                     transition-colors duration-(--duration-fast) hover:bg-surface-hover hover:text-ink-strong"
+              class="select-none rounded-full px-2 py-0.5 type-label text-tx-2
+                     transition-colors duration-(--duration-fast) hover:bg-ui hover:text-tx"
               onclick={() => folderPrefs.setHue(cwd, undefined)}
               type="button"
             >
@@ -130,8 +130,8 @@
               class="select-none focus-inset flex size-space-8 items-center justify-center rounded-full transition-colors
                      duration-(--duration-fast)
                      aria-pressed:outline-solid aria-pressed:outline-2
-                     aria-pressed:-outline-offset-2 aria-pressed:outline-ink-strong
-                     aria-pressed:focus-visible:outline-accent-ink"
+                     aria-pressed:-outline-offset-2 aria-pressed:outline-tx
+                     aria-pressed:focus-visible:outline-accent"
               onclick={() => folderPrefs.setHue(cwd, hue)}
               title="Hue {hue}{pickedHue === undefined && on
                 ? ' (automatic)'

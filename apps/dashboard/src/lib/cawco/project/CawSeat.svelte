@@ -72,7 +72,7 @@
   {@attach land(() => `caw:${projectId}`, { uniform: true })}
 >
   {#if lead.inPanel}
-    <IconFolder aria-hidden="true" class="size-icon-lg text-ink-muted" />
+    <IconFolder aria-hidden="true" class="size-icon-lg text-tx-2" />
   {:else if lead.shown}
     <Caw next={HEAD_NEXT} {size} status={lead.status} {still} />
   {/if}

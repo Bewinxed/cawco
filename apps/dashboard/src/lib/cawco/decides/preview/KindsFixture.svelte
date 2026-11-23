@@ -196,14 +196,14 @@
 <!-- Kinds of choice draws in place under its button, and the page grows
      to hold it whole: a frame is as tall as its page. -->
 <div
-  class="relative flex flex-col gap-space-4 bg-surface-page p-space-4 max-desk:p-space-4"
+  class="relative flex flex-col gap-space-4 bg-bg p-space-4 max-desk:p-space-4"
   {@attach holdsPanels}
 >
   <div
     class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-4 gap-y-space-3 max-phone:grid-cols-1"
     style:--head-cols="minmax(0, 1fr) auto"
   >
-    <h1 class="m-0 type-title text-balance text-ink-strong wrap-anywhere">
+    <h1 class="m-0 type-title text-balance text-tx wrap-anywhere">
       {project === null
         ? decidesWords.detailsLabel
         : decidesWords.title(project)}

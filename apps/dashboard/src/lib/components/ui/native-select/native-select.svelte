@@ -45,16 +45,16 @@
 <div
   class={cn(
     "group/native-select relative isolate w-fit rounded-sm has-[select:disabled]:opacity-50",
-    "has-[select:focus-visible]:outline-2 has-[select:focus-visible]:outline-accent-ink has-[select:focus-visible]:outline-solid has-[select:focus-visible]:-outline-offset-2",
-    "before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-strong before:bg-surface-raised before:shadow-sm before:transition-control",
-    "has-[select[aria-invalid=true]]:before:border-status-fail dark:has-[select[aria-invalid=true]]:before:border-status-fail/50",
+    "has-[select:focus-visible]:outline-2 has-[select:focus-visible]:outline-accent has-[select:focus-visible]:outline-solid has-[select:focus-visible]:-outline-offset-2",
+    "before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-tx-2 before:bg-bg before:shadow-sm before:transition-control",
+    "has-[select[aria-invalid=true]]:before:border-red dark:has-[select[aria-invalid=true]]:before:border-red/50",
     nativeSelectVariants({ measure }),
     className
   )}
   data-slot="native-select-wrapper"
 >
   <select
-    class="h-(--select-h) w-full focus-visible:outline-off min-w-0 overflow-hidden text-ellipsis whitespace-nowrap select-none appearance-none rounded-sm border border-transparent bg-transparent pr-space-8 pl-3 type-body text-ink-strong [--select-h:var(--spacing-control-md)] [--select-reach:max(calc((var(--select-h)-var(--spacing-control-lg))/2),calc(var(--hit-gap-y,var(--spacing-control-lg))/-2))] selection:bg-accent selection:text-on-accent placeholder:text-ink-muted disabled:pointer-events-none disabled:cursor-not-allowed coarse:mt-(--select-reach) coarse:mb-(--select-reach) coarse:h-[calc(var(--select-h)-2*var(--select-reach))]"
+    class="h-(--select-h) w-full focus-visible:outline-off min-w-0 overflow-hidden text-ellipsis whitespace-nowrap select-none appearance-none rounded-sm border border-transparent bg-transparent pr-space-8 pl-3 type-body text-tx [--select-h:var(--spacing-control-md)] [--select-reach:max(calc((var(--select-h)-var(--spacing-control-lg))/2),calc(var(--hit-gap-y,var(--spacing-control-lg))/-2))] selection:bg-accent selection:text-on-accent placeholder:text-tx-2 disabled:pointer-events-none disabled:cursor-not-allowed coarse:mt-(--select-reach) coarse:mb-(--select-reach) coarse:h-[calc(var(--select-h)-2*var(--select-reach))]"
     data-slot="native-select"
     bind:this={ref}
     bind:value
@@ -64,7 +64,7 @@
   </select>
   <IconUnfold
     aria-hidden="true"
-    class="pointer-events-none absolute top-1/2 right-space-4 size-icon-md -translate-y-1/2 select-none text-ink-muted"
+    class="pointer-events-none absolute top-1/2 right-space-4 size-icon-md -translate-y-1/2 select-none text-tx-2"
     data-slot="native-select-icon"
   />
 </div>

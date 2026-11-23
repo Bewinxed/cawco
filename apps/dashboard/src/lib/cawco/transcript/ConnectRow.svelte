@@ -59,12 +59,12 @@
   <div
     data-slot="trow"
     data-connect={kind}
-    class="rail-line w-full min-h-6.5 coarse:min-h-control-lg text-base font-medium text-ink-strong"
+    class="rail-line w-full min-h-6.5 coarse:min-h-control-lg text-base font-medium text-tx"
   >
     <span data-slot="rail-cell" class="rail-cell">
       <span
         data-slot="glyph"
-        class="col-start-1 row-start-1 grid place-items-center text-ink-muted data-[connect=connected]:text-status-done data-[connect=expired]:text-status-attn"
+        class="col-start-1 row-start-1 grid place-items-center text-tx-2 data-[connect=connected]:text-green data-[connect=expired]:text-orange"
         data-connect={kind}
         >{#if kind === "declined"}<IconNeutral
             class="size-icon-md block"
@@ -82,7 +82,7 @@
     >
     {#if after}
       <span
-        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-normal data-[connect=connected]:flex-none data-[connect=expired]:flex-none data-[connect=expired]:text-status-attn text-ink-muted flex-1"
+        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-normal data-[connect=connected]:flex-none data-[connect=expired]:flex-none data-[connect=expired]:text-orange text-tx-2 flex-1"
         data-connect={kind}
         title={after}>· {after}</span
       >
@@ -92,7 +92,7 @@
     <!-- The tool row's tail: the server's name in the muted mono face, and
          the chevron; it opens the MCP page. -->
     <a
-      class="mark-line touch-hit flex-none ms-auto inline-flex items-center gap-space-1 rounded-xs font-(family-name:--font-mono) font-normal text-ink-muted no-underline transition-[color] duration-(--duration-fast) ease-out hover:text-ink-strong"
+      class="mark-line touch-hit flex-none ms-auto inline-flex items-center gap-space-1 rounded-xs font-(family-name:--font-mono) font-normal text-tx-2 no-underline transition-[color] duration-(--duration-fast) ease-out hover:text-tx"
       data-box
       href={MCP}
       title={askWords.recordOnMcpPage(answer.server)}

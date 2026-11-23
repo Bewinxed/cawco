@@ -84,19 +84,19 @@
     >
       <div
         aria-hidden="true"
-        class="absolute start-(--peek-x) top-(--peek-y) flex flex-col gap-space-1 max-w-70 mt-space-1 px-space-2 py-space-1 border border-border-control rounded-sm bg-surface-raised shadow-sm motion-safe:animate-fade-in motion-safe:anim-dur-fast"
+        class="absolute start-(--peek-x) top-(--peek-y) flex flex-col gap-space-1 max-w-70 mt-space-1 px-space-2 py-space-1 border border-ui-2 rounded-sm bg-bg shadow-sm motion-safe:animate-fade-in motion-safe:anim-dur-fast"
         style:--peek-x="{peek.at.x}px"
         style:--peek-y="{peek.at.y}px"
       >
-        <span class="type-label text-ink-strong text-pretty wrap-anywhere"
+        <span class="type-label text-tx text-pretty wrap-anywhere"
           >{thing.label}</span
         >
         {#if thing.state}
-          <span class="type-meta text-ink-muted">{thing.state}</span>
+          <span class="type-meta text-tx-2">{thing.state}</span>
         {/if}
         {#each thing.peek as line, at (at)}
           <span
-            class="type-meta text-ink-muted line-clamp-2 text-pretty wrap-anywhere"
+            class="type-meta text-tx-2 line-clamp-2 text-pretty wrap-anywhere"
             >{line}</span
           >
         {/each}

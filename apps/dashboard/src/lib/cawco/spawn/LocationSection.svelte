@@ -467,7 +467,7 @@
   </div>
 
   <div data-slot="path" class="grid min-w-0 gap-space-2">
-    <span class="type-label text-ink-muted" id={`${uid}-path`}
+    <span class="type-label text-tx-2" id={`${uid}-path`}
       ><MorphText text={pathLabel} /></span
     >
     <!-- What it holds is clipped to its corners and is no scroller (the
@@ -624,7 +624,7 @@
                 {#if listingFolders}
                   <div
                     data-slot="location-section-empty"
-                    class="type-meta px-space-2 py-space-6 text-center wrap-anywhere text-ink-subtle"
+                    class="type-meta px-space-2 py-space-6 text-center wrap-anywhere text-tx-2"
                     role="status"
                   >
                     {spawnWords.location.loadingFolders}
@@ -706,12 +706,12 @@
     <p
       data-slot="outcome"
       aria-live="polite"
-      class="m-0 min-w-0 type-meta text-pretty text-ink-muted"
+      class="m-0 min-w-0 type-meta text-pretty text-tx-2"
       in:unfold
       out:unfold
     >
       {#if at >= 0}{said.sentence.slice(0, at)}<span
-          class="font-(family-name:--font-mono) wrap-anywhere text-ink-strong"
+          class="font-(family-name:--font-mono) wrap-anywhere text-tx"
           >{said.path}</span
         >{said.sentence.slice(at + said.path.length)}{:else}{said.sentence}{/if}
     </p>

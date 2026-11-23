@@ -107,7 +107,7 @@
     >
   {:else}
     <label
-      class="flex min-h-control-md min-w-0 items-center type-label text-ink-strong text-pretty wrap-anywhere"
+      class="flex min-h-control-md min-w-0 items-center type-label text-tx text-pretty wrap-anywhere"
       for={id}>{name}</label
     >
     <div
@@ -221,7 +221,7 @@
       <p
         aria-hidden="true"
         class={[
-          "mark-line col-start-2 m-0 flex min-w-0 items-center gap-space-1 pt-space-1 type-meta text-ink-muted",
+          "mark-line col-start-2 m-0 flex min-w-0 items-center gap-space-1 pt-space-1 type-meta text-tx-2",
           atEnd && "justify-end",
         ]}
         data-slot="dial-was"
@@ -230,7 +230,7 @@
         {#if dial.kind === "color"}
           <span
             data-box
-            class="checker block size-space-3 flex-none overflow-clip rounded-xs border border-border-control"
+            class="checker block size-space-3 flex-none overflow-clip rounded-xs border border-ui-2"
             ><span
               class="block size-full bg-(--was)"
               style:--was={paint(String(was ?? ""))}

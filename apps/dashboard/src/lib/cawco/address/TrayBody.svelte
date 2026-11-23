@@ -27,7 +27,7 @@
 <div
   class={cn(
     "relative grid min-w-0",
-    "bg-surface-raised",
+    "bg-bg",
     form === "desk"
       ? ["rounded-lg", deskPad]
       : "max-h-(--sheet-room) overflow-y-auto overscroll-contain rounded-t-lg px-space-4 pb-safe-space-4",

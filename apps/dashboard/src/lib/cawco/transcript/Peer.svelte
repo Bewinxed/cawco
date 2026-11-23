@@ -116,13 +116,13 @@
          own flex row, so the headline is never laid out beside the label. -->
     <p
       data-slot="peer-label"
-      class="relative m-0 type-label leading-lg text-ink-muted"
+      class="relative m-0 type-label leading-lg text-tx-2"
     >
       <span data-slot="line" class="min-h-space-6 rail-line">
         <span
           data-rail-cell
           data-slot="glyph"
-          class="text-accent-ink group-data-err/peer:text-status-fail rail-cell"
+          class="text-accent group-data-err/peer:text-red rail-cell"
         >
           {#if row.kind === "rule"}
             <IconRules class="size-icon-md" />
@@ -149,18 +149,18 @@
           {#if senderId}
             <a
               data-slot="name"
-              class="text-ink-strong relative z-1 py-space-1 underline decoration-current/35 underline-offset-2 hover:text-accent-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:duration-(--duration-fast) can-hover:motion-safe:ease-out"
+              class="text-tx relative z-1 py-space-1 underline decoration-current/35 underline-offset-2 hover:text-accent can-hover:motion-safe:transition-[color] can-hover:motion-safe:duration-(--duration-fast) can-hover:motion-safe:ease-out"
               href={conversationHref(senderId, boardStore.instanceIndex)}
               >{row.name}</a
             >
           {:else}
-            <span data-slot="name" class="text-ink-strong">{row.name}</span>
+            <span data-slot="name" class="text-tx">{row.name}</span>
           {/if}
         </span>
         {#if message.state === "failed"}
-          <span class="flex-none text-status-fail">not sent</span>
+          <span class="flex-none text-red">not sent</span>
         {:else if row.kind === "report" && row.failed}
-          <span class="flex-none text-status-fail">failed</span>
+          <span class="flex-none text-red">failed</span>
         {:else if message.state === "pending"}
           <span class="flex-none">queued</span>
         {/if}
@@ -168,7 +168,7 @@
            cut to the one line. -->
         {#if !(open || headline) && excerpt}
           <span
-            class="grow shrink basis-0 min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-normal text-ink-muted"
+            class="grow shrink basis-0 min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-normal text-tx-2"
             >{excerpt}</span
           >
         {/if}
@@ -195,7 +195,7 @@
       {#if !open && headline}
         <span
           data-slot="headline"
-          class="block min-w-0 pb-space-1 whitespace-normal wrap-anywhere font-normal text-ink-muted rail-hang"
+          class="block min-w-0 pb-space-1 whitespace-normal wrap-anywhere font-normal text-tx-2 rail-hang"
           >{headline}</span
         >
       {/if}
@@ -204,7 +204,7 @@
       <!-- Why it did not go, in MessageRow's own reason line. -->
       <p
         data-slot="reason"
-        class="mt-space-1 mb-0 text-sm font-normal text-status-fail rail-hang"
+        class="mt-space-1 mb-0 text-sm font-normal text-red rail-hang"
       >
         {meta.sendFailed}
       </p>

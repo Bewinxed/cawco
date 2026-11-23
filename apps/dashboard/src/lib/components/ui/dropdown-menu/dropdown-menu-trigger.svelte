@@ -22,12 +22,12 @@
     variants: {
       face: {
         title:
-          "mark-line type-label min-w-0 gap-space-1 px-space-2 text-ink-strong concentric-sm",
+          "mark-line type-label min-w-0 gap-space-1 px-space-2 text-tx concentric-sm",
         count: "mark-line px-space-2",
       },
       look: {
         attach:
-          "hit-edge-hair grid size-control-md place-items-center concentric-xs border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-surface-hover hover:text-ink-strong group-inert/ctrls:not-aria-invalid:border-border-strong group-inert/ctrls:shadow-sm motion-safe:pressed:scale-(--press-scale) motion-safe:transition-[background-color,color,scale]",
+          "hit-edge-hair grid size-control-md place-items-center concentric-xs border border-ui-2 bg-bg text-tx-2 transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-ui hover:text-tx group-inert/ctrls:not-aria-invalid:border-tx-2 group-inert/ctrls:shadow-sm motion-safe:pressed:scale-(--press-scale) motion-safe:transition-[background-color,color,scale]",
       },
     },
   });

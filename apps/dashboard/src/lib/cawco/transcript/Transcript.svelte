@@ -498,7 +498,7 @@
     <div
       data-tx-rail
       data-slot="livetool"
-      class="min-h-6.5 coarse:min-h-control-lg text-base font-medium text-ink-strong rail-row rail-line"
+      class="min-h-6.5 coarse:min-h-control-lg text-base font-medium text-tx rail-row rail-line"
     >
       <span data-slot="rail-cell" class="rail-cell {d.color}"
         ><LiveIcon class="size-icon-md" /></span
@@ -510,13 +510,13 @@
            the call's vocabulary the instant it completed. -->
       {#if d.label}
         <span
-          class="font-medium text-ink-strong flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+          class="font-medium text-tx flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
           >{d.label}</span
         >
       {/if}
       <!-- The argument gives way first (ToolGroup's row). -->
       <span
-        class="font-(family-name:--font-mono) text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-1"
+        class="font-(family-name:--font-mono) text-tx-2 overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-1"
         >{row.glance.glance}</span
       >
     </div>
@@ -569,7 +569,7 @@
   {#if (session.loading || session.cursor !== null) && rowDraw.renderedRows.length === 0}
     <p
       data-slot="transcript-empty"
-      class="mark-line isolate flex items-center gap-space-2 text-sm font-normal text-ink-muted py-space-4"
+      class="mark-line isolate flex items-center gap-space-2 text-sm font-normal text-tx-2 py-space-4"
       style:padding-top={headRoom
         ? `calc(var(--spacing-space-4) + ${headRoom})`
         : undefined}
@@ -624,7 +624,7 @@
     {#if rowDraw.renderedRows.length > 0 && session.olderFault}
       <p
         data-slot="transcript-empty"
-        class="text-sm font-normal text-ink-muted py-space-4"
+        class="text-sm font-normal text-tx-2 py-space-4"
       >
         {#if session.olderFault.reason !== "offline"}
           The turns before these couldn't be read:
@@ -646,7 +646,7 @@
     {:else if rowDraw.renderedRows.length > 0 && rowBuild.built.before}
       <p
         data-slot="transcript-empty"
-        class="mark-line flex items-center gap-space-2 text-sm font-normal text-ink-muted py-space-4"
+        class="mark-line flex items-center gap-space-2 text-sm font-normal text-tx-2 py-space-4"
       >
         <LiveDot /><span>Loading transcript…</span>
       </p>
@@ -737,10 +737,7 @@
       class="isolate flex flex-col gap-space-2 mt-space-3 mb-space-1"
       data-slot="loose-stop"
     >
-      <p
-        class="text-center type-meta text-status-fail wrap-anywhere"
-        role="alert"
-      >
+      <p class="text-center type-meta text-red wrap-anywhere" role="alert">
         {looseStop.words}
       </p>
       <ChatgptOffer
@@ -840,7 +837,7 @@
       {#if seek.unfound}
         <!-- The dock's raised line, as the not-caught-up line floats (Behind). -->
         <p
-          class="max-w-full py-space-2 px-space-3 border border-border-hairline rounded-sm bg-surface-raised shadow-lg text-sm font-normal text-ink-muted text-center text-balance"
+          class="max-w-full py-space-2 px-space-3 border border-ui rounded-sm bg-bg shadow-lg text-sm font-normal text-tx-2 text-center text-balance"
           data-open-at={seek.unfound}
           in:rise={"--duration-slow"}
           out:rise={"--duration-base"}
@@ -885,7 +882,7 @@
         <div class="isolate">
           <p
             data-slot="transcript-empty"
-            class="mark-line flex items-center gap-space-2 text-sm font-normal text-ink-muted py-space-4"
+            class="mark-line flex items-center gap-space-2 text-sm font-normal text-tx-2 py-space-4"
           >
             <LiveDot /><span>Loading transcript…</span>
           </p>

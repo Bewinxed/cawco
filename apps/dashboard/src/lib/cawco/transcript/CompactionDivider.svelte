@@ -173,7 +173,7 @@
   aria-label={row.brief === null || failed
     ? undefined
     : `Compacted, ${open ? "hide" : "show"} the summary`}
-  class="select-none group/divider divider-chevron flex items-center gap-space-2 w-full min-h-control-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-accent-ink transition-[color] duration-(--duration-fast) ease-out hover:enabled:text-accent-ink data-failed:block data-failed:text-start data-failed:text-status-fail focus-inset touch-hit"
+  class="select-none group/divider divider-chevron flex items-center gap-space-2 w-full min-h-control-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-accent transition-[color] duration-(--duration-fast) ease-out hover:enabled:text-accent data-failed:block data-failed:text-start data-failed:text-red focus-inset touch-hit"
   disabled={row.brief === null || failed}
   onclick={() => disclosed.set(!open)}
   type="button"
@@ -337,7 +337,7 @@
   >
     <div data-slot="body" {@attach morph()}>
       {#if facts}
-        <p class="mb-space-2 type-meta text-ink-muted">{facts}</p>
+        <p class="mb-space-2 type-meta text-tx-2">{facts}</p>
       {/if}
       <MessageBody source={row.brief} />
     </div>

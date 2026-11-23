@@ -279,7 +279,7 @@
 
 <section data-slot="model" class="grid gap-space-2">
   {#if !runtime}
-    <SectionHeader hue="var(--color-mark-4)" icon={Cpu} {label}>
+    <SectionHeader hue="var(--color-cyan)" icon={Cpu} {label}>
       {#snippet right()}
         {#if account}
           <span class="flex min-w-0 justify-end">
@@ -298,7 +298,7 @@
   {/if}
   <div
     data-slot="picker"
-    class="field-edge transition-control relative grid rounded-sm border bg-surface-raised shadow-sm rail-step-(--rail-step-fine) coarse:rail-step-(--spacing-control-lg) data-railed:grid-cols-(--cols)"
+    class="field-edge transition-control relative grid rounded-sm border bg-bg shadow-sm rail-step-(--rail-step-fine) coarse:rail-step-(--spacing-control-lg) data-railed:grid-cols-(--cols)"
     data-railed={!runtime || undefined}
     style:--cols="auto minmax(0, 1fr)"
     style:--rail-gap="calc(var(--rail-step) - var(--spacing-control-md))"
@@ -307,7 +307,7 @@
     {#if !runtime}
       <Rail
         axis="y"
-        class="grid content-box-start gap-(--rail-gap) hit-gap-x-(--rail-gap) hit-gap-y-(--rail-gap) rounded-s-sm concentric-in r-outer-sm r-inset-space-2 border-e border-e-border-hairline bg-surface-recess p-space-2"
+        class="grid content-box-start gap-(--rail-gap) hit-gap-x-(--rail-gap) hit-gap-y-(--rail-gap) rounded-s-sm concentric-in r-outer-sm r-inset-space-2 border-e border-e-ui bg-bg-2 p-space-2"
         itemClass="ns-in touch-hit press-tint grid size-control-md place-items-center"
         stagger
         items={railItems}
@@ -341,18 +341,18 @@
     <div data-slot="pick" class="grid min-w-0">
       <label
         data-slot="search"
-        class="flex h-control-lg items-center gap-space-2 border-b border-b-border-hairline px-space-3"
+        class="flex h-control-lg items-center gap-space-2 border-b border-b-ui px-space-3"
       >
         <Search
           data-model-section-lead
-          class="size-icon-md flex-none text-ink-subtle"
+          class="size-icon-md flex-none text-tx-2"
         />
         <input
           aria-controls={`${uid}-models`}
           aria-label={spawnWords.searchModels}
           autocapitalize="off"
           autocorrect="off"
-          class="h-full min-w-0 flex-1 border-none border-current bg-transparent p-0 type-body text-ink-strong placeholder:text-ink-muted"
+          class="h-full min-w-0 flex-1 border-none border-current bg-transparent p-0 type-body text-tx placeholder:text-tx-2"
           id={`${uid}-search`}
           oninput={(event) => {
             query = event.currentTarget.value;
@@ -378,7 +378,7 @@
             class={pressVariants({
               press: "scale",
               class:
-                "select-none inline-flex size-space-6 items-center justify-center rounded-xs border-none border-current bg-transparent text-ink-subtle hover:text-ink-strong",
+                "select-none inline-flex size-space-6 items-center justify-center rounded-xs border-none border-current bg-transparent text-tx-2 hover:text-tx",
             })}
             onclick={() => {
               query = "";
@@ -427,14 +427,14 @@
               picked={false}
             >
               {#snippet lead()}
-                <Code class="size-icon-md text-ink-muted" />
+                <Code class="size-icon-md text-tx-2" />
               {/snippet}
             </PickRow>
           </div>
         {:else if noResults}
           <div
             data-slot="none"
-            class="type-meta grid place-items-center gap-space-2 px-space-3 py-space-6 text-center text-pretty text-ink-subtle"
+            class="type-meta grid place-items-center gap-space-2 px-space-3 py-space-6 text-center text-pretty text-tx-2"
             in:crossIn
             out:crossOut
           >

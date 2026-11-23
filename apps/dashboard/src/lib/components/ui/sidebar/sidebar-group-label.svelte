@@ -14,7 +14,7 @@
       end: { action: "pointer-coarse:h-11 pr-0" },
       seam: {
         section:
-          "mt-space-2 h-auto min-h-space-8 rounded-none border-t border-t-border-hairline pt-space-2 text-ink-strong",
+          "mt-space-2 h-auto min-h-space-8 rounded-none border-t border-t-ui pt-space-2 text-tx",
       },
     },
   });
@@ -43,7 +43,7 @@
 
   const mergedProps = $derived({
     class: cn(
-      "focus-inset flex h-space-8 shrink-0 items-center rounded-sm px-3 text-ink-strong/70 type-label [&>svg]:size-icon-md [&>svg]:shrink-0",
+      "focus-inset flex h-space-8 shrink-0 items-center rounded-sm px-3 text-tx/70 type-label [&>svg]:size-icon-md [&>svg]:shrink-0",
       sidebarGroupLabelVariants({ pad, end, seam }),
       className
     ),

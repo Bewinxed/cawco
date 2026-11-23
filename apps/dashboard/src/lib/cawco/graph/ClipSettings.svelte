@@ -346,12 +346,12 @@
     {#if path}
       {@render glyph(path)}
     {:else}
-      <span class="flex-none text-ink-muted">{label}</span>
+      <span class="flex-none text-tx-2">{label}</span>
     {/if}
     <span
       class={[
         "num min-w-0 overflow-clip text-ellipsis whitespace-nowrap",
-        edits.has(key) ? "text-ink-strong" : "text-ink-strong",
+        edits.has(key) ? "text-tx" : "text-tx",
       ]}
       data-slot="chip-label">{value}</span
     >
@@ -392,7 +392,7 @@
             value={delay}
           />
           <InputGroup.Addon align="inline-end">
-            <span class="type-meta text-ink-muted">{words.msUnit}</span>
+            <span class="type-meta text-tx-2">{words.msUnit}</span>
             <InputGroup.Button
               aria-label={words.later}
               onclick={() => setDelay(delay + STEP)}
@@ -438,9 +438,9 @@
         <!-- A length of his own: off the design system's durations, which
              the agent reads as his own number to name. -->
         <label
-          class="flex min-w-0 items-center gap-space-2 border-t border-border-hairline px-space-3 pt-space-2 pb-space-1"
+          class="flex min-w-0 items-center gap-space-2 border-t border-ui px-space-3 pt-space-2 pb-space-1"
         >
-          <span class="min-w-0 flex-1 type-label text-ink-muted"
+          <span class="min-w-0 flex-1 type-label text-tx-2"
             >{words.ownLength}</span
           >
           <InputGroup.Root
@@ -458,7 +458,7 @@
               value={Math.round(longest)}
             />
             <InputGroup.Addon align="inline-end">
-              <span class="type-meta text-ink-muted">{words.msUnit}</span>
+              <span class="type-meta text-tx-2">{words.msUnit}</span>
             </InputGroup.Addon>
           </InputGroup.Root>
         </label>
@@ -543,9 +543,7 @@
           >
             {#each values as one (one.property)}
               {@const said = propertyName(one.property)}
-              <span class="min-w-0 truncate type-label text-ink-strong"
-                >{said}</span
-              >
+              <span class="min-w-0 truncate type-label text-tx">{said}</span>
               <Input
                 aria-label={words.valueFrom(said)}
                 onchange={(event) =>
@@ -559,7 +557,7 @@
                   )}
                 value={one.from}
               />
-              <span aria-hidden="true" class="type-meta text-ink-muted">→</span>
+              <span aria-hidden="true" class="type-meta text-tx-2">→</span>
               <Input
                 aria-label={words.valueTo(said)}
                 onchange={(event) =>

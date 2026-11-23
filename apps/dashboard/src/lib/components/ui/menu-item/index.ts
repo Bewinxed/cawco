@@ -26,5 +26,5 @@ import { tv } from "#lib/utils.js";
  * row's tick or dot in the row's own ink, stand over it.
  */
 export const menuItemVariants = tv({
-  base: "min-h-control-sm concentric-xs mark-line transition-control coarse:min-h-control-lg [&>:where(svg,.icon-swap):first-child]:text-ink-muted",
+  base: "min-h-control-sm concentric-xs mark-line transition-control coarse:min-h-control-lg [&>:where(svg,.icon-swap):first-child]:text-tx-2",
 });

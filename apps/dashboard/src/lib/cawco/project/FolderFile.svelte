@@ -96,7 +96,7 @@
            and copy, wrapping where it runs long. -->
       <bdi
         data-slot="page-path"
-        class="type-meta font-mono liga-none wrap-anywhere text-ink-subtle"
+        class="type-meta font-mono liga-none wrap-anywhere text-tx-2"
         >{path}</bdi
       >
       {#if media}
@@ -125,7 +125,7 @@
         <pre
           in:reveal
           data-slot="text"
-          class="m-0 font-mono text-sm wrap-anywhere whitespace-pre-wrap text-ink-strong">{content}</pre>
+          class="m-0 font-mono text-sm wrap-anywhere whitespace-pre-wrap text-tx">{content}</pre>
       {/if}
     </div>
   </div>

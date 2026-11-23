@@ -120,7 +120,7 @@
       </Alert>
     {/if}
     {#if who.problems.length > 0}
-      <p class="type-meta text-status-fail text-pretty" role="alert">
+      <p class="type-meta text-red text-pretty" role="alert">
         {decidesWords.fileProblems(who.problems.join(" "))}
       </p>
     {/if}
@@ -145,7 +145,7 @@
   <!-- Configure's section, its cards straight on the recessed ground: the
        section template's raised body would hold them card in card. -->
   <div
-    class="flex min-h-0 min-w-0 flex-auto flex-col overflow-y-auto bg-surface-recess px-space-4 py-space-2"
+    class="flex min-h-0 min-w-0 flex-auto flex-col overflow-y-auto bg-bg-2 px-space-4 py-space-2"
   >
     <div class="flex max-w-245 min-w-0 flex-col gap-space-4 py-space-6">
       <div
@@ -176,15 +176,15 @@
         >
           <li class="min-w-0">
             <a
-              class="text-ink-muted wrap-anywhere can-hover:hover:text-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs"
+              class="text-tx-2 wrap-anywhere can-hover:hover:text-tx focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid rounded-xs"
               href="/config/decides">{decidesWords.fleet}</a
             >
           </li>
-          <li aria-hidden="true" class="text-ink-muted">/</li>
+          <li aria-hidden="true" class="text-tx-2">/</li>
           <li class="min-w-0">
             {#if project}
               <a
-                class="text-ink-strong wrap-anywhere can-hover:hover:text-accent-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs"
+                class="text-tx wrap-anywhere can-hover:hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid rounded-xs"
                 href={projectHref}>{name}</a
               >
             {:else}
@@ -193,7 +193,7 @@
           </li>
         </ol>
         <a
-          class="flex-none text-accent-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs"
+          class="flex-none text-accent underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid rounded-xs"
           href="{projectHref}?view=decisions">{decidesWords.decisions}</a
         >
       </nav>
@@ -203,23 +203,21 @@
       >
         <header class="flex min-w-0 flex-col gap-space-2">
           {#if project}
-            <h1
-              class="m-0 type-title text-balance text-ink-strong wrap-anywhere"
-            >
+            <h1 class="m-0 type-title text-balance text-tx wrap-anywhere">
               {decidesWords.title(name)}
             </h1>
           {:else}
             <Skeleton line="title" radius="text" width="title" />
           {/if}
           {#if ready}
-            <p class="m-0 type-body text-pretty text-ink-muted">
+            <p class="m-0 type-body text-pretty text-tx-2">
               {who.own.length === 0
                 ? decidesWords.follows(name)
                 : decidesWords.except(name, who.own.length)}
               {#if who.own.length > 0}
                 <button
                   aria-disabled={who.asking !== null || undefined}
-                  class="text-accent-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-accent-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs aria-disabled:text-ink-muted"
+                  class="text-accent underline underline-offset-2 can-hover:hover:not-aria-disabled:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid rounded-xs aria-disabled:text-tx-2"
                   onclick={() => {
                     if (who.asking === null) {
                       who.useFleet(who.own);
@@ -231,7 +229,7 @@
               {/if}
             </p>
             <ul
-              class="m-0 flex list-none flex-wrap items-center gap-x-space-4 gap-y-space-1 p-0 type-meta text-ink-muted"
+              class="m-0 flex list-none flex-wrap items-center gap-x-space-4 gap-y-space-1 p-0 type-meta text-tx-2"
             >
               <li class="mark-line flex items-center gap-x-space-1">
                 <IconGlobe aria-hidden="true" class="size-icon-sm" />

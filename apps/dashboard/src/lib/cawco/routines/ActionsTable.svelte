@@ -148,13 +148,11 @@
           <Table.Cell {rule} variant="ledger">
             <span
               data-slot="what"
-              class="block truncate type-label text-ink-strong"
+              class="block truncate type-label text-tx"
               title="{action.service} · {action.tool}">{action.reason}</span
             >
             {#if from}
-              <span
-                data-slot="from"
-                class="block truncate type-meta text-ink-muted"
+              <span data-slot="from" class="block truncate type-meta text-tx-2"
                 >{words.from(from)}</span
               >
             {/if}

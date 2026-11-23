@@ -81,7 +81,7 @@
         aria-hidden="true"
         class="rail-cell rounded-xs bg-mark-overlay bg-(--mark-bg)"
         style:--mark-bg="var(--color-mark-{markHue(seed)})"
-        ><Sprite class="size-icon-sm block text-surface-page" /></span
+        ><Sprite class="size-icon-sm block text-bg" /></span
       >
       <!-- A narrow head (DESIGN.md, The Truncate Inside Rule: the name
            stands, the rest gives way): the name stays whole; the model stands
@@ -99,7 +99,7 @@
       >
         <span
           data-slot="name"
-          class="flex-none font-(family-name:--font-mono) text-ink-strong whitespace-nowrap"
+          class="flex-none font-(family-name:--font-mono) text-tx whitespace-nowrap"
           >{branch.subagentType}</span
         >
         <!-- The disclosure affordance: one glyph in currentColor, rotated by
@@ -107,20 +107,20 @@
         <span
           data-slot="chev"
           aria-hidden="true"
-          class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-out group-state-open/bhead:rotate-90"
+          class="size-icon-sm flex-none grid place-items-center text-tx-2 motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-out group-state-open/bhead:rotate-90"
           data-box><IconChevronRight class="size-icon-sm block" /></span
         >
         {#if title !== branch.subagentType}
           <span
             data-slot="task"
-            class="min-w-0 max-w-max grow basis-ch-6 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted text-sm font-normal"
+            class="min-w-0 max-w-max grow basis-ch-6 overflow-clip text-ellipsis whitespace-nowrap text-tx-2 text-sm font-normal"
             >{title}</span
           >
         {/if}
         {#if model}
           <span
             data-slot="model"
-            class="flex-none whitespace-nowrap text-ink-muted text-sm font-normal"
+            class="flex-none whitespace-nowrap text-tx-2 text-sm font-normal"
             >{modelLabel(model)}</span
           >
         {/if}
@@ -130,7 +130,7 @@
            words on their x-height in the box (.mark-text): 2px past the
            trim's room given back, so the box keeps its height. -->
       <span
-        class="mark-text ms-auto flex-none text-sm font-normal num rounded-xs py-(--pill-py) px-space-2 bg-transparent text-ink-muted status-running:bg-status-live-bg status-running:text-status-live status-done:bg-status-done-bg status-done:text-status-done status-failed:bg-status-fail-bg status-failed:text-status-fail"
+        class="mark-text ms-auto flex-none text-sm font-normal num rounded-xs py-(--pill-py) px-space-2 bg-transparent text-tx-2 status-running:bg-bg-2 status-running:text-cyan status-done:bg-bg-2 status-done:text-green status-failed:bg-bg-2 status-failed:text-red"
         data-status={phase}
         data-subagent-phase={phase}
         data-box
@@ -154,7 +154,7 @@
          running is said by its hue and the pill, not a loop. -->
     {#if view.running}
       <p
-        class="rail-line items-start mt-space-1 mb-0 text-sm font-normal text-ink-strong leading-base max-w-measure"
+        class="rail-line items-start mt-space-1 mb-0 text-sm font-normal text-tx leading-base max-w-measure"
       >
         <span data-slot="rail-cell" aria-hidden="true" class="rail-cell h-lh"
           ><LiveDot /></span
@@ -163,14 +163,14 @@
     {:else if failed && branch.error}
       <p
         data-slot="now"
-        class="rail-hang mt-space-1 mb-0 items-box-start text-sm font-normal text-status-fail leading-base max-w-measure"
+        class="rail-hang mt-space-1 mb-0 items-box-start text-sm font-normal text-red leading-base max-w-measure"
       >
         {headline(branch.error)}
       </p>
     {:else if view.report}
       <p
         data-slot="now"
-        class="rail-hang mt-space-1 mb-0 items-box-start text-sm font-normal text-ink-strong leading-base max-w-measure"
+        class="rail-hang mt-space-1 mb-0 items-box-start text-sm font-normal text-tx leading-base max-w-measure"
       >
         {headline(view.report)}
       </p>
@@ -186,7 +186,7 @@
       <CollapsibleLazy count={1} open={open.get()}>
         <div
           data-slot="inner"
-          class="mt-space-2 mb-0 ms-(--inner-start) me-0 p-space-1 rounded-sm bg-surface-recess"
+          class="mt-space-2 mb-0 ms-(--inner-start) me-0 p-space-1 rounded-sm bg-bg-2"
           style:--inner-start="calc(var(--x-hang) - var(--spacing-space-1))"
           style:--rail-head="var(--rail)"
           style:--rail-gap="var(--spacing-space-4)"
@@ -216,16 +216,14 @@
 
           {#if failed && branch.error}
             <p
-              class="mt-space-4 p-space-3 rounded-xs text-base font-normal text-status-fail bg-surface-raised shadow-sm whitespace-pre-wrap"
+              class="mt-space-4 p-space-3 rounded-xs text-base font-normal text-red bg-bg shadow-sm whitespace-pre-wrap"
             >
               {branch.error}
             </p>
           {:else if view.report}
-            <section
-              class="mt-space-4 p-space-3 rounded-xs bg-surface-raised shadow-sm"
-            >
+            <section class="mt-space-4 p-space-3 rounded-xs bg-bg shadow-sm">
               <h4
-                class="text-base font-medium tracking-caps uppercase text-ink-muted mb-space-2"
+                class="text-base font-medium tracking-caps uppercase text-tx-2 mb-space-2"
               >
                 Report
               </h4>

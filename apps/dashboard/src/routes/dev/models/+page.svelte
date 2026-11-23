@@ -186,12 +186,12 @@
   <title>Models CawCo uses &middot; CawCo</title>
 </svelte:head>
 
-<div class="flex min-h-dvh flex-col bg-surface-recess">
+<div class="flex min-h-dvh flex-col bg-bg-2">
   <div
     class="flex flex-wrap items-center gap-space-3 px-space-4 pt-space-4"
     data-slot="bench"
   >
-    <label class="flex items-center gap-space-2 type-label text-ink-muted">
+    <label class="flex items-center gap-space-2 type-label text-tx-2">
       Fleet
       <NativeSelect
         aria-label="Fleet"
@@ -206,7 +206,7 @@
         {/each}
       </NativeSelect>
     </label>
-    <label class="flex items-center gap-space-2 type-label text-ink-muted">
+    <label class="flex items-center gap-space-2 type-label text-tx-2">
       Hub
       <NativeSelect
         aria-label="Hub"

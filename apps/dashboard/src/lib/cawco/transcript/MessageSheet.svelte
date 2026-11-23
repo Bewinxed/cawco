@@ -103,7 +103,7 @@
           <button
             class={[
               menuItemVariants(),
-              "flex items-center gap-space-3 px-space-3 type-label text-ink-strong can-hover:hover:bg-surface-hover",
+              "flex items-center gap-space-3 px-space-3 type-label text-tx can-hover:hover:bg-ui",
             ]}
             data-menu-item
             onclick={() => {

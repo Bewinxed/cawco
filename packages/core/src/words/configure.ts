@@ -67,7 +67,7 @@ export interface ConfigSectionDefinition {
   /** It lists rows the rail counts beside its name; a setting has no count. */
   counted: boolean;
   group: ConfigGroup;
-  /** Its hue, as a token: `mark-6` (`--color-mark-4`, `Palette.named`). */
+  /** Its hue, as a token: `mark-6` (`--color-cyan`, `Palette.named`). */
   hue: string;
   /** Its glyph, as Solar names it (`~icons/solar/<icon>`, the app's `Glyph` raw value). */
   icon: string;

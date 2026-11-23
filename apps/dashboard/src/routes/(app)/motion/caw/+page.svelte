@@ -62,7 +62,7 @@
 <svelte:head><title>Caw bench · CawCo</title></svelte:head>
 
 <main
-  class="type-body flex min-h-dvh flex-col items-center gap-space-4 bg-surface-recess p-space-6 text-ink-muted"
+  class="type-body flex min-h-dvh flex-col items-center gap-space-4 bg-bg-2 p-space-6 text-tx-2"
 >
   <div data-slot="stage" class="grid size-80 place-items-center">
     {#if mounted}

@@ -1317,7 +1317,7 @@
     data-box
     style:--mark-bg="var(--color-mark-{markHue(sessionPlace(item.instanceId))})"
     {@attach land(() => (flies ? flightKey(item.instanceId) : undefined))}
-    ><Sprite class="size-icon-sm block text-surface-page" /></span
+    ><Sprite class="size-icon-sm block text-bg" /></span
   >
 {/snippet}
 
@@ -1327,14 +1327,14 @@
      the delegate card draws it (a queued delegate has no session to open
      until it starts). -->
 {#snippet rowEnd(item: TrayChild)}
-  <span class="flex-none text-sm text-ink-muted num"
+  <span class="flex-none text-sm text-tx-2 num"
     >{span(item.createdAt, item.endedAt ?? minute)}</span
   >
   {#if !item.queued}
     <a
       data-box
       aria-label="Open {item.title} in its own view"
-      class="touch-hit flex-none size-4.5 grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-fast) ease-out hover:text-accent-ink hover:bg-surface-hover"
+      class="touch-hit flex-none size-4.5 grid place-items-center rounded-xs text-tx-2 transition-[color,background] duration-(--duration-fast) ease-out hover:text-accent hover:bg-ui"
       href={hrefOf(item)}
       title="Open {item.title} in its own view"
     >
@@ -1351,7 +1351,7 @@
          as one beat. -->
     <span
       data-slot="dot"
-      class="size-space-1 rounded-pill bg-status-live"
+      class="size-space-1 rounded-pill bg-cyan"
       style:animation-delay="-{Date.now() % 2000}ms"
     ></span>
   {:else if tone === "asked" || tone === "needs"}
@@ -1379,7 +1379,7 @@
     class={chipVariants({
       variant: "tray",
       class:
-        "group/chip touch-hit flex-initial min-w-30 max-w-56 data-end:ms-auto status-failed:text-status-fail status-needs:text-status-attn status-failed:before:bg-status-fail-bg status-needs:before:bg-status-attn-bg motion-safe:data-fly:not-data-finished:before:animate-fade-in motion-safe:data-fly:not-data-finished:before:anim-dur-fast motion-safe:data-fly:not-data-finished:before:anim-delay-fast motion-reduce:data-fly:animate-fade-in motion-reduce:data-fly:anim-dur-fast data-finished:before:animate-finish",
+        "group/chip touch-hit flex-initial min-w-30 max-w-56 data-end:ms-auto status-failed:text-red status-needs:text-orange status-failed:before:bg-bg-2 status-needs:before:bg-bg-2 motion-safe:data-fly:not-data-finished:before:animate-fade-in motion-safe:data-fly:not-data-finished:before:anim-dur-fast motion-safe:data-fly:not-data-finished:before:anim-delay-fast motion-reduce:data-fly:animate-fade-in motion-reduce:data-fly:anim-dur-fast data-finished:before:animate-finish",
     })}
     data-tray-chip
     data-delegate-tray-tone={tone}
@@ -1422,19 +1422,19 @@
       {#if item.queued}
         <span
           data-slot="note"
-          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap group-status-cancelled/chip:text-ink-muted"
+          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap group-status-cancelled/chip:text-tx-2"
           >{queuedWords(item)}</span
         >
       {:else if item.checkQueue}
         <span
           data-slot="note"
-          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap group-status-cancelled/chip:text-ink-muted"
+          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap group-status-cancelled/chip:text-tx-2"
           >{checkQueueWords(item)}</span
         >
       {:else if tone === "needs"}
         <span
           data-slot="note"
-          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap group-status-cancelled/chip:text-ink-muted"
+          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap group-status-cancelled/chip:text-tx-2"
           >{chip.questions > 0
             ? questionWords(chip.questions)
             : chip.cards.join(", ")}</span
@@ -1442,7 +1442,7 @@
       {:else if tone === "failed" || tone === "cancelled"}
         <span
           data-slot="note"
-          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap group-status-cancelled/chip:text-ink-muted"
+          class="min-w-0 font-normal overflow-clip text-ellipsis whitespace-nowrap group-status-cancelled/chip:text-tx-2"
           >{tone}</span
         >
       {/if}
@@ -1450,7 +1450,7 @@
     <span
       data-chip-slot
       aria-hidden="true"
-      class="flex-none size-icon-md grid place-items-center group-status-running/chip:text-ink-muted group-status-done/chip:text-status-done group-status-starting/chip:text-ink-muted group-status-asked/chip:text-ink-muted group-status-cancelled/chip:text-ink-muted motion-safe:group-data-fly/chip:animate-fade-in motion-safe:group-data-fly/chip:anim-dur-fast motion-safe:group-data-fly/chip:anim-delay-fast"
+      class="flex-none size-icon-md grid place-items-center group-status-running/chip:text-tx-2 group-status-done/chip:text-green group-status-starting/chip:text-tx-2 group-status-asked/chip:text-tx-2 group-status-cancelled/chip:text-tx-2 motion-safe:group-data-fly/chip:animate-fade-in motion-safe:group-data-fly/chip:anim-dur-fast motion-safe:group-data-fly/chip:anim-delay-fast"
       data-box
     >
       {#key slotOf(tone)}
@@ -1481,7 +1481,7 @@
   {@const later = laterThan(item)}
   <li
     data-slot="srow"
-    class="flex flex-col gap-space-1 py-space-3 px-space-4 not-first:border-t not-first:border-t-border-hairline"
+    class="flex flex-col gap-space-1 py-space-3 px-space-4 not-first:border-t not-first:border-t-ui"
     data-flip
     data-shelf-row={item.id}
     style:--sacts-start={"calc(calc(var(--spacing) * 4.5) + var(--spacing-space-2))"}
@@ -1489,16 +1489,16 @@
     <div class="mark-line flex items-center gap-space-2 min-w-0">
       {@render mark(item, false)}
       <span
-        class="flex-initial min-w-0 text-base font-medium text-ink-strong overflow-clip text-ellipsis whitespace-nowrap"
+        class="flex-initial min-w-0 text-base font-medium text-tx overflow-clip text-ellipsis whitespace-nowrap"
         >{item.title}</span
       >
-      <span class="flex-none ms-auto text-sm text-ink-muted whitespace-nowrap"
+      <span class="flex-none ms-auto text-sm text-tx-2 whitespace-nowrap"
         >{failedWhen(item)}</span
       >
       <a
         data-box
         aria-label="Open {item.title} in its own view"
-        class="touch-hit flex-none size-4.5 grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-fast) ease-out hover:text-accent-ink hover:bg-surface-hover"
+        class="touch-hit flex-none size-4.5 grid place-items-center rounded-xs text-tx-2 transition-[color,background] duration-(--duration-fast) ease-out hover:text-accent hover:bg-ui"
         href={hrefOf(item)}
         title="Open {item.title} in its own view"
       >
@@ -1506,7 +1506,7 @@
       </a>
     </div>
     <p
-      class="m-0 ps-(--sacts-start) text-sm text-status-fail overflow-clip text-ellipsis whitespace-nowrap"
+      class="m-0 ps-(--sacts-start) text-sm text-red overflow-clip text-ellipsis whitespace-nowrap"
     >
       {item.error || "It failed without saying why."}
     </p>
@@ -1552,9 +1552,7 @@
                     class="flex-auto min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
                     >{other.title}</span
                   >
-                  <span class="flex-none text-sm text-ink-muted"
-                    >{other.state}</span
-                  >
+                  <span class="flex-none text-sm text-tx-2">{other.state}</span>
                 </DropdownMenu.Item>
               {/each}
             </DropdownMenu.Content>
@@ -1627,26 +1625,26 @@
   {@const { item, tone } = chip}
   <li
     data-slot="srow"
-    class="flex flex-col gap-space-1 py-space-3 px-space-4 not-first:border-t not-first:border-t-border-hairline"
+    class="flex flex-col gap-space-1 py-space-3 px-space-4 not-first:border-t not-first:border-t-ui"
     data-flip
     data-shelf-row={item.id}
   >
     <div class="mark-line flex items-center gap-space-2 min-w-0">
       {@render mark(item, false)}
       <span
-        class="flex-initial min-w-0 text-base font-medium text-ink-strong overflow-clip text-ellipsis whitespace-nowrap"
+        class="flex-initial min-w-0 text-base font-medium text-tx overflow-clip text-ellipsis whitespace-nowrap"
         >{item.title}</span
       >
       <!-- A folded delegate's state gives way before its title does. -->
       <span
-        class="flex-initial ms-auto text-sm text-ink-muted whitespace-nowrap min-w-0 overflow-clip text-ellipsis status-needs:text-status-attn status-failed:text-status-fail"
+        class="flex-initial ms-auto text-sm text-tx-2 whitespace-nowrap min-w-0 overflow-clip text-ellipsis status-needs:text-orange status-failed:text-red"
         data-delegate-tray-tone={tone}
         data-status={chip.item.stalled ? "failed" : tone}
         >{stateWords(chip)}</span
       >
       <span
         aria-hidden="true"
-        class="flex-none size-icon-md grid place-items-center text-ink-muted status-done:text-status-done status-failed:text-status-fail status-needs:text-status-attn"
+        class="flex-none size-icon-md grid place-items-center text-tx-2 status-done:text-green status-failed:text-red status-needs:text-orange"
         data-delegate-tray-tone={tone}
         data-box
         data-status={tone}
@@ -1712,7 +1710,7 @@
             class={chipVariants({
               variant: "tray",
               class:
-                "touch-hit flex-none min-w-0 w-13 justify-center num data-needs:text-status-attn data-needs:before:bg-status-attn-bg",
+                "touch-hit flex-none min-w-0 w-13 justify-center num data-needs:text-orange data-needs:before:bg-bg-2",
             })}
             data-tray-chip
             data-flip="pop"
@@ -1743,7 +1741,7 @@
             class={chipVariants({
               variant: "tray",
               class:
-                "touch-hit flex-none min-w-0 max-w-56 whitespace-nowrap ms-auto text-status-fail before:bg-status-fail-bg",
+                "touch-hit flex-none min-w-0 max-w-56 whitespace-nowrap ms-auto text-red before:bg-bg-2",
             })}
             data-tray-chip
             data-flip="pop"
@@ -1813,9 +1811,7 @@
             data-slot="shead"
             class="flex h-control-lg items-center gap-space-2 pe-space-2 ps-space-4"
           >
-            <h2
-              class="flex-auto min-w-0 m-0 text-base font-medium text-ink-strong"
-            >
+            <h2 class="flex-auto min-w-0 m-0 text-base font-medium text-tx">
               {#if shelf === "failed"}
                 {failures.length === 1
                   ? "1 failure needs a decision"
@@ -1853,7 +1849,7 @@
           {#if shelf === "failed" && failures.length > 1}
             <footer
               data-slot="sfoot"
-              class="py-space-2 px-space-4 border-t border-t-border-hairline"
+              class="py-space-2 px-space-4 border-t border-t-ui"
             >
               {#if allReason === null}
                 <Button
@@ -1934,12 +1930,12 @@
             <div class="mark-line flex items-center gap-space-2 mb-space-2">
               {@render mark(item, false)}
               <span
-                class="flex-auto min-w-0 text-base font-medium text-ink-strong overflow-clip text-ellipsis whitespace-nowrap"
+                class="flex-auto min-w-0 text-base font-medium text-tx overflow-clip text-ellipsis whitespace-nowrap"
                 >{item.title}</span
               >
               <span
                 aria-label={stateWords(openChip)}
-                class="flex-none size-icon-md grid place-items-center text-ink-muted status-done:text-status-done status-failed:text-status-fail status-needs:text-status-attn"
+                class="flex-none size-icon-md grid place-items-center text-tx-2 status-done:text-green status-failed:text-red status-needs:text-orange"
                 data-delegate-tray-tone={tone}
                 data-box
                 data-status={tone}

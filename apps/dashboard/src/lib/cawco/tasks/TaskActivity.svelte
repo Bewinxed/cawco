@@ -243,14 +243,14 @@
 </script>
 
 {#snippet asker(name: string)}
-  <span data-slot="who" class="type-label text-size-inherit text-ink-strong"
+  <span data-slot="who" class="type-label text-size-inherit text-tx"
     >{name}</span
   >
 {/snippet}
 
 {#snippet when(at: number)}
   <time
-    class="type-meta whitespace-nowrap text-ink-subtle"
+    class="type-meta whitespace-nowrap text-tx-2"
     datetime={new Date(at).toISOString()}
     title={new Date(at).toLocaleString()}>{ago(at)}</time
   >
@@ -260,7 +260,7 @@
   {#if each.kind === "comment"}
     <li
       data-slot="comment"
-      class="flex flex-col gap-space-1 rounded-sm bg-surface-recess px-space-3 py-space-2"
+      class="flex flex-col gap-space-1 rounded-sm bg-bg-2 px-space-3 py-space-2"
     >
       <span
         class="mark-line flex flex-wrap items-baseline gap-x-space-2 type-meta"
@@ -270,7 +270,7 @@
           <a
             data-box
             data-slot="via"
-            class="mark-line inline-flex items-center gap-space-1 self-center text-ink-muted no-underline hover:text-ink-strong focus-inset"
+            class="mark-line inline-flex items-center gap-space-1 self-center text-tx-2 no-underline hover:text-tx focus-inset"
             href={each.via.url}
             rel="noreferrer"
             target="_blank"
@@ -282,14 +282,14 @@
         {/if}
         {@render when(each.at)}
         {#if each.via?.editedAt}
-          <span data-slot="edited" class="text-ink-subtle"
+          <span data-slot="edited" class="text-tx-2"
             >{externalItemWords.edited}</span
           >
         {/if}</span
       >
       <div
         data-slot="comment-text"
-        class="min-w-0 type-body wrap-anywhere text-ink-strong"
+        class="min-w-0 type-body wrap-anywhere text-tx"
       >
         <MessageBody source={each.text} />
       </div>
@@ -298,14 +298,11 @@
     <!-- mark-line: the glyph heads words that may wrap: it stands in a mark cell, one line tall, on the first line -->
     <li
       data-slot="change"
-      class="grid grid-cols-(--cols) items-box-start gap-space-2 type-meta text-ink-muted"
+      class="grid grid-cols-(--cols) items-box-start gap-space-2 type-meta text-tx-2"
       style:--cols="var(--spacing-icon-sm) minmax(0, 1fr) auto"
     >
       <span class="mark-cell"
-        ><IconHistory
-          aria-hidden="true"
-          class="size-icon-sm text-ink-subtle"
-        /></span
+        ><IconHistory aria-hidden="true" class="size-icon-sm text-tx-2" /></span
       >
       <span data-slot="what" class="min-w-0 wrap-anywhere"
         >{@render asker(each.who)}
@@ -342,7 +339,7 @@
       <Skeleton class="w-1/2" line="body" />
     </div>
   {:else if pieces.length === 0}
-    <p class="type-meta text-ink-muted" in:reveal>
+    <p class="type-meta text-tx-2" in:reveal>
       {only === "comments" ? "No comments yet." : "Nothing has happened yet."}
     </p>
   {:else}
@@ -362,8 +359,7 @@
                   style="--chev-turn: rotate(90deg)"
                 />
                 <span>{piece.lines.length} changes</span>
-                <span
-                  class="ms-auto type-meta whitespace-nowrap text-ink-subtle"
+                <span class="ms-auto type-meta whitespace-nowrap text-tx-2"
                   >{ago(piece.lines[0].at)} – {ago(
                     piece.lines.at(-1)?.at ?? piece.lines[0].at
                   )}</span
@@ -416,11 +412,11 @@
       />
     </div>
     {#if reaches?.kind === "live"}
-      <p class="type-meta text-ink-muted">
+      <p class="type-meta text-tx-2">
         {reaches.session} is working on this task and reads your comment now.
       </p>
     {:else if reaches?.kind === "resumes"}
-      <p class="type-meta text-ink-muted">
+      <p class="type-meta text-tx-2">
         Your comment picks the work up again: its last session continues, or a
         new session starts on it.
       </p>

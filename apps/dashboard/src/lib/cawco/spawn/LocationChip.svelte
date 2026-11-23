@@ -85,9 +85,9 @@
     {#if mode === "repo" && onGithub}
       <ProviderLogo provider="github" />
     {:else if mode === "repo"}
-      <FolderGit class="text-mark-1" />
+      <FolderGit class="text-orange" />
     {:else}
-      <FolderOpen class="text-mark-1" />
+      <FolderOpen class="text-orange" />
     {/if}
     <!-- A folder is a path, set in the mono face; a repository is a name. -->
     <span

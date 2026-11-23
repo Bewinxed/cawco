@@ -3,7 +3,7 @@
    * A provider's mark (marks.ts): its logo as it ships, or, `mono`, its
    * silhouette in `currentColor` (an account's tile tints it in the
    * account's hue). A logo drawn in one plain ink is the silhouette in
-   * `--color-ink-strong`. A provider with no mark draws the accounts glyph.
+   * `--color-tx`. A provider with no mark draws the accounts glyph.
    */
   import { IconAccounts } from "#lib/icons.js";
   import { markOf } from "./marks";
@@ -21,7 +21,7 @@
   data-slot="mark"
   aria-hidden="true"
   data-mono={mono || undefined}
-  class="inline-grid h-(--mark-size) w-(--mark-size) flex-none place-items-center text-ink-strong data-mono:text-inherit [&>*]:size-full"
+  class="inline-grid h-(--mark-size) w-(--mark-size) flex-none place-items-center text-tx data-mono:text-inherit [&>*]:size-full"
   data-box
   style:--mark-size={`${size}px`}
 >

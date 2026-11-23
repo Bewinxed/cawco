@@ -60,7 +60,7 @@
       both schemes, WCAG 1.4.11): `neutral-2` on the raised sheet was about
       1.05:1 and read as no control at all (the review of 7 November). */
   export const grabberVariants = tv({
-    base: "mx-auto mt-4 mb-3 h-1.5 w-25 shrink-0 rounded-pill bg-border-strong",
+    base: "mx-auto mt-4 mb-3 h-1.5 w-25 shrink-0 rounded-pill bg-tx-2",
   });
 </script>
 
@@ -266,7 +266,7 @@
        (vite.config.ts, vendorComponentSheets). -->
   <DrawerPrimitive.Content
     class={cn(
-      "motion-reduce:sheet-fade group/drawer-content fixed z-(--layer-float) flex h-auto flex-col bg-transparent p-4 text-ink-strong type-label before:absolute before:inset-2 before:-z-1 before:rounded-lg before:border before:border-border-control before:bg-surface-raised data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=left]:phone:max-w-96 data-[vaul-drawer-direction=right]:phone:max-w-96 data-[vaul-drawer-direction=bottom]:pb-[calc(--spacing(4)+var(--safe-bottom))] data-[vaul-drawer-direction=bottom]:before:inset-x-0 data-[vaul-drawer-direction=bottom]:before:bottom-0 data-[vaul-drawer-direction=bottom]:before:rounded-b-none data-[vaul-drawer-direction=bottom]:before:border-x-0 data-[vaul-drawer-direction=bottom]:before:border-b-0",
+      "motion-reduce:sheet-fade group/drawer-content fixed z-(--layer-float) flex h-auto flex-col bg-transparent p-4 text-tx type-label before:absolute before:inset-2 before:-z-1 before:rounded-lg before:border before:border-ui-2 before:bg-bg data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=left]:phone:max-w-96 data-[vaul-drawer-direction=right]:phone:max-w-96 data-[vaul-drawer-direction=bottom]:pb-[calc(--spacing(4)+var(--safe-bottom))] data-[vaul-drawer-direction=bottom]:before:inset-x-0 data-[vaul-drawer-direction=bottom]:before:bottom-0 data-[vaul-drawer-direction=bottom]:before:rounded-b-none data-[vaul-drawer-direction=bottom]:before:border-x-0 data-[vaul-drawer-direction=bottom]:before:border-b-0",
       drawerContentVariants({ pad, height, width, closed, look }),
       hosted &&
         "absolute inset-0 z-1 m-0 h-full max-h-none w-full p-0 outline-off before:hidden data-[vaul-drawer-direction=bottom]:pb-0",
@@ -345,7 +345,7 @@
       class="pointer-events-none absolute inset-x-space-2 top-space-2 z-1 h-(--sheet-room) overflow-clip rounded-t-lg group-data-[vaul-drawer-direction=bottom]/drawer-content:inset-x-0"
       data-slot="drawer-head-fade"
     >
-      <HeadFade band="var(--sheet-room)" tint="bg-surface-raised" />
+      <HeadFade band="var(--sheet-room)" tint="bg-bg" />
     </div>
     <!-- The grabber and the header, one stack over
          the content (`absolute z-2`), its height the sheet's room. -->

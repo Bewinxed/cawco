@@ -28,7 +28,7 @@
     data-scheme={scheme}
     data-single={thumbnail.single || undefined}
     aria-hidden="true"
-    class="h-16 w-22.5 shrink-0 overflow-hidden rounded-sm border border-border-control bg-surface-sunk data-single:data-[scheme=dark]:p-space-1 [&_[data-slot=shot-box]]:min-h-0 [&_img]:object-top data-single:data-[scheme=dark]:[&_img]:rounded-xs"
+    class="h-16 w-22.5 shrink-0 overflow-hidden rounded-sm border border-ui-2 bg-bg-2 data-single:data-[scheme=dark]:p-space-1 [&_[data-slot=shot-box]]:min-h-0 [&_img]:object-top data-single:data-[scheme=dark]:[&_img]:rounded-xs"
     inert
   >
     <Shot alt="Preview" size="thumb" src={`data:image/png;base64,${src}`} />

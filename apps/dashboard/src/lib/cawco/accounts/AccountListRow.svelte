@@ -100,14 +100,14 @@
 </script>
 
 <li
-  class="@container/arow flex min-h-control-lg min-w-0 flex-col border-t border-t-border-hairline"
+  class="@container/arow flex min-h-control-lg min-w-0 flex-col border-t border-t-ui"
   data-flip
   style:--link-cols={"var(--spacing-space-3) minmax(0, 1fr) var(--spacing-icon-md)"}
 >
   <a
     data-setup={account.setupStep}
     data-slot="account-list-row-link"
-    class="grid min-w-0 flex-auto grid-areas-(--link-areas) grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-1 px-space-2 py-space-3 text-inherit no-underline transition-control focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-accent-ink focus-visible:-outline-offset-2 active:bg-surface-hover data-two:grid-areas-(--link-areas-two)"
+    class="grid min-w-0 flex-auto grid-areas-(--link-areas) grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-1 px-space-2 py-space-3 text-inherit no-underline transition-control focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2 active:bg-ui data-two:grid-areas-(--link-areas-two)"
     data-two={Boolean(problem) || undefined}
     {href}
     style:--link-areas={'"dot name chev"'}
@@ -122,7 +122,7 @@
     ></i>
     <span
       data-slot="name"
-      class="col-(--area) row-(--area) type-label flex min-w-0 text-ink-strong"
+      class="col-(--area) row-(--area) type-label flex min-w-0 text-tx"
       style:--area="name"
       ><span data-slot="words" class="truncate" data-share="title:{href}"
         >{name}</span
@@ -130,7 +130,7 @@
     >
     {#if problem}
       <span
-        class="mark-line col-(--area) row-(--area) flex min-w-0 items-start gap-space-1 type-meta text-status-attn transition-[color] duration-(--duration-slow) ease-out"
+        class="mark-line col-(--area) row-(--area) flex min-w-0 items-start gap-space-1 type-meta text-orange transition-[color] duration-(--duration-slow) ease-out"
         data-flip
         style:--area="problem"
       >
@@ -146,7 +146,7 @@
     <span
       data-slot="chev"
       aria-hidden="true"
-      class="col-(--area) row-(--area) flex text-ink-subtle @max-sm/arow:row-1"
+      class="col-(--area) row-(--area) flex text-tx-2 @max-sm/arow:row-1"
       style:--area="chev"><IconChevronRight class="size-icon-md" /></span
     >
   </a>
@@ -171,7 +171,7 @@
         {#if said}
           <span
             data-slot="check-said"
-            class="min-w-0 type-meta text-ink-muted"
+            class="min-w-0 type-meta text-tx-2"
             role="status">{said}</span
           >
         {/if}

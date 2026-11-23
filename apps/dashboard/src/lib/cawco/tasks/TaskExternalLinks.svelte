@@ -151,7 +151,7 @@
 {#snippet age(at: number | null)}
   {#if at !== null}
     <time
-      class="type-label font-normal num whitespace-nowrap text-ink-muted"
+      class="type-label font-normal num whitespace-nowrap text-tx-2"
       datetime={new Date(at).toISOString()}
       title={formatTimestamp(new Date(at))}>{formatAgeShort(at)}</time
     >
@@ -164,11 +164,11 @@
     {@const who = whoOf(each)}
     <li
       data-slot="link-comment"
-      class="flex max-w-measure min-w-0 flex-col gap-space-2 rounded-sm bg-surface-recess px-space-3 py-space-2"
+      class="flex max-w-measure min-w-0 flex-col gap-space-2 rounded-sm bg-bg-2 px-space-3 py-space-2"
     >
       <div
         data-slot="comment-text"
-        class="min-w-0 type-body wrap-anywhere text-ink-strong"
+        class="min-w-0 type-body wrap-anywhere text-tx"
       >
         <MessageBody source={each.text} />
       </div>
@@ -179,7 +179,7 @@
           formatTimestamp(new Date(each.at)),
           words.source[via.source]
         )}
-        class="mark-line flex max-w-full flex-wrap items-center gap-x-space-2 gap-y-space-1 self-start rounded-xs type-label font-normal text-ink-muted no-underline hover:text-ink-strong focus-inset"
+        class="mark-line flex max-w-full flex-wrap items-center gap-x-space-2 gap-y-space-1 self-start rounded-xs type-label font-normal text-tx-2 no-underline hover:text-tx focus-inset"
         data-slot="comment-cite"
         href={via.url}
         rel="noreferrer"
@@ -200,11 +200,11 @@
           >{formatAgeShort(each.at)}</span
         >
         {#if via.editedAt}
-          <span class="text-ink-subtle">{words.edited}</span>
+          <span class="text-tx-2">{words.edited}</span>
         {/if}
         <IconArrowUpRight
           aria-hidden="true"
-          class="size-icon-md flex-none text-ink-subtle"
+          class="size-icon-md flex-none text-tx-2"
         />
       </a>
     </li>
@@ -229,7 +229,7 @@
   >
     <!-- mark-line: the glyph, age and link-out stand in cells one title line tall, on the title's first line, beside words that wrap -->
     <div
-      class="group/row relative isolate col-span-full grid grid-cols-subgrid items-start gap-y-space-1 px-space-2 py-space-2 before:absolute before:inset-0 before:-z-1 before:rounded-sm before:transition-[background-color] before:duration-(--duration-fast) before:ease-in-out hover:not-active:before:bg-surface-hover active:before:bg-surface-pressed"
+      class="group/row relative isolate col-span-full grid grid-cols-subgrid items-start gap-y-space-1 px-space-2 py-space-2 before:absolute before:inset-0 before:-z-1 before:rounded-sm before:transition-[background-color] before:duration-(--duration-fast) before:ease-in-out hover:not-active:before:bg-ui active:before:bg-ui-2"
       data-slot="link-line"
     >
       <span class="mark-cell type-title" data-slot="glyph"
@@ -238,7 +238,7 @@
       <div class="flex min-w-0 flex-col gap-space-1" data-slot="link-main">
         <a
           aria-label={nameOf(link)}
-          class="block min-w-0 type-title text-ink-strong no-underline after:absolute after:inset-0 after:rounded-sm focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-solid focus-visible:after:outline-accent-ink focus-visible:after:-outline-offset-2"
+          class="block min-w-0 type-title text-tx no-underline after:absolute after:inset-0 after:rounded-sm focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-solid focus-visible:after:outline-accent focus-visible:after:-outline-offset-2"
           data-slot="link-title"
           href={link.url}
           rel="noreferrer"
@@ -251,19 +251,19 @@
           {:else if link.title}
             <span
               class="line-clamp-2 text-pretty wrap-anywhere"
-              class:text-ink-muted={glyph === "failed"}
+              class:text-tx-2={glyph === "failed"}
               title={link.title}>{link.title}</span
             >
           {:else if sentence}
             <span
-              class="block type-body text-pretty wrap-anywhere text-status-fail"
+              class="block type-body text-pretty wrap-anywhere text-red"
               role="alert">{sentence}</span
             >
           {/if}
         </a>
         {#if link.title && sentence}
           <p
-            class="m-0 max-w-measure type-body text-pretty wrap-anywhere text-status-fail"
+            class="m-0 max-w-measure type-body text-pretty wrap-anywhere text-red"
             data-slot="link-problem"
             role="alert"
           >
@@ -272,31 +272,31 @@
         {/if}
         {#if link.baselineUnread}
           <p
-            class="m-0 max-w-measure type-body text-pretty wrap-anywhere text-status-attn"
+            class="m-0 max-w-measure type-body text-pretty wrap-anywhere text-orange"
             data-slot="link-held"
           >
             {words.baselineUnread}
           </p>
         {/if}
         <span
-          class="mark-line flex min-w-0 items-center gap-x-space-2 type-label font-normal text-ink-muted"
+          class="mark-line flex min-w-0 items-center gap-x-space-2 type-label font-normal text-tx-2"
           data-slot="link-meta"
         >
           <span
             class="flex-none whitespace-nowrap font-medium"
-            class:text-ink-strong={glyph !== "failed" && glyph !== "pending"}
-            class:text-status-fail={glyph === "failed"}
-            class:text-ink-subtle={glyph === "pending"}
+            class:text-tx={glyph !== "failed" && glyph !== "pending"}
+            class:text-red={glyph === "failed"}
+            class:text-tx-2={glyph === "pending"}
             data-slot="link-state">{said}</span
           >
-          <span aria-hidden="true" class="flex-none text-ink-subtle">·</span>
+          <span aria-hidden="true" class="flex-none text-tx-2">·</span>
           <ProviderLogo class="flex-none" provider={link.source} />
           <span
             class="flex-none whitespace-nowrap font-(family-name:--font-mono) liga-none num"
             data-slot="link-ref">{link.ref}</span
           >
           {#if place}
-            <span aria-hidden="true" class="flex-none text-ink-subtle">·</span>
+            <span aria-hidden="true" class="flex-none text-tx-2">·</span>
             <span
               class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
               data-slot="link-place"
@@ -337,7 +337,7 @@
       <span class="mark-cell type-title" data-slot="link-out"
         ><IconArrowUpRight
           aria-hidden="true"
-          class="size-icon-md text-ink-subtle"
+          class="size-icon-md text-tx-2"
         /></span
       >
     </div>
@@ -384,10 +384,8 @@
     id="{uid}-head"
   >
     <span>{words.linksHead}</span>
-    <span
-      data-num
-      data-slot="count"
-      class="num ms-auto type-meta text-ink-subtle">{links.length}</span
+    <span data-num data-slot="count" class="num ms-auto type-meta text-tx-2"
+      >{links.length}</span
     >
   </h3>
   <div
@@ -404,15 +402,13 @@
       >
         {#if headed}
           <h4
-            class="col-span-full m-0 flex items-baseline gap-space-2 px-space-2 pb-space-1 type-label text-ink-muted"
+            class="col-span-full m-0 flex items-baseline gap-space-2 px-space-2 pb-space-1 type-label text-tx-2"
             class:pt-space-4={index > 0}
             id="{uid}-{group.mode}"
           >
             <span>{words.relation[group.mode]}</span>
             {#if group.mode !== "record"}
-              <span class="num type-meta text-ink-subtle"
-                >{group.links.length}</span
-              >
+              <span class="num type-meta text-tx-2">{group.links.length}</span>
             {/if}
           </h4>
         {/if}

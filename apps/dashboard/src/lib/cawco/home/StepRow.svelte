@@ -44,10 +44,10 @@
   <span class="mark-cell">
     <span
       data-slot="step-mark"
-      class="grid size-icon-md place-items-center text-ink-muted"
+      class="grid size-icon-md place-items-center text-tx-2"
     >
       {#if done}
-        <IconSuccess aria-hidden="true" class="size-icon-md text-status-done" />
+        <IconSuccess aria-hidden="true" class="size-icon-md text-green" />
       {:else if live}
         <LiveDot />
       {:else}
@@ -56,7 +56,7 @@
         <span
           data-slot="step-number"
           aria-hidden="true"
-          class="box-border grid size-full place-items-center rounded-pill border border-border-control type-meta leading-none num before:content-data-n"
+          class="box-border grid size-full place-items-center rounded-pill border border-ui-2 type-meta leading-none num before:content-data-n"
           data-n={n}
         ></span>
       {/if}
@@ -64,7 +64,7 @@
   </span>
   <span
     data-slot="step-label"
-    class="min-w-0 type-label wrap-anywhere text-ink-strong group-data-done/step:text-ink-muted"
+    class="min-w-0 type-label wrap-anywhere text-tx group-data-done/step:text-tx-2"
     >{#if done}<span class="sr-only">{doneWord}{" "}</span>{/if}{label}</span
   >
   {@render children?.()}

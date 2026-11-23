@@ -73,13 +73,13 @@
 {/snippet}
 
 <div
-  class="@container/shell contain-layout w-(--frame-w) bg-surface-recess pbe-space-8"
+  class="@container/shell contain-layout w-(--frame-w) bg-bg-2 pbe-space-8"
   style:--frame-w={`${width}px`}
 >
   <header
-    class="flex h-control-lg items-center justify-end gap-space-1 bg-surface-raised pe-space-3 ps-space-3"
+    class="flex h-control-lg items-center justify-end gap-space-1 bg-bg pe-space-3 ps-space-3"
   >
-    <span class="me-auto truncate type-label text-ink-strong">index.html</span>
+    <span class="me-auto truncate type-label text-tx">index.html</span>
     {#if holds === "mode"}
       {@render modes()}
     {:else if holds === "toolbar"}

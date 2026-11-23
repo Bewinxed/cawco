@@ -13,7 +13,7 @@
        */
       look: {
         surface:
-          "[&_li]:wrap-anywhere font-inherit text-inherit [&_li]:m-0 [&_li]:p-0 [&_li]:marker:text-ink-muted [&_p]:m-0 [&_ul]:m-0 [&_ul]:grid [&_ul]:list-disc [&_ul]:gap-space-1 [&_ul]:ps-space-4",
+          "[&_li]:wrap-anywhere font-inherit text-inherit [&_li]:m-0 [&_li]:p-0 [&_li]:marker:text-tx-2 [&_p]:m-0 [&_ul]:m-0 [&_ul]:grid [&_ul]:list-disc [&_ul]:gap-space-1 [&_ul]:ps-space-4",
       },
     },
   });

@@ -34,8 +34,8 @@
   data-settings-row
 >
   <div class="grid min-w-0 flex-1 gap-space-1">
-    <span class="type-label text-ink-strong">Word address</span>
-    <RowLine class="type-meta text-ink-muted" {line} />
+    <span class="type-label text-tx">Word address</span>
+    <RowLine class="type-meta text-tx-2" {line} />
   </div>
   <span class={["flex-none", hidden && "invisible"]}>
     <Button

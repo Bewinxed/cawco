@@ -1522,7 +1522,7 @@
           <span
             class={[
               "min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap",
-              !one.review && "text-ink-muted",
+              !one.review && "text-tx-2",
             ]}
             >{one.review
               ? one.review.name
@@ -1562,19 +1562,17 @@
       {#each directions as one (one.file)}
         <DropdownMenu.RadioItem row="described" value={one.file}>
           <span class="flex min-w-0 flex-1 flex-col gap-space-1" data-box>
-            <span class="truncate type-label font-medium text-ink-strong"
+            <span class="truncate type-label font-medium text-tx"
               >{one.name}</span
             >
             {#if one.line}
-              <span class="line-clamp-2 type-meta text-ink-muted"
-                >{one.line}</span
-              >
+              <span class="line-clamp-2 type-meta text-tx-2">{one.line}</span>
             {/if}
           </span>
           {#if one.file === pickedFile}
             <IconTick
               aria-label={words.pickedMark}
-              class="size-icon-sm flex-none text-ink-muted"
+              class="size-icon-sm flex-none text-tx-2"
               data-slot="direction-picked"
             />
           {/if}
@@ -1612,12 +1610,12 @@
           tip={false}
         >
           <span
-            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-title"
+            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-tx type-title"
             >{name}</span
           >
           <IconChevronDown
             aria-hidden="true"
-            class="size-icon-sm flex-none text-ink-muted"
+            class="size-icon-sm flex-none text-tx-2"
           />
         </BarItem>
       {/snippet}
@@ -1706,7 +1704,7 @@
                      view (motion/list-swap), in a box as wide as the longest. -->
                 {#key kept.state}
                   <span
-                    class="col-start-1 row-start-1 min-w-0 animate-(--swap) overflow-clip text-ellipsis whitespace-nowrap text-center text-ink-strong type-title"
+                    class="col-start-1 row-start-1 min-w-0 animate-(--swap) overflow-clip text-ellipsis whitespace-nowrap text-center text-tx type-title"
                     style:--swap={stepSwap.rowAnim(0)}
                     out:stepSwap.leaveView>{keptState?.name ?? ""}</span
                   >
@@ -1714,7 +1712,7 @@
               </span>
               <IconChevronDown
                 aria-hidden="true"
-                class="size-icon-sm flex-none text-ink-muted"
+                class="size-icon-sm flex-none text-tx-2"
               />
             </BarItem>
           {/snippet}
@@ -1754,12 +1752,11 @@
                           class="flex min-w-0 flex-col gap-space-1"
                           data-box
                         >
-                          <span
-                            class="truncate type-label font-medium text-ink-strong"
+                          <span class="truncate type-label font-medium text-tx"
                             >{state.name}</span
                           >
                           {#if state.note}
-                            <span class="line-clamp-2 type-meta text-ink-muted"
+                            <span class="line-clamp-2 type-meta text-tx-2"
                               >{state.note}</span
                             >
                           {/if}
@@ -1984,7 +1981,7 @@
 
 <div
   data-slot="design-graph"
-  class="flex h-full min-h-0 min-w-0 flex-col bg-surface-page contain-layout"
+  class="flex h-full min-h-0 min-w-0 flex-col bg-bg contain-layout"
   data-arriving={arriving || reading || undefined}
   {lang}
   {@attach frameSize(

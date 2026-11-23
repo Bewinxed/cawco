@@ -72,7 +72,7 @@
 
 <div
   bind:this={shell}
-  class="@container/shell contain-layout relative w-(--frame-w) h-(--frame-h) bg-surface-recess"
+  class="@container/shell contain-layout relative w-(--frame-w) h-(--frame-h) bg-bg-2"
   data-hang-layer={layer.id}
   style:--frame-h={`${height}px`}
   style:--frame-w={`${width}px`}
@@ -137,7 +137,7 @@
           {:else}
             <div class="flex w-full flex-col p-space-3">
               {#each rows as row (row)}
-                <p class="py-space-2 type-label text-ink-strong">{row}</p>
+                <p class="py-space-2 type-label text-tx">{row}</p>
               {/each}
             </div>
           {/if}

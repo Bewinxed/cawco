@@ -37,12 +37,12 @@
 </script>
 
 {#if phone.current}
-  <p data-slot="checklist" class="m-0 type-meta text-pretty text-ink-muted">
+  <p data-slot="checklist" class="m-0 type-meta text-pretty text-tx-2">
     {SENTENCE}
   </p>
 {:else}
   <div data-slot="checklist" class="flex flex-col gap-space-2">
-    <p id="connect-needs" class="m-0 type-meta text-ink-muted">
+    <p id="connect-needs" class="m-0 type-meta text-tx-2">
       On it the installer needs
     </p>
     <ul
@@ -52,7 +52,7 @@
       {#each INSTALL_CHECKS as check (check)}
         <li
           data-check-chip={check}
-          class="mark-line inline-flex h-icon-lg items-center gap-space-1 rounded-xs bg-surface-recess px-space-2 type-label text-ink-strong"
+          class="mark-line inline-flex h-icon-lg items-center gap-space-1 rounded-xs bg-bg-2 px-space-2 type-label text-tx"
         >
           <StepMark state="future" size="sm" />
           <span>{CHECK_WORDS[check]}</span>

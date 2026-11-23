@@ -34,7 +34,7 @@
   aria-label={`Needs you, ${count}`}
   aria-pressed={on}
   class={cn(
-    "select-none mark-line type-label inline-flex h-control-sm flex-none items-center gap-space-2 rounded-sm border border-transparent bg-transparent px-space-3 in-form-compact:px-space-2 text-status-attn hover:bg-surface-hover transition-[background-color,color,border-color] duration-(--duration-fast) ease-out motion-safe:active:transform-(--tpress) aria-pressed:border-status-attn",
+    "select-none mark-line type-label inline-flex h-control-sm flex-none items-center gap-space-2 rounded-sm border border-transparent bg-transparent px-space-3 in-form-compact:px-space-2 text-orange hover:bg-ui transition-[background-color,color,border-color] duration-(--duration-fast) ease-out motion-safe:active:transform-(--tpress) aria-pressed:border-orange",
     className
   )}
   style:--tpress="scale(var(--press-scale))"
@@ -44,9 +44,9 @@
   in:crossIn
   out:crossOut
 >
-  <IconNeedsYou aria-hidden="true" class="size-icon-md text-status-attn" />
+  <IconNeedsYou aria-hidden="true" class="size-icon-md text-orange" />
   <!-- In the view strip (`data-form="compact"`) its glyph and count stand
        alone. -->
   <span class="in-form-compact:hidden">Needs you</span>
-  <span data-slot="num" class="num text-status-attn">{count}</span>
+  <span data-slot="num" class="num text-orange">{count}</span>
 </button>

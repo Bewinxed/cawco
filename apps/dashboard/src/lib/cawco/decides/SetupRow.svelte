@@ -41,7 +41,7 @@
 
 <section
   aria-labelledby="{uid}-label"
-  class="min-w-0 border-b border-border-hairline py-space-3 last:border-b-0"
+  class="min-w-0 border-b border-ui py-space-3 last:border-b-0"
   data-row={id}
   style:--row-open="calc(var(--spacing) * 36) minmax(0, 1fr)"
   style:--row-folded="calc(var(--spacing) * 36) minmax(0, 1fr) auto"
@@ -52,10 +52,7 @@
       class="grid min-w-0 grid-cols-(--row-open) gap-x-space-3 gap-y-space-2 @max-phone/member-setup:grid-cols-1"
     >
       <h3
-        class={[
-          "m-0 type-label",
-          open ? "font-medium text-ink-strong" : "text-ink-muted",
-        ]}
+        class={["m-0 type-label", open ? "font-medium text-tx" : "text-tx-2"]}
         id="{uid}-label"
       >
         {label}
@@ -69,7 +66,7 @@
       class="grid min-w-0 grid-cols-(--row-folded) items-center gap-x-space-3 gap-y-space-1 @max-phone/member-setup:grid-cols-(--row-narrow)"
     >
       <h3
-        class="m-0 type-label text-ink-muted @max-phone/member-setup:col-start-1"
+        class="m-0 type-label text-tx-2 @max-phone/member-setup:col-start-1"
         id="{uid}-label"
       >
         {label}
@@ -77,7 +74,7 @@
       <p
         class={[
           "m-0 min-w-0 truncate type-label @max-phone/member-setup:col-start-1 @max-phone/member-setup:row-start-2",
-          problem ? "text-status-fail" : "text-ink-strong",
+          problem ? "text-red" : "text-tx",
         ]}
       >
         {value}

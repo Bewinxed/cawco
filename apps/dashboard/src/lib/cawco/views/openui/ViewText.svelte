@@ -12,7 +12,7 @@
 
 <p
   data-slot="text"
-  class="type-body text-pretty text-ink-strong role-label:type-label role-meta:type-meta role-meta:text-ink-muted role-title:type-title role-title:text-balance"
+  class="type-body text-pretty text-tx role-label:type-label role-meta:type-meta role-meta:text-tx-2 role-title:type-title role-title:text-balance"
   data-role={role}
 >
   {String(props.text ?? "")}

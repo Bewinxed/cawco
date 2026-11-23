@@ -46,16 +46,16 @@
   <ul class="m-0 flex min-w-0 list-none flex-col gap-space-2 p-0">
     {#each each as place (`${place.machine}\0${place.path}`)}
       <li class="flex min-w-0 flex-col gap-space-1">
-        <span class="type-label text-ink-strong">{place.machine}</span>
+        <span class="type-label text-tx">{place.machine}</span>
         <!-- The path reads from its end: the folder's tail stays when
              it is cut, and one that fits starts under its machine's
              name (the end of a right-to-left line). -->
         <span
-          class="dir-rtl type-meta truncate text-end text-ink-muted"
+          class="dir-rtl type-meta truncate text-end text-tx-2"
           title={place.path}><bdi>{place.path}</bdi></span
         >
         {#if place.made && place.within.length > 0}
-          <span class="type-meta text-pretty text-ink-muted"
+          <span class="type-meta text-pretty text-tx-2"
             >{projectEndWords.within(place.within)}</span
           >
         {/if}
@@ -72,7 +72,7 @@
   style:--box-indent="calc(var(--spacing-icon-md) + var(--spacing-space-2))"
 >
   <label
-    class="mark-line flex min-w-0 items-center gap-space-2 type-label text-ink-strong data-disabled:text-ink-muted"
+    class="mark-line flex min-w-0 items-center gap-space-2 type-label text-tx data-disabled:text-tx-2"
     data-disabled={disabled || undefined}
   >
     <Checkbox
@@ -100,18 +100,16 @@
       {/if}
       {#if checked && kept.length > 0}
         <div class="grid min-w-0 grid-cols-1 gap-space-2" data-stays>
-          <span class="type-label text-ink-strong"
-            >{projectEndWords.staysOnDisk}</span
-          >
+          <span class="type-label text-tx">{projectEndWords.staysOnDisk}</span>
           {@render listed(kept)}
         </div>
       {/if}
       {#if !checked}
-        <p class="m-0 min-w-0 type-meta text-pretty text-ink-muted">
+        <p class="m-0 min-w-0 type-meta text-pretty text-tx-2">
           {projectEndWords.transcriptsStay}
         </p>
       {:else if removed.length > 0}
-        <p class="m-0 min-w-0 type-meta text-pretty text-ink-muted">
+        <p class="m-0 min-w-0 type-meta text-pretty text-tx-2">
           {projectEndWords.transcriptsGo}
         </p>
       {/if}

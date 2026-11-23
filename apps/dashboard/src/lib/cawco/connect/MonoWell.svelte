@@ -36,12 +36,12 @@
 <div
   data-slot="well"
   data-rows={rows}
-  class="flex min-w-0 items-start gap-space-2 rounded-sm border border-border-control bg-surface-sunk py-space-1 ps-space-3 pe-space-1"
+  class="flex min-w-0 items-start gap-space-2 rounded-sm border border-ui-2 bg-bg-2 py-space-1 ps-space-3 pe-space-1"
 >
   <!-- What the well is, said once before its lines. -->
   <span class="sr-only">{label}:</span>
   <div
-    class="flex min-w-0 flex-1 flex-col py-space-1 font-mono type-code text-ink-strong"
+    class="flex min-w-0 flex-1 flex-col py-space-1 font-mono type-code text-tx"
     aria-live={live ? "off" : undefined}
   >
     {#each shown as line, index (index)}

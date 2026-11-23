@@ -46,7 +46,7 @@
     row === "artifact" && "min-h-control-lg aria-busy:opacity-50",
     row === "described" && "min-h-control-lg py-space-2",
     tile &&
-      "size-control-sm min-h-control-sm justify-center p-0 coarse:size-control-lg aria-checked:bg-accent-wash aria-checked:text-accent-ink",
+      "size-control-sm min-h-control-sm justify-center p-0 coarse:size-control-lg aria-checked:bg-ui aria-checked:text-accent",
     className
   )}
   data-menu-item

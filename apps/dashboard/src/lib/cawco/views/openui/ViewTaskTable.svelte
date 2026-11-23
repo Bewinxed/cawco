@@ -53,10 +53,7 @@
   }
 </script>
 
-<div
-  data-slot="ledger"
-  class="overflow-hidden rounded-lg bg-surface-raised shadow-sm"
->
+<div data-slot="ledger" class="overflow-hidden rounded-lg bg-bg shadow-sm">
   <Table.Root fadeEdges ghostRows="tbody tr">
     <Table.Header>
       {#each table.getHeaderGroups() as group (group.id)}
@@ -83,7 +80,7 @@
               {#if i === 0}
                 <a
                   data-slot="cell-link"
-                  class="type-label text-ink-strong no-underline after:absolute after:inset-0"
+                  class="type-label text-tx no-underline after:absolute after:inset-0"
                   href={view.hrefOf(row.original.id)}
                   onclick={(event) => open(event, row.original.id)}
                   >{String(cell.getValue())}</a

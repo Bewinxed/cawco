@@ -317,7 +317,7 @@
            under the drawer's line). -->
       <div
         data-slot="hub-band"
-        class="pointer-events-auto invisible mx-space-3 mt-(--band-air) grid auto-rows-band grid-cols-fluid-auto items-center gap-x-space-3 rounded-sm bg-status-attn-bg px-3 py-2.5 text-base font-normal text-status-attn tabular-nums opacity-0 desk:ms-space-6 desk:me-space-6 @max-phone/hub-band:auto-rows-band-phone data-open:visible data-open:opacity-100 tone-done:bg-status-done-bg tone-done:text-status-done tone-fail:bg-status-fail-bg tone-fail:text-status-fail tone-live:bg-status-live-bg tone-live:text-status-live motion-reduce:not-data-open:transition-band-hide motion-reduce:data-open:transition-band-show motion-safe:not-data-open:translate-band-shut motion-safe:not-data-open:transition-band-slide-hide motion-safe:data-open:translate-y-0 motion-safe:data-open:transition-band-slide-show"
+        class="pointer-events-auto invisible mx-space-3 mt-(--band-air) grid auto-rows-band grid-cols-fluid-auto items-center gap-x-space-3 rounded-sm bg-bg-2 px-3 py-2.5 text-base font-normal text-orange tabular-nums opacity-0 desk:ms-space-6 desk:me-space-6 @max-phone/hub-band:auto-rows-band-phone data-open:visible data-open:opacity-100 tone-done:bg-bg-2 tone-done:text-green tone-fail:bg-bg-2 tone-fail:text-red tone-live:bg-bg-2 tone-live:text-cyan motion-reduce:not-data-open:transition-band-hide motion-reduce:data-open:transition-band-show motion-safe:not-data-open:translate-band-shut motion-safe:not-data-open:transition-band-slide-hide motion-safe:data-open:translate-y-0 motion-safe:data-open:transition-band-slide-show"
         aria-hidden={band ? undefined : "true"}
         data-open={band ? "" : undefined}
         data-tone={tone}

@@ -69,10 +69,10 @@
 {:else if tray.step === "admin"}
   <div class="grid min-w-0 gap-space-2" data-slot="admin-command">
     <p
-      class="m-0 flex flex-wrap items-baseline gap-x-space-2 type-meta text-ink-muted"
+      class="m-0 flex flex-wrap items-baseline gap-x-space-2 type-meta text-tx-2"
     >
       <span>Auth ID</span>
-      <code class="type-code whitespace-nowrap text-ink-strong select-all"
+      <code class="type-code whitespace-nowrap text-tx select-all"
         >hskey-auth-7f3a9c2e</code
       >
     </p>
@@ -80,7 +80,7 @@
   </div>
 {:else if tray.step === "key"}
   <div class="grid min-w-0 gap-space-1" data-slot="key-field">
-    <label class="type-label text-ink-strong" for={keyId}>Setup key</label>
+    <label class="type-label text-tx" for={keyId}>Setup key</label>
     <Input
       id={keyId}
       autocomplete="off"
@@ -97,14 +97,11 @@
   </div>
 {:else if tray.step === "secure" && tray.certs && tray.issuesCerts}
   <p
-    class="mark-line m-0 flex min-w-0 items-center gap-space-2 rounded-sm border border-border-control bg-surface-sunk px-space-3 py-space-2"
+    class="mark-line m-0 flex min-w-0 items-center gap-space-2 rounded-sm border border-ui-2 bg-bg-2 px-space-3 py-space-2"
     data-slot="secure-address"
   >
-    <IconLock
-      aria-label="Secure"
-      class="size-icon-md flex-none text-status-done"
-    />
-    <code class="min-w-0 type-code whitespace-nowrap text-ink-strong select-all"
+    <IconLock aria-label="Secure" class="size-icon-md flex-none text-green" />
+    <code class="min-w-0 type-code whitespace-nowrap text-tx select-all"
       >https://{tray.long}</code
     >
   </p>
@@ -138,16 +135,13 @@
     <!-- The optional stations, as marks: one done is its tick and words;
          one not done is a text action that reopens its tray. -->
     <p
-      class="m-0 flex flex-wrap items-center gap-x-space-3 gap-y-space-1 type-meta text-ink-muted"
+      class="m-0 flex flex-wrap items-center gap-x-space-3 gap-y-space-1 type-meta text-tx-2"
       data-slot="station-marks"
     >
       {#each stationMarks(tray) as mark (mark.label)}
         {#if mark.done}
           <span class="mark-line inline-flex items-center gap-space-1">
-            <IconSuccess
-              aria-hidden="true"
-              class="size-icon-sm text-status-done"
-            />
+            <IconSuccess aria-hidden="true" class="size-icon-sm text-green" />
             <span>{mark.label}</span>
           </span>
         {:else}

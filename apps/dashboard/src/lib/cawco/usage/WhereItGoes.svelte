@@ -349,13 +349,13 @@
 <section
   data-slot="where-it-goes-card"
   aria-labelledby="where-title"
-  class="flex flex-col gap-space-4 rounded-lg bg-surface-raised p-space-4 shadow-sm max-phone:p-space-4"
+  class="flex flex-col gap-space-4 rounded-lg bg-bg p-space-4 shadow-sm max-phone:p-space-4"
 >
   <header
     data-slot="head"
     class="flex flex-wrap items-center justify-between gap-space-3"
   >
-    <h2 data-slot="title" class="type-label text-ink-muted" id="where-title">
+    <h2 data-slot="title" class="type-label text-tx-2" id="where-title">
       Where it goes
     </h2>
     <div class="flex flex-wrap gap-space-2">
@@ -393,7 +393,7 @@
   </header>
 
   {#if start === null}
-    <p data-slot="note" class="type-meta text-ink-muted">
+    <p data-slot="note" class="type-meta text-tx-2">
       This range follows a 5-hour window, and none is running for
       {descriptorOf(harness).words.usageName}.
     </p>
@@ -411,7 +411,7 @@
       {/each}
     </div>
   {:else if empty && !plan}
-    <p data-slot="note" class="type-meta text-ink-muted" in:reveal>
+    <p data-slot="note" class="type-meta text-tx-2" in:reveal>
       Nothing recorded in this range.
     </p>
   {:else}
@@ -435,7 +435,7 @@
             <!-- Where these ran, said once for the rows under it. -->
             <h3
               data-slot="machine"
-              class="mark-line type-label m-0 flex items-center gap-space-2 py-space-1 text-ink-muted"
+              class="mark-line type-label m-0 flex items-center gap-space-2 py-space-1 text-tx-2"
               data-key="head:{id}"
               style:animation={headAnim(entry.kind, id)}
               style:opacity={headUnseen(entry.kind, id) ? "0" : undefined}
@@ -480,7 +480,7 @@
         {:else if plan?.more}
           <span
             aria-hidden="true"
-            class="type-label text-ink-muted"
+            class="type-label text-tx-2"
             style:animation={leaveAnim("more")}>{plan.more}</span
           >
         {/if}
@@ -489,7 +489,7 @@
   {/if}
 
   {#if traitsOf(harness).costMeaning === "estimated"}
-    <p data-slot="note" class="type-meta text-ink-muted">
+    <p data-slot="note" class="type-meta text-tx-2">
       ~ is the API price of work the plan already covers.
     </p>
   {/if}
@@ -504,14 +504,14 @@
     {#if item.href && live}
       <a
         data-slot="name"
-        class="type-body truncate text-ink-strong no-underline hover:underline"
+        class="type-body truncate text-tx no-underline hover:underline"
         href={item.href}
         title={item.label}>{item.label}</a
       >
     {:else if item.os}
       <span
         data-slot="name"
-        class="mark-line type-body flex items-center gap-space-2 truncate text-ink-strong"
+        class="mark-line type-body flex items-center gap-space-2 truncate text-tx"
       >
         <OsMark class="size-icon-md shrink-0" os={item.os} />
         <span>{item.label}</span>
@@ -519,7 +519,7 @@
     {:else}
       <span
         data-slot="name"
-        class="type-body truncate text-ink-strong"
+        class="type-body truncate text-tx"
         title={item.label}>{item.label}</span
       >
     {/if}
@@ -530,15 +530,14 @@
             <span {...props} class="flex min-w-0 items-center gap-space-2">
               <span
                 data-slot="fill"
-                class="h-space-2 w-(--fill-w) min-w-space-1 flex-none rounded-xs bg-ink-muted motion-safe:transition-[inline-size] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
+                class="h-space-2 w-(--fill-w) min-w-space-1 flex-none rounded-xs bg-tx-2 motion-safe:transition-[inline-size] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
                 style:--share={item.share}
                 style:--fill-w={"calc(var(--share) * (100% - calc(var(--spacing) * 22)))"}
               ></span>
               <span
                 data-where-it-goes-value
                 data-slot="num"
-                class="type-meta num flex-none text-ink-strong"
-                >{item.value}</span
+                class="type-meta num flex-none text-tx">{item.value}</span
               >
             </span>
           {/snippet}
@@ -549,14 +548,14 @@
       <span class="flex min-w-0 items-center gap-space-2">
         <span
           data-slot="fill"
-          class="h-space-2 w-(--fill-w) min-w-space-1 flex-none rounded-xs bg-ink-muted motion-safe:transition-[inline-size] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
+          class="h-space-2 w-(--fill-w) min-w-space-1 flex-none rounded-xs bg-tx-2 motion-safe:transition-[inline-size] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
           style:--fill-w={"calc(var(--share) * (100% - calc(var(--spacing) * 22)))"}
           style:--share={item.share}
         ></span>
         <span
           data-where-it-goes-value
           data-slot="num"
-          class="type-meta num flex-none text-ink-strong">{item.value}</span
+          class="type-meta num flex-none text-tx">{item.value}</span
         >
       </span>
     {/if}

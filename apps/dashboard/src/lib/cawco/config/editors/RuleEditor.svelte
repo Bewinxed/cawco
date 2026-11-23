@@ -61,7 +61,7 @@
   let { rule, taken }: { rule: RuleRow | null; taken: string[] } = $props();
 
   const store = configStore();
-  const HUE = "var(--color-mark-2)";
+  const HUE = "var(--color-yellow)";
 
   let draft = $state<RuleDraft>(
     untrack(() => (rule ? draftOf(rule) : blankRule()))
@@ -262,7 +262,7 @@
   <ReadingWell text={ruleSentence(draft)} />
 
   <EditorSection hue={HUE} icon={IconEye} label="What to watch for">
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       CawCo reads what a session writes, not what you write to it.
     </p>
     <div data-slot="fold" class="flex flex-col gap-inherit">
@@ -358,7 +358,7 @@
         value={draft.watch}
       />
       {#if draft.watch !== "text" && draft.timing === "turn"}
-        <p class="type-meta text-status-attn" in:unfold out:unfold>
+        <p class="type-meta text-orange" in:unfold out:unfold>
           Reasoning is not kept once a turn is over. To watch thinking, fire on
           the message or the moment instead.
         </p>
@@ -375,7 +375,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconPlain} label="What CawCo sends back">
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       The session is told this is CawCo and not you, so it does not answer you
       for something you never said.
     </p>
@@ -417,7 +417,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       Everywhere unless you narrow it. Each filter you set has to match for the
       rule to fire. A model matches as a substring, so a family name covers
       every dated build of it.

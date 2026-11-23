@@ -64,17 +64,17 @@
        and a way to put the card away. -->
   <section
     aria-label={offerWords.joinedLabel}
-    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-border-control rounded-lg bg-surface-raised p-space-3 shadow-sm motion-safe:animate-rise-in"
+    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-ui-2 rounded-lg bg-bg p-space-3 shadow-sm motion-safe:animate-rise-in"
     data-offer={instanceId}
     role="status"
   >
     <p
-      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-ch-24 type-body text-ink-strong"
+      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-ch-24 type-body text-tx"
     >
       <IconFolder
         data-project-offer-glyph
         aria-hidden="true"
-        class="size-icon-md flex-none text-ink-muted"
+        class="size-icon-md flex-none text-tx-2"
       />
       <span>{joinedLine}</span>
     </p>
@@ -97,16 +97,16 @@
 {:else if offer}
   <section
     aria-label={offerWords.offerLabel}
-    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-border-control rounded-lg bg-surface-raised p-space-3 shadow-sm motion-safe:animate-rise-in"
+    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-ui-2 rounded-lg bg-bg p-space-3 shadow-sm motion-safe:animate-rise-in"
     data-offer={instanceId}
   >
     <p
-      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-ch-24 type-body text-ink-strong"
+      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-ch-24 type-body text-tx"
     >
       <IconFolder
         data-project-offer-glyph
         aria-hidden="true"
-        class="size-icon-md flex-none text-ink-muted"
+        class="size-icon-md flex-none text-tx-2"
       />
       <span>{offer.line}</span>
     </p>

@@ -27,15 +27,12 @@
 
 <figure class={["m-0 min-w-0", MEASURE_ROOM]} data-slot="block-audio">
   {#if !source}
-    <p
-      class="m-0 type-meta text-ink-muted wrap-anywhere"
-      data-slot="media-gone"
-    >
+    <p class="m-0 type-meta text-tx-2 wrap-anywhere" data-slot="media-gone">
       {transcriptWords.blockFileUnshown(file)}
     </p>
   {:else if media.still}
     <p
-      class="mark-line m-0 flex min-h-control-md items-center gap-space-2 rounded-pill bg-surface-recess px-space-3 text-ink-muted"
+      class="mark-line m-0 flex min-h-control-md items-center gap-space-2 rounded-pill bg-bg-2 px-space-3 text-tx-2"
       data-slot="sound-still"
     >
       <IconAudio class="size-icon-md flex-none" />
@@ -47,7 +44,7 @@
   {:else}
     <MediaPlayer kind="audio" {name} {source} />
     {#if caption}
-      <figcaption class="mt-space-2 type-meta text-ink-muted wrap-anywhere">
+      <figcaption class="mt-space-2 type-meta text-tx-2 wrap-anywhere">
         {caption}
       </figcaption>
     {/if}

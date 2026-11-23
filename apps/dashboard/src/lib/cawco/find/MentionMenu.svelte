@@ -87,7 +87,7 @@
 <!-- biome-ignore lint/a11y/noStaticElementInteractions: the mousedown handler only keeps the focus in the field; the rows are its controls -->
 <div
   data-slot="menu"
-  class="group/menu absolute inset-x-0 bottom-(--menu-bottom) z-2 origin-bottom overflow-hidden border border-border-control rounded-lg bg-surface-raised shadow-lg"
+  class="group/menu absolute inset-x-0 bottom-(--menu-bottom) z-2 origin-bottom overflow-hidden border border-ui-2 rounded-lg bg-bg shadow-lg"
   data-phone={phone || undefined}
   style:--menu-bottom="calc(100% + var(--spacing-space-2))"
   onmousedown={(event) => event.preventDefault()}
@@ -108,19 +108,19 @@
   >
     {#if mention.answer.state === "unreached"}
       <p
-        class="m-0 px-space-3 py-space-2 type-label font-normal text-ink-muted"
+        class="m-0 px-space-3 py-space-2 type-label font-normal text-tx-2"
         data-flip
       >
         Can't reach the hub. Nothing can be named until it's back.
         <button
-          class="select-none border-none border-current p-0 bg-transparent text-accent-ink"
+          class="select-none border-none border-current p-0 bg-transparent text-accent"
           onclick={() => mention.retry()}
           type="button">Retry</button
         >
       </p>
     {:else if mention.answer.state === "refused"}
       <p
-        class="m-0 px-space-3 py-space-2 type-label font-normal text-ink-muted"
+        class="m-0 px-space-3 py-space-2 type-label font-normal text-tx-2"
         data-flip
       >
         {mention.answer.detail}
@@ -142,7 +142,7 @@
       {/each}
     {:else if mention.current && mention.answer.state === "ok"}
       <p
-        class="m-0 px-space-3 py-space-2 type-label font-normal text-ink-muted"
+        class="m-0 px-space-3 py-space-2 type-label font-normal text-tx-2"
         data-flip
       >
         No sessions for “{mention.words}”

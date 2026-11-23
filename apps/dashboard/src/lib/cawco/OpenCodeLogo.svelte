@@ -14,9 +14,9 @@
 <svg aria-hidden="true" class={cn(className)} fill="none" viewBox="0 0 300 300">
   <!-- The glyph is 240 wide in its 300 square, inset 30 from the left. -->
   <g transform="translate(30)">
-    <path class="fill-border-control" d="M180 240H60V120H180V240Z" />
+    <path class="fill-ui-2" d="M180 240H60V120H180V240Z" />
     <path
-      class="fill-ink-strong"
+      class="fill-tx"
       d="M180 60H60V240H180V60ZM240 300H0V0H240V300Z"
       fill-rule="evenodd"
     />

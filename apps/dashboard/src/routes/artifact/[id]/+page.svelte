@@ -63,7 +63,7 @@
        conversation. -->
   <div
     data-slot="artifact-tab"
-    class="flex h-dvh flex-col overflow-hidden bg-surface-page p-space-2"
+    class="flex h-dvh flex-col overflow-hidden bg-bg p-space-2"
   >
     {#if session.refused}
       <div class="flex min-h-0 flex-1 flex-col" in:reveal>
@@ -87,7 +87,7 @@
     {:else}
       <div
         aria-hidden="true"
-        class="flex-1 rounded-lg bg-surface-recess p-space-4"
+        class="flex-1 rounded-lg bg-bg-2 p-space-4"
         out:revealOut
       >
         <Skeleton class="w-5/12" data-slot="block" line="body" radius="text" />

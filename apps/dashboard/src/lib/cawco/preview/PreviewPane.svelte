@@ -626,7 +626,7 @@
     <p
       id={stageCover.stageDetailsId}
       data-slot="details"
-      class="mt-space-2 text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere"
+      class="mt-space-2 text-tx-2 type-code liga-none whitespace-pre-wrap wrap-anywhere"
     >
       {said}
     </p>
@@ -1007,7 +1007,7 @@
   <DropdownMenu.Item onSelect={() => paneMode.showList(!paneMode.listOpen)}>
     <IconChat /><span>{commentWords.comments}</span
     >{#if paneDoc.openCount > 0}<span
-        class="ms-auto text-ink-muted num"
+        class="ms-auto text-tx-2 num"
         data-slot="count">{paneDoc.openCount}</span
       >{/if}
   </DropdownMenu.Item>
@@ -1111,7 +1111,7 @@
     bind:this={paneLayout.section}
   >
     <div
-      class="relative flex flex-col flex-1 min-h-0 overflow-hidden border border-border-control rounded-sm bg-surface-sunk"
+      class="relative flex flex-col flex-1 min-h-0 overflow-hidden border border-ui-2 rounded-sm bg-bg-2"
       bind:this={paneLayout.well}
     >
       {@render framed()}
@@ -1221,7 +1221,7 @@
     <div
       data-slot="down"
       data-unopened
-      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-sunk"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-bg-2"
       role="alert"
       transition:appear
     >
@@ -1249,7 +1249,7 @@
          own cause, its fix, and where to switch how previews are reached. -->
     <div
       data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-sunk"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-bg-2"
       role="alert"
       transition:appear
     >
@@ -1341,7 +1341,7 @@
         undefined}
       data-slot="cover"
       aria-hidden={stageCover.stageWaiting ? undefined : "true"}
-      class="group/cover absolute inset-x-0 top-(--side-room,0px) bottom-0 p-space-4 bg-surface-recess pointer-events-none transition-[opacity] duration-(--duration-fast) ease-out data-ready:opacity-0"
+      class="group/cover absolute inset-x-0 top-(--side-room,0px) bottom-0 p-space-4 bg-bg-2 pointer-events-none transition-[opacity] duration-(--duration-fast) ease-out data-ready:opacity-0"
       role={stageCover.stageWaiting ? "status" : undefined}
       {@attach (node) => {
         // Ready, the cover and its skeleton go in the skeleton's reveal and
@@ -1385,7 +1385,7 @@
     <!-- The stage or the server didn't start, or failed its restarts: where the page would be. -->
     <div
       data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-sunk"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-bg-2"
       role="alert"
       transition:appear
     >
@@ -1417,7 +1417,7 @@
     <!-- On its way past the time its stage is given: never an endless cover. -->
     <div
       data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-sunk"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-bg-2"
       data-never-drawn
       role="alert"
       transition:appear
@@ -1454,7 +1454,7 @@
     <div
       data-slot="down"
       data-down="unrecorded"
-      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-sunk"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-bg-2"
       role="alert"
       transition:appear
     >
@@ -1487,7 +1487,7 @@
     <!-- The browser's own error page stands in the frame: said in words, with the way back. -->
     <div
       data-slot="down"
-      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-sunk"
+      class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-bg-2"
       data-not-loaded
       role="alert"
       transition:appear
@@ -1667,12 +1667,12 @@
     <div
       data-slot="failure"
       data-pane-failure
-      class="absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-x-space-3 gap-y-space-2 px-space-3 py-space-2 bg-surface-raised border-t border-border-hairline"
+      class="absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-x-space-3 gap-y-space-2 px-space-3 py-space-2 bg-bg border-t border-ui"
       role="alert"
       transition:appear
     >
       <p
-        class="flex-1 basis-56 min-w-0 m-0 text-status-fail text-base font-normal text-pretty wrap-anywhere"
+        class="flex-1 basis-56 min-w-0 m-0 text-red text-base font-normal text-pretty wrap-anywhere"
       >
         {paneNotice.failure
           ? paneNotice.failure.message

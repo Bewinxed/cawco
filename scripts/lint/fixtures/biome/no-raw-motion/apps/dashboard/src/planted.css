@@ -13,7 +13,7 @@
   animation-delay: 0ms;
 }
 .ease-out {
-  color: var(--ink-strong);
+  color: var(--tx);
 }
 .kept {
   /* biome-ignore lint/plugin/no-raw-motion: a fixture's own suppression, which must hold. */

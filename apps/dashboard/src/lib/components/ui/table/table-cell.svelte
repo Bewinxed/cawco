@@ -15,12 +15,12 @@
          * numerals by default").
          */
         /** A list row's cell: meta text on the row's own spacing. */
-        list: "type-meta num h-control-lg px-space-3 py-space-2 text-ink-muted",
+        list: "type-meta num h-control-lg px-space-3 py-space-2 text-tx-2",
         /** A list cell that wells while its group (`group`) is open. */
         "list-opens":
-          "type-meta num h-control-lg px-space-3 py-space-2 text-ink-muted group-state-open:bg-surface-sunk",
+          "type-meta num h-control-lg px-space-3 py-space-2 text-tx-2 group-state-open:bg-bg-2",
         /** A ledger's cell: the row's height holds it, no block padding. */
-        ledger: "type-meta num h-control-lg px-space-3 py-0 text-ink-muted",
+        ledger: "type-meta num h-control-lg px-space-3 py-0 text-tx-2",
         /*
          * Where its table stacks (table.svelte `tableCards`), a ledger
          * cell drops its box in the card: a block of auto size, no padding
@@ -28,38 +28,37 @@
          */
         /** A ledger cell over a hairline. */
         "ledger-stacks":
-          "type-meta num h-control-lg border-b border-b-border-hairline px-space-3 py-0 text-ink-muted",
+          "type-meta num h-control-lg border-b border-b-ui px-space-3 py-0 text-tx-2",
         /**
          * A ledger cell of a pickable row (`group/row`), its hairline gone on
          * the last row, its row's picked fill on it in the ledger.
          */
         "ledger-picks-stacks":
-          "type-meta num h-control-lg border-b border-b-border-hairline px-space-3 py-0 text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-accent-wash",
+          "type-meta num h-control-lg border-b border-b-ui px-space-3 py-0 text-tx-2 group-last/row:border-b-none group-data-picked/row:bg-ui",
         /** A generated view's cell, label text over a hairline. */
-        view: "type-label num h-control-lg border-b border-b-border-hairline px-space-3 text-ink-muted",
+        view: "type-label num h-control-lg border-b border-b-ui px-space-3 text-tx-2",
         /** A generated view's lead column, on the row's spacing; its words wrap. */
         "view-lead":
-          "type-label num h-control-lg whitespace-normal border-b border-b-border-hairline px-space-3 py-space-2 text-ink-muted",
+          "type-label num h-control-lg whitespace-normal border-b border-b-ui px-space-3 py-space-2 text-tx-2",
         /** A generated table's other cells whose words wrap (an agent's block), on the row's spacing. */
         "view-wraps":
-          "type-label num h-control-lg whitespace-normal border-b border-b-border-hairline px-space-3 py-space-2 text-ink-muted",
+          "type-label num h-control-lg whitespace-normal border-b border-b-ui px-space-3 py-space-2 text-tx-2",
         /** A matrix's cell, ruled from its neighbour on the left; its words wrap. */
-        matrix:
-          "whitespace-normal border-border-control border-l px-space-4 py-space-2",
+        matrix: "whitespace-normal border-ui-2 border-l px-space-4 py-space-2",
         /** A matrix cell whose left rule goes where its row is a card. */
-        "matrix-stacks": "border-border-control border-l px-space-4 py-space-2",
+        "matrix-stacks": "border-ui-2 border-l px-space-4 py-space-2",
         /**
          * `matrix-stacks` whose words wrap, and that sits right under the
          * line above it in the card.
          */
         "matrix-stacks-under":
-          "whitespace-normal border-border-control border-l px-space-4 py-space-2",
+          "whitespace-normal border-ui-2 border-l px-space-4 py-space-2",
       },
       rule: {
         /** A hairline over the cell. */
-        top: "border-t border-t-border-hairline",
+        top: "border-t border-t-ui",
         /** A hairline over the cells of every row after another. */
-        between: "[tr+tr>&]:border-t [tr+tr>&]:border-t-border-hairline",
+        between: "[tr+tr>&]:border-t [tr+tr>&]:border-t-ui",
       },
       ...tableColumn,
     },

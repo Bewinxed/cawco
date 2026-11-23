@@ -284,7 +284,7 @@
           class="flex flex-col max-h-52 overflow-y-auto"
           transition:unfold
         >
-          <span data-slot="note" class="type-meta text-ink-muted"
+          <span data-slot="note" class="type-meta text-tx-2"
             >{words.severalSkills}</span
           >
           {#each choices as choice (choice)}
@@ -292,7 +292,7 @@
               data-slot="choice"
               class={menuItemVariants({
                 class:
-                  "select-none px-space-3 text-start font-(family-name:--font-mono) text-sm text-ink-strong focus-inset",
+                  "select-none px-space-3 text-start font-(family-name:--font-mono) text-sm text-tx focus-inset",
               })}
               data-menu-item
               disabled={busy}

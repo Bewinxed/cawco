@@ -67,7 +67,7 @@ words = Option("words", "Yes, 'Keeps running' replaces its status", "The row say
 </script>
 
 <div
-  class="flex h-(--frame-h) w-(--frame-w) min-w-0 flex-col overflow-hidden bg-surface-recess"
+  class="flex h-(--frame-h) w-(--frame-w) min-w-0 flex-col overflow-hidden bg-bg-2"
   style:--frame-h="{height}px"
   style:--frame-w="{width}px"
 >

@@ -38,16 +38,16 @@
   ] as const;
 </script>
 
-<div class="bg-surface-page p-space-4">
+<div class="bg-bg p-space-4">
   <div
-    class="relative flex h-(--frame-h) w-(--frame-w) flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-sm timeline-scope-transcript-head"
+    class="relative flex h-(--frame-h) w-(--frame-w) flex-col overflow-clip rounded-lg border border-ui bg-bg shadow-sm timeline-scope-transcript-head"
     style:--face-top={"calc(var(--spacing-control-md) + 2 * var(--spacing-space-2))"}
     style:--frame-h={`${height}px`}
     style:--frame-w={`${width}px`}
   >
     <!-- The room's head floats over the face as the graph's does: the rows
          run up beneath it, clear it at rest and fade under it. -->
-    <HeadFade band="var(--face-top)" tint="bg-surface-raised" />
+    <HeadFade band="var(--face-top)" tint="bg-bg" />
     <div
       class="absolute inset-x-0 top-0 z-2 flex h-13 min-w-0 items-center ps-space-4 pe-space-2"
     >

@@ -24,7 +24,7 @@
 
 <!-- The small button's height: where it rests is measured from it. -->
 <button
-  class="select-none mark-line pressable inline-flex items-center gap-space-2 h-control-sm py-0 px-space-3 border border-border-hairline rounded-sm bg-surface-raised shadow-lg text-base font-medium text-ink-strong hover:bg-surface-hover"
+  class="select-none mark-line pressable inline-flex items-center gap-space-2 h-control-sm py-0 px-space-3 border border-ui rounded-sm bg-bg shadow-lg text-base font-medium text-tx hover:bg-ui"
   onclick={onjump}
   type="button"
   in:rise={"--duration-slow"}

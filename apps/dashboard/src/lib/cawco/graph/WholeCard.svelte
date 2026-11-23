@@ -35,12 +35,12 @@
   data-slot="whole-state"
   data-kept={card.kept ? "" : undefined}
   class={[
-    "relative flex min-w-0 flex-col gap-space-1 rounded-sm border bg-surface-raised px-space-3 py-space-2 transition-control",
+    "relative flex min-w-0 flex-col gap-space-1 rounded-sm border bg-bg px-space-3 py-space-2 transition-control",
     wide ? "w-auto" : "w-52",
     card.kept
       ? "border-accent"
-      : "border-border-control can-hover:has-[button:hover]:bg-surface-hover",
-    card.against && "outline-solid outline-2 outline-status-done",
+      : "border-ui-2 can-hover:has-[button:hover]:bg-ui",
+    card.against && "outline-solid outline-2 outline-green",
   ]}
   style:--xy-handle-background-color="transparent"
   style:--xy-handle-border-color="transparent"
@@ -54,8 +54,8 @@
       aria-current={card.kept ? "true" : undefined}
       aria-describedby={card.marks.length > 0 ? `${uid}-marks` : undefined}
       class={[
-        "min-w-0 flex-1 text-start type-label wrap-anywhere outline-none before:absolute before:inset-0 focus-visible:before:outline-2 focus-visible:before:outline-solid focus-visible:before:outline-accent-ink focus-visible:before:-outline-offset-2",
-        "text-ink-strong before:rounded-sm",
+        "min-w-0 flex-1 text-start type-label wrap-anywhere outline-none before:absolute before:inset-0 focus-visible:before:outline-2 focus-visible:before:outline-solid focus-visible:before:outline-accent focus-visible:before:-outline-offset-2",
+        "text-tx before:rounded-sm",
       ]}
       onclick={() => card.onpress(card.id)}
     >
@@ -80,17 +80,14 @@
           {#each card.marks as mark (mark.said)}
             <span
               aria-hidden="true"
-              class="mark-line flex items-center gap-space-1 type-meta text-ink-muted"
+              class="mark-line flex items-center gap-space-1 type-meta text-tx-2"
               data-box
             >
               {#if mark.tone === "fail"}
-                <IconError
-                  class="size-icon-sm flex-none text-status-fail"
-                  data-box
-                />
+                <IconError class="size-icon-sm flex-none text-red" data-box />
               {:else}
                 <IconWarningTriangle
-                  class="size-icon-sm flex-none text-status-attn"
+                  class="size-icon-sm flex-none text-orange"
                   data-box
                 />
               {/if}
@@ -104,7 +101,7 @@
   {#if card.note}
     <span
       class={[
-        "line-clamp-2 min-w-0 type-meta text-pretty wrap-anywhere text-ink-muted",
+        "line-clamp-2 min-w-0 type-meta text-pretty wrap-anywhere text-tx-2",
       ]}>{card.note}</span
     >
   {/if}

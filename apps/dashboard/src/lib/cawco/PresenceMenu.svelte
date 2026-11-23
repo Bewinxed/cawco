@@ -120,7 +120,7 @@
             <span class="relative grid flex-none place-items-center" data-box>
               <img
                 alt=""
-                class="size-space-4 rounded-pill outline outline-ink-strong/10 -outline-offset-1"
+                class="size-space-4 rounded-pill outline outline-tx/10 -outline-offset-1"
                 height="18"
                 src={cawcoIcon}
                 width="18"
@@ -129,12 +129,10 @@
                 data-slot="presence-dot"
                 aria-hidden="true"
                 class={[
-                  "absolute -end-px -bottom-px size-1.5 rounded-pill ring-2 ring-surface-page transition-[background-color,box-shadow] duration-(--duration-fast) ease-out",
-                  dot === "here" && "bg-status-done",
-                  dot === "away" &&
-                    "bg-surface-page inset-ring-1 inset-ring-ink-subtle",
-                  dot === "appearing" &&
-                    "bg-surface-page inset-ring-1 inset-ring-status-attn",
+                  "absolute -end-px -bottom-px size-1.5 rounded-pill ring-2 ring-bg transition-[background-color,box-shadow] duration-(--duration-fast) ease-out",
+                  dot === "here" && "bg-green",
+                  dot === "away" && "bg-bg inset-ring-1 inset-ring-tx-2",
+                  dot === "appearing" && "bg-bg inset-ring-1 inset-ring-orange",
                 ]}
               ></span>
             </span>
@@ -209,7 +207,7 @@
             {#if device.counts}
               <span
                 data-slot="machine-state"
-                class="flex-none type-meta text-ink-muted"
+                class="flex-none type-meta text-tx-2"
                 >{presenceWords.machineState(device.state)}</span
               >
             {/if}
@@ -240,14 +238,13 @@
         >
         <span
           data-slot="at-computer-state"
-          class="flex-none type-meta text-ink-muted"
+          class="flex-none type-meta text-tx-2"
           >{presenceWords.atComputerState(desk)}</span
         >
       </DropdownMenu.CheckboxItem>
       {#if desk === "unavailable"}
         <DropdownMenu.Label data-slot="at-computer-instead" kind="line"
-          ><span class="text-ink-muted"
-            >{presenceWords.countsHere(onPhone())}</span
+          ><span class="text-tx-2">{presenceWords.countsHere(onPhone())}</span
           ></DropdownMenu.Label
         >
       {/if}
@@ -264,7 +261,7 @@
     {#if refusal}
       <!-- Wrapped whole: the setting's name and where to turn it on. -->
       <DropdownMenu.Label data-slot="presence-refusal" kind="line" role="alert"
-        ><span class="text-status-fail">{refusal.title}. {refusal.message}</span
+        ><span class="text-red">{refusal.title}. {refusal.message}</span
         ></DropdownMenu.Label
       >
     {/if}

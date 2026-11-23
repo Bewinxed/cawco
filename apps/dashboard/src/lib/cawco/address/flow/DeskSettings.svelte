@@ -55,9 +55,7 @@
   data-frame="settings"
   style:--float-room={flow.open.settings ? `${floatHeight}px` : "0px"}
 >
-  <h2 id="flow-settings-head" class="m-0 type-title text-ink-strong">
-    Devices
-  </h2>
+  <h2 id="flow-settings-head" class="m-0 type-title text-tx">Devices</h2>
   <DevicesList>
     <div class="relative">
       <SettingsRow

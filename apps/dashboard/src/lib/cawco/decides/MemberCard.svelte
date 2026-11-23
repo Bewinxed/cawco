@@ -109,12 +109,12 @@
   <p
     class={[
       "ps-(--stand-in) type-meta text-pretty wrap-anywhere",
-      facts?.attention ? "text-status-attn" : "text-ink-muted",
+      facts?.attention ? "text-orange" : "text-tx-2",
     ]}
   >
     {#if parked && facts?.text}
       {facts.text} ·
-      <span class="text-ink-strong">{decidesWords.unsaved}</span>
+      <span class="text-tx">{decidesWords.unsaved}</span>
     {:else}
       {factsLine}
     {/if}
@@ -126,7 +126,7 @@
       {@render tiles()}
     {:else}
       <p
-        class="rounded-sm border border-dashed border-border-control px-space-3 py-space-4 text-center type-meta text-ink-muted text-pretty"
+        class="rounded-sm border border-dashed border-ui-2 px-space-3 py-space-4 text-center type-meta text-tx-2 text-pretty"
       >
         {project === null
           ? decidesWords.holdsNothingFleet

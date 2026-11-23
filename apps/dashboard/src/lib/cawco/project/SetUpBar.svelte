@@ -26,7 +26,7 @@
 </script>
 
 <div
-  class="flex flex-wrap items-center gap-x-space-4 gap-y-space-2 rounded-lg bg-surface-recess px-space-3 py-space-2 inset-ring inset-ring-border-hairline"
+  class="flex flex-wrap items-center gap-x-space-4 gap-y-space-2 rounded-lg bg-bg-2 px-space-3 py-space-2 inset-ring inset-ring-ui"
   data-slot="draft-bar"
   data-state="set"
 >
@@ -34,11 +34,11 @@
     <p class="mark-line m-0 flex items-center gap-space-2">
       <IconSuccess
         aria-hidden="true"
-        class="size-icon-md flex-none text-status-done"
+        class="size-icon-md flex-none text-green"
       />
-      <span class="type-label text-ink-strong">{setupWords.isSetUp(name)}</span>
+      <span class="type-label text-tx">{setupWords.isSetUp(name)}</span>
     </p>
-    <p class="m-0 type-meta text-ink-muted">{setupWords.firstTask(first)}</p>
+    <p class="m-0 type-meta text-tx-2">{setupWords.firstTask(first)}</p>
   </div>
   <Button
     label={projectWords.askCaw}

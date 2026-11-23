@@ -185,7 +185,7 @@
        2026-10-23). -->
   <aside
     aria-label="Caw, {projectName}"
-    class="grid-area-dock in-data-caw-open:phone:mx-space-4 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@phone:mt-space-6 in-data-caw-open:@phone:mr-space-6 in-data-caw-open:@phone:mb-space-6 in-data-caw-open:@phone:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-sm"
+    class="grid-area-dock in-data-caw-open:phone:mx-space-4 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@phone:mt-space-6 in-data-caw-open:@phone:mr-space-6 in-data-caw-open:@phone:mb-space-6 in-data-caw-open:@phone:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-bg shadow-sm"
     data-caw-dock
     {@attach dock}
     {@attach appearOnMount({

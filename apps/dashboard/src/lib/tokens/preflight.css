@@ -141,9 +141,9 @@
 :where(.before\:bg-\(--hang-neck\))::before,
 :where(.before\:bg-\(color\:--tray-chip-fill\))::before,
 :where(.before\:bg-accent)::before,
-:where(.before\:bg-accent-ink)::before,
-:where(.before\:bg-accent-wash)::before,
-:where(.before\:bg-border-control)::before,
+:where(.before\:bg-bg)::before,
+:where(.before\:bg-bg-2)::before,
+:where(.before\:bg-bg\/72)::before,
 :where(.before\:bg-linear-to-b)::before,
 :where(.before\:bg-linear-to-b\/srgb)::before,
 :where(.before\:bg-status-attn-bg)::before,
@@ -151,11 +151,14 @@
 :where(.before\:bg-surface-raised)::before,
 :where(.before\:bg-surface-recess-deep)::before,
 :where(.before\:border)::before,
-:where(.before\:border-border-control)::before,
-:where(.before\:border-border-hairline)::before,
-:where(.before\:border-border-strong)::before,
+:where(.before\:border-accent)::before,
 :where(.before\:border-t)::before,
-:where(.before\:border-t-border-hairline)::before,
+:where(.before\:border-t-ui)::before,
+:where(.before\:border-tx-2)::before,
+:where(.before\:border-ui)::before,
+:where(.before\:border-ui-2)::before,
+:where(.before\:border-x)::before,
+:where(.before\:border-y)::before,
 :where(.before\:bottom-0)::before,
 :where(.before\:bottom-full)::before,
 :where(.before\:clip-join)::before,
@@ -175,6 +178,7 @@
 :where(.before\:h-0\.5)::before,
 :where(.before\:h-c-edge-fade-len)::before,
 :where(.before\:h-px)::before,
+:where(.before\:h-space-2)::before,
 :where(.before\:hidden)::before,
 :where(.before\:inset-0)::before,
 :where(.before\:inset-2)::before,
@@ -193,7 +197,7 @@
 :where(.before\:shadow-sm)::before,
 :where(.before\:size-1\.5)::before,
 :where(.before\:start-\(--band-start\))::before,
-:where(.before\:to-surface-raised)::before,
+:where(.before\:to-bg)::before,
 :where(.before\:to-transparent)::before,
 :where(.before\:top-0)::before,
 :where(.before\:top-1\/2)::before,
@@ -203,6 +207,8 @@
 :where(.before\:transition-opacity)::before,
 :where(.before\:translate-y-\(--cast-y\))::before,
 :where(.before\:w-\[calc\(var\(--gap-to\)-var\(--gap-from\)\)\])::before,
+:where(.before\:w-full)::before,
+:where(.before\:w-space-2)::before,
 :where(.before\:will-change-opacity)::before,
 :where(.before\:z-1)::before,
 :where(.before\:z-2)::before,
@@ -212,10 +218,10 @@
     )
 )::before,
 :where(.contrast-more\:before\:backdrop-filter-none)::before,
-:where(.contrast-more\:before\:bg-surface-raised)::before,
-:where(.contrast-more\:before\:border-border-strong)::before,
+:where(.contrast-more\:before\:bg-bg)::before,
+:where(.contrast-more\:before\:border-tx-2)::before,
 :where(
-  .dark\:has-\[select\[aria-invalid\=true\]\]\:before\:border-status-fail\/50:where(
+  .dark\:has-\[select\[aria-invalid\=true\]\]\:before\:border-red\/50:where(
       .dark,
       .dark *,
       [data-scheme="dark"],
@@ -266,7 +272,7 @@
 )::before,
 :where(.data-drop-before\:before\:-start-space-row[data-drop-before])::before,
 :where(.data-drop-before\:before\:absolute[data-drop-before])::before,
-:where(.data-drop-before\:before\:bg-ink-strong[data-drop-before])::before,
+:where(.data-drop-before\:before\:bg-tx[data-drop-before])::before,
 :where(.data-drop-before\:before\:inset-y-space-1[data-drop-before])::before,
 :where(.data-drop-before\:before\:rounded-pill[data-drop-before])::before,
 :where(.data-drop-before\:before\:w-space-1[data-drop-before])::before,
@@ -297,10 +303,7 @@
   .data-mention-field-empty\:before\:pointer-events-none[data-mention-field-empty]
 )::before,
 :where(
-  .data-mention-field-empty\:before\:text-ink-muted[data-mention-field-empty]
-)::before,
-:where(
-  .data-mention-field-empty\:before\:text-ink-subtle[data-mention-field-empty]
+  .data-mention-field-empty\:before\:text-tx-2[data-mention-field-empty]
 )::before,
 :where(
   .data-mention-field-empty\:before\:tracking-tight[data-mention-field-empty]
@@ -326,14 +329,14 @@
 :where(.file-meta span + span)::before,
 :where(.focus-visible\:before\:-outline-offset-2:focus-visible)::before,
 :where(.focus-visible\:before\:outline-2:focus-visible)::before,
-:where(.focus-visible\:before\:outline-accent-ink:focus-visible)::before,
+:where(.focus-visible\:before\:outline-accent:focus-visible)::before,
 :where(.focus-visible\:before\:outline-solid:focus-visible)::before,
 :where(
-  .has-\[select\[aria-invalid\=true\]\]\:before\:border-status-fail:has(
+  .has-\[select\[aria-invalid\=true\]\]\:before\:border-red:has(
     :is(select[aria-invalid="true"])
   )
 )::before,
-:where(.hover\:not-active\:before\:bg-surface-hover:hover:not(:active))::before,
+:where(.hover\:not-active\:before\:bg-ui:hover:not(:active))::before,
 :where(.katex .eqn-num)::before,
 :where(.katex .katex-stretchy)::before,
 :where(.katex .mml-eqn-num)::before,
@@ -387,7 +390,7 @@
     > [data-slot="tools"]
 )::before,
 :where(.not-first\:before\:absolute:not(:first-child))::before,
-:where(.not-first\:before\:bg-border-control:not(:first-child))::before,
+:where(.not-first\:before\:bg-ui-2:not(:first-child))::before,
 :where(.not-first\:before\:bottom-full:not(:first-child))::before,
 :where(.not-first\:before\:h-\(--joint-reach\):not(:first-child))::before,
 :where(.not-first\:before\:start-\(--joint-x\):not(:first-child))::before,
@@ -397,15 +400,13 @@
     :is(:where(code):not(:where([class~="not-prose"], [class~="not-prose"] *)))
 )::before,
 :where(.reduced-transparency\:before\:backdrop-filter-none)::before,
-:where(.reduced-transparency\:before\:bg-surface-raised)::before,
-:where(.reduced-transparency\:before\:border-border-strong)::before,
-:where(.status-failed\:before\:bg-status-fail-bg[data-status="failed"])::before,
-:where(.status-needs\:before\:bg-status-attn-bg[data-status="needs"])::before,
+:where(.reduced-transparency\:before\:bg-bg)::before,
+:where(.reduced-transparency\:before\:border-tx-2)::before,
+:where(.status-failed\:before\:bg-bg-2[data-status="failed"])::before,
+:where(.status-needs\:before\:bg-bg-2[data-status="needs"])::before,
 :where([data-sonner-toast][data-swiping="false"][data-removed="true"])::before,
 :where([data-sonner-toast][data-swiping="true"])::before,
-:where(
-  :is(:where(.group)[data-cur] .group-data-cur\:after\:bg-accent-ink)
-)::after,
+:where(:is(:where(.group)[data-cur] .group-data-cur\:after\:bg-accent))::after,
 :where(
   :is(
     :where(.group\/cover)[data-ready]
@@ -478,12 +479,15 @@
 :where(.after\:-inset-bs-px)::after,
 :where(.after\:-translate-x-1\/2)::after,
 :where(.after\:absolute)::after,
-:where(.after\:bg-border-hairline)::after,
-:where(.after\:bg-border-strong)::after,
 :where(.after\:bg-mark-deck-shade)::after,
+:where(.after\:bg-tx-2)::after,
+:where(.after\:bg-ui)::after,
 :where(.after\:border)::after,
-:where(.after\:border-border-control)::after,
-:where(.after\:border-border-hairline)::after,
+:where(.after\:border-accent)::after,
+:where(.after\:border-s)::after,
+:where(.after\:border-t)::after,
+:where(.after\:border-ui)::after,
+:where(.after\:border-ui-2)::after,
 :where(.after\:content-rest)::after,
 :where(.after\:duration-\(--duration-base\))::after,
 :where(.after\:ease-out)::after,
@@ -491,6 +495,7 @@
 :where(.after\:hidden)::after,
 :where(.after\:inset-0)::after,
 :where(.after\:inset-x-\(--pad\))::after,
+:where(.after\:inset-x-0)::after,
 :where(.after\:inset-y-0)::after,
 :where(.after\:left-\[calc\(50\%\+var\(--spacing-space-4\)\)\])::after,
 :where(.after\:left-1\/2)::after,
@@ -502,7 +507,9 @@
 :where(.after\:rounded-pill)::after,
 :where(.after\:rounded-sm)::after,
 :where(.after\:size-space-2)::after,
+:where(.after\:start-1\/2)::after,
 :where(.after\:text-transparent)::after,
+:where(.after\:top-1\/2)::after,
 :where(.after\:transition-\[background-color\])::after,
 :where(.after\:w-space-1)::after,
 :where(.after\:w-space-3)::after,
@@ -530,7 +537,7 @@
 )::after,
 :where(.data-drop-after\:after\:-end-space-1[data-drop-after])::after,
 :where(.data-drop-after\:after\:absolute[data-drop-after])::after,
-:where(.data-drop-after\:after\:bg-ink-strong[data-drop-after])::after,
+:where(.data-drop-after\:after\:bg-tx[data-drop-after])::after,
 :where(.data-drop-after\:after\:inset-y-space-1[data-drop-after])::after,
 :where(.data-drop-after\:after\:rounded-pill[data-drop-after])::after,
 :where(.data-drop-after\:after\:w-space-1[data-drop-after])::after,
@@ -542,7 +549,7 @@
 :where(.disabled\:after\:content-none:disabled)::after,
 :where(.focus-visible\:after\:-outline-offset-2:focus-visible)::after,
 :where(.focus-visible\:after\:outline-2:focus-visible)::after,
-:where(.focus-visible\:after\:outline-accent-ink:focus-visible)::after,
+:where(.focus-visible\:after\:outline-accent:focus-visible)::after,
 :where(.focus-visible\:after\:outline-solid:focus-visible)::after,
 :where(.katex .katex-stretchy)::after,
 :where(.katex .katex-version)::after,

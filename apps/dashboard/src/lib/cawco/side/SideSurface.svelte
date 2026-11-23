@@ -629,10 +629,7 @@
        it): what scrolls beneath the head blurs and fades into the ground
        it stands on, from the first scroll; clear at rest and over a page
        in a frame, which names no timeline here. -->
-  <HeadFade
-    band="var(--side-room)"
-    tint={recessed ? "bg-surface-sunk" : "bg-surface-raised"}
-  />
+  <HeadFade band="var(--side-room)" tint={recessed ? "bg-bg-2" : "bg-bg"} />
   <header
     data-slot="side-head"
     data-fitted={all.length > 0 || undefined}
@@ -671,7 +668,7 @@
         <h2
           data-slot="title"
           aria-describedby={subtitle ? subtitleId : undefined}
-          class="m-0 truncate text-ink-strong type-title"
+          class="m-0 truncate text-tx type-title"
           title={subtitle || undefined}
         >
           {title}
@@ -753,15 +750,12 @@
          mode: it only says the page hears nothing; the cue is the cursor and
          the pressed segment), the edge easing in and out except while the
          split slides, and points a crosshair. -->
-    <div
-      class="relative flex min-h-0 flex-1 bg-surface-sunk"
-      data-slot="well-row"
-    >
+    <div class="relative flex min-h-0 flex-1 bg-bg-2" data-slot="well-row">
       <div
         data-side-well
         data-mode={mode && mode !== "interact" ? mode : undefined}
         data-ringed={mode ? "" : undefined}
-        class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-sunk data-ringed:outline-1 data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:-outline-offset-1 data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--duration-fast) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-accent/35"
+        class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-bg-2 data-ringed:outline-1 data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:-outline-offset-1 data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--duration-fast) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-accent/35"
         bind:this={well}
       >
         {@render children()}

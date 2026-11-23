@@ -87,7 +87,7 @@
       <img
         bind:this={shown}
         {alt}
-        class="block h-auto w-full rounded-sm outline-1 -outline-offset-1 outline-ink-strong/10"
+        class="block h-auto w-full rounded-sm outline-1 -outline-offset-1 outline-tx/10"
         data-block-picture
         data-caption={caption || undefined}
         decoding="async"
@@ -97,17 +97,14 @@
       />
     </button>
   {:else}
-    <p
-      class="m-0 type-meta text-ink-muted wrap-anywhere"
-      data-slot="media-gone"
-    >
+    <p class="m-0 type-meta text-tx-2 wrap-anywhere" data-slot="media-gone">
       {src
         ? transcriptWords.blockPictureFailed(alt)
         : transcriptWords.blockFileUnshown(file)}
     </p>
   {/if}
   {#if caption}
-    <figcaption class="mt-space-2 type-meta text-ink-muted wrap-anywhere">
+    <figcaption class="mt-space-2 type-meta text-tx-2 wrap-anywhere">
       {caption}
     </figcaption>
   {/if}

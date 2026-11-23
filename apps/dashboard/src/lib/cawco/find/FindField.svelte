@@ -32,24 +32,24 @@
 
 <div
   data-slot="finder-field"
-  class="group/field flex items-center flex-none gap-space-2 h-control-lg ps-space-3 pe-space-1 border-b border-b-border-hairline data-phone:h-13 data-phone:border-b-none data-phone:border-t data-phone:border-t-border-hairline"
+  class="group/field flex items-center flex-none gap-space-2 h-control-lg ps-space-3 pe-space-1 border-b border-b-ui data-phone:h-13 data-phone:border-b-none data-phone:border-t data-phone:border-t-ui"
   data-phone={phone || undefined}
 >
   <SearchIcon
     data-finder-lead
-    class="flex-none size-icon-md text-ink-muted"
+    class="flex-none size-icon-md text-tx-2"
     aria-hidden="true"
   />
   <input
     bind:this={input}
     {value}
-    class="flex-1 min-w-0 h-full border-none border-current p-0 bg-transparent type-body text-ink-strong caret-accent placeholder:text-ink-subtle placeholder:text-ellipsis"
+    class="flex-1 min-w-0 h-full border-none border-current p-0 bg-transparent type-body text-tx caret-accent placeholder:text-tx-2 placeholder:text-ellipsis"
     {...rest}
   />
   {#if value}
     <button
       data-slot="clear"
-      class="select-none grid place-items-center flex-none size-control-md border-none border-current rounded-sm bg-transparent text-ink-muted hover:not-active:bg-surface-hover active:bg-surface-hover group-data-phone/field:size-control-lg"
+      class="select-none grid place-items-center flex-none size-control-md border-none border-current rounded-sm bg-transparent text-tx-2 hover:not-active:bg-ui active:bg-ui group-data-phone/field:size-control-lg"
       aria-label="Clear the words"
       onclick={onclear}
       type="button"

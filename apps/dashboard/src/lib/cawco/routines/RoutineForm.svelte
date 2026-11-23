@@ -538,7 +538,7 @@
         <!-- One paragraph through MorphText (The Steady Swap Rule): a new
              read changes its words and next run in place. -->
         <p
-          class="num m-0 type-body text-pretty text-ink-strong"
+          class="num m-0 type-body text-pretty text-tx"
           aria-busy={readBack.reading || undefined}
         >
           <MorphText text={readBack.line} wrap />
@@ -613,13 +613,13 @@
   <!-- The commit row: what creating it does at once, in plain words; why
        a create was refused and what to do; then Cancel and Create. -->
   <div data-slot="commit" class="flex min-w-0 flex-col gap-space-3">
-    <p class="m-0 max-w-measure type-body text-pretty text-ink-strong">
+    <p class="m-0 max-w-measure type-body text-pretty text-tx">
       {words.testRun}
     </p>
     {#if failure}
       <p
         data-slot="form-failure"
-        class="m-0 max-w-measure type-body text-pretty wrap-anywhere text-status-fail"
+        class="m-0 max-w-measure type-body text-pretty wrap-anywhere text-red"
         role="alert"
         in:unfold
         out:unfold

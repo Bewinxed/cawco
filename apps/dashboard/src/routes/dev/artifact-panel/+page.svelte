@@ -665,10 +665,7 @@
   />
 {/snippet}
 
-<div
-  class="h-dvh bg-surface-recess p-space-2 max-phone:p-0"
-  data-bench-panel={asked}
->
+<div class="h-dvh bg-bg-2 p-space-2 max-phone:p-0" data-bench-panel={asked}>
   <SideSurface
     items={[
       {
@@ -764,7 +761,7 @@
           {@const [x, y, w] = spots[one.number] ?? [0, 0, 0, 0]}
           <button
             aria-label={commentWords.openThread(one.number)}
-            class="absolute start-(--spot-x) top-(--spot-y) z-1 flex -translate-y-full rounded-pill outline-off focus-visible:outline-2 focus-visible:outline-accent-ink"
+            class="absolute start-(--spot-x) top-(--spot-y) z-1 flex -translate-y-full rounded-pill outline-off focus-visible:outline-2 focus-visible:outline-accent"
             data-pin-spot={one.number}
             onclick={() => openFromPage(one)}
             onpointerenter={() => {

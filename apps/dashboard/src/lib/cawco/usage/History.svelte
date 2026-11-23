@@ -220,13 +220,13 @@
 <section
   data-slot="history-card"
   aria-labelledby="history-title"
-  class="flex flex-col gap-space-4 rounded-lg bg-surface-raised p-space-4 shadow-sm max-phone:p-space-4"
+  class="flex flex-col gap-space-4 rounded-lg bg-bg p-space-4 shadow-sm max-phone:p-space-4"
 >
   <header
     data-slot="head"
     class="flex flex-wrap items-center justify-between gap-space-3"
   >
-    <h2 data-slot="title" class="type-label text-ink-muted" id="history-title">
+    <h2 data-slot="title" class="type-label text-tx-2" id="history-title">
       History
     </h2>
     <Tabs
@@ -260,17 +260,17 @@
       {#each charts as chart (chart.harness)}
         <figure class="flex min-w-0 flex-col gap-space-2">
           <figcaption class="flex items-baseline justify-between gap-space-2">
-            <span data-slot="name" class="type-label text-ink-strong"
+            <span data-slot="name" class="type-label text-tx"
               >{chart.title}</span
             >
             {#if ready && !chart.missing}
-              <span data-slot="num" class="type-label num text-ink-strong"
+              <span data-slot="num" class="type-label num text-tx"
                 >{chart.approx}{money(chart.total)}</span
               >
             {/if}
           </figcaption>
           {#if chart.missing}
-            <p data-slot="note" class="type-meta text-ink-muted">
+            <p data-slot="note" class="type-meta text-tx-2">
               This range follows a 5-hour window, and none is running.
             </p>
           {:else if !ready}
@@ -315,16 +315,14 @@
 
 {#snippet plot(chart: Chart, live: boolean)}
   <div class="flex flex-col gap-space-1">
-    <div
-      class="flex h-24 items-end gap-space-1 border-b border-b-border-hairline"
-    >
+    <div class="flex h-24 items-end gap-space-1 border-b border-b-ui">
       {#each chart.points as point (point.at)}
         {#if !live}
           <span
             data-slot="slot"
             class="group flex h-full min-w-0 flex-1 items-end"
             ><span
-              class="h-(--bar-h) min-h-px w-full rounded-t-xs bg-ink-muted group-hover:bg-ink-strong motion-safe:transition-[block-size] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
+              class="h-(--bar-h) min-h-px w-full rounded-t-xs bg-tx-2 group-hover:bg-tx motion-safe:transition-[block-size] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
               style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
               style:--bar-h="calc(var(--h) * 100%)"
             ></span></span
@@ -343,7 +341,7 @@
                   role="img"
                 >
                   <span
-                    class="h-(--bar-h) min-h-px w-full rounded-t-xs bg-ink-muted group-hover:bg-ink-strong motion-safe:transition-[block-size] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
+                    class="h-(--bar-h) min-h-px w-full rounded-t-xs bg-tx-2 group-hover:bg-tx motion-safe:transition-[block-size] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
                     style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
                     style:--bar-h="calc(var(--h) * 100%)"
                   ></span>
@@ -359,7 +357,7 @@
       {/each}
     </div>
     {#if chart.points.length > 0}
-      <div class="type-meta flex justify-between text-ink-muted">
+      <div class="type-meta flex justify-between text-tx-2">
         <span>{periodLabel(chart.points[0].at)}</span>
         <span>{periodLabel(chart.points.at(-1)?.at ?? 0)}</span>
       </div>
@@ -372,12 +370,12 @@
     <thead>
       <tr>
         <th
-          class="type-label border-b border-b-border-hairline px-0 py-space-1 text-start text-ink-muted"
+          class="type-label border-b border-b-ui px-0 py-space-1 text-start text-tx-2"
           scope="col">{byHour ? "Hour" : "Day"}</th
         >
         <th
           data-slot="num"
-          class="type-label num border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-muted"
+          class="type-label num border-b border-b-ui px-0 py-space-1 text-end text-tx-2"
           scope="col"
         >
           {traitsOf(chart.harness).costMeaning === "estimated"
@@ -389,13 +387,12 @@
     <tbody>
       {#each chart.points as point (point.at)}
         <tr>
-          <td
-            class="border-b border-b-border-hairline px-0 py-space-1 text-ink-strong"
+          <td class="border-b border-b-ui px-0 py-space-1 text-tx"
             >{periodLabel(point.at)}</td
           >
           <td
             data-slot="num"
-            class="num border-b border-b-border-hairline px-0 py-space-1 text-end text-ink-strong"
+            class="num border-b border-b-ui px-0 py-space-1 text-end text-tx"
             >{chart.approx}{money(point.cost)}</td
           >
         </tr>

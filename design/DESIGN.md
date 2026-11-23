@@ -2,10 +2,10 @@
 
 ## System
 - One source of truth: `apps/dashboard/src/lib/tokens/theme.css` declares every design token once, by hand, in Tailwind's `@theme`. Hold the whole set in your head:
-  - **24 semantic colour roles** (in `light-dark()` OKLCH, no redundant primitive ramps): 6 surfaces (`surface-page`, `surface-raised`, `surface-recess`, `surface-sunk`, `surface-hover`, `surface-pressed`), 3 inks (`ink-strong`, `ink-muted`, `ink-subtle`, every one ≥4.5:1 on surfaces; `surface-page` serves as inverse ink on `ink-strong`), 3 borders (`border-hairline`, `border-control`, `border-strong` ≥3:1), 4 Caw coral accents (`accent`, `accent-ink`, `accent-wash`, `on-accent`), and 4 status pairs (`status-{live,attn,done,fail}` + `-bg`, each ≥4.5:1 on its wash and ≥3:1 on surfaces). Plus **7 categorical marks** (`mark-1..7`) and **3 brand art pigments** (`spark`, `paper`, `crow-ink`).
+  - **Colour**, Flexoki's model (stephango.com/flexoki) on a neutral base: 8 base roles (`bg`, `bg-2` grounds; `ui`, `ui-2`, `ui-3` edges and the hover and pressed fills; `tx`, `tx-2`, `tx-3` text), Flexoki's 8 inks by hue (`red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple`, `magenta`), and Caw coral (`accent`, `on-accent`). No tinted fills. Text roles and status inks hold 4.5:1 on both grounds. Plus 3 brand art pigments for Caw's art (`spark`, `paper`, `crow-ink`).
   - **Typography**: 3 house faces (Figtree, JetBrains Mono, Nunito wordmark), 2 UI weights (`normal` 400, `medium` 500 — never above 500), **4 sizes** (`sm` 12px, `base` 14px, `lg` 18px, `xl` 24px), **3 line-heights as 4px-grid lengths** (`sm` 16px, `base` 20px, `lg` 24px), and 2 trackings (`tight`, `caps`), driving **6 type roles** (`type-meta`, `type-code`, `type-body`, `type-label`, `type-title`, `type-kpi`).
   - **4px spatial grid**: one base unit (`--spacing: 0.25rem`), 6 rhythm steps (`space-1/2/3/4/6/8` = 4–32px, every step ≥33% apart), and 9 semantic sizes (`icon-sm/md/lg`, `control-sm/md/lg`, `row-compact` 28px, `row` 40px stepping to 44px on coarse/phone, `measure` 72ch) — every length derived via `calc(var(--spacing) * n)`.
-  - **Shape, depth, motion & layout**: 5 radii (`xs` 4px, `sm` 8px, `lg` 12px, `xl` 16px, `pill`), 3 shadows (`sm`, `md`, `lg`), 4 durations (`fast` 120ms, `base` 200ms, `slow` 320ms, `loop` 1000ms), 3 curves (`ease-out`, `ease-in-out`, `ease-drawer`), 2 breakpoints (`phone` 640px, `desk` 900px), 4 containers (`xs`, `sm`, `phone`, `desk`), 4 z-layers (`bar`, `sheet`, `float`, `top`), and 4 shared mechanics (`blur-glass`, `press-scale`, `pop-scale`, `breath-floor`).
+  - **Shape, depth, motion & layout**: 5 radii (`xs` 4px, `sm` 8px, `lg` 12px, `xl` 16px, `pill`), one surface ladder (`surface`, `ui/elevated`: a surface stands a step above the one it opens in), 4 durations (`fast` 120ms, `base` 200ms, `slow` 320ms, `loop` 1000ms), 3 curves (`ease-out`, `ease-in-out`, `ease-drawer`), 2 breakpoints (`phone` 640px, `desk` 900px), 4 containers (`xs`, `sm`, `phone`, `desk`), 4 z-layers (`bar`, `sheet`, `float`, `top`), and 4 shared mechanics (`blur-glass`, `press-scale`, `pop-scale`, `breath-floor`).
 - **Rules for choosing**: Never add feature-named tokens or component-private dimensions to `theme.css`, and never smuggle them onto `:root` in `design.css`. A value either belongs to the system above or is derived from `--spacing` / system tokens inside the component that needs it (Tailwind's numeric scale `w-*`, `h-*`, `size-*` is valid for one-off component dimensions; rhythm `p/m/gap/space` stays on `space-*`). Never write `±1px` / `±2px` spacing arithmetic.
 
 ## Flow
@@ -27,10 +27,10 @@
 
 ## Colour, focus and type
 - Colour appears only where it means something: the act, status, identity, focus, and data past a threshold.
-- Coral (`accent`, `accent-ink`, `accent-wash`) is the act: one per view, on the act the view is for. It also marks what is selected, focused or checked. Advice wears a badge; status wears a status hue.
-- Crimson, yellow, olive and blue mean status (`status-{fail,attn,done,live}`). Identity hues and categorical marks (`mark-1..7`) tell things apart and mean nothing else.
+- Coral (`accent`) is the act: one per view, on the act the view is for. It also marks what is selected, focused or checked. Advice wears a badge; status wears a status hue.
+- Status: `red` failed, `orange` needs you, `green` done, `cyan` live. Elsewhere the eight inks tell things apart (accounts, charts, code) and mean nothing else.
 - Status reads by glyph, then word, then hue.
-- The focus ring (`accent-ink`) means focus. A text field shows focus by its caret and its frame's edge, with no ring.
+- The focus ring (`accent`) means focus. A text field shows focus by its caret and its frame's edge, with no ring.
 - The option chip is the one control that picks an answer. A setting that cannot change where it is shown is the same chip, sunk.
 - A count shows only above zero, unless zero is itself the reading.
 - Text takes its role from what it does (`type-meta`, `type-code`, `type-body`, `type-label`, `type-title`, `type-kpi`). Emphasis is one step of weight or ink.

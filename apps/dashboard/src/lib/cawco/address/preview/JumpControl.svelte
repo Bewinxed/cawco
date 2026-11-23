@@ -34,13 +34,13 @@
 
 <!-- Folded until pressed, so the picture as first drawn is the design alone. -->
 <details
-  class="group/jump grid gap-space-2 rounded-sm border border-dashed border-border-control bg-surface-recess p-space-3"
+  class="group/jump grid gap-space-2 rounded-sm border border-dashed border-ui-2 bg-bg-2 p-space-3"
   data-jump-control
 >
   <summary
-    class="press-tint focus-inset flex list-none flex-wrap items-baseline justify-between gap-x-space-3 gap-y-space-1 rounded-xs type-meta text-ink-muted details-marker:hidden"
+    class="press-tint focus-inset flex list-none flex-wrap items-baseline justify-between gap-x-space-3 gap-y-space-1 rounded-xs type-meta text-tx-2 details-marker:hidden"
   >
-    <span class="type-label text-ink-strong">Story control</span>
+    <span class="type-label text-tx">Story control</span>
     <span class="wrap-anywhere"
       >Not part of the design. The tray's own buttons move it; waiting states
       move on by themselves.</span
@@ -48,7 +48,7 @@
   </summary>
   <div class="flex flex-wrap items-end gap-x-space-3 gap-y-space-2">
     <label
-      class="grid min-w-0 gap-space-1 type-meta text-ink-muted"
+      class="grid min-w-0 gap-space-1 type-meta text-tx-2"
       for="{ids}-state"
     >
       State
@@ -76,7 +76,7 @@
       </NativeSelect>
     </label>
     <label
-      class="grid min-w-0 gap-space-1 type-meta text-ink-muted"
+      class="grid min-w-0 gap-space-1 type-meta text-tx-2"
       for="{ids}-network"
     >
       Network
@@ -100,7 +100,7 @@
       </NativeSelect>
     </label>
     <label
-      class="grid min-w-0 gap-space-1 type-meta text-ink-muted"
+      class="grid min-w-0 gap-space-1 type-meta text-tx-2"
       for="{ids}-cause"
     >
       Failure cause
@@ -125,7 +125,7 @@
       </NativeSelect>
     </label>
     <label
-      class="grid min-w-0 gap-space-1 type-meta text-ink-muted"
+      class="grid min-w-0 gap-space-1 type-meta text-tx-2"
       for="{ids}-from"
     >
       Opened from
@@ -153,7 +153,7 @@
     </label>
   </div>
   <div
-    class="flex flex-wrap items-center gap-x-space-4 gap-y-space-2 type-meta text-ink-strong"
+    class="flex flex-wrap items-center gap-x-space-4 gap-y-space-2 type-meta text-tx"
   >
     <span class="flex items-center gap-space-2">
       <Checkbox
@@ -199,9 +199,9 @@
     >
   </div>
   {#if tray.pose.toDraw}
-    <p class="m-0 type-meta text-ink-muted" data-jump="pose">
-      Caw here: <span class="text-ink-strong">{tray.pose.toDraw}</span>, pose to
-      be drawn ({tray.pose.standIn} stands in).
+    <p class="m-0 type-meta text-tx-2" data-jump="pose">
+      Caw here: <span class="text-tx">{tray.pose.toDraw}</span>, pose to be
+      drawn ({tray.pose.standIn} stands in).
     </p>
   {/if}
 </details>

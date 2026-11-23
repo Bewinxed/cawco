@@ -118,7 +118,7 @@
 
 {#snippet ref(id: string, remove?: () => void)}
   <span
-    class="flex items-center gap-space-1 min-h-control-sm min-w-0 pe-space-1 rounded-sm bg-surface-recess"
+    class="flex items-center gap-space-1 min-h-control-sm min-w-0 pe-space-1 rounded-sm bg-bg-2"
   >
     <button
       class="select-none flex flex-auto items-center gap-space-2 min-w-0 min-h-control-sm px-space-2 border-none border-current rounded-sm bg-transparent text-start press-tint focus-inset"
@@ -126,12 +126,11 @@
       title={byId.get(id)?.title}
       type="button"
     >
-      <span class="flex-none type-meta font-mono liga-none text-ink-muted"
-        >{id}</span
+      <span class="flex-none type-meta font-mono liga-none text-tx-2">{id}</span
       >
       {#if byId.get(id)}
         <span
-          class="min-w-0 overflow-clip type-label text-ink-strong text-ellipsis whitespace-nowrap"
+          class="min-w-0 overflow-clip type-label text-tx text-ellipsis whitespace-nowrap"
           >{byId.get(id)?.title}</span
         >
       {/if}
@@ -160,20 +159,17 @@
       ? referenceOf(one.href)
       : null}
     <span
-      class="flex items-center gap-space-1 min-h-control-sm min-w-0 px-space-2 pe-space-1 rounded-sm bg-surface-recess"
+      class="flex items-center gap-space-1 min-h-control-sm min-w-0 px-space-2 pe-space-1 rounded-sm bg-bg-2"
     >
       <span class="flex-auto min-w-0 overflow-clip text-ellipsis type-label">
         {#if drawn?.draw === "element"}
           <drawn.element id={drawn.id} kind={drawn.kind} label={one.label} />
         {:else if one.href.startsWith("http")}
-          <a
-            class="text-ink-strong"
-            href={one.href}
-            rel="noreferrer"
-            target="_blank">{one.label}</a
+          <a class="text-tx" href={one.href} rel="noreferrer" target="_blank"
+            >{one.label}</a
           >
         {:else}
-          <span class="text-ink-strong">{one.label}</span>
+          <span class="text-tx">{one.label}</span>
         {/if}
       </span>
       {#if !one.via}
@@ -186,7 +182,7 @@
       {/if}
     </span>
   {/if}
-  <span class="ps-space-2 type-meta text-ink-muted">
+  <span class="ps-space-2 type-meta text-tx-2">
     {one.flag ? `Blocked: ${one.label} ${one.flag}` : one.state}{#if one.via}
       · through {byId.get(one.via)?.title ?? one.via}{/if}
   </span>
@@ -201,12 +197,12 @@
     class="grid grid-cols-(--edge-cols) items-box-start gap-space-2"
     style:--edge-cols="calc(var(--spacing) * 24) minmax(0, 1fr)"
   >
-    <span class="pt-space-1 type-label text-ink-muted">{name}</span>
+    <span class="pt-space-1 type-label text-tx-2">{name}</span>
     <div data-slot="edge-list" class="flex flex-col gap-space-1 min-w-0">
       {#each ids as id (id)}
         {@render ref(id, remove ? () => remove(id) : undefined)}
       {:else}
-        <span class="pt-space-1 type-meta text-ink-subtle">None</span>
+        <span class="pt-space-1 type-meta text-tx-2">None</span>
       {/each}
     </div>
   </div>
@@ -258,14 +254,14 @@
                   type="button"
                 >
                   <span
-                    class="min-w-0 overflow-clip type-label text-ink-strong text-ellipsis whitespace-nowrap"
+                    class="min-w-0 overflow-clip type-label text-tx text-ellipsis whitespace-nowrap"
                     >Wait on {pasted}</span
                   >
                 </button>
               </li>
             {/if}
             {#if conditionsFault}
-              <li class="pt-space-1 type-meta text-ink-subtle">
+              <li class="pt-space-1 type-meta text-tx-2">
                 {conditionsFault}
               </li>
             {/if}
@@ -281,11 +277,11 @@
                   title={each.name}
                   type="button"
                 >
-                  <span class="flex-none type-meta text-ink-muted"
+                  <span class="flex-none type-meta text-tx-2"
                     >{conditionWords.conditionLabel}</span
                   >
                   <span
-                    class="min-w-0 overflow-clip type-label text-ink-strong text-ellipsis whitespace-nowrap"
+                    class="min-w-0 overflow-clip type-label text-tx text-ellipsis whitespace-nowrap"
                     >{each.statement}</span
                   >
                 </button>
@@ -303,20 +299,18 @@
                   type="button"
                 >
                   <span
-                    class="flex-none type-meta font-mono liga-none text-ink-muted"
+                    class="flex-none type-meta font-mono liga-none text-tx-2"
                     >{each.id}</span
                   >
                   <span
-                    class="min-w-0 overflow-clip type-label text-ink-strong text-ellipsis whitespace-nowrap"
+                    class="min-w-0 overflow-clip type-label text-tx text-ellipsis whitespace-nowrap"
                     >{each.title}</span
                   >
                 </button>
               </li>
             {:else}
               {#if !pasted && conditionCandidates.length === 0}
-                <li class="pt-space-1 type-meta text-ink-subtle">
-                  No task matches.
-                </li>
+                <li class="pt-space-1 type-meta text-tx-2">No task matches.</li>
               {/if}
             {/each}
           </ul>
@@ -328,12 +322,12 @@
     class="grid grid-cols-(--edge-cols) items-box-start gap-space-2"
     style:--edge-cols="calc(var(--spacing) * 24) minmax(0, 1fr)"
   >
-    <span class="pt-space-1 type-label text-ink-muted">Waits on</span>
+    <span class="pt-space-1 type-label text-tx-2">Waits on</span>
     <div data-slot="edge-list" class="flex flex-col gap-space-1 min-w-0">
       {#each task.waits as one (one.target)}
         <div class="flex flex-col min-w-0">{@render wait(one)}</div>
       {:else}
-        <span class="pt-space-1 type-meta text-ink-subtle">None</span>
+        <span class="pt-space-1 type-meta text-tx-2">None</span>
       {/each}
     </div>
   </div>
@@ -355,7 +349,7 @@
       class="grid grid-cols-(--edge-cols) items-box-start gap-space-2"
       style:--edge-cols="calc(var(--spacing) * 24) minmax(0, 1fr)"
     >
-      <span class="pt-space-1 type-label text-ink-muted">Found in</span>
+      <span class="pt-space-1 type-label text-tx-2">Found in</span>
       <span class="pt-space-1 min-w-0 type-label">
         {#if drawn.draw === "element"}
           <drawn.element
@@ -364,7 +358,7 @@
             label={task.foundInNamed.label}
           />
         {:else}
-          <span class="text-ink-strong">{task.foundInNamed.label}</span>
+          <span class="text-tx">{task.foundInNamed.label}</span>
         {/if}
       </span>
     </div>

@@ -1,7 +1,7 @@
 <!--
   What stands beside a comment's pill over the page: its composer while it
   is written (bare: the composer's own pill is its surface) and its thread
-  once it is (the raised card recipe: `--radius-lg`, `--color-border-control`,
+  once it is (the raised card recipe: `--radius-lg`, `--color-ui-2`,
   `--shadow-sm`, `--spacing-space-3` padding). One width for both,
   `--pin-card-reading-w` (two fifths of the well, 280 to 480px: the pin
   room is the size container its `cqi` reads), never past the well's room,
@@ -671,10 +671,10 @@
           class="drop-shadow-near transition-opacity duration-(--duration-base) ease-out group-data-run/pour:opacity-0 group-data-run/pour:duration-(--duration-fast) motion-reduce:transition-none"
           href="#{uid}-shape"
         />
-        <g class="stroke-border-control" stroke-width="1">
+        <g class="stroke-ui-2" stroke-width="1">
           <path
             bind:this={shapePath}
-            class="fill-surface-raised"
+            class="fill-bg"
             data-slot="pin-shape"
             id="{uid}-shape"
           />
@@ -699,7 +699,7 @@
         card &&
           "p-space-3 opacity-0 transition-[opacity] duration-(--duration-fast) ease-out group-data-[open=true]/pour:opacity-100 group-data-[open=true]/pour:duration-(--duration-base) group-data-[open=true]/pour:delay-(--duration-fast) motion-reduce:transition-none",
         sheet &&
-          "px-space-3 pt-space-3 pb-(--sheet-pb) border-t border-border-hairline rounded-t-lg bg-surface-raised shadow-lg",
+          "px-space-3 pt-space-3 pb-(--sheet-pb) border-t border-ui rounded-t-lg bg-bg shadow-lg",
       ]}
       data-slot="pin-body"
       bind:this={body}

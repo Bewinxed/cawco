@@ -143,14 +143,14 @@
       />
       {#if find.finding}
         <span
-          class="mark-line flex items-center gap-space-1 type-meta text-ink-muted"
+          class="mark-line flex items-center gap-space-1 type-meta text-tx-2"
           role="status"
           ><Spinner aria-hidden="true" box="small" /><span>Finding…</span></span
         >
       {/if}
       <RowFault again={() => find.again()} reason={find.problem} />
       <div data-slot="row" class="flex min-w-0 items-center gap-space-2">
-        <span data-slot="name" class="w-14 flex-none type-label text-ink-muted"
+        <span data-slot="name" class="w-14 flex-none type-label text-tx-2"
           >Label</span
         >
         <Select.Root
@@ -174,7 +174,7 @@
         </Select.Root>
       </div>
       <div data-slot="row" class="flex min-w-0 items-center gap-space-2">
-        <span data-slot="name" class="w-14 flex-none type-label text-ink-muted"
+        <span data-slot="name" class="w-14 flex-none type-label text-tx-2"
           >Type</span
         >
         <Select.Root
@@ -217,7 +217,7 @@
                 {/each}
               </Select.Content>
             </Select.Root>
-            <span class="flex-none type-meta text-ink-subtle">=</span>
+            <span class="flex-none type-meta text-tx-2">=</span>
             <Select.Root
               disabled={!key}
               onValueChange={(next) => setField(index, key, next)}

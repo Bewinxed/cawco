@@ -150,7 +150,7 @@
     width="widest"
   >
     {#if machines.length === 0}
-      <p class="type-meta py-space-3 px-space-2 text-ink-muted">
+      <p class="type-meta py-space-3 px-space-2 text-tx-2">
         <AddMachineLink>{commonWords.noMachines}</AddMachineLink>
         — this lands on the first one that registers.
       </p>
@@ -173,11 +173,11 @@
           >
             {#snippet trailing()}
               {#if item?.state === "failed"}
-                <span data-slot="mark" class="inline-flex text-status-fail"
+                <span data-slot="mark" class="inline-flex text-red"
                   ><IconWarningTriangle class="size-icon-sm flex-none" /></span
                 >
               {:else if item?.state === "applied"}
-                <span data-slot="mark" class="inline-flex text-ink-muted"
+                <span data-slot="mark" class="inline-flex text-tx-2"
                   ><IconCheck class="size-icon-sm flex-none" /></span
                 >
               {:else}
@@ -187,7 +187,7 @@
                   aria-disabled={syncing || undefined}
                   aria-label="Sync {machineLabel(machine.hostname)}"
                   data-slot="sync"
-                  class="select-none inline-flex h-space-6 items-center gap-space-1 rounded-sm px-space-2 type-label text-ink-strong transition-control hover:enabled:bg-surface-hover disabled:opacity-50 motion-safe:transition-control-press motion-safe:active:enabled:not-aria-busy:scale-(--press-scale)"
+                  class="select-none inline-flex h-space-6 items-center gap-space-1 rounded-sm px-space-2 type-label text-tx transition-control hover:enabled:bg-ui disabled:opacity-50 motion-safe:transition-control-press motion-safe:active:enabled:not-aria-busy:scale-(--press-scale)"
                   disabled={!online}
                   onclick={whileIdle(
                     () => syncing,
@@ -214,7 +214,7 @@
             {#if runtime}
               <p
                 data-slot="note"
-                class="flex items-start gap-space-2 px-space-2 pt-0 pb-space-2 type-meta wrap-anywhere text-ink-muted"
+                class="flex items-start gap-space-2 px-space-2 pt-0 pb-space-2 type-meta wrap-anywhere text-tx-2"
               >
                 <span
                   >{harness}: {SAID[runtime.state]}
@@ -228,7 +228,7 @@
           <p
             data-rollout-chip-refused
             data-slot="note"
-            class="mark-line flex items-start gap-space-2 px-space-2 pt-0 pb-space-2 type-meta wrap-anywhere text-status-fail"
+            class="mark-line flex items-start gap-space-2 px-space-2 pt-0 pb-space-2 type-meta wrap-anywhere text-red"
             role="alert"
             in:appear
           >
@@ -262,7 +262,7 @@
           <!-- A detail on a row that did not fail is a note, not an error. -->
           <p
             data-slot="note"
-            class="mark-line flex items-start gap-space-2 px-space-2 pt-0 pb-space-2 type-meta wrap-anywhere text-ink-muted"
+            class="mark-line flex items-start gap-space-2 px-space-2 pt-0 pb-space-2 type-meta wrap-anywhere text-tx-2"
           >
             <span class="mark-cell"
               ><IconInfo class="size-icon-sm flex-none" /></span

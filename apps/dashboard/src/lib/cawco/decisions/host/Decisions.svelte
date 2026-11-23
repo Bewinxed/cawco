@@ -319,7 +319,7 @@
           </h1>
         {:else}
           <h1
-            class="type-title mark-text min-w-0 text-balance text-ink-strong wrap-anywhere"
+            class="type-title mark-text min-w-0 text-balance text-tx wrap-anywhere"
           >
             {String(props.title ?? "")}
           </h1>
@@ -349,7 +349,7 @@
       class="mx-auto flex w-full min-w-0 max-w-(--column-w) flex-wrap items-center justify-between gap-space-3 px-(--page-in)"
     >
       <p
-        class="mark-line type-meta num flex min-w-0 grow items-center gap-space-3 text-ink-muted"
+        class="mark-line type-meta num flex min-w-0 grow items-center gap-space-3 text-tx-2"
         data-slot="meter"
         class:invisible={setupPage}
       >
@@ -357,7 +357,7 @@
           ><MorphText text={String(count)} /> of {ids.length} picked</span
         >
         <span
-          class="h-space-1 w-0 max-w-30 grow overflow-hidden rounded-xs bg-surface-sunk"
+          class="h-space-1 w-0 max-w-30 grow overflow-hidden rounded-xs bg-bg-2"
           data-box
           data-slot="meter-bar"
         >

@@ -14,7 +14,7 @@ Prefix every inner class with a two-letter prefix of the mockup's own (`ld-row`,
 
 ## Design
 
-CawCo's tokens only (`kit/tokens.css`, from DESIGN.md): `--color-surface-page`, `--color-surface-raised`, `--color-surface-recess`, `--color-border-hairline`, `--color-border-control`, `--color-ink-strong`, `--color-ink-muted`; coral for "you" and the thing you act on: `--color-accent`, `--color-accent-ink`, `--color-accent-wash`, `--color-accent-wash`; status pairs that mean status only: `--color-status-done-bg/-ink`, `--color-status-attn-bg/-ink`, `--color-status-fail-bg/-ink`. Type `--font-sans`, `--font-mono` (ids, paths, times, numbers), sizes `--text-sm`, `--text-base`, `--text-base`; radii `--radius-sm`, `--radius-sm`, `--radius-lg`; spacing `--spacing-space-1` … `--spacing-space-8`; motion `--duration-fast`, `--ease-out`. A value the tokens lack is a token to add to `apps/dashboard/src/lib/tokens/theme.css` first.
+CawCo's tokens only (`kit/tokens.css`, from DESIGN.md): `--color-bg`, `--color-bg`, `--color-bg-2`, `--color-ui`, `--color-ui-2`, `--color-tx`, `--color-tx-2`; coral for "you" and the thing you act on: `--color-accent`, `--color-accent`, `--color-ui`, `--color-ui`; status pairs that mean status only: `--color-bg-2/-ink`, `--color-bg-2/-ink`, `--color-bg-2/-ink`. Type `--font-sans`, `--font-mono` (ids, paths, times, numbers), sizes `--text-sm`, `--text-base`, `--text-base`; radii `--radius-sm`, `--radius-sm`, `--radius-lg`; spacing `--spacing-space-1` … `--spacing-space-8`; motion `--duration-fast`, `--ease-out`. A value the tokens lack is a token to add to `apps/dashboard/src/lib/tokens/theme.css` first.
 
 Content is the project's real records: its own repository, projects, machines and tasks by the names the hub gives them, with real times. Copy is calm, short and sentence case; buttons are verb + object.
 
@@ -30,7 +30,7 @@ The page adds `is-live` to the root while it is on screen and dispatches `mk:liv
 
 ## Accessibility
 
-A purely illustrative mockup: `role="img"` on the root with an `aria-label` stating the idea in one sentence, inner controls `aria-hidden="true"` and `tabindex="-1"`. An interactive one: real buttons with a visible focus ring (`outline: 2px solid var(--color-accent-ink)`), no `role="img"`.
+A purely illustrative mockup: `role="img"` on the root with an `aria-label` stating the idea in one sentence, inner controls `aria-hidden="true"` and `tabindex="-1"`. An interactive one: real buttons with a visible focus ring (`outline: 2px solid var(--color-accent)`), no `role="img"`.
 
 ## Check
 

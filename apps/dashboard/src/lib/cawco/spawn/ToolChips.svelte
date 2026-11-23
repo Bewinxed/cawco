@@ -128,7 +128,7 @@
 </script>
 
 {#snippet effortChip()}
-  <Tuning class="text-mark-1" />
+  <Tuning class="text-orange" />
   <span data-slot="chip-label" class="capitalize"
     >{tools.effort ?? spawnWords.effort.default}</span
   >
@@ -143,7 +143,7 @@
       data-variant={readonly ? "static" : undefined}
       title={effortOff.reason}
     >
-      <Tuning class="text-mark-1" />
+      <Tuning class="text-orange" />
       <span data-slot="chip-label">{effortOff.label}</span>
       <span class="sr-only">: {effortOff.reason}</span>
     </span>
@@ -159,7 +159,7 @@
     <Icon style={`color:${look.hue}`} />
     <span data-slot="chip-label">{look.name}</span>
   {:else}
-    <IconShield class="text-ink-subtle" />
+    <IconShield class="text-tx-2" />
     <span data-slot="chip-label">{UNCHOSEN_MODE}</span>
   {/if}
 {/snippet}

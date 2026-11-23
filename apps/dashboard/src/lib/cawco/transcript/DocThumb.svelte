@@ -47,14 +47,14 @@
     !!file && file.progress !== undefined && !file.failed && !file.href
   );
   const BOX =
-    "inline-flex items-center gap-space-2 h-12 w-full max-w-64 py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--duration-fast) motion-safe:ease-out";
+    "inline-flex items-center gap-space-2 h-12 w-full max-w-64 py-0 ps-space-2 pe-space-3 border border-ui rounded-sm bg-bg-2 text-tx text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--duration-fast) motion-safe:ease-out";
 </script>
 
 {#snippet face()}
   <span
     data-slot="glyph"
     aria-hidden="true"
-    class="grid place-items-center flex-none text-ink-muted"
+    class="grid place-items-center flex-none text-tx-2"
   >
     {#if uploading}
       <UploadRing
@@ -77,13 +77,13 @@
       <span
         data-slot="meta"
         data-doc-thumb-failed
-        class="text-sm font-normal tabular-nums leading-lg text-status-fail whitespace-nowrap"
+        class="text-sm font-normal tabular-nums leading-lg text-red whitespace-nowrap"
         >Couldn't upload</span
       >
     {:else}
       <span
         data-slot="meta"
-        class="text-sm font-normal tabular-nums leading-lg text-ink-muted whitespace-nowrap"
+        class="text-sm font-normal tabular-nums leading-lg text-tx-2 whitespace-nowrap"
         >{meta}</span
       >
     {/if}
@@ -94,7 +94,7 @@
   <button
     data-slot="doc"
     aria-label={`Open ${name}`}
-    class={["select-none press-tint hover:bg-surface-hover", BOX]}
+    class={["select-none press-tint hover:bg-ui", BOX]}
     data-share={share}
     onclick={() =>
       lightbox.open({ kind: "text", name, content: props.content, share })}
@@ -107,7 +107,7 @@
   <a
     data-slot="doc"
     aria-label={`Download ${name}`}
-    class={["press-tint hover:bg-surface-hover", BOX]}
+    class={["press-tint hover:bg-ui", BOX]}
     download={name}
     href={file.href}
     title={name}
@@ -118,7 +118,7 @@
   <button
     data-slot="doc"
     aria-label={`Couldn't upload ${name}: ${file.failed} Try again`}
-    class={["select-none press-tint hover:bg-surface-hover", BOX]}
+    class={["select-none press-tint hover:bg-ui", BOX]}
     onclick={() => file?.onretry?.()}
     title={`${name}: ${file.failed}`}
     type="button"

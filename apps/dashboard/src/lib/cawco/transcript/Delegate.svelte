@@ -459,16 +459,16 @@
           class="rail-cell rounded-xs bg-mark-overlay bg-(--mark-bg)"
           style:--mark-bg="var(--color-mark-{markHue(hueSeed)})"
           {@attach trayCard(() => (elsewhere ? null : id))}
-          ><Sprite class="size-space-3 block text-surface-page" /></span
+          ><Sprite class="size-space-3 block text-bg" /></span
         >
         <span
-          class="font-(family-name:--font-mono) text-ink-strong group-hover/bhead:text-accent-ink flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap transition-[color] duration-(--duration-fast) ease-out"
+          class="font-(family-name:--font-mono) text-tx group-hover/bhead:text-accent flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap transition-[color] duration-(--duration-fast) ease-out"
           >{label}</span
         >
         <span
           data-slot="chev"
           aria-hidden="true"
-          class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-out group-state-open/bhead:rotate-90"
+          class="size-icon-sm flex-none grid place-items-center text-tx-2 motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-out group-state-open/bhead:rotate-90"
           data-box><IconChevronRight class="size-icon-sm block" /></span
         >
         <!-- Its words on their x-height in the box (.mark-text): the trim's
@@ -476,14 +476,14 @@
         {#if started}
           <span
             data-slot="kind"
-            class="mark-text flex-none text-sm font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-4.5 whitespace-nowrap"
+            class="mark-text flex-none text-sm font-normal text-tx border border-ui rounded-xs py-(--kind-py) px-space-2 leading-4.5 whitespace-nowrap"
             data-box
             style:--kind-py="calc((1lh - 1ex) / 2)">session</span
           >
         {:else if type}
           <span
             data-slot="kind"
-            class="mark-text flex-none text-sm font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-4.5 whitespace-nowrap"
+            class="mark-text flex-none text-sm font-normal text-tx border border-ui rounded-xs py-(--kind-py) px-space-2 leading-4.5 whitespace-nowrap"
             data-box
             style:--kind-py="calc((1lh - 1ex) / 2)">{type}</span
           >
@@ -492,20 +492,20 @@
         {#if harness}
           <span
             data-slot="meta"
-            class="text-ink-muted text-sm font-normal flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap max-desk:hidden"
+            class="text-tx-2 text-sm font-normal flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap max-desk:hidden"
             >{harness}</span
           >
         {/if}
         {#if model}
           <span
             data-slot="meta"
-            class="text-ink-muted text-sm font-normal flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap max-desk:hidden"
+            class="text-tx-2 text-sm font-normal flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap max-desk:hidden"
             >{modelLabel(model)}</span
           >
         {/if}
         {#if mayDelegate}
           <span
-            class="flex-none text-sm font-normal text-accent-ink whitespace-nowrap"
+            class="flex-none text-sm font-normal text-accent whitespace-nowrap"
             >may delegate</span
           >
         {/if}
@@ -513,7 +513,7 @@
              past the trim's room given back, so the box keeps its height. A phase
              change carries its tone across with its words. -->
         <span
-          class="mark-text ms-auto flex-none text-sm font-normal num rounded-xs py-(--pill-py) px-space-2 bg-transparent text-ink-muted whitespace-nowrap transition-[background-color,color] duration-(--duration-fast) ease-out tone-live:bg-status-live-bg tone-live:text-status-live tone-attn:bg-status-attn-bg tone-attn:text-status-attn tone-done:bg-status-done-bg tone-done:text-status-done tone-fail:bg-status-fail-bg tone-fail:text-status-fail"
+          class="mark-text ms-auto flex-none text-sm font-normal num rounded-xs py-(--pill-py) px-space-2 bg-transparent text-tx-2 whitespace-nowrap transition-[background-color,color] duration-(--duration-fast) ease-out tone-live:bg-bg-2 tone-live:text-cyan tone-attn:bg-bg-2 tone-attn:text-orange tone-done:bg-bg-2 tone-done:text-green tone-fail:bg-bg-2 tone-fail:text-red"
           data-tone={tone}
           data-delegate-tone={tone}
           data-box
@@ -545,7 +545,7 @@
       {#if id}
         <a
           aria-label="Open {label} in its own view"
-          class="touch-hit flex-none size-6.5 grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-fast) ease-out hover:text-accent-ink hover:bg-surface-hover"
+          class="touch-hit flex-none size-6.5 grid place-items-center rounded-xs text-tx-2 transition-[color,background] duration-(--duration-fast) ease-out hover:text-accent hover:bg-ui"
           href={conversationHref(id, boardStore.instanceIndex)}
           title="Open {label} in its own view"
         >
@@ -558,7 +558,7 @@
          headline() bounds its length; the wrap is the layout's. -->
     {#if brief}
       <p
-        class="rail-hang mt-space-1 mb-0 type-body text-ink-muted max-w-measure wrap-anywhere"
+        class="rail-hang mt-space-1 mb-0 type-body text-tx-2 max-w-measure wrap-anywhere"
       >
         {headline(brief)}
       </p>
@@ -574,7 +574,7 @@
         {#key status.kind}
           <p
             data-slot="now"
-            class="rail-line col-start-1 row-start-1 mt-space-1 mb-0 items-box-start text-sm font-normal text-ink-strong data-err:text-status-fail leading-base max-w-measure"
+            class="rail-line col-start-1 row-start-1 mt-space-1 mb-0 items-box-start text-sm font-normal text-tx data-err:text-red leading-base max-w-measure"
             data-err={status.err || undefined}
             in:lineSwap
             out:lineSwap
@@ -615,16 +615,16 @@
       {#each waiting as ask (ask.key)}
         <li
           data-slot="ask"
-          class="rail-line items-baseline type-body text-ink-strong min-w-0 first:mt-space-1"
+          class="rail-line items-baseline type-body text-tx min-w-0 first:mt-space-1"
           data-flip
           title={ask.detail}
         >
           <span data-slot="rail-cell" aria-hidden="true" class="rail-cell h-lh"
-            ><span data-slot="dot" class="size-1.5 rounded-pill bg-status-attn"
+            ><span data-slot="dot" class="size-1.5 rounded-pill bg-orange"
             ></span></span
           >
           <span
-            class="flex-none text-sm font-normal text-status-attn uppercase tracking-caps"
+            class="flex-none text-sm font-normal text-orange uppercase tracking-caps"
             >{ask.status}</span
           >
           <span class="min-w-0 wrap-anywhere">{ask.short}</span>
@@ -642,11 +642,11 @@
           {#if report}
             <section
               data-delegate-failed={report.failed || undefined}
-              class="group/report mt-space-4 p-space-3 rounded-xs bg-surface-raised shadow-sm"
+              class="group/report mt-space-4 p-space-3 rounded-xs bg-bg shadow-sm"
               data-failed={report.failed || undefined}
             >
               <h4
-                class="text-base font-medium tracking-caps uppercase text-ink-muted group-data-failed/report:text-status-fail mb-space-2"
+                class="text-base font-medium tracking-caps uppercase text-tx-2 group-data-failed/report:text-red mb-space-2"
               >
                 {report.failed ? "Report — failed" : "Report"}
                 {#if report.count > 1}

@@ -42,20 +42,20 @@
       look: {
         chip: chipVariants({ variant: "setting" }),
         state:
-          "mark-line type-meta inline-flex h-space-6 items-center gap-space-1 whitespace-nowrap rounded-sm bg-surface-recess px-space-2 text-ink-muted transition-chip-settle not-data-fail:hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail motion-safe:pressed:scale-(--press-scale)",
+          "mark-line type-meta inline-flex h-space-6 items-center gap-space-1 whitespace-nowrap rounded-sm bg-bg-2 px-space-2 text-tx-2 transition-chip-settle not-data-fail:hover:bg-ui data-fail:bg-bg-2 data-fail:text-red motion-safe:pressed:scale-(--press-scale)",
         count:
-          "pressable type-meta num h-icon-md min-w-icon-md overflow-visible px-space-1 text-ink-strong leading-none",
+          "pressable type-meta num h-icon-md min-w-icon-md overflow-visible px-space-1 text-tx leading-none",
         strip:
-          "press-tint flex h-control-lg items-center rounded-sm px-space-3 text-start text-ink-strong transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
+          "press-tint flex h-control-lg items-center rounded-sm px-space-3 text-start text-tx transition-[background-color] duration-(--duration-fast) ease-out hover:bg-ui hover:ring-ground-ui aria-expanded:bg-ui aria-expanded:ring-ground-ui",
         "strip-home":
-          "press-tint flex h-14 items-center rounded-sm px-space-4 text-start text-ink-strong transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
+          "press-tint flex h-14 items-center rounded-sm px-space-4 text-start text-tx transition-[background-color] duration-(--duration-fast) ease-out hover:bg-ui hover:ring-ground-ui aria-expanded:bg-ui aria-expanded:ring-ground-ui",
         mark: "pressable inline-flex rounded-xs",
         swatch:
-          "pointer-hit grid place-items-center rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-1",
-        segment: `${segmentedVariants().segment()} num press-tint focus-inset shrink-0 aria-expanded:bg-surface-pressed`,
-        "segment-compact": `${segmentedVariants({ compact: true }).segment()} num press-tint focus-inset shrink-0 aria-expanded:bg-surface-pressed`,
+          "pointer-hit grid place-items-center rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-1",
+        segment: `${segmentedVariants().segment()} num press-tint focus-inset shrink-0 aria-expanded:bg-ui-2`,
+        "segment-compact": `${segmentedVariants({ compact: true }).segment()} num press-tint focus-inset shrink-0 aria-expanded:bg-ui-2`,
         meter:
-          "mark-line flex h-row-compact items-center gap-space-2 rounded-sm px-space-2 text-ink-muted type-label tabular-nums transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-surface-hover data-compacting:text-ink-strong data-critical:not-data-compacting:text-status-fail data-warn:not-data-critical:not-data-compacting:text-status-attn",
+          "mark-line flex h-row-compact items-center gap-space-2 rounded-sm px-space-2 text-tx-2 type-label tabular-nums transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-ui data-compacting:text-tx data-critical:not-data-compacting:text-red data-warn:not-data-critical:not-data-compacting:text-orange",
       },
     },
   });

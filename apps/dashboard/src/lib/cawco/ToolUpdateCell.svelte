@@ -122,11 +122,11 @@
     width="widest"
   >
     <header
-      class="flex flex-none items-baseline gap-space-1 border-b border-border-hairline px-space-3 py-space-2"
+      class="flex flex-none items-baseline gap-space-1 border-b border-ui px-space-3 py-space-2"
     >
-      <span class="type-label text-ink-strong">{head}</span>
+      <span class="type-label text-tx">{head}</span>
       {#if method}
-        <code class="ml-auto shrink-0 type-code text-ink-muted">{method}</code>
+        <code class="ml-auto shrink-0 type-code text-tx-2">{method}</code>
       {/if}
     </header>
     <div
@@ -134,9 +134,7 @@
     >
       {@render body()}
     </div>
-    <footer
-      class="flex-none border-t border-border-hairline px-space-3 py-space-2"
-    >
+    <footer class="flex-none border-t border-ui px-space-3 py-space-2">
       {@render act(label, pendingLabel)}
     </footer>
   </Popover.Content>
@@ -154,7 +152,7 @@
   data-update={update.kind}
 >
   <span
-    class="mark-line inline-flex min-w-0 items-center gap-space-2 type-meta text-ink-muted"
+    class="mark-line inline-flex min-w-0 items-center gap-space-2 type-meta text-tx-2"
   >
     <span class="mark-cell grid w-icon-md flex-none place-items-center">
       {#if update.kind === "runs"}
@@ -162,28 +160,28 @@
           aria-label={update.updatedAt === undefined && !ownCopy
             ? words.current
             : undefined}
-          class="size-icon-md text-status-done"
+          class="size-icon-md text-green"
         />
       {:else if update.kind === "updating"}
         <Spinner />
       {:else if update.kind === "failed"}
-        <IconWarningTriangle class="size-icon-md text-status-fail" />
+        <IconWarningTriangle class="size-icon-md text-red" />
       {:else if update.kind === "own" || (update.kind === "asked" && blocks)}
-        <IconNeedsYou class="size-icon-md text-status-attn" />
+        <IconNeedsYou class="size-icon-md text-orange" />
       {:else}
         <IconNotYet class="size-icon-md" />
       {/if}
     </span>
     {#if update.kind === "runs" && ownCopy}
       {#snippet takeOver()}
-        <p class="type-body text-pretty text-ink-strong">
+        <p class="type-body text-pretty text-tx">
           {words.takeOverWhy(spec.name)}
         </p>
       {/snippet}
       <Popover.Root>
         {@render opener(
           words.ownRuns,
-          "text-ink-muted",
+          "text-tx-2",
           words.ownHead(spec.name, machine)
         )}
         {@render layer(
@@ -199,7 +197,7 @@
         <span class="num">{words.updated(ago === "now" ? null : ago)}</span>
       {/if}
     {:else if update.kind === "updating"}
-      <span class="text-ink-strong"
+      <span class="text-tx"
         >{words.updating(spec.exactVersion ? undefined : update.to)}</span
       >
     {:else if update.kind === "failed"}
@@ -207,21 +205,20 @@
       {#snippet why()}
         {#if update.kind === "failed"}
           {#if update.cause}
-            <code
-              class="type-code whitespace-pre-wrap wrap-anywhere text-ink-strong"
+            <code class="type-code whitespace-pre-wrap wrap-anywhere text-tx"
               >{update.cause}</code
             >
           {:else if !update.output}
-            <p class="type-body text-ink-strong">{words.failedSilent}</p>
+            <p class="type-body text-tx">{words.failedSilent}</p>
           {/if}
-          <p class="type-meta text-pretty text-ink-muted">
+          <p class="type-meta text-pretty text-tx-2">
             {words.failedNext(machine, update.found)}
           </p>
           {#if update.output}
             <button
               aria-controls="tool-output-{machineId}-{spec.id}"
               aria-expanded={outputShown}
-              class="pointer-hit self-start rounded-xs type-meta text-accent-ink hover:text-accent-ink"
+              class="pointer-hit self-start rounded-xs type-meta text-accent hover:text-accent"
               onclick={() => {
                 outputShown = !outputShown;
               }}
@@ -231,7 +228,7 @@
             {#if outputShown}
               <pre
                 id="tool-output-{machineId}-{spec.id}"
-                class="flex-none rounded-xs bg-surface-recess px-space-2 py-space-1 type-code whitespace-pre-wrap wrap-anywhere text-ink-muted"
+                class="flex-none rounded-xs bg-bg-2 px-space-2 py-space-1 type-code whitespace-pre-wrap wrap-anywhere text-tx-2"
                 transition:unfold>{update.output}</pre>
             {/if}
           {/if}
@@ -244,26 +241,26 @@
           }
         }}
       >
-        {@render opener(words.failed, "text-status-fail", head)}
+        {@render opener(words.failed, "text-red", head)}
         {@render layer(head, why, words.retry)}
       </Popover.Root>
     {:else if update.kind === "own"}
       {@const head = words.ownHead(spec.name, machine)}
       {#snippet costs()}
         {#if update.kind === "own"}
-          <p class="type-body text-pretty text-ink-strong">
+          <p class="type-body text-pretty text-tx">
             {words.ownWhy(spec.name, update.wants)}
           </p>
         {/if}
       {/snippet}
       <Popover.Root>
-        {@render opener(words.own, "text-ink-strong", head)}
+        {@render opener(words.own, "text-tx", head)}
         {@render layer(head, costs, words.update)}
       </Popover.Root>
     {:else if update.kind === "asked" && !blocks}
       <span class="num">{words.newer(update.wants.version)}</span>
     {:else if update.kind === "asked"}
-      <span class="text-ink-strong">{words.asked}</span>
+      <span class="text-tx">{words.asked}</span>
     {:else if !online}
       <span>{words.dueAway}</span>
     {:else if paused}
@@ -272,7 +269,7 @@
       <span>{words.dueNow}</span>
     {/if}
     {#if paused && presses}
-      <span aria-hidden="true" class="text-ink-subtle">·</span><span
+      <span aria-hidden="true" class="text-tx-2">·</span><span
         data-slot="paused">{words.machinePaused}</span
       >
     {/if}

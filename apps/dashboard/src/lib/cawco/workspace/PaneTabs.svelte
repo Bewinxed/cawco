@@ -1420,7 +1420,7 @@
         data-drop-after={(dropHint.tabIndexIn(leaf.id) === i + 1 &&
           i === tabs.length - 1) ||
           undefined}
-        class="group/tab pane-tab-pads pane-tab-rims pane-tab-needs relative flex max-w-60 min-w-0 flex-none touch-pan-x data-drop-after:z-(--drop-z) data-drop-before:z-(--drop-z) motion-safe:reordering:not-data-following:transition-[translate] motion-safe:reordering:not-data-following:duration-(--duration-slow) motion-safe:reordering:not-data-following:ease-drawer data-drop-before:before:absolute data-drop-before:before:inset-y-space-1 data-drop-before:before:-start-space-1 data-drop-before:before:z-4 data-drop-before:before:w-space-1 data-drop-before:before:rounded-pill data-drop-before:before:bg-ink-strong data-drop-after:after:absolute data-drop-after:after:inset-y-space-1 data-drop-after:after:-end-space-1 data-drop-after:after:z-4 data-drop-after:after:w-space-1 data-drop-after:after:rounded-pill data-drop-after:after:bg-ink-strong"
+        class="group/tab pane-tab-pads pane-tab-rims pane-tab-needs relative flex max-w-60 min-w-0 flex-none touch-pan-x data-drop-after:z-(--drop-z) data-drop-before:z-(--drop-z) motion-safe:reordering:not-data-following:transition-[translate] motion-safe:reordering:not-data-following:duration-(--duration-slow) motion-safe:reordering:not-data-following:ease-drawer data-drop-before:before:absolute data-drop-before:before:inset-y-space-1 data-drop-before:before:-start-space-1 data-drop-before:before:z-4 data-drop-before:before:w-space-1 data-drop-before:before:rounded-pill data-drop-before:before:bg-tx data-drop-after:after:absolute data-drop-after:after:inset-y-space-1 data-drop-after:after:-end-space-1 data-drop-after:after:z-4 data-drop-after:after:w-space-1 data-drop-after:after:rounded-pill data-drop-after:after:bg-tx"
         style:--drop-z="calc(var(--stack-top) + 1)"
         data-chosen={chosen ? "" : undefined}
         data-flush={hungFlush(cardHere, menuHere)}
@@ -1466,14 +1466,12 @@
         style:--rim-full={RIM_STRENGTH[tab.tone].full}
         style:--rim-ink="var(--tone)"
         style:--rim-rest={RIM_STRENGTH[tab.tone].rest}
-        style:--sheet={cardHere || menuHere
-          ? "var(--color-surface-recess)"
-          : undefined}
+        style:--sheet={cardHere || menuHere ? "var(--color-bg-2)" : undefined}
         style:--tab-fill={cardHere || menuHere
-          ? "var(--color-surface-recess)"
+          ? "var(--color-bg-2)"
           : undefined}
         style:--tab-hover={cardHere || menuHere
-          ? "var(--color-surface-recess)"
+          ? "var(--color-bg-2)"
           : undefined}
         style:--tone={RIM_INK[tab.tone]}
         style:--z-rest={restZ}
@@ -1506,16 +1504,16 @@
           data-slot="shade"
           aria-hidden="true"
           class="pointer-events-none absolute inset-x-(--shade-x) inset-y-0 z-0 mask-(--shade-mask)"
-          style:--shade-mask={"linear-gradient(to bottom, var(--color-ink-strong) calc(100% - 2 * var(--flare)), transparent calc(100% - var(--flare)))"}
+          style:--shade-mask={"linear-gradient(to bottom, var(--color-tx) calc(100% - 2 * var(--flare)), transparent calc(100% - var(--flare)))"}
           style:--shade-x="calc(-1 * var(--flare))"
           style:--cast-start="calc(var(--flare) + var(--slope-start))"
           style:--cast-end="calc(var(--flare) + var(--slope-end))"
           style:--cast-r="var(--radius) var(--radius) 0 0"
           ><span
-            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-sunk opacity-(--cast-op) shadow-tab-start group-data-chosen/tab:shadow-tab-start-chosen group-data-lifted/tab:opacity-100 motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
+            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-bg-2 opacity-(--cast-op) shadow-tab-start group-data-chosen/tab:shadow-tab-start-chosen group-data-lifted/tab:opacity-100 motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
             style:--cast-op="calc(1 - var(--lone-start, 0))"
           ></span><span
-            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-sunk opacity-(--cast-op) shadow-tab-end group-data-chosen/tab:shadow-tab-end-chosen group-data-lifted/tab:opacity-100 motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
+            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-bg-2 opacity-(--cast-op) shadow-tab-end group-data-chosen/tab:shadow-tab-end-chosen group-data-lifted/tab:opacity-100 motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
             style:--cast-op="calc(1 - var(--lone-end, 0))"
           ></span></span
         >

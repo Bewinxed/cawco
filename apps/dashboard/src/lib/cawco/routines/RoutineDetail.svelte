@@ -294,23 +294,23 @@
       class="flex max-w-measure flex-col gap-space-2 pt-space-2"
     >
       <h4
-        class="m-0 flex flex-wrap items-baseline gap-x-space-2 type-label text-ink-strong"
+        class="m-0 flex flex-wrap items-baseline gap-x-space-2 type-label text-tx"
         id="condition-{routine.id}"
       >
         <span>{conditions.conditionHead}</span>
-        <span class="type-meta text-ink-muted"
+        <span class="type-meta text-tx-2"
           >{conditionStateWords[condition.state]}</span
         >
       </h4>
-      <p class="m-0 type-body text-ink-strong wrap-break-word">
+      <p class="m-0 type-body text-tx wrap-break-word">
         {condition.statement}
       </p>
       {#if conditionSaid}
-        <p class="m-0 type-body text-ink-strong wrap-break-word">
+        <p class="m-0 type-body text-tx wrap-break-word">
           {conditionSaid}
         </p>
       {/if}
-      <p class="m-0 flex flex-wrap gap-x-space-2 type-meta text-ink-muted">
+      <p class="m-0 flex flex-wrap gap-x-space-2 type-meta text-tx-2">
         {#if condition.state !== "met"}
           <span
             >{condition.deadline === null
@@ -326,7 +326,7 @@
         >
       </p>
       {#if askingMet}
-        <p class="m-0 type-body text-ink-strong">{conditions.markMetAsk}</p>
+        <p class="m-0 type-body text-tx">{conditions.markMetAsk}</p>
       {/if}
       <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
         {#if askingMet}
@@ -395,15 +395,15 @@
       aria-labelledby="check-{routine.id}"
       class="flex max-w-measure flex-col gap-space-2 pt-space-2"
     >
-      <h4 class="m-0 type-label text-ink-strong" id="check-{routine.id}">
+      <h4 class="m-0 type-label text-tx" id="check-{routine.id}">
         {checkWords.head}
       </h4>
-      <p class="m-0 type-code liga-none text-ink-strong wrap-anywhere">
+      <p class="m-0 type-code liga-none text-tx wrap-anywhere">
         {check.command}
       </p>
-      <p class="m-0 type-meta text-ink-muted">{checkWords.hint}</p>
+      <p class="m-0 type-meta text-tx-2">{checkWords.hint}</p>
       {#if !check.approved}
-        <p class="m-0 type-body text-status-attn">
+        <p class="m-0 type-body text-orange">
           {checkWords.unapprovedLine}
         </p>
       {/if}
@@ -413,19 +413,17 @@
       >
         {#each check.machines as one (one.machine)}
           <li data-machine class="flex flex-col gap-space-1">
-            <span class="type-body text-ink-strong">{one.machine}</span>
+            <span class="type-body text-tx">{one.machine}</span>
             <span class="flex flex-wrap items-center gap-x-space-2">
               <RunStatus status={checkStatus(one)} text={checkSaid(one)} />
               {#if one.wokeAt !== null}
-                <span class="type-meta text-ink-muted"
+                <span class="type-meta text-tx-2"
                   >{checkWords.woke(since(one.wokeAt))}</span
                 >
               {/if}
             </span>
             {#if one.said}
-              <span class="type-meta text-ink-strong wrap-break-word"
-                >{one.said}</span
-              >
+              <span class="type-meta text-tx wrap-break-word">{one.said}</span>
             {/if}
           </li>
         {/each}
@@ -448,12 +446,12 @@
     <div
       data-slot="instruction"
       bind:this={body}
-      class="type-body text-ink-strong data-clamped:max-h-(--clamp-h) data-clamped:overflow-hidden data-clamped:mask-(--fade-mask)"
+      class="type-body text-tx data-clamped:max-h-(--clamp-h) data-clamped:overflow-hidden data-clamped:mask-(--fade-mask)"
       data-clamped={whole ? undefined : ""}
       id="instruction-{routine.id}"
       style:--clamp-h="calc(var(--lines) * 1lh)"
       style:--fade-from="calc(100% - 1lh)"
-      style:--fade-mask={"linear-gradient(to bottom, var(--color-ink-strong) var(--fade-from), transparent)"}
+      style:--fade-mask={"linear-gradient(to bottom, var(--color-tx) var(--fade-from), transparent)"}
       style:--lines="4"
     >
       <Markdown source={routine.prompt} />
@@ -479,12 +477,12 @@
       aria-labelledby="runs-{routine.id}"
       class="flex flex-col gap-space-2"
     >
-      <h4 class="m-0 type-label text-ink-strong" id="runs-{routine.id}">
+      <h4 class="m-0 type-label text-tx" id="runs-{routine.id}">
         {words.recentRuns}
       </h4>
       <div
         data-slot="runs-ledger"
-        class="overflow-hidden rounded-sm border border-border-hairline bg-surface-raised"
+        class="overflow-hidden rounded-sm border border-ui bg-bg"
       >
         <!-- Result is the column this ledger exists for and keeps its floor
              (c-ledger-title-min): Took folds under 576px, When and Outcome
@@ -572,14 +570,14 @@
                   {#if href}
                     <a
                       data-slot="result"
-                      class="block truncate text-ink-strong no-underline group-outcome-failed/run:text-status-fail hover:underline hover:underline-offset-3 hover:not-group-outcome-failed/run:text-accent-ink"
+                      class="block truncate text-tx no-underline group-outcome-failed/run:text-red hover:underline hover:underline-offset-3 hover:not-group-outcome-failed/run:text-accent"
                       {href}
                       title={result || undefined}>{result || words.readRun}</a
                     >
                   {:else}
                     <span
                       data-slot="result"
-                      class="block truncate text-ink-strong group-outcome-failed/run:text-status-fail"
+                      class="block truncate text-tx group-outcome-failed/run:text-red"
                       title={result || undefined}>{result}</span
                     >
                   {/if}
@@ -600,7 +598,7 @@
         >
       {/if}
       {#if readFault}
-        <p class="m-0 type-meta text-status-fail" role="status">
+        <p class="m-0 type-meta text-red" role="status">
           {readFault}
         </p>
       {/if}
@@ -613,12 +611,10 @@
       aria-labelledby="actions-{routine.id}"
       class="flex flex-col gap-space-2"
     >
-      <h4 class="m-0 type-label text-ink-strong" id="actions-{routine.id}">
+      <h4 class="m-0 type-label text-tx" id="actions-{routine.id}">
         {words.columnActions}
       </h4>
-      <div
-        class="overflow-hidden rounded-sm border border-border-hairline bg-surface-raised"
-      >
+      <div class="overflow-hidden rounded-sm border border-ui bg-bg">
         <ActionsTable {actions} label={words.columnActions} />
       </div>
     </section>

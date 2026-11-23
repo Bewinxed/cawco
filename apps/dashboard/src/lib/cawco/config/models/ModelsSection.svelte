@@ -419,11 +419,10 @@
     data-slot="check"
     viewBox="0 0 20 20"
   >
-    <circle cx="10" cy="10" r="10" class="fill-status-done-bg stroke-none"
-    ></circle>
+    <circle cx="10" cy="10" r="10" class="fill-bg-2 stroke-none"></circle>
     <path
       d="M6.2 10.4l2.5 2.5 5.1-5.6"
-      class="stroke-status-done motion-safe:animate-check-draw motion-safe:dash-unit"
+      class="stroke-green motion-safe:animate-check-draw motion-safe:dash-unit"
       pathLength="1"
       stroke-linecap="round"
       stroke-linejoin="round"
@@ -466,7 +465,7 @@
         {/if}
       {/snippet}
     </SectionHeader>
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       One way to reach Jev. A TypeSafe key held in Jev below takes over from it.
     </p>
     <div
@@ -479,7 +478,7 @@
           <p
             data-slot="num"
             aria-live="polite"
-            class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-space-2 text-ink-muted tone-ok:text-ink-strong"
+            class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-space-2 text-tx-2 tone-ok:text-tx"
             data-tone={phase === "connected" ? "ok" : "off"}
             in:blur={lineBlur("--duration-slow")}
             out:blur={lineBlur("--duration-base")}
@@ -498,7 +497,7 @@
               <span
                 data-slot="dot"
                 aria-hidden="true"
-                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-done group-tone-ok:opacity-100"
+                class="size-space-2 flex-none rounded-pill bg-tx-2 opacity-50 group-tone-ok:bg-green group-tone-ok:opacity-100"
                 data-box
               ></span>
               <span>Not connected</span>
@@ -509,7 +508,7 @@
     </div>
     {#if openrouterError}
       <p
-        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail"
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-red"
         role="alert"
         transition:unfold
       >
@@ -520,7 +519,7 @@
 
   <form
     data-slot="group"
-    class="flex flex-col gap-space-2 border-t border-border-hairline pt-space-4"
+    class="flex flex-col gap-space-2 border-t border-ui pt-space-4"
     data-group="jev"
     onsubmit={saveKey}
   >
@@ -550,21 +549,21 @@
         </div>
       {/snippet}
     </SectionHeader>
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       Answers the hub's yes/no questions: meaning rules, fleet watch,
       suggestions and its own judgments. It goes straight to TypeSafe while a
       key is held here, otherwise through OpenRouter.
     </p>
     <p
       aria-live="polite"
-      class="mark-line group type-body flex items-center gap-space-2 text-ink-muted tone-ok:text-ink-strong"
+      class="mark-line group type-body flex items-center gap-space-2 text-tx-2 tone-ok:text-tx"
       data-testid="jev-route"
       data-tone={jev?.route ? "ok" : "off"}
     >
       <span
         data-slot="dot"
         aria-hidden="true"
-        class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-done group-tone-ok:opacity-100"
+        class="size-space-2 flex-none rounded-pill bg-tx-2 opacity-50 group-tone-ok:bg-green group-tone-ok:opacity-100"
         data-box
       ></span>
       <span>{routeLine}</span>
@@ -589,7 +588,7 @@
           <p
             data-slot="num"
             aria-live="polite"
-            class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-space-2 text-ink-muted tone-ok:text-ink-strong"
+            class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-space-2 text-tx-2 tone-ok:text-tx"
             data-testid="typesafe-key-state"
             data-tone={keyPhase === "held" ? "ok" : "off"}
             in:blur={lineBlur("--duration-slow")}
@@ -602,7 +601,7 @@
               <span
                 data-slot="dot"
                 aria-hidden="true"
-                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-done group-tone-ok:opacity-100"
+                class="size-space-2 flex-none rounded-pill bg-tx-2 opacity-50 group-tone-ok:bg-green group-tone-ok:opacity-100"
                 data-box
               ></span>
               <span>Not set</span>
@@ -623,7 +622,7 @@
     />
     {#if jevError}
       <p
-        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail"
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-red"
         role="alert"
         transition:unfold
       >
@@ -634,10 +633,10 @@
 
   <div
     data-slot="group"
-    class="flex flex-col gap-space-2 border-t border-border-hairline pt-space-4"
+    class="flex flex-col gap-space-2 border-t border-ui pt-space-4"
   >
     <SectionHeader level={2} hue={HUE} icon={IconRules} label="Fleet watch" />
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       Reads every session's stream for a loop or a stall. A yes from Jev, or a
       second signal while Jev is off, starts one triage that tells the session's
       lead. In a project whose Caw is off, it tells you instead.
@@ -655,7 +654,7 @@
     {#if watch}
       <ul
         data-slot="num"
-        class="num type-meta flex flex-col gap-space-1 text-ink-muted"
+        class="num type-meta flex flex-col gap-space-1 text-tx-2"
       >
         <li>
           Same error {watch.limits.sameError} times in
@@ -674,7 +673,7 @@
     {/if}
     {#if watchError}
       <p
-        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail"
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-red"
         role="alert"
         transition:unfold
       >

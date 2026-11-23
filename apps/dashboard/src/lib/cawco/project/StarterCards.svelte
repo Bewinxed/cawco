@@ -56,7 +56,7 @@
       <li class="group-data-rows/starters:max-w-full">
         <button
           data-slot="starter"
-          class="select-none mark-line press-tint type-label flex size-full min-h-14 items-box-start gap-space-2 rounded-lg bg-surface-raised p-space-3 text-start text-pretty text-ink-strong shadow-sm transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover group-data-rows/starters:h-auto group-data-rows/starters:min-h-control-md group-data-rows/starters:w-auto group-data-rows/starters:max-w-full group-data-rows/starters:rounded-sm group-data-rows/starters:border group-data-rows/starters:border-solid group-data-rows/starters:border-border-strong group-data-rows/starters:px-space-3 group-data-rows/starters:py-space-2 group-data-rows/starters:shadow-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-2"
+          class="select-none mark-line press-tint type-label flex size-full min-h-14 items-box-start gap-space-2 rounded-lg bg-bg p-space-3 text-start text-pretty text-tx shadow-sm transition-[background-color] duration-(--duration-fast) ease-out hover:bg-ui group-data-rows/starters:h-auto group-data-rows/starters:min-h-control-md group-data-rows/starters:w-auto group-data-rows/starters:max-w-full group-data-rows/starters:rounded-sm group-data-rows/starters:border group-data-rows/starters:border-solid group-data-rows/starters:border-tx-2 group-data-rows/starters:px-space-3 group-data-rows/starters:py-space-2 group-data-rows/starters:shadow-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-2"
           onclick={() => onpick(starter.text)}
           type="button"
         >
@@ -69,7 +69,7 @@
               ><Glyph
                 data-starter-glyph
                 aria-hidden="true"
-                class="size-icon-md flex-none text-ink-strong"
+                class="size-icon-md flex-none text-tx"
               /></span
             >
           {/if}
@@ -80,7 +80,7 @@
             {#if rows && starter.reason}
               <span
                 data-slot="starter-reason"
-                class="type-meta text-pretty wrap-anywhere text-ink-muted"
+                class="type-meta text-pretty wrap-anywhere text-tx-2"
                 >{starter.reason}</span
               >
             {/if}

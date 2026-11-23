@@ -55,7 +55,7 @@
   }: { server: FleetMcpServerView | null; taken: string[] } = $props();
 
   const store = configStore();
-  const HUE = "var(--color-mark-4)";
+  const HUE = "var(--color-cyan)";
 
   type Mode = McpFields["mode"];
   const HOW: Record<Mode, string> = {
@@ -267,30 +267,26 @@
       bind:value={serverName}
     />
     {#if serverName !== "" && nameProblem}
-      <p class="type-meta text-status-fail" in:appear>{nameProblem}</p>
+      <p class="type-meta text-red" in:appear>{nameProblem}</p>
     {:else if server && serverName.trim() !== "" && serverName.trim() !== server.name}
       <!-- Said before Save, where the name is changed: that is its consequence. -->
-      <p
-        data-slot="note"
-        class="type-meta max-w-measure text-ink-muted"
-        in:appear
-      >
+      <p data-slot="note" class="type-meta max-w-measure text-tx-2" in:appear>
         {words.renamed(server.name)}
       </p>
     {:else}
-      <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-measure text-tx-2">
         <Coded text={words.callsAs(serverName || "name")} />
       </p>
     {/if}
     {#if form.failed}
-      <p class="type-meta text-status-fail" role="alert" in:appear>
+      <p class="type-meta text-red" role="alert" in:appear>
         {form.failed}
       </p>
     {/if}
     {#if server}
       <McpSignIn {server} />
       {#if server.auth?.state === "failed"}
-        <p class="type-meta text-status-fail" role="alert">
+        <p class="type-meta text-red" role="alert">
           {server.auth.detail}
         </p>
       {/if}
@@ -325,7 +321,7 @@
           in:crossIn
           out:crossOut
         >
-          <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+          <p data-slot="note" class="type-meta max-w-measure text-tx-2">
             {HOW.bunx}
           </p>
           <Field id="mcp-package" label={words.package}>
@@ -360,7 +356,7 @@
           in:crossIn
           out:crossOut
         >
-          <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+          <p data-slot="note" class="type-meta max-w-measure text-tx-2">
             {HOW.command}
           </p>
           <Field id="mcp-command" label={words.command}>
@@ -391,7 +387,7 @@
           in:crossIn
           out:crossOut
         >
-          <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+          <p data-slot="note" class="type-meta max-w-measure text-tx-2">
             {HOW.remote}
           </p>
           <Field id="mcp-url" label={words.url}>
@@ -405,7 +401,7 @@
             />
           </Field>
           {#if urlKeyHeld}
-            <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+            <p data-slot="note" class="type-meta max-w-measure text-tx-2">
               {clearUrlKey ? words.urlKeyCleared : words.urlKeyHeld}
               <Button
                 label={clearUrlKey ? words.urlKeyKeep : words.urlKeyClear}
@@ -445,7 +441,7 @@
         icon={IconKey}
         label={mode === "remote" ? words.headers : words.environment}
       >
-        <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+        <p data-slot="note" class="type-meta max-w-measure text-tx-2">
           <Coded text={words.expanded} />
         </p>
         <div
@@ -478,7 +474,7 @@
   {/if}
 
   <EditorSection hue={HUE} icon={IconMapPoint} label={words.where}>
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       {words.whereNote}
     </p>
     <div>

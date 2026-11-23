@@ -216,7 +216,7 @@
   <span
     data-slot="thumb"
     aria-hidden="true"
-    class="pointer-events-none absolute top-0 left-0 concentric-sm bg-surface-raised shadow-sm motion-safe:data-placed:transition-[transform,width,height] motion-safe:data-placed:duration-(--duration-base) motion-safe:data-placed:ease-in-out"
+    class="pointer-events-none absolute top-0 left-0 concentric-sm bg-bg shadow-sm motion-safe:data-placed:transition-[transform,width,height] motion-safe:data-placed:duration-(--duration-base) motion-safe:data-placed:ease-in-out"
     data-placed={placed || undefined}
     style:height={thumbBox ? `${thumbBox.h}px` : undefined}
     style:opacity={thumbBox ? 1 : 0}
@@ -229,7 +229,7 @@
       aria-checked={entry.id === value}
       aria-label={entry.label}
       class={cn(
-        "press-tint relative select-none concentric-sm border-none border-current bg-transparent p-0 text-ink-muted transition-[background-color] duration-(--duration-fast) ease-out hover:enabled:aria-checked-false:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 aria-checked:text-ink-strong",
+        "press-tint relative select-none concentric-sm border-none border-current bg-transparent p-0 text-tx-2 transition-[background-color] duration-(--duration-fast) ease-out hover:enabled:aria-checked-false:bg-ui disabled:cursor-not-allowed disabled:opacity-50 aria-checked:text-tx",
         itemClass
       )}
       data-rail-item-class={itemClass}
@@ -255,7 +255,7 @@
     <span
       data-slot="tip"
       aria-hidden="true"
-      class="pointer-events-none absolute top-0 left-0 z-5 flex items-center overflow-hidden rounded-sm bg-ink-strong text-surface-recess shadow-sm transition-[opacity] duration-(--duration-fast) ease-out motion-safe:transition-rail-tip group-axis-x/rail:top-(--tip-off) group-axis-y/rail:left-(--tip-off)"
+      class="pointer-events-none absolute top-0 left-0 z-5 flex items-center overflow-hidden rounded-sm bg-tx text-bg-2 shadow-sm transition-[opacity] duration-(--duration-fast) ease-out motion-safe:transition-rail-tip group-axis-x/rail:top-(--tip-off) group-axis-y/rail:left-(--tip-off)"
       style:--tip-off="calc(100% + var(--spacing-space-2))"
       style:height={tipBox ? `${tipBox.h}px` : undefined}
       style:opacity={tip >= 0 ? 1 : 0}

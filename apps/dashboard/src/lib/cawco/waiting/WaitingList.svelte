@@ -81,18 +81,18 @@
           type="button"
         >
           <span
-            class="mark-cell type-body w-row-compact text-ink-muted"
+            class="mark-cell type-body w-row-compact text-tx-2"
             title={waitingWords.kind[row.kind]}
             data-box
           >
             <Glyph aria-hidden="true" class="size-icon-md" />
           </span>
           <span class="flex min-w-0 flex-col gap-space-1">
-            <span class="type-body line-clamp-3 wrap-anywhere text-ink-strong"
+            <span class="type-body line-clamp-3 wrap-anywhere text-tx"
               >{row.words}</span
             >
             {#if said.length > 0}
-              <span class="type-meta text-pretty wrap-anywhere text-ink-muted"
+              <span class="type-meta text-pretty wrap-anywhere text-tx-2"
                 >{said.join(" · ")}</span
               >
             {/if}

@@ -184,7 +184,7 @@
   {#if policy}
     <div data-slot="group" class="flex flex-col gap-space-2">
       <SectionHeader
-        hue="var(--color-mark-4)"
+        hue="var(--color-cyan)"
         icon={IconDownload}
         label="Channel"
       >
@@ -216,7 +216,7 @@
           {#if pendingText}
             <p
               aria-live="polite"
-              class="type-meta max-w-measure text-ink-muted"
+              class="type-meta max-w-measure text-tx-2"
               in:blur={{
                 duration: dur("--duration-slow"),
                 easing: easeOut,
@@ -237,7 +237,7 @@
         <div data-slot="fold" class="type-label">
           <button
             aria-expanded={foldOpen}
-            class="select-none group mark-line inline-flex items-center gap-space-1 text-ink-muted"
+            class="select-none group mark-line inline-flex items-center gap-space-1 text-tx-2"
             onclick={() => {
               foldOpen = !foldOpen;
             }}
@@ -250,7 +250,7 @@
             <span>What's new in {displayVersion(release.version)}</span>
           </button>
           {#if foldOpen}
-            <div class="type-body pt-space-2 text-ink-strong" transition:unfold>
+            <div class="type-body pt-space-2 text-tx" transition:unfold>
               <ReleaseNotes source={notes.full} />
             </div>
           {/if}
@@ -260,10 +260,10 @@
 
     <div
       data-slot="group"
-      class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-4"
+      class="flex flex-col gap-space-2 border-t border-t-ui pt-space-4"
     >
       <SectionHeader
-        hue="var(--color-mark-2)"
+        hue="var(--color-yellow)"
         icon={IconMonitor}
         label="Machines"
       >

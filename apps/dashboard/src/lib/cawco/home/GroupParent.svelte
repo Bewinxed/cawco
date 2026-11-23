@@ -65,7 +65,7 @@
   /** Whether its rail is the phone's sheet, where its link is followed. */
   const inSheet = inRailSheet();
   const rowClass =
-    "select-none mark-line press-tint focus-inset m-0 flex w-full min-w-0 h-row-compact coarse:h-control-lg items-center gap-space-2 rounded-sm border-none border-current bg-transparent py-0 ps-space-2 pe-space-2 text-start type-label text-ink-strong no-underline";
+    "select-none mark-line press-tint focus-inset m-0 flex w-full min-w-0 h-row-compact coarse:h-control-lg items-center gap-space-2 rounded-sm border-none border-current bg-transparent py-0 ps-space-2 pe-space-2 text-start type-label text-tx no-underline";
 </script>
 
 {#snippet name()}

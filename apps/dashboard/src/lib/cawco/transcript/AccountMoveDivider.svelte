@@ -170,12 +170,12 @@
   <button
     aria-expanded={open}
     data-account-run={moves.length > 1 ? moves.length : undefined}
-    class="select-none peer/line flex items-center gap-space-3 w-full min-h-control-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-ink-muted group-data-stopped/move:text-status-fail focus-inset touch-hit"
+    class="select-none peer/line flex items-center gap-space-3 w-full min-h-control-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-tx-2 group-data-stopped/move:text-red focus-inset touch-hit"
     onclick={() => disclosed.set(!open)}
     type="button"
-    style:--account={hue ? hueVar(hue) : "var(--color-ink-muted)"}
+    style:--account={hue ? hueVar(hue) : "var(--color-tx-2)"}
   >
-    <span class="h-px flex-1 min-w-0 bg-border-control"></span>
+    <span class="h-px flex-1 min-w-0 bg-ui-2"></span>
     <span
       class="inline-flex items-center gap-space-2 min-w-0 whitespace-nowrap mark-line"
       ><span
@@ -205,11 +205,11 @@
         >
       {/if}</span
     >
-    <span class="h-px flex-1 min-w-0 bg-border-control"></span>
+    <span class="h-px flex-1 min-w-0 bg-ui-2"></span>
   </button>
   <p
     data-slot="detail"
-    class="grid grid-rows-shut opacity-0 text-center type-meta text-ink-subtle group-data-open/move:grid-rows-open group-data-open/move:opacity-100 peer-focus-visible/line:grid-rows-open peer-focus-visible/line:opacity-100 group-hover/move:grid-rows-open group-hover/move:opacity-100 @phone:grid-rows-open @phone:opacity-100 motion-safe:transition-[grid-template-rows,opacity] motion-safe:duration-(--duration-base) motion-safe:ease-out"
+    class="grid grid-rows-shut opacity-0 text-center type-meta text-tx-2 group-data-open/move:grid-rows-open group-data-open/move:opacity-100 peer-focus-visible/line:grid-rows-open peer-focus-visible/line:opacity-100 group-hover/move:grid-rows-open group-hover/move:opacity-100 @phone:grid-rows-open @phone:opacity-100 motion-safe:transition-[grid-template-rows,opacity] motion-safe:duration-(--duration-base) motion-safe:ease-out"
   >
     <span class="fold-item">{words.detail}</span>
   </p>
@@ -218,7 +218,7 @@
          width, never behind a hover. -->
     <p
       data-slot="stop"
-      class="text-center type-meta text-status-fail wrap-anywhere"
+      class="text-center type-meta text-red wrap-anywhere"
       role="alert"
     >
       {stop}
@@ -261,11 +261,11 @@
           <li
             data-slot="account-run-line"
             class="type-meta"
-            style:--account={tint ? hueVar(tint) : "var(--color-ink-muted)"}
+            style:--account={tint ? hueVar(tint) : "var(--color-tx-2)"}
           >
             <span
               data-slot="words"
-              class="block text-ink-muted wrap-anywhere text-pretty num"
+              class="block text-tx-2 wrap-anywhere text-pretty num"
               ><span
                 aria-hidden="true"
                 class="inline-block size-space-2 me-space-2 align-middle rounded-pill bg-(--account)"
@@ -273,7 +273,7 @@
             >
             <span
               data-slot="detail"
-              class="block text-ink-subtle wrap-anywhere text-pretty"
+              class="block text-tx-2 wrap-anywhere text-pretty"
               >{said.detail}</span
             >
           </li>

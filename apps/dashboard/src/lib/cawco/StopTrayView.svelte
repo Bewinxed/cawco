@@ -757,7 +757,7 @@
             </TreeMark>
             <span
               data-slot="title"
-              class="m-0 min-w-0 flex-auto overflow-clip type-label text-balance text-ellipsis whitespace-nowrap text-ink-strong"
+              class="m-0 min-w-0 flex-auto overflow-clip type-label text-balance text-ellipsis whitespace-nowrap text-tx"
               ><span class="sr-only">{status.word}: </span>
               {#if shownAs.href && !(picks && choosing)}
                 <a
@@ -773,7 +773,7 @@
                own under the title. -->
           <span
             data-slot="status"
-            class="mark-line inline-flex items-center gap-space-1 text-base font-medium whitespace-nowrap text-ink-muted @max-sm/stop-tray:group-data-away:col-span-full @max-sm/stop-tray:group-data-away:row-start-2 @max-sm/stop-tray:group-data-away:ps-(--stat-away-indent) @max-sm/stop-tray:group-data-away:pb-space-1"
+            class="mark-line inline-flex items-center gap-space-1 text-base font-medium whitespace-nowrap text-tx-2 @max-sm/stop-tray:group-data-away:col-span-full @max-sm/stop-tray:group-data-away:row-start-2 @max-sm/stop-tray:group-data-away:ps-(--stat-away-indent) @max-sm/stop-tray:group-data-away:pb-space-1"
             data-stop-tray-tone={status.tone}
             data-box
             style:--stat-away-indent={"calc(var(--mark-size, var(--spacing-space-4)) + var(--spacing-space-2))"}
@@ -782,10 +782,10 @@
               data-slot="glyph"
               class={[
                 "inline-grid flex-none @min-xs/stop-tray:@max-sm/stop-tray:hidden",
-                status.tone === "working" && "text-status-live",
-                status.tone === "attention" && "text-status-attn",
-                status.tone === "failed" && "text-status-fail",
-                status.tone === "quiet" && "text-ink-muted",
+                status.tone === "working" && "text-cyan",
+                status.tone === "attention" && "text-orange",
+                status.tone === "failed" && "text-red",
+                status.tone === "quiet" && "text-tx-2",
               ]}
               data-box
             >
@@ -834,7 +834,7 @@
           </span>
           <span
             data-slot="num"
-            class="num type-meta text-end whitespace-nowrap text-ink-muted @max-sm/stop-tray:group-data-away:row-start-1 @max-sm/stop-tray:group-data-away:col-start-3 @max-xs/stop-tray:hidden"
+            class="num type-meta text-end whitespace-nowrap text-tx-2 @max-sm/stop-tray:group-data-away:row-start-1 @max-sm/stop-tray:group-data-away:col-start-3 @max-xs/stop-tray:hidden"
             >{trailOf(row)}</span
           >
           {#if picks}
@@ -868,7 +868,7 @@
   {#each arrivals as arrival (arrival.id)}
     {@const Sprite = sessionSprite(arrival.id)}
     <span
-      class="absolute inset-0 grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay text-surface-page"
+      class="absolute inset-0 grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay text-bg"
       style:--fill={arrival.fill}
       style:--landed-icon="calc(var(--btn-icon) * 2 / 3)"
       out:intoRing
@@ -921,7 +921,7 @@
           <!-- Its words cross-fade where they stand as he is off. -->
           <p
             data-slot="title"
-            class="m-0 min-w-0 flex-auto overflow-clip type-label text-balance text-ellipsis whitespace-nowrap text-ink-strong"
+            class="m-0 min-w-0 flex-auto overflow-clip type-label text-balance text-ellipsis whitespace-nowrap text-tx"
             id="{uid}-title"
             {@attach crossfades(() => heading)}
           >

@@ -25,7 +25,7 @@
 </script>
 
 <div
-  class="relative h-(--frame-h) w-full overflow-clip bg-surface-page"
+  class="relative h-(--frame-h) w-full overflow-clip bg-bg"
   style:--frame-h={`${height}px`}
   bind:this={layer}
 >

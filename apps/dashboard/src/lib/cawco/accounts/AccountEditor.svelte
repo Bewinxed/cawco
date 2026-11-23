@@ -184,14 +184,14 @@
       bind:value={fields.nickname}
     />
     {#if refused}
-      <p class="type-meta text-status-fail" role="alert" in:appear>
+      <p class="type-meta text-red" role="alert" in:appear>
         {refused}
       </p>
     {/if}
   {/snippet}
 
   <EditorSection
-    hue="var(--color-mark-4)"
+    hue="var(--color-cyan)"
     icon={IconServer}
     label={words.editor.machines}
   >
@@ -208,7 +208,7 @@
 
   {#if limits}
     <EditorSection
-      hue="var(--color-mark-1)"
+      hue="var(--color-orange)"
       icon={IconUsage}
       label={words.editor.limits}
     >
@@ -217,9 +217,7 @@
         label={words.editor.neverBackup}
         bind:checked={fields.neverBackup}
       />
-      <div
-        class="flex flex-wrap items-center gap-space-3 pt-space-2 text-ink-strong"
-      >
+      <div class="flex flex-wrap items-center gap-space-3 pt-space-2 text-tx">
         <label for="reserve">{words.editor.reserve}</label>
         <!-- The figure and its unit hold together on one line. -->
         <span
@@ -259,7 +257,7 @@
         </span>
       </div>
       {#if !floorsRead}
-        <p class="type-meta text-status-fail" id="reserve-line" in:appear>
+        <p class="type-meta text-red" id="reserve-line" in:appear>
           {words.editor.reserveInvalid}
         </p>
       {/if}

@@ -735,7 +735,7 @@
 {#snippet ghAccounts()}
   <div data-slot="gh" class="flex min-w-0 flex-col gap-space-2">
     {#if gh === null}
-      <p class="type-meta text-ink-muted" role="status">{words.ghLooking}</p>
+      <p class="type-meta text-tx-2" role="status">{words.ghLooking}</p>
     {:else}
       {#if gh.signIns.length > 0}
         <ul aria-label={words.ghList} class="flex min-w-0 flex-col gap-space-4">
@@ -746,10 +746,9 @@
               class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2"
             >
               <span class="flex min-w-0 grow basis-0 flex-col gap-space-1">
-                <span class="type-label wrap-anywhere text-ink-strong"
-                  >{one.login}</span
+                <span class="type-label wrap-anywhere text-tx">{one.login}</span
                 >
-                <span class="type-meta wrap-anywhere text-ink-muted"
+                <span class="type-meta wrap-anywhere text-tx-2"
                   >{words.ghWhere(one.machine, one.host)}</span
                 >
                 <span
@@ -760,8 +759,7 @@
                   {#each one.scopes as scope (scope)}
                     <Badge variant="secondary"><span>{scope}</span></Badge>
                   {:else}
-                    <span class="type-meta text-ink-muted"
-                      >{words.ghScopesNone}</span
+                    <span class="type-meta text-tx-2">{words.ghScopesNone}</span
                     >
                   {/each}
                 </span>
@@ -786,19 +784,19 @@
           {/each}
         </ul>
       {:else if !ghProblem}
-        <p class="max-w-measure type-meta text-pretty text-ink-muted">
+        <p class="max-w-measure type-meta text-pretty text-tx-2">
           {words.ghNone}
         </p>
       {/if}
       {#if gh.unread.length > 0}
-        <p class="max-w-measure type-meta text-pretty text-ink-muted">
+        <p class="max-w-measure type-meta text-pretty text-tx-2">
           {words.ghUnanswered(listOf.format(gh.unread))}
         </p>
       {/if}
       {#if ghProblem}
         <p
           data-slot="gh-problem"
-          class="type-meta wrap-anywhere text-status-fail"
+          class="type-meta wrap-anywhere text-red"
           role="alert"
         >
           {ghProblem}
@@ -869,7 +867,7 @@
     >
       <p
         data-slot="empty-line"
-        class="type-body max-w-measure text-pretty text-ink-muted"
+        class="type-body max-w-measure text-pretty text-tx-2"
       >
         {words.emptyLine}
       </p>
@@ -885,7 +883,7 @@
           <li>
             <button
               data-slot="connections-page-card"
-              class="select-none mark-line press-tint type-label flex size-full min-h-14 items-center gap-space-2 rounded-lg border-none border-current bg-surface-raised p-space-3 text-start text-ink-strong shadow-sm transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-accent-ink focus-visible:outline-offset-2"
+              class="select-none mark-line press-tint type-label flex size-full min-h-14 items-center gap-space-2 rounded-lg border-none border-current bg-bg p-space-3 text-start text-tx shadow-sm transition-[background-color] duration-(--duration-fast) ease-out hover:bg-ui focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
               onclick={() => startAdding(service)}
               type="button"
             >
@@ -948,11 +946,11 @@
                    page, opened from the row's button. -->
               <p
                 data-slot="device-code"
-                class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted"
+                class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-tx-2"
                 role="status"
               >
                 <span>{words.deviceEnter}</span>
-                <code class="font-mono type-label text-ink-strong select-all"
+                <code class="font-mono type-label text-tx select-all"
                   >{row.device.userCode}</code
                 >
                 <Button
@@ -1009,7 +1007,7 @@
               <form
                 data-slot="row-ask"
                 aria-label={words.key(labelOf(row))}
-                class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-strong"
+                class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-tx"
                 onsubmit={(event) => {
                   event.preventDefault();
                   saveKey(row);
@@ -1129,7 +1127,7 @@
   <Popover.Content align="end" customAnchor={chooseAnchor} width="narrow">
     {#if choosing}
       {@const row = choosing}
-      <p class="type-label px-space-2 pt-space-2 pb-space-1 text-ink-strong">
+      <p class="type-label px-space-2 pt-space-2 pb-space-1 text-tx">
         {words.projectsFor(labelOf(row))}
       </p>
       <ul class="flex flex-col">
@@ -1138,7 +1136,7 @@
             <label
               class={menuItemVariants({
                 class:
-                  "type-label flex w-full items-center gap-space-2 px-space-2 text-ink-strong",
+                  "type-label flex w-full items-center gap-space-2 px-space-2 text-tx",
               })}
               data-menu-item
             >

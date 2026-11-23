@@ -101,15 +101,13 @@
   }
 </script>
 
-<div
-  class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-4"
->
+<div class="flex flex-col gap-space-2 border-t border-t-ui pt-space-4">
   <SectionHeader
-    hue="var(--color-mark-1)"
+    hue="var(--color-orange)"
     icon={IconLaptop}
     label={words.onEachMachine}
   />
-  <p data-slot="note" class="max-w-measure type-meta text-ink-muted">
+  <p data-slot="note" class="max-w-measure type-meta text-tx-2">
     {words.inventoryNote}
   </p>
 
@@ -128,27 +126,21 @@
           <button
             data-slot="head"
             aria-expanded={open[machine.machineId] === true}
-            class="select-none mark-line focus-inset press-tint flex min-h-control-lg items-center gap-space-2 rounded-sm px-space-2 py-space-2 text-start transition-control hover:enabled:bg-surface-hover"
+            class="select-none mark-line focus-inset press-tint flex min-h-control-lg items-center gap-space-2 rounded-sm px-space-2 py-space-2 text-start transition-control hover:enabled:bg-ui"
             disabled={machine.status !== "online" && !open[machine.machineId]}
             onclick={() => expand(machine)}
             type="button"
           >
             {#if open[machine.machineId]}
-              <IconChevronDown class="size-icon-md flex-none text-ink-muted" />
+              <IconChevronDown class="size-icon-md flex-none text-tx-2" />
             {:else}
-              <IconChevronRight class="size-icon-md flex-none text-ink-muted" />
+              <IconChevronRight class="size-icon-md flex-none text-tx-2" />
             {/if}
-            <OsMark
-              class="size-icon-md flex-none text-ink-muted"
-              os={machine.os}
-            />
-            <span data-slot="host" class="type-label text-ink-strong"
+            <OsMark class="size-icon-md flex-none text-tx-2" os={machine.os} />
+            <span data-slot="host" class="type-label text-tx"
               >{machineLabel(machine.hostname)}</span
             >
-            <span
-              data-slot="note"
-              class="max-w-measure type-meta text-ink-muted"
-            >
+            <span data-slot="note" class="max-w-measure type-meta text-tx-2">
               {#if open[machine.machineId]}
                 {words.hide}
               {:else if machine.status === "online"}
@@ -164,7 +156,7 @@
             {:else if reading[machine.machineId]}
               <p
                 data-slot="note"
-                class="mark-line flex max-w-measure items-center gap-space-2 type-meta text-ink-muted"
+                class="mark-line flex max-w-measure items-center gap-space-2 type-meta text-tx-2"
                 role="status"
               >
                 <Spinner class="shrink-0" /><span>{words.asking}</span>
@@ -174,10 +166,7 @@
                 <AlertDescription>{unread[machine.machineId]}</AlertDescription>
               </Alert>
             {:else if rows.length === 0}
-              <p
-                data-slot="note"
-                class="max-w-measure type-meta text-ink-muted"
-              >
+              <p data-slot="note" class="max-w-measure type-meta text-tx-2">
                 {kind === "mcp" ? words.noMcpAtAll : words.noSkillsAtAll}
               </p>
             {:else}
@@ -186,7 +175,7 @@
                   {@const key = keyOf(machine.machineId, row.scope, row.name)}
                   <li
                     data-slot="entry"
-                    class="flex flex-wrap items-center gap-space-2 py-space-2 not-first:border-t not-first:border-t-border-hairline"
+                    class="flex flex-wrap items-center gap-space-2 py-space-2 not-first:border-t not-first:border-t-ui"
                   >
                     <span
                       data-slot="text"
@@ -195,7 +184,7 @@
                       <span class="flex flex-wrap items-center gap-space-2">
                         <span
                           data-slot="name"
-                          class="font-(family-name:--font-mono) text-sm text-ink-strong"
+                          class="font-(family-name:--font-mono) text-sm text-tx"
                           >{row.name}</span
                         >
                         <Badge variant="outline"><span>{row.scope}</span></Badge
@@ -215,7 +204,7 @@
                       {#if "description" in row && row.description}
                         <span
                           data-slot="note"
-                          class="line-clamp-2 max-w-measure type-meta text-ink-muted"
+                          class="line-clamp-2 max-w-measure type-meta text-tx-2"
                           >{row.description}</span
                         >
                       {/if}
@@ -236,7 +225,7 @@
                     {:else if taken.includes(row.name) && !row.managed}
                       <span
                         data-slot="note"
-                        class="max-w-measure type-meta text-ink-muted"
+                        class="max-w-measure type-meta text-tx-2"
                         >{words.inTheFleet}</span
                       >
                     {/if}

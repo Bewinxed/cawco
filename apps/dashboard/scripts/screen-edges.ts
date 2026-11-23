@@ -17,11 +17,11 @@
  * nothing descends from them.
  *
  * The states, in the cascade's order, each rule at the weight of the one
- * before so the later stands: the top is the bar (surface-raised), or the
+ * before so the later stands: the top is the bar (bg), or the
  * shelf where the bar floats or hosts the tabs (a narrow or portrait screen
  * hosting keeps the bar's); a scrim lays the page's background over each
  * edge at its share (scrim-mix); a bottom sheet is the foot; a side sheet
- * is both edges (surface-raised), the phone's sidebar both (sidebar).
+ * is both edges (bg), the phone's sidebar both (sidebar).
  *
  *   bun run screen-edges
  *   bun scripts/screen-edges.ts --check   (part of `bun run check`: writes
@@ -139,12 +139,12 @@ function literal(value: string): string {
  * hex, where the browser, mixing the tokens, keeps full precision.
  */
 const scrimmed = (under: string): string =>
-  `color-mix(in srgb, ${literal("var(--color-surface-page)")} calc(${literal("72%")}), ${literal(`var(${under})`)})`;
+  `color-mix(in srgb, ${literal("var(--color-bg)")} calc(${literal("72%")}), ${literal(`var(${under})`)})`;
 
-const RAISED = "--color-surface-raised";
-const RECESS = "--color-surface-recess";
-const SHELF = "--color-surface-sunk";
-const SIDEBAR = "--color-surface-page";
+const RAISED = "--color-bg";
+const RECESS = "--color-bg-2";
+const SHELF = "--color-bg-2";
+const SIDEBAR = "--color-bg";
 const BAR_UNDER = ':where([data-bar~="floating"], [data-bar~="hosting"])';
 const SCRIM = ['[data-scrim~="open"]', '[data-scrim~="lightbox"]'];
 const NARROW =

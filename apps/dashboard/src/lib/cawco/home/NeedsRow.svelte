@@ -89,7 +89,7 @@
     <a
       data-slot="cover"
       aria-label="Open {title}"
-      class="press-tint focus-inset absolute inset-0 rounded-inherit hover:bg-surface-hover"
+      class="press-tint focus-inset absolute inset-0 rounded-inherit hover:bg-ui"
       {href}
       onclick={onchoose}
       {onkeydown}><span class="sr-only">Open {title}</span></a
@@ -100,7 +100,7 @@
        wide (NoticeRow), so both groups' words start on one line. -->
   <span
     data-slot="lead"
-    class="pointer-events-none relative col-1 row-1 grid h-4.5 w-row-compact place-items-center self-center text-ink-muted"
+    class="pointer-events-none relative col-1 row-1 grid h-4.5 w-row-compact place-items-center self-center text-tx-2"
   >
     {@render lead()}
   </span>
@@ -111,21 +111,21 @@
   <span
     data-slot="name"
     class={[
-      "mark-text pointer-events-none relative col-2 row-1 min-w-0 self-center overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong",
+      "mark-text pointer-events-none relative col-2 row-1 min-w-0 self-center overflow-clip type-label text-ellipsis whitespace-nowrap text-tx",
       wait === null && "group-data-peek/row:pe-(--peek-room)",
     ]}>{title}</span
   >
   {#if wait !== null}
     <span
       data-slot="wait"
-      class="mark-text pointer-events-none relative col-3 row-1 self-center type-meta num text-ink-muted group-data-peek/row:me-(--peek-room)"
+      class="mark-text pointer-events-none relative col-3 row-1 self-center type-meta num text-tx-2 group-data-peek/row:me-(--peek-room)"
       >{wait}</span
     >
   {/if}
   {@render end?.()}
   <span
     data-slot="want"
-    class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 line-clamp-std-2 type-body wrap-anywhere text-ink-strong group-kind-choice/row:block group-kind-choice/row:line-clamp-undo group-kind-tailnet/row:block group-kind-tailnet/row:line-clamp-undo group-kind-desk/row:block group-kind-desk/row:line-clamp-undo group-kind-watch/row:block group-kind-watch/row:line-clamp-undo"
+    class="pointer-events-none relative col-start-2 col-end-4 row-2 line-clamp-2 line-clamp-std-2 type-body wrap-anywhere text-tx group-kind-choice/row:block group-kind-choice/row:line-clamp-undo group-kind-tailnet/row:block group-kind-tailnet/row:line-clamp-undo group-kind-desk/row:block group-kind-desk/row:line-clamp-undo group-kind-watch/row:block group-kind-watch/row:line-clamp-undo"
     >{want}</span
   >
   {@render below?.()}

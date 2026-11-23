@@ -932,10 +932,10 @@
       : undefined
   );
   const HUES = [
-    "var(--color-mark-1)",
-    "var(--color-mark-2)",
-    "var(--color-mark-4)",
-    "var(--color-mark-1)",
+    "var(--color-orange)",
+    "var(--color-yellow)",
+    "var(--color-cyan)",
+    "var(--color-orange)",
   ];
   const loadLabel = (online: boolean, running: number) => {
     if (!online) {
@@ -2387,7 +2387,7 @@
         </BarGlass>
       {:else}
         <span
-          class="inline-flex size-space-6 flex-none items-center justify-center rounded-xs bg-ink-strong text-surface-page"
+          class="inline-flex size-space-6 flex-none items-center justify-center rounded-xs bg-tx text-bg"
           ><Bolt class="size-icon-sm" /></span
         >
       {/if}
@@ -2398,7 +2398,7 @@
          on one line. -->
       <h2
         data-slot="title"
-        class="type-title m-0 min-w-0 text-ink-strong not-data-wraps:truncate data-wraps:text-balance"
+        class="type-title m-0 min-w-0 text-tx not-data-wraps:truncate data-wraps:text-balance"
         data-wraps={moveStep || undefined}
       >
         <MorphText text={headTitle} wrap={moveStep} />
@@ -2425,7 +2425,7 @@
 <div
   data-slot="body"
   class={[
-    "fai-scroll kit-edge-fade-block group min-h-0 flex-initial overflow-auto rounded-lg bg-surface-raised px-space-4 pt-space-4 pb-space-6 max-phone:-mx-space-1 max-phone:touch-pan-y max-phone:overscroll-contain max-phone:rounded-none max-phone:bg-transparent max-phone:px-space-1 max-phone:pb-space-4",
+    "fai-scroll kit-edge-fade-block group min-h-0 flex-initial overflow-auto rounded-lg bg-bg px-space-4 pt-space-4 pb-space-6 max-phone:-mx-space-1 max-phone:touch-pan-y max-phone:overscroll-contain max-phone:rounded-none max-phone:bg-transparent max-phone:px-space-1 max-phone:pb-space-4",
     sheet && !moveStep
       ? "max-phone:pt-(--body-top) max-phone:scroll-timeline-transcript-head"
       : "max-phone:pt-space-3",
@@ -2451,14 +2451,14 @@
     >
       <div class="group-data-stepped:hidden">
         <SectionHeader
-          hue="var(--color-mark-4)"
+          hue="var(--color-cyan)"
           icon={Chat}
           label={continueFrom ? spawnWords.nextStep : spawnWords.firstPrompt}
         />
       </div>
       <div
         data-slot="composer"
-        class="field-edge relative grid grid-cols-1 rounded-lg border bg-surface-raised shadow-sm transition-control"
+        class="field-edge relative grid grid-cols-1 rounded-lg border bg-bg shadow-sm transition-control"
       >
         <div class="contents group-data-stepped:hidden">
           <PromptEditor
@@ -2494,7 +2494,7 @@
               class={chipVariants({ variant: "setting" })}
               title={spawnWords.form.startsInWhy(sourceProject.name)}
             >
-              <Files class="text-mark-1" />
+              <Files class="text-orange" />
               <span data-slot="chip-label"
                 >{spawnWords.form.startsIn(sourceProject.name)}</span
               >
@@ -2595,7 +2595,7 @@
         data-slot="reading"
         data-why={readingSaysWhy || undefined}
         aria-live="polite"
-        class="type-meta m-0 truncate text-status-fail group-data-stepped:not-data-why:hidden data-informational:text-ink-muted data-two:line-clamp-2 data-two:text-pretty data-two:whitespace-normal"
+        class="type-meta m-0 truncate text-red group-data-stepped:not-data-why:hidden data-informational:text-tx-2 data-two:line-clamp-2 data-two:text-pretty data-two:whitespace-normal"
         data-informational={locationInformational || undefined}
         data-two={moveTo !== null || undefined}
         title={reading}
@@ -2618,7 +2618,7 @@
     <!-- The prompt and the settings are two regions, parted by the hairline
          (DESIGN.md, Borders are graded). -->
     <hr
-      class="mt-space-4 mb-0 mx-0 h-px border-0 bg-border-hairline group-data-stepped:hidden"
+      class="mt-space-4 mb-0 mx-0 h-px border-0 bg-ui group-data-stepped:hidden"
     />
     <div
       data-slot="stack"
@@ -2663,7 +2663,7 @@
             ]}
             value={carry}
           />
-          <p aria-live="polite" class="type-meta m-0 text-ink-muted num">
+          <p aria-live="polite" class="type-meta m-0 text-tx-2 num">
             {sizing}
           </p>
           <MachineAway away={waits.away("estimate")} />
@@ -2764,7 +2764,7 @@
       {#if placementFix}
         <AlertDescription>
           <a
-            class="rounded-xs text-accent-ink no-underline hover:text-accent-ink"
+            class="rounded-xs text-accent no-underline hover:text-accent"
             href={placementFix.href}
             onclick={() => close()}>Open {configurePage(placementFix.slug)}</a
           >

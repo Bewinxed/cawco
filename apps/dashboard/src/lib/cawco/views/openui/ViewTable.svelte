@@ -55,7 +55,7 @@
 <div
   data-block-wide={wide || undefined}
   data-slot="ledger"
-  class="overflow-hidden rounded-lg bg-surface-raised shadow-sm"
+  class="overflow-hidden rounded-lg bg-bg shadow-sm"
   {@attach needsRoom}
 >
   <Table.Root fadeEdges stacks="phone" style="--card-cols: minmax(0, 1fr)">
@@ -79,12 +79,12 @@
               {#if i > 0 && columns[i]}
                 <!-- Its heading, in the card only: the band is hidden there. -->
                 <span
-                  class="me-space-2 hidden type-meta text-ink-muted @max-phone/table:inline"
+                  class="me-space-2 hidden type-meta text-tx-2 @max-phone/table:inline"
                   data-slot="cell-heading">{columns[i]}</span
                 >
               {/if}
               {#if typeof cell === "string" || typeof cell === "number"}
-                <span class={i === 0 ? "type-label text-ink-strong" : undefined}
+                <span class={i === 0 ? "type-label text-tx" : undefined}
                   >{cell}</span
                 >
               {:else}

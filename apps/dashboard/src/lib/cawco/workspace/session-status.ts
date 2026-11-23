@@ -23,11 +23,11 @@ export type StatusTone = "working" | "attention" | "failed" | "quiet";
 
 /** Each status's rim ink, on the rail's scale: a pane tab's rim (PaneTabs) and a comment pin's. */
 export const RIM_INK: Record<StatusTone, string> = {
-  working: "var(--color-status-live)",
+  working: "var(--color-cyan)",
   // The attention glyph's tone, darker by day, so its rim holds 3:1.
-  attention: "var(--color-status-attn)",
-  failed: "var(--color-status-fail)",
-  quiet: "var(--color-ink-muted)",
+  attention: "var(--color-orange)",
+  failed: "var(--color-red)",
+  quiet: "var(--color-tx-2)",
 };
 /**
  * Each status's rim strength unchosen (`rest`) and chosen (`full`), read

@@ -51,7 +51,7 @@
         inline: {
           box: "min-w-0",
           field:
-            "h-control-sm text-ellipsis border-transparent bg-transparent px-space-3 text-ink-strong shadow-none not-focus-visible:hover:bg-surface-hover focus-visible:bg-surface-raised",
+            "h-control-sm text-ellipsis border-transparent bg-transparent px-space-3 text-tx shadow-none not-focus-visible:hover:bg-ui focus-visible:bg-bg",
         },
         /** A field in a list of keys and values (a task's own fields): a
             small button's height and its cell's tighter corner, flat, its
@@ -162,8 +162,8 @@
     "bg-surface-raised px-3 text-ink-strong",
     "type-body file:inline-flex file:h-7",
     "file:border-0 file:bg-transparent file:font-medium",
-    "file:text-ink-strong file:type-label",
-    "placeholder:text-ink-muted",
+    "file:text-tx file:type-label",
+    "placeholder:text-tx-2",
     "disabled:pointer-events-none disabled:cursor-not-allowed",
     "disabled:opacity-50 aria-invalid:border-error-9",
     "dark:aria-invalid:border-error-9/50",
@@ -233,7 +233,7 @@
     {#if suggests}
       <IconUnfold
         aria-hidden="true"
-        class="pointer-events-none absolute top-1/2 right-space-3 size-icon-md -translate-y-1/2 text-ink-muted"
+        class="pointer-events-none absolute top-1/2 right-space-3 size-icon-md -translate-y-1/2 text-tx-2"
         data-slot="input-suggests"
       />
     {/if}

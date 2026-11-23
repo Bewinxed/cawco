@@ -87,13 +87,13 @@
 <form
   data-slot="place-pick"
   aria-label={words.title}
-  class="absolute inset-0 z-1 flex flex-col gap-space-3 overflow-y-auto p-space-4 bg-surface-raised"
+  class="absolute inset-0 z-1 flex flex-col gap-space-3 overflow-y-auto p-space-4 bg-bg"
   onsubmit={use}
   transition:appear
 >
-  <h2 class="type-title text-ink-strong">{words.title}</h2>
+  <h2 class="type-title text-tx">{words.title}</h2>
   <div class="flex flex-col gap-space-1">
-    <span class="type-label text-ink-muted" id="place-machine-label"
+    <span class="type-label text-tx-2" id="place-machine-label"
       >{words.machine}</span
     >
     <Select.Root
@@ -134,8 +134,7 @@
     </Select.Root>
   </div>
   <div class="flex flex-col gap-space-1">
-    <label class="type-label text-ink-muted" for="place-folder"
-      >{words.folder}</label
+    <label class="type-label text-tx-2" for="place-folder">{words.folder}</label
     >
     <Input
       autocomplete="off"
@@ -172,9 +171,7 @@
     />
     <Button label={words.cancel} onclick={oncancel} size="sm" variant="ghost" />
     {#if problem}
-      <span class="type-label text-status-fail" role="alert" in:appear
-        >{problem}</span
-      >
+      <span class="type-label text-red" role="alert" in:appear>{problem}</span>
     {/if}
   </div>
 </form>

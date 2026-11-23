@@ -113,7 +113,7 @@
   data-slot="group"
 >
   <SectionHeader
-    hue="var(--color-mark-2)"
+    hue="var(--color-yellow)"
     icon={rows.length > 0 ? IconRefresh : IconCheck}
     label={rows.length > 0 ? words.behindHead(rows.length) : words.quietHead}
     level={2}
@@ -178,11 +178,9 @@
             {#if hasMark(row.spec.id)}
               <HarnessLogo data-box harness={row.spec.id} />
             {/if}
-            <span class="type-label text-ink-strong">{row.spec.name}</span>
+            <span class="type-label text-tx">{row.spec.name}</span>
             {#if wants}
-              <span class="num type-meta text-ink-muted"
-                >{words.runs(wants)}</span
-              >
+              <span class="num type-meta text-tx-2">{words.runs(wants)}</span>
             {/if}
           </span>
         </Table.Cell>
@@ -190,10 +188,8 @@
           <span class="flex items-center @phone/table:min-h-control-lg">
             <code
               data-slot="num"
-              class={[
-                "num type-code",
-                found ? "text-ink-strong" : "text-ink-muted",
-              ]}>{found ?? "—"}</code
+              class={["num type-code", found ? "text-tx" : "text-tx-2"]}
+              >{found ?? "—"}</code
             >
           </span>
         </Table.Cell>

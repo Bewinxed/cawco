@@ -39,9 +39,9 @@
            segment height and concentric corners, on a page's ground (in a
            bar's glass the switch is BarSegments); the chosen segment
            lifted in surface-lift. */
-        segmented: `${SEGMENTED_TRACK} [--sheet:var(--color-surface-raised)]`,
+        segmented: `${SEGMENTED_TRACK} [--sheet:var(--color-bg)]`,
         folder:
-          "isolate gap-0 rounded-none bg-transparent [--item:calc(var(--spacing)_*_7)] [--pad:var(--spacing-space-1)] [--radius:var(--radius-sm)] [--sheet:var(--color-surface-raised)] ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--duration-slow)] [--choose-ease:var(--ease-in-out)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:calc(var(--spacing)_*_0)] [--slope-start:calc(var(--spacing)_*_0.25)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-(--z,var(--z-rest,1)) [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap)",
+          "isolate gap-0 rounded-none bg-transparent [--item:calc(var(--spacing)_*_7)] [--pad:var(--spacing-space-1)] [--radius:var(--radius-sm)] [--sheet:var(--color-bg)] ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--duration-slow)] [--choose-ease:var(--ease-in-out)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:calc(var(--spacing)_*_0)] [--slope-start:calc(var(--spacing)_*_0.25)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-(--z,var(--z-rest,1)) [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap)",
       },
       fill: {
         true: "flex w-full min-w-0 [&>[data-slot=ff-tab]]:min-w-0 [&>[data-slot=ff-tab]]:flex-1 [&_[data-slot=hit]]:justify-center",
@@ -1189,7 +1189,7 @@
     <div
       data-slot="ring"
       aria-hidden="true"
-      class="pointer-events-none absolute start-0 top-0 z-4 rounded-(--shape) border-2 border-accent-ink in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:duration-(--duration-fast) motion-safe:ease-out"
+      class="pointer-events-none absolute start-0 top-0 z-4 rounded-(--shape) border-2 border-accent in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:duration-(--duration-fast) motion-safe:ease-out"
       style:transform="translate({focusRect.left}px,{focusRect.top}px)"
       style:width="{focusRect.width}px"
       style:height="{focusRect.height}px"

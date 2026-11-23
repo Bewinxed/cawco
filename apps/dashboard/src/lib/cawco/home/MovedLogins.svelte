@@ -69,16 +69,16 @@
     {#snippet lead()}
       <!-- The group's glyph in the lead column, as a section head's is: 16px
            (`icon-md`) in muted ink, centred in the 28px column. -->
-      <span data-slot="glyph" class="grid place-items-center text-ink-muted"
+      <span data-slot="glyph" class="grid place-items-center text-tx-2"
         ><IconAccounts aria-hidden="true" class="size-icon-md" /></span
       >
     {/snippet}
     <!-- The heading of the group: label type in strong ink, its explainer in
          muted meta; the entries under it read a step lower (MovedLogin). -->
-    <h3 data-slot="head" class="m-0 pe-(--x-room) type-label text-ink-strong">
+    <h3 data-slot="head" class="m-0 pe-(--x-room) type-label text-tx">
       {heading}
     </h3>
-    <p data-slot="explainer" class="m-0 type-meta text-ink-muted">
+    <p data-slot="explainer" class="m-0 type-meta text-tx-2">
       Found signed in on your machines and kept as fleet accounts; any session
       can use them now.
     </p>

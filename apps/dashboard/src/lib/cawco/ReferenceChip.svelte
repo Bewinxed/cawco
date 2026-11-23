@@ -25,7 +25,7 @@
     refKey,
     words,
     glyph: Glyph,
-    tone = "text-ink-muted",
+    tone = "text-tx-2",
     mark,
     onpress,
     href,

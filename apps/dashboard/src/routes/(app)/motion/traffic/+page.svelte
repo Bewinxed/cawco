@@ -442,16 +442,16 @@
      scroller grew with the list until the list filled it. A pane's scroller
      is a fixed box; virtua resizing it from inside its own measure was a
      ResizeObserver loop no real pane has. -->
-<div class="flex min-h-0 flex-auto flex-col bg-surface-recess">
+<div class="flex min-h-0 flex-auto flex-col bg-bg-2">
   <!-- On the transcript's own start edge (its `pad="transcript"`), so the
        head, the controls and the transcript's first row or empty state
        stand on one x. The controls are the kit's xs outline buttons, one
        height, wrapping whole. -->
   <header
-    class="flex flex-col gap-space-2 border-b border-b-border-hairline py-space-4 ps-space-6 pe-space-6 max-desk:px-space-4"
+    class="flex flex-col gap-space-2 border-b border-b-ui py-space-4 ps-space-6 pe-space-6 max-desk:px-space-4"
   >
-    <h1 class="type-title text-ink-strong">Arrival traffic</h1>
-    <p class="type-body text-pretty text-ink-muted">
+    <h1 class="type-title text-tx">Arrival traffic</h1>
+    <p class="type-body text-pretty text-tx-2">
       The real transcript, driven without a model. Sequence it from
       <code class="type-code">window.__traffic</code>, or use these.
     </p>
@@ -478,7 +478,7 @@
       >
       <Button onclick={() => reset(0)} size="xs" variant="outline">Reset</Button
       >
-      <span data-slot="count" class="num type-meta text-ink-muted"
+      <span data-slot="count" class="num type-meta text-tx-2"
         >{session.messages.length} messages</span
       >
     </div>

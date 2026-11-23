@@ -365,9 +365,7 @@
         {#if route === "ssh"}
           <div class="flex flex-col gap-space-1">
             <div class="flex items-center gap-space-2">
-              <label
-                for="connect-target"
-                class="flex-none type-body text-ink-strong"
+              <label for="connect-target" class="flex-none type-body text-tx"
                 >{connectWords.reachItAt}</label
               >
               <Input
@@ -420,7 +418,7 @@
                     type="button"
                     data-slot="port"
                     aria-label="Port 22. Change the port"
-                    class="select-none pressable touch-hit mark-line col-start-1 row-start-1 inline-flex h-control-md w-full items-center justify-center gap-space-1 rounded-sm border border-border-control bg-surface-raised type-body text-ink-strong shadow-sm transition-control hover:bg-surface-hover"
+                    class="select-none pressable touch-hit mark-line col-start-1 row-start-1 inline-flex h-control-md w-full items-center justify-center gap-space-1 rounded-sm border border-ui-2 bg-bg type-body text-tx shadow-sm transition-control hover:bg-ui"
                     onclick={() => {
                       // Its field takes focus in this press's own task. A
                       // frame later (`tick`, in async mode) it would take
@@ -435,7 +433,7 @@
                     <span class="num">Port 22</span>
                     <IconChevronDown
                       aria-hidden="true"
-                      class="size-icon-sm text-ink-muted"
+                      class="size-icon-sm text-tx-2"
                     />
                   </button>
                 {/if}
@@ -444,7 +442,7 @@
             <p
               id="connect-said"
               aria-live="polite"
-              class="m-0 min-h-lh ps-row-compact type-meta text-status-fail"
+              class="m-0 min-h-lh ps-row-compact type-meta text-red"
             >
               {said || refused}
             </p>
@@ -452,7 +450,7 @@
 
           {#if noKey}
             <div data-slot="no-key" class="flex flex-col gap-space-2">
-              <p class="m-0 type-body text-pretty text-ink-strong">
+              <p class="m-0 type-body text-pretty text-tx">
                 The hub has no SSH key yet. Make one on the hub's machine; this
                 changes on its own once it exists.
               </p>
@@ -466,7 +464,7 @@
           {:else}
             <div class="flex flex-col gap-space-2">
               <div class="mark-line flex items-center gap-space-2">
-                <span class="type-body text-ink-strong">Sign in</span>
+                <span class="type-body text-tx">Sign in</span>
                 <span data-box
                   ><Choice
                     label="Sign in"
@@ -500,7 +498,7 @@
                     lines={keyLines}
                     rows={keyRows}
                   />
-                  <p class="m-0 type-meta text-ink-muted">
+                  <p class="m-0 type-meta text-tx-2">
                     Put it in ~/.ssh/authorized_keys for {user}.
                   </p>
                 </div>
@@ -508,7 +506,7 @@
             </div>
           {/if}
 
-          <p class="m-0 type-meta text-ink-muted">
+          <p class="m-0 type-meta text-tx-2">
             You can leave. The install carries on without you.
           </p>
           <Checklist />
@@ -518,7 +516,7 @@
               <p
                 id="connect-add-waits"
                 data-slot="waits"
-                class="m-0 min-w-0 type-meta text-pretty text-ink-muted"
+                class="m-0 min-w-0 type-meta text-pretty text-tx-2"
               >
                 {connectWords.waitsForKey}
               </p>
@@ -536,13 +534,13 @@
           </div>
         {:else}
           <div class="flex flex-col gap-space-2">
-            <p id="connect-reaches" class="m-0 type-body text-ink-strong">
+            <p id="connect-reaches" class="m-0 type-body text-tx">
               {connectWords.reachesHubAt}
             </p>
             {#if connect.joinFailed}
               <div data-slot="join-failed" class="flex items-start gap-space-3">
                 <p
-                  class="m-0 min-w-0 flex-1 type-meta text-pretty text-status-fail"
+                  class="m-0 min-w-0 flex-1 type-meta text-pretty text-red"
                   aria-live="polite"
                 >
                   The hub's addresses couldn't be read: {connect.joinFailed} It asks
@@ -570,7 +568,7 @@
                     data-address={row.kind}
                     class={[
                       "mark-line flex min-h-control-sm items-center gap-space-2 rounded-sm px-space-1 py-space-1 coarse:min-h-control-lg",
-                      row.address ? "hover:bg-surface-hover" : "opacity-50",
+                      row.address ? "hover:bg-ui" : "opacity-50",
                     ]}
                   >
                     <input
@@ -594,11 +592,11 @@
                         ]}
                       >
                         <span
-                          class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap font-mono type-label text-ink-strong"
+                          class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap font-mono type-label text-tx"
                           >{row.address.replace(SCHEME, "")}</span
                         >
                         <span
-                          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted"
+                          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-tx-2"
                           >{row.name} · {row.where}</span
                         >
                       </span>
@@ -615,11 +613,11 @@
                         ]}
                       >
                         <span
-                          class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-muted"
+                          class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-label text-tx-2"
                           >{row.missing[0]}</span
                         >
                         <span
-                          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted"
+                          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-tx-2"
                           >{row.missing[1]}</span
                         >
                       </span>
@@ -639,16 +637,16 @@
             ]}
           />
           <div class="flex flex-col gap-space-1">
-            <p class="m-0 type-meta text-ink-muted">
+            <p class="m-0 type-meta text-tx-2">
               In a real terminal it may ask you questions there.
             </p>
-            <p class="m-0 type-meta text-pretty text-ink-muted">
+            <p class="m-0 type-meta text-pretty text-tx-2">
               {connectWords.alreadyHasCawCo}
             </p>
           </div>
           <Checklist />
           {#if refused}
-            <p class="m-0 type-meta text-status-fail" aria-live="polite">
+            <p class="m-0 type-meta text-red" aria-live="polite">
               {refused}
             </p>
           {/if}
@@ -658,7 +656,7 @@
               <p
                 id="connect-copy-waits"
                 data-slot="waits"
-                class="m-0 min-w-0 type-meta text-pretty text-ink-muted"
+                class="m-0 min-w-0 type-meta text-pretty text-tx-2"
               >
                 {copyWaits}
               </p>

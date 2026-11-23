@@ -31,7 +31,7 @@
 <button
   bind:this={scrim}
   aria-label="Close"
-  class="absolute inset-0 bg-surface-page/72"
+  class="absolute inset-0 bg-bg/72"
   data-slot="scrim"
   onclick={onpark}
   tabindex="-1"

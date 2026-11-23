@@ -12,10 +12,10 @@
     $props();
 
   const ROLES = {
-    title: "type-title text-balance text-ink-strong",
-    label: "type-label text-pretty text-ink-strong",
-    body: "type-body text-pretty text-ink-strong",
-    meta: "type-meta text-pretty text-ink-muted",
+    title: "type-title text-balance text-tx",
+    label: "type-label text-pretty text-tx",
+    body: "type-body text-pretty text-tx",
+    meta: "type-meta text-pretty text-tx-2",
   } as const;
   /** Its role: the library's schema takes one of the four, "body" when left out. */
   function roleOf(variant: unknown): keyof typeof ROLES {

@@ -657,7 +657,7 @@
       aria-current={chosen || undefined}
       data-focused={pin.id === focused || undefined}
       data-moved={gone || undefined}
-      class="flex items-start gap-space-2 w-full min-h-control-lg px-space-2 py-space-2 border-none rounded-sm bg-transparent text-start transition-[background-color] duration-(--duration-fast) ease-out not-active:not-aria-current:group-hover/row:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-surface-hover aria-current:not-focus-visible:outline-1 aria-current:not-focus-visible:-outline-offset-1 aria-current:not-focus-visible:outline-solid aria-current:not-focus-visible:outline-border-control focus-visible:outline-2 focus-visible:outline-accent-ink focus-visible:-outline-offset-2"
+      class="flex items-start gap-space-2 w-full min-h-control-lg px-space-2 py-space-2 border-none rounded-sm bg-transparent text-start transition-[background-color] duration-(--duration-fast) ease-out not-active:not-aria-current:group-hover/row:bg-ui active:not-aria-current:bg-ui-2 aria-current:bg-ui aria-current:not-focus-visible:outline-1 aria-current:not-focus-visible:-outline-offset-1 aria-current:not-focus-visible:outline-solid aria-current:not-focus-visible:outline-ui-2 focus-visible:outline-2 focus-visible:outline-accent focus-visible:-outline-offset-2"
       data-pin-row={pin.number}
       onblur={() => onhover(null)}
       onclick={(event) =>
@@ -687,7 +687,7 @@
             data-slot="title"
             class={[
               "min-w-0 truncate type-body font-medium",
-              gone ? "text-ink-subtle" : "text-ink-strong",
+              gone ? "text-tx-2" : "text-tx",
             ]}
             >{#each segments(gone ? said.offPage(awayOf(pin.id)) : pinName(pin)) as part, at (at)}{#if part.hit}<mark
                   class="bg-selection text-inherit rounded-xs">{part.text}</mark
@@ -697,7 +697,7 @@
             data-slot="age"
             class={[
               "ms-auto flex-none type-meta num transition-opacity duration-(--duration-fast) ease-out not-coarse:group-hover/row:opacity-0 not-coarse:group-focus-within/row:opacity-0",
-              "text-ink-muted",
+              "text-tx-2",
             ]}>{formatAgeShort(Date.parse(lastActivity(pin)))}</span
           >
         </span>
@@ -706,7 +706,7 @@
             data-line="words"
             class={[
               "mt-space-1 line-clamp-2 type-body text-pretty wrap-anywhere",
-              "text-ink-strong",
+              "text-tx",
             ]}
             >{#each segments(wordsOf(pin, firstWords)) as part, at (at)}{#if part.hit}<mark
                   class="bg-accent/20 text-inherit rounded-xs">{part.text}</mark
@@ -723,13 +723,13 @@
               {#if one.kind === "image"}
                 <img
                   alt={one.name}
-                  class="size-icon-lg flex-none rounded-xs border border-border-hairline object-cover"
+                  class="size-icon-lg flex-none rounded-xs border border-ui object-cover"
                   data-thumb
                   src={one.ref}
                 />
               {:else}
                 <span
-                  class="grid size-icon-lg flex-none place-items-center rounded-xs border border-border-hairline bg-surface-recess text-ink-muted"
+                  class="grid size-icon-lg flex-none place-items-center rounded-xs border border-ui bg-bg-2 text-tx-2"
                   data-thumb
                   title={one.name}
                   ><IconDocument aria-hidden="true" class="size-icon-sm" /><span
@@ -739,7 +739,7 @@
               {/if}
             {/each}
             {#if attached.length > STRIP}
-              <span class={["type-meta num", "text-ink-muted"]} data-slot="more"
+              <span class={["type-meta num", "text-tx-2"]} data-slot="more"
                 >+{attached.length - STRIP}</span
               >
             {/if}
@@ -749,14 +749,14 @@
           <span
             class={[
               "mt-space-1 type-meta line-clamp-2 text-pretty wrap-anywhere",
-              "text-status-fail",
+              "text-red",
             ]}
             data-line="back"
             data-not-sent="">{said.notSent(back.why)}</span
           >
         {:else if back?.kind === "held"}
           <span
-            class={["mt-space-1 type-meta", "text-ink-muted"]}
+            class={["mt-space-1 type-meta", "text-tx-2"]}
             data-line="back"
             data-held="">{said.unsent}</span
           >
@@ -765,7 +765,7 @@
           <span
             class={[
               "mt-space-1 flex min-w-0 items-center gap-space-1 type-meta mark-line",
-              back.unread ? "text-ink-strong" : "text-ink-muted",
+              back.unread ? "text-tx" : "text-tx-2",
             ]}
             data-line="back"
             data-unread={back.unread || undefined}
@@ -775,13 +775,13 @@
               aria-hidden="true"
               class={[
                 "grid size-icon-sm flex-none place-items-center",
-                back.by === "you" && "text-accent-ink",
+                back.by === "you" && "text-accent",
               ]}
               data-box
               data-speaker={back.by}><Speaker class="size-icon-sm" /></span
             ><span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
               >{#if back.unread}<span
-                  class="text-status-attn font-medium"
+                  class="text-orange font-medium"
                   data-slot="new-answer">{`${said.newAnswer} · `}</span
                 >{/if}{#each segments(marked.length > 0 ? aroundHit(back.text) : back.text) as part, at (at)}{#if part.hit}<mark
                     class="bg-accent/20 text-inherit rounded-xs"
@@ -861,7 +861,7 @@
        Title Bars Follow Liquid Glass Rule). -->
   <HeadFade
     band="var(--rail-head)"
-    tint={layout === "beside" ? "bg-surface-raised/72" : "bg-surface-raised"}
+    tint={layout === "beside" ? "bg-bg/72" : "bg-bg"}
   />
   <div
     class="absolute inset-x-0 top-0 z-2 flex flex-col"
@@ -1140,7 +1140,7 @@
           bind:value={note}
         />
         {#if noteRefused}
-          <p class="m-0 type-meta text-status-fail" role="alert">
+          <p class="m-0 type-meta text-red" role="alert">
             {noteRefused}
           </p>
         {/if}
@@ -1238,7 +1238,7 @@
             {#each searchedGroups as group (group.value)}
               <!-- The list each hit is in, named over its hits. -->
               <h3
-                class="m-0 px-space-2 pt-space-2 pb-space-1 text-ink-muted type-meta first:pt-0"
+                class="m-0 px-space-2 pt-space-2 pb-space-1 text-tx-2 type-meta first:pt-0"
                 data-slot="hits-in"
               >
                 {group.name} <span class="num">{group.pins.length}</span>
@@ -1252,7 +1252,7 @@
           {:else}
             <p
               data-slot="pin-list-empty"
-              class="m-0 px-space-2 py-space-3 text-ink-strong type-label"
+              class="m-0 px-space-2 py-space-3 text-tx type-label"
             >
               {said.noMatch(asked.trim())}
             </p>
@@ -1279,7 +1279,7 @@
                 {:else}
                   <p
                     data-slot="pin-list-empty"
-                    class="m-0 px-space-2 py-space-3 text-ink-strong type-label"
+                    class="m-0 px-space-2 py-space-3 text-tx type-label"
                   >
                     {filter === "open" ? said.noneOpen : said.noneResolved}
                   </p>

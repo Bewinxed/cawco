@@ -121,7 +121,7 @@
   style:--c={ring.color}
 >
   <circle
-    class="fill-border-control origin-center -rotate-90 data-spent:fill-border-strong/55"
+    class="fill-ui-2 origin-center -rotate-90 data-spent:fill-tx-2/55"
     cx="12"
     cy="12"
     data-spent={ring.limitOn === "5h" || undefined}
@@ -140,7 +140,7 @@
     style:stroke-dashoffset={off(disc)}
   />
   <circle
-    class="fill-none stroke-border-control origin-center -rotate-90 data-spent:stroke-border-strong/55"
+    class="fill-none stroke-ui-2 origin-center -rotate-90 data-spent:stroke-tx-2/55"
     cx="12"
     cy="12"
     data-spent={ring.limitOn === "week" || undefined}
@@ -160,7 +160,7 @@
     style:stroke-dashoffset={off(rim)}
   />
   <circle
-    class="fill-none stroke-ink-subtle origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:duration-(--duration-slow) group-data-refill/rings:ease-out not-data-off:group-data-stale/rings:opacity-82 data-off:opacity-0 motion-reduce:transition-off"
+    class="fill-none stroke-tx-2 origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:duration-(--duration-slow) group-data-refill/rings:ease-out not-data-off:group-data-stale/rings:opacity-82 data-off:opacity-0 motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-off={reserve === null || Math.min(rim, reserve) <= 0 || undefined}

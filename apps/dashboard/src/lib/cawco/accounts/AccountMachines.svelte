@@ -341,15 +341,14 @@
           : words.machines.openSignIn}
       {@const landedHere = claude ? landedOn(machine, "claude") : undefined}
       <li
-        class="col-span-full grid min-h-control-lg grid-cols-subgrid items-center gap-x-space-4 px-space-2 py-space-1 not-first:not-data-again:border-t not-first:not-data-again:border-t-border-hairline"
+        class="col-span-full grid min-h-control-lg grid-cols-subgrid items-center gap-x-space-4 px-space-2 py-space-1 not-first:not-data-again:border-t not-first:not-data-again:border-t-ui"
         data-again={again || undefined}
         data-flip
       >
         <!-- A machine's second sign-in sits under its first, named once;
              each says what it signs in for under the name. -->
         <span class="flex min-w-0 flex-col">
-          <span
-            class={["type-label truncate text-ink-strong", again && "sr-only"]}
+          <span class={["type-label truncate text-tx", again && "sr-only"]}
             >{name}</span
           >
           {#if chatgpt}
@@ -364,7 +363,7 @@
           {#if word !== "signed-in"}
             <span
               data-slot="machine-state"
-              class="mark-line inline-flex items-center gap-space-1 type-meta whitespace-nowrap text-ink-muted transition-[color] duration-(--duration-slow) ease-out state-mismatch:text-status-attn"
+              class="mark-line inline-flex items-center gap-space-1 type-meta whitespace-nowrap text-tx-2 transition-[color] duration-(--duration-slow) ease-out state-mismatch:text-orange"
               data-parked={parked ? "" : undefined}
               data-state={word}
             >
@@ -415,7 +414,7 @@
                 <div class="flex flex-col gap-space-3 p-space-2">
                   <p
                     data-slot="title"
-                    class="flex items-baseline justify-between gap-space-3 type-label text-ink-strong"
+                    class="flex items-baseline justify-between gap-space-3 type-label text-tx"
                   >
                     <span class="truncate">{name}</span>
                     {#if place.codex}
@@ -447,7 +446,7 @@
                     {#if landedHere && flow.phase === "idle"}
                       <p
                         data-slot="landed"
-                        class="type-meta flex items-start gap-space-2 text-ink-muted"
+                        class="type-meta flex items-start gap-space-2 text-tx-2"
                         role="status"
                       >
                         <Check />
@@ -492,7 +491,7 @@
                put away, until it is opened and tried again. -->
           <p
             data-slot="refused"
-            class="col-span-full pb-space-2 type-meta text-status-fail"
+            class="col-span-full pb-space-2 type-meta text-red"
             data-flip
             role="alert"
           >
@@ -502,7 +501,7 @@
         {#if refusals.get(place.key)}
           <p
             data-slot="refused"
-            class="col-span-full pb-space-2 type-meta text-status-fail"
+            class="col-span-full pb-space-2 type-meta text-red"
             data-flip
             role="alert"
           >
@@ -511,7 +510,7 @@
         {/if}
       </li>
     {:else}
-      <li class="col-span-full px-space-4 py-space-3 type-meta text-ink-muted">
+      <li class="col-span-full px-space-4 py-space-3 type-meta text-tx-2">
         {words.machines.none}
       </li>
     {/each}

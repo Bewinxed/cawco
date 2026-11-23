@@ -9,6 +9,6 @@
 
 <span
   data-slot="meta"
-  class="pointer-events-none relative col-start-2 col-end-4 row-3 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+  class="pointer-events-none relative col-start-2 col-end-4 row-3 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-tx-2"
   >{text}</span
 >

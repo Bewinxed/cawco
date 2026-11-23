@@ -3,7 +3,7 @@
      fades in. -->
 <svg
   aria-hidden="true"
-  class="size-icon-md flex-none animate-fade-in text-status-done motion-safe:animate-none"
+  class="size-icon-md flex-none animate-fade-in text-green motion-safe:animate-none"
   fill="none"
   viewBox="0 0 24 24"
 >

@@ -34,7 +34,7 @@
 <Collapsible.Root
   {...rest}
   class={cn(
-    "min-w-0 max-w-full font-family-inherit text-base font-normal leading-base text-ink-muted size-compact:text-sm",
+    "min-w-0 max-w-full font-family-inherit text-base font-normal leading-base text-tx-2 size-compact:text-sm",
     className
   )}
   data-size={resolvedSize}

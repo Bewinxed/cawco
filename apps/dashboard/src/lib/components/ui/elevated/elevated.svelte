@@ -10,9 +10,9 @@
     base: "surface relative border",
     variants: {
       look: {
-        panel: "rounded-lg border-border-hairline p-space-4",
-        float: "rounded-lg border-border-control p-space-2",
-        dialog: "rounded-xl border-border-control p-space-4",
+        panel: "rounded-lg border-ui p-space-4",
+        float: "rounded-lg border-ui-2 p-space-2",
+        dialog: "rounded-xl border-ui-2 p-space-4",
       },
     },
     defaultVariants: { look: "float" },

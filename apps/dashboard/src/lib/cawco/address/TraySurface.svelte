@@ -15,8 +15,8 @@
   class={[
     "relative min-w-0",
     form === "desk"
-      ? "rounded-xl bg-surface-recess p-(--tray-pad) shadow-lg"
-      : "rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-lg",
+      ? "rounded-xl bg-bg-2 p-(--tray-pad) shadow-lg"
+      : "rounded-t-lg border-t border-ui bg-bg shadow-lg",
   ]}
   data-slot="surface"
 >

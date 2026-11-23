@@ -209,7 +209,7 @@
 
 <section
   aria-label="Task graph"
-  class="relative h-full min-h-70 min-w-0 overflow-hidden rounded-lg bg-surface-recess inset-ring inset-ring-border-hairline"
+  class="relative h-full min-h-70 min-w-0 overflow-hidden rounded-lg bg-bg-2 inset-ring inset-ring-ui"
   data-settled={eased || undefined}
   data-slot="view-canvas"
   {@attach measureCanvas}
@@ -226,7 +226,7 @@
         refY="5"
         viewBox="0 0 10 10"
       >
-        <path class="fill-ink-muted" d="M0,0 L10,5 L0,10 z" />
+        <path class="fill-tx-2" d="M0,0 L10,5 L0,10 z" />
       </marker>
     </defs>
   </svg>

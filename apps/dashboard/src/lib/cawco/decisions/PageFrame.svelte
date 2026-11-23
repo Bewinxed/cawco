@@ -343,7 +343,7 @@
     <!-- The page's Send that didn't go: said over the page, never over its
          Send, which goes again from where it stands. -->
     <p
-      class="m-0 flex-none px-space-3 py-space-2 bg-surface-raised border-b border-border-hairline text-status-fail text-base text-pretty wrap-anywhere"
+      class="m-0 flex-none px-space-3 py-space-2 bg-bg border-b border-ui text-red text-base text-pretty wrap-anywhere"
       role="alert"
       in:reveal
     >

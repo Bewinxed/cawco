@@ -37,13 +37,13 @@
     aria-pressed={shown}
     class={chipVariants({
       variant: "tray",
-      class: "touch-hit text-ink-strong aria-pressed:before:bg-surface-pressed",
+      class: "touch-hit text-tx aria-pressed:before:bg-ui-2",
     })}
     data-tray-chip
     onclick={onopen}
     type="button"
   >
-    <IconNeedsYou aria-hidden="true" class="text-status-attn" />
+    <IconNeedsYou aria-hidden="true" class="text-orange" />
     <span aria-hidden="true" class="num whitespace-nowrap"
       >{waiting}<span class="@max-phone/tray:hidden"
         >{` ${waitingWords.needYouWord(waiting)}`}</span

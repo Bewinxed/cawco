@@ -326,7 +326,7 @@
        hidden beside it, as the page draws it, read for what differs. -->
   <div
     class={[
-      "relative h-full min-h-0 overflow-auto bg-surface-page p-space-4",
+      "relative h-full min-h-0 overflow-auto bg-bg p-space-4",
       dark ? "scheme-dark dark" : "scheme-light",
     ]}
     {@attach frameSize(
@@ -371,7 +371,7 @@
 <div
   data-loaded={loaded.join(" ")}
   data-slot="directions-bench"
-  class="flex h-dvh min-h-0 bg-surface-page p-space-2 [&>*]:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
+  class="flex h-dvh min-h-0 bg-bg p-space-2 [&>*]:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
 >
   <SideSurface
     items={directionItems(head)}

@@ -135,11 +135,11 @@
   >
     <div
       data-slot="tile"
-      class="grid grid-cols-1 gap-space-2 rounded-sm border border-border-hairline bg-surface-raised p-space-3 shadow-sm"
+      class="grid grid-cols-1 gap-space-2 rounded-sm border border-ui bg-bg p-space-3 shadow-sm"
     >
       <p
         data-slot="title"
-        class="m-0 type-label text-balance wrap-anywhere text-ink-strong"
+        class="m-0 type-label text-balance wrap-anywhere text-tx"
         id="{id}-title"
       >
         {asked.title}
@@ -147,7 +147,7 @@
       {#each paragraphs as paragraph, index (index)}
         <p
           data-slot="body"
-          class="m-0 type-meta text-pretty wrap-anywhere text-ink-muted"
+          class="m-0 type-meta text-pretty wrap-anywhere text-tx-2"
         >
           {paragraph}
         </p>

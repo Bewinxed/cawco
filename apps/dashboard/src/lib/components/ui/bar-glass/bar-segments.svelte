@@ -131,7 +131,7 @@
                   props={trigger}
                   tip={segment.tip ?? false}
                   >{segment.label}{#if segment.count}<span
-                      class="ms-space-1 text-ink-muted"
+                      class="ms-space-1 text-tx-2"
                       data-slot="segment-count">{segment.count}</span
                     >{/if}</BarItem
                 >

@@ -22,10 +22,10 @@
 
 <code
   data-slot="connect-address"
-  class="min-w-0 type-code liga-none text-ink-subtle wrap-break-word text-pretty"
+  class="min-w-0 type-code liga-none text-tx-2 wrap-break-word text-pretty"
   ><span class="whitespace-nowrap">{parts.head}</span><wbr /><span
     data-slot="connect-host"
-    class="text-ink-strong"><OriginText origin={parts.host} /></span
+    class="text-tx"><OriginText origin={parts.host} /></span
   >{#each runs as run, at (at)}<wbr /><span
       data-address-run
       class="whitespace-nowrap">{run}</span

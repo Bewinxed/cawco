@@ -148,7 +148,7 @@
           data-slot="reason"
           class="m-0 min-w-0 flex-initial type-meta text-(--reason-ink) wrap-anywhere"
           role={live ? "alert" : undefined}
-          style:--reason-ink="var(--fault-ink, var(--color-status-fail))"
+          style:--reason-ink="var(--fault-ink, var(--color-red))"
         >
           {said}
         </p>
@@ -196,10 +196,10 @@
       {#if command}
         <div
           data-slot="command"
-          class="ms-(--fault-indent) me-(--fault-end) mb-space-1 flex min-w-0 items-start gap-space-2 rounded-sm border border-border-control bg-surface-sunk py-space-1 ps-space-3 pe-space-1"
+          class="ms-(--fault-indent) me-(--fault-end) mb-space-1 flex min-w-0 items-start gap-space-2 rounded-sm border border-ui-2 bg-bg-2 py-space-1 ps-space-3 pe-space-1"
         >
           <code
-            class="min-w-0 flex-1 py-space-1 font-mono type-code text-ink-strong whitespace-pre-wrap wrap-anywhere"
+            class="min-w-0 flex-1 py-space-1 font-mono type-code text-tx whitespace-pre-wrap wrap-anywhere"
             >{command}</code
           >
           <CopyButton
@@ -215,7 +215,7 @@
         <p
           id={detailsId}
           data-slot="details"
-          class="m-0 ps-(--fault-indent) pe-(--fault-end) pb-space-1 type-meta font-mono whitespace-pre-wrap wrap-anywhere text-ink-muted"
+          class="m-0 ps-(--fault-indent) pe-(--fault-end) pb-space-1 type-meta font-mono whitespace-pre-wrap wrap-anywhere text-tx-2"
           transition:unfold
         >
           {details}

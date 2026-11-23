@@ -80,7 +80,7 @@
   });
 </script>
 
-<div class="flex min-h-0 min-w-0 flex-auto bg-surface-recess">
+<div class="flex min-h-0 min-w-0 flex-auto bg-bg-2">
   {#if slug}
     <div class="flex min-h-0 py-space-2 pl-space-4 max-desk:hidden">
       <ConfigRail current={slug} />
@@ -97,7 +97,7 @@
   >
     {#key page.url.pathname}
       <div
-        class="col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col bg-surface-recess"
+        class="col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col bg-bg-2"
         in:pageIn
         out:pageOut
       >

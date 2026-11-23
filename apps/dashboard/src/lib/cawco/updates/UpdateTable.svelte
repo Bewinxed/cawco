@@ -51,11 +51,9 @@
     {/snippet}
     {#snippet cells(machine: Row)}
       <Table.Cell variant="ledger-stacks">
-        <span
-          class="mark-line inline-flex items-center gap-space-1 text-ink-strong"
-        >
+        <span class="mark-line inline-flex items-center gap-space-1 text-tx">
           {#if isCurrent(machine)}
-            <IconCheck class="size-icon-md shrink-0 text-status-done" />
+            <IconCheck class="size-icon-md shrink-0 text-green" />
           {/if}
           <code data-slot="num" class="num type-code">{runningOf(machine)}</code
           >

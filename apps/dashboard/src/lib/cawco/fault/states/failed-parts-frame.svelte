@@ -45,20 +45,20 @@
 </script>
 
 {#snippet stand()}
-  <div class="size-full bg-surface-sunk"></div>
+  <div class="size-full bg-bg-2"></div>
 {/snippet}
 
 {#snippet transcript(pill = true)}
   <div
-    class="flex min-h-0 flex-1 flex-col justify-end gap-space-4 bg-surface-recess px-space-6 pb-space-4"
+    class="flex min-h-0 flex-1 flex-col justify-end gap-space-4 bg-bg-2 px-space-6 pb-space-4"
   >
-    <p class="m-0 max-w-measure text-pretty text-ink-strong type-body">
+    <p class="m-0 max-w-measure text-pretty text-tx type-body">
       The side panel crash: your console shows a list that got two items with
       the same key.
     </p>
     {#if pill}
       <div
-        class="flex h-control-md max-w-(--composer-w) items-center rounded-lg border border-border-control bg-surface-raised px-space-3 text-ink-subtle shadow-sm type-body"
+        class="flex h-control-md max-w-(--composer-w) items-center rounded-lg border border-ui-2 bg-bg px-space-3 text-tx-2 shadow-sm type-body"
       >
         Write to Claude Code
       </div>
@@ -88,7 +88,7 @@
 
 <div
   data-slot="failed-parts"
-  class="relative flex h-(--frame-h) w-(--frame-w) min-w-0 flex-col overflow-hidden bg-surface-recess text-ink-strong"
+  class="relative flex h-(--frame-h) w-(--frame-w) min-w-0 flex-col overflow-hidden bg-bg-2 text-tx"
   style:--frame-h="{height}px"
   style:--frame-w="{width}px"
 >
@@ -112,11 +112,11 @@
     <div class="absolute inset-x-0 top-2/5 bottom-0 flex flex-col">
       <div
         data-preview-sheet
-        class="relative flex min-h-0 flex-1 flex-col rounded-t-lg bg-surface-raised pt-space-3 shadow-lg"
+        class="relative flex min-h-0 flex-1 flex-col rounded-t-lg bg-bg pt-space-3 shadow-lg"
       >
         <span
           aria-hidden="true"
-          class="mx-auto mb-space-1 block h-1.5 w-25 flex-none rounded-full bg-border-control"
+          class="mx-auto mb-space-1 block h-1.5 w-25 flex-none rounded-full bg-ui-2"
         ></span>
         <RegionBoundary part="preview">
           <Throws {builds} {stuck}>{@render stand()}</Throws>

@@ -28,7 +28,7 @@
   width="10"
   style:--c={ring.color}
 >
-  <circle class="fill-border-control" cx="5" cy="5" r="5" />
+  <circle class="fill-ui-2" cx="5" cy="5" r="5" />
   <!-- A sector: a stroke as wide as its circle's diameter fills the disc from the centre out. -->
   <circle
     class="fill-none arc-week origin-center -rotate-90 transition-[stroke-dashoffset] duration-(--duration-slow) ease-in-out motion-reduce:transition-off"

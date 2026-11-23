@@ -14,7 +14,7 @@
 
 <span
   data-slot="for"
-  class="inline-flex min-w-0 items-start gap-space-2 type-meta text-ink-muted"
+  class="inline-flex min-w-0 items-start gap-space-2 type-meta text-tx-2"
 >
   <span class="inline-flex flex-none items-center gap-space-1">
     {#each harnesses as harness (harness)}

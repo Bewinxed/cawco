@@ -46,7 +46,7 @@
     id="session-start-held"
     data-slot="start-held"
     aria-live="polite"
-    class="type-meta m-0 min-w-0 flex-1 text-pretty text-ink-muted"
+    class="type-meta m-0 min-w-0 flex-1 text-pretty text-tx-2"
   >
     <MorphText text={held} wrap />
   </p>

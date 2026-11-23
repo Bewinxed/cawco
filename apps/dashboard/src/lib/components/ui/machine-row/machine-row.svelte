@@ -62,11 +62,11 @@
   >
   <span
     data-slot="meta"
-    class="type-meta mark-line flex items-center gap-space-2 text-ink-subtle"
+    class="type-meta mark-line flex items-center gap-space-2 text-tx-2"
     ><span
       data-slot="dot"
       data-machine-row-away={presence === "away" || undefined}
-      class="size-1.5 flex-none rounded-pill bg-ink-subtle data-is-away:bg-status-attn not-data-is-away:data-is-online:bg-status-done"
+      class="size-1.5 flex-none rounded-pill bg-tx-2 data-is-away:bg-orange not-data-is-away:data-is-online:bg-green"
       data-box
       data-is-away={presence === "away" || undefined}
       data-is-online={presence === "online" || undefined}

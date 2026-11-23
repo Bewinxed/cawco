@@ -43,14 +43,12 @@
 
 <div class="flex flex-col gap-space-6">
   <figure class="flex min-w-0 flex-col gap-space-2">
-    <figcaption class="text-ink-muted type-meta">
-      Layers, back to front
-    </figcaption>
+    <figcaption class="text-tx-2 type-meta">Layers, back to front</figcaption>
     <div class="relative isolate grid h-72">
       {#each LAYERS as layer, index (layer.token)}
         <div
           class={[
-            "surface col-start-1 row-start-1 h-28 w-64 translate-x-(--plane-x) translate-y-(--plane-y) rounded-lg border border-border-control p-space-3",
+            "surface col-start-1 row-start-1 h-28 w-64 translate-x-(--plane-x) translate-y-(--plane-y) rounded-lg border border-ui-2 p-space-3",
             layer.z,
           ]}
           style:--surface-level={2}
@@ -59,17 +57,14 @@
           {@attach zOf}
         >
           <p class="type-label">{layer.name}</p>
-          <p
-            class="text-ink-muted tabular-nums type-meta"
-            data-z={layer.token}
-          ></p>
+          <p class="text-tx-2 tabular-nums type-meta" data-z={layer.token}></p>
         </div>
       {/each}
     </div>
   </figure>
 
   <figure class="flex min-w-0 flex-col gap-space-2">
-    <figcaption class="text-ink-muted type-meta">
+    <figcaption class="text-tx-2 type-meta">
       Containers: the same rows in a box under 320px and over it. Under, the
       line below a row moves under its mark
     </figcaption>
@@ -79,7 +74,7 @@
     </div>
   </figure>
 
-  <p class="text-ink-muted type-meta">
+  <p class="text-tx-2 type-meta">
     Breakpoints: phone under 640px, desk from 900px. They follow the window, so
     switch this graph's width to 390 or 1440 to see them.
   </p>

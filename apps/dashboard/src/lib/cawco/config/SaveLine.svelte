@@ -27,7 +27,7 @@
 
 <p
   aria-live="polite"
-  class="mark-line m-0 grid min-h-control-sm items-center type-meta text-ink-muted"
+  class="mark-line m-0 grid min-h-control-sm items-center type-meta text-tx-2"
   data-slot="save"
 >
   {#key phase}
@@ -40,14 +40,11 @@
         <LiveDot data-pulse size="row" tone="muted" />
         <span>{words.saving}</span>
       {:else if phase === "saved"}
-        <IconTick class="size-icon-md flex-none text-status-done" />
-        <span class="text-ink-strong">{words.saved}</span>
+        <IconTick class="size-icon-md flex-none text-green" />
+        <span class="text-tx">{words.saved}</span>
       {:else if phase === "failed"}
-        <IconError
-          aria-hidden="true"
-          class="size-icon-md flex-none text-status-fail"
-        />
-        <span class="text-status-fail">{words.notSaved}</span>
+        <IconError aria-hidden="true" class="size-icon-md flex-none text-red" />
+        <span class="text-red">{words.notSaved}</span>
       {/if}
     </span>
   {/key}

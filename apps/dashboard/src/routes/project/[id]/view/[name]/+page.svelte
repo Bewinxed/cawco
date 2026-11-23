@@ -105,7 +105,7 @@
      end, as the project page and Usage stand; under the desk line 18px a
      side, as theirs do. Never inside a notch's safe area. -->
 <main
-  class="min-h-dvh bg-surface-recess pt-space-6 pr-(--pad-right) pb-(--pad-bottom) pl-(--pad-left) max-desk:pr-(--pad-right-narrow) max-desk:pl-(--pad-left-narrow)"
+  class="min-h-dvh bg-bg-2 pt-space-6 pr-(--pad-right) pb-(--pad-bottom) pl-(--pad-left) max-desk:pr-(--pad-right-narrow) max-desk:pl-(--pad-left-narrow)"
   data-safe-bottom
   data-view-alone={name}
   style:--pad-bottom="max(var(--spacing-space-6), var(--safe-bottom))"

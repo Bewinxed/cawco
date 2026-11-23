@@ -30,7 +30,7 @@
    * breath) or
    * an answer is unread (the needs-you dot, in `status-attn-glyph`, its
    * echo three loops and then still: DESIGN.md, Status dot); gone from the
-   * page, a dashed `--color-border-control` ring. `inline`, it stands in a line
+   * page, a dashed `--color-ui-2` ring. `inline`, it stands in a line
    * of text as a chip's mark (a pin's chip, CommentChip): the inline
    * chip's line tall.
    */
@@ -56,7 +56,7 @@
 <!-- mark-line: the dot stands on the pill's top-end corner, absolutely, not beside its figure -->
 <span
   aria-hidden="true"
-  class="relative inline-flex flex-none items-center justify-center h-row-compact min-w-row-compact data-inline:h-4.5 data-inline:min-w-4.5 rounded-pill px-space-2 whitespace-nowrap ring-2 ring-surface-raised shadow-sm type-label num data-tail:rounded-es-xs data-[state=provisional]:inset-ring-2 data-[state=provisional]:inset-ring-accent data-[state=provisional]:bg-surface-raised data-[state=unsent]:inset-ring-2 data-[state=unsent]:inset-ring-accent data-[state=unsent]:bg-surface-raised data-[state=unsent]:text-accent data-[state=sent]:bg-accent data-[state=sent]:text-on-accent data-[state=resolved]:bg-surface-pressed data-[state=resolved]:text-ink-strong data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-accent-ink not-data-focused:data-gone:outline-dashed not-data-focused:data-gone:outline-offset-2 not-data-focused:data-gone:outline-1 not-data-focused:data-gone:outline-border-control"
+  class="relative inline-flex flex-none items-center justify-center h-row-compact min-w-row-compact data-inline:h-4.5 data-inline:min-w-4.5 rounded-pill px-space-2 whitespace-nowrap ring-2 ring-bg shadow-sm type-label num data-tail:rounded-es-xs data-[state=provisional]:inset-ring-2 data-[state=provisional]:inset-ring-accent data-[state=provisional]:bg-bg data-[state=unsent]:inset-ring-2 data-[state=unsent]:inset-ring-accent data-[state=unsent]:bg-bg data-[state=unsent]:text-accent data-[state=sent]:bg-accent data-[state=sent]:text-on-accent data-[state=resolved]:bg-ui-2 data-[state=resolved]:text-tx data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-accent not-data-focused:data-gone:outline-dashed not-data-focused:data-gone:outline-offset-2 not-data-focused:data-gone:outline-1 not-data-focused:data-gone:outline-ui-2"
   data-focused={focused || undefined}
   data-gone={gone || undefined}
   data-inline={size === "inline" || undefined}

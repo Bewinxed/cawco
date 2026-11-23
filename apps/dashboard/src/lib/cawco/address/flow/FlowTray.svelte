@@ -125,7 +125,7 @@
         </div>
         <h2
           id={titleId}
-          class="m-0 min-w-0 text-start type-title text-balance text-ink-strong"
+          class="m-0 min-w-0 text-start type-title text-balance text-tx"
           data-slot="title"
         >
           <MorphText text={words.title} wrap />
@@ -140,7 +140,7 @@
             out:depart
           >
             {#each words.lines as line (line)}
-              <p class="m-0 type-body text-pretty text-ink-muted">
+              <p class="m-0 type-body text-pretty text-tx-2">
                 <Words text={line} />
               </p>
             {/each}

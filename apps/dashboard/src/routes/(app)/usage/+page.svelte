@@ -190,7 +190,7 @@
         data-slot="page-head"
         class="me-auto flex min-w-0 flex-col gap-space-1"
       >
-        <p class="m-0 type-body text-pretty text-ink-muted">{description}</p>
+        <p class="m-0 type-body text-pretty text-tx-2">{description}</p>
       </div>
       <Select.Root
         onValueChange={(value) => filter(value === "all" ? "" : value)}
@@ -238,7 +238,7 @@
 
     {#if usageStore.spendFailed}
       <div class="flex flex-wrap items-center gap-space-3" role="alert">
-        <p data-slot="note" class="type-meta text-ink-muted">
+        <p data-slot="note" class="type-meta text-tx-2">
           Could not reach the hub for usage data. Check that it is running, then
           try again.
         </p>

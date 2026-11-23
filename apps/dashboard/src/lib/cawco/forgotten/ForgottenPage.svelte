@@ -17,10 +17,10 @@
   class="min-w-0 flex-auto overflow-y-auto pt-space-6 pr-space-6 pb-space-6 pl-space-6 max-desk:px-space-4 max-phone:px-space-4 max-phone:py-space-4"
 >
   <div class="flex max-w-245 flex-col gap-space-4">
-    <h1 class="m-0 type-title text-balance text-ink-strong">
+    <h1 class="m-0 type-title text-balance text-tx">
       {projectEndWords.forgottenTitle}
     </h1>
-    <div class="rounded-lg bg-surface-raised px-space-4 py-space-2 shadow-sm">
+    <div class="rounded-lg bg-bg px-space-4 py-space-2 shadow-sm">
       <ForgottenProjects {...props} />
     </div>
   </div>

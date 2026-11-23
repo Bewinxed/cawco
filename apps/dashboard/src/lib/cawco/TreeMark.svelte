@@ -148,7 +148,7 @@
      (apps/dashboard/scripts/has-subject-check.ts). -->
 <span
   data-tree-mark
-  class="group/mark relative z-(--mark-z) inline-block flex-none size-(--size) text-surface-page data-bare:text-ink-muted"
+  class="group/mark relative z-(--mark-z) inline-block flex-none size-(--size) text-bg data-bare:text-tx-2"
   data-box
   data-bare={fill ? undefined : ""}
   data-dot={dot}
@@ -219,7 +219,7 @@
     style:--hole={dot
       ? "calc(calc(var(--spacing) * 1.5) / 2 + calc(var(--spacing) * 0.375))"
       : undefined}
-    style:--hole-mask={"var(--beat-mask, radial-gradient(circle at 100% 0, transparent calc(var(--hole) - calc(1px / 4)), var(--color-ink-strong) calc(var(--hole) + calc(1px / 4))))"}
+    style:--hole-mask={"var(--beat-mask, radial-gradient(circle at 100% 0, transparent calc(var(--hole) - calc(1px / 4)), var(--color-tx) calc(var(--hole) + calc(1px / 4))))"}
   >
     <span
       data-slot="tree-mark-rest"

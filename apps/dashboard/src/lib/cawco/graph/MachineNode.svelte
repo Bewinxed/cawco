@@ -16,10 +16,10 @@
 
 <div
   data-slot="machine"
-  class="size-full rounded-lg border border-border-control bg-surface-recess"
+  class="size-full rounded-lg border border-ui-2 bg-bg-2"
 >
   <h3
-    class="m-0 truncate px-space-3 pt-space-2 type-label text-ink-muted"
+    class="m-0 truncate px-space-3 pt-space-2 type-label text-tx-2"
     title={name}
   >
     {name}

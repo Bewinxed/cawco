@@ -117,7 +117,7 @@
     onpointerdown={(event) => event.stopPropagation()}
   >
     <span class="flex items-center gap-space-1">
-      <span class="type-meta text-ink-muted">Theme</span>
+      <span class="type-meta text-tx-2">Theme</span>
       {#each THEMES as option (option.value)}
         <Button
           aria-pressed={theme.resolved === option.value}
@@ -130,7 +130,7 @@
     </span>
     {#each SWITCHES as each (each.key)}
       <span class="flex items-center gap-space-1">
-        <span class="type-meta text-ink-muted">{each.label}</span>
+        <span class="type-meta text-tx-2">{each.label}</span>
         {#each each.options as option (option.value)}
           <Button
             aria-current={current(each.key) === option.value
@@ -152,7 +152,7 @@
   <div class="grid place-items-center p-space-4">
     <!-- biome-ignore lint/security/useIframeSandbox: a /motion bench framing the dashboard's own route; it needs scripts and its origin, and with both a sandbox holds nothing back. -->
     <iframe
-      class="rounded-lg border border-border-control bg-surface-recess"
+      class="rounded-lg border border-ui-2 bg-bg-2"
       height="844"
       src={frameSrc}
       title="Phone sheet"

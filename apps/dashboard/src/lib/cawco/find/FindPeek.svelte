@@ -65,16 +65,16 @@
 <div
   data-slot="peek"
   {id}
-  class="group/peek grid grid-cols-(--peek-cols) gap-x-space-3 gap-y-space-1 ms-(--peek-ms) mt-0 mb-space-2 py-space-1 pe-0 ps-space-3 border-s border-s-border-control type-meta leading-icon-lg data-phone:type-label data-phone:font-normal data-phone:leading-row-compact"
+  class="group/peek grid grid-cols-(--peek-cols) gap-x-space-3 gap-y-space-1 ms-(--peek-ms) mt-0 mb-space-2 py-space-1 pe-0 ps-space-3 border-s border-s-ui-2 type-meta leading-icon-lg data-phone:type-label data-phone:font-normal data-phone:leading-row-compact"
   data-phone={phone || undefined}
   style:--peek-cols="max-content minmax(0, 1fr)"
   style:--peek-ms={"calc(var(--spacing-space-3) + var(--spacing-icon-md) + var(--spacing-space-2))"}
 >
   {#if conversation?.purpose}
-    <span data-slot="find-peek-label" class="text-ink-subtle">purpose</span>
+    <span data-slot="find-peek-label" class="text-tx-2">purpose</span>
     <span
       data-slot="value"
-      class="min-w-0 text-ink-strong"
+      class="min-w-0 text-tx"
       {@attach said(
         ownParts(conversation, "purpose", conversation.purpose),
         shown
@@ -82,8 +82,8 @@
     ></span>
   {/if}
   {#if conversation?.lastReport}
-    <span data-slot="find-peek-label" class="text-ink-subtle">last</span>
-    <span data-slot="value" class="min-w-0 text-ink-strong"
+    <span data-slot="find-peek-label" class="text-tx-2">last</span>
+    <span data-slot="value" class="min-w-0 text-tx"
       ><span
         {@attach said(
           ownParts(conversation, "report", conversation.lastReport.headline),
@@ -96,13 +96,13 @@
     >
   {/if}
   {#if moments.length > 0}
-    <span data-slot="find-peek-label" class="text-ink-subtle">said</span>
+    <span data-slot="find-peek-label" class="text-tx-2">said</span>
     <span class="grid min-w-0" role="presentation">
       {#each moments as moment, i (moment.docId)}
         {@const key = keyOf(i)}
         <button
           id={idOf(key)}
-          class="group/moment relative flex select-none items-center gap-space-2 w-(--moment-w) min-w-0 mx-(--moment-mx) px-space-1 border-none border-current rounded-xs bg-transparent text-start text-ink-strong cursor-default active:bg-surface-hover group-data-phone/peek:min-h-control-lg"
+          class="group/moment relative flex select-none items-center gap-space-2 w-(--moment-w) min-w-0 mx-(--moment-mx) px-space-1 border-none border-current rounded-xs bg-transparent text-start text-tx cursor-default active:bg-ui group-data-phone/peek:min-h-control-lg"
           style:--moment-w="calc(100% + 2 * var(--spacing-space-1))"
           style:--moment-mx="calc(-1 * var(--spacing-space-1))"
           aria-selected={activeKey === key}
@@ -133,38 +133,38 @@
           >
           <span
             data-slot="enter"
-            class="text-ink-subtle opacity-0 group-data-active/moment:opacity-100 group-data-phone/peek:opacity-100"
+            class="text-tx-2 opacity-0 group-data-active/moment:opacity-100 group-data-phone/peek:opacity-100"
             aria-hidden="true">↵</span
           >
         </button>
       {/each}
     </span>
   {:else if momentsState.state === "asking"}
-    <span data-slot="find-peek-label" class="text-ink-subtle">said</span>
+    <span data-slot="find-peek-label" class="text-tx-2">said</span>
     <span
       data-slot="value"
-      class="mark-line flex min-w-0 items-start gap-space-2 text-ink-muted"
+      class="mark-line flex min-w-0 items-start gap-space-2 text-tx-2"
       ><span class="mark-cell"><LiveDot /></span><span class="min-w-0"
         >Asking {momentsState.machine}…</span
       ></span
     >
   {:else if momentsState.state === "missing"}
-    <span data-slot="find-peek-label" class="text-ink-subtle">said</span>
-    <span data-slot="value" class="min-w-0 text-ink-muted"
+    <span data-slot="find-peek-label" class="text-tx-2">said</span>
+    <span data-slot="value" class="min-w-0 text-tx-2"
       >{momentsState.machine} didn't answer<span class="px-space-1">·</span
       ><button
-        class="select-none border-none border-current p-0 bg-transparent text-accent-ink"
+        class="select-none border-none border-current p-0 bg-transparent text-accent"
         onclick={onretry}
         type="button">Retry</button
       ></span
     >
   {/if}
   {#if conversation && conversation.children.count > 0}
-    <span data-slot="find-peek-label" class="text-ink-subtle">delegates</span>
-    <span data-slot="value" class="min-w-0 text-ink-strong"
+    <span data-slot="find-peek-label" class="text-tx-2">delegates</span>
+    <span data-slot="value" class="min-w-0 text-tx"
       ><span data-slot="num" class="num">{conversation.children.count}</span
       >{#if conversation.children.needsYou > 0}<span class="px-space-1">·</span
-        ><span class="text-status-attn font-medium"
+        ><span class="text-orange font-medium"
           ><span data-slot="num" class="num"
             >{conversation.children.needsYou}</span
           > needs you</span
@@ -172,10 +172,8 @@
     >
   {/if}
   {#if !phone}
-    <span
-      data-slot="foot"
-      class="col-span-full text-ink-subtle"
-      aria-hidden="true">↵ open<span class="px-space-1">·</span>← fold</span
+    <span data-slot="foot" class="col-span-full text-tx-2" aria-hidden="true"
+      >↵ open<span class="px-space-1">·</span>← fold</span
     >
   {/if}
 </div>

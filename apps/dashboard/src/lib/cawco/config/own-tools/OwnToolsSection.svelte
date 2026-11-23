@@ -70,7 +70,7 @@
       <ToolChoice
         fault={faults.stepLists}
         heading={words.stepLists.heading}
-        hue="var(--color-mark-2)"
+        hue="var(--color-yellow)"
         icon={IconListCheck}
         id="step-lists"
         lines={words.stepLists.lines}
@@ -82,7 +82,7 @@
       />
       <!-- True of both switches, so at the foot under both. -->
       <div
-        class="flex max-w-measure flex-col gap-space-1 border-t border-border-hairline pt-space-4 type-meta text-pretty text-ink-muted"
+        class="flex max-w-measure flex-col gap-space-1 border-t border-ui pt-space-4 type-meta text-pretty text-tx-2"
       >
         <p class="m-0">{words.untouched}</p>
         {#if running > 0}

@@ -92,15 +92,15 @@
 
 {#snippet line(shown: Figure[])}
   <p
-    class="m-0 flex min-w-0 flex-wrap items-baseline gap-x-space-1 gap-y-space-1 type-label text-ink-strong"
+    class="m-0 flex min-w-0 flex-wrap items-baseline gap-x-space-1 gap-y-space-1 type-label text-tx"
   >
     {#each shown as figure, at (figure.text)}
       {#if at > 0}
-        <span aria-hidden="true" class="text-ink-muted">·</span>
+        <span aria-hidden="true" class="text-tx-2">·</span>
       {/if}
       {#if figure.href}
         <a
-          class="text-accent-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs"
+          class="text-accent underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid rounded-xs"
           href={figure.href}>{figure.text}</a
         >
       {:else}

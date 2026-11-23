@@ -67,7 +67,7 @@
     | TailNote;
 
   /** A failed call's glyph ink, the transcript's (ToolGroup `.glyph.err`). */
-  const FAILED_INK = "text-status-fail";
+  const FAILED_INK = "text-red";
 
   /** Rows on screen, the height of the tail; one row's height, in px. */
   const SLOTS = 6;
@@ -365,11 +365,11 @@
      lifts. The stack stands on the tail's foot and spills over its top, in
      the flow, so the widest row is the tail's width (the panel sizes to it). -->
 <div
-  class="flex flex-col justify-end h-(--tail-h) overflow-hidden text-ink-strong data-full:mask-(--tail-fade)"
+  class="flex flex-col justify-end h-(--tail-h) overflow-hidden text-tx data-full:mask-(--tail-fade)"
   style:--row="calc(var(--spacing) * 6)"
   style:--slots={slots}
   style:--tail-h="calc(var(--row) * var(--slots))"
-  style:--tail-fade={"linear-gradient(to bottom, transparent, var(--color-ink-strong) var(--row))"}
+  style:--tail-fade={"linear-gradient(to bottom, transparent, var(--color-tx) var(--row))"}
   data-full={shown.length >= SLOTS || undefined}
 >
   {#if shown.length}
@@ -383,7 +383,7 @@
         {@const row = dataOf(key)}
         <div
           data-slot="row"
-          class="mark-line flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-sm whitespace-nowrap kind-ask:text-status-attn kind-asked:text-ink-muted kind-fail:text-status-fail"
+          class="mark-line flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-sm whitespace-nowrap kind-ask:text-orange kind-asked:text-tx-2 kind-fail:text-red"
           data-delegate-tail-kind={row?.kind}
           data-kind={row?.kind}
         >
@@ -402,15 +402,15 @@
               <span class="flex-none font-medium">{row.verb}</span>
             {/if}
             <span
-              class="flex-initial min-w-0 overflow-clip text-ellipsis font-(family-name:--font-mono) text-ink-muted"
+              class="flex-initial min-w-0 overflow-clip text-ellipsis font-(family-name:--font-mono) text-tx-2"
               >{row.arg}</span
             >
           {:else if row?.kind === "reason"}
             <span
-              class="flex-none size-icon-md grid place-items-center text-ink-muted"
+              class="flex-none size-icon-md grid place-items-center text-tx-2"
               data-box><IconCpu class="size-icon-md block" /></span
             >
-            <span class="flex-none font-normal text-ink-muted">Reasoning</span>
+            <span class="flex-none font-normal text-tx-2">Reasoning</span>
           {:else if row?.kind === "say"}
             <span
               data-slot="text"
@@ -428,10 +428,10 @@
           {:else if row?.kind === "peer"}
             {@const Icon = row.icon}
             <span
-              class="flex-none size-icon-md grid place-items-center text-ink-muted"
+              class="flex-none size-icon-md grid place-items-center text-tx-2"
               data-box><Icon class="size-icon-md block" /></span
             >
-            <span class="flex-none font-normal text-ink-muted">{row.lead}</span>
+            <span class="flex-none font-normal text-tx-2">{row.lead}</span>
             <span
               data-slot="text"
               class="flex-initial min-w-0 overflow-clip text-ellipsis"
@@ -451,7 +451,7 @@
     <!-- Its facts as the hub has them: state, project, role, machine, age. -->
     <p
       data-slot="facts"
-      class="m-0 flex-none h-(--row) flex items-center min-w-0 text-sm text-ink-muted"
+      class="m-0 flex-none h-(--row) flex items-center min-w-0 text-sm text-tx-2"
       in:arrive
     >
       <span class="min-w-0 truncate">{sessionFacts(answer)}</span>

@@ -76,8 +76,7 @@
         <Button onclick={() => onKey(key)} size="sm" variant="outline"
           >{words.key}</Button
         >
-        <span class="type-meta text-ink-muted text-pretty">{words.keyCost}</span
-        >
+        <span class="type-meta text-tx-2 text-pretty">{words.keyCost}</span>
       </span>
     {/if}
     <Button

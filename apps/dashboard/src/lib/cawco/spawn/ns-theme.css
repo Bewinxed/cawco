@@ -15,14 +15,14 @@
   :where(&) {
     font: var(--font-weight-normal) var(--text-base) / var(--leading-base)
       var(--font-sans);
-    color: var(--color-ink-strong);
+    color: var(--color-tx);
   }
   /* E1: the drawer card (vaul's on a phone) keeps the body role and ink
-     over the kit's own `text-ink-strong type-label`. */
+     over the kit's own `text-tx type-label`. */
   &[data-slot="drawer-content"] {
     font: var(--font-weight-normal) var(--text-base) / var(--leading-base)
       var(--font-sans);
-    color: var(--color-ink-strong);
+    color: var(--color-tx);
   }
 }
 
@@ -31,14 +31,14 @@
 @utility fai-scroll {
   :where(.ns-theme &) {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-border-control) transparent;
+    scrollbar-color: var(--color-ui-2) transparent;
   }
   :where(.ns-theme &)::-webkit-scrollbar {
     width: var(--spacing-space-2);
     height: var(--spacing-space-2);
   }
   :where(.ns-theme &)::-webkit-scrollbar-thumb {
-    background: var(--color-border-control);
+    background: var(--color-ui-2);
     border-radius: var(--radius-pill);
     border: 2px solid transparent;
     background-clip: content-box;

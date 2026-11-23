@@ -50,29 +50,36 @@
   }));
 </script>
 
-{#snippet shell(title: string, pane: Snippet, note?: string)}
+{#snippet shell(title: string, pane: Snippet, note?: string, major = false)}
   <section
-    class="@container mb-space-4 flex break-inside-avoid flex-col overflow-clip rounded-lg border border-border-hairline"
+    class={[
+      "@container flex break-inside-avoid flex-col gap-space-3",
+      major ? "mb-space-8" : "mb-space-4",
+    ]}
     aria-label={title}
   >
-    <header
-      class="flex flex-wrap items-baseline justify-between gap-x-space-4 gap-y-space-1 border-b border-border-hairline bg-surface-raised px-space-4 py-space-2"
-    >
-      <h3 class="type-label">{title}</h3>
+    <header class="flex flex-col gap-space-1">
+      {#if major}
+        <h2 class="type-title">{title}</h2>
+      {:else}
+        <h3 class="type-label">{title}</h3>
+      {/if}
       {#if note}
-        <p class="text-ink-muted type-meta">{note}</p>
+        <p class="max-w-measure text-tx-2 type-body">{note}</p>
       {/if}
     </header>
-    <div class="grid grow @phone:grid-cols-2">
+    <div
+      class="grid overflow-clip rounded-lg border border-ui @phone:grid-cols-2"
+    >
       {#each SCHEMES as scheme (scheme.scheme)}
         <div
           data-scheme={scheme.scheme}
           class={[
-            "flex min-w-0 flex-col gap-space-3 bg-surface-page p-space-4 text-ink-strong",
+            "flex min-w-0 flex-col gap-space-3 bg-bg p-space-4 text-tx",
             scheme.scheme === "dark" ? "scheme-dark" : "scheme-light",
           ]}
         >
-          <p class="text-ink-subtle type-meta">{scheme.label}</p>
+          <p class="text-tx-2 type-meta">{scheme.label}</p>
           {@render pane()}
         </div>
       {/each}
@@ -92,7 +99,7 @@
         <div class="max-w-full min-w-0">
           <frame.component {...frame.args} />
         </div>
-        <figcaption class="text-ink-muted type-meta">
+        <figcaption class="text-tx-2 type-meta">
           {frame.label}
         </figcaption>
       </figure>
@@ -104,7 +111,7 @@
           <div class="max-w-full min-w-0" {@attach forced(force.state)}>
             <first.component {...first.args} />
           </div>
-          <figcaption class="text-ink-muted type-meta">
+          <figcaption class="text-tx-2 type-meta">
             {first.label}, {force.label}
           </figcaption>
         </figure>
@@ -124,53 +131,34 @@
   {#snippet pane()}
     <Foundation foundation={one} />
   {/snippet}
-  {@render shell(one.title, pane, one.note)}
+  {@render shell(one.title, pane, one.note, true)}
 {/snippet}
 
-{#snippet layerSection(heading: string, summary: string, groups: Group[])}
-  <section class="flex flex-col gap-space-3" aria-label={heading}>
-    <header class="flex flex-col gap-space-1">
-      <h2 class="text-ink-strong type-label">{heading}</h2>
-      <p class="text-ink-muted type-meta">{summary}</p>
-    </header>
-    {#each groups.filter((one) => one.wide) as one (one.title)}
-      <div class="-mb-space-4">{@render foundationCard(one)}</div>
-    {/each}
-    <div class="-mb-space-4 columns-phone gap-space-4">
-      {#each groups.filter((one) => !one.wide) as one (one.title)}
-        {@render foundationCard(one)}
-      {/each}
-    </div>
-  </section>
+{#snippet foundations(groups: Group[])}
+  {#each groups as one (one.title)}
+    {@render foundationCard(one)}
+  {/each}
 {/snippet}
 
 <div
-  class="flex min-h-dvh flex-col gap-space-6 bg-surface-page p-space-4 text-ink-strong max-phone:p-space-3"
+  class="flex min-h-dvh flex-col gap-space-8 bg-bg p-space-6 text-tx max-phone:p-space-3"
 >
   <header class="flex flex-col gap-space-1">
-    <h1 class="type-title">CawCo design system</h1>
-    <p class="text-ink-muted type-body">
+    <h1 class="type-kpi">CawCo design system</h1>
+    <p class="text-tx-2 type-body">
       Semantic roles, shared scales, and core kit components in their states,
       light and dark side by side.
     </p>
   </header>
 
-  {@render layerSection(
-    "Roles",
-    "What every screen reaches for: 24 colour roles, 6 type roles on 4 sizes and 3 4px-grid leadings, and the 4px spacing and control ladder.",
-    ROLES
-  )}
+  {@render foundations(ROLES)}
 
-  {@render layerSection(
-    "Palette, shape, motion and layout",
-    "7 categorical marks, 3 brand art pigments, 5 radii, 3 shadows, 4 durations, 3 curves, 2 breakpoints, 4 containers, and 4 z-layers.",
-    SCALES
-  )}
+  {@render foundations(SCALES)}
 
   <section class="flex flex-col gap-space-4" aria-label="Core components">
     <header class="flex flex-col gap-space-1">
-      <h2 class="text-ink-strong type-label">Core components</h2>
-      <p class="text-ink-muted type-meta">
+      <h2 class="type-title">Core components</h2>
+      <p class="text-tx-2 type-meta">
         The canonical UI kit primitives in their states, including subgrid Row,
         row-subgrid OptionTiles, Dialog, Fluid tabs, and Icon toggle.
       </p>
@@ -178,7 +166,7 @@
 
     {#each sections as section (section.title)}
       <div class="flex flex-col gap-space-3">
-        <h3 class="text-ink-muted type-label">{section.title}</h3>
+        <h3 class="text-tx-2 type-label">{section.title}</h3>
         {#if section.flowing.length > 0}
           <div class="-mb-space-4 columns-phone gap-space-4">
             {#each section.flowing as one (one.family.file)}

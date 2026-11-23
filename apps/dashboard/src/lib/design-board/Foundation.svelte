@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Colour from "./Colour.svelte";
   import Elevation from "./Elevation.svelte";
   /**
    * One foundation group (foundations.ts) drawn in the scheme of the pane
@@ -80,7 +81,7 @@
   /** Multi-shelf wide groups flow across two columns when roomy. */
   const flowing = $derived(foundation.shelves.length >= 4 && foundation.wide);
 
-  /** A token's name past its kind prefix: `--color-surface-raised` -> "surface-raised". */
+  /** A token's name past its kind prefix: `--color-bg-2` -> "bg-2". */
   const short = (name: string) => name.replace(KIND_PREFIX, "");
 
   /** Seconds or milliseconds as a number of milliseconds. */
@@ -137,7 +138,9 @@
   };
 </script>
 
-{#if foundation.inUse === "spacing"}
+{#if foundation.inUse === "colour"}
+  <Colour />
+{:else if foundation.inUse === "spacing"}
   <Spacing />
 {:else if foundation.inUse === "elevation"}
   <Elevation />
@@ -156,14 +159,14 @@
         ]}
       >
         {#if foundation.shelves.length > 1}
-          <h4 class="text-ink-subtle type-meta">{shelf.title}</h4>
+          <h4 class="text-tx-2 type-meta">{shelf.title}</h4>
         {/if}
         {#if shelf.kind === "colour"}
           <ul class="flex flex-col gap-space-1">
             {#each shelf.names as name (name)}
               <li class="flex min-w-0 items-center gap-space-2">
                 <span
-                  class="size-5 flex-none rounded-xs border border-border-hairline"
+                  class="size-5 flex-none rounded-xs border border-ui"
                   {@attach probe(shelf.kind, name)}
                 ></span>
                 <span class="truncate type-meta">{short(name)}</span>
@@ -175,16 +178,15 @@
             {#each shelf.names as name (name)}
               <li class="flex items-baseline justify-between gap-space-6">
                 <span
-                  class={["min-w-0 text-ink-strong", TYPE_CLASS[name]]}
+                  class={["min-w-0 text-tx", TYPE_CLASS[name]]}
                   {@attach probe(shelf.kind, name)}
                 >
                   {ROLE[name]?.sample}
                 </span>
                 <span class="flex flex-col items-end text-right">
                   <span class="type-label">{name.replace("type-", "")}</span>
-                  <span class="text-ink-muted type-meta">{ROLE[name]?.use}</span
-                  >
-                  <span class="text-ink-subtle tabular-nums type-meta"
+                  <span class="text-tx-2 type-meta">{ROLE[name]?.use}</span>
+                  <span class="text-tx-2 tabular-nums type-meta"
                     >{readings.get(name)}</span
                   >
                 </span>
@@ -197,7 +199,7 @@
               <li class="flex min-w-0 flex-col gap-space-1">
                 <span
                   class={[
-                    "min-w-0 text-ink-strong",
+                    "min-w-0 text-tx",
                     shelf.kind === "leading" && "max-w-48 type-body",
                   ]}
                   {@attach probe(shelf.kind, name)}
@@ -206,7 +208,7 @@
                     ? "The session on obelisk-of-light finished its checks and waits for your review."
                     : "Move the session to studio-mac"}
                 </span>
-                <span class="text-ink-muted type-meta">
+                <span class="text-tx-2 type-meta">
                   {short(name)} · {shelf.kind === "face"
                     ? firstFace(readings.get(name))
                     : readings.get(name)}
@@ -220,7 +222,7 @@
               <li class="flex items-center gap-space-3">
                 <span class="w-32 flex-none truncate type-meta">
                   {name === "--spacing" ? "unit" : short(name)}
-                  <span class="text-ink-subtle tabular-nums"
+                  <span class="text-tx-2 tabular-nums"
                     >{readings.get(name)}</span
                   >
                 </span>
@@ -243,7 +245,7 @@
               <li class="flex items-center gap-space-3">
                 <span class="w-32 flex-none truncate type-meta">
                   {short(name)}
-                  <span class="text-ink-subtle tabular-nums"
+                  <span class="text-tx-2 tabular-nums"
                     >{readings.get(name)}</span
                   >
                 </span>
@@ -266,11 +268,11 @@
                   {@attach probe(shelf.kind, name)}
                 >
                   {short(name)}
-                  <span class="text-ink-subtle tabular-nums">{z}</span>
+                  <span class="text-tx-2 tabular-nums">{z}</span>
                 </span>
                 <span class="min-w-0 flex-1 overflow-clip">
                   <span
-                    class="block h-2 w-(--bar) max-w-full rounded-xs bg-ink-muted"
+                    class="block h-2 w-(--bar) max-w-full rounded-xs bg-tx-2"
                     style:--bar={`${Math.min(100, (z / 160) * 100)}%`}
                   ></span>
                 </span>
@@ -283,17 +285,15 @@
               <li class="flex w-24 flex-col gap-space-2">
                 <span
                   class={[
-                    "block size-16 bg-surface-raised",
-                    shelf.kind === "radius" && "border border-border-control",
+                    "block size-16 bg-bg",
+                    shelf.kind === "radius" && "border border-ui-2",
                     shelf.kind === "shadow" && "rounded-sm",
                   ]}
                   {@attach probe(shelf.kind, name)}
                 ></span>
                 <span class="truncate type-meta">{short(name)}</span>
                 {#if shelf.kind === "radius"}
-                  <span class="text-ink-subtle type-meta"
-                    >{readings.get(name)}</span
-                  >
+                  <span class="text-tx-2 type-meta">{readings.get(name)}</span>
                 {/if}
               </li>
             {/each}
@@ -308,11 +308,11 @@
                   {@attach probe(shelf.kind, name)}
                 >
                   {short(name)}
-                  <span class="text-ink-subtle tabular-nums">{ms}ms</span>
+                  <span class="text-tx-2 tabular-nums">{ms}ms</span>
                 </span>
                 <span class="min-w-0 flex-1 overflow-clip">
                   <span
-                    class="block h-2 w-(--bar) max-w-full rounded-xs bg-status-live"
+                    class="block h-2 w-(--bar) max-w-full rounded-xs bg-cyan"
                     style:--bar={`${Math.min(100, (ms / 1000) * 100)}%`}
                   ></span>
                 </span>
@@ -325,7 +325,7 @@
               {@const path = curve(readings.get(name))}
               <li class="mark-line flex w-28 flex-col gap-space-2">
                 <span
-                  class="block size-16 rounded-sm border border-border-hairline p-space-1"
+                  class="block size-16 rounded-sm border border-ui p-space-1"
                   data-box
                   {@attach probe(shelf.kind, name)}
                 >

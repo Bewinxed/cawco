@@ -246,7 +246,7 @@
     >
       <div
         class={dialogTray.body({
-          class: "flex min-h-0 flex-col gap-space-3 text-ink-strong",
+          class: "flex min-h-0 flex-col gap-space-3 text-tx",
         })}
       >
         <header

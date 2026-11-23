@@ -278,30 +278,30 @@ const STRIP = `${AT} h-2.5 rounded-xs`;
 const PART = {
   root: "absolute inset-0",
   layer: AT,
-  label: `${AT} flex items-center gap-space-2 h-space-4 ${META} font-medium text-ink-strong`,
+  label: `${AT} flex items-center gap-space-2 h-space-4 ${META} font-medium text-tx`,
   dot: "flex-none size-space-2 rounded-pill bg-(--c)",
   name: "min-w-0 overflow-hidden text-ellipsis",
-  pin: "size-icon-sm text-ink-muted",
-  clock: `${AT} px-space-1 rounded-xs ${META} tabular-nums text-right text-ink-muted`,
+  pin: "size-icon-sm text-tx-2",
+  clock: `${AT} px-space-1 rounded-xs ${META} tabular-nums text-right text-tx-2`,
   /**
    * The soonest clock's emphasis (Soonest reset): the selection tint, as a
    * search marks its match, never the lane's hue at a wash, which read as a
    * status khaki (DESIGN.md, The Reserved Hue Rule).
    */
   clockWash: `${AT} rounded-xs bg-accent/20 opacity-0`,
-  blocked: `${AT} ${META} font-medium text-right text-status-fail opacity-0`,
-  bar: `${STRIP} bg-surface-hover`,
+  blocked: `${AT} ${META} font-medium text-right text-red opacity-0`,
+  bar: `${STRIP} bg-ui`,
   headroom: `${STRIP} bg-(--c)/42 opacity-0`,
   fill: `${STRIP} bg-(--c) origin-left`,
   ghost: `${STRIP} border border-dashed border-(--c) bg-(--c)/22 opacity-0`,
   pulse: STRIP,
-  chip: `${AT} size-2.5 rounded-xs bg-(--c) ring-2 ring-surface-recess`,
+  chip: `${AT} size-2.5 rounded-xs bg-(--c) ring-2 ring-bg-2`,
   /** A fork is its parent's chip drawn hollow: the same lane, no extra mark. */
-  fork: `${AT} size-2.5 rounded-xs bg-surface-recess inset-ring-2 inset-ring-(--c) ring-2 ring-surface-recess`,
-  tag: `${AT} px-space-1 rounded-xs bg-surface-hover type-meta font-medium tracking-caps uppercase leading-space-4 tabular-nums text-ink-strong whitespace-nowrap`,
+  fork: `${AT} size-2.5 rounded-xs bg-bg-2 inset-ring-2 inset-ring-(--c) ring-2 ring-bg-2`,
+  tag: `${AT} px-space-1 rounded-xs bg-ui type-meta font-medium tracking-caps uppercase leading-space-4 tabular-nums text-tx whitespace-nowrap`,
   /** A caption wraps where the stage is narrow; the stage grows to hold it. */
   caption:
-    "absolute inset-x-space-3 bottom-space-2 type-meta leading-sm text-ink-strong text-pretty",
+    "absolute inset-x-space-3 bottom-space-2 type-meta leading-sm text-tx text-pretty",
 };
 
 /**

@@ -37,29 +37,27 @@
 </script>
 
 <div
-  class="group flex h-full min-h-22 flex-col rounded-sm bg-surface-raised p-space-2 shadow-sm"
+  class="group flex h-full min-h-22 flex-col rounded-sm bg-bg p-space-2 shadow-sm"
   data-tone={tone}
   {...rest}
 >
   <div
     data-slot="well"
-    class="flex min-w-0 flex-auto flex-col justify-between gap-space-1 rounded-sm bg-surface-recess p-2.5 inset-ring inset-ring-border-hairline"
+    class="flex min-w-0 flex-auto flex-col justify-between gap-space-1 rounded-sm bg-bg-2 p-2.5 inset-ring inset-ring-ui"
   >
-    <span class="min-w-0 type-label text-ink-muted">{label}</span>
+    <span class="min-w-0 type-label text-tx-2">{label}</span>
     <span class="flex flex-wrap items-baseline gap-x-space-2">
       <!-- A new figure morphs out of the old one, digit by digit, in place. -->
       <span
         data-slot="num"
         data-stat-value
-        class="num min-h-lh type-kpi text-ink-strong group-tone-live:text-status-live group-tone-attn:text-status-attn group-tone-done:text-status-done group-tone-fail:text-status-fail group-tone-caution:text-status-attn group-tone-bad:text-status-fail max-desk:type-title"
+        class="num min-h-lh type-kpi text-tx group-tone-live:text-cyan group-tone-attn:text-orange group-tone-done:text-green group-tone-fail:text-red group-tone-caution:text-orange group-tone-bad:text-red max-desk:type-title"
         ><MorphText text={String(value)} /></span
       >
       {#if unit}
         {#key unit}
-          <span
-            data-slot="num"
-            class="num type-meta text-ink-muted"
-            data-flip="pop">{unit}</span
+          <span data-slot="num" class="num type-meta text-tx-2" data-flip="pop"
+            >{unit}</span
           >
         {/key}
       {/if}

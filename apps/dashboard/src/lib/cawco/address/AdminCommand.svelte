@@ -15,7 +15,7 @@
   </div>
 {:else}
   <code
-    class="block min-w-0 rounded-sm border border-border-control bg-surface-hover px-space-3 py-space-2 type-code whitespace-pre-wrap text-ink-strong select-all"
+    class="block min-w-0 rounded-sm border border-ui-2 bg-ui px-space-3 py-space-2 type-code whitespace-pre-wrap text-tx select-all"
     >{command}</code
   >
 {/if}

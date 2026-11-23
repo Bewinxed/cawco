@@ -145,7 +145,7 @@
   aria-label="Home"
   class={[
     "flex min-h-0 min-w-0 flex-col",
-    variant === "page" && "flex-auto overflow-y-auto bg-surface-recess",
+    variant === "page" && "flex-auto overflow-y-auto bg-bg-2",
     variant === "rail" && "flex-none",
   ]}
   data-home-variant={variant}
@@ -197,7 +197,7 @@
         class="flex flex-col gap-space-2"
         data-flip
       >
-        <h2 class="m-0 px-space-2 type-label text-ink-strong">Machines</h2>
+        <h2 class="m-0 px-space-2 type-label text-tx">Machines</h2>
         <MachinesList />
       </section>
     {/if}
@@ -237,7 +237,7 @@
           status={home.waitingOn.length > 0 ? "ready" : "sleeping"}
         />
         <!-- The line's states share one cell and cross-fade (§8). -->
-        <figcaption class="relative type-body text-center text-ink-muted">
+        <figcaption class="relative type-body text-center text-tx-2">
           {#if firstRun}
             {#key cawLine}
               <span in:crossIn out:crossOut>{cawLine}</span>
@@ -268,7 +268,7 @@
       data-slot="dock"
       class="sticky bottom-0 mt-auto bg-(image:--dock-fade) px-space-4 pt-space-3 pb-(--dock-foot)"
       data-safe-bottom
-      style:--dock-fade={"linear-gradient(transparent, var(--color-surface-recess) var(--spacing-space-4))"}
+      style:--dock-fade={"linear-gradient(transparent, var(--color-bg-2) var(--spacing-space-4))"}
       style:--dock-foot="calc(var(--spacing-space-3) + var(--safe-bottom))"
     >
       <Button

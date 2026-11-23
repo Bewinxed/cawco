@@ -178,7 +178,7 @@
   {#if note.status}
     <span
       data-slot="hstatus"
-      class="flex-none text-ink-muted data-bad:text-status-fail"
+      class="flex-none text-tx-2 data-bad:text-red"
       data-bad={note.status === "failed" || undefined}>{note.status}</span
     >
   {/if}
@@ -191,7 +191,7 @@
     <time
       data-slot="num"
       data-eat
-      class="flex-none ms-space-2 font-normal text-ink-subtle num"
+      class="flex-none ms-space-2 font-normal text-tx-2 num"
       datetime={eventAt.toISOString()}>{eventClock}</time
     >
   {/if}
@@ -215,7 +215,7 @@
   <div
     data-tx-rail
     data-slot="note"
-    class="text-base font-medium text-ink-muted rail-row"
+    class="text-base font-medium text-tx-2 rail-row"
   >
     {#if harness.body}
       <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
@@ -238,7 +238,7 @@
       <!-- Nothing to open, so nothing that looks openable: a chevron over an
            empty body is the dead disclosure the tool rows already refuse. -->
       <span
-        class="inline-flex max-w-full text-base font-medium text-ink-muted rail-line"
+        class="inline-flex max-w-full text-base font-medium text-tx-2 rail-line"
       >
         {@render harnessHead(harness)}
       </span>
@@ -252,22 +252,22 @@
   <div
     data-tx-rail
     data-slot="note"
-    class="text-base font-medium text-ink-muted rail-row"
+    class="text-base font-medium text-tx-2 rail-row"
   >
     <span
-      class="inline-flex max-w-full text-base font-medium text-ink-muted rail-line"
+      class="inline-flex max-w-full text-base font-medium text-tx-2 rail-line"
     >
       <span data-slot="rail-cell" class="rail-cell"
         ><IconInfo class="size-icon-sm" /></span
       >
       <span
-        class="flex-none text-ink-strong data-bad:text-status-fail"
+        class="flex-none text-tx data-bad:text-red"
         data-bad={message?.content === "task failed" || undefined}
         >{message?.content}</span
       >
       {#if message?.metadata?.result}
         <span
-          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted"
+          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-tx-2"
           >{message.metadata.result}</span
         >
       {/if}
@@ -280,10 +280,10 @@
   <div
     data-tx-rail
     data-slot="note"
-    class="text-base font-medium text-ink-muted rail-row"
+    class="text-base font-medium text-tx-2 rail-row"
   >
     <span
-      class="inline-flex max-w-full text-base font-medium text-ink-muted rail-line"
+      class="inline-flex max-w-full text-base font-medium text-tx-2 rail-line"
     >
       <span data-slot="rail-cell" class="rail-cell"
         ><IconTerminal class="size-icon-sm" /></span
@@ -295,7 +295,7 @@
     <pre
       data-slot="well"
       style:--well-x="calc(var(--x-hang) - var(--spacing-space-3))"
-      class="bg-surface-recess rounded-sm p-space-3 mt-space-2 ms-(--well-x) overflow-x-auto font-mono text-base leading-base text-ink-strong whitespace-pre-wrap">{message?.content}</pre>
+      class="bg-bg-2 rounded-sm p-space-3 mt-space-2 ms-(--well-x) overflow-x-auto font-mono text-base leading-base text-tx whitespace-pre-wrap">{message?.content}</pre>
   </div>
 {:else if isInterrupted}
   <!-- One quiet word for a deliberate act. The colour budget is for things
@@ -303,10 +303,10 @@
   <div
     data-tx-rail
     data-slot="note"
-    class="text-base font-medium text-ink-muted rail-row"
+    class="text-base font-medium text-tx-2 rail-row"
   >
     <span
-      class="inline-flex max-w-full text-base font-medium text-ink-muted rail-line"
+      class="inline-flex max-w-full text-base font-medium text-tx-2 rail-line"
     >
       <span data-slot="rail-cell" class="rail-cell"
         ><IconStop class="size-icon-sm" /></span
@@ -324,12 +324,12 @@
   <div
     data-tx-rail
     data-slot="note"
-    class="text-base font-medium text-ink-muted data-waiting:opacity-70 rail-row"
+    class="text-base font-medium text-tx-2 data-waiting:opacity-70 rail-row"
     data-artifact-responses={responses.id}
     data-waiting={message?.state === "pending" || undefined}
   >
     <span
-      class="inline-flex max-w-full text-base font-medium text-ink-muted gap-space-2 items-baseline rail-line"
+      class="inline-flex max-w-full text-base font-medium text-tx-2 gap-space-2 items-baseline rail-line"
     >
       <span data-slot="rail-cell" class="rail-cell"
         ><ResponseGlyph class="size-icon-sm" /></span
@@ -341,7 +341,7 @@
         <button
           aria-busy={opening}
           data-slot="aname"
-          class="select-none pointer-hit touch-hit py-0 px-0 border-none border-current bg-transparent text-ink-strong underline decoration-current/35 underline-offset-2 focus-visible:outline-2 focus-visible:outline-accent-ink focus-visible:outline-offset-2 focus-visible:rounded-xs hover:text-accent-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:duration-(--duration-fast) can-hover:motion-safe:ease-out"
+          class="select-none pointer-hit touch-hit py-0 px-0 border-none border-current bg-transparent text-tx underline decoration-current/35 underline-offset-2 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 focus-visible:rounded-xs hover:text-accent can-hover:motion-safe:transition-[color] can-hover:motion-safe:duration-(--duration-fast) can-hover:motion-safe:ease-out"
           onclick={openResponses}
           title="Open {responses.title}"
           type="button"
@@ -351,7 +351,7 @@
       >
       <span
         data-slot="hstatus"
-        class="flex-none text-ink-muted font-normal data-bad:text-status-fail"
+        class="flex-none text-tx-2 font-normal data-bad:text-red"
         data-bad={message?.state === "failed" || undefined}
         >{responsesState}</span
       >
@@ -359,14 +359,14 @@
     {#if message?.state === "failed" && message.metadata?.sendFailed}
       <p
         data-slot="reason"
-        class="mt-space-1 mb-0 text-sm font-normal text-status-fail rail-hang"
+        class="mt-space-1 mb-0 text-sm font-normal text-red rail-hang"
       >
         {message.metadata.sendFailed}
       </p>
     {:else if openFailed}
       <p
         data-slot="reason"
-        class="mt-space-1 mb-0 text-sm font-normal text-status-fail rail-hang"
+        class="mt-space-1 mb-0 text-sm font-normal text-red rail-hang"
       >
         {openFailed}
       </p>
@@ -379,12 +379,12 @@
     data-tx-rail
     data-slot="note"
     data-moved
-    class="text-base font-medium text-ink-muted rail-row"
+    class="text-base font-medium text-tx-2 rail-row"
   >
     <span
-      class="inline-flex max-w-full text-base font-medium text-ink-muted rail-line"
+      class="inline-flex max-w-full text-base font-medium text-tx-2 rail-line"
     >
-      <span data-slot="rail-cell" class="text-status-live rail-cell"
+      <span data-slot="rail-cell" class="text-cyan rail-cell"
         ><IconSuccess class="size-icon-sm" /></span
       >
       <span
@@ -395,7 +395,7 @@
     </span>
     {#if message?.content}
       <p
-        class="mt-space-1 mb-0 text-sm font-normal leading-base text-ink-muted rail-hang"
+        class="mt-space-1 mb-0 text-sm font-normal leading-base text-tx-2 rail-hang"
       >
         {message.content}
       </p>
@@ -408,8 +408,8 @@
   <div
     data-tx-rail
     data-slot="note"
-    style:--rail-head={"linear-gradient(var(--color-status-fail), var(--color-status-fail))"}
-    class="text-base font-medium text-status-fail rail-row"
+    style:--rail-head={"linear-gradient(var(--color-red), var(--color-red))"}
+    class="text-base font-medium text-red rail-row"
   >
     <span
       class="inline-flex max-w-full text-base font-medium text-inherit rail-line"
@@ -431,7 +431,7 @@
   <div
     data-tx-rail
     data-slot="note"
-    class="text-base font-medium text-ink-muted rail-row"
+    class="text-base font-medium text-tx-2 rail-row"
   >
     <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
       <Collapsible.Trigger look="note">
@@ -443,7 +443,7 @@
           <pre
             data-slot="well"
             style:--well-x="calc(var(--x-hang) - var(--spacing-space-3))"
-            class="bg-surface-recess rounded-sm p-space-3 mt-space-2 ms-(--well-x) overflow-x-auto font-mono text-base leading-base text-ink-strong whitespace-pre-wrap">{foldCommand}</pre>
+            class="bg-bg-2 rounded-sm p-space-3 mt-space-2 ms-(--well-x) overflow-x-auto font-mono text-base leading-base text-tx whitespace-pre-wrap">{foldCommand}</pre>
         {:else if foldBody}
           <div class="mt-space-3 rail-hang">
             <MessageBody source={foldBody} />
@@ -458,7 +458,7 @@
   <div
     data-tx-rail
     data-slot="note"
-    class="text-base font-medium text-ink-muted rail-row"
+    class="text-base font-medium text-tx-2 rail-row"
   >
     <span class="inline-flex max-w-full rail-line">
       {@render foldHead()}

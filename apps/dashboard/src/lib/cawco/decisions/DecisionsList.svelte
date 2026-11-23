@@ -166,10 +166,10 @@
 
 {#snippet links(label: string, to: DecisionLink[], kind: string)}
   <span class="inline" data-links={kind}>
-    <span class="text-ink-muted">{label}</span>
+    <span class="text-tx-2">{label}</span>
     {#each to as link, index (link.name)}
       <a
-        class="relative z-1 rounded-xs text-ink-strong underline decoration-border-control underline-offset-3 wrap-anywhere hover:decoration-ink-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink"
+        class="relative z-1 rounded-xs text-tx underline decoration-ui-2 underline-offset-3 wrap-anywhere hover:decoration-tx-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent"
         data-link-to={link.name}
         href={hrefOf(link.name)}
         onclick={(event) => opening(event, link.name)}>{link.title}</a
@@ -179,18 +179,18 @@
 {/snippet}
 
 {#snippet sep()}
-  <span aria-hidden="true" class="text-ink-subtle">·</span>
+  <span aria-hidden="true" class="text-tx-2">·</span>
 {/snippet}
 
 {#snippet fact(page: DecisionPageSummary)}
   {@const open = page.cards - page.picked}
   {#if page.state === "picking"}
     {#if open > 0}
-      <span class="whitespace-nowrap text-ink-strong" data-open={open}
+      <span class="whitespace-nowrap text-tx" data-open={open}
         >{words.open(open)}</span
       >
     {:else}
-      <span class="whitespace-nowrap text-ink-strong" data-open="0"
+      <span class="whitespace-nowrap text-tx" data-open="0"
         >{words.notSent}</span
       >
     {/if}
@@ -238,7 +238,7 @@
   <!-- mark-line: the row is a grid; its mark stands in the lead column, centred on the title's first line by its own cell -->
   <div
     data-slot="decision-row"
-    class="group/row relative isolate col-span-full grid min-h-control-lg grid-cols-subgrid items-center gap-y-space-1 px-space-2 py-space-2 before:absolute before:inset-y-px before:inset-x-0 before:-z-1 before:rounded-sm before:transition-[background-color] before:duration-(--duration-fast) before:ease-in-out hover:not-active:before:bg-surface-hover active:before:bg-surface-pressed [&+&]:border-t [&+&]:border-border-hairline @max-phone/decisions:items-start"
+    class="group/row relative isolate col-span-full grid min-h-control-lg grid-cols-subgrid items-center gap-y-space-1 px-space-2 py-space-2 before:absolute before:inset-y-px before:inset-x-0 before:-z-1 before:rounded-sm before:transition-[background-color] before:duration-(--duration-fast) before:ease-in-out hover:not-active:before:bg-ui active:before:bg-ui-2 [&+&]:border-t [&+&]:border-ui @max-phone/decisions:items-start"
     data-flip
     data-page={page.name}
     data-standing={page.state}
@@ -248,10 +248,10 @@
       data-slot="mark"
     >
       {#if isDecided(page) && page.state === "decided"}
-        <IconSuccess aria-hidden="true" class="size-icon-md text-status-done" />
+        <IconSuccess aria-hidden="true" class="size-icon-md text-green" />
       {:else}
         <span
-          class="grid place-items-center group-data-[standing=picking]/row:text-ink-strong text-ink-muted"
+          class="grid place-items-center group-data-[standing=picking]/row:text-tx text-tx-2"
         >
           <TaskRing
             done={page.state === "making" ? 0 : page.picked}
@@ -262,13 +262,13 @@
       {/if}
     </span>
     <a
-      class="col-start-2 row-start-1 min-w-0 type-label text-pretty wrap-anywhere text-ink-strong no-underline after:absolute after:inset-0 after:rounded-sm focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-solid focus-visible:after:outline-accent-ink focus-visible:after:-outline-offset-2"
+      class="col-start-2 row-start-1 min-w-0 type-label text-pretty wrap-anywhere text-tx no-underline after:absolute after:inset-0 after:rounded-sm focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-solid focus-visible:after:outline-accent focus-visible:after:-outline-offset-2"
       data-slot="title"
       href={hrefOf(page.name)}
       onclick={(event) => opening(event, page.name)}>{@render hl(page.title)}</a
     >
     <span
-      class="col-start-3 row-start-1 flex min-w-0 flex-wrap items-center gap-x-space-1 type-meta num text-ink-muted @max-phone/decisions:col-span-2 @max-phone/decisions:col-start-2 @max-phone/decisions:row-start-2"
+      class="col-start-3 row-start-1 flex min-w-0 flex-wrap items-center gap-x-space-1 type-meta num text-tx-2 @max-phone/decisions:col-span-2 @max-phone/decisions:col-start-2 @max-phone/decisions:row-start-2"
       data-slot="fact"
     >
       {@render fact(page)}
@@ -279,7 +279,7 @@
     >
       {#if page.updatedAt > 0}
         <span
-          class="type-meta num whitespace-nowrap text-ink-muted transition-opacity duration-(--duration-fast) ease-out data-act:can-hover:group-hover/row:opacity-0 data-act:group-focus-within/row:opacity-0"
+          class="type-meta num whitespace-nowrap text-tx-2 transition-opacity duration-(--duration-fast) ease-out data-act:can-hover:group-hover/row:opacity-0 data-act:group-focus-within/row:opacity-0"
           data-act={act || undefined}
           data-slot="age"
           title={words.lastChanged(formatTimestamp(new Date(page.updatedAt)))}
@@ -330,7 +330,7 @@
         {#each hits as hit (hit)}
           <li class="min-w-0">
             <a
-              class="relative z-1 block py-space-1 type-meta text-pretty wrap-anywhere text-ink-strong no-underline hover:underline"
+              class="relative z-1 block py-space-1 type-meta text-pretty wrap-anywhere text-tx no-underline hover:underline"
               data-hit
               href={hrefOf(page.name)}
               onclick={(event) => opening(event, page.name)}
@@ -342,7 +342,7 @@
     {/if}
     {#if refused[page.name]}
       <p
-        class="col-span-3 col-start-2 m-0 type-meta text-pretty wrap-anywhere text-status-fail"
+        class="col-span-3 col-start-2 m-0 type-meta text-pretty wrap-anywhere text-red"
         role="alert"
       >
         {refused[page.name]}
@@ -390,7 +390,7 @@
     <!-- The list's frame at its size while the pages are read (The Claim Of Nothing Rule). -->
     <div
       aria-busy="true"
-      class="grid gap-y-space-3 rounded-lg bg-surface-raised p-space-3 shadow-sm"
+      class="grid gap-y-space-3 rounded-lg bg-bg p-space-3 shadow-sm"
       data-slot="list-skeleton"
     >
       <Skeleton line="label" radius="text" width="name" />
@@ -408,7 +408,7 @@
       class="flex flex-col items-start gap-space-2 py-space-6"
       data-slot="no-match"
     >
-      <h3 class="m-0 type-title text-balance wrap-anywhere text-ink-strong">
+      <h3 class="m-0 type-title text-balance wrap-anywhere text-tx">
         {words.noMatch(query.trim())}
       </h3>
       <Button
@@ -422,7 +422,7 @@
     </div>
   {:else}
     <div
-      class="grid grid-cols-(--list-cols) gap-x-space-3 rounded-lg bg-surface-raised p-space-1 shadow-sm @max-phone/decisions:grid-cols-(--list-cols-narrow)"
+      class="grid grid-cols-(--list-cols) gap-x-space-3 rounded-lg bg-bg p-space-1 shadow-sm @max-phone/decisions:grid-cols-(--list-cols-narrow)"
       data-slot="list"
       style:--list-cols={COLS}
       style:--list-cols-narrow={COLS_NARROW}
@@ -434,7 +434,7 @@
         {@const rest = group.pages.length - head.length}
         <section
           aria-labelledby="dgroup-{group.key}"
-          class="col-span-full grid grid-cols-subgrid [&+&]:border-t [&+&]:border-border-hairline"
+          class="col-span-full grid grid-cols-subgrid [&+&]:border-t [&+&]:border-ui"
           data-count={group.pages.length}
           data-group={group.key}
         >
@@ -447,28 +447,25 @@
                   <!-- Needs you: the status dot in spark beside its word, never a fill. -->
                   <span
                     aria-hidden="true"
-                    class="size-1.5 rounded-pill bg-status-attn"
+                    class="size-1.5 rounded-pill bg-orange"
                   ></span>
                 {/if}
               {:else if group.key === "sent"}
-                <IconSend
-                  aria-hidden="true"
-                  class="size-icon-md text-ink-muted"
-                />
+                <IconSend aria-hidden="true" class="size-icon-md text-tx-2" />
               {:else}
                 <IconSuccess
                   aria-hidden="true"
-                  class="size-icon-md text-status-done"
+                  class="size-icon-md text-green"
                 />
               {/if}
             </span>
             <h3
-              class="col-span-3 col-start-2 m-0 flex items-baseline gap-space-2 type-label text-ink-strong"
+              class="col-span-3 col-start-2 m-0 flex items-baseline gap-space-2 type-label text-tx"
               id="dgroup-{group.key}"
             >
               <span>{group.title}</span>
               {#if group.pages.length > 0}
-                <span class="type-meta num text-ink-muted" data-slot="count"
+                <span class="type-meta num text-tx-2" data-slot="count"
                   >{group.pages.length}</span
                 >
               {/if}
@@ -476,7 +473,7 @@
           </div>
           {#if group.key === "open" && group.pages.length === 0}
             <p
-              class="col-span-3 col-start-2 m-0 pb-space-3 type-meta text-ink-muted"
+              class="col-span-3 col-start-2 m-0 pb-space-3 type-meta text-tx-2"
               data-slot="group-line"
             >
               {words.nothingWaits}
@@ -488,7 +485,7 @@
           {#if rest > 0}
             <button
               aria-expanded="false"
-              class="mark-line col-span-3 col-start-2 -ms-space-2 mt-space-1 mb-space-2 inline-flex h-space-6 items-center gap-space-1 justify-self-start rounded-xs px-space-2 type-label text-ink-muted transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-surface-hover hover:text-ink-strong focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink"
+              class="mark-line col-span-3 col-start-2 -ms-space-2 mt-space-1 mb-space-2 inline-flex h-space-6 items-center gap-space-1 justify-self-start rounded-xs px-space-2 type-label text-tx-2 transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-ui hover:text-tx focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent"
               data-more={group.key}
               onclick={() => {
                 unfolded = { ...unfolded, [group.key]: true };

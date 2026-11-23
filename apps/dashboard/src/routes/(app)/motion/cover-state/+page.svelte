@@ -16,7 +16,7 @@
 
 <div
   data-bench="cover"
-  class="group/cover relative h-dvh w-(--pane-w) max-w-full p-space-4 bg-surface-recess"
+  class="group/cover relative h-dvh w-(--pane-w) max-w-full p-space-4 bg-bg-2"
   style:--pane-w={asked ? `${Number(asked)}px` : "100%"}
 >
   <CoverState waiting={dir === null ? { line } : { dir }} />

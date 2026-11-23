@@ -49,7 +49,7 @@
   );
 </script>
 
-<p data-slot="note" class="max-w-measure type-meta text-ink-muted">
+<p data-slot="note" class="max-w-measure type-meta text-tx-2">
   Sessions see the reply but never this rule's history, so this is the only
   place it is visible.
 </p>
@@ -61,20 +61,20 @@
   {#if loading}
     <p
       data-slot="note"
-      class="mark-line flex max-w-measure items-center gap-space-2 type-meta text-ink-muted"
+      class="mark-line flex max-w-measure items-center gap-space-2 type-meta text-tx-2"
       role="status"
     >
       <LiveDot /><span>Loading…</span>
     </p>
   {:else if failed}
-    <p class="type-meta text-status-attn" role="alert">{failed}</p>
+    <p class="type-meta text-orange" role="alert">{failed}</p>
   {:else if rows.length === 0}
-    <p data-slot="note" class="max-w-measure type-meta text-ink-muted">
+    <p data-slot="note" class="max-w-measure type-meta text-tx-2">
       It has not caught anything yet. Nothing to see is the good outcome.
     </p>
   {:else}
     {#if waiting > 0}
-      <p data-slot="num" class="num type-meta text-status-attn" data-flip>
+      <p data-slot="num" class="num type-meta text-orange" data-flip>
         {waiting}
         {waiting === 1 ? "session is" : "sessions are"}
         still pending — it clears when their next turn ends without matching.
@@ -84,7 +84,7 @@
       {#each visible as row (row.instanceId)}
         <li
           data-slot="entry"
-          class="flex flex-col gap-space-1 py-space-2 not-first:border-t not-first:border-t-border-hairline"
+          class="flex flex-col gap-space-1 py-space-2 not-first:border-t not-first:border-t-ui"
           data-flip
         >
           <div
@@ -97,22 +97,22 @@
             >
               <span
                 data-slot="path"
-                class="font-(family-name:--font-mono) text-sm wrap-anywhere text-ink-strong"
+                class="font-(family-name:--font-mono) text-sm wrap-anywhere text-tx"
                 >{row.where}</span
               >
               {#if row.harness}
-                <span class="max-w-measure type-meta text-ink-muted"
+                <span class="max-w-measure type-meta text-tx-2"
                   >{row.harness}</span
                 >
               {/if}
             </span>
-            <span class="max-w-measure type-meta text-ink-muted">
+            <span class="max-w-measure type-meta text-tx-2">
               {times(row.totalFires)}, last {since(row.lastFiredAt)}
             </span>
           </div>
 
           {#if row.status === "pending"}
-            <p class="type-meta text-status-attn">
+            <p class="type-meta text-orange">
               Fired {times(row.fireCount)} in a row.
             </p>
           {/if}

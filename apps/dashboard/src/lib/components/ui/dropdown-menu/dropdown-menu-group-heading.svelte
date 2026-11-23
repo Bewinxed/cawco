@@ -19,7 +19,7 @@
      Menus: a section's title is set apart from its items). -->
 <DropdownMenuPrimitive.GroupHeading
   class={cn(
-    "px-2.5 pt-space-2 pb-space-1 text-ink-muted type-meta data-[inset]:ps-space-8",
+    "px-2.5 pt-space-2 pb-space-1 text-tx-2 type-meta data-[inset]:ps-space-8",
     className
   )}
   data-inset={inset}

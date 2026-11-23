@@ -75,7 +75,7 @@
    */
   const glass = (layout: string) =>
     cn(
-      "rounded-pill border border-border-control bg-surface-raised/72 p-space-2 shadow-sm backdrop-blur-glass backdrop-saturate-160 concentric-in r-inset-space-2 r-outer-pill reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none",
+      "rounded-pill border border-ui-2 bg-bg/72 p-space-2 shadow-sm backdrop-blur-glass backdrop-saturate-160 concentric-in r-inset-space-2 r-outer-pill reduced-transparency:bg-bg reduced-transparency:backdrop-filter-none",
       layout
     );
 
@@ -200,7 +200,7 @@
                 {:else if view.count > 0}
                   <span
                     data-slot="count"
-                    class="type-meta ms-auto text-ink-muted tabular-nums"
+                    class="type-meta ms-auto text-tx-2 tabular-nums"
                     >{view.count}</span
                   >
                 {/if}

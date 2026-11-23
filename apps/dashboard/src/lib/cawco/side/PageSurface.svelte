@@ -48,7 +48,7 @@
   class="relative flex min-h-0 flex-1 flex-col timeline-scope-transcript-head"
   style:--side-room="var(--spacing-control-lg)"
 >
-  <HeadFade band="var(--side-room)" tint="bg-surface-recess" />
+  <HeadFade band="var(--side-room)" tint="bg-bg-2" />
   <header
     data-slot="page-head"
     class="absolute inset-x-0 top-0 z-2 flex h-(--side-room) items-center gap-space-2 pe-space-4 ps-space-3"
@@ -62,9 +62,8 @@
       />
     </BarGlass>
     {#if title}
-      <span
-        data-slot="title"
-        class="min-w-0 truncate type-label text-ink-strong">{title}</span
+      <span data-slot="title" class="min-w-0 truncate type-label text-tx"
+        >{title}</span
       >
     {/if}
   </header>

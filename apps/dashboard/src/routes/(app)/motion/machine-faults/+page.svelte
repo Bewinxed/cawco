@@ -135,7 +135,7 @@
       >
         <div
           data-slot="row"
-          class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm px-space-2 py-space-1 text-ink-strong coarse:min-h-control-lg"
+          class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm px-space-2 py-space-1 text-tx coarse:min-h-control-lg"
         >
           <MachineRow
             hue={machineHue(index, true)}

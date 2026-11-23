@@ -122,13 +122,13 @@
 <section
   data-slot="stage"
   aria-label={name}
-  class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip bg-surface-page timeline-scope-transcript-head"
+  class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip bg-bg timeline-scope-transcript-head"
 >
   <!-- The field: the frame holding the stage page fills it; the page is
        its own scroller, its own page and gutter round the drawing. -->
   <div
     data-slot="stage-field"
-    class="relative min-h-0 min-w-0 flex-1 bg-surface-page"
+    class="relative min-h-0 min-w-0 flex-1 bg-bg"
     style:--stage-room="{room}px"
     {@attach frameSize(
       (node: HTMLElement) => {
@@ -148,7 +148,7 @@
   <!-- The scroll edge effect under the panel's head for a drawing this
        document scrolls (a bench's stand-in names the timeline); the stage
        page in its frame is another document and draws its own (STAGE_ROOM). -->
-  <HeadFade band="{room}px" tint="bg-surface-page" />
+  <HeadFade band="{room}px" tint="bg-bg" />
   <!-- The room the panel's head floats over, which the page pads its top
        by: the head's alone, so it never changes. -->
   <div
@@ -176,7 +176,7 @@
         <BarGlass form="group" title={words.stale}>
           <p
             role="status"
-            class="mark-line m-0 inline-flex min-w-0 items-center gap-space-1 px-space-2 type-label text-status-attn"
+            class="mark-line m-0 inline-flex min-w-0 items-center gap-space-1 px-space-2 type-label text-orange"
             data-slot="stage-stale"
           >
             <IconCloudCross
@@ -193,13 +193,13 @@
       {#if compare || variant}
         <BarGlass form="group">
           {#if variant}
-            <span class="min-w-0 truncate px-space-2 type-label text-ink-muted"
+            <span class="min-w-0 truncate px-space-2 type-label text-tx-2"
               >{variant}</span
             >
           {/if}
           {#if compare && beside}
             <span
-              class="min-w-0 truncate px-space-2 type-label text-ink-muted"
+              class="min-w-0 truncate px-space-2 type-label text-tx-2"
               data-slot="stage-against">{words.comparedWith(compare.name)}</span
             >
           {:else if compare}
@@ -231,7 +231,7 @@
               </span>
             </BarItem>
           {:else if compare?.read?.same}
-            <span class="min-w-0 truncate px-space-2 type-label text-ink-muted"
+            <span class="min-w-0 truncate px-space-2 type-label text-tx-2"
               >{words.sameAs(compare.name)}</span
             >
           {/if}
@@ -258,7 +258,7 @@
       <li class="min-w-0">
         <button
           type="button"
-          class="mark-line pointer-hit touch-hit flex min-h-control-sm min-w-0 items-center gap-space-2 rounded-sm px-space-1 text-start type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover"
+          class="mark-line pointer-hit touch-hit flex min-h-control-sm min-w-0 items-center gap-space-2 rounded-sm px-space-1 text-start type-label text-tx transition-control can-hover:hover:bg-ui"
           data-kind={line.kind}
           data-slot="difference"
           onclick={() => ondifference(at)}
@@ -267,7 +267,7 @@
             aria-hidden="true"
             data-box
             class={[
-              "inline-block size-space-3 flex-none rounded-xs border-2 border-status-done",
+              "inline-block size-space-3 flex-none rounded-xs border-2 border-green",
               line.kind === "went" && "border-dashed",
             ]}
           ></span>
@@ -276,7 +276,7 @@
       </li>
     {/each}
     {#if found.length > LINES_SHOWN}
-      <li class="flex items-center px-space-1 type-meta text-ink-muted num">
+      <li class="flex items-center px-space-1 type-meta text-tx-2 num">
         +{figureOf(found.length - LINES_SHOWN, lang)}
       </li>
     {/if}
@@ -303,7 +303,7 @@
   <span
     aria-hidden="true"
     data-box
-    class="inline-block size-space-3 flex-none rounded-xs border-2 border-status-done"
+    class="inline-block size-space-3 flex-none rounded-xs border-2 border-green"
   ></span>
   <span class="num"
     >{words.differenceCount(found.length, figureOf(found.length, lang))}</span
@@ -311,7 +311,7 @@
   <IconChevronDown
     aria-hidden="true"
     class={[
-      "size-icon-sm flex-none text-ink-muted transition-transform duration-(--duration-fast) ease-out",
+      "size-icon-sm flex-none text-tx-2 transition-transform duration-(--duration-fast) ease-out",
       listShown && "rotate-180",
     ]}
     data-box

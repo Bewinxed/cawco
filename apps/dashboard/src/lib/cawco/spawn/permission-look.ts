@@ -49,5 +49,5 @@ export const permissionLook = (
 ): PermissionLook => ({
   name: permissionModeLabel(value),
   desc: permissionModeDescription(value, harness),
-  ...(DRAWN[value] ?? { icon: Shield, hue: "var(--color-ink-subtle)" }),
+  ...(DRAWN[value] ?? { icon: Shield, hue: "var(--color-tx-2)" }),
 });

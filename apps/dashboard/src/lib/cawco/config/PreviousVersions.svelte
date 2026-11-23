@@ -62,7 +62,7 @@
   );
 </script>
 
-<p data-slot="note" class="max-w-measure type-meta text-ink-muted">
+<p data-slot="note" class="max-w-measure type-meta text-tx-2">
   Every save keeps what it replaced. Restoring writes an old version back as
   this one.
 </p>
@@ -70,9 +70,9 @@
      reflow, what follows sliding. -->
 <div class="flex flex-col gap-space-2" {@attach reflow()}>
   {#if failed}
-    <p class="type-meta text-status-attn" role="alert">{failed}</p>
+    <p class="type-meta text-orange" role="alert">{failed}</p>
   {:else if versions.length === 0}
-    <p data-slot="note" class="max-w-measure type-meta text-ink-muted">
+    <p data-slot="note" class="max-w-measure type-meta text-tx-2">
       Nothing has been saved over yet.
     </p>
   {:else}
@@ -81,15 +81,12 @@
     <ul class="flex flex-col m-0 p-0 list-none">
       {#each visibleVersions as version (version.id)}
         <li
-          class="flex flex-wrap items-center justify-between gap-space-2 py-space-2 not-first:border-t not-first:border-t-border-hairline"
+          class="flex flex-wrap items-center justify-between gap-space-2 py-space-2 not-first:border-t not-first:border-t-ui"
           data-flip
         >
           <span class="flex flex-col gap-space-1">
-            <span class="type-label text-ink-strong">{version.name}</span>
-            <span
-              data-slot="note"
-              class="max-w-measure type-meta text-ink-muted"
-            >
+            <span class="type-label text-tx">{version.name}</span>
+            <span data-slot="note" class="max-w-measure type-meta text-tx-2">
               {new Date(version.createdAt).toLocaleString()}
               · from {versionSource(version.source)}
               ·

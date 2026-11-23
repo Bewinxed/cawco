@@ -76,17 +76,17 @@
      the steps and Close at its end. -->
 <div
   data-slot="find-line"
-  class="@container min-w-0 pb-(--cin-pad) mb-(--cin-pad) border-b border-b-border-hairline"
+  class="@container min-w-0 pb-(--cin-pad) mb-(--cin-pad) border-b border-b-ui"
 >
   <div class="flex flex-wrap items-center gap-x-space-1 gap-y-(--cin-pad)">
     <!-- mark-line: the glyph leads a field, not words; the field sets its own line. -->
     <div class="flex flex-auto basis-full min-w-0 items-center @sm:basis-0">
       <IconSearch
-        class="flex-none size-icon-md me-space-2 text-ink-muted"
+        class="flex-none size-icon-md me-space-2 text-tx-2"
         aria-hidden="true"
       />
       <input
-        class="flex-1 min-w-0 h-control-md appearance-none border-none p-0 [&::-webkit-search-cancel-button]:hidden bg-transparent font-sans text-input-floor text-ink-strong caret-accent placeholder:text-ink-subtle outline-none"
+        class="flex-1 min-w-0 h-control-md appearance-none border-none p-0 [&::-webkit-search-cancel-button]:hidden bg-transparent font-sans text-input-floor text-tx caret-accent placeholder:text-tx-2 outline-none"
         aria-activedescendant={find.listOpen && find.index !== null
           ? placeId(find.viewId, find.index)
           : undefined}

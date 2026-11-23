@@ -51,13 +51,13 @@
     <div class="flex flex-col gap-space-6">
       <Dialog.Header foot="report">
         <Dialog.Title lead="glyph">
-          <IconAlert class="size-icon-md shrink-0 text-status-fail" />
+          <IconAlert class="size-icon-md shrink-0 text-red" />
           <span>{title}</span>
         </Dialog.Title>
       </Dialog.Header>
 
       <pre
-        class="m-0 max-h-vh-60 min-w-0 overflow-auto wrap-anywhere whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-sm leading-base text-ink-strong select-text"
+        class="m-0 max-h-vh-60 min-w-0 overflow-auto wrap-anywhere whitespace-pre-wrap rounded-sm border border-ui bg-bg-2 p-space-3 font-mono text-sm leading-base text-tx select-text"
         data-error-text>{message}</pre>
 
       <RowFault again={copy} data-copy-refused reason={refusals.reason(key)} />

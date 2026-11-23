@@ -194,19 +194,17 @@
 
 <div data-slot="condition" class="flex flex-col gap-space-2 min-w-0 ps-space-1">
   {#if said}
-    <p class="m-0 type-body text-ink-strong wrap-break-word">{said}</p>
+    <p class="m-0 type-body text-tx wrap-break-word">{said}</p>
   {/if}
   {#if facts.length > 0}
-    <p class="m-0 flex flex-wrap gap-x-space-2 type-meta text-ink-muted">
+    <p class="m-0 flex flex-wrap gap-x-space-2 type-meta text-tx-2">
       {#each facts as fact (fact)}
         <span>{fact}</span>
       {/each}
     </p>
   {/if}
   {#if standing === "timed-out"}
-    <label
-      class="flex flex-wrap items-center gap-space-2 type-label text-ink-muted"
-    >
+    <label class="flex flex-wrap items-center gap-space-2 type-label text-tx-2">
       <span>{words.keepCheckingUntil}</span>
       <Input
         class="w-auto"
@@ -218,7 +216,7 @@
     </label>
   {/if}
   {#if asking}
-    <p class="m-0 type-body text-ink-strong">{words.markMetAsk}</p>
+    <p class="m-0 type-body text-tx">{words.markMetAsk}</p>
   {/if}
   <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
     {#if asking}

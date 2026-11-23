@@ -506,7 +506,7 @@
   style:--bar-room={shown || sheet ? "var(--spacing-control-lg)" : undefined}
 >
   {#if (shown || sheet) && !onPreview}
-    <BarFloat tint="bg-surface-recess">
+    <BarFloat tint="bg-bg-2">
       {#snippet leading()}
         {#if previewOpen && switchAt === "start"}
           <!-- Leading: where the preview's own bar holds a surface's switch
@@ -609,7 +609,7 @@
         <div
           data-slot="preview"
           class={[
-            "absolute inset-0 flex min-h-0 flex-col bg-surface-raised",
+            "absolute inset-0 flex min-h-0 flex-col bg-bg",
             !onPreview && "invisible",
           ]}
           inert={!onPreview}
@@ -636,7 +636,7 @@
       {#if !shown}
         <div
           data-slot="pane"
-          class="@container relative flex min-h-0 min-w-0 flex-auto flex-col bg-surface-recess pb-(--reserved)"
+          class="@container relative flex min-h-0 min-w-0 flex-auto flex-col bg-bg-2 pb-(--reserved)"
           data-safe-bottom
           style:--composer-clearance="var(--spacing-space-4)"
           style:--reserved={reserved}

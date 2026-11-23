@@ -56,7 +56,7 @@ export function outlineLayer(): OutlineLayer {
   svg.setAttribute("data-slot", "hang-outline");
   svg.setAttribute("aria-hidden", "true");
   svg.innerHTML = `<defs>
-<linearGradient id="${id}-ink" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="0" y2="1"><stop offset="0" data-slot="rim"/><stop offset="1" class="[stop-color:var(--color-border-control)]"/></linearGradient>
+<linearGradient id="${id}-ink" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="0" y2="1"><stop offset="0" data-slot="rim"/><stop offset="1" class="[stop-color:var(--color-ui-2)]"/></linearGradient>
 <clipPath id="${id}-under"><rect data-slot="under" x="-100000" y="0" width="200000" height="200000"/></clipPath>
 <filter id="${id}-cast" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
 <feGaussianBlur in="SourceAlpha" stdDeviation="24"/><feOffset dy="18" result="far"/><feFlood style="flood-color: light-dark(oklch(29.5% 0.01 70 / 0.2), oklch(18.4% 0.004 70 / 0.76))"/><feComposite in2="far" operator="in" result="farInk"/>
@@ -84,10 +84,7 @@ export function outlineLayer(): OutlineLayer {
       under.setAttribute("y", String(shape.tab.bottom));
       gradient.setAttribute("y1", String(shape.tab.top + shape.box.radius));
       gradient.setAttribute("y2", String(shape.tab.bottom - shape.box.flare));
-      rimStop.style.setProperty(
-        "stop-color",
-        rim || "var(--color-border-control)"
-      );
+      rimStop.style.setProperty("stop-color", rim || "var(--color-ui-2)");
     },
     show(shown) {
       svg.style.display = shown ? "" : "none";

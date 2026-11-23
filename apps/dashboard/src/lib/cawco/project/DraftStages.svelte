@@ -95,7 +95,7 @@
        a field of its own to change, and its box stands on the column's
        edges with the stages. -->
   <div class="flex flex-col gap-space-1" data-slot="setup-aim">
-    <label class="ps-space-3 type-meta text-ink-muted" for="{uid}-aim"
+    <label class="ps-space-3 type-meta text-tx-2" for="{uid}-aim"
       >{setupPageWords.aim}</label
     >
     <Textarea
@@ -137,7 +137,7 @@
   {/each}
   {#if adds}
     <button
-      class="select-none press-tint mark-line flex min-h-22 max-phone:min-h-control-md items-center justify-center gap-space-2 rounded-lg border-none bg-transparent text-ink-muted inset-ring inset-ring-border-control hover:bg-surface-hover"
+      class="select-none press-tint mark-line flex min-h-22 max-phone:min-h-control-md items-center justify-center gap-space-2 rounded-lg border-none bg-transparent text-tx-2 inset-ring inset-ring-ui-2 hover:bg-ui"
       data-slot="add-stage"
       onclick={add}
       type="button"

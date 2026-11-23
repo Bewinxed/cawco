@@ -98,7 +98,7 @@
 
 {#if place === "onboarding"}
   <div
-    class="h-full overflow-y-auto bg-surface-recess px-space-6 pt-space-8 pb-space-8 max-phone:px-space-4"
+    class="h-full overflow-y-auto bg-bg-2 px-space-6 pt-space-8 pb-space-8 max-phone:px-space-4"
   >
     <FirstRun
       onaddmachine={none}
@@ -120,11 +120,11 @@
     />
   </div>
 {:else}
-  <div class="flex min-h-0 min-w-0 flex-auto bg-surface-recess">
+  <div class="flex min-h-0 min-w-0 flex-auto bg-bg-2">
     <div class="flex min-h-0 py-space-2 pl-space-4 max-desk:hidden">
       <ConfigRail current="helpers" />
     </div>
-    <div class="flex min-h-0 min-w-0 flex-auto flex-col bg-surface-recess">
+    <div class="flex min-h-0 min-w-0 flex-auto flex-col bg-bg-2">
       <OwnToolsSection
         {chosen}
         {faults}

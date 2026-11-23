@@ -115,7 +115,7 @@
       <span class="inline-grid" data-box in:arrive|global
         ><StepMark state="done" /></span
       >
-      <p class="m-0 type-body text-ink-strong wrap-anywhere" aria-live="polite">
+      <p class="m-0 type-body text-tx wrap-anywhere" aria-live="polite">
         {name} is in the fleet.
       </p>
     </div>
@@ -127,14 +127,14 @@
             aria-hidden="true"
             class={[
               "size-1.5 rounded-pill",
-              machine?.status === "online" ? "bg-status-done" : "bg-ink-subtle",
+              machine?.status === "online" ? "bg-green" : "bg-tx-2",
             ]}
             data-box
           ></span>
         </span>
         <p
           data-slot="presence"
-          class="m-0 type-body text-pretty text-ink-muted wrap-anywhere"
+          class="m-0 type-body text-pretty text-tx-2 wrap-anywhere"
         >
           {machine?.status === "online"
             ? `Online as ${machine.hostname}.`
@@ -167,14 +167,14 @@
       <div class="mark-line flex items-start gap-space-2">
         <span class="mark-cell type-body"><StepMark state="failed" /></span>
         <div class="flex flex-col gap-space-1" aria-live="assertive" data-box>
-          <p class="m-0 type-body text-ink-strong wrap-anywhere">
+          <p class="m-0 type-body text-tx wrap-anywhere">
             The hub restarted during the install and lost it.
           </p>
-          <p class="m-0 type-body text-ink-muted wrap-anywhere">
+          <p class="m-0 type-body text-tx-2 wrap-anywhere">
             The fleet just now: {name}
             {inFleet ? "is in it, but not online." : "is not in it."}
           </p>
-          <p class="m-0 type-body text-ink-muted wrap-anywhere">
+          <p class="m-0 type-body text-tx-2 wrap-anywhere">
             Retry runs the whole install again.
           </p>
         </div>
@@ -182,7 +182,7 @@
     {:else if install.state === "stopped"}
       <div class="mark-line flex items-start gap-space-2">
         <span class="mark-cell type-body"><StepMark state="stopped" /></span>
-        <p class="m-0 type-body text-pretty text-ink-strong wrap-anywhere">
+        <p class="m-0 type-body text-pretty text-tx wrap-anywhere">
           {#if install.route === "command"}
             Stopped. The command no longer works; nothing on the machine was
             touched unless it already ran. Retry gives a new command.
@@ -207,7 +207,7 @@
           <StepMark state="failed" />
           <p
             data-slot="headline"
-            class="m-0 type-label text-status-fail"
+            class="m-0 type-label text-red"
             aria-live="assertive"
           >
             {words.headline}
@@ -216,13 +216,13 @@
         {#if words.why}
           <p
             data-slot="why"
-            class="m-0 type-body text-pretty text-ink-strong wrap-anywhere"
+            class="m-0 type-body text-pretty text-tx wrap-anywhere"
           >
             {words.why}
           </p>
         {/if}
         {#if words.command}
-          <p class="m-0 type-body text-ink-strong wrap-anywhere">
+          <p class="m-0 type-body text-tx wrap-anywhere">
             {words.where}
           </p>
           <MonoWell
@@ -233,11 +233,11 @@
           />
         {/if}
         {#if words.fix}
-          <p class="m-0 type-body text-pretty text-ink-strong wrap-anywhere">
+          <p class="m-0 type-body text-pretty text-tx wrap-anywhere">
             {words.fix}
           </p>
         {/if}
-        <p class="m-0 type-body text-pretty text-ink-muted wrap-anywhere">
+        <p class="m-0 type-body text-pretty text-tx-2 wrap-anywhere">
           {words.next}
         </p>
       </div>
@@ -252,7 +252,7 @@
       />
     {/if}
     {#if refused}
-      <p class="m-0 type-meta text-status-fail" aria-live="polite">
+      <p class="m-0 type-meta text-red" aria-live="polite">
         {refused}
       </p>
     {/if}

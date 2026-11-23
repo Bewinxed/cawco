@@ -96,7 +96,7 @@
 
 <div class="flex h-full min-h-0 flex-col gap-space-4" data-slot="setup-draft">
   <div
-    class="flex flex-wrap items-center gap-x-space-4 gap-y-space-2 rounded-lg bg-surface-recess px-space-3 py-space-2 inset-ring inset-ring-border-hairline"
+    class="flex flex-wrap items-center gap-x-space-4 gap-y-space-2 rounded-lg bg-bg-2 px-space-3 py-space-2 inset-ring inset-ring-ui"
     data-slot="draft-bar"
     data-state={barState}
   >
@@ -105,30 +105,27 @@
         <p class="mark-line m-0 flex items-center gap-space-2">
           <IconNeedsYou
             aria-hidden="true"
-            class="size-icon-md flex-none text-status-attn"
+            class="size-icon-md flex-none text-orange"
           />
-          <span class="type-label text-ink-strong"
-            >{setupWords.waitingOn(waiting)}</span
+          <span class="type-label text-tx">{setupWords.waitingOn(waiting)}</span
           >
         </p>
-        <p class="m-0 type-meta text-ink-muted">{setupWords.waitingWhy}</p>
+        <p class="m-0 type-meta text-tx-2">{setupWords.waitingWhy}</p>
       {:else if drafting}
         <p class="mark-line m-0 flex items-center gap-space-2">
           <LiveDot />
-          <span class="type-label text-ink-strong"
-            >{setupWords.draftingHow(name)}</span
-          >
+          <span class="type-label text-tx">{setupWords.draftingHow(name)}</span>
         </p>
         {#if asking > 0}
-          <p class="m-0 type-meta text-ink-muted">
+          <p class="m-0 type-meta text-tx-2">
             {setupWords.asksOpen(asking)}
           </p>
         {/if}
       {:else}
-        <p class="m-0 type-label text-ink-strong">
+        <p class="m-0 type-label text-tx">
           {setupWords.draftedHow(name)}
         </p>
-        <p class="m-0 type-meta text-ink-muted">
+        <p class="m-0 type-meta text-tx-2">
           {asking > 0 ? setupWords.asksBefore(asking) : setupWords.draftHint}
         </p>
       {/if}

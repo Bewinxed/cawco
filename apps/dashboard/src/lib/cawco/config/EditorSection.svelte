@@ -23,7 +23,7 @@
 
 <section
   data-slot="section"
-  class="flex flex-col gap-space-2 min-w-0 pt-space-4 border-t border-t-border-hairline"
+  class="flex flex-col gap-space-2 min-w-0 pt-space-4 border-t border-t-ui"
 >
   <SectionHeader {hue} {icon} {label} {right} wrap />
   {@render children()}

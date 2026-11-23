@@ -276,7 +276,7 @@
       />
       <h2
         data-slot="title"
-        class="m-0 min-w-0 type-label text-pretty wrap-anywhere text-ink-strong"
+        class="m-0 min-w-0 type-label text-pretty wrap-anywhere text-tx"
       >
         {shown?.title ?? name}
       </h2>
@@ -287,16 +287,12 @@
         data-slot="page-facts"
         class="flex flex-none flex-wrap items-center gap-x-space-3 gap-y-space-2"
       >
-        <span
-          class="mark-line inline-flex items-center gap-space-2 text-ink-strong"
-        >
+        <span class="mark-line inline-flex items-center gap-space-2 text-tx">
           <TaskRing
             done={isDecided(shown) ? 1 : shown.picked}
             total={isDecided(shown) ? 1 : shown.cards}
           />
-          <span data-slot="num" class="type-meta num text-ink-muted"
-            >{figure}</span
-          >
+          <span data-slot="num" class="type-meta num text-tx-2">{figure}</span>
         </span>
         {#if pill}
           <StatePill
@@ -309,10 +305,10 @@
         {#each [{ label: words.after, to: summary?.after ?? [], kind: "after" }, { label: words.unlocks, to: summary?.unlocks ?? [], kind: "unlocks" }] as group (group.kind)}
           {#if group.to.length > 0}
             <span class="type-meta text-pretty" data-links={group.kind}>
-              <span class="text-ink-muted">{group.label}</span>
+              <span class="text-tx-2">{group.label}</span>
               {#each group.to as link, index (link.name)}
                 <a
-                  class="rounded-xs text-ink-strong underline decoration-border-control underline-offset-3 wrap-anywhere hover:decoration-ink-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink"
+                  class="rounded-xs text-tx underline decoration-ui-2 underline-offset-3 wrap-anywhere hover:decoration-tx-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent"
                   data-link-to={link.name}
                   href={pageHref(link.name)}
                   onclick={(event) => {
@@ -331,7 +327,7 @@
     {/if}
 
     {#if unread && !read}
-      <p class="type-body py-space-4 text-ink-muted" role="alert">
+      <p class="type-body py-space-4 text-tx-2" role="alert">
         {words.unread(unread)}
       </p>
     {:else if decided && read?.record}
@@ -352,7 +348,7 @@
         title={read.title}
       />
     {:else if read}
-      <p class="type-body py-space-4 text-ink-muted" in:reveal>{words.gone}</p>
+      <p class="type-body py-space-4 text-tx-2" in:reveal>{words.gone}</p>
     {:else}
       <div aria-hidden="true" class="p-space-4" out:revealOut>
         <Skeleton class="w-2/5" data-slot="block" line="body" radius="text" />
@@ -377,7 +373,7 @@
     {#if refusal}
       <p
         data-slot="feedback"
-        class="type-meta m-0 px-space-3 text-status-fail"
+        class="type-meta m-0 px-space-3 text-red"
         role="alert"
         in:appear
       >

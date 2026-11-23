@@ -496,7 +496,7 @@
         ><!-- A box of its own (`data-box`), not the bar item's trimmed and
              padded words: a clamp's padding would show the top of a third
              line, and a trim round it would cut its first and last. --><span
-          class="line-clamp-2 text-pretty wrap-anywhere text-start text-ink-strong type-body font-medium"
+          class="line-clamp-2 text-pretty wrap-anywhere text-start text-tx type-body font-medium"
           data-box>{name}</span
         ></BarItem
       >
@@ -674,7 +674,7 @@
          being read slides rather than jumps. -->
     <p
       data-slot="chain"
-      class="m-0 min-w-0 shrink-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted type-meta"
+      class="m-0 min-w-0 shrink-0 overflow-clip text-ellipsis whitespace-nowrap text-tx-2 type-meta"
       title={`on ${parent}`}
       transition:unfold
     >
@@ -727,7 +727,7 @@
     <!-- Resolved, and when: Reopen is the floating group's, said once. -->
     <p
       data-slot="resolved"
-      class="m-0 shrink-0 min-w-0 text-ink-muted type-meta num"
+      class="m-0 shrink-0 min-w-0 text-tx-2 type-meta num"
       role="status"
     >
       {said.resolvedAgo(resolvedAge)}
@@ -740,10 +740,7 @@
       data-not-sent=""
       class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
     >
-      <p
-        class="m-0 min-w-0 text-pretty wrap-anywhere text-status-fail"
-        role="status"
-      >
+      <p class="m-0 min-w-0 text-pretty wrap-anywhere text-red" role="status">
         {said.notSent(whyNotSent)}
       </p>
       <Button
@@ -791,7 +788,7 @@
               <p class="flex flex-wrap gap-space-1 mt-space-1 mx-0 mb-0">
                 {#each entry.files as file (file)}
                   <code
-                    class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-surface-recess type-code"
+                    class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-bg-2 type-code"
                     >{file}</code
                   >
                 {/each}
@@ -817,7 +814,7 @@
          with the live dot (core `words/comments.ts`). -->
     <p
       data-slot="sent-to"
-      class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-1 gap-y-0 text-ink-muted type-meta"
+      class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-1 gap-y-0 text-tx-2 type-meta"
     >
       <span>{said.sentTo}</span>
       {#if sentTo?.draw === "element"}

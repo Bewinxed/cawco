@@ -422,8 +422,8 @@ function Host() {
   const surface = useRef<HTMLDivElement>(null);
   const ink = useMemo<CanvasInk>(
     () => ({
-      stroke: tokenHex("--color-ink-strong"),
-      ground: tokenHex("--color-surface-raised"),
+      stroke: tokenHex("--color-tx"),
+      ground: tokenHex("--color-bg"),
     }),
     []
   );

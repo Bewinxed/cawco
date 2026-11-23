@@ -424,16 +424,16 @@
   data-slot="ff-tab"
   data-ff-tab
   class={cn(
-    "group/ff-tab relative flex h-(--item) min-w-0 flex-initial items-center rounded-(--shape) text-ink-muted",
+    "group/ff-tab relative flex h-(--item) min-w-0 flex-initial items-center rounded-(--shape) text-tx-2",
     "[&>:where(:not([data-slot=fold],[data-slot=hit]))]:relative [&>:where(:not([data-slot=fold],[data-slot=hit]))]:z-3",
     "data-trailed:pe-(--end-pad)",
     "in-variant-folder:data-trailed:pe-(--fold-end-pad)",
-    "data-tab-item-selected:text-ink-strong hover-hover:data-ghosted:not-data-tab-item-selected:text-ink-strong",
-    "in-variant-folder:data-tab-item-selected:text-ink-muted",
+    "data-tab-item-selected:text-tx hover-hover:data-ghosted:not-data-tab-item-selected:text-tx",
+    "in-variant-folder:data-tab-item-selected:text-tx-2",
     "motion-safe:transition-[color] motion-safe:duration-(--duration-fast) motion-safe:ease-out",
     "in-variant-folder:motion-safe:[transition:color_calc(var(--duration-fast)/2)_var(--ease-out),--pick_var(--choose-dur)_var(--choose-ease)]",
     "[[data-variant=folder]_[data-ride]_&]:transition-off",
-    "hit-pressed:bg-surface-pressed in-variant-folder:hit-pressed:bg-transparent light:hit-pressed:text-ink-strong hit-pressed:[--sheet-press:var(--color-surface-pressed)]",
+    "hit-pressed:bg-ui-2 in-variant-folder:hit-pressed:bg-transparent light:hit-pressed:text-tx hit-pressed:[--sheet-press:var(--color-ui-2)]",
     // A glyph alone is narrower than a finger: under one it takes the touch
     // floor across, its glyph centred (The 44 Touch Rule), since its
     // neighbours' edges bound its hit area.
@@ -588,7 +588,7 @@
       <span
         data-slot="text"
         aria-hidden="true"
-        class="pick-inherit col-start-1 row-start-1 hidden min-w-0 truncate leading-(--item) font-medium in-variant-folder:block in-variant-folder:text-ink-strong in-variant-folder:opacity-(--pick) before:content-[attr(data-text)]"
+        class="pick-inherit col-start-1 row-start-1 hidden min-w-0 truncate leading-(--item) font-medium in-variant-folder:block in-variant-folder:text-tx in-variant-folder:opacity-(--pick) before:content-[attr(data-text)]"
         data-text={label}
       ></span>
     </span>

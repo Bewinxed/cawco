@@ -74,7 +74,7 @@ export class PaneClose {
       width: `${rect.width}px`,
       height: `${rect.height}px`,
       borderRadius: "var(--radius-lg)",
-      background: "var(--color-surface-raised)",
+      background: "var(--color-bg)",
       boxShadow: "var(--shadow-lg)",
       pointerEvents: "none",
       zIndex: "calc(var(--layer-float) + 10)",

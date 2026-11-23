@@ -221,7 +221,7 @@
                as the next step. -->
           <span
             data-slot="tail"
-            class="flex justify-end flex-auto min-w-0 overflow-hidden text-ink-muted text-sm font-normal whitespace-nowrap tail-fade"
+            class="flex justify-end flex-auto min-w-0 overflow-hidden text-tx-2 text-sm font-normal whitespace-nowrap tail-fade"
             in:tailIn
             out:tailOut><span class="flex-none">{tail}</span></span
           >

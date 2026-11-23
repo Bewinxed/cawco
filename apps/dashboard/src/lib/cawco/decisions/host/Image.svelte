@@ -123,7 +123,7 @@
       <img
         bind:this={shown}
         {alt}
-        class="block h-auto max-w-full rounded-xs outline-1 -outline-offset-1 outline-ink-strong/10"
+        class="block h-auto max-w-full rounded-xs outline-1 -outline-offset-1 outline-tx/10"
         decoding="async"
         height={Math.round(size.height / size.scale)}
         loading="lazy"
@@ -136,10 +136,7 @@
     </button>
   {:else}
     <!-- One line in its well where the picture would stand, never a slab of its size. -->
-    <p
-      data-slot="media-gone"
-      class="type-meta w-full text-ink-muted wrap-anywhere"
-    >
+    <p data-slot="media-gone" class="type-meta w-full text-tx-2 wrap-anywhere">
       {src
         ? "The picture this card showed didn't load."
         : "The picture this card showed is gone."}

@@ -74,7 +74,7 @@
   let { path }: { path: string } = $props();
 
   const store = configStore();
-  const HUE = "var(--color-mark-4)";
+  const HUE = "var(--color-cyan)";
   const LATEST = 5;
   const main = untrack(() => path === MAIN);
 
@@ -441,12 +441,12 @@
         />
       {/if}
     </div>
-    <h1 data-slot="title" class="type-title wrap-anywhere text-ink-strong">
+    <h1 data-slot="title" class="type-title wrap-anywhere text-tx">
       {label}
     </h1>
     {#if !main}
       <p
-        class="relative flex flex-wrap gap-x-space-3 gap-y-space-1 type-meta text-ink-muted"
+        class="relative flex flex-wrap gap-x-space-3 gap-y-space-1 type-meta text-tx-2"
       >
         <span
           >{words.loadedInto(loadedInto(scope, projectsStore.projects))}</span
@@ -455,7 +455,7 @@
     {/if}
     <p
       data-slot="num"
-      class="num relative flex flex-wrap gap-x-space-3 gap-y-space-1 type-meta text-ink-muted"
+      class="num relative flex flex-wrap gap-x-space-3 gap-y-space-1 type-meta text-tx-2"
     >
       <span>{formatBytes(bytes)}</span>
       <span
@@ -475,7 +475,7 @@
         <span>{words.notWritten}</span>
       {/if}
       {#if dirty}
-        <span class="font-medium text-ink-strong" in:crossIn out:crossOut
+        <span class="font-medium text-tx" in:crossIn out:crossOut
           >{words.unsaved}<span class="not-any-pointer-fine:hidden"
             >{words.saveShortcut}</span
           ></span
@@ -489,7 +489,7 @@
   <EditorSection hue={HUE} icon={IconDocument} label={words.contents}>
     {#if conflict}
       <div class="flex flex-col gap-space-2" in:unfold out:unfold>
-        <p class="type-meta text-status-attn">{words.changedElsewhere}</p>
+        <p class="type-meta text-orange">{words.changedElsewhere}</p>
         {#key conflict.hash}
           <DiffView
             filePath={path}
@@ -525,7 +525,7 @@
          inside has focus (`field-edge`). -->
     <div
       data-slot="field"
-      class="field-edge transition-control min-h-80 rounded-sm border bg-surface-raised px-space-2 py-space-1 shadow-sm"
+      class="field-edge transition-control min-h-80 rounded-sm border bg-bg px-space-2 py-space-1 shadow-sm"
     >
       <!-- Crepe reads its text once, when it is made: it waits for a draft
            kept for this file to be back. -->
@@ -543,13 +543,13 @@
 
   <EditorSection hue={HUE} icon={IconHistory} label={words.history}>
     {#if historyError}
-      <p class="type-meta text-status-attn" role="alert">{historyError}</p>
+      <p class="type-meta text-orange" role="alert">{historyError}</p>
     {:else if versions === null}
-      <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-measure text-tx-2">
         {words.loading}
       </p>
     {:else if versions.length === 0}
-      <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-measure text-tx-2">
         {words.nothingReplaced}
       </p>
     {:else}
@@ -561,7 +561,7 @@
           {#each visibleVersions as row (row.id)}
             <li
               data-slot="entry"
-              class="flex flex-col gap-space-2 py-space-2 not-first:border-t not-first:border-t-border-hairline"
+              class="flex flex-col gap-space-2 py-space-2 not-first:border-t not-first:border-t-ui"
               data-flip
             >
               <div
@@ -569,22 +569,18 @@
               >
                 <span
                   data-slot="memory-editor-label"
-                  class="type-meta max-w-measure text-ink-strong"
+                  class="type-meta max-w-measure text-tx"
                   >{formatDistanceToNow(new Date(row.createdAt))}</span
                 >
-                <span
-                  data-slot="note"
-                  class="type-meta max-w-measure text-ink-muted"
+                <span data-slot="note" class="type-meta max-w-measure text-tx-2"
                   >{words.from(versionSource(row.source))}</span
                 >
                 <span
                   data-slot="note"
-                  class="type-meta max-w-measure text-ink-muted"
+                  class="type-meta max-w-measure text-tx-2"
                   title={row.hash}>{row.hash.slice(0, 8)}</span
                 >
-                <span
-                  data-slot="note"
-                  class="type-meta max-w-measure text-ink-muted"
+                <span data-slot="note" class="type-meta max-w-measure text-tx-2"
                   >{formatBytes(row.bytes)}</span
                 >
                 <Button
@@ -608,7 +604,7 @@
                     {#if reading[row.id]}
                       <p
                         data-slot="note"
-                        class="mark-line flex items-center gap-space-2 type-meta max-w-measure text-ink-muted"
+                        class="mark-line flex items-center gap-space-2 type-meta max-w-measure text-tx-2"
                         role="status"
                         in:crossIn
                         out:crossOut
@@ -674,7 +670,7 @@
         />
       {:else}
         {#if applied.length > 0}
-          <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+          <p data-slot="note" class="type-meta max-w-measure text-tx-2">
             {words.inSyncOn(applied.length)}
             {#if asleep.length > 0}
               {words.offlineSync(

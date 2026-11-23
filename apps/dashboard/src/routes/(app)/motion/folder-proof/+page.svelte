@@ -173,7 +173,7 @@
 <!-- Over the shell and anything it draws (a hub banner): the strip on its
      shelf, and the page its chosen tab opens into. -->
 <div
-  class="fixed inset-0 z-(--z) flex flex-col bg-surface-recess text-ink-strong"
+  class="fixed inset-0 z-(--z) flex flex-col bg-bg-2 text-tx"
   style:--z="calc(var(--layer-sheet) + 20)"
   data-folder-proof
   bind:this={proofEl}
@@ -185,26 +185,26 @@
 >
   <div
     data-slot="group"
-    class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-sunk pt-space-6"
+    class="@container/leaf flex min-h-0 flex-auto flex-col bg-bg-2 pt-space-6"
     data-strip="session"
     onclickcapture={benchClick(leaf)}
   >
     <PaneTabs {leaf} />
-    <div class="h-space-6 bg-surface-recess"></div>
+    <div class="h-space-6 bg-bg-2"></div>
   </div>
   <div
     data-slot="group"
-    class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-sunk pt-space-6"
+    class="@container/leaf flex min-h-0 flex-auto flex-col bg-bg-2 pt-space-6"
     data-strip="session-idle"
     onclickcapture={benchClick(idleLeaf)}
   >
     <PaneTabs leaf={idleLeaf} />
-    <div class="h-space-6 bg-surface-recess"></div>
+    <div class="h-space-6 bg-bg-2"></div>
   </div>
   <!-- The rims' tokens, tuned live. The bench's own controls, at the foot,
        clear of every strip. -->
   <div
-    class="type-label flex flex-wrap gap-x-space-4 gap-y-space-2 border-t border-t-border-hairline bg-surface-raised px-space-4 py-space-3 text-ink-muted"
+    class="type-label flex flex-wrap gap-x-space-4 gap-y-space-2 border-t border-t-ui bg-bg px-space-4 py-space-3 text-tx-2"
   >
     <label class="flex items-center gap-space-2">
       <span>Taper</span>
@@ -220,7 +220,7 @@
           }
         }
       />
-      <output class="num min-w-ch-4 text-ink-strong">{taper ?? "–"}px</output>
+      <output class="num min-w-ch-4 text-tx">{taper ?? "–"}px</output>
     </label>
     <label class="flex items-center gap-space-2">
       <span>Subtle</span>
@@ -236,7 +236,7 @@
           }
         }
       />
-      <output class="num min-w-ch-4 text-ink-strong">{subtle ?? "–"}%</output>
+      <output class="num min-w-ch-4 text-tx">{subtle ?? "–"}%</output>
     </label>
     <label class="flex items-center gap-space-2">
       <span>Thickness</span>
@@ -252,7 +252,7 @@
           }
         }
       />
-      <output class="num min-w-ch-4 text-ink-strong">{width ?? "–"}px</output>
+      <output class="num min-w-ch-4 text-tx">{width ?? "–"}px</output>
     </label>
   </div>
 </div>

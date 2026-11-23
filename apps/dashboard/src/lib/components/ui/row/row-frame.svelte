@@ -7,29 +7,27 @@
 </script>
 
 <div
-  class="w-full max-w-sm rounded-lg border border-border-hairline bg-surface-raised px-space-3 py-space-2"
+  class="w-full max-w-sm rounded-lg border border-ui bg-bg px-space-3 py-space-2"
 >
   <RowList aria-label="Aligned rows">
     <Row>
       {#snippet lead()}
         <span
-          class="grid size-row-compact place-items-center rounded-sm bg-surface-recess text-ink-muted"
+          class="grid size-row-compact place-items-center rounded-sm bg-bg-2 text-tx-2"
         >
           <IconCpu class="size-icon-md" />
         </span>
       {/snippet}
       <div class="flex min-w-0 flex-col">
-        <span class="truncate type-label text-ink-strong"
-          >Local workstation</span
-        >
-        <span class="truncate type-meta text-ink-muted">macOS · Connected</span>
+        <span class="truncate type-label text-tx">Local workstation</span>
+        <span class="truncate type-meta text-tx-2">macOS · Connected</span>
       </div>
       {#snippet trail()}
         <Badge variant="done"><span>Live</span></Badge>
       {/snippet}
       {#snippet below()}
         {#if withBelow}
-          <span class="type-meta text-ink-muted"
+          <span class="type-meta text-tx-2"
             >Aligned to the body track with subgrid, zero inset arithmetic.</span
           >
         {/if}
@@ -38,18 +36,14 @@
     <Row>
       {#snippet lead()}
         <span
-          class="grid size-row-compact place-items-center rounded-sm bg-surface-recess text-ink-muted"
+          class="grid size-row-compact place-items-center rounded-sm bg-bg-2 text-tx-2"
         >
           <IconKey class="size-icon-md" />
         </span>
       {/snippet}
       <div class="flex min-w-0 flex-col">
-        <span class="truncate type-label text-ink-strong"
-          >Anthropic API key</span
-        >
-        <span class="truncate type-meta text-ink-muted"
-          >Used by 3 harnesses</span
-        >
+        <span class="truncate type-label text-tx">Anthropic API key</span>
+        <span class="truncate type-meta text-tx-2">Used by 3 harnesses</span>
       </div>
       {#snippet trail()}
         <Badge variant="secondary"><span>Primary</span></Badge>
@@ -58,14 +52,12 @@
     <Row>
       {#snippet lead()}
         <span
-          class="grid size-row-compact place-items-center rounded-sm bg-surface-recess text-ink-muted"
+          class="grid size-row-compact place-items-center rounded-sm bg-bg-2 text-tx-2"
         >
           <IconFolder class="size-icon-md" />
         </span>
       {/snippet}
-      <span class="truncate type-label text-ink-strong"
-        >Workspace directory</span
-      >
+      <span class="truncate type-label text-tx">Workspace directory</span>
     </Row>
   </RowList>
 </div>

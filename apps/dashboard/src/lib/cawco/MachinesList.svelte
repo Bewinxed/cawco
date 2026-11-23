@@ -230,14 +230,14 @@
   <!-- Machines waiting to be admitted (hub hub-auth.ts): first, as they wait on you. -->
   <ul
     data-slot="list"
-    class="mx-0 mt-0 mb-space-1 flex list-none flex-col gap-space-1 border-b border-b-border-hairline px-0 pt-0 pb-space-1"
+    class="mx-0 mt-0 mb-space-1 flex list-none flex-col gap-space-1 border-b border-b-ui px-0 pt-0 pb-space-1"
   >
     {#each hubAuth.waiting as machine (machine.machineId)}
       {@const name = machineLabel(machine.hostname ?? machine.machineId)}
       <li
         data-slot="row"
         class={[
-          "flex w-full min-h-space-8 items-center rounded-sm py-space-1 text-ink-strong transition-control coarse:min-h-control-lg hover:bg-surface-hover",
+          "flex w-full min-h-space-8 items-center rounded-sm py-space-1 text-tx transition-control coarse:min-h-control-lg hover:bg-ui",
           tileRow,
         ]}
         data-waiting={machine.machineId}
@@ -297,7 +297,7 @@
   <!-- No machine yet: the empty fleet's two ways in, as rows. -->
   <p
     class={[
-      "m-0 pt-space-1 pb-space-2 type-meta text-ink-muted",
+      "m-0 pt-space-1 pb-space-2 type-meta text-tx-2",
       rail ? "ps-space-3 pe-space-2" : "px-space-2",
     ]}
   >
@@ -311,7 +311,7 @@
           data-slot="row"
           aria-haspopup="dialog"
           class={[
-            "select-none flex w-full min-h-space-8 items-center rounded-sm py-space-1 text-start text-ink-strong transition-control coarse:min-h-control-lg hover:bg-surface-hover press-tint focus-inset",
+            "select-none flex w-full min-h-space-8 items-center rounded-sm py-space-1 text-start text-tx transition-control coarse:min-h-control-lg hover:bg-ui press-tint focus-inset",
             bareRow,
           ]}
           onclick={(event) => connect.openNew(event.currentTarget, way.route)}
@@ -323,12 +323,8 @@
             style:color={way.hue}><Icon class="size-icon-md" /></span
           >
           <span data-slot="words" class="flex min-w-0 flex-col">
-            <span data-slot="name" class="type-label text-ink-strong"
-              >{way.name}</span
-            >
-            <span data-slot="meta" class="type-meta text-ink-muted"
-              >{way.meta}</span
-            >
+            <span data-slot="name" class="type-label text-tx">{way.name}</span>
+            <span data-slot="meta" class="type-meta text-tx-2">{way.meta}</span>
           </span>
         </button>
       </li>
@@ -363,7 +359,7 @@
             <div
               data-slot="row"
               class={[
-                "flex w-full min-h-space-8 items-center rounded-sm py-space-1 text-ink-strong transition-control coarse:min-h-control-lg hover:bg-surface-hover press-tint focus-inset",
+                "flex w-full min-h-space-8 items-center rounded-sm py-space-1 text-tx transition-control coarse:min-h-control-lg hover:bg-ui press-tint focus-inset",
                 tileRow,
               ]}
               style:--tile-lead={rail ? TILE_LEAD : undefined}
@@ -416,7 +412,7 @@
     data-slot="row"
     data-add
     class={[
-      "select-none mark-line press-tint focus-inset mt-space-1 flex w-full min-h-space-8 items-center rounded-ee-sm rounded-es-sm border-t border-t-border-hairline py-space-1 text-start type-label text-ink-muted transition-control coarse:min-h-control-lg hover:bg-surface-hover",
+      "select-none mark-line press-tint focus-inset mt-space-1 flex w-full min-h-space-8 items-center rounded-ee-sm rounded-es-sm border-t border-t-ui py-space-1 text-start type-label text-tx-2 transition-control coarse:min-h-control-lg hover:bg-ui",
       bareRow,
     ]}
     onclick={(event) => connect.openNew(event.currentTarget)}

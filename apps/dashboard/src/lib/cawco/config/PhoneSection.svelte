@@ -127,21 +127,21 @@
         />
       {/snippet}
     </SectionHeader>
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       A push names the session or task and nothing else; the app reads the rest
       over your tailnet.
     </p>
     {#each testLines as line, index (index)}
       <p
         data-slot="num"
-        class="num mark-line group type-body flex items-center gap-space-2 text-ink-muted tone-ok:text-ink-strong"
+        class="num mark-line group type-body flex items-center gap-space-2 text-tx-2 tone-ok:text-tx"
         data-tone={line.tone}
         transition:unfold
       >
         <span
           data-slot="dot"
           aria-hidden="true"
-          class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-bad:bg-status-attn group-tone-bad:opacity-100 group-tone-ok:bg-status-done group-tone-ok:opacity-100"
+          class="size-space-2 flex-none rounded-pill bg-tx-2 opacity-50 group-tone-bad:bg-orange group-tone-bad:opacity-100 group-tone-ok:bg-green group-tone-ok:opacity-100"
           data-box
         ></span>
         <span>{line.text}</span>
@@ -171,24 +171,24 @@
           <!-- minmax(0, 1fr) auto auto, and minmax(0, 1fr) auto on a phone (the row's tracks) -->
           <li
             data-slot="device"
-            class="grid grid-cols-(--device-cols) items-center gap-space-3 not-first:border-t not-first:border-t-border-hairline py-space-3 max-phone:grid-cols-(--device-cols-phone)"
+            class="grid grid-cols-(--device-cols) items-center gap-space-3 not-first:border-t not-first:border-t-ui py-space-3 max-phone:grid-cols-(--device-cols-phone)"
             style:--device-cols="minmax(0, 1fr) auto auto"
             style:--device-cols-phone="minmax(0, 1fr) auto"
           >
             <div data-slot="who" class="flex min-w-0 flex-col">
-              <span data-slot="name" class="type-body text-ink-strong"
+              <span data-slot="name" class="type-body text-tx"
                 >{device.name}</span
               >
               <span
                 data-num
                 data-slot="meta"
-                class="num type-meta wrap-anywhere text-ink-muted"
+                class="num type-meta wrap-anywhere text-tx-2"
                 >{platformName(device.platform)}</span
               >
               <span
                 data-num
                 data-slot="meta"
-                class="num type-meta wrap-anywhere text-ink-muted tone-bad:text-status-fail"
+                class="num type-meta wrap-anywhere text-tx-2 tone-bad:text-red"
                 data-tone={device.lastError ? "bad" : "ok"}
               >
                 {#if device.lastError}
@@ -221,7 +221,7 @@
     {/if}
     {#if deviceError}
       <p
-        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail"
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-red"
         role="alert"
         transition:unfold
       >

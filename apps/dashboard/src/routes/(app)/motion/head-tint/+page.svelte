@@ -206,7 +206,7 @@
      wrapper), so the bench stands on the bench layer under it. One group,
      its strip on the shelf and its panes under it. -->
 <div
-  class="@container/leaf fixed inset-0 z-(--z) flex flex-col bg-surface-sunk pt-space-6 text-ink-strong"
+  class="@container/leaf fixed inset-0 z-(--z) flex flex-col bg-bg-2 pt-space-6 text-tx"
   style:--z="calc(var(--layer-sheet) + 20)"
   data-head-tint
   onclickcapture={benchClick(leaf)}
@@ -216,7 +216,7 @@
        one laid out in the same box, only the chosen one drawn. -->
   <div
     data-slot="stack"
-    class="relative flex min-h-0 min-w-0 flex-auto overflow-hidden bg-surface-recess"
+    class="relative flex min-h-0 min-w-0 flex-auto overflow-hidden bg-bg-2"
   >
     {#each ids as id (id)}
       {@const shown = leaf.active === id}

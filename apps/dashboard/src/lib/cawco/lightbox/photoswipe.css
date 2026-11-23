@@ -5,11 +5,11 @@
      `cawco-pswp` mainClass lightbox/photoswipe.ts passes it: its chrome on the house's
      raised surface and hairline, 44px controls. */
   .cawco-pswp {
-    --pswp-bg: oklch(from var(--color-surface-page) l c h / 0.72);
-    --pswp-placeholder-bg: var(--color-surface-recess);
-    --pswp-icon-color: var(--color-ink-strong);
-    --pswp-error-text-color: var(--color-ink-muted);
-    color: var(--color-ink-strong);
+    --pswp-bg: oklch(from var(--color-bg) l c h / 0.72);
+    --pswp-placeholder-bg: var(--color-bg-2);
+    --pswp-icon-color: var(--color-tx);
+    --pswp-error-text-color: var(--color-tx-2);
+    color: var(--color-tx);
 
     & .pswp__bg {
       backdrop-filter: blur(2px);
@@ -24,10 +24,10 @@
       place-items: center;
       inline-size: var(--spacing-control-lg);
       block-size: var(--spacing-control-lg);
-      border: 1px solid var(--color-border-hairline);
+      border: 1px solid var(--color-ui);
       border-radius: var(--radius-sm);
-      background: var(--color-surface-raised);
-      color: var(--color-ink-strong);
+      background: var(--color-bg);
+      color: var(--color-tx);
       opacity: 1;
       overflow: visible;
 
@@ -37,7 +37,7 @@
       }
       @media (hover: hover) and (pointer: fine) {
         &:hover {
-          background: var(--color-surface-hover);
+          background: var(--color-ui);
         }
       }
     }
@@ -59,13 +59,13 @@
       block-size: var(--spacing-control-lg);
       margin: 0;
       padding-inline: var(--spacing-space-3);
-      border: 1px solid var(--color-border-hairline);
+      border: 1px solid var(--color-ui);
       border-radius: var(--radius-sm);
-      background: var(--color-surface-raised);
+      background: var(--color-bg);
       font-size: var(--text-sm);
       font-weight: var(--font-weight-normal);
       font-variant-numeric: tabular-nums;
-      color: var(--color-ink-strong);
+      color: var(--color-tx);
       text-shadow: none;
       opacity: 1;
     }
@@ -79,10 +79,10 @@
       align-items: center;
       gap: var(--spacing-space-3);
       padding: var(--spacing-space-2) var(--spacing-space-3);
-      border: 1px solid var(--color-border-hairline);
+      border: 1px solid var(--color-ui);
       border-radius: var(--radius-sm);
-      background: var(--color-surface-recess);
-      color: var(--color-ink-muted);
+      background: var(--color-bg-2);
+      color: var(--color-tx-2);
       font-size: var(--text-sm);
       font-weight: var(--font-weight-normal);
       opacity: 0;

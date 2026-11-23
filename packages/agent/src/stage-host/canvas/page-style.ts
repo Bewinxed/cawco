@@ -19,7 +19,7 @@ html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
 /* The skeleton recipe: a surface-hover block, pulsing down to 0.5 and back once a --duration-loop on
    ease-in-out (transitions.dev Skeleton loader and reveal), still without motion. */
 .cawco-stand-in-body { inline-size: calc(var(--spacing) * 60); max-inline-size: 100vw; block-size: calc(var(--spacing) * 24);
-  border-radius: var(--radius-sm); background: var(--color-surface-hover); }
+  border-radius: var(--radius-sm); background: var(--color-ui); }
 @media (prefers-reduced-motion: no-preference) {
   .cawco-waiting { animation-duration: var(--duration-base); animation-timing-function: var(--ease-out); }
   .cawco-stand-in-body { animation: cawco-pulse var(--duration-loop) var(--ease-in-out) infinite; }
@@ -29,29 +29,29 @@ html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
 /* What failed says so where it would stand: the error formula's line, then Show details. It reads raised on the page, so its
    details recess inside it in both schemes. */
 .cawco-section-failed, .cawco-stage-failed { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--spacing-space-2); inline-size: 0;
-  min-inline-size: max(100%, calc(var(--spacing) * 60)); box-sizing: border-box; padding: var(--spacing-space-3); background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-hairline); border-radius: var(--radius-sm); font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans); color: var(--color-ink-strong); }
-.cawco-section-failed-line { margin: 0; font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans); color: var(--color-status-fail); text-wrap: pretty; }
+  min-inline-size: max(100%, calc(var(--spacing) * 60)); box-sizing: border-box; padding: var(--spacing-space-3); background: var(--color-bg);
+  border: 1px solid var(--color-ui); border-radius: var(--radius-sm); font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans); color: var(--color-tx); }
+.cawco-section-failed-line { margin: 0; font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans); color: var(--color-red); text-wrap: pretty; }
 /* Who is on it, under what failed: the muted ink, a calm line beside the red one. */
-.cawco-failed-fixing { margin: 0; font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans); color: var(--color-ink-muted); text-wrap: pretty; }
+.cawco-failed-fixing { margin: 0; font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans); color: var(--color-tx-2); text-wrap: pretty; }
 /* Show details: the sm ghost, its words standing on the line's start (its own inset pulled back), no disclosure triangle. */
 :is(.cawco-section-failed, .cawco-stage-failed) summary { list-style: none; display: inline-flex; align-items: center; inline-size: fit-content;
   block-size: var(--spacing-control-sm); padding-inline: var(--spacing-space-2); margin-inline-start: calc(var(--spacing-space-2) * -1); border-radius: var(--radius-sm);
-  font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans); color: var(--color-ink-strong); cursor: pointer; }
+  font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans); color: var(--color-tx); cursor: pointer; }
 :is(.cawco-section-failed, .cawco-stage-failed) summary::-webkit-details-marker { display: none; }
 /* Its details stand in the card's one track: a wide code frame scrolls inside it, never widens it. */
 :is(.cawco-section-failed, .cawco-stage-failed) details { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--spacing-space-1); }
-@media (hover: hover) { :is(.cawco-section-failed, .cawco-stage-failed) summary:hover { background: var(--color-surface-hover); } }
-:is(.cawco-section-failed, .cawco-stage-failed) :is(summary, button):focus-visible { outline: 2px solid var(--color-accent-ink);
+@media (hover: hover) { :is(.cawco-section-failed, .cawco-stage-failed) summary:hover { background: var(--color-ui); } }
+:is(.cawco-section-failed, .cawco-stage-failed) :is(summary, button):focus-visible { outline: 2px solid var(--color-accent);
   outline-offset: 2px; }
 :is(.cawco-section-failed, .cawco-stage-failed) pre { margin: var(--spacing-space-1) 0 0; padding: var(--spacing-space-2); font: var(--font-weight-normal) var(--text-sm) / var(--leading-base) var(--font-mono);
-  font-variant-ligatures: none; color: var(--color-ink-strong); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--color-surface-recess);
+  font-variant-ligatures: none; color: var(--color-tx); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--color-bg-2);
   border-radius: var(--radius-sm); }
 /* Vite's code frame: its columns line up, so it scrolls rather than wraps. */
 .cawco-section-failed pre.cawco-section-failed-frame { white-space: pre; overflow-wrap: normal; overflow-x: auto; }
 /* The place stays whole on one line: the path gives way inside (The Truncate Inside Rule), :line:column never. */
 .cawco-section-failed-place { display: flex; min-inline-size: 0; margin: 0; font: var(--font-weight-normal) var(--text-sm) / var(--leading-base) var(--font-mono); font-variant-ligatures: none;
-  color: var(--color-ink-muted); white-space: nowrap; }
+  color: var(--color-tx-2); white-space: nowrap; }
 .cawco-section-failed-place > span:first-child { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
 .cawco-section-failed-place > span:last-child { flex: none; }
 .cawco-frame-body { position: relative; min-inline-size: 24px; min-block-size: 16px; }
@@ -65,14 +65,14 @@ html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
    a 1440 drawing in a 1440 window stands edge to edge, and the page never scrolls sideways for a gutter. A drawing wider
    than the page scrolls sideways. No scrollbar's gutter stands empty beside the drawing (the preview proxy's floor keeps
    one): a strip of the panel showed through it. */
-html.cawco-stage-page { overflow: auto; overscroll-behavior: contain; scrollbar-gutter: auto; background: var(--color-surface-page);
+html.cawco-stage-page { overflow: auto; overscroll-behavior: contain; scrollbar-gutter: auto; background: var(--color-bg);
   scroll-padding-block-start: var(--stage-room, 0px); }
 /* The stage's floating head (the panel's StagePane) over the page's top: the column pads its top by its room (--stage-room,
    said by the panel), so the drawing at rest stands clear of it and scrolls beneath it, and the scroll edge effect under it
    blurs and fades what scrolls there into the page's ground, clear at rest (DESIGN.md, The Title Bars Follow Liquid Glass Rule). */
 html.cawco-stage-page::before { content: ""; position: fixed; inset-inline: 0; inset-block-start: 0; z-index: 2147483000;
   block-size: var(--stage-room, 0px); pointer-events: none; opacity: 0;
-  background: linear-gradient(to bottom, var(--color-surface-page) 40%, transparent);
+  background: linear-gradient(to bottom, var(--color-bg) 40%, transparent);
   backdrop-filter: blur(var(--spacing-space-2)); mask-image: linear-gradient(to bottom, black 50%, transparent);
   transition: opacity var(--duration-fast, 150ms) ease-out; }
 html.cawco-stage-page.cawco-stage-scrolled::before { opacity: 1; }
@@ -101,7 +101,7 @@ html.cawco-stage-page .cawco-canvas { display: flex; flex-direction: column; ali
 .cawco-stage-flipped > .cawco-stage-against { visibility: visible; }
 .cawco-stage-flipped > .cawco-stage-drawing { visibility: hidden; }
 /* Side by side, each drawing named over its own column. */
-.cawco-stage-names { display: flex; gap: var(--spacing-space-6); font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans); color: var(--color-ink-muted); }
+.cawco-stage-names { display: flex; gap: var(--spacing-space-6); font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans); color: var(--color-tx-2); }
 .cawco-stage-names[hidden] { display: none; }
 .cawco-stage-names > span { inline-size: var(--frame-w); min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* A difference's ring: outside the element's box on its own shape, solid for what came in or changed, dashed for what
@@ -110,14 +110,14 @@ html.cawco-stage-page .cawco-canvas { display: flex; flex-direction: column; ali
 .cawco-change-ring { --ring-out: calc(var(--spacing-space-1) + 2px); position: absolute; box-sizing: border-box;
   left: calc(var(--ring-x) - var(--ring-out)); top: calc(var(--ring-y) - var(--ring-out));
   inline-size: calc(var(--ring-w) + 2 * var(--ring-out)); block-size: calc(var(--ring-h) + 2 * var(--ring-out));
-  border: 2px solid var(--color-status-done); border-radius: calc(var(--ring-r) + var(--spacing-space-1)); }
+  border: 2px solid var(--color-green); border-radius: calc(var(--ring-r) + var(--spacing-space-1)); }
 .cawco-change-ring[data-kind="went"] { border-style: dashed; }
 /* The ring on what a row of the design graph's Animation face rests on: the change ring's stroke round the thing as it
    stands at the playhead's moment, in the same layer, taking no press. */
 .cawco-lit-ring { --ring-out: calc(var(--spacing-space-1) + 2px); position: absolute; box-sizing: border-box;
   pointer-events: none; left: calc(var(--ring-x) - var(--ring-out)); top: calc(var(--ring-y) - var(--ring-out));
   inline-size: calc(var(--ring-w) + 2 * var(--ring-out)); block-size: calc(var(--ring-h) + 2 * var(--ring-out));
-  border: 2px solid var(--color-status-done); border-radius: var(--radius-sm); }
+  border: 2px solid var(--color-green); border-radius: var(--radius-sm); }
 .cawco-lit-ring[hidden] { display: none; }
 /* The alignment guides (guides.ts): a layer of the stage's own over the drawing, at its px, taking no press. One hue per kind of
    edge, a near-miss and an off-token spacing in red with its px, an on-token spacing washed green (theme.css --color-c-guide-*). */
@@ -125,21 +125,21 @@ html.cawco-stage-page .cawco-canvas { display: flex; flex-direction: column; ali
   overflow: visible; pointer-events: none; z-index: 1; }
 .cawco-guides[hidden] { display: none; }
 .cawco-guides line { stroke-width: 1px; shape-rendering: crispEdges; }
-.cawco-guides [data-kind="start"] { stroke: var(--color-mark-4); }
-.cawco-guides [data-kind="end"] { stroke: var(--color-mark-6); }
-.cawco-guides [data-kind="centre"] { stroke: var(--color-mark-5); }
-.cawco-guides [data-kind="baseline"] { stroke: var(--color-mark-3); stroke-dasharray: 2 2; }
-.cawco-guides rect[data-kind="surface"] { fill: none; stroke: var(--color-mark-1); stroke-width: 1px; }
-.cawco-guides rect[data-kind="on-token"] { fill: color-mix(in oklab, var(--color-status-done) 14%, transparent); }
-.cawco-guides rect[data-kind="off-token"] { fill: color-mix(in oklab, var(--color-status-fail) 30%, transparent); }
+.cawco-guides [data-kind="start"] { stroke: var(--color-cyan); }
+.cawco-guides [data-kind="end"] { stroke: var(--color-purple); }
+.cawco-guides [data-kind="centre"] { stroke: var(--color-blue); }
+.cawco-guides [data-kind="baseline"] { stroke: var(--color-green); stroke-dasharray: 2 2; }
+.cawco-guides rect[data-kind="surface"] { fill: none; stroke: var(--color-orange); stroke-width: 1px; }
+.cawco-guides rect[data-kind="on-token"] { fill: color-mix(in oklab, var(--color-green) 14%, transparent); }
+.cawco-guides rect[data-kind="off-token"] { fill: color-mix(in oklab, var(--color-red) 30%, transparent); }
 /* A gap handed out of free room (an auto margin, space-between): off every token too, drawn as its outline alone, dashed, so a
    wide stretch of it never floods the drawing red. */
-.cawco-guides rect[data-kind="free"] { fill: none; stroke: var(--color-status-fail); stroke-width: 1px;
+.cawco-guides rect[data-kind="free"] { fill: none; stroke: var(--color-red); stroke-width: 1px;
   stroke-dasharray: 4 3; }
-.cawco-guides line[data-kind="miss"] { stroke: var(--color-status-fail); stroke-width: var(--spacing-space-1); }
+.cawco-guides line[data-kind="miss"] { stroke: var(--color-red); stroke-width: var(--spacing-space-1); }
 /* A px said over the drawing: the miss red, haloed in the page's ground so it reads over any line or word under it. */
-.cawco-guides text { font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans); font-variant-numeric: tabular-nums; fill: var(--color-status-fail); text-anchor: middle;
-  dominant-baseline: central; paint-order: stroke; stroke: var(--color-surface-page); stroke-width: 3px; stroke-linejoin: round; }
+.cawco-guides text { font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans); font-variant-numeric: tabular-nums; fill: var(--color-red); text-anchor: middle;
+  dominant-baseline: central; paint-order: stroke; stroke: var(--color-bg); stroke-width: 3px; stroke-linejoin: round; }
 /* A decision page's Preview (by=embed) and a map's card (by=map), drawn by the stage (stage.ts bootColumn): each story it
    names a drawing, one under another, each at its own width, 1 CSS px per px. A drawing of no width of its own answers
    its story's width conditions at the canvas's width (canvas width.ts). */
@@ -150,23 +150,23 @@ html.cawco-column-page .cawco-canvas { container: cawco-width / inline-size; }
 /* A Preview stands in the page's own flow on the surface the decision page draws its Preview on; the page holding it makes
    its frame as tall as the column and as wide as its widest story (CANVAS_EMBED_SIZE) and scrolls it sideways where its
    room is narrower, and a wheel or a finger on it scrolls that page. */
-html.cawco-embed, html.cawco-embed body { block-size: auto; overflow-x: hidden; overflow-y: auto; background: var(--color-surface-page); }
+html.cawco-embed, html.cawco-embed body { block-size: auto; overflow-x: hidden; overflow-y: auto; background: var(--color-bg); }
 /* A map's card: the column on the well, fitted to the card by one transform (stage.ts fit). */
-html.cawco-map, html.cawco-map body { block-size: 100%; overflow: hidden; background: var(--color-surface-sunk); }
+html.cawco-map, html.cawco-map body { block-size: 100%; overflow: hidden; background: var(--color-bg-2); }
 html.cawco-map .cawco-canvas { position: fixed; inset: 0; overflow: hidden; }
 html.cawco-map .cawco-column { position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: max-content;
   transform-origin: 0 0; }
 .cawco-stage-waiting { display: grid; gap: var(--spacing-space-2); }
 .cawco-stage-waiting > .cawco-stand-in-body { inline-size: min(var(--frame-w), 100%); }
 .cawco-stage-failed { justify-items: start; }
-.cawco-stage-failed-head { display: flex; align-items: center; gap: var(--spacing-space-2); margin: 0; font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans); color: var(--color-status-fail); }
+.cawco-stage-failed-head { display: flex; align-items: center; gap: var(--spacing-space-2); margin: 0; font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans); color: var(--color-red); }
 .cawco-stage-failed-head svg { inline-size: var(--spacing-icon-md); block-size: var(--spacing-icon-md); flex: none; }
-.cawco-stage-failed-message { margin: 0; max-inline-size: var(--spacing-measure); font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans); color: var(--color-ink-strong); overflow-wrap: anywhere; }
+.cawco-stage-failed-message { margin: 0; max-inline-size: var(--spacing-measure); font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans); color: var(--color-tx); overflow-wrap: anywhere; }
 /* Try again: the kit's sm outline button. */
 .cawco-stage-failed button { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; block-size: var(--spacing-control-sm);
-  padding-inline: var(--spacing-space-3); border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-surface-raised);
-  box-shadow: var(--shadow-sm); font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans); color: var(--color-ink-strong); cursor: pointer; }
-@media (hover: hover) { .cawco-stage-failed button:hover { background: var(--color-surface-hover); } }
+  padding-inline: var(--spacing-space-3); border: 1px solid var(--color-tx-2); border-radius: var(--radius-sm); background: var(--color-bg);
+  box-shadow: var(--shadow-sm); font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans); color: var(--color-tx); cursor: pointer; }
+@media (hover: hover) { .cawco-stage-failed button:hover { background: var(--color-ui); } }
 .cawco-sr { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 `;
 

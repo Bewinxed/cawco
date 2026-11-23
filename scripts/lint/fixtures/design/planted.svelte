@@ -25,7 +25,7 @@
 <div class:rounded-huge-too={picked !== ""}></div>
 <Button class="p-space-4 {steady}">Restyled</Button>
 <Button class={picked}>Unreadable</Button>
-<div style="color: var(--ink); --tint: var(--mark-1)"></div>
+<div style="color: var(--ink); --tint: var(--orange)"></div>
 <div style:--tint="#ff0000"></div>
 <div bind:clientWidth={width}></div>
 <div class="hover:opacity-50 focus-visible:opacity-75"></div>
@@ -38,7 +38,7 @@
   ><path fill="#ec4899" stroke="currentColor" d="M0 0" /></svg
 >
 <div
-  class="[--gap:var(--space-2)] [--gap-x:12px] [--tab:light-dark(var(--surface-recess),var(--surface-hover))] text-[oklch(50%_0.1_30)] h-[calc(var(--icon-md)+2px)] max-h-[55dvh]"
+  class="[--gap:var(--space-2)] [--gap-x:12px] [--tab:light-dark(var(--bg-2),var(--ui))] text-[oklch(50%_0.1_30)] h-[calc(var(--icon-md)+2px)] max-h-[55dvh]"
 ></div>
 <div style:--hang="calc(-1 * var(--icon-sm))" style:--far="-12px"></div>
 <div style:--delay="60ms" style:--curve="var(--dur-fade) ease-in"></div>

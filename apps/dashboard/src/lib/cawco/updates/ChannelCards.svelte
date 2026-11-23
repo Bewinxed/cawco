@@ -95,7 +95,7 @@
       <span
         data-slot="frame"
         aria-hidden="true"
-        class="pointer-events-none absolute inset-y-0 z-1 rounded-sm border border-accent bg-surface-recess motion-safe:dir-end:transition-frame-end-first motion-safe:dir-start:transition-frame-start-first"
+        class="pointer-events-none absolute inset-y-0 z-1 rounded-sm border border-accent bg-bg-2 motion-safe:dir-end:transition-frame-end-first motion-safe:dir-start:transition-frame-start-first"
         data-dir={index === 1 ? "end" : "start"}
         style:inset-inline-end={index === 0 ? HALF : "0"}
         style:inset-inline-start={index === 0 ? "0" : HALF}
@@ -105,7 +105,7 @@
         <span
           data-slot="frame"
           aria-hidden="true"
-          class="pointer-events-none absolute inset-y-0 z-1 rounded-sm border border-accent bg-surface-recess"
+          class="pointer-events-none absolute inset-y-0 z-1 rounded-sm border border-accent bg-bg-2"
           style:inset-inline-end={index === 0 ? HALF : "0"}
           style:inset-inline-start={index === 0 ? "0" : HALF}
           in:fade={{
@@ -121,16 +121,15 @@
     {#each CARDS as card (card.channel)}
       {@const found = release(card.channel)}
       <RadioGroup.Item
-        class="relative flex flex-col rounded-sm border border-border-control bg-transparent px-space-4 pt-space-6 pb-space-4 type-meta text-start text-ink-strong transition-control hover:bg-surface-hover no-hover:active:bg-surface-hover unhovered:active:bg-surface-hover focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent-ink"
+        class="relative flex flex-col rounded-sm border border-ui-2 bg-transparent px-space-4 pt-space-6 pb-space-4 type-meta text-start text-tx transition-control hover:bg-ui no-hover:active:bg-ui unhovered:active:bg-ui focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent"
         value={card.channel}
       >
-        <span data-slot="name" class="relative z-2 type-label text-ink-strong"
+        <span data-slot="name" class="relative z-2 type-label text-tx"
           >{card.name}</span
         >
-        <span class="relative z-2 mt-space-1 text-ink-muted"
-          >{card.description}</span
+        <span class="relative z-2 mt-space-1 text-tx-2">{card.description}</span
         >
-        <span class="relative z-2 mt-space-2 text-ink-strong">
+        <span class="relative z-2 mt-space-2 text-tx">
           {#if channels === null}
             —
           {:else if found}
@@ -138,12 +137,12 @@
               >{displayVersion(found.version)}</code
             >
           {:else}
-            <span class="text-ink-muted">No release yet</span>
+            <span class="text-tx-2">No release yet</span>
           {/if}
         </span>
         {#if card.channel === current}
           <span
-            class="mark-line relative z-2 mt-space-2 flex items-center gap-space-2 text-ink-strong"
+            class="mark-line relative z-2 mt-space-2 flex items-center gap-space-2 text-tx"
             in:blur={{
               duration: dur("--duration-slow"),
               easing: easeOut,
@@ -163,15 +162,11 @@
               stroke-linejoin="round"
               viewBox="0 0 20 20"
             >
-              <circle
-                cx="10"
-                cy="10"
-                r="10"
-                class="fill-accent-wash stroke-none"
+              <circle cx="10" cy="10" r="10" class="fill-ui stroke-none"
               ></circle>
               <path
                 d="M6.2 10.4l2.5 2.5 5.1-5.6"
-                class="stroke-accent-ink dash-unit motion-safe:animate-check-draw motion-safe:anim-delay-fast"
+                class="stroke-accent dash-unit motion-safe:animate-check-draw motion-safe:anim-delay-fast"
                 pathLength="1"
                 stroke-width="1.8"
               ></path>

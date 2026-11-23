@@ -159,7 +159,7 @@
     data-slot="todo"
     data-todo={ref}
     data-linked={marked === ref || undefined}
-    class="group flex items-center gap-space-2 min-h-control-md ps-(--indent) rounded-sm transition-[background-color] duration-(--duration-base) ease-out data-linked:bg-accent-wash"
+    class="group flex items-center gap-space-2 min-h-control-md ps-(--indent) rounded-sm transition-[background-color] duration-(--duration-base) ease-out data-linked:bg-ui"
     style:--depth={todo.depth}
     style:--indent="calc(var(--depth, 0) * var(--spacing-space-6))"
   >
@@ -195,7 +195,7 @@
     {:else}
       <button
         data-slot="text"
-        class="select-none flex flex-auto items-baseline gap-space-2 min-w-0 p-space-1 rounded-xs type-body text-ink-strong text-start hover:bg-surface-hover data-done:text-ink-subtle data-done:line-through data-done:decoration-border-control press-tint focus-inset"
+        class="select-none flex flex-auto items-baseline gap-space-2 min-w-0 p-space-1 rounded-xs type-body text-tx text-start hover:bg-ui data-done:text-tx-2 data-done:line-through data-done:decoration-ui-2 press-tint focus-inset"
         data-done={checked ? "" : undefined}
         onclick={() => {
           editing = ref;
@@ -206,7 +206,7 @@
       >
         <span>{todo.text}</span>
         {#if todo.promoted}
-          <span class="flex-none type-meta font-mono liga-none text-ink-muted"
+          <span class="flex-none type-meta font-mono liga-none text-tx-2"
             >→ {todo.promoted}</span
           >
         {/if}
@@ -281,16 +281,13 @@
   <h3 class={sectionHeadVariants({ inset: "flush" })}>
     To-dos
     {#if groups.agreed.length > 0}
-      <span
-        data-num
-        data-slot="count"
-        class="num ms-auto type-meta text-ink-subtle"
+      <span data-num data-slot="count" class="num ms-auto type-meta text-tx-2"
         >{done}/{groups.agreed.length}</span
       >
     {/if}
   </h3>
   {#if problem}
-    <p class="type-meta text-status-fail" role="alert">{problem}</p>
+    <p class="type-meta text-red" role="alert">{problem}</p>
   {/if}
   {#if groups.agreed.length > 0}
     <ul class="flex flex-col m-0 p-0 list-none">
@@ -299,7 +296,7 @@
       {/each}
     </ul>
   {:else if groups.offered.length === 0}
-    <p data-slot="todo-list-empty" class="type-body text-ink-subtle">
+    <p data-slot="todo-list-empty" class="type-body text-tx-2">
       Break the task into steps here; a session working on it ticks them as it
       goes.
     </p>

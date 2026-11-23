@@ -62,13 +62,13 @@
     {#each members as member (member.id)}
       <li class="min-w-0">
         <button
-          class="flex min-h-control-lg w-full items-start gap-x-space-2 concentric-xs p-space-2 text-start transition-control can-hover:hover:bg-surface-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid"
+          class="flex min-h-control-lg w-full items-start gap-x-space-2 concentric-xs p-space-2 text-start transition-control can-hover:hover:bg-ui focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid"
           onclick={() => onpick(member.id)}
           type="button"
         >
           <MemberFace {member} size={28} />
           <span class="flex min-w-0 flex-auto flex-col">
-            <span class="type-label font-medium text-ink-strong wrap-anywhere">
+            <span class="type-label font-medium text-tx wrap-anywhere">
               {member.name}
               {#if member.id === fleetChoice}
                 <span class="font-normal text-ink-muted">
@@ -76,7 +76,7 @@
                 >
               {/if}
             </span>
-            <span class="type-meta text-ink-muted text-pretty wrap-anywhere"
+            <span class="type-meta text-tx-2 text-pretty wrap-anywhere"
               >{member.job}</span
             >
           </span>

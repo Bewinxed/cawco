@@ -18,7 +18,7 @@
   class="flex min-w-0 flex-col pt-space-2"
   data-slot="section"
 >
-  <h2 class="type-label pb-space-3 text-ink-muted wrap-anywhere">
+  <h2 class="type-label pb-space-3 text-tx-2 wrap-anywhere">
     {String(props.title ?? "")}
   </h2>
   <div class="flex min-w-0 flex-col gap-space-4">

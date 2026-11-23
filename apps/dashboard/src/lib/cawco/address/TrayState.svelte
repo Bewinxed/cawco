@@ -37,7 +37,7 @@
       out:depart
     >
       {#each words.lines as line (line)}
-        <p class="m-0 type-body text-pretty text-ink-muted">
+        <p class="m-0 type-body text-pretty text-tx-2">
           <Words text={line} />
         </p>
       {/each}

@@ -60,7 +60,7 @@
   {section}
 >
   <div data-slot="group" class="flex flex-col gap-space-2">
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       {spendWords.note}
     </p>
     <Field

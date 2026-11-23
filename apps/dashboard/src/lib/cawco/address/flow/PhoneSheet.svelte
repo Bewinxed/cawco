@@ -55,11 +55,11 @@
 </script>
 
 <div
-  class="relative h-211 w-97.5 max-w-full flex-none overflow-clip rounded-xl border border-border-hairline bg-surface-page"
+  class="relative h-211 w-97.5 max-w-full flex-none overflow-clip rounded-xl border border-ui bg-bg"
   data-frame="phone"
 >
   <div class="grid content-start gap-space-3 px-space-1 pt-space-4">
-    <h2 class="m-0 px-space-3 type-title text-ink-strong">Needs you</h2>
+    <h2 class="m-0 px-space-3 type-title text-tx">Needs you</h2>
     <div class="grid gap-space-1">
       {#if shown}
         <AddressRow

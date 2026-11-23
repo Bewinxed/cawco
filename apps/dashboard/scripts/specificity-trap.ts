@@ -9,7 +9,7 @@
  * `not-data-quiet:text-ink-strong in-aria-current:text-accent-ink`, the
  * first compiles to `.a:not([data-quiet])` (0,2,0) and the second to
  * `:where([aria-current="true"]) .b` (0,1,0): with both matching, the
- * current pin's title drew ink-strong on the selected wash. Tailwind's own
+ * current pin's title drew tx on the selected wash. Tailwind's own
  * order decides only between rules of equal weight.
  *
  * Every `src/**\/*.svelte` element's `class` (its text and every string

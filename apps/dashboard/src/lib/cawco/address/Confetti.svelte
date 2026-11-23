@@ -14,9 +14,9 @@
   const INKS = [
     "var(--color-accent)",
     "var(--color-spark)",
-    "var(--color-mark-4)",
-    "var(--color-mark-2)",
-    "var(--color-mark-5)",
+    "var(--color-cyan)",
+    "var(--color-yellow)",
+    "var(--color-blue)",
   ];
 
   function throwBits(layer: HTMLElement) {

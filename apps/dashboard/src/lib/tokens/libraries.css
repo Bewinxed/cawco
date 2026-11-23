@@ -9,32 +9,32 @@
        palette names (the --code-syntax- prefix), on the syntax token
        DESIGN.md gives it. On the root because every code surface reads them:
        a transcript's well, and a diff, whose shadow root inherits them. */
-    --code-syntax-foreground: var(--color-ink-strong);
-    --code-syntax-background: var(--color-surface-recess);
+    --code-syntax-foreground: var(--color-tx);
+    --code-syntax-background: var(--color-bg-2);
     --code-syntax-token-keyword: light-dark(
-      oklch(from var(--color-mark-5) 44% c h),
-      oklch(from var(--color-mark-5) 75% c h)
+      oklch(from var(--color-blue) 44% c h),
+      oklch(from var(--color-blue) 75% c h)
     );
     --code-syntax-token-function: light-dark(
-      oklch(from var(--color-mark-4) 44% c h),
-      oklch(from var(--color-mark-4) 75% c h)
+      oklch(from var(--color-cyan) 44% c h),
+      oklch(from var(--color-cyan) 75% c h)
     );
     --code-syntax-token-link: var(--code-syntax-token-function);
     --code-syntax-token-string: light-dark(
-      oklch(from var(--color-mark-2) 43% c h),
-      oklch(from var(--color-mark-2) 75% c h)
+      oklch(from var(--color-yellow) 43% c h),
+      oklch(from var(--color-yellow) 75% c h)
     );
     --code-syntax-token-string-expression: var(--code-syntax-token-string);
     --code-syntax-token-constant: light-dark(
-      oklch(from var(--color-mark-1) 44% c h),
-      oklch(from var(--color-mark-1) 75% c h)
+      oklch(from var(--color-orange) 44% c h),
+      oklch(from var(--color-orange) 75% c h)
     );
     --code-syntax-token-comment: light-dark(
-      oklch(from var(--color-ink-subtle) 43% c h),
-      oklch(from var(--color-ink-muted) 72% c h)
+      oklch(from var(--color-tx-2) 43% c h),
+      oklch(from var(--color-tx-2) 72% c h)
     );
-    --code-syntax-token-parameter: var(--color-ink-strong);
-    --code-syntax-token-punctuation: var(--color-ink-strong);
+    --code-syntax-token-parameter: var(--color-tx);
+    --code-syntax-token-punctuation: var(--color-tx);
   }
 }
 
@@ -52,30 +52,30 @@
   [data-slot="diagram"],
   [data-markdown="mermaid"],
   .pele {
-    --pele-bg: var(--color-surface-raised);
-    --pele-fg: var(--color-ink-strong);
-    --pele-muted: var(--color-ink-muted);
-    --pele-line: var(--color-ink-muted);
-    --pele-surface: var(--color-surface-raised);
-    --pele-surface-alt: var(--color-surface-recess);
-    --pele-border: var(--color-border-control);
-    --pele-accent: var(--color-ink-strong);
-    --pele-critical: var(--color-status-fail);
-    --pele-error: var(--color-status-fail);
+    --pele-bg: var(--color-bg);
+    --pele-fg: var(--color-tx);
+    --pele-muted: var(--color-tx-2);
+    --pele-line: var(--color-tx-2);
+    --pele-surface: var(--color-bg);
+    --pele-surface-alt: var(--color-bg-2);
+    --pele-border: var(--color-ui-2);
+    --pele-accent: var(--color-tx);
+    --pele-critical: var(--color-red);
+    --pele-error: var(--color-red);
     --pele-font: var(--font-sans);
     --pele-font-mono: var(--font-mono);
     --pele-title-weight: var(--font-weight-medium);
     --pele-heading-weight: var(--font-weight-medium);
     --pele-bold-weight: var(--font-weight-medium);
     --pele-radius: var(--radius-sm);
-    --pele-series-1: var(--color-ink-strong);
-    --pele-series-2: var(--color-status-live);
-    --pele-series-3: var(--color-mark-5);
-    --pele-series-4: var(--color-status-attn);
-    --pele-series-5: var(--color-ink-subtle);
+    --pele-series-1: var(--color-tx);
+    --pele-series-2: var(--color-cyan);
+    --pele-series-3: var(--color-blue);
+    --pele-series-4: var(--color-orange);
+    --pele-series-5: var(--color-tx-2);
     --pele-series-6: var(--color-accent);
-    --pele-series-7: var(--color-ink-muted);
-    --pele-series-8: var(--color-border-strong);
+    --pele-series-7: var(--color-tx-2);
+    --pele-series-8: var(--color-tx-2);
 
     & > svg {
       display: block;
@@ -90,16 +90,16 @@
     }
     & .pele-edge-label {
       font-size: var(--text-sm);
-      fill: var(--color-ink-muted);
+      fill: var(--color-tx-2);
     }
     & .pele-cluster > rect,
     & .pele-cluster > path {
-      stroke: var(--color-border-hairline);
+      stroke: var(--color-ui);
     }
     & .pele-cluster-label {
       font-size: var(--text-base);
       font-weight: var(--font-weight-medium);
-      fill: var(--color-ink-muted);
+      fill: var(--color-tx-2);
     }
   }
 }

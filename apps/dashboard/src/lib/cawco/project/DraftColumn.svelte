@@ -103,7 +103,7 @@
 
 <section
   aria-label={setupWords.draftStage(stage.name)}
-  class="group/col flex flex-col gap-space-1 rounded-lg bg-surface-recess p-space-1 inset-ring inset-ring-border-hairline"
+  class="group/col flex flex-col gap-space-1 rounded-lg bg-bg-2 p-space-1 inset-ring inset-ring-ui"
   data-kind={stage.kind}
   data-share="stage:{stage.name}"
   data-slot="draft-column"
@@ -114,7 +114,7 @@
       {#if stage.kind === "you"}
         <IconNeedsYou
           aria-hidden="true"
-          class="size-icon-md flex-none text-status-attn"
+          class="size-icon-md flex-none text-orange"
         />
       {:else}
         {@const mark = markOf(stage)}
@@ -163,7 +163,7 @@
               }}
             >
               <span>{setupPageWords.kindItem}</span>
-              <span class="ms-auto type-meta text-ink-muted">{kindWord}</span>
+              <span class="ms-auto type-meta text-tx-2">{kindWord}</span>
               <IconChevronRight aria-hidden="true" class="size-icon-sm" />
             </DropdownMenu.Item>
             {#if delegates.length > 0}
@@ -174,7 +174,7 @@
                 }}
               >
                 <span>{setupPageWords.worker}</span>
-                <span class="ms-auto type-meta text-ink-muted"
+                <span class="ms-auto type-meta text-tx-2"
                   >{stage.hooks?.runs
                     ? nameOf(stage.hooks.runs)
                     : setupPageWords.noWorker}</span
@@ -257,7 +257,7 @@
     </span>
     {#if showsKind}
       <span
-        class="type-meta whitespace-nowrap text-ink-subtle group-kind-you/col:text-status-attn"
+        class="type-meta whitespace-nowrap text-tx-2 group-kind-you/col:text-orange"
         >{kindWord}</span
       >
     {/if}
@@ -266,7 +266,7 @@
        the meta role, under the name it describes. -->
   {#if holds}
     <p
-      class="m-0 px-space-2 pb-space-2 type-meta text-pretty text-ink-muted"
+      class="m-0 px-space-2 pb-space-2 type-meta text-pretty text-tx-2"
       data-slot="holds"
     >
       {holds}

@@ -26,7 +26,7 @@
 
 <input
   aria-label={words.name}
-  class="-mx-space-2 min-w-0 flex-auto rounded-sm border-none bg-transparent px-space-2 type-title text-ink-strong caret-accent outline-hidden transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover focus:bg-surface-hover"
+  class="-mx-space-2 min-w-0 flex-auto rounded-sm border-none bg-transparent px-space-2 type-title text-tx caret-accent outline-hidden transition-[background-color] duration-(--duration-fast) ease-out hover:bg-ui focus:bg-ui"
   data-slot="setup-name"
   onblur={() => {
     editing = false;

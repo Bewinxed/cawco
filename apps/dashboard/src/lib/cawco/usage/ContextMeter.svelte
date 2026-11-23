@@ -51,19 +51,19 @@
         <button
           {...tip}
           aria-label={`${said}. ${reading.detail}`}
-          class="mark-line flex w-full cursor-default items-center gap-x-space-2 rounded-xs border-none bg-transparent p-0 text-start text-inherit text-ink-muted outline-offset-2"
+          class="mark-line flex w-full cursor-default items-center gap-x-space-2 rounded-xs border-none bg-transparent p-0 text-start text-inherit text-tx-2 outline-offset-2"
           data-slot="context-meter"
           type="button"
         >
           <span
             aria-hidden="true"
-            class="group/bar relative block h-x-height min-w-0 flex-1 overflow-hidden rounded-pill bg-border-control"
+            class="group/bar relative block h-x-height min-w-0 flex-1 overflow-hidden rounded-pill bg-ui-2"
             data-box
             data-slot="track"
             data-state={reading.state}
           >
             <span
-              class="absolute inset-y-0 start-0 w-(--fill-w) rounded-pill bg-ink-muted group-state-near/bar:bg-status-attn group-state-over/bar:bg-status-fail group-state-reached/bar:bg-status-fail group-state-stale/bar:bg-ink-subtle motion-safe:transition-[inline-size] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
+              class="absolute inset-y-0 start-0 w-(--fill-w) rounded-pill bg-tx-2 group-state-near/bar:bg-orange group-state-over/bar:bg-red group-state-reached/bar:bg-red group-state-stale/bar:bg-tx-2 motion-safe:transition-[inline-size] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
               data-slot="fill"
               style:--fill-w={share > 0 ? `max(${share}%, 1ex)` : "0px"}
             ></span>
@@ -74,7 +74,7 @@
     </Tip>
   {:else if reading.kind === "reading"}
     <p
-      class="mark-line m-0 flex items-center gap-space-2 text-ink-muted"
+      class="mark-line m-0 flex items-center gap-space-2 text-tx-2"
       data-slot="context-reading"
     >
       <span class="mark-cell"><LiveDot /></span><span
@@ -83,7 +83,7 @@
     </p>
   {:else}
     <p
-      class="m-0 text-pretty wrap-anywhere text-ink-muted"
+      class="m-0 text-pretty wrap-anywhere text-tx-2"
       data-slot="context-refused"
     >
       {reading.why}

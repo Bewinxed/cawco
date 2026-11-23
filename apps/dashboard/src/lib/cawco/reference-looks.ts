@@ -26,7 +26,7 @@ export interface ReferenceLook {
 }
 
 /** Today's shared look: the inline chip as it is, no mark, the state in the muted ink. */
-const SHARED: ReferenceLook = { mark: null, state: "text-ink-muted" };
+const SHARED: ReferenceLook = { mark: null, state: "text-tx-2" };
 
 export const REFERENCE_LOOKS: Record<ThingKind, ReferenceLook> = {
   task: SHARED,
@@ -60,7 +60,7 @@ export function markLook(mark: ReferenceMark): MarkLook {
     case "decision":
       return { glyph: IconDecisions };
     case "change":
-      return { glyph: IconRefresh, tone: "text-status-done" };
+      return { glyph: IconRefresh, tone: "text-green" };
     default:
       return mark satisfies never;
   }

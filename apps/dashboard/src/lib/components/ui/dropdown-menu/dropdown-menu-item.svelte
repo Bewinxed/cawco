@@ -11,7 +11,7 @@
     variants: {
       marks: {
         "current-busy":
-          "aria-busy:opacity-50 aria-current:text-ink-strong aria-current:data-[variant=destructive]:text-ink-strong aria-current:data-[variant=destructive]:focus:text-ink-strong",
+          "aria-busy:opacity-50 aria-current:text-tx aria-current:data-[variant=destructive]:text-tx aria-current:data-[variant=destructive]:focus:text-tx",
       },
       row: { artifact: "min-h-control-lg" },
     },
@@ -47,12 +47,12 @@
     "cursor-default select-none items-center gap-2.5 type-label",
     "outline-hidden data-disabled:pointer-events-none",
     "data-inset:pl-space-8",
-    "data-[variant=destructive]:text-status-fail",
+    "data-[variant=destructive]:text-red",
     "data-disabled:opacity-50",
-    "data-[variant=destructive]:focus:text-status-fail",
+    "data-[variant=destructive]:focus:text-red",
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
-    "px-2.5 data-[variant=destructive]:[&>svg]:text-status-fail",
+    "px-2.5 data-[variant=destructive]:[&>svg]:text-red",
     dropdownMenuItemVariants({ marks, row }),
     className
   )}

@@ -190,16 +190,16 @@
   <div data-slot="body" class="grid gap-space-1 type-meta">
     {#each n.lines as line, i (i)}
       {#if line.state === "busy" && i === spinnerAt}
-        <div class="mark-line flex items-center gap-space-2 text-ink-strong">
+        <div class="mark-line flex items-center gap-space-2 text-tx">
           <Spinner class="shrink-0" tone="muted" />
           <span>{line.text}</span>
         </div>
       {:else}
-        <div class="text-ink-strong">{line.text}</div>
+        <div class="text-tx">{line.text}</div>
       {/if}
     {/each}
     {#if n.closing && !n.failed}
-      <span class="text-ink-muted">{n.closing}</span>
+      <span class="text-tx-2">{n.closing}</span>
     {/if}
   </div>
 {/snippet}
@@ -215,18 +215,15 @@
   <div data-slot="update-card-card" class="flex min-w-0 flex-col gap-space-1">
     <h2
       data-slot="title"
-      class="mark-line m-0 flex items-center gap-space-2 pe-(--x-room) type-label wrap-anywhere text-ink-strong"
+      class="mark-line m-0 flex items-center gap-space-2 pe-(--x-room) type-label wrap-anywhere text-tx"
     >
       {#if notice.failed}
-        <IconError
-          aria-hidden="true"
-          class="size-icon-md shrink-0 text-status-fail"
-        />
+        <IconError aria-hidden="true" class="size-icon-md shrink-0 text-red" />
       {/if}
       <span>{notice.title}</span>
     </h2>
     {#if meta}
-      <p data-slot="meta" class="m-0 type-meta text-ink-muted">{meta}</p>
+      <p data-slot="meta" class="m-0 type-meta text-tx-2">{meta}</p>
     {/if}
     {#if notes}
       <!-- The notes' fold (transitions-dev Accordion expand): the grid row
@@ -252,7 +249,7 @@
           class="fold-item opacity-0 blur-fold transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:duration-(--duration-slow) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--duration-base) motion-reduce:group-data-open/fold:duration-(--duration-slow)"
         >
           <div class="flex flex-col gap-space-1 pt-space-1">
-            <div class="type-body text-ink-strong">
+            <div class="type-body text-tx">
               <ReleaseNotes source={notes.full} />
             </div>
             {#if said}
@@ -283,7 +280,7 @@
            trailing edge. -->
       <div
         data-slot="actions"
-        class="sticky bottom-0 z-1 mt-space-1 flex flex-wrap items-center justify-end gap-space-1 bg-surface-raised before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-(--fade-len) before:bg-linear-to-b/srgb before:from-transparent before:to-surface-raised before:opacity-0 before:transition-[opacity] before:duration-(--duration-fast) before:ease-out data-stuck:before:opacity-100"
+        class="sticky bottom-0 z-1 mt-space-1 flex flex-wrap items-center justify-end gap-space-1 bg-bg before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-(--fade-len) before:bg-linear-to-b/srgb before:from-transparent before:to-bg before:opacity-0 before:transition-[opacity] before:duration-(--duration-fast) before:ease-out data-stuck:before:opacity-100"
         {@attach held}
       >
         {#if showConfigure}

@@ -106,18 +106,16 @@
 </script>
 
 <div
-  class="relative flex h-dvh flex-col bg-surface-page type-body text-ink-strong"
+  class="relative flex h-dvh flex-col bg-bg type-body text-tx"
   data-phone={phone || undefined}
 >
   {#if !phone}
     <header
-      class="flex h-control-lg flex-none items-center justify-between border-b border-b-border-hairline bg-surface-raised ps-space-6 pe-space-1"
+      class="flex h-control-lg flex-none items-center justify-between border-b border-b-ui bg-bg ps-space-6 pe-space-1"
     >
-      <span data-slot="title" class="type-label text-ink-muted"
-        >Finder bench</span
-      >
+      <span data-slot="title" class="type-label text-tx-2">Finder bench</span>
       <button
-        class="select-none inline-flex h-control-md items-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
+        class="select-none inline-flex h-control-md items-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-3 type-label text-tx-2"
         data-jump
         onclick={() => (open ? hide() : show())}
         type="button"
@@ -141,7 +139,7 @@
          centred, and full width with 11px margins under 900px. -->
     <div
       data-slot="composer"
-      class="relative mx-auto mb-(--dock-foot) flex w-(--composer-w) flex-none items-end gap-space-2 rounded-lg border border-border-control bg-surface-raised py-space-2 pr-space-2 pl-space-3 shadow-sm max-desk:mx-space-3 max-desk:w-auto"
+      class="relative mx-auto mb-(--dock-foot) flex w-(--composer-w) flex-none items-end gap-space-2 rounded-lg border border-ui-2 bg-bg py-space-2 pr-space-2 pl-space-3 shadow-sm max-desk:mx-space-3 max-desk:w-auto"
       data-composer
       data-safe-bottom
       style:--dock-foot="calc(var(--spacing-space-4) + var(--safe-bottom))"
@@ -156,7 +154,7 @@
       />
       <div data-slot="controls" class="flex gap-space-1">
         <button
-          class="select-none h-control-md rounded-xs border border-border-control bg-surface-raised px-space-3 type-label text-ink-strong"
+          class="select-none h-control-md rounded-xs border border-ui-2 bg-bg px-space-3 type-label text-tx"
           type="button">Attach</button
         >
         <button
@@ -170,7 +168,7 @@
     </div>
     {#if phone}
       <button
-        class="select-none absolute top-space-3 end-space-3 inline-flex h-control-md items-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
+        class="select-none absolute top-space-3 end-space-3 inline-flex h-control-md items-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-3 type-label text-tx-2"
         data-jump
         onclick={() => show()}
         type="button">Jump</button
@@ -183,11 +181,11 @@
       <!-- A phone: a sheet from the glass, the field at its foot over the keyboard. -->
       <div
         data-slot="sheet"
-        class="fixed inset-0 z-(--layer-float) flex flex-col bg-surface-raised pt-space-2"
+        class="fixed inset-0 z-(--layer-float) flex flex-col bg-bg pt-space-2"
         data-finder-card
       >
         <div
-          class="mx-auto mb-space-2 h-space-1 w-space-8 flex-none rounded-pill bg-border-control"
+          class="mx-auto mb-space-2 h-space-1 w-space-8 flex-none rounded-pill bg-ui-2"
           aria-hidden="true"
         ></div>
         <Finder
@@ -205,7 +203,7 @@
       <!-- The glass's card, as it hangs: right-aligned under the bar, the page live under it. -->
       <div
         data-slot="finder-page-card"
-        class="absolute end-0 top-control-lg z-(--layer-float) flex max-h-(--card-max-h) w-130 flex-col overflow-hidden rounded-b-lg border border-border-control border-t-none bg-surface-raised shadow-overlay-hung"
+        class="absolute end-0 top-control-lg z-(--layer-float) flex max-h-(--card-max-h) w-130 flex-col overflow-hidden rounded-b-lg border border-ui-2 border-t-none bg-bg shadow-overlay-hung"
         data-finder-card
         role="dialog"
         aria-label="Jump"

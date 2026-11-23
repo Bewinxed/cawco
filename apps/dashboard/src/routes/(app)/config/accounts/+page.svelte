@@ -64,14 +64,14 @@
             <ProviderMark provider={group.provider} />
             <h2
               data-slot="name"
-              class="type-label min-w-0 flex-auto text-ink-muted"
+              class="type-label min-w-0 flex-auto text-tx-2"
               id="provider-{group.provider}"
             >
               {group.name}
             </h2>
             {#if hasRouting(group.accounts.length)}
               <a
-                class="mark-line touch-hit pointer-hit type-label inline-flex flex-none items-center gap-space-1 rounded-xs text-accent-ink no-underline transition-[opacity] duration-(--duration-fast) ease-out hover:text-accent-ink active:opacity-72"
+                class="mark-line touch-hit pointer-hit type-label inline-flex flex-none items-center gap-space-1 rounded-xs text-accent no-underline transition-[opacity] duration-(--duration-fast) ease-out hover:text-accent active:opacity-72"
                 data-box
                 data-flip="pop"
                 href="/config/accounts/{encodeURIComponent(

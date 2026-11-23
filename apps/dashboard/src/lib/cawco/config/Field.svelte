@@ -31,36 +31,34 @@
 </script>
 
 <div data-slot="field-field" class="flex flex-col gap-space-2 min-w-0">
-  <label data-field-label class="type-meta text-ink-muted" for={id}
-    >{label}</label
-  >
+  <label data-field-label class="type-meta text-tx-2" for={id}>{label}</label>
   {@render children()}
   {#if problem || warn || hint}
     <div class="relative flex flex-col" in:unfold out:unfold {@attach morph()}>
       {#if problem}
         <span
           data-slot="field-problem"
-          class="max-w-measure type-meta text-status-fail"
+          class="max-w-measure type-meta text-red"
           in:crossIn
           out:crossOut>{problem}</span
         >
       {:else if warn}
         <span
-          class="max-w-measure type-meta text-status-attn"
+          class="max-w-measure type-meta text-orange"
           in:crossIn
           out:crossOut>{@render warn()}</span
         >
       {:else if typeof hint === "string"}
         <span
           data-slot="hint"
-          class="max-w-measure type-meta text-pretty text-ink-muted"
+          class="max-w-measure type-meta text-pretty text-tx-2"
           in:crossIn
           out:crossOut>{hint}</span
         >
       {:else if hint}
         <span
           data-slot="hint"
-          class="max-w-measure type-meta text-pretty text-ink-muted"
+          class="max-w-measure type-meta text-pretty text-tx-2"
           in:crossIn
           out:crossOut>{@render hint()}</span
         >

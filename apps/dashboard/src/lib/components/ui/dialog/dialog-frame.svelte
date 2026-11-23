@@ -42,7 +42,7 @@
       <Dialog.Header>
         <Dialog.Title>{title}</Dialog.Title>
       </Dialog.Header>
-      <p class="text-ink-muted type-body">{line}</p>
+      <p class="text-tx-2 type-body">{line}</p>
       <Dialog.Footer>
         <Button variant="outline">Not now</Button>
         <Button>{confirm}</Button>

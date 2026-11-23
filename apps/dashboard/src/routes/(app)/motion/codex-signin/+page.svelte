@@ -285,10 +285,7 @@
   });
 </script>
 
-<div
-  class="flex min-h-0 min-w-0 flex-auto bg-surface-recess"
-  data-bench="codex-signin"
->
+<div class="flex min-h-0 min-w-0 flex-auto bg-bg-2" data-bench="codex-signin">
   <div class="flex min-h-0 py-space-2 pl-space-4 max-desk:hidden">
     <ConfigRail current="accounts" />
   </div>
@@ -296,9 +293,7 @@
     data-slot="pane"
     class="grid min-h-0 min-w-0 flex-auto grid-cols-1 grid-rows-1 overflow-hidden"
   >
-    <div
-      class="col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col bg-surface-recess"
-    >
+    <div class="col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col bg-bg-2">
       <EditorRoute
         found
         loaded

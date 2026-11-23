@@ -32,7 +32,7 @@
   class={chipVariants({
     variant: "tray",
     class:
-      "touch-hit text-ink-muted aria-pressed:text-ink-strong aria-pressed:before:bg-surface-pressed",
+      "touch-hit text-tx-2 aria-pressed:text-tx aria-pressed:before:bg-ui-2",
   })}
   data-tray-chip
   onclick={onopen}

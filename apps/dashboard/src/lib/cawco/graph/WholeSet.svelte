@@ -257,7 +257,7 @@
           ),
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: "var(--color-border-strong)",
+            color: "var(--color-tx-2)",
           },
           data,
         },
@@ -410,8 +410,8 @@
           openMove(id);
         }
       })}
-    class="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-surface-raised"
-    style:--xy-edge-stroke="var(--color-border-strong)"
+    class="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-bg"
+    style:--xy-edge-stroke="var(--color-tx-2)"
     style:--xy-edge-stroke-width="calc(var(--spacing) * 0.375)"
   >
     <SvelteFlowProvider>

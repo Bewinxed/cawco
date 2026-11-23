@@ -77,7 +77,7 @@
       style:--cols="calc(var(--spacing) * 24) minmax(0, 1fr)"
     >
       {#each Object.entries(fields) as [key, value] (key)}
-        <dt class="type-code liga-none wrap-anywhere pt-space-1 text-ink-muted">
+        <dt class="type-code liga-none wrap-anywhere pt-space-1 text-tx-2">
           {key}
         </dt>
         <dd
@@ -106,7 +106,7 @@
           {:else}
             <button
               data-slot="shown"
-              class="select-none press-tint focus-inset min-w-0 flex-auto cursor-text rounded-sm border-none border-current bg-transparent px-space-2 py-space-1 type-body wrap-anywhere text-start text-ink-strong hover:bg-surface-hover"
+              class="select-none press-tint focus-inset min-w-0 flex-auto cursor-text rounded-sm border-none border-current bg-transparent px-space-2 py-space-1 type-body wrap-anywhere text-start text-tx hover:bg-ui"
               onclick={() => {
                 editing = key;
                 draft = said(value);
@@ -127,7 +127,7 @@
       {/each}
     </dl>
   {:else if !adding}
-    <p class="type-meta text-ink-muted">
+    <p class="type-meta text-tx-2">
       No fields yet. A field is any key the project uses, like priority or due.
     </p>
   {/if}

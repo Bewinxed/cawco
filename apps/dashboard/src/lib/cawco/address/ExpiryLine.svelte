@@ -11,25 +11,25 @@
 </script>
 
 <div
-  class="grid grid-cols-(--expiry-cols) items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted"
+  class="grid grid-cols-(--expiry-cols) items-center gap-x-space-2 gap-y-space-1 type-meta text-tx-2"
   data-off={off || undefined}
   data-slot="expiry-line"
   style:--expiry-cols="auto minmax(0, 1fr) auto"
 >
   <span>Today</span>
   <span class="relative flex h-icon-md items-center" aria-hidden="true">
-    <span class="size-space-2 flex-none rounded-pill bg-status-live"></span>
+    <span class="size-space-2 flex-none rounded-pill bg-cyan"></span>
     <span
-      class="h-px flex-1 bg-ink-muted data-off:bg-status-done"
+      class="h-px flex-1 bg-tx-2 data-off:bg-green"
       data-off={off || undefined}
     ></span>
     {#if !off}
       <span
-        class="box-border size-space-2 flex-none rounded-pill border border-ink-muted"
+        class="box-border size-space-2 flex-none rounded-pill border border-tx-2"
       ></span>
     {/if}
   </span>
-  <span class="num text-ink-strong">{off ? "No expiry" : dateOf(EXPIRES)}</span>
+  <span class="num text-tx">{off ? "No expiry" : dateOf(EXPIRES)}</span>
   <span class="col-2 text-center"
     >{off ? "Expiry is off" : `${EXPIRY_DAYS} days`}</span
   >

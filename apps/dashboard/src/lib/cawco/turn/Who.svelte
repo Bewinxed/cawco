@@ -112,7 +112,7 @@
   data-turn-who
   data-grouped={grouped || undefined}
   class={[
-    "flex items-center gap-space-2 text-base text-ink-muted font-medium mb-space-2 data-grouped:float-end data-grouped:items-baseline data-grouped:justify-end data-grouped:text-sm data-grouped:min-w-ch-9 data-grouped:min-h-(--who-line-h) data-grouped:mb-0 data-grouped:ms-space-3",
+    "flex items-center gap-space-2 text-base text-tx-2 font-medium mb-space-2 data-grouped:float-end data-grouped:items-baseline data-grouped:justify-end data-grouped:text-sm data-grouped:min-w-ch-9 data-grouped:min-h-(--who-line-h) data-grouped:mb-0 data-grouped:ms-space-3",
     !grouped && "mark-line",
   ]}
   style:--who-line-h={LINE_H}
@@ -158,9 +158,7 @@
         {/if}
       </span>
     {/if}
-    <span data-slot="role" class="text-base font-medium text-ink-strong"
-      >{name}</span
-    >
+    <span data-slot="role" class="text-base font-medium text-tx">{name}</span>
   {/if}
   {#if note}
     {#if noteLive}
@@ -168,7 +166,7 @@
     {/if}
     <span
       data-slot="note"
-      class={["text-sm font-normal text-ink-muted", !noteLive && "ms-auto"]}
+      class={["text-sm font-normal text-tx-2", !noteLive && "ms-auto"]}
       >{note}</span
     >
   {/if}
@@ -188,7 +186,7 @@
       data-after-note={note || (actions ? "" : undefined)}
       data-shown={shown || undefined}
       data-part={(grouped && you) || undefined}
-      class="ms-auto text-sm font-normal text-ink-muted tabular-nums opacity-0 data-shown:opacity-100 data-part:opacity-100 group-hover/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--duration-fast) motion-safe:ease-out data-after-note:ms-0"
+      class="ms-auto text-sm font-normal text-tx-2 tabular-nums opacity-0 data-shown:opacity-100 data-part:opacity-100 group-hover/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--duration-fast) motion-safe:ease-out data-after-note:ms-0"
       datetime={validAt.toISOString()}>{clock}</time
     >
   {/if}

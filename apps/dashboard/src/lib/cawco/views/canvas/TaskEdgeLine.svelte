@@ -61,7 +61,7 @@
   <BaseEdge
     {id}
     path={route[0]}
-    style="stroke: var(--color-ink-subtle); stroke-width: 1px; stroke-dasharray: 6 4"
+    style="stroke: var(--color-tx-2); stroke-width: 1px; stroke-dasharray: 6 4"
   />
 {:else if data}
   <BaseEdge
@@ -69,7 +69,7 @@
     markerEnd={`url(#${data.marker})`}
     path={route[0]}
     style={data.landed
-      ? "stroke: var(--color-border-control); stroke-width: calc(var(--spacing) * 0.375)"
-      : "stroke: var(--color-ink-muted); stroke-width: calc(var(--spacing) * 0.375)"}
+      ? "stroke: var(--color-ui-2); stroke-width: calc(var(--spacing) * 0.375)"
+      : "stroke: var(--color-tx-2); stroke-width: calc(var(--spacing) * 0.375)"}
   />
 {/if}

@@ -387,7 +387,7 @@
     >
     {#if reason}
       <span
-        class="type-meta block max-w-ch-32 text-status-fail whitespace-normal wrap-anywhere"
+        class="type-meta block max-w-ch-32 text-red whitespace-normal wrap-anywhere"
         data-reason
         role="alert"
         transition:unfold>{reason}</span

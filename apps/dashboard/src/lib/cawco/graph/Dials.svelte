@@ -228,7 +228,7 @@
      props. -->
 {#snippet partHead(text: string)}
   <h3
-    class="col-span-full m-0 flex min-w-0 items-end text-ink-strong type-title text-pretty"
+    class="col-span-full m-0 flex min-w-0 items-end text-tx type-title text-pretty"
   >
     {text}
   </h3>
@@ -237,7 +237,7 @@
      muted ink, under the part's head, set apart by the space above it. -->
 {#snippet groupHead(text: string)}
   <h4
-    class="col-span-full m-0 flex min-h-space-6 min-w-0 items-end text-ink-muted type-label"
+    class="col-span-full m-0 flex min-h-space-6 min-w-0 items-end text-tx-2 type-label"
   >
     <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
       >{text}</span
@@ -321,7 +321,7 @@
           aria-label={title}
           class={[
             "col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-3",
-            dials.length > 0 && "border-t border-t-border-hairline pt-space-4",
+            dials.length > 0 && "border-t border-t-ui pt-space-4",
           ]}
           data-slot="dials-props"
         >
@@ -334,7 +334,7 @@
             class="col-span-full flex min-w-0 flex-wrap items-center justify-between gap-x-space-4 gap-y-space-2"
             data-slot="dials-props-head"
           >
-            <h3 class="m-0 min-w-0 text-ink-strong type-title text-pretty">
+            <h3 class="m-0 min-w-0 text-tx type-title text-pretty">
               {title}
             </h3>
             {#if own.content && own.content.cases.length > 0}

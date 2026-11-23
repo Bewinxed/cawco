@@ -2,7 +2,7 @@
   The transcript's head dissolving into the chosen tab: rows scrolled up past
   the transcript's top edge blur progressively toward it, up to
   `--spacing-space-1` at the edge over `--spacing-space-6`, and dissolve into the
-  chosen tab's sheet (`--color-surface-recess`, the fill PaneTabs paints the tab in), so
+  chosen tab's sheet (`--color-bg-2`, the fill PaneTabs paints the tab in), so
   at the edge they have become the tab's fill and the transcript and its tab
   read as one sheet (owner: "it should not just be a blur, but it should blur
   into the color of the highlighted tab"). A pane draws it beside FootFade, in
@@ -37,7 +37,7 @@
 
   let {
     band,
-    tint = "bg-surface-recess",
+    tint = "bg-bg-2",
   }: {
     /** The band's height, a CSS length: `--spacing-space-6` under a tab strip, a bar's height under a floating bar. */
     band?: string;

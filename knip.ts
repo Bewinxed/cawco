@@ -120,6 +120,7 @@ export default {
         "scripts/codemods/tokens-to-theme.ts",
         "scripts/codemods/tokens-to-theme.proof.ts",
         "scripts/codemods/theme-prune.ts",
+        "scripts/codemods/flexoki-roles.ts",
         "scripts/codemods/theme-unify.ts",
         "scripts/codemods/theme-audit.ts",
         "scripts/codemods/distill-design-system.ts",

@@ -38,15 +38,12 @@
         {id}
         type="button"
         aria-label="{label}: {chosen?.words}"
-        class="select-none pressable touch-hit mark-line inline-flex h-control-sm max-w-full items-center gap-space-1 rounded-sm border border-border-control bg-surface-raised px-space-2 type-label text-ink-strong shadow-sm transition-control hover:bg-surface-hover"
+        class="select-none pressable touch-hit mark-line inline-flex h-control-sm max-w-full items-center gap-space-1 rounded-sm border border-ui-2 bg-bg px-space-2 type-label text-tx shadow-sm transition-control hover:bg-ui"
       >
         <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
           ><MorphText text={chosen?.words ?? ""} /></span
         >
-        <IconChevronDown
-          aria-hidden="true"
-          class="size-icon-sm text-ink-muted"
-        />
+        <IconChevronDown aria-hidden="true" class="size-icon-sm text-tx-2" />
       </button>
     {/snippet}
   </DropdownMenu.Trigger>
@@ -63,11 +60,9 @@
       {#each options as option (option.value)}
         <DropdownMenu.RadioItem value={option.value}>
           <span class="flex min-w-0 flex-col" data-box>
-            <span class="type-label text-ink-strong">{option.words}</span>
+            <span class="type-label text-tx">{option.words}</span>
             {#if option.says}
-              <span class="type-meta text-pretty text-ink-muted"
-                >{option.says}</span
-              >
+              <span class="type-meta text-pretty text-tx-2">{option.says}</span>
             {/if}
           </span>
         </DropdownMenu.RadioItem>

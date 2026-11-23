@@ -143,7 +143,7 @@
     <iframe
       bind:this={frame}
       class={[
-        "pointer-events-none block flex-none rounded-xs border-0 outline-1 -outline-offset-1 outline-ink-strong/10",
+        "pointer-events-none block flex-none rounded-xs border-0 outline-1 -outline-offset-1 outline-tx/10",
         (!shape || down) && "absolute opacity-0",
       ]}
       onload={hello}
@@ -163,10 +163,7 @@
     ></iframe>
   {:else}
     <!-- One line in its well where the drawing would stand, never a slab of its size. -->
-    <p
-      data-slot="media-gone"
-      class="type-meta w-full text-ink-muted wrap-anywhere"
-    >
+    <p data-slot="media-gone" class="type-meta w-full text-tx-2 wrap-anywhere">
       {held
         ? "This piece names an artifact that is not a canvas."
         : "The canvas this card showed is gone."}

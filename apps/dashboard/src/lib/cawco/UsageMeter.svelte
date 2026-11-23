@@ -180,10 +180,10 @@
       else the limit wash at its limit (lit wins, as its background does). */
   function groundOf(ring: RingAccount): string | undefined {
     if (ring.id === lit) {
-      return "var(--color-surface-hover)";
+      return "var(--color-ui)";
     }
     if (ring.state === "limit") {
-      return "light-dark(color-mix(in oklch, var(--color-status-fail) 6%, transparent), color-mix(in oklch, var(--color-status-fail) 10%, transparent))";
+      return "light-dark(color-mix(in oklch, var(--color-red) 6%, transparent), color-mix(in oklch, var(--color-red) 10%, transparent))";
     }
     return undefined;
   }
@@ -489,14 +489,14 @@
   {#if !(shown || gap || limitsRead)}
     <!-- The limits are on their way: the live dot beside the words. -->
     <span
-      class="mark-line flex min-w-0 items-center gap-space-2 type-meta text-ink-muted"
+      class="mark-line flex min-w-0 items-center gap-space-2 type-meta text-tx-2"
       ><LiveDot /><span
         class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
         >{empty}</span
       ></span
     >
   {:else if !shown}
-    <span class="truncate type-meta text-ink-muted">{gap?.short ?? empty}</span>
+    <span class="truncate type-meta text-tx-2">{gap?.short ?? empty}</span>
   {:else}
     <!-- Claude's cell asks for its whole first line and caption, and never
          takes less than its marks and digits; opencode's is as wide as it
@@ -555,7 +555,7 @@
                 <span
                   data-slot="slot"
                   data-more
-                  class="absolute top-0 grid h-icon-md min-w-icon-md place-items-center type-meta num text-ink-muted transition-[inset-inline-start] duration-(--duration-base) ease-in-out motion-reduce:transition-off"
+                  class="absolute top-0 grid h-icon-md min-w-icon-md place-items-center type-meta num text-tx-2 transition-[inset-inline-start] duration-(--duration-base) ease-in-out motion-reduce:transition-off"
                   data-strip-more
                   style:inset-inline-start={slotAt(
                     stripMarks.length,
@@ -569,14 +569,14 @@
             {#if stop?.back}
               <span
                 aria-hidden="true"
-                class="inline-grid flex-none text-ink-muted"
+                class="inline-grid flex-none text-tx-2"
                 data-strip-back><IconRefresh class="size-icon-sm" /></span
               >
             {/if}
             <!-- The strip's time: its line here, the figure face on its own
                  span (`mono-figure`). -->
             <span
-              class="flex-none font-sans text-base leading-icon-md font-medium num text-ink-strong data-muted:text-ink-muted"
+              class="flex-none font-sans text-base leading-icon-md font-medium num text-tx data-muted:text-tx-2"
               data-muted={claude.stale !== null || undefined}
               data-strip-digits
               ><span class="mono-figure"
@@ -589,7 +589,7 @@
                marks and digits: only when the rail cannot fit it at all does
                it end in an ellipsis. -->
           <span
-            class="line-clamp-1 line-clamp-std-1 min-w-0 font-sans text-sm leading-4 font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-strong"
+            class="line-clamp-1 line-clamp-std-1 min-w-0 font-sans text-sm leading-4 font-normal num wrap-anywhere text-tx-2 [&_b]:text-tx"
             data-next={claude.next?.id}
             data-strip-caption
             ><Words parts={caption(claude, now, nameOf)} /></span
@@ -615,14 +615,12 @@
                  limit the refresh mark and when it's back: 12px, Solar
                  duotone, muted. -->
             {#if goTime?.kind === "back"}
-              <span
-                aria-hidden="true"
-                class="inline-grid flex-none text-ink-muted"
+              <span aria-hidden="true" class="inline-grid flex-none text-tx-2"
                 ><IconRefresh class="size-icon-sm" /></span
               >
             {/if}
             <span
-              class="flex-none font-sans text-base leading-icon-md font-medium num text-ink-strong"
+              class="flex-none font-sans text-base leading-icon-md font-medium num text-tx"
               data-strip-go-time
               ><span class="mono-figure"
                 ><Figure text={goTime?.figure ?? ""} /></span
@@ -633,7 +631,7 @@
             <!-- mark-line: one clamped line of text; the week ring stands in
                  it on vertical-align: middle, the x-height's middle -->
             <span
-              class="line-clamp-1 line-clamp-std-1 min-w-0 font-sans text-sm leading-4 font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-strong"
+              class="line-clamp-1 line-clamp-std-1 min-w-0 font-sans text-sm leading-4 font-normal num wrap-anywhere text-tx-2 [&_b]:text-tx"
               data-strip-go-week
               ><WeekMark ring={openCode} />
               <span class="mono-figure">{goWeek}%</span></span
@@ -695,7 +693,7 @@
           data-usage-meter-glyph
           {...props}
           aria-label={tip}
-          class="col-2 row-2 inline-grid self-center justify-self-box-end text-ink-muted"
+          class="col-2 row-2 inline-grid self-center justify-self-box-end text-tx-2"
           data-status-slot
           role="img"
           ><IconRefresh aria-hidden="true" class="size-icon-sm" /></span
@@ -704,7 +702,7 @@
     </Tip>
   {:else if time.guess}
     <span
-      class="mono-figure col-2 row-2 self-center justify-self-box-end text-sm leading-base text-ink-muted"
+      class="mono-figure col-2 row-2 self-center justify-self-box-end text-sm leading-base text-tx-2"
       data-status-slot>~</span
     >
   {/if}
@@ -713,7 +711,7 @@
        stronger than the week; a guess stays muted. -->
   <span
     data-slot="time"
-    class="col-3 row-2 type-meta whitespace-nowrap text-ink-strong data-guess:text-ink-muted"
+    class="col-3 row-2 type-meta whitespace-nowrap text-tx data-guess:text-tx-2"
     data-guess={(time.kind === "stop" && time.guess) || undefined}
     data-time
   >
@@ -729,7 +727,7 @@
       ><WeekMark {ring} /></span
     >
     <span
-      class="col-5 row-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted"
+      class="col-5 row-2 justify-self-box-end type-meta whitespace-nowrap text-tx-2"
       data-week
       ><span class="mono-figure inline-block min-w-ch-4 text-end">{week}%</span
       ></span
@@ -799,7 +797,7 @@
     data-usage-cell
     {...props}
     aria-label={cellLabel(ring, c, shown)}
-    class="relative col-span-5 grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-box-start items-box-start rounded-sm p-space-1 transition-[background-color] duration-(--duration-base) ease-out data-carrying:inset-ring data-carrying:inset-ring-border-strong not-data-lit:data-limit:bg-status-fail/8 data-lit:bg-surface-hover motion-reduce:transition-off"
+    class="relative col-span-5 grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-box-start items-box-start rounded-sm p-space-1 transition-[background-color] duration-(--duration-base) ease-out data-carrying:inset-ring data-carrying:inset-ring-tx-2 not-data-lit:data-limit:bg-red/8 data-lit:bg-ui motion-reduce:transition-off"
     data-account={ring.id}
     data-bind={ring.bind}
     data-carrying={(c !== null && ring.id === c.carry?.id) || undefined}
@@ -832,9 +830,9 @@
            right after it, going under it only when the two don't fit. A
            name never ends in an ellipsis; one longer than the cell wraps. -->
       <span class="flex min-w-0 flex-wrap type-meta wrap-anywhere" data-name>
-        <span class="min-w-0 font-medium text-ink-strong">{name.local}</span>
+        <span class="min-w-0 font-medium text-tx">{name.local}</span>
         {#if name.domain}
-          <span class="text-ink-muted">{name.domain}</span>
+          <span class="text-tx-2">{name.domain}</span>
         {/if}
       </span>
       {#if c && ring.id === c.delegate?.id}
@@ -844,7 +842,7 @@
             <span
               {...tipProps}
               aria-label={tip}
-              class="inline-grid flex-none text-ink-strong"
+              class="inline-grid flex-none text-tx"
               data-delegates
               role="img"
             >
@@ -877,13 +875,13 @@
         : "max-h-(--pop-max)",
     ]}
     style:--pop-max="calc(var(--bits-popover-content-available-height) - 2px)"
-    style:--ring-ground="var(--color-surface-raised)"
+    style:--ring-ground="var(--color-bg)"
     {@attach morph()}
   >
     {#if !(shown || gap) && notes.length === 0}
       <p
         class={[
-          "p-space-3 type-meta text-ink-muted",
+          "p-space-3 type-meta text-tx-2",
           !limitsRead && "mark-line flex items-center gap-space-2",
         ]}
       >
@@ -900,7 +898,7 @@
       >
         <div class="flex items-center justify-between gap-space-2">
           <h3
-            class="mark-line flex items-center gap-space-2 p-0 type-label text-ink-strong"
+            class="mark-line flex items-center gap-space-2 p-0 type-label text-tx"
           >
             <span
               data-slot="mark"
@@ -922,14 +920,14 @@
                 data-num
                 {...props}
                 aria-label={stop?.said}
-                class="type-kpi num whitespace-nowrap text-ink-strong data-muted:text-ink-muted"
+                class="type-kpi num whitespace-nowrap text-tx data-muted:text-tx-2"
                 data-muted={claude.stale !== null || undefined}
                 data-stop-kpi
                 role="img"
                 >{#if stop?.back}
                   <span
                     aria-hidden="true"
-                    class="me-space-1 inline-grid align-middle text-ink-muted"
+                    class="me-space-1 inline-grid align-middle text-tx-2"
                     data-stop-back><IconRefresh class="size-icon-md" /></span
                   >
                 {/if}
@@ -959,7 +957,7 @@
     <div
       class={[
         "kit-edge-fade-block relative min-h-0 flex-auto overflow-y-auto overscroll-contain",
-        claude && "border-t border-t-border-hairline",
+        claude && "border-t border-t-ui",
       ]}
       data-accounts
       data-flyover-scope
@@ -1004,7 +1002,7 @@
               >
                 {#if block.head}
                   <h4
-                    class="col-span-full px-space-1 pt-0 pb-space-1 type-meta text-ink-muted group-not-first/block:mt-space-2"
+                    class="col-span-full px-space-1 pt-0 pb-space-1 type-meta text-tx-2 group-not-first/block:mt-space-2"
                     data-flyover-edge
                     data-org-head
                   >
@@ -1026,7 +1024,7 @@
                      the whole popover, edge to edge, as a section's edge
                      is: `border: 0`, then its top edge. -->
                 <hr
-                  class="col-span-full my-space-1 h-0 border-none before:absolute before:inset-x-0 before:border-t before:border-t-border-hairline"
+                  class="col-span-full my-space-1 h-0 border-none before:absolute before:inset-x-0 before:border-t before:border-t-ui"
                 />
                 {@render cell(openCode, null, sideFor())}
               </div>
@@ -1056,7 +1054,7 @@
         <!-- Claude's gap: the whole why the strip's line stands for, and
              the sign-in that fixes it when one does. -->
         <div
-          class="flex flex-col items-start gap-space-2 p-space-3 type-meta text-ink-muted"
+          class="flex flex-col items-start gap-space-2 p-space-3 type-meta text-tx-2"
         >
           <p class="mark-line flex items-center gap-space-2">
             <span
@@ -1084,7 +1082,7 @@
              A hairline parts it from the group, the gap or the note before
              it. -->
         <p
-          class="mark-line flex items-center gap-space-2 p-space-3 type-meta text-ink-muted not-first:border-t not-first:border-t-border-hairline"
+          class="mark-line flex items-center gap-space-2 p-space-3 type-meta text-tx-2 not-first:border-t not-first:border-t-ui"
         >
           <span
             data-slot="mark"
@@ -1098,7 +1096,7 @@
     </div>
     <div
       data-slot="foot"
-      class="flex-none border-t border-t-border-hairline px-space-4 py-space-3"
+      class="flex-none border-t border-t-ui px-space-4 py-space-3"
       data-pop-foot
     >
       <Button
@@ -1121,10 +1119,8 @@
   data-slot="strip"
   class="group/strip relative w-full min-w-0 rounded-sm bg-(--ring-ground) variant-home:rounded-sm"
   data-variant={variant}
-  style:--ring-ground="var(--strip-ground, var(--color-surface-page))"
-  style:--strip-ground={variant === "home"
-    ? "var(--color-surface-raised)"
-    : undefined}
+  style:--ring-ground="var(--strip-ground, var(--color-bg))"
+  style:--strip-ground={variant === "home" ? "var(--color-bg)" : undefined}
 >
   {#if touch.current}
     <!-- On touch every account rises in the house sheet, as a tab's details

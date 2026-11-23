@@ -19,7 +19,7 @@
   <div class="flex flex-col gap-space-1">
     <TaskCard href={view.hrefOf(task.id)} onopen={view.onopen} {task} />
     {#if extra.length > 0}
-      <p class="type-meta px-space-3 text-ink-muted">{extra.join(" · ")}</p>
+      <p class="type-meta px-space-3 text-tx-2">{extra.join(" · ")}</p>
     {/if}
   </div>
 {/if}

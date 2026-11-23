@@ -109,7 +109,7 @@
   {#snippet below()}
     <span
       data-slot="meta"
-      class="pointer-events-none relative col-start-2 col-end-4 row-3 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+      class="pointer-events-none relative col-start-2 col-end-4 row-3 overflow-hidden type-meta text-ellipsis whitespace-nowrap text-tx-2"
       >{item.place}</span
     >
     <!-- A line per machine, every line on the list's one grid, so each
@@ -127,20 +127,20 @@
           class="mark-line col-span-full grid grid-cols-subgrid gap-y-space-1"
         >
           <OsMark
-            class="mark-line size-icon-md self-center text-ink-muted"
+            class="mark-line size-icon-md self-center text-tx-2"
             data-box
             os={line.os}
           />
-          <span class="min-w-0 self-center wrap-break-word text-ink-strong"
+          <span class="min-w-0 self-center wrap-break-word text-tx"
             >{line.machine}</span
           >
-          <span class="self-center text-ink-muted"
+          <span class="self-center text-tx-2"
             >{#if line.state.found}<code class="num type-code"
                 >{line.state.found}</code
               >{/if}{#if line.state.found && why}{" · "}{/if}{#if line.state.kind === "failed" && line.state.output}<button
                 aria-controls={outputId}
                 aria-expanded={opened[line.machineId] === true}
-                class="pointer-hit touch-hit rounded-xs text-status-fail underline decoration-dotted underline-offset-2 hover:text-ink-strong"
+                class="pointer-hit touch-hit rounded-xs text-red underline decoration-dotted underline-offset-2 hover:text-tx"
                 onclick={() => {
                   opened[line.machineId] = !opened[line.machineId];
                 }}
@@ -167,15 +167,14 @@
             >
               {#if line.state.kind === "failed" && line.state.cause}
                 <!-- The installer's own line that says why, under the name. -->
-                <code
-                  class="line-clamp-2 type-code wrap-anywhere text-status-fail"
+                <code class="line-clamp-2 type-code wrap-anywhere text-red"
                   >{line.state.cause}</code
                 >
               {/if}
               {#if line.state.kind === "failed" && opened[line.machineId]}
                 <pre
                   id={outputId}
-                  class="m-0 max-h-56 overflow-auto rounded-xs bg-surface-recess px-space-2 py-space-1 type-code whitespace-pre-wrap wrap-anywhere text-ink-muted"
+                  class="m-0 max-h-56 overflow-auto rounded-xs bg-bg-2 px-space-2 py-space-1 type-code whitespace-pre-wrap wrap-anywhere text-tx-2"
                   transition:unfold>{line.state.output}</pre>
               {/if}
               {#if refused}

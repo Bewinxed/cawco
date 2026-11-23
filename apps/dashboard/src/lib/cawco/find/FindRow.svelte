@@ -88,7 +88,7 @@
   <button
     data-slot="row"
     {id}
-    class="group/row mark-line relative grid grid-cols-(--row-cols) grid-rows-(--row-rows) gap-x-space-2 items-center w-full min-h-13 px-space-3 py-space-2 border-none border-current rounded-sm bg-transparent text-start box-border cursor-default outline-off select-none active:bg-surface-hover data-phone:min-h-14 data-phone:py-space-3 data-peekable:pe-control-lg"
+    class="group/row mark-line relative grid grid-cols-(--row-cols) grid-rows-(--row-rows) gap-x-space-2 items-center w-full min-h-13 px-space-3 py-space-2 border-none border-current rounded-sm bg-transparent text-start box-border cursor-default outline-off select-none active:bg-ui data-phone:min-h-14 data-phone:py-space-3 data-peekable:pe-control-lg"
     aria-describedby={peeked ? `${id}-peek` : undefined}
     aria-label={row.spoken}
     aria-posinset={posinset}
@@ -132,25 +132,25 @@
     <span
       data-slot="title"
       data-box={phone || undefined}
-      class="row-start-1 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label leading-icon-lg text-ink-strong group-data-phone/row:type-body group-data-phone/row:leading-icon-lg group-data-phone/row:font-medium group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-3 group-data-phone/row:line-clamp-std-3 group-data-phone/row:overflow-clip"
+      class="row-start-1 col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label leading-icon-lg text-tx group-data-phone/row:type-body group-data-phone/row:leading-icon-lg group-data-phone/row:font-medium group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-3 group-data-phone/row:line-clamp-std-3 group-data-phone/row:overflow-clip"
       {@attach said(titleRuns, shown)}
     ></span>
     {#if ago}
       <span
         data-slot="num"
-        class="num row-start-1 col-start-3 type-meta leading-icon-lg text-ink-muted group-data-phone/row:self-box-start"
+        class="num row-start-1 col-start-3 type-meta leading-icon-lg text-tx-2 group-data-phone/row:self-box-start"
         aria-hidden="true">{ago}</span
       >
     {/if}
     {#if row.state.word || row.meta.length > 0}
       <span
         data-slot="meta"
-        class="row-start-2 col-start-2 col-end-4 line-clamp-2 type-meta leading-icon-md text-ink-muted group-data-phone/row:type-label group-data-phone/row:font-normal group-data-phone/row:leading-icon-md"
+        class="row-start-2 col-start-2 col-end-4 line-clamp-2 type-meta leading-icon-md text-tx-2 group-data-phone/row:type-label group-data-phone/row:font-normal group-data-phone/row:leading-icon-md"
         aria-hidden="true"
         data-box
       >
         <span
-          class="font-medium text-ink-muted tone-live:text-status-live tone-attn:text-status-attn tone-fail:text-status-fail"
+          class="font-medium text-tx-2 tone-live:text-cyan tone-attn:text-orange tone-fail:text-red"
           data-tone={row.state.tone}>{row.state.word}</span
         >
         {#each row.meta as word (word)}
@@ -164,7 +164,7 @@
            column. -->
       <span
         data-slot="reason"
-        class="row-start-3 col-start-2 col-end-4 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta leading-space-4 text-ink-subtle group-data-phone/row:type-label group-data-phone/row:font-normal group-data-phone/row:leading-icon-md group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-2 group-data-phone/row:line-clamp-std-2 group-data-phone/row:overflow-clip"
+        class="row-start-3 col-start-2 col-end-4 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta leading-space-4 text-tx-2 group-data-phone/row:type-label group-data-phone/row:font-normal group-data-phone/row:leading-icon-md group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-2 group-data-phone/row:line-clamp-std-2 group-data-phone/row:overflow-clip"
         aria-hidden="true"
         data-box
         {@attach said(row.reason.parts, shown, {
@@ -176,7 +176,7 @@
   </button>
   {#if peekable}
     <button
-      class="select-none group/disclose absolute inset-y-0 end-0 grid place-items-center w-control-lg min-h-0 p-0 border-none border-current rounded-sm bg-transparent text-ink-muted active:bg-surface-hover"
+      class="select-none group/disclose absolute inset-y-0 end-0 grid place-items-center w-control-lg min-h-0 p-0 border-none border-current rounded-sm bg-transparent text-tx-2 active:bg-ui"
       aria-controls={`${id}-peek`}
       aria-expanded={peeked}
       aria-label={peeked ? "Fold" : "Peek"}

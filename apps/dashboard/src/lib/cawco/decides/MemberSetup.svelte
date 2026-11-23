@@ -269,7 +269,7 @@
   {@const problem = problemOf(row)}
   {#if problem}
     <p
-      class="m-0 type-meta text-status-fail text-pretty"
+      class="m-0 type-meta text-red text-pretty"
       data-problem
       role="alert"
       transition:unfold
@@ -282,7 +282,7 @@
 {#snippet does()}
   {#if adding}
     <div class="flex min-w-0 flex-col gap-space-2">
-      <label class="type-meta text-ink-muted" for="{uid}-name"
+      <label class="type-meta text-tx-2" for="{uid}-name"
         >{decidesWords.nameLabel}</label
       >
       <Input
@@ -302,14 +302,13 @@
     </div>
   {:else if member?.type === "agent"}
     <p class="m-0 flex min-w-0 flex-col">
-      <span class="type-label text-ink-strong wrap-anywhere">{member.name}</span
-      >
-      <span class="type-meta text-ink-muted">{decidesWords.nameKept}</span>
+      <span class="type-label text-tx wrap-anywhere">{member.name}</span>
+      <span class="type-meta text-tx-2">{decidesWords.nameKept}</span>
     </p>
   {/if}
   {#if adding || member?.type === "agent"}
     <div class="flex min-w-0 flex-col gap-space-2">
-      <label class="type-meta text-ink-muted" for="{uid}-job"
+      <label class="type-meta text-tx-2" for="{uid}-job"
         >{decidesWords.jobLabel}</label
       >
       <Input
@@ -321,11 +320,11 @@
     </div>
   {:else}
     <p class="m-0 flex min-w-0 flex-col">
-      <span class="type-label text-ink-strong text-pretty wrap-anywhere"
+      <span class="type-label text-tx text-pretty wrap-anywhere"
         >{member?.job}</span
       >
       {#if isCaw && who.lead}
-        <span class="type-meta text-ink-muted"
+        <span class="type-meta text-tx-2"
           >{decidesWords.cawNow(who.lead.sentence)}</span
         >
       {/if}
@@ -335,7 +334,7 @@
 
 {#snippet lead()}
   {#if who.lead && who.projectId !== null && project !== null}
-    <div class="type-label text-ink-strong">
+    <div class="type-label text-tx">
       <CawLeadSwitch
         lead={who.lead}
         projectId={who.projectId}
@@ -346,7 +345,7 @@
 {/snippet}
 
 {#snippet runs()}
-  <p class="m-0 -mb-space-1 type-meta text-ink-muted" aria-hidden="true">
+  <p class="m-0 -mb-space-1 type-meta text-tx-2" aria-hidden="true">
     {decidesWords.harnessLabel}
   </p>
   <OptionTiles
@@ -368,7 +367,7 @@
   {@render problemLine("runs")}
   {#if models.length > 0}
     <div class="flex min-w-0 flex-col gap-space-2">
-      <p class="m-0 type-meta text-ink-muted" id="{uid}-model">
+      <p class="m-0 type-meta text-tx-2" id="{uid}-model">
         {decidesWords.modelLabel}
       </p>
       <div class="max-h-64 min-w-0 overflow-y-auto overscroll-contain">
@@ -399,7 +398,7 @@
   {/if}
   {#if !isCaw}
     <div class="flex min-w-0 flex-col gap-space-2">
-      <p class="m-0 type-meta text-ink-muted" aria-hidden="true">
+      <p class="m-0 type-meta text-tx-2" aria-hidden="true">
         {decidesWords.effortLabel}
       </p>
       <OptionTiles
@@ -413,13 +412,13 @@
         bind:value={setup.draft.effort}
       />
       {#if effort}
-        <p class="m-0 max-w-measure type-meta text-ink-muted text-pretty">
+        <p class="m-0 max-w-measure type-meta text-tx-2 text-pretty">
           {effort.description}
         </p>
       {/if}
     </div>
     <label
-      class="flex min-h-control-lg items-center gap-space-2 type-label text-ink-strong"
+      class="flex min-h-control-lg items-center gap-space-2 type-label text-tx"
     >
       <Checkbox bind:checked={setup.draft.delegates} />
       <span>{decidesWords.delegatesLabel}</span>
@@ -432,23 +431,23 @@
     <p class="m-0 flex min-w-0 flex-col gap-space-1 type-label">
       {#if who.projectId !== null && project !== null}
         <a
-          class="text-accent-ink underline-offset-2 wrap-anywhere can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs"
+          class="text-accent underline-offset-2 wrap-anywhere can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid rounded-xs"
           href={folderFileHref(who.projectId, "AGENTS.md")}
           >{decidesWords.cawInstructions(project)}</a
         >
       {/if}
       <a
-        class="text-accent-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs"
+        class="text-accent underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid rounded-xs"
         href="/config/skills">{decidesWords.cawSkills}</a
       >
     </p>
   {:else}
     <fieldset class="m-0 flex min-w-0 flex-col gap-space-1 border-0 p-0">
-      <legend class="mb-space-1 type-meta text-ink-muted"
+      <legend class="mb-space-1 type-meta text-tx-2"
         >{decidesWords.skillsLabel}</legend
       >
       {#if who.skills.length === 0}
-        <p class="m-0 type-meta text-ink-muted">{decidesWords.noSkills}</p>
+        <p class="m-0 type-meta text-tx-2">{decidesWords.noSkills}</p>
       {:else}
         <ul
           class="m-0 flex max-h-64 list-none flex-col overflow-y-auto overscroll-contain p-0"
@@ -469,13 +468,12 @@
                   }
                 />
                 <span class="flex min-w-0 flex-col">
-                  <span
-                    class="type-label font-mono text-ink-strong wrap-anywhere"
+                  <span class="type-label font-mono text-tx wrap-anywhere"
                     >{skill.id}</span
                   >
                   {#if skill.note}
                     <span
-                      class="type-meta text-ink-muted text-pretty wrap-anywhere line-clamp-2"
+                      class="type-meta text-tx-2 text-pretty wrap-anywhere line-clamp-2"
                       >{skill.note}</span
                     >
                   {/if}
@@ -487,7 +485,7 @@
       {/if}
     </fieldset>
     <div class="flex min-w-0 flex-col gap-space-2">
-      <label class="type-meta text-ink-muted" for="{uid}-instructions"
+      <label class="type-meta text-tx-2" for="{uid}-instructions"
         >{decidesWords.instructionsLabel}</label
       >
       <Textarea
@@ -497,7 +495,7 @@
         placeholder={decidesWords.instructionsPlaceholder}
         bind:value={setup.draft.instructions}
       />
-      <p class="m-0 type-meta text-ink-muted" id="{uid}-instructions-hint">
+      <p class="m-0 type-meta text-tx-2" id="{uid}-instructions-hint">
         {decidesWords.instructionsHint}
       </p>
       {@render problemLine("knows")}
@@ -529,23 +527,20 @@
               }
             }
           />
-          <Glyph
-            aria-hidden="true"
-            class="size-icon-sm flex-none text-ink-muted"
-          />
-          <span class="min-w-0 type-label text-ink-strong wrap-anywhere"
+          <Glyph aria-hidden="true" class="size-icon-sm flex-none text-tx-2" />
+          <span class="min-w-0 type-label text-tx wrap-anywhere"
             >{kind.name}</span
           >
           {#if project !== null}
             {@const Scope = who.isOwn(kind.id) ? IconFolder : IconGlobe}
             <Scope
               aria-hidden="true"
-              class="size-icon-sm flex-none text-ink-muted"
+              class="size-icon-sm flex-none text-tx-2"
               data-box
             />
           {/if}
           {#if other}
-            <span class="min-w-0 type-meta text-ink-muted wrap-anywhere"
+            <span class="min-w-0 type-meta text-tx-2 wrap-anywhere"
               >{decidesWords.nowHeld(other.name)}</span
             >
           {/if}
@@ -553,7 +548,7 @@
       </li>
     {/each}
   </ul>
-  <p class="m-0 type-meta text-ink-muted text-pretty">
+  <p class="m-0 type-meta text-tx-2 text-pretty">
     {project === null
       ? decidesWords.decidesHint
       : `${decidesWords.decidesHint} ${decidesWords.decidesHintProject}`}
@@ -577,10 +572,10 @@
       }
     }
   />
-  <p class="m-0 type-meta text-ink-muted">{decidesWords.hearHint}</p>
+  <p class="m-0 type-meta text-tx-2">{decidesWords.hearHint}</p>
   {#if who.projectId !== null}
     <a
-      class="self-start type-label text-accent-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs"
+      class="self-start type-label text-accent underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid rounded-xs"
       href="/project/{encodeURIComponent(who.projectId)}?view=decisions"
       >{decidesWords.answersIn}</a
     >
@@ -619,7 +614,7 @@
       <button
         aria-expanded={setup.picking}
         aria-label={decidesWords.changePicture(face.name)}
-        class="relative flex-none rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid"
+        class="relative flex-none rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid"
         onclick={() => {
           setup.picking = !setup.picking;
         }}
@@ -627,21 +622,18 @@
       >
         <MemberFace member={face} size={56} />
         <span
-          class="absolute -end-space-1 -bottom-space-1 grid size-6 place-items-center rounded-full border border-border-hairline bg-surface-raised text-ink-strong shadow-sm"
+          class="absolute -end-space-1 -bottom-space-1 grid size-6 place-items-center rounded-full border border-ui bg-bg text-tx shadow-sm"
         >
           <IconPen aria-hidden="true" class="size-icon-sm" />
         </span>
       </button>
     {/if}
     <div class="flex min-w-0 flex-auto flex-col self-center">
-      <h2
-        class="m-0 type-title text-balance text-ink-strong wrap-anywhere"
-        id={headId}
-      >
+      <h2 class="m-0 type-title text-balance text-tx wrap-anywhere" id={headId}>
         {name}
       </h2>
       {#if member !== null || setup.adding !== null}
-        <p class="m-0 type-meta text-ink-muted text-pretty wrap-anywhere">
+        <p class="m-0 type-meta text-tx-2 text-pretty wrap-anywhere">
           {line}
         </p>
       {/if}
@@ -710,16 +702,16 @@
 
   {#if member !== null || setup.adding !== null}
     <footer
-      class="flex min-w-0 flex-col gap-space-2 border-t border-border-hairline p-space-3"
+      class="flex min-w-0 flex-col gap-space-2 border-t border-ui p-space-3"
     >
       <RowFault reason={footFault} />
       <div
         class="flex min-w-0 flex-wrap items-center justify-end gap-x-space-3 gap-y-space-2"
       >
-        <p class="m-0 me-auto min-w-0 type-meta text-ink-muted text-pretty">
+        <p class="m-0 me-auto min-w-0 type-meta text-tx-2 text-pretty">
           {decidesWords.fromNowOn}
           {#if setup.tried && count > 0}
-            <span class="text-status-fail"> {decidesWords.toFix(count)}</span>
+            <span class="text-red"> {decidesWords.toFix(count)}</span>
           {/if}
         </p>
         <div class="flex flex-none items-center gap-space-2">
@@ -765,14 +757,14 @@
       </div>
       {#if member !== null && isAgent && member.delegateType}
         <a
-          class="self-end type-meta text-accent-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs"
+          class="self-end type-meta text-accent underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid rounded-xs"
           href="/config/delegate-types/{encodeURIComponent(
             member.delegateType
           )}">{decidesWords.openType}</a
         >
       {/if}
       {#if member !== null && !member.builtIn && !BUILT_IN_MEMBERS.some((builtIn) => builtIn === member.id)}
-        <div class="border-t border-border-hairline pt-space-2">
+        <div class="border-t border-ui pt-space-2">
           <Button
             disabled={removeAsked}
             label={decidesWords.remove}

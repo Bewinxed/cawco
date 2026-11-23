@@ -131,7 +131,7 @@
     {/if}
     <span
       data-slot="result"
-      class="flex min-w-0 flex-auto items-center justify-end gap-space-2 type-meta text-ink-muted empty:hidden max-phone:basis-full max-phone:justify-start"
+      class="flex min-w-0 flex-auto items-center justify-end gap-space-2 type-meta text-tx-2 empty:hidden max-phone:basis-full max-phone:justify-start"
     >
       {#if result}
         {@render result()}

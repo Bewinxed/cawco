@@ -440,7 +440,7 @@
 
 <div
   data-slot="wait"
-  class="group/wait flex flex-col items-center justify-center gap-space-4 flex-auto min-h-0 overflow-y-auto py-space-8 px-space-6 bg-surface-recess data-phone:justify-start data-phone:pbs-space-6 data-phone:px-space-4 data-phone:pbe-(--wait-pad-end)"
+  class="group/wait flex flex-col items-center justify-center gap-space-4 flex-auto min-h-0 overflow-y-auto py-space-8 px-space-6 bg-bg-2 data-phone:justify-start data-phone:pbs-space-6 data-phone:px-space-4 data-phone:pbe-(--wait-pad-end)"
   data-move={job.id}
   data-phone={phone || undefined}
   style:--wait-pad-end={"calc(var(--spacing-space-4) + env(safe-area-inset-bottom))"}
@@ -490,9 +490,7 @@
               status={STATUS[row.phase]}
             >
               {#if row.step === "snapshot" && job.snapshot?.branch && row.phase !== "ahead"}
-                <code
-                  data-slot="sub"
-                  class="type-code text-ink-muted wrap-anywhere"
+                <code data-slot="sub" class="type-code text-tx-2 wrap-anywhere"
                   >{job.snapshot.branch}</code
                 >
               {/if}
@@ -506,7 +504,7 @@
                   <span
                     data-num
                     data-slot="meta"
-                    class="type-meta text-ink-muted num"
+                    class="type-meta text-tx-2 num"
                     >{share(progress.bytes, progress.total)}% ·
                     {partWords(progress.bytes, progress.total)}{left
                       ? ` · ${left}`
@@ -529,7 +527,7 @@
                          (rtl), read from the left like every line above it. -->
                     <span
                       data-slot="path"
-                      class="row-start-1 col-start-1 truncate text-left type-code text-ink-muted dir-rtl"
+                      class="row-start-1 col-start-1 truncate text-left type-code text-tx-2 dir-rtl"
                       title={file.file}
                       in:crossIn
                       out:crossOut><bdi>{file.file}</bdi></span
@@ -539,7 +537,7 @@
                   <span
                     data-num
                     data-slot="meta"
-                    class="type-meta text-ink-muted num"
+                    class="type-meta text-tx-2 num"
                     >{partWords(file.bytes, file.total)}</span
                   >
                 </div>
@@ -551,11 +549,11 @@
                      gap on touch"). -->
                 <div
                   data-slot="move-wait-card"
-                  class="grid gap-space-3 coarse:gap-space-4 mbs-space-1 p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-sm"
+                  class="grid gap-space-3 coarse:gap-space-4 mbs-space-1 p-space-3 border border-ui-2 rounded-lg bg-bg shadow-sm"
                   in:unfold
                   out:unfold
                 >
-                  <p class="m-0 type-label text-ink-strong">{job.ask.title}</p>
+                  <p class="m-0 type-label text-tx">{job.ask.title}</p>
                   <MoveAskBody ask={job.ask} />
                   <div
                     class="flex justify-between gap-space-8 group-data-phone/wait:gap-space-4"
@@ -567,7 +565,7 @@
                       size="sm"
                       variant="secondary"
                     >
-                      <IconClose data-slot="deny" class="text-ink-muted" />
+                      <IconClose data-slot="deny" class="text-tx-2" />
                       <span>{DONT_MOVE}</span>
                     </Button>
                     <!-- The yes is the action, coral as in New session's step 2. -->
@@ -652,7 +650,7 @@
         {/each}
       </ThinkingSteps>
       {#if job.stage === "cancelled"}
-        <p class="m-0 type-meta text-ink-muted" in:crossIn>
+        <p class="m-0 type-meta text-tx-2" in:crossIn>
           {["Stopped.", job.kept].filter(Boolean).join(" ")}
         </p>
       {/if}

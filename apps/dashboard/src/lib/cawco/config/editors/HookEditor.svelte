@@ -82,7 +82,7 @@
   let { hook, taken }: { hook: FleetHook | null; taken: string[] } = $props();
 
   const store = configStore();
-  const HUE = "var(--color-mark-4)";
+  const HUE = "var(--color-cyan)";
 
   let draft = $state<HookDraft>(
     untrack(() => (hook ? draftOf(hook) : blankHook()))
@@ -433,7 +433,7 @@
   <ReadingWell text={hookSentence(draft)} />
 
   <EditorSection hue={HUE} icon={IconClock} label="When it runs">
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       One lifecycle event. The events with a matcher are the ones Claude Code
       lets you narrow further.
     </p>
@@ -457,9 +457,9 @@
       />
     </Field>
     {#if shown("event")}
-      <p class="type-meta text-status-fail" in:appear>{wrong.event}</p>
+      <p class="type-meta text-red" in:appear>{wrong.event}</p>
     {:else if eventInfo}
-      <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-measure text-tx-2">
         Runs {eventInfo.blurb}.
       </p>
     {/if}
@@ -502,7 +502,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconPlay} label="What it runs">
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       CawCo writes this to every machine it applies to and registers it — no
       prompt, no approval, every time the event fires.
     </p>
@@ -731,7 +731,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
-    <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-measure text-tx-2">
       Every machine in the fleet unless you narrow it to one project.
     </p>
     <Field id="hook-scope" label="Scope">
@@ -750,7 +750,7 @@
       />
     </Field>
     {#if shown("scope")}
-      <p class="type-meta text-status-fail" in:appear>{wrong.scope}</p>
+      <p class="type-meta text-red" in:appear>{wrong.scope}</p>
     {/if}
   </EditorSection>
 
@@ -762,7 +762,7 @@
         />
       {:else}
         {#if applied.length > 0}
-          <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
+          <p data-slot="note" class="type-meta max-w-measure text-tx-2">
             In sync on
             {applied.length}
             machine{applied.length === 1 ? "" : "s"}.

@@ -163,14 +163,14 @@
     />
     {#if confirming === "on"}
       <div
-        class="flex max-w-measure flex-col gap-space-3 rounded-sm border border-border-hairline bg-surface-raised p-space-3 shadow-sm"
+        class="flex max-w-measure flex-col gap-space-3 rounded-sm border border-ui bg-bg p-space-3 shadow-sm"
         transition:unfold
       >
-        <p data-slot="lead" class="type-body text-ink-strong">
+        <p data-slot="lead" class="type-body text-tx">
           Require paired devices? From the moment you confirm:
         </p>
         <ul
-          class="type-body flex list-disc flex-col gap-space-1 ps-space-4 text-ink-muted"
+          class="type-body flex list-disc flex-col gap-space-1 ps-space-4 text-tx-2"
         >
           <li>This browser is the first paired device.</li>
           <li>
@@ -187,11 +187,9 @@
             hub until its update arrives.
           </li>
           <li>
-            Each run of <code class="type-code text-ink-strong"
-              >cawco connections</code
-            >, <code class="type-code text-ink-strong">relay</code> or
-            <code class="type-code text-ink-strong">jev</code> asks you to approve
-            it once.
+            Each run of <code class="type-code text-tx">cawco connections</code
+            >, <code class="type-code text-tx">relay</code> or
+            <code class="type-code text-tx">jev</code> asks you to approve it once.
           </li>
           <li>Sessions keep their tools.</li>
         </ul>
@@ -216,10 +214,10 @@
       </div>
     {:else if confirming === "off"}
       <div
-        class="flex max-w-measure flex-col gap-space-3 rounded-sm border border-border-hairline bg-surface-raised p-space-3 shadow-sm"
+        class="flex max-w-measure flex-col gap-space-3 rounded-sm border border-ui bg-bg p-space-3 shadow-sm"
         transition:unfold
       >
-        <p data-slot="lead" class="type-body text-ink-strong">
+        <p data-slot="lead" class="type-body text-tx">
           Stop requiring paired devices? Every device on your network reaches
           the fleet again. The paired devices and machine keys are forgotten:
           turning it on again starts from the device that does.
@@ -261,7 +259,7 @@
     />
     {#if findProblem}
       <p
-        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail"
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-red"
         role="alert"
         transition:unfold
       >
@@ -281,27 +279,24 @@
         {#each hubAuth.requests as request (request.userCode)}
           <li
             data-slot="row"
-            class="flex items-center gap-space-3 py-space-3 not-first:border-t not-first:border-border-hairline"
+            class="flex items-center gap-space-3 py-space-3 not-first:border-t not-first:border-ui"
           >
             <div data-slot="who" class="flex min-w-0 flex-1 flex-col">
-              <span data-slot="name" class="type-body text-ink-strong"
+              <span data-slot="name" class="type-body text-tx"
                 >{request.name}</span
               >
               <span
                 data-num
                 data-slot="meta"
-                class="num type-meta wrap-anywhere text-ink-muted"
+                class="num type-meta wrap-anywhere text-tx-2"
               >
-                Code <span data-slot="code" class="type-code text-ink-strong"
+                Code <span data-slot="code" class="type-code text-tx"
                   >{request.userCode}</span
                 >{request.address ? ` · ${request.address}` : ""} · asked {formatDistanceToNow(
                   new Date(request.at)
                 )}
               </span>
-              <span
-                data-slot="meta"
-                class="type-meta wrap-anywhere text-ink-muted"
-              >
+              <span data-slot="meta" class="type-meta wrap-anywhere text-tx-2">
                 Approve only if this is the code on the device in front of you.
               </span>
             </div>
@@ -333,16 +328,16 @@
         {#each hubAuth.waiting as machine (machine.machineId)}
           <li
             data-slot="row"
-            class="flex items-center gap-space-3 py-space-3 not-first:border-t not-first:border-border-hairline"
+            class="flex items-center gap-space-3 py-space-3 not-first:border-t not-first:border-ui"
           >
             <div data-slot="who" class="flex min-w-0 flex-1 flex-col">
-              <span data-slot="name" class="type-body text-ink-strong"
+              <span data-slot="name" class="type-body text-tx"
                 >{machine.hostname ?? machine.machineId}</span
               >
               <span
                 data-num
                 data-slot="meta"
-                class="num type-meta wrap-anywhere text-ink-muted"
+                class="num type-meta wrap-anywhere text-tx-2"
               >
                 Machine{machine.platform
                   ? ` · ${machine.platform}`
@@ -391,10 +386,10 @@
           <li
             data-slot="row"
             data-devices
-            class="flex items-center gap-space-3 py-space-3 not-first:border-t not-first:border-border-hairline"
+            class="flex items-center gap-space-3 py-space-3 not-first:border-t not-first:border-ui"
           >
             <div data-slot="who" class="flex min-w-0 flex-1 flex-col">
-              <span data-slot="name" class="type-body text-ink-strong"
+              <span data-slot="name" class="type-body text-tx"
                 >{device.name}{device.id === current
                   ? " · this browser"
                   : ""}</span
@@ -402,7 +397,7 @@
               <span
                 data-num
                 data-slot="meta"
-                class="num type-meta wrap-anywhere text-ink-muted"
+                class="num type-meta wrap-anywhere text-tx-2"
               >
                 {KINDS[device.kind]} · paired {formatDistanceToNow(
                   new Date(device.createdAt)
@@ -426,7 +421,7 @@
       {#if devices.length === 1}
         <p
           data-slot="note"
-          class="type-meta max-w-measure wrap-anywhere text-ink-muted"
+          class="type-meta max-w-measure wrap-anywhere text-tx-2"
         >
           The only paired device stays until you pair another or turn pairing
           off, so the fleet always has someone who can approve.
@@ -437,7 +432,7 @@
 
   {#if problem}
     <p
-      class="type-meta mt-space-4 wrap-anywhere whitespace-pre-wrap text-status-fail"
+      class="type-meta mt-space-4 wrap-anywhere whitespace-pre-wrap text-red"
       role="alert"
       transition:unfold
     >

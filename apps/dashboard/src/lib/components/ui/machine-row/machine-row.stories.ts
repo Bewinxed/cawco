@@ -11,7 +11,7 @@ export default {
   component: MachineRow,
   args: {
     icon: IconServerSquare,
-    hue: "var(--color-mark-1)",
+    hue: "var(--color-orange)",
     name: "obelisk-of-light",
     meta: "Linux · 3 sessions · home",
     presence: "online",
@@ -25,7 +25,7 @@ export const Online = {};
 export const Away = {
   args: {
     icon: IconLaptopAlt,
-    hue: "var(--color-mark-2)",
+    hue: "var(--color-yellow)",
     name: "studio-mac",
     meta: "macOS · last seen 2 hours ago",
     presence: "away",
@@ -35,7 +35,7 @@ export const Away = {
 /** A machine switched off. */
 export const Off = {
   args: {
-    hue: "var(--color-ink-subtle)",
+    hue: "var(--color-tx-2)",
     name: "nimbus-build-02",
     meta: "Linux · off since Tuesday",
     presence: "off",

@@ -236,7 +236,7 @@
 <section
   data-slot="hitl"
   aria-label="Question from {asker}"
-  class="mt-space-4 ms-(--x-rail) py-space-3 pe-space-3 ps-(--hitl-start) border border-border-control rounded-lg bg-surface-raised shadow-sm"
+  class="mt-space-4 ms-(--x-rail) py-space-3 pe-space-3 ps-(--hitl-start) border border-ui-2 rounded-lg bg-bg shadow-sm"
   data-frame
   bind:this={section}
   style:--hitl-start="calc(var(--x-glyph) - var(--x-rail) - 1px)"
@@ -245,27 +245,27 @@
        the title at the text column, the state in words after it. Each
        state cell is one grid cell, so the outgoing mark or word and the
        incoming one cross-fade in place. -->
-  <h2 class="rail-line text-base font-medium text-ink-strong mb-space-2">
+  <h2 class="rail-line text-base font-medium text-tx mb-space-2">
     <span data-slot="rail-cell" class="rail-cell inline-grid">
       {#if answered}
         <span
           data-slot="mark"
           data-question-card-done
-          class="col-start-1 row-start-1 grid place-items-center text-status-done"
+          class="col-start-1 row-start-1 grid place-items-center text-green"
           in:pillSwap
           out:pillSwap><IconCheck class="size-(--w-glyph)" /></span
         >
       {:else if dismissed || failed}
         <span
           data-slot="mark"
-          class="col-start-1 row-start-1 grid place-items-center text-ink-muted"
+          class="col-start-1 row-start-1 grid place-items-center text-tx-2"
           in:pillSwap
           out:pillSwap><IconClose class="size-(--w-glyph)" /></span
         >
       {:else}
         <span
           data-slot="mark"
-          class="col-start-1 row-start-1 grid place-items-center text-status-attn"
+          class="col-start-1 row-start-1 grid place-items-center text-orange"
           in:pillSwap
           out:pillSwap><IconAsk class="size-(--w-glyph)" /></span
         >
@@ -276,31 +276,31 @@
       {#if answered}
         <span
           data-slot="done"
-          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-base font-medium whitespace-nowrap bg-status-done-bg text-status-done"
+          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-base font-medium whitespace-nowrap bg-bg-2 text-green"
           in:pillSwap
           out:pillSwap><span>answered</span></span
         >
       {:else if dismissed}
         <span
-          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-base font-medium whitespace-nowrap bg-surface-recess text-ink-muted"
+          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-base font-medium whitespace-nowrap bg-bg-2 text-tx-2"
           in:pillSwap
           out:pillSwap><span>dismissed</span></span
         >
       {:else if withdrawn}
         <span
-          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-base font-medium whitespace-nowrap bg-surface-recess text-ink-muted"
+          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-base font-medium whitespace-nowrap bg-bg-2 text-tx-2"
           in:pillSwap
           out:pillSwap><span>withdrawn</span></span
         >
       {:else if failed}
         <span
-          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-base font-medium whitespace-nowrap bg-surface-recess text-ink-muted"
+          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-base font-medium whitespace-nowrap bg-bg-2 text-tx-2"
           in:pillSwap
           out:pillSwap><span>not asked</span></span
         >
       {:else}
         <span
-          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-base font-medium whitespace-nowrap bg-status-attn-bg text-status-attn"
+          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-base font-medium whitespace-nowrap bg-bg-2 text-orange"
           in:pillSwap
           out:pillSwap><span>needs you</span></span
         >
@@ -313,7 +313,7 @@
   {#each questions as q, index (index)}
     <p
       data-slot="lede"
-      class="rail-hang type-body text-ink-strong mb-space-2 max-w-measure"
+      class="rail-hang type-body text-tx mb-space-2 max-w-measure"
     >
       {q.question}
     </p>
@@ -349,11 +349,11 @@
     </div>
     {#if otherText(q)}
       <p
-        class="rail-hang type-body text-ink-strong max-w-measure flex gap-space-2 items-baseline"
+        class="rail-hang type-body text-tx max-w-measure flex gap-space-2 items-baseline"
         in:crossIn
       >
         <span
-          class="text-base font-medium uppercase tracking-caps text-ink-muted flex-none"
+          class="text-base font-medium uppercase tracking-caps text-tx-2 flex-none"
           >Answered</span
         >{otherText(q)}
       </p>
@@ -362,11 +362,11 @@
 
   {#if freeform}
     <p
-      class="rail-hang type-body text-ink-strong max-w-measure flex gap-space-2 items-baseline"
+      class="rail-hang type-body text-tx max-w-measure flex gap-space-2 items-baseline"
       in:crossIn
     >
       <span
-        class="text-base font-medium uppercase tracking-caps text-ink-muted flex-none"
+        class="text-base font-medium uppercase tracking-caps text-tx-2 flex-none"
         >In your own words</span
       >{freeform}
     </p>

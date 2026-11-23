@@ -117,13 +117,13 @@
   {#if result?.ok}
     <span
       data-slot="ok"
-      class="mark-line type-meta inline-flex items-center gap-space-1 text-ink-strong"
+      class="mark-line type-meta inline-flex items-center gap-space-1 text-tx"
       ><Check /><span>{words.sent}</span></span
     >
   {:else if result}
     <span
       data-slot="bad"
-      class="mark-line type-meta inline-flex items-center gap-space-1 text-status-fail"
+      class="mark-line type-meta inline-flex items-center gap-space-1 text-red"
       ><IconWarningTriangle
         aria-hidden="true"
         class="size-icon-sm flex-none"
@@ -177,7 +177,7 @@
       {#each machines as machine (machine.machineId)}
         {@const online = machineOnline(machine)}
         <li
-          class="flex min-h-control-md flex-wrap items-center justify-between gap-x-space-3 gap-y-space-1 not-first:border-t not-first:border-t-border-hairline"
+          class="flex min-h-control-md flex-wrap items-center justify-between gap-x-space-3 gap-y-space-1 not-first:border-t not-first:border-t-ui"
         >
           <span
             data-slot="pick"
@@ -199,17 +199,17 @@
               }
             />
             <label
-              class="type-label truncate text-ink-strong group-data-off:text-ink-muted"
+              class="type-label truncate text-tx group-data-off:text-tx-2"
               for="{id}-{machine.machineId}">{machineName(machine)}</label
             >
           </span>
           <span
             data-slot="result"
-            class="type-meta inline-flex items-center gap-space-1 text-ink-muted"
+            class="type-meta inline-flex items-center gap-space-1 text-tx-2"
           >
             {#if !online}
               <span
-                class="type-meta inline-flex items-center gap-space-1 text-ink-muted"
+                class="type-meta inline-flex items-center gap-space-1 text-tx-2"
                 >{words.offline}</span
               >
             {:else}
@@ -234,7 +234,7 @@
     {#if one && machines[0]}
       <span
         data-slot="result"
-        class="type-meta inline-flex items-center gap-space-1 text-ink-muted"
+        class="type-meta inline-flex items-center gap-space-1 text-tx-2"
         >{@render outcome(machines[0].machineId)}</span
       >
     {/if}
@@ -242,7 +242,7 @@
   {#if problem}
     <p
       data-slot="bad"
-      class="type-meta inline-flex items-center gap-space-1 text-status-fail"
+      class="type-meta inline-flex items-center gap-space-1 text-red"
       role="alert"
     >
       {problem}

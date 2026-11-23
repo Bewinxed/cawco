@@ -60,13 +60,11 @@
 </script>
 
 <div
-  class="flex h-(--frame-h) w-(--frame-w) min-w-0 justify-end overflow-hidden bg-surface-recess p-space-2"
+  class="flex h-(--frame-h) w-(--frame-w) min-w-0 justify-end overflow-hidden bg-bg-2 p-space-2"
   style:--frame-h="{height}px"
   style:--frame-w="{width}px"
 >
-  <div
-    class="flex min-h-0 w-xs max-w-full flex-col rounded-lg bg-surface-raised shadow-lg"
-  >
+  <div class="flex min-h-0 w-xs max-w-full flex-col rounded-lg bg-bg shadow-lg">
     <CommentRail
       down={null}
       focused={null}

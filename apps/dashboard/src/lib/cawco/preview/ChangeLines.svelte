@@ -91,27 +91,27 @@
     data-slot="change-words"
     {@attach measured(at)}
   >
-    <span class="font-medium text-ink-strong">{line.element}</span>
+    <span class="font-medium text-tx">{line.element}</span>
     {#if line.moved}
-      <span class="text-ink-muted"
+      <span class="text-tx-2"
         >{commentWords.moved(line.moved.before, line.moved.after)} ·</span
       >
     {/if}
     {#if line.before === undefined}
-      <span class="text-ink-muted">{commentWords.added}</span>
+      <span class="text-tx-2">{commentWords.added}</span>
     {:else if line.before !== line.after}
       <span class="sr-only">{previewWords.changedFrom}</span>
       <span
-        class="text-ink-muted line-through decoration-ink-subtle"
+        class="text-tx-2 line-through decoration-tx-2"
         data-slot="change-before">{line.before}</span
       >
-      <span aria-hidden="true" class="text-ink-muted">→</span>
+      <span aria-hidden="true" class="text-tx-2">→</span>
       <span class="sr-only">{previewWords.changedTo}</span>
     {/if}
-    <span class="text-ink-strong" data-slot="change-after">{line.after}</span>
+    <span class="text-tx" data-slot="change-after">{line.after}</span>
   </span>
   {#if line.revision !== undefined}
-    <span class="flex-none text-ink-muted num" data-slot="change-revision"
+    <span class="flex-none text-tx-2 num" data-slot="change-revision"
       >{commentWords.revision(line.revision)}{line.times && line.times > 1
         ? ` · ${commentWords.times(line.times)}`
         : ""}</span
@@ -130,12 +130,12 @@
   {/if}
   <div class="flex min-w-0 flex-1 flex-col gap-space-1">
     {#if unanswered}
-      <p class="m-0 text-status-attn type-meta" data-slot="no-answer">
+      <p class="m-0 text-orange type-meta" data-slot="no-answer">
         {commentWords.changedNoAnswer}
       </p>
     {/if}
     {#if lines[0]?.earlier}
-      <p class="m-0 text-ink-muted type-meta" data-slot="earlier-lines">
+      <p class="m-0 text-tx-2 type-meta" data-slot="earlier-lines">
         {commentWords.earlierLines(lines[0].earlier)}
       </p>
     {/if}
@@ -145,11 +145,11 @@
           {#if step && line.anchor}
             {@const anchor = line.anchor}
             <button
-              class="flex w-full min-w-0 items-start gap-space-1 rounded-xs border-none bg-transparent p-0 text-start type-meta mark-line can-hover:hover:bg-surface-hover"
+              class="flex w-full min-w-0 items-start gap-space-1 rounded-xs border-none bg-transparent p-0 text-start type-meta mark-line can-hover:hover:bg-ui"
               onclick={() => step(anchor)}
               type="button"
             >
-              <span aria-hidden="true" class="mark-cell text-status-done"
+              <span aria-hidden="true" class="mark-cell text-green"
                 ><IconRefresh class="size-icon-sm" /></span
               >
               {@render said(line, at)}
@@ -158,7 +158,7 @@
             <span
               class="flex min-w-0 items-start gap-space-1 type-meta mark-line"
             >
-              <span aria-hidden="true" class="mark-cell text-status-done"
+              <span aria-hidden="true" class="mark-cell text-green"
                 ><IconRefresh class="size-icon-sm" /></span
               >
               {@render said(line, at)}
@@ -169,7 +169,7 @@
             <div class="flex justify-end">
               <button
                 aria-expanded={opened.has(at)}
-                class="select-none px-space-2 py-0 rounded-sm border-none bg-transparent type-meta font-medium text-ink-strong underline underline-offset-2 can-hover:hover:bg-surface-hover press-tint focus-inset"
+                class="select-none px-space-2 py-0 rounded-sm border-none bg-transparent type-meta font-medium text-tx underline underline-offset-2 can-hover:hover:bg-ui press-tint focus-inset"
                 data-slot="change-more"
                 onclick={() => {
                   if (opened.has(at)) {

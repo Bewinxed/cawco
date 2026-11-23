@@ -43,9 +43,9 @@ export type ReadSheet = (path: string) => Promise<string | undefined>;
 export interface TailwindTheme {
   /** Every stylesheet read, the entry first, by path from the root; Tailwind's own as `tailwindcss/<file>`. */
   files: string[];
-  /** The names each token type offers, by Tailwind's own namespaces, as variables (`--color-ink-strong`). */
+  /** The names each token type offers, by Tailwind's own namespaces, as variables (`--color-tx`). */
   names: Record<TokenType, string[]>;
-  /** Every theme variable Tailwind holds once the entry is loaded, as it writes them (`--color-ink-strong`), in its order. */
+  /** Every theme variable Tailwind holds once the entry is loaded, as it writes them (`--color-tx`), in its order. */
   tokens: string[];
 }
 

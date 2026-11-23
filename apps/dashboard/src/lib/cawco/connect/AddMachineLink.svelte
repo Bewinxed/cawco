@@ -13,7 +13,7 @@
 <button
   type="button"
   aria-haspopup="dialog"
-  class="inline border-0 bg-transparent p-0 font-inherit text-accent-ink underline-offset-4 hover:underline"
+  class="inline border-0 bg-transparent p-0 font-inherit text-accent underline-offset-4 hover:underline"
   onclick={(event) => connect.openNew(event.currentTarget)}
 >
   {@render children()}

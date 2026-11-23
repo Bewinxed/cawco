@@ -14,13 +14,13 @@
 
 .allowed {
   width: var(--c-btn-h);
-  border: 1px solid var(--border-hairline);
+  border: 1px solid var(--ui);
   margin: -2px 0;
   padding-block: calc((1lh - 1ex) / 2);
   min-block-size: 2lh;
   max-block-size: 55dvh;
-  color: oklch(from var(--ink-strong) l c h);
-  background: color-mix(in oklch, var(--surface-raised) 50%, transparent);
+  color: oklch(from var(--tx) l c h);
+  background: color-mix(in oklch, var(--bg) 50%, transparent);
   white-space: nowrap;
 }
 @media (width < --theme(--breakpoint-desk)) {

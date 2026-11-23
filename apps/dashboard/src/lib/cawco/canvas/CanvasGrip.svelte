@@ -75,8 +75,8 @@
     aria-hidden="true"
     data-slot="grip"
     class={[
-      "group-focus-visible/grab:outline-2 group-focus-visible/grab:outline-offset-2 group-focus-visible/grab:outline-accent-ink group-focus-visible/grab:outline-solid",
-      handle === "top" && "h-1.5 w-25 rounded-pill bg-border-control",
+      "group-focus-visible/grab:outline-2 group-focus-visible/grab:outline-offset-2 group-focus-visible/grab:outline-accent group-focus-visible/grab:outline-solid",
+      handle === "top" && "h-1.5 w-25 rounded-pill bg-ui-2",
       handle !== "top" && "relative m-1.5 size-3 overflow-clip",
       handle === "top-left" && "rounded-ss-(--grip-r)",
       handle === "top-right" && "rounded-se-(--grip-r)",
@@ -87,7 +87,7 @@
     {#if handle !== "top"}
       <span
         class={[
-          "absolute top-0 size-(--grip-box) rounded-(--grip-r) inset-ring-1.5 inset-ring-border-control",
+          "absolute top-0 size-(--grip-box) rounded-(--grip-r) inset-ring-1.5 inset-ring-ui-2",
           handle === "top-left" ? "start-0" : "end-0",
         ]}
       ></span>

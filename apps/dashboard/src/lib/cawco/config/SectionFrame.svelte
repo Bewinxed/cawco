@@ -133,11 +133,11 @@
 {/snippet}
 
 <div
-  class="flex min-h-0 min-w-0 flex-auto flex-col overflow-y-auto bg-surface-recess px-space-4 py-space-2"
+  class="flex min-h-0 min-w-0 flex-auto flex-col overflow-y-auto bg-bg-2 px-space-4 py-space-2"
 >
   <div
     data-slot="body"
-    class="flex max-w-245 min-h-(--card-h) shrink-0 grow basis-auto flex-col gap-space-6 rounded-lg bg-surface-raised px-space-6 py-space-6"
+    class="flex max-w-245 min-h-(--card-h) shrink-0 grow basis-auto flex-col gap-space-6 rounded-lg bg-bg px-space-6 py-space-6"
     style:--card-h={card === null ? undefined : `${card}px`}
     {@attach morph({ on: ["data-fill"] })}
     {@attach settled ? rememberCard(page.url.pathname) : undefined}

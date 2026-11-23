@@ -228,7 +228,7 @@
   >
     <div bind:this={box} class="type-label flex-none" data-slot="diagram"></div>
     {#if failed}
-      <p class="type-meta text-center text-ink-muted wrap-anywhere">{failed}</p>
+      <p class="type-meta text-center text-tx-2 wrap-anywhere">{failed}</p>
     {/if}
   </Well>
 {/snippet}

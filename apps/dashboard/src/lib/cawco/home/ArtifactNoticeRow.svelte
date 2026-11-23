@@ -90,14 +90,14 @@
         status="idle"
       />
     {:else}
-      <Kind aria-hidden="true" class="size-icon-md text-ink-muted" />
+      <Kind aria-hidden="true" class="size-icon-md text-tx-2" />
     {/if}
   {/snippet}
   {#if notice.href}
     <a
       data-slot="name"
       data-artifact-notice={notice.artifactId}
-      class="select-none pe-(--x-room) min-w-0 rounded-xs type-label wrap-anywhere text-ink-strong no-underline focus-inset hover:text-ink-strong"
+      class="select-none pe-(--x-room) min-w-0 rounded-xs type-label wrap-anywhere text-tx no-underline focus-inset hover:text-tx"
       href={needLinkOf(notice.href)}
       onclick={opened}>{words}</a
     >
@@ -105,7 +105,7 @@
     <span
       data-slot="name"
       data-artifact-notice={notice.artifactId}
-      class="pe-(--x-room) min-w-0 type-label wrap-anywhere text-ink-strong"
+      class="pe-(--x-room) min-w-0 type-label wrap-anywhere text-tx"
       >{words}</span
     >
   {/if}

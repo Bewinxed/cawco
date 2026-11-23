@@ -186,7 +186,7 @@
 >
   <div
     aria-label="Next 5 hours: {label}"
-    class="flex h-space-2 gap-(--relay-gap) overflow-hidden rounded-xs bg-border-control hover-none:h-space-3 coarse:h-space-3 max-phone:h-space-3"
+    class="flex h-space-2 gap-(--relay-gap) overflow-hidden rounded-xs bg-ui-2 hover-none:h-space-3 coarse:h-space-3 max-phone:h-space-3"
     data-relay-bar
     role="img"
   >
@@ -235,7 +235,7 @@
         <span
           data-stop={seg.key === stopKey || undefined}
           aria-hidden="true"
-          class="min-w-0 shrink basis-0 hatched transition-[flex-grow] duration-(--duration-slow) ease-out group-data-instant/relay:transition-off data-stop:border-s data-stop:border-s-ink-strong motion-reduce:transition-off"
+          class="min-w-0 shrink basis-0 hatched transition-[flex-grow] duration-(--duration-slow) ease-out group-data-instant/relay:transition-off data-stop:border-s data-stop:border-s-tx motion-reduce:transition-off"
           data-relay-stop={seg.key === stopKey ? "" : undefined}
           style:flex-grow={seg.ms}
         ></span>
@@ -244,7 +244,7 @@
   </div>
   <div
     aria-hidden="true"
-    class="relative h-(--ticks-h) type-meta num text-ink-subtle"
+    class="relative h-(--ticks-h) type-meta num text-tx-2"
     style:--ticks-h={"calc(var(--spacing-space-1) + var(--leading-sm))"}
   >
     {#each ticks as tick (tick.hour)}
@@ -258,7 +258,7 @@
       >
         <span
           data-slot="mark"
-          class="h-space-1 w-px flex-none bg-ink-subtle"
+          class="h-space-1 w-px flex-none bg-tx-2"
           data-tick-mark
         ></span>
         <span

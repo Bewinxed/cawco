@@ -23,13 +23,13 @@ export const CONNECT_WAYS: readonly ConnectWay[] = [
     name: connectWords.overSsh,
     meta: "The hub signs in and installs",
     icon: IconKey,
-    hue: "var(--color-mark-4)",
+    hue: "var(--color-cyan)",
   },
   {
     route: "command",
     name: connectWords.byCommand,
     meta: "Run one line in a terminal on it",
     icon: IconTerminal,
-    hue: "var(--color-mark-1)",
+    hue: "var(--color-orange)",
   },
 ];

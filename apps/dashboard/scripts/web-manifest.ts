@@ -10,7 +10,7 @@
  *   whichever host and port served it (localhost, cawco.local, a tailnet
  *   name), none written here.
  * - `theme_color` and `background_color` are the light scheme's bar and
- *   ground (surface-raised and surface-recess, the colours app.css gives
+ *   ground (bg and bg-2, the colours app.css gives
  *   `html` and `body`), read from theme.css as the cascade resolves them. A
  *   manifest holds one of each, so the dark scheme's are the page's own:
  *   ScreenEdges keeps `theme-color` on the bar as drawn, in either scheme.
@@ -72,8 +72,8 @@ const manifest = {
   start_url: "/",
   scope: "/",
   display: "standalone",
-  theme_color: lightHex("surface-raised"),
-  background_color: lightHex("surface-recess"),
+  theme_color: lightHex("bg"),
+  background_color: lightHex("bg-2"),
   icons: [
     icon(192, "any"),
     icon(512, "any"),

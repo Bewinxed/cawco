@@ -29,10 +29,10 @@
  *
  * It also reads every class the markup and the recipes write (.svelte, .ts
  * and .js under apps/dashboard/src, the generated lib/tokens aside) for a
- * theme token written as an arbitrary value: `bg-[var(--color-surface-raised)]` or
- * `bg-(--color-surface-raised)`, where `--color-surface-raised` stands behind a theme key
- * in a namespace that utility reads (`--color-surface-raised`), so the
- * theme's own utility says it (`bg-surface-raised`). The namespaces each
+ * theme token written as an arbitrary value: `bg-[var(--color-bg)]` or
+ * `bg-(--color-bg)`, where `--color-bg` stands behind a theme key
+ * in a namespace that utility reads (`--color-bg`), so the
+ * theme's own utility says it (`bg-bg`). The namespaces each
  * utility reads are Tailwind v4's (https://tailwindcss.com/docs/theme:
  * "Theme variables are special CSS variables defined using the `@theme`
  * directive that influence which utility classes exist in your project"),
@@ -376,7 +376,7 @@ const NAMESPACES = [
   ...new Set([...Object.values(CORE_NAMESPACES).flat(), "duration"]),
 ].sort((a, b) => b.length - a.length);
 
-/** A theme key's namespace and its name in it: `--color-surface-raised` → color, surface-raised. */
+/** A theme key's namespace and its name in it: `--color-bg` → color, surface-raised. */
 function keyOf(key: string): { name: string; space: string } | null {
   for (const space of NAMESPACES) {
     if (key.startsWith(`--${space}-`)) {

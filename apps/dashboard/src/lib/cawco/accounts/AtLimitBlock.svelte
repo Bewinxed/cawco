@@ -103,10 +103,7 @@
 </script>
 
 <div class="@container flex flex-col">
-  <h3
-    data-slot="head"
-    class="type-label mb-space-3 text-balance text-ink-strong"
-  >
+  <h3 data-slot="head" class="type-label mb-space-3 text-balance text-tx">
     {words.head}
   </h3>
   {#if unread !== undefined}
@@ -116,15 +113,12 @@
     </Alert>
   {/if}
   {#if onePlan}
-    <p
-      data-slot="one-plan"
-      class="pt-space-2 pb-space-3 text-pretty text-ink-strong"
-    >
+    <p data-slot="one-plan" class="pt-space-2 pb-space-3 text-pretty text-tx">
       {words.onePlan}
     </p>
   {:else}
     <div
-      class="flex items-center justify-between gap-space-4 pt-space-2 pb-space-3 text-ink-strong"
+      class="flex items-center justify-between gap-space-4 pt-space-2 pb-space-3 text-tx"
     >
       <label for="{id}-move">{words.move}</label>
       <Switch id="{id}-move" bind:checked={atLimit.move} />
@@ -133,7 +127,7 @@
   {#if atLimit.move && !onePlan}
     <div class="flex flex-col" in:unfold out:unfold>
       <p
-        class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-strong"
+        class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-tx"
       >
         <label for="{id}-wait">{words.wait}</label>
         <Input
@@ -153,7 +147,7 @@
         <span>{words.minutes}</span>
       </p>
       <p
-        class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-strong"
+        class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-tx"
       >
         <label for="{id}-over">{words.over}</label>
         <Input
@@ -173,7 +167,7 @@
         <span>{words.kTokens}</span>
       </p>
       <div
-        class="flex flex-wrap items-center justify-between gap-space-3 py-space-2 text-pretty text-ink-strong"
+        class="flex flex-wrap items-center justify-between gap-space-3 py-space-2 text-pretty text-tx"
       >
         <span id="{id}-at-limit">{words.atLimit}</span>
         <Tabs
@@ -193,7 +187,7 @@
         </Tabs>
       </div>
       <div
-        class="flex flex-wrap items-center justify-between gap-space-3 py-space-2 text-pretty text-ink-strong"
+        class="flex flex-wrap items-center justify-between gap-space-3 py-space-2 text-pretty text-tx"
       >
         <span id="{id}-cold-move">{words.coldMove}</span>
         <Tabs
@@ -214,7 +208,7 @@
       </div>
       {#if summarises}
         <div class="flex flex-col gap-space-3 py-space-2" in:unfold out:unfold>
-          <p class="type-meta m-0 text-pretty text-ink-muted">
+          <p class="type-meta m-0 text-pretty text-tx-2">
             {words.summaryHint}
           </p>
           <ModelSection
@@ -238,7 +232,7 @@
       </div>
       {#if terms}
         <a
-          class="mark-line inline-flex items-center gap-space-1 self-start rounded-xs type-label text-pretty text-accent-ink no-underline hover:text-accent-ink"
+          class="mark-line inline-flex items-center gap-space-1 self-start rounded-xs type-label text-pretty text-accent no-underline hover:text-accent"
           href={TERMS_URL}
           rel="noopener noreferrer"
           target="_blank"
@@ -250,7 +244,7 @@
     </div>
   {/if}
   <p
-    class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-strong"
+    class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-tx"
   >
     <label for="{id}-file-room">{words.fileRoom}</label>
     <Input
@@ -268,10 +262,10 @@
       value={atLimit.compaction.fileRoom / 1000}
     />
     <span>{words.fileRoomUnit}</span>
-    <span class="type-meta text-ink-muted">{words.fileRoomOff}</span>
+    <span class="type-meta text-tx-2">{words.fileRoomOff}</span>
   </p>
   <p
-    class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-strong"
+    class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-tx"
   >
     <label for="{id}-stale">{words.stale}</label>
     <Input
@@ -289,6 +283,6 @@
       value={atLimit.staleAfterHours}
     />
     <span>{words.staleHours}</span>
-    <span class="type-meta text-ink-muted">{words.staleAfter}</span>
+    <span class="type-meta text-tx-2">{words.staleAfter}</span>
   </p>
 </div>

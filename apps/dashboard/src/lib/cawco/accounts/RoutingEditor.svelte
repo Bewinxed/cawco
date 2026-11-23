@@ -154,11 +154,11 @@
     <ProviderMark {provider} />
   {/snippet}
   {#snippet header()}
-    <h1 data-slot="title" class="type-title text-ink-strong">
+    <h1 data-slot="title" class="type-title text-tx">
       {title}
     </h1>
     {#if refused}
-      <p class="type-meta text-status-fail" role="alert" in:appear>
+      <p class="type-meta text-red" role="alert" in:appear>
         {refused}
       </p>
     {/if}
@@ -181,7 +181,7 @@
           <TabItem {label} value={kind}>
             {#snippet trail()}
               <span
-                class="ms-space-1 font-normal text-ink-muted @max-sm/kinds:hidden"
+                class="ms-space-1 font-normal text-tx-2 @max-sm/kinds:hidden"
                 >{words.trail(strategyLabel(draft[kind].strategy))}</span
               >
             {/snippet}
@@ -211,10 +211,7 @@
   </section>
 
   {#if limits}
-    <section
-      data-slot="well"
-      class="border-t border-border-hairline pt-space-4"
-    >
+    <section data-slot="well" class="border-t border-ui pt-space-4">
       <AtLimitBlock
         accounts={limitLanes}
         onePlan={isChatgptPlan({ provider })}

@@ -43,9 +43,8 @@
   <!-- An entry under the group's head: body type in row ink, a step under the
        head's label, so the head reads as the heading and the entries as its
        list. The name gives way first (The Truncate Inside Rule). -->
-  <span
-    data-slot="name"
-    class="pe-(--x-room) type-body text-ink-strong truncate">{one.name}</span
+  <span data-slot="name" class="pe-(--x-room) type-body text-tx truncate"
+    >{one.name}</span
   >
   <!-- Where it was found, and the to-do at the line's trailing edge; the
        to-do wraps under it when both don't fit. -->
@@ -53,7 +52,7 @@
     data-slot="sub"
     class="flex min-w-0 flex-wrap items-baseline justify-between gap-x-space-2"
   >
-    <span data-slot="from" class="type-meta text-ink-muted wrap-anywhere"
+    <span data-slot="from" class="type-meta text-tx-2 wrap-anywhere"
       >{one.from}</span
     >
     {#if one.missing > 0}
@@ -62,7 +61,7 @@
            of 24). -->
       <a
         data-slot="todo"
-        class="mark-line me-(--hang) ms-auto inline-flex items-center gap-space-1 rounded-xs type-meta text-accent-ink no-underline whitespace-nowrap transition-[opacity] duration-(--duration-fast) ease-out hover:text-accent-ink active:opacity-72"
+        class="mark-line me-(--hang) ms-auto inline-flex items-center gap-space-1 rounded-xs type-meta text-accent no-underline whitespace-nowrap transition-[opacity] duration-(--duration-fast) ease-out hover:text-accent active:opacity-72"
         href="/config/accounts/{one.account.id}"
         onclick={onchoose}
         style:--hang="calc(-1 * var(--spacing-icon-sm) * 8.25 / 24)"
@@ -72,7 +71,7 @@
     {:else}
       <span
         data-slot="done"
-        class="mark-line ms-auto inline-flex items-center gap-space-1 type-meta text-ink-muted whitespace-nowrap"
+        class="mark-line ms-auto inline-flex items-center gap-space-1 type-meta text-tx-2 whitespace-nowrap"
         ><IconSuccess aria-hidden="true" class="size-icon-sm" /><span
           >Signed in everywhere</span
         ></span

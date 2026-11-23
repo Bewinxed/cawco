@@ -258,7 +258,7 @@ sheet.textContent = `
   .rect[data-bare] { outline-offset:calc(var(--spacing) * 0.5); }
   .rect[data-rest] { outline-style:none; }
   .rect[data-root] { outline-style:dashed; outline-offset:calc(-1 * (var(--spacing-space-1) + 1px)); background:none; }
-  .label { position:fixed; pointer-events:none; max-width:100%; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:var(--spacing-space-1) var(--spacing-space-2); border-radius:var(--radius-xs); background:var(--color-surface-raised); color:var(--color-ink-strong); font:var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans); border:1px solid var(--color-border-control); box-shadow:var(--shadow-sm); }
+  .label { position:fixed; pointer-events:none; max-width:100%; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:var(--spacing-space-1) var(--spacing-space-2); border-radius:var(--radius-xs); background:var(--color-bg); color:var(--color-tx); font:var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans); border:1px solid var(--color-ui-2); box-shadow:var(--shadow-sm); }
 `;
 const layer = document.createElement("div");
 layer.className = "layer";
@@ -1127,7 +1127,7 @@ function takeTheme(said: unknown) {
     // What the overlay paints with tokens read as it is drawn, the pills
     // (pins.ts paintOf: their inks and their breath's floor), the ink's
     // strokes (ink.ts, `--color-accent`) and the changes' rings (changes.ts,
-    // `--color-status-done`), is drawn again in the new scheme.
+    // `--color-green`), is drawn again in the new scheme.
     if (said !== drawnIn) {
       drawnIn = said;
       pins.draw();

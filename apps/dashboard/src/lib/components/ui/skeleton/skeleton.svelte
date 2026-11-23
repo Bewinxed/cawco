@@ -13,7 +13,7 @@
    * never a number.
    */
   const skeletonVariants = tv({
-    base: "loops block rounded-sm bg-surface-hover motion-safe:animate-pulse motion-safe:[animation-delay:var(--loop-at)]",
+    base: "loops block rounded-sm bg-ui motion-safe:animate-pulse motion-safe:[animation-delay:var(--loop-at)]",
     variants: {
       /** The block it holds the place of, at that block's height. */
       height: {

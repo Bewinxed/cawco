@@ -212,7 +212,7 @@
        the name, so it reads as the name's figure and not a word of it. -->
   {#if quota}
     <span
-      class="mark-line ms-word inline-flex flex-none items-center gap-word text-ink-muted tabular-nums"
+      class="mark-line ms-word inline-flex flex-none items-center gap-word text-tx-2 tabular-nums"
       data-box
       data-slot="quota"
     >

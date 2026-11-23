@@ -10,8 +10,8 @@
 }
 body {
   margin: 0;
-  background: var(--color-surface-page);
-  color: var(--color-ink-strong);
+  background: var(--color-bg);
+  color: var(--color-tx);
   font-family: var(--font-sans);
   font-size: var(--text-base);
   line-height: 1.55;
@@ -33,7 +33,7 @@ code {
   font-size: calc(1em * 0.9);
 }
 a {
-  color: var(--color-accent-ink);
+  color: var(--color-accent);
 }
 
 /* Caw, light and dark: always a pair, the page shows the right one. */
@@ -86,7 +86,7 @@ a {
   font-size: var(--text-lg);
 }
 .dp-hero p {
-  color: var(--color-ink-muted);
+  color: var(--color-tx-2);
   max-width: var(--spacing-measure);
   margin-top: var(--spacing-space-1);
 }
@@ -95,19 +95,19 @@ a {
   flex-direction: column;
   align-items: flex-end;
   gap: var(--spacing-space-1);
-  color: var(--color-ink-muted);
+  color: var(--color-tx-2);
   font-size: var(--text-base);
   font-variant-numeric: tabular-nums;
 }
 .dp-meter b {
-  color: var(--color-ink-strong);
+  color: var(--color-tx);
   font-size: var(--text-lg);
 }
 .dp-bar {
   width: calc(var(--spacing) * 30);
   height: var(--spacing-space-1);
   border-radius: var(--radius-xs);
-  background: var(--color-surface-recess);
+  background: var(--color-bg-2);
   overflow: hidden;
 }
 .dp-bar i {
@@ -118,8 +118,8 @@ a {
   transition: width var(--duration-fast) var(--ease-out);
 }
 .dp-offline {
-  color: var(--color-status-attn);
-  background: var(--color-status-attn-bg);
+  color: var(--color-orange);
+  background: var(--color-bg-2);
   border-radius: var(--radius-sm);
   padding: var(--spacing-space-2) var(--spacing-space-3);
 }
@@ -136,8 +136,8 @@ a {
 
 /* A decision card: the question, one line of why, how it would look, the options, a note. */
 .dp-card {
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-hairline);
+  background: var(--color-bg);
+  border: 1px solid var(--color-ui);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
   padding: var(--spacing-space-4);
@@ -162,7 +162,7 @@ a {
 }
 .dp-state {
   font-size: var(--text-sm);
-  color: var(--color-ink-muted);
+  color: var(--color-tx-2);
   min-inline-size: 0;
   overflow-wrap: anywhere;
 }
@@ -213,7 +213,7 @@ a {
   }
 }
 .dp-send:focus-visible {
-  outline: 2px solid var(--color-accent-ink);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 .dp-send:disabled {
@@ -236,7 +236,7 @@ a {
   }
 }
 .dp-why {
-  color: var(--color-ink-muted);
+  color: var(--color-tx-2);
   max-width: var(--spacing-measure);
 }
 /* A card's media: two side by side on a wide page; one, or three and more,
@@ -262,7 +262,7 @@ a {
    the curve); a pane's mockups take any corners. */
 .dp-pane {
   margin: 0;
-  background: var(--color-surface-recess);
+  background: var(--color-bg-2);
   border-radius: var(--radius-lg);
   padding: var(--spacing-space-4);
   display: flex;
@@ -272,7 +272,7 @@ a {
 }
 .dp-pane > figcaption {
   font-size: var(--text-sm);
-  color: var(--color-ink-muted);
+  color: var(--color-tx-2);
   font-weight: var(--font-weight-medium);
 }
 
@@ -300,9 +300,9 @@ a {
   line-height: var(--leading-base);
   text-align: start;
   cursor: pointer;
-  background: var(--color-surface-raised);
-  color: var(--color-ink-strong);
-  border: 1px solid var(--color-border-control);
+  background: var(--color-bg);
+  color: var(--color-tx);
+  border: 1px solid var(--color-ui-2);
   border-radius: var(--radius-sm);
   min-block-size: var(--spacing-control-sm);
   padding: var(--spacing-space-2) var(--spacing-space-3);
@@ -317,11 +317,11 @@ a {
 }
 @media (hover: hover) and (pointer: fine) {
   .dp-opt:not([data-cawco-picked]):hover {
-    background: var(--color-surface-hover);
+    background: var(--color-ui);
   }
 }
 .dp-opt:focus-visible {
-  outline: 2px solid var(--color-accent-ink);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 /* An option's keycap and label run, in its chip and on the decided line. */
@@ -348,8 +348,8 @@ a {
   height: calc(var(--spacing) * 4.25);
   padding: 0 var(--spacing-space-1);
   border-radius: var(--radius-xs);
-  background: var(--color-surface-recess);
-  color: var(--color-ink-strong);
+  background: var(--color-bg-2);
+  color: var(--color-tx);
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-normal);
@@ -363,7 +363,7 @@ a {
 }
 .dp-opt > span {
   font-size: var(--text-base);
-  color: var(--color-ink-muted);
+  color: var(--color-tx-2);
   line-height: 1.4;
 }
 /* What it costs and what it builds, under what it gets: the meta size. */
@@ -381,8 +381,8 @@ a {
   padding-inline: var(--spacing-space-1);
   margin-block-end: var(--spacing-space-1);
   border-radius: var(--radius-xs);
-  background: var(--color-surface-recess);
-  color: var(--color-ink-strong);
+  background: var(--color-bg-2);
+  color: var(--color-tx);
   font: var(--font-weight-medium) var(--text-base) / var(--leading-base)
     var(--font-sans);
   line-height: 1;
@@ -390,14 +390,14 @@ a {
   transition: background-color var(--duration-fast) var(--ease-out);
 }
 .dp-opt[data-cawco-picked] .dp-tag {
-  background: var(--color-surface-raised);
+  background: var(--color-bg);
 }
 /* A picked option (DESIGN.md, option chips): the coral edge, a recessed
    fill and the keycap filled vermilion with a white digit; its words keep
    their ink. */
 .dp-opt[data-cawco-picked] {
   border-color: var(--color-accent);
-  background: var(--color-surface-recess);
+  background: var(--color-bg-2);
 }
 .dp-opt[data-cawco-picked] .dp-kc {
   background: var(--color-accent);
@@ -406,7 +406,7 @@ a {
 /* An option chip stands taller than 44px, so a
    press tints it to surface-fill and moves nothing. */
 .dp-opt:active {
-  background: var(--color-surface-hover);
+  background: var(--color-ui);
 }
 @media (prefers-reduced-motion: reduce) {
   .dp-bar i {
@@ -418,21 +418,21 @@ a {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-space-1);
-  color: var(--color-ink-muted);
+  color: var(--color-tx-2);
   font-size: var(--text-base);
 }
 .dp-note textarea {
   font: inherit;
   min-block-size: var(--spacing-control-md);
-  color: var(--color-ink-strong);
-  background: var(--color-surface-page);
-  border: 1px solid var(--color-border-control);
+  color: var(--color-tx);
+  background: var(--color-bg);
+  border: 1px solid var(--color-ui-2);
   border-radius: var(--radius-sm);
   padding: var(--spacing-space-2) var(--spacing-space-3);
   resize: vertical;
 }
 .dp-note textarea::placeholder {
-  color: var(--color-ink-subtle);
+  color: var(--color-tx-2);
   opacity: 1;
 }
 /* The 44 Touch Rule: under a finger the note stands 44px tall. */
@@ -469,7 +469,7 @@ a {
   min-inline-size: 100%;
 }
 .dp-real > figcaption b {
-  color: var(--color-ink-strong);
+  color: var(--color-tx);
 }
 .dp-real-more {
   display: none;
@@ -513,5 +513,5 @@ a {
   justify-content: flex-end;
   gap: var(--spacing-space-3);
   align-items: center;
-  color: var(--color-ink-muted);
+  color: var(--color-tx-2);
 }

@@ -325,7 +325,7 @@
   {@const Icon = GLYPH[one.kind]}
   <a
     data-slot="attachment"
-    class="inline-flex items-center gap-space-1 max-w-(--attach-max-w) min-h-space-6 px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-control-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
+    class="inline-flex items-center gap-space-1 max-w-(--attach-max-w) min-h-space-6 px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-tx-2 no-underline hover:bg-ui hover:text-tx coarse:min-h-control-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
     href={hrefOf(one)}
     rel="noopener"
     style:--attach-my="calc((1lh - var(--spacing-space-6)) / 2)"
@@ -343,10 +343,10 @@
 
 {#snippet checkList()}
   {#if check.length > 0}
-    <h4 class="mt-space-2 mx-0 mb-0 type-label text-ink-strong">Check</h4>
+    <h4 class="mt-space-2 mx-0 mb-0 type-label text-tx">Check</h4>
     <ul
       data-slot="check-list"
-      class="m-0 ps-space-4 type-body text-ink-strong list-disc marker:text-ink-muted"
+      class="m-0 ps-space-4 type-body text-tx list-disc marker:text-tx-2"
     >
       {#each check as line, index (index)}
         <li>{line}</li>
@@ -357,7 +357,7 @@
 
 <section
   aria-label="Review {task.id}"
-  class="group flex-auto grid grid-cols-1 grid-rows-(--review-rows) grid-areas-(--review-areas) @desk/task-frame:grid-areas-(--review-areas-wide) min-h-0 border-t border-t-border-hairline @desk/task-frame:grid-cols-(--review-cols) @desk/task-frame:grid-rows-(--review-rows-wide)"
+  class="group flex-auto grid grid-cols-1 grid-rows-(--review-rows) grid-areas-(--review-areas) @desk/task-frame:grid-areas-(--review-areas-wide) min-h-0 border-t border-t-ui @desk/task-frame:grid-cols-(--review-cols) @desk/task-frame:grid-rows-(--review-rows-wide)"
   data-words-staged={wordsStage || undefined}
   style:--review-areas={'"result" "stage" "decide"'}
   style:--review-areas-wide={'"result stage" "decide decide"'}
@@ -370,7 +370,7 @@
   <div
     data-slot="result"
     style:--area="result"
-    class="row-(--area) col-(--area) flex flex-col gap-space-2 py-space-3 px-(--pane-inline) @desk/task-frame:min-h-0 @desk/task-frame:overflow-y-auto @desk/task-frame:overscroll-contain @desk/task-frame:border-e @desk/task-frame:border-e-border-hairline"
+    class="row-(--area) col-(--area) flex flex-col gap-space-2 py-space-3 px-(--pane-inline) @desk/task-frame:min-h-0 @desk/task-frame:overflow-y-auto @desk/task-frame:overscroll-contain @desk/task-frame:border-e @desk/task-frame:border-e-ui"
     data-band="result"
   >
     {#if from}
@@ -385,7 +385,7 @@
           status={markStatus}
         />
         <span
-          class="min-w-0 overflow-clip type-label text-ink-strong text-ellipsis whitespace-nowrap"
+          class="min-w-0 overflow-clip type-label text-tx text-ellipsis whitespace-nowrap"
           >{fromName}</span
         >
         {#if ended && newest}
@@ -399,7 +399,7 @@
         {/if}
         <a
           aria-label="Open its session beside this task"
-          class="inline-flex flex-none items-center gap-space-1 ms-auto h-space-6 px-space-2 rounded-sm type-label text-ink-strong no-underline hover:bg-surface-hover hover:text-ink-strong mark-line press-tint focus-inset"
+          class="inline-flex flex-none items-center gap-space-1 ms-auto h-space-6 px-space-2 rounded-sm type-label text-tx no-underline hover:bg-ui hover:text-tx mark-line press-tint focus-inset"
           data-box
           href={rowHref(from.instanceId)}
           onclick={(event) => {
@@ -414,7 +414,7 @@
       {#if ended && newest?.endedHow}
         <p
           data-slot="ended"
-          class="m-0 type-body text-ink-muted wrap-anywhere data-fail:text-status-fail"
+          class="m-0 type-body text-tx-2 wrap-anywhere data-fail:text-red"
           data-fail={newest.state === "failed" || undefined}
         >
           {newest.endedHow}
@@ -424,7 +424,7 @@
     {#if landed.length > 0}
       <p
         data-slot="landed"
-        class="flex flex-wrap items-baseline gap-x-space-2 gap-y-0 m-0 type-body text-ink-strong"
+        class="flex flex-wrap items-baseline gap-x-space-2 gap-y-0 m-0 type-body text-tx"
       >
         <span class="type-label">{words.landed}</span>
         {#each landed as sha (sha)}
@@ -435,7 +435,7 @@
     {#if asked.length > 0}
       <div
         data-slot="asked"
-        class="flex flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-body text-ink-strong"
+        class="flex flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-body text-tx"
       >
         <span class="flex-none type-label">{words.waitsOnAnswer}</span>
         <!-- A long question wraps or ends inside its chip, never past the
@@ -465,7 +465,7 @@
       >
         <p
           data-slot="summary"
-          class="m-0 type-body text-ink-strong text-pretty line-clamp-2 group-data-more/words:block"
+          class="m-0 type-body text-tx text-pretty line-clamp-2 group-data-more/words:block"
         >
           {summary}
         </p>
@@ -474,9 +474,9 @@
           {#if check.length > 0}
             <p
               data-slot="check"
-              class="flex-auto min-w-0 m-0 type-body text-ink-muted text-pretty line-clamp-1 group-data-more/words:block"
+              class="flex-auto min-w-0 m-0 type-body text-tx-2 text-pretty line-clamp-1 group-data-more/words:block"
             >
-              <span class="font-medium text-ink-strong">Check:</span>
+              <span class="font-medium text-tx">Check:</span>
               {check.join(" · ")}
             </p>
           {/if}
@@ -484,7 +484,7 @@
             <button
               data-slot="more"
               aria-expanded={more}
-              class="select-none flex-none ms-auto px-space-2 py-0 rounded-sm type-label text-ink-strong underline underline-offset-2 hover:bg-surface-hover hover:text-ink-strong press-tint focus-inset"
+              class="select-none flex-none ms-auto px-space-2 py-0 rounded-sm type-label text-tx underline underline-offset-2 hover:bg-ui hover:text-tx press-tint focus-inset"
               onclick={() => {
                 more = !more;
               }}
@@ -509,7 +509,7 @@
       </div>
     {/if}
     {#if !banded}
-      <p data-slot="nothing" class="m-0 type-body text-ink-muted text-pretty">
+      <p data-slot="nothing" class="m-0 type-body text-tx-2 text-pretty">
         {words.nothingToReview}
       </p>
     {/if}
@@ -519,7 +519,7 @@
   <div
     data-slot="stage"
     style:--area="stage"
-    class="row-(--area) col-(--area) flex flex-col min-h-0 py-space-3 px-(--pane-inline) border-y border-y-border-hairline overflow-y-auto overscroll-contain data-framed:overflow-hidden @desk/task-frame:border-b-none"
+    class="row-(--area) col-(--area) flex flex-col min-h-0 py-space-3 px-(--pane-inline) border-y border-y-ui overflow-y-auto overscroll-contain data-framed:overflow-hidden @desk/task-frame:border-b-none"
     data-band="stage"
     data-framed={!!presented || undefined}
     id="stage-{task.id}"
@@ -532,7 +532,7 @@
         {@render checkList()}
       </div>
     {:else}
-      <p class="m-0 type-body text-ink-muted">
+      <p class="m-0 type-body text-tx-2">
         {#if attached.length > 0}
           Nothing presented, only its files.
         {:else if from}
@@ -548,7 +548,7 @@
        buttons; under them, who takes it up once it is sent back. -->
   {#if ended || deciding}
     <form
-      class="flex flex-col gap-space-2 pt-space-3 pb-(--decide-end) px-(--pane-inline) row-(--area) col-(--area) @desk/task-frame:border-t @desk/task-frame:border-t-border-hairline"
+      class="flex flex-col gap-space-2 pt-space-3 pb-(--decide-end) px-(--pane-inline) row-(--area) col-(--area) @desk/task-frame:border-t @desk/task-frame:border-t-ui"
       data-band="decide"
       onsubmit={(event) => {
         event.preventDefault();
@@ -572,10 +572,7 @@
           rows={2}
           bind:value={note}
         />
-        <p
-          class="m-0 type-meta text-ink-muted text-pretty"
-          id="note-{task.id}-goes"
-        >
+        <p class="m-0 type-meta text-tx-2 text-pretty" id="note-{task.id}-goes">
           {words.noteGoes}
         </p>
       {/if}
@@ -625,10 +622,7 @@
         {/if}
       </div>
       {#if back}
-        <p
-          class="m-0 type-meta text-ink-muted text-pretty"
-          id="back-{task.id}-by"
-        >
+        <p class="m-0 type-meta text-tx-2 text-pretty" id="back-{task.id}-by">
           {backBy}
         </p>
       {/if}

@@ -25,6 +25,6 @@
   });
 </script>
 
-<div class="flex min-h-0 min-w-0 flex-auto flex-col bg-surface-recess">
+<div class="flex min-h-0 min-w-0 flex-auto flex-col bg-bg-2">
   <DelegateTypeEditor {taken} {type} />
 </div>

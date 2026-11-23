@@ -83,13 +83,10 @@
         out:crossOut
       >
         {#if fleet === "none"}
-          <h1
-            data-slot="title"
-            class="m-0 type-title text-balance text-ink-strong"
-          >
+          <h1 data-slot="title" class="m-0 type-title text-balance text-tx">
             {shellWords.noMachines}
           </h1>
-          <p class="m-0 max-w-104 type-body text-pretty text-ink-muted">
+          <p class="m-0 max-w-104 type-body text-pretty text-tx-2">
             Sessions run on your own machines. Install CawCo on one and it joins
             this fleet.
           </p>
@@ -130,13 +127,11 @@
         {:else}
           <h1
             data-slot="title"
-            class="m-0 type-title text-center text-balance text-ink-strong"
+            class="m-0 type-title text-center text-balance text-tx"
           >
             {shellWords.noneOnline}
           </h1>
-          <p
-            class="m-0 max-w-104 type-body text-center text-pretty text-ink-muted"
-          >
+          <p class="m-0 max-w-104 type-body text-center text-pretty text-tx-2">
             Sessions run on a machine that is online. See which ones dropped and
             why.
           </p>

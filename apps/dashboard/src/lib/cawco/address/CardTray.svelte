@@ -46,8 +46,8 @@
   class={[
     "relative min-w-0",
     form === "desk"
-      ? "rounded-xl bg-surface-recess p-(--tray-pad) shadow-lg"
-      : "rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-lg",
+      ? "rounded-xl bg-bg-2 p-(--tray-pad) shadow-lg"
+      : "rounded-t-lg border-t border-ui bg-bg shadow-lg",
   ]}
   data-form={form}
   data-step={tray.step}
@@ -77,7 +77,7 @@
       <TrayCaw pose={tray.pose.pose} size={CAW} />
       <h2
         id={titleId}
-        class="m-0 min-w-0 px-space-6 type-title text-balance text-ink-strong"
+        class="m-0 min-w-0 px-space-6 type-title text-balance text-tx"
         data-slot="title"
       >
         <MorphText text={words.title} wrap />
@@ -90,7 +90,7 @@
             out:depart
           >
             {#each words.lines as line (line)}
-              <p class="m-0 max-w-104 type-body text-pretty text-ink-muted">
+              <p class="m-0 max-w-104 type-body text-pretty text-tx-2">
                 <Words text={line} />
               </p>
             {/each}
@@ -99,7 +99,7 @@
       </div>
       {#if slot}
         <div
-          class="w-full min-w-0 rounded-sm border border-border-control bg-surface-recess p-space-3 text-start"
+          class="w-full min-w-0 rounded-sm border border-ui-2 bg-bg-2 p-space-3 text-start"
           data-slot="slot"
           transition:unfold
         >

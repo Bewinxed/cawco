@@ -346,20 +346,20 @@
   <h1 class="type-title">Channel cards</h1>
   <section
     data-slot="updates-page-card"
-    class="rounded-lg bg-surface-raised p-space-4 shadow-sm"
+    class="rounded-lg bg-bg p-space-4 shadow-sm"
     data-states="cards-stable"
   >
-    <p class="type-meta mb-space-2 text-ink-muted">
+    <p class="type-meta mb-space-2 text-tx-2">
       The fleet follows Stable; Stable chosen.
     </p>
     <ChannelCards channels={CHANNELS} chosen="stable" current="stable" />
   </section>
   <section
     data-slot="updates-page-card"
-    class="rounded-lg bg-surface-raised p-space-4 shadow-sm"
+    class="rounded-lg bg-bg p-space-4 shadow-sm"
     data-states="cards-nightly"
   >
-    <p class="type-meta mb-space-2 text-ink-muted">
+    <p class="type-meta mb-space-2 text-tx-2">
       The fleet follows Nightly; Stable chosen.
     </p>
     <ChannelCards channels={CHANNELS} chosen="stable" current="nightly" />
@@ -368,7 +368,7 @@
   <h1 class="type-title">Update cell, rows 1 to 13</h1>
   <section
     data-slot="updates-page-card"
-    class="rounded-lg bg-surface-raised p-space-4 shadow-sm"
+    class="rounded-lg bg-bg p-space-4 shadow-sm"
     data-states="table"
   >
     <UpdateTable machines={ROWS} policy={OFF} />

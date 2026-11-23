@@ -37,14 +37,14 @@
       id: "cockpit",
       name: "cockpit",
       path: "~/code/cockpit",
-      hue: "var(--color-mark-1)",
+      hue: "var(--color-orange)",
       machineId: "studio",
     },
     {
       id: "site",
       name: "site",
       path: "~/code/site",
-      hue: "var(--color-mark-4)",
+      hue: "var(--color-cyan)",
       machineId: "studio",
     },
   ];
@@ -59,7 +59,7 @@
     load,
     online: true,
     icon: Server,
-    hue: "var(--color-mark-4)",
+    hue: "var(--color-cyan)",
   });
   const MACHINES: MachineItem[] = [
     machine("studio", "macOS"),

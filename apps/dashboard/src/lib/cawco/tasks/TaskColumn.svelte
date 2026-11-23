@@ -129,7 +129,7 @@
 <section
   data-slot="column"
   aria-label="{label}, {count} {count === 1 ? 'task' : 'tasks'}"
-  class="group/col flex min-h-0 flex-col max-phone:snap-start gap-space-1 rounded-lg bg-surface-recess p-space-1 transition-[background-color,opacity] duration-(--duration-fast) ease-out data-closed:opacity-50 data-over:bg-surface-hover inset-ring inset-ring-border-hairline"
+  class="group/col flex min-h-0 flex-col max-phone:snap-start gap-space-1 rounded-lg bg-bg-2 p-space-1 transition-[background-color,opacity] duration-(--duration-fast) ease-out data-closed:opacity-50 data-over:bg-ui inset-ring inset-ring-ui"
   data-closed={closed ? "" : undefined}
   data-kind={kind ?? "none"}
   data-over={over ? "" : undefined}
@@ -142,7 +142,7 @@
       {#if kind === "you"}
         <IconNeedsYou
           aria-hidden="true"
-          class="-me-space-1 size-icon-md flex-none text-status-attn"
+          class="-me-space-1 size-icon-md flex-none text-orange"
         />
       {:else if kind}
         {@const mark = markOf({ kind, icon, color })}
@@ -156,24 +156,21 @@
       {/if}
       <h3
         data-slot="name"
-        class="min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong"
+        class="min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap text-tx"
       >
         {label}
       </h3>
       <!-- Drawn only above 0 (DESIGN.md, The Earned Count Rule); the
            section's name says the number whatever it is. -->
       {#if count > 0}
-        <span
-          data-num
-          data-slot="count"
-          class="num ms-auto type-meta text-ink-subtle"
+        <span data-num data-slot="count" class="num ms-auto type-meta text-tx-2"
           ><MorphText text={String(count)} /></span
         >
       {/if}
     </span>
     <span
       data-slot="kind"
-      class="flex-none type-meta whitespace-nowrap text-ink-subtle group-kind-you/col:text-status-attn"
+      class="flex-none type-meta whitespace-nowrap text-tx-2 group-kind-you/col:text-orange"
       >{kindWord}</span
     >
   </header>
@@ -223,7 +220,7 @@
         {#if moving?.(task.id)}
           <span
             data-slot="moving"
-            class="mark-line flex items-center gap-space-1 px-space-2 pt-space-1 pb-0 type-meta text-ink-muted"
+            class="mark-line flex items-center gap-space-1 px-space-2 pt-space-1 pb-0 type-meta text-tx-2"
             ><Spinner aria-hidden="true" box="small" /><span>Moving…</span
             ></span
           >

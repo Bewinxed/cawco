@@ -609,7 +609,7 @@
        pads its own by the room the graph tells it. -->
   <div
     class={[
-      "h-full min-h-0 overflow-auto bg-surface-page p-space-4 scroll-timeline-transcript-head",
+      "h-full min-h-0 overflow-auto bg-bg p-space-4 scroll-timeline-transcript-head",
       dark ? "scheme-dark" : "scheme-light",
     ]}
     {@attach frameSize(
@@ -676,7 +676,7 @@
      floating head (SideSurface), beside the page on a desk and a sheet's
      on a phone, the graph under the head as PreviewPane hosts it. -->
 <div
-  class="flex h-dvh min-h-0 bg-surface-page p-space-2 [&>*]:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
+  class="flex h-dvh min-h-0 bg-bg p-space-2 [&>*]:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
 >
   <SideSurface
     label="Preview"

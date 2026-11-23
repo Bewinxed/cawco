@@ -80,7 +80,7 @@
 
 {#snippet glyph(Mark: typeof Glyph)}
   <span
-    class="grid size-8 flex-none place-items-center rounded-xs bg-surface-raised text-ink-strong shadow-sm"
+    class="grid size-8 flex-none place-items-center rounded-xs bg-bg text-tx shadow-sm"
   >
     <Mark aria-hidden="true" class="size-icon-sm" />
   </span>
@@ -88,7 +88,7 @@
 
 <li
   bind:this={row}
-  class="col-span-full grid min-w-0 grid-cols-subgrid items-start gap-y-space-2 border-b border-border-hairline py-space-3 last:border-b-0"
+  class="col-span-full grid min-w-0 grid-cols-subgrid items-start gap-y-space-2 border-b border-ui py-space-3 last:border-b-0"
   data-kind-row={kind.id}
 >
   <div class="col-start-1 row-start-1 @max-sm/kinds:row-span-2">
@@ -105,7 +105,7 @@
         }
       }}
     >
-      <label class="type-meta text-ink-muted" for="{uid}-name"
+      <label class="type-meta text-tx-2" for="{uid}-name"
         >{decidesWords.kindSteps.name}</label
       >
       <Input
@@ -118,14 +118,14 @@
       />
       {#if problems.name}
         <p
-          class="m-0 type-meta text-status-fail text-pretty"
+          class="m-0 type-meta text-red text-pretty"
           id="{uid}-name-problem"
           role="alert"
         >
           {problems.name}
         </p>
       {/if}
-      <label class="type-meta text-ink-muted" for="{uid}-example"
+      <label class="type-meta text-tx-2" for="{uid}-example"
         >{decidesWords.kindSteps.example}</label
       >
       <Input
@@ -140,7 +140,7 @@
       />
       {#if problems.example}
         <p
-          class="m-0 type-meta text-status-fail text-pretty"
+          class="m-0 type-meta text-red text-pretty"
           id="{uid}-example-problem"
           role="alert"
         >
@@ -161,20 +161,19 @@
   {:else}
     <div class="col-start-2 row-start-1 flex min-w-0 flex-col">
       <span class="mark-line flex min-w-0 items-center gap-x-space-1">
-        <span
-          class="min-w-0 type-label font-medium text-ink-strong wrap-anywhere"
+        <span class="min-w-0 type-label font-medium text-tx wrap-anywhere"
           >{kind.name}</span
         >
         {#if !kind.builtIn}
           <IconPen
             aria-label={decidesWords.addedKey}
-            class="size-icon-sm flex-none text-ink-muted"
+            class="size-icon-sm flex-none text-tx-2"
             role="img"
           />
         {/if}
       </span>
       <span
-        class="type-meta text-ink-muted text-pretty wrap-anywhere first-letter:uppercase"
+        class="type-meta text-tx-2 text-pretty wrap-anywhere first-letter:uppercase"
         >{kind.example}</span
       >
     </div>
@@ -186,8 +185,7 @@
         <MemberFace member={holder} size={24} />
         <span
           aria-hidden="true"
-          class="min-w-0 type-label text-ink-strong wrap-anywhere"
-          >{holder.name}</span
+          class="min-w-0 type-label text-tx wrap-anywhere">{holder.name}</span
         >
       </p>
     {/if}
@@ -243,7 +241,7 @@
               <span class="min-w-0 wrap-anywhere">
                 {other.name}
                 {#if decider}
-                  <span class="text-ink-muted"> · {decider.name}</span>
+                  <span class="text-tx-2"> · {decider.name}</span>
                 {/if}
               </span>
             </span>

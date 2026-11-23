@@ -55,7 +55,7 @@
     <button
       aria-controls={foldId}
       aria-expanded={open}
-      class="mark-line press-tint focus-inset group/fold -mx-space-2 flex min-h-control-sm items-center gap-space-1 rounded-sm px-space-2 type-label text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
+      class="mark-line press-tint focus-inset group/fold -mx-space-2 flex min-h-control-sm items-center gap-space-1 rounded-sm px-space-2 type-label text-tx-2 transition-control hover:bg-ui hover:text-tx"
       data-tray-details
       onclick={() => {
         open = !open;
@@ -108,7 +108,7 @@
       {:else}
         <div class="grid min-w-0 gap-space-1">
           <pre
-            class="focus-inset m-0 max-h-48 overflow-auto overscroll-contain rounded-sm border border-border-control bg-surface-sunk px-space-3 py-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong select-all"
+            class="focus-inset m-0 max-h-48 overflow-auto overscroll-contain rounded-sm border border-ui-2 bg-bg-2 px-space-3 py-space-2 type-code wrap-anywhere whitespace-pre-wrap text-tx select-all"
             data-slot="raw">{raw}</pre>
           {#if tray.overHttps}
             <span class="flex justify-end">
@@ -118,14 +118,9 @@
         </div>
       {/if}
       {#if tray.step !== "unsupported"}
-        <div
-          class="grid gap-space-2 border-t border-t-border-hairline pt-space-2"
-        >
+        <div class="grid gap-space-2 border-t border-t-ui pt-space-2">
           {#if tray.stopping}
-            <p
-              class="m-0 type-body text-pretty text-ink-strong"
-              transition:unfold
-            >
+            <p class="m-0 type-body text-pretty text-tx" transition:unfold>
               {cost}
             </p>
             <span class="flex flex-wrap justify-end gap-space-2">

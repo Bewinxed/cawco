@@ -14,10 +14,10 @@ import { tv } from "#lib/utils.js";
  *   ("Connect a machine…", "New project…").
  */
 export const iconTileVariants = tv({
-  base: "inline-flex size-6.5 flex-none items-center justify-center rounded-sm bg-surface-raised shadow-sm transition-[background-color,color] duration-(--duration-slow) ease-out data-ink:bg-ink-strong data-ink:text-surface-page data-ink:shadow-none [&_svg]:flex-none",
+  base: "inline-flex size-6.5 flex-none items-center justify-center rounded-sm bg-bg shadow-sm transition-[background-color,color] duration-(--duration-slow) ease-out data-ink:bg-tx data-ink:text-bg data-ink:shadow-none [&_svg]:flex-none",
   variants: {
     empty: {
-      true: "border border-dashed border-border-strong bg-transparent shadow-none",
+      true: "border border-dashed border-tx-2 bg-transparent shadow-none",
     },
   },
 });

@@ -15,7 +15,7 @@
 <!-- Reading leaves the same way it came: one fade. -->
 {#if home.status === "reading"}
   <div
-    class="flex min-h-row-compact items-center type-meta text-ink-muted"
+    class="flex min-h-row-compact items-center type-meta text-tx-2"
     role="status"
     out:crossOut
   >

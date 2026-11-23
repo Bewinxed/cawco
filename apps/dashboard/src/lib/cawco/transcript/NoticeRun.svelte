@@ -54,11 +54,11 @@
 >
   <button
     aria-expanded={open}
-    class="select-none flex items-center gap-space-3 w-full min-h-control-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-ink-muted focus-inset touch-hit"
+    class="select-none flex items-center gap-space-3 w-full min-h-control-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-tx-2 focus-inset touch-hit"
     onclick={() => disclosed.set(!open)}
     type="button"
   >
-    <span class="h-px flex-1 min-w-0 bg-border-control"></span>
+    <span class="h-px flex-1 min-w-0 bg-ui-2"></span>
     <span
       class="inline-flex items-center gap-space-2 min-w-0 whitespace-nowrap mark-line"
       ><span data-slot="mark" class="inline-flex items-center" data-box
@@ -68,7 +68,7 @@
         >{line}</span
       >
       {#if more > 0}
-        <span data-slot="more" class="flex-none text-ink-subtle num"
+        <span data-slot="more" class="flex-none text-tx-2 num"
           >· {noticeWords.more(more)}</span
         >
       {/if}
@@ -79,7 +79,7 @@
         /></span
       ></span
     >
-    <span class="h-px flex-1 min-w-0 bg-border-control"></span>
+    <span class="h-px flex-1 min-w-0 bg-ui-2"></span>
   </button>
   {#if open}
     <!-- What the agent read, at the text column where a brief opens: one
@@ -92,7 +92,7 @@
       onintrostart={opening}
       transition:unfold
     >
-      <p data-slot="sent" class="mb-space-1 type-meta text-ink-subtle">
+      <p data-slot="sent" class="mb-space-1 type-meta text-tx-2">
         {noticeWords.sent}
       </p>
       {#if row.messages.length === 1}
@@ -105,7 +105,7 @@
             <li data-slot="notice" class="min-w-0">
               <span
                 data-slot="words"
-                class="block type-meta text-ink-muted wrap-anywhere text-pretty num"
+                class="block type-meta text-tx-2 wrap-anywhere text-pretty num"
                 >{one.metadata?.noteTitle ?? noticeWords.fallback}</span
               >
               <div data-slot="notice-text" class="min-w-0 wrap-anywhere">

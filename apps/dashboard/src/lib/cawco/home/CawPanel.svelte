@@ -178,7 +178,7 @@
   style:--fade-len="var(--spacing-row)"
   style:--list-max={"min(calc(var(--spacing) * 140), calc(100dvh - calc(var(--spacing) * 30)))"}
   style:--list-max-phone={"calc(100dvh - var(--spacing-control-lg) - var(--spacing-space-3) - var(--safe-bottom) - calc(var(--spacing) * 24))"}
-  style:--stuck-fade={"linear-gradient(to bottom, transparent, var(--color-ink-strong) var(--fade-start), var(--color-ink-strong))"}
+  style:--stuck-fade={"linear-gradient(to bottom, transparent, var(--color-tx) var(--fade-start), var(--color-tx))"}
   {@attach reflow()}
   {@attach measured}
 >
@@ -193,16 +193,14 @@
         <span
           data-slot="needs"
           data-caw-panel-glyph
-          class="me-space-1 grid w-row-compact flex-none place-items-center self-center text-status-attn"
+          class="me-space-1 grid w-row-compact flex-none place-items-center self-center text-orange"
           data-box
           ><IconNeedsYou aria-hidden="true" class="size-icon-md" /></span
         >
-        <span
-          data-slot="title"
-          class="type-label text-ink-strong"
-          id="caw-needs">{commonWords.needsYou}</span
+        <span data-slot="title" class="type-label text-tx" id="caw-needs"
+          >{commonWords.needsYou}</span
         >
-        <span data-slot="count" class="type-meta num text-ink-muted"
+        <span data-slot="count" class="type-meta num text-tx-2"
           >{needs.length}</span
         >
       </div>
@@ -230,15 +228,13 @@
       >
         <span
           data-slot="glyph"
-          class="me-space-1 grid w-row-compact flex-none place-items-center self-center text-ink-muted"
+          class="me-space-1 grid w-row-compact flex-none place-items-center self-center text-tx-2"
           data-box><IconNotices aria-hidden="true" class="size-icon-md" /></span
         >
-        <span
-          data-slot="title"
-          class="type-label text-ink-strong"
-          id="caw-notices">Notices</span
+        <span data-slot="title" class="type-label text-tx" id="caw-notices"
+          >Notices</span
         >
-        <span data-slot="count" class="type-meta num text-ink-muted"
+        <span data-slot="count" class="type-meta num text-tx-2"
           >{noticeCount}</span
         >
         {#if clearable}
@@ -266,7 +262,7 @@
       <!-- Notices part with a hairline, as rows of one list do. -->
       <ul
         data-slot="notices"
-        class="m-0 list-none p-0 [&>li]:border-border-hairline [&>li:not(:last-child)]:border-b"
+        class="m-0 list-none p-0 [&>li]:border-ui [&>li:not(:last-child)]:border-b"
       >
         {#if damaged}
           <!-- The damaged record: its words on the rows' text column, Reset
@@ -278,11 +274,7 @@
             style:--damaged-cols="1fr auto"
             style:--damaged-lead={"calc(var(--spacing-space-3) + var(--spacing-row-compact) + var(--spacing-space-3))"}
           >
-            <p
-              data-slot="words"
-              class="m-0 type-meta text-status-fail"
-              role="alert"
-            >
+            <p data-slot="words" class="m-0 type-meta text-red" role="alert">
               {damagedHubRecordWords("notices", damaged)}
             </p>
             <Button
@@ -295,7 +287,7 @@
               variant="secondary"
             />
             {#if resetProblem}
-              <p class="col-span-full m-0 type-meta text-ink-muted">
+              <p class="col-span-full m-0 type-meta text-tx-2">
                 {resetProblem}
               </p>
             {/if}
@@ -352,7 +344,7 @@
     <!-- mark-line: Caw stands above the words, not beside them -->
     <div
       data-slot="caw-panel-empty"
-      class="grid justify-items-center gap-space-2 px-space-4 pt-space-6 pb-space-4 type-label text-ink-muted outline-off"
+      class="grid justify-items-center gap-space-2 px-space-4 pt-space-6 pb-space-4 type-label text-tx-2 outline-off"
       data-flip
       role="status"
       tabindex="-1"

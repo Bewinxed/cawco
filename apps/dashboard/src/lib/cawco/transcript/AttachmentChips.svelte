@@ -134,18 +134,18 @@
   const REMOVE = pressVariants({
     press: "scale",
     class:
-      "select-none grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit pointer-hit",
+      "select-none grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-tx-2 flex-none hover:bg-bg-2 hover:text-tx touch-hit pointer-hit",
   });
   const CHIP =
-    "inline-flex items-center gap-space-2 max-w-full h-row-compact ps-space-1 pe-space-1 border border-border-hairline rounded-sm bg-surface-raised shadow-sm text-base font-medium text-ink-strong mark-line hit-gap-x-space-2 coarse:hit-gap-x-space-3";
+    "inline-flex items-center gap-space-2 max-w-full h-row-compact ps-space-1 pe-space-1 border border-ui rounded-sm bg-bg shadow-sm text-base font-medium text-tx mark-line hit-gap-x-space-2 coarse:hit-gap-x-space-3";
   const BODY =
-    "select-none inline-flex items-center gap-space-2 min-w-0 h-full p-0 border-none bg-transparent text-start text-ink-strong rounded-xs touch-hit pointer-hit mark-line";
+    "select-none inline-flex items-center gap-space-2 min-w-0 h-full p-0 border-none bg-transparent text-start text-tx rounded-xs touch-hit pointer-hit mark-line";
 </script>
 
 {#snippet face(chip: Chip)}
   <span
     aria-hidden="true"
-    class="grid place-items-center size-icon-lg flex-none text-ink-muted"
+    class="grid place-items-center size-icon-lg flex-none text-tx-2"
     data-box
   >
     {#if chip.lead.kind === "thumb"}
@@ -157,7 +157,7 @@
       />
       {#if chip.lead.progress !== undefined}
         <UploadRing
-          class="col-start-1 row-start-1 size-icon-md text-ink-strong"
+          class="col-start-1 row-start-1 size-icon-md text-tx"
           progress={chip.lead.progress}
         />
       {/if}
@@ -182,7 +182,7 @@
         data-slot="att-meta"
         class={[
           "flex-none whitespace-nowrap text-sm font-normal tabular-nums",
-          chip.failed ? "text-status-fail" : "text-ink-muted",
+          chip.failed ? "text-red" : "text-tx-2",
         ]}>{chip.meta}</span
       >
     {/if}
@@ -222,7 +222,7 @@
           <span
             data-box
             aria-hidden="true"
-            class="grid place-items-center size-icon-lg flex-none text-ink-muted"
+            class="grid place-items-center size-icon-lg flex-none text-tx-2"
           >
             {#if folded.thumb}
               <img
@@ -265,7 +265,7 @@
             aria-label={chip.press.label}
             class={pressVariants({
               press: "scale",
-              class: [BODY, "press-tint hover:bg-surface-hover"],
+              class: [BODY, "press-tint hover:bg-ui"],
             })}
             data-box
             onclick={chip.press.run}

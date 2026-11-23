@@ -74,7 +74,7 @@
 <footer
   data-slot={slot}
   data-on-padding={onPadding || undefined}
-  class="sticky -bottom-space-2 z-1 mt-auto flex flex-none flex-col gap-space-3 bg-surface-raised pt-space-3 pb-(--foot-pb) data-on-padding:-mb-space-6 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-10 before:bg-linear-to-b/srgb before:from-transparent before:to-surface-raised before:opacity-0 before:transition-[opacity] before:duration-(--duration-fast) before:ease-out data-stuck:before:opacity-100 max-phone:before:h-space-4"
+  class="sticky -bottom-space-2 z-1 mt-auto flex flex-none flex-col gap-space-3 bg-bg pt-space-3 pb-(--foot-pb) data-on-padding:-mb-space-6 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-10 before:bg-linear-to-b/srgb before:from-transparent before:to-bg before:opacity-0 before:transition-[opacity] before:duration-(--duration-fast) before:ease-out data-stuck:before:opacity-100 max-phone:before:h-space-4"
   data-safe-bottom
   style:--foot-pb="calc(var(--spacing-space-6) + var(--safe-bottom))"
   {@attach aboveKeyboard()}

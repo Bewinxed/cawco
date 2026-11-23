@@ -424,7 +424,7 @@
 {#snippet thread(shown: Pin, sheet = false)}
   <!-- What the thread is on, and the way to it there. -->
   <div
-    class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted"
+    class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-tx-2"
     data-doc={sync.state}
     data-slot="thread-where"
   >
@@ -495,8 +495,7 @@
   </span>
   <span data-slot="label">{words}</span>
   {#if answer}
-    <span class="flex-none text-ink-muted" data-slot="state">· {stateWord}</span
-    >
+    <span class="flex-none text-tx-2" data-slot="state">· {stateWord}</span>
   {/if}
 </button><RowFault
   again={openWhere}

@@ -99,7 +99,7 @@
   })}
 >
   {#snippet trigger()}
-    <Files class="text-mark-1" />
+    <Files class="text-orange" />
     {#key project?.id}
       <span data-slot="chip-label" class="ns-in"
         >{project?.name ?? spawnWords.project.none}</span
@@ -114,7 +114,7 @@
       <!-- biome-ignore lint/a11y/useSemanticElements: the clear control sits inside the chip trigger, which is already a button; buttons cannot nest -->
       <span
         data-slot="clear"
-        class="ns-check pointer-hit touch-hit select-none relative z-1 -mr-space-1 inline-flex size-space-4 items-center justify-center rounded-xs text-ink-subtle transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-surface-hover hover:text-ink-strong"
+        class="ns-check pointer-hit touch-hit select-none relative z-1 -mr-space-1 inline-flex size-space-4 items-center justify-center rounded-xs text-tx-2 transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-ui hover:text-tx"
         onclick={(event) => {
           event.stopPropagation();
           onclear();
@@ -138,13 +138,13 @@
     <div class="ns-panel grid gap-space-2 p-space-1">
       <label
         data-slot="project-chip-field"
-        class="field-edge transition-control flex h-control-md max-phone:h-control-lg items-center gap-space-2 rounded-sm border bg-surface-raised px-space-3 shadow-sm"
+        class="field-edge transition-control flex h-control-md max-phone:h-control-lg items-center gap-space-2 rounded-sm border bg-bg px-space-3 shadow-sm"
       >
-        <Files class="size-icon-md flex-none text-ink-subtle" />
+        <Files class="size-icon-md flex-none text-tx-2" />
         <input
           aria-label={spawnWords.project.name}
           autocapitalize="off"
-          class="type-body min-w-0 flex-1 border-none border-current bg-transparent p-0 text-ink-strong placeholder:text-ink-muted"
+          class="type-body min-w-0 flex-1 border-none border-current bg-transparent p-0 text-tx placeholder:text-tx-2"
           oninput={(event) => onName(event.currentTarget.value)}
           placeholder={spawnWords.project.name}
           spellcheck="false"
@@ -153,13 +153,13 @@
       </label>
       <label
         data-slot="project-chip-field"
-        class="field-edge transition-control flex h-control-md max-phone:h-control-lg items-center gap-space-2 rounded-sm border bg-surface-raised px-space-3 shadow-sm"
+        class="field-edge transition-control flex h-control-md max-phone:h-control-lg items-center gap-space-2 rounded-sm border bg-bg px-space-3 shadow-sm"
       >
-        <Folder class="size-icon-md flex-none text-ink-subtle" />
+        <Folder class="size-icon-md flex-none text-tx-2" />
         <input
           aria-label={spawnWords.project.path}
           autocapitalize="off"
-          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) type-body text-ink-strong placeholder:text-ink-muted"
+          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) type-body text-tx placeholder:text-tx-2"
           oninput={(event) => {
             if (draft) {
               draft = { ...draft, path: event.currentTarget.value };
@@ -176,9 +176,8 @@
         data-slot="actions"
         class="mt-space-1 flex items-center justify-end gap-space-2"
       >
-        <span
-          class="type-meta min-w-0 flex-1 truncate text-status-fail"
-          role="alert">{createError}</span
+        <span class="type-meta min-w-0 flex-1 truncate text-red" role="alert"
+          >{createError}</span
         >
         <Button
           onclick={() => {
@@ -208,7 +207,7 @@
       <button
         data-slot="row"
         aria-pressed={on}
-        class="select-none ns-in press-tint relative flex h-control-lg w-full items-center gap-space-3 rounded-xs border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color] duration-(--duration-base) ease-out aria-pressed:bg-accent-wash aria-pressed:text-accent-ink motion-safe:transition-[background-color,transform]"
+        class="select-none ns-in press-tint relative flex h-control-lg w-full items-center gap-space-3 rounded-xs border-none border-current bg-transparent px-space-2 py-space-2 text-start text-tx transition-[background-color] duration-(--duration-base) ease-out aria-pressed:bg-ui aria-pressed:text-accent motion-safe:transition-[background-color,transform]"
         data-fh="1"
         data-machine-id={row.machineId}
         data-project-id={row.id}
@@ -223,23 +222,23 @@
           <span data-slot="name" class="type-label block">{row.name}</span>
           <span
             data-slot="meta"
-            class="type-meta block truncate text-ink-subtle in-aria-pressed:text-accent-ink"
+            class="type-meta block truncate text-tx-2 in-aria-pressed:text-accent"
             >{row.machine ? `${row.machine} · ${row.path}` : row.path}</span
           >
         </span>
         {#if on}
-          <Check class="ns-check size-icon-md flex-none text-accent-ink" />
+          <Check class="ns-check size-icon-md flex-none text-accent" />
         {/if}
       </button>
     {/each}
     <div
       data-slot="divider"
-      class="mx-space-1 my-space-1 border-t border-border-hairline"
+      class="mx-space-1 my-space-1 border-t border-ui"
     ></div>
     <button
       data-slot="row"
       data-add
-      class="select-none ns-in press-tint relative flex h-control-lg w-full items-center gap-space-3 rounded-xs border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color] duration-(--duration-base) ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
+      class="select-none ns-in press-tint relative flex h-control-lg w-full items-center gap-space-3 rounded-xs border-none border-current bg-transparent px-space-2 py-space-2 text-start text-tx-2 transition-[background-color] duration-(--duration-base) ease-out hover:text-tx motion-safe:transition-[background-color,transform]"
       data-fh="1"
       onclick={() => {
         draft = { name: "", path: "" };

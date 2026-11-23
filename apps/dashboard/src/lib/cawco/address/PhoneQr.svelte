@@ -41,7 +41,7 @@
   style:--qr-cols="var(--address-qr, calc(var(--spacing) * 28)) minmax(0, 1fr)"
 >
   <svg
-    class="block size-28 flex-none rounded-sm bg-surface-raised text-ink-strong shadow-sm"
+    class="block size-28 flex-none rounded-sm bg-bg text-tx shadow-sm"
     aria-label="QR code for {address}"
     role="img"
     viewBox="0 0 {code.size} {code.size}"
@@ -55,13 +55,11 @@
       <li class="mark-line flex min-w-0 items-start gap-space-2 type-body">
         <span class="mark-cell">
           <span
-            class="box-border grid size-icon-md place-items-center rounded-pill border border-border-control type-meta leading-none num text-ink-muted"
+            class="box-border grid size-icon-md place-items-center rounded-pill border border-ui-2 type-meta leading-none num text-tx-2"
             aria-hidden="true">{index + 1}</span
           >
         </span>
-        <span class="mark-text min-w-0 text-ink-strong"
-          ><Words text={step} /></span
-        >
+        <span class="mark-text min-w-0 text-tx"><Words text={step} /></span>
       </li>
     {/each}
   </ol>

@@ -60,7 +60,7 @@
       {#snippet mark()}
         <IconWarningTriangle
           aria-hidden="true"
-          class="mb-space-1 size-icon-lg text-status-fail"
+          class="mb-space-1 size-icon-lg text-red"
         />
       {/snippet}
       {#snippet action()}
@@ -68,13 +68,13 @@
       {/snippet}
     </EmptyState>
   {:else if signedIn}
-    <p class="type-body text-ink-muted" role="status">
+    <p class="type-body text-tx-2" role="status">
       {signedIn}
       is signed in for the whole fleet. You can close this tab.
     </p>
   {:else}
     <p
-      class="mark-line flex items-center gap-space-2 type-body text-ink-muted"
+      class="mark-line flex items-center gap-space-2 type-body text-tx-2"
       role="status"
     >
       <LiveDot /><span>Finishing sign-in…</span>

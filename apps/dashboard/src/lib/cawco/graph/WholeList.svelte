@@ -60,7 +60,7 @@
     <section aria-label={machine.name} class="grid min-w-0 gap-space-2">
       {#if review.machines.length > 1}
         <h3
-          class="m-0 truncate text-ink-muted type-meta font-medium tracking-caps uppercase"
+          class="m-0 truncate text-tx-2 type-meta font-medium tracking-caps uppercase"
         >
           {machine.name}
         </h3>
@@ -76,13 +76,13 @@
                        opens on the Animation face, as the map's arrow does. -->
                   <button
                     type="button"
-                    class="pointer-hit touch-hit relative -mx-space-1 flex min-w-0 flex-wrap gap-x-space-2 rounded-xs px-space-1 text-start type-meta transition-control can-hover:hover:bg-surface-hover"
+                    class="pointer-hit touch-hit relative -mx-space-1 flex min-w-0 flex-wrap gap-x-space-2 rounded-xs px-space-1 text-start type-meta transition-control can-hover:hover:bg-ui"
                     onclick={() => onmove(move.from, move.to)}
                   >
                     {#if move.label}
-                      <span class="text-ink-strong">{move.label}</span>
+                      <span class="text-tx">{move.label}</span>
                     {/if}
-                    <span class="min-w-0 text-ink-muted wrap-anywhere"
+                    <span class="min-w-0 text-tx-2 wrap-anywhere"
                       >{words.move(nameOf(move.from), nameOf(move.to))}</span
                     >
                   </button>

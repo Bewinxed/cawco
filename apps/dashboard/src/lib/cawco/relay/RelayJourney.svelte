@@ -354,10 +354,10 @@
     text.match(/\([^)]*\)|\S+/gu) ?? [text];
 
   /** A step's note: meta, muted; a failure's in the fail ink. */
-  const NOTE = "min-w-0 type-meta text-ink-muted text-pretty wrap-anywhere";
-  const FAIL = "min-w-0 type-meta text-status-fail text-pretty wrap-anywhere";
+  const NOTE = "min-w-0 type-meta text-tx-2 text-pretty wrap-anywhere";
+  const FAIL = "min-w-0 type-meta text-red text-pretty wrap-anywhere";
   /** Needs you's meta line (NeedsCard's `.meta`): meta, muted, one line, at every width. */
-  const META = "min-w-0 max-w-full truncate type-meta text-ink-muted";
+  const META = "min-w-0 max-w-full truncate type-meta text-tx-2";
   /** A step's controls: side by side, each the column's width in a narrow card (one grid column), `space-2` apart. */
   const CONTROLS =
     "flex min-w-0 flex-wrap items-center gap-space-2 @max-sm:grid @max-sm:grid-cols-1";
@@ -368,13 +368,13 @@
 {#snippet stepMark(mark: Mark, n: number)}
   <span class="mark-cell">
     <span
-      class="grid size-icon-md place-items-center text-ink-muted"
+      class="grid size-icon-md place-items-center text-tx-2"
       data-slot="step-mark"
     >
       {#if mark === "done"}
-        <IconSuccess aria-hidden="true" class="size-icon-md text-status-done" />
+        <IconSuccess aria-hidden="true" class="size-icon-md text-green" />
       {:else if mark === "failed"}
-        <IconError aria-hidden="true" class="size-icon-md text-status-fail" />
+        <IconError aria-hidden="true" class="size-icon-md text-red" />
       {:else if mark === "working"}
         <Spinner aria-hidden="true" role="none" />
       {:else}
@@ -386,8 +386,8 @@
           class={[
             "box-border grid size-full place-items-center rounded-pill border bg-transparent type-meta leading-none num before:content-data-n",
             mark === "standing"
-              ? "border-border-strong text-ink-strong"
-              : "border-border-control text-ink-muted",
+              ? "border-tx-2 text-tx"
+              : "border-ui-2 text-tx-2",
           ]}
           data-n={n}
         ></span>
@@ -415,7 +415,7 @@
          inside it, so a third line is cut at the words' edge, never shown
          in the box's padding. -->
     <code
-      class="block min-w-0 rounded-sm border border-border-control bg-surface-hover px-space-3 py-space-2 font-mono type-meta text-ink-strong"
+      class="block min-w-0 rounded-sm border border-ui-2 bg-ui px-space-3 py-space-2 font-mono type-meta text-tx"
       title={text}
       ><span class={clamp ? "line-clamp-2" : "block"} data-slot="copy-words"
         ><span class="sr-only">{label}:{" "}</span
@@ -447,16 +447,16 @@
     class="mark-line flex min-w-0 items-center gap-space-3 @max-sm:gap-space-2"
   >
     <span
-      class="grid w-row-compact flex-none place-items-center text-ink-muted @max-sm:w-icon-md"
+      class="grid w-row-compact flex-none place-items-center text-tx-2 @max-sm:w-icon-md"
       data-box
     >
       {#if done}
-        <IconSuccess aria-hidden="true" class="size-icon-md text-status-done" />
+        <IconSuccess aria-hidden="true" class="size-icon-md text-green" />
       {:else}
         <IconMonitor aria-hidden="true" class="size-icon-md" />
       {/if}
     </span>
-    <h3 class="min-w-0 type-label text-ink-strong text-balance">
+    <h3 class="min-w-0 type-label text-tx text-balance">
       {words.title}
     </h3>
   </div>
@@ -481,15 +481,14 @@
 
 {#snippet choiceRow(choice: RelayChoice)}
   <li
-    class="grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-1 py-space-2 not-first:border-t not-first:border-border-hairline @max-sm:grid-cols-1"
+    class="grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-1 py-space-2 not-first:border-t not-first:border-ui @max-sm:grid-cols-1"
     data-relay-choice={choice.machineId}
   >
     <div class="flex min-w-0 flex-col gap-space-1">
-      <span class="min-w-0 type-label text-ink-strong wrap-anywhere"
-        >{choice.name}</span
+      <span class="min-w-0 type-label text-tx wrap-anywhere">{choice.name}</span
       >
-      <p class="min-w-0 type-meta text-ink-muted wrap-anywhere">
-        <code class="font-mono text-ink-strong">{choice.address}</code
+      <p class="min-w-0 type-meta text-tx-2 wrap-anywhere">
+        <code class="font-mono text-tx">{choice.address}</code
         >{#if choice.lan}{`, ${words.behindRouter}`}{/if}{#if !choice.online}{` · ${words.offline}`}{/if}
       </p>
     </div>
@@ -681,7 +680,7 @@
       <p class={FAIL}>
         {#if step.command && step.why?.includes(step.command)}
           {@const at = step.why.indexOf(step.command)}
-          {step.why.slice(0, at)}<code class="font-mono text-ink-strong"
+          {step.why.slice(0, at)}<code class="font-mono text-tx"
             >{step.command}</code
           >{step.why.slice(at + step.command.length)}
         {:else}
@@ -779,10 +778,10 @@
       style:--title-edge={"calc(var(--spacing-row-compact) + var(--spacing-space-3))"}
     >
       {#if lead}
-        <p class="type-body text-ink-strong text-pretty @max-sm:hidden">
+        <p class="type-body text-tx text-pretty @max-sm:hidden">
           {domain ? words.leadDomain(domain) : words.leadPlain}
         </p>
-        <p class="hidden type-body text-ink-strong text-pretty @max-sm:block">
+        <p class="hidden type-body text-tx text-pretty @max-sm:block">
           {domain ? words.leadDomainShort(domain) : words.leadPlainShort}
         </p>
       {/if}
@@ -810,9 +809,7 @@
             <span
               class={[
                 "min-w-0 type-label wrap-anywhere",
-                mark === "done" || mark === "waiting"
-                  ? "text-ink-muted"
-                  : "text-ink-strong",
+                mark === "done" || mark === "waiting" ? "text-tx-2" : "text-tx",
               ]}
               data-slot="step-label"
               >{#if SAID[mark]}<span class="sr-only">{SAID[mark]}{" "}</span
@@ -868,14 +865,10 @@
     class="@container flex min-w-0 max-w-ch-60 flex-col items-start gap-space-3"
     data-relay-entry
   >
-    <p
-      class="type-body text-ink-strong text-pretty wrap-anywhere @max-sm:hidden"
-    >
+    <p class="type-body text-tx text-pretty wrap-anywhere @max-sm:hidden">
       {words.entry(domain)}
     </p>
-    <p
-      class="hidden type-body text-ink-strong text-pretty wrap-anywhere @max-sm:block"
-    >
+    <p class="hidden type-body text-tx text-pretty wrap-anywhere @max-sm:block">
       {words.entryShort(domain)}
     </p>
     <Button
@@ -901,7 +894,7 @@
       class="{UNDER_TITLE} items-start gap-space-3"
       style:--title-edge={"calc(var(--spacing-row-compact) + var(--spacing-space-3))"}
     >
-      <p class="type-body text-ink-strong text-pretty wrap-anywhere">
+      <p class="type-body text-tx text-pretty wrap-anywhere">
         {domain ? words.leadDomain(domain) : words.leadPlain}
       </p>
       <Button
@@ -927,7 +920,7 @@
       class="{UNDER_TITLE} items-start gap-space-2"
       style:--title-edge={"calc(var(--spacing-row-compact) + var(--spacing-space-3))"}
     >
-      <p class="type-body text-ink-strong text-pretty wrap-anywhere">
+      <p class="type-body text-tx text-pretty wrap-anywhere">
         {words.doneRow(summary.name ?? summary.machine.address)}
       </p>
       {#if row}
@@ -962,20 +955,16 @@
       <div class="flex min-w-0 flex-col gap-space-1">
         <div class="flex min-w-0 flex-wrap items-center gap-space-2">
           <span
-            class="min-w-0 type-label text-ink-strong wrap-anywhere"
+            class="min-w-0 type-label text-tx wrap-anywhere"
             data-relay-machine>{summary.machine.name}</span
           >
           <Badge data-relay-state variant={badge.tint}
             ><span>{badge.said}</span></Badge
           >
         </div>
-        <p
-          class="min-w-0 type-meta text-ink-muted wrap-anywhere"
-          data-relay-line
-        >
-          <code class="font-mono text-ink-strong"
-            >{summary.machine.address}</code
-          >{#if summary.name}{" · "}<code class="font-mono text-ink-strong"
+        <p class="min-w-0 type-meta text-tx-2 wrap-anywhere" data-relay-line>
+          <code class="font-mono text-tx">{summary.machine.address}</code
+          >{#if summary.name}{" · "}<code class="font-mono text-tx"
               >{summary.name}</code
             >{/if}
         </p>
@@ -1020,7 +1009,7 @@
       </div>
       {#if busy}
         <p
-          class="col-span-full type-meta text-ink-muted text-pretty"
+          class="col-span-full type-meta text-tx-2 text-pretty"
           data-relay-wait
           id="relay-stop-wait"
         >
@@ -1045,10 +1034,10 @@
         </ul>
         {#each summary.ports.filter((port) => port.error) as port (port.name)}
           <p
-            class="col-span-full min-w-0 type-meta text-ink-muted wrap-anywhere"
+            class="col-span-full min-w-0 type-meta text-tx-2 wrap-anywhere"
             data-relay-port-error={port.name}
           >
-            <span class="text-ink-strong">{port.name}:</span>
+            <span class="text-tx">{port.name}:</span>
             {port.error}
           </p>
         {/each}
@@ -1057,7 +1046,7 @@
         <p class="col-span-full {FAIL}" data-relay-why>
           {#if summary.whyCommand && summary.why.includes(summary.whyCommand)}
             {@const at = summary.why.indexOf(summary.whyCommand)}
-            {summary.why.slice(0, at)}<code class="font-mono text-ink-strong"
+            {summary.why.slice(0, at)}<code class="font-mono text-tx"
               >{summary.whyCommand}</code
             >{summary.why.slice(at + summary.whyCommand.length)}
           {:else}
@@ -1069,7 +1058,7 @@
         class="col-span-full grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-2 @max-sm:grid-cols-1 @max-sm:justify-items-start"
       >
         <p
-          class="min-w-0 type-meta text-ink-muted text-pretty wrap-anywhere"
+          class="min-w-0 type-meta text-tx-2 text-pretty wrap-anywhere"
           data-relay-proven
         >
           {#if summary.endsAt}{words.certificateEnds(
@@ -1088,7 +1077,7 @@
           variant="outline"
         />
         {#if !summary.name}
-          <p class="min-w-0 type-meta text-ink-muted text-pretty">
+          <p class="min-w-0 type-meta text-tx-2 text-pretty">
             {words.noName}
           </p>
           <Button

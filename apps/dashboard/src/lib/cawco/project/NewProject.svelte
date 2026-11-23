@@ -254,7 +254,7 @@
     <div class="w-full max-w-142.5">
       <h1
         data-slot="title"
-        class="m-0 px-(--field-px) type-title text-ink-strong max-desk:px-space-3"
+        class="m-0 px-(--field-px) type-title text-tx max-desk:px-space-3"
       >
         {onboardingWords.ask}
       </h1>
@@ -296,7 +296,7 @@
           data-slot="no-machine"
           class="mark-line flex flex-wrap items-center gap-x-space-3 gap-y-space-2 px-(--field-px) max-desk:px-space-3"
         >
-          <span class="type-body text-pretty text-ink-muted"
+          <span class="type-body text-pretty text-tx-2"
             >{fleet === "none"
               ? onboardingWords.noMachine
               : onboardingWords.noneOnline}</span

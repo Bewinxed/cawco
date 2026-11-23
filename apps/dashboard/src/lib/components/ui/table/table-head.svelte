@@ -4,7 +4,7 @@
   import { tableColumn } from "./table.svelte";
 
   const tableHeadVariants = tv({
-    base: "whitespace-nowrap px-space-3 text-start align-middle text-ink-strong type-label",
+    base: "whitespace-nowrap px-space-3 text-start align-middle text-tx type-label",
     variants: {
       variant: {
         /**
@@ -13,7 +13,7 @@
          * surface, held at the top while the rows scroll under it
          * (DESIGN.md, Density: "a 32px header band"; ledger-header).
          */
-        band: "type-label sticky top-0 h-8 bg-surface-recess text-ink-muted uppercase tracking-caps",
+        band: "type-label sticky top-0 h-8 bg-bg-2 text-tx-2 uppercase tracking-caps",
         /*
          * A matrix's heads stand on their top edge, so heads of different
          * heights start their names on one line, and take the base's label
@@ -21,24 +21,23 @@
          * label").
          */
         /** A matrix's corner heading. */
-        "matrix-corner": "px-space-4 py-space-3 align-top text-ink-muted",
+        "matrix-corner": "px-space-4 py-space-3 align-top text-tx-2",
         /** A matrix's corner heading pinned to the inline start as it scrolls. */
         "matrix-corner-pinned":
-          "sticky start-0 bg-surface-raised px-space-4 py-space-3 align-top text-ink-muted",
+          "sticky start-0 bg-bg px-space-4 py-space-3 align-top text-tx-2",
         /** A matrix's column heading, ruled on the left. */
         "matrix-column":
-          "border-border-control border-l px-space-4 py-space-3 align-top text-ink-muted",
+          "border-ui-2 border-l px-space-4 py-space-3 align-top text-tx-2",
         /** A wide matrix column's heading. */
         "matrix-column-wide":
-          "min-w-56 border-border-control border-l px-space-4 py-space-3 align-top text-ink-muted",
+          "min-w-56 border-ui-2 border-l px-space-4 py-space-3 align-top text-tx-2",
         /** A wide matrix column's heading whose content sets its own text, and wraps. */
         "matrix-column-wide-plain":
-          "min-w-56 whitespace-normal border-border-control border-l px-space-4 py-space-3 align-top",
+          "min-w-56 whitespace-normal border-ui-2 border-l px-space-4 py-space-3 align-top",
         /** A matrix's row heading on the raised surface. */
-        "matrix-row": "bg-surface-raised px-space-4 py-space-2",
+        "matrix-row": "bg-bg px-space-4 py-space-2",
         /** A matrix's row heading pinned to the inline start as it scrolls. */
-        "matrix-row-pinned":
-          "sticky start-0 bg-surface-raised px-space-4 py-space-2",
+        "matrix-row-pinned": "sticky start-0 bg-bg px-space-4 py-space-2",
       },
       ...tableColumn,
     },

@@ -89,7 +89,7 @@
       />
     {:else}
       <p
-        class="mark-line m-0 flex flex-wrap items-center gap-x-space-2 gap-y-space-1 py-space-1 type-meta text-ink-muted"
+        class="mark-line m-0 flex flex-wrap items-center gap-x-space-2 gap-y-space-1 py-space-1 type-meta text-tx-2"
         role="status"
       >
         <Spinner aria-hidden="true" box="small" />

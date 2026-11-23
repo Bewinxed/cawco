@@ -6,7 +6,7 @@
   floating surface), at its real size, 1 CSS px per px, centred on both axes
   where it is narrower than the card. What marks a piece's edge is its own:
   a framed page or a picture takes the kit's image edge inside its box
-  (`outline-ink-strong/10`, Preview.svelte, Canvas.svelte, Image.svelte); a
+  (`outline-tx/10`, Preview.svelte, Canvas.svelte, Image.svelte); a
   drawing stands on the card's ground (host.css, `[data-slot=diagram]`).
   A piece that knows its own width (`picture`: a Preview's design, a
   canvas's drawing, a picture's or a diagram's own) is hugged: this box is
@@ -115,7 +115,7 @@
       data-slot="media-foot"
     >
       <span
-        class="type-meta min-w-0 text-ink-muted wrap-anywhere"
+        class="type-meta min-w-0 text-tx-2 wrap-anywhere"
         data-slot="media-caption">{caption ?? ""}</span
       >{@render action?.()}
     </figcaption>
@@ -123,7 +123,7 @@
   {#if said}
     <p
       class={[
-        "type-meta text-status-fail wrap-anywhere",
+        "type-meta text-red wrap-anywhere",
         picture !== undefined && "max-phone:in-data-bleeds:well-bleed-words",
       ]}
       role="status"

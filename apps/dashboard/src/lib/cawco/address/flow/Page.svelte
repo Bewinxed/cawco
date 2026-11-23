@@ -253,13 +253,13 @@
 <!-- This mount's one tooltip provider, at its root (main.ts). -->
 <TooltipProvider>
   <div
-    class="grid min-h-dvh grid-cols-1 content-start gap-space-6 bg-surface-page p-space-6"
+    class="grid min-h-dvh grid-cols-1 content-start gap-space-6 bg-bg p-space-6"
     data-preview="address"
   >
     <header class="grid max-w-measure gap-space-4" data-slot="bar">
       <div class="grid gap-space-1">
-        <h1 class="m-0 type-title text-ink-strong">Open CawCo by one word</h1>
-        <p class="m-0 type-body text-pretty text-ink-muted">
+        <h1 class="m-0 type-title text-tx">Open CawCo by one word</h1>
+        <p class="m-0 type-body text-pretty text-tx-2">
           One tray, at its real size: in Needs you, over Configure › Devices,
           and as a phone's sheet. Its own buttons move it on; a waiting state
           moves on by itself, as the hub would, and where it stands is kept
@@ -273,7 +273,7 @@
       data-slot="frames"
     >
       <figure class="m-0 grid min-w-0 grid-cols-1 content-start gap-space-3">
-        <figcaption class="type-meta text-ink-muted">
+        <figcaption class="type-meta text-tx-2">
           Desk · Needs you, onboarding
         </figcaption>
         <DeskNeeds bind:this={needs} {flow} />
@@ -281,13 +281,13 @@
       <figure
         class="m-0 grid min-w-0 grow basis-120 grid-cols-1 content-start gap-space-3"
       >
-        <figcaption class="type-meta text-ink-muted">
+        <figcaption class="type-meta text-tx-2">
           Desk · Configure › Devices
         </figcaption>
         <DeskSettings bind:this={settings} {flow} />
       </figure>
       <figure class="m-0 grid min-w-0 grid-cols-1 content-start gap-space-3">
-        <figcaption class="type-meta text-ink-muted">Phone · 390</figcaption>
+        <figcaption class="type-meta text-tx-2">Phone · 390</figcaption>
         <PhoneSheet bind:this={phone} {flow} />
       </figure>
     </main>

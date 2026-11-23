@@ -74,7 +74,7 @@
       aria-selected={one.value === value}
       class={menuItemVariants({
         class:
-          "flex w-full items-center gap-space-2 px-space-3 py-space-1 text-start type-label text-ink-strong select-none focus-inset",
+          "flex w-full items-center gap-space-2 px-space-3 py-space-1 text-start type-label text-tx select-none focus-inset",
       })}
       data-menu-item
       data-slot="item"
@@ -84,7 +84,7 @@
     >
       {#if glyphs}
         <span
-          class="grid size-icon-md flex-none place-items-center text-ink-muted"
+          class="grid size-icon-md flex-none place-items-center text-tx-2"
           data-box
         >
           {#if one.glyph}
@@ -104,8 +104,7 @@
       {/if}
       <span class="min-w-0 flex-1 text-pretty">{one.name}</span>
       {#if one.meta}
-        <span class="type-meta whitespace-nowrap text-ink-muted num"
-          >{one.meta}</span
+        <span class="type-meta whitespace-nowrap text-tx-2 num">{one.meta}</span
         >
       {/if}
       <span class="grid size-icon-md flex-none place-items-center" data-box>

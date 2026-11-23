@@ -40,17 +40,17 @@
     ondismiss={() => ondismiss(notices.map((one) => one.id))}
   >
     {#snippet lead()}
-      <span data-slot="glyph" class="grid place-items-center text-ink-muted"
+      <span data-slot="glyph" class="grid place-items-center text-tx-2"
         ><IconAccounts aria-hidden="true" class="size-icon-md" /></span
       >
     {/snippet}
-    <h3 data-slot="head" class="type-label m-0 pe-(--x-room) text-ink-strong">
+    <h3 data-slot="head" class="type-label m-0 pe-(--x-room) text-tx">
       Sessions rebalanced <span
         data-slot="count"
-        class="type-meta num text-ink-muted">{notices.length}</span
+        class="type-meta num text-tx-2">{notices.length}</span
       >
     </h3>
-    <p data-slot="explainer" class="type-meta m-0 text-ink-muted">
+    <p data-slot="explainer" class="type-meta m-0 text-tx-2">
       An account came, so sessions moved off accounts about to run out and held
       ones were placed again.
     </p>
@@ -77,11 +77,10 @@
           {/snippet}
           <span
             data-slot="title"
-            class="type-body truncate pe-(--x-room) text-ink-strong"
-            >{words.title}</span
+            class="type-body truncate pe-(--x-room) text-tx">{words.title}</span
           >
           {#each words.lines as line, n (n)}
-            <span class="type-meta wrap-anywhere text-ink-muted">{line}</span>
+            <span class="type-meta wrap-anywhere text-tx-2">{line}</span>
           {/each}
         </NoticeRow>
       </li>

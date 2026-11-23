@@ -853,9 +853,7 @@
       in:crossIn
       out:crossOut
     >
-      <p
-        class="m-0 min-w-0 flex-initial type-body wrap-anywhere text-status-fail"
-      >
+      <p class="m-0 min-w-0 flex-initial type-body wrap-anywhere text-red">
         {failure(slot)}
       </p>
       {#if again}
@@ -873,7 +871,7 @@
   {:else if pending(slot) && !(slot === "model" && ridesMove)}
     <p
       data-slot="feedback"
-      class="mark-line mt-space-2 flex items-start gap-space-2 type-body wrap-anywhere text-ink-muted"
+      class="mark-line mt-space-2 flex items-start gap-space-2 type-body wrap-anywhere text-tx-2"
       role="status"
       in:crossIn
       out:crossOut
@@ -887,15 +885,12 @@
     <p
       data-feedback
       data-slot="done"
-      class="mark-line mt-space-2 flex items-center gap-space-1 type-body wrap-anywhere text-ink-muted"
+      class="mark-line mt-space-2 flex items-center gap-space-1 type-body wrap-anywhere text-tx-2"
       role="status"
       in:crossIn
       out:crossOut
     >
-      <IconCheck
-        aria-hidden="true"
-        class="size-icon-md flex-none text-status-done"
-      />
+      <IconCheck aria-hidden="true" class="size-icon-md flex-none text-green" />
       <span>{DONE[slot]()}</span>
     </p>
   {/if}
@@ -903,20 +898,20 @@
 
 <div
   data-slot="session-details"
-  class="ns-theme flex max-h-inherit min-h-0 w-full min-w-0 flex-col text-base font-normal text-ink-strong"
+  class="ns-theme flex max-h-inherit min-h-0 w-full min-w-0 flex-col text-base font-normal text-tx"
   bind:this={rootEl}
   style:--dir={dir}
 >
   <div
     data-slot="details-body"
-    class="min-h-0 touch-pan-y overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
+    class="min-h-0 touch-pan-y overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-ui-2 scrollbar-track-transparent"
   >
     <!-- The head is the tab's own surface, continued through the junction
          where the card hangs from the tab: the folder's label band. A
          finger's vertical drag on the head is the card's own (a swipe up
          folds it back into its tab, PaneTabs `swipeCardShut`), never the
          body's scroll, which would take the touch away from it. -->
-    <div data-slot="head" class="touch-pan-x bg-surface-recess">
+    <div data-slot="head" class="touch-pan-x bg-bg-2">
       <div
         class="flex items-start gap-space-3 px-space-4 pt-space-4 pb-space-1"
       >
@@ -927,7 +922,7 @@
           <!-- Wraps; only a title past three lines is cut. -->
           <h2
             id={`${uid}-title`}
-            class="m-0 line-clamp-3 min-w-0 text-lg font-medium leading-base text-pretty wrap-anywhere text-ink-strong"
+            class="m-0 line-clamp-3 min-w-0 text-lg font-medium leading-base text-pretty wrap-anywhere text-tx"
             {title}
           >
             <MorphText text={title} wrap />
@@ -964,7 +959,7 @@
       <p
         data-slot="meta"
         class={[
-          "m-0 flex flex-wrap items-center gap-space-2 px-space-4 pt-0 text-sm font-normal leading-base text-ink-muted",
+          "m-0 flex flex-wrap items-center gap-space-2 px-space-4 pt-0 text-sm font-normal leading-base text-tx-2",
           contextRead ? "pb-0" : "pb-space-3",
         ]}
         bind:this={metaEl}
@@ -981,7 +976,7 @@
           <button
             data-slot="cwd"
             aria-label={`Copy working directory ${cwd}`}
-            class="select-none min-w-0 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-base text-start wrap-anywhere text-inherit hover:text-ink-strong active:opacity-72"
+            class="select-none min-w-0 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-base text-start wrap-anywhere text-inherit hover:text-tx active:opacity-72"
             onclick={() => copy("Working directory", cwd)}
             title={cwd}
             type="button"
@@ -1029,9 +1024,7 @@
            follows the meters by space alone. The head's edge is the hairline
            at the top of the controls. No pad at the foot: the held feedback
            line is the space under the group. -->
-      <div
-        class="relative border-t border-t-border-hairline px-space-4 pt-space-4 pb-0"
-      >
+      <div class="relative border-t border-t-ui px-space-4 pt-space-4 pb-0">
         <!-- The four settings (model, effort, permission, account) as one
              group: the same chip height and the same gap across and down,
              wrapping as a unit when the card runs out of row. The model chip
@@ -1203,7 +1196,7 @@
             <p
               data-slot="feedback"
               data-resumes
-              class="mt-space-2 type-body wrap-anywhere text-ink-muted"
+              class="mt-space-2 type-body wrap-anywhere text-tx-2"
               in:crossIn
               out:crossOut
             >
@@ -1222,13 +1215,13 @@
   {#if session?.mcp}
     <div
       data-slot="stats"
-      class="flex flex-none items-center border-t border-t-border-hairline px-space-4 pt-space-3 pb-0 text-sm font-normal leading-base num text-ink-strong"
+      class="flex flex-none items-center border-t border-t-ui px-space-4 pt-space-3 pb-0 text-sm font-normal leading-base num text-tx"
       bind:this={statsEl}
       {@attach morph()}
     >
       <a
         data-slot="tools"
-        class="inline-flex items-center text-ink-strong hover:text-ink-strong"
+        class="inline-flex items-center text-tx hover:text-tx"
         href="/config/mcp">{@render figure(`${session.mcp.length} MCP`)}</a
       >
     </div>

@@ -267,7 +267,7 @@
       status={steps.machine.state === "todo" ? "sleeping" : "ready"}
     />
     {#if arrived && machineName}
-      <figcaption class="type-body text-center text-ink-muted">
+      <figcaption class="type-body text-center text-tx-2">
         {firstRunWords.arrived(machineName)}
       </figcaption>
     {/if}
@@ -276,17 +276,14 @@
   <!-- mark-line: the folder glyph heads the title and its meta as a pair in the lead column; the steps below are rows of their own. -->
   <div
     data-slot="first-run"
-    class="grid grid-cols-(--row-cols) gap-x-space-3 rounded-lg bg-surface-raised p-space-4 shadow-sm"
+    class="grid grid-cols-(--row-cols) gap-x-space-3 rounded-lg bg-bg p-space-4 shadow-sm"
     style:--row-cols="var(--spacing-row-compact) minmax(0, 1fr)"
   >
     <span class="mark-cell row-span-2"
-      ><IconFolder
-        aria-hidden="true"
-        class="size-icon-md text-ink-muted"
-      /></span
+      ><IconFolder aria-hidden="true" class="size-icon-md text-tx-2" /></span
     >
-    <h2 class="m-0 type-label text-ink-strong">{firstRunWords.title}</h2>
-    <span class="type-meta num text-ink-muted"
+    <h2 class="m-0 type-label text-tx">{firstRunWords.title}</h2>
+    <span class="type-meta num text-tx-2"
       >{firstRunWords.meta(doneCount, list.length)}</span
     >
     <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->

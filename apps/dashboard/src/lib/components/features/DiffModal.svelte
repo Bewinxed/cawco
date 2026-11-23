@@ -81,7 +81,7 @@
   >
     <header
       data-slot="head"
-      class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-2 py-space-3 ps-space-4 pe-13 border-b border-b-border-hairline"
+      class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-2 py-space-3 ps-space-4 pe-13 border-b border-b-ui"
     >
       <div class="flex min-w-0 items-center gap-3">
         <div class="flex min-w-0 items-center gap-2">
@@ -96,8 +96,8 @@
           />
         </div>
         <div data-slot="num" class="num flex items-center gap-2 type-meta">
-          <span class="text-status-done">+{stats.additions}</span>
-          <span class="text-status-fail">-{stats.deletions}</span>
+          <span class="text-green">+{stats.additions}</span>
+          <span class="text-red">-{stats.deletions}</span>
         </div>
       </div>
       <ToggleGroup.Root
@@ -126,7 +126,7 @@
           class="min-h-full"
           style:--diffs-font-size="var(--text-base)"
           style:--diffs-line-height="var(--leading-base)"
-          style:--diffs-bg-separator-override="var(--color-surface-recess)"
+          style:--diffs-bg-separator-override="var(--color-bg-2)"
           in:crossIn
           out:crossOut
           {@attach drawn(diffStyle)}

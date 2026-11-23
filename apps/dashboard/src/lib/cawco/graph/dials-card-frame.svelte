@@ -82,9 +82,7 @@
   const surfaceLevel = rise();
 </script>
 
-<div
-  class="flex justify-center bg-surface-page px-space-3 pt-space-4 pb-space-6"
->
+<div class="flex justify-center bg-bg px-space-3 pt-space-4 pb-space-6">
   <div
     style:--surface-level={surfaceLevel}
     class={floatingSurface({

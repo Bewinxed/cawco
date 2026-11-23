@@ -74,7 +74,7 @@
 
 <li
   data-slot={slot}
-  class="flex flex-col gap-space-2 py-space-2 not-first:border-t not-first:border-t-border-hairline"
+  class="flex flex-col gap-space-2 py-space-2 not-first:border-t not-first:border-t-ui"
 >
   <div class="relative flex flex-wrap items-center gap-x-space-3 gap-y-space-2">
     <MachineRow
@@ -130,7 +130,7 @@
   <MachineAway away={copies.waits.away(`settle:${at}`)} />
   {#if detail}
     <pre
-      class="max-h-24 overflow-auto rounded-sm bg-surface-raised px-space-2 py-space-2 font-mono text-sm wrap-anywhere whitespace-pre-wrap"
+      class="max-h-24 overflow-auto rounded-sm bg-bg px-space-2 py-space-2 font-mono text-sm wrap-anywhere whitespace-pre-wrap"
       in:unfold
       out:unfold>{detail}</pre>
   {/if}
@@ -153,7 +153,7 @@
         {:else if copies.peeking[at]}
           <p
             data-slot="note"
-            class="mark-line flex items-center gap-space-2 type-meta max-w-measure text-ink-muted"
+            class="mark-line flex items-center gap-space-2 type-meta max-w-measure text-tx-2"
             role="status"
             in:crossIn
             out:crossOut
@@ -161,18 +161,13 @@
             <Spinner class="shrink-0" /><span>{reading}</span>
           </p>
         {:else if copies.unread[at]}
-          <p
-            class="type-meta text-status-attn"
-            role="alert"
-            in:crossIn
-            out:crossOut
-          >
+          <p class="type-meta text-orange" role="alert" in:crossIn out:crossOut>
             {copies.unread[at]}
           </p>
         {:else if copies.copies[at] === null}
           <p
             data-slot="note"
-            class="type-meta max-w-measure text-ink-muted"
+            class="type-meta max-w-measure text-tx-2"
             in:crossIn
             out:crossOut
           >

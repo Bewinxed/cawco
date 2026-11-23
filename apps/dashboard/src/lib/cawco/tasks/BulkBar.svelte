@@ -114,7 +114,7 @@
   data-slot="bulk"
   data-safe-bottom
   aria-label="Selected tasks"
-  class="fixed inset-x-space-3 bottom-(--off-bottom) z-(--z) flex min-h-(--min-h) w-fit flex-wrap items-center justify-center gap-space-1 mx-auto border border-border-control rounded-lg bg-surface-raised shadow-lg py-space-1 pr-space-1 pl-space-3 max-phone:bottom-(--off-bottom-phone)"
+  class="fixed inset-x-space-3 bottom-(--off-bottom) z-(--z) flex min-h-(--min-h) w-fit flex-wrap items-center justify-center gap-space-1 mx-auto border border-ui-2 rounded-lg bg-bg shadow-lg py-space-1 pr-space-1 pl-space-3 max-phone:bottom-(--off-bottom-phone)"
   role="toolbar"
   style:--z="calc(var(--layer-bar) + 10)"
   style:--off-bottom="calc(var(--spacing-space-4) + var(--safe-bottom, 0px))"
@@ -124,12 +124,12 @@
   {#if run}
     <!-- The change in flight, drawn where it was asked for. -->
     <span
-      class="mark-line inline-flex items-center gap-space-2 pe-space-2 type-label text-ink-strong"
+      class="mark-line inline-flex items-center gap-space-2 pe-space-2 type-label text-tx"
       role="status"
     >
       <TaskRing done={run.done} size="sm" total={run.total} />
       {#if run.failed}
-        <span data-slot="failed" class="text-status-fail"
+        <span data-slot="failed" class="text-red"
           >{run.verb} stopped at {run.failed.id}: {run.failed.text}</span
         >
       {:else}
@@ -154,7 +154,7 @@
       >
     {/if}
   {:else}
-    <span data-slot="count" class="pe-space-2 type-label text-ink-strong"
+    <span data-slot="count" class="pe-space-2 type-label text-tx"
       ><span data-slot="num" class="num">{picked.length}</span> selected</span
     >
     <DropdownMenu.Root>
@@ -262,7 +262,7 @@
         >
           {#if running.length > 0}
             <!-- What decides it: the work Drop would stop, by name. -->
-            <p class="type-meta text-status-attn">
+            <p class="type-meta text-orange">
               {running.length === 1
                 ? "This one is"
                 : `These ${running.length} are`}
@@ -274,16 +274,16 @@
               {#each running as task (task.id)}
                 <li class="flex min-w-0 items-baseline gap-space-2">
                   <span
-                    class="flex-none type-meta font-(family-name:--font-mono) liga-none text-ink-muted"
+                    class="flex-none type-meta font-(family-name:--font-mono) liga-none text-tx-2"
                     >{task.id}</span
                   >
-                  <span class="min-w-0 truncate type-label text-ink-strong"
+                  <span class="min-w-0 truncate type-label text-tx"
                     >{task.title}</span
                   >
                   {#if task.attempts[0]}
                     <a
                       data-slot="session"
-                      class="ms-auto flex-none type-meta text-accent-ink"
+                      class="ms-auto flex-none type-meta text-accent"
                       href="/session/{task.attempts[0].instanceId}"
                       >its session</a
                     >
@@ -292,7 +292,7 @@
               {/each}
             </ul>
           {/if}
-          <label class="type-label text-ink-strong" for="bulk-reason"
+          <label class="type-label text-tx" for="bulk-reason"
             >Why {picked.length === 1 ? "it's" : `these ${picked.length} are`} dropped</label
           >
           <Input

@@ -26,7 +26,7 @@
   } = $props();
 
   const hue = $derived(
-    stage.color ? STAGE_HUES[stage.color] : "var(--color-ink-muted)"
+    stage.color ? STAGE_HUES[stage.color] : "var(--color-tx-2)"
   );
 </script>
 
@@ -73,7 +73,7 @@
     >
       <span
         aria-hidden="true"
-        class="size-icon-sm rounded-pill inset-ring inset-ring-border-strong"
+        class="size-icon-sm rounded-pill inset-ring inset-ring-tx-2"
         data-box
       ></span>
     </DropdownMenu.RadioItem>

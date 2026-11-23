@@ -43,7 +43,7 @@
 
 <!-- A sheet's stage on its way: the project's own dev toolchain (Vite, Astro or Nuxt), started or woken by the daemon. -->
 <p
-  class="mark-line mt-space-3 mx-0 mb-0 flex items-start gap-space-2 text-ink-muted type-meta animate-fade-in anim-delay-loop group-data-ready/cover:animation-paused group-data-ready/cover:after:animation-paused"
+  class="mark-line mt-space-3 mx-0 mb-0 flex items-start gap-space-2 text-tx-2 type-meta animate-fade-in anim-delay-loop group-data-ready/cover:animation-paused group-data-ready/cover:after:animation-paused"
   data-slot="cover-state"
 >
   <span class="mark-cell"><LiveDot /></span><span class="min-w-0"

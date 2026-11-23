@@ -499,7 +499,7 @@
 </script>
 
 <div
-  class="@container/shell contain-layout relative flex aspect-16/10 w-full flex-col bg-surface-sunk text-ink-strong"
+  class="@container/shell contain-layout relative flex aspect-16/10 w-full flex-col bg-bg-2 text-tx"
   data-hang-layer={layer.id}
   data-working-area
   style:--shell-h={`${shellHeight}px`}
@@ -514,7 +514,7 @@
 >
   <div
     data-slot="leaf"
-    class="@container/leaf relative flex min-h-0 min-w-0 flex-auto flex-col overflow-hidden bg-surface-recess"
+    class="@container/leaf relative flex min-h-0 min-w-0 flex-auto flex-col overflow-hidden bg-bg-2"
   >
     <PaneTabs {leaf} />
     <div

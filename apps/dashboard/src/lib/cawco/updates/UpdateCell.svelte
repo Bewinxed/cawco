@@ -39,7 +39,7 @@
       class="flex flex-wrap items-center gap-space-2 type-label motion-safe:animate-cell-swap motion-reduce:animate-fade-in motion-reduce:anim-dur-fast"
     >
       {#if cell.plain}
-        <span class="type-meta text-ink-muted">{cell.text}</span>
+        <span class="type-meta text-tx-2">{cell.text}</span>
       {:else if cell.text}
         {#if cell.icon === "spinner"}
           <span class="mark-line inline-flex items-center gap-space-2">
@@ -49,9 +49,7 @@
         {:else}
           <Badge size="cell-tall" variant={cell.fail ? "destructive" : "ghost"}>
             {#if cell.fail}
-              <span
-                class="size-1.5 shrink-0 rounded-pill bg-status-fail"
-                data-box
+              <span class="size-1.5 shrink-0 rounded-pill bg-red" data-box
               ></span>
             {:else if cell.icon === "clock"}
               <IconClock class="size-icon-md shrink-0" />
@@ -62,7 +60,7 @@
           </Badge>
         {/if}
         {#if cell.meta}
-          <span data-num data-slot="meta" class="num type-meta text-ink-muted"
+          <span data-num data-slot="meta" class="num type-meta text-tx-2"
             >{cell.meta}</span
           >
         {/if}
@@ -108,7 +106,7 @@
   {/key}
   {#if reading && cell.buttons.includes("error")}
     <pre
-      class="mt-space-2 max-h-40 overflow-auto rounded-xs border border-border-control bg-surface-sunk p-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong"
+      class="mt-space-2 max-h-40 overflow-auto rounded-xs border border-ui-2 bg-bg-2 p-space-2 type-code wrap-anywhere whitespace-pre-wrap text-tx"
       transition:unfold>{machine.binaryUpdate?.error ??
         "The machine did not say why."}</pre>
   {/if}

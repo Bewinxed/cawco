@@ -13,7 +13,7 @@
    * scrim leaving while its dialog still says it is open.
    */
   export const scrimVariants = tv({
-    base: "bg-surface-page/72 backdrop-blur-scrim data-[leaving]:animate-fade-out data-closed:animate-fade-out data-open:animate-fade-in data-open:anim-dur-slow data-[stacked]:bg-transparent data-[stacked]:backdrop-filter-none",
+    base: "bg-bg/72 backdrop-blur-scrim data-[leaving]:animate-fade-out data-closed:animate-fade-out data-open:animate-fade-in data-open:anim-dur-slow data-[stacked]:bg-transparent data-[stacked]:backdrop-filter-none",
   });
 </script>
 

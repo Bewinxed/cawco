@@ -248,8 +248,7 @@
     <Table.Cell variant="ledger-stacks" class="@max-phone/table:col-span-full"
       ><span
         data-slot="name"
-        class="type-label block truncate text-ink-strong no-underline"
-        >{label}</span
+        class="type-label block truncate text-tx no-underline">{label}</span
       ></Table.Cell
     >
     <Table.Cell
@@ -276,7 +275,7 @@
 
 <section aria-label="{projectName}'s spend" class="flex flex-col gap-space-4">
   {#if refused && !spend}
-    <p data-slot="note" class="type-meta text-ink-muted" role="alert">
+    <p data-slot="note" class="type-meta text-tx-2" role="alert">
       The spend for {projectName} could not be read: {refused}
     </p>
   {:else if !spend}
@@ -307,7 +306,7 @@
         >
           {#snippet action()}
             {#if onCapLine}
-              <span class="type-meta shrink grow basis-full text-ink-muted"
+              <span class="type-meta shrink grow basis-full text-tx-2"
                 >{onCapLine}</span
               >
             {/if}
@@ -337,13 +336,13 @@
                     saveCap();
                   }}
                 >
-                  <p data-slot="note" class="type-meta text-ink-muted">
+                  <p data-slot="note" class="type-meta text-tx-2">
                     What {projectName} may spend, its Caw and its attempts together.
                     Leave it empty for no limit.
                   </p>
                   <label
                     data-slot="project-spend-field"
-                    class="type-meta flex flex-col gap-space-1 text-ink-muted"
+                    class="type-meta flex flex-col gap-space-1 text-tx-2"
                     >Dollars
                     <Input
                       inputmode="decimal"
@@ -353,7 +352,7 @@
                   >
                   <div
                     data-slot="project-spend-field"
-                    class="type-meta flex flex-col gap-space-1 text-ink-muted"
+                    class="type-meta flex flex-col gap-space-1 text-tx-2"
                   >
                     <span>Each</span>
                     <Tabs
@@ -372,7 +371,7 @@
                   </div>
                   <label
                     data-slot="project-spend-field"
-                    class="type-meta flex flex-col gap-space-1 text-ink-muted"
+                    class="type-meta flex flex-col gap-space-1 text-tx-2"
                     for="cap-on"
                     >When it is reached
                     <NativeSelect
@@ -397,7 +396,7 @@
                   {#if capRefused}
                     <p
                       data-slot="refused"
-                      class="type-meta text-status-fail"
+                      class="type-meta text-red"
                       role="alert"
                       in:appear
                     >
@@ -450,13 +449,13 @@
                     saveBudget();
                   }}
                 >
-                  <p data-slot="note" class="type-meta text-ink-muted">
+                  <p data-slot="note" class="type-meta text-tx-2">
                     What one attempt at a task may spend before it stops. Leave
                     a field empty for no limit.
                   </p>
                   <label
                     data-slot="project-spend-field"
-                    class="type-meta flex flex-col gap-space-1 text-ink-muted"
+                    class="type-meta flex flex-col gap-space-1 text-tx-2"
                     >Dollars
                     <Input
                       inputmode="decimal"
@@ -466,7 +465,7 @@
                   >
                   <label
                     data-slot="project-spend-field"
-                    class="type-meta flex flex-col gap-space-1 text-ink-muted"
+                    class="type-meta flex flex-col gap-space-1 text-tx-2"
                     >Turns
                     <Input
                       inputmode="numeric"
@@ -476,7 +475,7 @@
                   >
                   <label
                     data-slot="project-spend-field"
-                    class="type-meta flex flex-col gap-space-1 text-ink-muted"
+                    class="type-meta flex flex-col gap-space-1 text-tx-2"
                     >Minutes
                     <Input
                       inputmode="numeric"
@@ -487,7 +486,7 @@
                   {#if budgetRefused}
                     <p
                       data-slot="refused"
-                      class="type-meta text-status-fail"
+                      class="type-meta text-red"
                       role="alert"
                       in:appear
                     >
@@ -515,7 +514,7 @@
              the This month tile. -->
         <div
           data-slot="ledger"
-          class="overflow-hidden rounded-lg bg-surface-raised shadow-sm"
+          class="overflow-hidden rounded-lg bg-bg shadow-sm"
         >
           <!-- Under 640px each row is a card: its name across it, then its
                count, spend and last word; each band stays as its section's
@@ -540,13 +539,13 @@
                     >
                       <a
                         data-slot="name"
-                        class="type-label block truncate text-ink-strong no-underline after:absolute after:inset-0"
+                        class="type-label block truncate text-tx no-underline after:absolute after:inset-0"
                         href="/project/{encodeURIComponent(
                           projectId
                         )}?task={attempt.taskId}"
                         >{attempt.title}<span
                           data-slot="id"
-                          class="type-code liga-none ms-space-2 text-ink-subtle"
+                          class="type-code liga-none ms-space-2 text-tx-2"
                           >{attempt.taskId}</span
                         ></a
                       >
@@ -593,7 +592,7 @@
           </Table.Root>
         </div>
       {:else}
-        <p data-slot="note" class="type-meta text-ink-muted">
+        <p data-slot="note" class="type-meta text-tx-2">
           No spend on {projectName} yet. The first wake or attempt shows up here.
         </p>
       {/if}

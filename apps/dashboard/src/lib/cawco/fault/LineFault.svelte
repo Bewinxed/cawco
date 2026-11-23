@@ -70,7 +70,7 @@
     >
       <p
         data-strip={strip || undefined}
-        class="m-0 min-w-0 flex-auto text-pretty text-ink-strong type-label data-strip:flex-initial"
+        class="m-0 min-w-0 flex-auto text-pretty text-tx type-label data-strip:flex-initial"
       >
         {again
           ? regionFaultWords.stillCantShow(what)

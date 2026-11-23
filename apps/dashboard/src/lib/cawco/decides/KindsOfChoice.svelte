@@ -111,7 +111,7 @@
   {@const problem = problemOf(step)}
   {#if problem}
     <p
-      class="m-0 type-meta text-status-fail text-pretty"
+      class="m-0 type-meta text-red text-pretty"
       data-problem
       id="{uid}-{step}-problem"
       role="alert"
@@ -181,9 +181,9 @@
     <section
       aria-labelledby="{uid}-add"
       bind:this={steps}
-      class="@container/member-setup mb-space-2 flex min-w-0 flex-col rounded-sm bg-surface-recess px-space-3 pt-space-3"
+      class="@container/member-setup mb-space-2 flex min-w-0 flex-col rounded-sm bg-bg-2 px-space-3 pt-space-3"
     >
-      <h3 class="m-0 type-label font-medium text-ink-strong" id="{uid}-add">
+      <h3 class="m-0 type-label font-medium text-tx" id="{uid}-add">
         {decidesWords.addKind}
       </h3>
       {#each shownSteps as step (step)}
@@ -200,7 +200,7 @@
       {/each}
       <RowFault again={() => who.addKind()} reason={addFault?.reason} />
       <div
-        class="flex min-w-0 items-center justify-end gap-space-2 border-t border-border-hairline py-space-3"
+        class="flex min-w-0 items-center justify-end gap-space-2 border-t border-ui py-space-3"
       >
         <Button
           label={decidesWords.cancel}
@@ -248,14 +248,14 @@
   >
     <header class="flex min-w-0 items-start gap-x-space-3 p-space-3">
       <div class="flex min-w-0 flex-auto flex-col gap-space-1">
-        <h2 class="m-0 type-title text-balance text-ink-strong" id={headId}>
+        <h2 class="m-0 type-title text-balance text-tx" id={headId}>
           {decidesWords.kindsHead}
         </h2>
-        <p class="m-0 max-w-measure type-meta text-ink-muted text-pretty">
+        <p class="m-0 max-w-measure type-meta text-tx-2 text-pretty">
           {decidesWords.kindsIntro}
         </p>
         <p
-          class="mark-line m-0 flex items-center gap-x-space-1 type-meta text-ink-muted"
+          class="mark-line m-0 flex items-center gap-x-space-1 type-meta text-tx-2"
         >
           <IconPen aria-hidden="true" class="size-icon-sm flex-none" />
           <span>{decidesWords.addedKey}</span>
@@ -300,7 +300,7 @@
   <Button {...props} size="sm" variant="secondary">
     <span>{decidesWords.kindsHead}</span>
     {#if who.read.state === "read"}
-      <span class="text-ink-muted tabular-nums" aria-hidden="true"
+      <span class="text-tx-2 tabular-nums" aria-hidden="true"
         >{who.kinds.length}</span
       >
       <span class="sr-only">, {decidesWords.kindsCount(who.kinds.length)}</span>
@@ -346,7 +346,7 @@
     </Popover.Root>
   {/if}
   {#if parked}
-    <span class="type-meta text-ink-muted">{decidesWords.kindUnsaved}</span>
+    <span class="type-meta text-tx-2">{decidesWords.kindUnsaved}</span>
   {/if}
 </div>
 

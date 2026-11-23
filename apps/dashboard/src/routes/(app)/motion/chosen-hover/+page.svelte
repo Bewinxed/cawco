@@ -42,14 +42,14 @@
 
   const projects: ProjectItem[] = [
     {
-      hue: "var(--color-mark-4)",
+      hue: "var(--color-cyan)",
       id: "p1",
       machineId: "m1",
       name: "cockpit",
       path: "~/cockpit",
     },
     {
-      hue: "var(--color-mark-1)",
+      hue: "var(--color-orange)",
       id: "p2",
       machineId: "m1",
       name: "landing",
@@ -58,7 +58,7 @@
   ];
   const machines: MachineItem[] = [
     {
-      hue: "var(--color-mark-4)",
+      hue: "var(--color-cyan)",
       icon: IconLaptop,
       id: "m1",
       load: "2 sessions",
@@ -67,7 +67,7 @@
       os: "macOS",
     },
     {
-      hue: "var(--color-mark-1)",
+      hue: "var(--color-orange)",
       icon: IconServer,
       id: "m2",
       load: "idle",
@@ -147,7 +147,7 @@
 <svelte:head><title>Chosen and hover | CawCo</title></svelte:head>
 <main
   data-bench
-  class="flex flex-wrap items-start gap-space-6 p-space-8 text-ink-strong"
+  class="flex flex-wrap items-start gap-space-6 p-space-8 text-tx"
 >
   <section class="min-w-0" data-probe="lifetime">
     <LifetimeChip
@@ -282,7 +282,7 @@
             <p
               class={[
                 "type-body",
-                said.by === "person" ? "text-ink-strong" : "text-ink-muted",
+                said.by === "person" ? "text-tx" : "text-tx-2",
               ]}
             >
               {said.text}
@@ -293,8 +293,8 @@
       <Resizable.Handle look="split" />
       <Resizable.Pane defaultSize={50} look="split">
         <div class="flex min-w-0 flex-1 flex-col gap-space-1 p-space-3">
-          <p class="type-label text-ink-strong">Preview</p>
-          <p class="type-meta text-ink-muted">{pins[1]?.thread[0]?.text}</p>
+          <p class="type-label text-tx">Preview</p>
+          <p class="type-meta text-tx-2">{pins[1]?.thread[0]?.text}</p>
         </div>
       </Resizable.Pane>
     </Resizable.PaneGroup>

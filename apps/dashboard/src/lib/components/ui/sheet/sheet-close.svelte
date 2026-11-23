@@ -7,7 +7,7 @@
    * symbol in its glass group (The Title Bars Follow Liquid Glass Rule).
    */
   const SHEET_CLOSE =
-    "touch-hit focus-inset inline-flex size-row flex-none items-center justify-center rounded-sm bg-transparent text-ink-muted [--hit-edge:1px] transition-control hover:bg-surface-hover hover:text-ink-strong [&_svg]:size-space-4";
+    "touch-hit focus-inset inline-flex size-row flex-none items-center justify-center rounded-sm bg-transparent text-tx-2 [--hit-edge:1px] transition-control hover:bg-ui hover:text-tx [&_svg]:size-space-4";
 </script>
 
 <script lang="ts">

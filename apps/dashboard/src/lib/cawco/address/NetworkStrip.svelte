@@ -22,35 +22,35 @@
 <figure class="m-0 grid gap-space-2" data-slot="network-strip">
   <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list). -->
   <ul
-    class="relative m-0 flex list-none flex-wrap items-center justify-between gap-space-2 p-0 before:absolute before:inset-x-space-4 before:top-1/2 before:h-px before:bg-border-control"
+    class="relative m-0 flex list-none flex-wrap items-center justify-between gap-space-2 p-0 before:absolute before:inset-x-space-4 before:top-1/2 before:h-px before:bg-ui-2"
     role="list"
   >
     <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
     <li
-      class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill border border-border-control bg-surface-raised px-space-2 py-space-1 type-meta text-ink-strong"
+      class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill border border-ui-2 bg-bg px-space-2 py-space-1 type-meta text-tx"
     >
-      <IconLaptop aria-hidden="true" class="size-icon-md text-ink-muted" />
+      <IconLaptop aria-hidden="true" class="size-icon-md text-tx-2" />
       <span class="min-w-0 wrap-anywhere">obelisk</span>
     </li>
     <li
-      class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill border border-accent bg-accent-wash px-space-2 py-space-1 type-meta text-accent-ink"
+      class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill border border-accent bg-ui px-space-2 py-space-1 type-meta text-accent"
     >
       <IconPlus aria-hidden="true" class="size-icon-sm" />
       <span class="whitespace-nowrap">cawco</span>
     </li>
     <li
-      class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill border border-border-control bg-surface-raised px-space-2 py-space-1 type-meta text-ink-strong"
+      class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill border border-ui-2 bg-bg px-space-2 py-space-1 type-meta text-tx"
     >
-      <IconPhone aria-hidden="true" class="size-icon-md text-ink-muted" />
+      <IconPhone aria-hidden="true" class="size-icon-md text-tx-2" />
       <span class="min-w-0 wrap-anywhere">your phone</span>
     </li>
   </ul>
   <figcaption
-    class="grid gap-space-1 type-meta text-center text-pretty text-ink-muted"
+    class="grid gap-space-1 type-meta text-center text-pretty text-tx-2"
   >
     <span>{network} · <span class="whitespace-nowrap">{domain}</span></span>
     {#if taken}
-      <span class="text-ink-strong" data-slot="taken"
+      <span class="text-tx" data-slot="taken"
         >A device named cawco is already on <span class="whitespace-nowrap"
           >{domain}</span
         >, so this one gets another name as it joins.</span

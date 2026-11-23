@@ -56,7 +56,7 @@
   };
 </script>
 
-<div class="w-full min-w-0 bg-surface-recess p-space-4" {@attach hold}>
+<div class="w-full min-w-0 bg-bg-2 p-space-4" {@attach hold}>
   <Suggestions
     label={set === "decisions" ? "Choices to ask Caw for" : "Things to ask Caw"}
     {loading}

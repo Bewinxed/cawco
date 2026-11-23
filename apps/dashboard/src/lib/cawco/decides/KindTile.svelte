@@ -88,9 +88,9 @@
   /** Its surface: raised while its list is open, deeper when this project set it. */
   const surface = $derived.by(() => {
     if (handing) {
-      return "bg-surface-raised inset-ring-2 inset-ring-accent";
+      return "bg-bg inset-ring-2 inset-ring-accent";
     }
-    return own ? "bg-(--wash,var(--color-surface-sunk))" : "bg-surface-recess";
+    return own ? "bg-(--wash,var(--color-bg-2))" : "bg-bg-2";
   });
   const scopeTip = $derived.by(() => {
     if (project === null) {
@@ -118,25 +118,21 @@
     data-handing={handing || undefined}
     data-slot="kind-tile"
     style:--wash={own && !handing && holder.hue !== null
-      ? `color-mix(in oklab, var(--color-mark-${holder.hue}) 8%, var(--color-surface-recess))`
+      ? `color-mix(in oklab, var(--color-mark-${holder.hue}) 8%, var(--color-bg-2))`
       : undefined}
   >
     <span
-      class="grid size-8 flex-none place-items-center rounded-xs bg-surface-raised text-ink-strong shadow-sm"
+      class="grid size-8 flex-none place-items-center rounded-xs bg-bg text-tx shadow-sm"
     >
       <Glyph aria-hidden="true" class="size-icon-sm" />
     </span>
     <div class="flex min-w-0 flex-auto flex-col">
       <span class="flex min-w-0 flex-wrap items-center gap-x-space-1">
-        <span
-          class="min-w-0 type-label font-medium text-ink-strong wrap-anywhere"
+        <span class="min-w-0 type-label font-medium text-tx wrap-anywhere"
           >{kind.name}</span
         >
         {#if project !== null}
-          <Scope
-            aria-hidden="true"
-            class="size-icon-sm flex-none text-ink-muted"
-          />
+          <Scope aria-hidden="true" class="size-icon-sm flex-none text-tx-2" />
         {/if}
       </span>
       {#if !brief}
@@ -175,7 +171,7 @@
       {#if asking}
         <LiveDot />
       {:else}
-        <IconTransfer aria-hidden="true" class="size-icon-sm text-ink-muted" />
+        <IconTransfer aria-hidden="true" class="size-icon-sm text-tx-2" />
       {/if}
     </span>
     {#if asking}
@@ -233,7 +229,7 @@
   </div>
   {#if own && !brief}
     <button
-      class="self-center type-meta text-accent-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-accent-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid aria-disabled:text-ink-muted"
+      class="self-center type-meta text-accent underline underline-offset-2 can-hover:hover:not-aria-disabled:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid aria-disabled:text-tx-2"
       aria-disabled={asking !== null || undefined}
       onclick={() => {
         if (asking === null) {

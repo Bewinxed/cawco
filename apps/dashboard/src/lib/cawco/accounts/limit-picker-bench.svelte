@@ -490,7 +490,7 @@
 </script>
 
 <div
-  class="w-full bg-surface-recess"
+  class="w-full bg-bg-2"
   {@attach frameSize(
     (node) => node.clientWidth,
     (next) => {

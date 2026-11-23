@@ -59,7 +59,7 @@
       {#if caw}
         <CawFace size={14} status={caw} />
       {:else}
-        <Sprite class="block size-icon-sm text-surface-page" />
+        <Sprite class="block size-icon-sm text-bg" />
       {/if}
     {/snippet}
   </ReferenceFace>

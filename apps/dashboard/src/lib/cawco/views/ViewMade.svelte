@@ -42,12 +42,12 @@
   {#each made as task (task.id)}
     <li
       data-slot="tile"
-      class="flex min-w-0 flex-col gap-space-2 rounded-lg bg-surface-raised p-space-2 shadow-sm data-open:inset-ring data-open:inset-ring-border-control"
+      class="flex min-w-0 flex-col gap-space-2 rounded-lg bg-bg p-space-2 shadow-sm data-open:inset-ring data-open:inset-ring-ui-2"
       data-open={task.id === open || undefined}
     >
       <a
         data-slot="head"
-        class="press-tint focus-inset grid min-h-control-sm grid-cols-(--head-cols) items-center gap-space-2 rounded-sm px-space-2 text-inherit no-underline hover:bg-surface-hover"
+        class="press-tint focus-inset grid min-h-control-sm grid-cols-(--head-cols) items-center gap-space-2 rounded-sm px-space-2 text-inherit no-underline hover:bg-ui"
         style:--head-cols="auto minmax(0, 1fr) auto"
         href={hrefOf(task.id)}
         onclick={(event) => {
@@ -63,23 +63,22 @@
           onopen(task.id);
         }}
       >
-        <span
-          data-slot="id"
-          class="type-meta font-mono liga-none text-ink-muted">{task.id}</span
+        <span data-slot="id" class="type-meta font-mono liga-none text-tx-2"
+          >{task.id}</span
         >
-        <span data-slot="title" class="type-label truncate text-ink-strong"
+        <span data-slot="title" class="type-label truncate text-tx"
           >{task.title}</span
         >
         <span
           data-you={task.kind === "you" || undefined}
           data-is-you={task.kind === "you" || undefined}
           data-slot="stage"
-          class="mark-line type-meta inline-flex items-center gap-space-1 text-ink-muted data-is-you:text-status-attn"
+          class="mark-line type-meta inline-flex items-center gap-space-1 text-tx-2 data-is-you:text-orange"
         >
           {#if task.kind === "you"}
             <IconNeedsYou
               data-view-made-glyph
-              class="size-icon-sm text-status-attn"
+              class="size-icon-sm text-orange"
             />
           {/if}
           <span>{stageLabel(task.stage)}</span>

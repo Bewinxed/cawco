@@ -73,6 +73,6 @@
     {/if}
   </OptionGroup>
   {#if flock}
-    <p class="m-0 type-meta text-ink-muted">{decidesWords.posesNote}</p>
+    <p class="m-0 type-meta text-tx-2">{decidesWords.posesNote}</p>
   {/if}
 </div>

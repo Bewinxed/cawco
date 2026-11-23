@@ -29,23 +29,21 @@
   {...props}
   bind:this={card}
   class={[
-    "row-span-3 flex min-h-control-lg min-w-0 flex-col items-center justify-center gap-space-2 rounded-lg border-2 p-space-4 text-center transition-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid",
+    "row-span-3 flex min-h-control-lg min-w-0 flex-col items-center justify-center gap-space-2 rounded-lg border-2 p-space-4 text-center transition-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent focus-visible:outline-solid",
     open
-      ? "border-accent bg-surface-raised"
-      : "border-dashed border-border-control can-hover:hover:bg-surface-hover",
+      ? "border-accent bg-bg"
+      : "border-dashed border-ui-2 can-hover:hover:bg-ui",
   ]}
   data-add-member
   type="button"
 >
-  <span
-    class="grid size-12 place-items-center rounded-lg bg-surface-sunk text-ink-muted"
-  >
+  <span class="grid size-12 place-items-center rounded-lg bg-bg-2 text-tx-2">
     <IconPlus aria-hidden="true" class="size-icon-md" />
   </span>
-  <span class="type-body font-medium text-ink-strong wrap-anywhere">
+  <span class="type-body font-medium text-tx wrap-anywhere">
     {resume === null ? decidesWords.addMember : decidesWords.resume(resume)}
   </span>
-  <span class="max-w-measure type-meta text-ink-muted text-pretty">
+  <span class="max-w-measure type-meta text-tx-2 text-pretty">
     {decidesWords.addMemberNote}
   </span>
 </button>

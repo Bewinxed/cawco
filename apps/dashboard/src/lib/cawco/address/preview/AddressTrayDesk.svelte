@@ -125,7 +125,7 @@
 <svelte:document {onpointerdown} />
 
 <div
-  class="grid min-h-195 content-start gap-space-4 bg-surface-page p-space-4"
+  class="grid min-h-195 content-start gap-space-4 bg-bg p-space-4"
   data-address-desk={direction}
 >
   <!-- The floating tray stands over the page, not in its flow: the page
@@ -139,10 +139,7 @@
   >
     {#if tray.source === "needs"}
       <section aria-labelledby="address-needs-head" class="grid gap-space-2">
-        <h2
-          id="address-needs-head"
-          class="m-0 px-space-3 type-label text-ink-muted"
-        >
+        <h2 id="address-needs-head" class="m-0 px-space-3 type-label text-tx-2">
           Needs you
         </h2>
         <div class="grid gap-space-1">
@@ -174,7 +171,7 @@
       </section>
     {:else}
       <section aria-labelledby="address-settings-head" class="grid gap-space-2">
-        <h2 id="address-settings-head" class="m-0 type-title text-ink-strong">
+        <h2 id="address-settings-head" class="m-0 type-title text-tx">
           Devices
         </h2>
         <DevicesList>

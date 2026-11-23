@@ -130,7 +130,7 @@
      captions are measured, taller only where one wraps. -->
 <div
   data-slot="stage"
-  class="relative box-content overflow-hidden contain-layout contain-paint rounded-sm border border-border-control bg-surface-recess h-(--stage-h)"
+  class="relative box-content overflow-hidden contain-layout contain-paint rounded-sm border border-ui-2 bg-bg-2 h-(--stage-h)"
   bind:this={stage}
   style:--stage-h="{figureHeight(
     board,

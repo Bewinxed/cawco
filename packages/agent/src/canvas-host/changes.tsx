@@ -5,7 +5,7 @@
  * `meta.changes` less the person's looks in its `seen` map, read from the doc
  * this page holds, so every screen of the canvas marks the same.
  *
- * Each changed element wears the ring the pages wear (`--color-status-done`,
+ * Each changed element wears the ring the pages wear (`--color-green`,
  * `--focus-ring-width` heavy, `--spacing-space-1` outside its box,
  * so it never covers its strokes or words) on a layer of its own over the
  * scene, in the scene's coordinates: it pans and zooms with the drawing,

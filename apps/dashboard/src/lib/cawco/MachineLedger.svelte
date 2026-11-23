@@ -73,17 +73,14 @@
               settle === "top" && "@phone/table:min-h-control-lg",
             ]}
           >
-            <OsMark
-              class="size-icon-md shrink-0 text-ink-muted"
-              os={machine.os}
-            />
+            <OsMark class="size-icon-md shrink-0 text-tx-2" os={machine.os} />
             <span class="flex min-w-0 flex-col">
               <span class="mark-line flex min-w-0 items-start gap-space-2">
                 <!-- The row's title: it wraps whole, never cut, at a
                      hostname's own breaks (its hyphens), past them only
                      where one part is wider than the column. -->
                 <span
-                  class="min-w-0 type-label whitespace-normal wrap-break-word text-ink-strong"
+                  class="min-w-0 type-label whitespace-normal wrap-break-word text-tx"
                   >{machineLabel(machine.hostname)}</span
                 >
                 <!-- On the name's first line when it wraps (mark-cell). -->
@@ -91,12 +88,12 @@
                   <span
                     data-box
                     class="size-1.5 shrink-0 rounded-pill {on
-                      ? 'bg-status-done'
-                      : 'bg-ink-subtle'}"
+                      ? 'bg-green'
+                      : 'bg-tx-2'}"
                   ></span>
                 </span>
               </span>
-              <span class="truncate type-meta text-ink-muted"
+              <span class="truncate type-meta text-tx-2"
                 >{os.label}{on ? "" : " · offline"}</span
               >
             </span>

@@ -25,18 +25,16 @@
     <li class="mark-line flex min-w-0 items-start gap-space-2 type-body">
       <span class={["mark-cell", cell]}>
         {#if fact.mark === "yes"}
-          <IconSuccess aria-label="Yes" class="size-icon-md text-status-done" />
+          <IconSuccess aria-label="Yes" class="size-icon-md text-green" />
         {:else if fact.mark === "no"}
-          <IconNeutral aria-label="No" class="size-icon-md text-ink-muted" />
+          <IconNeutral aria-label="No" class="size-icon-md text-tx-2" />
         {:else if fact.mark === "wait"}
           <LiveDot />
         {:else}
-          <IconNotYet class="size-icon-md text-ink-subtle" />
+          <IconNotYet class="size-icon-md text-tx-2" />
         {/if}
       </span>
-      <span class="mark-text min-w-0 text-ink-strong"
-        ><Words text={fact.text} /></span
-      >
+      <span class="mark-text min-w-0 text-tx"><Words text={fact.text} /></span>
     </li>
   {/each}
 </ul>

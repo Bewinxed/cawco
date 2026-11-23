@@ -658,8 +658,8 @@ h1 {
   --attn-glyph: oklch(57% 0.125 78);
   --live-glyph: oklch(50% 0.15 252);
   --done-glyph: oklch(52% 0.14 140);
-  --mark-2: oklch(53% 0.15 47.4);
-  --mark-5: oklch(51% 0.093 186.7);
+  --yellow: oklch(53% 0.15 47.4);
+  --blue: oklch(51% 0.093 186.7);
   --mark-8: oklch(51% 0.165 349.8);
   --app-shadow: 0 1px 2px oklch(29.5% 0.01 70 / 0.07);
 

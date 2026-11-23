@@ -34,14 +34,14 @@
 
 {#snippet piece(index: number, content: Snippet)}
   <figure class="flex min-w-0 flex-col gap-space-2">
-    <figcaption class="text-ink-muted type-meta">{PIECES[index]}</figcaption>
+    <figcaption class="text-tx-2 type-meta">{PIECES[index]}</figcaption>
     <div class="relative w-full max-w-sm" {@attach measure(setFor(index))}>
       {@render content()}
       <div class="pointer-events-none absolute inset-0" aria-hidden="true">
         {#each measured[index] as band, at (at)}
           <span
             class={[
-              "absolute start-(--band-x) top-(--band-y) grid h-(--band-h) w-(--band-w) place-items-center text-accent-ink",
+              "absolute start-(--band-x) top-(--band-y) grid h-(--band-h) w-(--band-w) place-items-center text-accent",
               across(band)
                 ? "before:h-space-2 before:w-full before:border-x before:border-accent after:absolute after:inset-x-0 after:top-1/2 after:border-t after:border-accent"
                 : "before:h-full before:w-space-2 before:border-y before:border-accent after:absolute after:inset-y-0 after:start-1/2 after:border-s after:border-accent",

@@ -130,8 +130,8 @@
     <Mark
       aria-hidden="true"
       class={inline
-        ? "size-icon-md flex-none text-ink-muted"
-        : "mb-space-1 size-icon-lg text-ink-muted"}
+        ? "size-icon-md flex-none text-tx-2"
+        : "mb-space-1 size-icon-lg text-tx-2"}
       data-slot="empty-mark"
     />
   {/if}
@@ -145,10 +145,10 @@
   {#if inline}
     <!-- One sentence: what is missing, then why, in meta. -->
     <p
-      class="mark-text min-w-0 flex-[1_1_auto] type-meta text-ink-muted text-pretty wrap-anywhere [&_code]:type-label"
+      class="mark-text min-w-0 flex-[1_1_auto] type-meta text-tx-2 text-pretty wrap-anywhere [&_code]:type-label"
     >
       <span
-        class="max-w-ch-60 type-meta font-medium tracking-tight text-ink-strong text-balance"
+        class="max-w-ch-60 type-meta font-medium tracking-tight text-tx text-balance"
         data-slot="empty-title">{title}</span
       >
       {#if line}
@@ -162,14 +162,14 @@
          no break in it (a view's, a filter's) breaks rather than pushing
          the block past its column. -->
     <p
-      class="max-w-ch-60 type-title text-ink-strong text-balance wrap-anywhere"
+      class="max-w-ch-60 type-title text-tx text-balance wrap-anywhere"
       data-slot="empty-title"
     >
       {title}
     </p>
     {#if line}
       <p
-        class="mark-text max-w-ch-60 type-body text-ink-muted text-pretty wrap-anywhere [&_code]:type-label"
+        class="mark-text max-w-ch-60 type-body text-tx-2 text-pretty wrap-anywhere [&_code]:type-label"
         data-slot="empty-line"
       >
         {@render why()}

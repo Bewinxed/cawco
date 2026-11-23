@@ -48,7 +48,7 @@
 <!-- Parked by delta. `--spacing-space-3` is `GAP` in deck.svelte.ts; keep them equal. -->
 <div
   data-lifted={deck.lifted || undefined}
-  class="group/deck relative min-h-0 min-w-0 flex-auto touch-pan-x touch-pan-y overflow-hidden bg-surface-recess"
+  class="group/deck relative min-h-0 min-w-0 flex-auto touch-pan-x touch-pan-y overflow-hidden bg-bg-2"
   style:--park-up="translate3d(0, calc(-100% - var(--spacing-space-3)), 0)"
   style:--park-here="translate3d(0, 0, 0)"
   style:--park-down="translate3d(0, calc(100% + var(--spacing-space-3)), 0)"
@@ -132,7 +132,7 @@
           <span class="flex" transition:fadeDots>
             <span
               data-slot="dot"
-              class="size-space-2 rounded-pill bg-ink-muted opacity-50 transition-[height,opacity] duration-(--duration-base) ease-out data-dot-on:h-space-4 data-dot-on:bg-ink-strong data-dot-on:opacity-100 motion-reduce:transition-[opacity] motion-reduce:duration-(--duration-base)"
+              class="size-space-2 rounded-pill bg-tx-2 opacity-50 transition-[height,opacity] duration-(--duration-base) ease-out data-dot-on:h-space-4 data-dot-on:bg-tx data-dot-on:opacity-100 motion-reduce:transition-[opacity] motion-reduce:duration-(--duration-base)"
               data-dot-on={leaf.id === workspace.focusedLeafId || undefined}
             ></span>
           </span>

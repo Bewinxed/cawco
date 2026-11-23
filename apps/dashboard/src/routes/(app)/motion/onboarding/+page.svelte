@@ -433,7 +433,7 @@
 
 {#if beat === "first-run"}
   <div
-    class="h-full overflow-y-auto bg-surface-recess px-space-6 pt-space-8 pb-space-8 max-phone:px-space-4"
+    class="h-full overflow-y-auto bg-bg-2 px-space-6 pt-space-8 pb-space-8 max-phone:px-space-4"
   >
     <FirstRun
       arrived

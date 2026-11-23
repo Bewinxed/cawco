@@ -60,13 +60,13 @@
 
 <article
   data-slot="record"
-  class="flex min-w-0 scroll-mt-space-4 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-sm"
+  class="flex min-w-0 scroll-mt-space-4 flex-col overflow-hidden rounded-lg bg-bg shadow-sm"
   id={card.id}
 >
   {#if card.still}
     <img
       alt={chosen[0]?.label ?? ""}
-      class="block aspect-16/10 w-full bg-surface-recess object-cover"
+      class="block aspect-16/10 w-full bg-bg-2 object-cover"
       src={card.still}
     />
   {/if}
@@ -77,10 +77,7 @@
     class="flex min-w-0 flex-col items-start gap-space-3 p-space-4"
     {@attach reflow()}
   >
-    <h3
-      data-slot="question"
-      class="type-label max-w-full text-pretty text-ink-strong"
-    >
+    <h3 data-slot="question" class="type-label max-w-full text-pretty text-tx">
       {card.question}
     </h3>
     {#if chosen.length > 0}
@@ -95,21 +92,21 @@
             >
           </span>
           {#if option.line}
-            <span class="type-meta min-w-0 text-ink-muted">{option.line}</span>
+            <span class="type-meta min-w-0 text-tx-2">{option.line}</span>
           {/if}
         </p>
       {/each}
     {:else}
-      <p data-slot="open-card" class="type-label max-w-full text-ink-subtle">
+      <p data-slot="open-card" class="type-label max-w-full text-tx-2">
         {words.leftOpen}
       </p>
     {/if}
     {#if card.dials.length > 0}
-      <p class="type-meta max-w-full text-ink-muted">
+      <p class="type-meta max-w-full text-tx-2">
         {#each card.dials as [name, value], index (name)}
           <span
-            >{index > 0 ? " · " : ""}{name}{" "}<span
-              class="num text-ink-strong">{value}</span
+            >{index > 0 ? " · " : ""}{name}{" "}<span class="num text-tx"
+              >{value}</span
             ></span
           >
         {/each}
@@ -118,7 +115,7 @@
     {#if card.note}
       <p
         data-slot="note"
-        class="mark-line type-body flex max-w-full items-start gap-space-2 text-ink-strong"
+        class="mark-line type-body flex max-w-full items-start gap-space-2 text-tx"
       >
         <span aria-hidden="true" class="mark-cell"
           ><span
@@ -156,7 +153,7 @@
           >
             <span
               data-slot="id"
-              class="num font-(family-name:--font-mono) text-sm text-ink-muted"
+              class="num font-(family-name:--font-mono) text-sm text-tx-2"
               >{id}</span
             >
             {#if task}
@@ -210,7 +207,7 @@
           >
             <div class="flex flex-col gap-space-2 pt-space-3">
               {#if card.why}
-                <p data-slot="why" class="type-meta text-ink-muted">
+                <p data-slot="why" class="type-meta text-tx-2">
                   {card.why}
                 </p>
               {/if}
@@ -227,12 +224,12 @@
                   {#if option.recommended}
                     <span
                       data-slot="tag"
-                      class="type-meta rounded-xs border border-border-hairline px-space-1 text-ink-muted"
+                      class="type-meta rounded-xs border border-ui px-space-1 text-tx-2"
                       >{words.recommended}</span
                     >
                   {/if}
                   {#if option.line}
-                    <span class="type-meta min-w-0 text-ink-muted"
+                    <span class="type-meta min-w-0 text-tx-2"
                       >{option.line}</span
                     >
                   {/if}

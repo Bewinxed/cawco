@@ -109,7 +109,7 @@
   data-narrow={width === "narrow" || undefined}
   data-slot="block"
   aria-labelledby={headId}
-  class="group/block relative flex min-w-0 flex-col gap-space-2 data-dragging:rounded-lg data-dragging:bg-surface-recess data-dragging:-outline-offset-1 data-dragging:outline-1 data-dragging:outline-border-control data-dragging:outline-dashed"
+  class="group/block relative flex min-w-0 flex-col gap-space-2 data-dragging:rounded-lg data-dragging:bg-bg-2 data-dragging:-outline-offset-1 data-dragging:outline-1 data-dragging:outline-ui-2 data-dragging:outline-dashed"
   data-block={id}
   data-body={body}
   data-dragging={drag.dragging === id ? "" : undefined}
@@ -126,18 +126,18 @@
        twice (its head and body hidden). -->
   <header
     data-slot="block-head"
-    class="mark-line press-tint flex min-h-control-sm min-w-0 cursor-grab items-center gap-space-2 rounded-sm px-space-1 select-none touch-callout-none group-data-dragging/block:invisible coarse:min-h-control-lg data-block-preview:bg-surface-raised data-block-preview:px-space-3 data-block-preview:shadow-lg"
+    class="mark-line press-tint flex min-h-control-sm min-w-0 cursor-grab items-center gap-space-2 rounded-sm px-space-1 select-none touch-callout-none group-data-dragging/block:invisible coarse:min-h-control-lg data-block-preview:bg-bg data-block-preview:px-space-3 data-block-preview:shadow-lg"
     {@attach dragHead(drag, () => ({ block: id, page }))}
   >
     <span
       data-slot="glyph"
       aria-hidden="true"
-      class="grid flex-none place-items-center text-ink-muted [&>*]:size-icon-md"
+      class="grid flex-none place-items-center text-tx-2 [&>*]:size-icon-md"
       data-box><Glyph /></span
     >
     <h2
       data-slot="title"
-      class="type-label m-0 min-w-0 flex-initial overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
+      class="type-label m-0 min-w-0 flex-initial overflow-clip text-ellipsis whitespace-nowrap text-tx"
       id={headId}
     >
       {title}
@@ -186,7 +186,7 @@
             >
           </DropdownMenu.RadioGroup>
           {#if columns === 1}
-            <p class="m-0 px-space-3 pb-space-1 type-meta text-ink-muted">
+            <p class="m-0 px-space-3 pb-space-1 type-meta text-tx-2">
               {words.widerScreens}
             </p>
           {/if}
@@ -215,7 +215,7 @@
   <div
     data-card={card || undefined}
     data-slot="block-body"
-    class="flex min-w-0 flex-col group-data-dragging/block:invisible group-body-capped/block:phone:max-h-120 group-body-capped/block:phone:overflow-y-auto group-body-capped/block:phone:overscroll-contain group-body-fill/block:h-(--fill-h-fine) group-body-fill/block:coarse:h-(--fill-h-coarse) data-card:overflow-x-hidden not-group-body-capped/block:data-card:overflow-y-hidden max-phone:data-card:overflow-y-hidden data-card:rounded-lg data-card:bg-surface-raised data-card:shadow-sm"
+    class="flex min-w-0 flex-col group-data-dragging/block:invisible group-body-capped/block:phone:max-h-120 group-body-capped/block:phone:overflow-y-auto group-body-capped/block:phone:overscroll-contain group-body-fill/block:h-(--fill-h-fine) group-body-fill/block:coarse:h-(--fill-h-coarse) data-card:overflow-x-hidden not-group-body-capped/block:data-card:overflow-y-hidden max-phone:data-card:overflow-y-hidden data-card:rounded-lg data-card:bg-bg data-card:shadow-sm"
   >
     {@render children()}
   </div>

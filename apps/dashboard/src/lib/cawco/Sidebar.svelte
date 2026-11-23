@@ -756,7 +756,7 @@
 {/snippet}
 
 <div
-  class="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-surface-page text-ink-strong"
+  class="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-bg text-tx"
   bind:this={railEl}
   {@attach highlight({ rows: ROWS })}
 >
@@ -793,7 +793,7 @@
                      keeps its shape on the rail in either theme. -->
                 <img
                   alt=""
-                  class="flex-none size-space-4 rounded-xs outline outline-ink-strong/10 -outline-offset-1"
+                  class="flex-none size-space-4 rounded-xs outline outline-tx/10 -outline-offset-1"
                   height="18"
                   src={cawcoIcon}
                   width="18"
@@ -802,7 +802,7 @@
                      icon in its own box (its face is Nunito, not a label's),
                      a body line tall. -->
                 <span
-                  class="inline-flex items-center h-(--wordmark-h) wordmark text-base min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
+                  class="inline-flex items-center h-(--wordmark-h) wordmark text-base min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-tx"
                   data-box
                   style:--wordmark-h={"var(--leading-base)"}>Caw&amp;Co</span
                 >
@@ -820,7 +820,7 @@
           <button
             {...tip}
             aria-label="Start session"
-            class="select-none focus-inset touch-hit inline-grid flex-none place-items-center size-row border-none border-current rounded-sm bg-transparent text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
+            class="select-none focus-inset touch-hit inline-grid flex-none place-items-center size-row border-none border-current rounded-sm bg-transparent text-tx-2 transition-control hover:bg-ui hover:text-tx"
             data-start-session
             onclick={(event) => newSession(undefined, event.currentTarget)}
             type="button"
@@ -861,7 +861,7 @@
           <button
             data-slot="search"
             aria-haspopup="dialog"
-            class="select-none mark-line press-tint focus-inset flex items-center gap-space-2 w-full min-h-control-lg px-space-3 border border-border-control rounded-sm bg-surface-raised type-body text-ink-muted text-start cursor-text"
+            class="select-none mark-line press-tint focus-inset flex items-center gap-space-2 w-full min-h-control-lg px-space-3 border border-ui-2 rounded-sm bg-bg type-body text-tx-2 text-start cursor-text"
             data-share="jump"
             onclick={() => onsearch()}
             type="button"
@@ -1022,7 +1022,7 @@
           </div>
         </Sidebar.GroupLabel>
         {#if orderedProjects.length === 0}
-          <p class="px-space-3 type-meta text-ink-muted" data-flip>
+          <p class="px-space-3 type-meta text-tx-2" data-flip>
             {boardStore.machines.length === 0
               ? sidebarWords.noProjectsNoMachines
               : sidebarWords.noProjects}

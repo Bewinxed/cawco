@@ -58,18 +58,18 @@
         >
           <span
             data-slot="mark"
-            class="grid size-control-md place-items-center text-ink-muted"
+            class="grid size-control-md place-items-center text-tx-2"
           >
             <Spinner aria-hidden="true" box="large" role="presentation" />
           </span>
           <p
             data-slot="title"
-            class="m-0 type-label text-balance text-ink-strong"
+            class="m-0 type-label text-balance text-tx"
             id={titleId}
           >
             {working.title}
           </p>
-          <p data-slot="body" class="m-0 type-meta text-pretty text-ink-muted">
+          <p data-slot="body" class="m-0 type-meta text-pretty text-tx-2">
             {working.step}
           </p>
         </div>
@@ -85,7 +85,7 @@
           <span
             data-slot="mark"
             data-enter
-            class="grid size-control-md place-items-center tone-caution:text-status-attn tone-ok:text-status-done motion-safe:animate-mark-in"
+            class="grid size-control-md place-items-center tone-caution:text-orange tone-ok:text-green motion-safe:animate-mark-in"
             data-tone={ok ? "ok" : "caution"}
           >
             {#if ok}
@@ -96,12 +96,12 @@
           </span>
           <p
             data-slot="title"
-            class="m-0 type-label text-balance text-ink-strong"
+            class="m-0 type-label text-balance text-tx"
             id={titleId}
           >
             {answer.title}
           </p>
-          <p data-slot="body" class="m-0 type-meta text-pretty text-ink-muted">
+          <p data-slot="body" class="m-0 type-meta text-pretty text-tx-2">
             {answer.body}
           </p>
         </div>

@@ -1330,7 +1330,7 @@
 
 <section
   aria-label={browserWords.view}
-  class="absolute inset-x-0 top-0 bottom-(--keyboard-lift,0px) flex flex-col min-h-0 pt-(--side-room,0px) bg-surface-sunk"
+  class="absolute inset-x-0 top-0 bottom-(--keyboard-lift,0px) flex flex-col min-h-0 pt-(--side-room,0px) bg-bg-2"
   data-browser-host={host ?? undefined}
   data-browser-mine={mine || undefined}
   data-slot="browser-view"
@@ -1343,7 +1343,7 @@
        clips what it holds). -->
   <div
     bind:this={well}
-    class="relative grid flex-1 min-h-0 place-items-center overflow-hidden bg-surface-recess data-framed:content-start data-framed:justify-items-start data-framed:gap-space-3 data-framed:p-space-3 not-data-framed:not-data-fill:data-[form=phone]:p-space-4"
+    class="relative grid flex-1 min-h-0 place-items-center overflow-hidden bg-bg-2 data-framed:content-start data-framed:justify-items-start data-framed:gap-space-3 data-framed:p-space-3 not-data-framed:not-data-fill:data-[form=phone]:p-space-4"
     data-form={mine ? form : undefined}
     data-fill={handheld || undefined}
     data-framed={addressAtFoot || undefined}
@@ -1378,7 +1378,7 @@
          the field the person tapped stands over the keyboard. -->
     <div
       bind:this={screenBox}
-      class="relative h-(--screen-h) w-(--screen-w) translate-y-(--keyboard-shift) overflow-hidden in-data-framed:rounded-sm in-data-framed:border in-data-framed:border-border-hairline not-in-data-framed:not-in-data-fill:in-data-[form=phone]:rounded-xl not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border-border-hairline not-in-data-framed:not-in-data-fill:in-data-[form=phone]:shadow-md"
+      class="relative h-(--screen-h) w-(--screen-w) translate-y-(--keyboard-shift) overflow-hidden in-data-framed:rounded-sm in-data-framed:border in-data-framed:border-ui not-in-data-framed:not-in-data-fill:in-data-[form=phone]:rounded-xl not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border-ui not-in-data-framed:not-in-data-fill:in-data-[form=phone]:shadow-md"
       data-slot="browser-screen"
       style:--keyboard-shift="{-keyboardShift}px"
       style:--screen-h="{screen.h}px"
@@ -1471,7 +1471,7 @@
              pressed, or a step at a time by the arrow keys. -->
         <button
           aria-label={browserWords.overview}
-          class="absolute end-space-3 top-space-3 z-1 aspect-(--page-ratio) w-22 touch-none overflow-hidden rounded-xs border border-border-strong bg-surface-raised p-0 shadow-sm"
+          class="absolute end-space-3 top-space-3 z-1 aspect-(--page-ratio) w-22 touch-none overflow-hidden rounded-xs border border-tx-2 bg-bg p-0 shadow-sm"
           data-slot="browser-overview"
           onkeydown={overviewKey}
           onpointerdown={overviewAt}
@@ -1578,7 +1578,7 @@
     {/if}
     {#if refusal}
       <p
-        class="absolute inset-x-0 bottom-0 m-0 px-space-3 py-space-2 border-t border-border-hairline bg-surface-raised text-status-fail text-base text-pretty wrap-anywhere"
+        class="absolute inset-x-0 bottom-0 m-0 px-space-3 py-space-2 border-t border-ui bg-bg text-red text-base text-pretty wrap-anywhere"
         data-slot="browser-refusal"
         role="alert"
       >
@@ -1602,7 +1602,7 @@
          under it, Show details last. It runs to the card's top under the
          head and takes its room on its own scroller. -->
     <div
-      class="absolute inset-0 z-1 grid place-items-center overflow-y-auto overscroll-contain px-space-4 pt-(--side-room,0px) pb-space-4 bg-surface-sunk max-phone:px-space-3"
+      class="absolute inset-0 z-1 grid place-items-center overflow-y-auto overscroll-contain px-space-4 pt-(--side-room,0px) pb-space-4 bg-bg-2 max-phone:px-space-3"
       data-slot="browser-down"
       role="alert"
       transition:appear
@@ -1611,11 +1611,11 @@
         <div class="mb-space-4 flex-none" data-slot="browser-down-caw">
           {@render animatedCaw({ again: false, head: false, size: CAW_SIZE })}
         </div>
-        <h2 class="m-0 text-center text-balance text-ink-strong type-title">
+        <h2 class="m-0 text-center text-balance text-tx type-title">
           {failed.title}
         </h2>
         <p
-          class="m-0 mt-space-1 text-center text-pretty text-ink-muted type-body wrap-anywhere"
+          class="m-0 mt-space-1 text-center text-pretty text-tx-2 type-body wrap-anywhere"
         >
           {failed.line}
         </p>
@@ -1654,7 +1654,7 @@
     <!-- Content under the stream, never a band over it: why this machine
          shows one page at a time. -->
     <p
-      class="m-0 flex-none px-space-3 py-space-2 text-ink-muted type-meta text-pretty"
+      class="m-0 flex-none px-space-3 py-space-2 text-tx-2 type-meta text-pretty"
       data-slot="browser-local"
     >
       {browserWords.localLine}

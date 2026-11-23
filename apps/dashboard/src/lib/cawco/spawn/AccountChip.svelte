@@ -103,12 +103,12 @@
     aria-label={spawnWords.account.name}
     class="flex flex-col p-space-2"
     role="listbox"
-    style:--ring-ground="var(--color-surface-raised)"
+    style:--ring-ground="var(--color-bg)"
   >
     <button
       data-slot="option"
       aria-selected={tool.value === null}
-      class="group press-tint transition-control select-none grid min-h-control-lg w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong"
+      class="group press-tint transition-control select-none grid min-h-control-lg w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-tx"
       data-account-option="auto"
       onclick={() => pick(null)}
       role="option"
@@ -119,20 +119,18 @@
       <span data-slot="words" class="flex min-w-0 flex-col gap-space-row">
         <span class="type-label">{autoName}</span>
         {#if tool.auto.why}
-          <span class="type-meta text-ink-muted text-pretty"
-            >{tool.auto.why}</span
-          >
+          <span class="type-meta text-tx-2 text-pretty">{tool.auto.why}</span>
         {/if}
       </span>
       <Check
-        class="size-icon-md text-accent-ink opacity-0 transition-[opacity] duration-(--duration-fast) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
+        class="size-icon-md text-accent opacity-0 transition-[opacity] duration-(--duration-fast) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
       />
     </button>
     {#each tool.options as option (option.id)}
       <button
         data-slot="option"
         aria-selected={tool.value === option.id}
-        class="group press-tint transition-control select-none grid min-h-control-lg w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong"
+        class="group press-tint transition-control select-none grid min-h-control-lg w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-tx"
         data-account-option={option.id}
         disabled={option.disabled}
         onclick={() => pick(option.id)}
@@ -160,13 +158,13 @@
             ><AccountName account={nameFields(option)} row wrap /></span
           >
           {#if option.line.length > 0}
-            <span class="type-meta text-ink-muted"
+            <span class="type-meta text-tx-2"
               ><Words parts={option.line} /></span
             >
           {/if}
         </span>
         <Check
-          class="size-icon-md text-accent-ink opacity-0 transition-[opacity] duration-(--duration-fast) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
+          class="size-icon-md text-accent opacity-0 transition-[opacity] duration-(--duration-fast) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
         />
       </button>
     {/each}

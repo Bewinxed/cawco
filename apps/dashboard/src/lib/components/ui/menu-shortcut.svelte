@@ -12,8 +12,8 @@
 
   /** Its item's focus, by the menu's own item group (written whole, for Tailwind). */
   const FOCUSED: Record<Menu, string> = {
-    "context-menu": "group-focus/context-menu-item:text-ink-strong",
-    "dropdown-menu": "group-focus/dropdown-menu-item:text-ink-strong",
+    "context-menu": "group-focus/context-menu-item:text-tx",
+    "dropdown-menu": "group-focus/dropdown-menu-item:text-tx",
   };
 
   let {
@@ -29,7 +29,7 @@
 
 <span
   class={cn(
-    "ml-auto coarse:hidden text-ink-muted type-meta tracking-caps",
+    "ml-auto coarse:hidden text-tx-2 type-meta tracking-caps",
     FOCUSED[menu],
     className
   )}

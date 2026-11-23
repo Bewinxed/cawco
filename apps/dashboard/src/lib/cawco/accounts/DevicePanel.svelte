@@ -85,14 +85,11 @@
 
 <div class="flex min-w-0 flex-col gap-space-2">
   {#if flow?.phase === "signed-in"}
-    <p
-      class="type-meta flex items-center gap-space-2 text-ink-strong"
-      role="status"
-    >
+    <p class="type-meta flex items-center gap-space-2 text-tx" role="status">
       <Check />
       <span
         >{accountsWords.signin.signedInAs}
-        <b class="font-medium text-ink-strong"
+        <b class="font-medium text-tx"
           >{flow.email ?? accountsWords.signin.theAccount}</b
         ></span
       >
@@ -102,14 +99,14 @@
       <div
         data-slot="well"
         data-dim={phase === "expired" || undefined}
-        class="flex items-center rounded-sm bg-surface-recess px-space-4 py-space-3 transition-[opacity] duration-(--duration-base) ease-out data-dim:opacity-50"
+        class="flex items-center rounded-sm bg-bg-2 px-space-4 py-space-3 transition-[opacity] duration-(--duration-base) ease-out data-dim:opacity-50"
         in:openPlace
       >
         <span class="sr-only">{words.said(flow?.code ?? "")}</span>
         <span
           data-slot="code"
           aria-hidden="true"
-          class="type-code liga-none flex select-all gap-space-3 tracking-caps text-ink-strong"
+          class="type-code liga-none flex select-all gap-space-3 tracking-caps text-tx"
         >
           {#each groups as group, at (at)}
             <span>{group}</span>
@@ -145,15 +142,15 @@
       {/if}
     </div>
     {#if phase === "waiting"}
-      <p class="type-meta text-ink-muted">
+      <p class="type-meta text-tx-2">
         {words.enterWithin}
         <span data-slot="num" class="num">{clock}</span>
       </p>
     {:else if phase === "expired"}
-      <p class="type-meta text-ink-muted">{words.expired}</p>
+      <p class="type-meta text-tx-2">{words.expired}</p>
     {:else if flow?.phase === "mismatch"}
       <p
-        class="mark-line type-meta flex items-start gap-space-1 text-status-attn"
+        class="mark-line type-meta flex items-start gap-space-1 text-orange"
         role="alert"
       >
         <span class="mark-cell"
@@ -166,7 +163,7 @@
       </p>
     {/if}
     {#if flow?.problem}
-      <p class="type-meta text-status-fail" role="alert">{flow.problem}</p>
+      <p class="type-meta text-red" role="alert">{flow.problem}</p>
     {/if}
   {/if}
 </div>

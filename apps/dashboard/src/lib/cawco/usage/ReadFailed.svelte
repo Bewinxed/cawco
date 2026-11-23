@@ -22,7 +22,7 @@
   class="flex flex-wrap items-center gap-space-3"
   role="alert"
 >
-  <p data-slot="note" class="type-meta text-ink-muted">{said}</p>
+  <p data-slot="note" class="type-meta text-tx-2">{said}</p>
   <Button
     icon={IconRefresh}
     label="Retry"

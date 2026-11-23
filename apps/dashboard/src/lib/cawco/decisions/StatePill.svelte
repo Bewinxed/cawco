@@ -23,7 +23,7 @@
 
 <span
   data-slot="state-pill"
-  class="type-label inline-flex h-space-6 max-w-full flex-none items-center gap-space-2 rounded-pill px-space-3 whitespace-nowrap transition-[background-color,color] duration-(--duration-slow) ease-out tone-live:bg-status-live-bg tone-live:text-status-live tone-done:bg-status-done-bg tone-done:text-status-done"
+  class="type-label inline-flex h-space-6 max-w-full flex-none items-center gap-space-2 rounded-pill px-space-3 whitespace-nowrap transition-[background-color,color] duration-(--duration-slow) ease-out tone-live:bg-bg-2 tone-live:text-cyan tone-done:bg-bg-2 tone-done:text-green"
   data-tone={tone}
   {title}
 >

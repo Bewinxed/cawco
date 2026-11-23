@@ -52,9 +52,9 @@
       <FactList cell="w-icon-md" facts={factsFor(flow)} />
       {#if failed}
         <div class="grid min-w-0 gap-space-1">
-          <span class="type-label text-ink-muted">What came back</span>
+          <span class="type-label text-tx-2">What came back</span>
           <pre
-            class="focus-inset m-0 max-h-48 overflow-auto overscroll-contain rounded-sm border border-border-control bg-surface-sunk px-space-3 py-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong select-all"
+            class="focus-inset m-0 max-h-48 overflow-auto overscroll-contain rounded-sm border border-ui-2 bg-bg-2 px-space-3 py-space-2 type-code wrap-anywhere whitespace-pre-wrap text-tx select-all"
             data-slot="raw">{rawFor(flow)}</pre>
           {#if clipboard}
             <span class="flex justify-end">
@@ -66,14 +66,9 @@
         </div>
       {/if}
       {#if !(failed && flow.cause === "unsupported")}
-        <div
-          class="grid gap-space-2 border-t border-t-border-hairline pt-space-2"
-        >
+        <div class="grid gap-space-2 border-t border-t-ui pt-space-2">
           {#if flow.stopping}
-            <p
-              class="m-0 type-body text-pretty text-ink-strong"
-              transition:unfold
-            >
+            <p class="m-0 type-body text-pretty text-tx" transition:unfold>
               {cost}
             </p>
             <span class="flex flex-wrap justify-end gap-space-2">

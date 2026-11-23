@@ -173,17 +173,17 @@
     label={madeWords.position}
   >
     <media-slider-track
-      class="relative block h-1 w-full overflow-clip rounded-pill bg-border-control transition-[height] duration-(--duration-fast) ease-out group-data-interactive/scrub:h-1.5"
+      class="relative block h-1 w-full overflow-clip rounded-pill bg-ui-2 transition-[height] duration-(--duration-fast) ease-out group-data-interactive/scrub:h-1.5"
     >
       <media-slider-buffer
-        class="absolute inset-y-0 start-0 block w-(--media-slider-buffer,0%) bg-border-strong"
+        class="absolute inset-y-0 start-0 block w-(--media-slider-buffer,0%) bg-tx-2"
       ></media-slider-buffer>
       <media-slider-fill
-        class="absolute inset-y-0 start-0 block w-(--media-slider-fill,0%) bg-ink-strong group-data-dragging/scrub:w-(--media-slider-pointer,0%)"
+        class="absolute inset-y-0 start-0 block w-(--media-slider-fill,0%) bg-tx group-data-dragging/scrub:w-(--media-slider-pointer,0%)"
       ></media-slider-fill>
     </media-slider-track>
     <media-slider-thumb
-      class="absolute start-(--media-slider-fill,0%) top-1/2 block size-3 -translate-x-1/2 rtl:translate-x-1/2 -translate-y-1/2 touch-hit rounded-full bg-ink-strong opacity-0 transition-opacity duration-(--duration-fast) ease-out group-data-interactive/scrub:opacity-100 group-data-dragging/scrub:start-(--media-slider-pointer,0%) coarse:opacity-100 focus-visible:opacity-100"
+      class="absolute start-(--media-slider-fill,0%) top-1/2 block size-3 -translate-x-1/2 rtl:translate-x-1/2 -translate-y-1/2 touch-hit rounded-full bg-tx opacity-0 transition-opacity duration-(--duration-fast) ease-out group-data-interactive/scrub:opacity-100 group-data-dragging/scrub:start-(--media-slider-pointer,0%) coarse:opacity-100 focus-visible:opacity-100"
     ></media-slider-thumb>
   </media-time-slider>
 {/snippet}
@@ -193,7 +193,7 @@
     class={[
       "inline-flex flex-none items-center gap-space-1 pe-space-2 type-meta num whitespace-nowrap",
       // Over a picture the glass lets its light through: the time holds its contrast in the strong ink.
-      kind === "video" ? "text-ink-strong" : "text-ink-muted",
+      kind === "video" ? "text-tx" : "text-tx-2",
     ]}
   >
     <media-time type="current"></media-time>
@@ -218,13 +218,13 @@
 {/snippet}
 
 {#if problem}
-  <p class="m-0 type-meta text-status-fail wrap-anywhere">{problem}</p>
+  <p class="m-0 type-meta text-red wrap-anywhere">{problem}</p>
 {:else if kind === "video"}
   <video-player class="contents" {@attach follows}>
     <!-- The frame: the clip's shape and width (`frame`), its hairline an
          edge drawn over the picture on the frame's own radius. -->
     <media-container
-      class="group/clip relative block aspect-(--clip-ratio) w-(--clip-w) max-w-full overflow-clip rounded-sm bg-surface-recess after:pointer-events-none after:absolute after:inset-0 after:rounded-inherit after:border after:border-border-hairline"
+      class="group/clip relative block aspect-(--clip-ratio) w-(--clip-w) max-w-full overflow-clip rounded-sm bg-bg-2 after:pointer-events-none after:absolute after:inset-0 after:rounded-inherit after:border after:border-ui"
       style:--clip-ratio={frame.ratio}
       style:--clip-w={frame.width}
       in:reveal
@@ -268,7 +268,7 @@
          glass's do (design.css `concentric-row`), each marked by where it
          stands (placeItems). -->
     <media-container
-      class="flex h-control-md w-full min-w-0 items-center gap-space-1 rounded-pill bg-surface-raised p-space-1 shadow-sm outline-1 -outline-offset-1 outline-border-hairline concentric-row r-inset-space-1 r-join-xs hit-gap-x-space-1 coarse:gap-space-4 coarse:hit-gap-x-space-4"
+      class="flex h-control-md w-full min-w-0 items-center gap-space-1 rounded-pill bg-bg p-space-1 shadow-sm outline-1 -outline-offset-1 outline-ui concentric-row r-inset-space-1 r-join-xs hit-gap-x-space-1 coarse:gap-space-4 coarse:hit-gap-x-space-4"
       data-glass
       style:--r-outer="calc(var(--spacing-control-md) / 2)"
       {@attach placeItems}

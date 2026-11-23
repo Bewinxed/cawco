@@ -231,13 +231,13 @@
 <main class="grid gap-space-2 p-space-4">
   {#each CASES as one, i (one.name)}
     <section
-      class="relative flex min-h-space-8 flex-col border border-border-hairline data-grid:grid"
+      class="relative flex min-h-space-8 flex-col border border-ui data-grid:grid"
       data-grid={one.grid || undefined}
       data-case={i}
     >
       {#key views[i]}
         <div
-          class="flex items-center gap-space-2 bg-surface-raised p-space-2"
+          class="flex items-center gap-space-2 bg-bg p-space-2"
           data-view={views[i]}
           in:crossIn
           out:leaving={i}

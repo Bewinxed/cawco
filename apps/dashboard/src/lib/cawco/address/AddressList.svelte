@@ -50,30 +50,30 @@
 
 <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list). -->
 <ul
-  class="m-0 grid list-none overflow-hidden rounded-sm border border-border-control bg-surface-sunk p-0"
+  class="m-0 grid list-none overflow-hidden rounded-sm border border-ui-2 bg-bg-2 p-0"
   data-slot="address-list"
   role="list"
 >
   <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
   {#each rows as row (row.address)}
     <li
-      class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-b border-b-border-hairline py-space-1 ps-space-3 pe-space-1 last:border-b-0"
+      class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-b border-b-ui py-space-1 ps-space-3 pe-space-1 last:border-b-0"
       data-waits={row.waits ? "" : undefined}
     >
       <span class="mark-line flex min-w-0 flex-1 items-center gap-space-1">
         {#if row.secure}
           <IconLock
             aria-label="Secure"
-            class="size-icon-sm flex-none text-status-done"
+            class="size-icon-sm flex-none text-green"
           />
         {/if}
         <code
-          class="min-w-0 type-code whitespace-nowrap text-ink-strong select-all data-waits:text-ink-muted"
+          class="min-w-0 type-code whitespace-nowrap text-tx select-all data-waits:text-tx-2"
           data-waits={row.waits ? "" : undefined}>{row.address}</code
         >
       </span>
       {#if row.waits}
-        <span class="type-meta text-ink-muted">{row.waits}</span>
+        <span class="type-meta text-tx-2">{row.waits}</span>
       {:else}
         <span class="flex flex-none items-center gap-space-1">
           <Button

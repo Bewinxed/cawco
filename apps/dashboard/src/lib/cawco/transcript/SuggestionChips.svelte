@@ -215,7 +215,7 @@
   data-slot="suggest"
   data-filled={shown.length > 0 || slow || !!failure || undefined}
   style:--suggest-bottom="calc(100% + var(--spacing-space-2))"
-  style:--suggest-lift={"linear-gradient(to top, var(--color-surface-recess) 55%, color-mix(in oklch, var(--color-surface-recess) 0%, transparent))"}
+  style:--suggest-lift={"linear-gradient(to top, var(--color-bg-2) 55%, color-mix(in oklch, var(--color-bg-2) 0%, transparent))"}
   class="absolute inset-x-0 bottom-(--suggest-bottom) flex flex-col justify-end h-14 pt-space-4 pointer-events-none data-filled:bg-(image:--suggest-lift)"
 >
   <!-- Drawn only with something in it: chips, the shimmer of an answer on
@@ -239,7 +239,7 @@
              confidence that moves in place re-tints over --duration-slow. -->
         <button
           data-slot="suggest-chip"
-          class="select-none inline-flex items-center h-control-sm gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 border border-suggest-tint rounded-sm bg-suggest-tint shadow-sm text-ink-strong text-base font-medium whitespace-nowrap flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:scale-(--press-scale) hover:bg-suggest-tint-hover mark-line touch-hit hit-edge-hair"
+          class="select-none inline-flex items-center h-control-sm gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 border border-suggest-tint rounded-sm bg-suggest-tint shadow-sm text-tx text-base font-medium whitespace-nowrap flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:scale-(--press-scale) hover:bg-suggest-tint-hover mark-line touch-hit hit-edge-hair"
           onclick={() => choose(candidate)}
           title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ""}`}
           type="button"
@@ -256,19 +256,19 @@
             <IconToolSkill
               data-suggestion-chips-glyph
               aria-hidden="true"
-              class="size-icon-md flex-none text-ink-muted"
+              class="size-icon-md flex-none text-tx-2"
             />
           {:else if candidate.kind === "tool"}
             <IconToolGeneric
               data-suggestion-chips-glyph
               aria-hidden="true"
-              class="size-icon-md flex-none text-ink-muted"
+              class="size-icon-md flex-none text-tx-2"
             />
           {:else}
             <IconToolMcp
               data-suggestion-chips-glyph
               aria-hidden="true"
-              class="size-icon-md flex-none text-ink-muted"
+              class="size-icon-md flex-none text-tx-2"
             />
           {/if}
           <span data-slot="name" class="min-w-0 overflow-clip text-ellipsis"
@@ -288,7 +288,7 @@
       {#if shown.length > 1}
         <span
           aria-hidden="true"
-          class="inline-flex items-center gap-space-1 text-ink-muted text-sm font-normal whitespace-nowrap flex-none pointer-events-auto coarse:hidden"
+          class="inline-flex items-center gap-space-1 text-tx-2 text-sm font-normal whitespace-nowrap flex-none pointer-events-auto coarse:hidden"
           ><Kbd>⇧ Tab</Kbd> all</span
         >
       {/if}
@@ -306,7 +306,7 @@
       {#if failure}
         <p
           data-slot="suggest-fail"
-          class="m-0 text-ink-muted text-sm font-normal whitespace-nowrap flex-none pointer-events-auto"
+          class="m-0 text-tx-2 text-sm font-normal whitespace-nowrap flex-none pointer-events-auto"
           role="status"
           in:fade={{ duration: dur("--duration-slow"), easing: easeOut }}
         >

@@ -65,7 +65,7 @@
       data-shown={!finished}
     >
       <circle
-        class="stroke-border-control"
+        class="stroke-ui-2"
         cx={box / 2}
         cy={box / 2}
         fill="none"
@@ -86,7 +86,7 @@
       />
     </g>
     <g
-      class="transform-fill origin-center text-status-done transition-[opacity,scale] duration-(--duration-base) ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:duration-(--duration-fast) motion-reduce:shown-false:scale-100"
+      class="transform-fill origin-center text-green transition-[opacity,scale] duration-(--duration-base) ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:duration-(--duration-fast) motion-reduce:shown-false:scale-100"
       data-shown={finished}
     >
       <polyline

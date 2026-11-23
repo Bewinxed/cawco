@@ -81,7 +81,7 @@
     <div
       data-slot="well"
       style:--well-pad-block="calc(var(--spacing-space-2) + 1px)"
-      class="ms-(--well-x) py-(--well-pad-block) px-(--pad) inset-ring-1 inset-ring-border-control rounded-sm bg-surface-sunk"
+      class="ms-(--well-x) py-(--well-pad-block) px-(--pad) inset-ring-1 inset-ring-ui-2 rounded-sm bg-bg-2"
     >
       <div class="flex flex-col max-w-measure text-base leading-base">
         {@render line("52%")}

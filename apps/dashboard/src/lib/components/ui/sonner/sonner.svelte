@@ -150,7 +150,7 @@
   <Sonner
     data-sonner-group
     class="group"
-    style="--normal-bg: var(--color-surface-raised); --normal-text: var(--color-ink-strong); --normal-border: var(--color-border-control);"
+    style="--normal-bg: var(--color-bg); --normal-text: var(--color-tx); --normal-border: var(--color-ui-2);"
     theme={theme.current}
     {...restProps}
     toastOptions={{

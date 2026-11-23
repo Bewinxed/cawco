@@ -245,7 +245,7 @@
         older</span
       >
       {#if failed > 0}
-        <span class="ms-space-1 text-status-fail">{failedWords(failed)}</span>
+        <span class="ms-space-1 text-red">{failedWords(failed)}</span>
       {/if}
     </button>
   {/snippet}
@@ -260,9 +260,9 @@
     class="kit-tree kit-tree-rail flex flex-col max-h-(--older-max) mt-space-1 overflow-y-auto overscroll-contain scrollbar-thin not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)"
     data-flip-anchor
     style:--fade="var(--spacing-space-4)"
-    style:--fade-above={"linear-gradient(transparent, var(--color-ink-strong) var(--fade))"}
-    style:--fade-below={"linear-gradient(var(--color-ink-strong) calc(100% - var(--fade)), transparent)"}
-    style:--fade-both={"linear-gradient(transparent, var(--color-ink-strong) var(--fade), var(--color-ink-strong) calc(100% - var(--fade)), transparent)"}
+    style:--fade-above={"linear-gradient(transparent, var(--color-tx) var(--fade))"}
+    style:--fade-below={"linear-gradient(var(--color-tx) calc(100% - var(--fade)), transparent)"}
+    style:--fade-both={"linear-gradient(transparent, var(--color-tx) var(--fade), var(--color-tx) calc(100% - var(--fade)), transparent)"}
     style:--line-root-gap="calc(var(--spacing-space-1) / 2)"
     style:--older-max="calc(6 * {height} + 5 * var(--line-root-gap))"
     data-keep-scroll="{list}:{id}"

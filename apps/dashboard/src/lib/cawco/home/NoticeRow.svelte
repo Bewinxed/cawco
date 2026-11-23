@@ -81,7 +81,7 @@
     <button
       data-slot="x"
       aria-label={dismissLabel}
-      class="select-none touch-hit pointer-hit focus-inset grid size-space-6 place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press motion-safe:active:transform-(--tpress) coarse:after:start-(--hit-start) coarse:after:end-(--hit-end) hover:bg-surface-hover hover:text-ink-strong"
+      class="select-none touch-hit pointer-hit focus-inset grid size-space-6 place-items-center rounded-xs border-none border-current bg-transparent p-0 text-tx-2 transition-tint-press motion-safe:active:transform-(--tpress) coarse:after:start-(--hit-start) coarse:after:end-(--hit-end) hover:bg-ui hover:text-tx"
       onclick={ondismiss}
       style:--tpress="scale(var(--press-scale))"
       style:--hit-start={"calc((var(--spacing-space-6) - var(--spacing-control-lg)) / 2 - var(--x-ink))"}
