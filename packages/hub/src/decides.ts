@@ -192,6 +192,35 @@ export const decidesFileWith = async (
   );
 };
 
+/**
+ * Project `projectId`'s decides.md with `routes` set over its own (null:
+ * back to its area's and the fleet's), committed as the person's with
+ * `message`, and the tables that read it told. The Settings view's
+ * hand-over (`PUT /api/projects/:id/decides`) and a Who decides change Caw
+ * asked and the person approved (project-settings.ts `set_decides`) both
+ * write through it. Answers the refusal; undefined once written.
+ */
+export const projectRoutesWritten = async (
+  projectId: string,
+  fleet: FleetDecides,
+  routes: Record<string, string | null>,
+  message: string,
+  rulesChanged: DecidesDeps["rulesChanged"]
+) => {
+  const file = await decidesFileWith(projectId, fleet, routes);
+  if (file instanceof ElysiaStatus) {
+    return file;
+  }
+  const written = await writeFolderFile(projectId, DECIDES_FILE, file, {
+    author: YOU,
+    message,
+  });
+  if (written instanceof ElysiaStatus) {
+    return written;
+  }
+  rulesChanged(projectId);
+};
+
 export const decidesRoutes = (deps: DecidesDeps) => {
   const { db, types } = deps;
 
@@ -804,18 +833,16 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           if (unknown) {
             return unknown;
           }
-          const file = await decidesFileWith(params.id, fleet, body.routes);
-          if (file instanceof ElysiaStatus) {
-            return file;
-          }
-          const written = await writeFolderFile(params.id, DECIDES_FILE, file, {
-            author: YOU,
-            message: body.message,
-          });
-          if (written instanceof ElysiaStatus) {
+          const written = await projectRoutesWritten(
+            params.id,
+            fleet,
+            body.routes,
+            body.message,
+            deps.rulesChanged
+          );
+          if (written) {
             return written;
           }
-          deps.rulesChanged(params.id);
           const decides = await decidesTable(
             { projectId: params.id, areaId: areaOf(params.id) },
             db.fleet()

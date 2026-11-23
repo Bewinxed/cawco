@@ -63,6 +63,8 @@ export interface TrackerTie {
   githubProject: { name: string; url: string } | { none: string } | null;
   home: "github" | "linear";
   linked: number;
+  /** With GitHub: its words when it refused adding a Status option for a column the Project lacks; null when nothing did. */
+  statusesRefused: string | null;
   sync: SyncStanding;
   /** The repository (GitHub) or team (Linear), by its id and as it reads. */
   target: { id: string; label: string; url: string };

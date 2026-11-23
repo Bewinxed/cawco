@@ -54,6 +54,19 @@ export interface GithubProject {
   url: string;
 }
 
+/**
+ * The stages the hub has made sure of a Status option for on one GitHub
+ * Project (hub tracker.ts): each had an option named as it, or the hub
+ * added one. A stage named here is never given one again, so an option the
+ * person removes or renames on GitHub stays as they left it.
+ */
+export interface GithubStatusStages {
+  /** The Project's node id: another Project starts again from none. */
+  projectId: string;
+  /** The stages' names, as stages.md names them. */
+  stages: string[];
+}
+
 /** A GitHub Project a connection reaches, offered in the binding's form. */
 export interface GithubProjectChoice {
   fieldId: string | null;
@@ -102,6 +115,13 @@ interface TrackerBindingView {
    * nothing stops them. Issues sync either way.
    */
   githubProjectReason: string | null;
+  /**
+   * GitHub: why the Project has no Status option yet for a stage that lacks
+   * one, in GitHub's words (it refused adding them); null when nothing
+   * stopped them. Every other stage's Status syncs either way, and Sync now
+   * asks again.
+   */
+  githubStatusesRefused: string | null;
   /** Issues linked to the project's tasks. */
   linked: number;
   /** When its last poll answered, ms epoch; null before its first. */

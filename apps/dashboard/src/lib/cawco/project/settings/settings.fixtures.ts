@@ -179,6 +179,7 @@ const LANTERN_TIE: TrackerTie = {
   },
   connection: { name: "Lantern GitHub App", account: "lantern-studio" },
   linked: 148,
+  statusesRefused: null,
   sync: { kind: "inStep", at: minutesAgo(4) },
   githubProject: {
     name: "Lantern roadmap",

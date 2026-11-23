@@ -96,6 +96,7 @@ import {
   FleetSyncReportSchema,
   FolderMoveStageSchema,
   GithubProjectSchema,
+  GithubStatusStagesSchema,
   HookHandlerSchema,
   InstanceStatusSchema,
   IssueTrackerSchema,
@@ -662,6 +663,14 @@ export const projects = sqliteTable("projects", {
   attemptsHearComments: integer("attempts_hear_comments", { mode: "boolean" })
     .notNull()
     .default(true),
+  /**
+   * Whether the project's sessions, Caw among them, may propose a change to
+   * its Who decides (project-settings.ts `set_decides`), each one the
+   * person's to approve; off, they read it only.
+   */
+  cawProposesDecides: integer("caw_proposes_decides", { mode: "boolean" })
+    .notNull()
+    .default(false),
   /** The harness Caw runs on. */
   cawHarness: storedEnum(z.enum(HARNESSES))("caw_harness")
     .notNull()
@@ -6920,6 +6929,16 @@ export const trackerBindings = sqliteTable("tracker_bindings", {
   githubProject: storedJson(GithubProjectSchema)("github_project"),
   /** GitHub: why stages do not show on a Project, in GitHub's words; set, that part of the sync does not run. */
   githubProjectReason: text("github_project_reason"),
+  /**
+   * GitHub: the stages the hub has made sure of a Status option for on the
+   * Project (core `GithubStatusStages`); null before the first sync that
+   * did, as on every binding made before the hub added options.
+   */
+  githubStatusStages: storedJson(GithubStatusStagesSchema)(
+    "github_status_stages"
+  ),
+  /** GitHub: its words when it refused adding a stage's Status option; null when nothing did. */
+  githubStatusesRefused: text("github_statuses_refused"),
 });
 
 /**

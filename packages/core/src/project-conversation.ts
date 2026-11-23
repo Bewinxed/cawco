@@ -64,6 +64,12 @@ export interface ProjectConversationView {
   /** Why Caw could not start now, on or off, or why its last start failed; null when he could. */
   problem: string | null;
   /**
+   * Whether the project's sessions, Caw among them, may propose a change to
+   * its Who decides, each one the person's to approve (hub
+   * project-settings.ts `set_decides`); off, they read it only.
+   */
+  proposesDecides: boolean;
+  /**
    * What Caw started that still runs, as his off control lists it, each lead
    * row followed by its delegates: the sessions his work items run, and his
    * own turn while an event started it. Turning him off with any of these
@@ -214,6 +220,15 @@ export type ProjectNoteEvent =
       title: string;
     }
   | { kind: "view"; name: string }
+  | {
+      /** The hub added Status options to a GitHub Project the board syncs with (hub tracker.ts). */
+      kind: "board-statuses";
+      /** The options added, each named as its column. */
+      added: string[];
+      /** The Project's title and address. */
+      board: string;
+      url: string;
+    }
   | { kind: "agents"; sha: string }
   | {
       /** The session fleet watch nudged about. */

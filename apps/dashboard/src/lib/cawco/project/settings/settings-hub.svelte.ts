@@ -367,6 +367,7 @@ export class SettingsHub {
       },
       githubProject,
       linked: binding.linked,
+      statusesRefused: binding.githubStatusesRefused,
       sync: syncOf(binding),
       target: {
         id: binding.target,

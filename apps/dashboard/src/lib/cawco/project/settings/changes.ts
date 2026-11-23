@@ -312,7 +312,7 @@ export function sectionStates(
     ) {
       return "busy";
     }
-    if (record.tie?.sync.kind === "refused") {
+    if (record.tie?.sync.kind === "refused" || record.tie?.statusesRefused) {
       return "fault";
     }
     return away;

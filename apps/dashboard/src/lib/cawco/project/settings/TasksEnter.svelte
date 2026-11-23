@@ -417,6 +417,14 @@
               reason={tie.sync.words}
             />
           {/if}
+          {#if tie.statusesRefused && !syncPending}
+            <!-- GitHub refused a Status option for a column its Project lacks: Sync now asks again. -->
+            <RowFault
+              again={onsync}
+              againLabel={words.tryAgain}
+              reason={tie.statusesRefused}
+            />
+          {/if}
           <RowFault
             again={() => onretry("sync")}
             againLabel={words.retryChange}

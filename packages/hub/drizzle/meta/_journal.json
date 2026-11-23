@@ -3270,6 +3270,13 @@
       "when": 1795418817120,
       "tag": "0474_trigger_router",
       "breakpoints": true
+    },
+    {
+      "idx": 475,
+      "version": "6",
+      "when": 1795419628587,
+      "tag": "0475_status_stages_decides_proposals",
+      "breakpoints": true
     }
   ]
 }

@@ -435,7 +435,12 @@ import { tagStoredSend } from "./db/tag-markers";
 import { refOf as linkRefOf, viaOf as linkViaOf } from "./db/task-links";
 import { undoable } from "./db/trash";
 import { decide, type HubTurn, type TurnChoice } from "./decide";
-import { decidesFileWith, decidesRoutes, type HarnessOffer } from "./decides";
+import {
+  decidesFileWith,
+  decidesRoutes,
+  type HarnessOffer,
+  projectRoutesWritten,
+} from "./decides";
 import { DECIDES_FILE, decidesTable } from "./decides-file";
 import { refiledStatements } from "./decision-program";
 import { createDecisions, decidedTasks, decisionRoutes } from "./decisions";
@@ -10986,6 +10991,7 @@ export const createServer = (
     db,
     externalItems,
     lifetime,
+    notice: noticeProject,
     tasks,
   });
   // Ingress (ingress.ts): events from GitHub and polled connections, each
@@ -11073,6 +11079,14 @@ export const createServer = (
   // Areas (areas.ts): every reader of a project's settings reads them in
   // effect with its row, so a change here reaches each at once; what is
   // told of it is told here.
+  /** A Who decides table changed, project `projectId`'s or the fleet's (null): who marks tasks done is part of the stages' rules (tasks.ts `ruled`). */
+  const decidesRulesChanged = (projectId: string | null) => {
+    for (const id of projectId
+      ? [projectId]
+      : db.listProjects().map((project) => project.id)) {
+      tasks.touched(id);
+    }
+  };
   /** A project's Who decides table in effect (decides-file.ts); the folder's problem when its decides.md does not read. */
   const decidesOf = (project: { areaId: string | null; id: string }) =>
     decidesTable(
@@ -11151,6 +11165,18 @@ export const createServer = (
       ),
     connections,
     db,
+    decides: {
+      fleet: () => db.decides.fleet(),
+      table: decidesOf,
+      write: (projectId, routes, message) =>
+        projectRoutesWritten(
+          projectId,
+          db.decides.fleet(),
+          routes,
+          message,
+          decidesRulesChanged
+        ),
+    },
     dispatch: dispatcher,
     edit: (projectId, change) => projectEdits.edit(projectId, change),
     publish: createRepoPublish({
@@ -14037,14 +14063,7 @@ export const createServer = (
             db.trash.put({ kind: "delegateType", key: name }, Date.now()),
           project: (id) => db.project(id),
           projects: () => db.listProjects(),
-          // Who marks tasks done is part of the stages' rules (tasks.ts `ruled`).
-          rulesChanged: (projectId) => {
-            for (const id of projectId
-              ? [projectId]
-              : db.listProjects().map((project) => project.id)) {
-              tasks.touched(id);
-            }
-          },
+          rulesChanged: decidesRulesChanged,
           harnesses: harnessOffers,
           skills: () =>
             db

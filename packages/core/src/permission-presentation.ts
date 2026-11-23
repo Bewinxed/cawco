@@ -35,6 +35,7 @@ import { isSecretName, looksSecret } from "./secret-shapes";
 import { DAY_MS } from "./time";
 import { areaWords } from "./words/areas";
 import { askStanceLine } from "./words/ask-lines";
+import { decidesWords } from "./words/decides";
 import { scopeWords } from "./words/memory-scope";
 import { projectAccountWords } from "./words/project-account";
 import {
@@ -1482,6 +1483,7 @@ export const PROJECT_SETTING_KINDS = [
   "set_account_at_limit",
   "set_area",
   "set_starting_set",
+  "set_decides",
 ] as const;
 
 /**
@@ -1532,6 +1534,19 @@ export type ProjectSettingChange =
    * everything installed.
    */
   | { kind: "set_starting_set"; startingSet: StartingSet | null }
+  /**
+   * Who settles one kind of choice in the project (Who decides, core
+   * decides.ts): its decides.md line handing `decides` (a kind's id) to
+   * `member` (a member's id), or none (null) so it follows its area's and
+   * the fleet's again; each with its name as the change was checked.
+   */
+  | {
+      decides: string;
+      kind: "set_decides";
+      kindName: string;
+      member: string | null;
+      memberName: string | null;
+    }
   | {
       /** The account the GitHub connection signs in as: the repository's owner. */
       account?: string;
@@ -1600,6 +1615,10 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return areaWords.change(change.name);
     case "set_starting_set":
       return projectSettingsWords.startingSet(change.startingSet);
+    case "set_decides":
+      return change.member === null
+        ? decidesWords.backCommit([change.kindName])
+        : decidesWords.handCommit(change.kindName, change.memberName ?? "");
     case "set_lands":
       break;
   }

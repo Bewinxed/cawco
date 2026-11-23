@@ -79,6 +79,8 @@ export interface SettingsRead {
   onCap: SettingRead;
   /** Why dispatch starts nothing now; null when it would. */
   paused: string | null;
+  /** Whether its sessions may propose a Who decides change (`set_decides`). */
+  proposesDecides: boolean;
   /** Tasks waiting in review now. */
   reviewing: number;
   reviewLimit: number;
@@ -109,6 +111,11 @@ export const projectSettingsWords = {
       `- Repositories: ${now.links.length > 0 ? now.links.join(", ") : "none linked"} (link_repo, create_repo with folder)`,
       `- Connections granted: ${now.connections.length > 0 ? now.connections.join(", ") : "none"} (grant_connection)`,
       `- ${projectSettingsWords.startingSetRead(now.startingSet)} (set_starting_set)`,
+      `- Who decides each kind of choice: ${now.decides.join("; ") || "none"} (${
+        now.proposesDecides
+          ? "set_decides, which the person approves"
+          : "read only: the person lets this project's sessions propose a change in Caw's settings"
+      })`,
       areaWords.read(now.area),
       `${projectAccountWords.read(now.account)}, ${now.accountFrom}`,
       `${projectAccountWords.atLimit.read(now.accountAtLimit)}, ${now.accountFrom}`,
@@ -117,7 +124,6 @@ export const projectSettingsWords = {
       `- Caw's permission mode: ${now.cawMode.value} (${now.cawMode.from})`,
       `- Budget: ${now.cap.value} (${now.cap.from})`,
       `- At the budget: ${now.onCap.value} (${now.onCap.from})`,
-      `- Who decides: ${now.decides.join("; ") || "none"}`,
       `- Delegate types: ${now.types.join(", ") || "none"}`,
       "",
       `Now: ${now.live} ${now.live === 1 ? "attempt is" : "attempts are"} live and ${now.reviewing} ${now.reviewing === 1 ? "task waits" : "tasks wait"} for review. ${
@@ -188,6 +194,10 @@ export const projectSettingsWords = {
     runsOn: (to: string | null) =>
       `This project's attempts run on ${to ?? "any machine"} already.`,
     startingSet: "This project's sessions start with that set already.",
+    decides: (kind: string, member: string) =>
+      `${kind} goes to ${member} in this project already.`,
+    decidesFollows: (kind: string) =>
+      `${kind} follows the fleet in this project already: decides.md has no line for it.`,
   },
   needs: {
     dispatch: "set_dispatch says on (dispatch: true) or off (false).",
@@ -201,7 +211,18 @@ export const projectSettingsWords = {
       "set_attempts_hear_comments says on (attempts_hear_comments: true) or off (false).",
     startingSet:
       "set_starting_set names starting_set: { skills: [...], servers: [...] }, or null for everything.",
+    decides:
+      "set_decides names decides, a kind of choice, and member, who settles it here (null: the fleet's again).",
   },
+  /** A Who decides change naming a kind or member the fleet has none of: what it has. */
+  unknownDecides: (what: "kind" | "member", asked: string, known: string[]) =>
+    `Who decides has no ${what} “${asked}”. Its ${what === "kind" ? "kinds" : "members"}: ${known.join(", ")}.`,
+  /** A Who decides change while the project's switch for proposing one is off. */
+  decidesProposalsOff:
+    "This project's sessions may not propose a change to who decides: its Who decides is read only until the person lets them in Caw's settings.",
+  /** A Who decides change while the project's decides.md does not read. */
+  decidesUnread: (problems: string[]) =>
+    `This project's decides.md does not read, so who decides cannot change until it does: ${problems.join(" ")}`,
   /** A grant of a connection the hub has none of: what it can grant instead. */
   noConnection: (name: string, grantable: string[]): string =>
     grantable.length > 0

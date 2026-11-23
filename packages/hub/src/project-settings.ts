@@ -58,6 +58,16 @@
  *   start with when their delegate type names none, written to its
  *   `starting-set.md` (project-starting-set.ts); null deletes the file, and
  *   they start with everything. Sessions started after it take it.
+ * - `set_decides`: who settles one kind of choice here (Who decides, core
+ *   decides.ts), `done` among them: a kind, by its id or name, handed to a
+ *   member, by its id or name, or back to its area's and the fleet's (null).
+ *   Only while the project's switch lets its sessions propose one
+ *   (`cawProposesDecides`, off until the person turns it on in Caw's
+ *   settings); off, it is refused and Who decides is read only. Who decides
+ *   is the person's to set, so it is always asked, `ask` or not: the ask
+ *   stands in Needs you with the change in words, and Approve writes
+ *   decides.md as the Settings view's hand-over does (decides.ts
+ *   `projectRoutesWritten`), checked again then, the switch with it.
  * Called with no changes, it answers the project's settings as they stand,
  * each named by the change that sets it, every setting in effect with where
  * it came from (its own, its area's, the fleet's), and what dispatch would
@@ -73,6 +83,7 @@ import {
 } from "@cawco/core/accounts";
 import type { SettingSource } from "@cawco/core/areas";
 import { PROJECT_SETTINGS } from "@cawco/core/asks";
+import type { FleetDecides } from "@cawco/core/decides";
 import {
   type StartingSet,
   startingSetProblem,
@@ -111,6 +122,7 @@ import type { Areas } from "./areas";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
+import type { projectRoutesWritten } from "./decides";
 import type { decidesTable } from "./decides-file";
 import { type Dispatcher, dispatchProblem } from "./dispatch";
 import type { DispatchChange } from "./dispatch-shapes";
@@ -183,6 +195,12 @@ const ASKED_CHANGE = z.object({
     .describe(
       "set_starting_set: all its sessions start with, besides CawCo's own; skills named as your listing names them. null: everything"
     ),
+  decides: z.string().optional().describe("set_decides: a kind, by id or name"),
+  member: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("set_decides: who settles it, by id or name; null: the fleet's"),
 });
 type AskedChange = z.infer<typeof ASKED_CHANGE>;
 
@@ -199,12 +217,14 @@ const definition = z.object({
   ask: z
     .boolean()
     .optional()
-    .describe("true asks the person first; create_repo always does."),
+    .describe(
+      "true asks the person first; create_repo and set_decides always do."
+    ),
   project: z.string().optional(),
 });
 
 const DESCRIPTION =
-  "Your project's settings, read or changed. Use it to read them, or to change one, like linking a repository, granting a connection or proposing a starting set.";
+  "Your project's settings, read or changed. Use it to read them, or to change one, like linking a repository, granting a connection, proposing a starting set, or proposing who decides a kind of choice (set_decides, done among them), which the person approves.";
 
 /** What a malformed call is told, after what it got wrong. */
 const INPUT_HELP = `changes is a list of ${PROJECT_SETTING_KINDS.join(", ")}, and reason one sentence; leave changes out to read the settings.`;
@@ -279,6 +299,13 @@ const ParkedChange: GenericSchema<unknown, ProjectSettingChange> = variant(
       ),
     }),
     object({
+      decides: string(),
+      kind: literal("set_decides"),
+      kindName: string(),
+      member: nullable(string()),
+      memberName: nullable(string()),
+    }),
+    object({
       account: optional(string()),
       bytes: number(),
       connection: string(),
@@ -339,6 +366,12 @@ const askedOf = (change: ProjectSettingChange): AskedChange => {
       return { kind: change.kind, area: change.area };
     case "set_starting_set":
       return { kind: change.kind, starting_set: change.startingSet };
+    case "set_decides":
+      return {
+        kind: change.kind,
+        decides: change.decides,
+        member: change.member,
+      };
     default:
       return unhandled("project setting", change);
   }
@@ -479,6 +512,21 @@ export interface ProjectSettingsDeps {
     "addProjectLink" | "machineFacts" | "project" | "projectByRemote"
   >;
   /**
+   * Who decides (decides.ts): the fleet's kinds and members, the project's
+   * table in effect (decides-file.ts), and its decides.md written with
+   * routes set over its own, as the person's commit saying `message`
+   * (`projectRoutesWritten`, the Settings view's own hand-over).
+   */
+  readonly decides: {
+    readonly fleet: () => FleetDecides;
+    readonly table: (project: ProjectRow) => ReturnType<typeof decidesTable>;
+    readonly write: (
+      projectId: string,
+      routes: Record<string, string | null>,
+      message: string
+    ) => ReturnType<typeof projectRoutesWritten>;
+  };
+  /**
    * Changes the project's dispatch settings, and reads them with what the
    * dispatcher would do now: the dashboard's own path (dispatch.ts
    * `configure`, `view`).
@@ -526,6 +574,7 @@ export const createProjectSettings = ({
   caw,
   connections,
   db,
+  decides,
   dispatch,
   edit,
   inEffect,
@@ -826,6 +875,112 @@ export const createProjectSettings = ({
     } satisfies ProjectSettingChange;
   };
 
+  /**
+   * The kind and member a Who decides change names, by id or name among
+   * the fleet's (null: back to its area's and the fleet's); refused naming
+   * what the fleet has when either is none of its.
+   */
+  const decidesNamed = (asked: AskedChange) => {
+    const words = projectSettingsWords;
+    const wanted = asked.decides?.trim();
+    if (!wanted || asked.member === undefined) {
+      return problem(400, {
+        code: "decides-needed",
+        detail: words.needs.decides,
+      });
+    }
+    const fleet = decides.fleet();
+    const names =
+      (name: string) =>
+      (one: { id: string; name: string }): boolean =>
+        one.id === name || one.name.trim().toLowerCase() === name.toLowerCase();
+    const kind = fleet.kinds.find(names(wanted));
+    if (!kind) {
+      return problem(400, {
+        code: "decides-kind-unknown",
+        detail: words.unknownDecides(
+          "kind",
+          wanted,
+          fleet.kinds.map((one) => `${one.id} (${one.name})`)
+        ),
+      });
+    }
+    const memberAsked = asked.member?.trim() || null;
+    const member =
+      memberAsked === null ? null : fleet.members.find(names(memberAsked));
+    if (member === undefined) {
+      return problem(400, {
+        code: "decides-member-unknown",
+        detail: words.unknownDecides(
+          "member",
+          memberAsked ?? "",
+          fleet.members.map((one) => `${one.id} (${one.name})`)
+        ),
+      });
+    }
+    return { kind, member };
+  };
+
+  /**
+   * One kind of choice handed to a member here, or back to its area's and
+   * the fleet's (null), while the project lets its sessions propose one;
+   * refused when it is so already, or while the project's decides.md does
+   * not read.
+   */
+  const decidesSet = async (project: ProjectRow, asked: AskedChange) => {
+    const words = projectSettingsWords;
+    if (!project.cawProposesDecides) {
+      return problem(403, {
+        code: "decides-proposals-off",
+        detail: words.decidesProposalsOff,
+      });
+    }
+    const named = decidesNamed(asked);
+    if (named instanceof ElysiaStatus) {
+      return named;
+    }
+    const { kind, member } = named;
+    const table = await decides.table(project);
+    if (table instanceof ElysiaStatus) {
+      return table;
+    }
+    if (table.problems.length > 0) {
+      return problem(409, {
+        code: "decides-file-unread",
+        detail: words.decidesUnread(table.problems),
+      });
+    }
+    const already =
+      member === null
+        ? table.from[kind.id] !== "project" &&
+          words.already.decidesFollows(kind.name)
+        : table.routes[kind.id] === member.id &&
+          words.already.decides(kind.name, member.name);
+    if (already) {
+      return problem(400, { code: "already", detail: already });
+    }
+    return {
+      kind: "set_decides",
+      decides: kind.id,
+      kindName: kind.name,
+      member: member?.id ?? null,
+      memberName: member?.name ?? null,
+    } satisfies ProjectSettingChange;
+  };
+
+  /** A Who decides change applied, as the person's (it is always asked): its decides.md written as the Settings view's hand-over writes it. */
+  const decidesWritten = async (
+    projectId: string,
+    change: Extract<ProjectSettingChange, { kind: "set_decides" }>
+  ) => {
+    const refused = await decides.write(
+      projectId,
+      { [change.decides]: change.member },
+      projectSettingWords(change)
+    );
+    return refused ?? [projectSettingWords(change)];
+  };
+
   /** One asked change, checked against the project as it stands, as the hub stores it. */
   const grantChange = (project: ProjectRow, asked: AskedChange) => {
     const name = asked.connection?.trim();
@@ -903,6 +1058,8 @@ export const createProjectSettings = ({
         return areaSet(project, asked);
       case "set_starting_set":
         return startingSetChange(project, asked);
+      case "set_decides":
+        return await decidesSet(project, asked);
       case "set_lands":
         break;
       default:
@@ -927,7 +1084,9 @@ export const createProjectSettings = ({
   /** Every change checked, else the first refusal; two changes of one kind are refused. */
   const checkAll = async (project: ProjectRow, asked: AskedChange[]) => {
     const kinds = new Set(
-      asked.map((one) => `${one.kind}:${one.connection ?? ""}`)
+      asked.map(
+        (one) => `${one.kind}:${one.connection ?? ""}:${one.decides ?? ""}`
+      )
     );
     if (kinds.size !== asked.length) {
       return problem(400, {
@@ -1050,6 +1209,8 @@ export const createProjectSettings = ({
       case "set_starting_set":
         await writeStartingSet(project.id, change.startingSet, author);
         break;
+      case "set_decides":
+        return await decidesWritten(project.id, change);
       case "set_lands":
         return await editSaid(change, project.id, { lands: change.lands });
       default:
@@ -1181,6 +1342,7 @@ export const createProjectSettings = ({
         (one) => `${one.kind}: ${one.member} (${from(one.from)})`
       ),
       types: folder.types.map((one) => `${one.name} (${from(one.from)})`),
+      proposesDecides: project.cawProposesDecides,
       events: project.eventsOn,
       hearsTasks: project.hearsTasks,
       attemptsHearComments: project.attemptsHearComments,
@@ -1230,9 +1392,13 @@ export const createProjectSettings = ({
     if (changes instanceof ElysiaStatus) {
       return changes;
     }
-    // Creating a remote and pushing reach outside: always the person's.
+    // Creating a remote and pushing reach outside, and who decides is
+    // theirs to set: always the person's.
     const asking =
-      input.ask === true || changes.some((one) => one.kind === "create_repo");
+      input.ask === true ||
+      changes.some(
+        (one) => one.kind === "create_repo" || one.kind === "set_decides"
+      );
     if (!asking) {
       const said = await apply(project, changes, boardTitle(actor));
       if (said instanceof ElysiaStatus) {

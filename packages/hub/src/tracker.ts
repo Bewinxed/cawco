@@ -63,6 +63,16 @@
  *   binding saying GitHub's words, and issues sync as before. Sync now asks
  *   again at once, the poll every ten minutes: given the permission since,
  *   the binding takes its Project and Status starts.
+ * - **Status options.** A stage takes the option named as it. Binding adds
+ *   one for each stage the Project lacks, and every sync after does the
+ *   same for a stage the hub has not yet made sure of on that Project (a
+ *   column added to the board since, or every stage of a binding made
+ *   before the hub added options): each stage once, so an option the
+ *   person removes or renames on GitHub stays as they left it, and no
+ *   option is ever removed or renamed. Options added are told in one note
+ *   per Project in the project's conversation. GitHub's refusal stays on
+ *   the binding in its words, the other stages' Status syncing meanwhile;
+ *   Sync now asks again at once, the poll every ten minutes.
  * - **No fallbacks.** A refused write leaves both sides as they are and says
  *   the tracker's words on the task's link, and on the binding when the
  *   connection's sign-in or scope is what refused: a sign-in refused marks
@@ -71,10 +81,12 @@
 
 import { detach } from "@cawco/core/detach";
 import { isFleetProject } from "@cawco/core/fleet-project";
+import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { Stage, TaskSummary } from "@cawco/core/task-views";
 import {
   type GithubProject,
   type GithubProjectsView,
+  type GithubStatusStages,
   type IssueTracker,
   statusOptionFor,
   TRACKER_NAMES,
@@ -82,6 +94,7 @@ import {
   type TrackerSyncState,
   type TrackerView,
 } from "@cawco/core/trackers";
+import { boardStatusWords } from "@cawco/core/words/board-statuses";
 import { connectionsWords } from "@cawco/core/words/connections";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
@@ -159,6 +172,8 @@ export interface TrackersDeps {
   /** Files a comment from the tracker on its task, once, as data (external-items.ts). */
   readonly externalItems: Pick<ExternalItems, "fileComment">;
   readonly lifetime: HubLifetimeShape;
+  /** A note to the person in the project's conversation, waking no one (caw.ts `notice`). */
+  readonly notice: (projectId: string, note: ProjectNote) => void;
   readonly tasks: Pick<
     Tasks,
     | "comment"
@@ -282,8 +297,12 @@ interface Sync {
   projectRead?: GithubProject;
   stages: Stage[];
   states: IssueState[];
+  /** GitHub: its words when it refused adding a stage's option this sync; null when the options went through. */
+  statusesRefused?: string | null;
   /** GitHub's words when this sync found the connection may not read or write the Project: Status stops. */
   statusRefused?: string;
+  /** GitHub: the stages made sure of a Status option on the Project, when this sync made sure of more. */
+  statusStages?: GithubStatusStages;
 }
 
 /** One linked task made one record with its issue again: what each side moved, and where they agree after. */
@@ -349,6 +368,38 @@ const heldOf = (issue: Issue) => ({
   labels: issue.labels,
   remoteUpdatedAt: issue.updatedAt,
 });
+
+/** A binding's GitHub Project columns: the Project, why there is none, the stages made sure of on it, and GitHub's words on the options it refused. */
+type OnProject = Pick<
+  TrackerBindingRow,
+  | "githubProject"
+  | "githubProjectReason"
+  | "githubStatusStages"
+  | "githubStatusesRefused"
+>;
+
+/**
+ * The Project a binding asks for among those listed (left out: the first
+ * linked to the repository); null when it asks none and none is linked,
+ * undefined when the one it names is not listed.
+ */
+const projectChosen = (
+  listed: GithubProjectsView,
+  asked: BindInput["githubProject"]
+) => {
+  if (asked) {
+    return listed.projects.find((each) => each.id === asked.id);
+  }
+  return listed.projects.find((each) => each.linked) ?? null;
+};
+
+/** A binding with no GitHub Project: Linear's, or GitHub's with none picked. */
+const NO_PROJECT: OnProject = {
+  githubProject: null,
+  githubProjectReason: null,
+  githubStatusStages: null,
+  githubStatusesRefused: null,
+};
 
 /** How the link lookup names an issue by its tracker's key: GitHub's number in the bound repository, Linear's id. */
 const itemOf = (binding: TrackerBindingRow, key: string): ItemKey =>
@@ -719,12 +770,31 @@ const outcomeOf = (sync: Sync): Pick<TrackerBindingRow, "reason" | "state"> => {
 const projectAfter = (
   sync: Sync
 ): Partial<
-  Pick<TrackerBindingRow, "githubProject" | "githubProjectReason">
+  Pick<
+    TrackerBindingRow,
+    | "githubProject"
+    | "githubProjectReason"
+    | "githubStatusStages"
+    | "githubStatusesRefused"
+  >
 > => ({
   ...sync.projectProbe,
   ...(sync.projectRead ? { githubProject: sync.projectRead } : {}),
   ...(sync.statusRefused ? { githubProjectReason: sync.statusRefused } : {}),
+  ...(sync.statusStages ? { githubStatusStages: sync.statusStages } : {}),
+  ...(sync.statusesRefused === undefined
+    ? {}
+    : { githubStatusesRefused: sync.statusesRefused }),
 });
+
+/** How a stage's name and an option's are compared: ignoring case, as core `statusOptionFor` does. */
+const stageKey = (name: string): string => name.trim().toLowerCase();
+
+/** The stages `made` names on Project `projectId`; none when it names another Project, or nothing yet. */
+const madeOn = (
+  made: GithubStatusStages | null,
+  projectId: string
+): string[] => (made?.projectId === projectId ? made.stages : []);
 
 /** Where a binding stands after a sync that stopped: refused for a sign-in or scope, else as it stood. */
 const stateAfter = (
@@ -739,6 +809,8 @@ export const createTrackers = (deps: TrackersDeps) => {
   const soon = new Map<string, ReturnType<HubLifetimeShape["after"]>>();
   /** When each project's refused GitHub Projects were last asked (binding asks too), ms. */
   const checkedAt = new Map<string, number>();
+  /** When each project's refused Status options were last asked for, ms. */
+  const statusesAskedAt = new Map<string, number>();
   /** Tasks changed since their project's last sync, by project. */
   const dirty = new Map<string, Set<string>>();
   /** The tasks the sync is writing now (`<project>\0<task>`): their events are its own. */
@@ -817,8 +889,33 @@ export const createTrackers = (deps: TrackersDeps) => {
         linked: db.trackers.linkedCount(projectId),
         githubProject: binding.githubProject ?? null,
         githubProjectReason: binding.githubProjectReason ?? null,
+        githubStatusesRefused: binding.githubStatusesRefused ?? null,
       },
     };
+  };
+
+  /** One note per Project in the project's conversation, naming the Status options the hub added to it; none when it added none. */
+  const noticeAdded = (
+    projectId: string,
+    board: Pick<GithubProject, "title" | "url"> | null,
+    added: readonly string[]
+  ): void => {
+    if (!board || added.length === 0) {
+      return;
+    }
+    console.info(
+      `[tracker] ${projectId}: added the Status ${added.length === 1 ? "option" : "options"} ${added.join(", ")} to ${board.title}`
+    );
+    deps.notice(projectId, {
+      title: boardStatusWords.addedTitle(board.title, added),
+      body: boardStatusWords.addedBody(board.title, added.length),
+      event: {
+        kind: "board-statuses",
+        added: [...added],
+        board: board.title,
+        url: board.url,
+      },
+    });
   };
 
   /** The issue's changes written into its task; a refusal leaves them unagreed, to go again. */
@@ -1557,8 +1654,8 @@ export const createTrackers = (deps: TrackersDeps) => {
     }
     checkedAt.set(binding.projectId, Date.now());
     const bound = binding.githubProject;
-    // Options are added as it binds alone: a stage added to the board
-    // since leaves Status alone until the binding is saved again.
+    // No options are added here: the sync's own step adds the ones its
+    // stages lack once the Project reads (`statusesOwed`).
     const probe = await projectOf(
       binding.connection,
       binding.target,
@@ -1573,8 +1670,8 @@ export const createTrackers = (deps: TrackersDeps) => {
       sync.statusRefused = probe.response.detail;
       return null;
     }
-    sync.projectProbe = probe;
-    const { githubProject, githubProjectReason } = sync.projectProbe;
+    const { githubProject, githubProjectReason } = probe.onProject;
+    sync.projectProbe = { githubProject, githubProjectReason };
     return githubProjectReason ? null : githubProject;
   };
 
@@ -1651,6 +1748,83 @@ export const createTrackers = (deps: TrackersDeps) => {
       return;
     }
     sync.onProject = { client, fieldId: read.fieldId, project: fresh, read };
+    return await statusesOwed(sync, retry);
+  };
+
+  /**
+   * GitHub: each stage the hub has not yet made sure of a Status option for
+   * on the binding's Project given one, as binding gives them
+   * (tracker-github-project.ts `statusOptionsAdded`), the options it has
+   * kept as they are; then named made, so it is never given one again. A
+   * stage that has one by its name is named made with no call. GitHub's
+   * refusal goes on the binding in its words, the other stages' Status
+   * syncing, and is asked again on Sync now or after {@link RECHECK_MS}.
+   */
+  const statusesOwed = async (
+    sync: Sync,
+    retry: boolean
+  ): Promise<Stopped | undefined> => {
+    const { binding, onProject } = sync;
+    if (!onProject) {
+      return;
+    }
+    const { project } = onProject;
+    const made = madeOn(binding.githubStatusStages, project.id);
+    const known = new Set(made.map(stageKey));
+    const owed = sync.stages
+      .map((stage) => stage.name)
+      .filter((name) => !known.has(stageKey(name)));
+    if (owed.length === 0) {
+      return;
+    }
+    const madeNow: GithubStatusStages = {
+      projectId: project.id,
+      stages: [...made, ...owed],
+    };
+    const lacking = owed.filter(
+      (name) => statusOptionFor(name, project) === null
+    );
+    if (lacking.length === 0) {
+      sync.statusStages = madeNow;
+      return;
+    }
+    const last = statusesAskedAt.get(binding.projectId) ?? 0;
+    if (
+      binding.githubStatusesRefused &&
+      !retry &&
+      Date.now() - last < RECHECK_MS
+    ) {
+      return;
+    }
+    statusesAskedAt.set(binding.projectId, Date.now());
+    const octokit = await signedIn(() =>
+      deps.connections.githubClient(binding.connection)
+    );
+    if (octokit instanceof ElysiaStatus) {
+      return octokit;
+    }
+    const added = await statusOptionsAdded(
+      octokit,
+      project,
+      onProject.fieldId,
+      lacking
+    );
+    if (added instanceof ElysiaStatus) {
+      if (stopsSync(added)) {
+        return added;
+      }
+      console.warn(
+        `[tracker] ${binding.projectId}: ${project.title} kept no Status option for ${lacking.join(", ")}: ${added.response.detail}`
+      );
+      sync.statusesRefused = added.response.detail;
+      return;
+    }
+    const withOptions: GithubProject = { ...project, options: added.options };
+    onProject.project = withOptions;
+    sync.projectRead = withOptions;
+    sync.statusStages = madeNow;
+    sync.statusesRefused = null;
+    noticeAdded(binding.projectId, withOptions, added.added);
   };
 
   /** Each linked task on the board whose issue moved, or that moved itself or has a problem, made one record. */
@@ -1975,6 +2149,8 @@ export const createTrackers = (deps: TrackersDeps) => {
       resumeAt: null,
       githubProject: null,
       githubProjectReason: null,
+      githubStatusStages: null,
+      githubStatusesRefused: null,
     };
     const read = await targetOf(
       draft,
@@ -1985,7 +2161,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     if (read instanceof ElysiaStatus) {
       return read;
     }
-    const { target, onProject } = read;
+    const { target, onProject, added } = read;
     checkedAt.set(projectId, Date.now());
     const was = db.trackers.binding(projectId);
     // The same target bound again (another connection) keeps where it stood: nothing is missed or copied twice.
@@ -2011,6 +2187,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     console.info(
       `[tracker] ${projectId} bound to ${target.name} through ${asked.connection}`
     );
+    noticeAdded(projectId, onProject.githubProject, added);
     await syncProject(projectId);
     return view(projectId);
   };
@@ -2049,10 +2226,10 @@ export const createTrackers = (deps: TrackersDeps) => {
     const onProject =
       draft.provider === "github"
         ? await projectOf(draft.connection, target.id, asked, stages)
-        : { githubProject: null, githubProjectReason: null };
+        : { onProject: NO_PROJECT, added: [] };
     return onProject instanceof ElysiaStatus
       ? onProject
-      : { target, onProject };
+      : { target, ...onProject };
   };
 
   /**
@@ -2061,10 +2238,12 @@ export const createTrackers = (deps: TrackersDeps) => {
    * option named as it, ignoring case (core `statusOptionFor`). A stage
    * whose name no option carries has one added on GitHub as it binds
    * (tracker-github-project.ts `statusOptionsAdded`), every option it had
-   * kept with its items; GitHub's refusal of that refuses the binding in
-   * its words, so the person can pick no Project or grant what it needs. A
+   * kept with its items, and every stage is named made on it
+   * (`statusesOwed`); GitHub's refusal of that refuses the binding in its
+   * words, so the person can pick no Project or grant what it needs. A
    * connection that may not read the owner's Projects binds with none,
-   * GitHub's words kept.
+   * GitHub's words kept. Answers the binding's Project columns and the
+   * options it added.
    */
   const projectOf = async (
     connection: string,
@@ -2082,48 +2261,50 @@ export const createTrackers = (deps: TrackersDeps) => {
     if (listed instanceof ElysiaStatus) {
       return listed;
     }
-    const none: Pick<
-      TrackerBindingRow,
-      "githubProject" | "githubProjectReason"
-    > = { githubProject: null, githubProjectReason: listed.refused ?? null };
+    const none: { added: string[]; onProject: OnProject } = {
+      onProject: { ...NO_PROJECT, githubProjectReason: listed.refused ?? null },
+      added: [],
+    };
     if (listed.refused || asked === null) {
       return none;
     }
-    const chosen = asked
-      ? listed.projects.find((each) => each.id === asked.id)
-      : listed.projects.find((each) => each.linked);
-    if (asked && !chosen) {
+    const chosen = projectChosen(listed, asked);
+    if (chosen === undefined) {
       return problem(400, {
         code: "tracker-github-project-unknown",
-        detail: `${connection} reaches no open GitHub Project ${asked.id} for ${repo}: pick one it lists.`,
+        detail: `${connection} reaches no open GitHub Project ${asked?.id} for ${repo}: pick one it lists.`,
       });
     }
-    const options = chosen?.fieldId
+    if (!chosen) {
+      return none;
+    }
+    const statuses = chosen.fieldId
       ? await statusOptionsAdded(octokit, chosen, chosen.fieldId, stages)
-      : (chosen?.options ?? []);
-    if (options instanceof ElysiaStatus) {
+      : { added: [], options: chosen.options };
+    if (statuses instanceof ElysiaStatus) {
       return problem(400, {
         code: "tracker-github-statuses",
-        detail: options.response.detail,
+        detail: statuses.response.detail,
       });
     }
-    const onProject: Pick<
-      TrackerBindingRow,
-      "githubProject" | "githubProjectReason"
-    > = {
-      githubProject: chosen
-        ? {
-            id: chosen.id,
-            number: chosen.number,
-            title: chosen.title,
-            url: chosen.url,
-            fieldId: chosen.fieldId,
-            options,
-          }
-        : null,
+    const onProject: OnProject = {
+      githubProject: {
+        id: chosen.id,
+        number: chosen.number,
+        title: chosen.title,
+        url: chosen.url,
+        fieldId: chosen.fieldId,
+        options: statuses.options,
+      },
       githubProjectReason: null,
+      // With no Status field there is nothing made: the sync says so, and
+      // a field made since takes every stage's option.
+      githubStatusStages: chosen.fieldId
+        ? { projectId: chosen.id, stages: [...stages] }
+        : null,
+      githubStatusesRefused: null,
     };
-    return onProject;
+    return { onProject, added: statuses.added };
   };
 
   /** The Projects a GitHub connection reaches for a repository, for the binding's choice; GitHub's words when it may not read them. */

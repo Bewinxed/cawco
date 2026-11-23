@@ -11524,6 +11524,33 @@
             "properties": {
               "kind": {
                 "type": "string",
+                "const": "board-statuses"
+              },
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "board": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "added",
+              "board",
+              "url"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
                 "const": "agents"
               },
               "sha": {
@@ -14316,6 +14343,24 @@
       "options",
       "title",
       "url"
+    ]
+  },
+  "tracker_bindings.github_status_stages": {
+    "type": "object",
+    "properties": {
+      "projectId": {
+        "type": "string"
+      },
+      "stages": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "projectId",
+      "stages"
     ]
   },
   "tracker_bindings.provider": {

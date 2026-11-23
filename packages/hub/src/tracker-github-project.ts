@@ -313,15 +313,16 @@ export const githubProjects = async (
  * back with its `id` ("Include this to preserve the option's identity
  * during updates, preventing item field values from being cleared",
  * docs.github.com/en/graphql/reference/projects), its colour and its
- * description; an added one takes no id. Answers the options as they stand
- * after, or GitHub's refusal in its words.
+ * description; an added one takes no id. It never removes or renames one.
+ * Answers the options as they stand after and the names it added (none
+ * when every stage had one), or GitHub's refusal in its words.
  */
 export const statusOptionsAdded = async (
   octokit: Octokit,
   project: Pick<GithubProject, "title">,
   fieldId: string,
   stages: readonly string[]
-): Promise<StatusOption[] | TrackerProblem> => {
+): Promise<{ added: string[]; options: StatusOption[] } | TrackerProblem> => {
   const on = `the Project “${project.title}”`;
   const read = await ask<{
     node: { options?: (OptionInput & { id: string })[] } | null;
@@ -337,9 +338,19 @@ export const statusOptionsAdded = async (
       (option) =>
         option.name.trim().toLowerCase() === stage.trim().toLowerCase()
     );
-  const missing = stages.filter((stage) => !named(stage));
+  // Two stages named alike, ignoring case, take one option.
+  const missing = stages.filter(
+    (stage, at) =>
+      !named(stage) &&
+      stages.findIndex(
+        (other) => other.trim().toLowerCase() === stage.trim().toLowerCase()
+      ) === at
+  );
   if (missing.length === 0) {
-    return options.map(({ id, name }) => ({ id, name }));
+    return {
+      added: [],
+      options: options.map(({ id, name }) => ({ id, name })),
+    };
   }
   const sent: OptionInput[] = [
     ...options.map(({ id, name, color, description }) => ({
@@ -364,7 +375,10 @@ export const statusOptionsAdded = async (
   if (added instanceof ElysiaStatus) {
     return added;
   }
-  return added.updateProjectV2Field.projectV2Field?.options ?? [];
+  return {
+    added: missing,
+    options: added.updateProjectV2Field.projectV2Field?.options ?? [],
+  };
 };
 
 /** One Project's Status for one repository's issues, as the sync asks of it; a problem when the name is no `owner/repo`. */

@@ -21350,6 +21350,9 @@
                   },
                   "on": {
                     "type": "boolean"
+                  },
+                  "proposesDecides": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -56128,6 +56131,10 @@
             "description": "Why Caw could not start now, on or off, or why its last start failed; null when he could.",
             "type": "string"
           },
+          "proposesDecides": {
+            "description": "Whether the project's sessions, Caw among them, may propose a change to\nits Who decides, each one the person's to approve (hub\nproject-settings.ts `set_decides`); off, they read it only.",
+            "type": "boolean"
+          },
           "running": {
             "description": "What Caw started that still runs, as his off control lists it, each lead\nrow followed by its delegates: the sessions his work items run, and his\nown turn while an event started it. Turning him off with any of these\nrunning names which stop; the rest finish.",
             "type": "array",
@@ -56153,6 +56160,7 @@
           "harness",
           "hearsTasks",
           "on",
+          "proposesDecides",
           "running",
           "spendUsd",
           "starting"
@@ -64668,6 +64676,10 @@
           },
           "githubProjectReason": {
             "description": "GitHub: why stages do not show on a Project, in GitHub's words (the\nconnection may not read or write the owner's Projects); null when\nnothing stops them. Issues sync either way.",
+            "type": "string"
+          },
+          "githubStatusesRefused": {
+            "description": "GitHub: why the Project has no Status option yet for a stage that lacks\none, in GitHub's words (it refused adding them); null when nothing\nstopped them. Every other stage's Status syncs either way, and Sync now\nasks again.",
             "type": "string"
           },
           "linked": {
@@ -76689,6 +76701,9 @@
           "cawModel": {
             "type": "string"
           },
+          "cawProposesDecides": {
+            "type": "boolean"
+          },
           "conversationInstanceId": {
             "type": "string"
           },
@@ -76841,6 +76856,7 @@
           "appleGate",
           "attemptsHearComments",
           "cawHarness",
+          "cawProposesDecides",
           "createdAt",
           "dispatch",
           "eventsOn",
@@ -98371,6 +98387,9 @@
             "cawModel": {
               "type": "string"
             },
+            "cawProposesDecides": {
+              "type": "boolean"
+            },
             "conversationInstanceId": {
               "type": "string"
             },
@@ -98523,6 +98542,7 @@
             "appleGate",
             "attemptsHearComments",
             "cawHarness",
+            "cawProposesDecides",
             "createdAt",
             "dispatch",
             "eventsOn",
@@ -121222,6 +121242,9 @@
           "cawModel": {
             "type": "string"
           },
+          "cawProposesDecides": {
+            "type": "boolean"
+          },
           "conversationInstanceId": {
             "type": "string"
           },
@@ -121374,6 +121397,7 @@
           "appleGate",
           "attemptsHearComments",
           "cawHarness",
+          "cawProposesDecides",
           "createdAt",
           "dispatch",
           "eventsOn",
@@ -164346,6 +164370,9 @@
           "cawModel": {
             "type": "string"
           },
+          "cawProposesDecides": {
+            "type": "boolean"
+          },
           "conversation": {
             "type": "string"
           },
@@ -164566,6 +164593,7 @@
           "appleGate",
           "attemptsHearComments",
           "cawHarness",
+          "cawProposesDecides",
           "createdAt",
           "dispatch",
           "eventsOn",
@@ -173529,6 +173557,9 @@
           "cawModel": {
             "type": "string"
           },
+          "cawProposesDecides": {
+            "type": "boolean"
+          },
           "conversationInstanceId": {
             "type": "string"
           },
@@ -173746,6 +173777,7 @@
           "appleGate",
           "attemptsHearComments",
           "cawHarness",
+          "cawProposesDecides",
           "createdAt",
           "dispatch",
           "eventsOn",
@@ -174094,6 +174126,9 @@
           "cawModel": {
             "type": "string"
           },
+          "cawProposesDecides": {
+            "type": "boolean"
+          },
           "conversationInstanceId": {
             "type": "string"
           },
@@ -174246,6 +174281,7 @@
           "appleGate",
           "attemptsHearComments",
           "cawHarness",
+          "cawProposesDecides",
           "createdAt",
           "dispatch",
           "eventsOn",
@@ -227706,6 +227742,9 @@
           "cawModel": {
             "type": "string"
           },
+          "cawProposesDecides": {
+            "type": "boolean"
+          },
           "conversationInstanceId": {
             "type": "string"
           },
@@ -227858,6 +227897,7 @@
           "appleGate",
           "attemptsHearComments",
           "cawHarness",
+          "cawProposesDecides",
           "createdAt",
           "dispatch",
           "eventsOn",

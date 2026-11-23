@@ -256,9 +256,15 @@ import {
  * it, in place of the `command` target, which is gone (worker 31,689
  * measured; a delegate makes no routines). The worker's budget is raised
  * to it.
+ * 2026-11-23: project_settings takes `set_decides` with `decides` and
+ * `member`, how a project's sessions propose a Who decides change for the
+ * person to approve (the owner's pick that day, in place of the set_review
+ * that left with review becoming the `done` kind), and its description
+ * says so (worker 31,766 measured; a delegate has no project_settings).
+ * The worker's budget is raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 31_689,
+  worker: 31_766,
   delegate: 12_344,
   overseer: 770,
   "web-facing": 3400,
