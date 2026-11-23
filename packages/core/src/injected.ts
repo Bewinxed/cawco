@@ -799,9 +799,10 @@ export const artifactSavesNotice = (
  * change waits as that next version, which decision pages, artifact_read
  * and artifact_browse have at once, and the panel keeps the version opened
  * until the holder's artifact_show opens it; told once per held version.
- * Sent under the system origin
- * {@link import("./harness/kinds").ARTIFACT_ORIGIN}; a transcript draws it as one
- * quiet note.
+ * Sent under the hub's own origin (hub hub-words.ts
+ * `ARTIFACT_HANDED_ORIGIN`), never the person's act: a delegate's hand-up
+ * wakes no one the person stopped, and waits as a note while the holder's
+ * cache is cold. A transcript draws it as one quiet note, by its marker.
  */
 export interface ArtifactHanded extends ArtifactComments {
   /** The maker's name, as the rail shows it. */
@@ -889,7 +890,8 @@ export interface ArtifactNotice extends ArtifactComments {
 
 /**
  * THE ARTIFACT NOTICES: every message CawCo sends a session under the system
- * origin {@link import("./harness/kinds").ARTIFACT_ORIGIN}, each with how it is read
+ * origin {@link import("./harness/kinds").ARTIFACT_ORIGIN} (and a hand-up,
+ * {@link ArtifactHanded}, under its own), each with how it is read
  * back and the words its row leads with. A transcript draws each as the one
  * quiet line ({@link import("./harness").ARTIFACT_RESPONSES}), never as the
  * person's words; a notice on that origin none of these reads is a broken law

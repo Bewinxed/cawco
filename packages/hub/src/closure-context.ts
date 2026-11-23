@@ -138,7 +138,7 @@ import type {
   StoredSendRefusal,
 } from "./db/stored-types";
 import type { Undoable } from "./db/trash";
-import type { HubTurn, TurnChoice } from "./decide";
+import type { TurnChoice } from "./decide";
 import type { createDecisions } from "./decisions";
 import type { createDelegateWaits } from "./delegate-waits";
 import type { createDesignSystem } from "./design-system";
@@ -412,6 +412,8 @@ export interface ClosureContext {
   byIdNow: <E extends HubEnvelope<"control" | "send">>(envelope: E) => E;
   /** When `instanceId`'s warm prompt cache lapses, between turns; null when it is cold, unknown or inside a turn (keep-alive.ts `cacheState`). */
   cacheLapsesAt: (instanceId: string) => number | null;
+  /** Whether `instanceId`'s prompt cache is warm now (keep-alive.ts `cacheState`): false when it is cold or unknown. */
+  cacheWarm: (instanceId: string) => boolean;
   callAgent: AgentCall;
   callFs: <O extends FsOp>(
     machineId: string,
@@ -633,11 +635,10 @@ export interface ClosureContext {
   hubPreviewOrigins: () => HubPreviewOrigins;
   hubRun: `${string}-${string}-${string}-${string}-${string}`;
   hubStep: (event: HandoverEvent) => HandoverCommand[];
-  /** The one decision (decide.ts) on a turn the hub would start in `instanceId` by itself; undefined for a session the hub has no row of. */
+  /** The one decision (decide.ts) on a turn a send from `origin` would start in `instanceId`, by what its words are (hub-words.ts); undefined for a session the hub has no row of. */
   hubTurn: (
     instanceId: string,
-    turn: HubTurn,
-    waitedOn: boolean
+    origin: NeutralOrigin
   ) => TurnChoice | undefined;
   identities: ReturnType<typeof createSessionIdentities>;
   inCustody: Map<string, { machineId: string; since: number; told: boolean }>;
@@ -921,7 +922,6 @@ export interface ClosureContext {
     instanceId: string,
     neutral: { atLimit?: true | undefined; is_error?: boolean | undefined }
   ) => void;
-  noteWithdrawn: (asks: readonly ArrivingAsk[]) => void;
   noticesSeen: ReturnType<typeof createNoticesSeen>;
   notifications: ReturnType<typeof createNotifications>;
   /** Whether a machine's agent is connected. */
@@ -1368,7 +1368,11 @@ export interface ClosureContext {
   startsFreed: (_machineId: string) => void;
   startsOnHomeLogin: (machineId: string, payload: SpawnPayload) => boolean;
   startsTurnIn: (
-    row: { status: string; parentInstanceId?: string | null | undefined },
+    row: {
+      id: string;
+      status: string;
+      parentInstanceId?: string | null | undefined;
+    },
     {
       origin,
       shouldQuery,

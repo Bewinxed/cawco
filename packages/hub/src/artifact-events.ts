@@ -53,6 +53,7 @@ import { ARTIFACTS_ROOT } from "./config";
 import type { ArtifactRow } from "./db/artifacts";
 import { askWhat } from "./delegate-waits";
 import type { HubContext } from "./hub-context";
+import { ARTIFACT_HANDED_ORIGIN } from "./hub-words";
 import type { HubTimer } from "./lifetime";
 import { awayProblem, silentProblem } from "./machine-answers";
 import { externalizeImages } from "./media";
@@ -197,13 +198,19 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     }
     return { withdrawn, ...(replaces ? { replaces } : {}) };
   };
-  /** An artifact event's payload to `instance`: its words, its pictures first, the texts and files it carries, and the unread event it replaces. */
+  /**
+   * An artifact event's payload to `instance`: its words, its pictures
+   * first, the texts and files it carries, the unread event it replaces,
+   * and its origin: the person's act on the artifact (core
+   * `ARTIFACT_ORIGIN`), else the hub's word that a delegate handed it up.
+   */
   const artifactEventPayload = (
     instance: InstanceRow,
     text: string,
     images: TurnImage[],
     replaces: string | undefined,
-    attachments: SendAttachment[] = []
+    attachments: SendAttachment[] = [],
+    origin: string = ARTIFACT_ORIGIN
   ): SendPayload => ({
     instanceId: instance.id,
     ...(attachments.length > 0 ? { attachments } : {}),
@@ -218,7 +225,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
             : [...images.map(imageBlockOf), { type: "text" as const, text }],
       },
       parent_tool_use_id: null,
-      origin: { kind: "system", name: ARTIFACT_ORIGIN },
+      origin: { kind: "system", name: origin },
       ...(replaces ? { replaces } : {}),
     },
   });
@@ -228,7 +235,8 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     text: string,
     images: TurnImage[],
     replaces: string | undefined,
-    attachments: SendAttachment[] = []
+    attachments: SendAttachment[] = [],
+    origin: string = ARTIFACT_ORIGIN
   ) =>
     ctx.deliverSend({
       verb: "send",
@@ -239,7 +247,8 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
         text,
         images,
         replaces,
-        attachments
+        attachments,
+        origin
       ),
     });
   /**
@@ -317,10 +326,12 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
   /**
    * A session's artifact went to the session it reports to, not opened
    * (artifacts/service.ts `handOver`): that one hears it once per
-   * hand-off, on the channel the person's picks take, which wakes it as
-   * their words do, unless it is not woken by this maker's work
-   * ({@link wokenBy}): then it is kept in its transcript as not sent, with
-   * why, waking nobody. So is one it didn't take.
+   * hand-off, in the hub's word (hub-words.ts `ARTIFACT_HANDED_ORIGIN`),
+   * never the person's act: a note its next turn reads unless its cache is
+   * warm, so a hand-up starts no turn in a cold parent nor in one the
+   * person stopped. One not woken by this maker's work ({@link wokenBy})
+   * is kept in its transcript as not sent, with why, waking nobody. So is
+   * one it didn't take.
    */
   const handArtifactUp: ArtifactServiceDeps["handedUp"] = async (
     parent,
@@ -343,7 +354,14 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
         recordUndelivered(parent, text, [], artifactToolWords.handedUnwoken);
         return Promise.resolve();
       }
-      const record = sendArtifactEvent(parent, text, [], undefined);
+      const record = sendArtifactEvent(
+        parent,
+        text,
+        [],
+        undefined,
+        [],
+        ARTIFACT_HANDED_ORIGIN
+      );
       if (record instanceof ElysiaStatus) {
         // A problem the send path answers (a conversation gone) keeps no record of its own.
         recordUndelivered(parent, text, [], record.response.detail);

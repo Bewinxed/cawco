@@ -34,7 +34,7 @@ import type {
   ContinuationUnplaced,
   ContinueOutcome,
 } from "./hub-shapes";
-import type { KeepAliveRow } from "./keep-alive";
+import type { KeepAliveRow, TurnReading } from "./keep-alive";
 import type { AgentCall, Unanswered } from "./machine-answers";
 import { awayProblem, silentProblem } from "./machine-answers";
 import type { MachinePause, PauseCaller } from "./machine-pause";
@@ -58,7 +58,7 @@ export interface SessionCallsDeps {
   /** The session's workspace's own state, and Jev's word on a cold session that holds nothing unlanded. */
   readonly coldReading: (
     row: KeepAliveRow & { projectId: string | null; workItemId: string | null },
-    state: { lastTurnAt: string | null; midTurn: boolean },
+    state: TurnReading,
     message: string | undefined
   ) => Promise<{
     jev?: { attach: boolean; noul: number } | { error: string };
@@ -74,6 +74,7 @@ export interface SessionCallsDeps {
   readonly delegateTypes: DelegateTypesShape;
   readonly followupState: (row: KeepAliveRow) => {
     midTurn: boolean;
+    requestAt: number | null;
     hasTurns: boolean;
     recordedTurnAt: string | null;
     lastTurnAt: string | null;
@@ -192,6 +193,7 @@ export const followupCalls = ({
       return {
         row: null,
         midTurn: false,
+        requestAt: null,
         hasTurns: false,
         lastTurnAt: null,
         activityBound: false,
@@ -201,6 +203,7 @@ export const followupCalls = ({
     return {
       row,
       midTurn: state.midTurn,
+      requestAt: state.requestAt,
       hasTurns: state.hasTurns,
       lastTurnAt: state.lastTurnAt,
       activityBound: state.activityBound,

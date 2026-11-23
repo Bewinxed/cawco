@@ -97,6 +97,7 @@ export type ContinuationsContext = Pick<
   | "askersOf"
   | "atLimit"
   | "awayError"
+  | "cacheWarm"
   | "callAgent"
   | "contextTokensOf"
   | "contextWindowOf"
@@ -632,9 +633,17 @@ export const createContinuations = (ctx: ContinuationsContext) => {
   ): string => {
     const { account } = request.target;
     const where = `in a new session${account ? ` on ${ctx.accountWords(account)}` : ""}, asked by ${askerWords(askedBy)}`;
-    const files = steps.files
-      ? " It files its open items in its records first, in a turn of its own."
-      : "";
+    let files = "";
+    if (steps.files) {
+      files =
+        " It files its open items in its records first, in a turn of its own.";
+    } else if (
+      askedBy.kind === "person" ||
+      (askedBy.kind === "move" && askedBy.stopped === false)
+    ) {
+      files =
+        " Its cache isn't warm, so it files nothing first: the new session takes up what is still open from the summary and its records.";
+    }
     if (request.asksOnly) {
       return `[continuation] ${prepared.source.title} restarts from the ${prepared.extracted.asks.length} message(s) it was asked ${where}.${files} Nothing is summarised; the new session opens on those messages and its open items.`;
     }
@@ -700,7 +709,11 @@ export const createContinuations = (ctx: ContinuationsContext) => {
   /**
    * Whether a job's source files its open items first: a person's Continue
    * of a session CawCo runs, and a move's ahead of its limit, which can still
-   * take a turn there.
+   * take a turn there, while its prompt cache is warm. A cold or unmeasured
+   * source files nothing: that turn would re-read its whole conversation at
+   * the write price before the summariser reads it again, and the summary
+   * lists what is still open, which the new session takes up from there
+   * (the owner's pick on cold-wakes, 2026-11-23: "Skip filing when cold").
    */
   const filesFirst = (
     prepared: PreparedContinuation,
@@ -708,7 +721,8 @@ export const createContinuations = (ctx: ContinuationsContext) => {
   ): boolean =>
     (askedBy.kind === "person" ||
       (askedBy.kind === "move" && askedBy.stopped === false)) &&
-    ctx.db.getInstancesByIds([prepared.source.instanceId]).length > 0;
+    ctx.db.getInstancesByIds([prepared.source.instanceId]).length > 0 &&
+    ctx.cacheWarm(prepared.source.instanceId);
 
   /** A job's first step once nothing holds it: its source's filing turn, else what follows that. */
   const firstStage = (

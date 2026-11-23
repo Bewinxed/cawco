@@ -25,12 +25,13 @@ import { workWords } from "@cawco/core/words/work";
 import { ElysiaStatus } from "elysia";
 import type { ClosureContext } from "./closure-context";
 import type { AccountLeave } from "./db/accounts";
+import { MOVE_ENDED_ORIGIN } from "./hub-words";
 import type { HubTimer } from "./lifetime";
 import type { Kept } from "./limit-decision";
 import { SIGNIN_TIMEOUT_MS } from "./login-moves";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { createSends } from "./sends";
-import { LIMIT_ORIGIN, sessionWord } from "./session-word";
+import { sessionWord } from "./session-word";
 import { unreachable } from "./unreachable";
 
 /**
@@ -271,8 +272,11 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
    * hub restart, taken here once): each background task, by its id,
    * description and the last of its output, and the one-time wake-ups. Its
    * first turn there reads it, so the session starts again what it still
-   * needs. Every launch asks ({@link resumeSpawn}): the one after the move,
-   * or, when that never came up, the next.
+   * needs: a quiet note, unless its cache is warm or it was waiting on that
+   * work or holds a live work item (hub-words.ts, `move-ended`), and the
+   * carry-on that goes with it reads it in its turn. Every launch asks
+   * ({@link resumeSpawn}): the one after the move, or, when that never came
+   * up, the next.
    */
   const tellEndedByMove = (row: { id: string; machineId: string }): void => {
     const ended = ctx.db.moveEndings.take(row.id);
@@ -282,7 +286,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
     const sent = ctx.deliverSend(
       sessionWord(row, endedByMoveWords(ended), {
         kind: "system",
-        name: LIMIT_ORIGIN,
+        name: MOVE_ENDED_ORIGIN,
         line: noticeWords.movedEnded(ended.tasks.length),
       })
     );

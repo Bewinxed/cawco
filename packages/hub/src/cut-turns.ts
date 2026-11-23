@@ -1,4 +1,3 @@
-import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import type { CutCommand } from "@cawco/core/commands/controls";
 import { detach } from "@cawco/core/detach";
@@ -23,6 +22,7 @@ import type { PublicInstanceRow } from "./db/instances";
 import type { MachineLineKind } from "./db/schema";
 import { TURN_UNRECORDED } from "./db/sends";
 import type { MachineLine } from "./db/session-lines";
+import { RESTORE_ORIGIN, TASKS_CUT_ORIGIN } from "./hub-words";
 import { isKeepAlive } from "./keep-alive";
 import { uuidOf } from "./named-uuid";
 import type { createSends } from "./sends";
@@ -141,15 +141,6 @@ const TASKS_LINE = z.object({
   type: z.string().optional(),
 });
 
-/** The questions an `AskUserQuestion` ask asked, each as it came. */
-const ASKED_QUESTIONS = z.object({
-  input: z
-    .object({
-      questions: z.array(z.object({ question: z.unknown() })).optional(),
-    })
-    .optional(),
-});
-
 /** A machine's own line about a session (core `MachineLineKind`): its id and its words. */
 const MACHINE_LINE = z.object({ uuid: z.string(), content: z.string() });
 
@@ -251,8 +242,11 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
    * process is up the session is told each one, interrupted, its outcome
    * unknown, with the last of what it printed as that process reads it
    * ({@link cutTaskOutput}), in a message its transcript shows: the line
-   * the person and the session both read. Once: the same cut says it under
-   * one uuid. A move tells what it ended its own way ({@link tellEndedByMove}).
+   * the person and the session both read. A quiet note, unless its cache is
+   * warm or it was waiting on that work or holds a live work item
+   * (hub-words.ts, `tasks-cut`): a cut turn handed back reads it in its
+   * turn. Once: the same cut says it under one uuid. A move tells what it
+   * ended its own way ({@link tellEndedByMove}).
    */
   const tellCutTasks = (
     row: { id: string; machineId: string },
@@ -290,7 +284,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
               uuid: uuidOf(`${row.id}\u0000cut\u0000${before.getTime()}`),
               message: { role: "user", content: ctx.cutTasksWords(how, told) },
               parent_tool_use_id: null,
-              origin: { kind: "system", name: "restore" },
+              origin: { kind: "system", name: TASKS_CUT_ORIGIN },
             },
           },
         } satisfies HubEnvelope<"send">);
@@ -347,7 +341,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
             uuid: uuidOf(`${row.id}\u0000${turn}`),
             message: { role: "user", content },
             parent_tool_use_id: null,
-            origin: { kind: "system", name: "restore" },
+            origin: { kind: "system", name: RESTORE_ORIGIN },
           },
         },
       } satisfies HubEnvelope<"send">,
@@ -386,8 +380,8 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
    *   continuation of it is under way, or it moves account at its turn's
    *   end: those send their own word;
    * - an ask of it is parked: its process is waiting on that ask, or, its
-   *   process gone, the session is halted on its permit until the answer
-   *   wakes it (asks.ts `keep`).
+   *   process gone, the session is halted on its permit or its question
+   *   until the person's answer wakes it (asks.ts `keep`).
    */
   const cutTurnOf = (
     row: PublicInstanceRow,
@@ -402,14 +396,11 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
         (how === "killed" ||
           (launched !== undefined && (open ?? 0) < launched)));
     const processUp = row.status === "running" || row.status === "starting";
-    // A question its process took with it is asked again whatever else waits.
     if (
       open === null ||
       !cut ||
       (how === "killed" ? row.status !== "sleeping" : !processUp) ||
-      (how !== "killed" &&
-        awaitsSend(row.id) &&
-        !withdrawnQuestions.has(row.id))
+      (how !== "killed" && awaitsSend(row.id))
     ) {
       return undefined;
     }
@@ -430,92 +421,12 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
   };
 
   /**
-   * Questions a session had put to the person when its process went, by
-   * session: the asks went with the process ("Question withdrawn"), nobody
-   * answered them, and the turn handed back asks them again
-   * ({@link askAgain}).
+   * Asks that went with the process that parked them and the hub does not
+   * keep (server.ts `keepPrompt`): off every screen.
    */
-  const withdrawnQuestions = new Map<string, string[]>();
-
-  /** Keeps the questions `asks` put to the person, which go with their process unanswered. */
-  const noteWithdrawn = (asks: readonly ArrivingAsk[]): void => {
-    for (const ask of asks) {
-      if (!ask.instanceId || ask.payload.toolName !== ASK_USER_QUESTION) {
-        continue;
-      }
-      const read = ASKED_QUESTIONS.safeParse(ask.payload);
-      const asked = read.success ? (read.data.input?.questions ?? []) : [];
-      const questions = asked.flatMap((one) =>
-        typeof one.question === "string" ? [one.question] : []
-      );
-      if (questions.length > 0) {
-        withdrawnQuestions.set(ask.instanceId, [
-          ...(withdrawnQuestions.get(ask.instanceId) ?? []),
-          ...questions,
-        ]);
-      }
-    }
-  };
-
-  /** Asks that went with the process that parked them: off every screen, and a question asked again when its session next runs. */
   const goneWithProcess = (asks: readonly ArrivingAsk[]): void => {
-    noteWithdrawn(asks);
     for (const parked of asks) {
       ctx.pending.resolve(parked.requestId ?? "", "cancelled");
-    }
-  };
-
-  /** A cut turn's hand-back, with the questions its process took with it to be asked again. */
-  const askAgain = (instanceId: string, words: string): string => {
-    const questions = withdrawnQuestions.get(instanceId);
-    withdrawnQuestions.delete(instanceId);
-    return questions?.length
-      ? `${words} The question${questions.length === 1 ? "" : "s"} you had asked the person (${questions.map((one) => `"${one}"`).join(", ")}) went with that process and ${questions.length === 1 ? "was" : "were"} never answered: ask again.`
-      : words;
-  };
-
-  /**
-   * A session up again whose question went with its last process, with no
-   * cut turn handed back to say so (what it was sent took that turn's
-   * place): told now, behind what it was owed, to ask it again. Once per
-   * process: the same start says it once however often it is looked at.
-   */
-  const askWithdrawnAgain = (
-    row: PublicInstanceRow | undefined,
-    restartedAt: Date | null | undefined
-  ): void => {
-    if (
-      !(row && restartedAt && withdrawnQuestions.has(row.id)) ||
-      ctx.db.ownedInstance(row.id, row.machineId)?.endIntent ||
-      !(row.status === "running" || row.status === "starting")
-    ) {
-      return;
-    }
-    const sent = ctx.deliverSend({
-      verb: "send",
-      machineId: row.machineId,
-      instanceId: row.id,
-      payload: {
-        instanceId: row.id,
-        message: {
-          type: "user",
-          uuid: uuidOf(`${row.id}\u0000asked\u0000${restartedAt.getTime()}`),
-          message: {
-            role: "user",
-            content: askAgain(
-              row.id,
-              `CawCo restarted this session's process at ${utcClock(restartedAt)}.`
-            ),
-          },
-          parent_tool_use_id: null,
-          origin: { kind: "system", name: "restore" },
-        },
-      },
-    } satisfies HubEnvelope<"send">);
-    if (sent instanceof ElysiaStatus) {
-      console.warn(
-        `[hub] a question asked again was not sent: ${sent.response.detail}`
-      );
     }
   };
 
@@ -553,16 +464,12 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
       if (serverStopped) {
         ctx.turnOver(instanceId);
       }
-      askWithdrawnAgain(row, restartedAt);
       return;
     }
     const unsent = handTurnBack(
       row,
       String(cut),
-      askAgain(
-        row.id,
-        `${restartedWords(restartedAt)}${cutWords ? `\n\n${cutWords}` : ""}`
-      )
+      `${restartedWords(restartedAt)}${cutWords ? `\n\n${cutWords}` : ""}`
     );
     if (unsent !== undefined) {
       ctx.turnOver(row.id);
@@ -696,10 +603,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
     const unsent = handTurnBack(
       row,
       String(cut),
-      askAgain(
-        row.id,
-        `${killedWords(signal, killedAt)}${cutWords ? `\n\n${cutWords}` : ""}`
-      )
+      `${killedWords(signal, killedAt)}${cutWords ? `\n\n${cutWords}` : ""}`
     );
     if (unsent !== undefined) {
       ctx.turnOver(row.id);
@@ -772,7 +676,6 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
 
   return {
     keepTasks,
-    noteWithdrawn,
     goneWithProcess,
     awaitsSend,
     resumeCutTurn,

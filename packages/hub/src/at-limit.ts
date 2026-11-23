@@ -39,6 +39,7 @@ import {
   type MoveTrigger,
   type WaitWhy,
 } from "./decide";
+import { MOVE_ENDED_ORIGIN } from "./hub-words";
 import type { HubTimer } from "./lifetime";
 import {
   type AccountsRead,
@@ -382,10 +383,13 @@ const CARRY_ON_ORIGIN = "limit";
  * Whether a turn its account refused was started by the hub's own word
  * rather than a person's or a session's: such a turn asked nothing of the
  * session that is worth another account, so it is not moved, and waits for
- * a person or its parent to write.
+ * a person or its parent to write. A carry-on, and the word of what its
+ * move ended (which rides with one), are the move's own.
  */
 const noticeTurn = (origin: NeutralOrigin | undefined): boolean =>
-  origin?.kind === "system" && origin.name !== CARRY_ON_ORIGIN;
+  origin?.kind === "system" &&
+  origin.name !== CARRY_ON_ORIGIN &&
+  origin.name !== MOVE_ENDED_ORIGIN;
 
 /** A decision that waits. */
 type Waiting = Extract<MoveChoice, { kind: "wait" }>;

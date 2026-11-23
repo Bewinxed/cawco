@@ -28,8 +28,10 @@
  * parent's own answer goes untold, and an ask no screen was shown.
  *
  * Each word is the hub's, under its own origin (core `DELEGATE_WAIT_ORIGIN`),
- * never the delegate's message: it wakes a parent at rest, and a send of it
- * that fails tells no session it failed. Its tag names the ask, its
+ * never the delegate's message, and a quiet note the parent's next turn
+ * reads, never a turn of its own (hub-words.ts: the person holds the ask in
+ * Needs you, and the parent can do nothing for it): a send of it that fails
+ * tells no session it failed. Its tag names the ask, its
  * delegate and what it asks. Each is told once: its send is
  * named by the ask and what it tells ({@link NoticeMark}), and the hub hands
  * a send it already holds a record of over once (server.ts

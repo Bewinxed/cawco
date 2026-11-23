@@ -21,7 +21,10 @@
  *   in its parent's tray, and started once the pause ends;
  * - a preview's listener: not started, the pane saying why.
  * Turns already running there are interrupted as the pause begins, and each
- * session is sent word, held until the end, to carry on where it stopped.
+ * session is sent word, held until the end, to carry on where it stopped:
+ * a word that finishes its cut turn (hub-words.ts), so it runs at the end
+ * whatever its cache, a session that fell asleep meanwhile woken by it (the
+ * owner's pick on cold-wakes, 2026-11-23).
  *
  * The pause is the machine's row (`agents.paused_until`), so it survives the
  * hub's restart and its agent's; the timer is armed again as the hub starts.

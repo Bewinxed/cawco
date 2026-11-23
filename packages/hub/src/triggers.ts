@@ -45,8 +45,8 @@ import { ElysiaStatus } from "elysia";
 import { isProjectConversation, type PersonsSend } from "./caw";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
+import { ROUTINE_ORIGIN } from "./hub-words";
 import type { HubLifetimeShape } from "./lifetime";
-import { ROUTINE_ORIGIN } from "./memory";
 import type { Caps } from "./project-caps";
 import type { Tasks } from "./tasks";
 import {

@@ -77,6 +77,7 @@ import { z } from "zod";
 import { isProjectConversation } from "./caw";
 import type { DbShape } from "./db";
 import { isBlocked } from "./db/project-work";
+import { FLEET_WATCH_ORIGIN } from "./hub-words";
 import {
   askJev,
   type JevAccess,
@@ -112,7 +113,7 @@ const ERROR_KEY_LIMIT = 300;
 /** A task's brief, as triage reads it. */
 const BRIEF_LIMIT = 4000;
 /** The origin of what fleet watch sends: never a person's word. */
-const ORIGIN = { kind: "system", name: "fleet-watch" } as const;
+const ORIGIN = { kind: "system", name: FLEET_WATCH_ORIGIN } as const;
 
 const DIGITS = /\d+/gu;
 const HEX = /\b[0-9a-f]{8,}\b/gu;

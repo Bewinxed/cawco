@@ -56,6 +56,7 @@ import { z } from "zod";
 import { MEMORY_FILE_CHARS } from "./config";
 import type { DbShape } from "./db";
 import type { SessionTaintRow } from "./db/projects";
+import { ROUTINE_ORIGIN } from "./hub-words";
 import { type JevAccess, jevAccess } from "./jev";
 import { askRow, offLine } from "./jev-placement";
 import { boardTitle } from "./labels";
@@ -167,8 +168,6 @@ export const personsTier = (rel: string): string | undefined => {
 
 /** How long what the web test reads of the fleet (its hostnames, its MCP servers' URLs) is kept before it is read again. */
 const FLEET_READ_MS = 60_000;
-/** The origin a conversation's wake carries when a routine woke it (caw.ts). */
-export const ROUTINE_ORIGIN = "routine:";
 /** A keep-alive's send (keep-alive.ts): the hub's heartbeat, not a delivery. */
 const KEEPALIVE = "keepalive";
 /** Whether a subagent of `harness` ends with its call's result (its descriptor's `subagentEndsWithCall`). */

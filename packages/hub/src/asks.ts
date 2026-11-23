@@ -5,7 +5,9 @@
  * - **question**: the session's own `ask` call ({@link tools}), questions in
  *   the house shape and whether its work waits on them. Nothing on the
  *   session's side waits either way: the call answers at once
- *   (`askQuestionWords`), and the answer arrives as a message.
+ *   (`askQuestionWords`), and the answer arrives as a message. A harness's
+ *   own question whose process went before the person answered is kept as
+ *   one ({@link keep}), its work waiting on it.
  * - **approve**: whatever door an `admin_*_write` call comes in by (MCP from
  *   any harness, the REST door, `cawco tool`), and `project_settings`,
  *   opening a relay or installing a build when they ask: the hub records it
@@ -268,6 +270,28 @@ const answerSend = (askId: string): string => uuidOf(`${askId}\u0000answer`);
 const callOf = (envelope: ArrivingAsk): AskedPermit => {
   const { toolName, input } = envelope.payload;
   return { kind: "permit", tool: toolName, input };
+};
+
+/** A harness's question's questions, in the house shape every card reads. */
+const HARNESS_QUESTIONS = z.array(UserQuestionShape).min(1);
+
+/**
+ * What a parked prompt is kept as ({@link keep}): a harness's question as
+ * the hub's question, its work waiting on the answer as the harness's call
+ * did; any other prompt as a permit. Undefined for a question in no shape a
+ * card reads.
+ */
+const keptAsk = (
+  envelope: ArrivingAsk
+): AskedPermit | AskedQuestion | undefined => {
+  const { toolName, input } = envelope.payload;
+  if (toolName !== ASK_USER_QUESTION) {
+    return callOf(envelope);
+  }
+  const questions = HARNESS_QUESTIONS.safeParse(input.questions);
+  return questions.success
+    ? { kind: "question", questions: questions.data, blocks: true }
+    : undefined;
 };
 
 export const createAsks = (deps: AsksDeps) => {
@@ -586,15 +610,23 @@ export const createAsks = (deps: AsksDeps) => {
     },
 
     /**
-     * A harness's permission prompt whose process went before the person
-     * answered, kept as the hub's own ask under the same request id, so the
-     * same card stays on every screen and push, and its session parks on it.
-     * The prompt's own frame is replaced, not settled; a prompt routed to
-     * its session's parent stays routed there.
+     * A harness's permission prompt or question whose process went before
+     * the person answered, kept as the hub's own ask under the same request
+     * id, so the same card stays on every screen and push, and its session
+     * parks on it: a prompt as a permit, a question as the hub's question,
+     * whose answer reaches the session as the person's act and wakes it
+     * (the owner's pick on cold-wakes, 2026-11-23: "The hub keeps it"; never
+     * a wake to ask it again). The prompt's own frame is replaced, not
+     * settled; one routed to its session's parent stays routed there.
+     * False for a question in no shape a card reads, which goes with its
+     * process.
      */
-    keep(prompt: ArrivingAsk, asker: InstanceRow): void {
+    keep(prompt: ArrivingAsk, asker: InstanceRow): boolean {
       const { raisedAt, routedTo, toolUseId } = prompt.payload;
-      const asked = callOf(prompt);
+      const asked = keptAsk(prompt);
+      if (!asked) {
+        return false;
+      }
       const ask: AskRecord = {
         id: prompt.requestId ?? newAskId(),
         instanceId: asker.id,
@@ -607,8 +639,9 @@ export const createAsks = (deps: AsksDeps) => {
       deps.asks.add(ask);
       deps.park(askEnvelope(ask, asker));
       console.log(
-        `[asks] ${asker.id}'s process went while its ${asked.tool} prompt waited on the person (${ask.id}): kept`
+        `[asks] ${asker.id}'s process went while its ${asked.kind === "question" ? "question" : `${asked.tool} prompt`} waited on the person (${ask.id}): kept`
       );
+      return true;
     },
 
     /**

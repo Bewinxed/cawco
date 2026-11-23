@@ -75,13 +75,15 @@ const coldReading = (
 
 /**
  * A session's prompt cache as every reader of it decides (hub decide.ts,
- * the cold check, keep-alive): warm until a moment, cold, or unknown. Being
- * inside a turn is warm: its requests write the cache every few seconds.
- * Cold is proven only by a measurement: a keep-alive ping that missed
- * (`measuredCold`), or a measured lifetime (its TTL from its last request)
- * that has run out, or its harness's longest lifetime past since its last
- * turn. Anything else is unknown, and unknown is never priced as warm or as
- * free (decide.ts).
+ * the cold check, keep-alive): warm until a moment, cold, or unknown. It
+ * lives from the session's last request, inside a turn as between turns: a
+ * working turn's requests write it every few seconds, and a turn parked on
+ * the person's answer (an ask, a permission prompt) makes none, so it goes
+ * cold there as anywhere. Cold is proven only by a measurement: a
+ * keep-alive ping that missed (`measuredCold`), or a measured lifetime (its
+ * TTL from its last request) that has run out, or its harness's longest
+ * lifetime past since its last request or turn. Anything else is unknown,
+ * and unknown is never priced as warm or as free (decide.ts).
  */
 export type CacheState =
   | { kind: "warm"; inTurn: boolean; until: number }
@@ -96,22 +98,65 @@ const ttlMs = (ttl: string | null): number | null => {
   return ttl === "5m" ? 300_000 : null;
 };
 
+/** The shortest lifetime any harness's prompt cache holds: a request this recent left it warm, its lifetime measured or not. */
+const SHORTEST_LIFE_MS = 300_000;
+
+/**
+ * The cache of a session inside a turn, from that turn's last request
+ * (`requestAt`): warm for its lifetime (`life`, or the shortest any cache
+ * holds when unmeasured) after it, cold once a measured lifetime or its
+ * harness's longest has run out, else unknown. Unknown too when this hub
+ * heard none of the turn's requests (it started before the hub did).
+ * Never the measured-cold reading between turns: a working turn wrote the
+ * cache again since.
+ */
+const turnCache = (
+  harness: KeepAliveRow["harness"],
+  life: number | null,
+  requestAt: number | null,
+  now: number
+): CacheState => {
+  if (requestAt === null) {
+    return { kind: "unknown" };
+  }
+  const until = requestAt + (life ?? SHORTEST_LIFE_MS);
+  if (until > now) {
+    return { kind: "warm", inTurn: true, until };
+  }
+  const longest = life ?? traitsOf(harness).promptCacheMaxMs;
+  return longest !== null && requestAt + longest <= now
+    ? { kind: "cold" }
+    : { kind: "unknown" };
+};
+
+/**
+ * How a session's turns stand, as {@link cacheState} reads them: whether a
+ * turn is under way (`midTurn`, read off its process), when that turn last
+ * sent a request (`requestAt`, epoch ms, turn-state.ts; null when this hub
+ * heard none of it), and when its last turn ended (`lastTurnAt`, ISO) when
+ * the caller knows it.
+ */
+export interface TurnReading {
+  lastTurnAt?: string | null;
+  midTurn: boolean;
+  requestAt?: number | null;
+}
+
 /**
  * THE ONE CACHE TEST ({@link CacheState}): `row`'s prompt cache at `now`,
- * `midTurn` read off its process (a turn under way), `lastTurnAt` its last
- * turn's end when the caller knows it.
+ * from how its turns stand (`how`).
  */
 export const cacheState = (
   row: Pick<
     KeepAliveRow,
     "cacheColdAt" | "cacheColdUnread" | "cacheTtl" | "harness" | "lastRequestAt"
   >,
-  how: { lastTurnAt?: string | null; midTurn: boolean },
+  how: TurnReading,
   now: number
 ): CacheState => {
   const life = ttlMs(row.cacheTtl);
   if (how.midTurn) {
-    return { kind: "warm", inTurn: true, until: now + (life ?? 300_000) };
+    return turnCache(row.harness, life, how.requestAt ?? null, now);
   }
   if (measuredCold(row)) {
     return { kind: "cold" };
@@ -140,12 +185,8 @@ export const cacheState = (
  * hands no work to without asking, and one whose artifacts its project
  * takes up (artifacts/service.ts `leftFor`).
  */
-export const provenCold = (
-  row: KeepAliveRow,
-  midTurn: boolean,
-  lastTurnAt: string | null
-): boolean =>
-  cacheState(row, { midTurn, lastTurnAt }, Date.now()).kind === "cold";
+export const provenCold = (row: KeepAliveRow, how: TurnReading): boolean =>
+  cacheState(row, how, Date.now()).kind === "cold";
 
 /** How long before its cache expires a session is pinged. */
 const pingMargin = (row: Pick<KeepAliveColumns, "cacheTtl">): number =>

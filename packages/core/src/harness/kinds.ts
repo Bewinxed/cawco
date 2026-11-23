@@ -151,8 +151,8 @@ export const WORK_ITEM_ORIGIN = "work-item";
  * The `system` origin name of the hub's word to a parent while its delegate
  * waits on the person, and of how that wait ended (hub delegate-waits.ts):
  * the hub's word about the delegate, never the delegate's own message, so a
- * send of it that fails tells no session it failed. It wakes a parent at
- * rest: the far end of the work the parent set going.
+ * send of it that fails tells no session it failed. A quiet note the
+ * parent's next turn reads, never a turn of its own (hub hub-words.ts).
  */
 export const DELEGATE_WAIT_ORIGIN = "delegate-wait";
 

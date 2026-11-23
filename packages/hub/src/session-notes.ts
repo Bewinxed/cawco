@@ -14,12 +14,8 @@ import {
   projectNoteLine,
   watchLine,
 } from "./history";
+import { CONTAINERS_ORIGIN, LEAK_ORIGIN } from "./hub-words";
 import { uuidOf } from "./named-uuid";
-
-/** The system origin name of the hub's word that something a session started leaks (core `LEAK_FOUND`). */
-const LEAK_ORIGIN = "leak";
-/** The system origin name of the hub's word that a session's containers stopped as it ended (core `CONTAINERS_ENDED`). */
-const CONTAINERS_ORIGIN = "containers";
 
 /**
  * The uuid of the notice sent for leak `leak` of session `instanceId`,
@@ -65,7 +61,10 @@ export const createSessionNotes = (ctx: SessionNotesContext) => {
   /**
    * A leak its machine found in what a session started (core `LEAK_FOUND`):
    * the session is told in the hub's word ({@link tellSession}), once per
-   * leak. One from a machine that does not run the session is nobody's.
+   * leak, warm or cold, asleep or not: a word that finishes what it set
+   * going (hub-words.ts), so it judges whether that is normal (the owner's
+   * pick on cold-wakes, 2026-11-23). One from a machine that does not run
+   * the session is nobody's.
    *
    * A delegate whose work item has ended takes no word but its parent's
    * (work-items.ts `refusal`), and a leak is mostly found once its commands
@@ -172,10 +171,13 @@ export const createSessionNotes = (ctx: SessionNotesContext) => {
    * - `ended` (core `CONTAINERS_ENDED`): the session ended, and the containers
    *   its work started were stopped. The session that delegated it is told,
    *   naming it and its item; a session nobody delegated is the person's
-   *   own, and is told itself, a word that waits for whoever wakes it next.
+   *   own, and is told itself.
    * - `untracked` (core `CONTAINERS_UNTRACKED`): as it launches, the session
    *   reaches a runtime with no door, so what it starts there will not stop
    *   with it. The session itself is told: it is the one starting them.
+   *
+   * Either is a quiet note, never a turn of its own however warm the
+   * session (hub-words.ts): it waits for whatever next wakes it.
    */
   const tellContainers = (
     machineId: string,

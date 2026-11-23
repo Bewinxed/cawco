@@ -119,10 +119,10 @@ import type {
   TaskTriggersDb,
 } from "./db/task-triggers";
 import type { Dispatcher } from "./dispatch";
+import { ROUTINE_ORIGIN } from "./hub-words";
 import { eventData } from "./inbound-event";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { type CommandOptions, WouldWait } from "./machine-pause";
-import { ROUTINE_ORIGIN } from "./memory";
 import type { MemoryRun, ProbeAnswer } from "./memory-run";
 import type { Push } from "./push";
 import type { CarryRoutines } from "./routine-carry";

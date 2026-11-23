@@ -30,6 +30,7 @@ const BY_KIND: Readonly<Record<string, string>> = {
   "machine-pause": "Told the machine pause is over",
   plan: "Told your plan changes",
   restore: "Told about a restart",
+  "tasks-cut": "Told about a restart",
   "work-item": "Told about its work item",
 };
 

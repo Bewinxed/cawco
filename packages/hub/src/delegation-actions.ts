@@ -59,7 +59,7 @@ import type {
   DelegatePeek,
 } from "./delegation-tree";
 import { byId, handleId, isHandle, mentioned } from "./handles";
-import { type KeepAliveRow, provenCold } from "./keep-alive";
+import { type KeepAliveRow, provenCold, type TurnReading } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { handle as idHandle } from "./presenters/words";
 import type { ProblemsOf } from "./refusal";
@@ -1153,12 +1153,8 @@ const CONTEXT_SIZE_MS = 3000;
  * Whether a session's prompt cache is warm now (mid-turn, unmeasured, or
  * unexpired); a warm one forgets the cold refusals given about it.
  */
-function warmNow(
-  row: KeepAliveRow,
-  midTurn: boolean,
-  lastTurnAt: string | null
-): boolean {
-  if (provenCold(row, midTurn, lastTurnAt)) {
+function warmNow(row: KeepAliveRow, how: TurnReading): boolean {
+  if (provenCold(row, how)) {
     return false;
   }
   const prefix = `${row.id}:`;
@@ -1287,9 +1283,17 @@ async function checkCold(
   if (!state.row) {
     return;
   }
-  const { row, midTurn, hasTurns, lastTurnAt, activityBound, unlanded, jev } =
-    state;
-  if (warmNow(row, midTurn, lastTurnAt)) {
+  const {
+    row,
+    midTurn,
+    requestAt,
+    hasTurns,
+    lastTurnAt,
+    activityBound,
+    unlanded,
+    jev,
+  } = state;
+  if (warmNow(row, { midTurn, requestAt, lastTurnAt })) {
     return;
   }
   if (unlanded) {

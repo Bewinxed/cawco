@@ -7,6 +7,7 @@ import type {
 import type { ColdMove, CompactMethod } from "@cawco/core/accounts/kinds";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import type { LimitWindow } from "@cawco/core/usage/types";
+import type { HubWord } from "./hub-words";
 import type { CacheState } from "./keep-alive";
 
 /**
@@ -20,7 +21,9 @@ import type { CacheState } from "./keep-alive";
  * leaves a window of an account it touches under that account's floor
  * ({@link holdsOn}) or makes it run short ({@link runsShort}), and takes the
  * cheapest that holds, the strategy's order breaking ties within a margin
- * ({@link MARGIN_USD}); ahead of a limit, only when it beats staying.
+ * ({@link MARGIN_USD}); ahead of a limit, only when it beats staying. A
+ * turn the hub starts by itself is decided by what its origin's words are
+ * (hub-words.ts), never by its price ({@link decideTurn}).
  *
  * Only a choice this module makes reaches the carry: a {@link DecidedMove}
  * is branded, constructed here alone, and goes stale after
@@ -48,13 +51,6 @@ export const LOOK_AHEAD_MS = 5 * HOUR_MS;
  */
 const MARGIN_USD = 0.05;
 const MARGIN_SHARE = 0.1;
-
-/**
- * What a hub-started turn may cost and still run unasked: past it, the
- * hub's word waits as a note the session's next turn reads, unless someone
- * waits on its answer.
- */
-const HUB_TURN_THRESHOLD_USD = 0.5;
 
 /**
  * Start values for what is not measured per session yet: the requests of a
@@ -211,20 +207,18 @@ export type MoveTrigger =
   | { kind: "hand"; stopped: boolean; to: string };
 
 /**
- * A turn the hub starts by itself, by what it is: a recap on the person's
- * return (`recap`); the notes a session writes before its cache goes cold
- * while the person is away (`notes`); one that runs whatever its price, as
- * its session waits on it or it is warm by construction (`always`: a
- * carry-on, a compaction's step, a cut turn handed back, a keep-alive, a
- * work item's "still open"); any other notice (`notice`).
+ * A turn the hub would start by itself, by its origin's words as the one
+ * table says them (hub-words.ts `hubWordOf`), with what that word is
+ * decided on beside its cache: whether the session waits on its own work
+ * (`ownWork`: its last turn ended waiting on work of its own, or it holds a
+ * live work item) and whether the person stopped it since they last wrote
+ * to it (`personStopped`).
  */
-export type HubTurn = "always" | "notes" | "notice" | "recap";
-
 export interface TurnTrigger {
   kind: "hub-turn";
-  turn: HubTurn;
-  /** A person or a deadline waits on what it answers. */
-  waitedOn: boolean;
+  ownWork: boolean;
+  personStopped: boolean;
+  word: HubWord;
 }
 
 /** How a move makes the session small. */
@@ -318,11 +312,19 @@ export type MoveChoice =
       why: StayWhy;
     });
 
+/**
+ * A hub word's turn, decided: it runs now, or waits as a quiet note its
+ * next turn reads. `why`: its kind for a finish, the person's act or a word
+ * warm by construction (`finish`, `person`, `warm`); a word to know that
+ * runs on a warm cache (`warm`) or on its session's wait for its own work
+ * (`own-work`), or waits because it is always a note (`note`), the person
+ * stopped the session (`stopped`), or its cache is cold or unknown.
+ */
 export interface TurnChoice {
-  kind: "run" | "note" | "skip";
+  kind: "run" | "note";
   /** What the turn costs, dollars; null when unknown. */
   usd: number | null;
-  why: "always" | "warm" | "cold" | "unknown" | "waited" | "cheap" | "dear";
+  why: HubWord["kind"] | "own-work" | "note" | "stopped" | "cold" | "unknown";
 }
 
 /** One priced option of moving to one account. */
@@ -864,36 +866,34 @@ const bounces = (facts: DecideFacts): boolean => {
   );
 };
 
-/** A turn the hub starts by itself (audit 3.7), priced at what its first request re-reads. */
+/**
+ * A turn the hub starts by itself (audit 3.7; the owner's rule of
+ * 2026-11-23, hub-words.ts): a finish, the person's act or a word warm by
+ * construction runs; a word the session only needs to know, unless the
+ * person stopped the session since they last wrote to it, runs while its
+ * cache is warm (unknown counts cold), or, for one that tells of its own
+ * work, while it waits on that work; else it waits as a note its next turn
+ * reads. Priced at what its first request re-reads, for the record.
+ */
 const decideTurn = (facts: TurnFacts, trigger: TurnTrigger): TurnChoice => {
   const usd = stayPrice(facts);
   const { cache } = facts.session;
-  switch (trigger.turn) {
-    case "always":
-      return { kind: "run", usd, why: "always" };
-    case "recap":
-    case "notes":
-      // A recap or the notes before cold run warm only: a cold session's
-      // notes are shown, and it is woken by the person writing to it.
-      if (cache.kind === "warm") {
-        return { kind: "run", usd, why: "warm" };
-      }
-      return {
-        kind: "skip",
-        usd,
-        why: cache.kind === "cold" ? "cold" : "unknown",
-      };
-    case "notice":
-      if (trigger.waitedOn) {
-        return { kind: "run", usd, why: "waited" };
-      }
-      if (cache.kind === "warm") {
-        return { kind: "run", usd, why: "warm" };
-      }
-      return usd !== null && usd <= HUB_TURN_THRESHOLD_USD
-        ? { kind: "run", usd, why: "cheap" }
-        : { kind: "note", usd, why: usd === null ? "unknown" : "dear" };
+  const { word } = trigger;
+  if (word.kind !== "know") {
+    return { kind: "run", usd, why: word.kind };
   }
+  if (word.runs === "never") {
+    return { kind: "note", usd, why: "note" };
+  }
+  if (trigger.personStopped) {
+    return { kind: "note", usd, why: "stopped" };
+  }
+  if (word.runs === "own-work" && trigger.ownWork) {
+    return { kind: "run", usd, why: "own-work" };
+  }
+  return cache.kind === "warm"
+    ? { kind: "run", usd, why: "warm" }
+    : { kind: "note", usd, why: cache.kind };
 };
 
 /** A person's move: their target, its cheapest shape; held only while that account can't run it at all. */

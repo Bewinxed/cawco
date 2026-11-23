@@ -4,10 +4,12 @@
  * A send the hub keeps owed (`sent_messages.owed_held`) goes once something
  * releases it: a send that may wake its session, the end of its account's
  * limit, its machine's pause or grace (sends.ts `releaseOwed`,
- * `failOwedAway`). CawCo's own notices to a session at rest (a browser's, a
- * leak's, a rule's, a work item's word) may not wake it (server.ts
- * `startsTurnIn`), so they wait for the person or its parent, and a session
- * nobody writes to again kept them for good: 256 of them on obelisk's hub
+ * `failOwedAway`). CawCo's own notices to a session at rest that only tell
+ * it something (a browser's, a rule's, its containers', a word it only
+ * needs to know while its cache is cold: hub-words.ts) may not wake it
+ * (server.ts `startsTurnIn`), so they wait for the person or its parent,
+ * and a session nobody writes to again kept them for good: 256 of them on
+ * obelisk's hub
  * on 2026-11-14, 225 owed to sessions that errored in one incident on
  * 2026-10-23 (task tsk-372, project assets `01589412/owed-sends.md`).
  *

@@ -92,7 +92,6 @@ export type AskRoutingContext = Pick<
   | "machineName"
   | "memoryWatch"
   | "movedFrom"
-  | "noteWithdrawn"
   | "oweMoveOff"
   | "owedMoves"
   | "pending"
@@ -115,6 +114,18 @@ export type AskRoutingContext = Pick<
   Pick<ReturnType<typeof createSends>, "deliverSend">;
 
 export const createAskRouting = (ctx: AskRoutingContext) => {
+  /**
+   * What `instanceId`'s process was halted on, kept as the hub's own asks
+   * (server.ts `keepPrompt`): its permission prompts and its questions,
+   * which stay on every screen while it may run again.
+   */
+  const keepParked = (instanceId: string): void => {
+    for (const ask of ctx.pending.list()) {
+      if (ask.instanceId === instanceId && !outlivesSession(ask)) {
+        ctx.keepPrompt(ask);
+      }
+    }
+  };
   /**
    * Drops a dead process's parked questions, telling whoever carried them
    * elsewhere that they are over — a push whose buttons still work after the
@@ -141,19 +152,10 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
     ctx.hubAsks.turnEnded(instanceId);
     ctx.hubAsks.withdrawEnded(instanceId);
     if (!outlived) {
-      // If it runs again, a permission prompt it was halted on stays, and
-      // what it had asked the person is asked again.
+      // If it runs again, a permission prompt or a question it was halted
+      // on stays as the hub's own ask, and the person's answer wakes it.
       if (keep === "all") {
-        ctx.noteWithdrawn(
-          ctx.pending
-            .list()
-            .filter(
-              (ask) =>
-                ask.instanceId === instanceId &&
-                !outlivesSession(ask) &&
-                !ctx.keepPrompt(ask)
-            )
-        );
+        keepParked(instanceId);
       }
       // Its connect asks' calls end with it, signed in or not.
       ctx.connectAsks.ended(instanceId);
@@ -477,9 +479,9 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
   /**
    * The hub's word to `parent` while its delegate waits on the person, or of
    * how its ask ended (delegate-waits.ts): the hub's, under its own origin
-   * (core `DELEGATE_WAIT_ORIGIN`), never the delegate's message, so it wakes
-   * a parent at rest and a send of it that fails tells no session it
-   * failed. Drawn in the parent's transcript as a note titled `line`; its
+   * (core `DELEGATE_WAIT_ORIGIN`), never the delegate's message, so a send
+   * of it that fails tells no session it failed; a quiet note the parent's
+   * next turn reads, never a turn of its own (hub-words.ts). Drawn in the parent's transcript as a note titled `line`; its
    * tag names the ask, its delegate and what it asks (`about`). Under a
    * `uuid` already sent it goes nowhere: each is told once.
    */

@@ -31,29 +31,44 @@ export interface TurnWords {
  *   before a `success` result, with no assistant frame after it.
  * - Whether it has called a tool: it has done work, which a credential's
  *   refusal never runs again (limit-moves.ts `takeCredentialTurn`).
+ * - When it last sent a request: its start (its first request goes as the
+ *   turn begins), then each of its own assistant frames (each answers one
+ *   request, the next following its tool results). Its prompt cache lives
+ *   from there (keep-alive.ts `cacheState`), so a turn parked for hours on
+ *   the person's answer reads cold. A subagent's requests are its own
+ *   context's and keep none of it warm.
  */
 export const turnState = () => {
   const said = new Map<string, string[]>();
   const endsOnNoReply = new Set<string>();
   const worked = new Set<string>();
+  const requested = new Map<string, number>();
   const forget = (instanceId: string): void => {
     said.delete(instanceId);
     endsOnNoReply.delete(instanceId);
     worked.delete(instanceId);
+    requested.delete(instanceId);
   };
   return {
-    /** A turn of the session starts: it has said and done nothing yet. */
-    began: forget,
+    /** A turn of the session starts: it has said and done nothing yet, and its first request goes now. */
+    began(instanceId: string): void {
+      forget(instanceId);
+      requested.set(instanceId, Date.now());
+    },
     /** A turn's end, whatever ended it: what it said and did goes. */
     over: forget,
     /** Whether the turn in flight has called a tool. */
     worked: (instanceId: string): boolean => worked.has(instanceId),
+    /** When the turn in flight last sent a request, epoch ms; undefined when this hub heard none of it (it started before the hub did, or no turn is in flight). */
+    requestAt: (instanceId: string): number | undefined =>
+      requested.get(instanceId),
     /**
      * One of the turn's own assistant frames (not a subagent's). A tool call
      * means the turn goes on: everything said up to it, this frame's own text
      * included, was narration.
      */
     frame(instanceId: string, content: readonly NeutralAssistantBlock[]) {
+      requested.set(instanceId, Date.now());
       const lastCall = content.findLast((block) => block.type === "tool_use");
       if (lastCall) {
         said.delete(instanceId);

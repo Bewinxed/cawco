@@ -104,14 +104,12 @@ import {
   ARTIFACT_ORIGIN,
   ASK_ORIGIN,
   COMPACTION_ORIGIN,
-  DELEGATE_WAIT_ORIGIN,
   descriptorOf,
   HARNESSES,
   harnessName,
   harnessNamed,
   type ModelInfo,
   PLAN_ORIGIN,
-  WORK_ITEM_ORIGIN,
 } from "@cawco/core/harness/kinds";
 import {
   permissionModeNamed,
@@ -177,7 +175,6 @@ import {
   OVER_STATUSES,
   resumedKey,
 } from "@cawco/core/protocol";
-import { questionsOf } from "@cawco/core/question";
 import { artifactLink, sessionLink, taskLink } from "@cawco/core/references";
 import {
   type LastErrorKind,
@@ -434,7 +431,7 @@ import type {
 import { tagStoredSend } from "./db/tag-markers";
 import { refOf as linkRefOf, viaOf as linkViaOf } from "./db/task-links";
 import { undoable } from "./db/trash";
-import { decide, type HubTurn, type TurnChoice } from "./decide";
+import { decide, type TurnChoice } from "./decide";
 import {
   decidesFileWith,
   decidesRoutes,
@@ -492,6 +489,12 @@ import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
 import { type AuthSocket, type Forwarded, MachineAway } from "./hub-shapes";
 import { createHubTools, installBuild } from "./hub-tools";
+import {
+  BROWSER_ORIGIN,
+  FOLDER_MOVE_ORIGIN,
+  hubWordOf,
+  TASK_WAITS_ORIGIN,
+} from "./hub-words";
 import { createIngress, type Ingress, ingressRoutes } from "./ingress";
 import { createInstalls } from "./installs";
 import { instanceTimes } from "./instance-out";
@@ -507,6 +510,7 @@ import {
   type KeepAliveRow,
   keepAliveState,
   provenCold,
+  type TurnReading,
 } from "./keep-alive";
 import { isBlockProgram, moveKeptBlocks, pageSourcePaths } from "./kept-blocks";
 import { boardTitle, sessionLabel } from "./labels";
@@ -520,6 +524,7 @@ import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import {
   contextSize,
+  liveWorkOf,
   type Outlook,
   type Stall,
   sessionCostsOf,
@@ -558,7 +563,6 @@ import {
   createTurnWatch,
   inboxNotes,
   memoryRoutes,
-  ROUTINE_ORIGIN,
 } from "./memory";
 import { createMemoryRun } from "./memory-run";
 import { createMoves } from "./moves";
@@ -737,7 +741,7 @@ import { sessionLimitRoutes } from "./session-limits";
 import { sessionReads } from "./session-list";
 import { createSessionNotes } from "./session-notes";
 import { createSessionRuntime } from "./session-runtime";
-import { LIMIT_ORIGIN, sessionWord } from "./session-word";
+import { sessionWord } from "./session-word";
 import type { SettingPick } from "./setting-pick-shapes";
 import { createSettingPicks } from "./setting-picks";
 import { nameSettledOnce } from "./settled-names";
@@ -1138,33 +1142,6 @@ const PARKS_ASKS: ReadonlySet<InstanceStatus> = new Set([
 ]);
 /** How long after a session heard a pin's thread a task it files counts as found in that pin (tasks.ts `found_in`). */
 const PIN_ASK_MS = 30 * 60_000;
-/** The origin of the hub's word to a live attempt that a wait of its task moved (tasks.ts `tell`). */
-const TASK_WAITS_ORIGIN = "task-waits";
-/**
- * The hub's words that may start a turn in a session at rest (asleep or
- * failed, no process): each is the far end of something a person, the
- * session's parent or the session itself set going. Every other word of the
- * hub's (a rule's reply, a browser's take-over, a leak or containers notice,
- * a pause's carry-on, the person's return (sends.ts `tellBack`, sent only
- * to a session whose process is up), a fork's or a plan's note, an
- * undelivered notice) is a note: kept at the hub and read at the session's
- * next turn, never the cause of one ({@link startsTurnIn}). A routine's own words
- * (`routine:<id>`, memory.ts) wake too.
- */
-const WAKES_AT_REST: ReadonlySet<string> = new Set([
-  // Its delegate's wait on the person, and its end (delegate-waits.ts).
-  DELEGATE_WAIT_ORIGIN,
-  // Its open work item: the sweep's wake, a declared wait's end.
-  WORK_ITEM_ORIGIN,
-  // The turn its account's limit cut, carried on at the reset.
-  LIMIT_ORIGIN,
-  // The turn a restart or a kill cut, handed back once (`resumeCutTurn`).
-  "restore",
-  // A session on a project's thing, sent a trigger on it (triggers.ts).
-  PROJECT_ORIGIN,
-  // Its looping delegate, for it as that delegate's steward (fleet-watch.ts).
-  "fleet-watch",
-]);
 
 export interface HubServices {
   /**
@@ -1317,8 +1294,6 @@ type DashboardVerbs = {
 
 /** How long a machine gets to interrupt a reply a folder move waits for. */
 const FOLDER_MOVE_INTERRUPT_MS = 20_000;
-/** The system origin name of the hub's word to a session whose folder moved. */
-const FOLDER_MOVE_ORIGIN = "folder-move";
 
 export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
@@ -1448,6 +1423,7 @@ export const createServer = (
     awayWords: () => awayWords,
     boundProblem: () => boundProblem,
     cacheLapsesAt: () => cacheLapsesAt,
+    cacheWarm: () => cacheWarm,
     callAgent: () => callAgent,
     caw: () => caw,
     checkSources: () => checkSources,
@@ -1800,7 +1776,6 @@ export const createServer = (
     homeLoginMoveOf: () => homeLoginMoveOf,
     inCustody: () => inCustody,
     keepPrompt: () => keepPrompt,
-    noteWithdrawn: () => noteWithdrawn,
     oweMoveOff: () => oweMoveOff,
     publishDelegateEvent: () => publishDelegateEvent,
     settlePending: () => settlePending,
@@ -1984,7 +1959,6 @@ export const createServer = (
     keepTasks,
     noteFreshStart,
     noteMachineLine,
-    noteWithdrawn,
     processFailed,
     resumeCutTurn,
   } = createCutTurns(ctx);
@@ -2896,13 +2870,15 @@ export const createServer = (
     },
   });
   /**
-   * A harness's permission prompt whose process went, kept as a permit
-   * (asks.ts `keep`) while its session may run again: the same card stays,
-   * and the session parks on it (the owner's pick on approval-waits, "Halts
-   * until you answer, and survives restarts"). False for anything else
-   * parked, which goes with its process: a question (asked again,
-   * {@link noteWithdrawn}), an ask the hub raised, one an answer is already
-   * in flight for.
+   * A harness's permission prompt or question whose process went, kept as
+   * the hub's own ask (asks.ts `keep`) while its session may run again: the
+   * same card stays, and the session parks on it (the owner's picks on
+   * approval-waits, "Halts until you answer, and survives restarts", and on
+   * cold-wakes, 2026-11-23: "The hub keeps it"). The person's answer
+   * reaches the session as their act, which wakes it; nothing wakes it to
+   * ask again. False for anything else parked, which goes with its
+   * process: an ask the hub raised, a browser's or a connect ask, one an
+   * answer is already in flight for.
    */
   const keepPrompt = (parked: ArrivingAsk): boolean => {
     const { payload } = parked;
@@ -2911,7 +2887,6 @@ export const createServer = (
       payload.browserAsk ||
       payload.connectAsk ||
       outlivesSession(parked) ||
-      questionsOf(payload.toolName, payload.input) !== null ||
       answeringPermissions.has(parked.requestId ?? "")
     ) {
       return false;
@@ -2920,8 +2895,7 @@ export const createServer = (
     if (!row || endedForGood(row.id)) {
       return false;
     }
-    hubAsks.keep(parked, row);
-    return true;
+    return hubAsks.keep(parked, row);
   };
   /**
    * Says something to a session, as the hub: `name` is the notice's kind,
@@ -3014,7 +2988,7 @@ export const createServer = (
     },
     // A note its next turn reads: the take-over asks nothing of it.
     tell: (instanceId, text) =>
-      tellSession(instanceId, text, { name: "browser", quiet: true }),
+      tellSession(instanceId, text, { name: BROWSER_ORIGIN, quiet: true }),
     // The gate id its browser door is (agent door.ts): its workspace's,
     // else the session's own.
     workspaceOf: (row) => sessionWorkspace(row)?.id ?? row.id,
@@ -3280,7 +3254,7 @@ export const createServer = (
   // that just started holds no daemon sockets, so it has no basis for any row
   // claiming `running` or `starting`.
   const swept = db.sweepBootStatuses();
-  /** Asks this start drops with the process that parked them: asked again when each session next runs ({@link noteWithdrawn}), or kept as permits ({@link keepPrompt}) once asks can be presented. */
+  /** Asks this start drops with the process that parked them: kept as the hub's own ({@link keepPrompt}) once asks can be presented, or gone. */
   const droppedAtStart: ArrivingAsk[] = [];
   for (const parked of pending.list()) {
     const [row] = db.getInstancesByIds([parked.instanceId ?? ""]);
@@ -3657,53 +3631,57 @@ export const createServer = (
   };
   /**
    * Whether a send from `origin` may start a turn in `row` when its process
-   * is gone ({@link wakesForSend}). A stopped or stopping session, ended by
-   * its person, its parent or the hub, is woken only by a person (their
-   * words, their Send on one of its artifacts, or their answer to its ask:
-   * core `byPerson`) or by its
-   * own parent:
-   * a delegate's report, another session's hand-off and every hub notice
-   * wait for one of them. A sleeping or failed one is woken by another
-   * session's word (a delegate's report, a hand-off) and by the hub's words
-   * that finish what was set going for it ({@link WAKES_AT_REST}: its work
-   * item, its routine, a turn a limit or a restart cut); never by the hub's
-   * own notices (a rule, a browser, a leak, a pause, a carry): nothing the
-   * hub does on its own wakes a session that was not live (2026-10-23, 157
+   * is gone ({@link wakesForSend}), by what its words are (hub-words.ts
+   * `hubWordOf`). A stopped or stopping session, ended by its person, its
+   * parent or the hub, is woken only by the person's act (their words,
+   * their Send on one of its artifacts, their answer to its ask, core
+   * `byPerson`; their Continue's filing turn) or by its own parent: a delegate's report,
+   * another session's hand-off and every word of the hub's wait for one of
+   * them. A sleeping or failed one is woken by another session's word and
+   * by the hub's words that finish what was set going in it (its work
+   * item, a turn a limit, a pause or a restart cut, a trigger on its own
+   * thing, its looping delegate, a process of its leaking); by a word it
+   * only needs to know only while its cache is warm (the one decision,
+   * {@link hubTurn}); and never by a word warm by construction, which no
+   * process took. Nothing the hub does on its own starts a turn in a
+   * session that is not warm unless it finishes work set going there
+   * (decided by the owner 2026-11-23, cockpit#8eabb628; 2026-10-23, 157
    * September sessions on obelisk woken by browser and leak notices).
    * A send that may not wake its session is kept at the hub, owed, and goes
    * to it in order when a send that may wake it arrives
    * ({@link deliverSend}, {@link releaseOwed}).
    *
    * CawCo's quiet note (a `system` send with `shouldQuery: false`: a
-   * take-over's word, a fork's or a plan's note, an undelivered notice)
-   * never wakes one, whosever act it tells of: a live session at rest
-   * stores it and reads it with its next turn (agent claude.ts
-   * `quietNote`), and one with no process has it kept at the hub the same way, its
-   * next send's wake carrying it.
+   * take-over's word, a fork's or a plan's note, an undelivered notice, a
+   * word the one decision kept as a note) never wakes one, whosever act it
+   * tells of: a live session at rest stores it and reads it with its next
+   * turn (agent claude.ts `quietNote`), and one with no process has it kept
+   * at the hub the same way, its next send's wake carrying it.
    */
   const startsTurnIn = (
-    row: { status: string; parentInstanceId?: string | null },
+    row: { id: string; status: string; parentInstanceId?: string | null },
     { origin, shouldQuery }: { origin: NeutralOrigin; shouldQuery?: boolean }
   ): boolean => {
     if (origin.kind === "system" && shouldQuery === false) {
       return false;
     }
-    if (
-      fromItsOwn(row, origin) ||
-      // A person's Continue files the session's open items first, stopped
-      // or not (open-items.ts).
-      (origin.kind === "system" && origin.name === COMPACTION_ORIGIN)
-    ) {
+    const word = hubWordOf(origin);
+    if (fromItsOwn(row, origin) || word.kind === "person") {
       return true;
     }
     if (row.status === "stopping" || row.status === "stopped") {
       return false;
     }
-    if (origin.kind !== "system") {
-      return true;
+    switch (word.kind) {
+      case "finish":
+        return true;
+      case "know":
+        return hubTurn(row.id, origin)?.kind === "run";
+      case "warm":
+        return false;
+      default:
+        return unhandled("hub word", word);
     }
-    const name = origin.name ?? "";
-    return WAKES_AT_REST.has(name) || name.startsWith(ROUTINE_ORIGIN);
   };
   /** Whether the sends owed to `instanceId` include one that may wake it ({@link startsTurnIn}). */
   const owedWakes = (row: {
@@ -4788,7 +4766,7 @@ export const createServer = (
         return false;
       }
       const state = followupState(row);
-      return !provenCold(row, state.midTurn, state.lastTurnAt);
+      return !provenCold(row, state);
     },
     pageCards: (artifactId, cards) => artifacts.pageCards(artifactId, cards),
     project: (id) => db.project(id),
@@ -5014,7 +4992,7 @@ export const createServer = (
         return false;
       }
       const state = followupState(row);
-      return provenCold(row, state.midTurn, state.lastTurnAt);
+      return provenCold(row, state);
     },
     // Caw answers the pins of his project's sessions whose writer ended, and
     // reads every page of his project (decisions.ts).
@@ -9365,7 +9343,8 @@ export const createServer = (
 
   /**
    * A machine's pause cuts the session's turn, and sends it word to carry
-   * on, which the pause keeps at the hub until it ends.
+   * on, which the pause keeps at the hub until it ends: a finish
+   * (hub-words.ts), which starts its turn then, asleep or cold.
    */
   const cutForPause = (
     instanceId: string,
@@ -10389,6 +10368,7 @@ export const createServer = (
       : turns.lastTurnAt;
     return {
       midTurn: !!pulses.get(row.id)?.busy,
+      requestAt: turnInFlight.requestAt(row.id) ?? null,
       hasTurns: turns.hasTurns,
       recordedTurnAt: turns.lastTurnAt,
       lastTurnAt,
@@ -10396,15 +10376,16 @@ export const createServer = (
     };
   };
   /**
-   * The one decision (decide.ts) on a turn the hub would start in
-   * `instanceId` by itself (`turn`; `waitedOn`: someone waits on its
-   * answer), priced at what its first request re-reads: its cache now, its
-   * context, its own measured prices.
+   * The one decision (decide.ts) on a turn a send from `origin` would start
+   * in `instanceId`, by what its words are (hub-words.ts `hubWordOf`): its
+   * cache now, whether it waits on its own work (its last turn ended
+   * waiting on work of its own, or it holds a live work item), whether the
+   * person stopped it since they last wrote to it, and what its first
+   * request re-reads at its context and its own measured prices.
    */
   const hubTurn = (
     instanceId: string,
-    turn: HubTurn,
-    waitedOn: boolean
+    origin: NeutralOrigin
   ): TurnChoice | undefined => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (!row) {
@@ -10423,7 +10404,19 @@ export const createServer = (
           costs: sessionCostsOf(db, row, context, now),
         },
       },
-      { kind: "hub-turn", turn, waitedOn }
+      {
+        kind: "hub-turn",
+        word: hubWordOf(origin),
+        ownWork: row.wakesItself || liveWorkOf(db, row),
+        personStopped: db.personStopped(row.id),
+      }
+    );
+  };
+  /** Whether `instanceId`'s prompt cache is warm now (keep-alive.ts `cacheState`): false when it is cold or unknown. */
+  const cacheWarm = (instanceId: string): boolean => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    return (
+      !!row && cacheState(row, followupState(row), Date.now()).kind === "warm"
     );
   };
   /** When `instanceId`'s warm cache lapses between turns; null when it is cold, unknown or mid-turn. */
@@ -10460,13 +10453,13 @@ export const createServer = (
    */
   const coldReading = async (
     row: KeepAliveRow & { projectId: string | null; workItemId: string | null },
-    state: { lastTurnAt: string | null; midTurn: boolean },
+    state: TurnReading,
     message: string | undefined
   ): Promise<{
     jev?: { attach: boolean; noul: number } | { error: string };
     unlanded?: Unlanded | { error: string };
   }> => {
-    if (!provenCold(row, state.midTurn, state.lastTurnAt)) {
+    if (!provenCold(row, state)) {
       return {};
     }
     const unlanded = await coldWork(row.id);
@@ -10719,7 +10712,7 @@ export const createServer = (
     activity: (row) => {
       const state = followupState(row);
       return {
-        cacheWarm: !provenCold(row, state.midTurn, state.lastTurnAt),
+        cacheWarm: !provenCold(row, state),
         lastActivityAt: new Date(
           Math.max(
             row.updatedAt.getTime(),
@@ -12217,8 +12210,8 @@ export const createServer = (
     idle: sessionIdle,
     send: deliverSend,
   });
-  // A prompt whose session may run again stays as a permit; the rest go
-  // with the process that parked them.
+  // A prompt or a question whose session may run again stays as the hub's
+  // own ask; the rest go with the process that parked them.
   goneWithProcess(droppedAtStart.filter((parked) => !keepPrompt(parked)));
   // An approved ask this hub was running when it went is told, never run
   // again; the asks of sessions that ended meanwhile are withdrawn.
