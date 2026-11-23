@@ -346,9 +346,7 @@ export const createStartHolds = (
   const wakeForSend = (
     agent: NonNullable<ReturnType<typeof ctx.registry.agent>>,
     machineId: string,
-    instanceId: string,
-    /** The hub's own wake of many at once (the person back, `tellBack`): it goes in its turn (`paceSpawn`). */
-    paced = false
+    instanceId: string
   ): void => {
     const [row] = ctx.db.getInstancesByIds([instanceId]);
     if (!(row && ctx.wakesForSend(row))) {
@@ -356,7 +354,7 @@ export const createStartHolds = (
     }
     // Moving a session whose cache is cold is free: it is re-placed first.
     ctx.replaceAtWake(row);
-    resumeSpawn(agent, machineId, row, false, paced);
+    resumeSpawn(agent, machineId, row, false);
   };
 
   /**

@@ -524,9 +524,9 @@ export const withMovedLine = (text: string, move: CheckoutMove): string =>
 
 /**
  * The hub's word to a session holding news for the person as they come back
- * from being away (hub sends.ts `tellBack`): it starts a turn whose reply
- * is the recap; its presence line carries the notes ({@link PresenceSaid}
- * `recap`).
+ * from being away (hub sends.ts `tellBack`), sent only to one whose process
+ * is up and whose prompt cache is warm: it starts a turn whose reply is the
+ * recap; its presence line carries the notes ({@link PresenceSaid} `recap`).
  */
 export const BACK_MESSAGE =
   "[CawCo] The person is back. Tell them what happened while they were away.";
@@ -544,11 +544,13 @@ export const NOTES_BEFORE_COLD_MESSAGE = (since: string): string =>
  * Where the person is, as a session is told at the start of each turn (hub
  * sends.ts `presenced`, from notifications.ts `person`):
  * - `on`: on this chat now, or this is their own message: talk normally.
- *   With `recap`, the person has just come back from being away since
- *   `recap.since` (the hub's own word on when they left), and this turn is
- *   the hub's word that they are back ({@link BACK_MESSAGE}): the notes the
+ *   With `recap`, the person has come back from being away since
+ *   `recap.since` (the hub's own word on when they left), and the notes the
  *   session kept meanwhile (its plan's "Since `recap.section`" section)
- *   ride along for it to recap as its reply;
+ *   ride along: on the hub's word that they are back ({@link BACK_MESSAGE},
+ *   `recap.turn` `back`) the reply is the recap; on their own first message
+ *   since (`theirs`, a session not told they were back) the reply answers
+ *   it and recaps the notes too;
  * - `elsewhere`: here, on another chat or another app: a turn that delivers
  *   work they asked for ends on its report, which pushes (push.ts
  *   `turnEnded`); every other turn is silent, reaching them only with a
@@ -563,6 +565,8 @@ export type PresenceSaid = {
   | {
       kind: "on";
       recap?: {
+        /** Whose turn carries it: the hub's word that they are back, or their own message. */
+        turn: "back" | "theirs";
         notes: string;
         /** The plan's section the notes are under, by its heading's time (`## Since HH:MM`). */
         section: string;
@@ -635,7 +639,7 @@ const whereTheyAre = (said: PresenceSaid): string => {
   switch (said.kind) {
     case "on":
       return said.recap
-        ? `[CawCo presence] The person has just come back; they were away since ${said.recap.since}. Your plan's notes from while they were away:\n\n${said.recap.notes}${said.recap.waiting?.length ? `\n\nWhat of yours waits on them now, as Needs you lists it:\n${said.recap.waiting.map(waitLine).join("\n")}\nName each by its link as written here.` : ""}\n\nThis turn's reply is your recap of those notes, short: what was done, what was decided, and what waits on them. It reaches them, so do not end it on ${NO_REPLY_TOOL}. Then fold that section into the rest of your plan's spec with todo_write.`
+        ? `[CawCo presence] The person ${said.recap.turn === "back" ? "has just come back" : "came back and this is their first message to you since"}; they were away since ${said.recap.since}. Your plan's notes from while they were away:\n\n${said.recap.notes}${said.recap.waiting?.length ? `\n\nWhat of yours waits on them now, as Needs you lists it:\n${said.recap.waiting.map(waitLine).join("\n")}\nName each by its link as written here.` : ""}\n\n${said.recap.turn === "back" ? "This turn's reply is your recap of those notes" : "Answer their message, and in the same reply recap those notes"}, short: what was done, what was decided, and what waits on them. It reaches them, so do not end it on ${NO_REPLY_TOOL}. Then fold that section into the rest of your plan's spec with todo_write.`
         : `[CawCo presence] The person is on this chat now: talk to them normally. ${ON_CHAT_ACTS}`;
     case "elsewhere":
       return `[CawCo presence] The person is at their desk but not on this chat. A turn that delivers work they asked for ends on its report, which reaches them; every other turn ends on ${NO_REPLY_TOOL} as its last call, and a question or a choice reaches them by ask or a decision card. Keep your plan current with todo_write.`;

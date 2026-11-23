@@ -729,7 +729,7 @@ import { carryRoutines } from "./routine-carry";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { createRuleRows } from "./rule-rows";
 import { RuleEngine } from "./rules";
-import { BACK_ORIGIN, createSends, UNREAD } from "./sends";
+import { createSends, UNREAD } from "./sends";
 import {
   ATTACHMENT_PAGE_LIMIT,
   attachmentsOfPages,
@@ -1143,9 +1143,10 @@ const TASK_WAITS_ORIGIN = "task-waits";
  * failed, no process): each is the far end of something a person, the
  * session's parent or the session itself set going. Every other word of the
  * hub's (a rule's reply, a browser's take-over, a leak or containers notice,
- * a pause's carry-on, a fork's or a plan's note, an undelivered notice) is
- * a note: kept at the hub and read at the session's next turn, never the
- * cause of one ({@link startsTurnIn}). A routine's own words
+ * a pause's carry-on, the person's return (sends.ts `tellBack`, sent only
+ * to a session whose process is up), a fork's or a plan's note, an
+ * undelivered notice) is a note: kept at the hub and read at the session's
+ * next turn, never the cause of one ({@link startsTurnIn}). A routine's own words
  * (`routine:<id>`, memory.ts) wake too.
  */
 const WAKES_AT_REST: ReadonlySet<string> = new Set([
@@ -1161,8 +1162,6 @@ const WAKES_AT_REST: ReadonlySet<string> = new Set([
   PROJECT_ORIGIN,
   // Its looping delegate, for it as that delegate's steward (fleet-watch.ts).
   "fleet-watch",
-  // The person came back, and it holds news for them (`tellBack`).
-  BACK_ORIGIN,
 ]);
 
 export interface HubServices {

@@ -95,8 +95,8 @@ export interface SendDelivery {
 }
 
 /** The system origin name of the hub's word that the person is back, to a session holding news for them (`tellBack`). */
-export const BACK_ORIGIN = "back";
-/** Whether `origin` is the hub's word that the person is back: its wake goes in its turn among the hub's own launches. */
+const BACK_ORIGIN = "back";
+/** Whether `origin` is the hub's word that the person is back ({@link BACK_ORIGIN}). */
 const isBack = (origin: NeutralOrigin): boolean =>
   origin.kind === "system" && origin.name === BACK_ORIGIN;
 /** The system origin name of the hub's word to a session the person is away from, to write its notes before its cache goes cold (`notesBeforeCold`). */
@@ -2378,19 +2378,22 @@ export const createSends = (ctx: SendsContext) => {
   const recapsGiven = new Map<string, PresenceSaid>();
 
   /**
-   * The recap a session's "back" send carries ({@link tellBack}), read as it
-   * is first handed (a held session's when it next runs): the notes the
+   * The recap a turn carries on the person's return: the hub's "back" send
+   * to a warm session ({@link tellBack}), or else the person's own next
+   * message to it, read as it is first handed: the notes the
    * session kept in its plan while the person was away (`awayNotesOf`) and
    * what of the session's waits on them now, exactly as Needs you lists it
    * (core `planWaitsOf`), with the hub's own away-since. Once per return
    * (notifications.ts `takeRecap`, kept on the hub through a restart), and
    * never notes the person has seen (`session_plans.away_seen`: opened in
    * the plan, or recapped before). Recapped, they are seen: the plan ring's
-   * mark goes. Undefined when there is none to give.
+   * mark goes. `turn` says whose the turn is (core `PresenceSaid`). Undefined
+   * when there is none to give.
    */
   const recapFor = (
     instanceId: string,
-    uuid: string
+    uuid: string,
+    turn: "back" | "theirs"
   ): PresenceSaid | undefined => {
     const given = recapsGiven.get(uuid);
     if (given) {
@@ -2423,6 +2426,7 @@ export const createSends = (ctx: SendsContext) => {
     const said: PresenceSaid = {
       kind: "on",
       recap: {
+        turn,
         notes: notes.notes,
         section: notes.since,
         since: clockOf(back.since),
@@ -2433,12 +2437,29 @@ export const createSends = (ctx: SendsContext) => {
     return said;
   };
 
-  /** Whether `row` holds news the person hasn't seen: away notes in its plan, unseen ({@link recapFor}). */
+  /**
+   * Whether `row`'s process is up and takes a turn now: running, its machine
+   * connected and not paused, and no limit hold on it. A session at rest,
+   * held or on a machine away is not woken for the person's return.
+   */
+  const processUp = (row: PublicInstanceRow): boolean =>
+    row.status === "running" &&
+    !!ctx.registry.agent(row.machineId) &&
+    ctx.machinePause.until(row.machineId) === undefined &&
+    !ctx.atLimit.handling(row.id);
+
+  /**
+   * Whether `row` holds news the person hasn't seen and may be told of their
+   * return ({@link tellBack}): it talks with them, is not continued or
+   * discarded, its process is up ({@link processUp}), its plan holds away
+   * notes they have not seen ({@link recapFor}), and no "back" send already
+   * waits in it. Whether its cache is warm is {@link tellBack}'s to ask.
+   */
   const holdsNews = (row: PublicInstanceRow): boolean => {
     if (
       !talksWithPerson(row) ||
       row.continuedInto !== null ||
-      row.status === "discarded"
+      !processUp(row)
     ) {
       return false;
     }
@@ -2456,18 +2477,15 @@ export const createSends = (ctx: SendsContext) => {
   /**
    * THE RETURN'S RECAP: the person came back from being away (notifications.ts
    * `turned`: the rollup of every device's facts went from away to here).
-   * Each session holding news for them ({@link holdsNews}) shows its notes
-   * at once in its plan, with no turn; the one decision (decide.ts, a
-   * `recap` turn, decided 2026-11-19) then lets only a session whose cache
-   * is warm recap: it is sent the hub's word that they are back (core
-   * `BACK_MESSAGE`), whose presence line carries the notes
-   * ({@link recapFor}), and its reply is the recap. A cold session starts
-   * no turn: its notes stand, written before it went cold
-   * ({@link notesBeforeCold}), and the person wakes it by writing to it. A
-   * session with no news gets nothing, nor does one this word already waits
-   * in. One send each: a session whose process is up takes its turn now;
-   * one held (at its limit, its machine away or paused) gets it when it next
-   * runs, as any send does.
+   * Every session's away notes show at once in its plan, with no turn. The
+   * hub's word that they are back (core `BACK_MESSAGE`) goes only to a
+   * session whose process is up ({@link holdsNews}) and whose prompt cache
+   * is warm (the one decision, decide.ts, a `recap` turn: warm only,
+   * unknown counted cold); its presence line carries the notes
+   * ({@link recapFor}), and its reply is the recap. Any other session is
+   * sent nothing and never woken: its notes stand unseen in its plan, the
+   * ring marks them, and the person's own next message to it carries them
+   * ({@link personSaid}). Decided by the owner 2026-11-23 (cockpit#8eabb628).
    */
   const tellBack = (): void => {
     recapsGiven.clear();
@@ -2591,16 +2609,19 @@ export const createSends = (ctx: SendsContext) => {
    * always are), here elsewhere, or away since when, and, on any other
    * send, that their last message still waits for its reply. The hub's word
    * that they are back ({@link tellBack}) carries the notes the session kept
-   * in its plan while they were away, for its recap ({@link recapFor}).
+   * in its plan while they were away, for its recap ({@link recapFor}); a
+   * session not told so carries them on the person's own next message.
    */
   const personSaid = (
     instanceId: string,
     { origin, uuid }: { origin: NeutralOrigin; uuid: string }
   ): PresenceSaid => {
     if (origin.kind === "human") {
-      return { kind: "on" };
+      return recapFor(instanceId, uuid, "theirs") ?? { kind: "on" };
     }
-    const recap = isBack(origin) ? recapFor(instanceId, uuid) : undefined;
+    const recap = isBack(origin)
+      ? recapFor(instanceId, uuid, "back")
+      : undefined;
     if (recap) {
       return recap;
     }
@@ -2840,7 +2861,7 @@ export const createSends = (ctx: SendsContext) => {
       if (keepAlive) {
         ctx.db.updateKeepAlive(instanceId, { keepAliveTurn: message.uuid });
       } else {
-        ctx.wakeForSend(agent, machineId, instanceId, isBack(message.origin));
+        ctx.wakeForSend(agent, machineId, instanceId);
       }
     }
     const owed =
@@ -3340,7 +3361,7 @@ export const createSends = (ctx: SendsContext) => {
       return true;
     }
     if (row.status === "sleeping") {
-      ctx.wakeForSend(agent, row.machineId, send.instanceId, isBack(origin));
+      ctx.wakeForSend(agent, row.machineId, send.instanceId);
     }
     return handToProcess(agent, send, envelope);
   };

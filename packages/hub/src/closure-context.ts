@@ -1481,8 +1481,7 @@ export interface ClosureContext {
   wakeForSend: (
     agent: MachineSocket,
     machineId: string,
-    instanceId: string,
-    paced?: boolean
+    instanceId: string
   ) => void;
   wakesForSend: (row: {
     continuedInto: string | null;
