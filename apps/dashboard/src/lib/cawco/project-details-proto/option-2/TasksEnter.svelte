@@ -29,14 +29,9 @@
     IconSettings,
     IconWorking,
   } from "#lib/icons.js";
+  import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
-  import {
-    aside,
-    type Travel,
-    travelIn,
-    travelOut,
-  } from "#lib/platform/motion/route.svelte.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import type { Change, ChangeKey } from "./changes";
   import { FORM_FIELD, FORM_LABEL, OPENED_FORM } from "./opened-form";
@@ -83,31 +78,42 @@
   );
   /** The tiles' order, which way a swap between their setups moves. */
   const TILE_AT = { github: 1, linear: 2 } as const;
-  /** Which way the setup swapped for its sibling moves: the move every page makes to a sibling (motion/route `aside`). */
-  let setupTravel = $state<Travel>(aside(1, false));
+  /** Which way the last swap between the two setups went along the tiles: 1 rightward, -1 leftward, 0 for none. */
+  let setupDir = 0;
   let setupWas = untrack(() => setupHome);
   $effect.pre(() => {
     const next = setupHome;
     if (next !== setupWas) {
       const was = setupWas;
-      if (next !== null && was !== null) {
-        setupTravel = aside(
-          TILE_AT[next] - TILE_AT[was],
-          getComputedStyle(document.documentElement).direction === "rtl"
-        );
-      }
+      setupDir =
+        next !== null && was !== null
+          ? Math.sign(TILE_AT[next] - TILE_AT[was])
+          : 0;
       setupWas = next;
     }
   });
   /**
-   * The setup leaving, out of the flow where it stood, so the form's height
-   * follows the one arriving (morph) while the two cross.
+   * The setup arriving glides in from the side of the tile picked, as a
+   * conversation does when its tab is switched (workspace/PaneLeaf: a
+   * `--swap-nudge` toward the new side over `--duration-pop` on the drawer
+   * curve); the one it replaces goes at once.
    */
-  const setupOut = (node: HTMLElement) => {
-    node.style.position = "absolute";
-    node.style.insetInline = "0";
-    node.style.top = "0";
-    return travelOut(node, () => setupTravel);
+  const setupIn = (node: HTMLElement) => {
+    const dir = setupDir;
+    if (!(dir && motionOk.current)) {
+      return;
+    }
+    const rtl = getComputedStyle(node).direction === "rtl" ? -1 : 1;
+    node.animate(
+      [
+        {
+          transform: `translateX(calc(var(--swap-nudge) * ${dir * rtl}))`,
+          opacity: 0.4,
+        },
+        { transform: "none", opacity: 1 },
+      ],
+      { duration: dur("--duration-pop"), easing: ease("--ease-drawer") }
+    );
   };
   /** Leaving a tie for the project's own files, asked and not yet answered: the press first says what it stops (DESIGN.md, ceremony matches consequence). */
   let leaving = $derived(opening === "files");
@@ -408,17 +414,12 @@
       data-slot="setup-asks"
       transition:unfold
     >
-      <!-- GitHub's setup and Linear's swap sideways toward the tile picked,
-           both at once, as a page moves to its sibling (motion/route
-           `aside`: the old one out, the new one in, one nudge), and the
-           form's height follows the one coming in (motion/morph). -->
+      <!-- GitHub's setup and Linear's swap as a conversation's tabs do: the
+           new one glides in from the tile's side (setupIn), and the form's
+           height follows it (motion/morph). -->
       <div class="relative min-w-0" {@attach morph()}>
         {#key setupHome}
-          <div
-            class="flex min-w-0 flex-col gap-space-5"
-            in:travelIn={setupTravel}
-            out:setupOut
-          >
+          <div class="flex min-w-0 flex-col gap-space-5" {@attach setupIn}>
             <div class="flex min-w-0 flex-col gap-space-1">
               <p
                 class="mark-line m-0 flex items-center gap-space-2 type-label text-ink-strong"

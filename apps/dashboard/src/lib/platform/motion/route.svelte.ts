@@ -37,17 +37,6 @@ const nudge = (x: number, y: number): Travel => ({
   leavingOnTop: false,
 });
 
-/**
- * A move to a sibling one `step` along (positive: toward the inline end):
- * the horizontal ±8% nudge every page that is not a spoke or one of
- * Configure's own moves takes, and a panel switched for its sibling in
- * place (a tracker's setup for another's) takes the same.
- */
-export const aside = (step: number, rtl: boolean): Travel => {
-  const side = rtl ? -1 : 1;
-  return nudge(step < 0 ? -8 * side : 8 * side, 0);
-};
-
 /** The sidebar's spokes, top to bottom: a move between two slides that way. */
 const SPOKE_ORDER = ["session", "usage", "config"];
 
@@ -101,7 +90,7 @@ export function plan({
     CONFIG.test(from) && CONFIG.test(to)
       ? configTravel(from, to, step, side, narrow, sections)
       : null;
-  return inConfig ?? aside(step, rtl);
+  return inConfig ?? nudge(step < 0 ? -8 * side : 8 * side, 0);
 }
 
 /** Configure's own moves: a phone's stack, and a wide section change. */
@@ -165,19 +154,7 @@ const STILL: End = { x: 0, y: 0, opacity: 0 };
 const STILL_OVER: DurToken = "--duration-control";
 
 export function pageOut(node: HTMLElement) {
-  return travelOut(node, () => route.travel);
-}
-
-export function pageIn(node: HTMLElement) {
-  return travelIn(node, route.travel);
-}
-
-/**
- * What leaves on `travel` (read as it leaves): the outgoing side of a
- * page's move, and of a panel swapped for its sibling in place.
- */
-export function travelOut(node: HTMLElement, travel: () => Travel) {
-  const { over } = travel();
+  const { over } = route.travel;
   // The page going away takes no input (Svelte makes a leaving node inert,
   // and gives it back its own as it comes back) and, on a pop, stays on top.
   // A page asked for again while it leaves is set back down (`lifting`), and
@@ -186,21 +163,20 @@ export function travelOut(node: HTMLElement, travel: () => Travel) {
   return lifting(
     node,
     (): Record<string, string> =>
-      travel().leavingOnTop ? { "z-index": "1" } : {},
+      route.travel.leavingOnTop ? { "z-index": "1" } : {},
     {
       duration: dur(motionOk.current ? over : STILL_OVER),
       easing: easeDrawer,
       css: (_t: number, u: number) => {
-        const to = motionOk.current ? travel().leave : STILL;
+        const to = motionOk.current ? route.travel.leave : STILL;
         return `transform: translate(${to.x * u}%, ${to.y * u}%); opacity: ${1 - (1 - to.opacity) * u}`;
       },
     }
   );
 }
 
-/** What arrives on `travel`: the incoming side of a page's move, and of a panel's swap. */
-export function travelIn(_node: HTMLElement, travel: Travel) {
-  const { enter, over } = travel;
+export function pageIn(_node: HTMLElement) {
+  const { enter, over } = route.travel;
   const from = motionOk.current ? enter : STILL;
   return {
     duration: dur(motionOk.current ? over : STILL_OVER),
