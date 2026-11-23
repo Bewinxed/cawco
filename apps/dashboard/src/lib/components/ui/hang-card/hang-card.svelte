@@ -753,7 +753,7 @@
   {...morphLook}
   {...rest}
   class={cn(
-    floatingSurface({ motion: "hang", edge: "drawn" }),
+    floatingSurface({ motion: "hang" }),
     hangCardVariants({ tab, rises, glass, surface }),
     frame && FRAMES[frame],
     className

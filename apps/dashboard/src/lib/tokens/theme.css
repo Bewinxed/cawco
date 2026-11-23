@@ -92,14 +92,17 @@
      Colour — Flexoki's model on a neutral base (stephango.com/flexoki, MIT):
      8 base roles, Flexoki's 8 inks, and Caw coral. Light, then dark.
      ========================================================================= */
-  /* Base (8): two grounds, three interface greys, three text greys.
+  /* Base (8): two grounds, three interface greys, three text greys. The
+     interface greys are text at low opacity, so an edge or a hover reads
+     the same on every ground under it: a surface's level, coral, a status
+     (joshpuckett, 2022: "use opacity instead of a solid color").
      Flexoki's lightness steps with the warmth taken out; muted text
      moved to hold 4.5:1 on every ground. */
   --color-bg: light-dark(oklch(99% 0 0), oklch(17% 0 0));
   --color-bg-2: light-dark(oklch(95.4% 0 0), oklch(22.3% 0 0));
-  --color-ui: light-dark(oklch(91.7% 0 0), oklch(27.3% 0 0));
-  --color-ui-2: light-dark(oklch(88.1% 0 0), oklch(32.1% 0 0));
-  --color-ui-3: light-dark(oklch(84.6% 0 0), oklch(36.5% 0 0));
+  --color-ui: light-dark(oklch(17% 0 0 / 0.09), oklch(84.6% 0 0 / 0.15));
+  --color-ui-2: light-dark(oklch(17% 0 0 / 0.15), oklch(84.6% 0 0 / 0.21));
+  --color-ui-3: light-dark(oklch(17% 0 0 / 0.18), oklch(84.6% 0 0 / 0.29));
   --color-tx-3: light-dark(oklch(77.2% 0 0), oklch(45.3% 0 0));
   --color-tx-2: light-dark(oklch(50% 0 0), oklch(69% 0 0));
   --color-tx: light-dark(oklch(17% 0 0), oklch(84.6% 0 0));
@@ -1107,7 +1110,8 @@
    in (ui/elevated sets --surface-level from its parent's). Level 0 is the
    page. In light the ground turns to the raised white at level 1 and the
    shadow alone carries every level after it; in dark each level is lighter,
-   and the shadow deepens with it. What stands inside a surface without
+   and the shadow deepens with it. Its edge is a ring in the same shadow,
+   so the shadow and the edge read as one line, never a border on top. What stands inside a surface without
    rising (a dialog's body, a fade over its head) takes its ground from
    --surface-ground, which the surface computes at its own level. */
 @property --surface-level {
@@ -1127,11 +1131,7 @@
   box-shadow:
     0 calc(var(--surface-level) * 2px) calc(var(--surface-level) * 6px)
       light-dark(oklch(29.5% 0 0 / 0.1), oklch(0% 0 0 / 0.45)),
-    0 0 0 1px
-      light-dark(
-        oklch(29.5% 0 0 / calc(min(var(--surface-level), 1) * 0.06)),
-        oklch(100% 0 0 / calc(var(--surface-level) * 0.03))
-      );
+    0 0 0 1px var(--color-ui-2);
 }
 
 /* Primary coral fill sheen and hover state derived from --color-accent. */

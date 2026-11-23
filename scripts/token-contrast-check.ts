@@ -142,6 +142,10 @@ const S = {
   nest: "token nest-ink ('about 2.3:1 to 2.5:1')",
 };
 
+/** A ground: an interface grey is translucent, so it is measured over the page. */
+const groundOf = (name: string): string[] =>
+  name.startsWith("ui") ? ["bg", name] : [name];
+
 /** The inks that carry a status: fail, needs you, done, live. */
 const STATUS_INKS = ["red", "orange", "green", "cyan"];
 
@@ -158,7 +162,7 @@ const PAIRS: Pair[] = [
     ].map((bg) => ({
       label: `${ink} on ${bg}`,
       fg: ink,
-      bg: [bg],
+      bg: groundOf(bg),
       floor: TEXT,
       source: S.inks,
     }))
@@ -188,7 +192,7 @@ const PAIRS: Pair[] = [
   ).map(([name, bg]) => ({
     label: `on-accent on ${name}`,
     fg: "on-accent",
-    bg: [bg],
+    bg: groundOf(bg),
     floor: TEXT,
     source: S.action,
   })),
@@ -196,7 +200,7 @@ const PAIRS: Pair[] = [
   ...["bg", "bg-2", "ui"].map((bg) => ({
     label: `accent on ${bg}`,
     fg: "accent",
-    bg: [bg],
+    bg: groundOf(bg),
     floor: TEXT,
     source: bg === "ui" ? S.selected : S.brandInk,
   })),
@@ -211,7 +215,7 @@ const PAIRS: Pair[] = [
     ["bg", "bg-2"].map((bg) => ({
       label: `${ink} on ${bg}`,
       fg: ink,
-      bg: [bg],
+      bg: groundOf(bg),
       floor: TEXT,
       source: S.chips,
     }))
@@ -228,7 +232,7 @@ const PAIRS: Pair[] = [
   ...IDENTITY_HUES.map((h) => ({
     label: `identity-ink at hue ${h} on ui`,
     fg: `light-dark(oklch(48% 0.12 ${h}), oklch(74% 0.11 ${h}))`,
-    bg: ["ui"],
+    bg: ["bg", "ui"],
     floor: TEXT,
     source: S.identity,
   })),
@@ -236,7 +240,7 @@ const PAIRS: Pair[] = [
   ...["bg", "bg-2"].map((bg) => ({
     label: `tx-2 edge on ${bg}`,
     fg: "tx-2",
-    bg: [bg],
+    bg: groundOf(bg),
     floor: UI,
     source: S.strongEdge,
   })),
@@ -251,7 +255,7 @@ const PAIRS: Pair[] = [
   ...["bg", "bg-2", "ui"].map((bg) => ({
     label: `accent focus ring on ${bg}`,
     fg: "accent",
-    bg: [bg],
+    bg: groundOf(bg),
     floor: UI,
     source: S.ring,
   })),
@@ -263,7 +267,7 @@ const PAIRS: Pair[] = [
     source: S.hairline,
   },
   ...STATUS_INKS.flatMap((ink) =>
-    [["bg"], ["ui"], ["bg-2"]].map((bg) => ({
+    [["bg"], ["bg", "ui"], ["bg-2"]].map((bg) => ({
       label: `${ink} glyph on ${bg[0]}`,
       fg: ink,
       bg,
@@ -287,7 +291,7 @@ const PAIRS: Pair[] = [
       label: `${ink} at breath-floor on ${bg}`,
       fg: ink,
       fgOpacity: "motion.breath-floor",
-      bg: [bg],
+      bg: groundOf(bg),
       floor: UI,
       source: S.breath,
     }))
@@ -344,14 +348,14 @@ const PAIRS: Pair[] = [
       {
         label: `account ${hue} (${mark}) disc on ui-2`,
         fg: mark,
-        bg: ["ui-2"],
+        bg: ["bg", "ui-2"],
         floor: 3.9,
         source: S.dial,
       },
       {
         label: `account ${hue} (${mark}) week rim on ui-2`,
         fg: weekRim(mark),
-        bg: ["ui-2"],
+        bg: ["bg", "ui-2"],
         floor: 7.8,
         source: `${S.dial}; ${S.week}`,
       },
@@ -366,7 +370,7 @@ const PAIRS: Pair[] = [
         label: `account ${hue} (${mark}) at stale opacity on ui-2`,
         fg: mark,
         fgOpacity: 0.82,
-        bg: ["ui-2"],
+        bg: ["bg", "ui-2"],
         floor: UI,
         source: S.stale,
       },
