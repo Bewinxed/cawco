@@ -275,9 +275,15 @@
                        ellipsises it, never widening the set past it. One
                        not shown stands out of the flow at its own width,
                        unseen and unrendered, its layout kept. -->
+                  <!-- The one shown clips at the surface's inset (`clip-margin`,
+                       the surface's own padding): its rows enter rising from
+                       below (`ns-in`, --pop-rise), and the last row's lift
+                       reached past the inset into the surface's scrollable
+                       overflow, a scrollbar standing for the entry and going
+                       as it landed, the rows shifting with it. -->
                   <div
                     class={on
-                      ? "grid grid-cols-1 content-start gap-(--ns-pop-gap,0px)"
+                      ? "grid grid-cols-1 content-start gap-(--ns-pop-gap,0px) overflow-clip clip-margin-space-2"
                       : "invisible absolute start-0 top-0 grid w-(--kept-w) grid-cols-1 content-start gap-(--ns-pop-gap,0px) content-visibility-hidden"}
                     inert={!on}
                     style={`--ns-pop-gap:${member.gap}px;--kept-w:${popoverWidth(member.width)}`}

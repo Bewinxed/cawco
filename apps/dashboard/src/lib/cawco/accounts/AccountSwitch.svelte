@@ -6,7 +6,7 @@
     type ChipSize,
     chipVariants,
   } from "#lib/components/ui/chip/index.js";
-  import { IconChevronDown as Down } from "#lib/icons.js";
+  import { IconChevronDown as Down, IconUser } from "#lib/icons.js";
 
   /**
    * A session card's account line: the account the session bills, as its dot
@@ -65,6 +65,9 @@
     onpick,
     none,
     quota,
+    short = false,
+    tone,
+    bare = false,
   }: (
     | { instance: AccountHolder; choice?: never }
     | { choice: AccountChoice; instance?: never }
@@ -99,13 +102,32 @@
       state: MeterState;
       used: number;
     } | null;
+    /**
+     * The account's short name on the chip (its label, else its address
+     * before the @), the whole name in its accessible name: a row of
+     * pickers with no room for an address.
+     */
+    short?: boolean;
+    /** The chip's tone: `muted` for an account a setting inherits. */
+    tone?: "muted";
+    /**
+     * The chip draws its mark alone (the account's dot, or the person
+     * glyph on no account), its name in its accessible name: a phone's row
+     * of pickers, where the tooltip around the chip names it.
+     */
+    bare?: boolean;
   } = $props();
   /** The chip's figure: what the account has left, as its rows say it ("38% left"). */
   const quotaWords = $derived(
     quota ? limitPickWords.left(Math.max(0, Math.round(100 - quota.used))) : ""
   );
   const chip = $derived(
-    chipVariants({ variant: "setting", size, class: "min-w-0 max-w-full" })
+    chipVariants({
+      variant: "setting",
+      size,
+      tone,
+      class: "min-w-0 max-w-full",
+    })
   );
 
   let open = $state(false);
@@ -132,6 +154,10 @@
     }
     return choice ? choice.auto.name : (none?.label ?? "");
   });
+  /** What the chip says: the name, or its short form. */
+  const said = $derived(
+    shown && short ? (shown.label ?? name.split("@")[0] ?? name) : name
+  );
   const pickable = $derived(
     !(readonly || (instance !== undefined && asking(instance))) &&
       accounts.length > 0
@@ -159,11 +185,21 @@
     <span
       data-slot="dot"
       aria-hidden="true"
-      class="size-space-2 flex-none rounded-pill bg-(--c)"
+      class={[
+        "size-space-2 flex-none rounded-pill bg-(--c)",
+        // An inherited account's dot drops its colour with its muted name.
+        tone === "muted" && "grayscale opacity-70",
+      ]}
       style:--c={hueVar(shown.hue)}
     ></span>
+  {:else if bare}
+    <IconUser aria-hidden="true" class="text-ink-subtle" />
   {/if}
-  <span data-slot="chip-label" data-account-chip>{name}</span>
+  <span
+    class={bare ? "sr-only" : undefined}
+    data-slot="chip-label"
+    data-account-chip>{said}</span
+  >
   <!-- The account's room for the model the session runs, with the account
        it belongs to: the ring and its figure one unit, a word space (0.25em,
        Figtree's) apart inside it, and a word space beyond the chip's gap off
