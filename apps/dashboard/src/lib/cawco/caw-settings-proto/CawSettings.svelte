@@ -105,7 +105,7 @@
 >
   <CawHero disabled={hubAway} {lead} {projectId} {projectName} {sheet} />
   <!-- The settings, from the hero's edge; on the sheet its own inset holds them. -->
-  <div class={["flex flex-col gap-space-6", !sheet && "px-space-4 pb-space-4"]}>
+  <div class={["flex flex-col gap-space-8", !sheet && "px-space-4 pb-space-4"]}>
     {#if hubAway}
       <p
         data-slot="hub-away"
@@ -154,10 +154,10 @@
         </p>
       {/if}
     </section>
-    <section data-slot="triggers" class="grid gap-space-1">
+    <section data-slot="triggers" class="grid gap-space-3">
       <h3 class="m-0 type-row text-ink-strong">{words.triggers}</h3>
       {#if triggers}
-        <ul class="m-0 grid list-none p-0">
+        <ul class="m-0 grid list-none gap-space-5 p-0">
           {#each TRIGGER_KINDS as kind (kind)}
             <TriggerRow
               {installed}

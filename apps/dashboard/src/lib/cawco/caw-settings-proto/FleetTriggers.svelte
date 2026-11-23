@@ -45,7 +45,10 @@
 
 <SectionFrame {problem} ready={kinds !== null} {section}>
   {#if kinds}
-    <ul data-slot="fleet-triggers" class="m-0 grid max-w-160 list-none p-0">
+    <ul
+      data-slot="fleet-triggers"
+      class="m-0 grid max-w-160 list-none gap-space-5 p-0"
+    >
       {#each TRIGGER_KINDS as kind (kind)}
         <TriggerRow
           {installed}

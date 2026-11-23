@@ -82,11 +82,7 @@
   const effect = $derived(view.inEffect);
 </script>
 
-<li
-  data-slot="trigger-row"
-  data-kind={kind}
-  class="grid gap-y-space-2 border-border-hairline py-space-3 not-last:border-b"
->
+<li data-slot="trigger-row" data-kind={kind} class="grid gap-y-space-2">
   <div class="grid min-w-0">
     <span class="type-label font-medium text-ink-strong">{named.name}</span>
     {#if "what" in named}
