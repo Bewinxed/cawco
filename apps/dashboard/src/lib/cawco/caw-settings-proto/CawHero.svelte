@@ -30,6 +30,7 @@
     type SwitchedLead,
   } from "#lib/cawco/project/CawLeadSwitch.svelte";
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
 
   let {
     lead,
@@ -111,7 +112,10 @@
   </div>
   <div class={["flex flex-col gap-space-3", sheet ? "px-4" : "px-space-4"]}>
     {#if asleep}
-      <p class="m-0 pt-space-3 type-meta text-pretty text-ink-muted">
+      <p
+        class="m-0 pt-space-3 type-meta text-pretty text-ink-muted"
+        transition:unfold
+      >
         {words.asleepLine}
       </p>
     {/if}

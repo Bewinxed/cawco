@@ -40,7 +40,6 @@
 
 <script lang="ts">
   import { cawOffWords } from "@cawco/core/words/caw-off";
-  import { untrack } from "svelte";
   /**
    * Whether the project's events reach a conversation, the project's own
    * switch (fable-lead-switch.md §1): one component wherever it stands,
@@ -108,27 +107,12 @@
   const offJob = $derived(stopWork.of("caw-off", projectId));
   /** The tray stands open here: asked, or reopened from where it parked. */
   const standing = $derived(offJob?.open === true && offJob.at === at);
-  /** The confirm stands asked here: open, not yet pressed. */
-  const asking = $derived(
-    offJob?.open === true &&
-      offJob.at === at &&
-      ["none", "list", "armed"].includes(offJob.phase)
-  );
   // His switch's place can hold his off tray while it is drawn (stop-work `reopen`).
   $effect(() => stopWork.place(at));
-  // The confirm pressed: the popover closes and the stops go on parked
-  // under the switch, where they are said as they land. Only on the press:
-  // a tray reopened from there stands in the popover until put away.
-  let wasAsking = false;
-  $effect(() => {
-    const job = offJob;
-    const now = asking;
-    const pressed = wasAsking && !now && job?.open === true && job.at === at;
-    wasAsking = now;
-    if (pressed && job && ["stopping", "ending"].includes(job.phase)) {
-      untrack(() => stopWork.dismiss(job));
-    }
-  });
+  // The confirm pressed: the card stays out of the switch through its
+  // steps (each row stopping in place, the confirm saying how many, then
+  // "Caw is off" held) and folds back into the switch as the job closes
+  // (stop-work `finish`). Put away before then, the stops go on parked.
   // Turning him off by the tray: the hub's view of him once off is the switch's.
   $effect(() =>
     stopWork.onCawView(projectId, (view) => {
