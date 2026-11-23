@@ -73,7 +73,10 @@
         scroll: "overflow-y-auto overscroll-contain",
         clip: "overflow-hidden",
       },
-      pad: { none: "p-0", inset: "p-space-2", form: "p-3" },
+      /* With no pad its rows stand flush with its edge, so it clips them to
+         its corners: a row's fill would otherwise cover the ring where the
+         corner curves in. */
+      pad: { none: "overflow-clip p-0", inset: "p-space-2", form: "p-3" },
       gap: {
         none: "gap-0",
         tight: "gap-space-1",

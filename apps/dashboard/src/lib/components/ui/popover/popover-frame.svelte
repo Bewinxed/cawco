@@ -38,7 +38,9 @@
       onOpenAutoFocus={(event) => event.preventDefault()}
       pad="none"
       portalProps={{ disabled: true }}
+      avoidCollisions={false}
       side="bottom"
+      strategy="absolute"
       trapFocus={false}
     >
       <Command.Root>

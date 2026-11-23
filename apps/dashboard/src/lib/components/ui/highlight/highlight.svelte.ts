@@ -115,8 +115,7 @@ const LAYERS = `
   opacity: 0;
   will-change: opacity;
   --ghost-fill: var(--color-ui);
-  background-color: var(--ghost-ground, var(--color-bg));
-  background-image: linear-gradient(var(--ghost-fill), var(--ghost-fill));
+  --part-ground: var(--ghost-ground, var(--color-bg));
 }
 [data-slot="highlight-ghost"] {
   display: none;
@@ -149,8 +148,8 @@ const LAYERS = `
   left: 0;
   box-sizing: border-box;
   transform-origin: 0 0;
-  background-color: inherit;
-  background-image: inherit;
+  background-color: var(--part-ground);
+  background-image: linear-gradient(var(--ghost-fill), var(--ghost-fill));
 }
 :is([data-slot="highlight-ghost"], [data-slot="highlight-pill"]) [data-part] {
   will-change: transform;
