@@ -2194,11 +2194,11 @@ public enum Words {
 
         public static let makingProject = "Making project…"
 
-        public static let designTitle = "Design system"
+        public static let designTitle = "No design system"
 
         /// Its line: what it asks, with what a build would read listed ("a, b and c"), or nothing.
         public static func designLine(from: String) -> String {
-            from.count > 0 ? "This work needs a design system. Build one from \(from)?" : "This work needs a design system. Build one?"
+            from.count > 0 ? "A design task started without one. Build files a task to make one from \(from)." : "A design task started without one. Build files a task to make one."
         }
 
         public static let build = "Build"
@@ -2206,11 +2206,6 @@ public enum Words {
         public static let filing = "Filing…"
 
         public static let notNowPending = "Not now…"
-
-        /// What was answered: Build filed the task.
-        public static let filed = "Filed"
-
-        public static let open = "Open"
     }
 
     public enum PlacePick {

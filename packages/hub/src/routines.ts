@@ -312,7 +312,7 @@ export interface RoutineDeps {
   >;
   /** Why the project's spend cap holds its work back now, or nothing (project-caps.ts). */
   readonly pauses: (projectId: string) => string | undefined;
-  readonly push: Pick<Push, "routine" | "routineMade">;
+  readonly push: Pick<Push, "routine" | "routineMade" | "routineCheckChanged">;
   /** Why the project's spend cap keeps its Caw from waking, or nothing (project-caps.ts). */
   readonly quiets: (projectId: string) => string | undefined;
   /** Runs a check's command on a machine's host, as the agent's user, in no workspace (machine-commands.ts `runOnMachine`). */
@@ -562,18 +562,6 @@ const dayIn = (at: Date, timeZone: string): string =>
     year: "numeric",
   }).format(at);
 
-/** A routine's next run in words, in its zone: "Thu 16 Oct, 09:00". */
-const nextWords = (at: number, timeZone: string): string =>
-  new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(at));
-
 /** The targets only the hub files a routine for. */
 const HUB_TARGETS: ReadonlySet<RoutineTarget> = new Set(["curator", "trim"]);
 
@@ -756,12 +744,6 @@ export const createRoutines = ({
       : "(The event that started this run is no longer kept.)";
   };
 
-  /** A run's line's ending, by what it says of the run. */
-  const NOTE_WHAT = {
-    delivered: "",
-    failed: " failed twice · needs you",
-  } as const;
-
   /**
    * Says `title`, and `body` under it, on the routine's own thread: a
    * comment on its task as the hub, which wakes no one (the owner's "Where
@@ -796,19 +778,18 @@ export const createRoutines = ({
     );
   };
 
-  /** Says a run on the routine's thread; `title` in place of the run's own line. */
+  /** Says a run on the routine's thread: its line, `title` given the run's slot as it reads, and `body` under it. */
   const note = (
     routine: RoutineRow,
     run: RoutineRunRow,
-    phase: keyof typeof NOTE_WHAT,
-    body?: string,
-    title?: string
+    title: (slot: string) => string,
+    body?: string
   ): void => {
     const label = slotLabel(run.slot, zoneOf(routine));
     onThread(
       routine,
       `its run ${run.id.slice(0, 8)} (${label})`,
-      title ?? `Run · ${label}${NOTE_WHAT[phase]}`,
+      title(label),
       body
     );
   };
@@ -1132,15 +1113,12 @@ export const createRoutines = ({
     failed: readonly Failed[],
     beside: boolean
   ): void => {
+    const failedOn = failed.map((one) => one.machine).join(", ");
     note(
       routine,
       run,
-      "failed",
-      failed.map((one) => checkWords.failedOn(one.machine, one.why)).join("\n"),
-      checkWords.failedNote(
-        routine.name,
-        failed.map((one) => one.machine).join(", ")
-      )
+      (slot) => checkWords.failedNote(slot, failedOn),
+      failed.map((one) => checkWords.failedOn(one.machine, one.why)).join("\n")
     );
     const failing = store
       .checks(routine.id)
@@ -1470,7 +1448,12 @@ export const createRoutines = ({
         ? { enabled: false, disabledReason: conditionWords.offFailing }
         : {}),
     });
-    note(routine, run, "failed", run.reason ?? undefined);
+    note(
+      routine,
+      run,
+      routineToolWords.runFailedTwiceNote,
+      run.reason ?? undefined
+    );
     push.routine({
       failed: true,
       instanceId,
@@ -1501,14 +1484,14 @@ export const createRoutines = ({
         ? `${words}${routineToolWords.noteCut(report?.session)}`
         : words;
     if (!reportsToLead(routine)) {
-      note(routine, run, "delivered", noted);
+      note(routine, run, routineToolWords.runNote, noted);
       return;
     }
     const unheard = (why: string) =>
       note(
         routine,
         run,
-        "delivered",
+        routineToolWords.runNote,
         `${noted}\n\nNo session heard this result: ${why}`
       );
     const label = slotLabel(run.slot, zoneOf(routine));
@@ -1565,13 +1548,7 @@ export const createRoutines = ({
       return;
     }
     const evidence = run.output ?? "";
-    note(
-      routine,
-      run,
-      "delivered",
-      evidence || undefined,
-      routineToolWords.stoppedNote(routine.name)
-    );
+    note(routine, run, routineToolWords.stoppedNote, evidence || undefined);
     const moving = async () => {
       // A session's move to done that was this run's stop moved it already.
       const task = await tasks().get(projectId, taskId);
@@ -1616,13 +1593,7 @@ export const createRoutines = ({
   ): void => {
     const question = run.output ?? "";
     store.update(routine.id, { held: "asked", asked: question });
-    note(
-      routine,
-      run,
-      "failed",
-      question || undefined,
-      routineToolWords.askedNote(routine.name)
-    );
+    note(routine, run, routineToolWords.askedNote, question || undefined);
     push.routine({
       failed: true,
       instanceId,
@@ -2305,7 +2276,7 @@ export const createRoutines = ({
       );
     }
     return routine.expiresAt && !routine.keep
-      ? "Off in 7 days unless you keep it."
+      ? routineToolWords.madeExpires(dayIn(routine.expiresAt, zoneOf(routine)))
       : null;
   };
 
@@ -2325,9 +2296,6 @@ export const createRoutines = ({
     )
       ? "Caw"
       : { delegate: "A delegate", session: "A session" }[by];
-    const next = schedule.nextAt
-      ? ` · next ${nextWords(schedule.nextAt, zoneOf(routine))}`
-      : "";
     const body = [
       routine.madeWhy,
       lasts,
@@ -2343,7 +2311,7 @@ export const createRoutines = ({
     onThread(
       routine,
       "it was made",
-      `${who} set up this routine · ${schedule.words}${next}`,
+      routineToolWords.madeNote(who),
       body || undefined
     );
     push.routineMade({
@@ -2415,7 +2383,7 @@ export const createRoutines = ({
     const line = conditionWords.timedOutNote(row.stop ?? row.name, date);
     const [newest] = store.runs(row.id, 1);
     if (updated && newest) {
-      note(updated, newest, "failed", newest.reason ?? undefined, line);
+      note(updated, newest, () => line, newest.reason ?? undefined);
     }
     push.routine({
       failed: true,
@@ -3255,16 +3223,15 @@ export const createRoutines = ({
     return updated;
   };
 
-  /** A session changed the command a check runs, unasked by its mode: a line on the routine's thread with the command whole, and a push. */
+  /** A session changed the command a check runs, asked or not: a line on the routine's thread with the command whole, and a push. */
   const commandChanged = (routine: RoutineRow, by: InstanceRow): void => {
     onThread(
       routine,
       `${by.id.slice(0, 8)} changed its check`,
-      checkWords.changedNote(routine.name),
+      checkWords.changedNote,
       checkWords.changedBody(routine.command ?? "")
     );
-    push.routineMade({
-      line: checkWords.changedNote(routine.name),
+    push.routineCheckChanged({
       name: routine.name,
       projectId: routine.projectId,
       routineId: routine.id,

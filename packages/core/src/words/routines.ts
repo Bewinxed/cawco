@@ -385,10 +385,21 @@ export const routineToolWords = {
     stage
       ? `Its task is in ${stage}, so it has ended. Move the task out of ${stage} to turn it back on.`
       : "Its task is no longer on the board, so it has ended.",
-  /** A run said stop: one quiet line in the project's conversation. */
-  stoppedNote: (name: string): string => `Routine · ${name} stopped: done`,
-  /** A run asked the owner: the line in the project's conversation, beside the question. */
-  askedNote: (name: string): string => `Routine · ${name} asks you · needs you`,
+  /** A run's line on its routine's thread, by its slot as it reads ("Run · 09:00"). */
+  runNote: (slot: string): string => `Run · ${slot}`,
+  /** A run that failed twice: its line on the thread. */
+  runFailedTwiceNote: (slot: string): string =>
+    `Run · ${slot} · failed twice · needs you`,
+  /** A session made the routine: the line on its thread; `who` is "Caw", "A delegate" or "A session". */
+  madeNote: (who: string): string => `${who} set up this routine`,
+  /** A session's routine that turns itself off unless kept: the day it does, on its thread and in its push. */
+  madeExpires: (date: string): string =>
+    `Turns off on ${date} unless you keep it: Keep is in its menu in Routines.`,
+  /** A run said stop: its line on the routine's thread. */
+  stoppedNote: (slot: string): string =>
+    `Run · ${slot} · stop condition met · routine ended`,
+  /** A run asked the owner: its line on the routine's thread, over the question. */
+  askedNote: (slot: string): string => `Run · ${slot} · asks you · needs you`,
   /** A session moved a routine to done and is none of its runs. */
   doneNotRun: (taskId: string): string =>
     `${taskId} is a routine: only one of its runs (with task_result routine stop) or the owner moves it to done. To end it, move it to a dropped stage; to pause it, task_update with enabled false.`,

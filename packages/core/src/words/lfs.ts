@@ -10,25 +10,22 @@ export const lfsWords = {
   offerTitle: (folder: string) => `Large files in ${folder}`,
   /** Its line: how many its first commit left out for size alone, and their size. */
   offerLine: (count: number, size: string) =>
-    `${count} ${count === 1 ? "file" : "files"}, ${size}, ${count === 1 ? "was" : "were"} left out of its first commit for size alone. Git LFS can keep ${count === 1 ? "it" : "them"} instead, by pattern.`,
+    `${count} ${count === 1 ? "file" : "files"}, ${size}, ${count === 1 ? "was" : "were"} left out of its first commit for size alone. Track with LFS commits ${count === 1 ? "it" : "them"} through Git LFS, and the next push uploads ${count === 1 ? "it" : "them"}.`,
   track: "Track with LFS",
   tracking: "Committing…",
-  notNow: "Not now",
-  notNowPending: "Not now…",
-  /** A row: its pattern's files and their size. */
-  row: (count: number, size: string) =>
-    `${count} ${count === 1 ? "file" : "files"} · ${size}`,
+  notNow: "Leave out",
+  notNowPending: "Leaving out…",
   /** What was answered: Track committed them. */
   tracked: (commit: string) => `Tracked with LFS in ${commit.slice(0, 7)}`,
   /** Under it, when the folder's own pre-push hook kept git-lfs's out. */
   ownPrePush:
-    "The folder has a pre-push hook of its own, so git-lfs's was not put beside it: a push from there sends the large files only with `git lfs push origin --all`, or once the hooks are merged (`git lfs update --manual` says how).",
+    "The folder keeps its own pre-push hook, so `git push` from it does not send the large files. Send them with `git lfs push origin --all`, or merge git-lfs's hook into yours: `git lfs update --manual` prints how.",
 
   // ── An LFS server the project never declared ──
   refusedTitle: "Large files left as pointers",
   /** Its line: the server, and where to declare it. */
-  refusedLine: (endpoint: string, project: string) =>
-    `The repository's .lfsconfig says its large files live at ${endpoint}, which is neither its origin's LFS nor where ${project} declared its large files live, so CawCo fetched nothing from it. If they belong there, declare it in the project's settings, under Large files.`,
+  refusedLine: (endpoint: string) =>
+    `A repository's .lfsconfig keeps its large files at ${endpoint}, a server this project is not set to use, so nothing was fetched from there. If the files belong there, set it as the Custom server under Git LFS in the project's settings.`,
   dismiss: "Dismiss",
   dismissing: "Dismissing…",
 };

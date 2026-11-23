@@ -105,6 +105,7 @@ import { causeLine } from "@cawco/core/words/install";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { pairingWords } from "@cawco/core/words/pairing";
 import { presenceLogWords } from "@cawco/core/words/presence-log";
+import { checkWords } from "@cawco/core/words/routine-check";
 import { Elysia, problem, t } from "elysia";
 import { z } from "zod";
 import { isProjectConversation } from "./caw";
@@ -1595,6 +1596,29 @@ export const createPush = ({
     }
   });
 
+  /** A routine's push opens its task, or the routine itself while it has none. */
+  const routineOpens = (routine: {
+    projectId: string;
+    routineId: string;
+    taskId: string | null;
+  }): PushData =>
+    routine.taskId
+      ? {
+          kind: "task",
+          instanceId: null,
+          machineId: null,
+          projectId: routine.projectId,
+          taskId: routine.taskId,
+        }
+      : {
+          kind: "routine",
+          instanceId: null,
+          machineId: null,
+          projectId: routine.projectId,
+          routineId: routine.routineId,
+          runId: null,
+        };
+
   const projectName = (projectId: string | null | undefined): string | null =>
     (projectId ? db.project(projectId)?.name : undefined) ?? null;
 
@@ -2174,7 +2198,6 @@ export const createPush = ({
       taskId: string | null;
     }): void {
       const project = projectName(made.projectId);
-      const { taskId } = made;
       arrive({
         ask: false,
         instanceId: null,
@@ -2186,25 +2209,40 @@ export const createPush = ({
           category: PUSH_CATEGORIES.taskOpenOnly,
           collapseId: `routine-made-${made.routineId}`,
           group: made.projectId,
-          data: taskId
-            ? {
-                kind: "task",
-                instanceId: null,
-                machineId: null,
-                projectId: made.projectId,
-                taskId,
-              }
-            : {
-                kind: "routine",
-                instanceId: null,
-                machineId: null,
-                projectId: made.projectId,
-                routineId: made.routineId,
-                runId: null,
-              },
+          data: routineOpens(made),
         },
       });
       console.log(`[push] routine ${made.routineId}: made, announced`);
+    },
+
+    /**
+     * A session changed the command a routine's check runs (routines.ts
+     * `commandChanged`): beside its line on the routine's thread, opening
+     * its task. The routine's name is the agent's words, so it goes sealed;
+     * the line is the hub's own, so both say it.
+     */
+    routineCheckChanged(changed: {
+      name: string;
+      projectId: string;
+      routineId: string;
+      taskId: string | null;
+    }): void {
+      const project = projectName(changed.projectId);
+      arrive({
+        ask: false,
+        instanceId: null,
+        landedAt: new Date(),
+        still: () => true,
+        notification: {
+          shown: alertOf("Routine", project, checkWords.changedNote),
+          sealed: alertOf(changed.name, project, checkWords.changedNote),
+          category: PUSH_CATEGORIES.taskOpenOnly,
+          collapseId: `routine-check-${changed.routineId}`,
+          group: changed.projectId,
+          data: routineOpens(changed),
+        },
+      });
+      console.log(`[push] routine ${changed.routineId}: check changed`);
     },
 
     /**

@@ -16,6 +16,19 @@ export const checkOutcomeWords: Record<CheckOutcome, string> = {
   paused: "paused",
 };
 
+/**
+ * A shell command as a markdown code block, so a thread draws it as code:
+ * its fence one backtick longer than any run of backticks inside it.
+ */
+const shellBlock = (command: string): string => {
+  const longest = Math.max(
+    2,
+    ...Array.from(command.matchAll(/`+/gu), (run) => run[0].length)
+  );
+  const fence = "`".repeat(longest + 1);
+  return `${fence}sh\n${command}\n${fence}`;
+};
+
 export const checkWords = {
   /** The block's head in a routine's detail. */
   head: "Check",
@@ -66,17 +79,17 @@ export const checkWords = {
   failedOn: (machine: string, why: string) => `${machine}: ${why}`,
 
   /** The conversation's line when the check failed on some machine. */
-  failedNote: (name: string, machines: string) =>
-    `Routine · ${name} · its check failed on ${machines}`,
+  failedNote: (slot: string, machines: string) =>
+    `Run · ${slot} · its check failed on ${machines}`,
 
   /** A session made a routine with a check: under the notice's line, the command it runs, whole. */
   madeCommand: (command: string, machines: string) =>
-    `Its check runs this command on ${machines} before each run, as the CawCo agent's user, outside any sandbox. Only output wakes the routine.\n\n${command}`,
-  /** A session changed the command a check runs, in a mode that runs commands unasked: the notice's line. */
-  changedNote: (name: string) =>
-    `A session changed the command a routine's check runs: ${name}`,
+    `Its check runs this command on ${machines} before each run, as the CawCo agent's user, outside any sandbox. Only output wakes the routine.\n\n${shellBlock(command)}`,
+  /** A session changed the command a check runs: the line on the routine's thread, and its push's body. */
+  changedNote: "A session changed the command its check runs",
   /** Under it: the command it runs now, whole. */
-  changedBody: (command: string) => `It runs this command now:\n\n${command}`,
+  changedBody: (command: string) =>
+    `It runs this command now:\n\n${shellBlock(command)}`,
   /** The approval card's line for a routine with a check a session asks to make. */
   askMake: (name: string) => `Set up a routine gated by a command: ${name}`,
   /** The approval card's line for a change to the command a check runs. */

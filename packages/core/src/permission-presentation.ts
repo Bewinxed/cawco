@@ -1638,7 +1638,7 @@ export const publishedWords = (
   change: Extract<ProjectSettingChange, { kind: "create_repo" }>
 ): string => {
   const made = change.madeCommit
-    ? `It was a plain folder, so CawCo made it a git repository with one commit, ${change.madeCommit.slice(0, 9)}, pushed nowhere yet. `
+    ? projectSettingsWords.publishedMade(change.folder, change.madeCommit)
     : "";
   const size = `${made}${change.files} ${change.files === 1 ? "file" : "files"}, ${(change.bytes / MB).toFixed(1)} MB`;
   if (change.leftOut.length === 0) {

@@ -253,14 +253,14 @@
       case "cap":
         return capLine(item.cap);
       case "offer":
-        return offerLine(item.offer, item.place);
+        return offerLine(item.offer);
     }
     return "";
   });
 
   const MB = 1024 * 1024;
   /** An offer's line: what it asks, in the hub's words for its kind. */
-  function offerLine(offer: WaitingOffer, project: string): string {
+  function offerLine(offer: WaitingOffer): string {
     switch (offer.kind) {
       case "design":
         return offerWords.designLine(
@@ -274,7 +274,7 @@
         return lfsWords.offerLine(count, `${(bytes / MB).toFixed(1)} MB`);
       }
       case "lfs-refused":
-        return lfsWords.refusedLine(offer.endpoint, project);
+        return lfsWords.refusedLine(offer.endpoint);
     }
   }
 

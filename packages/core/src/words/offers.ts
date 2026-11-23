@@ -26,16 +26,13 @@ export const offerWords = {
   makingProject: "Making project…",
 
   // ── The design-system offer in Needs you (home/NeedsCard.svelte) ──
-  designTitle: "Design system",
+  designTitle: "No design system",
   /** Its line: what it asks, with what a build would read listed ("a, b and c"), or nothing. */
   designLine: (from: string) =>
     from.length > 0
-      ? `This work needs a design system. Build one from ${from}?`
-      : "This work needs a design system. Build one?",
+      ? `A design task started without one. Build files a task to make one from ${from}.`
+      : "A design task started without one. Build files a task to make one.",
   build: "Build",
   filing: "Filing…",
   notNowPending: "Not now…",
-  /** What was answered: Build filed the task. */
-  filed: "Filed",
-  open: "Open",
 };

@@ -10812,6 +10812,7 @@ export const createServer = (
         push.routineMade(said);
         projectStarters.routineMade(said.projectId);
       },
+      routineCheckChanged: (said) => push.routineCheckChanged(said),
     },
     types: (projectId) => projectTypes.typesFor(projectId),
     workItems,

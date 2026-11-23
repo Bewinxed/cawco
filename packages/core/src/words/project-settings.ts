@@ -95,6 +95,9 @@ export interface SettingsRead {
 }
 
 export const projectSettingsWords = {
+  /** A `create_repo` card's detail, when reading the plain folder made it a repository: its folder as the summary names it, and its one commit. */
+  publishedMade: (folder: string | undefined, commit: string): string =>
+    `${folder ?? "The folder"} was a plain folder, so it was made a git repository: one commit, ${commit.slice(0, 7)}, not pushed yet. `,
   /** `project_settings` with no changes: every setting, by the field that changes it, then what dispatch does now. */
   read: (now: SettingsRead): string =>
     [

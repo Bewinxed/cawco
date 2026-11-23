@@ -79,8 +79,8 @@ export const createWaitFlags = ({
     const kind = wait.kind === "pr" ? "pr" : "run";
     const title =
       kind === "pr"
-        ? taskLinkWords.closedUnmergedNote(wait.label, task.title)
-        : taskLinkWords.runFailedNote(wait.label, task.title);
+        ? taskLinkWords.closedUnmergedNote(wait.label)
+        : taskLinkWords.runFailedNote(wait.label);
     detach(
       tasks
         .comment(
