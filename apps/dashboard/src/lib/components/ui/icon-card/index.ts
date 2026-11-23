@@ -12,7 +12,7 @@ import { tv } from "#lib/utils.js";
  * `data-slot="icon-cards"`: the highlight's rows and the pill's hook.
  */
 export const iconCardVariants = tv({
-  base: "relative flex flex-col gap-space-1 rounded-sm bg-transparent px-space-4 pt-space-6 pb-space-4 text-start text-tx ring ring-ui-2 focus-inset type-meta transition-control active:bg-ui",
+  base: "relative flex flex-col gap-space-1 rounded-sm border border-ui-2 bg-transparent px-space-4 pt-space-6 pb-space-4 text-start text-tx focus-inset type-meta transition-control active:bg-ui",
 });
 
 /**

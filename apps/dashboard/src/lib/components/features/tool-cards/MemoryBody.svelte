@@ -243,7 +243,7 @@
 {#snippet well(source: string)}
   <div
     data-slot="well"
-    class="max-h-105 overflow-auto p-space-3 ring ring-ui rounded-sm bg-bg-2"
+    class="max-h-105 overflow-auto p-space-3 border border-ui rounded-sm bg-bg-2"
   >
     <ToolProse {source} />
   </div>

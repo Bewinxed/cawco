@@ -444,7 +444,7 @@
     <div
       data-slot="drop-preview"
       aria-hidden="true"
-      class="pointer-events-none absolute z-3 ring ring-ui-2 bg-ui opacity-90 motion-safe:transition-[inset] motion-safe:duration-(--duration-base) motion-safe:ease-in-out"
+      class="pointer-events-none absolute z-3 border border-ui-2 bg-ui opacity-90 motion-safe:transition-[inset] motion-safe:duration-(--duration-base) motion-safe:ease-in-out"
       style:inset={previewInset}
       transition:previewFade
     ></div>

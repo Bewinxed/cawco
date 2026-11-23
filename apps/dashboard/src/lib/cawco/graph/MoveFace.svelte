@@ -952,7 +952,7 @@
   >
     <span
       aria-hidden="true"
-      class="absolute inset-y-0 start-(--from) w-(--wide) rounded-pill ring ring-ui-2 bg-bg"
+      class="absolute inset-y-0 start-(--from) w-(--wide) rounded-pill border border-ui-2 bg-bg"
       style:--from="{(viewFrom / scale) * 100}%"
       style:--wide="{(viewSpan / scale) * 100}%"
     ></span>
@@ -1359,7 +1359,7 @@
             >
               <span
                 aria-hidden="true"
-                class={["h-space-2 w-space-4 rounded-xs ring", BAR[kind]]}
+                class={["h-space-2 w-space-4 rounded-xs border", BAR[kind]]}
                 data-box
               ></span>
               <span>{words.kinds[kind]}</span>

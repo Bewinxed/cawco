@@ -64,7 +64,7 @@
        and a way to put the card away. -->
   <section
     aria-label={offerWords.joinedLabel}
-    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 ring ring-ui-2 rounded-lg bg-bg p-space-3 shadow-sm motion-safe:animate-rise-in"
+    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-ui-2 rounded-lg bg-bg p-space-3 shadow-sm motion-safe:animate-rise-in"
     data-offer={instanceId}
     role="status"
   >
@@ -97,7 +97,7 @@
 {:else if offer}
   <section
     aria-label={offerWords.offerLabel}
-    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 ring ring-ui-2 rounded-lg bg-bg p-space-3 shadow-sm motion-safe:animate-rise-in"
+    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-ui-2 rounded-lg bg-bg p-space-3 shadow-sm motion-safe:animate-rise-in"
     data-offer={instanceId}
   >
     <p

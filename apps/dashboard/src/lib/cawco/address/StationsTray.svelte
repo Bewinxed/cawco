@@ -346,7 +346,7 @@
                     {:else}
                       <span
                         class={[
-                          "box-border grid size-icon-md place-items-center rounded-pill ring type-meta leading-none num before:content-data-n",
+                          "box-border grid size-icon-md place-items-center rounded-pill border type-meta leading-none num before:content-data-n",
                           state === "open"
                             ? "border-accent text-accent"
                             : "border-ui-2 text-tx-2",

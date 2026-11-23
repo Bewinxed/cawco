@@ -82,7 +82,7 @@ export const chipVariants = tv({
       inline:
         "-my-space-1 max-w-full gap-space-1 rounded-[calc(var(--radius-xs)+var(--spacing-space-1))] bg-bg-2 py-space-1 ps-space-1 pe-space-2 align-baseline leading-4.5 whitespace-nowrap inset-ring inset-ring-ui motion-safe:transition-[background-color,transform] motion-safe:duration-(--duration-fast) motion-safe:ease-out motion-safe:enabled:active:[transform:scale(var(--press-scale))] can-hover:enabled:hover:bg-ui [&>[data-slot=label]]:max-w-ch-32 [&>[data-slot=label]]:min-w-0 [&>[data-slot=label]]:self-baseline [&>[data-slot=label]]:overflow-clip [&>[data-slot=label]]:text-ellipsis [&>svg]:size-icon-md [&>svg]:flex-none",
       setting:
-        "touch-hit h-control-sm max-w-full gap-space-2 bg-bg px-space-2 leading-none whitespace-nowrap ring ring-ui-2 hit-edge-hair transition-control aria-disabled:opacity-50 motion-safe:transition-control-press can-hover:enabled:not-variant-static:hover:bg-ui motion-safe:enabled:not-aria-busy:pressed:[transform:scale(var(--press-scale))] variant-static:bg-bg-2 variant-static:ring-ui [&_[data-slot=chip-label]]:min-w-0 [&_[data-slot=chip-label]]:overflow-hidden [&_[data-slot=chip-label]]:text-ellipsis [&>[data-slot=chevron]]:size-icon-sm [&>[data-slot=chevron]]:text-tx-2 [&>svg]:flex-none [&>svg:not([data-slot=chevron])]:size-icon-md",
+        "touch-hit h-control-sm max-w-full gap-space-2 border border-ui-2 bg-bg px-space-2 leading-none whitespace-nowrap hit-edge-hair transition-control aria-disabled:opacity-50 motion-safe:transition-control-press can-hover:enabled:not-variant-static:hover:bg-ui motion-safe:enabled:not-aria-busy:pressed:[transform:scale(var(--press-scale))] variant-static:border-ui variant-static:bg-bg-2 [&_[data-slot=chip-label]]:min-w-0 [&_[data-slot=chip-label]]:overflow-hidden [&_[data-slot=chip-label]]:text-ellipsis [&>[data-slot=chevron]]:size-icon-sm [&>[data-slot=chevron]]:text-tx-2 [&>svg]:flex-none [&>svg:not([data-slot=chevron])]:size-icon-md",
     },
     size: {
       regular: "",
@@ -97,13 +97,13 @@ export const chipVariants = tv({
     {
       variant: "setting",
       tone: "fail",
-      class: "text-red ring-red",
+      class: "border-red text-red",
     },
     {
       variant: "setting",
       tone: "grant",
       class:
-        "bg-bg-2 text-orange ring-orange can-hover:enabled:not-variant-static:hover:bg-bg-2 variant-static:bg-bg-2 variant-static:ring-orange [&>[data-slot=chevron]]:text-orange",
+        "border-orange bg-bg-2 text-orange can-hover:enabled:not-variant-static:hover:bg-bg-2 variant-static:border-orange variant-static:bg-bg-2 [&>[data-slot=chevron]]:text-orange",
     },
   ],
   defaultVariants: { variant: "option" },

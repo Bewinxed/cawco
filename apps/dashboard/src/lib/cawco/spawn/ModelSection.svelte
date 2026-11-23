@@ -298,7 +298,7 @@
   {/if}
   <div
     data-slot="picker"
-    class="field-edge transition-control relative grid rounded-sm ring bg-bg shadow-sm rail-step-(--rail-step-fine) coarse:rail-step-(--spacing-control-lg) data-railed:grid-cols-(--cols)"
+    class="field-edge transition-control relative grid rounded-sm border bg-bg shadow-sm rail-step-(--rail-step-fine) coarse:rail-step-(--spacing-control-lg) data-railed:grid-cols-(--cols)"
     data-railed={!runtime || undefined}
     style:--cols="auto minmax(0, 1fr)"
     style:--rail-gap="calc(var(--rail-step) - var(--spacing-control-md))"

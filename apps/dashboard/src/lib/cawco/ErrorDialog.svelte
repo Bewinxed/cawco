@@ -57,7 +57,7 @@
       </Dialog.Header>
 
       <pre
-        class="m-0 max-h-vh-60 min-w-0 overflow-auto wrap-anywhere whitespace-pre-wrap rounded-sm ring ring-ui bg-bg-2 p-space-3 font-mono text-sm leading-base text-tx select-text"
+        class="m-0 max-h-vh-60 min-w-0 overflow-auto wrap-anywhere whitespace-pre-wrap rounded-sm border border-ui bg-bg-2 p-space-3 font-mono text-sm leading-base text-tx select-text"
         data-error-text>{message}</pre>
 
       <RowFault again={copy} data-copy-refused reason={refusals.reason(key)} />

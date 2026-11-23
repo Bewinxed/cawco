@@ -224,7 +224,7 @@
     <!-- The frame: the clip's shape and width (`frame`), its hairline an
          edge drawn over the picture on the frame's own radius. -->
     <media-container
-      class="group/clip relative block aspect-(--clip-ratio) w-(--clip-w) max-w-full overflow-clip rounded-sm bg-bg-2 after:pointer-events-none after:absolute after:inset-0 after:rounded-inherit after:ring after:ring-ui"
+      class="group/clip relative block aspect-(--clip-ratio) w-(--clip-w) max-w-full overflow-clip rounded-sm bg-bg-2 after:pointer-events-none after:absolute after:inset-0 after:rounded-inherit after:border after:border-ui"
       style:--clip-ratio={frame.ratio}
       style:--clip-w={frame.width}
       in:reveal

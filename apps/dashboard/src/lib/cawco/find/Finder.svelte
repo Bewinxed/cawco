@@ -571,7 +571,7 @@
   >
     {#each WHO as who (who.value)}
       <button
-        class="select-none inline-flex items-center gap-space-1 h-space-6 px-space-3 ring ring-ui-2 rounded-pill bg-bg type-label text-tx-2 transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] aria-pressed:ring-transparent aria-pressed:bg-ui aria-pressed:text-accent aria-pressed-false:hover:bg-ui motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
+        class="select-none inline-flex items-center gap-space-1 h-space-6 px-space-3 border border-ui-2 rounded-pill bg-bg type-label text-tx-2 transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] aria-pressed:border-transparent aria-pressed:bg-ui aria-pressed:text-accent aria-pressed-false:hover:bg-ui motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
         aria-pressed={(finder.by ?? "anyone") === who.value}
         onclick={() => {
           if (finder.parsed.me && who.value !== "me") {
@@ -585,7 +585,7 @@
     {/each}
     {#each finder.projectChips as word (word)}
       <span
-        class="mark-line inline-flex items-center gap-space-1 h-space-6 ps-space-3 pe-space-1 ring ring-transparent rounded-pill bg-ui type-label text-accent transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-ui motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
+        class="mark-line inline-flex items-center gap-space-1 h-space-6 ps-space-3 pe-space-1 border border-transparent rounded-pill bg-ui type-label text-accent transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-ui motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
         data-flip="pop"
         ><span>{word}</span><button
           data-box
@@ -599,7 +599,7 @@
     {#if finder.parsed.time}
       {@const time = finder.parsed.time}
       <span
-        class="mark-line inline-flex items-center gap-space-1 h-space-6 ps-space-3 pe-space-1 ring ring-transparent rounded-pill bg-ui type-label text-accent transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-ui motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
+        class="mark-line inline-flex items-center gap-space-1 h-space-6 ps-space-3 pe-space-1 border border-transparent rounded-pill bg-ui type-label text-accent transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] hover:bg-ui motion-safe:active:scale-(--press-scale) group-data-phone/finder:h-space-8"
         data-flip="pop"
         ><span>{time}</span><button
           data-box

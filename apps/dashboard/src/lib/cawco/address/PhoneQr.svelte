@@ -55,7 +55,7 @@
       <li class="mark-line flex min-w-0 items-start gap-space-2 type-body">
         <span class="mark-cell">
           <span
-            class="box-border grid size-icon-md place-items-center rounded-pill ring ring-ui-2 type-meta leading-none num text-tx-2"
+            class="box-border grid size-icon-md place-items-center rounded-pill border border-ui-2 type-meta leading-none num text-tx-2"
             aria-hidden="true">{index + 1}</span
           >
         </span>

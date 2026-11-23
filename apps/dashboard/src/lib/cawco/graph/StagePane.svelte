@@ -267,7 +267,7 @@
             aria-hidden="true"
             data-box
             class={[
-              "inline-block size-space-3 flex-none rounded-xs ring-2 ring-green",
+              "inline-block size-space-3 flex-none rounded-xs border-2 border-green",
               line.kind === "went" && "border-dashed",
             ]}
           ></span>
@@ -303,7 +303,7 @@
   <span
     aria-hidden="true"
     data-box
-    class="inline-block size-space-3 flex-none rounded-xs ring-2 ring-green"
+    class="inline-block size-space-3 flex-none rounded-xs border-2 border-green"
   ></span>
   <span class="num"
     >{words.differenceCount(found.length, figureOf(found.length, lang))}</span

@@ -32,7 +32,7 @@
     aria-hidden="true"
     class={[
       place,
-      "size-1.5 rounded-pill ring ring-tx-2 bg-bg ring-dot-cut ring-bg",
+      "size-1.5 rounded-pill border border-tx-2 bg-bg ring-dot-cut ring-bg",
     ]}
     data-dot="held"
   ></span>

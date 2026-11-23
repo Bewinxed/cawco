@@ -23,7 +23,7 @@
   } = $props();
 </script>
 
-<div class="h-40 w-full rounded-sm ring ring-ui">
+<div class="h-40 w-full rounded-sm border border-ui">
   <Resizable.PaneGroup direction="horizontal">
     <Resizable.Pane defaultSize={100 - sideSize} minSize={30}>
       <p class="p-space-4 type-label">{main}</p>

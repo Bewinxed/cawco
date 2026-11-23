@@ -80,7 +80,7 @@
          * as a held row's pill is.
          */
         corner:
-          "pointer-events-none absolute top-[calc(var(--count-foot,0%)_-_var(--spacing-icon-md)_/_2)] start-[calc(50%_+_var(--count-glyph)_/_2_-_var(--spacing-icon-md)_/_2)] h-icon-md min-w-icon-md rounded-pill bg-tx px-space-1 type-label text-bg tabular-nums data-[look=attn]:bg-bg-2 data-[look=attn]:text-orange data-[look=held]:ring data-[look=held]:ring-tx-2 data-[look=held]:bg-bg data-[look=held]:text-tx",
+          "pointer-events-none absolute top-[calc(var(--count-foot,0%)_-_var(--spacing-icon-md)_/_2)] start-[calc(50%_+_var(--count-glyph)_/_2_-_var(--spacing-icon-md)_/_2)] h-icon-md min-w-icon-md rounded-pill bg-tx px-space-1 type-label text-bg tabular-nums data-[look=attn]:bg-bg-2 data-[look=attn]:text-orange data-[look=held]:border data-[look=held]:border-tx-2 data-[look=held]:bg-bg data-[look=held]:text-tx",
       },
       /** Its figures in tabular widths (DESIGN.md, The Tabular Figure Rule). */
       figures: { tabular: "tabular-nums" },
@@ -89,15 +89,15 @@
         success: "text-green",
         muted: "text-tx-2",
         subtle: "text-tx-2",
-        "success-edge": "ring-green text-green",
-        "warning-edge": "ring-orange text-orange",
-        "muted-edge": "ring-ui-2 text-tx-2",
+        "success-edge": "border-green text-green",
+        "warning-edge": "border-orange text-orange",
+        "muted-edge": "border-ui-2 text-tx-2",
       },
       /** Its glyph and words a hairline apart. */
       gap: { tight: "gap-space-1" },
       /** A row's meta tag: the recess with no edge, meta size at body weight, muted ink held. */
       kind: {
-        meta: "rounded-xs ring-transparent bg-bg-2 px-space-2 py-px font-normal text-tx-2 text-sm",
+        meta: "rounded-xs border-transparent bg-bg-2 px-space-2 py-px font-normal text-tx-2 text-sm",
       },
     },
     defaultVariants: {

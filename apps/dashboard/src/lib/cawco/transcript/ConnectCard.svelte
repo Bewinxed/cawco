@@ -332,7 +332,7 @@
         aria-label={connect.again
           ? askWords.reconnectAskFrom(asker)
           : askWords.connectAskFrom(asker)}
-        class="rail-hang mt-space-1 mb-space-2 flex flex-col gap-space-2 min-w-0 rounded-sm ring ring-ui bg-bg p-space-3 shadow-sm scroll-my-space-4"
+        class="rail-hang mt-space-1 mb-space-2 flex flex-col gap-space-2 min-w-0 rounded-sm border border-ui bg-bg p-space-3 shadow-sm scroll-my-space-4"
       >
         <!-- Who connects to what: Caw&Co, the arrow between, the service. -->
         <div

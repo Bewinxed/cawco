@@ -114,7 +114,7 @@
   data-slot="bulk"
   data-safe-bottom
   aria-label="Selected tasks"
-  class="fixed inset-x-space-3 bottom-(--off-bottom) z-(--z) flex min-h-(--min-h) w-fit flex-wrap items-center justify-center gap-space-1 mx-auto ring ring-ui-2 rounded-lg bg-bg shadow-lg py-space-1 pr-space-1 pl-space-3 max-phone:bottom-(--off-bottom-phone)"
+  class="fixed inset-x-space-3 bottom-(--off-bottom) z-(--z) flex min-h-(--min-h) w-fit flex-wrap items-center justify-center gap-space-1 mx-auto border border-ui-2 rounded-lg bg-bg shadow-lg py-space-1 pr-space-1 pl-space-3 max-phone:bottom-(--off-bottom-phone)"
   role="toolbar"
   style:--z="calc(var(--layer-bar) + 10)"
   style:--off-bottom="calc(var(--spacing-space-4) + var(--safe-bottom, 0px))"

@@ -87,7 +87,7 @@
 <!-- biome-ignore lint/a11y/noStaticElementInteractions: the mousedown handler only keeps the focus in the field; the rows are its controls -->
 <div
   data-slot="menu"
-  class="group/menu absolute inset-x-0 bottom-(--menu-bottom) z-2 origin-bottom overflow-hidden ring ring-ui-2 rounded-lg bg-bg shadow-lg"
+  class="group/menu absolute inset-x-0 bottom-(--menu-bottom) z-2 origin-bottom overflow-hidden border border-ui-2 rounded-lg bg-bg shadow-lg"
   data-phone={phone || undefined}
   style:--menu-bottom="calc(100% + var(--spacing-space-2))"
   onmousedown={(event) => event.preventDefault()}

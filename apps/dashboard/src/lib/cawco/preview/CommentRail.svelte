@@ -723,13 +723,13 @@
               {#if one.kind === "image"}
                 <img
                   alt={one.name}
-                  class="size-icon-lg flex-none rounded-xs ring ring-ui object-cover"
+                  class="size-icon-lg flex-none rounded-xs border border-ui object-cover"
                   data-thumb
                   src={one.ref}
                 />
               {:else}
                 <span
-                  class="grid size-icon-lg flex-none place-items-center rounded-xs ring ring-ui bg-bg-2 text-tx-2"
+                  class="grid size-icon-lg flex-none place-items-center rounded-xs border border-ui bg-bg-2 text-tx-2"
                   data-thumb
                   title={one.name}
                   ><IconDocument aria-hidden="true" class="size-icon-sm" /><span

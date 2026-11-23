@@ -236,7 +236,7 @@
 <section
   data-slot="hitl"
   aria-label="Question from {asker}"
-  class="mt-space-4 ms-(--x-rail) py-space-3 pe-space-3 ps-(--hitl-start) ring ring-ui-2 rounded-lg bg-bg shadow-sm"
+  class="mt-space-4 ms-(--x-rail) py-space-3 pe-space-3 ps-(--hitl-start) border border-ui-2 rounded-lg bg-bg shadow-sm"
   data-frame
   bind:this={section}
   style:--hitl-start="calc(var(--x-glyph) - var(--x-rail) - 1px)"

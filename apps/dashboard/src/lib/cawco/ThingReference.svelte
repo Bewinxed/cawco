@@ -84,7 +84,7 @@
     >
       <div
         aria-hidden="true"
-        class="absolute start-(--peek-x) top-(--peek-y) flex flex-col gap-space-1 max-w-70 mt-space-1 px-space-2 py-space-1 ring ring-ui-2 rounded-sm bg-bg shadow-sm motion-safe:animate-fade-in motion-safe:anim-dur-fast"
+        class="absolute start-(--peek-x) top-(--peek-y) flex flex-col gap-space-1 max-w-70 mt-space-1 px-space-2 py-space-1 border border-ui-2 rounded-sm bg-bg shadow-sm motion-safe:animate-fade-in motion-safe:anim-dur-fast"
         style:--peek-x="{peek.at.x}px"
         style:--peek-y="{peek.at.y}px"
       >

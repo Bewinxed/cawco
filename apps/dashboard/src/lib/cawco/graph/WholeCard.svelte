@@ -35,9 +35,11 @@
   data-slot="whole-state"
   data-kept={card.kept ? "" : undefined}
   class={[
-    "relative flex min-w-0 flex-col gap-space-1 rounded-sm ring bg-bg px-space-3 py-space-2 transition-control",
+    "relative flex min-w-0 flex-col gap-space-1 rounded-sm border bg-bg px-space-3 py-space-2 transition-control",
     wide ? "w-auto" : "w-52",
-    card.kept ? "ring-accent" : "ring-ui-2 can-hover:has-[button:hover]:bg-ui",
+    card.kept
+      ? "border-accent"
+      : "border-ui-2 can-hover:has-[button:hover]:bg-ui",
     card.against && "outline-solid outline-2 outline-green",
   ]}
   style:--xy-handle-background-color="transparent"

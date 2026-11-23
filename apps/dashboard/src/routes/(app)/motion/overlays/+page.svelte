@@ -239,7 +239,7 @@
       <ContextMenu.Root bind:open={open["context-menu"]}>
         <ContextMenu.Trigger>
           <div
-            class="rounded-sm ring ring-ui-2 px-space-3 py-space-2"
+            class="rounded-sm border border-ui-2 px-space-3 py-space-2"
             data-open="context-menu"
           >
             Context menu

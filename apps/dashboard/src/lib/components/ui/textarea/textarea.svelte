@@ -38,8 +38,8 @@
             stand a boxed row's inset in (`c-field-inline-inset`, space-3
             less its edge), on the text column of the rows beside it. */
         prose:
-          "min-h-0 ring-transparent bg-transparent px-space-3 py-space-1 shadow-none hover:bg-ui",
-        note: "max-h-50 min-h-control-md min-w-0 ring-transparent bg-transparent px-0 py-space-2 leading-lg shadow-none placeholder-shown:truncate",
+          "min-h-0 ring-0 bg-transparent px-space-3 py-space-1 shadow-none hover:bg-ui",
+        note: "max-h-50 min-h-control-md min-w-0 ring-0 bg-transparent px-0 py-space-2 leading-lg shadow-none placeholder-shown:truncate",
       },
     },
   });

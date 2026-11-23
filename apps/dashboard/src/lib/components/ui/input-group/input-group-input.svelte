@@ -13,7 +13,7 @@
 
 <Input
   class={cn(
-    "flex-1 rounded-none border-0 bg-transparent shadow-none dark:bg-transparent",
+    "flex-1 rounded-none ring-0 bg-transparent shadow-none dark:bg-transparent",
     className
   )}
   area={false}

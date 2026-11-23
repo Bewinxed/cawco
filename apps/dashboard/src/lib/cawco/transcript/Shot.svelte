@@ -268,7 +268,7 @@
   {#if video && failed !== src}
     <div
       data-slot="shot-box"
-      class="relative flex items-center justify-start w-full h-60 p-0 ring ring-ui rounded-sm overflow-hidden bg-transparent text-tx-2 group-data-thumb/shot:w-12 group-data-thumb/shot:h-12"
+      class="relative flex items-center justify-start w-full h-60 p-0 border border-ui rounded-sm overflow-hidden bg-transparent text-tx-2 group-data-thumb/shot:w-12 group-data-thumb/shot:h-12"
     >
       {#if captionsReady}
         <!-- Captions come from the sidecar .vtt when the video has one; a video without one has none to show. Svelte and Biome read only an unconditional <track>. -->
@@ -300,7 +300,7 @@
   {:else if failed === src}
     <div
       data-slot="shot-box"
-      class="relative flex flex-col items-start justify-center w-full h-60 p-space-3 ring ring-ui rounded-sm overflow-hidden bg-bg-2 text-tx-2 text-sm font-normal group-data-thumb/shot:w-12 group-data-thumb/shot:h-12"
+      class="relative flex flex-col items-start justify-center w-full h-60 p-space-3 border border-ui rounded-sm overflow-hidden bg-bg-2 text-tx-2 text-sm font-normal group-data-thumb/shot:w-12 group-data-thumb/shot:h-12"
     >
       <span>{missing ?? (video ? "Video" : "Image")} not available</span>
       {#if path}
@@ -314,7 +314,7 @@
     <button
       data-slot="shot-box"
       aria-label={`Open ${alt}`}
-      class="select-none relative flex items-center justify-start w-full h-60 p-0 ring ring-ui rounded-sm overflow-hidden bg-transparent text-tx-2 group-data-thumb/shot:w-12 group-data-thumb/shot:h-12"
+      class="select-none relative flex items-center justify-start w-full h-60 p-0 border border-ui rounded-sm overflow-hidden bg-transparent text-tx-2 group-data-thumb/shot:w-12 group-data-thumb/shot:h-12"
       onclick={open}
       type="button"
     >

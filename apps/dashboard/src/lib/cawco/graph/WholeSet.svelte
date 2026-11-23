@@ -509,7 +509,7 @@
     <span
       bind:this={ruler}
       aria-hidden="true"
-      class="pointer-events-none invisible absolute start-0 top-0 max-w-40 ring px-space-1 type-meta"
+      class="pointer-events-none invisible absolute start-0 top-0 max-w-40 border px-space-1 type-meta"
     ></span>
   </div>
 {/if}

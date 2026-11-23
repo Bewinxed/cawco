@@ -10,7 +10,7 @@
   import { pressVariants } from "./press.js";
 
   export const buttonVariants = tv({
-    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-sm glass-item:concentric-at ring ring-tx-2 bg-linear-to-b bg-bg from-transparent to-transparent bg-clip-padding font-medium type-body text-tx leading-none tracking-tight [--hit-edge:1px] hover:bg-ui disabled:pointer-events-none disabled:opacity-50 aria-invalid:ring-red [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-sm glass-item:concentric-at border border-tx-2 bg-linear-to-b bg-bg from-transparent to-transparent bg-clip-padding font-medium type-body text-tx leading-none tracking-tight [--hit-edge:1px] hover:bg-ui disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-red [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       /* The press, by size (./press.ts, The Press Rule): a compact button
          scales; one stretched full width, as a list row or a card's body,
@@ -30,17 +30,17 @@
            a switch to or from this variant, and its hover, cross the
            highlight with the fill on one clock (`--transition-control`). */
         default:
-          "ring-transparent bg-accent accent-stops bg-clip-border text-on-accent hover:bg-accent hover:accent-stops-hover",
+          "border-transparent bg-accent accent-stops bg-clip-border text-on-accent hover:bg-accent hover:accent-stops-hover",
         outline: "aria-expanded:not-aria-current-page:bg-ui",
-        secondary: "ring-ui bg-bg-2 hover:bg-ui",
+        secondary: "border-ui bg-bg-2 hover:bg-ui",
         ghost:
-          "ring-transparent bg-transparent aria-expanded:not-aria-current-page:bg-ui",
-        destructive: "ring-red bg-transparent text-red hover:bg-bg-2",
+          "border-transparent bg-transparent aria-expanded:not-aria-current-page:bg-ui",
+        destructive: "border-red bg-transparent text-red hover:bg-bg-2",
         /* A grant wider than what was asked (DESIGN.md, The Consequential
            Grant Rule): warning tint, warning ink and a real edge, the same at
            rest and under the pointer, so it is never made more inviting. */
-        grant: "ring-orange bg-bg-2 text-orange hover:bg-bg-2",
-        link: "ring-transparent bg-transparent text-accent underline-offset-4 hover:bg-transparent hover:underline",
+        grant: "border-orange bg-bg-2 text-orange hover:bg-bg-2",
+        link: "border-transparent bg-transparent text-accent underline-offset-4 hover:bg-transparent hover:underline",
       },
       size: {
         default:
@@ -83,23 +83,23 @@
           under it (the callers' `background` shorthand put the clip back
           at the border box). */
       answer: {
-        deny: "ring-transparent bg-bg-2 bg-clip-border text-red not-aria-expanded:hover:bg-bg-2 hover:text-red aria-expanded:hover:bg-bg-2 aria-invalid:ring-transparent",
+        deny: "border-transparent bg-bg-2 bg-clip-border text-red not-aria-expanded:hover:bg-bg-2 hover:text-red aria-expanded:hover:bg-bg-2 aria-invalid:border-transparent",
         approve:
-          "ring-transparent bg-bg-2 bg-clip-border text-green not-aria-expanded:hover:bg-bg-2 hover:text-green aria-expanded:hover:bg-bg-2 aria-invalid:ring-transparent",
+          "border-transparent bg-bg-2 bg-clip-border text-green not-aria-expanded:hover:bg-bg-2 hover:text-green aria-expanded:hover:bg-bg-2 aria-invalid:border-transparent",
         "deny-edge":
-          "ring-red bg-bg-2 text-tx not-aria-invalid:hover:ring-red not-aria-expanded:hover:bg-bg-2 hover:text-tx aria-expanded:hover:bg-bg-2 aria-invalid:ring-red aria-invalid:hover:ring-red",
+          "border-red bg-bg-2 text-tx not-aria-invalid:hover:border-red not-aria-expanded:hover:bg-bg-2 hover:text-tx aria-expanded:hover:bg-bg-2 aria-invalid:border-red aria-invalid:hover:border-red",
         "approve-edge":
-          "ring-green bg-bg-2 text-tx not-aria-invalid:hover:ring-green not-aria-expanded:hover:bg-bg-2 hover:text-tx aria-expanded:hover:bg-bg-2 aria-invalid:ring-green aria-invalid:hover:ring-green",
+          "border-green bg-bg-2 text-tx not-aria-invalid:hover:border-green not-aria-expanded:hover:bg-bg-2 hover:text-tx aria-expanded:hover:bg-bg-2 aria-invalid:border-green aria-invalid:hover:border-green",
         "deny-strong":
-          "ring-red bg-bg-2 text-tx not-aria-expanded:hover:bg-bg-2 hover:text-tx aria-expanded:hover:bg-bg-2 aria-invalid:ring-red",
+          "border-red bg-bg-2 text-tx not-aria-expanded:hover:bg-bg-2 hover:text-tx aria-expanded:hover:bg-bg-2 aria-invalid:border-red",
         "approve-strong":
-          "ring-green bg-bg-2 text-tx not-aria-expanded:hover:bg-bg-2 hover:text-tx aria-expanded:hover:bg-bg-2 aria-invalid:ring-green",
+          "border-green bg-bg-2 text-tx not-aria-expanded:hover:bg-bg-2 hover:text-tx aria-expanded:hover:bg-bg-2 aria-invalid:border-green",
       },
       /** Its 44×44 area on every pointer, not only a finger's (DESIGN.md,
           The Peer Rule: Approve and Deny). */
       hit: { always: "touch-hit-always" },
       /** No edge of its own. */
-      edge: { none: "ring-transparent" },
+      edge: { none: "border-transparent" },
       /** Its box: a prompt's answer (the label size at medium weight, the
           small corner), or 24px square. */
       fit: {

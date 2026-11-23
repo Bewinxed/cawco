@@ -25,7 +25,7 @@
     ></span>
     {#if !off}
       <span
-        class="box-border size-space-2 flex-none rounded-pill ring ring-tx-2"
+        class="box-border size-space-2 flex-none rounded-pill border border-tx-2"
       ></span>
     {/if}
   </span>

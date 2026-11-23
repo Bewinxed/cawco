@@ -113,7 +113,7 @@
   }
 </script>
 
-<div class="rounded-sm overflow-hidden ring ring-ui-2 bg-bg-2">
+<div class="rounded-sm overflow-hidden border border-ui-2 bg-bg-2">
   <div
     class="flex items-center justify-between px-3 py-2 bg-bg border-b border-ui-2 font-mono type-meta text-tx-2"
   >

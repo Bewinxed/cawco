@@ -19,7 +19,7 @@
 <!-- Comes and goes as "Jump to latest" does, which shares its dock. -->
 <div
   aria-busy="true"
-  class="mark-line inline-flex items-center gap-space-2 py-space-2 px-space-3 ring ring-ui rounded-sm bg-bg shadow-lg text-base font-medium text-tx"
+  class="mark-line inline-flex items-center gap-space-2 py-space-2 px-space-3 border border-ui rounded-sm bg-bg shadow-lg text-base font-medium text-tx"
   role="status"
   in:rise={"--duration-slow"}
   out:rise={"--duration-base"}

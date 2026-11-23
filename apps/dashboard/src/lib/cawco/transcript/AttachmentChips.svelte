@@ -137,7 +137,7 @@
       "select-none grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-tx-2 flex-none hover:bg-bg-2 hover:text-tx touch-hit pointer-hit",
   });
   const CHIP =
-    "inline-flex items-center gap-space-2 max-w-full h-row-compact ps-space-1 pe-space-1 ring ring-ui rounded-sm bg-bg shadow-sm text-base font-medium text-tx mark-line hit-gap-x-space-2 coarse:hit-gap-x-space-3";
+    "inline-flex items-center gap-space-2 max-w-full h-row-compact ps-space-1 pe-space-1 border border-ui rounded-sm bg-bg shadow-sm text-base font-medium text-tx mark-line hit-gap-x-space-2 coarse:hit-gap-x-space-3";
   const BODY =
     "select-none inline-flex items-center gap-space-2 min-w-0 h-full p-0 border-none bg-transparent text-start text-tx rounded-xs touch-hit pointer-hit mark-line";
 </script>

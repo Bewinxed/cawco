@@ -118,7 +118,7 @@
   >
     <!-- mark-line: the icon is in the title row, not beside the card's body -->
     <div
-      class="flex w-full max-w-95 flex-col items-center gap-space-4 rounded-xl ring ring-ui bg-bg p-space-4 shadow-sm"
+      class="flex w-full max-w-95 flex-col items-center gap-space-4 rounded-xl border border-ui bg-bg p-space-4 shadow-sm"
       data-slot="passkey-qr-card"
     >
       <!-- Title with key icon. -->

@@ -31,7 +31,7 @@
     <li>
       <a
         aria-current={shown === path ? "page" : undefined}
-        class="group/file mark-line press-tint type-label inline-flex min-h-control-sm max-w-full items-center gap-space-2 rounded-sm ring ring-ui-2 bg-bg px-space-3 text-tx transition-[background-color] duration-(--duration-fast) ease-out focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-2 text-center no-underline aria-current-page:bg-ui aria-current-page:text-accent"
+        class="group/file mark-line press-tint type-label inline-flex min-h-control-sm max-w-full items-center gap-space-2 rounded-sm border border-ui-2 bg-bg px-space-3 text-tx transition-[background-color] duration-(--duration-fast) ease-out focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent focus-visible:outline-offset-2 text-center no-underline aria-current-page:bg-ui aria-current-page:text-accent"
         data-folder-chip={path}
         href={folderFileHref(projectId, path)}
       >

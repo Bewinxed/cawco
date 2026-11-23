@@ -95,7 +95,7 @@
       <span
         data-slot="frame"
         aria-hidden="true"
-        class="pointer-events-none absolute inset-y-0 z-1 rounded-sm ring ring-accent bg-bg-2 motion-safe:dir-end:transition-frame-end-first motion-safe:dir-start:transition-frame-start-first"
+        class="pointer-events-none absolute inset-y-0 z-1 rounded-sm border border-accent bg-bg-2 motion-safe:dir-end:transition-frame-end-first motion-safe:dir-start:transition-frame-start-first"
         data-dir={index === 1 ? "end" : "start"}
         style:inset-inline-end={index === 0 ? HALF : "0"}
         style:inset-inline-start={index === 0 ? "0" : HALF}
@@ -105,7 +105,7 @@
         <span
           data-slot="frame"
           aria-hidden="true"
-          class="pointer-events-none absolute inset-y-0 z-1 rounded-sm ring ring-accent bg-bg-2"
+          class="pointer-events-none absolute inset-y-0 z-1 rounded-sm border border-accent bg-bg-2"
           style:inset-inline-end={index === 0 ? HALF : "0"}
           style:inset-inline-start={index === 0 ? "0" : HALF}
           in:fade={{
@@ -121,7 +121,7 @@
     {#each CARDS as card (card.channel)}
       {@const found = release(card.channel)}
       <RadioGroup.Item
-        class="relative flex flex-col rounded-sm ring ring-ui-2 bg-transparent px-space-4 pt-space-6 pb-space-4 type-meta text-start text-tx transition-control hover:bg-ui no-hover:active:bg-ui unhovered:active:bg-ui focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent"
+        class="relative flex flex-col rounded-sm border border-ui-2 bg-transparent px-space-4 pt-space-6 pb-space-4 type-meta text-start text-tx transition-control hover:bg-ui no-hover:active:bg-ui unhovered:active:bg-ui focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent"
         value={card.channel}
       >
         <span data-slot="name" class="relative z-2 type-label text-tx"

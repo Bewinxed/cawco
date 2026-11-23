@@ -418,7 +418,7 @@
                     type="button"
                     data-slot="port"
                     aria-label="Port 22. Change the port"
-                    class="select-none pressable touch-hit mark-line col-start-1 row-start-1 inline-flex h-control-md w-full items-center justify-center gap-space-1 rounded-sm ring ring-ui-2 bg-bg type-body text-tx shadow-sm transition-control hover:bg-ui"
+                    class="select-none pressable touch-hit mark-line col-start-1 row-start-1 inline-flex h-control-md w-full items-center justify-center gap-space-1 rounded-sm border border-ui-2 bg-bg type-body text-tx shadow-sm transition-control hover:bg-ui"
                     onclick={() => {
                       // Its field takes focus in this press's own task. A
                       // frame later (`tick`, in async mode) it would take

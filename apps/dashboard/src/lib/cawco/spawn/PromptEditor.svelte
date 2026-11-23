@@ -188,7 +188,7 @@
     // A reference on the prompt's line: one line box tall less its 1px
     // margin each side, so a line holding chips keeps the prompt's leading.
     chip.className =
-      "m-px inline-flex h-[calc(var(--prompt-lh)-2px)] items-center gap-space-1 rounded-sm ring ring-ui-2 bg-ui ps-space-1 pe-space-2 align-top font-sans type-label leading-none font-medium whitespace-nowrap text-tx select-all";
+      "m-px inline-flex h-[calc(var(--prompt-lh)-2px)] items-center gap-space-1 rounded-sm border border-ui-2 bg-ui ps-space-1 pe-space-2 align-top font-sans type-label leading-none font-medium whitespace-nowrap text-tx select-all";
     const mark = document.createElement("span");
     mark.className = "inline-flex [&>svg]:size-icon-sm";
     mark.style.color = item.hue ?? "";

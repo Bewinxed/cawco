@@ -7,7 +7,7 @@
 </script>
 
 <div
-  class="w-full max-w-sm rounded-lg ring ring-ui bg-bg px-space-3 py-space-2"
+  class="w-full max-w-sm rounded-lg border border-ui bg-bg px-space-3 py-space-2"
 >
   <RowList aria-label="Aligned rows">
     <Row>

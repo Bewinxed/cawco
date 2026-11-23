@@ -99,7 +99,7 @@ export const ROLES: Foundation[] = [
   },
   {
     title: "Spacing",
-    note: "Six steps on a 4px unit: 4, 8, 12, 16, 24 and 32px. The lines mark the spaces that set each piece's rhythm.",
+    note: "Six steps on a 4px unit: 4, 8, 12, 16, 24 and 32px. Every padding and gap in the pieces below is one of them; the graph's guides measure any of it.",
     wide: true,
     inUse: "spacing",
     shelves: [],

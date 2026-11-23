@@ -47,7 +47,7 @@
     !!file && file.progress !== undefined && !file.failed && !file.href
   );
   const BOX =
-    "inline-flex items-center gap-space-2 h-12 w-full max-w-64 py-0 ps-space-2 pe-space-3 ring ring-ui rounded-sm bg-bg-2 text-tx text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--duration-fast) motion-safe:ease-out";
+    "inline-flex items-center gap-space-2 h-12 w-full max-w-64 py-0 ps-space-2 pe-space-3 border border-ui rounded-sm bg-bg-2 text-tx text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--duration-fast) motion-safe:ease-out";
 </script>
 
 {#snippet face()}

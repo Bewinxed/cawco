@@ -384,7 +384,7 @@
         <span
           aria-hidden="true"
           class={[
-            "box-border grid size-full place-items-center rounded-pill ring bg-transparent type-meta leading-none num before:content-data-n",
+            "box-border grid size-full place-items-center rounded-pill border bg-transparent type-meta leading-none num before:content-data-n",
             mark === "standing"
               ? "border-tx-2 text-tx"
               : "border-ui-2 text-tx-2",
@@ -415,7 +415,7 @@
          inside it, so a third line is cut at the words' edge, never shown
          in the box's padding. -->
     <code
-      class="block min-w-0 rounded-sm ring ring-ui-2 bg-ui px-space-3 py-space-2 font-mono type-meta text-tx"
+      class="block min-w-0 rounded-sm border border-ui-2 bg-ui px-space-3 py-space-2 font-mono type-meta text-tx"
       title={text}
       ><span class={clamp ? "line-clamp-2" : "block"} data-slot="copy-words"
         ><span class="sr-only">{label}:{" "}</span

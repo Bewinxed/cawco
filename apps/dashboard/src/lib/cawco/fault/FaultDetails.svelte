@@ -24,7 +24,7 @@
   data-slot="fault-details"
   {id}
   data-floating={floating || undefined}
-  class="flex w-full min-w-0 items-start gap-space-2 rounded-sm ring ring-ui-2 bg-bg-2 py-space-1 ps-space-3 pe-space-1 data-floating:ring-ui-2 data-floating:bg-bg data-floating:shadow-lg"
+  class="flex w-full min-w-0 items-start gap-space-2 rounded-sm border border-ui-2 bg-bg-2 py-space-1 ps-space-3 pe-space-1 data-floating:border-ui-2 data-floating:bg-bg data-floating:shadow-lg"
   transition:unfold
 >
   <pre

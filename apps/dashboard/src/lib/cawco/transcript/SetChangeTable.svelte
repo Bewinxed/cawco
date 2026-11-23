@@ -34,7 +34,7 @@
       ? words.listedCaption(table.days)
       : words.unlistedCaption(table.days)}
   </p>
-  <div class="overflow-hidden rounded-sm ring ring-ui bg-bg">
+  <div class="overflow-hidden rounded-sm border border-ui bg-bg">
     <Table.Root aria-labelledby={captionId} layout="ledger">
       <Table.Header>
         <Table.Row variant="band">

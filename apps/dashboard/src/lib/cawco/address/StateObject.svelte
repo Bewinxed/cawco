@@ -97,7 +97,7 @@
   </div>
 {:else if tray.step === "secure" && tray.certs && tray.issuesCerts}
   <p
-    class="mark-line m-0 flex min-w-0 items-center gap-space-2 rounded-sm ring ring-ui-2 bg-bg-2 px-space-3 py-space-2"
+    class="mark-line m-0 flex min-w-0 items-center gap-space-2 rounded-sm border border-ui-2 bg-bg-2 px-space-3 py-space-2"
     data-slot="secure-address"
   >
     <IconLock aria-label="Secure" class="size-icon-md flex-none text-green" />

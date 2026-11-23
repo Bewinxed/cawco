@@ -11,5 +11,5 @@ import { tv } from "#lib/utils.js";
  * (design.css `concentric-in`): its 12px less their inset and its edge.
  */
 export const dockShellVariants = tv({
-  base: "reduced-transparency:backdrop-filter-none rounded-lg bg-bg/72 shadow-sm ring ring-ui-2 backdrop-blur-glass backdrop-saturate-160 concentric-in r-inset-space-2 r-outer-lg reduced-transparency:bg-bg",
+  base: "reduced-transparency:backdrop-filter-none rounded-lg border border-ui-2 bg-bg/72 shadow-sm backdrop-blur-glass backdrop-saturate-160 concentric-in r-inset-space-2 r-outer-lg reduced-transparency:bg-bg",
 });

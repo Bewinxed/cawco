@@ -1189,7 +1189,7 @@
     <div
       data-slot="ring"
       aria-hidden="true"
-      class="pointer-events-none absolute start-0 top-0 z-4 rounded-(--shape) ring-2 ring-accent in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:duration-(--duration-fast) motion-safe:ease-out"
+      class="pointer-events-none absolute start-0 top-0 z-4 rounded-(--shape) border-2 border-accent in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:duration-(--duration-fast) motion-safe:ease-out"
       style:transform="translate({focusRect.left}px,{focusRect.top}px)"
       style:width="{focusRect.width}px"
       style:height="{focusRect.height}px"

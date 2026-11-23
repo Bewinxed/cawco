@@ -120,7 +120,7 @@
           style:--dock-foot={"calc(var(--spacing-space-4) + var(--safe-bottom, 0px))"}
         >
           <div
-            class="pointer-events-auto w-(--composer-w) min-w-0 rounded-lg ring ring-ui-2 bg-bg px-space-3 shadow-sm max-desk:mx-space-3 max-desk:w-auto max-desk:flex-1"
+            class="pointer-events-auto w-(--composer-w) min-w-0 rounded-lg border border-ui-2 bg-bg px-space-3 shadow-sm max-desk:mx-space-3 max-desk:w-auto max-desk:flex-1"
           >
             <LineFault
               again={rebuild.again}
