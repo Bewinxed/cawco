@@ -15,8 +15,6 @@ export const cawSettingsWords = {
   switchOn: "Caw is awake",
   /** The switch's words while he is off. */
   switchOff: "Caw is asleep",
-  /** What it means while he is asleep, in one line under the hero: the switch's consequence. */
-  asleepLine: "Triggers wait on their task, routine or page until Caw wakes.",
   /** The hub has not said whether he is on yet. */
   reading: "Reading…",
   /** The hub is out of reach: what shows is what it said last, and the controls are sunk. */

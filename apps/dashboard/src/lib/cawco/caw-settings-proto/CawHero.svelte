@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { cawOffWords } from "@cawco/core/words/caw-off";
   /**
    * The head of Caw's settings: a hero picture of Caw awake or asleep,
    * edge to edge across the panel's top, its top corners the panel's, and
@@ -7,16 +8,16 @@
    * of the bar's Liquid Glass (BarGlass, a head's floating group), which
    * keeps its label readable over the day scene and the night one. The
    * picture's foot fades through a short gradient into the panel's surface
-   * (`surface-raised`), and one line saying what the state he is in means
-   * stands on its solid end, so its contrast is the surface's in either
-   * scheme. Turning him off with sessions running asks in a card that
+   * (`surface-raised`). What being asleep means is said where it is chosen,
+   * in the confirm card, and in the switch's tooltip while he sleeps, so
+   * nothing under the hero moves as he turns. Turning him off with sessions running asks in a card that
    * comes down out of the capsule, one shape with it (CawLeadSwitch's
    * `hang`, BarCard), and goes back up into it; what the switch says after
-   * it (the stops parked there once pressed, a refusal) stands under the
-   * line.
+   * it (the stops parked there once put away, a refusal) stands under the
+   * hero.
    *
    * Flipping him crossfades the hero between the awake and the asleep
-   * scene, and the line with it, once the hub says he turned: both stand in
+   * scene once the hub says he turned: both stand in
    * one cell, so nothing around them moves, and only their opacity changes,
    * over the house's fade on its ease-out. The scenes are one composition at
    * 16:10, day and night (Caw at work in his attic, then curled asleep
@@ -30,7 +31,7 @@
     type SwitchedLead,
   } from "#lib/cawco/project/CawLeadSwitch.svelte";
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
-  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
 
   let {
     lead,
@@ -97,28 +98,29 @@
       <!-- The switch and its words on one line in the capsule: they never
            wrap, so the words never fall under the switch; positioned, so
            they stand over the glass's join while the confirm hangs. -->
-      <span class="relative flex h-c-btn-h-sm items-center px-space-2">
-        <CawLeadSwitch
-          {disabled}
-          hang
-          label={asleep ? words.switchOff : words.switchOn}
-          {lead}
-          part="switch"
-          {projectId}
-          {projectName}
-        />
-      </span>
+      <!-- Asleep, its tooltip says what that means (the confirm card says
+           it while he is being turned off). -->
+      <Tip disabled={!asleep} label={cawOffWords.waits}>
+        {#snippet children(tip)}
+          <span
+            {...tip}
+            class="relative flex h-c-btn-h-sm items-center px-space-2"
+          >
+            <CawLeadSwitch
+              {disabled}
+              hang
+              label={asleep ? words.switchOff : words.switchOn}
+              {lead}
+              part="switch"
+              {projectId}
+              {projectName}
+            />
+          </span>
+        {/snippet}
+      </Tip>
     </BarGlass>
   </div>
   <div class={["flex flex-col gap-space-3", sheet ? "px-4" : "px-space-4"]}>
-    {#if asleep}
-      <p
-        class="m-0 pt-space-3 type-meta text-pretty text-ink-muted"
-        transition:unfold
-      >
-        {words.asleepLine}
-      </p>
-    {/if}
     <!-- What the switch says after it: the stops parked there once its
          confirm is pressed, a refusal. -->
     <CawLeadSwitch

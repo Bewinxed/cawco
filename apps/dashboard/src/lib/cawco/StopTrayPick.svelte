@@ -201,10 +201,14 @@
   /** The actions stand: always, where the confirm carries the landing. */
   const actions = $derived(step !== "off" || endsOn === "confirm");
 
-  /** Once he is off: what stopped, and what waits for its machine. */
+  /**
+   * While it asks and stops: what turning him off means. Once he is off:
+   * what stopped, and what waits for its machine. One line either way, so
+   * the card keeps its height as it turns.
+   */
   const line = $derived.by(() => {
     if (step !== "off") {
-      return "";
+      return words.waits;
     }
     const away = picked.filter((row) => row.stop === "away");
     const machines = [...new Set(away.map((row) => row.machineName))];
