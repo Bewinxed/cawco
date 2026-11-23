@@ -379,7 +379,7 @@ export const createTriggers = (deps: TriggersDeps) => {
         harness: set.harness,
         ...(set.model ? { model: set.model } : {}),
         ...(set.account ? { account: set.account } : {}),
-        ...(set.mode ? { mode: set.mode } : {}),
+        mode: set.mode,
         mayStart: [ANY_TYPE],
         skills: [EVENT_SKILLS[event.kind]],
         origin: "event",

@@ -30,7 +30,6 @@ import {
 } from "./harness/kinds";
 import {
   type OfferedMode,
-  PERMISSION_MODES,
   type PermissionMode,
   permissionModeNamed,
 } from "./harness/modes";
@@ -105,19 +104,23 @@ export const cleanStartRefusal = (harness: HarnessKind): string | undefined =>
   traitsOf(harness).cleanStartRefused ?? undefined;
 
 /**
- * `mode` as one CawCo offers, or none when none was named. One it does not
- * offer throws, in words that list what it does: a session is never started
- * in a mode other than the one asked for.
+ * `mode` as one `harness` has (its descriptor's `permissionModes`), or none
+ * when none was named. One it does not have throws, in words that list what
+ * it has: a session is never started in a mode other than the one asked
+ * for. The hub settles Auto to Bypass before a start reaches a harness
+ * without it (hub launches.ts `modeOf`).
  */
 export const offeredMode = (
-  mode: PermissionMode | undefined
+  mode: PermissionMode | undefined,
+  harness: HarnessKind
 ): OfferedMode | undefined => {
   if (mode === undefined) {
     return;
   }
   const offered = permissionModeNamed(mode);
-  if (!offered) {
-    throw new Error(harnessWords.modeNotOffered(mode, PERMISSION_MODES));
+  const has = traitsOf(harness).permissionModes;
+  if (!(offered && has.includes(offered))) {
+    throw new Error(harnessWords.modeNotOffered(mode, harness, has));
   }
   return offered;
 };

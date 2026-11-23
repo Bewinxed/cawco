@@ -250,6 +250,7 @@ export const spawnWords = {
     default: "Ask first",
     plan: "Plan first",
     acceptEdits: "Accept edits",
+    auto: "Auto",
     bypassPermissions: "Bypass",
     fullSend: "Full Send",
   } satisfies Record<OfferedMode, string>,
@@ -263,6 +264,9 @@ export const spawnWords = {
    */
   /** A start named a permission mode CawCo has no word for at all. */
   modeUnknown: (mode: string) => `"${mode}" is not a permission mode.`,
+  /** The hub's line as a start asked Auto of a harness without it, which runs it in Bypass (hub launches.ts `modeOf`). */
+  autoElsewhereLine: (harness: string, machine: string) =>
+    `[hub] ${harness} on ${machine} has no Auto mode; its session starts in Bypass`,
   modeUnchosen: (harness: string, machine: string) =>
     `A permission mode must be chosen for the ${harness} session on ${machine}, and none was. Choose one, then start it again. Nothing was started.`,
   /**
@@ -295,6 +299,8 @@ export const spawnWords = {
   /** The warning while Full Send is the mode picked. */
   fullSendOn: "Full Send is on",
   fullSendCarried: "Full Send is on, from your last start",
+  /** The form carried Auto to a harness without it, and so picks Bypass in its place (core modes.ts `modeOn`). */
+  autoElsewhere: (harness: string) => `Bypass is on: ${harness} has no Auto`,
   /** The confirmation a switch to Full Send asks first. */
   switchToFullSendTitle: "Switch to Full Send?",
   switchToFullSend: "Switch to Full Send",

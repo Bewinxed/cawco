@@ -3640,7 +3640,7 @@ export class OpencodeSession implements HarnessSession {
       return Promise.resolve();
     },
     [CONTROL_SET_PERMISSION_MODE]: (mode) => {
-      this.#permissionMode = offeredMode(mode);
+      this.#permissionMode = offeredMode(mode, "opencode");
       this.#answerOpen();
       return Promise.resolve({ permissionMode: mode });
     },

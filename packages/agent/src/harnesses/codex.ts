@@ -19,8 +19,8 @@ import type {
   HarnessReport,
   SignInFault,
 } from "@cawco/core/harness";
+import { CODEX } from "@cawco/core/harness/codex";
 import type { ModelInfo } from "@cawco/core/harness/kinds";
-import { PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { codexFleetRoot, harnessRecordsDir } from "@cawco/core/paths/harnesses";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import type {
@@ -75,12 +75,13 @@ import { neutralSubagentChange } from "./neutral-subagents";
 
 /**
  * What Codex does, from everything a harness can: every permission mode
- * (codex-session.ts `CODEX_MODES`) and all the rest the audit found it
+ * it shares (codex-session.ts `CODEX_MODES`) and all the rest the audit found it
  * meets, but these.
  */
 const CODEX_CAPABILITIES: HarnessCapabilities = {
   ...FULL_CAPABILITIES,
-  permissionModes: [...PERMISSION_MODES],
+  // Every shared mode; Claude Code's Auto is not Codex's.
+  permissionModes: [...CODEX.permissionModes],
   // Codex lists its servers (`mcpServerStatus/list`) but turns none on or
   // off one at a time: its reload takes the whole config again (C-bg).
   mcpControl: false,

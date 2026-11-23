@@ -1986,6 +1986,7 @@
       "default",
       "acceptEdits",
       "plan",
+      "auto",
       "bypassPermissions",
       "fullSend"
     ]
@@ -5031,6 +5032,7 @@
       "default",
       "acceptEdits",
       "plan",
+      "auto",
       "bypassPermissions",
       "fullSend"
     ]
@@ -6148,6 +6150,7 @@
       "default",
       "acceptEdits",
       "plan",
+      "auto",
       "bypassPermissions",
       "fullSend"
     ]
@@ -11640,6 +11643,7 @@
       "default",
       "acceptEdits",
       "plan",
+      "auto",
       "bypassPermissions",
       "fullSend"
     ]
@@ -11673,6 +11677,7 @@
       "default",
       "acceptEdits",
       "plan",
+      "auto",
       "bypassPermissions",
       "fullSend"
     ]
@@ -13776,6 +13781,7 @@
       "default",
       "acceptEdits",
       "plan",
+      "auto",
       "bypassPermissions",
       "fullSend"
     ]
@@ -13954,6 +13960,7 @@
       "default",
       "acceptEdits",
       "plan",
+      "auto",
       "bypassPermissions",
       "fullSend"
     ]

@@ -2413,7 +2413,7 @@ const sessionSpecOf = (
         ...(clean ? CLEAN_ENV : {}),
       },
     },
-    permissionMode: offeredMode(spec.permissionMode),
+    permissionMode: offeredMode(spec.permissionMode, "claude"),
     persistSession: spec.persistSession,
     resume: spec.resume,
     schedulesToParent: spec.schedulesToParent === true,
@@ -4121,7 +4121,7 @@ class ClaudeSession implements HarnessSession {
 
   /** Moves the CLI into `asked`, one CawCo offers; the session takes it once the CLI is in it. */
   async #setMode(asked: PermissionMode | undefined): Promise<void> {
-    const mode = offeredMode(asked);
+    const mode = offeredMode(asked, "claude");
     if (!mode) {
       throw new Error(
         `${CONTROL_SET_PERMISSION_MODE} names no permission mode`

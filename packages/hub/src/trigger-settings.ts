@@ -7,9 +7,11 @@
  *
  * - **The fleet's default** for a kind (`fleet_trigger_settings`), then
  *   **the project's own** over it (`project_trigger_settings`), each field
- *   on its own; a field neither sets is the project's Caw setting (its
- *   harness and model, its Caw mode, the account its sessions start on).
- *   A model follows its harness (core `triggerSettingInEffect`).
+ *   on its own; a harness, model or account neither sets is the project's
+ *   Caw setting (its harness and model, the account its sessions start
+ *   on), and a mode neither sets is Auto on Claude Code, else Bypass (core
+ *   `triggerModeDefault`), never Caw's chat mode. A model follows its
+ *   harness (core `triggerSettingInEffect`).
  * - **A routine's or an event route's own mode** wins over all of it, per
  *   event, as the router reads it ({@link TriggerSettings.forEvent}).
  * - Read and written through `/api/fleet/trigger-settings` and
@@ -28,6 +30,7 @@ import {
   type TriggerKind,
   type TriggerSetting,
   type TriggerSettingInEffect,
+  triggerModeDefault,
   triggerSettingInEffect,
 } from "@cawco/core/triggers";
 import { projectAccountWords } from "@cawco/core/words/project-account";
@@ -58,7 +61,7 @@ export interface EventModeSource {
 export interface TriggerStart {
   account: string | null;
   harness: TriggerSettingInEffect["harness"]["value"];
-  mode: OfferedMode | null;
+  mode: OfferedMode;
   model: string | null;
 }
 
@@ -75,11 +78,10 @@ export const createTriggerSettings = ({
   accounts,
   db,
 }: TriggerSettingsDeps) => {
-  /** The project's Caw settings, what a kind falls back to. */
+  /** The project's Caw settings, what a kind's harness, model and account fall back to. */
   const cawOf = (project: ProjectRow) => ({
     harness: project.cawHarness,
     model: project.cawModel ?? null,
-    mode: project.inEffect.cawMode.value,
     account: project.inEffect.account.value,
   });
 
@@ -161,9 +163,11 @@ export const createTriggerSettings = ({
 
     /**
      * What a fresh session for an event of `kind` (a kind with settings, or
-     * none: the project's Caw settings) starts on in `project`: its kind's
-     * settings in effect, the event's own route's or routine's mode over
-     * its mode.
+     * none: the project's Caw settings, its Caw mode else a trigger's
+     * default mode) starts on in `project`: its kind's settings in effect,
+     * the event's own route's or routine's mode over its mode. A mode its
+     * harness lacks is settled where the session starts (hub launches.ts
+     * `modeOf`).
      */
     forEvent(
       project: ProjectRow,
@@ -175,7 +179,13 @@ export const createTriggerSettings = ({
         (source.routine ? db.routines.get(source.routine)?.mode : undefined);
       if (kind === undefined) {
         const caw = cawOf(project);
-        return { ...caw, mode: own ?? caw.mode };
+        return {
+          ...caw,
+          mode:
+            own ??
+            project.inEffect.cawMode.value ??
+            triggerModeDefault(caw.harness),
+        };
       }
       const set = inEffect(project, kind);
       return {

@@ -43,7 +43,7 @@ export const PI = {
 
   // Its resource loader starts without context files, skills or extensions.
   cleanStartRefused: null,
-  permissionModes: false,
+  permissionModes: [],
   requiredOnEveryMachine: false,
   startsWithoutConversation: false,
   spills: true,

@@ -268,9 +268,15 @@ import {
  * day in cockpit#8eabb628, when his comment plainly answered a card and an
  * agent had no proper way to record it (worker 32,071 with set_decides, delegate 12,649
  * measured); both budgets are raised to it.
+ * 2026-11-23: Claude Code's Auto is a mode a session may name (core
+ * `SESSION_CHOSEN_MODES`; the owner that day: "for claude, offer 'auto'
+ * mode as an additional one"), one more value in each mode enum of
+ * start_session, continue_session and the routine and route tools (worker
+ * 32,083 measured; the delegate's tools name no mode). The worker's budget
+ * is raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 32_071,
+  worker: 32_083,
   delegate: 12_649,
   overseer: 770,
   "web-facing": 3400,

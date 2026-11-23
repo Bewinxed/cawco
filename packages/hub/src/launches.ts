@@ -3,9 +3,11 @@ import type { SessionInstruction } from "@cawco/core/fleet";
 import { cleanStartRefusal } from "@cawco/core/harness";
 import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
 import {
+  modeOn,
   type PermissionMode,
   WIRE_PERMISSION_MODES,
 } from "@cawco/core/harness/modes";
+import { traitsOf } from "@cawco/core/harness/traits";
 import { forkNotice } from "@cawco/core/injected";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { MachinePathRefused } from "@cawco/core/machine-path";
@@ -808,13 +810,27 @@ export const createLaunches = (ctx: LaunchesContext) => {
           }
         : { mode: null };
     }
-    const mode = asked ?? fallback;
-    if (!mode) {
+    const chosen = asked ?? fallback;
+    if (!chosen) {
       // The page asks for one where the person acted (core `ModeAsk`).
       return {
         refusal: unchosenMode(machineId, harness),
         ask: { machineId, harness },
       };
+    }
+    // One mode named for every harness (a trigger kind's, Caw's, a
+    // routine's, a caller's) meets this one here: Claude Code's Auto runs
+    // as Bypass where the harness, as its machine reports it, has no Auto
+    // (core modes.ts `modeOn`): pi, OpenCode, Codex, or an agent older than
+    // Auto.
+    const mode = modeOn(
+      chosen,
+      harnessModes(machineId, harness) ?? traitsOf(harness).permissionModes
+    );
+    if (mode !== chosen) {
+      console.log(
+        spawnWords.autoElsewhereLine(harness, ctx.machineName(machineId))
+      );
     }
     const unfit = modeRefusal(machineId, harness, mode);
     const named = WIRE_PERMISSION_MODES.find((one) => one === mode);

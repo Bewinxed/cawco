@@ -17,9 +17,13 @@ export const harnessWords = {
   /** Keep-alive asked of a `harness` session mid-turn, or waiting on a question. */
   keepAliveNotIdle: (harness: HarnessKind) =>
     `Keep-alive requires an idle ${harnessName(harness)} session.`,
-  /** A mode named that CawCo offers no harness ({@link PERMISSION_MODES}). */
-  modeNotOffered: (mode: string, offered: readonly string[]) =>
-    `CawCo offers no "${mode}" permission mode; it offers ${offered.join(", ")}.`,
+  /** A mode named that `harness` does not have (its descriptor's `permissionModes`). */
+  modeNotOffered: (
+    mode: string,
+    harness: HarnessKind,
+    offered: readonly string[]
+  ) =>
+    `${harnessName(harness)} has no "${mode}" permission mode; it has ${offered.join(", ") || "none"}.`,
   /** The context a compacted session gets in place of its open items when they could not be listed in time (agent claude.ts `#openItemsAfterCompaction`). */
   openItemsUnlisted:
     "Your open items could not be listed after the compaction. Call open_items to list them.",

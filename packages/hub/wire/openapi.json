@@ -2916,6 +2916,7 @@
                   "cawMode": {
                     "enum": [
                       "acceptEdits",
+                      "auto",
                       "bypassPermissions",
                       "default",
                       "fullSend",
@@ -7889,6 +7890,7 @@
                   "mode": {
                     "enum": [
                       "acceptEdits",
+                      "auto",
                       "bypassPermissions",
                       "default",
                       "fullSend",
@@ -8028,6 +8030,7 @@
                   "mode": {
                     "enum": [
                       "acceptEdits",
+                      "auto",
                       "bypassPermissions",
                       "default",
                       "fullSend",
@@ -9025,6 +9028,7 @@
                   "mode": {
                     "enum": [
                       "acceptEdits",
+                      "auto",
                       "bypassPermissions",
                       "default",
                       "fullSend",
@@ -11723,6 +11727,7 @@
                   "mode": {
                     "enum": [
                       "acceptEdits",
+                      "auto",
                       "bypassPermissions",
                       "default",
                       "fullSend",
@@ -21393,6 +21398,7 @@
                   "mode": {
                     "enum": [
                       "acceptEdits",
+                      "auto",
                       "bypassPermissions",
                       "default",
                       "fullSend",
@@ -29037,6 +29043,7 @@
                   "mode": {
                     "enum": [
                       "acceptEdits",
+                      "auto",
                       "bypassPermissions",
                       "default",
                       "fullSend",
@@ -31069,6 +31076,7 @@
                   "mode": {
                     "enum": [
                       "acceptEdits",
+                      "auto",
                       "bypassPermissions",
                       "default",
                       "fullSend",
@@ -31411,6 +31419,7 @@
                   "mode": {
                     "enum": [
                       "acceptEdits",
+                      "auto",
                       "bypassPermissions",
                       "default",
                       "fullSend",
@@ -42564,7 +42573,7 @@
             "type": "number"
           },
           "mode": {
-            "$ref": "#/components/schemas/EventRouteViewMode",
+            "$ref": "#/components/schemas/TriggerSourced.T_1",
             "description": "The mode its event starts the project's conversation in when it has none; null: its routine's."
           },
           "projectId": {
@@ -42589,16 +42598,6 @@
           "projectId",
           "routineId",
           "source"
-        ]
-      },
-      "EventRouteViewMode": {
-        "type": "string",
-        "enum": [
-          "acceptEdits",
-          "bypassPermissions",
-          "default",
-          "fullSend",
-          "plan"
         ]
       },
       "Exclude": {
@@ -56260,7 +56259,7 @@
             "type": "string"
           },
           "mode": {
-            "$ref": "#/components/schemas/EventRouteViewMode",
+            "$ref": "#/components/schemas/TriggerSourced.T_1",
             "description": "The permission mode the hub starts the project's conversation in, the\nproject's own; null: the fleet's, else the one the person last chose\nfor its harness on that machine. A routine's or an event route's own\nwins over it."
           },
           "model": {
@@ -59271,7 +59270,7 @@
             "type": "string"
           },
           "mode": {
-            "$ref": "#/components/schemas/EventRouteViewMode",
+            "$ref": "#/components/schemas/TriggerSourced.T_1",
             "description": "The mode a conversation run starts the project's conversation in when it has none; null: the project's."
           },
           "name": {
@@ -60557,7 +60556,7 @@
                 "$ref": "#/components/schemas/SettingSource"
               },
               "value": {
-                "$ref": "#/components/schemas/EventRouteViewMode"
+                "$ref": "#/components/schemas/TriggerSourced.T_1"
               }
             },
             "required": [
@@ -65817,7 +65816,7 @@
             "$ref": "#/components/schemas/HarnessKind"
           },
           "mode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/TriggerSourced.T_1"
           },
           "model": {
             "type": "string"
@@ -65833,7 +65832,7 @@
             "type": "object",
             "properties": {
               "from": {
-                "$ref": "#/components/schemas/TriggerSettingSource"
+                "$ref": "#/components/schemas/TriggerSourced.From"
               },
               "value": {
                 "type": "string"
@@ -65848,7 +65847,7 @@
             "type": "object",
             "properties": {
               "from": {
-                "$ref": "#/components/schemas/TriggerSettingSource"
+                "$ref": "#/components/schemas/TriggerSourced.From"
               },
               "value": {
                 "$ref": "#/components/schemas/TriggerSourced.T"
@@ -65860,18 +65859,19 @@
             ]
           },
           "mode": {
-            "description": "A setting in effect, and where it came from.",
+            "description": "The mode its session runs in on the harness in effect (core modes.ts `modeOn`).",
             "type": "object",
             "properties": {
               "from": {
-                "$ref": "#/components/schemas/TriggerSettingSource"
+                "$ref": "#/components/schemas/TriggerSourced.From_1"
               },
               "value": {
-                "$ref": "#/components/schemas/EventRouteViewMode"
+                "$ref": "#/components/schemas/TriggerSourced.T_1"
               }
             },
             "required": [
-              "from"
+              "from",
+              "value"
             ]
           },
           "model": {
@@ -65879,7 +65879,7 @@
             "type": "object",
             "properties": {
               "from": {
-                "$ref": "#/components/schemas/TriggerSettingSource"
+                "$ref": "#/components/schemas/TriggerSourced.From"
               },
               "value": {
                 "type": "string"
@@ -65897,11 +65897,20 @@
           "model"
         ]
       },
-      "TriggerSettingSource": {
-        "description": "Where a trigger setting in effect came from: the project's own override,\nthe fleet's default for the kind, or neither, so the project's Caw\nsettings (its harness and model; its Caw mode, else its area's, else the\nfleet's; the account its sessions start on).",
+      "TriggerSourced.From": {
+        "description": "Where a trigger setting in effect came from: the project's own override,\nthe fleet's default for the kind, or neither, so the project's Caw\nsettings (its harness and model; the account its sessions start on).",
         "type": "string",
         "enum": [
           "caw",
+          "fleet",
+          "project"
+        ]
+      },
+      "TriggerSourced.From_1": {
+        "description": "Where a trigger's mode in effect came from: the project's own override,\nthe fleet's default for the kind, or neither, so CawCo's own default for\na trigger's session ({@link triggerModeDefault}). Caw's chat mode is no\nlayer of it.",
+        "type": "string",
+        "enum": [
+          "default",
           "fleet",
           "project"
         ]
@@ -65913,6 +65922,17 @@
           "codex",
           "opencode",
           "pi"
+        ]
+      },
+      "TriggerSourced.T_1": {
+        "type": "string",
+        "enum": [
+          "acceptEdits",
+          "auto",
+          "bypassPermissions",
+          "default",
+          "fullSend",
+          "plan"
         ]
       },
       "TurnImage": {
@@ -77000,7 +77020,7 @@
             "$ref": "#/components/schemas/HarnessKind"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/TriggerSourced.T_1"
           },
           "cawModel": {
             "type": "string"
@@ -84498,7 +84518,7 @@
                   "type": "number"
                 },
                 "cawMode": {
-                  "$ref": "#/components/schemas/EventRouteViewMode"
+                  "$ref": "#/components/schemas/TriggerSourced.T_1"
                 },
                 "createdAt": {
                   "type": "string"
@@ -84590,7 +84610,7 @@
             "type": "number"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/TriggerSourced.T_1"
           },
           "createdAt": {
             "type": "string"
@@ -90891,7 +90911,7 @@
         "type": "object",
         "properties": {
           "mode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/TriggerSourced.T_1"
           }
         }
       },
@@ -98664,7 +98684,7 @@
               "$ref": "#/components/schemas/HarnessKind"
             },
             "cawMode": {
-              "$ref": "#/components/schemas/EventRouteViewMode"
+              "$ref": "#/components/schemas/TriggerSourced.T_1"
             },
             "cawModel": {
               "type": "string"
@@ -116105,7 +116125,7 @@
             "type": "number"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/TriggerSourced.T_1"
           },
           "createdAt": {
             "type": "string"
@@ -121519,7 +121539,7 @@
             "$ref": "#/components/schemas/HarnessKind"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/TriggerSourced.T_1"
           },
           "cawModel": {
             "type": "string"
@@ -133495,7 +133515,7 @@
             "type": "number"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/TriggerSourced.T_1"
           },
           "createdAt": {
             "type": "string"
@@ -165437,7 +165457,7 @@
             "$ref": "#/components/schemas/HarnessKind"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/TriggerSourced.T_1"
           },
           "cawModel": {
             "type": "string"
@@ -174624,7 +174644,7 @@
             "$ref": "#/components/schemas/HarnessKind"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/TriggerSourced.T_1"
           },
           "cawModel": {
             "type": "string"
@@ -175193,7 +175213,7 @@
             "$ref": "#/components/schemas/HarnessKind"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/TriggerSourced.T_1"
           },
           "cawModel": {
             "type": "string"
@@ -223177,7 +223197,7 @@
                   "type": "number"
                 },
                 "cawMode": {
-                  "$ref": "#/components/schemas/EventRouteViewMode"
+                  "$ref": "#/components/schemas/TriggerSourced.T_1"
                 },
                 "createdAt": {
                   "type": "string"
@@ -225543,7 +225563,7 @@
         "type": "object",
         "properties": {
           "mode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/TriggerSourced.T_1"
           }
         }
       },
@@ -228809,7 +228829,7 @@
             "$ref": "#/components/schemas/HarnessKind"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/TriggerSourced.T_1"
           },
           "cawModel": {
             "type": "string"

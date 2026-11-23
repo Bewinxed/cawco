@@ -80,7 +80,6 @@ typeOverrides:
     DiscoveredSkillScope: OpenEnums.DiscoveredSkillScope
     ErrorFrameLastErrorKind: OpenEnums.ErrorFrameLastErrorKind
     ErrorSaidKind: OpenEnums.ErrorSaidKind
-    EventRouteViewMode: OpenEnums.EventRouteViewMode
     Exclude: OpenEnums.Exclude
     ExternalActorKind: OpenEnums.ExternalActorKind
     ExternalCommentDirection: OpenEnums.ExternalCommentDirection
@@ -241,8 +240,10 @@ typeOverrides:
     TranscriptBranchStatus: OpenEnums.TranscriptBranchStatus
     TranscriptEventOpenBlock: OpenEnums.TranscriptEventOpenBlock
     TriggerHold: OpenEnums.TriggerHold
-    TriggerSettingSource: OpenEnums.TriggerSettingSource
+    TriggerSourced.From: OpenEnums.TriggerSourced.From
+    TriggerSourced.From_1: OpenEnums.TriggerSourced.From_1
     TriggerSourced.T: OpenEnums.TriggerSourced.T
+    TriggerSourced.T_1: OpenEnums.TriggerSourced.T_1
     Verb: OpenEnums.Verb
     WaitKind: OpenEnums.WaitKind
     WaitReason: OpenEnums.WaitReason

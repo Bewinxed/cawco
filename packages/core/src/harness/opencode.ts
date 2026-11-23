@@ -5,6 +5,7 @@
 import { IMAGE_MEDIA_TYPES } from "../attachments";
 import { OPENCODE_NOT_CLEAN, OPENCODE_WORDS } from "../words/harness-plugins";
 import type { HarnessDescriptor } from "./descriptor";
+import { SHARED_MODES } from "./modes";
 
 /**
  * Its empty config: its schema alone. OpenCode writes `$schema` into a
@@ -41,7 +42,7 @@ export const OPENCODE = {
   pictureTypes: IMAGE_MEDIA_TYPES,
 
   cleanStartRefused: OPENCODE_NOT_CLEAN,
-  permissionModes: true,
+  permissionModes: SHARED_MODES,
   requiredOnEveryMachine: false,
   startsWithoutConversation: true,
   spills: true,

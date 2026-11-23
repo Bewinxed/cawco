@@ -21,7 +21,7 @@
     HARNESSES,
     type HarnessKind,
   } from "@cawco/core/harness/kinds";
-  import type { PermissionMode } from "@cawco/core/harness/modes";
+  import { modeOn, type PermissionMode } from "@cawco/core/harness/modes";
   import { traitsOf } from "@cawco/core/harness/traits";
   import { machinePath } from "@cawco/core/machine-path";
   import { modelRun } from "@cawco/core/model-names";
@@ -151,6 +151,7 @@
   import AttachmentChips from "../transcript/AttachmentChips.svelte";
   import { ComposerDraft } from "../transcript/composer-draft.svelte";
   import { keepDraft } from "../transcript/keep-draft.svelte";
+  import { speakerName } from "../transcript/speaker";
   import { TRY_AGAIN } from "../unanswered";
   import { startForecast, usage } from "../usage/forecast.svelte";
   import { fmt, type Part } from "../usage/rings";
@@ -445,8 +446,21 @@
   const lastMode = $derived(
     machine?.chosenModes?.[harness] ?? spawnPrefs.permissionMode
   );
-  /** The mode a start goes out on. */
-  const permissionMode = $derived(modePick ?? lastMode);
+  /** The mode the form carries: the person's pick here, else their last. */
+  const carriedMode = $derived(modePick ?? lastMode);
+  /**
+   * The mode a start goes out on: the carried one, but Bypass in place of
+   * Auto on a harness without it, as the machine reports it (core
+   * `modeOn`), which the form says ({@link autoElsewhere}).
+   */
+  const permissionMode = $derived(
+    carriedMode &&
+      modeOn(
+        carriedMode,
+        report?.capabilities.permissionModes ??
+          traitsOf(harness).permissionModes
+      )
+  );
   /**
    * Full Send came with the form (the last start's mode, or a failed
    * continuation's) rather than from a pick in it: the warning says where
@@ -685,6 +699,10 @@
   );
   /** A harness that reports no permission modes (pi) has none to pick, so no control shows and none is sent. */
   const modeless = $derived(report?.capabilities.permissionModes.length === 0);
+  /** The carried Auto stands as Bypass here: said once, beside Start. */
+  const autoElsewhere = $derived(
+    !modeless && carriedMode === "auto" && permissionMode !== "auto"
+  );
   const modes = $derived(
     modeless
       ? []
@@ -2767,6 +2785,22 @@
     <Alert role="status" variant="warning">
       <IconShield />
       <AlertTitle>{modeRefused}</AlertTitle>
+    </Alert>
+  </div>
+{/if}
+<!-- Auto carried to a harness without it starts in Bypass: said once,
+       beside Start, while the picker shows Bypass chosen. -->
+{#if autoElsewhere && !modeRefused && !placementRefusal}
+  <div
+    class="flex-none pt-space-2"
+    data-slot="start-notice"
+    data-vaul-no-drag
+    in:unfold|global
+    out:unfold
+  >
+    <Alert role="status" variant="warning">
+      <IconShield />
+      <AlertTitle>{spawnWords.autoElsewhere(speakerName(harness))}</AlertTitle>
     </Alert>
   </div>
 {/if}

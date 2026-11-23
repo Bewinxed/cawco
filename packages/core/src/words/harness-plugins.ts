@@ -52,6 +52,7 @@ export const CLAUDE_WORDS = {
     default: "Reads and allow-listed tools run; others ask.",
     plan: "Read-only until you approve a plan.",
     acceptEdits: "File edits run without asking.",
+    auto: "Tools run unasked; a second model blocks risky actions.",
     bypassPermissions: "Tools run unasked; safety checks still ask.",
     fullSend: "Everything is approved; only questions ask.",
   },

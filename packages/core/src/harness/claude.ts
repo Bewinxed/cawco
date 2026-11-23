@@ -7,6 +7,7 @@ import { PROJECT_SKILLS, projectClaudeRelative } from "../claude-dirs";
 import { HOUR_MS } from "../time";
 import { CLAUDE_WORDS } from "../words/harness-plugins";
 import type { HarnessDescriptor } from "./descriptor";
+import { PERMISSION_MODES } from "./modes";
 
 const DIR = { kind: "dir" } as const;
 const EMPTY_JSON = { kind: "file", text: "{}\n" } as const;
@@ -63,7 +64,7 @@ export const CLAUDE = {
 
   // Started with what its launch says: setting sources and memory off.
   cleanStartRefused: null,
-  permissionModes: true,
+  permissionModes: PERMISSION_MODES,
   requiredOnEveryMachine: true,
   startsWithoutConversation: false,
   spills: true,

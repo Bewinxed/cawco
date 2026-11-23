@@ -18,7 +18,7 @@
  */
 import type { ImageMediaType } from "../attachments";
 import type { HookEvent } from "../hook-events";
-import type { OfferedMode } from "./modes";
+import type { OfferedMode, SharedMode } from "./modes";
 
 /**
  * Its words (core words/harness-plugins.ts holds each harness's): its
@@ -48,8 +48,15 @@ export interface NoReplyWords {
 export interface HarnessWords {
   /** Full Send's words, for a harness it is offered on. */
   readonly fullSend: FullSendCopy | Lacks;
-  /** What each mode does on it, in a line the picker's row holds whole, for a harness with modes. */
-  readonly modes: Readonly<Record<OfferedMode, string>> | Lacks;
+  /**
+   * What each mode does on it, in a line the picker's row holds whole, for a
+   * harness with modes: every shared one, and each of its own it has
+   * ({@link HarnessDescriptor.permissionModes}).
+   */
+  readonly modes:
+    | (Readonly<Record<SharedMode, string>> &
+        Readonly<Partial<Record<OfferedMode, string>>>)
+    | Lacks;
   /** Its name, as the operator knows it and a sentence names it. */
   readonly name: string;
   /** What the no-reply tool says there. */
@@ -305,8 +312,12 @@ interface HarnessDescriptorFacts<K extends string> {
   };
   /** Whether it names providers by ids of its own rather than pi-ai's. */
   readonly ownProviderIds: boolean;
-  /** Whether it takes a permission mode at all. */
-  readonly permissionModes: boolean;
+  /**
+   * The permission modes it has (core harness/modes.ts), its machines'
+   * report of it lists them: none for a harness that takes no mode at all,
+   * `SHARED_MODES` for most, all of `PERMISSION_MODES` for Claude Code.
+   */
+  readonly permissionModes: readonly OfferedMode[];
   /**
    * The picture types a send to it can carry (core attachments.ts): Claude
    * Code's are Anthropic's four; a harness that hands a picture on to its

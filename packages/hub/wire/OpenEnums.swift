@@ -3060,53 +3060,6 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/EventRouteViewMode`.
-    public enum EventRouteViewMode: OpenEnum {
-        case acceptEdits
-        case bypassPermissions
-        case _default
-        case fullSend
-        case plan
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "acceptEdits": self = .acceptEdits
-            case "bypassPermissions": self = .bypassPermissions
-            case "default": self = ._default
-            case "fullSend": self = .fullSend
-            case "plan": self = .plan
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .acceptEdits: "acceptEdits"
-            case .bypassPermissions: "bypassPermissions"
-            case ._default: "default"
-            case .fullSend: "fullSend"
-            case .plan: "plan"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.acceptEdits, .bypassPermissions, ._default, .fullSend, .plan]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
     /// `#/components/schemas/Exclude`.
     public enum Exclude: OpenEnum {
         case area
@@ -10483,8 +10436,8 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/TriggerSettingSource`.
-    public enum TriggerSettingSource: OpenEnum {
+    /// `#/components/schemas/TriggerSourced.From`.
+    public enum TriggerSourced.From: OpenEnum {
         case caw
         case fleet
         case project
@@ -10514,6 +10467,47 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.caw, .fleet, .project]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/TriggerSourced.From_1`.
+    public enum TriggerSourced.From_1: OpenEnum {
+        case _default
+        case fleet
+        case project
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "default": self = ._default
+            case "fleet": self = .fleet
+            case "project": self = .project
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case ._default: "default"
+            case .fleet: "fleet"
+            case .project: "project"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [._default, .fleet, .project]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -10558,6 +10552,56 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.claude, .codex, .opencode, .pi]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/TriggerSourced.T_1`.
+    public enum TriggerSourced.T_1: OpenEnum {
+        case acceptEdits
+        case auto
+        case bypassPermissions
+        case _default
+        case fullSend
+        case plan
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "acceptEdits": self = .acceptEdits
+            case "auto": self = .auto
+            case "bypassPermissions": self = .bypassPermissions
+            case "default": self = ._default
+            case "fullSend": self = .fullSend
+            case "plan": self = .plan
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .acceptEdits: "acceptEdits"
+            case .auto: "auto"
+            case .bypassPermissions: "bypassPermissions"
+            case ._default: "default"
+            case .fullSend: "fullSend"
+            case .plan: "plan"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.acceptEdits, .auto, .bypassPermissions, ._default, .fullSend, .plan]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

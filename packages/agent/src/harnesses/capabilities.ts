@@ -1,7 +1,7 @@
 import type { HarnessCapabilities } from "@cawco/core/harness";
 import { PERMISSION_MODES } from "@cawco/core/harness/modes";
 
-/** Everything a harness can be asked to do, every permission mode: Claude Code's, and the base the others take away from. */
+/** Everything a harness can be asked to do, every permission mode (Auto among them): Claude Code's, and the base the others take away from. */
 export const FULL_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
   permissionModes: [...PERMISSION_MODES],

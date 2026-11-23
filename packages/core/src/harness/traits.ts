@@ -22,7 +22,11 @@ import {
   harnessNamed,
   type PluginOf,
 } from "./kinds";
-import { COMMANDS_UNASKED_MODES } from "./modes";
+import {
+  COMMANDS_UNASKED_MODES,
+  type OfferedMode,
+  SHARED_MODES,
+} from "./modes";
 
 /**
  * The facts a stored row or a frame's harness name is read for, whatever
@@ -77,7 +81,7 @@ const UNKNOWN_TRAITS: HarnessTraits = {
   resolvesModelNames: false, // nothing claimed
   contextWindow: "catalog", // as a compare with a name it isn't
   cleanStartRefused: null, // nothing claimed
-  permissionModes: true, // as a compare with a name it isn't
+  permissionModes: SHARED_MODES, // as a compare with a name it isn't
   requiredOnEveryMachine: false, // nothing claimed
   startsWithoutConversation: false, // nothing claimed
   custody: "keeper", // as a compare with a name it isn't
@@ -190,5 +194,9 @@ export const runsCommandsUnasked = (
   harness: unknown,
   mode: string | null | undefined
 ): boolean =>
-  !traitsOf(harness).permissionModes ||
+  traitsOf(harness).permissionModes.length === 0 ||
   COMMANDS_UNASKED_MODES.some((each) => each === mode);
+
+/** Whether `harness` has permission mode `mode` (its descriptor's `permissionModes`). */
+export const hasMode = (harness: unknown, mode: OfferedMode): boolean =>
+  traitsOf(harness).permissionModes.includes(mode);

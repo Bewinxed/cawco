@@ -11,7 +11,8 @@
  * names its routine. There is no other record of it.
  */
 import type { HarnessKind } from "./harness/kinds";
-import type { OfferedMode } from "./harness/modes";
+import { AUTO_ELSEWHERE, modeOn, type OfferedMode } from "./harness/modes";
+import { hasMode, traitsOf } from "./harness/traits";
 import { MINUTE_MS } from "./time";
 
 /** The kinds of thing a trigger happens to. */
@@ -115,14 +116,21 @@ export const UNSET_TRIGGER_SETTING: TriggerSetting = {
 /**
  * Where a trigger setting in effect came from: the project's own override,
  * the fleet's default for the kind, or neither, so the project's Caw
- * settings (its harness and model; its Caw mode, else its area's, else the
- * fleet's; the account its sessions start on).
+ * settings (its harness and model; the account its sessions start on).
  */
 type TriggerSettingSource = "project" | "fleet" | "caw";
 
+/**
+ * Where a trigger's mode in effect came from: the project's own override,
+ * the fleet's default for the kind, or neither, so CawCo's own default for
+ * a trigger's session ({@link triggerModeDefault}). Caw's chat mode is no
+ * layer of it.
+ */
+type TriggerModeSource = "project" | "fleet" | "default";
+
 /** A setting in effect, and where it came from. */
-interface TriggerSourced<T> {
-  from: TriggerSettingSource;
+interface TriggerSourced<T, From = TriggerSettingSource> {
+  from: From;
   value: T;
 }
 
@@ -130,9 +138,21 @@ interface TriggerSourced<T> {
 export interface TriggerSettingInEffect {
   account: TriggerSourced<string | null>;
   harness: TriggerSourced<HarnessKind>;
-  mode: TriggerSourced<OfferedMode | null>;
+  /** The mode its session runs in on the harness in effect (core modes.ts `modeOn`). */
+  mode: TriggerSourced<OfferedMode, TriggerModeSource>;
   model: TriggerSourced<string | null>;
 }
+
+/**
+ * The mode a trigger's session runs in when neither the project nor the
+ * fleet sets one for its kind: Claude Code's Auto on a harness that has it,
+ * else Bypass (the owner, 2026-11-23: "for claude, offer 'auto' mode as an
+ * additional one, for harnesses that don't offer it, show bypass"). Nobody
+ * watches a trigger's session for a tool ask, so it runs in one that never
+ * waits on one; Auto has a second model review each action in their place.
+ */
+export const triggerModeDefault = (harness: HarnessKind): OfferedMode =>
+  hasMode(harness, "auto") ? "auto" : AUTO_ELSEWHERE;
 
 /** The fleet's own settings, kind by kind (`GET /api/fleet/trigger-settings`). */
 export interface FleetTriggerSettings {
@@ -147,21 +167,22 @@ export interface ProjectTriggerSettings {
   >;
 }
 
-/** The project's Caw settings, what a kind falls back to when neither layer sets it. */
+/** The project's Caw settings, what a kind's harness, model and account fall back to when neither layer sets them. */
 export interface CawFallback {
   account: string | null;
   harness: HarnessKind;
-  mode: OfferedMode | null;
   model: string | null;
 }
 
 /**
  * One kind's settings in effect: each field from the most specific layer
  * that sets it (the project's, then the fleet's, then the project's Caw
- * settings). A model follows its harness: it comes from the most specific
+ * settings; for the mode, {@link triggerModeDefault} on the harness in
+ * effect). A model follows its harness: it comes from the most specific
  * layer that sets one, but never from a layer below the one that set the
  * harness (a layer naming a harness and no model means that harness's
- * default).
+ * default). A mode the harness lacks is the one it runs instead: Auto set
+ * for a harness without it is Bypass in effect (core modes.ts `modeOn`).
  */
 export const triggerSettingInEffect = (
   project: TriggerSetting,
@@ -192,10 +213,18 @@ export const triggerSettingInEffect = (
   const model: TriggerSourced<string | null> = named
     ? { value: named.model, from: named.from }
     : { value: harness.from === "caw" ? caw.model : null, from: harness.from };
+  const setMode = firstOf(project.mode, fleet.mode, null);
+  const mode: TriggerSourced<OfferedMode, TriggerModeSource> =
+    setMode.value === null
+      ? { value: triggerModeDefault(harness.value), from: "default" }
+      : {
+          value: modeOn(setMode.value, traitsOf(harness.value).permissionModes),
+          from: setMode.from === "project" ? "project" : "fleet",
+        };
   return {
     harness,
     model,
-    mode: firstOf(project.mode, fleet.mode, caw.mode),
+    mode,
     account: firstOf(project.account, fleet.account, caw.account),
   };
 };

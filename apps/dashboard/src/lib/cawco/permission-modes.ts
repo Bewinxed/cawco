@@ -4,12 +4,12 @@
  * Send confirmation all read it.
  *
  * A mode's name is the product's; what it does is its harness's, so every
- * description is written for one harness. A harness with modes is offered
- * every one of core's `PERMISSION_MODES`, the list each machine reports for
- * it, each described for it, in {@link ORDER}: from the one that asks the
- * most to the one that asks the least. pi reports no modes and is offered
- * none. Claude Code has more (`dontAsk`, `auto`) that no harness here is
- * offered; a session that reports one is named by it.
+ * description is written for one harness. A harness is offered the modes
+ * its descriptor lists (core `traitsOf(harness).permissionModes`), the list
+ * each machine reports for it, each described for it, in {@link ORDER}: from
+ * the one that asks the most to the one that asks the least. Claude Code
+ * alone has Auto; pi has no modes and is offered none. Claude Code's
+ * `dontAsk` is offered nowhere; a session that reports it is named by it.
  */
 import type { HarnessReport } from "@cawco/core/harness";
 import type { FullSendCopy } from "@cawco/core/harness/descriptor";
@@ -20,6 +20,7 @@ import {
   type PermissionMode,
   permissionModeNamed,
 } from "@cawco/core/harness/modes";
+import { traitsOf } from "@cawco/core/harness/traits";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { speakerName } from "./transcript/speaker";
 
@@ -34,8 +35,9 @@ const RANK: Record<OfferedMode, number> = {
   default: 0,
   plan: 1,
   acceptEdits: 2,
-  bypassPermissions: 3,
-  fullSend: 4,
+  auto: 3,
+  bypassPermissions: 4,
+  fullSend: 5,
 };
 
 const ORDER = [...PERMISSION_MODES].sort((a, b) => RANK[a] - RANK[b]);
@@ -48,7 +50,7 @@ const LABELS: Record<OfferedMode, string> = spawnWords.modes;
  */
 const modeWordsOf = (
   harness: HarnessKind
-): Readonly<Record<OfferedMode, string>> | undefined => {
+): Readonly<Partial<Record<OfferedMode, string>>> | undefined => {
   const { modes } = descriptorOf(harness).words;
   return "lacks" in modes ? undefined : modes;
 };
@@ -68,16 +70,17 @@ export function permissionModeDescription(
   return (harness && offered && modeWordsOf(harness)?.[offered]) || "";
 }
 
-/** The modes a person picks between on `harness`, each described for it. */
+/** The modes a person picks between on `harness`, each described for it: the ones it has. */
 export function permissionModesFor(
   harness: HarnessKind
 ): PermissionModeOption[] {
   const described = modeWordsOf(harness);
+  const has = traitsOf(harness).permissionModes;
   return described
-    ? ORDER.map((value) => ({
+    ? ORDER.filter((value) => has.includes(value)).map((value) => ({
         value,
         label: LABELS[value],
-        description: described[value],
+        description: described[value] ?? "",
       }))
     : [];
 }

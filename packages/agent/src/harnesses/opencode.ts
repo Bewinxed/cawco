@@ -1229,6 +1229,8 @@ export const removeCawcoSessionConfigs = async (): Promise<void> => {
 
 const OPENCODE_CAPABILITIES: HarnessCapabilities = {
   ...FULL_CAPABILITIES,
+  // Every shared mode; Claude Code's Auto is not OpenCode's.
+  permissionModes: [...OPENCODE.permissionModes],
   tasks: false,
 };
 
@@ -6365,7 +6367,7 @@ class OpencodeHarness implements Harness<"opencode"> {
       sessionId,
       directory: ctx.cwd,
       model: spec.model,
-      permissionMode: offeredMode(spec.permissionMode),
+      permissionMode: offeredMode(spec.permissionMode, "opencode"),
       effort: spec.effort,
       mayStart: spec.mayStart,
       instructions: spec.instructions,

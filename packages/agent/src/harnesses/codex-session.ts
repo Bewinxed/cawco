@@ -19,10 +19,7 @@ import type { RestartHold } from "@cawco/core/binary-updates";
 import { deniedToolsOn } from "@cawco/core/delegate-types";
 import type { SessionCredentialInstall } from "@cawco/core/harness";
 import { CODEX } from "@cawco/core/harness/codex";
-import {
-  type OfferedMode,
-  permissionModeNamed,
-} from "@cawco/core/harness/modes";
+import { type SharedMode, sharedModeNamed } from "@cawco/core/harness/modes";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import {
   CONTROL_CONTEXT_USAGE,
@@ -113,7 +110,7 @@ const codexModelOf = (
  */
 const CODEX_MODES: Readonly<
   Record<
-    OfferedMode,
+    SharedMode,
     { approval: V2.AskForApproval; edits: "ask" | "accept" | "refuse" }
   >
 > = {
@@ -186,7 +183,7 @@ interface CodexLaunch {
    * a clean session.
    */
   readonly instructions?: string;
-  readonly mode: OfferedMode;
+  readonly mode: SharedMode;
   /** `<provider>/<id>`, or none for Codex's own default. */
   readonly model: string | undefined;
 }
@@ -209,7 +206,7 @@ class CodexSession implements HarnessSession {
   };
   /** Frames said before the supervisor installed this session, in order. */
   readonly #early: { seq: number; message: NeutralMessage }[] = [];
-  #mode: OfferedMode;
+  #mode: SharedMode;
   #model: string | undefined;
   #effort: ReasoningEffort | undefined;
   /** The turn running, by Codex's id. */
@@ -1016,7 +1013,7 @@ class CodexSession implements HarnessSession {
     return Promise.resolve();
   }
 
-  #setMode(mode: OfferedMode): { permissionMode: string } {
+  #setMode(mode: SharedMode): { permissionMode: string } {
     this.#mode = mode;
     // Codex takes the policy with the next turn (turn/start
     // `approvalPolicy`); what the adapter answers itself follows now.
@@ -1075,7 +1072,7 @@ class CodexSession implements HarnessSession {
     [CONTROL_SET_MODEL]: (model) => this.#takeModel(model),
     [CONTROL_SET_EFFORT]: (effort) => this.#takeEffort(effort),
     [CONTROL_SET_PERMISSION_MODE]: (mode) => {
-      const offered = permissionModeNamed(mode);
+      const offered = sharedModeNamed(mode);
       if (!offered) {
         return Promise.reject(new Error(`Codex takes no ${mode} mode.`));
       }
@@ -1206,9 +1203,9 @@ const codexDenials = (spec: Pick<SpawnPayload, "denyTools">) => {
   };
 };
 
-/** The permission mode a spawn starts in, refused when it names one CawCo does not offer. */
-const codexModeOf = (spec: SpawnPayload): OfferedMode => {
-  const mode = permissionModeNamed(spec.permissionMode ?? "default");
+/** The permission mode a spawn starts in, refused when it names one Codex does not have. */
+const codexModeOf = (spec: SpawnPayload): SharedMode => {
+  const mode = sharedModeNamed(spec.permissionMode ?? "default");
   if (!mode) {
     throw new Error(`Codex takes no ${spec.permissionMode} mode.`);
   }

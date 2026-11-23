@@ -7,6 +7,7 @@
 import { IMAGE_MEDIA_TYPES } from "../attachments";
 import { CODEX_WORDS } from "../words/harness-plugins";
 import type { HarnessDescriptor } from "./descriptor";
+import { SHARED_MODES } from "./modes";
 
 const DIR = { kind: "dir" } as const;
 
@@ -84,7 +85,7 @@ export const CODEX = {
   // A thread started with no project AGENTS.md, no skills and a home with
   // no AGENTS.md of CawCo's reads none of them (C-o).
   cleanStartRefused: null,
-  permissionModes: true,
+  permissionModes: SHARED_MODES,
   requiredOnEveryMachine: false,
   startsWithoutConversation: false,
   // It keeps a large output's head and tail and saves no file (C-s).
