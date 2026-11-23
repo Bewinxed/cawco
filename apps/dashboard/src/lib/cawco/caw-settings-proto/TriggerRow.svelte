@@ -1,21 +1,3 @@
-<script lang="ts" module>
-  import type { Component } from "svelte";
-  import {
-    IconComment,
-    IconConnection,
-    IconRepeat,
-    IconTaskList,
-  } from "#lib/icons.js";
-
-  /** Each kind's glyph, in its row's lead column. */
-  const GLYPHS: Record<TriggerKind, Component> = {
-    comments: IconComment,
-    "routine-results": IconRepeat,
-    "task-moves": IconTaskList,
-    "inbound-events": IconConnection,
-  };
-</script>
-
 <script lang="ts">
   /**
    * One kind of trigger's row in Caw's settings: what reaches it, and what
@@ -26,8 +8,7 @@
    * chat", "fleet", "each project"). A pick sets that field alone, and a
    * field the row sets carries a small reset that sets it back to what it
    * inherits. The row's words lead, the pickers under them from the same
-   * edge; under the phone line the pickers and the refusal take the row's
-   * whole width, from the glyph's edge, so its pickers keep one line.
+   * edge.
    */
   import type { HarnessKind } from "@cawco/core/harness/kinds";
   import type { TriggerKind } from "@cawco/core/triggers";
@@ -75,7 +56,6 @@
     onchange: (patch: Partial<TriggerLayer>) => void;
   } = $props();
 
-  const Glyph = $derived(GLYPHS[kind]);
   const named = $derived(triggerKindWords[kind]);
 
   const FIELDS: TriggerField[] = ["harness", "model", "mode", "account"];
@@ -102,25 +82,18 @@
   const effect = $derived(view.inEffect);
 </script>
 
-<!-- mark-line: the glyph stands in the row's lead column, centred on the
-     name's first line by a box one label line tall, not beside the words. -->
 <li
   data-slot="trigger-row"
   data-kind={kind}
-  class="grid grid-cols-mark-fluid items-start gap-x-space-2 gap-y-space-2 border-border-hairline py-space-3 not-last:border-b"
+  class="grid gap-y-space-2 border-border-hairline py-space-3 not-last:border-b"
 >
-  <span aria-hidden="true" class="flex h-lh items-center type-label">
-    <Glyph class="size-icon-md flex-none text-ink-muted" />
-  </span>
   <div class="grid min-w-0">
     <span class="type-label font-medium text-ink-strong">{named.name}</span>
     {#if "what" in named}
       <span class="type-meta text-ink-muted text-pretty">{named.what}</span>
     {/if}
   </div>
-  <div
-    class="col-start-2 min-w-0 max-phone:col-span-full max-phone:col-start-1"
-  >
+  <div class="min-w-0">
     <RunsAs
       account={effect.account.value}
       {from}
@@ -144,11 +117,7 @@
     />
   </div>
   {#if refused}
-    <p
-      data-slot="refused"
-      class="col-start-2 m-0 type-meta text-error-11 max-phone:col-span-full max-phone:col-start-1"
-      role="alert"
-    >
+    <p data-slot="refused" class="m-0 type-meta text-error-11" role="alert">
       {refused}
     </p>
   {/if}
