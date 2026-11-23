@@ -180,6 +180,7 @@ const LANTERN_TIE: TrackerTie = {
   connection: { name: "Lantern GitHub App", account: "lantern-studio" },
   linked: 148,
   statusesRefused: null,
+  statusesAdded: null,
   sync: { kind: "inStep", at: minutesAgo(4) },
   githubProject: {
     name: "Lantern roadmap",
@@ -253,6 +254,15 @@ const LANTERN_TIED: SettingsRecord = {
   tie: LANTERN_TIE,
 };
 
+/** Lantern web tied to GitHub, its Project just given Status options for two board columns it lacked. */
+const LANTERN_STATUSES_ADDED: SettingsRecord = {
+  ...LANTERN_TIED,
+  tie: {
+    ...LANTERN_TIE,
+    statusesAdded: { options: ["In review", "Waiting on design"] },
+  },
+};
+
 /** Lantern web named to an account that is signed in on no machine: nothing starts. */
 const LANTERN_SIGNED_OUT: SettingsRecord = {
   ...LANTERN,
@@ -280,6 +290,7 @@ export const SITUATIONS = {
   "At rest": LANTERN,
   "Two stages in trouble": LANTERN_IN_TROUBLE,
   "Tied to GitHub, in step": LANTERN_TIED,
+  "GitHub Status options added": LANTERN_STATUSES_ADDED,
   "Named account signed out": LANTERN_SIGNED_OUT,
   "Who decides unreadable": LANTERN_RULES_UNREADABLE,
   "Hub out of reach": LANTERN_HUB_AWAY,

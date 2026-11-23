@@ -2986,6 +2986,20 @@ const GithubStatusStagesShape = declared(
 export const GithubStatusStagesSchema = GithubStatusStagesShape;
 export type GithubStatusStagesOutput = z.output<typeof GithubStatusStagesShape>;
 
+const GithubStatusesAddedShape = declared(
+  z.object({
+    at: z.number(),
+    options: z.array(z.string()),
+    projectId: z.string(),
+  }),
+  "GithubStatusesAdded",
+  "packages/core/src/trackers.ts"
+);
+export const GithubStatusesAddedSchema = GithubStatusesAddedShape;
+export type GithubStatusesAddedOutput = z.output<
+  typeof GithubStatusesAddedShape
+>;
+
 const HarnessCapabilitiesShape = declared(
   z.object({
     compaction: z.boolean(),
@@ -4696,12 +4710,6 @@ const ProjectNoteEventShape = declared(
       title: z.string(),
     }),
     z.object({ kind: z.literal("view"), name: z.string() }),
-    z.object({
-      kind: z.literal("board-statuses"),
-      added: z.array(z.string()),
-      board: z.string(),
-      url: z.string(),
-    }),
     z.object({ kind: z.literal("agents"), sha: z.string() }),
     z.object({
       instanceId: z.string(),

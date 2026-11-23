@@ -368,6 +368,9 @@ export class SettingsHub {
       githubProject,
       linked: binding.linked,
       statusesRefused: binding.githubStatusesRefused,
+      statusesAdded: binding.githubStatusesAdded
+        ? { options: binding.githubStatusesAdded.options }
+        : null,
       sync: syncOf(binding),
       target: {
         id: binding.target,

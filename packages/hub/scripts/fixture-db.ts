@@ -1151,6 +1151,7 @@ function seedTracker(db: HubDb, projects: string[]): void {
     githubProjectReason: null,
     githubStatusStages: null,
     githubStatusesRefused: null,
+    githubStatusesAdded: null,
   });
   const baselines = [
     {

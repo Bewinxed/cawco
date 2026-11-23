@@ -63,6 +63,8 @@ export interface TrackerTie {
   githubProject: { name: string; url: string } | { none: string } | null;
   home: "github" | "linear";
   linked: number;
+  /** With GitHub: the Status options the hub last added to the Project, for the columns it lacked; null when it added none. */
+  statusesAdded: { options: string[] } | null;
   /** With GitHub: its words when it refused adding a Status option for a column the Project lacks; null when nothing did. */
   statusesRefused: string | null;
   sync: SyncStanding;

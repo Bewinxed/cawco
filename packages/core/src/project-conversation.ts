@@ -220,15 +220,6 @@ export type ProjectNoteEvent =
       title: string;
     }
   | { kind: "view"; name: string }
-  | {
-      /** The hub added Status options to a GitHub Project the board syncs with (hub tracker.ts). */
-      kind: "board-statuses";
-      /** The options added, each named as its column. */
-      added: string[];
-      /** The Project's title and address. */
-      board: string;
-      url: string;
-    }
   | { kind: "agents"; sha: string }
   | {
       /** The session fleet watch nudged about. */

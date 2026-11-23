@@ -625,6 +625,7 @@ import type {
   GhTokenOutput,
   GitChangesOutput,
   GithubProjectOutput,
+  GithubStatusesAddedOutput,
   GithubStatusStagesOutput,
   GuideLineOutput,
   HarnessBlockTypeOutput,
@@ -935,6 +936,7 @@ import type {
 } from "./tools";
 import type {
   GithubProject as GithubProjectType,
+  GithubStatusesAdded as GithubStatusesAddedType,
   GithubStatusStages as GithubStatusStagesType,
   IssueTracker as IssueTrackerType,
   StatusOption as StatusOptionType,
@@ -1220,6 +1222,7 @@ prove<
     Same<StatusOptionOutput, StatusOptionType>,
     Same<GithubProjectOutput, GithubProjectType>,
     Same<GithubStatusStagesOutput, GithubStatusStagesType>,
+    Same<GithubStatusesAddedOutput, GithubStatusesAddedType>,
     Same<HarnessCapabilitiesOutput, HarnessCapabilitiesType>,
     Same<SignInFaultOutput, SignInFaultType>,
     Same<HarnessReportOutput, HarnessReportType>,

@@ -2,8 +2,9 @@
  * A session in its project's place (Caw among them: roles.ts `allows`)
  * changes that project's settings (`project_settings`). The owner's word:
  * "caw should be able to do whatever it wants", so the change applies at
- * once, through the same code the person's own change runs, and is noted in
- * the project's conversation with what changed. When the change is one the
+ * once, through the same code the person's own change runs; made by the
+ * project's conversation, it is noted there with what changed, and any
+ * other session's shows in Settings and its own call's answer. When the change is one the
  * session judges the person should decide, it asks with `ask: true`: the
  * change is recorded as the person's ask in that session (asks.ts) and
  * the call answers at once; Approve has the hub apply it
@@ -552,7 +553,7 @@ export interface ProjectSettingsDeps {
         { readonly "~status": true }
       >
   >;
-  /** Notes what happened in the project's conversation (caw.ts `notice`). */
+  /** Notes what happened in the project's conversation (caw.ts `notice`) when `actor` is that conversation; nothing for another session. */
   readonly note: (actor: InstanceRow, note: ProjectNote) => void;
   /** A place published to a new GitHub repository (repo-publish.ts). */
   readonly publish: Pick<RepoPublish, "publish" | "read">;
@@ -1413,7 +1414,7 @@ export const createProjectSettings = ({
           name: project.name,
         },
       });
-      return `Applied: ${said.join("; ")}. It is noted in the project's conversation.`;
+      return `Applied: ${said.join("; ")}.`;
     }
     const recorded = await ask(
       actor,
@@ -1478,7 +1479,7 @@ export const createProjectSettings = ({
     return `Applied: ${said.join("; ")}.`;
   };
 
-  /** A declined ask (asks.ts `carryOut`): noted in the project's conversation, nothing applied. */
+  /** A declined ask (asks.ts `carryOut`): nothing applied; noted in the project's conversation when it asked. */
   const runDeclined = (
     actor: InstanceRow,
     input: Record<string, unknown>

@@ -10991,7 +10991,6 @@ export const createServer = (
     db,
     externalItems,
     lifetime,
-    notice: noticeProject,
     tasks,
   });
   // Ingress (ingress.ts): events from GitHub and polled connections, each
@@ -11186,8 +11185,15 @@ export const createServer = (
       db,
       places: placeRepos,
     }),
+    // Only a change the person's chat with Caw made is a line in it: any
+    // other session hears its own outcome as its call's or ask's answer,
+    // and the change shows in Settings (the owner's "Where triggers go",
+    // 2026-11-23: nothing a session of its own does goes in that chat).
     note: (actor, note) => {
-      if (actor.projectId) {
+      if (
+        actor.projectId &&
+        db.project(actor.projectId)?.conversationInstanceId === actor.id
+      ) {
         noticeProject(actor.projectId, note);
       }
     },

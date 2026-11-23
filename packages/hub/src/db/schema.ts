@@ -96,6 +96,7 @@ import {
   FleetSyncReportSchema,
   FolderMoveStageSchema,
   GithubProjectSchema,
+  GithubStatusesAddedSchema,
   GithubStatusStagesSchema,
   HookHandlerSchema,
   InstanceStatusSchema,
@@ -6939,6 +6940,14 @@ export const trackerBindings = sqliteTable("tracker_bindings", {
   ),
   /** GitHub: its words when it refused adding a stage's Status option; null when nothing did. */
   githubStatusesRefused: text("github_statuses_refused"),
+  /**
+   * GitHub: the Status options the hub last added to the Project, and when
+   * (core `GithubStatusesAdded`), shown beside the binding; null before it
+   * added any.
+   */
+  githubStatusesAdded: storedJson(GithubStatusesAddedSchema)(
+    "github_statuses_added"
+  ),
 });
 
 /**

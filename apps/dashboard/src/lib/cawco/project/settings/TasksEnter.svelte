@@ -1,5 +1,6 @@
 <script lang="ts">
   import { repoIdentity, repoPath } from "@cawco/core/protocol";
+  import { boardStatusWords } from "@cawco/core/words/board-statuses";
   import { settingsViewWords as words } from "@cawco/core/words/settings-view";
   import { untrack } from "svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
@@ -416,6 +417,23 @@
               againLabel={words.tryAgain}
               reason={tie.sync.words}
             />
+          {/if}
+          {#if tie.statusesAdded && tie.githubProject && "name" in tie.githubProject}
+            <!-- The Status options the hub last added to the Project: told on the tie, never in the Caw chat. -->
+            <div class="flex min-w-0 flex-col gap-space-1">
+              <p class="m-0 min-w-0 type-meta text-pretty text-ink-strong">
+                {boardStatusWords.addedTitle(
+                  tie.githubProject.name,
+                  tie.statusesAdded.options
+                )}
+              </p>
+              <p class="m-0 min-w-0 type-meta text-pretty text-ink-muted">
+                {boardStatusWords.addedBody(
+                  tie.githubProject.name,
+                  tie.statusesAdded.options.length
+                )}
+              </p>
+            </div>
           {/if}
           {#if tie.statusesRefused && !syncPending}
             <!-- GitHub refused a Status option for a column its Project lacks: Sync now asks again. -->

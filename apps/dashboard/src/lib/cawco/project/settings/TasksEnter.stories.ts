@@ -27,6 +27,15 @@ export const SyncedWithGitHub = {
   },
 };
 
+/** Synced with GitHub, the hub just added two Status options its Project lacked: said under the tie. */
+export const StatusOptionsAdded = {
+  args: {
+    ...stageArgs("GitHub Status options added"),
+    syncing: false,
+    onsync: () => undefined,
+  },
+};
+
 /** Pressed on GitHub Issues: its setup open, the repository picked in the New session form's picker. */
 export const SettingUpGitHub = {
   args: { opening: "github" },

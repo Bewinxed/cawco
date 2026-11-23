@@ -3277,6 +3277,13 @@
       "when": 1795419628587,
       "tag": "0475_status_stages_decides_proposals",
       "breakpoints": true
+    },
+    {
+      "idx": 476,
+      "version": "6",
+      "when": 1795420175433,
+      "tag": "0476_board_statuses_on_the_tie",
+      "breakpoints": true
     }
   ]
 }

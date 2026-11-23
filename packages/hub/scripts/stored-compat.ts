@@ -139,6 +139,11 @@ const REWRITES: readonly Rewrite[] = [
     migration: "0470_routine_checks",
     why: "a routine's target is never command, since a check gates any routine's runs: a trigger whose target is command is set to null with its problem saying why, so it fires nothing until its task file is rewritten, and its task index writes it again",
   },
+  {
+    column: "project_notes.note",
+    migration: "0476_board_statuses_on_the_tie",
+    why: "the hub no longer notes Status options it added in the project's conversation: those notes are deleted, the options last added now kept on the binding and shown under its row in Settings",
+  },
 ];
 
 type Schema = Record<string, unknown>;

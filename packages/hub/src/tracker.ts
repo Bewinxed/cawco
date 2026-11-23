@@ -69,8 +69,10 @@
  *   column added to the board since, or every stage of a binding made
  *   before the hub added options): each stage once, so an option the
  *   person removes or renames on GitHub stays as they left it, and no
- *   option is ever removed or renamed. Options added are told in one note
- *   per Project in the project's conversation. GitHub's refusal stays on
+ *   option is ever removed or renamed. The options last added are kept on
+ *   the binding and shown under its row in the project's settings, never
+ *   in the Caw chat (the owner's "Where triggers go", 2026-11-23: what the
+ *   hub does goes on its thing). GitHub's refusal stays on
  *   the binding in its words, the other stages' Status syncing meanwhile;
  *   Sync now asks again at once, the poll every ten minutes.
  * - **No fallbacks.** A refused write leaves both sides as they are and says
@@ -81,11 +83,11 @@
 
 import { detach } from "@cawco/core/detach";
 import { isFleetProject } from "@cawco/core/fleet-project";
-import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { Stage, TaskSummary } from "@cawco/core/task-views";
 import {
   type GithubProject,
   type GithubProjectsView,
+  type GithubStatusesAdded,
   type GithubStatusStages,
   type IssueTracker,
   statusOptionFor,
@@ -94,7 +96,6 @@ import {
   type TrackerSyncState,
   type TrackerView,
 } from "@cawco/core/trackers";
-import { boardStatusWords } from "@cawco/core/words/board-statuses";
 import { connectionsWords } from "@cawco/core/words/connections";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
@@ -172,8 +173,6 @@ export interface TrackersDeps {
   /** Files a comment from the tracker on its task, once, as data (external-items.ts). */
   readonly externalItems: Pick<ExternalItems, "fileComment">;
   readonly lifetime: HubLifetimeShape;
-  /** A note to the person in the project's conversation, waking no one (caw.ts `notice`). */
-  readonly notice: (projectId: string, note: ProjectNote) => void;
   readonly tasks: Pick<
     Tasks,
     | "comment"
@@ -297,6 +296,8 @@ interface Sync {
   projectRead?: GithubProject;
   stages: Stage[];
   states: IssueState[];
+  /** GitHub: the Status options this sync added to the Project. */
+  statusesAdded?: GithubStatusesAdded;
   /** GitHub: its words when it refused adding a stage's option this sync; null when the options went through. */
   statusesRefused?: string | null;
   /** GitHub's words when this sync found the connection may not read or write the Project: Status stops. */
@@ -369,12 +370,13 @@ const heldOf = (issue: Issue) => ({
   remoteUpdatedAt: issue.updatedAt,
 });
 
-/** A binding's GitHub Project columns: the Project, why there is none, the stages made sure of on it, and GitHub's words on the options it refused. */
+/** A binding's GitHub Project columns: the Project, why there is none, the stages made sure of on it, GitHub's words on the options it refused, and the options last added. */
 type OnProject = Pick<
   TrackerBindingRow,
   | "githubProject"
   | "githubProjectReason"
   | "githubStatusStages"
+  | "githubStatusesAdded"
   | "githubStatusesRefused"
 >;
 
@@ -398,6 +400,7 @@ const NO_PROJECT: OnProject = {
   githubProject: null,
   githubProjectReason: null,
   githubStatusStages: null,
+  githubStatusesAdded: null,
   githubStatusesRefused: null,
 };
 
@@ -601,7 +604,7 @@ const planStatus = (round: Round): void => {
   const to = stageForStatus(sync, onProject.project, remote, task.stage);
   if (!to) {
     round.said.push(
-      `${link.ref} is “${optionName(onProject.project, remote)}” on ${onProject.project.title}, and no stage maps to it: map one in the project's details.`
+      `${link.ref} is “${optionName(onProject.project, remote)}” on ${onProject.project.title}, and the board has no column of that name, so the task stays where it is.`
     );
     return;
   }
@@ -767,21 +770,12 @@ const outcomeOf = (sync: Sync): Pick<TrackerBindingRow, "reason" | "state"> => {
 };
 
 /** The binding's Project as the sync read it, and GitHub's words when it refused it. */
-const projectAfter = (
-  sync: Sync
-): Partial<
-  Pick<
-    TrackerBindingRow,
-    | "githubProject"
-    | "githubProjectReason"
-    | "githubStatusStages"
-    | "githubStatusesRefused"
-  >
-> => ({
+const projectAfter = (sync: Sync): Partial<OnProject> => ({
   ...sync.projectProbe,
   ...(sync.projectRead ? { githubProject: sync.projectRead } : {}),
   ...(sync.statusRefused ? { githubProjectReason: sync.statusRefused } : {}),
   ...(sync.statusStages ? { githubStatusStages: sync.statusStages } : {}),
+  ...(sync.statusesAdded ? { githubStatusesAdded: sync.statusesAdded } : {}),
   ...(sync.statusesRefused === undefined
     ? {}
     : { githubStatusesRefused: sync.statusesRefused }),
@@ -795,6 +789,48 @@ const madeOn = (
   made: GithubStatusStages | null,
   projectId: string
 ): string[] => (made?.projectId === projectId ? made.stages : []);
+
+/**
+ * The Status options just added to `project`, kept on the binding to be
+ * shown beside it (never a note in the Caw chat); null when none were.
+ * `who` names the project or repository in the log.
+ */
+const addedNow = (
+  who: string,
+  project: Pick<GithubProject, "id" | "title">,
+  options: readonly string[]
+): GithubStatusesAdded | null => {
+  if (options.length === 0) {
+    return null;
+  }
+  console.info(
+    `[tracker] ${who}: added the Status ${options.length === 1 ? "option" : "options"} ${options.join(", ")} to ${project.title}`
+  );
+  return { projectId: project.id, options: [...options], at: Date.now() };
+};
+
+/** What a binding bound again keeps of the options last added: those added now, else, on the same Project, those added before. */
+const addedKept = (
+  was: TrackerBindingRow | undefined,
+  now: OnProject
+): GithubStatusesAdded | null => {
+  if (now.githubStatusesAdded) {
+    return now.githubStatusesAdded;
+  }
+  return was?.githubProject?.id === now.githubProject?.id
+    ? (was?.githubStatusesAdded ?? null)
+    : null;
+};
+
+/** The options last added to the binding's Project, as the view shows them; none for another Project. */
+const addedOn = (
+  binding: Pick<TrackerBindingRow, "githubProject" | "githubStatusesAdded">
+): Pick<GithubStatusesAdded, "at" | "options"> | null => {
+  const added = binding.githubStatusesAdded;
+  return added && added.projectId === binding.githubProject?.id
+    ? { at: added.at, options: added.options }
+    : null;
+};
 
 /** Where a binding stands after a sync that stopped: refused for a sign-in or scope, else as it stood. */
 const stateAfter = (
@@ -890,32 +926,9 @@ export const createTrackers = (deps: TrackersDeps) => {
         githubProject: binding.githubProject ?? null,
         githubProjectReason: binding.githubProjectReason ?? null,
         githubStatusesRefused: binding.githubStatusesRefused ?? null,
+        githubStatusesAdded: addedOn(binding),
       },
     };
-  };
-
-  /** One note per Project in the project's conversation, naming the Status options the hub added to it; none when it added none. */
-  const noticeAdded = (
-    projectId: string,
-    board: Pick<GithubProject, "title" | "url"> | null,
-    added: readonly string[]
-  ): void => {
-    if (!board || added.length === 0) {
-      return;
-    }
-    console.info(
-      `[tracker] ${projectId}: added the Status ${added.length === 1 ? "option" : "options"} ${added.join(", ")} to ${board.title}`
-    );
-    deps.notice(projectId, {
-      title: boardStatusWords.addedTitle(board.title, added),
-      body: boardStatusWords.addedBody(board.title, added.length),
-      event: {
-        kind: "board-statuses",
-        added: [...added],
-        board: board.title,
-        url: board.url,
-      },
-    });
   };
 
   /** The issue's changes written into its task; a refusal leaves them unagreed, to go again. */
@@ -1670,7 +1683,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       sync.statusRefused = probe.response.detail;
       return null;
     }
-    const { githubProject, githubProjectReason } = probe.onProject;
+    const { githubProject, githubProjectReason } = probe;
     sync.projectProbe = { githubProject, githubProjectReason };
     return githubProjectReason ? null : githubProject;
   };
@@ -1824,7 +1837,8 @@ export const createTrackers = (deps: TrackersDeps) => {
     sync.projectRead = withOptions;
     sync.statusStages = madeNow;
     sync.statusesRefused = null;
-    noticeAdded(binding.projectId, withOptions, added.added);
+    sync.statusesAdded =
+      addedNow(binding.projectId, project, added.added) ?? undefined;
   };
 
   /** Each linked task on the board whose issue moved, or that moved itself or has a problem, made one record. */
@@ -2150,6 +2164,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       githubProject: null,
       githubProjectReason: null,
       githubStatusStages: null,
+      githubStatusesAdded: null,
       githubStatusesRefused: null,
     };
     const read = await targetOf(
@@ -2161,7 +2176,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     if (read instanceof ElysiaStatus) {
       return read;
     }
-    const { target, onProject, added } = read;
+    const { target, onProject } = read;
     checkedAt.set(projectId, Date.now());
     const was = db.trackers.binding(projectId);
     // The same target bound again (another connection) keeps where it stood: nothing is missed or copied twice.
@@ -2176,6 +2191,7 @@ export const createTrackers = (deps: TrackersDeps) => {
         targetName: target.name,
         targetUrl: target.url,
         ...onProject,
+        githubStatusesAdded: addedKept(was, onProject),
         ...kept,
       });
       // Another Project's options are other ids: what the links agreed on Status starts again.
@@ -2187,7 +2203,6 @@ export const createTrackers = (deps: TrackersDeps) => {
     console.info(
       `[tracker] ${projectId} bound to ${target.name} through ${asked.connection}`
     );
-    noticeAdded(projectId, onProject.githubProject, added);
     await syncProject(projectId);
     return view(projectId);
   };
@@ -2226,10 +2241,10 @@ export const createTrackers = (deps: TrackersDeps) => {
     const onProject =
       draft.provider === "github"
         ? await projectOf(draft.connection, target.id, asked, stages)
-        : { onProject: NO_PROJECT, added: [] };
+        : NO_PROJECT;
     return onProject instanceof ElysiaStatus
       ? onProject
-      : { target, ...onProject };
+      : { target, onProject };
   };
 
   /**
@@ -2242,8 +2257,8 @@ export const createTrackers = (deps: TrackersDeps) => {
    * (`statusesOwed`); GitHub's refusal of that refuses the binding in its
    * words, so the person can pick no Project or grant what it needs. A
    * connection that may not read the owner's Projects binds with none,
-   * GitHub's words kept. Answers the binding's Project columns and the
-   * options it added.
+   * GitHub's words kept. Answers the binding's Project columns, the
+   * options it added among them.
    */
   const projectOf = async (
     connection: string,
@@ -2261,9 +2276,9 @@ export const createTrackers = (deps: TrackersDeps) => {
     if (listed instanceof ElysiaStatus) {
       return listed;
     }
-    const none: { added: string[]; onProject: OnProject } = {
-      onProject: { ...NO_PROJECT, githubProjectReason: listed.refused ?? null },
-      added: [],
+    const none: OnProject = {
+      ...NO_PROJECT,
+      githubProjectReason: listed.refused ?? null,
     };
     if (listed.refused || asked === null) {
       return none;
@@ -2302,9 +2317,10 @@ export const createTrackers = (deps: TrackersDeps) => {
       githubStatusStages: chosen.fieldId
         ? { projectId: chosen.id, stages: [...stages] }
         : null,
+      githubStatusesAdded: addedNow(repo, chosen, statuses.added),
       githubStatusesRefused: null,
     };
-    return { onProject, added: statuses.added };
+    return onProject;
   };
 
   /** The Projects a GitHub connection reaches for a repository, for the binding's choice; GitHub's words when it may not read them. */

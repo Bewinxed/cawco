@@ -64678,6 +64678,27 @@
             "description": "GitHub: why stages do not show on a Project, in GitHub's words (the\nconnection may not read or write the owner's Projects); null when\nnothing stops them. Issues sync either way.",
             "type": "string"
           },
+          "githubStatusesAdded": {
+            "description": "GitHub: the Status options the hub last added to the Project, and when;\nnull when it has added none to this one.",
+            "type": "object",
+            "properties": {
+              "at": {
+                "description": "When they were added, ms epoch.",
+                "type": "number"
+              },
+              "options": {
+                "description": "The options added, each named as its column.",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "at",
+              "options"
+            ]
+          },
           "githubStatusesRefused": {
             "description": "GitHub: why the Project has no Status option yet for a stage that lacks\none, in GitHub's words (it refused adding them); null when nothing\nstopped them. Every other stage's Status syncs either way, and Sync now\nasks again.",
             "type": "string"

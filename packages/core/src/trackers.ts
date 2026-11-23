@@ -67,6 +67,21 @@ export interface GithubStatusStages {
   stages: string[];
 }
 
+/**
+ * The Status options the hub last added to one GitHub Project (hub
+ * tracker.ts), each named as a board column the Project had no option for.
+ * Kept on the binding and read beside it, so the person finds it where the
+ * board's link is.
+ */
+export interface GithubStatusesAdded {
+  /** When they were added, ms epoch. */
+  at: number;
+  /** The options added, each named as its column. */
+  options: string[];
+  /** The Project's node id: another Project shows none. */
+  projectId: string;
+}
+
 /** A GitHub Project a connection reaches, offered in the binding's form. */
 export interface GithubProjectChoice {
   fieldId: string | null;
@@ -115,6 +130,11 @@ interface TrackerBindingView {
    * nothing stops them. Issues sync either way.
    */
   githubProjectReason: string | null;
+  /**
+   * GitHub: the Status options the hub last added to the Project, and when;
+   * null when it has added none to this one.
+   */
+  githubStatusesAdded: Pick<GithubStatusesAdded, "at" | "options"> | null;
   /**
    * GitHub: why the Project has no Status option yet for a stage that lacks
    * one, in GitHub's words (it refused adding them); null when nothing
