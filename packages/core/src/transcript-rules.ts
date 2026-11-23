@@ -654,27 +654,9 @@ export function contextLineOf(content: string): ContextLine | null {
   return line.success ? line.data : null;
 }
 
-/** What a project note's line carries: its title, and what its event offers to act on. */
+/** What a project note's line carries: its title. */
 function noteMetadata(note: ProjectNote): BlockMetadata {
-  const { event } = note;
-  return {
-    noteTitle: note.title,
-    noteKind: CAW_EVENT_NOTE,
-    ...(event.kind === "routine-made"
-      ? {
-          routineMade: {
-            expiresAt: event.expiresAt,
-            routineId: event.routineId,
-          },
-        }
-      : {}),
-    ...(event.kind === "design-offer"
-      ? { designOffer: { projectId: event.projectId } }
-      : {}),
-    ...(event.kind === "repo" && event.lfsOffer
-      ? { lfsOffer: { id: event.lfsOffer } }
-      : {}),
-  };
+  return { noteTitle: note.title, noteKind: CAW_EVENT_NOTE };
 }
 
 function systemLine(
@@ -1112,7 +1094,7 @@ export function mapFrame(
           );
           break;
         }
-        // A project note (hub caw.ts `notice`): its title, its body under it,
+        // A project note (hub caw.ts `noteOwnAct`): its title, its body under it,
         // and what its event offers to act on.
         case PROJECT_NOTE: {
           const note = projectNoteOf(sdk.content ?? "");

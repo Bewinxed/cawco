@@ -1,8 +1,8 @@
 /**
- * Caw's two offers in a conversation (Projects §2 "Caw suggests, you
- * escalate", §5.7 design systems): "make this a project" over a plain
- * session's composer, and Build / Not now under Caw's note asking whether
- * to build a design system, for the dashboard and the native app alike.
+ * Two offers (Projects §2 "Caw suggests, you escalate", §5.7 design
+ * systems): "make this a project" over a plain session's composer, and the
+ * design-system offer's row in Needs you with Build / Not now, for the
+ * dashboard and the native app alike.
  *
  * `bun run words` writes these into the app as `Words.Offers`
  * (CawCoCore/Words.generated.swift), and `words:check` fails the typecheck
@@ -25,7 +25,13 @@ export const offerWords = {
   createProject: "Create project",
   makingProject: "Making project…",
 
-  // ── The design-system offer under Caw's note (transcript/DesignOfferActions.svelte) ──
+  // ── The design-system offer in Needs you (home/NeedsCard.svelte) ──
+  designTitle: "Design system",
+  /** Its line: what it asks, with what a build would read listed ("a, b and c"), or nothing. */
+  designLine: (from: string) =>
+    from.length > 0
+      ? `This work needs a design system. Build one from ${from}?`
+      : "This work needs a design system. Build one?",
   build: "Build",
   filing: "Filing…",
   notNowPending: "Not now…",

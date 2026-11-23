@@ -103,11 +103,6 @@ export interface BlockMetadata {
   /** The delegate's brief headline, carried beside {@link delegateInstanceId}. */
   delegateTitle?: string;
   /**
-   * A project note of Caw asking whether to build a design system: the
-   * project it is for, whose Build and Not now the note draws under it.
-   */
-  designOffer?: { projectId: string };
-  /**
    * A failure card's heading (`ui.error`, `ui.session_error`); a missing
    * session's when unset on a session error, "Turn failed" otherwise.
    */
@@ -125,12 +120,6 @@ export interface BlockMetadata {
   /** A stored transcript can name an image it no longer carries, hence the optional src. */
   images?: Array<{ mediaType: string; src?: string }>;
   isRedactedThinking?: boolean;
-  /**
-   * A project note that a folder was made a repository with files left out
-   * for their size: the offer of Git LFS for them (ProjectNoteEvent `repo`'s
-   * `lfsOffer`), whose Track with LFS and Not now the note draws under it.
-   */
-  lfsOffer?: { id: string };
   model?: string;
   /** Harness-injected user-role content (task notifications, reminders, compaction). */
   noteKind?: string;
@@ -167,11 +156,6 @@ export interface BlockMetadata {
    */
   resultRecord?: string;
   resultSubtype?: string;
-  /**
-   * A project note that a session made a routine (ProjectNoteEvent
-   * `routine-made`): the note draws Keep, Turn off and Open beside it.
-   */
-  routineMade?: { expiresAt: number | null; routineId: string };
   /** A `user.rule`'s rule name, read off its `[Rule: <name>]` marker line. */
   ruleName?: string;
   /** Why a send did not go: its record's reason. */

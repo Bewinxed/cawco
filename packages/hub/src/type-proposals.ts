@@ -95,7 +95,7 @@ const editsAnswered = (input: unknown): unknown =>
     ? input.edits
     : undefined;
 
-/** Your answer to a proposal for `paths`, as its note in the project's conversation: `sha` is your commit, null when you declined; it links the first file. */
+/** Your answer to a proposal for `paths`, as its line in the proposer's chat with Caw: `sha` is your commit, null when you declined; it links the first file. */
 const answeredNote = (
   paths: string[],
   sha: string | null,
@@ -122,8 +122,15 @@ export interface TypeProposalsDeps {
   readonly db: Pick<DbShape, "listProjects" | "project">;
   /** The project's folder changed under its tasks (a commit landed). */
   readonly folderChanged: (projectId: string) => void;
-  /** A note to the person in the project's conversation (caw.ts `notice`); wakes no model. */
-  readonly notice: (projectId: string, note: ProjectNote) => void;
+  /**
+   * The person's answer as a line in the proposer's chat with Caw, when the
+   * proposer is the project's Caw conversation (caw.ts `noteOwnAct`); any
+   * other session hears it as its ask's answer alone. Wakes no model.
+   */
+  readonly noteOwnAct: (
+    actor: Pick<InstanceRow, "id" | "projectId">,
+    note: ProjectNote
+  ) => void;
   /** Parks an ask for the person: the pending ledger, every dashboard, push. */
   readonly park: (envelope: ArrivingAsk) => void;
   /**
@@ -143,7 +150,7 @@ export interface TypeProposalsDeps {
 export const createTypeProposals = ({
   db,
   folderChanged,
-  notice,
+  noteOwnAct,
   park,
   settle,
   tell,
@@ -505,7 +512,7 @@ export const createTypeProposals = ({
     folderChanged(proposal.projectId);
   };
 
-  /** The person's answer to the open proposal `requestId`, carried out; the project's conversation keeps it as a note. */
+  /** The person's answer to the open proposal `requestId`, carried out; the proposer's chat with Caw keeps it as a line when it is Caw's. */
   const answerOpen = async (
     projectId: string,
     requestId: string,
@@ -530,8 +537,8 @@ export const createTypeProposals = ({
           return rejected;
         }
       }
-      notice(
-        projectId,
+      noteOwnAct(
+        { id: proposal.session, projectId },
         answeredNote(
           proposal.files.map((file) => file.path),
           sha,

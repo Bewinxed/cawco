@@ -520,7 +520,7 @@ import { createLaunchAccounts } from "./launch-accounts";
 import { createLaunches } from "./launches";
 import { createLawTasks } from "./law-tasks";
 import { createLaws } from "./laws";
-import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
+import { createLfsOffers } from "./lfs-offers";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import {
   contextSize,
@@ -574,6 +574,7 @@ import {
   createNotifications,
   notificationRoutes,
 } from "./notifications";
+import { createOffersWaiting, offersWaitingRoutes } from "./offers-waiting";
 import { createOpenItems } from "./open-items";
 import { watchPairingRequests } from "./pairing-requests";
 import { createPasskeyRelay } from "./passkey-relay";
@@ -1426,6 +1427,7 @@ export const createServer = (
     cacheWarm: () => cacheWarm,
     callAgent: () => callAgent,
     caw: () => caw,
+    offersWaiting: () => offersWaiting,
     checkSources: () => checkSources,
     coldReading: () => coldReading,
     coldWork: () => coldWork,
@@ -3156,18 +3158,6 @@ export const createServer = (
   // settlement, answer and process-end paths above it reach it through this.
   const leadPort = portOf<Caw | undefined>("lead", undefined);
   const triggersPort = portOf<Triggers | undefined>("triggers", undefined);
-  /** A note of the hub's to the person about a project, kept with its conversation (caw.ts `notice`); one for a project the hub does not keep is said in the log. */
-  const noticeProject = (
-    projectId: string,
-    note: Parameters<Caw["notice"]>[1]
-  ): void => {
-    const unnoted = leadPort.now()?.notice(projectId, note);
-    if (unnoted) {
-      console.warn(
-        `[caw] ${projectId}: a note was not kept: ${unnoted.response.detail}`
-      );
-    }
-  };
   // Caw's own project settings (project-settings.ts), made with connections.
   const projectSettingsPort = portOf<ProjectSettings | undefined>(
     "projectSettings",
@@ -8418,12 +8408,21 @@ export const createServer = (
     kind: "hub",
     why: "its work item is over, or its workspace was closed",
   };
-  // A plain folder made a git repository when it is first needed as one.
-  // Its note reaches Caw, made further down; nothing needs it before the hub is up.
+  // The hub's offers waiting on the person (offers-waiting.ts): Needs you
+  // lists them, never the project's Caw chat. A design offer's sources are
+  // read from design-offers.ts, made further down, once one is listed.
+  const offersWaiting = createOffersWaiting({
+    broadcast: (frame) =>
+      registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
+    db,
+    sources: (projectId) => designOffers.sources(projectId),
+  });
+  // A plain folder made a git repository when it is first needed as one,
+  // its large files left out offered to Git LFS in Needs you.
   const placeRepos = createPlaceRepos({
     call: callMachine,
     db,
-    notice: noticeProject,
+    offersChanged: offersWaiting.changed,
   });
   /**
    * A stage frame of machine `machineId` kept, a place's sheet stage's or
@@ -9285,8 +9284,9 @@ export const createServer = (
   const typeProposals = createTypeProposals({
     db,
     folderChanged: (projectId) => tasks.touched(projectId),
-    // The conversation's notes are made further down; read once a call runs.
-    notice: noticeProject,
+    // The proposer's chat with Caw keeps the person's answer as a line in
+    // it (caw.ts `noteOwnAct`), made further down; read once a call runs.
+    noteOwnAct: (actor, note) => leadPort.now()?.noteOwnAct(actor, note),
     park: (envelope) => parkForPerson(envelope),
     settle: settleParked,
     tell: (instanceId, text, line) => tellProposer(instanceId, text, line),
@@ -10112,7 +10112,7 @@ export const createServer = (
     call: callMachine,
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
-    notice: noticeProject,
+    offersChanged: offersWaiting.changed,
     // Called on a person's answer, long after both are made.
     declined: (projectId) => projectStarters.designDeclined(projectId),
   });
@@ -10155,12 +10155,12 @@ export const createServer = (
         };
   };
   // Git LFS offered for the large files a place's first commit left out,
-  // under that note (lfs-offers.ts): tracked on the place's machine once the
+  // in Needs you (lfs-offers.ts): tracked on the place's machine once the
   // person says so.
   const lfsOffers = createLfsOffers({
     call: callMachine,
     db,
-    notice: noticeProject,
+    offersChanged: offersWaiting.changed,
   });
   // A project's starters, written for it by Jev from what it holds now, on
   // its changes (project-starters.ts): a task filed or moved here; its
@@ -10302,7 +10302,6 @@ export const createServer = (
     index: db.taskIndex,
     kept: db.taskWaitFlags,
     lifetime,
-    notice: noticeProject,
     push,
     tasks,
   });
@@ -10776,7 +10775,6 @@ export const createServer = (
     runOnHost: (machineId, cmd, timeoutMs, how) =>
       runOnMachine(machineId, "/", cmd, timeoutMs, undefined, how),
     machines: () => db.machineFacts(),
-    caw,
     // A routine moved (paused, held, on again): its project's waits are read again.
     waitsMoved: (projectId) => {
       detach(
@@ -11184,14 +11182,7 @@ export const createServer = (
     // other session hears its own outcome as its call's or ask's answer,
     // and the change shows in Settings (the owner's "Where triggers go",
     // 2026-11-23: nothing a session of its own does goes in that chat).
-    note: (actor, note) => {
-      if (
-        actor.projectId &&
-        db.project(actor.projectId)?.conversationInstanceId === actor.id
-      ) {
-        noticeProject(actor.projectId, note);
-      }
-    },
+    note: (actor, note) => leadPort.now()?.noteOwnAct(actor, note),
     writeStartingSet: writeProjectStartingSet,
   });
   projectSettingsPort.fill(settings);
@@ -14134,7 +14125,7 @@ export const createServer = (
         appleDiagnosticsRoutes(),
         projectOfferRoutes(projectOffers, YOU_ACTOR),
         designOfferRoutes(designOffers, YOU_ACTOR),
-        lfsOfferRoutes(lfsOffers),
+        offersWaitingRoutes(offersWaiting, lfsOffers),
         starterRoutes(projectStarters),
         planRoutes(plans),
         planChangeRoutes(changesOfPlans),

@@ -1830,8 +1830,7 @@ export const createWorkItems = ({
 
   /**
    * The Caw an item's report must not wake: its project's, while he is off
-   * and the item is not yours (its origin `event`, or `kept`, whose end is
-   * noted in the project's conversation instead, caw.ts `notice`); null otherwise.
+   * and the item is not yours (its origin `event`, or `kept`); null otherwise.
    */
   const cawOff = (item: WorkItemRow): string | null => {
     const led = item.projectId ? db.project(item.projectId) : undefined;
@@ -1845,9 +1844,9 @@ export const createWorkItems = ({
    * delegated work's do (a work item). A session another session started with `start_session`
    * nests under it and reports to no one, its asks the person's. A
    * routine's run has no parent row: routines.ts reads how it ended and
-   * sends its report to the project's conversation itself (`surfaceRun`),
-   * so a run that answers NO_REPLY wakes no model, the conversation's
-   * included.
+   * routes its result as a trigger on the routine (triggers.ts) or says it
+   * on the routine's thread, so a run that answers NO_REPLY wakes no model
+   * and nothing reaches the project's Caw chat.
    */
   const reportsBack = (
     row: Pick<InstanceRow, "parentInstanceId" | "workItemId">

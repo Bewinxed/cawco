@@ -24,6 +24,7 @@ import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
 import type { PairingRequest, WaitingMachine } from "@cawco/core/hub-auth";
 import type { Install } from "@cawco/core/install";
 import { machineLabel } from "@cawco/core/machine-names";
+import type { WaitingOffer } from "@cawco/core/project-conversation";
 import {
   projectAt as projectHolding,
   topsIn,
@@ -32,7 +33,9 @@ import { questionsOf } from "@cawco/core/question";
 import type { RelayJourneyView } from "@cawco/core/stream-relay";
 import type { TailnetHttps } from "@cawco/core/tailnet-https";
 import { contactWords, MACHINE_LOST_MS } from "@cawco/core/words/contact";
+import { lfsWords } from "@cawco/core/words/lfs";
 import { mcpWords } from "@cawco/core/words/mcp";
+import { offerWords } from "@cawco/core/words/offers";
 import { presenceWords } from "@cawco/core/words/presence";
 import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
 import { tailnetWords } from "@cawco/core/words/tailnet";
@@ -429,6 +432,25 @@ interface WatchItem {
 }
 
 /**
+ * An offer of the hub's waiting on your answer (core `WaitingOffer`): Build
+ * or Not now on a project's design system, Track with LFS or Not now on a
+ * made repository's large files, Dismiss on an LFS server the project never
+ * declared. It leaves once answered. It opens where it is about: the task
+ * that raised the design offer, the project, or its settings.
+ */
+interface OfferItem {
+  href: string;
+  key: string;
+  kind: "offer";
+  offer: WaitingOffer;
+  place: string;
+  /** Its project, named and marked as the rail marks it. */
+  project: ProjectMarking | null;
+  raisedAt: number;
+  title: string;
+}
+
+/**
  * HTTPS on the hub machine's tailnet name, while a step of the person's
  * stands in its way (core tailnet-https.ts): the first such step, said in
  * one line with its one button. The hub checks again on its own; once the
@@ -636,6 +658,7 @@ export type NeedsItem =
   | CapItem
   | ActionItem
   | WatchItem
+  | OfferItem
   | TailnetItem
   | DeskItem
   | RelayItem
@@ -644,6 +667,35 @@ export type NeedsItem =
   | InstallItem
   | LostMachineItem
   | TaskItem;
+
+/** An offer's row key, title and where it opens: the task that raised a design offer, the project, or its settings. */
+const offerFacts = (
+  offer: WaitingOffer
+): { href: string; key: string; title: string } => {
+  const at = `/project/${encodeURIComponent(offer.projectId)}`;
+  switch (offer.kind) {
+    case "design":
+      return {
+        href: `${at}?task=${encodeURIComponent(offer.taskId)}`,
+        key: `offer:design:${offer.projectId}`,
+        title: offerWords.designTitle,
+      };
+    case "lfs":
+      return {
+        href: at,
+        key: `offer:lfs:${offer.id}`,
+        title: lfsWords.offerTitle(
+          offer.root.split("/").filter(Boolean).at(-1) ?? offer.root
+        ),
+      };
+    case "lfs-refused":
+      return {
+        href: `${at}?view=settings`,
+        key: `offer:lfs-refused:${offer.projectId}:${offer.endpoint}`,
+        title: lfsWords.refusedTitle,
+      };
+  }
+};
 
 /**
  * Where an ask opens, its card's and a wide screen's landing alike: the
@@ -1199,6 +1251,21 @@ class Home {
         raisedAt: notice.at,
       };
     });
+    const offered: NeedsItem[] = needsStore.offers.map((offer) => {
+      const project = projectsStore.projects.find(
+        (one) => one.id === offer.projectId
+      );
+      return {
+        kind: "offer",
+        offer,
+        ...offerFacts(offer),
+        place: project?.name ?? "",
+        project: project
+          ? { name: project.name, hue: markHue(folderOf(project)) }
+          : null,
+        raisedAt: offer.offeredAt,
+      };
+    });
     // HTTPS on the tailnet name: its step while one stands, its tick a moment after.
     const tailnet = tailnetStore.tailnetHttps;
     const secured: NeedsItem[] =
@@ -1396,6 +1463,7 @@ class Home {
       ...caps,
       ...actions,
       ...watched,
+      ...offered,
       ...secured,
       ...desk,
       ...relaying,

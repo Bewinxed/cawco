@@ -2161,7 +2161,7 @@ export const createPush = ({
 
     /**
      * A session made a routine (routines.ts `announce`): you hear of it once,
-     * beside its note in the project's conversation, opening its task. Its
+     * beside its line on the routine's thread, opening its task. Its
      * name and what it said are the agent's words, so they go sealed; the
      * visible words are "Routine" and "New routine".
      */

@@ -27,9 +27,6 @@
    * nor a tool call lands here.
    */
   import type { Message } from "../types";
-  import DesignOfferActions from "./DesignOfferActions.svelte";
-  import LfsOfferActions from "./LfsOfferActions.svelte";
-  import RoutineMadeActions from "./RoutineMadeActions.svelte";
   import type { HarnessNote } from "./rows";
 
   let {
@@ -95,16 +92,6 @@
    * and when it happened is said in the reader's own time.
    */
   const wokeCaw = $derived(message?.metadata?.noteKind === CAW_EVENT);
-  /** A session made a routine: Keep, Turn off and Open under its line. */
-  const routineMade = $derived(
-    wokeCaw ? message?.metadata?.routineMade : undefined
-  );
-  /** Caw asking whether to build a design system: Build and Not now under its line. */
-  const designOffer = $derived(
-    wokeCaw ? message?.metadata?.designOffer : undefined
-  );
-  /** A folder made a repository with large files left out: Git LFS offered for them under its line. */
-  const lfsOffer = $derived(wokeCaw ? message?.metadata?.lfsOffer : undefined);
   /**
    * The line a session moved to its machine opens on (core `MOVED_HERE`):
    * what moved, with the done glyph, and what stayed under it, open. It is
@@ -217,19 +204,6 @@
     class="inline-flex flex-none data-open:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out"
     data-box><IconChevronRight class="size-icon-sm" /></span
   >
-{/snippet}
-
-<!-- What a note offers to do next: keep a routine, a design, LFS. -->
-{#snippet offerActions()}
-  {#if routineMade}
-    <RoutineMadeActions routine={routineMade} />
-  {/if}
-  {#if designOffer}
-    <DesignOfferActions offer={designOffer} />
-  {/if}
-  {#if lfsOffer}
-    <LfsOfferActions offer={lfsOffer} />
-  {/if}
 {/snippet}
 
 <!-- Every line here is a rail row (app.css `rail-row`): its mark in the
@@ -477,7 +451,6 @@
         {/if}
       </Collapsible.Content>
     </Collapsible.Root>
-    {@render offerActions()}
   </div>
 {:else}
   <!-- Nothing to open, so nothing that looks openable — the same dead-disclosure
@@ -490,6 +463,5 @@
     <span class="inline-flex max-w-full rail-line">
       {@render foldHead()}
     </span>
-    {@render offerActions()}
   </div>
 {/if}

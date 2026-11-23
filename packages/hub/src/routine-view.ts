@@ -7,7 +7,7 @@
 import type { OfferedMode } from "@cawco/core/harness/modes";
 import type { LandsMode } from "@cawco/core/injected";
 import type {
-  RoutineMadeEvent,
+  RoutineMadeBy,
   RoutineSchedule,
 } from "@cawco/core/project-conversation";
 import type {
@@ -23,7 +23,7 @@ import type { WorkBudget } from "./db/stored-types";
  * it, and how its notice names that session.
  */
 interface RoutineMadeIn {
-  by: RoutineMadeEvent["by"];
+  by: RoutineMadeBy;
   instanceId: string;
 }
 

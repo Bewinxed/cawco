@@ -278,35 +278,9 @@ export const nameConversation = async (
   return view;
 };
 
-/**
- * What a routine's notice reads of it (hub routines.ts `RoutineView`): kept
- * or not, on or off.
- */
-export interface RoutineState {
-  enabled: boolean;
-  id: string;
-  keep: boolean;
-  /** Null for a fleet routine. */
-  projectId: string | null;
-}
-
-/** A routine as it stands now. */
-export const readRoutine = (routineId: string) =>
-  hubData(hub.api.routines({ id: routineId }).get(), refusedOrUnreached);
-
 /** The fleet's connections, never their keys (`GET /api/connections`). */
 export const readConnections = async (client: HubClient = hub) =>
   (await hubData(client.api.connections.get(), refusedOrUnreached)).connections;
-
-/** Keeps a routine past its 7 days, or turns it off: the routine as it stands after. */
-export const changeRoutine = (
-  routineId: string,
-  change: { enabled?: boolean; keep?: boolean }
-) =>
-  hubData(
-    hub.api.routines({ id: routineId }).patch(change),
-    refusedOrUnreached
-  );
 
 /** "Ask Caw for a view": your words to the project's conversation, which drafts it; the session they went to. */
 export const requestView = (projectId: string, text: string) =>

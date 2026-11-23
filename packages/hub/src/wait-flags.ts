@@ -3,8 +3,9 @@
  * once: a pull request closed unmerged, or an Actions run gone red
  * (task-waits.ts `GITHUB_FLAG`). The task reads blocked on the board either
  * way; this is the one time it reaches the person, as a condition stopped
- * unmet does (routines.ts `stopCheck`): a note in the project's conversation
- * and a push that opens the task.
+ * unmet does (routines.ts `stopCheck`): a comment on the task as the hub,
+ * which wakes no one, and a push that opens the task. Never a line in the
+ * project's Caw chat.
  *
  * - **When.** A second after any change to a project's tasks (tasks.ts
  *   `listen`), which every move of a pull request or run waited on is
@@ -23,8 +24,8 @@
  *   comes back as it was.
  */
 
+import { detach } from "@cawco/core/detach";
 import { isOneOf } from "@cawco/core/one-of";
-import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { TaskSummary } from "@cawco/core/task-views";
 import { CLOSED_STAGE_KINDS } from "@cawco/core/views";
 import { waitTarget } from "@cawco/core/wait-targets";
@@ -35,7 +36,7 @@ import type { TaskWaitFlagsDb, TaskWaitKey } from "./db/task-wait-flags";
 import type { HubLifetimeShape } from "./lifetime";
 import { createProjectLooks } from "./project-looks";
 import type { Push } from "./push";
-import type { TaskEvent, Tasks } from "./tasks";
+import { hubActor, type TaskEvent, type Tasks } from "./tasks";
 
 /** A change's look waits this long, so a burst of changes looks once. */
 const SETTLE_MS = 1000;
@@ -49,10 +50,8 @@ export interface WaitFlagsDeps {
   /** The waits told, kept. */
   readonly kept: TaskWaitFlagsDb;
   readonly lifetime: HubLifetimeShape;
-  /** A note in the project's conversation, waking nobody (caw.ts `notice`). */
-  readonly notice: (projectId: string, note: ProjectNote) => void;
   readonly push: Pick<Push, "waitFlagged">;
-  readonly tasks: Pick<Tasks, "list">;
+  readonly tasks: Pick<Tasks, "comment" | "list">;
 }
 
 const keyOf = ({ taskId, target }: TaskWaitKey): string =>
@@ -68,7 +67,6 @@ export const createWaitFlags = ({
   index,
   kept,
   lifetime,
-  notice,
   push,
   tasks,
 }: WaitFlagsDeps) => {
@@ -83,18 +81,23 @@ export const createWaitFlags = ({
       kind === "pr"
         ? taskLinkWords.closedUnmergedNote(wait.label, task.title)
         : taskLinkWords.runFailedNote(wait.label, task.title);
-    notice(projectId, {
-      title,
-      body: taskLinkWords.blockedNoteBody(kind),
-      event: {
-        kind: "wait",
-        label: wait.label,
-        state: wait.state,
-        target: wait.target,
-        taskId: task.id,
-        title: task.title,
-      },
-    });
+    detach(
+      tasks
+        .comment(
+          projectId,
+          task.id,
+          `**${title}**\n\n${taskLinkWords.blockedNoteBody(kind)}`,
+          hubActor(`its wait on ${wait.target} is ${wait.state}`)
+        )
+        .then((said) => {
+          if (said instanceof ElysiaStatus) {
+            console.warn(
+              `[wait flags] ${projectId} ${task.id}: not said on the task: ${said.response.detail}`
+            );
+          }
+        }),
+      "wait flags"
+    );
     const key = { taskId: task.id, target: wait.target };
     push.waitFlagged({
       line: title,

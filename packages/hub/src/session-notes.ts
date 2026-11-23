@@ -227,7 +227,7 @@ export const createSessionNotes = (ctx: SessionNotesContext) => {
    * `FLEET_WATCH`): kept on its row and folded into what its screens show
    * now. Never sent to its process.
    */
-  /** A project note placed in its conversation's transcript as it lands (caw.ts `notice`). */
+  /** A project note placed in its conversation's transcript as it lands (caw.ts `noteOwnAct`). */
   const noteProject = (
     instanceId: string,
     kept: { at: number; id: string; note: ProjectNote }

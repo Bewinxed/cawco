@@ -38,7 +38,9 @@
  *   FAILED: <why>` fails it, retried once at once (attempt 2); a second
  *   failure stands in Needs you; anything else is delivered. A delegate
  *   run's delivered result is a trigger on the routine (triggers.ts); the curator's and
- *   the trim's are notes.
+ *   the trim's are lines on the routine's thread (its task's comments), as
+ *   every failure, ask, stop and the routine's making are. None of it is a
+ *   line in the project's Caw chat.
  * - **Stopping** (2026-11-22). Every run answers in its `task_result`: keep
  *   it going (the default), stop it (its stop condition holds: its task
  *   moves to the first done stage with the run's evidence), or ask you (it
@@ -76,8 +78,7 @@ import { runsCommandsUnasked } from "@cawco/core/harness/traits";
 import type { LandsMode } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
 import type {
-  ProjectNoteEvent,
-  RoutineMadeEvent,
+  RoutineMadeBy,
   RoutineSchedule,
 } from "@cawco/core/project-conversation";
 import type { InstanceRow } from "@cawco/core/protocol";
@@ -105,7 +106,7 @@ import { routineToolWords } from "@cawco/core/words/routines";
 import cronstrue from "cronstrue";
 import { Cron, DateTime } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
-import { type Caw, isProjectConversation } from "./caw";
+import { isProjectConversation } from "./caw";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
@@ -190,8 +191,16 @@ const PLACE_WAIT_MS = 60_000;
 const PLACE_POLL_MS = 1000;
 /** Runs a routine's read carries, and a page of `/api/routines/:id/runs` holds: the newest; its `runsTotal` says how many it has had. */
 const RUNS_SHOWN = 20;
-/** The longest delivered output a project note carries. */
+/** The longest delivered output its line on the routine's thread carries. */
 const NOTE_MAX = 4000;
+
+/**
+ * A run's words as a task comment takes them: its headings set below a
+ * comment entry's own (tasks.ts refuses `#`, `##` and `###` inside one).
+ */
+const threadBody = (text: string): string =>
+  text.replace(/^#{1,3}(?=\s)/gmu, "####");
+
 /** A conversation run's skip while Caw is off: a routine is Caw acting on his own (Caw on / Caw off). */
 const CAW_OFF = "Caw is off, so only your words wake him";
 /** Slots in a row whose last attempt failed before the hub turns a routine off. */
@@ -279,8 +288,6 @@ export interface RoutineDeps {
   ) => Promise<string | undefined>;
   /** Routines made before routines were tasks, their tasks filed (routine-carry.ts). */
   readonly carry: Pick<CarryRoutines, "carry" | "due">;
-  /** A routine's notes in the project's conversation (caw.ts), waking nobody. */
-  readonly caw: Pick<Caw, "notice">;
   readonly db: Pick<
     DbShape,
     | "ingress"
@@ -474,7 +481,8 @@ const clipReason = (words: string): string => {
 /**
  * Whether a run's delivered result is a trigger on its routine
  * (triggers.ts): a delegate's and an orchestrator's. A conversation run's
- * result is its own session's; the curator's and the trim's are notes.
+ * result is its own session's; the curator's and the trim's are said on
+ * its thread.
  */
 const reportsToLead = (routine: Pick<RoutineRow, "target">): boolean =>
   routine.target === "delegate" || routine.target === "orchestrator";
@@ -573,7 +581,6 @@ export const createRoutines = ({
   anyOnline,
   askPerson,
   carry,
-  caw,
   toRouter,
   db,
   dispatch,
@@ -749,16 +756,47 @@ export const createRoutines = ({
       : "(The event that started this run is no longer kept.)";
   };
 
-  /** A run's note's line, by what it says of the run. */
-  const NOTE_WHAT: Record<
-    Exclude<Extract<ProjectNoteEvent, { kind: "routine" }>["phase"], "started">,
-    string
-  > = {
+  /** A run's line's ending, by what it says of the run. */
+  const NOTE_WHAT = {
     delivered: "",
     failed: " failed twice · needs you",
+  } as const;
+
+  /**
+   * Says `title`, and `body` under it, on the routine's own thread: a
+   * comment on its task as the hub, which wakes no one (the owner's "Where
+   * triggers go": nothing the hub writes about a routine goes in the
+   * project's Caw chat). A routine with no task yet is said in the log.
+   */
+  const onThread = (
+    routine: RoutineRow,
+    reason: string,
+    title: string,
+    body?: string
+  ): void => {
+    const { projectId, taskId } = routine;
+    if (!taskId) {
+      console.warn(
+        `[routines] ${routine.name} has no task to say this on: ${title}`
+      );
+      return;
+    }
+    const text = body ? `**${title}**\n\n${threadBody(body)}` : `**${title}**`;
+    detach(
+      tasks()
+        .comment(projectId, taskId, text, hubActor(reason))
+        .then((written) => {
+          if (written instanceof ElysiaStatus) {
+            console.warn(
+              `[routines] ${routine.name}: ${title} was not said on its task: ${written.response.detail}`
+            );
+          }
+        }),
+      "routine thread"
+    );
   };
 
-  /** Notes a run in the project's conversation, waking no one; `title` in place of the routine's own line. */
+  /** Says a run on the routine's thread; `title` in place of the run's own line. */
   const note = (
     routine: RoutineRow,
     run: RoutineRunRow,
@@ -767,25 +805,12 @@ export const createRoutines = ({
     title?: string
   ): void => {
     const label = slotLabel(run.slot, zoneOf(routine));
-    const unnoted = caw.notice(routine.projectId, {
-      title: title ?? `Routine · ${routine.name}${NOTE_WHAT[phase]}`,
-      ...(body ? { body } : {}),
-      event: {
-        kind: "routine",
-        phase,
-        routineId: routine.id,
-        name: routine.name,
-        runId: run.id,
-        slot: run.slot,
-        slotLabel: label,
-        schedule: scheduleOf(routine),
-      },
-    });
-    if (unnoted) {
-      console.warn(
-        `[routines] ${routine.name} (${run.slot}) was not noted: ${unnoted.response.detail}`
-      );
-    }
+    onThread(
+      routine,
+      `its run ${run.id.slice(0, 8)} (${label})`,
+      title ?? `Run · ${label}${NOTE_WHAT[phase]}`,
+      body
+    );
   };
 
   /** A run skipped before anything started: why, kept on the run; the next waiting event's run goes. */
@@ -1096,8 +1121,8 @@ export const createRoutines = ({
   };
 
   /**
-   * A check that failed on some machines, told in the project's
-   * conversation so no failure is quiet. Beside a machine that woke the run
+   * A check that failed on some machines, told on the routine's thread so
+   * no failure is quiet. Beside a machine that woke the run
    * (`beside`), a machine failing {@link FAILING_SLOTS} slots in a row
    * holds the routine and turns it off, as three failing slots do.
    */
@@ -1464,8 +1489,8 @@ export const createRoutines = ({
   /**
    * A delivered result told: a project's delegate run's is a trigger on
    * the routine (triggers.ts); held while the project's triggers are off,
-   * and then also a note saying no session heard it yet. Any other's is a
-   * note.
+   * and then also a line on its thread saying no session heard it yet. Any
+   * other's is a line on its thread.
    */
   const delivered = (routine: RoutineRow, run: RoutineRunRow): void => {
     const output = run.output ?? "";
@@ -1532,8 +1557,7 @@ export const createRoutines = ({
   /**
    * A run said stop: its stop condition holds. The task moves to the
    * project's first done stage as the hub, the run's evidence its reason;
-   * what waits on it goes ahead, and one quiet line in the conversation
-   * says so.
+   * what waits on it goes ahead, and one line on its thread says so.
    */
   const stopped = (routine: RoutineRow, run: RoutineRunRow): void => {
     const { projectId, taskId } = routine;
@@ -1582,8 +1606,8 @@ export const createRoutines = ({
   /**
    * A run asked you: the routine stands in Needs you with its question, its
    * trigger held ({@link ASK_HOLDS}) until you answer (a comment on its
-   * task, a run by hand, turning it on), one line in the conversation and a
-   * push that opens the task.
+   * task, a run by hand, turning it on), one line on its thread and a push
+   * that opens the task.
    */
   const asks = (
     routine: RoutineRow,
@@ -2158,8 +2182,7 @@ export const createRoutines = ({
   >();
 
   /** Who made a routine, as its notice names them: a delegate, or another session. */
-  type MadeBy = RoutineMadeEvent["by"];
-  const madeByOf = (actor: InstanceRow): MadeBy =>
+  const madeByOf = (actor: InstanceRow): RoutineMadeBy =>
     actor.parentInstanceId || actor.workItemId ? "delegate" : "session";
 
   /** One paragraph of what a turn said: the last, clipped. */
@@ -2286,7 +2309,7 @@ export const createRoutines = ({
       : null;
   };
 
-  /** A session made `routine`, and you hear of it once: a note in the project's conversation and a push. */
+  /** A session made `routine`, and you hear of it once: a line on the routine's thread and a push. */
   const announce = (routine: RoutineRow): void => {
     const maker = routine.madeInInstance;
     const by = routine.madeBy;
@@ -2317,25 +2340,12 @@ export const createRoutines = ({
     ]
       .filter(Boolean)
       .join("\n\n");
-    const unnoted = caw.notice(routine.projectId, {
-      title: `${who} set up a routine: ${routine.name} · ${schedule.words}${next}`,
-      ...(body ? { body } : {}),
-      event: {
-        kind: "routine-made",
-        by,
-        expiresAt: ms(routine.expiresAt),
-        instanceId: maker,
-        name: routine.name,
-        routineId: routine.id,
-        schedule,
-        why: routine.madeWhy,
-      },
-    });
-    if (unnoted) {
-      console.warn(
-        `[routines] ${routine.name} was not noted as made: ${unnoted.response.detail}`
-      );
-    }
+    onThread(
+      routine,
+      "it was made",
+      `${who} set up this routine · ${schedule.words}${next}`,
+      body || undefined
+    );
     push.routineMade({
       line: [schedule.words, lasts].filter(Boolean).join(" · "),
       name: routine.name,
@@ -3245,28 +3255,14 @@ export const createRoutines = ({
     return updated;
   };
 
-  /** A session changed the command a check runs, unasked by its mode: a note with the command whole, and a push. */
+  /** A session changed the command a check runs, unasked by its mode: a line on the routine's thread with the command whole, and a push. */
   const commandChanged = (routine: RoutineRow, by: InstanceRow): void => {
-    const when = scheduleOf(routine);
-    const unnoted = caw.notice(routine.projectId, {
-      title: checkWords.changedNote(routine.name),
-      body: checkWords.changedBody(routine.command ?? ""),
-      event: {
-        kind: "routine-made",
-        by: madeByOf(by),
-        expiresAt: ms(routine.expiresAt),
-        instanceId: by.id,
-        name: routine.name,
-        routineId: routine.id,
-        schedule: when,
-        why: null,
-      },
-    });
-    if (unnoted) {
-      console.warn(
-        `[routines] ${routine.name}'s new command was not noted: ${unnoted.response.detail}`
-      );
-    }
+    onThread(
+      routine,
+      `${by.id.slice(0, 8)} changed its check`,
+      checkWords.changedNote(routine.name),
+      checkWords.changedBody(routine.command ?? "")
+    );
     push.routineMade({
       line: checkWords.changedNote(routine.name),
       name: routine.name,
@@ -3944,7 +3940,7 @@ const deadlineAt = (at: number | null | undefined): Date | null | undefined => {
 /**
  * The dashboard's routes for routines, thin over the task model until the
  * dashboard reads tasks (slice 6 of the merge): its Routines view, its
- * routine form, a routine made notice's Keep and Turn off, and the installed
+ * routine form and the installed
  * app's Routines pane read them. A routine is its task; `DELETE` ends it in
  * a dropped stage.
  */

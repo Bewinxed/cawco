@@ -4591,18 +4591,6 @@ const PreviewStartedShape = declared(
 export const PreviewStartedSchema = PreviewStartedShape;
 export type PreviewStartedOutput = z.output<typeof PreviewStartedShape>;
 
-const RoutineScheduleShape = declared(
-  z.object({
-    cron: z.string(),
-    nextAt: z.number().nullable(),
-    timeZone: z.string(),
-    words: z.string(),
-  }),
-  "RoutineSchedule",
-  "packages/core/src/project-conversation.ts"
-);
-export type RoutineScheduleOutput = z.output<typeof RoutineScheduleShape>;
-
 const WorkItemStateShape = declared(
   z.enum(WORK_ITEM_STATES),
   "WorkItemState",
@@ -4617,67 +4605,8 @@ const ItemEndShape = declared(
 );
 export type ItemEndOutput = z.output<typeof ItemEndShape>;
 
-const RoutineMadeByShape = declared(
-  z.enum(["delegate", "session"]),
-  "RoutineMadeBy",
-  "packages/core/src/project-conversation.ts"
-);
-export const RoutineMadeBySchema: z.ZodType<RoutineMadeByType> =
-  RoutineMadeByShape;
-export type RoutineMadeByOutput = z.output<typeof RoutineMadeByShape>;
-
-const RoutineMadeEventShape = declared(
-  z.object({
-    by: RoutineMadeByShape,
-    expiresAt: z.number().nullable(),
-    instanceId: z.string(),
-    name: z.string(),
-    routineId: z.string(),
-    schedule: RoutineScheduleShape,
-    why: z.string().nullable(),
-  }),
-  "RoutineMadeEvent",
-  "packages/core/src/project-conversation.ts"
-);
-export type RoutineMadeEventOutput = z.output<typeof RoutineMadeEventShape>;
-
-const RoutineMadeNoteShape = declared(
-  RoutineMadeEventShape.extend({ kind: z.literal("routine-made") }),
-  "RoutineMadeNote",
-  "packages/core/src/project-conversation.ts"
-);
-export type RoutineMadeNoteOutput = z.output<typeof RoutineMadeNoteShape>;
-
-const DesignOfferEventShape = declared(
-  z.object({
-    projectId: z.string(),
-    sources: z.array(z.string()),
-    taskId: z.string(),
-  }),
-  "DesignOfferEvent",
-  "packages/core/src/project-conversation.ts"
-);
-export type DesignOfferEventOutput = z.output<typeof DesignOfferEventShape>;
-
-const DesignOfferNoteShape = declared(
-  DesignOfferEventShape.extend({ kind: z.literal("design-offer") }),
-  "DesignOfferNote",
-  "packages/core/src/project-conversation.ts"
-);
-export type DesignOfferNoteOutput = z.output<typeof DesignOfferNoteShape>;
-
 const ProjectNoteEventShape = declared(
   z.union([
-    z.object({
-      kind: z.literal("routine"),
-      name: z.string(),
-      phase: z.enum(["started", "delivered", "failed"]),
-      routineId: z.string(),
-      runId: z.string(),
-      schedule: RoutineScheduleShape,
-      slot: z.string(),
-      slotLabel: z.string(),
-    }),
     z.object({
       instanceId: z.string(),
       kind: z.literal("attempt"),
@@ -4698,14 +4627,6 @@ const ProjectNoteEventShape = declared(
     z.object({
       kind: z.literal("task"),
       stage: z.string(),
-      taskId: z.string(),
-      title: z.string(),
-    }),
-    z.object({
-      kind: z.literal("wait"),
-      label: z.string(),
-      state: z.string(),
-      target: z.string(),
       taskId: z.string(),
       title: z.string(),
     }),
@@ -4737,16 +4658,6 @@ const ProjectNoteEventShape = declared(
       sha: z.string().nullable(),
       what: z.enum(["wrote", "approved", "declined"]),
     }),
-    z.object({
-      commit: z.string().nullable(),
-      kind: z.literal("repo"),
-      lfsOffer: z.string().optional(),
-      lfsRefused: z.string().optional(),
-      machineId: z.string(),
-      root: z.string(),
-    }),
-    RoutineMadeNoteShape,
-    DesignOfferNoteShape,
   ]),
   "ProjectNoteEvent",
   "packages/core/src/project-conversation.ts"
@@ -5085,6 +4996,15 @@ export const ReportedUsageBucketSchema = ReportedUsageBucketShape;
 export type ReportedUsageBucketOutput = z.output<
   typeof ReportedUsageBucketShape
 >;
+
+const RoutineMadeByShape = declared(
+  z.enum(["delegate", "session"]),
+  "RoutineMadeBy",
+  "packages/core/src/project-conversation.ts"
+);
+export const RoutineMadeBySchema: z.ZodType<RoutineMadeByType> =
+  RoutineMadeByShape;
+export type RoutineMadeByOutput = z.output<typeof RoutineMadeByShape>;
 
 const RuleMatchKindShape = declared(
   z.enum(["phrase", "regex", "meaning"]),

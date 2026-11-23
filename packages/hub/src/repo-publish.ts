@@ -7,8 +7,8 @@
  *
  * - **Read**, before the card: the checkout named (`folder`, the project's
  *   only one when left out) is made a git repository when it is a plain folder (place-repo.ts `ensure`: what is
- *   private, secret, large or generated stays out, and the project's
- *   conversation is told),
+ *   private, secret, large or generated stays out; the card says the
+ *   commit it made, and Needs you offers Git LFS for its large files),
  *   then its branch, commit, files and bytes, and every path the rules keep
  *   out, are read on its machine (CONTROL_PLACE_PUSH, a dry run), which
  *   refuses a place whose commits hold what the rules or the credential
@@ -229,6 +229,7 @@ export const createRepoPublish = ({
       private: asked.private ?? true,
       connection: connection.name,
       account: connection.account,
+      ...(made.state === "made" ? { madeCommit: made.commit } : {}),
       files: tree.files,
       bytes: tree.bytes,
       // What stays out by the rules, with what a first commit made now

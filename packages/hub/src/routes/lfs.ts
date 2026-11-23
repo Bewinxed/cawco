@@ -6,17 +6,16 @@ import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import { addressOf } from "../hub-auth";
 import type { HubContext } from "../hub-context";
-import { machineName } from "../machine-name";
 
 export const lfsRoutes = ({
-  caw,
   connections,
   db,
   hubAuth,
   lfsMachineProject,
+  offersWaiting,
 }: Pick<
   HubContext,
-  "caw" | "connections" | "db" | "hubAuth" | "lfsMachineProject"
+  "connections" | "db" | "hubAuth" | "lfsMachineProject" | "offersWaiting"
 >) =>
   new Elysia()
     // Where a project's large files live, for a machine that holds a place
@@ -58,8 +57,9 @@ export const lfsRoutes = ({
     )
     // A repository's `.lfsconfig` named an LFS endpoint that is neither its
     // origin's nor the project's declared one (agent host-lfs.ts): its
-    // large files stayed pointers. The project's conversation is told once per
-    // endpoint, ever (`lfs_refusals`), with how to declare it.
+    // large files stayed pointers. It stands in Needs you once per project
+    // and endpoint, ever (`lfs_refusals`, offers-waiting.ts), with how to
+    // declare it; never a line in the project's Caw chat.
     .post(
       "/api/lfs/projects/:id/refused",
       {
@@ -82,21 +82,17 @@ export const lfsRoutes = ({
             detail: project.refused,
           });
         }
-        if (!db.lfsOffers.refused(params.id, body.endpoint)) {
-          return { ok: true };
-        }
         const machineId = project.machineId ?? body.machineId;
-        const noted = caw.notice(params.id, {
-          title: "Large files left as pointers: an undeclared LFS server",
-          event: {
-            kind: "repo",
-            root: body.root,
+        if (
+          db.lfsOffers.refused({
+            projectId: params.id,
+            endpoint: body.endpoint,
             machineId,
-            commit: null,
-            lfsRefused: body.endpoint,
-          },
-          body: `The repository's \`.lfsconfig\` says its large files live at ${body.endpoint}, which is neither its origin's LFS nor where ${project.row.name} declared its large files live. CawCo fetches nothing from a server it was not told of, so in ${body.root} on ${machineName(db, machineId)} they are pointer files, not the files themselves.\n\nIf they belong there, declare it: Project details › Large files, set to ${body.endpoint} with the connection that signs in there. Workspaces cut after that fetch them.`,
-        });
-        return noted ?? { ok: true };
+            root: body.root,
+          })
+        ) {
+          offersWaiting.changed();
+        }
+        return { ok: true };
       }
     );

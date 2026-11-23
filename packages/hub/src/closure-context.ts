@@ -196,6 +196,7 @@ import type { MemoryRun } from "./memory-run";
 import type { createMoves } from "./moves";
 import type { createNoticesSeen } from "./notices";
 import type { createNotifications } from "./notifications";
+import type { OffersWaiting } from "./offers-waiting";
 import type { createOpenItems } from "./open-items";
 import type { createPasskeyRelay } from "./passkey-relay";
 import type { AnswerFrom, PendingShape } from "./pending";
@@ -924,6 +925,8 @@ export interface ClosureContext {
   ) => void;
   noticesSeen: ReturnType<typeof createNoticesSeen>;
   notifications: ReturnType<typeof createNotifications>;
+  /** The hub's offers waiting on the person, as Needs you lists them (offers-waiting.ts). */
+  offersWaiting: OffersWaiting;
   /** Whether a machine's agent is connected. */
   online: (machineId: string) => boolean;
   onlineMachines: () => string[];

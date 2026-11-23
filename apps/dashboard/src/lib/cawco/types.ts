@@ -35,7 +35,7 @@ export type SendRowState =
   "sending" | "unreached" | Exclude<SendState, "replaced">;
 
 /** A block's metadata, and what this tab's own rows carry beside it. */
-export interface MessageMetadata extends BlockMetadata {
+interface MessageMetadata extends BlockMetadata {
   /** A folded command line's command (SystemLine). */
   command?: string;
 }

@@ -25,9 +25,12 @@
  *   parent, whatever its size. Every other trigger (a comment, a task's
  *   move, a pin, a card, a routine's run or report, an inbound event) goes
  *   through the trigger router (triggers.ts) and never reaches it.
- * - **Notes**: what the hub says to the person about the project (a
- *   repository made, an offer to answer, a routine made) is a line in the
- *   conversation's transcript, waking nobody ({@link Caw.notice}).
+ * - **Notes of the chat's own acts**: the outcome of what the person's chat
+ *   with Caw did (a project made, a setting changed, a type proposal
+ *   answered, a view drafted) is a line in its transcript, waking nobody
+ *   ({@link Caw.noteOwnAct}). Nothing the hub writes about a project's
+ *   thing is: a routine's or task's lines go on its thread, an offer to
+ *   Needs you (offers-waiting.ts).
  * - **Views**: a session drafts a view with `view_draft` (views.ts), an
  *   OpenUI Lang program written to the prompt generated from CawCo's library
  *   (openui.ts `VIEW_PROMPT`, which `view_guide` answers; the project-view
@@ -1384,7 +1387,7 @@ export const createCaw = ({
     }
   };
 
-  /** {@link api.notice} for a project the hub keeps. */
+  /** A line in project `project`'s conversation's transcript, waking nobody: {@link api.noteOwnAct}'s, and a project made. */
   const noticeIn = (project: ProjectRow, note: ProjectNote): void => {
     const kept = db.projectNotes.add(
       project.id,
@@ -1447,18 +1450,24 @@ export const createCaw = ({
     },
 
     /**
-     * A note of the hub's to the person about the project (a repository
-     * made, an offer to answer, a routine made): kept with the project and
-     * drawn as a line in its conversation's transcript, waking nobody, on
-     * or off. A project with no conversation yet keeps it for the one that
-     * starts.
+     * The outcome of an act of the person's chat with Caw (a setting it
+     * changed, a type proposal it made answered): a line in that chat's
+     * transcript, waking nobody, written only when `actor` is the project's
+     * Caw conversation. Any other session hears its own outcome in its
+     * call's or ask's answer (the owner's "Where triggers go", 2026-11-23:
+     * nothing a session of its own does goes in that chat).
      */
-    notice(projectId: string, note: ProjectNote) {
-      const project = projectOf(projectId);
-      if (project instanceof ElysiaStatus) {
-        return project;
+    noteOwnAct(
+      actor: Pick<InstanceRow, "id" | "projectId">,
+      note: ProjectNote
+    ) {
+      if (!(actor.projectId && isProjectConversation(actor, db.project))) {
+        return;
       }
-      noticeIn(project, note);
+      const project = db.project(actor.projectId);
+      if (project) {
+        noticeIn(project, note);
+      }
     },
 
     /**
@@ -1909,7 +1918,7 @@ export const createCaw = ({
           if (drafted instanceof ElysiaStatus) {
             return drafted;
           }
-          noticeIn(calling.project, {
+          api.noteOwnAct(calling.actor, {
             title: `View · ${by} drafted “${drafted.view}”`,
             event: { kind: "view", name: drafted.view },
           });

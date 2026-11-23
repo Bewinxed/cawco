@@ -1,7 +1,9 @@
 /**
  * The offers a session's conversation carries: "make this a project" (read
  * on connect, then kept by `project_offer` frames), with the project an offer
- * answered here joined, and a project's design and large-files offers.
+ * answered here joined; and the answers to the hub's offers Needs you lists
+ * (a project's design system, Git LFS for a made repository's large files,
+ * an undeclared LFS server put away).
  */
 import type {
   ProjectOfferAccepted,
@@ -111,13 +113,6 @@ export function dismissProjectJoin(instanceId: string): void {
   delete offersState.projectJoins[instanceId];
 }
 
-/** Where a project's design-system offer stands (hub design-offers.ts). */
-export const readDesignOffer = (projectId: string) =>
-  hubData(
-    hub.api.projects({ id: projectId })["design-offer"].get(),
-    refusedOrUnreached
-  );
-
 /** Answers it: Build files the task, Not now records it; the offer as it stands after. */
 export const answerDesignOffer = (
   projectId: string,
@@ -130,10 +125,6 @@ export const answerDesignOffer = (
     refusedOrUnreached
   );
 
-/** Where an offer of Git LFS for a place's left-out large files stands (hub lfs-offers.ts). */
-export const readLfsOffer = (id: string) =>
-  hubData(hub.api["lfs-offers"]({ id }).get(), refusedOrUnreached);
-
 /** Answers it: Track commits the files through LFS, Not now records it; the offer as it stands after. */
 export const answerLfsOffer = (
   id: string,
@@ -143,6 +134,13 @@ export const answerLfsOffer = (
     answer === "track"
       ? hub.api["lfs-offers"]({ id }).track.post()
       : hub.api["lfs-offers"]({ id }).dismiss.post(),
+    refusedOrUnreached
+  );
+
+/** Puts an undeclared LFS server's refusal away from Needs you. */
+export const dismissLfsRefusal = (projectId: string, endpoint: string) =>
+  hubDone(
+    hub.api["lfs-refusals"].dismiss.post({ projectId, endpoint }),
     refusedOrUnreached
   );
 

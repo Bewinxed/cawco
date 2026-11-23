@@ -2194,6 +2194,13 @@ public enum Words {
 
         public static let makingProject = "Making project…"
 
+        public static let designTitle = "Design system"
+
+        /// Its line: what it asks, with what a build would read listed ("a, b and c"), or nothing.
+        public static func designLine(from: String) -> String {
+            from.count > 0 ? "This work needs a design system. Build one from \(from)?" : "This work needs a design system. Build one?"
+        }
+
         public static let build = "Build"
 
         public static let filing = "Filing…"

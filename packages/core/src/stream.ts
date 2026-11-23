@@ -516,12 +516,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    person does on a page whose session ended is a trigger on it (hub
  *    triggers.ts), never the session that delegated it. A page built for
  *    102 may read either, so it reloads first.
+ * 104: a project note's line carries no `routineMade`, `designOffer` or
+ *    `lfsOffer`: what the hub says of a routine or a task's wait is on that
+ *    thing's thread, and its offers stand in Needs you (hub
+ *    offers-waiting.ts, an `offers.waiting` frame). A page built for 103
+ *    draws those offers under the notes, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 103;
+export const WIRE_PROTOCOL = 104;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

@@ -144,6 +144,11 @@ const REWRITES: readonly Rewrite[] = [
     migration: "0476_board_statuses_on_the_tie",
     why: "the hub no longer notes Status options it added in the project's conversation: those notes are deleted, the options last added now kept on the binding and shown under its row in Settings",
   },
+  {
+    column: "project_notes.note",
+    migration: "0477_offers_in_needs_you",
+    why: "the hub no longer notes a routine, a task's wait, a design offer or a made repository in the project's conversation: those notes are deleted, the lines now on the routine's or task's comments and the offers in Needs you",
+  },
 ];
 
 type Schema = Record<string, unknown>;

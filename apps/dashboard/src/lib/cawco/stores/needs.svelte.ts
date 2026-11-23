@@ -1,6 +1,7 @@
 /**
  * What waits on the person beside the sessions' asks: approved actions,
- * fleet watch's notices, and the artifacts in Needs you and their notices.
+ * fleet watch's notices, the hub's offers (a design system, Git LFS, an
+ * undeclared LFS server), and the artifacts in Needs you and their notices.
  * Read on connect where the hub has a read, then kept whole by each one's
  * frame.
  */
@@ -10,6 +11,7 @@ import type {
   ArtifactNeedNotice,
 } from "@cawco/core/artifact-needs";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
+import type { WaitingOffer } from "@cawco/core/project-conversation";
 import { hub } from "#lib/platform/hub.js";
 import { hubData, hubDone } from "#lib/platform/hub-read.js";
 import { heardFrame, heardSince, readLeaves } from "../heard";
@@ -41,6 +43,13 @@ const needsState = $state<{
   watchNotices: FleetWatchNotice[];
 
   /**
+   * The hub's offers waiting on the person's answer (core `WaitingOffer`),
+   * oldest first: read as the dashboard connects, then kept whole by the
+   * hub's `offers.waiting` frames.
+   */
+  offers: WaitingOffer[];
+
+  /**
    * The artifacts waiting on the person, and their notices (core
    * artifact-needs.ts): read as the dashboard connects, in `/api/pending`'s
    * `artifact.needs` envelope, then kept whole by the hub's frames.
@@ -51,6 +60,7 @@ const needsState = $state<{
   questionsMoved: 0,
   actions: [],
   watchNotices: [],
+  offers: [],
   artifactNeeds: [],
   artifactNotices: [],
 });
@@ -63,6 +73,20 @@ export function takeActions(frame: FrameOf<"actions">): void {
 export function takeWatchNotices(frame: FrameOf<"fleet_watch.notices">): void {
   heardFrame("fleet_watch.notices");
   needsState.watchNotices = frame.notices;
+}
+
+export function takeWaitingOffers(frame: FrameOf<"offers.waiting">): void {
+  heardFrame("offers.waiting");
+  needsState.offers = frame.offers;
+}
+
+/** The hub's offers waiting on you, as the hub holds them now. */
+export async function readWaitingOffers(): Promise<void> {
+  const mark = readLeaves();
+  const read = await load(hubData(hub.api.offers.waiting.get()));
+  if (read && !heardSince("offers.waiting", mark)) {
+    needsState.offers = read.offers;
+  }
 }
 
 export function takeArtifactNeeds(frame: FrameOf<"artifact.needs">): void {
@@ -131,6 +155,10 @@ export const needsStore = {
   /** Fleet watch's needs-you notices, oldest first. */
   get watchNotices(): FleetWatchNotice[] {
     return needsState.watchNotices;
+  },
+  /** The hub's offers waiting on your answer, oldest first. */
+  get offers(): WaitingOffer[] {
+    return needsState.offers;
   },
   /** The artifacts waiting on the person, longest wait first. */
   get artifactNeeds(): ArtifactNeed[] {

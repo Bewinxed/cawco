@@ -314,6 +314,7 @@ const ParkedChange: GenericSchema<unknown, ProjectSettingChange> = variant(
       folder: optional(string()),
       kind: literal("create_repo"),
       leftOut: array(object({ path: string(), why: string() })),
+      madeCommit: optional(string()),
       name: string(),
       private: boolean(),
     }),
@@ -553,7 +554,7 @@ export interface ProjectSettingsDeps {
         { readonly "~status": true }
       >
   >;
-  /** Notes what happened in the project's conversation (caw.ts `notice`) when `actor` is that conversation; nothing for another session. */
+  /** Notes what happened in the project's conversation (caw.ts `noteOwnAct`) when `actor` is that conversation; nothing for another session. */
   readonly note: (actor: InstanceRow, note: ProjectNote) => void;
   /** A place published to a new GitHub repository (repo-publish.ts). */
   readonly publish: Pick<RepoPublish, "publish" | "read">;

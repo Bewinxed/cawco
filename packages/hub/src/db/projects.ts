@@ -349,7 +349,7 @@ export interface ProjectsDb {
     segment: string
   ) => string | undefined;
   /**
-   * The hub's notes to the person about a project (caw.ts `notice`): `add`
+   * The lines of the Caw chat's own acts (caw.ts `noteOwnAct`): `add`
    * keeps one, its conversation's line, or the next one's while it has none
    * (`instanceId` null); `adopt` makes the waiting ones the conversation's
    * that just started; `of` reads a conversation's, oldest first.

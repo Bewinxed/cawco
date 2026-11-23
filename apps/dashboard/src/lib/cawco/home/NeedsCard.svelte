@@ -60,6 +60,7 @@
   import type { ArtifactKind } from "@cawco/core/artifact-kinds";
   import { needLinkOf } from "@cawco/core/artifact-needs";
   import { detach } from "@cawco/core/detach";
+  import type { WaitingOffer } from "@cawco/core/project-conversation";
   import { questionsOf } from "@cawco/core/question";
   import type {
     TailnetHttps,
@@ -72,7 +73,9 @@
   import { connectWords } from "@cawco/core/words/connect";
   import { contactWords } from "@cawco/core/words/contact";
   import { causeLine } from "@cawco/core/words/install";
+  import { lfsWords } from "@cawco/core/words/lfs";
   import { mcpWords } from "@cawco/core/words/mcp";
+  import { offerWords } from "@cawco/core/words/offers";
   import { pairingWords } from "@cawco/core/words/pairing";
   import { presenceWords } from "@cawco/core/words/presence";
   import { tailnetWords } from "@cawco/core/words/tailnet";
@@ -112,6 +115,7 @@
     IconWindow,
   } from "#lib/icons.js";
   import { failureWords } from "#lib/platform/hub-read.js";
+  import { toast } from "#lib/platform/toasts.js";
   import { isTyping } from "#lib/utils/typing.js";
   import { goto } from "$app/navigation";
   import CopyBox from "../CopyBox.svelte";
@@ -137,6 +141,11 @@
   import { takeOverBrowser } from "../stores/browsers.svelte";
   import { answerFor, submitCommand } from "../stores/commands.svelte";
   import { decideAction } from "../stores/needs.svelte";
+  import {
+    answerDesignOffer,
+    answerLfsOffer,
+    dismissLfsRefusal,
+  } from "../stores/offers.svelte";
   import { relayStore } from "../stores/relay.svelte";
   import { capLine } from "../usage";
   import { choices } from "./choices.svelte";
@@ -243,9 +252,61 @@
         return item.want;
       case "cap":
         return capLine(item.cap);
+      case "offer":
+        return offerLine(item.offer, item.place);
     }
     return "";
   });
+
+  const MB = 1024 * 1024;
+  /** An offer's line: what it asks, in the hub's words for its kind. */
+  function offerLine(offer: WaitingOffer, project: string): string {
+    switch (offer.kind) {
+      case "design":
+        return offerWords.designLine(
+          new Intl.ListFormat("en", { type: "conjunction" }).format(
+            offer.sources
+          )
+        );
+      case "lfs": {
+        const count = offer.rows.reduce((sum, row) => sum + row.count, 0);
+        const bytes = offer.rows.reduce((sum, row) => sum + row.bytes, 0);
+        return lfsWords.offerLine(count, `${(bytes / MB).toFixed(1)} MB`);
+      }
+      case "lfs-refused":
+        return lfsWords.refusedLine(offer.endpoint, project);
+    }
+  }
+
+  /** An offer's answer on its way: its buttons hold until the hub answers, and the row leaves on its frame. */
+  let offering = $state<"yes" | "no" | null>(null);
+  async function answerOffer(yes: boolean) {
+    if (item.kind !== "offer" || held || offering) {
+      return;
+    }
+    const { offer } = item;
+    offering = yes ? "yes" : "no";
+    refusal = null;
+    try {
+      if (offer.kind === "design") {
+        await answerDesignOffer(offer.projectId, yes ? "build" : "dismiss");
+      } else if (offer.kind === "lfs") {
+        const now = await answerLfsOffer(offer.id, yes ? "track" : "dismiss");
+        if (now.answer === "tracked" && now.commit) {
+          // The row leaves on the hub's frame: what Track made is said here.
+          toast.success(lfsWords.tracked(now.commit), {
+            ...(now.ownPrePush ? { description: lfsWords.ownPrePush } : {}),
+          });
+        }
+      } else {
+        await dismissLfsRefusal(offer.projectId, offer.endpoint);
+      }
+    } catch (error) {
+      refusal = failureWords(error);
+    } finally {
+      offering = null;
+    }
+  }
 
   /** What Deny and Approve answer, as their names say it: what it asks and whose it is. */
   const answered = $derived(
@@ -344,6 +405,7 @@
           .join(" · ");
       case "mcp":
       case "machine":
+      case "offer":
       case "tool":
         return item.place;
       case "install":
@@ -778,6 +840,14 @@
       {:else if item.kind === "task"}
         {#if item.reason === "failed"}
           <IconError aria-hidden="true" class="size-icon-md" />
+        {:else}
+          <IconNeedsYou aria-hidden="true" class="size-icon-md" />
+        {/if}
+      {:else if item.kind === "offer"}
+        {#if item.offer.kind === "lfs-refused"}
+          <IconWarningTriangle aria-hidden="true" class="size-icon-md" />
+        {:else if item.offer.kind === "lfs"}
+          <IconFolder aria-hidden="true" class="size-icon-md" />
         {:else}
           <IconNeedsYou aria-hidden="true" class="size-icon-md" />
         {/if}
@@ -1332,6 +1402,54 @@
               <IconCheck />
               <span>Remove</span>
             </Button>
+          {/if}
+        </div>
+      {:else if item.kind === "offer"}
+        {@const offer = item.offer}
+        <div
+          data-slot="peers"
+          class="relative col-start-2 col-end-4 row-4 mt-space-2 flex justify-end gap-space-2 coarse:gap-space-4"
+        >
+          {#if refusal}
+            <ErrorText message={refusal} title="The hub refused that answer" />
+          {/if}
+          {#if offer.kind === "lfs-refused"}
+            <Button
+              disabled={held}
+              label={lfsWords.dismiss}
+              onclick={() => answerOffer(false)}
+              pending={offering === "no"}
+              pendingLabel={lfsWords.dismissing}
+              size="sm"
+              variant="secondary"
+            />
+          {:else}
+            <Button
+              disabled={held || offering === "yes"}
+              label={offer.kind === "design"
+                ? offerWords.notNow
+                : lfsWords.notNow}
+              onclick={() => answerOffer(false)}
+              pending={offering === "no"}
+              pendingLabel={offer.kind === "design"
+                ? offerWords.notNowPending
+                : lfsWords.notNowPending}
+              size="sm"
+              variant="secondary"
+            />
+            <Button
+              disabled={held || offering === "no"}
+              label={offer.kind === "design"
+                ? offerWords.build
+                : lfsWords.track}
+              onclick={() => answerOffer(true)}
+              pending={offering === "yes"}
+              pendingLabel={offer.kind === "design"
+                ? offerWords.filing
+                : lfsWords.tracking}
+              size="sm"
+              variant="secondary"
+            />
           {/if}
         </div>
       {:else if item.kind === "mcp" && item.why}

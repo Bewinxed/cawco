@@ -18250,6 +18250,69 @@
         }
       }
     },
+    "/api/lfs-refusals/dismiss": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "endpoint": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "projectId": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "endpoint",
+                  "projectId"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiLfsRefusalsDismiss",
+        "responses": {
+          "200": {
+            "description": "postApiLfsRefusalsDismiss 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiLfsRefusalsDismiss200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiLfsRefusalsDismiss 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiLfsRefusalsDismiss404"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiLfsRefusalsDismiss 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiLfsRefusalsDismiss422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/local-name": {
       "get": {
         "operationId": "getApiLocalName",
@@ -19291,6 +19354,33 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiNotificationsDismiss422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/offers/waiting": {
+      "get": {
+        "operationId": "getApiOffersWaiting",
+        "responses": {
+          "200": {
+            "description": "getApiOffersWaiting 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiOffersWaiting200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiOffersWaiting 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiOffersWaiting422"
                 }
               }
             }
@@ -37389,18 +37479,6 @@
             "description": "The delegate's brief headline, carried beside {@link delegateInstanceId}.",
             "type": "string"
           },
-          "designOffer": {
-            "description": "A project note of Caw asking whether to build a design system: the\nproject it is for, whose Build and Not now the note draws under it.",
-            "type": "object",
-            "properties": {
-              "projectId": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "projectId"
-            ]
-          },
           "errorTitle": {
             "description": "A failure card's heading (`ui.error`, `ui.session_error`); a missing\nsession's when unset on a session error, \"Turn failed\" otherwise.",
             "type": "string"
@@ -37441,18 +37519,6 @@
           },
           "isRedactedThinking": {
             "type": "boolean"
-          },
-          "lfsOffer": {
-            "description": "A project note that a folder was made a repository with files left out\nfor their size: the offer of Git LFS for them (ProjectNoteEvent `repo`'s\n`lfsOffer`), whose Track with LFS and Not now the note draws under it.",
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "id"
-            ]
           },
           "model": {
             "type": "string"
@@ -37532,21 +37598,6 @@
           },
           "resultSubtype": {
             "type": "string"
-          },
-          "routineMade": {
-            "description": "A project note that a session made a routine (ProjectNoteEvent\n`routine-made`): the note draws Keep, Turn off and Open beside it.",
-            "type": "object",
-            "properties": {
-              "expiresAt": {
-                "type": "number"
-              },
-              "routineId": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "routineId"
-            ]
           },
           "ruleName": {
             "description": "A `user.rule`'s rule name, read off its `[Rule: <name>]` marker line.",
@@ -46024,6 +46075,9 @@
             "$ref": "#/components/schemas/MovesFrame"
           },
           {
+            "$ref": "#/components/schemas/OffersWaitingFrame"
+          },
+          {
             "$ref": "#/components/schemas/PasskeyAdvertFrame"
           },
           {
@@ -46147,6 +46201,7 @@
             "instances": "#/components/schemas/InstancesFrame",
             "move_progress": "#/components/schemas/MoveProgressFrame",
             "moves": "#/components/schemas/MovesFrame",
+            "offers.waiting": "#/components/schemas/OffersWaitingFrame",
             "passkey_advert": "#/components/schemas/PasskeyAdvertFrame",
             "passkey_qr": "#/components/schemas/PasskeyQrFrame",
             "passkey_status": "#/components/schemas/PasskeyStatusFrame",
@@ -49581,6 +49636,11 @@
           },
           "id": {
             "type": "string"
+          },
+          "ownPrePush": {
+            "description": "Track's own answer only: the folder has a pre-push hook of its own, so\ngit-lfs's was not put beside it, and a push from there sends the large\nfiles only with `git lfs push origin --all` or once the hooks are merged.",
+            "const": true,
+            "type": "boolean"
           },
           "root": {
             "description": "The folder's root on its machine.",
@@ -53722,6 +53782,28 @@
             "type": "number"
           }
         }
+      },
+      "OffersWaitingFrame": {
+        "description": "Hub-originated: every offer waiting on the person, whole, on each change.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "offers.waiting"
+            ]
+          },
+          "offers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitingOffer"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "offers"
+        ]
       },
       "OnCap": {
         "description": "What reaching a project's spend cap does (Projects spec §5.3): `pause`\nstarts no new attempts at its tasks, `quiet` books what would wake its Caw\nwithout a turn, `both` does both. The fleet has a default (Configure,\nSpend); a project may set its own.",
@@ -67145,6 +67227,124 @@
         "required": [
           "machineId",
           "since"
+        ]
+      },
+      "WaitingOffer": {
+        "description": "An offer of the hub's waiting on the person's answer, as Needs you lists\nit (hub offers-waiting.ts): never a line in the project's Caw chat.\n\n- `design`: a design-shaped task entered an active stage in a project with\n  no design system (hub design-offers.ts); Build and Not now answer it\n  through `/api/projects/:id/design-offer`.\n- `lfs`: a folder made a repository left large files out of its first\n  commit (hub place-repo.ts); Track with LFS and Not now answer it through\n  `/api/lfs-offers/:id`.\n- `lfs-refused`: a checkout's `.lfsconfig` names an LFS server the project\n  never declared, so its large files stayed pointers (hub routes/lfs.ts);\n  declared in the project's settings, or put away with Dismiss through\n  `/api/lfs-refusals/dismiss`.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "design"
+                ]
+              },
+              "offeredAt": {
+                "description": "When it was raised, ms epoch.",
+                "type": "number"
+              },
+              "projectId": {
+                "type": "string"
+              },
+              "sources": {
+                "description": "What the build would read, in words: \"the repository's styles and components\".",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "taskId": {
+                "description": "The task whose move raised it.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "offeredAt",
+              "projectId",
+              "sources",
+              "taskId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "lfs"
+                ]
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "offeredAt": {
+                "type": "number"
+              },
+              "projectId": {
+                "type": "string"
+              },
+              "root": {
+                "description": "The folder made a repository, on its machine.",
+                "type": "string"
+              },
+              "rows": {
+                "description": "What is offered, a row per pattern.",
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PlaceLfsRow"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "machineId",
+              "offeredAt",
+              "projectId",
+              "root",
+              "rows"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "endpoint": {
+                "description": "The LFS server its `.lfsconfig` names.",
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "lfs-refused"
+                ]
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "offeredAt": {
+                "type": "number"
+              },
+              "projectId": {
+                "type": "string"
+              },
+              "root": {
+                "description": "The checkout whose large files stayed pointers; null when it was not said.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "endpoint",
+              "kind",
+              "offeredAt",
+              "projectId"
+            ]
+          }
         ]
       },
       "WindowForecast": {
@@ -98248,6 +98448,56 @@
               "type"
             ]
           }
+        ]
+      },
+      "getApiOffersWaiting200": {
+        "type": "object",
+        "properties": {
+          "offers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitingOffer"
+            }
+          }
+        },
+        "required": [
+          "offers"
+        ]
+      },
+      "getApiOffersWaiting422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "getApiOpenrouter200": {
@@ -162276,6 +162526,156 @@
           "status",
           "title",
           "type"
+        ]
+      },
+      "postApiLfsRefusalsDismiss200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "postApiLfsRefusalsDismiss404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "lfs-refusal-unknown"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiLfsRefusalsDismiss422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
         ]
       },
       "postApiMachinesByMachineIdPause400": {

@@ -39,6 +39,7 @@ import type {
   PreviewUnavailable,
 } from "./preview/protocol";
 import type { PreviewSettings } from "./preview/routes";
+import type { OffersWaitingFrame } from "./project-conversation";
 import type {
   BuildInfo,
   ContinuationJob,
@@ -937,6 +938,8 @@ export type FramePayload =
   | DelegateEventFrame
   /** Hub-originated: every open fleet-watch notice, whole, on each change. */
   | FleetWatchNoticesFrame
+  /** Hub-originated: every offer waiting on the person, whole, on each change. */
+  | OffersWaitingFrame
   /** Hub-originated: every artifact waiting on the person, and their notices, whole, on each change. */
   | ArtifactNeedsFrame
   /** Hub-originated: every law the hub caught broken, whole, on each break. */

@@ -13,10 +13,11 @@
  *   checkout that cannot be read now is asked again on the next such move);
  * - no task already builds one, and the project was never offered.
  *
- * Then one card in the project's conversation: "This work needs a design
- * system. Build one from <sources>?", with
- * Build and Not now. The `design_offers` row is written as he asks, so he
- * asks once; Not now is recorded there and he never asks again unless the
+ * Then one row in Needs you (offers-waiting.ts), never a line in the
+ * project's Caw chat: "This work needs a design system. Build one from
+ * <sources>?", with Build and Not now. The `design_offers` row is written
+ * as it is raised, so it is raised once; a build filed any other way
+ * answers it; Not now is recorded there and he never asks again unless the
  * person does. Build files "Build the design system" in the project's first
  * to-do stage, naming the design-system skill. Nothing is built before the
  * person says Build.
@@ -25,10 +26,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { CommandResult } from "@cawco/core/commands/controls";
-import type {
-  DesignOfferState,
-  ProjectNote,
-} from "@cawco/core/project-conversation";
+import type { DesignOfferState } from "@cawco/core/project-conversation";
 import type { StagesTemplate } from "@cawco/core/views";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
@@ -58,8 +56,8 @@ export interface DesignOffersDeps {
   db: DbShape;
   /** The person said Not now: the project's starters stop suggesting one (project-starters.ts). */
   declined: (projectId: string) => void;
-  /** A note to the person in the project's conversation that wakes no one (caw.ts `notice`). */
-  notice: (projectId: string, note: ProjectNote) => void;
+  /** An offer was raised or answered: Needs you hears it (offers-waiting.ts). */
+  offersChanged: () => void;
   online: (machineId: string) => boolean;
   run: (
     machineId: string,
@@ -210,7 +208,7 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
     }
     const first =
       stage ?? view.stages.find((each) => each.kind === "todo")?.name;
-    return await tasks.create(
+    const filed = await tasks.create(
       projectId,
       {
         ...buildWords(sources),
@@ -218,6 +216,15 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
       },
       actor
     );
+    // The offer standing in Needs you is answered by the build, whoever filed it.
+    if (
+      !(filed instanceof ElysiaStatus) &&
+      db.designOffers.of(projectId)?.answer === null
+    ) {
+      db.designOffers.answer(projectId, "built", filed.id);
+      deps.offersChanged();
+    }
+    return filed;
   };
 
   /** Whether nothing builds the project's system and it has none; a refused read's refusal. */
@@ -260,14 +267,11 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
     if (sources instanceof ElysiaStatus) {
       return sources;
     }
-    const line = `This work needs a design system. Build one${sources.length ? ` from ${listed(sources)}` : ""}?`;
     // One project is looked at once at a time (`looking`), and the row was
-    // absent above: the card and its row go together.
-    deps.notice(projectId, {
-      title: `Design system · ${line}`,
-      event: { kind: "design-offer", projectId, sources, taskId: task.id },
-    });
-    db.designOffers.offer({ projectId, taskId: task.id });
+    // absent above: it is raised once.
+    if (db.designOffers.offer({ projectId, taskId: task.id })) {
+      deps.offersChanged();
+    }
   };
 
   const consider = (projectId: string, taskId: string): void => {
@@ -317,13 +321,20 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
     /** Where the project's offer stands. */
     state,
 
-    /** "Not now": recorded, so Caw never asks this project again. */
+    /** What a build would read, in words; none while the project's folder does not read. */
+    sources(projectId: string): string[] {
+      const sources = sourcesOf(projectId);
+      return sources instanceof ElysiaStatus ? [] : sources;
+    },
+
+    /** "Not now": recorded, so this project is never offered again. */
     dismiss(projectId: string) {
       const row = answerable(projectId);
       if (row instanceof ElysiaStatus || row.answer) {
         return state(projectId);
       }
       db.designOffers.answer(projectId, "dismissed");
+      deps.offersChanged();
       deps.declined(projectId);
       return state(projectId);
     },
@@ -338,7 +349,6 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
       if (task instanceof ElysiaStatus) {
         return task;
       }
-      db.designOffers.answer(projectId, "built", task.id);
       return state(projectId);
     },
 

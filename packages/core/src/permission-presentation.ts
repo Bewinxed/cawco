@@ -1562,6 +1562,12 @@ export type ProjectSettingChange =
       kind: "create_repo";
       /** What CawCo's first commit of the place left out, and why (agent place-repo.ts). */
       leftOut: { path: string; why: string }[];
+      /**
+       * The folder was a plain one, so reading it for this card made it a
+       * git repository (hub place-repo.ts): its one commit. Absent when it
+       * was a repository already.
+       */
+      madeCommit?: string;
       name: string;
       private: boolean;
     };
@@ -1631,7 +1637,10 @@ const MB = 1024 * 1024;
 export const publishedWords = (
   change: Extract<ProjectSettingChange, { kind: "create_repo" }>
 ): string => {
-  const size = `${change.files} ${change.files === 1 ? "file" : "files"}, ${(change.bytes / MB).toFixed(1)} MB`;
+  const made = change.madeCommit
+    ? `It was a plain folder, so CawCo made it a git repository with one commit, ${change.madeCommit.slice(0, 9)}, pushed nowhere yet. `
+    : "";
+  const size = `${made}${change.files} ${change.files === 1 ? "file" : "files"}, ${(change.bytes / MB).toFixed(1)} MB`;
   if (change.leftOut.length === 0) {
     return `${size}. Nothing was left out.`;
   }

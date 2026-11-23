@@ -469,7 +469,12 @@ export const KNOWN_UNOWNED: readonly {
   {
     column: lfsRefusals.projectId,
     reason:
-      "The project told an LFS endpoint refused, so it is told once: the record outlives a deleted project.",
+      "The project an LFS endpoint was refused for, so it is raised once: the record outlives a deleted project.",
+  },
+  {
+    column: lfsRefusals.machineId,
+    reason:
+      "The machine of the checkout an LFS endpoint was refused in: the record outlives a removed machine.",
   },
   {
     column: moves.targetInstanceId,

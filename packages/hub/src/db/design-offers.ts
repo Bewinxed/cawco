@@ -1,8 +1,8 @@
-import { eq } from "drizzle-orm";
+import { asc, eq, isNull } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { designOffers } from "./schema";
 
-type DesignOfferRow = typeof designOffers.$inferSelect;
+export type DesignOfferRow = typeof designOffers.$inferSelect;
 
 /** Caw's one design-system offer per project (schema `designOffers`). */
 export interface DesignOffersDb {
@@ -15,6 +15,8 @@ export interface DesignOffersDb {
   readonly of: (projectId: string) => DesignOfferRow | undefined;
   /** Files the offer; false when the project was offered already. */
   readonly offer: (offer: { projectId: string; taskId: string }) => boolean;
+  /** Every offer not answered yet, oldest first: what Needs you lists. */
+  readonly open: () => DesignOfferRow[];
 }
 
 export const designOffersDb = (db: BunSQLiteDatabase): DesignOffersDb => ({
@@ -31,6 +33,13 @@ export const designOffersDb = (db: BunSQLiteDatabase): DesignOffersDb => ({
       .onConflictDoNothing()
       .returning({ projectId: designOffers.projectId })
       .all().length > 0,
+  open: () =>
+    db
+      .select()
+      .from(designOffers)
+      .where(isNull(designOffers.answer))
+      .orderBy(asc(designOffers.offeredAt))
+      .all(),
   of: (projectId) =>
     db
       .select()

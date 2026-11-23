@@ -137,7 +137,7 @@ const CAW_STATUSES = [
 ] as const;
 export type CawStatus = (typeof CAW_STATUSES)[number];
 
-/** The `noteKind` of a project note's line in its conversation's transcript (hub caw.ts `notice`). */
+/** The `noteKind` of a project note's line in its conversation's transcript (hub caw.ts `noteOwnAct`). */
 export const CAW_EVENT_NOTE = "caw.event";
 
 /** A routine's schedule as the person reads it: its cron in words, in its zone, and its next run. */
@@ -157,22 +157,6 @@ export interface RoutineSchedule {
  * a routine's name). A task or session is never named by its id in words.
  */
 export type ProjectNoteEvent =
-  | {
-      kind: "routine";
-      name: string;
-      /**
-       * `started`: a conversation run woke Caw; `delivered`: a run's output;
-       * `failed`: its second failure, which needs you.
-       */
-      phase: "started" | "delivered" | "failed";
-      routineId: string;
-      runId: string;
-      schedule: RoutineSchedule;
-      /** The run's slot (a time, `test:…`, `now:…`, `event:…`, `inbox:…`). */
-      slot: string;
-      /** The slot in words: "09:00" in the routine's zone, "test", "by-hand", "event", "inbox". */
-      slotLabel: string;
-    }
   | {
       /** The session the attempt ran in. */
       instanceId: string;
@@ -201,22 +185,6 @@ export type ProjectNoteEvent =
       /** The stage of kind `you` it now waits in. */
       stage: string;
       taskId: string;
-      title: string;
-    }
-  | {
-      /**
-       * A task's wait on a pull request closed unmerged, or on an Actions
-       * run gone red, can no longer settle (hub wait-flags.ts): told once.
-       */
-      kind: "wait";
-      /** What it waits on, as the hub named it: `PR #418 Fix tray`. */
-      label: string;
-      /** Where the wait stands: `closed` or `red`. */
-      state: string;
-      /** The wait as the task's file keeps it: the pull request's or run's URL. */
-      target: string;
-      taskId: string;
-      /** The task's title as the hub had it. */
       title: string;
     }
   | { kind: "view"; name: string }
@@ -249,76 +217,10 @@ export type ProjectNoteEvent =
       sha: string | null;
       /** Caw wrote it, or you answered his proposal for it. */
       what: "wrote" | "approved" | "declined";
-    }
-  | {
-      commit: string | null;
-      kind: "repo";
-      /**
-       * The large files its first commit left out, offered to Git LFS: the
-       * offer, read and answered at `/api/lfs-offers/:id` (hub
-       * lfs-offers.ts). Absent when nothing was left out for its size.
-       */
-      lfsOffer?: string;
-      /**
-       * An LFS endpoint the repository's `.lfsconfig` names that is neither
-       * its origin's nor the project's declared one: its large files stayed
-       * pointers, and nothing was fetched from there (agent host-lfs.ts).
-       */
-      lfsRefused?: string;
-      machineId: string;
-      /** The folder made a repository, or the clone the refusal was in. */
-      root: string;
-    }
-  /** A session made a routine (routines.ts `announce`). */
-  | RoutineMadeNote
-  /** Caw asking whether to build a design system. */
-  | DesignOfferNote;
+    };
 
 /** Who made a routine: a delegate, or a session in conversation. */
 export type RoutineMadeBy = "delegate" | "session";
-
-/**
- * A session made a routine with `task_create` (routines.ts `announce`):
- * the note in its project's conversation. Keep, Turn off and Open act on `routineId`
- * through `/api/routines/:id`.
- */
-export interface RoutineMadeEvent {
-  /** `delegate`: a delegated session made it; `session`: any other, the project's conversation among them. */
-  by: RoutineMadeBy;
-  /** When it turns itself off unless kept, ms epoch; null when it was kept as it was made. */
-  expiresAt: number | null;
-  /** The session that made it. */
-  instanceId: string;
-  name: string;
-  routineId: string;
-  schedule: RoutineSchedule;
-  /** What the making turn said just before the call, one paragraph; null when it said nothing. */
-  why: string | null;
-}
-
-/** {@link RoutineMadeEvent} as a project note's kind. */
-export interface RoutineMadeNote extends RoutineMadeEvent {
-  kind: "routine-made";
-}
-
-/**
- * Caw asking first, once per project, whether to build a design system
- * (hub design-offers.ts): a design-shaped task entered an active stage in a
- * project with none. Build and Not now act on the project through
- * `/api/projects/:id/design-offer`.
- */
-export interface DesignOfferEvent {
-  projectId: string;
-  /** What the build would read, in words: "the repository's styles and components", "the brand kit". */
-  sources: string[];
-  /** The task whose move raised it. */
-  taskId: string;
-}
-
-/** {@link DesignOfferEvent} as a project note's kind. */
-export interface DesignOfferNote extends DesignOfferEvent {
-  kind: "design-offer";
-}
 
 /** Where a project's design offer stands (`GET /api/projects/:id/design-offer`). */
 export interface DesignOfferState {
@@ -335,10 +237,71 @@ export interface LfsOfferState {
   /** The commit that took them through LFS; null until then. */
   commit: string | null;
   id: string;
+  /**
+   * Track's own answer only: the folder has a pre-push hook of its own, so
+   * git-lfs's was not put beside it, and a push from there sends the large
+   * files only with `git lfs push origin --all` or once the hooks are merged.
+   */
+  ownPrePush?: true;
   /** The folder's root on its machine. */
   root: string;
   /** What is offered, a row per pattern. */
   rows: PlaceLfsRow[];
+}
+
+/**
+ * An offer of the hub's waiting on the person's answer, as Needs you lists
+ * it (hub offers-waiting.ts): never a line in the project's Caw chat.
+ *
+ * - `design`: a design-shaped task entered an active stage in a project with
+ *   no design system (hub design-offers.ts); Build and Not now answer it
+ *   through `/api/projects/:id/design-offer`.
+ * - `lfs`: a folder made a repository left large files out of its first
+ *   commit (hub place-repo.ts); Track with LFS and Not now answer it through
+ *   `/api/lfs-offers/:id`.
+ * - `lfs-refused`: a checkout's `.lfsconfig` names an LFS server the project
+ *   never declared, so its large files stayed pointers (hub routes/lfs.ts);
+ *   declared in the project's settings, or put away with Dismiss through
+ *   `/api/lfs-refusals/dismiss`.
+ */
+export type WaitingOffer =
+  | {
+      kind: "design";
+      /** When it was raised, ms epoch. */
+      offeredAt: number;
+      projectId: string;
+      /** What the build would read, in words: "the repository's styles and components". */
+      sources: string[];
+      /** The task whose move raised it. */
+      taskId: string;
+    }
+  | {
+      id: string;
+      kind: "lfs";
+      machineId: string;
+      offeredAt: number;
+      projectId: string;
+      /** The folder made a repository, on its machine. */
+      root: string;
+      /** What is offered, a row per pattern. */
+      rows: PlaceLfsRow[];
+    }
+  | {
+      /** The LFS server its `.lfsconfig` names. */
+      endpoint: string;
+      kind: "lfs-refused";
+      machineId: string | null;
+      offeredAt: number;
+      projectId: string;
+      /** The checkout whose large files stayed pointers; null when it was not said. */
+      root: string | null;
+    };
+
+/** Hub-originated: every offer waiting on the person, whole, on each change. */
+export interface OffersWaitingFrame {
+  instanceId?: undefined;
+  kind: "offers.waiting";
+  offers: WaitingOffer[];
 }
 
 /** A note of the hub's to the person about a project, as its writers give it: one line, its fold, and what it is. */

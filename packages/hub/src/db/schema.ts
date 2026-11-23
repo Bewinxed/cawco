@@ -5379,10 +5379,11 @@ export const lfsOffers = sqliteTable("lfs_offers", {
 });
 
 /**
- * The LFS endpoints a repository's `.lfsconfig` named that a project's
- * conversation was told git-lfs refused (server.ts `/api/lfs/projects/:id/refused`,
- * agent host-lfs.ts): one row per project and endpoint, so it is told
- * once, whatever restarts and however many fetches meet it.
+ * The LFS endpoints a repository's `.lfsconfig` named that git-lfs refused
+ * for a project (routes/lfs.ts `/api/lfs/projects/:id/refused`, agent
+ * host-lfs.ts): one row per project and endpoint, so it is raised once,
+ * whatever restarts and however many fetches meet it. It stands in Needs
+ * you (offers-waiting.ts) until the person dismisses it.
  */
 export const lfsRefusals = sqliteTable(
   "lfs_refusals",
@@ -5390,6 +5391,11 @@ export const lfsRefusals = sqliteTable(
     projectId: projectColumn("project_id").notNull(),
     endpoint: text("endpoint").notNull(),
     notedAt: timestamp("noted_at").notNull(),
+    /** The checkout whose large files stayed pointers, and its machine; null on a row from before they were kept. */
+    root: text("root"),
+    machineId: machineColumn("machine_id"),
+    /** When the person put it away from Needs you; null while it stands. */
+    dismissedAt: timestamp("dismissed_at"),
   },
   (table) => [primaryKey({ columns: [table.projectId, table.endpoint] })]
 );
@@ -6360,9 +6366,9 @@ export const purgedSessions = sqliteTable(
 );
 
 /**
- * What the hub says to the person about a project (caw.ts `notice`): a
- * repository made, an offer to answer, a routine made. Each is a line in its
- * conversation's transcript (`instance_id`), waking nobody; one written
+ * The outcome of an act of the person's chat with Caw (caw.ts `noteOwnAct`):
+ * a project made, a setting changed, a type proposal answered, a view
+ * drafted. Each is a line in its conversation's transcript (`instance_id`), waking nobody; one written
  * while the project had no conversation waits for the next to start
  * (`instance_id` null until then).
  */
@@ -7109,7 +7115,7 @@ export const externalComments = sqliteTable(
 /**
  * A task's wait on a pull request closed unmerged, or on an Actions run gone
  * red (task-waits.ts `GITHUB_FLAG`), once the person was told of it
- * (wait-flags.ts): one note in the project's conversation and one push per
+ * (wait-flags.ts): one comment on its task and one push per
  * wait, never a second while its row stands. The row goes once the wait
  * reads open, merged, running or green again (a reopened pull request, a run
  * run again), so its next flag is told; and once its task is closed or no

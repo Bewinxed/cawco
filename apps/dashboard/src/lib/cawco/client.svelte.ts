@@ -86,10 +86,12 @@ import { takeFleetMcp } from "./stores/mcp-servers.svelte";
 import { takeBoardMoves, takeMoves } from "./stores/moves.svelte";
 import {
   readWaitingActions,
+  readWaitingOffers,
   readWatchNotices,
   takeActions,
   takeArtifactNeeds,
   takeQuestionsMoved,
+  takeWaitingOffers,
   takeWatchNotices,
 } from "./stores/needs.svelte";
 import { readProjectOffers, takeProjectOffer } from "./stores/offers.svelte";
@@ -228,6 +230,8 @@ async function refresh(): Promise<boolean> {
   readWaitingActions();
   // Fleet watch's notices to you: frames keep them from here.
   readWatchNotices();
+  // The hub's offers waiting on your answer: frames keep them from here.
+  readWaitingOffers();
   // Whether CawCo updates a copy of a CLI it doesn't run by itself: a
   // harness block's press reads it.
   readToolUpdates();
@@ -573,6 +577,7 @@ export function startClient(): () => void {
     onFrame("hub_auth", takeAuthFrame),
     onFrame("installs", takeInstallsFrame),
     onFrame("fleet_watch.notices", takeWatchNotices),
+    onFrame("offers.waiting", takeWaitingOffers),
     onFrame("artifact.needs", takeArtifactNeeds),
     onFrame("hub.restart", takeHubRestart),
     onFrame("project.stop", takeProjectStop),

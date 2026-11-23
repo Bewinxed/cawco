@@ -418,7 +418,7 @@ export const NOTICES_ENDED = "notices_ended";
 
 /**
  * The hub's line in a project conversation's transcript for one of its
- * notes to the person (hub caw.ts `notice`, core project-conversation.ts `ProjectNote`):
+ * notes to the person (hub caw.ts `noteOwnAct`, core project-conversation.ts `ProjectNote`):
  * `content` is the note as JSON, drawn as a note titled by its title, its
  * body under it, with what its event offers (a made routine's Keep, a design
  * or LFS offer) under that. Never sent to the session.
