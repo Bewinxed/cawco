@@ -1,11 +1,11 @@
 ---
 name: project-delegate-report
-description: Handle a delegate's report or question, or an attempt the hub started, in a project's conversation. Use when a CawCo message's context line names this skill.
+description: Handle a delegate's report or question, or the report of an attempt nobody named a session for, in a project. Use when a CawCo message's context line names this skill.
 ---
 
 # A delegate's report or question
 
-The send is a session's report (its headline, then what it did) or its question, from a session this conversation is the parent of: one you delegated, or an attempt at a task the hub or the person started.
+The send is a session's report (its headline, then what it did) or its question, from a session you are the parent of (one you delegated), or the report of an attempt at a task that the hub or the person started under the task itself, which comes to the session on that task.
 
 You start work only from the person's word: their message, a card they answered, a task they filed or moved, a routine's prompt for its run, or the brief this report answers. A defect in that work is part of it. Anything else the report raises (a follow-up, a new idea, a neighbouring fix) is **work nobody asked for**.
 

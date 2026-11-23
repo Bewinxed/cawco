@@ -10,7 +10,7 @@
  *   `design-explore` and `design-graph` among them: every agent's
  *   design graph is built by them, `choosing-preview-libraries` (the
  *   libraries and house look a preview draws with), and one skill per kind
- *   of event the project's conversation hears (caw.ts `EVENT_SKILLS`).
+ *   of trigger a project's sessions hear (trigger-event.ts `EVENT_SKILLS`).
  * - {@link TEMPLATE_SKILLS} are each project template's starter skills: bound
  *   to every project made from that template (`projects.template`) and
  *   placed at each of its checkouts and workspaces, as a project's own skills
@@ -44,8 +44,8 @@ export const BUNDLED_SKILLS = [
   "design-system",
   "design-graph",
   "choosing-preview-libraries",
-  // One per kind of event the project's conversation hears, named in each
-  // send's context line (caw.ts `EVENT_SKILLS`).
+  // One per kind of trigger a project's sessions hear, named in each
+  // trigger's words (trigger-event.ts `EVENT_SKILLS`).
   "project-routine-run",
   "project-routine-report",
   "project-delegate-report",
@@ -58,6 +58,7 @@ export const BUNDLED_SKILLS = [
   "project-fleet-watch",
   "project-connection",
   "project-decision",
+  "project-held-triggers",
   "project-setup",
   "project-view",
 ] as const;

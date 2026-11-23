@@ -192,7 +192,7 @@ const storedPayload = (event: InboundEvent): string => {
   });
 };
 
-/** Which kind of trigger a stored event is (caw.ts `EVENT_SKILLS`). */
+/** Which kind of trigger a stored event is (trigger-event.ts `EVENT_SKILLS`). */
 const kindOf = (row: InboundEventRow): "github-event" | "inbound-event" =>
   row.source.startsWith("github") ? "github-event" : "inbound-event";
 

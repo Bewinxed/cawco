@@ -171,7 +171,11 @@ export const createTriggers = (deps: TriggersDeps) => {
   const freshOn = (projectId: string, thing: Thing) => {
     const item = db
       .liveWorkItemsOf(thingParentId(thing))
-      .find((one) => one.projectId === projectId && isLive(one.state));
+      // An attempt the hub started under its task (dispatch.ts
+      // `taskParentOf`) shares the parent id; it is no fresh session.
+      .find(
+        (one) => one.projectId === projectId && !one.taskId && isLive(one.state)
+      );
     const session = item ? row(item.instanceId) : undefined;
     return item && session && !OVER_STATUSES.has(session.status)
       ? { item, session }
@@ -633,7 +637,7 @@ export const createTriggers = (deps: TriggersDeps) => {
     const now = Date.now();
     for (const item of db.liveWorkItems()) {
       const session =
-        item.projectId && isThingParent(item.parentInstanceId)
+        item.projectId && !item.taskId && isThingParent(item.parentInstanceId)
           ? row(item.instanceId)
           : undefined;
       if (!(session && idleLong(item, session, now))) {

@@ -61,11 +61,11 @@ export interface SettingsRead {
   /** Each kind's member, in effect: `look: you (its own)`. */
   decides: string[];
   dispatch: boolean;
-  /** Whether the project's events reach its conversation. */
+  /** Whether triggers on the project's things start sessions (hub triggers.ts). */
   events: boolean;
   /** The tasks dispatch would start next, in order. */
   frontier: string[];
-  /** The conversation reads what the person writes on tasks. */
+  /** A session reads what the person writes on a task no session is on. */
   hearsTasks: boolean;
   /** Ready tasks dispatch does not start, each with why. */
   held: { task: string; why: string }[];
@@ -97,8 +97,8 @@ export const projectSettingsWords = {
   read: (now: SettingsRead): string =>
     [
       `${now.name}'s settings, each with the change that sets it:`,
-      `- Events reach the project's conversation: ${onOff(now.events)} (set_events)`,
-      `- The conversation reads what the person writes on tasks: ${onOff(now.hearsTasks)} (set_hears_tasks)`,
+      `- Triggers (comments, moves, routines, events) start sessions: ${onOff(now.events)} (set_events)`,
+      `- A session reads what the person writes on a task no session is on: ${onOff(now.hearsTasks)} (set_hears_tasks)`,
       `- The person's comment on a task reaches its attempt: ${onOff(now.attemptsHearComments)} (set_attempts_hear_comments)`,
       `- Start attempts at ready tasks on their own: ${onOff(now.dispatch)} (set_dispatch)`,
       `- Attempts at once: at most ${now.maxAttempts} (set_max_attempts)`,
@@ -142,12 +142,12 @@ export const projectSettingsWords = {
       : `Let each attempt spend at most ${budgetText(budget)}`,
   eventsOn: (on: boolean): string =>
     on
-      ? "Turn events on: routines and events reach the project's conversation"
-      : "Turn events off: what the conversation started finishes, and only the person's words reach it",
+      ? "Turn triggers on: comments, moves, routines and events start sessions, and what was held while off goes to one"
+      : "Turn triggers off: nothing starts for them and they are held, what Caw started finishes, and the person's words still reach the conversation",
   hearsTasks: (on: boolean): string =>
     on
-      ? "Have the project's conversation read your comments, to-dos and new tasks, and fold them into the task"
-      : "Stop the project's conversation reading your comments, to-dos and new tasks",
+      ? "Have a session read your comments, to-dos and new tasks on a task no session is on, and fold them into the task"
+      : "Stop sessions starting for your comments, to-dos and new tasks; a task's running attempt still reads them",
   attemptsHearComments: (on: boolean): string =>
     on
       ? "Send your comment on a task to its attempt"
@@ -182,7 +182,7 @@ export const projectSettingsWords = {
     events: (on: boolean) =>
       `Events are ${onOff(on)} for this project already.`,
     hearsTasks: (on: boolean) =>
-      `The conversation reading what you write on tasks is ${onOff(on)} for this project already.`,
+      `A session reading what you write on tasks is ${onOff(on)} for this project already.`,
     attemptsHearComments: (on: boolean) =>
       `Comments reaching their task's attempt is ${onOff(on)} for this project already.`,
     runsOn: (to: string | null) =>

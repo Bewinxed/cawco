@@ -5019,10 +5019,12 @@ export const createServer = (
         .listProjects()
         .filter((project) => project.conversationInstanceId === instance.id)
         .map((project) => project.id),
-      // A fresh session for a trigger (triggers.ts) reads its project's pages.
+      // A fresh session for a trigger (triggers.ts) reads its project's
+      // pages; an attempt under its task is no such session.
       ...(instance.projectId &&
-      instance.parentInstanceId &&
-      isThingParent(instance.parentInstanceId)
+      instance.workItemId &&
+      isThingParent(instance.parentInstanceId) &&
+      !db.workItem(instance.workItemId)?.taskId
         ? [instance.projectId]
         : []),
     ],

@@ -7396,7 +7396,7 @@ export const heldTriggers = sqliteTable(
   {
     id: text("id").primaryKey(),
     projectId: projectKey(),
-    /** Its kind (hub caw.ts `EVENT_SKILLS`): the skill it names. */
+    /** Its kind (hub trigger-event.ts `EVENT_SKILLS`): the skill it names. */
     kind: text("kind").notNull(),
     thingKind: storedEnum(z.enum(THING_KINDS))("thing_kind").notNull(),
     thingId: text("thing_id").notNull(),

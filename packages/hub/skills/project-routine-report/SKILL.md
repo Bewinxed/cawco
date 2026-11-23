@@ -1,6 +1,6 @@
 ---
 name: project-routine-report
-description: Handle a routine's delegate run reporting its result to a project's conversation. Use when a CawCo message's context line names this skill.
+description: Handle the result a routine's delegate run delivered in a project. Use when a CawCo message's context line names this skill.
 ---
 
 # A routine's report
