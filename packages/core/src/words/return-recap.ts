@@ -29,37 +29,43 @@ export const returnRecapWords = {
         ? [counted(recap.landed.length, "delegate landed", "delegates landed")]
         : []),
     ]),
-  /** What opens under it: each part headed, each record by its link. */
-  detail: (recap: ReturnRecap): string =>
-    [
+  /** What opens under it: each record by its link; the parts headed only when there are two or more. */
+  detail: (recap: ReturnRecap): string => {
+    const parts: { heading: string; lines: string[] }[] = [
       ...(recap.waiting.length > 0
         ? [
-            [
-              "Waiting on you",
-              ...recap.waiting.map((link) => `- ${link}`),
-            ].join("\n"),
+            {
+              heading: "Waiting on you",
+              lines: recap.waiting.map((link) => `- ${link}`),
+            },
           ]
         : []),
       ...(recap.moved.length > 0
         ? [
-            [
-              "Tasks moved",
-              ...recap.moved.map(
+            {
+              heading: "Tasks moved",
+              lines: recap.moved.map(
                 ({ task, from, to }) => `- ${task}: ${from} → ${to}`
               ),
-            ].join("\n"),
+            },
           ]
         : []),
       ...(recap.landed.length > 0
         ? [
-            [
-              "Delegates landed",
-              ...recap.landed.map(
+            {
+              heading: "Delegates landed",
+              lines: recap.landed.map(
                 ({ work, commit, headline }) =>
                   `- ${work}${commit ? ` \`${shortSha(commit)}\`` : ""}${headline ? `: ${headline}` : ""}`
               ),
-            ].join("\n"),
+            },
           ]
         : []),
-    ].join("\n\n"),
+    ];
+    return parts
+      .map(({ heading, lines }) =>
+        (parts.length > 1 ? [heading, ...lines] : lines).join("\n")
+      )
+      .join("\n\n");
+  },
 };
