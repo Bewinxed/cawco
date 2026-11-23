@@ -7,10 +7,10 @@
    */
   import type { Snippet } from "svelte";
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import type { WhoDecides } from "./decides.svelte";
-  import { drawnInPlace, placeUnder } from "./in-place";
+  import { drawnInPlace } from "./in-place";
   import MemberSetup from "./MemberSetup.svelte";
+  import StillPopover from "./StillPopover.svelte";
 
   let {
     who,
@@ -49,20 +49,15 @@
     },
   })}
   {#if who.setup && open && anchor}
-    <section
-      aria-labelledby="{uid}-head"
-      class={[
-        floatingSurface({ motion: "pop" }),
-        "absolute z-(--layer-float) w-(--pop-w) overflow-clip p-0",
-      ]}
-      data-state="open"
-      data-still-popover
+    <StillPopover
       id="{uid}-panel"
-      style="--pop-w: min(calc(var(--spacing) * 208), 100%)"
-      {@attach placeUnder(() => anchor, "start")}
+      labelledby="{uid}-head"
+      anchor={() => anchor}
+      align="start"
+      width="calc(var(--spacing) * 208)"
     >
       <MemberSetup headId="{uid}-head" {project} setup={who.setup} {who} />
-    </section>
+    </StillPopover>
   {/if}
 {:else}
   <Popover.Root

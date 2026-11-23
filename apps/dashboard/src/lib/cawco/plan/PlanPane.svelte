@@ -43,6 +43,7 @@
    */
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { rise } from "#lib/components/ui/elevated/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconClose } from "#lib/icons.js";
@@ -135,6 +136,9 @@
   });
   // Esc shuts it: from inside, the focus back on its ring; from the tray row or the composer under it, the focus staying where it was.
   shutOnEscape(() => section, { inside: shut, under: () => onclose() });
+
+  /** Its step on the surface ladder (ui/elevated). */
+  const surfaceLevel = rise();
 </script>
 
 <!-- It comes in by the kit's `@starting-style` (opacity, rise and scale on
@@ -143,6 +147,7 @@
      pane's `{#if}` that shuts it is outside this component, a snippet
      render between. -->
 <section
+  style:--surface-level={surfaceLevel}
   data-slot="plan"
   aria-labelledby={titleId}
   class={floatingSurface({

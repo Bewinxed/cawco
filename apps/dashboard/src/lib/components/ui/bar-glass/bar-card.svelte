@@ -22,9 +22,10 @@
    * (HangCard's: nothing above the glass's foot, its shadow's room each
    * other side) opens on the leading side to hold it.
    *
-   * Both wear the panel's drop (HangCard `depth`): the glass is narrower
+   * Both rise one step, as a panel (HangCard `depth`): the glass is narrower
    * than the card, so past its sides the clip at the card's top stands in
-   * open air, and the overlay's 48px drop ended there in a hard line.
+   * open air, and a float's deeper drop ended there in a hard line. The
+   * thread beside it stands inside the card and takes its level.
    */
   import type { ComponentProps, Snippet } from "svelte";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
@@ -90,7 +91,7 @@
     <div
       aria-label={besideLabel}
       class={cn(
-        floatingSurface({ motion: "pop", depth: "panel" }),
+        floatingSurface({ motion: "pop" }),
         "absolute end-full top-0 flex max-h-full min-h-0 flex-col overflow-hidden rounded-e-none p-0"
       )}
       data-side="left"

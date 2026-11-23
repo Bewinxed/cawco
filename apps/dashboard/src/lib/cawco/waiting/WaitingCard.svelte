@@ -17,6 +17,7 @@
    * to the room over the row (to the top of the composer's dock).
    */
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import { rise } from "#lib/components/ui/elevated/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { IconClose } from "#lib/icons.js";
   import { popOut } from "#lib/platform/motion/pop.svelte.js";
@@ -75,9 +76,13 @@
 
   // Esc shuts it: from inside, the focus back on its chip; from the tray row or the composer under it, the focus staying where it was.
   shutOnEscape(() => section, { inside: shut, under: () => onclose() });
+
+  /** Its step on the surface ladder (ui/elevated). */
+  const surfaceLevel = rise();
 </script>
 
 <section
+  style:--surface-level={surfaceLevel}
   data-slot="waiting"
   aria-labelledby={titleId}
   class={floatingSurface({

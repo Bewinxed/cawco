@@ -61,6 +61,8 @@ interface Shelf {
 }
 
 export interface Foundation {
+  /** Drawn in use, on real pieces, in place of its shelves. */
+  inUse?: "spacing" | "elevation" | "layout";
   /** Short line stating what this group decides. */
   note: string;
   shelves: Shelf[];
@@ -102,41 +104,25 @@ export const ROLES: Foundation[] = [
   },
   {
     title: "Typography",
-    note: "6 type roles built from 4 sizes (12, 14, 18, 24px), 3 line-heights on the 4px grid (16, 20, 24px), 3 faces, and 2 weights (≤500).",
+    note: "Six roles. A component sets its text with one of them and nothing else.",
     wide: true,
     shelves: [
       shelf("Roles", "type", [
+        "type-kpi",
+        "type-title",
+        "type-label",
+        "type-body",
         "type-meta",
         "type-code",
-        "type-body",
-        "type-label",
-        "type-title",
-        "type-kpi",
       ]),
-      shelf("Sizes", "size", named(starts("--text-"))),
-      shelf("Line heights (4px grid)", "leading", named(starts("--leading-"))),
-      shelf("Faces", "face", THEME.names.TokenFont),
-      shelf("Weights", "weight", named(starts("--font-weight-"))),
-      shelf("Tracking", "tracking", named(starts("--tracking-"))),
     ],
   },
   {
-    title: "Spacing and sizes",
-    note: "One 4px unit (`--spacing`), 6 rhythm steps (4–32px), and 9 semantic sizes (rows step to 44px on touch/phone).",
+    title: "Spacing",
+    note: "Six steps on a 4px unit: 1, 2, 3, 4, 6 and 8 (4 to 32px). Each padding and gap is measured off the real piece and named by its step; red is off the scale.",
     wide: true,
-    shelves: [
-      shelf(
-        "4px rhythm ladder",
-        "space",
-        named(
-          (name) => name === "--spacing" || name.startsWith("--spacing-space-")
-        )
-      ),
-      shelf("Icons", "space", named(starts("--spacing-icon-"))),
-      shelf("Controls", "space", named(starts("--spacing-control-"))),
-      shelf("Rows", "space", named(starts("--spacing-row"))),
-      shelf("Measure", "measure", named(starts("--spacing-measure"))),
-    ],
+    inUse: "spacing",
+    shelves: [],
   },
 ];
 
@@ -155,13 +141,13 @@ export const SCALES: Foundation[] = [
     ],
   },
   {
-    title: "Shape and elevation",
-    note: "5 radii on the 4px grid (4, 8, 12, 16px, pill) and 3 shadows softly ringed in dark.",
-    shelves: [
-      shelf("Radii", "radius", named(starts("--radius-"))),
-      shelf("Shadows", "shadow", named(starts("--shadow-"))),
-    ],
+    title: "Elevation",
+    note: "One ladder. Each surface takes its level from the one it opens in: a panel one step, a popover, menu or dialog two. Light turns white at level 1 and lets the shadow carry the rest; dark lightens each level.",
+    wide: true,
+    inUse: "elevation",
+    shelves: [],
   },
+
   {
     title: "Motion",
     note: "4 durations (120, 200, 320, 1000ms) and 3 easing curves.",
@@ -172,11 +158,9 @@ export const SCALES: Foundation[] = [
   },
   {
     title: "Layout and layers",
-    note: "2 screen breakpoints, 4 container tiers, and 4 z-index planes.",
-    shelves: [
-      shelf("Screen", "breakpoint", named(starts("--breakpoint-"))),
-      shelf("Containers", "breakpoint", named(starts("--container-"))),
-      shelf("Z-index planes", "layer", named(starts("--layer-"))),
-    ],
+    note: "Four planes, two breakpoints (640, 900) and four container tiers (320, 448, 640, 900).",
+    wide: true,
+    inUse: "layout",
+    shelves: [],
   },
 ];

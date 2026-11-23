@@ -20,6 +20,7 @@
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
+  import { rise } from "#lib/components/ui/elevated/index.js";
   import { submenuSurface } from "#lib/components/ui/menu-surface.svelte.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
@@ -44,6 +45,9 @@
     } = $props();
 
   const surface = submenuSurface(() => ref);
+
+  /** One step above the surface it opens in (theme.css `surface`). */
+  const surfaceLevel = rise();
 </script>
 
 <!-- In the top layer's portal, as every kit floating surface is: inside its
@@ -51,6 +55,7 @@
      coordinates. -->
 <DropdownMenuPortal {...portalProps}>
   <DropdownMenuPrimitive.SubContent
+    style="--surface-level: {surfaceLevel}"
     {preventOverflowTextSelection}
     {strategy}
     class={cn(

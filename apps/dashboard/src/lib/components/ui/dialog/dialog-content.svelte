@@ -19,8 +19,8 @@
    */
   export const dialogTrayVariants = tv({
     slots: {
-      tray: "fixed phone:top-1/2 phone:left-1/2 z-(--layer-float) flex phone:max-h-dvh-85 w-full phone:max-w-112 phone:-translate-x-1/2 phone:-translate-y-1/2 flex-col phone:rounded-xl phone:bg-surface-recess phone:p-1.5 phone:shadow-lg outline-none phone:motion-safe:data-closed:animate-rise-out phone:motion-safe:data-open:animate-rise-in max-phone:inset-x-0 max-phone:bottom-0 max-phone:max-h-vh-85 max-phone:w-full max-phone:rounded-t-lg max-phone:border-border-hairline max-phone:border-t max-phone:bg-surface-raised max-phone:shadow-lg max-phone:motion-reduce:data-closed:animate-fade-out max-phone:motion-reduce:data-closed:anim-dur-fast max-phone:motion-reduce:data-open:animate-fade-in max-phone:motion-reduce:data-open:anim-dur-fast max-phone:motion-safe:data-closed:animate-sheet-out max-phone:motion-safe:data-open:animate-sheet-in",
-      body: "phone:rounded-lg bg-surface-raised phone:p-space-4 max-phone:px-4 max-phone:pb-[calc(--spacing(4)+var(--safe-bottom))]",
+      tray: "surface fixed phone:top-1/2 phone:left-1/2 z-(--layer-float) flex phone:max-h-dvh-85 w-full phone:max-w-112 phone:-translate-x-1/2 phone:-translate-y-1/2 flex-col phone:rounded-xl phone:bg-surface-recess phone:p-1.5 outline-none phone:motion-safe:data-closed:animate-rise-out phone:motion-safe:data-open:animate-rise-in max-phone:inset-x-0 max-phone:bottom-0 max-phone:max-h-vh-85 max-phone:w-full max-phone:rounded-t-lg max-phone:border-border-hairline max-phone:border-t max-phone:motion-reduce:data-closed:animate-fade-out max-phone:motion-reduce:data-closed:anim-dur-fast max-phone:motion-reduce:data-open:animate-fade-in max-phone:motion-reduce:data-open:anim-dur-fast max-phone:motion-safe:data-closed:animate-sheet-out max-phone:motion-safe:data-open:animate-sheet-in",
+      body: "phone:rounded-lg bg-(--surface-ground) phone:p-space-4 max-phone:px-4 max-phone:pb-[calc(--spacing(4)+var(--safe-bottom))]",
       /** The sheet's grabber, the drawer's own (ui/drawer), under the phone line only. */
       grabber: "phone:hidden",
       /** Close: the 30px ghost 12px from the tray body's corner; on the
@@ -91,6 +91,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import { Button } from "#lib/components/ui/button/index.js";
   import { grabberVariants } from "#lib/components/ui/drawer/drawer-content.svelte";
+  import { rise } from "#lib/components/ui/elevated/index.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
@@ -180,6 +181,9 @@
       })(ref);
     }
   });
+
+  /** Its step on the surface ladder (ui/elevated). */
+  const surfaceLevel = rise();
 </script>
 
 <DialogPortal {...portalProps}>
@@ -190,6 +194,7 @@
        is open, and clears it at once (floating-presence). The sheet's slide
        travels its own height (`--sheet-away`, the kit sheet's). -->
   <DialogPrimitive.Content
+    style="--surface-level: {surfaceLevel}"
     {preventOverflowTextSelection}
     class={cn(tray.tray(), dialogContentVariants({ size, width }), className)}
     data-slot="dialog-content"
@@ -233,7 +238,7 @@
           {#if headed}
             <!-- The header's scroll edge effect (HeadFade): what scrolls
                  beneath it blurs and fades into the body, clear at rest. -->
-            <HeadFade band="var(--dialog-room)" tint="bg-surface-raised" />
+            <HeadFade band="var(--dialog-room)" tint="bg-(--surface-ground)" />
           {/if}
           <div
             data-slot="grid"

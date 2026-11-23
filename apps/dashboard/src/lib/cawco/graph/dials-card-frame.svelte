@@ -10,6 +10,7 @@
    */
   import type { PropMeta } from "@cawco/core/stage";
   import { MediaQuery } from "svelte/reactivity";
+  import { rise } from "#lib/components/ui/elevated/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import Dials from "./Dials.svelte";
@@ -76,12 +77,16 @@
    */
   const CARD_W =
     "min(var(--spacing-measure), calc(calc(var(--spacing) * 48) + calc(var(--spacing) * 64) + var(--spacing-space-6) + 4 * var(--spacing-space-3) + 2px))";
+
+  /** Its step on the surface ladder (ui/elevated). */
+  const surfaceLevel = rise();
 </script>
 
 <div
   class="flex justify-center bg-surface-page px-space-3 pt-space-4 pb-space-6"
 >
   <div
+    style:--surface-level={surfaceLevel}
     class={floatingSurface({
       class:
         "flex max-h-(--card-max) w-full max-w-(--card-w) flex-col p-space-3",

@@ -29,6 +29,7 @@
   import type { ComponentProps, Snippet } from "svelte";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { sheetHeadVariants } from "#lib/components/ui/drawer/sheet-head.js";
+  import { rise } from "#lib/components/ui/elevated/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconClose } from "#lib/icons.js";
@@ -148,6 +149,9 @@
       );
     }
   });
+
+  /** Its step on the surface ladder (ui/elevated). */
+  const surfaceLevel = rise();
 </script>
 
 <SheetPortal {...portalProps} {keep}>
@@ -159,8 +163,9 @@
        The theme's `sheet-pan` component rule says it, keyed on this
        element's data-slot and data-side. -->
   <SheetPrimitive.Content
+    style="--surface-level: {surfaceLevel}"
     class={cn(
-      "fixed side-bottom:inset-x-0 side-top:inset-x-0 side-left:inset-y-0 side-right:inset-y-0 side-top:top-0 side-right:right-0 side-bottom:bottom-0 side-left:left-0 z-(--layer-float) flex side-bottom:h-auto side-left:h-full side-right:h-full side-top:h-auto side-left:w-3/4 side-right:w-3/4 side-left:phone:max-w-96 side-right:phone:max-w-96 flex-col side-bottom:border-t side-left:border-r side-top:border-b side-right:border-l bg-surface-raised bg-clip-padding text-ink-strong type-label shadow-lg timeline-scope-transcript-head",
+      "fixed side-bottom:inset-x-0 side-top:inset-x-0 side-left:inset-y-0 side-right:inset-y-0 side-top:top-0 side-right:right-0 side-bottom:bottom-0 side-left:left-0 z-(--layer-float) flex side-bottom:h-auto side-left:h-full side-right:h-full side-top:h-auto side-left:w-3/4 side-right:w-3/4 side-left:phone:max-w-96 side-right:phone:max-w-96 flex-col side-bottom:border-t side-left:border-r side-top:border-b side-right:border-l surface bg-clip-padding text-ink-strong type-label timeline-scope-transcript-head",
       /* It travels its whole size from the edge it belongs to (`--sheet-away`),
          over --duration-slow on the drawer curve, and leaves the same way over
          --duration-base; the entrance holds no end (no fill), since a drag writes
@@ -194,7 +199,7 @@
             >{title}</SheetPrimitive.Title
           >
         {:else}
-          <HeadFade band="var(--sheet-room)" tint="bg-surface-raised" />
+          <HeadFade band="var(--sheet-room)" tint="bg-(--surface-ground)" />
           <div
             class={cn(head.head(), "absolute inset-x-0 top-0 z-2 px-4 pt-4")}
             data-slot="sheet-header"

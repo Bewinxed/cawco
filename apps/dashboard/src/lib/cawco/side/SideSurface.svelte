@@ -48,6 +48,7 @@
     BarMenu,
   } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { rise } from "#lib/components/ui/elevated/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import {
@@ -521,6 +522,9 @@
       untrack(fit);
     }
   });
+
+  /** Its step on the surface ladder (ui/elevated). */
+  const surfaceLevel = rise("panel");
 </script>
 
 {#snippet expandBar()}
@@ -595,12 +599,13 @@
      is the sheet's own content: the sheet draws the surface and the corners,
      and the card neither (no second sheet inside it). -->
 <section
+  style:--surface-level={surfaceLevel}
   data-slot="side-card"
   data-side-card={of}
   data-side-surface-expanded={expanded || undefined}
   aria-label={label}
   class={cn(
-    floatingSurface({ depth: "panel" }),
+    floatingSurface(),
     "group/card @container relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden p-0 timeline-scope-transcript-head data-side-surface-expanded:rounded-none data-side-surface-expanded:border-0 data-side-surface-expanded:shadow-none in-data-cawco-headed:rounded-none in-data-cawco-headed:border-0 in-data-cawco-headed:shadow-none in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:rounded-none in-data-preview-sheet:border-0 in-data-preview-sheet:bg-transparent in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[border-radius,box-shadow] motion-safe:in-data-split-sliding:duration-(--duration-slow) motion-safe:in-data-split-sliding:ease-drawer"
   )}
   style:--side-room={"calc(var(--spacing-control-md) + 2 * var(--spacing-space-2))"}

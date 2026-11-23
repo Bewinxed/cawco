@@ -27,16 +27,16 @@
     OptionGroupItem,
   } from "#lib/components/ui/option-group/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconClose, IconPen, IconPlus } from "#lib/icons.js";
   import type { WhoDecides } from "./decides.svelte";
   import { showFirstProblem } from "./first-problem";
-  import { drawnInPlace, placeUnder } from "./in-place";
+  import { drawnInPlace } from "./in-place";
   import KindRow from "./KindRow.svelte";
   import { KIND_STEPS, type KindStep, writeParkedKind } from "./kinds.svelte";
   import MemberFace from "./MemberFace.svelte";
   import SetupRow from "./SetupRow.svelte";
+  import StillPopover from "./StillPopover.svelte";
 
   let {
     who,
@@ -351,18 +351,13 @@
 </div>
 
 {#if still && who.kindsOpen}
-  <section
-    aria-labelledby="{uid}-head"
-    class={[
-      floatingSurface({ motion: "pop" }),
-      "absolute z-(--layer-float) w-(--pop-w) overflow-clip p-0",
-    ]}
-    data-state="open"
-    data-still-popover
+  <StillPopover
     id="{uid}-panel"
-    style="--pop-w: min(calc(var(--spacing) * 176), 100%)"
-    {@attach placeUnder(() => anchor, "end")}
+    labelledby="{uid}-head"
+    anchor={() => anchor}
+    align="end"
+    width="calc(var(--spacing) * 176)"
   >
     {@render panel(`${uid}-head`)}
-  </section>
+  </StillPopover>
 {/if}

@@ -41,6 +41,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { rise } from "#lib/components/ui/elevated/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -1302,6 +1303,9 @@
     }
     return null;
   };
+
+  /** Its step on the surface ladder (ui/elevated). */
+  const surfaceLevel = rise();
 </script>
 
 {#snippet mark(item: TrayChild, flies: boolean)}
@@ -1781,6 +1785,7 @@
         <!-- svelte-ignore a11y_no_noninteractive_element_interactions: Escape inside the shelf is heard on the region, as it passes up from the row's field -->
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: Escape inside the shelf (a row's reason field, then the shelf) is heard on the region; every control in it is its own button or field -->
         <section
+          style:--surface-level={surfaceLevel}
           data-slot="shelf"
           aria-label={shelf === "failed"
             ? "Failed delegates"

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Select as SelectPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
+  import { rise } from "#lib/components/ui/elevated/index.js";
   import {
     drawn,
     own,
@@ -40,6 +41,9 @@
       })(ref);
     }
   });
+
+  /** One step above the surface it opens in (theme.css `surface`). */
+  const surfaceLevel = rise();
 </script>
 
 <!-- At most the room bits-ui measures between the trigger and the
@@ -51,6 +55,7 @@
 
 <SelectPortal {...portalProps}>
   <SelectPrimitive.Content
+    style="--surface-level: {surfaceLevel}"
     {preventOverflowTextSelection}
     {strategy}
     class={cn(

@@ -33,20 +33,8 @@
     "transition-opacity duration-(--duration-slow) ease-drawer [--kit-rise:0_calc(-1*var(--spacing-space-2))] side-left:[--kit-rise:var(--spacing-space-2)_0] side-right:[--kit-rise:calc(-1*var(--spacing-space-2))_0] side-top:[--kit-rise:0_var(--spacing-space-2)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--duration-base) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)]";
 
   export const floatingSurface = tv({
-    base: "rounded-lg concentric-in r-outer-lg border border-border-control bg-surface-raised p-space-2 text-ink-strong",
+    base: "surface rounded-lg concentric-in r-outer-lg border border-border-control p-space-2 text-ink-strong",
     variants: {
-      /**
-       * Its drop (DESIGN.md, Shadow Vocabulary): `overlay` for what opens
-       * over the page (a popover, a menu, a toast); `panel` for a card that
-       * floats in a place of its own, as the side card in its split: the
-       * ladder's md, whose drop (13px at most) its split's inset holds whole,
-       * where the overlay's 48px was cut by the pane into a band and the
-       * tile's 2px read as no shadow at all.
-       */
-      depth: {
-        overlay: "shadow-lg",
-        panel: "shadow-md",
-      },
       motion: {
         pop: popMotion,
         hang: "motion-reduce:transition-opacity motion-reduce:duration-(--duration-slow) motion-reduce:ease-drawer motion-reduce:data-closed:opacity-0 motion-reduce:starting:data-open:opacity-0 motion-reduce:data-closed:duration-(--duration-base)",
@@ -62,7 +50,7 @@
         drawn: "r-inset-space-2",
       },
     },
-    defaultVariants: { motion: "pop", edge: "own", depth: "overlay" },
+    defaultVariants: { motion: "pop", edge: "own" },
   });
 
   export type FloatingSurfaceLooks = VariantProps<typeof floatingSurface>;
@@ -118,6 +106,7 @@
   import { Popover as PopoverPrimitive } from "bits-ui";
   import { type ComponentProps, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import { rise } from "#lib/components/ui/elevated/index.js";
   import FloatingBody from "#lib/components/ui/floating-body.svelte";
   import { pressedAway } from "#lib/components/ui/floating-presence.js";
   import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
@@ -245,12 +234,16 @@
       return resize(ref);
     }
   });
+
+  /** One step above the surface it opens in (theme.css `surface`). */
+  const surfaceLevel = rise();
 </script>
 
 <!-- Mounted by bits-ui's forceMount and drawn while its presence says so:
      the page has its pointer back at the dismissal (floating-presence). -->
 <PopoverPortal {...portalProps}>
   <PopoverPrimitive.Content
+    style="--surface-level: {surfaceLevel}"
     {preventOverflowTextSelection}
     {strategy}
     {align}

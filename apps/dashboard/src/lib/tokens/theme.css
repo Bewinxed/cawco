@@ -1146,6 +1146,40 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The surface ladder. A surface stands one level above the surface it opens
+   in (ui/elevated sets --surface-level from its parent's). Level 0 is the
+   page. In light the ground turns to the raised white at level 1 and the
+   shadow alone carries every level after it; in dark each level is lighter,
+   and the shadow deepens with it. What stands inside a surface without
+   rising (a dialog's body, a fade over its head) takes its ground from
+   --surface-ground, which the surface computes at its own level. */
+@property --surface-level {
+  syntax: "<integer>";
+  inherits: true;
+  initial-value: 0;
+}
+
+@utility surface {
+  --surface-ground: light-dark(
+    oklch(
+      from var(--color-surface-page)
+        calc(l + min(var(--surface-level), 1) * 0.027) c h
+    ),
+    oklch(
+      from var(--color-surface-page) calc(l + var(--surface-level) * 0.025) c h
+    )
+  );
+  background-color: var(--surface-ground);
+  box-shadow:
+    0 calc(var(--surface-level) * 2px) calc(var(--surface-level) * 6px)
+      light-dark(oklch(29.5% 0.01 70 / 0.1), oklch(0% 0 0 / 0.45)),
+    0 0 0 1px
+      light-dark(
+        oklch(29.5% 0.01 70 / calc(min(var(--surface-level), 1) * 0.06)),
+        oklch(100% 0 0 / calc(var(--surface-level) * 0.03))
+      );
+}
+
 /* Primary coral fill sheen and hover state derived from --color-accent. */
 @utility bg-accent-surface {
   background-image: linear-gradient(

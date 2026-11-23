@@ -33,6 +33,7 @@
   import { graphWords as words } from "@cawco/core/words/graph";
   import type { Snippet } from "svelte";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import { rise } from "#lib/components/ui/elevated/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconChevronDown, IconCloudCross } from "#lib/icons.js";
@@ -113,6 +114,9 @@
   $effect(() => {
     need = laid && edge >= 0 ? Math.ceil(laid.need + edge) : 0;
   });
+
+  /** Its step on the surface ladder (ui/elevated). */
+  const surfaceLevel = rise();
 </script>
 
 <section
@@ -283,6 +287,7 @@
      the glass, as the map's card rises over it (floatingSurface). -->
 {#snippet differenceCard()}
   <div
+    style:--surface-level={surfaceLevel}
     class={[
       floatingSurface({ motion: "pop" }),
       "max-h-80 max-w-measure min-w-0 overflow-y-auto overscroll-contain ps-space-3",

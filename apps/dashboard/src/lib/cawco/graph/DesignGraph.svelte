@@ -70,6 +70,7 @@
   } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { rise as riseSurface } from "#lib/components/ui/elevated/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import {
     IconAdaptLinear,
@@ -1391,6 +1392,9 @@
       ? figure(Math.round(link.laid.scale * 100))
       : null
   );
+
+  /** Its step on the surface ladder (ui/elevated). */
+  const surfaceLevel = riseSurface();
 </script>
 
 <!-- What rises over the drawing: the map, the move, or the dials. -->
@@ -2035,6 +2039,7 @@
                  transport and timeline, or the dials. Under the phone
                  line it is a bottom sheet instead (below). -->
         <div
+          style:--surface-level={surfaceLevel}
           class={[
             floatingSurface({ motion: "pop" }),
             "absolute inset-x-space-3 bottom-(--rise-foot) z-2 mx-auto flex min-h-0 flex-col overflow-hidden",

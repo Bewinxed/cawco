@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
+  import { rise } from "#lib/components/ui/elevated/index.js";
   import FloatingBody from "#lib/components/ui/floating-body.svelte";
   import { menuSurface } from "#lib/components/ui/menu-surface.svelte.js";
   import {
@@ -39,12 +40,16 @@
     onInteractOutside: () => onInteractOutside,
     onCloseAutoFocus: () => onCloseAutoFocus,
   });
+
+  /** One step above the surface it opens in (theme.css `surface`). */
+  const surfaceLevel = rise();
 </script>
 
 <!-- Mounted by bits-ui's forceMount and drawn while its presence says so:
      the page has its pointer back at the dismissal (floating-presence). -->
 <ContextMenuPortal {...portalProps}>
   <ContextMenuPrimitive.Content
+    style="--surface-level: {surfaceLevel}"
     {preventOverflowTextSelection}
     {strategy}
     class={cn(

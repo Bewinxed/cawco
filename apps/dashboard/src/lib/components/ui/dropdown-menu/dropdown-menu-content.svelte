@@ -32,6 +32,7 @@
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
+  import { rise } from "#lib/components/ui/elevated/index.js";
   import FloatingBody from "#lib/components/ui/floating-body.svelte";
   import { menuSurface } from "#lib/components/ui/menu-surface.svelte.js";
   import {
@@ -91,11 +92,15 @@
     onInteractOutside: () => onInteractOutside,
     onCloseAutoFocus: () => onCloseAutoFocus,
   });
+
+  /** One step above the surface it opens in (theme.css `surface`). */
+  const surfaceLevel = rise();
 </script>
 
 <!-- Mounted and drawn as the popover is (floating-body). -->
 <DropdownMenuPortal {...portalProps}>
   <DropdownMenuPrimitive.Content
+    style="--surface-level: {surfaceLevel}"
     {preventOverflowTextSelection}
     {strategy}
     {align}

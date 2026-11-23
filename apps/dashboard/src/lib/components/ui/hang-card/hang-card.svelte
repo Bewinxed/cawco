@@ -138,6 +138,7 @@
   import { type Snippet, untrack } from "svelte";
   import ContextMenuContent from "#lib/components/ui/context-menu/context-menu-content.svelte";
   import DropdownMenuContent from "#lib/components/ui/dropdown-menu/dropdown-menu-content.svelte";
+  import { rise } from "#lib/components/ui/elevated/index.js";
   import {
     drawn,
     own,
@@ -243,13 +244,12 @@
     /** It hangs from the top bar's glass. */
     glass?: boolean;
     /**
-     * Its drop (floatingSurface's `depth`): the overlay's, or `panel`, the
-     * ladder's md, for a card hung from an anchor narrower than itself (a
-     * bar's glass, BarCard), where the clip at its top would cut the
-     * overlay's 48px drop into a hard line past the anchor's sides; md's
-     * rises 7px at most above the card, faint where the clip ends it.
+     * How far it rises on the surface ladder (ui/elevated): a float, or a
+     * `panel`, one step, for a card hung from an anchor narrower than itself
+     * (a bar's glass, BarCard), where the clip at its top would cut a float's
+     * deeper drop into a hard line past the anchor's sides.
      */
-    depth?: "overlay" | "panel";
+    depth?: "float" | "panel";
     /**
      * The face it frames: the glass card's (GlassCard: Caw's panel, the
      * machines, Jump or Files, each its own width, padding and height), or
@@ -296,7 +296,7 @@
     as: Content = PopoverContent,
     flared = true,
     glass = false,
-    depth = "overlay",
+    depth = "float",
     frame,
     surface,
     tab = false,
@@ -728,6 +728,9 @@
       }
     };
   };
+
+  /** Its step on the surface ladder, taken once as it opens. */
+  const surfaceLevel = rise(untrack(() => depth));
 </script>
 
 <!-- Mounted by bits-ui's forceMount and drawn while its presence says so,
@@ -740,6 +743,7 @@
      z-index is held inside: it stands on the floating layer itself
      (DESIGN.md, Stacking), or the card stood under the page's dock. -->
 <Content
+  style="--surface-level: {surfaceLevel}"
   preventOverflowTextSelection={false}
   data-glass-card={glass || undefined}
   data-safe-bottom
@@ -749,7 +753,7 @@
   {...morphLook}
   {...rest}
   class={cn(
-    floatingSurface({ motion: "hang", edge: "drawn", depth }),
+    floatingSurface({ motion: "hang", edge: "drawn" }),
     hangCardVariants({ tab, rises, glass, surface }),
     frame && FRAMES[frame],
     className

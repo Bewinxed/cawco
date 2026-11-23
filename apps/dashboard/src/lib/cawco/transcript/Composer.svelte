@@ -33,6 +33,7 @@
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import * as Command from "#lib/components/ui/command/index.js";
   import { dockShellVariants } from "#lib/components/ui/dock-shell/index.js";
+  import { rise as riseSurface } from "#lib/components/ui/elevated/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -795,6 +796,9 @@
     showing: () => showing,
     trayRows: () => trayRows,
   });
+
+  /** Its step on the surface ladder (ui/elevated). */
+  const surfaceLevel = riseSurface();
 </script>
 
 <!-- The dock is one column from the top of the pane down to the composer's
@@ -1390,6 +1394,7 @@
                the highlighted row standing on the kit's ghost. -->
           <!-- biome-ignore lint/a11y/noStaticElementInteractions: role="presentation" is deliberate — this wrapper is never meant to be announced; the mousedown handler only preventDefaults so focus stays on the field, it is not a user interaction target. -->
           <div
+            style:--surface-level={surfaceLevel}
             data-slot="menu"
             class={floatingSurface({
               class:
