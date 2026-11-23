@@ -12,7 +12,7 @@
    follows through its own formula, as a change to theme.css would, and
    the layers the frame portals to the body read them alike. The stage
    draws each frame in a document of its own. In `overrides`, over
-   theme.css's layer and SectionRow's utilities. */
+   theme.css's layer and the components' utilities. */
 
 @layer overrides {
   :root {
@@ -110,5 +110,20 @@
   li[data-slot="item"] > [data-slot="row"] ~ div {
     grid-column: body / trail-end;
     padding-inline: 0;
+  }
+
+  /* 4. Content edges on the base, counted from a surface's outer edge.
+     Today the views strip's first label and a section card's heading
+     share an edge by sum (3 + 12 against border 1 + 14); on the base the
+     card's side becomes 1 + 16 and the strip's stays 3 + 12, 2px apart.
+     Both stand 16 in: the segmented groove's pad is a step (SEGMENTED_TRACK
+     writes it as 0.75 of the base), and the card's padding holds its
+     border inside it, as `--spacing-c-field-inline-inset` does. */
+  [data-slot="settings-section"] {
+    padding: calc(var(--spacing-space-4) - var(--border-width));
+  }
+
+  [data-slot="views"] [data-slot="ff-tabs-list"] {
+    --pad: var(--spacing-space-1);
   }
 }

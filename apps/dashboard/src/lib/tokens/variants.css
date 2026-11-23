@@ -588,6 +588,7 @@
 @custom-variant slot-session-row-note (&[data-slot="session-row-note"]);
 @custom-variant slot-session-status (&[data-slot="session-status"]);
 @custom-variant slot-settings (&[data-slot="settings"]);
+@custom-variant slot-settings-section (&[data-slot="settings-section"]);
 @custom-variant slot-setup-asks (&[data-slot="setup-asks"]);
 @custom-variant slot-shade (&[data-slot="shade"]);
 @custom-variant slot-shead (&[data-slot="shead"]);
@@ -678,6 +679,7 @@
 @custom-variant slot-view-bar (&[data-slot="view-bar"]);
 @custom-variant slot-view-calendar (&[data-slot="view-calendar"]);
 @custom-variant slot-view-canvas (&[data-slot="view-canvas"]);
+@custom-variant slot-views (&[data-slot="views"]);
 @custom-variant slot-waiting (&[data-slot="waiting"]);
 @custom-variant slot-waiting-chip (&[data-slot="waiting-chip"]);
 @custom-variant slot-wall (&[data-slot="wall"]);
