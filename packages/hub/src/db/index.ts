@@ -50,7 +50,7 @@ import { type HubAuthDb, hubAuthDb } from "./hub-auth";
 import { type HubSettingsDb, hubSettingsDb } from "./hub-settings";
 import { type IngressDb, ingressDb } from "./ingress";
 import { type InstancesDb, instancesDb } from "./instances";
-import { type LfsOffersDb, lfsOffersDb } from "./lfs-offers";
+import { type LfsRefusalsDb, lfsRefusalsDb } from "./lfs-refusals";
 import { type MachinesDb, machinesDb } from "./machines";
 import { type McpServersDb, mcpServersDb } from "./mcp-servers";
 import { type MemoryFactsDb, memoryFactsDb } from "./memory-facts";
@@ -158,8 +158,8 @@ interface HubStore {
   readonly hubAuth: HubAuthDb;
   /** Inbound events, their routes and the pollers that bring them in (ingress.ts). */
   readonly ingress: IngressDb;
-  /** Git LFS offered for a place's left-out large files (lfs-offers.ts). */
-  readonly lfsOffers: LfsOffersDb;
+  /** LFS servers a checkout named that the project never declared (routes/lfs.ts). */
+  readonly lfsRefusals: LfsRefusalsDb;
   /** When briefs last carried a project's knowledge lessons (memory.ts). */
   readonly memoryFacts: MemoryFactsDb;
   /** What each session's move ended, until it is told (move-endings.ts). */
@@ -399,7 +399,7 @@ const make = async (path: string): Promise<DbShape> => {
     designOffers: designOffersDb(db),
     trim: trimDb(db),
     triggers: triggersDb(db),
-    lfsOffers: lfsOffersDb(db),
+    lfsRefusals: lfsRefusalsDb(db),
     blocks: blocksDb(db),
     decides: decidesDb(db, delegateTypes),
     starters: startersDb(db),

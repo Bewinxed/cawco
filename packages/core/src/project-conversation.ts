@@ -9,7 +9,6 @@ import type { OnCap, ProjectCap } from "./areas";
 import type { HarnessKind } from "./harness/kinds";
 import type { OfferedMode, PermissionMode } from "./harness/modes";
 import type { ItemEnd } from "./work-items";
-import type { PlaceLfsRow } from "./workspace/controls";
 
 /**
  * Why the project's conversation can't start when no machine is online, and
@@ -230,25 +229,6 @@ export interface DesignOfferState {
   builtTaskId: string | null;
 }
 
-/** Where a place's offer of Git LFS stands (`GET /api/lfs-offers/:id`, hub lfs-offers.ts). */
-export interface LfsOfferState {
-  /** `open` while unanswered; `tracked`: its files are committed through LFS; `dismissed`: Not now. */
-  answer: "open" | "tracked" | "dismissed";
-  /** The commit that took them through LFS; null until then. */
-  commit: string | null;
-  id: string;
-  /**
-   * Track's own answer only: the folder has a pre-push hook of its own, so
-   * git-lfs's was not put beside it, and a push from there sends the large
-   * files only with `git lfs push origin --all` or once the hooks are merged.
-   */
-  ownPrePush?: true;
-  /** The folder's root on its machine. */
-  root: string;
-  /** What is offered, a row per pattern. */
-  rows: PlaceLfsRow[];
-}
-
 /**
  * An offer of the hub's waiting on the person's answer, as Needs you lists
  * it (hub offers-waiting.ts): never a line in the project's Caw chat.
@@ -256,9 +236,6 @@ export interface LfsOfferState {
  * - `design`: a design-shaped task entered an active stage in a project with
  *   no design system (hub design-offers.ts); Build and Not now answer it
  *   through `/api/projects/:id/design-offer`.
- * - `lfs`: a folder made a repository left large files out of its first
- *   commit (hub place-repo.ts); Track with LFS and Not now answer it through
- *   `/api/lfs-offers/:id`.
  * - `lfs-refused`: a checkout's `.lfsconfig` names an LFS server the project
  *   never declared, so its large files stayed pointers (hub routes/lfs.ts);
  *   declared in the project's settings, or put away with Dismiss through
@@ -274,17 +251,6 @@ export type WaitingOffer =
       sources: string[];
       /** The task whose move raised it. */
       taskId: string;
-    }
-  | {
-      id: string;
-      kind: "lfs";
-      machineId: string;
-      offeredAt: number;
-      projectId: string;
-      /** The folder made a repository, on its machine. */
-      root: string;
-      /** What is offered, a row per pattern. */
-      rows: PlaceLfsRow[];
     }
   | {
       /** The LFS server its `.lfsconfig` names. */

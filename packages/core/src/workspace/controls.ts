@@ -187,20 +187,10 @@ export interface PlaceLeftOut {
   why: string;
 }
 
-/**
- * Files a place's first commit left out for their size alone, by the
- * pattern Git LFS would track them under, as `git lfs migrate info` rows
- * read (extension, count, size): `*.<ext>` for a file with an extension,
- * its own path from the place's root for one without. git-lfs-faq(7):
- * "we recommend using patterns rather than `--above`".
- */
-export interface PlaceLfsRow {
+/** A file a place's first commit left out for its size alone, from the place's root. */
+export interface PlaceLargeFile {
   bytes: number;
-  /** How many of the left-out files it covers. */
-  count: number;
-  /** Those files, from the place's root. */
-  paths: string[];
-  pattern: string;
+  path: string;
 }
 
 /** What {@link CONTROL_PLACE_REPO} found or did. */
@@ -222,38 +212,11 @@ export type PlaceRepo =
       /**
        * What of `leftOut` was left out for its size alone, core
        * `LARGE_FILE_BYTES` (move.ts) or more, nothing else keeping it out
-       * (the folder's own ignore rules): what Git LFS is offered for, by
-       * pattern.
+       * (the folder's own ignore rules), biggest first: the session that
+       * asked for the repository is told of each (hub repo-publish.ts).
        */
-      lfs: PlaceLfsRow[];
+      large: PlaceLargeFile[];
     };
-
-/**
- * A place's left-out large files committed through Git LFS, once the person
- * accepted the offer (hub lfs-offers.ts): `git lfs track <patterns>`, the
- * paths taken out of CawCo's block in `.gitignore`, then a second commit as
- * CawCo by git-lfs-migrate(1)'s no-rewrite path (`git add .gitattributes;
- * git add --renormalize .; git commit`). Args `[path, PlaceLfsRow[]]`.
- * Answers {@link PlaceLfsMade}. Refused, with the reason, when the place is
- * no repository, git-lfs is not on the machine, or a path is no longer a
- * file there. Machine-scoped.
- */
-export const CONTROL_PLACE_LFS = "placeLfs";
-
-/** What {@link CONTROL_PLACE_LFS} committed. */
-export interface PlaceLfsMade {
-  bytes: number;
-  commit: string;
-  /** The left-out files it committed through LFS. */
-  files: number;
-  /**
-   * Whether git-lfs's hooks went into the folder's own git, so the person's
-   * own push sends the large files; false when a pre-push hook of the
-   * folder's own was there, which git-lfs does not overwrite.
-   */
-  hooks: boolean;
-  patterns: string[];
-}
 
 /**
  * Pushes a project's place, a git repository, to the hub's own remote of

@@ -84,7 +84,7 @@ export const lfsRoutes = ({
         }
         const machineId = project.machineId ?? body.machineId;
         if (
-          db.lfsOffers.refused({
+          db.lfsRefusals.refused({
             projectId: params.id,
             endpoint: body.endpoint,
             machineId,

@@ -115,7 +115,6 @@
     IconWindow,
   } from "#lib/icons.js";
   import { failureWords } from "#lib/platform/hub-read.js";
-  import { toast } from "#lib/platform/toasts.js";
   import { isTyping } from "#lib/utils/typing.js";
   import { goto } from "$app/navigation";
   import CopyBox from "../CopyBox.svelte";
@@ -143,7 +142,6 @@
   import { decideAction } from "../stores/needs.svelte";
   import {
     answerDesignOffer,
-    answerLfsOffer,
     dismissLfsRefusal,
   } from "../stores/offers.svelte";
   import { relayStore } from "../stores/relay.svelte";
@@ -258,7 +256,6 @@
     return "";
   });
 
-  const MB = 1024 * 1024;
   /** An offer's line: what it asks, in the hub's words for its kind. */
   function offerLine(offer: WaitingOffer): string {
     switch (offer.kind) {
@@ -268,11 +265,6 @@
             offer.sources
           )
         );
-      case "lfs": {
-        const count = offer.rows.reduce((sum, row) => sum + row.count, 0);
-        const bytes = offer.rows.reduce((sum, row) => sum + row.bytes, 0);
-        return lfsWords.offerLine(count, `${(bytes / MB).toFixed(1)} MB`);
-      }
       case "lfs-refused":
         return lfsWords.refusedLine(offer.endpoint);
     }
@@ -290,14 +282,6 @@
     try {
       if (offer.kind === "design") {
         await answerDesignOffer(offer.projectId, yes ? "build" : "dismiss");
-      } else if (offer.kind === "lfs") {
-        const now = await answerLfsOffer(offer.id, yes ? "track" : "dismiss");
-        if (now.answer === "tracked" && now.commit) {
-          // The row leaves on the hub's frame: what Track made is said here.
-          toast.success(lfsWords.tracked(now.commit), {
-            ...(now.ownPrePush ? { description: lfsWords.ownPrePush } : {}),
-          });
-        }
       } else {
         await dismissLfsRefusal(offer.projectId, offer.endpoint);
       }
@@ -846,8 +830,6 @@
       {:else if item.kind === "offer"}
         {#if item.offer.kind === "lfs-refused"}
           <IconWarningTriangle aria-hidden="true" class="size-icon-md" />
-        {:else if item.offer.kind === "lfs"}
-          <IconFolder aria-hidden="true" class="size-icon-md" />
         {:else}
           <IconNeedsYou aria-hidden="true" class="size-icon-md" />
         {/if}
@@ -1426,27 +1408,19 @@
           {:else}
             <Button
               disabled={held || offering === "yes"}
-              label={offer.kind === "design"
-                ? offerWords.notNow
-                : lfsWords.notNow}
+              label={offerWords.notNow}
               onclick={() => answerOffer(false)}
               pending={offering === "no"}
-              pendingLabel={offer.kind === "design"
-                ? offerWords.notNowPending
-                : lfsWords.notNowPending}
+              pendingLabel={offerWords.notNowPending}
               size="sm"
               variant="secondary"
             />
             <Button
               disabled={held || offering === "no"}
-              label={offer.kind === "design"
-                ? offerWords.build
-                : lfsWords.track}
+              label={offerWords.build}
               onclick={() => answerOffer(true)}
               pending={offering === "yes"}
-              pendingLabel={offer.kind === "design"
-                ? offerWords.filing
-                : lfsWords.tracking}
+              pendingLabel={offerWords.filing}
               size="sm"
               variant="secondary"
             />

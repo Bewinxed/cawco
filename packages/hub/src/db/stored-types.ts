@@ -891,9 +891,6 @@ export type ProjectOfferAnswer = "accepted" | "dismissed";
 /** The person's answer to a trim offer (schema `trim_offers.answer`). */
 export type TrimOfferAnswer = "on" | "dismissed";
 
-/** The person's answer to an LFS offer (schema `lfs_offers.answer`). */
-export type LfsOfferAnswer = "tracked" | "dismissed";
-
 /** Who changed an artifact (schema `artifact_changes.by`). */
 export type ArtifactChangeBy = "person" | "agent";
 

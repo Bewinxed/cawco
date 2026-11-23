@@ -1,9 +1,8 @@
 /**
  * The hub's offers waiting on the person's answer, as Needs you lists them
- * (core `WaitingOffer`): the design-system offer (design-offers.ts), the
- * Git LFS offer for a made repository's left-out files (place-repo.ts,
- * lfs-offers.ts), and an LFS server a checkout named that the project never
- * declared (routes/lfs.ts). None is a line in the project's Caw chat (the
+ * (core `WaitingOffer`): the design-system offer (design-offers.ts) and an
+ * LFS server a checkout named that the project never declared
+ * (routes/lfs.ts). None is a line in the project's Caw chat (the
  * owner's "Where triggers go", 2026-11-23: what needs the person goes to
  * Needs you).
  *
@@ -18,12 +17,11 @@ import type {
 } from "@cawco/core/project-conversation";
 import { Elysia, problem, t } from "elysia";
 import type { DbShape } from "./db";
-import type { LfsOffers } from "./lfs-offers";
 
 export interface OffersWaitingDeps {
   /** Sends a frame to every dashboard. */
   readonly broadcast: (frame: OffersWaitingFrame) => void;
-  readonly db: Pick<DbShape, "designOffers" | "lfsOffers" | "project">;
+  readonly db: Pick<DbShape, "designOffers" | "lfsRefusals" | "project">;
   /** What a project's design system would be built from, in words (design-offers.ts `sourcesOf`); none when it cannot be read now. */
   readonly sources: (projectId: string) => string[];
 }
@@ -42,16 +40,7 @@ export const createOffersWaiting = ({
       sources: sources(row.projectId),
       taskId: row.taskId,
     }));
-    const lfs: WaitingOffer[] = db.lfsOffers.open().map((row) => ({
-      kind: "lfs",
-      id: row.id,
-      machineId: row.machineId,
-      offeredAt: row.offeredAt.getTime(),
-      projectId: row.projectId,
-      root: row.root,
-      rows: row.rows,
-    }));
-    const refused: WaitingOffer[] = db.lfsOffers.refusals().map((row) => ({
+    const refused: WaitingOffer[] = db.lfsRefusals.open().map((row) => ({
       kind: "lfs-refused",
       endpoint: row.endpoint,
       machineId: row.machineId,
@@ -59,7 +48,7 @@ export const createOffersWaiting = ({
       projectId: row.projectId,
       root: row.root,
     }));
-    return [...design, ...lfs, ...refused]
+    return [...design, ...refused]
       .filter((offer) => db.project(offer.projectId) !== undefined)
       .sort((a, b) => a.offeredAt - b.offeredAt);
   };
@@ -72,7 +61,7 @@ export const createOffersWaiting = ({
     },
     /** Puts an LFS server's refusal away from Needs you; false when none stood. */
     dismissRefusal(projectId: string, endpoint: string): boolean {
-      const dismissed = db.lfsOffers.dismissRefusal(projectId, endpoint);
+      const dismissed = db.lfsRefusals.dismiss(projectId, endpoint);
       if (dismissed) {
         broadcast({ kind: "offers.waiting", offers: list() });
       }
@@ -84,15 +73,12 @@ export const createOffersWaiting = ({
 export type OffersWaiting = ReturnType<typeof createOffersWaiting>;
 
 /**
- * Needs you's read of the offers, an LFS offer's two answers and where it
- * stands, and Dismiss on an LFS server's refusal. One plugin, so the hub's
- * route list stays within TypeScript's instantiation depth (server.ts).
+ * Needs you's read of the offers, and Dismiss on an LFS server's refusal.
+ * One plugin, so the hub's route list stays within TypeScript's
+ * instantiation depth (server.ts).
  */
-export const offersWaitingRoutes = (offers: OffersWaiting, lfs: LfsOffers) =>
+export const offersWaitingRoutes = (offers: OffersWaiting) =>
   new Elysia()
-    .get("/api/lfs-offers/:id", ({ params }) => lfs.state(params.id))
-    .post("/api/lfs-offers/:id/dismiss", ({ params }) => lfs.dismiss(params.id))
-    .post("/api/lfs-offers/:id/track", ({ params }) => lfs.track(params.id))
     .get("/api/offers/waiting", (): { offers: WaitingOffer[] } => ({
       offers: offers.list(),
     }))

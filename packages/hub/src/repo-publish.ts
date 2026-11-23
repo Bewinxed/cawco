@@ -209,7 +209,6 @@ export const createRepoPublish = ({
       return place;
     }
     const made = await places.ensure({
-      projectId: project.id,
       machineId: place.machineId,
       path: place.path,
     });
@@ -230,6 +229,9 @@ export const createRepoPublish = ({
       connection: connection.name,
       account: connection.account,
       ...(made.state === "made" ? { madeCommit: made.commit } : {}),
+      ...(made.state === "made" && made.large.length > 0
+        ? { large: made.large }
+        : {}),
       files: tree.files,
       bytes: tree.bytes,
       // What stays out by the rules, with what a first commit made now

@@ -75,7 +75,6 @@ import type {
   InstanceTitleSource as InstanceTitleSourceType,
   KeepAliveStopped as KeepAliveStoppedType,
   LandingPhase as LandingPhaseType,
-  LfsOfferAnswer as LfsOfferAnswerType,
   LimitCompactionStage as LimitCompactionStageType,
   McpAuthMode as McpAuthModeType,
   MemoryLedger as MemoryLedgerType,
@@ -517,15 +516,6 @@ const LandingPhaseShape = declared(
 export const LandingPhaseSchema: z.ZodType<LandingPhaseType> =
   LandingPhaseShape;
 export type LandingPhaseOutput = z.output<typeof LandingPhaseShape>;
-
-const LfsOfferAnswerShape = declared(
-  z.enum(["tracked", "dismissed"]),
-  "LfsOfferAnswer",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const LfsOfferAnswerSchema: z.ZodType<LfsOfferAnswerType> =
-  LfsOfferAnswerShape;
-export type LfsOfferAnswerOutput = z.output<typeof LfsOfferAnswerShape>;
 
 const LimitCompactionStageShape = declared(
   z.enum(["carrying", "filing", "compacting"]),

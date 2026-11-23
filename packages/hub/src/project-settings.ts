@@ -313,6 +313,7 @@ const ParkedChange: GenericSchema<unknown, ProjectSettingChange> = variant(
       files: number(),
       folder: optional(string()),
       kind: literal("create_repo"),
+      large: optional(array(object({ bytes: number(), path: string() }))),
       leftOut: array(object({ path: string(), why: string() })),
       madeCommit: optional(string()),
       name: string(),
@@ -1120,6 +1121,34 @@ export const createProjectSettings = ({
       : [projectSettingWords(change)];
   };
 
+  /**
+   * A publish applied: the repository made and linked, as its repository's
+   * copy. What it says names each file the place's first commit left out
+   * for its size, so the session that asked knows of them.
+   */
+  const created = async (
+    project: ProjectRow,
+    change: Extract<ProjectSettingChange, { kind: "create_repo" }>
+  ) => {
+    const published = await publish.publish(project, change);
+    if (published instanceof ElysiaStatus) {
+      return published;
+    }
+    const { full, from } = published;
+    const refused = linkable(project, `github.com/${full}`);
+    if (refused instanceof ElysiaStatus) {
+      return refused;
+    }
+    db.addProjectLink(project.id, `github.com/${full}`, hubRepoSegment(from));
+    return [
+      projectSettingWords(change),
+      projectSettingWords({ kind: "link_repo", github: full }),
+      ...(change.large?.length
+        ? [projectSettingsWords.leftForSize(change.large)]
+        : []),
+    ] satisfies string[];
+  };
+
   const applyOne = async (
     project: ProjectRow,
     change: ProjectSettingChange,
@@ -1139,27 +1168,8 @@ export const createProjectSettings = ({
         break;
       case "rename":
         return await editSaid(change, project.id, { name: change.name });
-      case "create_repo": {
-        // A publish links what it made, as its repository's copy.
-        const published = await publish.publish(project, change);
-        if (published instanceof ElysiaStatus) {
-          return published;
-        }
-        const { full, from } = published;
-        const refused2 = linkable(project, `github.com/${full}`);
-        if (refused2 instanceof ElysiaStatus) {
-          return refused2;
-        }
-        db.addProjectLink(
-          project.id,
-          `github.com/${full}`,
-          hubRepoSegment(from)
-        );
-        return [
-          projectSettingWords(change),
-          projectSettingWords({ kind: "link_repo", github: full }),
-        ] satisfies string[];
-      }
+      case "create_repo":
+        return await created(project, change);
       case "set_runs_on":
       case "set_dispatch":
       case "set_max_attempts":
@@ -1293,7 +1303,11 @@ export const createProjectSettings = ({
     }
     const changes = answered3.map((one) =>
       one.kind === "create_repo" && shown?.kind === "create_repo"
-        ? { ...one, leftOut: shown.leftOut }
+        ? {
+            ...one,
+            leftOut: shown.leftOut,
+            ...(shown.large ? { large: shown.large } : {}),
+          }
         : one
     );
     // Approved: the person's own change.

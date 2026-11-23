@@ -3291,6 +3291,13 @@
       "when": 1795421127659,
       "tag": "0477_offers_in_needs_you",
       "breakpoints": true
+    },
+    {
+      "idx": 478,
+      "version": "6",
+      "when": 1795426055135,
+      "tag": "0478_lfs_offers_gone",
+      "breakpoints": true
     }
   ]
 }

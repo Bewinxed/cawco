@@ -464,10 +464,6 @@ const ARGS: {
   foldersStand: tuple([array(absolute)]),
   folderLook: tuple([object({ path: absolute, placeId: named, was: text })]),
   cloneHolding: tuple([named]),
-  placeLfs: tuple([
-    absolute,
-    array(object({ bytes: count, count, paths: texts, pattern: text })),
-  ]),
   placePush: tuple([absolute, named, maybe(boolean())]),
   workspaceChanges: tuple([WorkspaceRef]),
   workspaceApply: tuple([WorkspaceRef]),

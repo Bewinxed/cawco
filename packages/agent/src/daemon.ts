@@ -190,7 +190,6 @@ import {
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_ROOM,
   CONTROL_INPUTS_WRITE,
-  CONTROL_PLACE_LFS,
   CONTROL_PLACE_PUSH,
   CONTROL_PLACE_REPO,
   CONTROL_REMOVE_FOLDER,
@@ -342,7 +341,7 @@ import {
   moveSnapshot,
 } from "./move";
 import { placePush } from "./place-push";
-import { placeLfs, placeRepo } from "./place-repo";
+import { placeRepo } from "./place-repo";
 import { listenBrowsers, previewNetworks, servingPreviews } from "./preview";
 import { probesStarted } from "./probe-count";
 import { parseProcId, procIdFor, sessionOfProc } from "./proc-id";
@@ -3597,12 +3596,6 @@ const startDaemon = (rediscover = false) =>
     supervisor.declareControl(
       CONTROL_CLONE_HOLDING,
       async (path) => (await cloneHolding(path)) ?? null
-    );
-    // A place's left-out large files through Git LFS, once the person accepted: a second commit.
-    supervisor.declareControl(CONTROL_PLACE_LFS, (path, rows) =>
-      fenced()
-        ? Promise.reject(new Error(AGENT_RESTARTING))
-        : placeLfs(path, rows)
     );
     // A place published to GitHub goes through the hub's remote first.
     supervisor.declareControl(CONTROL_PLACE_PUSH, (path, projectId, dryRun) =>

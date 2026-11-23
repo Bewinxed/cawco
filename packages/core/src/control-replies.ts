@@ -323,7 +323,6 @@ import {
   PausedForMoveSchema,
   PermissionModeSetSchema,
   PictureTakenSchema,
-  PlaceLfsMadeSchema,
   PlacePushSchema,
   PlaceRepoSchema,
   PreviewStartedSchema,
@@ -396,7 +395,6 @@ import type {
   InputsLanded,
   InputsRead,
   InputsRoom,
-  PlaceLfsMade,
   PlacePush,
   PlaceRepo,
   WorkspaceApplied,
@@ -420,7 +418,6 @@ import {
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_ROOM,
   CONTROL_INPUTS_WRITE,
-  CONTROL_PLACE_PUSH,
   CONTROL_PLACE_REPO,
   CONTROL_REMOVE_FOLDER,
   CONTROL_REMOVE_FOLDER_REFUSAL,
@@ -438,7 +435,7 @@ import {
   CONTROL_WORKSPACE_SAVE,
   CONTROL_WORKSPACE_WORK_END,
   // Named apart, so this list is no copy of the agent's own (jscpd).
-  CONTROL_PLACE_LFS as PLACE_LFS,
+  CONTROL_PLACE_PUSH as PLACE_PUSH,
 } from "./workspace/controls";
 
 /**
@@ -585,8 +582,7 @@ const CONTROLS = {
   [CONTROL_CLONE_HOLDING]: reply<WorkspaceRef | null>(
     WorkspaceRefSchema.nullable()
   ),
-  [PLACE_LFS]: reply<PlaceLfsMade>(PlaceLfsMadeSchema),
-  [CONTROL_PLACE_PUSH]: reply<PlacePush>(PlacePushSchema),
+  [PLACE_PUSH]: reply<PlacePush>(PlacePushSchema),
   [CONTROL_WORKSPACE_CHANGES]: reply<WorkspaceChanges>(WorkspaceChangesSchema),
   [CONTROL_WORKSPACE_APPLY]: reply<WorkspaceApplied>(WorkspaceAppliedSchema),
   [CONTROL_WORKSPACE_BOUNDARY]: z.number(),

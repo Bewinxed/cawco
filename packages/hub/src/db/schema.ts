@@ -116,7 +116,6 @@ import {
   OpenCodeGoLimitsSchema,
   OwedMoveWaitSchema,
   ParkedAskShape,
-  PlaceLfsRowSchema,
   ProjectNoteSchema,
   ProjectOfferReasonSchema,
   RefusalReachSchema,
@@ -195,7 +194,6 @@ import {
   InstanceTitleSourceSchema,
   KeepAliveStoppedSchema,
   LandingPhaseSchema,
-  LfsOfferAnswerSchema,
   LimitCompactionStageSchema,
   McpAuthModeSchema,
   MoveAskerSchema,
@@ -5356,27 +5354,6 @@ export const trimKept = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.set, table.kind, table.name] })]
 );
-
-/**
- * Git LFS offered for the large files a place's first commit left out
- * (lfs-offers.ts): one row per offer, written as it is made. `answer` stays
- * null while the card stands; `tracked` once its files are committed
- * through LFS (`commit`), `dismissed` for Not now.
- */
-export const lfsOffers = sqliteTable("lfs_offers", {
-  id: text("id").primaryKey(),
-  projectId: projectColumn("project_id").notNull(),
-  machineId: machineColumn("machine_id").notNull(),
-  /** The folder made a repository, on its machine. */
-  root: text("root").notNull(),
-  /** What is offered, a row per pattern (core `PlaceLfsRow`). */
-  rows: storedJson(z.array(PlaceLfsRowSchema))("rows").notNull(),
-  offeredAt: timestamp("offered_at").notNull(),
-  answer: storedEnum(LfsOfferAnswerSchema)("answer"),
-  answeredAt: timestamp("answered_at"),
-  /** The commit that took them through LFS. */
-  commit: text("commit"),
-});
 
 /**
  * The LFS endpoints a repository's `.lfsconfig` named that git-lfs refused

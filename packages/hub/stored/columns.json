@@ -7204,42 +7204,6 @@
       "agent"
     ]
   },
-  "lfs_offers.answer": {
-    "type": "string",
-    "enum": [
-      "tracked",
-      "dismissed"
-    ]
-  },
-  "lfs_offers.rows": {
-    "type": "array",
-    "items": {
-      "type": "object",
-      "properties": {
-        "bytes": {
-          "type": "number"
-        },
-        "count": {
-          "type": "number"
-        },
-        "paths": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "pattern": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "bytes",
-        "count",
-        "paths",
-        "pattern"
-      ]
-    }
-  },
   "limit_compactions.kind": {
     "type": "string",
     "enum": [

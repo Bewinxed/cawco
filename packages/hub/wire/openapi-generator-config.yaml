@@ -137,7 +137,6 @@ typeOverrides:
     IssueTracker: OpenEnums.IssueTracker
     KeepAliveTtl: OpenEnums.KeepAliveTtl
     LandsMode: OpenEnums.LandsMode
-    LfsOfferStateAnswer: OpenEnums.LfsOfferStateAnswer
     LinkMode: OpenEnums.LinkMode
     LocalNameState: OpenEnums.LocalNameState
     MachineCapabilityId: OpenEnums.MachineCapabilityId

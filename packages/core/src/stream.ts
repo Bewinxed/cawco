@@ -517,7 +517,7 @@ import type { TailnetServing } from "./tailnet-https";
  *    triggers.ts), never the session that delegated it. A page built for
  *    102 may read either, so it reloads first.
  * 104: a project note's line carries no `routineMade`, `designOffer` or
- *    `lfsOffer`: what the hub says of a routine or a task's wait is on that
+ *    Git LFS offer: what the hub says of a routine or a task's wait is on that
  *    thing's thread, and its offers stand in Needs you (hub
  *    offers-waiting.ts, an `offers.waiting` frame). A page built for 103
  *    draws those offers under the notes, so it reloads first.

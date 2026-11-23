@@ -43,7 +43,6 @@ import {
   instanceMayStart,
   instanceStartingSet,
   instances,
-  lfsOffers,
   lfsRefusals,
   limitCompactions,
   limitEvents,
@@ -455,16 +454,6 @@ export const KNOWN_UNOWNED: readonly {
     column: instances.forkedFrom,
     reason:
       "The session this one was forked from: its lineage, kept after that session goes.",
-  },
-  {
-    column: lfsOffers.machineId,
-    reason:
-      "The machine of the place an LFS offer was made for: the offer's record outlives a removed machine.",
-  },
-  {
-    column: lfsOffers.projectId,
-    reason:
-      "The project an LFS offer was made for: the offer's record outlives a deleted project.",
   },
   {
     column: lfsRefusals.projectId,

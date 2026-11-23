@@ -181,8 +181,6 @@ import type {
   InputsRead,
   InputsRoom,
   InputWant,
-  PlaceLfsMade,
-  PlaceLfsRow,
   PlacePush,
   PlaceRepo,
   RemoveFolder,
@@ -423,7 +421,6 @@ interface ControlTable {
   "passkey.scanStop": Unread<[ask: PasskeyScanArgs]>;
   pauseForMove: Entry<[], PausedForMove>;
   piDefaultModel: Entry<[cwd: string], string | null>;
-  placeLfs: Entry<[path: string, rows: PlaceLfsRow[]], PlaceLfsMade>;
   placePush: Entry<
     [path: string, projectId: string, dryRun?: boolean | null],
     PlacePush

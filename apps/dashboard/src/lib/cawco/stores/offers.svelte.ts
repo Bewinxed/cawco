@@ -2,17 +2,13 @@
  * The offers a session's conversation carries: "make this a project" (read
  * on connect, then kept by `project_offer` frames), with the project an offer
  * answered here joined; and the answers to the hub's offers Needs you lists
- * (a project's design system, Git LFS for a made repository's large files,
- * an undeclared LFS server put away).
+ * (a project's design system, an undeclared LFS server put away).
  */
 import type {
   ProjectOfferAccepted,
   ProjectOfferSummary,
 } from "@cawco/core/frames";
-import type {
-  DesignOfferState,
-  LfsOfferState,
-} from "@cawco/core/project-conversation";
+import type { DesignOfferState } from "@cawco/core/project-conversation";
 import { offerWords } from "@cawco/core/words/offers";
 import { hub } from "#lib/platform/hub.js";
 import {
@@ -122,18 +118,6 @@ export const answerDesignOffer = (
     answer === "build"
       ? hub.api.projects({ id: projectId })["design-offer"].build.post()
       : hub.api.projects({ id: projectId })["design-offer"].dismiss.post(),
-    refusedOrUnreached
-  );
-
-/** Answers it: Track commits the files through LFS, Not now records it; the offer as it stands after. */
-export const answerLfsOffer = (
-  id: string,
-  answer: "track" | "dismiss"
-): Promise<LfsOfferState> =>
-  hubData(
-    answer === "track"
-      ? hub.api["lfs-offers"]({ id }).track.post()
-      : hub.api["lfs-offers"]({ id }).dismiss.post(),
     refusedOrUnreached
   );
 

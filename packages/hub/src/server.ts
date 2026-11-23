@@ -289,7 +289,6 @@ import {
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_ROOM,
   CONTROL_INPUTS_WRITE,
-  CONTROL_PLACE_LFS,
   CONTROL_PLACE_PUSH,
   CONTROL_PLACE_REPO,
   CONTROL_REPO_ROOT,
@@ -520,7 +519,6 @@ import { createLaunchAccounts } from "./launch-accounts";
 import { createLaunches } from "./launches";
 import { createLawTasks } from "./law-tasks";
 import { createLaws } from "./laws";
-import { createLfsOffers } from "./lfs-offers";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import {
   contextSize,
@@ -8362,7 +8360,6 @@ export const createServer = (
       method === CONTROL_INPUTS_WRITE ||
       method === CONTROL_INPUTS_CLEAR ||
       method === CONTROL_PLACE_REPO ||
-      method === CONTROL_PLACE_LFS ||
       method === CONTROL_PLACE_PUSH
         ? WORKSPACE_CREATE_TIMEOUT_MS
         : WORKSPACE_TIMEOUT_MS;
@@ -8417,13 +8414,8 @@ export const createServer = (
     db,
     sources: (projectId) => designOffers.sources(projectId),
   });
-  // A plain folder made a git repository when it is first needed as one,
-  // its large files left out offered to Git LFS in Needs you.
-  const placeRepos = createPlaceRepos({
-    call: callMachine,
-    db,
-    offersChanged: offersWaiting.changed,
-  });
+  // A plain folder made a git repository when it is first needed as one.
+  const placeRepos = createPlaceRepos({ call: callMachine });
   /**
    * A stage frame of machine `machineId` kept, a place's sheet stage's or
    * any workspace's preview server's or sheet's alike: one that fell asleep
@@ -10154,14 +10146,6 @@ export const createServer = (
           ),
         };
   };
-  // Git LFS offered for the large files a place's first commit left out,
-  // in Needs you (lfs-offers.ts): tracked on the place's machine once the
-  // person says so.
-  const lfsOffers = createLfsOffers({
-    call: callMachine,
-    db,
-    offersChanged: offersWaiting.changed,
-  });
   // A project's starters, written for it by Jev from what it holds now, on
   // its changes (project-starters.ts): a task filed or moved here; its
   // making, Caw's answers, attempts and routines at their own sites.
@@ -14126,7 +14110,7 @@ export const createServer = (
         appleDiagnosticsRoutes(),
         projectOfferRoutes(projectOffers, YOU_ACTOR),
         designOfferRoutes(designOffers, YOU_ACTOR),
-        offersWaitingRoutes(offersWaiting, lfsOffers),
+        offersWaitingRoutes(offersWaiting),
         starterRoutes(projectStarters),
         planRoutes(plans),
         planChangeRoutes(changesOfPlans),

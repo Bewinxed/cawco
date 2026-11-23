@@ -1560,6 +1560,12 @@ export type ProjectSettingChange =
        */
       folder?: string;
       kind: "create_repo";
+      /**
+       * What of `leftOut` the commit made for this card left out for its
+       * size alone, with its size (agent place-repo.ts): the session that
+       * asked is told of each. Absent when none was, or no commit was made.
+       */
+      large?: { bytes: number; path: string }[];
       /** What CawCo's first commit of the place left out, and why (agent place-repo.ts). */
       leftOut: { path: string; why: string }[];
       /**

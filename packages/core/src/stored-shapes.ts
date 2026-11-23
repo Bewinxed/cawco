@@ -4300,33 +4300,6 @@ const PictureTakenShape = declared(
 export const PictureTakenSchema = PictureTakenShape;
 export type PictureTakenOutput = z.output<typeof PictureTakenShape>;
 
-const PlaceLfsMadeShape = declared(
-  z.object({
-    bytes: z.number(),
-    commit: z.string(),
-    files: z.number(),
-    hooks: z.boolean(),
-    patterns: z.array(z.string()),
-  }),
-  "PlaceLfsMade",
-  "packages/core/src/workspace/controls.ts"
-);
-export const PlaceLfsMadeSchema = PlaceLfsMadeShape;
-export type PlaceLfsMadeOutput = z.output<typeof PlaceLfsMadeShape>;
-
-const PlaceLfsRowShape = declared(
-  z.object({
-    bytes: z.number(),
-    count: z.number(),
-    paths: z.array(z.string()),
-    pattern: z.string(),
-  }),
-  "PlaceLfsRow",
-  "packages/core/src/workspace/controls.ts"
-);
-export const PlaceLfsRowSchema = PlaceLfsRowShape;
-export type PlaceLfsRowOutput = z.output<typeof PlaceLfsRowShape>;
-
 const PlaceLeftOutShape = declared(
   z.object({ path: z.string(), why: z.string() }),
   "PlaceLeftOut",
@@ -4351,6 +4324,13 @@ const PlacePushShape = declared(
 export const PlacePushSchema = PlacePushShape;
 export type PlacePushOutput = z.output<typeof PlacePushShape>;
 
+const PlaceLargeFileShape = declared(
+  z.object({ bytes: z.number(), path: z.string() }),
+  "PlaceLargeFile",
+  "packages/core/src/workspace/controls.ts"
+);
+export type PlaceLargeFileOutput = z.output<typeof PlaceLargeFileShape>;
+
 const PlaceRepoShape = declared(
   z.union([
     z.object({ state: z.literal("checkout"), root: z.string() }),
@@ -4362,7 +4342,7 @@ const PlaceRepoShape = declared(
       bytes: z.number(),
       staged: z.array(z.string()),
       leftOut: z.array(PlaceLeftOutShape),
-      lfs: z.array(PlaceLfsRowShape),
+      large: z.array(PlaceLargeFileShape),
     }),
   ]),
   "PlaceRepo",

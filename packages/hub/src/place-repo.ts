@@ -7,19 +7,18 @@
  * a move makes one a repository with the person's yes (moves.ts `askFor`).
  * CawCo makes one local commit of what is
  * safe to keep in history, pushes nothing and adds no remote. The publish's
- * card says the commit and what it left out (repo-publish.ts); files left
- * out for their size alone are offered to Git LFS in Needs you
- * (lfs-offers.ts, offers-waiting.ts). Nothing of it is a line in the
- * project's Caw chat.
+ * card says the commit and what it left out, and the session that asked is
+ * told of each file left out for its size (repo-publish.ts). Nothing of it
+ * is a line in the project's Caw chat.
  *
  * The contract other modules call ({@link PlaceRepos}):
  *
- * - `ensure({ projectId, machineId, path })` runs on the place's machine,
+ * - `ensure({ machineId, path })` runs on the place's machine,
  *   through its agent ({@link CONTROL_PLACE_REPO}). Answers the machine's
  *   {@link PlaceRepo}: `checkout` when the place already is in a repository
  *   (nothing done), `made` with `commit`, `files`, `bytes`, `staged`,
- *   `leftOut: { path, why }[]` and `lfs` when it made one (its LFS offer
- *   filed). Throws
+ *   `leftOut: { path, why }[]` and `large: { path, bytes }[]` when it made
+ *   one. Throws
  *   an Error whose message is the machine's sentence when the place cannot
  *   be made one (not a folder there, past 500 MB to commit, a `.git` git
  *   cannot read, git failing), or the machine is not connected. A place has
@@ -32,61 +31,29 @@ import {
   CONTROL_PLACE_REPO,
   type PlaceRepo,
 } from "@cawco/core/workspace/controls";
-import type { DbShape } from "./db";
 import type { MachineCall } from "./machine-answers";
 
 /** What {@link createPlaceRepos} needs of the hub. */
 export interface PlaceRepoDeps {
   /** Runs a machine-scoped daemon function; throws the machine's own words. */
   readonly call: MachineCall;
-  readonly db: Pick<DbShape, "lfsOffers">;
-  /** An LFS offer was filed: Needs you hears it (offers-waiting.ts). */
-  readonly offersChanged: () => void;
 }
 
 /** A place as {@link PlaceRepos.ensure} takes it. */
 export interface PlaceRef {
   machineId: string;
   path: string;
-  projectId: string;
 }
 
-export const createPlaceRepos = ({
-  call,
-  db,
-  offersChanged,
-}: PlaceRepoDeps) => {
-  /**
-   * A made repository whose first commit left files out for their size
-   * alone: the offer to commit them through Git LFS, filed for Needs you.
-   */
-  const offerLfs = (
-    place: PlaceRef,
-    made: Extract<PlaceRepo, { state: "made" }>
-  ): void => {
-    console.log(
-      `[place-repo] ${made.root}: made a git repository, ${made.files} file(s) in ${made.commit.slice(0, 9)}, ${made.leftOut.length} path(s) left out`
-    );
-    if (made.lfs.length === 0) {
-      return;
-    }
-    db.lfsOffers.offer({
-      id: crypto.randomUUID(),
-      projectId: place.projectId,
-      machineId: place.machineId,
-      root: made.root,
-      rows: made.lfs,
-      offeredAt: new Date(),
-    });
-    offersChanged();
-  };
-
+export const createPlaceRepos = ({ call }: PlaceRepoDeps) => {
   const make = async (place: PlaceRef): Promise<PlaceRepo> => {
     const answer = await call(place.machineId, CONTROL_PLACE_REPO, [
       place.path,
     ]);
     if (answer.state === "made") {
-      offerLfs(place, answer);
+      console.log(
+        `[place-repo] ${answer.root}: made a git repository, ${answer.files} file(s) in ${answer.commit.slice(0, 9)}, ${answer.leftOut.length} path(s) left out`
+      );
     }
     return answer;
   };

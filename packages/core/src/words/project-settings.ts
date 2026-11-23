@@ -8,6 +8,7 @@
 import type { StartingSet } from "../delegate-types";
 import { areaWords } from "./areas";
 import { projectAccountWords } from "./project-account";
+import { sizeWords } from "./workspace-holding";
 
 /** A setting in effect as the read says it: its value in words, and where it came from in words. */
 interface SettingRead {
@@ -98,6 +99,9 @@ export const projectSettingsWords = {
   /** A `create_repo` card's detail, when reading the plain folder made it a repository: its folder as the summary names it, and its one commit. */
   publishedMade: (folder: string | undefined, commit: string): string =>
     `${folder ?? "The folder"} was a plain folder, so it was made a git repository: one commit, ${commit.slice(0, 7)}, not pushed yet. `,
+  /** A `create_repo`'s answer to the session that asked, when the folder's first commit left files out for their size: each file with its size. */
+  leftForSize: (files: readonly { bytes: number; path: string }[]): string =>
+    `Left out of the first commit for size: ${files.map((file) => `${file.path} (${sizeWords(file.bytes)})`).join(", ")}`,
   /** `project_settings` with no changes: every setting, by the field that changes it, then what dispatch does now. */
   read: (now: SettingsRead): string =>
     [
@@ -219,7 +223,7 @@ export const projectSettingsWords = {
   },
   /** A Who decides change naming a kind or member the fleet has none of: what it has. */
   unknownDecides: (what: "kind" | "member", asked: string, known: string[]) =>
-    `Who decides has no ${what} “${asked}”. Its ${what === "kind" ? "kinds" : "members"}: ${known.join(", ")}.`,
+    `Who decides has no ${what} “${asked}”. Its ${what === "kind" ? "kinds" : "members"}: ${known.join(", ")}`,
   /** A Who decides change while the project's switch for proposing one is off. */
   decidesProposalsOff:
     "This project's sessions may not propose a change to who decides: its Who decides is read only until the person lets them in Caw's settings.",

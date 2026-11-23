@@ -433,10 +433,9 @@ interface WatchItem {
 
 /**
  * An offer of the hub's waiting on your answer (core `WaitingOffer`): Build
- * or Not now on a project's design system, Track with LFS or Not now on a
- * made repository's large files, Dismiss on an LFS server the project never
- * declared. It leaves once answered. It opens where it is about: the task
- * that raised the design offer, the project, or its settings.
+ * or Not now on a project's design system, Dismiss on an LFS server the
+ * project never declared. It leaves once answered. It opens where it is
+ * about: the task that raised the design offer, or the project's settings.
  */
 interface OfferItem {
   href: string;
@@ -668,7 +667,7 @@ export type NeedsItem =
   | LostMachineItem
   | TaskItem;
 
-/** An offer's row key, title and where it opens: the task that raised a design offer, the project, or its settings. */
+/** An offer's row key, title and where it opens: the task that raised a design offer, or the project's settings. */
 const offerFacts = (
   offer: WaitingOffer
 ): { href: string; key: string; title: string } => {
@@ -679,14 +678,6 @@ const offerFacts = (
         href: `${at}?task=${encodeURIComponent(offer.taskId)}`,
         key: `offer:design:${offer.projectId}`,
         title: offerWords.designTitle,
-      };
-    case "lfs":
-      return {
-        href: at,
-        key: `offer:lfs:${offer.id}`,
-        title: lfsWords.offerTitle(
-          offer.root.split("/").filter(Boolean).at(-1) ?? offer.root
-        ),
       };
     case "lfs-refused":
       return {
