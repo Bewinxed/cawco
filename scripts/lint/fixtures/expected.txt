@@ -121,3 +121,5 @@ scripts/lint/fixtures/design/planted-typed-read.ts:24:19 house/typed-property-re
 scripts/lint/fixtures/design/planted.svelte:20:23 house/typed-property-read
 scripts/lint/fixtures/design/planted-render-dom.svelte:14:29 house/typed-property-read
 scripts/lint/fixtures/design/planted-render-dom.svelte:25:10 house/typed-property-read
+scripts/lint/fixtures/design/planted.svelte:41:13 design/no-arbitrary-values
+scripts/lint/fixtures/design/planted.svelte:41:13 house/no-raw-class-values

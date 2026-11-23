@@ -272,10 +272,9 @@
         "absolute inset-0 z-1 m-0 h-full max-h-none w-full p-0 outline-off before:hidden data-[vaul-drawer-direction=bottom]:pb-0",
       contained &&
         "absolute inset-x-0 top-0 h-full max-h-none data-[vaul-drawer-direction=bottom]:pb-0",
-      /* Floating its head, the content starts at the surface's top, inside
-         its 1px edge (the surface `inset-2` and its hairline), so what
-         scrolls runs beneath the head and never over that edge. */
-      floats && "timeline-scope-transcript-head pt-[calc(--spacing(2)+1px)]",
+      /* Floating its head, the content starts at the surface's top inset so
+         what scrolls runs beneath the head on the 4px grid. */
+      floats && "timeline-scope-transcript-head pt-space-2",
       className
     )}
     data-placed={hosted || contained ? undefined : ""}
@@ -343,7 +342,7 @@
          surface's edge and corners, which the box around it overhangs. -->
     <div
       aria-hidden="true"
-      class="pointer-events-none absolute inset-x-[calc(--spacing(2)+1px)] top-[calc(--spacing(2)+1px)] z-1 h-(--sheet-room) overflow-clip rounded-t-[calc(var(--radius-lg)-1px)] group-data-[vaul-drawer-direction=bottom]/drawer-content:inset-x-0"
+      class="pointer-events-none absolute inset-x-space-2 top-space-2 z-1 h-(--sheet-room) overflow-clip rounded-t-lg group-data-[vaul-drawer-direction=bottom]/drawer-content:inset-x-0"
       data-slot="drawer-head-fade"
     >
       <HeadFade band="var(--sheet-room)" tint="bg-surface-raised" />
@@ -351,7 +350,7 @@
     <!-- The grabber and the header, one stack over
          the content (`absolute z-2`), its height the sheet's room. -->
     <div
-      class="absolute inset-x-0 top-[calc(--spacing(2)+1px)] z-2 flex flex-col px-4 pt-[calc(--spacing(2)-1px)]"
+      class="absolute inset-x-0 top-space-2 z-2 flex flex-col px-4 pt-space-2"
       data-slot="drawer-head"
       {@attach frameSize(
         (node: HTMLElement) => node.offsetHeight,

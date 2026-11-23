@@ -53,7 +53,7 @@
            words not drawn, it stands as its glyph: the icon size's square,
            the glyph centred inside its edge, and a count it still says kept
            that inset from the glyph and the edge. */
-        sm: "h-control-sm glass-item:h-row-compact in-form-compact:min-w-control-sm gap-(--btn-gap) in-form-compact:px-[calc((var(--spacing-control-sm)-var(--btn-icon))/2-1px)] px-space-3 type-label [--btn-gap:var(--spacing-space-2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        sm: "h-control-sm glass-item:h-row-compact in-form-compact:min-w-control-sm gap-(--btn-gap) in-form-compact:px-space-2 px-space-3 type-label [--btn-gap:var(--spacing-space-2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:calc(var(--spacing)_*_2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         /* A control standing in a composer shell (the composer's surface brief, Composer:
            "34px Attach … and Send/Stop … each at the concentric 4px

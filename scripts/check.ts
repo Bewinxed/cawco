@@ -582,6 +582,8 @@ const gated: Gated[] = [
   // The release build's layers guard, over the house's sheets unbundled.
   bun("apps/dashboard/scripts/css-layers-check.ts"),
   bun("apps/dashboard/scripts/spacing-ratchet.ts"),
+  bun("apps/dashboard/scripts/row-ratchet.ts"),
+  bun("scripts/token-grid-check.ts"),
   // A class stock Tailwind draws and the house theme draws nothing for;
   // bun.lock pins the Tailwind that judges it.
   bun("scripts/tailwind-draws-check.ts"),

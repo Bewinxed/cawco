@@ -1,0 +1,14 @@
+{
+  "count": 13,
+  "files": {
+    "src/lib/cawco/accounts/AccountSetup.svelte": 1,
+    "src/lib/cawco/address/AddressList.svelte": 1,
+    "src/lib/cawco/address/NetworkStrip.svelte": 3,
+    "src/lib/cawco/address/flow/FlowObject.svelte": 1,
+    "src/lib/cawco/config/PickerChip.svelte": 1,
+    "src/lib/cawco/config/models/ImageDefault.svelte": 1,
+    "src/lib/cawco/config/own-tools/ToolChoice.svelte": 1,
+    "src/lib/cawco/find/Finder.svelte": 3,
+    "src/lib/cawco/graph/ChoiceList.svelte": 1
+  }
+}

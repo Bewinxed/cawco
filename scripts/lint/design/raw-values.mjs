@@ -89,13 +89,29 @@ function arbitraryCss(token) {
     .replace(/\\_/gu, "_");
 }
 
+const SPACING_UTILITY_PREFIX =
+  /^-?(?:p[xystblrse]?|m[xystblrse]?|gap(?:-[xy])?|space-[xy]|inset(?:-[xy])?|top|right|bottom|left|start|end)-\[/u;
+const HAIRLINE_ARITHMETIC = /(?:[+-]\s*[12]px|[12]px\s*[+-])(?![\w])/iu;
+
+/** Whether a class uses ±1px / ±2px arithmetic inside a spacing or inset utility. */
+function spacingHairlineArithmetic(token) {
+  const { base } = splitVariants(token);
+  if (!SPACING_UTILITY_PREFIX.test(base)) {
+    return null;
+  }
+  const css = arbitraryCss(token);
+  const match = HAIRLINE_ARITHMETIC.exec(css);
+  return match ? `spacing arithmetic (${match[0].trim()})` : null;
+}
+
 /** Each class whose arbitrary value writes a colour or a length literal. */
 export function rawClassValues(model) {
   const findings = [];
   for (const site of sitesOf(model, { follow: false })) {
     for (const entry of site.entries) {
       const said = isArbitraryValue(entry.name)
-        ? rawLiteral(arbitraryCss(entry.name))
+        ? (rawLiteral(arbitraryCss(entry.name)) ??
+          spacingHairlineArithmetic(entry.name))
         : null;
       if (said) {
         findings.push({
