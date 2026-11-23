@@ -75,6 +75,7 @@ import {
 } from "./project-work";
 import { type ProjectsDb, projectsDb } from "./projects";
 import { type RelaysDb, relaysDb } from "./relays";
+import { type ReturnRecapDb, returnRecapDb } from "./return-recap";
 import { type RulesDb, rulesDb } from "./rules";
 import { type SendsDb, sendsDb } from "./sends";
 import type { Revocations } from "./session-identity";
@@ -185,6 +186,8 @@ interface HubStore {
   readonly restoreProject: ForgetDb["restore"];
   /** Rows a project's restore held back, put back (forget.ts `retry`). */
   readonly retryHeldRows: ForgetDb["retry"];
+  /** What the person's return reads: tasks' moves, landed work, the plans naming a task (return-recap.ts). */
+  readonly returnRecap: ReturnRecapDb;
   /** Routines' triggers and runs (routines.ts). */
   readonly routines: TaskTriggersDb;
   /** The background tasks each Claude session's process runs now (session-tasks.ts). */
@@ -397,6 +400,7 @@ const make = async (path: string): Promise<DbShape> => {
     atLimit: atLimitDb(db),
     designChecks: designChecksDb(db),
     designOffers: designOffersDb(db),
+    returnRecap: returnRecapDb(db),
     trim: trimDb(db),
     triggers: triggersDb(db),
     lfsRefusals: lfsRefusalsDb(db),

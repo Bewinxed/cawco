@@ -39,8 +39,8 @@
  * so a restart reads the person back as they were; never a history. Each
  * change goes to every dashboard (`person`), to the push outlet (push.ts
  * holds a phone push while the person is at a desk) and to the hand of
- * each send (server.ts, the presence line), and to the hub's word to each
- * session holding news after a real return (sends.ts `tellBack`): a start
+ * each send (server.ts, the presence line), and to the recap of what moved
+ * while they were away, drawn on a real return (return-recap.ts): a start
  * with an away stretch still open reads that return on its first roll.
  *
  * **Clears.** A notification is over when its ask settles, its session is
@@ -794,8 +794,7 @@ export const createNotifications = ({
 
   /**
    * The person's last away stretch, kept on the hub: opened as they go
-   * away, ended by their return, and which sessions were given that
-   * return's recap.
+   * away, and ended by their return.
    */
   let stretch: AwayStretch = db.presence.stretch();
   const keepStretch = (next: AwayStretch): void => {
@@ -810,7 +809,7 @@ export const createNotifications = ({
    * roll that would have ended the stretch). So it starts with them away
    * since the stretch opened, and the first roll after the start (a beat,
    * the sweep) reads their return through `turned` and the person's
-   * listeners: the one path every return takes (sends.ts `tellBack`), the
+   * listeners: the one path every return takes (return-recap.ts), the
    * listeners being on by then.
    */
   const asLastTold = (person: Rolled): Rolled =>
@@ -846,7 +845,6 @@ export const createNotifications = ({
     keepStretch({
       awaySince: new Date(told.since ?? Date.now()),
       backAt: null,
-      recapped: [],
     });
   }
 
@@ -856,7 +854,6 @@ export const createNotifications = ({
       keepStretch({
         awaySince: new Date(person.since ?? now),
         backAt: null,
-        recapped: [],
       });
       return;
     }
@@ -866,7 +863,7 @@ export const createNotifications = ({
       stretch.awaySince !== null &&
       stretch.backAt === null
     ) {
-      keepStretch({ ...stretch, backAt: new Date(now), recapped: [] });
+      keepStretch({ ...stretch, backAt: new Date(now) });
       console.log(presenceLogWords.back(stretch.awaySince.toISOString()));
     }
   };
@@ -1317,20 +1314,9 @@ export const createNotifications = ({
       return viewOf(told, Date.now());
     },
 
-    /**
-     * The last return's recap for one session, once: when the person came
-     * back after an away stretch, the first time this session is handed
-     * their own message after it; null after that, and while there was no
-     * return. Kept on the hub, so a restart gives it neither twice nor
-     * again.
-     */
-    takeRecap(instanceId: string): { at: number; since: number } | null {
-      const { awaySince, backAt, recapped } = stretch;
-      if (!(awaySince && backAt) || recapped.includes(instanceId)) {
-        return null;
-      }
-      keepStretch({ ...stretch, recapped: [...recapped, instanceId] });
-      return { since: awaySince.getTime(), at: backAt.getTime() };
+    /** The person's last away stretch: since when, and when it ended (null while they are away). */
+    lastStretch(): AwayStretch {
+      return stretch;
     },
 
     /** A tab's answer to a desk alert it was named for; the push outlet hears it. */

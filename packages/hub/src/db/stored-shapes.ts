@@ -961,7 +961,16 @@ export const SendHoldSchema: z.ZodType<SendHoldType> = SendHoldShape;
 export type SendHoldOutput = z.output<typeof SendHoldShape>;
 
 const SessionLineKindShape = declared(
-  z.enum(["limit", "outdated", "watch", "moved", "room", "context", "unsent"]),
+  z.enum([
+    "limit",
+    "outdated",
+    "watch",
+    "moved",
+    "room",
+    "context",
+    "unsent",
+    "recap",
+  ]),
   "SessionLineKind",
   "packages/hub/src/db/stored-types.ts"
 );

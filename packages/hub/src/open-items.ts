@@ -14,8 +14,9 @@
  *   records that already existed 17% (the continuation evaluation,
  *   2026-10-16): the filing is what carries.
  * - **Reading** ({@link createOpenItems}): code builds the "Open items"
- *   section from those rows, word for word: the session's plan (its open
- *   steps and its spec), its task's open to-dos, the open tasks it filed,
+ *   section from those rows, word for word: the session's plan (the tasks
+ *   and to-dos it works on, still open), its task's open to-dos, the open
+ *   tasks it filed,
  *   every question its delegation tree put to the person, open or answered
  *   and not yet taken (artifacts/questions.ts, its own first, an ended
  *   delegate's taken up by it), its notes still in the project's memory
@@ -36,7 +37,7 @@ import type {
 } from "@cawco/core/context-filing";
 import type { PlanStep, SessionPlan, TaskTodo } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
-import { stepLink, taskLink, todoLink } from "@cawco/core/references";
+import { taskLink, todoLink } from "@cawco/core/references";
 import { contextWords } from "@cawco/core/words/context";
 import { ElysiaStatus, problem } from "elysia";
 import type { QuestionAnswer } from "./artifacts/questions";
@@ -67,9 +68,10 @@ export const filingPrompt = (
       : []),
     `Before this conversation is ${then === "compacted" ? "compacted" : "continued in a new session"}, file everything still open into your records, so it outlives the ${then === "compacted" ? "compaction" : "move"}: the hub lists those records word for word ${then === "compacted" ? "after it" : "in the new session's opening"}. This turn does only that.`,
     "",
-    "- Every open step, every promise made, and every question still waiting on an answer: your plan, `todo_write` with `steps`, one line each, pending or in_progress.",
-    "- Every decision taken and its reason, every constraint the person set (in plain words, never quoting them), every approach ruled out and why, and the files, paths, commands, ids and links to read again: your spec, `todo_write` with `spec`, the whole document.",
-    "- In a project: work that must outlive this conversation, `task_create`; your task's to-dos, `todo_write` with `task`; a lasting fact (convention, command, decision, place) or the person's correction or preference on how to work, `memory_note`.",
+    "- Work that must outlive this conversation and every promise made: a task (`task_create`), or a to-do on the task it belongs to (`todo_write` with `task` and `add`). Your task's to-dos you finished: `todo_write` with `tick`.",
+    "- A decision taken on a task, with its reason, a constraint the person set (in plain words, never quoting them), an approach ruled out and why, and the files, paths, commands, ids and links to read again: a comment on that task (`task_comment`).",
+    "- A lasting fact (convention, command, decision, place) or the person's correction or preference on how to work: `memory_note`.",
+    "- A question still waiting on the person stays where you asked it: it is listed again from its record.",
     "",
     "Write again only what changed or is missing. Then end your turn.",
     ...(fill ? ["", contextWords.filingLater] : []),
@@ -93,14 +95,12 @@ export interface OpenItemRows {
   asks: string[];
   /** Its notes still in its project's memory inbox. */
   notes: Note[];
-  /** Its plan: steps, spec, and an attempt's task with its to-dos. */
+  /** Its plan: the tasks and to-dos it works on, and an attempt's task with its to-dos. */
   plan: SessionPlan | null;
   /** The project its records live in; null for a session in none. */
   projectId: string | null;
   /** Every question its delegation tree put to the person, open or answered, its own first (artifacts/service.ts `questions`). */
   questions: AskedOf[];
-  /** The session whose records these are: its steps' links name it. */
-  session: string;
   /** The open tasks it filed, each with its description and open to-dos. */
   tasks: {
     description: string;
@@ -111,11 +111,21 @@ export interface OpenItemRows {
   }[];
 }
 
-/** A step's line, its words as its link (`cawco:step/<session>/<id>`): what the session names it by. */
+/** A step's record by its link, its words the label, in a project; else its handle and words. */
+const stepRecordWords = (projectId: string | null, step: PlanStep): string => {
+  if (!projectId || step.gone) {
+    return `${step.id} ${step.content}`;
+  }
+  return step.todo
+    ? todoLink(projectId, step.task, step.todo, step.content)
+    : taskLink(projectId, step.task, step.content);
+};
+
+/** A step's line: its status, then its record ({@link stepRecordWords}). */
 const stepLine =
-  (session: string) =>
+  (projectId: string | null) =>
   (step: PlanStep): string =>
-    `${"  ".repeat(step.depth)}- [${step.status}] ${stepLink(session, step.id, step.content)}`;
+    `${"  ".repeat(step.depth)}- [${step.status}] ${stepRecordWords(projectId, step)}`;
 
 /** A to-do's line: its link, its words the label, when it has an id and a task in a project; else its marker or position and its words. */
 const todoLine =
@@ -243,14 +253,8 @@ function openItemsSection(rows: OpenItemRows, page: QuestionsPage): string {
   );
   if (steps.length > 0) {
     parts.push(
-      "### Your plan's open steps",
-      ...steps.map(stepLine(rows.session))
-    );
-  }
-  if (rows.plan?.spec?.markdown.trim()) {
-    parts.push(
-      `### Your spec (written ${rows.plan.spec.at})`,
-      rows.plan.spec.markdown.trim()
+      "### Your plan's open tasks and to-dos",
+      ...steps.map(stepLine(rows.projectId))
     );
   }
   const todos = (rows.plan?.todos ?? []).filter((todo) => !todo.done);
@@ -293,7 +297,7 @@ function openItemsSection(rows: OpenItemRows, page: QuestionsPage): string {
     ...(parts.length > 0
       ? parts
       : [
-          "Nothing open is filed: no open plan steps, spec, to-dos, tasks, questions to the person, notes or asks.",
+          "Nothing open is filed: no open plan steps, to-dos, tasks, questions to the person, notes or asks.",
         ]),
   ].join("\n");
 }
@@ -307,14 +311,12 @@ const todoRecord =
 /**
  * What `rows` hold, each record one line to compare (core `FiledRecords`):
  * what a filing at the threshold counts what it wrote against
- * ({@link filingWrote}). A step is its status and words, whatever id its
- * writer gave it this time.
+ * ({@link filingWrote}). A step is its status and the record it names.
  */
 export const recordsOf = (rows: OpenItemRows): FiledRecords => ({
   steps: (rows.plan?.steps ?? []).map((step) =>
-    [step.status, step.content].join("\t")
+    [step.status, step.id].join("\t")
   ),
-  spec: rows.plan?.spec?.at ?? null,
   todos: [
     ...(rows.plan?.taskId
       ? (rows.plan.todos ?? []).map(todoRecord(rows.plan.taskId))
@@ -328,9 +330,9 @@ export const recordsOf = (rows: OpenItemRows): FiledRecords => ({
 /**
  * What a filing wrote, from its session's records as it started (`before`)
  * and as its turn ended (`after`): each kind of record of `after` not in
- * `before`, counted (a step closed or reworded counts, a step dropped does
- * not), and whether its spec was written since. The to-dos of a task it
- * filed count with that task, not again as to-dos.
+ * `before`, counted (a step closed or new counts, a step dropped does
+ * not). The to-dos of a task it filed count with that task, not again as
+ * to-dos.
  */
 export const filingWrote = (
   before: FiledRecords,
@@ -343,7 +345,6 @@ export const filingWrote = (
   const filed = new Set(fresh(before.tasks, after.tasks));
   return {
     steps: fresh(before.steps, after.steps).length,
-    spec: after.spec !== null && after.spec !== before.spec,
     todos: fresh(before.todos, after.todos).filter(
       (todo) => !filed.has(todo.slice(0, todo.indexOf("\t")))
     ).length,
@@ -427,7 +428,6 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
     }
     if (!projectId) {
       const alone: OpenItemRows = {
-        session: instanceId,
         projectId: null,
         asks,
         plan,
@@ -448,7 +448,6 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
       return notes;
     }
     const held: OpenItemRows = {
-      session: instanceId,
       projectId,
       asks,
       plan,

@@ -420,6 +420,15 @@ export const FLEET_WATCH = "fleet_watch";
 export const NOTICES_ENDED = "notices_ended";
 
 /**
+ * The hub's line in a session's transcript as the person comes back from
+ * being away (hub return-recap.ts): `content` is the recap as JSON (core
+ * return-recap.ts `ReturnRecap`), drawn as a note titled by its counts, each
+ * record by its link under it. Built from the hub's records; never sent to
+ * the session.
+ */
+export const RETURN_RECAP = "return_recap";
+
+/**
  * The hub's line in a project conversation's transcript for one of its
  * notes to the person (hub caw.ts `noteOwnAct`, core project-conversation.ts `ProjectNote`):
  * `content` is the note as JSON, drawn as a note titled by its title, its

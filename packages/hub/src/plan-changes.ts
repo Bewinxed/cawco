@@ -74,7 +74,6 @@ export interface PlanChangesDeps {
     | "getInstancesByIds"
     | "project"
     | "sentPlanChanges"
-    | "sessionPlan"
     | "untoldPlanChanges"
     | "untoldPlanReceivers"
     | "workItem"
@@ -229,7 +228,6 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
       byPlan.set(row.instanceId, [...(byPlan.get(row.instanceId) ?? []), row]);
     }
     const parts = [...byPlan].map(([instanceId, changes]) => {
-      const plan = db.sessionPlan(instanceId);
       const own = to.kind === "session" && to.instanceId === instanceId;
       const { whose, next } = own
         ? {
@@ -242,7 +240,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
         ...changes.map((change) => `- ${changeLine(change)}`),
         "",
         `${own ? "Your plan" : "That plan"} now:`,
-        stepLines(db, instanceId, plan),
+        stepLines(db, instanceId, plans.known(instanceId)),
         "",
         next,
       ].join("\n");
@@ -484,11 +482,8 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
      * `todo_write`'s session scope (plans.ts `write`), its answer carrying
      * what the session is owed of its plans' changes, those then told.
      */
-    async written(
-      row: InstanceRow,
-      written: { steps?: WrittenStep[]; spec?: string }
-    ) {
-      const plan = await plans.write(row, written);
+    async written(row: InstanceRow, steps: WrittenStep[]) {
+      const plan = await plans.write(row, steps);
       if (plan instanceof ElysiaStatus) {
         return plan;
       }
@@ -559,7 +554,7 @@ const PLAN_EDIT_SCHEMA = t.Union([
   t.Object({ kind: t.Literal("reword"), step: stepId(), content: words() }),
   t.Object({
     kind: t.Literal("add"),
-    content: words(),
+    step: stepId(),
     after: t.Optional(stepId()),
   }),
   t.Object({ kind: t.Literal("remove"), step: stepId() }),

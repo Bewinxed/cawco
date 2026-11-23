@@ -1,16 +1,15 @@
 <script lang="ts" module>
   import type { SessionPlan } from "@cawco/core/plan";
-  import { planPanelWords, planWords } from "@cawco/core/words/plan";
-  import { refusedOrUnreached } from "#lib/platform/hub-read.js";
+  import { planWords } from "@cawco/core/words/plan";
   import { stepsTree, todosTree } from "../plan";
   import { boardStore } from "../stores/board.svelte";
 
   /**
-   * A task's to-dos and nothing else (an attempt that has written no steps
-   * or spec): the card is titled by them, not "Plan" over a "To-dos" head.
+   * A task's to-dos and nothing else (an attempt that has written no
+   * steps): the card is titled by them, not "Plan" over a "To-dos" head.
    */
   const onlyTodos = (plan: SessionPlan | undefined): boolean =>
-    stepsTree(plan).length === 0 && !plan?.spec && todosTree(plan).length > 0;
+    stepsTree(plan).length === 0 && todosTree(plan).length > 0;
 
   /** The plan's card title. */
   const planTitle = (plan: SessionPlan | undefined): string =>
@@ -22,8 +21,8 @@
   import { commonWords } from "@cawco/core/words/common";
   /**
    * A session's plan (PRD §5.2, "Every session's plan, in a panel"): its
-   * steps as a tree (PlanTree); its spec, read-only, whole, as running
-   * text; and on a task attempt the task's to-dos the same way, with the
+   * steps, the tasks and to-dos it works on, as a tree (PlanTree); and on a
+   * task attempt the task's to-dos the same way, with the
    * way to the project's canvas. Live: the client's copy follows the hub's
    * snapshots and deltas (plan.ts).
    *
@@ -42,19 +41,14 @@
    * One column under its title that scrolls, as tall as what it holds up
    * to the room over the row (to the top of the composer's dock).
    */
-  import { untrack } from "svelte";
-  import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconClose } from "#lib/icons.js";
-  import { hub } from "#lib/platform/hub.js";
-  import { hubData } from "#lib/platform/hub-read.js";
   import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { scrollMotion } from "#lib/platform/motion/keyed.svelte.js";
   import { popOut } from "#lib/platform/motion/pop.svelte.js";
-  import MessageBody from "../MessageBody.svelte";
   import { planAsked, takePlan } from "../reference-things.svelte";
   import { plansStore } from "../stores/plans.svelte";
   import {
@@ -83,26 +77,8 @@
   );
   const showsTodos = $derived(todos.length > 0 && !!plan?.taskId);
   /** The steps are named once another part stands beside them. */
-  const stepsHeaded = $derived(!!plan?.spec || showsTodos);
+  const stepsHeaded = $derived(showsTodos);
   const titleId = $props.id();
-
-  /*
-   * Opened, its away notes are seen (hub plans.ts `seeAway`): the hub drops
-   * `awayUnseen` and every client's ring loses its mark. Once per opening:
-   * notes written while it stands open are not taken as read.
-   */
-  $effect(() => {
-    const id = instanceId;
-    if (!untrack(() => plan?.awayUnseen)) {
-      return;
-    }
-    hubData(
-      hub.api.instances({ id }).plan.seen.post(),
-      refusedOrUnreached
-    ).catch((error: unknown) => {
-      console.warn("[cawco] marking the away notes seen failed:", error);
-    });
-  });
 
   /** The room it may rise into: from the ring's row up to the top of the composer's dock. */
   const room = roomOver("--plan-room");
@@ -217,13 +193,6 @@
         {plan.taskId}
       </p>
     {/if}
-    {#if plan?.unread}
-      <!-- Steps stored before they were rows that did not read (hub
-           migration 0418): kept as stored, none of them in the tree. -->
-      <Alert data-slot="plan-unread" variant="warning">
-        <AlertDescription>{planPanelWords.unread}</AlertDescription>
-      </Alert>
-    {/if}
     {#if steps.length > 0}
       {#if stepsHeaded}
         <h3
@@ -233,15 +202,6 @@
         </h3>
       {/if}
       <PlanTree nodes={steps} />
-    {/if}
-
-    {#if plan?.spec}
-      <h3
-        class="m-0 type-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline"
-      >
-        {planWords.spec}
-      </h3>
-      <MessageBody source={plan.spec.markdown} />
     {/if}
 
     {#if showsTodos && plan?.taskId}

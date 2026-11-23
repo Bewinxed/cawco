@@ -62,18 +62,27 @@
     source: "cawco",
     steps: [
       {
-        id: "s1",
-        content: "Read the chip's markup",
+        id: "tsk-97",
+        task: "tsk-97",
+        content: "Release health tiles",
         depth: 0,
         status: "completed",
       },
       {
-        id: "s2",
-        content: "Draw every chip on the canvas at both widths",
+        id: "tsk-142",
+        task: "tsk-142",
+        content: "Tray chip overflow on a phone",
         depth: 0,
         status: "in_progress",
       },
-      { id: "s3", content: "Report what changed", depth: 0, status: "pending" },
+      {
+        id: "tsk-142:td-2",
+        task: "tsk-142",
+        todo: "td-2",
+        content: "Draw every chip on the canvas at both widths",
+        depth: 1,
+        status: "pending",
+      },
     ],
   };
 

@@ -240,7 +240,7 @@
       rows={live}
     />
   {/if}
-  <PlanRing done={2} onopen={nothing} open={false} total={12} unseen={null} />
+  <PlanRing done={2} onopen={nothing} open={false} total={12} />
 {/snippet}
 
 {#snippet conversation()}

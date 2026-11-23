@@ -15,10 +15,7 @@ export const offerWords = {
   offerLabel: "Make this session a project",
   joinedLabel: "Joined a project",
   /** Where the offer stood, once answering joined a project that already was. */
-  joined: (name: string, filed: number) =>
-    filed > 0
-      ? `Joined ${name}, with ${filed} proposed ${filed === 1 ? "task" : "tasks"} from the plan.`
-      : `Joined ${name}.`,
+  joined: (name: string) => `Joined ${name}.`,
   openProject: (name: string) => `Open ${name}`,
   putAway: "Put this away",
   notNow: "Not now",

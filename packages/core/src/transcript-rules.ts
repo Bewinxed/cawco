@@ -26,6 +26,7 @@ import {
   MOVED_HERE,
   NOTICES_ENDED,
   PROJECT_NOTE,
+  RETURN_RECAP,
   ROOM_HELD,
   SESSION_STOPPED,
 } from "./harness";
@@ -50,6 +51,7 @@ import { invariant } from "./invariant";
 import { isRecord } from "./is-record";
 import { CAW_EVENT_NOTE, type ProjectNote } from "./project-conversation";
 import { parseReference } from "./references";
+import type { ReturnRecap } from "./return-recap";
 import { parseRuleMarker } from "./rules";
 import type {
   CompactionFailure,
@@ -71,7 +73,11 @@ import {
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
 } from "./session-messages";
-import { ContextLineSchema, ProjectNoteSchema } from "./stored-shapes";
+import {
+  ContextLineSchema,
+  ProjectNoteSchema,
+  ReturnRecapSchema,
+} from "./stored-shapes";
 import type {
   BlockMetadata,
   BlockType,
@@ -84,6 +90,7 @@ import { contextWords } from "./words/context";
 import { delegateWaitWords } from "./words/delegates";
 import { FRESH_START_LINE } from "./words/harness-lines";
 import { noticeLine, noticeWords } from "./words/notices";
+import { returnRecapWords } from "./words/return-recap";
 import { unsentWords } from "./words/unsent";
 import { workflowWords } from "./words/workflows";
 
@@ -642,6 +649,18 @@ function projectNoteOf(content: string): ProjectNote | null {
   return note.success ? note.data : null;
 }
 
+/** A return's recap as its hub line carries it (JSON); null for text that is none. */
+function returnRecapOf(content: string): ReturnRecap | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  const recap = ReturnRecapSchema.safeParse(parsed);
+  return recap.success ? recap.data : null;
+}
+
 /** A context line as its hub line carries it (JSON); null for text that is none. */
 export function contextLineOf(content: string): ContextLine | null {
   let parsed: unknown;
@@ -1135,6 +1154,26 @@ export function mapFrame(
               noteTitle: line,
             })
           );
+          break;
+        }
+        // The hub's recap of what moved of the session's records while the
+        // person was away: titled by its counts, each record by its link.
+        case RETURN_RECAP: {
+          const recap = returnRecapOf(sdk.content ?? "");
+          if (recap) {
+            mapping.blocks.push(
+              systemLine(
+                base,
+                "ui.system_note",
+                returnRecapWords.detail(recap),
+                {
+                  subtype: RETURN_RECAP,
+                  noteKind: returnRecapWords.noteKind,
+                  noteTitle: returnRecapWords.title(recap),
+                }
+              )
+            );
+          }
           break;
         }
         // The hub's line for the notices owed to the session that ended

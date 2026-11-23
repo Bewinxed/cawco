@@ -91,7 +91,7 @@ final class ProjectOfferCard: UIView {
         drawn = key
         actions.arrangedSubviews.forEach { $0.removeFromSuperview() }
         if let joined, offer == nil {
-            line.text = Words.Offers.joined(name: joined.project.name, filed: joined.tasks.count)
+            line.text = Words.Offers.joined(name: joined.project.name)
             accessibilityLabel = Words.Offers.joinedLabel
             let open = Self.button(Words.Offers.openProject(name: joined.project.name), variant: .outline) { [weak self] in
                 self?.onOpenProject(joined.project.id)

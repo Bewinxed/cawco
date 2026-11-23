@@ -12,8 +12,8 @@
  * at a task (dispatch.ts) that reports to the session calling it, as
  * `delegate` with a `task` does; `task_retry` starts a fresh one in the
  * failed attempt's workspace.
- * `todo_write` also writes the calling session's own plan (plans.ts): its
- * steps and its spec, with or without a project or task.
+ * `todo_write` also writes the calling session's own plan (plans.ts): the
+ * tasks and to-dos of its project it works on, each step naming one.
  *
  * A routine (§5.5) is a task with a trigger: `task_create` with `on` or
  * `target` makes one (routines.ts `createdFor`), in the caller's project or,
@@ -31,7 +31,11 @@ import {
 import { FLEET_PROJECT_ID } from "@cawco/core/fleet-project";
 import { SESSION_CHOSEN_MODES } from "@cawco/core/harness/modes";
 import { LANDS_MODES } from "@cawco/core/injected";
-import { PLAN_STEP_PRIORITIES, PLAN_STEP_STATUSES } from "@cawco/core/plan";
+import {
+  PLAN_STEP_PRIORITIES,
+  PLAN_STEP_STATUSES,
+  stepHandle,
+} from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
   MADE_ROUTINE_TARGETS,
@@ -132,9 +136,9 @@ export interface TaskToolContext {
   /** The task the session's work item is an attempt at, if it has one. */
   workItemTask: string | null;
   /**
-   * Replaces the calling session's steps or spec (plan-changes.ts
-   * `written`), answering what it is owed of the person's changes; without
-   * it the session scope refuses.
+   * Replaces the calling session's steps (plan-changes.ts `written`),
+   * answering what it is owed of the person's changes; without it the
+   * session scope refuses.
    */
   writePlan?: PlanChangeCalls["written"];
 }
@@ -299,18 +303,23 @@ const deadlineOf = (written: string | undefined) => {
 /** An artifact named where no session can resolve it (discovery): as given. */
 const same = (asked: string): string => asked;
 
-/** A step as `todo_write` takes it: ACP's entry, its id and depth optional. */
+/** A step as `todo_write` takes it: the task or to-do it names, its status, its depth optional. */
 const stepParameter = () =>
   z.object({
-    content: z.string().trim().min(1),
-    status: z.enum(PLAN_STEP_STATUSES),
-    depth: z.number().int().min(0).optional(),
-    id: z
+    task: z
       .string()
       .trim()
       .min(1)
       .optional()
-      .describe("A task to-do's id (td-3): completing the step ticks it."),
+      .describe("Its task (tsk-12); a to-do's defaults to your work item's."),
+    todo: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("A to-do of it (td-3): completing the step ticks it."),
+    status: z.enum(PLAN_STEP_STATUSES),
+    depth: z.number().int().min(0).optional(),
     priority: z.enum(PLAN_STEP_PRIORITIES).optional(),
     waitsOn: z
       .string()
@@ -318,18 +327,50 @@ const stepParameter = () =>
       .describe(`What it waits on: ${WAIT_TARGETS}; '' for none.`),
   });
 
+/** The refusal of a step that names no task or to-do. */
+const namesNothing = (index: number) =>
+  problem(400, {
+    code: "todo-step-names-nothing",
+    detail: `Step ${index + 1} names no task or to-do. A plan's steps are the tasks and to-dos you work on: file the task (task_create), or the to-do on its task (todo_write with task and add), first, then name it here.`,
+  });
+
+/**
+ * The record a written step names, by handle (core `stepHandle`): its task,
+ * else `own`, the work item's, for a to-do alone; the refusal of a step
+ * that names no task, or a task by no task's id.
+ */
+const handleOf = (
+  step: Pick<z.infer<ReturnType<typeof stepParameter>>, "task" | "todo">,
+  index: number,
+  own: string | null
+) => {
+  const given = step.task ?? (step.todo ? own : null);
+  if (!given) {
+    return namesNothing(index);
+  }
+  const task = normaliseTaskRef(given);
+  if (!task) {
+    return problem(400, {
+      code: "todo-step-task-unread",
+      detail: `Step ${index + 1} names “${given}”, which is no task: name it as tsk-12.`,
+    });
+  }
+  return stepHandle({ task, ...(step.todo ? { todo: step.todo } : {}) });
+};
+
 /**
  * Steps as written, nested by depth: each one at most one deeper than the
- * one before, and each without an id given its position (`2`, `2.1`); the
- * refusal of a wait that names nothing, of a step too deep, or of an id
- * two steps have (a plan's step is found by its id: db
- * `session_plan_steps`, unique in its plan).
+ * one before, each naming a task or a to-do (a to-do alone is of `own`, the
+ * work item's task); the refusal of a step that names neither, of a wait
+ * that names nothing, of a step too deep, or of a record two steps name (a
+ * plan's step is found by its record: db `session_plan_steps`, unique in
+ * its plan). Whether each record is on the board is plans.ts `write`'s.
  */
 const stepsOf = async (
   written: z.infer<ReturnType<typeof stepParameter>>[],
-  stepWait: (written: string) => ReturnType<Tasks["keptWait"]>
+  stepWait: (written: string) => ReturnType<Tasks["keptWait"]>,
+  own: string | null
 ) => {
-  const counts: number[] = [];
   const read = await Promise.all(
     written.map((step) =>
       step.waitsOn?.trim() ? stepWait(step.waitsOn) : undefined
@@ -345,25 +386,26 @@ const stepsOf = async (
   const steps: WrittenStep[] = [];
   for (const [index, step] of written.entries()) {
     const depth = step.depth ?? 0;
-    if (depth > counts.length) {
+    const id = handleOf(step, index, own);
+    if (id instanceof ElysiaStatus) {
+      return id;
+    }
+    const last = steps.at(-1)?.depth ?? -1;
+    if (depth > last + 1) {
       return problem(400, {
         code: "todo-step-too-deep",
-        detail: `Step ${index + 1} (“${step.content}”) is at depth ${depth}, deeper than one past the step before it.`,
+        detail: `Step ${index + 1} (${id}) is at depth ${depth}, deeper than one past the step before it.`,
       });
     }
-    counts.length = depth + 1;
-    counts[depth] = (counts[depth] ?? 0) + 1;
-    const id = step.id ?? counts.join(".");
     const before = steps.findIndex((one) => one.id === id);
     if (before !== -1) {
       return problem(400, {
         code: "todo-step-id-twice",
-        detail: `Step ${index + 1} (“${step.content}”) has id ${id}, as step ${before + 1} does: give each step its own id, or none.`,
+        detail: `Step ${index + 1} names ${id}, as step ${before + 1} does: a plan names each task or to-do once.`,
       });
     }
     steps.push({
       id,
-      content: step.content,
       status: step.status,
       depth,
       ...(step.priority ? { priority: step.priority } : {}),
@@ -676,10 +718,9 @@ export function taskTools(context: TaskToolContext | undefined) {
       : own;
   };
 
-  /** todo_write's session scope: the session's steps (each wait read as a task's is) or its spec, written. */
+  /** todo_write's session scope: the session's steps, each naming a task or a to-do (each wait read as a task's is), written. */
   const ownPlan = async (
-    steps: z.infer<ReturnType<typeof stepParameter>>[] | undefined,
-    spec: string | undefined
+    steps: z.infer<ReturnType<typeof stepParameter>>[]
   ) => {
     if (!context?.writePlan) {
       return problem(409, {
@@ -687,19 +728,15 @@ export function taskTools(context: TaskToolContext | undefined) {
         detail: "Discovery cannot execute tools",
       });
     }
-    const written = steps
-      ? await stepsOf(
-          steps,
-          context.stepWait ?? ((step) => Promise.resolve(step))
-        )
-      : undefined;
+    const written = await stepsOf(
+      steps,
+      context.stepWait ?? ((step) => Promise.resolve(step)),
+      context.workItemTask
+    );
     if (written instanceof ElysiaStatus) {
       return written;
     }
-    return await context.writePlan(context.actor, {
-      ...(written ? { steps: written } : {}),
-      ...(spec === undefined ? {} : { spec }),
-    });
+    return await context.writePlan(context.actor, written);
   };
 
   /**
@@ -1187,16 +1224,12 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "todo_write",
-      "Your plan and spec, or a task's to-dos. Use it to keep your plan current as you work, and to tick a task's to-dos as you finish them.",
+      "Your plan (the tasks and to-dos you work on, when the work needs one), or a task's to-dos. Use it to tick to-dos as you finish them and add the ones you find.",
       {
         steps: z
           .array(stepParameter())
           .optional()
-          .describe("Replaces your step list; `depth` nests."),
-        spec: z
-          .string()
-          .optional()
-          .describe("Your spec: what you build, how and why."),
+          .describe("Replaces your plan; `depth` nests."),
         task: z
           .string()
           .optional()
@@ -1220,8 +1253,8 @@ export function taskTools(context: TaskToolContext | undefined) {
           .optional()
           .describe("Rewords a to-do, by id or position."),
       },
-      async ({ task, steps, spec, ...changes }) => {
-        if (steps !== undefined || spec !== undefined) {
+      async ({ task, steps, ...changes }) => {
+        if (steps !== undefined) {
           if (
             task !== undefined ||
             Object.values(changes).some((value) => value !== undefined)
@@ -1229,10 +1262,10 @@ export function taskTools(context: TaskToolContext | undefined) {
             return problem(400, {
               code: "todo-write-mixed",
               detail:
-                "Write your own plan (steps, spec) and a task's to-dos in separate calls.",
+                "Write your own plan (steps) and a task's to-dos in separate calls.",
             });
           }
-          return await ownPlan(steps, spec);
+          return await ownPlan(steps);
         }
         const scoped = scope();
         if (scoped instanceof ElysiaStatus) {

@@ -7474,12 +7474,6 @@
           "type": "string"
         }
       },
-      "spec": {
-        "type": [
-          "string",
-          "null"
-        ]
-      },
       "steps": {
         "type": "array",
         "items": {
@@ -7501,7 +7495,6 @@
     },
     "required": [
       "notes",
-      "spec",
       "steps",
       "tasks",
       "todos"
@@ -11220,12 +11213,6 @@
       "type": "string"
     }
   },
-  "presence_settings.recapped": {
-    "type": "array",
-    "items": {
-      "type": "string"
-    }
-  },
   "preview_settings.mode": {
     "type": "string",
     "enum": [
@@ -13655,7 +13642,8 @@
       "moved",
       "room",
       "context",
-      "unsent"
+      "unsent",
+      "recap"
     ]
   },
   "session_plan_steps.priority": {

@@ -28,7 +28,7 @@ export interface PlanChangeCalls {
    */
   written: (
     row: InstanceRow,
-    written: { steps?: WrittenStep[]; spec?: string }
+    steps: WrittenStep[]
   ) => Promise<
     | (SessionPlan & { personChanged?: string })
     | ProblemsOf<ReturnType<Plans["write"]>>

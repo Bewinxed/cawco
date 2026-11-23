@@ -8,7 +8,7 @@
  * chain when that file is stale. So a word is changed here or nowhere.
  */
 export const planWords = {
-  /** The ring's word, and the panel's title over steps or a spec. */
+  /** The ring's word, and the panel's title over its steps. */
   plan: "Plan",
   /** The ring, for a screen reader: how far the plan has got. */
   ringLabel: (done: number, total: number) =>
@@ -18,16 +18,7 @@ export const planWords = {
   /** The panel's title when it holds a task's to-dos alone, and their part's heading. */
   todos: "To-dos",
   steps: "Steps",
-  spec: "Spec",
   openInCanvas: "Open in canvas",
-};
-
-/**
- * The plan panel's words the dashboard alone says: the app's panel has no
- * place for them yet, so `bun run words` does not write them into it.
- */
-export const planPanelWords = {
-  /** The panel's stop when the plan holds steps stored earlier that do not read (core `SessionPlan.unread`). */
-  unread:
-    "Steps stored for this plan earlier do not read. They are kept as stored and not shown.",
+  /** A step whose task or to-do is gone from the board, by the record it named. */
+  gone: (handle: string) => `${handle}, no longer on the board`,
 };

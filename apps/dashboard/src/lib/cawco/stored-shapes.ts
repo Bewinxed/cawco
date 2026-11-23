@@ -1208,23 +1208,31 @@ const OrphanedCommentsShape = z.object({
 });
 export type OrphanedCommentsOutput = z.output<typeof OrphanedCommentsShape>;
 
-const PlanSpecShape = z.object({ at: z.string(), markdown: z.string() });
-export type PlanSpecOutput = z.output<typeof PlanSpecShape>;
-
 const PlanStepPriorityShape = z.enum(PLAN_STEP_PRIORITIES);
 export type PlanStepPriorityOutput = z.output<typeof PlanStepPriorityShape>;
 
 const PlanStepStatusShape = z.enum(PLAN_STEP_STATUSES);
 export type PlanStepStatusOutput = z.output<typeof PlanStepStatusShape>;
 
-const PlanStepShape = z.object({
+const KeptStepShape = z.object({
   comments: z.array(PlanCommentShape).optional(),
-  content: z.string(),
   depth: z.number(),
   id: z.string(),
   priority: PlanStepPriorityShape.optional(),
   status: PlanStepStatusShape,
   waitsOn: z.string().optional(),
+});
+export type KeptStepOutput = z.output<typeof KeptStepShape>;
+
+const StepRecordShape = z.object({
+  task: z.string(),
+  todo: z.string().optional(),
+});
+export type StepRecordOutput = z.output<typeof StepRecordShape>;
+
+const PlanStepShape = KeptStepShape.extend(StepRecordShape.shape).extend({
+  content: z.string(),
+  gone: z.literal(true).optional(),
 });
 export type PlanStepOutput = z.output<typeof PlanStepShape>;
 
@@ -1240,16 +1248,13 @@ const TaskTodoShape = z.object({
 export type TaskTodoOutput = z.output<typeof TaskTodoShape>;
 
 const SessionPlanShape = z.object({
-  awayUnseen: z.object({ since: z.string() }).optional(),
   changes: z.array(PlanChangeShape).optional(),
   needs: z.array(z.string()).optional(),
   orphanedComments: z.array(OrphanedCommentsShape).optional(),
   source: z.literal("cawco"),
-  spec: PlanSpecShape.optional(),
   steps: z.array(PlanStepShape),
   taskId: z.string().optional(),
   todos: z.array(TaskTodoShape).optional(),
-  unread: z.literal(true).optional(),
 });
 export const SessionPlanSchema = SessionPlanShape;
 export type SessionPlanOutput = z.output<typeof SessionPlanShape>;

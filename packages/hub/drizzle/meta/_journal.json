@@ -3298,6 +3298,13 @@
       "when": 1795426055135,
       "tag": "0478_lfs_offers_gone",
       "breakpoints": true
+    },
+    {
+      "idx": 479,
+      "version": "6",
+      "when": 1795430207306,
+      "tag": "0479_plan_steps_are_records",
+      "breakpoints": true
     }
   ]
 }

@@ -70,7 +70,7 @@ import {
 import type { CanvasAuthor } from "@cawco/core/canvas";
 import type { ArtifactAsked } from "@cawco/core/doc-meta";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
-import { type PlanStep, stepNamesArtifact } from "@cawco/core/plan";
+import { type KeptStep, stepNamesArtifact } from "@cawco/core/plan";
 import { artifactLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import type { ArtifactChange, ArtifactRow } from "../db/artifacts";
@@ -125,7 +125,7 @@ export interface ArtifactSessions {
   /** A project's setup page: its project is set up (hub tasks.ts `isSetUp`), which says where it lands (core `setupLanding`); false for any other artifact. */
   setUp: boolean;
   /** The writer's plan's steps: an open one naming a card or pin of it holds its ask ({@link planHolds}). */
-  steps: readonly PlanStep[];
+  steps: readonly KeptStep[];
 }
 
 const ms = (iso: string | null | undefined): number => {
@@ -298,7 +298,7 @@ export const sendsOnChange = (
 export const planHolds = (
   id: string,
   asked: ArtifactAsked | null,
-  steps: readonly PlanStep[]
+  steps: readonly KeptStep[]
 ): boolean =>
   asked?.step !== undefined ||
   steps.some((step) => stepNamesArtifact(step, id));
@@ -311,7 +311,7 @@ export const planHolds = (
 export const movedOn = (
   id: string,
   asked: ArtifactAsked | null,
-  steps: readonly PlanStep[]
+  steps: readonly KeptStep[]
 ): boolean =>
   asked !== null && !planHolds(id, asked, steps) && asked.movedAt !== undefined;
 
@@ -323,7 +323,7 @@ export const movedOn = (
 const reasonsOf = (
   row: ArtifactRow,
   facts: ArtifactFacts,
-  steps: readonly PlanStep[]
+  steps: readonly KeptStep[]
 ): ArtifactReason[] => {
   const reasons: ArtifactReason[] = [];
   if (asks(row, facts)) {

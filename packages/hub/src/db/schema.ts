@@ -897,6 +897,31 @@ export const projectTasks = sqliteTable(
 );
 
 /**
+ * Each move of a task from one stage to another (tasks.ts's `moved`
+ * event), as it happened: what the person's return reads of the tasks that
+ * moved while they were away (return-recap.ts). Kept {@link TASK_MOVES_KEPT_DAYS}
+ * days; the files' git history keeps the rest.
+ */
+export const taskMoves = sqliteTable(
+  "task_moves",
+  {
+    projectId: projectKey(),
+    /** `tsk-12`. */
+    taskId: text("task_id").notNull(),
+    from: text("from").notNull(),
+    to: text("to").notNull(),
+    at: timestamp("at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.taskId, table.at] }),
+    index("task_moves_at").on(table.at),
+  ]
+);
+
+/** How long a task's move is kept ({@link taskMoves}). */
+export const TASK_MOVES_KEPT_DAYS = 30;
+
+/**
  * What a task waits on (`waits_on:`), one row each, in the order its file
  * lists them (rowid): `other_id` the target as the file keeps it (a task as
  * `tsk-12`; a card, a pin, a pull request, a run or a session as
@@ -1185,8 +1210,8 @@ export const instances = sqliteTable(
     /**
      * When the person last stopped the session (their Stop or interrupt, from
      * a dashboard or the app), on the hub's clock; null once they write to it
-     * again. While set, the hub's word that they are back never goes to it
-     * (sends.ts `holdsNews`).
+     * again. While set, no turn of the hub's own starts it (decide.ts
+     * `personStopped`).
      */
     personStoppedAt: integer("person_stopped_at"),
     keepAliveEnabled: integer("keep_alive", { mode: "boolean" })
@@ -5224,8 +5249,6 @@ export const presenceSettings = sqliteTable("presence_settings", {
   backAt: timestamp("back_at"),
   /** The person's away clock, ms; null keeps their pick (core `AWAY_AFTER_DEFAULT_MS`). */
   awayAfterMs: integer("away_after_ms"),
-  /** The sessions already given that return's recap, by id. */
-  recapped: storedJson(z.array(z.string()))("recapped").notNull().default([]),
 });
 
 /**
@@ -5543,42 +5566,20 @@ export const starterOutcomes = sqliteTable(
 
 /**
  * A session's own plan (Projects spec §5.2, `plan.ts`), as it last wrote it
- * through `todo_write`'s session scope: its steps (CawCo's list, read only
- * while its native to-do tools are denied, one row each in
- * {@link sessionPlanSteps}) and its spec. Each is replaced whole on a
- * write; a harness's own list is read from the harness, never stored here.
+ * through `todo_write`'s session scope: its steps, one row each in
+ * {@link sessionPlanSteps}, each naming a task or a to-do. Replaced whole on
+ * a write.
  */
 export const sessionPlans = sqliteTable("session_plans", {
   instanceId: sessionColumn("instance_id").primaryKey(),
-  /**
-   * The steps as they were stored as JSON before migration 0418, when they
-   * did not read whole as a list of steps (with
-   * {@link sessionPlans.orphanedCommentsUnread}, the plan's other half as
-   * it was stored then): none of them is a row, and the plan says it holds
-   * steps that do not read (core `SessionPlan.unread`). The session's
-   * writes after are rows beside it and never touch it; it goes with the
-   * steps to a session that goes on from this one (db `copySessionSteps`).
-   * Null on every plan that read.
-   */
-  stepsUnread: text("steps_unread"),
-  /** The orphaned comments as they were stored beside {@link sessionPlans.stepsUnread}, when the plan did not read whole; null on every plan that read. */
-  orphanedCommentsUnread: text("orphaned_comments_unread"),
-  /** The session's spec, markdown; null until it writes one. */
-  spec: text("spec"),
-  specAt: timestamp("spec_at"),
-  /**
-   * The away notes (core injected.ts `awayNotesOf`) as the person last saw
-   * them: opened in the plan panel, or recapped to them on their return.
-   * The spec's away notes differing from it are unseen; null until first seen.
-   */
-  awaySeen: text("away_seen"),
   updatedAt: timestamp("updated_at").notNull(),
 });
 
 /**
- * One step of a session's plan (core plan.ts `PlanStep`), at its place in
- * the list: what finds each session's step in progress, and each step's
- * wait. Replaced whole with the list; goes and moves with its plan.
+ * One step of a session's plan (core plan.ts `KeptStep`), at its place in
+ * the list: the record it names, what finds each session's step in
+ * progress, and each step's wait. Its words are its record's, never kept
+ * here. Replaced whole with the list; goes and moves with its plan.
  */
 export const sessionPlanSteps = sqliteTable(
   "session_plan_steps",
@@ -5591,9 +5592,8 @@ export const sessionPlanSteps = sqliteTable(
       }),
     /** Its place in the list, from 0. */
     position: integer("position").notNull(),
-    /** Stable within one list: the writer's, the step's place, or `you-…` for one the person added. */
+    /** The record it names (core plan.ts `stepHandle`): `tsk-12`, or `tsk-12:td-3` for a to-do. */
     id: text("id").notNull(),
-    content: text("content").notNull(),
     depth: integer("depth").notNull(),
     status: storedEnum(z.enum(PLAN_STEP_STATUSES))("status").notNull(),
     /** Null where the `todo_write` that wrote it named none. */
@@ -5638,7 +5638,7 @@ export const sessionPlanStepComments = sqliteTable(
       }),
     /** The step it is on; null when orphaned. */
     stepId: text("step_id"),
-    /** The words of the step an orphaned comment was written on; null on a step's. */
+    /** The step an orphaned comment was written on: its record's handle (its words, on one kept before steps were records); null on a step's. */
     orphanStep: text("orphan_step"),
     ord: integer("ord").notNull(),
     /** When the person wrote it, ISO 8601, as core `PlanComment.at` keeps it. */

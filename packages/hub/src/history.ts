@@ -34,6 +34,7 @@ import type { PriorConversation } from "./db/schema";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { externalizeImages } from "./media";
 import { unsentLine } from "./owed-ends";
+import { recapLine } from "./return-recap";
 import { HISTORY_WINDOW } from "./sends";
 import type { HubLine } from "./transcript";
 import type {
@@ -750,6 +751,9 @@ export const createHistory = (ctx: HistoryContext) => {
       ...ctx.db
         .unsentLinesOf(row.id)
         .map((one) => [one, unsentLine(row, one)] as const),
+      ...ctx.db
+        .recapLinesOf(row.id)
+        .map((one) => [one, recapLine(row, one)] as const),
       ...ctx.db
         .contextLinesOf(row.id)
         .map((one) => [one, contextLine(row, one)] as const),

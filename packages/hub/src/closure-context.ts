@@ -411,8 +411,6 @@ export interface ClosureContext {
   browserStream: ReturnType<typeof createBrowserStream>;
   browsers: ReturnType<typeof createBrowsers>;
   byIdNow: <E extends HubEnvelope<"control" | "send">>(envelope: E) => E;
-  /** When `instanceId`'s warm prompt cache lapses, between turns; null when it is cold, unknown or inside a turn (keep-alive.ts `cacheState`). */
-  cacheLapsesAt: (instanceId: string) => number | null;
   /** Whether `instanceId`'s prompt cache is warm now (keep-alive.ts `cacheState`): false when it is cold or unknown. */
   cacheWarm: (instanceId: string) => boolean;
   callAgent: AgentCall;
@@ -751,8 +749,6 @@ export interface ClosureContext {
   keptWarm: (machineId: string, ids: string[]) => string[];
   knownProviders: () => ProviderInfo[];
   lastRequestContext: Map<string, number>;
-  /** When `instanceId`'s last recorded turn ended, ISO; null when none is. */
-  lastTurnAt: (instanceId: string) => string | null;
   launchAccount: (
     machineId: string,
     row: Parameters<ClosureContext["accountLaunch"]>[1],

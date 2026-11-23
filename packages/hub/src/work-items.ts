@@ -28,10 +28,10 @@
  * limit the item fails, its parent is told, and its session is ended. The
  * project's **conversation** may answer, steer and stop the project's items; their
  * reports and asks reach only the session that started each, the project's conversation only
- * for the work he started ({@link reportees}). And the **plan ↔ to-do link**: a task attempt's plan,
- * CawCo's own steps on every harness, is read on its turn's end, a
- * completed step whose id is a to-do's (`td-3`) ticks that to-do, `finish_item` asks once about the
- * to-dos still open, and steps left open become `(proposed)` to-dos.
+ * for the work he started ({@link reportees}). And a task's **to-dos at
+ * finish**: `finish_item` asks once about the to-dos still open. A plan's
+ * steps are the task's to-dos themselves (plans.ts), so a completed step has
+ * ticked its to-do as it was written.
  */
 
 import type { EndedBy } from "@cawco/core/accounts";
@@ -68,7 +68,6 @@ import {
 } from "@cawco/core/injected";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { NO_REPLY_TOOL } from "@cawco/core/no-reply";
-import type { PlanStep } from "@cawco/core/plan";
 import type {
   InstanceRow,
   NamedSpawn,
@@ -166,13 +165,12 @@ import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import { awayProblem, MachineProblem, thrownAgain } from "./machine-answers";
 import { machineName } from "./machine-name";
 import { signedInOn } from "./placement";
-import type { Plans } from "./plans";
 import { handle } from "./presenters/words";
 import { folderPath } from "./project-folder";
-import type { AnyProblem, ProblemsOf } from "./refusal";
+import type { ProblemsOf } from "./refusal";
 import { chatPointer, chatPointerRefusal } from "./report-pointer";
 import { sessionWord } from "./session-word";
-import type { Todo, TodoChanges } from "./task-file";
+import type { Todo } from "./task-file";
 import type { Tasks } from "./tasks";
 import { unwatchedMode } from "./unwatched-mode";
 import { CAWCO_TOOL } from "./web-reads";
@@ -750,14 +748,6 @@ interface WorkItemDeps extends Pick<
     task: { projectId: string | null; taskId?: string }
   ) => ItemPlacement | PlacementProblem;
   /**
-   * The session's plan steps as its plan panel reads them (plans.ts):
-   * CawCo's list, `todo_write`'s session scope. The plan ↔ to-do link reads
-   * these; or its refusal.
-   */
-  readonly planSteps: (
-    instanceId: string
-  ) => Promise<PlanStep[] | ProblemsOf<ReturnType<Plans["read"]>>>;
-  /**
    * A project's first work item on `machineId`, which holds no checkout of
    * it: the machine is sent the project's rows from now on (server.ts
    * `machineFleetItems`), and places them in each clone of it there. A
@@ -861,20 +851,14 @@ interface WorkItemDeps extends Pick<
    */
   readonly tellYou: (row: InstanceRow, title: string, body: string) => void;
   /**
-   * A project task's to-dos (tasks.ts), for the plan ↔ to-do link: read them,
-   * and tick or propose them as the hub. Without it the link is off.
+   * A project task's to-dos (tasks.ts): `finish_item` asks once about those
+   * still open. Without it it asks nothing.
    */
   readonly todos?: {
     read: (
       projectId: string,
       taskId: string
     ) => Promise<Todo[] | ProblemsOf<ReturnType<Tasks["get"]>>>;
-    write: (
-      projectId: string,
-      taskId: string,
-      changes: TodoChanges,
-      reason: string
-    ) => Promise<ProblemsOf<ReturnType<Tasks["todos"]>> | undefined>;
   };
   /** The delegate types a session of the project sees (the fleet's without one), read at dispatch. */
   readonly types: (projectId?: string | null) => DelegateType[];
@@ -888,14 +872,6 @@ interface WorkItemDeps extends Pick<
   readonly workPlace: (project: ProjectRow) => WorkPlace;
 }
 
-/** A plan step that stands for one of its task's to-dos: its `id` is that to-do's, `td-3`. */
-const PLAN_TODO = /^td-\d{1,6}$/u;
-/** Plan items one attempt may leave behind as proposed to-dos. */
-const PROPOSALS_LIMIT = 20;
-const RUNS_OF_SPACE = /\s+/gu;
-/** A plan item's or to-do's words as they are matched: spaces folded, lowercase. */
-const planWords = (text: string): string =>
-  text.replace(RUNS_OF_SPACE, " ").trim().toLowerCase();
 /**
  * How often the hub looks at every live item's budget, between turns, and
  * for items whose session is gone or asleep: the first look comes this long
@@ -1414,7 +1390,6 @@ export const createWorkItems = ({
   forLandings,
   forWorkspaces,
   placeAhead,
-  planSteps,
   publish,
   reclaimUnread,
   recutDone,
@@ -2466,16 +2441,9 @@ export const createWorkItems = ({
     );
   };
 
-  // --- plan ↔ to-dos ----------------------------------------------------------------
+  // --- to-dos at finish ----------------------------------------------------------------
 
-  /** The item's session's plan as its panel reads it; undefined when it cannot be read now. */
-  const planFor = (item: WorkItemRow): Promise<PlanStep[] | undefined> =>
-    planSteps(item.instanceId).then(
-      (steps) => (Array.isArray(steps) ? steps : undefined),
-      () => undefined
-    );
-
-  /** The task an item is an attempt at, when the plan link can reach it. */
+  /** The task an item is an attempt at, when its to-dos are kept. */
   const taskOf = (
     item: WorkItemRow
   ): { projectId: string; taskId: string } | undefined =>
@@ -2483,137 +2451,13 @@ export const createWorkItems = ({
       ? { projectId: item.projectId, taskId: item.taskId }
       : undefined;
 
-  /** The item's task, its plan and the task's to-dos, when it has a task with a plan and to-dos are kept. */
-  const taskPlan = async (item: WorkItemRow) => {
-    const task = taskOf(item);
-    const plan = task ? await planFor(item) : undefined;
-    return task && todos && plan?.length
-      ? { task, plan, ledger: todos }
-      : undefined;
-  };
-
-  /**
-   * Ticks each open to-do of the item's task whose id a completed plan item
-   * carries as its id (`td-3`), and each open proposed to-do whose words one
-   * without such an id has: a step left open when the attempt ended once
-   * ({@link proposeLeftovers}) and completed after it went on. One read of
-   * the ledger and, when something is to tick, one commit.
-   */
-  const syncPlan = async (
-    item: WorkItemRow
-  ): Promise<AnyProblem | undefined> => {
-    const planned = await taskPlan(item);
-    if (!planned) {
-      return;
-    }
-    const { task, plan, ledger } = planned;
-    const done = plan.filter((entry) => entry.status === "completed");
-    const completed = new Set(
-      done.filter((entry) => PLAN_TODO.test(entry.id)).map((entry) => entry.id)
-    );
-    const said = new Set(
-      done
-        .filter((entry) => !PLAN_TODO.test(entry.id))
-        .map((entry) => planWords(entry.content))
-    );
-    if (completed.size === 0 && said.size === 0) {
-      return;
-    }
-    const listed = await ledger.read(task.projectId, task.taskId);
-    if (!Array.isArray(listed)) {
-      return listed;
-    }
-    const open = listed.flatMap((todo) =>
-      !todo.done &&
-      todo.id &&
-      (completed.has(todo.id) ||
-        (todo.proposed && said.has(planWords(todo.text))))
-        ? [todo.id]
-        : []
-    );
-    if (open.length === 0) {
-      return undefined;
-    }
-    return await ledger.write(
-      task.projectId,
-      task.taskId,
-      { tick: open },
-      `attempt ${item.id.slice(0, 8)}'s plan completed them`
-    );
-  };
-
-  /** {@link syncPlan} off the turn's path; a machine that cannot answer is logged, not fatal. */
-  const syncSoon = (item: WorkItemRow): void => {
-    if (!(taskOf(item) && LIVE.has(item.state))) {
-      return;
-    }
-    syncPlan(item).then(
-      (unsynced) => {
-        if (unsynced) {
-          console.warn(
-            `[work-items] ${item.id}: its plan was not read: ${unsynced.response.detail}`
-          );
-        }
-      },
-      (error: unknown) =>
-        console.warn(
-          `[work-items] ${item.id}: its plan was not read: ${error instanceof Error ? error.message : String(error)}`
-        )
-    );
-  };
-
-  /**
-   * An item ended: its plan's last ticks land, and the plan items it left
-   * open (whose id is no to-do's) become proposed to-dos on its task — a line
-   * each, `(proposed)`, skipping words the task already has.
-   */
-  const proposeLeftovers = async (
-    item: WorkItemRow
-  ): Promise<AnyProblem | undefined> => {
-    const planned = await taskPlan(item);
-    if (!planned) {
-      return undefined;
-    }
-    const { task, plan, ledger } = planned;
-    const unsynced = await syncPlan(item);
-    if (unsynced) {
-      return unsynced;
-    }
-    const listed = await ledger.read(task.projectId, task.taskId);
-    if (!Array.isArray(listed)) {
-      return listed;
-    }
-    const known = new Set(listed.map((todo) => planWords(todo.text)));
-    const left = plan
-      .filter(
-        (entry) => entry.status !== "completed" && !PLAN_TODO.test(entry.id)
-      )
-      .map((entry) => entry.content.replace(RUNS_OF_SPACE, " ").trim())
-      .filter((text) => text && !known.has(planWords(text)));
-    const proposed = [...new Set(left)];
-    if (proposed.length === 0) {
-      return undefined;
-    }
-    const cut = proposed.length - PROPOSALS_LIMIT;
-    return await ledger.write(
-      task.projectId,
-      task.taskId,
-      {
-        add: proposed
-          .slice(0, PROPOSALS_LIMIT)
-          .map((text) => ({ text, proposed: true })),
-      },
-      `attempt ${item.id.slice(0, 8)} ended ${item.state} with these left open in its plan${cut > 0 ? ` and ${cut} more left in the plan` : ""}`
-    );
-  };
-
   /** Items whose session was asked once, at finish_item, about the task's unticked to-dos. */
   const todosAsked = new Set<string>();
 
   /**
    * The words that send a `finish_item` back once while the task has open
-   * to-dos (its plan's completed ones ticked first): each listed, to tick or
-   * explain. Nothing on the second call, or when every to-do is ticked.
+   * to-dos: each listed, to tick or explain. Nothing on the second call, or
+   * when every to-do is ticked.
    */
   const untickedText = async (
     item: WorkItemRow
@@ -2621,18 +2465,6 @@ export const createWorkItems = ({
     const task = taskOf(item);
     if (!(task && todos) || todosAsked.has(item.id)) {
       return;
-    }
-    try {
-      const unsynced = await syncPlan(item);
-      if (unsynced) {
-        console.warn(
-          `[work-items] ${item.id}: its plan was not read at finish_item: ${unsynced.response.detail}`
-        );
-      }
-    } catch (error) {
-      console.warn(
-        `[work-items] ${item.id}: its plan was not read at finish_item: ${error instanceof Error ? error.message : String(error)}`
-      );
     }
     // A task that cannot be read (deleted, a folder that refuses) asks nothing.
     const listed = await todos
@@ -2700,21 +2532,6 @@ export const createWorkItems = ({
         `[work-items] queued delegates did not start: ${error instanceof Error ? error.message : String(error)}`
       )
     );
-    if (taskOf(item)) {
-      proposeLeftovers(item).then(
-        (unproposed) => {
-          if (unproposed) {
-            console.warn(
-              `[work-items] ${item.id}: its plan's open items were not proposed: ${unproposed.response.detail}`
-            );
-          }
-        },
-        (error: unknown) =>
-          console.warn(
-            `[work-items] ${item.id}: its plan's open items were not proposed: ${error instanceof Error ? error.message : String(error)}`
-          )
-      );
-    }
   };
 
   // --- delegates waiting on owned files ----------------------------------------------
@@ -5958,8 +5775,6 @@ export const createWorkItems = ({
         return;
       }
       const worked = workedThisTurn.delete(item.id);
-      // The plan's completed to-do ids tick their to-dos, off the turn's path.
-      syncSoon(item);
       // The turn an interrupt cut: nothing goes back, nothing fails it and
       // nothing nudges it. Before this check, a Claude turn cut by
       // interrupt_delegate (an error result, never OpenCode's `aborted`)

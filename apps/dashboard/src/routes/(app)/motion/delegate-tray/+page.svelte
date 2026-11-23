@@ -200,8 +200,9 @@
     plan: {
       source: "cawco",
       steps: Array.from({ length: 8 }, (_, i) => ({
-        id: `${i}`,
-        content: `Step ${i + 1}`,
+        id: `tsk-${i + 1}`,
+        task: `tsk-${i + 1}`,
+        content: `Task ${i + 1}`,
         depth: 0,
         status: "pending" as const,
       })),

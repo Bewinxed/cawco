@@ -12,7 +12,7 @@ import {
   getMeta,
   type QuestionClose,
 } from "@cawco/core/doc-meta";
-import type { PlanStep } from "@cawco/core/plan";
+import type { KeptStep } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { TUNED_MAP, tunedEntryOf } from "@cawco/core/tuned";
 import type { Doc } from "yjs";
@@ -75,7 +75,7 @@ export type HolderRead = Pick<
  */
 export interface SessionRead {
   holder?: HolderRead;
-  steps?: readonly PlanStep[];
+  steps?: readonly KeptStep[];
 }
 
 /** What createFacts reads of the artifact service: its deps, and the service's parts it calls, each read when called. */
@@ -316,7 +316,7 @@ export const createFacts = (ctx: FactsContext) => {
       }
       return read.holder;
     };
-    const steps = (writer: string): readonly PlanStep[] => {
+    const steps = (writer: string): readonly KeptStep[] => {
       const read = entry(writer);
       const was = kept?.get(writer)?.steps;
       if (!read.steps) {

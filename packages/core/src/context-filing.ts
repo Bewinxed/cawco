@@ -26,7 +26,7 @@ export type FilingStage = "filing" | "filed" | "stopped";
 /**
  * What a session's records held as its filing at the threshold started,
  * each record one line to compare (hub open-items.ts `recordsOf`): its
- * plan's steps (status and words), when its spec was written, its task's
+ * plan's steps (status and the record each names), its task's
  * to-dos and its open filed tasks' (task, place, tick and words), the ids
  * of its open filed tasks and of its notes in its project's memory inbox.
  * Kept with the filing's plan (hub schema `limitCompactions.records`), so a
@@ -34,8 +34,6 @@ export type FilingStage = "filing" | "filed" | "stopped";
  */
 export interface FiledRecords {
   notes: string[];
-  /** When its spec was written, ISO 8601; null while it has none. */
-  spec: string | null;
   steps: string[];
   tasks: string[];
   todos: string[];
@@ -49,8 +47,6 @@ export interface FiledRecords {
 export interface FilingWrote {
   /** Notes it put in its project's memory inbox. */
   notes: number;
-  /** Whether it wrote its spec again. */
-  spec: boolean;
   /** Its plan's steps written new or changed, a step closed included. */
   steps: number;
   /** Tasks it filed. */

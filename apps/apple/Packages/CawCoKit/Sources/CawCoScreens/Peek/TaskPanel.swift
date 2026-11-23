@@ -6,9 +6,8 @@ import UIKit
 /// A session's plan (plan/PlanPane.svelte, PRD §5.2 "Every session's plan,
 /// in a panel"), as the hub keeps it (`hub.plans`): its steps as a tree on
 /// the app's nesting line, each ticked as it completes (the tick drawn along
-/// its stroke) or breathing while it is under way; its spec, read-only,
-/// whole, as running text; and on a task attempt the task's to-dos the same
-/// way. One column; a part after the first is headed on a seam. The peek
+/// its stroke) or breathing while it is under way; and on a task attempt the
+/// task's to-dos the same way. One column; a part after the first is headed on a seam. The peek
 /// and the plan's sheet draw it alike.
 final class PlanView: UIStackView {
     private let hub: HubConnection
@@ -49,17 +48,10 @@ final class PlanView: UIStackView {
         let done = Set(plan.steps.filter { $0.status == "completed" }.map(\.id))
         let landing = done.subtracting(ticked)
         ticked = done
-        let headed = plan.spec != nil || plan.showsTodos
+        let headed = plan.showsTodos
         if !plan.steps.isEmpty {
             if headed { addPart(Self.head(Words.Plan.steps)) }
             addArrangedSubview(PlanTree(Self.tree(plan.steps.map { ($0.id, $0.depth, $0.status, $0.content) }), landing: landing))
-        }
-        if let spec = plan.spec {
-            addPart(Self.head(Words.Plan.spec))
-            // MessageBody, as PlanPane.svelte draws the spec: its headings at body 500, never above the parts' own.
-            let document = MarkdownDocumentView(message: true)
-            document.setSource(spec)
-            addArrangedSubview(document)
         }
         if plan.showsTodos, let taskId = plan.taskId {
             if !plan.onlyTodos { addPart(Self.head(Words.Plan.todos, ref: taskId)) }

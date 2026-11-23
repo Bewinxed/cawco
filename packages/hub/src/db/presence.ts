@@ -15,11 +15,10 @@ import {
 /** One device's last word on the person, as notifications.ts keeps it. */
 export type PresenceClientRow = typeof presenceClients.$inferSelect;
 
-/** The person's last away stretch: since when, when it ended (null while away), and who was given its recap. */
+/** The person's last away stretch: since when, and when it ended (null while away). */
 export interface AwayStretch {
   readonly awaySince: Date | null;
   readonly backAt: Date | null;
-  readonly recapped: readonly string[];
 }
 
 /** A device the iOS app registered for pushes, by its Cawrier pairing. */
@@ -222,11 +221,10 @@ export const presenceDb = (core: DbCore): PresenceDb => {
         return {
           awaySince: row?.awaySince ?? null,
           backAt: row?.backAt ?? null,
-          recapped: row?.recapped ?? [],
         };
       },
-      setStretch: ({ awaySince, backAt, recapped }) => {
-        const set = { awaySince, backAt, recapped: [...recapped] };
+      setStretch: ({ awaySince, backAt }) => {
+        const set = { awaySince, backAt };
         db.insert(presenceSettings)
           .values({ id: PRESENCE_ID, appearAway: false, ...set })
           .onConflictDoUpdate({ target: presenceSettings.id, set })

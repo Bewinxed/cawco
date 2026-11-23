@@ -7,16 +7,14 @@
  * to ask at every turn's end and every delegate's spawn:
  * - `delegates`: it started a delegate;
  * - `days`: it has been going for more than a day, so it was active on two;
- * - `plan`: its plan still has {@link PLAN_ITEMS} or more open steps as a turn
- *   ends, read as its plan panel reads it (plans.ts): CawCo's list;
  * - `repo`: its folder belongs to no project, and another session is working
  *   in the same repository (normalised `origin`, projects.ts) on any machine.
  *
  * A session that was offered, whatever it answered, is never offered again:
  * the `project_offers` row says so. Accepting makes or joins the project
- * through the same path the dashboard's "New project" takes, moves the
- * session and its delegates into it, and files the plan's open items as
- * proposed tasks in the project's first to-do stage.
+ * through the same path the dashboard's "New project" takes, and moves the
+ * session and its delegates into it. (A plain session keeps no plan: a
+ * plan's steps are a project's tasks and to-dos, plans.ts.)
  */
 
 import type { CommandResult } from "@cawco/core/commands/controls";
@@ -26,7 +24,6 @@ import type {
   ProjectOfferSummary,
 } from "@cawco/core/frames";
 import type { MachinePath } from "@cawco/core/machine-path";
-import type { PlanStep } from "@cawco/core/plan";
 import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
@@ -39,18 +36,9 @@ import type { ProjectOfferRow } from "./db/projects";
 import { leafOf, sessionLabel } from "./labels";
 import { machineName } from "./machine-name";
 import { tool } from "./mcp-tool";
-import type { Plans } from "./plans";
 import type { CreateOrJoinProject } from "./project-making";
 import { normaliseRemote } from "./projects";
-import type { ProblemsOf } from "./refusal";
-import type { TaskActor, Tasks } from "./tasks";
 
-/** Open plan items at a turn's end that make a plan worth a project. */
-const PLAN_ITEMS = 5;
-/** The label a task filed from a session's plan carries until someone takes it up. */
-const PROPOSED_LABEL = "proposed";
-/** Task titles are one line of at most 200 characters (tasks.ts). */
-const TITLE_MAX = 200;
 /** A git read is local; past this the machine is not going to answer it. */
 const READ_MS = 10_000;
 
@@ -64,13 +52,6 @@ export interface ProjectOffersDeps {
   createProject: CreateOrJoinProject;
   db: DbShape;
   online: (machineId: string) => boolean;
-  /**
-   * The session's plan steps as its plan panel reads them: CawCo's list;
-   * or the problem of its read (plans.ts `read`).
-   */
-  planSteps: (
-    instanceId: string
-  ) => Promise<PlanStep[] | ProblemsOf<ReturnType<Plans["read"]>>>;
   /** To every dashboard: the session's standing offer, or null once answered. */
   publish: (row: InstanceShape, offer: ProjectOfferSummary | null) => void;
   run: (
@@ -81,7 +62,6 @@ export interface ProjectOffersDeps {
   ) => Promise<CommandResult>;
   /** Notes a new project's start and sends its conversation the setup steps (caw.ts `setup`): its session, when it started. */
   setup: (projectId: string, note: ProjectNote) => ReturnType<Caw["setup"]>;
-  tasks: Tasks;
 }
 
 const summaryOf = (row: ProjectOfferRow): ProjectOfferSummary => ({
@@ -93,12 +73,6 @@ const summaryOf = (row: ProjectOfferRow): ProjectOfferSummary => ({
 
 const plural = (n: number, one: string, many: string): string =>
   `${n} ${n === 1 ? one : many}`;
-
-/** A plan step's words as a task title: one line, within the limit. */
-const titleOf = (content: string): string => {
-  const line = content.replace(/\s+/gu, " ").trim();
-  return line.length > TITLE_MAX ? `${line.slice(0, TITLE_MAX - 1)}…` : line;
-};
 
 export const createProjectOffers = (deps: ProjectOffersDeps) => {
   const { db } = deps;
@@ -161,52 +135,6 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
       .catch(() => null);
     remotes.set(key, reading);
     return reading;
-  };
-
-  /** The session's open plan steps, in plan order; none when its plan cannot be read now. */
-  const openSteps = async (id: string): Promise<PlanStep[]> =>
-    (
-      await deps.planSteps(id).then(
-        (steps) => (Array.isArray(steps) ? steps : []),
-        () => []
-      )
-    ).filter((step) => step.status !== "completed");
-
-  /** Files a plan's open steps as proposed tasks, in plan order; the ones the project refused, with why. */
-  const filePlan = async (
-    projectId: string,
-    plan: PlanStep[],
-    actor: TaskActor
-  ): Promise<{
-    filed: AcceptResult["tasks"];
-    unfiled: AcceptResult["unfiled"];
-  }> => {
-    const filed: AcceptResult["tasks"] = [];
-    const unfiled: AcceptResult["unfiled"] = [];
-    for (const step of plan) {
-      const title = titleOf(step.content);
-      if (!title) {
-        continue;
-      }
-      try {
-        const task = await deps.tasks.create(
-          projectId,
-          { title, labels: [PROPOSED_LABEL] },
-          actor
-        );
-        if (task instanceof ElysiaStatus) {
-          unfiled.push({ title, why: task.response.detail });
-        } else {
-          filed.push({ id: task.id, title: task.title });
-        }
-      } catch (error) {
-        unfiled.push({
-          title,
-          why: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-    return { filed, unfiled };
   };
 
   const offer = (
@@ -291,15 +219,6 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
         );
         return;
       }
-      const open = (await openSteps(id)).length;
-      if (open >= PLAN_ITEMS) {
-        offer(
-          row,
-          "plan",
-          `This session's plan has ${open} open items. Make it a project?`
-        );
-        return;
-      }
       const shared = await sharedRepository(row);
       if (shared) {
         offer(row, "repo", shared);
@@ -381,10 +300,10 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
 
     /**
      * "Create project": the project from the session's machine and folder (or
-     * the one that already has its repository), the session and its
-     * delegates in it, and its open plan items as proposed tasks.
+     * the one that already has its repository), and the session and its
+     * delegates in it.
      */
-    async accept(instanceId: string, actor: TaskActor) {
+    async accept(instanceId: string) {
       const row = answerable(instanceId);
       if (row instanceof ElysiaStatus) {
         return row;
@@ -413,21 +332,14 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
       db.answerProjectOffer(row.id, "accepted", project.id);
       deps.publish(row, null);
 
-      const { filed, unfiled } = await filePlan(
-        project.id,
-        await openSteps(row.id),
-        actor
-      );
-      // A new project is set up by its conversation once its plan is on the board.
+      // A new project is set up by its conversation.
       const from = row.title || sessionLabel(row).name;
       const conversation = joined
         ? undefined
         : await deps.setup(project.id, {
             title: `Project · made from ${from}`,
             event: { kind: "project", what: "made", name: project.name, from },
-            body: filed.length
-              ? `Its plan is on the board as ${plural(filed.length, "proposed task", "proposed tasks")}: ${filed.map((task) => task.id).join(", ")}.`
-              : "",
+            body: "",
           });
       if (conversation instanceof ElysiaStatus) {
         return conversation;
@@ -436,8 +348,6 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
         joined,
         project: { id: project.id, name: project.name },
         sessions: moving.map((r) => r.id),
-        tasks: filed,
-        unfiled,
         ...(conversation ? { conversation } : {}),
       };
       return accepted;
@@ -448,7 +358,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
 export type ProjectOffers = ReturnType<typeof createProjectOffers>;
 
 /** The dashboard's routes: the standing offers, and their two answers. */
-export const projectOfferRoutes = (offers: ProjectOffers, you: TaskActor) =>
+export const projectOfferRoutes = (offers: ProjectOffers) =>
   new Elysia()
     .get("/api/project-offers", () => offers.open())
     .post(
@@ -456,7 +366,7 @@ export const projectOfferRoutes = (offers: ProjectOffers, you: TaskActor) =>
       ({ params }) => offers.dismiss(params.instanceId) ?? { ok: true }
     )
     .post("/api/project-offers/:instanceId/accept", ({ params }) =>
-      offers.accept(params.instanceId, you)
+      offers.accept(params.instanceId)
     );
 
 /** The MCP tool's name: Caw proposes it in conversation, and you say yes. */
@@ -495,10 +405,6 @@ const acceptedWords = (result: AcceptResult): string =>
     result.conversation
       ? "Its conversation sets it up; the person reads it on the project's page."
       : "",
-    result.tasks.length > 0
-      ? `Filed as proposed tasks: ${result.tasks.map((task) => `${task.id} “${task.title}”`).join(", ")}.`
-      : "No plan items to file.",
-    ...result.unfiled.map((one) => `Not filed, “${one.title}”: ${one.why}`),
   ]
     .filter(Boolean)
     .join("\n");

@@ -26,8 +26,6 @@ import {
 } from "./artifact-kinds";
 import { NO_REPLY_TOOL } from "./no-reply";
 import { isOneOf } from "./one-of";
-import type { PlanWait } from "./plan";
-import { artifactLink, stepLink } from "./references";
 import { unhandled } from "./unhandled";
 import { workWords } from "./words/work";
 import { type CarryRestored, INPUTS_DIR } from "./workspace/controls";
@@ -523,97 +521,26 @@ export const withMovedLine = (text: string, move: CheckoutMove): string =>
   afterMarker(text, movedLine(move));
 
 /**
- * The hub's word to a session holding news for the person as they come back
- * from being away (hub sends.ts `tellBack`), sent only to one whose process
- * is up and whose prompt cache is warm: it starts a turn whose reply is the
- * recap; its presence line carries the notes ({@link PresenceSaid} `recap`).
- */
-export const BACK_MESSAGE =
-  "[CawCo] The person is back. Tell them what happened while they were away.";
-
-/**
- * The hub's word to a session the person is away from, whose prompt cache
- * goes cold soon (hub sends.ts `notesBeforeCold`, decided 2026-11-19): it
- * writes what happened so far into its plan while its cache is still warm,
- * so the person reads it on return without waking it.
- */
-export const NOTES_BEFORE_COLD_MESSAGE = (since: string): string =>
-  `[CawCo] The person is still away and this session's prompt cache goes cold within minutes. Before it does, bring your plan's spec up to date with todo_write under "${awayNotesHeading(since)}" at its top: one line for each thing done, decided, or waiting on them since they left. They read it there when they come back, without waking you. Do nothing else, and end on ${NO_REPLY_TOOL}.`;
-
-/**
  * Where the person is, as a session is told at the start of each turn (hub
  * sends.ts `presenced`, from notifications.ts `person`):
- * - `on`: on this chat now, or this is their own message: talk normally.
- *   With `recap`, the person has come back from being away since
- *   `recap.since` (the hub's own word on when they left), and the notes the
- *   session kept meanwhile (its plan's "Since `recap.section`" section)
- *   ride along: on the hub's word that they are back ({@link BACK_MESSAGE},
- *   `recap.turn` `back`) the reply is the recap; on their own first message
- *   since (`theirs`, a session not told they were back) the reply answers
- *   it and recaps the notes too;
+ * - `on`: on this chat now, or this is their own message: talk normally;
  * - `elsewhere`: here, on another chat or another app: a turn that delivers
  *   work they asked for ends on its report, which pushes (push.ts
  *   `turnEnded`); every other turn is silent, reaching them only with a
  *   question or a choice;
  * - `away`: away since `since` (HH:MM on the hub's clock; null when no
- *   device has ever said): the same, and keep the notes.
+ *   device has ever said): the same. What happened while they were away
+ *   reaches them on their return from the hub's own records (hub
+ *   return-recap.ts), never from a session's words.
  */
 export type PresenceSaid = {
   /** Their last message to this session has no reply after it (hub db `personUnanswered`): this turn answers it. */
   unanswered?: boolean;
 } & (
-  | {
-      kind: "on";
-      recap?: {
-        /** Whose turn carries it: the hub's word that they are back, or their own message. */
-        turn: "back" | "theirs";
-        notes: string;
-        /** The plan's section the notes are under, by its heading's time (`## Since HH:MM`). */
-        section: string;
-        /** When the person went away, HH:MM on the hub's clock, as the hub knows it. */
-        since: string;
-        /** What of the session's waits on the person now, as Needs you lists it (plan.ts `planWaitsOf`). */
-        waiting?: readonly PlanWait[];
-      };
-    }
+  | { kind: "on" }
   | { kind: "elsewhere" }
   | { kind: "away"; since: string | null }
 );
-
-/** A wait as the recap names it: the step's chip, labelled by its words, then its page's chip; the page alone when no step names it. */
-const waitLine = ({ artifact, session, step }: PlanWait): string =>
-  step
-    ? `- ${stepLink(session, step.id, step.content)} waits on ${artifactLink(artifact.id, artifact.title)}`
-    : `- ${artifactLink(artifact.id, artifact.title)}, which no step names`;
-
-/** The heading a session's away notes open with in its plan's spec: `## Since 12:18 (you were away)`. */
-const awayNotesHeading = (since: string): string =>
-  `## Since ${since} (you were away)`;
-
-/** The first "## Since HH:MM" section of a plan's spec: when it began, and its lines. */
-export const awayNotesOf = (
-  spec: string | undefined
-): { notes: string; since: string } | undefined => {
-  if (!spec) {
-    return;
-  }
-  const lines = spec.split("\n");
-  const at = lines.findIndex((line) => AWAY_HEADING.test(line));
-  if (at < 0) {
-    return;
-  }
-  const since = AWAY_HEADING.exec(lines[at] ?? "")?.[1] ?? "";
-  const end = lines.findIndex(
-    (line, index) => index > at && line.startsWith("## ")
-  );
-  const notes = lines
-    .slice(at + 1, end < 0 ? undefined : end)
-    .join("\n")
-    .trim();
-  return notes ? { since, notes } : undefined;
-};
-
-const AWAY_HEADING = /^## Since (\d{1,2}:\d{2})\b/u;
 
 /** The away rule: how a turn ends, and the one thing that reaches the person. */
 const WORK_SILENT = `Work silent: end each turn on ${NO_REPLY_TOOL} as its last call. Only a question or a choice reaches them, by ask or a decision card.`;
@@ -638,15 +565,11 @@ export const presenceLine = (said: PresenceSaid): string =>
 const whereTheyAre = (said: PresenceSaid): string => {
   switch (said.kind) {
     case "on":
-      return said.recap
-        ? `[CawCo presence] The person ${said.recap.turn === "back" ? "has just come back" : "came back and this is their first message to you since"}; they were away since ${said.recap.since}. Your plan's notes from while they were away:\n\n${said.recap.notes}${said.recap.waiting?.length ? `\n\nWhat of yours waits on them now, as Needs you lists it:\n${said.recap.waiting.map(waitLine).join("\n")}\nName each by its link as written here.` : ""}\n\n${said.recap.turn === "back" ? "This turn's reply is your recap of those notes" : "Answer their message, and in the same reply recap those notes"}, short: what was done, what was decided, and what waits on them. It reaches them, so do not end it on ${NO_REPLY_TOOL}. Then fold that section into the rest of your plan's spec with todo_write.`
-        : `[CawCo presence] The person is on this chat now: talk to them normally. ${ON_CHAT_ACTS}`;
+      return `[CawCo presence] The person is on this chat now: talk to them normally. ${ON_CHAT_ACTS}`;
     case "elsewhere":
-      return `[CawCo presence] The person is at their desk but not on this chat. A turn that delivers work they asked for ends on its report, which reaches them; every other turn ends on ${NO_REPLY_TOOL} as its last call, and a question or a choice reaches them by ask or a decision card. Keep your plan current with todo_write.`;
-    case "away": {
-      const heading = awayNotesHeading(said.since ?? "now");
-      return `[CawCo presence] The person is away${said.since ? ` since ${said.since}` : ""}. ${WORK_SILENT} Keep what they would want to know in your plan's spec with todo_write, under "${heading}" at its top: one line for each thing done, decided, or waiting on them. Something waiting on them is a step of your plan: name the step by its link as todo_write answers it, labelled by its words, never a copy of its state. Tick steps as they finish.`;
-    }
+      return `[CawCo presence] The person is at their desk but not on this chat. A turn that delivers work they asked for ends on its report, which reaches them; every other turn ends on ${NO_REPLY_TOOL} as its last call, and a question or a choice reaches them by ask or a decision card.`;
+    case "away":
+      return `[CawCo presence] The person is away${said.since ? ` since ${said.since}` : ""}. ${WORK_SILENT}`;
   }
 };
 

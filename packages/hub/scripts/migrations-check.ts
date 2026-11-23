@@ -1478,6 +1478,12 @@ const DELETES: readonly Deletion[] = [
     rows: "1=1",
     why: "a brief's use of a lesson is kept by its lesson id now; the uses kept by a fact line's hash name no lesson",
   },
+  {
+    migration: "0479_plan_steps_are_records",
+    table: "session_plan_steps",
+    rows: "id NOT GLOB 'tsk-[0-9]*' AND NOT (id GLOB 'td-[0-9]*' AND instance_id IN (SELECT i.id FROM instances i JOIN work_items w ON w.id = i.work_item_id WHERE w.task_id IS NOT NULL))",
+    why: "a plan's step names a task or a to-do now; a step that held words of its own goes, the person's comments on it kept as orphaned",
+  },
 ];
 
 /** How many rows each deletion that runs on the database at `path` takes, by table. */

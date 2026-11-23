@@ -521,12 +521,18 @@ import type { TailnetServing } from "./tailnet-https";
  *    thing's thread, and its offers stand in Needs you (hub
  *    offers-waiting.ts, an `offers.waiting` frame). A page built for 103
  *    draws those offers under the notes, so it reloads first.
+ * 105: a session's plan carries no `spec`, `awayUnseen` or `unread`, and
+ *    each step names a task or a to-do (`task`, `todo`), its words read
+ *    from that record; the person's added step names its record, and
+ *    "Create project" files no plan items (`AcceptResult` has no `tasks`
+ *    or `unfiled`). A page built for 104 draws a spec and a ring mark
+ *    that are gone, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 104;
+export const WIRE_PROTOCOL = 105;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

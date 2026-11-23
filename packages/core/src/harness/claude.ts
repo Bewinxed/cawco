@@ -80,8 +80,8 @@ export const CLAUDE = {
   },
   // Its list, `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet` and
   // `TodoWrite` (each in agent SDK 0.3.302's `BUILTIN_TOOL_NAMES`), and its
-  // plan mode, `EnterPlanMode`/`ExitPlanMode`: the session's spec, written
-  // through CawCo, replaces it.
+  // plan mode, `EnterPlanMode`/`ExitPlanMode`: CawCo's plan, the tasks and
+  // to-dos it works on, replaces them.
   nativeTools: {
     subagents: ["Task", "Agent"],
     todos: [

@@ -239,7 +239,7 @@ import {
   WIRE_PROTOCOL,
 } from "@cawco/core/stream";
 import type { AttemptStart } from "@cawco/core/task-views";
-import { DAY_MS, HOUR_MS, MINUTE_MS, secondsOf } from "@cawco/core/time";
+import { DAY_MS, HOUR_MS, secondsOf } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import type { ReportedToolStatus } from "@cawco/core/tools";
 import { toolSpec } from "@cawco/core/tools";
@@ -672,6 +672,7 @@ import {
   relayJourneyRoutes,
 } from "./relay-journey";
 import { createRepoPublish } from "./repo-publish";
+import { createReturnRecap, type ReturnRecaps } from "./return-recap";
 import { accountHomeLoginRoutes } from "./routes/account-home-logins";
 import {
   accountPlacementRoutes,
@@ -1421,7 +1422,6 @@ export const createServer = (
     artifactLane: () => artifactLane,
     awayWords: () => awayWords,
     boundProblem: () => boundProblem,
-    cacheLapsesAt: () => cacheLapsesAt,
     cacheWarm: () => cacheWarm,
     callAgent: () => callAgent,
     caw: () => caw,
@@ -1539,7 +1539,6 @@ export const createServer = (
     hubTurn: () => hubTurn,
     inputRefusal: () => inputRefusal,
     keptAsleep: () => keptAsleep,
-    lastTurnAt: () => lastTurnAt,
     laws: () => laws,
     leadRuns: () => leadRunsPort.now(),
     limitRefused: () => limitRefused,
@@ -1871,8 +1870,6 @@ export const createServer = (
     takeBack,
     takeSendSignal,
     takeTaken,
-    tellBack,
-    notesBeforeCold,
     turnOver,
     turnUnderWay,
     turnsWritten,
@@ -4148,9 +4145,19 @@ export const createServer = (
     "planChanges",
     undefined
   );
+  // The person came back: each session's recap of what moved of its records
+  // meanwhile is drawn in its transcript, from the records, waking no one
+  // (return-recap.ts). Made as the first return reads it: the transcripts
+  // and Needs you are up by then.
+  let returnRecap: ReturnRecaps | undefined;
   notifications.onPerson((now, before) => {
     if (now.state === "here" && before.state === "away") {
-      tellBack();
+      returnRecap ??= createReturnRecap({
+        db,
+        needs: () => artifactLane.now().needs,
+        line: (row, message) => transcripts.line(row.id, message, row.harness),
+      });
+      returnRecap.returned(notifications.lastStretch());
     }
   });
   // A hub that just started has heard no machine yet: each gets the window a
@@ -8548,13 +8555,6 @@ export const createServer = (
     // A routine run's turn makes the sessions it starts the run's (memory.ts).
     spawnedUnder: (instanceId, parentId) =>
       memoryWatch.spawned(instanceId, parentId),
-    // Read through the plan panel's own read, so the link sees the list the
-    // session keeps on any harness. Called only once the hub is up, after
-    // `plans` below is made.
-    planSteps: async (instanceId) => {
-      const plan = await plans.read(instanceId);
-      return plan instanceof ElysiaStatus ? plan : plan.steps;
-    },
     pauses: (projectId) => caps.pauses(projectId),
     // A session already ended, or stopped with no process on its machine's
     // last custody reading, has nothing to confirm its stop: its stop is
@@ -8681,15 +8681,6 @@ export const createServer = (
       read: async (projectId, taskId) => {
         const task = await tasks.get(projectId, taskId);
         return task instanceof ElysiaStatus ? task : task.todos;
-      },
-      write: async (projectId, taskId, changes, reason) => {
-        const task = await tasks.todos(
-          projectId,
-          taskId,
-          changes,
-          hubActor(reason)
-        );
-        return task instanceof ElysiaStatus ? task : undefined;
       },
     },
     call: callMachine,
@@ -9945,6 +9936,19 @@ export const createServer = (
     );
   };
   tasks.listen(dispatcher.taskChanged);
+  // Each stage move as it happens: what the person's return reads of the
+  // tasks that moved while they were away (return-recap.ts).
+  tasks.listen((event) => {
+    if (event.kind === "moved") {
+      db.returnRecap.noteMove({
+        projectId: event.projectId,
+        taskId: event.id,
+        from: event.from,
+        to: event.to,
+        at: new Date(),
+      });
+    }
+  });
   tasks.listen(push.taskChanged);
   tasks.listen(caw.taskChanged);
   // What the person writes on a task, a trigger on it (task-input.ts,
@@ -10071,13 +10075,6 @@ export const createServer = (
   // itself, at a turn's end or a delegate's spawn (project-offers.ts).
   const projectOffers = createProjectOffers({
     db,
-    tasks,
-    // The plan as its panel reads it, on any harness. Called only once the
-    // hub is up, after `plans` below is made.
-    planSteps: async (instanceId) => {
-      const plan = await plans.read(instanceId);
-      return plan instanceof ElysiaStatus ? plan : plan.steps;
-    },
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
     createProject: createOrJoinProject,
@@ -10160,7 +10157,7 @@ export const createServer = (
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
   });
   tasks.listen(projectStarters.taskChanged);
-  // Every session's plan (§5.2): its steps, its spec, an attempt's to-dos,
+  // Every session's plan (§5.2): the tasks and to-dos it works on, an attempt's to-dos,
   // live to the session's followers (plans.ts).
   const plans = createPlans({
     db,
@@ -10403,20 +10400,6 @@ export const createServer = (
     return (
       !!row && cacheState(row, followupState(row), Date.now()).kind === "warm"
     );
-  };
-  /** When `instanceId`'s warm cache lapses between turns; null when it is cold, unknown or mid-turn. */
-  const cacheLapsesAt = (instanceId: string): number | null => {
-    const [row] = db.getInstancesByIds([instanceId]);
-    if (!row) {
-      return null;
-    }
-    const cache = cacheState(row, followupState(row), Date.now());
-    return cache.kind === "warm" && !cache.inTurn ? cache.until : null;
-  };
-  /** When `instanceId`'s last recorded turn ended, ISO; null when none is. */
-  const lastTurnAt = (instanceId: string): string | null => {
-    const [row] = db.getInstancesByIds([instanceId]);
-    return row ? followupState(row).recordedTurnAt : null;
   };
   /**
    * What a cold session's workspace holds on no remote, for its cold check
@@ -11673,8 +11656,7 @@ export const createServer = (
         notStopped(error instanceof Error ? error.message : String(error));
       }
     },
-    projectFromSession: (actor) =>
-      projectOffers.accept(actor.id, sessionActor(actor)),
+    projectFromSession: (actor) => projectOffers.accept(actor.id),
     writePlan: (actor, written) => changesOfPlans.written(actor, written),
     artifactNamed: (instanceId, asked) => artifacts.named(instanceId, asked),
     delegationTree: (actor, query) => delegationTree.read(actor, query),
@@ -12163,9 +12145,6 @@ export const createServer = (
   };
   pruneTurnUsage();
   lifetime.every("turn usage pruned", DAY_MS, pruneTurnUsage);
-  // While the person is away, a session with news writes its notes before
-  // its cache goes cold (sends.ts `notesBeforeCold`).
-  lifetime.every("notes before cold", MINUTE_MS, notesBeforeCold);
   // What is owed to a session nothing will wake ends (owed-ends.ts): the
   // notices this hub kept before it started, then each hour's.
   endOwedNotices("every");
@@ -13772,8 +13751,8 @@ export const createServer = (
    * the machine's teardown receipt: persisting intent is not proof that the
    * runner has ended. Then it cuts the turn it lands in, as an interrupt
    * does, and what it cut says it was the person's Stop; the session is
-   * marked stopped by the person, so their return wakes it no more
-   * (sends.ts `holdsNews`).
+   * marked stopped by the person, so no turn of the hub's own starts it
+   * until they write to it again (decide.ts `personStopped`).
    */
   const stopAskedByDashboard: DashboardVerbs["stop"] = (ws, message) => {
     stopFromDashboard(ws, message);
@@ -14108,7 +14087,7 @@ export const createServer = (
         }),
         faviconRoutes(),
         appleDiagnosticsRoutes(),
-        projectOfferRoutes(projectOffers, YOU_ACTOR),
+        projectOfferRoutes(projectOffers),
         designOfferRoutes(designOffers, YOU_ACTOR),
         offersWaitingRoutes(offersWaiting),
         starterRoutes(projectStarters),

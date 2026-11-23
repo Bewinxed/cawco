@@ -76,10 +76,6 @@ export const ARTIFACT_HANDED_ORIGIN = "artifact-handed";
 export const FLEET_WATCH_ORIGIN = "fleet-watch";
 /** The hub's word to a live attempt that a wait of its task moved (server.ts, tasks.ts `tell`). */
 export const TASK_WAITS_ORIGIN = "task-waits";
-/** The hub's word that the person is back, to a session holding news for them (sends.ts `tellBack`). */
-export const BACK_ORIGIN = "back";
-/** The hub's word to a session the person is away from, to write its notes before its cache goes cold (sends.ts `notesBeforeCold`). */
-export const NOTES_ORIGIN = "away-notes";
 /** The hub's word to a sender that its message did not arrive (sends.ts). */
 export const UNDELIVERED_ORIGIN = "undelivered";
 /** A fork's note to the session it forked (sends.ts `forkNotice`). */
@@ -150,10 +146,6 @@ const HUB_WORDS: Readonly<Record<string, HubWord>> = {
   [UNDELIVERED_ORIGIN]: NOTE,
   // A delegate handed it an artifact, not opened.
   [ARTIFACT_HANDED_ORIGIN]: KNOW,
-  // The person is back: recap the news (sends.ts `tellBack`).
-  [BACK_ORIGIN]: KNOW,
-  // The person is away: note what happened before the cache lapses.
-  [NOTES_ORIGIN]: KNOW,
   // Background work its old process ran ended with a move or a restart: it
   // runs when the session was waiting on that work, and rides in the turn a
   // carry-on or a cut turn's hand-back starts.

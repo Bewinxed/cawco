@@ -17,7 +17,6 @@ import SystemLine from "./SystemLine.svelte";
 const FILL = { tokens: 137_000, compactsAt: 167_000 };
 const WROTE_NOTHING: FilingWrote = {
   notes: 0,
-  spec: false,
   steps: 0,
   tasks: 0,
   todos: 0,
@@ -51,7 +50,7 @@ export default {
       fill: FILL,
       harness: "claude",
       stage: "filed",
-      wrote: { ...WROTE_NOTHING, steps: 4, spec: true, tasks: 1, notes: 1 },
+      wrote: { ...WROTE_NOTHING, steps: 4, tasks: 1, notes: 1 },
     }),
   },
 };

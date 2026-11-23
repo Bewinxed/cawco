@@ -686,16 +686,9 @@ const stepLines = (plan: SessionPlan, links: LinkScope): string[] =>
       `${"  ".repeat(step.depth)}- [${STEP_BOX[step.status]}] ${links.session ? stepLink(links.session, step.id, step.content) : `${step.id} ${step.content}`}${step.priority ? ` (${step.priority})` : ""}`
   );
 
-const HEADING = /^#+\s*/u;
-
-/** What a plan is called: its spec's first line, else its first step's words, else Plan (the dashboard's chip reads it so too). */
+/** What a plan is called: its first step's words, else Plan (the dashboard's chip reads it so too). */
 const planName = (plan: SessionPlan): string =>
-  plan.spec?.markdown
-    .split("\n")
-    .map((line) => line.replace(HEADING, "").trim())
-    .find(Boolean) ||
-  plan.steps[0]?.content ||
-  "Plan";
+  plan.steps[0]?.content || "Plan";
 
 /** A task's id and title, what an answer about its to-dos, comments or file names it by. */
 interface TaskNamed {
@@ -717,7 +710,6 @@ export const todoWrittenWords = (
     return lines(
       written.steps.length > 0 ? `${plan}:` : `${plan} has no steps.`,
       stepLines(written, links),
-      written.spec && "Your spec is kept.",
       written.personChanged &&
         `The person changed it: ${written.personChanged}`,
       written.todos &&

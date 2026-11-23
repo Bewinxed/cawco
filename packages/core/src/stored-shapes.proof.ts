@@ -356,6 +356,7 @@ import type {
 } from "./relays";
 import type { ReleaseManifest as ReleaseManifestType } from "./release-manifest";
 import type { DownloadProgress as DownloadProgressType } from "./resumable-download";
+import type { ReturnRecap as ReturnRecapType } from "./return-recap";
 import type {
   RuleMatchKind as RuleMatchKindType,
   RuleTiming as RuleTimingType,
@@ -790,6 +791,7 @@ import type {
   RestartHoldReasonOutput,
   ResultArtifactOutput,
   RetiringKeeperOutput,
+  ReturnRecapOutput,
   RoutineMadeByOutput,
   RuleMatchKindOutput,
   RuleTimingOutput,
@@ -1354,6 +1356,7 @@ prove<
     Same<ReportAnswerOutput, ReportAnswerType>,
     Same<UsageTokensOutput, UsageTokensType>,
     Same<ReportedUsageBucketOutput, ReportedUsageBucketType>,
+    Same<ReturnRecapOutput, ReturnRecapType>,
     Same<RoutineMadeByOutput, RoutineMadeByType>,
     Same<RuleMatchKindOutput, RuleMatchKindType>,
     Same<RuleTimingOutput, RuleTimingType>,

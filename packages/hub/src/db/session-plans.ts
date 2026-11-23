@@ -1,11 +1,12 @@
 /**
  * A session's plan and its changes: its steps and the person's comments on
  * them as rows (`session_plan_steps`, `session_plan_step_comments`), put
- * together as core's `PlanStep` list for whoever reads the plan whole, and
+ * together as core's `KeptStep` list for whoever reads the plan whole, and
  * queried as rows for each session's step in progress and each step's wait.
+ * A step names its record; its words are read from that record (plans.ts).
  */
 
-import type { OrphanedComments, PlanComment, PlanStep } from "@cawco/core/plan";
+import type { KeptStep, OrphanedComments, PlanComment } from "@cawco/core/plan";
 import { OVER_STATUSES } from "@cawco/core/protocol";
 import {
   and,
@@ -18,7 +19,6 @@ import {
   isNull,
   ne,
   notInArray,
-  sql,
 } from "drizzle-orm";
 import type { DbCore } from "./core";
 import {
@@ -37,18 +37,9 @@ import type { Tx } from "./tx";
  * their rows.
  */
 export interface StoredPlan {
-  awaySeen: string | null;
   instanceId: string;
   orphanedComments: OrphanedComments[];
-  spec: string | null;
-  specAt: Date | null;
-  steps: PlanStep[];
-  /**
-   * The plan as it was stored before its steps were rows, when it did not
-   * read whole (migration 0418): kept as stored, none of it a row. Null on
-   * every plan that read.
-   */
-  unread: { orphanedComments: string | null; steps: string | null } | null;
+  steps: KeptStep[];
   updatedAt: Date;
 }
 
@@ -63,8 +54,7 @@ export interface SessionPlansDb {
   /**
    * A session's steps start another's plan (`to`, the session that goes
    * on from `from`), with the person's comments on them, replacing `to`'s
-   * steps; a plan that did not read whole goes with them as it was kept.
-   * Nothing when `from` has no steps and nothing kept.
+   * steps. Nothing when `from` has no steps.
    */
   readonly copySessionSteps: (from: string, to: string) => void;
   /** Takes the waits `settled` off a session's steps, the rest of each step as it is. */
@@ -79,27 +69,14 @@ export interface SessionPlansDb {
   ) => PlanChangeRow[];
   /** How many plan steps not done, in sessions not over, wait on `target` (as a file keeps it): a condition checks while one does. */
   readonly planStepsWaiting: (target: string) => number;
-  /**
-   * The sessions whose plan's spec may hold away notes (a `## Since`
-   * heading; core injected.ts `awayNotesOf` reads whether it does), by id:
-   * those that may hold news for the person on their return.
-   */
-  readonly plansWithAwayNotes: () => string[];
   /** What a session's steps wait on, each once, in the list's order. */
   readonly planWaits: (instanceId: string) => string[];
-  /** The person saw the session's away notes as `notes` read (`session_plans.away_seen`). A session with no plan row has none to see. */
-  readonly putAwaySeen: (instanceId: string, notes: string) => void;
   /** Keeps one change the person made to a session's plan (plan-changes.ts). */
   readonly putPlanChange: (row: PlanChangeRow) => void;
-  /** Replaces a session's spec whole, its steps kept. */
-  readonly putSessionSpec: (instanceId: string, spec: string) => void;
-  /**
-   * Replaces a session's own steps whole, its spec kept;
-   * `orphanedComments` given, those too.
-   */
+  /** Replaces a session's own steps whole; `orphanedComments` given, those too. */
   readonly putSessionSteps: (
     instanceId: string,
-    steps: PlanStep[],
+    steps: KeptStep[],
     orphanedComments?: OrphanedComments[]
   ) => void;
   /** The changes told to `receiver` by a message still on record (core `PlanChange`, `sent_uuid`). */
@@ -119,7 +96,7 @@ export interface SessionPlansDb {
 type Reader = Pick<Tx, "select">;
 
 /** A session's steps in their order, each with the person's comments on it in theirs. */
-const stepsOf = (tx: Reader, instanceId: string): PlanStep[] => {
+const stepsOf = (tx: Reader, instanceId: string): KeptStep[] => {
   const comments = new Map<string, PlanComment[]>();
   for (const row of tx
     .select()
@@ -145,11 +122,10 @@ const stepsOf = (tx: Reader, instanceId: string): PlanStep[] => {
     .where(eq(sessionPlanSteps.instanceId, instanceId))
     .orderBy(asc(sessionPlanSteps.position))
     .all()
-    .map((row): PlanStep => {
+    .map((row): KeptStep => {
       const on = comments.get(row.id);
       return {
         id: row.id,
-        content: row.content,
         depth: row.depth,
         status: row.status,
         ...(row.priority === null ? {} : { priority: row.priority }),
@@ -229,7 +205,7 @@ const syncPlanLinks = (tx: Tx, instanceId: string): void => {
 const writeSteps = (
   tx: Tx,
   instanceId: string,
-  steps: readonly PlanStep[],
+  steps: readonly KeptStep[],
   orphaned?: readonly OrphanedComments[]
 ): void => {
   const updatedAt = new Date();
@@ -254,7 +230,6 @@ const writeSteps = (
           instanceId,
           position,
           id: step.id,
-          content: step.content,
           depth: step.depth,
           status: step.status,
           priority: step.priority ?? null,
@@ -308,15 +283,10 @@ export const sessionPlansDb = (core: DbCore): SessionPlansDb => {
     if (!row) {
       return;
     }
-    const { stepsUnread, orphanedCommentsUnread, ...kept } = row;
     const plan: StoredPlan = {
-      ...kept,
+      ...row,
       steps: stepsOf(tx, instanceId),
       orphanedComments: orphansOf(tx, instanceId),
-      unread:
-        stepsUnread === null && orphanedCommentsUnread === null
-          ? null
-          : { steps: stepsUnread, orphanedComments: orphanedCommentsUnread },
     };
     return plan;
   };
@@ -327,19 +297,10 @@ export const sessionPlansDb = (core: DbCore): SessionPlansDb => {
     copySessionSteps: (from, to) => {
       db.transaction((tx) => {
         const plan = sessionPlan(tx, from);
-        if (!plan || (plan.steps.length === 0 && plan.unread === null)) {
+        if (!plan || plan.steps.length === 0) {
           return;
         }
         writeSteps(tx, to, plan.steps);
-        if (plan.unread) {
-          tx.update(sessionPlans)
-            .set({
-              stepsUnread: plan.unread.steps,
-              orphanedCommentsUnread: plan.unread.orphanedComments,
-            })
-            .where(eq(sessionPlans.instanceId, to))
-            .run();
-        }
       });
     },
     dropPlanWaits: (instanceId, settled) => {
@@ -377,13 +338,6 @@ export const sessionPlansDb = (core: DbCore): SessionPlansDb => {
           )
         )
         .get()?.steps ?? 0,
-    plansWithAwayNotes: () =>
-      db
-        .select({ instanceId: sessionPlans.instanceId })
-        .from(sessionPlans)
-        .where(sql`${sessionPlans.spec} LIKE '%## Since %'`)
-        .all()
-        .map((one) => one.instanceId),
     putPlanChange: (row) => {
       db.insert(planChanges).values(row).run();
     },
@@ -476,22 +430,6 @@ export const sessionPlansDb = (core: DbCore): SessionPlansDb => {
       db.transaction((tx) => {
         writeSteps(tx, instanceId, steps, orphanedComments);
       });
-    },
-    putAwaySeen: (instanceId, notes) => {
-      db.update(sessionPlans)
-        .set({ awaySeen: notes })
-        .where(eq(sessionPlans.instanceId, instanceId))
-        .run();
-    },
-    putSessionSpec: (instanceId, spec) => {
-      const updatedAt = new Date();
-      db.insert(sessionPlans)
-        .values({ instanceId, spec, specAt: updatedAt, updatedAt })
-        .onConflictDoUpdate({
-          target: sessionPlans.instanceId,
-          set: { spec, specAt: updatedAt, updatedAt },
-        })
-        .run();
     },
   };
 };

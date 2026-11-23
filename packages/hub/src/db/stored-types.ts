@@ -854,9 +854,19 @@ export type WorkspaceState = "active" | "held" | "archived";
  *   said again in its place as it ends, or its harness's compaction.
  * - `unsent`: the notices owed to it that one look ended undelivered (core
  *   `NOTICES_ENDED`, hub owed-ends.ts), the line: how many, and why.
+ * - `recap`: what of its records moved while the person was away, drawn as
+ *   they came back (core `RETURN_RECAP`, hub return-recap.ts), the recap as
+ *   JSON.
  */
 export type SessionLineKind =
-  "limit" | "outdated" | "watch" | "moved" | "room" | "context" | "unsent";
+  | "limit"
+  | "outdated"
+  | "watch"
+  | "moved"
+  | "room"
+  | "context"
+  | "unsent"
+  | "recap";
 
 /** The resources a project's repository is polled for: issue events are where its labels come from. */
 export type GitHubResource =

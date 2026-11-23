@@ -1288,7 +1288,6 @@ export type FilingStageOutput = z.output<typeof FilingStageShape>;
 const FilingWroteShape = declared(
   z.object({
     notes: z.number(),
-    spec: z.boolean(),
     steps: z.number(),
     tasks: z.number(),
     todos: z.number(),
@@ -2049,7 +2048,6 @@ export type ExternalStateOutput = z.output<typeof ExternalStateShape>;
 const FiledRecordsShape = declared(
   z.object({
     notes: z.array(z.string()),
-    spec: z.string().nullable(),
     steps: z.array(z.string()),
     tasks: z.array(z.string()),
     todos: z.array(z.string()),
@@ -4976,6 +4974,28 @@ export const ReportedUsageBucketSchema = ReportedUsageBucketShape;
 export type ReportedUsageBucketOutput = z.output<
   typeof ReportedUsageBucketShape
 >;
+
+const ReturnRecapShape = declared(
+  z.object({
+    back: z.number(),
+    landed: z.array(
+      z.object({
+        commit: z.string().nullable(),
+        headline: z.string().nullable(),
+        work: z.string(),
+      })
+    ),
+    moved: z.array(
+      z.object({ from: z.string(), task: z.string(), to: z.string() })
+    ),
+    since: z.number(),
+    waiting: z.array(z.string()),
+  }),
+  "ReturnRecap",
+  "packages/core/src/return-recap.ts"
+);
+export const ReturnRecapSchema = ReturnRecapShape;
+export type ReturnRecapOutput = z.output<typeof ReturnRecapShape>;
 
 const RoutineMadeByShape = declared(
   z.enum(["delegate", "session"]),

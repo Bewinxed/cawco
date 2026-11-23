@@ -38,7 +38,7 @@
   let refused = $state("");
 
   const joinedLine = $derived(
-    joined ? offerWords.joined(joined.project.name, joined.tasks.length) : ""
+    joined ? offerWords.joined(joined.project.name) : ""
   );
 
   async function answer(which: "accept" | "dismiss"): Promise<void> {

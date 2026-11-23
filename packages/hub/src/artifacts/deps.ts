@@ -2,7 +2,7 @@ import type { PictureCut, PictureTaken } from "@cawco/core/artifact-picture";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import type { Member } from "@cawco/core/decides";
 import type { DecisionCard } from "@cawco/core/decisions";
-import type { PlanStep } from "@cawco/core/plan";
+import type { KeptStep } from "@cawco/core/plan";
 import type { PreviewUnavailable } from "@cawco/core/preview/protocol";
 import type { PreviewAddress } from "@cawco/core/preview/routes";
 import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
@@ -557,7 +557,7 @@ export interface ArtifactServiceDeps {
     write: SheetWrite
   ) => Promise<SheetWritten | StageRefused>;
   /** The session's plan's steps: an open one naming a card or pin of an artifact holds its ask (needs.ts `planHolds`). */
-  steps: (instanceId: string) => readonly PlanStep[];
+  steps: (instanceId: string) => readonly KeptStep[];
   /**
    * A preview's server on machine `machineId`, on `port` of the workspace or
    * place it runs in, stopped: no artifact is served from it any more

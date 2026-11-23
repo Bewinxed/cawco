@@ -126,7 +126,7 @@ export interface FindDb {
   readonly idsByPrefix: (prefix: string) => string[];
   /** The conversations find reads ({@link findColumns}): every one, or these ids'. */
   readonly instances: (ids?: string[]) => FindInstanceRow[];
-  /** Each session's plan step under way, by session: the first in its list in progress, found by its rows. Every session's, or these ids'. */
+  /** Each session's plan step under way, by session: the title of the task the first in its list in progress names. Every session's, or these ids'. */
   readonly planSteps: (ids?: string[]) => Map<string, string>;
   /** The person purged these sessions of `machineId` (their harness session ids) now. */
   readonly purge: (machineId: string, sessionIds: string[]) => void;
@@ -263,9 +263,22 @@ export const findDb = (db: BunSQLiteDatabase): FindDb => ({
     for (const row of db
       .select({
         id: sessionPlanSteps.instanceId,
-        content: sessionPlanSteps.content,
+        content: projectTasks.title,
       })
       .from(sessionPlanSteps)
+      .innerJoin(instances, eq(instances.id, sessionPlanSteps.instanceId))
+      // A step names a task, or a to-do of one (`tsk-12:td-3`): it is found
+      // by its task's title, the words the board indexes.
+      .innerJoin(
+        projectTasks,
+        and(
+          eq(projectTasks.projectId, instances.projectId),
+          eq(
+            projectTasks.id,
+            sql`substr(${sessionPlanSteps.id}, 1, instr(${sessionPlanSteps.id} || ':', ':') - 1)`
+          )
+        )
+      )
       .where(
         and(
           eq(sessionPlanSteps.status, "in_progress"),

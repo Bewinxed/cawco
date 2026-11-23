@@ -1,25 +1,28 @@
 /**
  * Every session's plan (Projects spec §5.2, "Every session's plan, in a
- * panel"; shapes in core plan.ts): its steps, its spec, and on a task attempt
- * the task's to-dos, the same for a plain session, a delegate and an attempt.
+ * panel"; shapes in core plan.ts): the tasks and to-dos it works on, and on
+ * a task attempt the task's to-dos, the same for a delegate and an attempt.
  *
  * Every session's steps are CawCo's list, on every harness: written whole
  * through `todo_write`'s session scope and stored here. Each harness's own
  * list and plan mode are denied to every session (core `OWN_LIST_DENIED`),
- * so there is no other list to read. The spec is CawCo's too.
+ * so there is no other list to read. A step names a task or a to-do of its
+ * session's project and nothing else ({@link readSteps}): its words and
+ * whether it is done are read from that record at every read, never kept.
+ * A write that completes a to-do's step ticks the to-do; a task's step is
+ * done when its task's stage is.
  *
  * The person changes a plan too ({@link Plans.edit}): each change is applied
- * to the steps here and kept as a row in their words (`plan_changes`);
- * plan-changes.ts decides who hears it and when. A write of the session's
- * steps names every step's wait whole: a step it gives none waits on
- * nothing. An id the session gives no step is only its place, so nothing is
- * kept by id across its writes. What of the session's waits on the person
- * is read from Needs you on every read, never stored (core `planWaitsOf`):
- * shown on the open step whose `waitsOn` names a card or pin of it, else in
- * the plan's `needs`, and gone from both once Needs you lists it no more
- * ({@link Plans.needsMoved}).
- * The person's comments stay on the step of the same words, wherever it
- * stands, else on the plan as orphaned comments ({@link keepComments}).
+ * to the steps here, or to the record a step names (a reword, a tick), and
+ * kept as a row in their words (`plan_changes`); plan-changes.ts decides who
+ * hears it and when. A write of the session's steps names every step's wait
+ * whole: a step it gives none waits on nothing. What of the session's waits
+ * on the person is read from Needs you on every read, never stored (core
+ * `planNeedsOf`): shown on the open step whose `waitsOn` names a card or pin
+ * of it, else in the plan's `needs`, and gone from both once Needs you lists
+ * it no more ({@link Plans.needsMoved}).
+ * The person's comments stay on the step naming the same record, wherever
+ * it stands, else on the plan as orphaned comments ({@link keepComments}).
  * A step's wait is a task's wait (wait-targets.ts): the hub's one
  * resolver settles it (task-waits.ts `settled`), and a settled wait is
  * dropped; and a write of the session's steps that would undo a change it
@@ -34,8 +37,8 @@
  */
 import type { ArtifactNeed } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
-import { awayNotesOf } from "@cawco/core/injected";
 import {
+  type KeptStep,
   type OrphanedComments,
   type PlanChange,
   type PlanComment,
@@ -47,18 +50,26 @@ import {
   planNeedsOf,
   type SessionPlan,
   stepNamesArtifact,
+  stepRecord,
 } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { artifactLink, stepLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import { waitArtifact, waitTarget } from "@cawco/core/wait-targets";
+import { planWords } from "@cawco/core/words/plan";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { createPatch } from "rfc6902";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
-import type { PlanChangeRow, StoredPlan } from "./db/session-plans";
-
-import type { TaskEvent, Tasks } from "./tasks";
+import type { PlanChangeRow } from "./db/session-plans";
+import {
+  sessionActor,
+  type TaskActor,
+  type TaskEvent,
+  type Tasks,
+  type TaskView,
+  YOU_ACTOR,
+} from "./tasks";
 
 export interface PlansDeps {
   db: Pick<
@@ -69,9 +80,7 @@ export interface PlansDeps {
     | "getInstancesByIds"
     | "planChangesOf"
     | "planWaits"
-    | "putAwaySeen"
     | "putPlanChange"
-    | "putSessionSpec"
     | "putSessionSteps"
     | "sessionPlan"
     | "settlePlanChanges"
@@ -82,7 +91,7 @@ export interface PlansDeps {
   needs: () => readonly ArtifactNeed[];
   /** Fans a plan frame out to the session's followers (stream.ts). */
   publish: (instanceId: string, message: PlanSnapshot | PlanDelta) => void;
-  tasks: Pick<Tasks, "get" | "waitStates">;
+  tasks: Pick<Tasks, "get" | "todos" | "update" | "waitStates">;
 }
 
 interface Held {
@@ -94,36 +103,35 @@ interface Held {
 const CHANGES_SHOWN = 20;
 
 /**
- * A step as the session writes it (`todo_write`): its `waitsOn` the whole of
- * what it waits on, none when left out. Comments are the person's: never
- * written.
+ * A step as the session writes it (`todo_write`): the record it names, its
+ * `waitsOn` the whole of what it waits on, none when left out. Comments are
+ * the person's: never written.
  */
-export type WrittenStep = Omit<PlanStep, "comments">;
+export type WrittenStep = Omit<KeptStep, "comments">;
 
 /**
  * The person's comments through a write of the session's steps: each old
- * step's, and each orphaned one's, go to the first new step of the same
- * words, wherever it stands; those whose words no new step has are the
- * plan's orphaned comments. Never by id: an id the session gives no step is
- * its place (task-tools.ts `stepsOf`).
+ * step's, and each orphaned one's, go to the new step naming the same
+ * record, wherever it stands; those whose record no new step names are the
+ * plan's orphaned comments.
  */
 const keepComments = (
-  before: readonly PlanStep[],
+  before: readonly KeptStep[],
   orphaned: readonly OrphanedComments[],
   written: readonly WrittenStep[]
-): { orphaned: OrphanedComments[]; steps: PlanStep[] } => {
-  const byWords = new Map<string, PlanComment[]>();
+): { orphaned: OrphanedComments[]; steps: KeptStep[] } => {
+  const byRecord = new Map<string, PlanComment[]>();
   for (const { step, comments } of [
     ...orphaned,
-    ...before.map((one) => ({ step: one.content, comments: one.comments })),
+    ...before.map((one) => ({ step: one.id, comments: one.comments })),
   ]) {
     if (comments?.length) {
-      byWords.set(step, [...(byWords.get(step) ?? []), ...comments]);
+      byRecord.set(step, [...(byRecord.get(step) ?? []), ...comments]);
     }
   }
-  const steps = written.map((step): PlanStep => {
-    const comments = byWords.get(step.content);
-    byWords.delete(step.content);
+  const steps = written.map((step): KeptStep => {
+    const comments = byRecord.get(step.id);
+    byRecord.delete(step.id);
     return comments
       ? {
           ...step,
@@ -133,8 +141,101 @@ const keepComments = (
   });
   return {
     steps,
-    orphaned: [...byWords].map(([step, comments]) => ({ step, comments })),
+    orphaned: [...byRecord].map(([step, comments]) => ({ step, comments })),
   };
+};
+
+/** The project a session's records live in: its own, else its work item's; null for a session in none. */
+const recordsProjectOf = (
+  db: Pick<DbShape, "workItem">,
+  row: Pick<InstanceRow, "projectId" | "workItemId">
+): string | null =>
+  row.projectId ??
+  (row.workItemId ? db.workItem(row.workItemId)?.projectId : null) ??
+  null;
+
+/** A task as a plan reads it: its view, or null once it is gone from the board. */
+type TaskRead = TaskView | null;
+
+/**
+ * The tasks `handles` name in `projectId`, each read once: null for one the
+ * board has no more; the refusal of a read that failed otherwise.
+ */
+const readTasks = async (
+  tasks: Pick<Tasks, "get">,
+  projectId: string | null,
+  handles: readonly string[]
+) => {
+  const read = new Map<string, TaskRead>();
+  for (const task of new Set(handles.map((one) => stepRecord(one).task))) {
+    if (!projectId) {
+      read.set(task, null);
+      continue;
+    }
+    const view = await tasks.get(projectId, task);
+    if (view instanceof ElysiaStatus) {
+      if (view.status !== 404) {
+        return view;
+      }
+      read.set(task, null);
+      continue;
+    }
+    read.set(task, view);
+  }
+  return read;
+};
+
+/**
+ * A kept step read whole from its record (`tasks`, {@link readTasks}): a
+ * to-do's text and tick, a task's title and stage (done or dropped is
+ * done); else the session's word, in progress or not. A record gone from
+ * the board says so, the session's word kept.
+ */
+const readStep = (
+  tasks: ReadonlyMap<string, TaskRead>,
+  step: KeptStep
+): PlanStep => {
+  const record = stepRecord(step.id);
+  const said = step.status === "in_progress" ? "in_progress" : "pending";
+  const task = tasks.get(record.task) ?? null;
+  const todo = record.todo
+    ? task?.todos.find((one) => one.id === record.todo)
+    : undefined;
+  const gone = !task || (record.todo !== undefined && !todo);
+  if (gone) {
+    return {
+      ...step,
+      ...record,
+      status: said,
+      content: planWords.gone(step.id),
+      gone: true,
+    };
+  }
+  const done = todo
+    ? todo.done
+    : task.kind === "done" || task.kind === "dropped";
+  return {
+    ...step,
+    ...record,
+    status: done ? "completed" : said,
+    content: todo ? todo.text : task.title,
+  };
+};
+
+/** A plan's kept steps read whole from their records ({@link readStep}), or the refusal of a read. */
+const readSteps = async (
+  tasks: Pick<Tasks, "get">,
+  projectId: string | null,
+  steps: readonly KeptStep[]
+) => {
+  const read = await readTasks(
+    tasks,
+    projectId,
+    steps.map((step) => step.id)
+  );
+  return read instanceof ElysiaStatus
+    ? read
+    : steps.map((step) => readStep(read, step));
 };
 
 /** The receiver's key, as `plan_changes.receiver` holds it. */
@@ -176,23 +277,26 @@ const blockOf = (steps: PlanStep[], at: number): [number, number] => {
 };
 
 /**
- * Whether a session's write of `steps` would undo the person's change: a
- * reworded step back in other words, an added one gone, a removed one back,
- * a tick turned the other way. A comment or a move is never undone by it.
+ * Whether a session's write of `steps` would undo the person's change: an
+ * added step gone, a removed one back, an untick ticked again. A reword, a
+ * comment or a move is never undone by it.
  */
 const undoes = (steps: WrittenStep[], change: PlanChangeRow): boolean => {
   const step = steps.find((one) => one.id === change.step);
   switch (change.kind) {
+    // A reword is the record's: the session's steps carry no words.
     case "reword":
-      return step !== undefined && step.content !== change.words;
+      return false;
     case "add":
       return step === undefined;
     case "remove":
       return step !== undefined;
+    // A completed step ticks its to-do; one written open unticks nothing.
     case "tick":
       return (
         step !== undefined &&
-        (step.status === "completed") !== (change.words === "done")
+        change.words === "not done" &&
+        step.status === "completed"
       );
     // A write keeps each step's comments by id ({@link Plans.write}), so it
     // cannot take one back.
@@ -267,35 +371,35 @@ const waitWords = (db: Pick<DbShape, "artifacts">, handle: string): string => {
 
 /**
  * A plan's steps as a message lists them: a box per status, nested by
- * indent, each by its link (session `session`'s, its words the label), a
- * wait by what it waits on; then, when the plan holds steps that did not
- * read (core `SessionPlan.unread`), that they are not listed.
+ * indent, each by its link (session `session`'s, its record's words the
+ * label), a wait by what it waits on.
  */
 export const stepLines = (
   db: Pick<DbShape, "artifacts">,
   session: string,
-  plan: Pick<StoredPlan, "steps" | "unread"> | undefined
-): string => {
-  const steps = plan?.steps ?? [];
-  const listed =
-    steps.length === 0
-      ? "(no steps)"
-      : steps
-          .map((step) => {
-            const box = BOX[step.status];
-            const wait = step.waitsOn
-              ? ` (waiting on ${waitWords(db, step.waitsOn)})`
-              : "";
-            return `${"  ".repeat(step.depth)}- ${box} ${stepLink(session, step.id, step.content)}${wait}`;
-          })
-          .join("\n");
-  return plan?.unread
-    ? `${listed}\n(Steps stored for this plan earlier do not read: they are kept as stored and not listed here.)`
-    : listed;
-};
+  steps: readonly PlanStep[]
+): string =>
+  steps.length === 0
+    ? "(no steps)"
+    : steps
+        .map((step) => {
+          const box = BOX[step.status];
+          const wait = step.waitsOn
+            ? ` (waiting on ${waitWords(db, step.waitsOn)})`
+            : "";
+          return `${"  ".repeat(step.depth)}- ${box} ${stepLink(session, step.id, step.content)}${wait}`;
+        })
+        .join("\n");
+
+/** A change to the record a step names, as the person's edit makes it: a to-do's, or a task's title. */
+type RecordChange =
+  | { task: string; todos: Parameters<Tasks["todos"]>[2] }
+  | { task: string; patch: { title: string } };
 
 /** What one of the person's edits made of a plan's steps, and how its change reads. */
 interface Applied {
+  /** The change it makes to the record its step names, when it is a reword or a tick. */
+  record?: RecordChange;
   step: string;
   steps: PlanStep[];
   /** The step's words before it; for an add, the step it follows ("" at the top). */
@@ -339,6 +443,14 @@ const wordsOf = (given: string, what: string) => {
   return words;
 };
 
+/** A step whose record the board has no more: nothing of its record changes. */
+const goneProblem = (step: PlanStep) =>
+  problem(409, {
+    code: "plan-step-gone",
+    detail: `${step.id} is no longer on the board, so it does not change.`,
+  });
+
+/** A reword of a step is its record's: the to-do's text, or the task's title. */
 const reword = (
   steps: PlanStep[],
   edit: Extract<PlanEdit, { kind: "reword" }>
@@ -347,7 +459,10 @@ const reword = (
   if (placed instanceof ElysiaStatus) {
     return placed;
   }
-  const { index, step } = placed;
+  const { step } = placed;
+  if (step.gone) {
+    return goneProblem(step);
+  }
   const words = wordsOf(edit.content, "A step");
   if (words instanceof ElysiaStatus) {
     return words;
@@ -358,31 +473,38 @@ const reword = (
       detail: "The step reads the same as before.",
     });
   }
-  const next = [...steps];
-  next[index] = { ...step, content: words };
   const applied: Applied = {
-    steps: next,
+    steps,
     step: step.id,
     was: step.content,
     words,
+    record: step.todo
+      ? { task: step.task, todos: { edit: [{ todo: step.todo, text: words }] } }
+      : { task: step.task, patch: { title: words } },
   };
   return applied;
 };
 
-const add = (steps: PlanStep[], edit: Extract<PlanEdit, { kind: "add" }>) => {
-  const words = wordsOf(edit.content, "A step");
-  if (words instanceof ElysiaStatus) {
-    return words;
+/** A step naming `added` (read from its record), after step `after` at its depth, or at the plan's end. */
+const add = (
+  steps: PlanStep[],
+  edit: Extract<PlanEdit, { kind: "add" }>,
+  added: PlanStep
+) => {
+  if (steps.some((one) => one.id === added.id)) {
+    return problem(409, {
+      code: "plan-step-there",
+      detail: `“${added.content}” is in this plan already.`,
+    });
   }
-  const id = `you-${crypto.randomUUID().slice(0, 8)}`;
   const next = [...steps];
   if (edit.after === undefined) {
-    next.push({ id, content: words, status: "pending", depth: 0 });
+    next.push({ ...added, depth: 0 });
     const last: Applied = {
       steps: next,
-      step: id,
+      step: added.id,
       was: steps.at(-1)?.content ?? "",
-      words,
+      words: added.content,
     };
     return last;
   }
@@ -392,13 +514,13 @@ const add = (steps: PlanStep[], edit: Extract<PlanEdit, { kind: "add" }>) => {
   }
   const { index, step: after } = placed;
   const [, end] = blockOf(steps, index);
-  next.splice(end, 0, {
-    id,
-    content: words,
-    status: "pending",
-    depth: after.depth,
-  });
-  const applied: Applied = { steps: next, step: id, was: after.content, words };
+  next.splice(end, 0, { ...added, depth: after.depth });
+  const applied: Applied = {
+    steps: next,
+    step: added.id,
+    was: after.content,
+    words: added.content,
+  };
   return applied;
 };
 
@@ -450,25 +572,37 @@ const comment = (
   return applied;
 };
 
+/** A tick of a step is its to-do's; a task's step is done when its stage is, so it takes none. */
 const tick = (steps: PlanStep[], edit: Extract<PlanEdit, { kind: "tick" }>) => {
   const placed = placeOf(steps, edit.step);
   if (placed instanceof ElysiaStatus) {
     return placed;
   }
-  const { index, step } = placed;
+  const { step } = placed;
+  if (step.gone) {
+    return goneProblem(step);
+  }
+  if (!step.todo) {
+    return problem(409, {
+      code: "plan-step-follows-stage",
+      detail: `“${step.content}” is a task: its step is done when the task's stage is. Move the task instead.`,
+    });
+  }
   if ((step.status === "completed") === edit.done) {
     return problem(409, {
       code: "plan-step-ticked-already",
       detail: `“${step.content}” is ${edit.done ? "done" : "not done"} already.`,
     });
   }
-  const next = [...steps];
-  next[index] = { ...step, status: edit.done ? "completed" : "pending" };
   const applied: Applied = {
-    steps: next,
+    steps,
     step: step.id,
     was: step.content,
     words: edit.done ? "done" : "not done",
+    record: {
+      task: step.task,
+      todos: edit.done ? { tick: [step.todo] } : { untick: [step.todo] },
+    },
   };
   return applied;
 };
@@ -525,13 +659,27 @@ const move = (steps: PlanStep[], edit: Extract<PlanEdit, { kind: "move" }>) => {
   return applied;
 };
 
-/** The person's edit applied to a plan's steps; refused, in words, when it names no step or changes nothing. */
-const applyEdit = (steps: PlanStep[], edit: PlanEdit, at: Date) => {
+/**
+ * The person's edit applied to a plan's steps (read whole from their
+ * records); refused, in words, when it names no step or changes nothing.
+ * `added`: an add's step, read from its record.
+ */
+const applyEdit = (
+  steps: PlanStep[],
+  edit: PlanEdit,
+  at: Date,
+  added: PlanStep | undefined
+) => {
   switch (edit.kind) {
     case "reword":
       return reword(steps, edit);
     case "add":
-      return add(steps, edit);
+      return added
+        ? add(steps, edit, added)
+        : problem(404, {
+            code: "plan-step-record-unknown",
+            detail: `${edit.step} names no task or to-do on this session's board.`,
+          });
     case "remove":
       return remove(steps, edit);
     case "comment":
@@ -544,6 +692,15 @@ const applyEdit = (steps: PlanStep[], edit: PlanEdit, at: Date) => {
       unhandled("edit", edit);
   }
 };
+
+/** A step as it is kept: its record by handle, none of the words read from it. */
+const keptOf = ({
+  content: _content,
+  gone: _gone,
+  task: _task,
+  todo: _todo,
+  ...kept
+}: PlanStep): KeptStep => kept;
 
 /** The session `instanceId`, or its problem: the hub has none. */
 export const planSessionOf = (
@@ -599,21 +756,32 @@ export const createPlans = (deps: PlansDeps) => {
       : { taskId: item.taskId, todos: task.todos };
   };
 
-  /** The plan as it stands now: the session's own steps and spec, and an attempt's to-dos. */
+  /** The session's steps as they stand, each read whole from its record ({@link readSteps}). */
+  const stepsNow = (row: InstanceRow) =>
+    readSteps(
+      deps.tasks,
+      recordsProjectOf(db, row),
+      db.sessionPlan(row.id)?.steps ?? []
+    );
+
+  /** The plan as it stands now: the session's own steps, read from their records, and an attempt's to-dos. */
   const compute = async (row: InstanceRow) => {
     const own = db.sessionPlan(row.id);
     const attempt = await attemptOf(row);
     if (attempt instanceof ElysiaStatus) {
       return attempt;
     }
+    const steps = await readSteps(
+      deps.tasks,
+      recordsProjectOf(db, row),
+      own?.steps ?? []
+    );
+    if (steps instanceof ElysiaStatus) {
+      return steps;
+    }
     const changes = db.planChangesOf(row.id, CHANGES_SHOWN).map(changeOf);
-    const away = awayNotesOf(own?.spec ?? undefined);
-    const steps = own?.steps ?? [];
     const needs = planNeedsOf(row.id, steps, deps.needs());
     const plan: SessionPlan = {
-      ...(away && away.notes !== own?.awaySeen
-        ? { awayUnseen: { since: away.since } }
-        : {}),
       source: "cawco",
       steps,
       ...(needs.length > 0 ? { needs } : {}),
@@ -621,13 +789,106 @@ export const createPlans = (deps: PlansDeps) => {
         ? { orphanedComments: own.orphanedComments }
         : {}),
       ...(changes.length > 0 ? { changes } : {}),
-      ...(own?.unread ? { unread: true } : {}),
-      ...(own?.spec && own.specAt
-        ? { spec: { markdown: own.spec, at: own.specAt.toISOString() } }
-        : {}),
       ...attempt,
     };
     return plan;
+  };
+
+  /**
+   * A write of `steps` that would undo a change the person made since the
+   * session last wrote its steps: thrown, naming each and the plan as it
+   * stands, or the refusal of reading it. The changes are settled either
+   * way: the session has heard them, so its next write goes through.
+   */
+  const undoRefused = async (row: InstanceRow, steps: WrittenStep[]) => {
+    const undone = db
+      .unsettledPlanChanges(row.id)
+      .filter((change) => undoes(steps, change));
+    db.settlePlanChanges(row.id);
+    if (undone.length === 0) {
+      return;
+    }
+    const now = await stepsNow(row);
+    if (now instanceof ElysiaStatus) {
+      return now;
+    }
+    throw new Error(
+      `Not written: the person changed your plan since you last wrote it, and these steps would undo it:\n${undone.map((change) => `- ${changeLine(change)}`).join("\n")}\n\nYour plan as it stands now:\n${stepLines(db, row.id, now)}\n\nWrite your steps again from it: the next write goes through as you give it.`
+    );
+  };
+
+  /**
+   * A change to a record the person's edit makes (a to-do reworded or
+   * ticked, a task retitled), as theirs; the refusal of one that did not go.
+   */
+  const actOn = async (projectId: string | null, change: RecordChange) => {
+    if (!projectId) {
+      return problem(409, {
+        code: "plan-session-no-project",
+        detail: "This session is in no project, so its plan names no task.",
+      });
+    }
+    const done =
+      "todos" in change
+        ? await deps.tasks.todos(
+            projectId,
+            change.task,
+            change.todos,
+            YOU_ACTOR
+          )
+        : await deps.tasks.update(
+            projectId,
+            change.task,
+            change.patch,
+            YOU_ACTOR
+          );
+    return done instanceof ElysiaStatus ? done : undefined;
+  };
+
+  /**
+   * Ticks each to-do a session's write completes that is not ticked yet, as
+   * the session, one commit per task; the refusal of one that did not go.
+   */
+  const tickCompleted = async (
+    row: InstanceRow,
+    projectId: string | null,
+    steps: readonly PlanStep[],
+    written: readonly WrittenStep[],
+    actor: TaskActor
+  ) => {
+    const open = new Map(
+      steps.flatMap((step) =>
+        step.todo && !step.gone && step.status !== "completed"
+          ? [[step.id, step] as const]
+          : []
+      )
+    );
+    const ticks = Map.groupBy(
+      written.flatMap((step) => {
+        const read = open.get(step.id);
+        return step.status === "completed" && read?.todo
+          ? [{ task: read.task, todo: read.todo }]
+          : [];
+      }),
+      (one) => one.task
+    );
+    if (!projectId || ticks.size === 0) {
+      return;
+    }
+    for (const [task, todos] of ticks) {
+      const ticked = await deps.tasks.todos(
+        projectId,
+        task,
+        { tick: todos.map((one) => one.todo) },
+        actor
+      );
+      if (ticked instanceof ElysiaStatus) {
+        return ticked;
+      }
+    }
+    console.info(
+      `[plans] ${row.id.slice(0, 8)}: its plan completed ${[...ticks.values()].flat().length} to-do(s), ticked`
+    );
   };
 
   const snapshotOf = (
@@ -772,38 +1033,51 @@ export const createPlans = (deps: PlansDeps) => {
     },
 
     /**
-     * `todo_write`'s session scope: the session's steps, its spec, or both,
-     * each replaced whole, every step's `waitsOn` with them: exactly what the
-     * write names. The person's comments stay on the step of the same words,
-     * else on the plan ({@link keepComments}); an artifact asked at work on
-     * the plan stays held by its ask (needs.ts `planHolds`), whatever the
-     * steps become. A write of steps that would undo a change the person made since the session last wrote
-     * them is refused, naming each and the plan as it stands; the next write
-     * goes through, whatever it says: the session has heard them.
+     * `todo_write`'s session scope: the session's steps, replaced whole,
+     * every step's `waitsOn` with them: exactly what the write names. Each
+     * step names a task or a to-do of the session's project; one that names
+     * none on its board is refused, naming it. A to-do whose step it
+     * completes is ticked, as the session. The person's comments stay on the
+     * step naming the same record, else on the plan ({@link keepComments});
+     * an artifact asked at work on the plan stays held by its ask (needs.ts
+     * `planHolds`), whatever the steps become. A write that would undo a
+     * change the person made since the session last wrote its steps is
+     * refused, naming each and the plan as it stands; the next write goes
+     * through, whatever it says: the session has heard them.
      */
-    async write(
-      row: InstanceRow,
-      written: { steps?: WrittenStep[]; spec?: string }
-    ) {
-      const { steps } = written;
-      if (steps) {
-        const plan = db.sessionPlan(row.id);
-        const before = plan?.steps ?? [];
-        const undone = db
-          .unsettledPlanChanges(row.id)
-          .filter((change) => undoes(steps, change));
-        db.settlePlanChanges(row.id);
-        if (undone.length > 0) {
-          throw new Error(
-            `Not written: the person changed your plan since you last wrote it, and these steps would undo it:\n${undone.map((change) => `- ${changeLine(change)}`).join("\n")}\n\nYour plan as it stands now:\n${stepLines(db, row.id, plan)}\n\nWrite your steps again from it: the next write goes through as you give it.`
-          );
-        }
-        const kept = keepComments(before, plan?.orphanedComments ?? [], steps);
-        db.putSessionSteps(row.id, kept.steps, kept.orphaned);
+    async write(row: InstanceRow, steps: WrittenStep[]) {
+      const projectId = recordsProjectOf(db, row);
+      const read = await readSteps(deps.tasks, projectId, steps);
+      if (read instanceof ElysiaStatus) {
+        return read;
       }
-      if (written.spec !== undefined) {
-        db.putSessionSpec(row.id, written.spec);
+      const unknown = read.filter((step) => step.gone);
+      if (unknown.length > 0) {
+        return problem(400, {
+          code: "todo-step-record-unknown",
+          detail: projectId
+            ? `${unknown.map((step) => step.id).join(", ")} ${unknown.length === 1 ? "names" : "name"} no task or to-do on your project's board. A step names a task or a to-do: file the task (task_create), or the to-do on its task (todo_write with task and add), first.`
+            : "You are in no project, so there is no task or to-do for a step to name: a plan's steps are a project's tasks and to-dos.",
+        });
       }
+      const plan = db.sessionPlan(row.id);
+      const before = plan?.steps ?? [];
+      const undoing = await undoRefused(row, steps);
+      if (undoing) {
+        return undoing;
+      }
+      const ticked = await tickCompleted(
+        row,
+        projectId,
+        read,
+        steps,
+        sessionActor(row)
+      );
+      if (ticked) {
+        return ticked;
+      }
+      const kept = keepComments(before, plan?.orphanedComments ?? [], steps);
+      db.putSessionSteps(row.id, kept.steps, kept.orphaned);
       const settled = await settle(row.id);
       return settled instanceof ElysiaStatus ? settled : settled.plan;
     },
@@ -821,9 +1095,35 @@ export const createPlans = (deps: PlansDeps) => {
       settled: boolean
     ) {
       const at = new Date();
-      const applied = applyEdit(db.sessionPlan(row.id)?.steps ?? [], edit, at);
+      const projectId = recordsProjectOf(db, row);
+      const current = await stepsNow(row);
+      if (current instanceof ElysiaStatus) {
+        return current;
+      }
+      const added =
+        edit.kind === "add"
+          ? await readSteps(deps.tasks, projectId, [
+              { id: edit.step.trim(), depth: 0, status: "pending" },
+            ])
+          : undefined;
+      if (added instanceof ElysiaStatus) {
+        return added;
+      }
+      const named = added?.[0];
+      const applied = applyEdit(
+        current,
+        edit,
+        at,
+        named && !named.gone ? named : undefined
+      );
       if (applied instanceof ElysiaStatus) {
         return applied;
+      }
+      if (applied.record) {
+        const refused = await actOn(projectId, applied.record);
+        if (refused) {
+          return refused;
+        }
       }
       const { steps, step, was, words } = applied;
       const change: PlanChangeRow = {
@@ -840,7 +1140,7 @@ export const createPlans = (deps: PlansDeps) => {
         settled,
         undelivered: null,
       };
-      db.putSessionSteps(row.id, steps);
+      db.putSessionSteps(row.id, steps.map(keptOf));
       db.putPlanChange(change);
       const now = await settle(row.id);
       return now instanceof ElysiaStatus ? now : change;
@@ -904,7 +1204,7 @@ export const createPlans = (deps: PlansDeps) => {
     },
 
     /** The session's steps as they stand: an open one naming a card or pin of an artifact holds its ask (needs.ts `planHolds`). */
-    steps(instanceId: string): readonly PlanStep[] {
+    steps(instanceId: string): readonly KeptStep[] {
       return db.sessionPlan(instanceId)?.steps ?? [];
     },
 
@@ -933,20 +1233,26 @@ export const createPlans = (deps: PlansDeps) => {
     },
 
     /**
-     * The person saw the session's away notes as they stand: opened its plan
-     * (`POST /api/instances/:id/plan/seen`), or had them recapped (server.ts
-     * `recapFor`). Answers whether they were unseen till now; the plan's
-     * followers hear `awayUnseen` go.
+     * The session's steps as the hub last read them whole for its followers,
+     * else as kept with each record's handle for its words: what a message
+     * that cannot wait for a read lists (plan-changes.ts `foldInto`).
      */
-    async seeAway(instanceId: string) {
-      const own = db.sessionPlan(instanceId);
-      const away = awayNotesOf(own?.spec ?? undefined);
-      if (!away || away.notes === own?.awaySeen) {
-        return false;
+    known(instanceId: string): PlanStep[] {
+      const known = held.get(instanceId);
+      if (known) {
+        return known.plan.steps;
       }
-      db.putAwaySeen(instanceId, away.notes);
-      const settled = await settle(instanceId);
-      return settled instanceof ElysiaStatus ? settled : true;
+      return (db.sessionPlan(instanceId)?.steps ?? []).map((step) => ({
+        ...step,
+        ...stepRecord(step.id),
+        content: step.id,
+      }));
+    },
+
+    /** The session's steps now, each read whole from its record, or the refusal of a read. */
+    stepsNow: (instanceId: string) => {
+      const row = rowOf(instanceId);
+      return row instanceof ElysiaStatus ? Promise.resolve(row) : stepsNow(row);
     },
 
     /** The plan's followers hear its changes' new state (told, or reaching no one). */
@@ -957,18 +1263,26 @@ export const createPlans = (deps: PlansDeps) => {
     /**
      * A project's tasks changed, or what they wait on moved (tasks.ts
      * `waitsMoved` emits it for a task, a card, a pull request, a run or a
-     * condition): an attempt's to-dos may have ticked, and any step of a
+     * condition): an attempt's to-dos may have ticked, a task or to-do a
+     * step names may have moved, been reworded or ticked, and any step of a
      * session in the project that waits on something may have settled. Each
      * such followed plan is read again.
      */
     taskChanged(event: TaskEvent): void {
       for (const [instanceId, { plan }] of held) {
         const waits = plan.steps.some((step) => step.waitsOn !== undefined);
-        if (!(plan.taskId || waits)) {
+        const names = plan.steps.some(
+          (step) => event.id === undefined || step.task === event.id
+        );
+        if (!(plan.taskId || waits || names)) {
           continue;
         }
         const [row] = db.getInstancesByIds([instanceId]);
-        if (waits && row?.projectId === event.projectId) {
+        if (
+          (waits || names) &&
+          row &&
+          recordsProjectOf(db, row) === event.projectId
+        ) {
           settleQuietly(instanceId);
           continue;
         }
@@ -1010,16 +1324,8 @@ export const createPlans = (deps: PlansDeps) => {
 
 export type Plans = ReturnType<typeof createPlans>;
 
-/**
- * `GET /api/instances/:id/plan`: the session's plan, as its followers hold
- * it. `POST /api/instances/:id/plan/seen`: the person opened it, so its away
- * notes are seen (`awayUnseen` goes); the owner's alone, as every route no
- * hub-auth list names.
- */
+/** `GET /api/instances/:id/plan`: the session's plan, as its followers hold it. */
 export const planRoutes = (plans: Plans) =>
-  new Elysia()
-    .get("/api/instances/:id/plan", ({ params }) => plans.read(params.id))
-    .post("/api/instances/:id/plan/seen", async ({ params }) => {
-      const seen = await plans.seeAway(params.id);
-      return typeof seen === "boolean" ? { seen } : seen;
-    });
+  new Elysia().get("/api/instances/:id/plan", ({ params }) =>
+    plans.read(params.id)
+  );

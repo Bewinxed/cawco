@@ -762,15 +762,15 @@ const briefOf = ({
   const open = task.todos.filter((todo) => !todo.done);
   const todos =
     open.length > 0
-      ? `Start your plan from these open to-dos: a step for each, its \`id\` the to-do's id (the last part of its link, \`td-3\`) and its content the to-do's words, like \`{ id: "td-3", content: "Persist the choice" }\`:\n\n${open
+      ? `Start your plan from these open to-dos: a step for each, naming the to-do by its id (the last part of its link, \`td-3\`), like \`{ todo: "td-3", status: "pending" }\`:\n\n${open
           .map(
             (todo) =>
               `${"  ".repeat(todo.depth)}- ${todo.id ? todoLink(project.id, task.id, todo.id, todo.text) : todo.text}`
           )
           .join(
             "\n"
-          )}\n\nWhen a step whose id is a to-do's is completed, the hub ticks that to-do; you can also tick it with todo_write. Add the steps you find. finish_item lists the to-dos still open once: tick or explain each in your summary. Steps you leave open become proposed to-dos on the task.`
-      : "The task has no open to-dos. Add the steps you find with todo_write as you go; plan items you leave open become proposed to-dos on the task.";
+          )}\n\nA step you complete ticks its to-do. Work you find that the task needs is a to-do on it first (todo_write with add), then a step. finish_item lists the to-dos still open once: tick or explain each in your summary.`
+      : "The task has no open to-dos. Work you find that it needs is a to-do on it (todo_write with add); a plan, when the work needs one, names those to-dos.";
   const sits = [
     ...(task.waits.length > 0
       ? [`It waits on: ${task.waits.map(waitLine).join("; ")}.`, ...checked]

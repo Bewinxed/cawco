@@ -489,7 +489,7 @@ export function createDelegationMcp(options: {
   ) => ReturnType<ProjectOffers["accept"]>;
   /** The whole id of the artifact a session names by its name, handle or id (artifacts/service.ts `named`), or its refusal. */
   artifactNamed?: Artifacts["named"];
-  /** `todo_write`'s session scope: the caller's own steps and spec (plans.ts). */
+  /** `todo_write`'s session scope: the caller's own steps, each a task or a to-do (plans.ts). */
   writePlan?: TaskToolContext["writePlan"];
   /** `delegate_list`: the calling session's own delegation tree (delegation-tree.ts). */
   delegationTree?: (

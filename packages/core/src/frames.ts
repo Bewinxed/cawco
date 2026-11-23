@@ -692,6 +692,8 @@ interface WorkItemFrame {
 /**
  * What made the hub offer to make a plain session a project (project-offers.ts);
  * `caw` when nothing did: Caw proposed it in conversation and you said yes.
+ * `plan` is only on offers made before a plan's steps were a project's
+ * tasks and to-dos, which a plain session has none of.
  */
 export type ProjectOfferReason = "delegates" | "days" | "plan" | "repo" | "caw";
 
@@ -705,7 +707,7 @@ export interface ProjectOfferSummary {
 }
 
 // What "Create project" on an offer did (hub project-offers.ts): the
-// project, and the plan items it filed as proposed tasks. `AcceptResult` is
+// project, and the sessions moved into it. `AcceptResult` is
 // the OpenAPI schema's name, which the app's client is generated from, and
 // a doc comment here would become that schema's description.
 export interface AcceptResult {
@@ -716,9 +718,6 @@ export interface AcceptResult {
   project: { id: string; name: string };
   /** The sessions moved into it: this one, then its delegates. */
   sessions: string[];
-  /** Plan items filed as proposed tasks, and the ones the project refused. */
-  tasks: { id: string; title: string }[];
-  unfiled: { title: string; why: string }[];
 }
 
 /** What "Create project" on an offer did, as the dashboard names it. */

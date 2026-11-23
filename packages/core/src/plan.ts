@@ -1,19 +1,20 @@
 /**
  * A session's plan (Projects spec §5.2, "Every session's plan, in a panel"):
- * its steps, its spec, and on a task attempt the task's to-dos. One shape
- * whatever the harness.
+ * the tasks and to-dos it works on, and on a task attempt the task's
+ * to-dos. One shape whatever the harness. A session keeps one only when its
+ * work needs one; nothing asks it to.
  *
- * - **Steps** are Agent Client Protocol plan entries
+ * - **Steps** are links: each names a task (`tsk-12`) or a to-do of one
+ *   (`tsk-12:td-3`), never words of its own (the owner, 2026-11-23: "the
+ *   plan's steps should be composed from tasks and todos only"). A step's
+ *   words and whether it is done are its record's, read at every read: a
+ *   to-do's text and tick, a task's title and its stage (done or dropped is
+ *   done). The session says which it works on (`in_progress`). The rest is
+ *   Agent Client Protocol's plan entry
  *   (https://agentclientprotocol.com/protocol/v1/agent-plan: `content`,
- *   `status` "pending, in_progress, and completed", `priority`), plus our `id`
- *   and `depth` for nesting by indent. ACP requires `priority`; it is kept
- *   here only where the `todo_write` that wrote it names one. Every write replaces the list whole, as ACP has it: "the
- *   Client must replace the current plan completely".
- * - **The spec** is the session's own document, written through CawCo
- *   (`todo_write`'s `spec`) on any harness and replaced whole: what `grill`
- *   interviews to and `to-tasks` turns into tasks with edges and checks
- *   (§5.4). It stands in for each harness's built-in plan mode, which every
- *   session is denied along with its own list (`OWN_LIST_DENIED`).
+ *   `status` "pending, in_progress, and completed", `priority`), plus
+ *   `depth` for nesting by indent. Every write replaces the list whole, as
+ *   ACP has it: "the Client must replace the current plan completely".
  *
  * - **The person's changes** ({@link PlanEdit}): a step reworded, added,
  *   removed, commented on, ticked or moved, recorded on the plan as a
@@ -47,20 +48,46 @@ export interface PlanComment {
   text: string;
 }
 
-/** One step of a session's plan: an ACP plan entry, with an id and a nesting depth. */
-export interface PlanStep {
+/** The record a step names: a task, or a to-do of one. */
+export interface StepRecord {
+  task: string;
+  todo?: string;
+}
+
+/** A to-do step's handle between its task and its to-do: `tsk-12:td-3`. */
+const RECORD_JOIN = ":";
+
+/** The step handle of a record: `tsk-12`, or `tsk-12:td-3` for a to-do. */
+export const stepHandle = ({ task, todo }: StepRecord): string =>
+  todo ? `${task}${RECORD_JOIN}${todo}` : task;
+
+/** The record a step handle names ({@link stepHandle}). */
+export const stepRecord = (handle: string): StepRecord => {
+  const at = handle.indexOf(RECORD_JOIN);
+  return at < 0
+    ? { task: handle }
+    : { task: handle.slice(0, at), todo: handle.slice(at + 1) };
+};
+
+/**
+ * One step of a session's plan as it is kept: the record it names (its
+ * handle, {@link stepHandle}), where it nests, and what the session said of
+ * it. Its words and whether it is done are its record's, read as the plan
+ * is ({@link PlanStep}).
+ */
+export interface KeptStep {
   /**
-   * The person's comments on it, oldest first. A session's write keeps them
-   * on the step of the same words, wherever it stands; with no such step
-   * they go to the plan's {@link SessionPlan.orphanedComments}.
+   * The person's comments on it, oldest first. A write of the session's
+   * keeps them on the step naming the same record, wherever it stands; with
+   * no such step they go to the plan's {@link SessionPlan.orphanedComments}.
    */
   comments?: PlanComment[];
-  content: string;
   /** Nesting by indent: 0 for a top-level step, one more than its parent's for a sub-step. */
   depth: number;
-  /** Stable within one list: the writer's, the step's place, or `you-…` for one the person added. */
+  /** The record it names, by handle: unique in its plan. */
   id: string;
   priority?: PlanStepPriority;
+  /** As the session wrote it; a done record reads `completed` whatever it says. */
   status: PlanStepStatus;
   /**
    * What it waits on, set by the session (`todo_write`'s `waitsOn`): a
@@ -71,9 +98,17 @@ export interface PlanStep {
   waitsOn?: string;
 }
 
+/** One step of a session's plan as it reads: its record's words and state with it. */
+export interface PlanStep extends KeptStep, StepRecord {
+  /** Its record's words: the to-do's text, or the task's title. */
+  content: string;
+  /** Its record is gone from the board: the task removed, or the to-do taken off it. */
+  gone?: true;
+}
+
 /** Whether an open step's `waitsOn` names artifact `artifactId`: a card or pin of it. */
 export const stepNamesArtifact = (
-  step: PlanStep,
+  step: Pick<KeptStep, "status" | "waitsOn">,
   artifactId: string
 ): boolean =>
   step.status !== "completed" &&
@@ -81,60 +116,32 @@ export const stepNamesArtifact = (
   waitArtifact(step.waitsOn) === artifactId;
 
 /**
- * An artifact of the session's that waits on the person, by its chip: on
- * the open step whose `waitsOn` names a card or pin of it, or on the plan
- * itself when no step does ({@link planWaitsOf}).
- */
-export interface PlanWait {
-  /** The artifact's id and title: its `cawco:artifact` chip. */
-  artifact: { id: string; title: string };
-  /** The session whose plan it is: the step's `cawco:step` chip. */
-  session: string;
-  /** The step that names it, by id and words; absent when no step does. */
-  step?: { content: string; id: string };
-}
-
-/**
- * What a session's plan waits on the person on: exactly the session's items
- * in Needs you (artifact-needs.ts `unparked`, which the hub's
+ * The plan's own needs: what of a session waits on the person, exactly its
+ * items in Needs you (artifact-needs.ts `unparked`, which the hub's
  * artifacts/needs.ts reads from questions.ts: an open question, a canvas to
- * judge not opened, a pin asking), in its order. Each goes on the open step
- * whose `waitsOn` names a card or pin of it ({@link stepNamesArtifact}),
- * else on the plan (`SessionPlan.needs`). Derived on every read, never
+ * judge not opened, a pin asking), in its order, that no open step's
+ * `waitsOn` names a card or pin of ({@link stepNamesArtifact}), by artifact
+ * id. One a step names shows on that step. Derived on every read, never
  * stored: a page whose every question is answered, taken or withdrawn, or
- * deleted, is never named. The plan panel, the away recap (injected.ts
- * `waitLine`) and Needs you say one thing.
+ * deleted, is never named. The plan panel and Needs you say one thing.
  */
-export const planWaitsOf = (
-  session: string,
-  steps: readonly PlanStep[],
-  needs: readonly ArtifactNeed[]
-): PlanWait[] =>
-  unparked(needs)
-    .filter((need) => need.instanceId === session)
-    .map((need) => {
-      const step = steps.find((one) => stepNamesArtifact(one, need.artifactId));
-      return {
-        session,
-        artifact: { id: need.artifactId, title: need.title },
-        ...(step ? { step: { id: step.id, content: step.content } } : {}),
-      };
-    });
-
-/** The plan's own needs ({@link planWaitsOf}): what of it waits on the person that no open step names, by artifact id. */
 export const planNeedsOf = (
   session: string,
-  steps: readonly PlanStep[],
+  steps: readonly Pick<KeptStep, "status" | "waitsOn">[],
   needs: readonly ArtifactNeed[]
 ): string[] =>
-  planWaitsOf(session, steps, needs).flatMap((wait) =>
-    wait.step ? [] : [wait.artifact.id]
-  );
+  unparked(needs)
+    .filter(
+      (need) =>
+        need.instanceId === session &&
+        !steps.some((one) => stepNamesArtifact(one, need.artifactId))
+    )
+    .map((need) => need.artifactId);
 
-/** The person's comments on a step whose words no write of the session's has kept: the step's words, and the comments. */
+/** The person's comments on a step no write of the session's has kept: the step's record, and the comments. */
 export interface OrphanedComments {
   comments: PlanComment[];
-  /** The words of the step they were written on. */
+  /** The record of the step they were written on, by handle ({@link stepHandle}). */
   step: string;
 }
 
@@ -167,11 +174,15 @@ export const PLAN_WAKING_EDITS: ReadonlySet<PlanEditKind> = new Set([
  */
 export const PLAN_WAKE_QUIET_MS = 3000;
 
-/** A person's change to a session's plan, as `POST /api/instances/:id/plan/edits` takes it. */
+/**
+ * A person's change to a session's plan, as `POST /api/instances/:id/plan/edits`
+ * takes it. A reword rewords the step's record (a to-do's text, a task's
+ * title); a tick ticks a to-do, and a task's step follows its stage.
+ */
 export type PlanEdit =
   | { kind: "reword"; step: string; content: string }
-  /** `after`: the step it follows, at that step's depth; absent, the plan's end. */
-  | { kind: "add"; content: string; after?: string }
+  /** `step`: the record it names, by handle; `after`: the step it follows, at that step's depth; absent, the plan's end. */
+  | { kind: "add"; step: string; after?: string }
   | { kind: "remove"; step: string }
   | { kind: "comment"; step: string; text: string }
   | { kind: "tick"; step: string; done: boolean }
@@ -206,13 +217,6 @@ export interface PlanChange {
    * `not done` for a tick; `up` or `down` for a move; "" for a removal.
    */
   words: string;
-}
-
-/** The session's spec, as it last wrote it. */
-export interface PlanSpec {
-  /** When it was written, ISO 8601. */
-  at: string;
-  markdown: string;
 }
 
 /** One to-do of a task file (`## To-dos`), as a task read parses it. */
@@ -272,13 +276,6 @@ export const todoProgress = (
  * a client's copy equal to.
  */
 export interface SessionPlan {
-  /**
-   * The spec's away notes (its `## Since HH:MM (you were away)` section,
-   * core injected.ts `awayNotesOf`) changed since the person last saw them:
-   * opened the plan, or had them recapped. `since` is the section's HH:MM.
-   * Absent once seen, and while the spec has none.
-   */
-  awayUnseen?: { since: string };
   /** The person's latest changes to it, newest last. */
   changes?: PlanChange[];
   /**
@@ -296,21 +293,12 @@ export interface SessionPlan {
    * expires those builds.
    */
   source: "cawco";
-  /** The session's spec, once it has written one. */
-  spec?: PlanSpec;
   /** CawCo's list: `todo_write`'s session scope, on every harness. */
   steps: PlanStep[];
   /** On a task attempt: the task. */
   taskId?: string;
   /** On a task attempt: the task's to-dos, nested and ticked as its file has them. */
   todos?: TaskTodo[];
-  /**
-   * The plan holds steps stored before they were rows (hub migration 0418)
-   * that did not read whole: kept as they were stored, none of them in
-   * {@link steps} or {@link orphanedComments}, and none read for anything.
-   * Absent on every plan that read.
-   */
-  unread?: true;
 }
 
 /** One RFC 6902 operation (https://www.rfc-editor.org/rfc/rfc6902). */

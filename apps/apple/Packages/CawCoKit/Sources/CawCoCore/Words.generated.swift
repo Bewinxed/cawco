@@ -2178,8 +2178,8 @@ public enum Words {
         public static let joinedLabel = "Joined a project"
 
         /// Where the offer stood, once answering joined a project that already was.
-        public static func joined(name: String, filed: Int) -> String {
-            filed > 0 ? "Joined \(name), with \(filed) proposed \(filed == 1 ? "task" : "tasks") from the plan." : "Joined \(name)."
+        public static func joined(name: String) -> String {
+            "Joined \(name)."
         }
 
         public static func openProject(name: String) -> String {
@@ -2241,7 +2241,7 @@ public enum Words {
 
     public enum Plan {
         // packages/core/src/words/plan.ts `planWords`
-        /// The ring's word, and the panel's title over steps or a spec.
+        /// The ring's word, and the panel's title over its steps.
         public static let plan = "Plan"
 
         /// The ring, for a screen reader: how far the plan has got.
@@ -2259,9 +2259,12 @@ public enum Words {
 
         public static let steps = "Steps"
 
-        public static let spec = "Spec"
-
         public static let openInCanvas = "Open in canvas"
+
+        /// A step whose task or to-do is gone from the board, by the record it named.
+        public static func gone(handle: String) -> String {
+            "\(handle), no longer on the board"
+        }
     }
 
     public enum Side {

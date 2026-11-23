@@ -29,6 +29,9 @@ const CONTEXT_LINES_KEPT = 20;
 /** How many of a session's lines about notices that ended undelivered are kept ({@link DbShape.noteUnsentLine}). */
 const UNSENT_LINES_KEPT = 20;
 
+/** How many of a session's recaps of the person's returns are kept ({@link DbShape.noteRecapLine}). */
+const RECAP_LINES_KEPT = 20;
+
 /** A session's move line ({@link DbShape.noteMovedHere}). */
 interface MovedHere {
   at: number;
@@ -59,6 +62,13 @@ export interface SessionLinesDb {
   /** Records that a session started where its project was moved to for it: the move's ready line. */
   readonly noteMovedHere: (id: string, line: MovedHere) => void;
   /**
+   * Keeps the recap of the person's return on the session's row (core
+   * `RETURN_RECAP`, its `content` the recap as JSON), the last {@link
+   * RECAP_LINES_KEPT}. False when one under its id is kept already, or the
+   * hub keeps no row for the session.
+   */
+  readonly noteRecapLine: (id: string, line: LimitNote) => boolean;
+  /**
    * Keeps the line for notices owed to the session that ended undelivered
    * (core `NOTICES_ENDED`) on its row, the last {@link UNSENT_LINES_KEPT}.
    * False when the hub keeps no row for the session.
@@ -66,6 +76,8 @@ export interface SessionLinesDb {
   readonly noteUnsentLine: (id: string, line: LimitNote) => boolean;
   /** Keeps a fleet-watch line on the session's row, the last {@link WATCH_LINES_KEPT}. */
   readonly noteWatchLine: (id: string, line: WatchLine) => void;
+  /** The recaps of the person's returns kept on the session's row, oldest first. */
+  readonly recapLinesOf: (id: string) => LimitNote[];
   /** The lines for notices that ended undelivered kept on the session's row, oldest first. */
   readonly unsentLinesOf: (id: string) => LimitNote[];
   /** The fleet-watch lines kept on the session's row, oldest first. */
@@ -190,6 +202,13 @@ export const sessionLinesDb = (core: DbCore): SessionLinesDb => {
       })),
     noteUnsentLine: (id, line) =>
       keepLine(id, "unsent", line, UNSENT_LINES_KEPT),
+    noteRecapLine: (id, line) => keepLine(id, "recap", line, RECAP_LINES_KEPT),
+    recapLinesOf: (id) =>
+      linesOf(id, "recap").map(({ id: lineId, at, content }) => ({
+        id: lineId,
+        at,
+        content,
+      })),
     unsentLinesOf: (id) =>
       linesOf(id, "unsent").map(({ id: lineId, at, content }) => ({
         id: lineId,

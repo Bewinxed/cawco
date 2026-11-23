@@ -127,17 +127,9 @@ const STEP_WORDS: Record<string, string> = {
 const TICKED = "Done";
 const UNTICKED = "To do";
 
-/** What a plan is called: its spec's first line, else its first step's words, else Plan. */
-const planName = (plan: SessionPlan): string => {
-  const spec = plan.spec?.markdown
-    .split("\n")
-    .map((line) => line.replace(HEADING, "").trim())
-    .find(Boolean);
-  return spec || plan.steps[0]?.content || planWords.plan;
-};
-
-/** A markdown heading's marks. */
-const HEADING = /^#+\s*/u;
+/** What a plan is called: its first step's words, else Plan. */
+const planName = (plan: SessionPlan): string =>
+  plan.steps[0]?.content || planWords.plan;
 
 /** A refusal as its status, so a 4xx keeps "none". */
 const statusOf = ({ response }: Refused) =>

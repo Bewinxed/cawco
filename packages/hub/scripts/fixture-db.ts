@@ -2215,43 +2215,38 @@ const planComment = (minutes: number, text: string) => ({
 });
 
 /**
- * Plans as the hub's own code writes them (`putSessionSteps`,
- * `putSessionSpec`), every one migration 0418 places whole as rows: steps
- * nested by depth in every status, with and without a priority, waiting on
- * a pull request, a task and a card, the person's comments on two steps,
- * a plan with orphaned comments in two groups, an empty list written, and
- * a spec written alone (steps never set). {@link seedSessionPlansByHand}
- * adds the ones that do not read.
+ * Plans as the hub's own code writes them (`putSessionSteps`): steps naming
+ * tasks and to-dos, nested by depth in every status, with and without a
+ * priority, waiting on a pull request, a task and a card, the person's
+ * comments on two steps, a plan with orphaned comments in two groups, and
+ * an empty list written. {@link seedSessionPlansByHand} adds the ones that
+ * do not read.
  */
 function seedSessionPlans(db: HubDb, sessions: Seeded[]): void {
-  const [first, second, third, fourth, fifth] = sessions.slice(60);
-  if (!(first && second && third && fourth && fifth)) {
-    throw new Error("the lists fixture's plans need five sessions");
+  const [first, second, third, fourth] = sessions.slice(60);
+  if (!(first && second && third && fourth)) {
+    throw new Error("the lists fixture's plans need four sessions");
   }
   db.putSessionSteps(first.id, [
     {
-      id: "1",
-      content: "Read the migration journal and the newest snapshot",
+      id: "tsk-1",
       depth: 0,
       status: "completed",
       comments: [planComment(3, "Start from 0413, not 0410.")],
     },
     {
-      id: "2",
-      content: "Move the session plans into rows",
+      id: "tsk-2",
       depth: 0,
       status: "in_progress",
       priority: "high",
     },
     {
-      id: "2.1",
-      content: "Write the migration with nested json_each",
+      id: "tsk-2:td-1",
       depth: 1,
       status: "in_progress",
     },
     {
-      id: "2.2",
-      content: "Rebuild the lists fixture at the pinned commit",
+      id: "tsk-2:td-2",
       depth: 1,
       status: "pending",
       priority: "low",
@@ -2262,8 +2257,7 @@ function seedSessionPlans(db: HubDb, sessions: Seeded[]): void {
       ],
     },
     {
-      id: "td-3",
-      content: "Report the counts",
+      id: "tsk-12:td-3",
       depth: 0,
       status: "pending",
       waitsOn: "tsk-12",
@@ -2273,8 +2267,7 @@ function seedSessionPlans(db: HubDb, sessions: Seeded[]): void {
     second.id,
     [
       {
-        id: "1",
-        content: "Pick the plan panel's stop wording",
+        id: "tsk-3",
         depth: 0,
         status: "pending",
         priority: "medium",
@@ -2297,17 +2290,12 @@ function seedSessionPlans(db: HubDb, sessions: Seeded[]): void {
   );
   db.putSessionSteps(third.id, [
     {
-      id: "1",
-      content: "Wait for the host proofs",
+      id: "tsk-4",
       depth: 0,
       status: "completed",
     },
   ]);
   db.putSessionSteps(fourth.id, []);
-  db.putSessionSpec(
-    fifth.id,
-    "## Goal\n\nMove every stored plan to rows, and say where one does not read."
-  );
 }
 
 /**

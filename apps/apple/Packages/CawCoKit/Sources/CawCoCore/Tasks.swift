@@ -22,13 +22,11 @@ public struct PlanTodo: Sendable, Equatable {
 }
 
 /// A session's plan as the hub keeps it (core plan.ts `SessionPlan`,
-/// `GET /api/instances/:id/plan` and the live frames): its steps, its spec
-/// (the session's own document, read-only), and on a task attempt the
-/// task's to-dos.
+/// `GET /api/instances/:id/plan` and the live frames): its steps, the tasks
+/// and to-dos it works on, each with its record's words, and on a task
+/// attempt the task's to-dos.
 public struct SessionPlan: Sendable, Equatable {
     public let steps: [PlanStep]
-    /// The spec's Markdown, once the session has written one.
-    public let spec: String?
     /// On a task attempt: the task.
     public let taskId: String?
     /// On a task attempt: the task's to-dos.
@@ -43,7 +41,6 @@ public struct SessionPlan: Sendable, Equatable {
             PlanTodo(id: todo["id"] as? String ?? todo["path"] as? String ?? "\(index)", text: todo["text"] as? String ?? "",
                      depth: (todo["depth"] as? NSNumber)?.intValue ?? 0, done: todo["done"] as? Bool == true)
         }
-        spec = (raw["spec"] as? [String: Any])?["markdown"] as? String
         taskId = raw["taskId"] as? String
     }
 
@@ -54,14 +51,14 @@ public struct SessionPlan: Sendable, Equatable {
             : (steps.count { $0.status == "completed" }, steps.count)
     }
 
-    /// It has something to show: steps, a spec, or a task's to-dos (PlanPane.svelte `planShows`).
-    public var shows: Bool { !steps.isEmpty || spec != nil || !todos.isEmpty }
+    /// It has something to show: steps, or a task's to-dos (PlanPane.svelte `planShows`).
+    public var shows: Bool { !steps.isEmpty || !todos.isEmpty }
 
     /// The task's to-dos are shown: an attempt's, with its task named (PlanPane.svelte `showsTodos`).
     public var showsTodos: Bool { !todos.isEmpty && taskId != nil }
 
-    /// Only a task's to-dos, no steps or spec: the panel is titled by them (PlanPane.svelte `onlyTodos`).
-    public var onlyTodos: Bool { steps.isEmpty && spec == nil && !todos.isEmpty }
+    /// Only a task's to-dos, no steps: the panel is titled by them (PlanPane.svelte `onlyTodos`).
+    public var onlyTodos: Bool { steps.isEmpty && !todos.isEmpty }
 }
 
 /// The plans this device follows (client.svelte.ts `watchPlan`, core
@@ -143,7 +140,7 @@ public final class PlanFollows {
         #if DEBUG
         let steps = plan.steps.map { "\($0.id):\($0.depth):\($0.status)" }.joined(separator: ",")
         let todos = plan.todos.map { "\($0.id):\($0.depth):\($0.done ? "done" : "open")" }.joined(separator: ",")
-        log.notice("plan \(id, privacy: .public) rev=\(now.rev, privacy: .public) steps=\(steps, privacy: .public) spec=\(plan.spec?.count ?? 0, privacy: .public) task=\(plan.taskId ?? "-", privacy: .public) todos=\(todos, privacy: .public)")
+        log.notice("plan \(id, privacy: .public) rev=\(now.rev, privacy: .public) steps=\(steps, privacy: .public) task=\(plan.taskId ?? "-", privacy: .public) todos=\(todos, privacy: .public)")
         #endif
     }
 }

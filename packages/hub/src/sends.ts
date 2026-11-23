@@ -24,16 +24,12 @@ import {
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { PresenceSaid } from "@cawco/core/injected";
 import {
-  awayNotesOf,
-  BACK_MESSAGE,
-  NOTES_BEFORE_COLD_MESSAGE,
   presenceLine,
   undeliveredNotice,
   withMovedLine,
   withReminder,
 } from "@cawco/core/injected";
 import { isRecord } from "@cawco/core/is-record";
-import { planWaitsOf } from "@cawco/core/plan";
 import type { InstanceRow, SendPayload } from "@cawco/core/protocol";
 import { relaunchOf } from "@cawco/core/relaunch";
 import { CONTROL_READ_TRANSCRIPT_WINDOW } from "@cawco/core/session/controls";
@@ -61,10 +57,8 @@ import type { SendHold, StoredSendRefusal } from "./db/stored-types";
 import type { TurnChoice } from "./decide";
 import type { Unstored } from "./hub-shapes";
 import {
-  BACK_ORIGIN,
   FORK_ORIGIN,
   MOVE_ENDED_ORIGIN,
-  NOTES_ORIGIN,
   UNDELIVERED_ORIGIN,
 } from "./hub-words";
 import { isKeepAlive } from "./keep-alive";
@@ -98,10 +92,6 @@ export interface SendDelivery {
    */
   woke?: "fresh" | "resume";
 }
-
-/** Whether `origin` is the hub's word that the person is back (hub-words.ts `BACK_ORIGIN`). */
-const isBack = (origin: NeutralOrigin): boolean =>
-  origin.kind === "system" && origin.name === BACK_ORIGIN;
 
 /** Why the one decision kept a hub word as a note, as the hub's log says it. */
 const noteWhy = (choice: TurnChoice): string => {
@@ -429,10 +419,8 @@ export type SendsContext = Pick<
   ClosureContext,
   | "accountWords"
   | "advanceCompaction"
-  | "artifactLane"
   | "atLimit"
   | "board"
-  | "cacheLapsesAt"
   | "callAgent"
   | "credentialTurns"
   | "db"
@@ -442,7 +430,6 @@ export type SendsContext = Pick<
   | "hubTurn"
   | "inputRefusal"
   | "keptAsleep"
-  | "lastTurnAt"
   | "laws"
   | "leadRuns"
   | "lifetime"
@@ -457,7 +444,6 @@ export type SendsContext = Pick<
   | "nameFromLiveTurn"
   | "notifications"
   | "planChanges"
-  | "plans"
   | "processAt"
   | "pulses"
   | "push"
@@ -1993,8 +1979,7 @@ export const createSends = (ctx: SendsContext) => {
     }
     if (message.origin.kind === "human") {
       ctx.watch?.humanSend(instanceId);
-      // The person wrote to it: a Stop of theirs no longer keeps their
-      // return's word from it ({@link holdsNews}).
+      // The person wrote to it: a Stop of theirs is behind them.
       ctx.db.setPersonStopped(instanceId, null);
     }
     ctx.workItems.heard(instanceId, message.origin);
@@ -2368,269 +2353,18 @@ export const createSends = (ctx: SendsContext) => {
       hour12: false,
     }).format(at);
 
-  /** The recap each of the hub's "back" sends was given as it was first handed: a hand again gives it the same ({@link recapFor}). */
-  const recapsGiven = new Map<string, PresenceSaid>();
-
-  /**
-   * The recap a turn carries on the person's return: the hub's "back" send
-   * to a warm session ({@link tellBack}), or else the person's own next
-   * message to it, read as it is first handed: the notes the
-   * session kept in its plan while the person was away (`awayNotesOf`) and
-   * what of the session's waits on them now, exactly as Needs you lists it
-   * (core `planWaitsOf`), with the hub's own away-since. Once per return
-   * (notifications.ts `takeRecap`, kept on the hub through a restart), and
-   * never notes the person has seen (`session_plans.away_seen`: opened in
-   * the plan, or recapped before). Recapped, they are seen: the plan ring's
-   * mark goes. `turn` says whose the turn is (core `PresenceSaid`). Undefined
-   * when there is none to give.
-   */
-  const recapFor = (
-    instanceId: string,
-    uuid: string,
-    turn: "back" | "theirs"
-  ): PresenceSaid | undefined => {
-    const given = recapsGiven.get(uuid);
-    if (given) {
-      return given;
-    }
-    const back = ctx.notifications.takeRecap(instanceId);
-    if (!back) {
-      return undefined;
-    }
-    const plan = ctx.db.sessionPlan(instanceId);
-    const notes = awayNotesOf(plan?.spec ?? undefined);
-    if (!notes || plan?.awaySeen === notes.notes) {
-      return undefined;
-    }
-    detach(
-      ctx.plans.seeAway(instanceId).then((seen) => {
-        if (seen instanceof ElysiaStatus) {
-          console.warn(
-            `[away notes recapped are seen] failed: ${seen.response.detail}`
-          );
-        }
-      }),
-      "away notes recapped are seen"
-    );
-    const waiting = planWaitsOf(
-      instanceId,
-      plan?.steps ?? [],
-      ctx.artifactLane.now().needs
-    );
-    const said: PresenceSaid = {
-      kind: "on",
-      recap: {
-        turn,
-        notes: notes.notes,
-        section: notes.since,
-        since: clockOf(back.since),
-        ...(waiting.length > 0 ? { waiting } : {}),
-      },
-    };
-    recapsGiven.set(uuid, said);
-    return said;
-  };
-
-  /**
-   * Whether `row`'s process is up and takes a turn now: running, its machine
-   * connected and not paused, and no limit hold on it. A session at rest,
-   * held or on a machine away is not woken for the person's return.
-   */
-  const processUp = (row: PublicInstanceRow): boolean =>
-    row.status === "running" &&
-    !!ctx.registry.agent(row.machineId) &&
-    ctx.machinePause.until(row.machineId) === undefined &&
-    !ctx.atLimit.handling(row.id);
-
-  /**
-   * Whether `row` holds news the person hasn't seen and may be told of their
-   * return ({@link tellBack}): it talks with them, is not continued or
-   * discarded, its process is up ({@link processUp}), the person has not
-   * stopped it since they last wrote to it (db `personStopped`: their Stop
-   * or interrupt marks it, their next message clears it), its plan holds
-   * away notes they have not seen ({@link recapFor}), and no "back" send
-   * already waits in it. Whether its cache is warm is {@link tellBack}'s to
-   * ask. A session they stopped stays stopped however warm its cache:
-   * decided by the owner 2026-11-23 (cockpit#8eabb628).
-   */
-  const holdsNews = (row: PublicInstanceRow): boolean => {
-    if (
-      !talksWithPerson(row) ||
-      row.continuedInto !== null ||
-      !processUp(row) ||
-      ctx.db.personStopped(row.id)
-    ) {
-      return false;
-    }
-    const plan = ctx.db.sessionPlan(row.id);
-    const notes = awayNotesOf(plan?.spec ?? undefined);
-    return (
-      !!notes &&
-      plan?.awaySeen !== notes.notes &&
-      !ctx.db
-        .sendsIn(row.id, ["pending"])
-        .some((send) => !!send.body.origin && isBack(send.body.origin))
-    );
-  };
-
-  /**
-   * THE RETURN'S RECAP: the person came back from being away (notifications.ts
-   * `turned`: the rollup of every device's facts went from away to here).
-   * Every session's away notes show at once in its plan, with no turn. The
-   * hub's word that they are back (core `BACK_MESSAGE`) goes only to a
-   * session whose process is up and that they have not stopped since they
-   * last wrote to it ({@link holdsNews}), and whose prompt cache
-   * is warm (the one decision, decide.ts: a word it only needs to know,
-   * hub-words.ts, unknown counted cold); its presence line carries the notes
-   * ({@link recapFor}), and its reply is the recap. Any other session is
-   * sent nothing and never woken, a session they stopped even while its
-   * cache is warm: its notes stand unseen in its plan, the
-   * ring marks them, and the person's own next message to it carries them
-   * ({@link personSaid}). Decided by the owner 2026-11-23 (cockpit#8eabb628).
-   */
-  const tellBack = (): void => {
-    recapsGiven.clear();
-    const holding = ctx.db
-      .listedInstancesByIds(ctx.db.plansWithAwayNotes())
-      .filter(holdsNews);
-    const told: PublicInstanceRow[] = [];
-    const shown: string[] = [];
-    for (const row of holding) {
-      const choice = ctx.hubTurn(row.id, {
-        kind: "system",
-        name: BACK_ORIGIN,
-      });
-      if (choice?.kind !== "run") {
-        shown.push(
-          `${ctx.sessionName(row)} (${choice ? noteWhy(choice) : "no row"}: no turn, its notes shown)`
-        );
-        continue;
-      }
-      told.push(row);
-      const sent = deliverSend(
-        sessionWord(row, BACK_MESSAGE, {
-          kind: "system",
-          name: BACK_ORIGIN,
-          line: noticeWords.back,
-        })
-      );
-      if (sent instanceof ElysiaStatus) {
-        console.warn(
-          `[presence] the person's return was not told to a session: ${sent.response.detail}`
-        );
-      }
-    }
-    console.log(
-      `[presence] the person is back: ${told.length} warm session(s) holding news told so, each to recap it${told.length > 0 ? `: ${told.map((row) => ctx.sessionName(row)).join(", ")}` : ""}${shown.length > 0 ? `; ${shown.join(", ")}` : ""}`
-    );
-  };
-
-  /** Each session told to write its notes before cold, by the end of the turn it was told after: once per turn of news. */
-  const notesAsked = new Map<string, string>();
-
-  /**
-   * Whether `row` writes its notes now ({@link notesBeforeCold}): it runs,
-   * talks with the person, is not kept warm by its keep-alive, took a turn
-   * since they left (`since`) it was not asked after, and its cache lapses
-   * within its lead. Its last turn's end and that lapse; undefined when not.
-   */
-  const notesDue = (
-    row: PublicInstanceRow,
-    since: number
-  ): { lapses: number; turnAt: string } | undefined => {
-    const turnAt = ctx.lastTurnAt(row.id);
-    if (
-      row.status !== "running" ||
-      row.keepAliveEnabled ||
-      !talksWithPerson(row) ||
-      turnAt === null ||
-      Date.parse(turnAt) <= since ||
-      notesAsked.get(row.id) === turnAt
-    ) {
-      return;
-    }
-    const lapses = ctx.cacheLapsesAt(row.id);
-    const lead = row.cacheTtl === "1h" ? 600_000 : 60_000;
-    return lapses === null || lapses - Date.now() > lead
-      ? undefined
-      : { lapses, turnAt };
-  };
-
-  /**
-   * THE NOTES BEFORE COLD (decided 2026-11-19, move-redesign "recap"):
-   * while the person is away, each session that talks with them, did work
-   * since they left that its notes don't hold yet, and whose prompt cache
-   * goes cold within its lead (keep-alive's: ten minutes before a one-hour
-   * cache lapses, one before a five-minute one), is told to write what
-   * happened so far into its plan while the cache is still warm, so the
-   * person reads it on return without waking it. Each such turn goes
-   * through the one decision (decide.ts: a word it only needs to know,
-   * hub-words.ts): it runs warm only. Once per turn of news; a session kept warm by its keep-alive is
-   * never asked, its cache not lapsing.
-   */
-  const notesBeforeCold = (): void => {
-    const person = ctx.notifications.person();
-    if (person.state !== "away" || person.since === null) {
-      return;
-    }
-    const { since } = person;
-    const live = ctx.registry
-      .machineIds()
-      .flatMap((machineId) => ctx.db.liveInstancesOn(machineId));
-    for (const row of live) {
-      const due = notesDue(row, since);
-      if (!due) {
-        continue;
-      }
-      const { lapses } = due;
-      notesAsked.set(row.id, due.turnAt);
-      const choice = ctx.hubTurn(row.id, {
-        kind: "system",
-        name: NOTES_ORIGIN,
-      });
-      if (choice?.kind !== "run") {
-        continue;
-      }
-      const sent = deliverSend(
-        sessionWord(row, NOTES_BEFORE_COLD_MESSAGE(clockOf(since)), {
-          kind: "system",
-          name: NOTES_ORIGIN,
-          line: noticeWords.notesBeforeCold,
-        })
-      );
-      if (sent instanceof ElysiaStatus) {
-        console.warn(
-          `[presence] a session's notes before its cache goes cold were not asked: ${sent.response.detail}`
-        );
-      } else {
-        console.log(
-          `[presence] ${ctx.sessionName(row)} writes its notes now: the person is away and its cache goes cold at ${clockOf(lapses)}`
-        );
-      }
-    }
-  };
-
   /**
    * What the session is told of the person as this send starts its turn
    * (core injected.ts `presenceLine`): on this chat (the person's own words
    * always are), here elsewhere, or away since when, and, on any other
-   * send, that their last message still waits for its reply. The hub's word
-   * that they are back ({@link tellBack}) carries the notes the session kept
-   * in its plan while they were away, for its recap ({@link recapFor}); a
-   * session not told so carries them on the person's own next message.
+   * send, that their last message still waits for its reply.
    */
   const personSaid = (
     instanceId: string,
-    { origin, uuid }: { origin: NeutralOrigin; uuid: string }
+    { origin }: { origin: NeutralOrigin }
   ): PresenceSaid => {
     if (origin.kind === "human") {
-      return recapFor(instanceId, uuid, "theirs") ?? { kind: "on" };
-    }
-    const recap = isBack(origin)
-      ? recapFor(instanceId, uuid, "back")
-      : undefined;
-    if (recap) {
-      return recap;
+      return { kind: "on" };
     }
     const person = ctx.notifications.person();
     const owed = ctx.db.personUnanswered(instanceId) !== null;
@@ -2723,7 +2457,7 @@ export const createSends = (ctx: SendsContext) => {
     const next = remindedContent(sent.message.content, lines);
     if (said) {
       console.log(
-        `[presence] send ${message.uuid} to ${instanceId.slice(0, 8)}: the person is ${said.kind}${said.unanswered ? ", their last message unanswered" : ""}${said.kind === "on" && said.recap ? `, back after away since ${said.recap.since}, with the plan's notes under "Since ${said.recap.section}"` : ""}`
+        `[presence] send ${message.uuid} to ${instanceId.slice(0, 8)}: the person is ${said.kind}${said.unanswered ? ", their last message unanswered" : ""}`
       );
     }
     return {
@@ -3597,8 +3331,6 @@ export const createSends = (ctx: SendsContext) => {
     byIdNow,
     deliverSend,
     continuationNow,
-    tellBack,
-    notesBeforeCold,
     personsMessage,
     presenced,
     deliverToSession,
