@@ -77,8 +77,8 @@ export function pillOf(
   }
   const { writer } = page;
   if (!writer || writer.ended) {
-    // Who took it (hub artifacts/taker.ts): the session that delegated it, else Caw.
-    const who = writer?.heardBy?.title ?? words.caw;
+    // Who took it (hub artifacts/taker.ts, triggers.ts): a session of Caw's.
+    const who = words.caw;
     return {
       tone: "live",
       word: words.sent,

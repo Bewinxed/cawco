@@ -170,7 +170,10 @@ const lfsChange = (
 };
 
 /** The accounts `asked` names: the one of that id, else those of that nickname, else of that email. */
-const accountsAsked = (accounts: Account[], asked: string): Account[] => {
+export const accountsAsked = (
+  accounts: Account[],
+  asked: string
+): Account[] => {
   const byId = accounts.find((one) => one.id === asked);
   if (byId) {
     return [byId];

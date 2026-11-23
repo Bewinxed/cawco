@@ -106,6 +106,7 @@ export type AskRoutingContext = Pick<
   | "startsTurnIn"
   | "touched"
   | "transcripts"
+  | "triggers"
   | "usageCounter"
   | "wakesForSend"
   | "watch"
@@ -521,9 +522,16 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
    * A delegate's report to its parent, as a queued peer message: what its
    * turn said (or why it never started), under the marker the parent's
    * transcript renders as a report. The parent, the session that started its
-   * work, is the only one that hears it (work-items.ts `reportees`).
+   * work, is the one that hears it (work-items.ts `reportees`).
    * `headline` is the delegate's one-or-two-sentence outcome from
    * `finish_item`, carried on the marker.
+   *
+   * A project's Caw conversation hears the reports of the delegates it
+   * started as they are, whatever its size (the owner's card "Where
+   * triggers go": "It goes in as it is"). Every other report in a project
+   * is a trigger on the delegate's thing (triggers.ts), whose owner is the
+   * parent while it still hears input; a parent that has ended passes it to
+   * the session on the thing, else a fresh one, never to an old chat.
    */
   const reportToParent = (
     delegate: ReportingSession,
@@ -532,7 +540,35 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
     told: ReportTold = {}
   ): void => {
     for (const parent of ctx.workItems.reportees(delegate)) {
-      reportTo(parent, delegate, body, failed, told);
+      const [row] = ctx.db.getInstancesByIds([delegate.id]);
+      const projectId = row?.projectId;
+      if (
+        !(ctx.triggers && projectId) ||
+        isProjectConversation(parent, ctx.db.project)
+      ) {
+        reportTo(parent, delegate, body, failed, told);
+        continue;
+      }
+      const item = row.workItemId ? ctx.db.workItem(row.workItemId) : undefined;
+      const link = sessionLink(delegate.id, boardTitle(delegate));
+      ctx.triggers.routeQuietly(projectId, {
+        kind: "delegate-report",
+        from: delegate.id,
+        thing: item?.taskId
+          ? {
+              kind: "task",
+              id: item.taskId,
+              name: `${item.taskId} (${item.title})`,
+            }
+          : { kind: "session", id: delegate.id, name: link },
+        what: `${link} ${failed ? "failed" : "reported"}.`,
+        delta: body,
+        who: link,
+        deliver: (owner) => {
+          reportTo(owner, delegate, body, failed, told);
+          return Promise.resolve(true);
+        },
+      });
     }
   };
 

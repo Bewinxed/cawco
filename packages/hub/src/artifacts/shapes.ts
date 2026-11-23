@@ -766,18 +766,17 @@ export type PageFrom =
 
 /**
  * Who hears a page's Send: the session that holds it, or, once that one has
- * ended, the project's Caw, told the person's act in its words (decisions.ts
- * `send`), whose conversation a message starts again.
+ * ended, a trigger on the page in its project (triggers.ts), told the
+ * person's act in its words.
  */
 export type PageHearer =
   | { session: InstanceRow }
   | {
-      caw: {
-        line: string;
+      route: {
         projectId: string;
         text: string;
-        /** Why Caw is woken, in its wake's words. */
-        trigger: string;
+        /** What happened, in the trigger's words. */
+        what: string;
       };
     };
 

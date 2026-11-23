@@ -24,42 +24,32 @@ export const takesNoInput = (
     ? noticeWords.sessionEnded
     : refusal(session.id);
 
-/** Where it goes: the writer, the session that delegated it, the project's Caw, or no one. */
-export type ArtifactTaker<C> =
+/** Where it goes: the writer, a trigger on the artifact (the router decides who), or no one. */
+export type ArtifactTaker =
   | { session: InstanceRow; to: "writer" }
-  | { session: InstanceRow; to: "parent"; why: string }
-  | { caw: C; projectId: string; to: "caw"; why: string }
+  | { projectId: string; to: "route"; why: string }
   | { to: "none" };
 
 /**
  * Its writer while it takes input ({@link takesNoInput}); once it takes
- * none (or no session holds it), the session that delegated it while that one does, which holds it
- * (service.ts `answerable`, open_items), else the project's Caw (projects
- * plan §5.8: "wakes the session that wrote the page, or Caw if it has
- * ended"). `none` when no one can: the writer keeps what was not taken,
- * with why. `refusal` answers why a session takes no input, or nothing.
+ * none (or no session holds it), a trigger on the artifact in its project
+ * (triggers.ts: the fresh session on it, else a fresh one; the owner's card
+ * "What a trigger wakes": "the session that wrote it hears it if it's
+ * live; otherwise a fresh session takes it"). `none` when it is in no
+ * project: the writer keeps what was not taken, with why. `refusal`
+ * answers why a session takes no input, or nothing.
  */
-export const artifactTaker = <C>(
+export const artifactTaker = (
   writer: InstanceRow | undefined,
   artifact: { projectId: string | null },
-  at: {
-    caw: C | undefined;
-    instance: (id: string) => InstanceRow | undefined;
-    refusal: (id: string) => string | undefined;
-  }
-): ArtifactTaker<C> => {
-  const refused = writer ? takesNoInput(writer, at.refusal) : undefined;
+  refusal: (id: string) => string | undefined
+): ArtifactTaker => {
+  const refused = writer ? takesNoInput(writer, refusal) : undefined;
   if (writer && refused === undefined) {
     return { to: "writer", session: writer };
   }
   const why = refused?.replace(CLOSING_STOP, "") ?? "no session holds it";
-  const parent = writer?.parentInstanceId
-    ? at.instance(writer.parentInstanceId)
-    : undefined;
-  if (parent && takesNoInput(parent, at.refusal) === undefined) {
-    return { to: "parent", session: parent, why };
-  }
-  return artifact.projectId && at.caw
-    ? { to: "caw", caw: at.caw, projectId: artifact.projectId, why }
+  return artifact.projectId
+    ? { to: "route", projectId: artifact.projectId, why }
     : { to: "none" };
 };

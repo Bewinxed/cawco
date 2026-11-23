@@ -7210,13 +7210,6 @@ public enum OpenEnums {
         case artifactUnknown
         case artifactUnnamed
         case atLimitNeedsAccount
-        case cawHomeUnsaid
-        case cawNoMachine
-        case cawOff
-        case cawProjectUnknown
-        case cawSendNotTaken
-        case cawSpendCapped
-        case cawStartUndone
         case dispatchProjectUnknown
         case dispatchRunsOnUnknown
         case dispatchSettingsUnfit
@@ -7255,10 +7248,7 @@ public enum OpenEnums {
         case giveUrlAloneConnection
         case largeFilesLiveHttps
         case largeFilesLiveUrl
-        case launchAccountUnavailable
         case lfsRefused
-        case machineAway
-        case machineSilent
         case nameNeeded
         case nameOneLine
         case nameTooLong
@@ -7266,15 +7256,7 @@ public enum OpenEnums {
         case noArea
         case noProject
         case notAllowed
-        case spawnDefaultUnnamed
-        case spawnNotPlaced
-        case spawnNotSettled
-        case spawnPayloadUnnamed
-        case spawnProjectDeleted
-        case spawnSessionKeyHeld
-        case spawnStartFailed
-        case spawnTaskAccountsUnread
-        case startingSetUnread
+        case pageUnheard
         case taskIdUnfit
         case taskLinkUnread
         case taskProjectUnknown
@@ -7295,13 +7277,6 @@ public enum OpenEnums {
             case "artifact-unknown": self = .artifactUnknown
             case "artifact-unnamed": self = .artifactUnnamed
             case "at-limit-needs-account": self = .atLimitNeedsAccount
-            case "caw-home-unsaid": self = .cawHomeUnsaid
-            case "caw-no-machine": self = .cawNoMachine
-            case "caw-off": self = .cawOff
-            case "caw-project-unknown": self = .cawProjectUnknown
-            case "caw-send-not-taken": self = .cawSendNotTaken
-            case "caw-spend-capped": self = .cawSpendCapped
-            case "caw-start-undone": self = .cawStartUndone
             case "dispatch-project-unknown": self = .dispatchProjectUnknown
             case "dispatch-runs-on-unknown": self = .dispatchRunsOnUnknown
             case "dispatch-settings-unfit": self = .dispatchSettingsUnfit
@@ -7340,10 +7315,7 @@ public enum OpenEnums {
             case "give-url-alone-connection": self = .giveUrlAloneConnection
             case "large-files-live-https": self = .largeFilesLiveHttps
             case "large-files-live-url": self = .largeFilesLiveUrl
-            case "launch-account-unavailable": self = .launchAccountUnavailable
             case "lfs-refused": self = .lfsRefused
-            case "machine-away": self = .machineAway
-            case "machine-silent": self = .machineSilent
             case "name-needed": self = .nameNeeded
             case "name-one-line": self = .nameOneLine
             case "name-too-long": self = .nameTooLong
@@ -7351,15 +7323,7 @@ public enum OpenEnums {
             case "no-area": self = .noArea
             case "no-project": self = .noProject
             case "not-allowed": self = .notAllowed
-            case "spawn-default-unnamed": self = .spawnDefaultUnnamed
-            case "spawn-not-placed": self = .spawnNotPlaced
-            case "spawn-not-settled": self = .spawnNotSettled
-            case "spawn-payload-unnamed": self = .spawnPayloadUnnamed
-            case "spawn-project-deleted": self = .spawnProjectDeleted
-            case "spawn-session-key-held": self = .spawnSessionKeyHeld
-            case "spawn-start-failed": self = .spawnStartFailed
-            case "spawn-task-accounts-unread": self = .spawnTaskAccountsUnread
-            case "starting-set-unread": self = .startingSetUnread
+            case "page-unheard": self = .pageUnheard
             case "task-id-unfit": self = .taskIdUnfit
             case "task-link-unread": self = .taskLinkUnread
             case "task-project-unknown": self = .taskProjectUnknown
@@ -7381,13 +7345,6 @@ public enum OpenEnums {
             case .artifactUnknown: "artifact-unknown"
             case .artifactUnnamed: "artifact-unnamed"
             case .atLimitNeedsAccount: "at-limit-needs-account"
-            case .cawHomeUnsaid: "caw-home-unsaid"
-            case .cawNoMachine: "caw-no-machine"
-            case .cawOff: "caw-off"
-            case .cawProjectUnknown: "caw-project-unknown"
-            case .cawSendNotTaken: "caw-send-not-taken"
-            case .cawSpendCapped: "caw-spend-capped"
-            case .cawStartUndone: "caw-start-undone"
             case .dispatchProjectUnknown: "dispatch-project-unknown"
             case .dispatchRunsOnUnknown: "dispatch-runs-on-unknown"
             case .dispatchSettingsUnfit: "dispatch-settings-unfit"
@@ -7426,10 +7383,7 @@ public enum OpenEnums {
             case .giveUrlAloneConnection: "give-url-alone-connection"
             case .largeFilesLiveHttps: "large-files-live-https"
             case .largeFilesLiveUrl: "large-files-live-url"
-            case .launchAccountUnavailable: "launch-account-unavailable"
             case .lfsRefused: "lfs-refused"
-            case .machineAway: "machine-away"
-            case .machineSilent: "machine-silent"
             case .nameNeeded: "name-needed"
             case .nameOneLine: "name-one-line"
             case .nameTooLong: "name-too-long"
@@ -7437,15 +7391,7 @@ public enum OpenEnums {
             case .noArea: "no-area"
             case .noProject: "no-project"
             case .notAllowed: "not-allowed"
-            case .spawnDefaultUnnamed: "spawn-default-unnamed"
-            case .spawnNotPlaced: "spawn-not-placed"
-            case .spawnNotSettled: "spawn-not-settled"
-            case .spawnPayloadUnnamed: "spawn-payload-unnamed"
-            case .spawnProjectDeleted: "spawn-project-deleted"
-            case .spawnSessionKeyHeld: "spawn-session-key-held"
-            case .spawnStartFailed: "spawn-start-failed"
-            case .spawnTaskAccountsUnread: "spawn-task-accounts-unread"
-            case .startingSetUnread: "starting-set-unread"
+            case .pageUnheard: "page-unheard"
             case .taskIdUnfit: "task-id-unfit"
             case .taskLinkUnread: "task-link-unread"
             case .taskProjectUnknown: "task-project-unknown"
@@ -7458,7 +7404,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.ambiguous, .artifactAskAgainGone, .artifactAskAgainNoSession, .artifactCommentHeard, .artifactCommentUndelivered, .artifactCommentsOnTheirWay, .artifactOthers, .artifactSessionUnknown, .artifactUnknown, .artifactUnnamed, .atLimitNeedsAccount, .cawHomeUnsaid, .cawNoMachine, .cawOff, .cawProjectUnknown, .cawSendNotTaken, .cawSpendCapped, .cawStartUndone, .dispatchProjectUnknown, .dispatchRunsOnUnknown, .dispatchSettingsUnfit, .folderAreaIdUnfit, .folderChangeNone, .folderChangeTwice, .folderDeleteFolder, .folderFileBinary, .folderFileMissing, .folderFileTooLarge, .folderFileUnnamed, .folderForgotten, .folderGitFailed, .folderGitMissing, .folderGitUnanswered, .folderLinkInGit, .folderLinkOutside, .folderListedFile, .folderMessageMissing, .folderMessageTooLong, .folderPathAbsolute, .folderPathBackslash, .folderPathControl, .folderPathInGit, .folderPathOutside, .folderPathThroughLink, .folderPathTooLong, .folderPlaceTaken, .folderProjectIdUnfit, .folderReadFolder, .folderWriteNone, .folderWriteOntoFolder, .folderWriteTooLarge, .folderWriteUnderFile, .folderWriteUnfit, .giveUrlAloneConnection, .largeFilesLiveHttps, .largeFilesLiveUrl, .launchAccountUnavailable, .lfsRefused, .machineAway, .machineSilent, .nameNeeded, .nameOneLine, .nameTooLong, .noAccount, .noArea, .noProject, .notAllowed, .spawnDefaultUnnamed, .spawnNotPlaced, .spawnNotSettled, .spawnPayloadUnnamed, .spawnProjectDeleted, .spawnSessionKeyHeld, .spawnStartFailed, .spawnTaskAccountsUnread, .startingSetUnread, .taskIdUnfit, .taskLinkUnread, .taskProjectUnknown, .workLandsNoneThem]
+        public static let allCases: [Self] = [.ambiguous, .artifactAskAgainGone, .artifactAskAgainNoSession, .artifactCommentHeard, .artifactCommentUndelivered, .artifactCommentsOnTheirWay, .artifactOthers, .artifactSessionUnknown, .artifactUnknown, .artifactUnnamed, .atLimitNeedsAccount, .dispatchProjectUnknown, .dispatchRunsOnUnknown, .dispatchSettingsUnfit, .folderAreaIdUnfit, .folderChangeNone, .folderChangeTwice, .folderDeleteFolder, .folderFileBinary, .folderFileMissing, .folderFileTooLarge, .folderFileUnnamed, .folderForgotten, .folderGitFailed, .folderGitMissing, .folderGitUnanswered, .folderLinkInGit, .folderLinkOutside, .folderListedFile, .folderMessageMissing, .folderMessageTooLong, .folderPathAbsolute, .folderPathBackslash, .folderPathControl, .folderPathInGit, .folderPathOutside, .folderPathThroughLink, .folderPathTooLong, .folderPlaceTaken, .folderProjectIdUnfit, .folderReadFolder, .folderWriteNone, .folderWriteOntoFolder, .folderWriteTooLarge, .folderWriteUnderFile, .folderWriteUnfit, .giveUrlAloneConnection, .largeFilesLiveHttps, .largeFilesLiveUrl, .lfsRefused, .nameNeeded, .nameOneLine, .nameTooLong, .noAccount, .noArea, .noProject, .notAllowed, .pageUnheard, .taskIdUnfit, .taskLinkUnread, .taskProjectUnknown, .workLandsNoneThem]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -10568,6 +10514,91 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.asked, .deadline, .failed, .failing]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/TriggerSettingSource`.
+    public enum TriggerSettingSource: OpenEnum {
+        case caw
+        case fleet
+        case project
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "caw": self = .caw
+            case "fleet": self = .fleet
+            case "project": self = .project
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .caw: "caw"
+            case .fleet: "fleet"
+            case .project: "project"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.caw, .fleet, .project]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/TriggerSourced.T`.
+    public enum TriggerSourced.T: OpenEnum {
+        case claude
+        case codex
+        case opencode
+        case pi
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "claude": self = .claude
+            case "codex": self = .codex
+            case "opencode": self = .opencode
+            case "pi": self = .pi
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .claude: "claude"
+            case .codex: "codex"
+            case .opencode: "opencode"
+            case .pi: "pi"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.claude, .codex, .opencode, .pi]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

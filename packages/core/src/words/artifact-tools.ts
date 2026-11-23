@@ -307,7 +307,7 @@ export const artifactToolWords = {
   /** The hub's log: a held next version's merge left the person's answers since its fork as he wrote them. */
   answersKeptAtMerge: (id: string, keys: readonly string[]) =>
     `[artifacts] ${id}: its next version's merge kept the person's answers on ${keys.join(", ")}, written after the version was made`,
-  /** The hub's log: the person's marks woke the project's Caw, their writer taking no input. */
-  marksWokeCaw: (session: string, project: string, why: string) =>
-    `[artifacts] the person's marks on session ${session}'s artifact woke project ${project}'s Caw: the session takes no input now (${why})`,
+  /** The hub's log: the person's marks were a trigger on the artifact, their writer taking no input. */
+  marksRouted: (session: string, project: string, to: string, why: string) =>
+    `[artifacts] the person's marks on session ${session}'s artifact went to the trigger router in project ${project} (${to}): the session takes no input now (${why})`,
 };

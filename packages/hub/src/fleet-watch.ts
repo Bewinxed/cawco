@@ -29,10 +29,11 @@
  *   decides once with `triage_decide` (nudge the steward, interrupt, stop,
  *   tell you, or leave it), then the hub ends it. It never reaches the
  *   watched session's model: a session never judges itself, its steward
- *   does. Its steward is its parent session, or the project's conversation
- *   when its parent is that conversation or it has none in the project;
- *   for the conversation itself, and outside any project with no parent,
- *   you.
+ *   does. Its steward is its parent session, or Caw when its parent is the
+ *   project's conversation or it has none in the project: a nudge to Caw
+ *   is a trigger on the session (triggers.ts), never a send to the
+ *   conversation. For the conversation itself, and outside any project
+ *   with no parent, you.
  * - **Events off.** With the project's events off nothing wakes a model: the
  *   detectors run, Jev and triage do not, and a second open kind becomes a
  *   needs-you notice.
@@ -73,7 +74,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { decisionWords, signalLine } from "@cawco/core/words/fleet-watch";
 import { ElysiaStatus } from "elysia";
 import { z } from "zod";
-import { isProjectConversation, type ProjectEvent } from "./caw";
+import { isProjectConversation } from "./caw";
 import type { DbShape } from "./db";
 import { isBlocked } from "./db/project-work";
 import {
@@ -88,6 +89,7 @@ import { defineTool, sentence } from "./mcp-tool";
 import { MEANING_THRESHOLD } from "./meaning";
 import { sessionWord } from "./session-word";
 import type { SpawnProblem } from "./spawn-problems";
+import type { TriggerEvent } from "./trigger-event";
 import { CAWCO_TOOL } from "./web-reads";
 import { isLive } from "./work-item-state";
 
@@ -286,8 +288,8 @@ export interface FleetWatchDeps {
   ) => Promise<MachinePath | SpawnProblem>;
   /** Stops a session's process. */
   stop: (instanceId: string) => void;
-  /** One send to a project's conversation (caw.ts `tell`); false when it did not take it (its switch is off). */
-  tell: (projectId: string, event: ProjectEvent) => Promise<boolean>;
+  /** A trigger on the stuck session, to the router (triggers.ts `route`); false when no session took it. */
+  trigger: (projectId: string, event: TriggerEvent) => Promise<boolean>;
 }
 
 export const createFleetWatch = (deps: FleetWatchDeps) => {
@@ -762,7 +764,8 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     const { steward } = triage;
     let stewardWords = "the person (no session steers it)";
     if (steward.kind === "caw") {
-      stewardWords = "Caw, the project's conversation";
+      stewardWords =
+        "Caw: a session of its for this project, the one on this session or a fresh one (the trigger router)";
     } else if (steward.kind === "session") {
       stewardWords = `${steward.name}, the session that started it`;
     }
@@ -794,7 +797,7 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
     release(triage);
   };
 
-  /** The nudge, to the steward: a session's message, or a send to the project's conversation. */
+  /** The nudge, to the steward: a session's message, or a trigger on the session (triggers.ts). */
   const nudge = (
     row: InstanceRow,
     steward: Steward,
@@ -814,11 +817,12 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       return;
     }
     deps
-      .tell(steward.projectId, {
-        by: "event",
+      .trigger(steward.projectId, {
         kind: "fleet-watch",
-        trigger: `fleet watch judged ${sessionLink(row.id, name)}: ${line}`,
-        text: content,
+        thing: { kind: "session", id: row.id, name: sessionLink(row.id, name) },
+        what: `Fleet watch judged ${sessionLink(row.id, name)}: ${line}.`,
+        delta: content,
+        who: "fleet watch",
       })
       .then((woken) => {
         if (!woken) {

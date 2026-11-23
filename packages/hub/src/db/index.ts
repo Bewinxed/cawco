@@ -95,6 +95,7 @@ import { type ToolCallKeysDb, toolCallKeysDb } from "./tool-call-keys";
 import { type TrackersDb, trackersDb } from "./trackers";
 import { type TrashDb, trashDb } from "./trash";
 import { type TreeStopsDb, treeStopsDb } from "./tree-stops";
+import { type TriggersDb, triggersDb } from "./triggers";
 import { type TrimDb, trimDb } from "./trim";
 import { type TurnCutsDb, turnCutsDb } from "./turn-cuts";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
@@ -213,6 +214,8 @@ interface HubStore {
   readonly trash: TrashDb;
   /** The stops that walk a delegation tree, a row per session until it ended (tree-stops.ts). */
   readonly treeStops: TreeStopsDb;
+  /** Each kind of trigger's settings, the fleet's and each project's, and the triggers held on a project (triggers.ts). */
+  readonly triggers: TriggersDb;
   /** The unused skills and servers routine's suggestion answers and kept items (unused-trim.ts). */
   readonly trim: TrimDb;
   /** Every turn the hub cut, and why (turn-cuts.ts). */
@@ -395,6 +398,7 @@ const make = async (path: string): Promise<DbShape> => {
     designChecks: designChecksDb(db),
     designOffers: designOffersDb(db),
     trim: trimDb(db),
+    triggers: triggersDb(db),
     lfsOffers: lfsOffersDb(db),
     blocks: blocksDb(db),
     decides: decidesDb(db, delegateTypes),

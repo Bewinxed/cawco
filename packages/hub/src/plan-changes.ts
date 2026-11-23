@@ -99,8 +99,16 @@ export interface PlanChangesDeps {
   spawnFromHub: ReturnType<typeof createSpawns>["spawnFromHub"];
   /** The person's words to a session, through the one send path (`PLAN_ORIGIN`). */
   tell: (instanceId: string, text: string) => PlanTold;
-  /** The person's words to a project's conversation (caw.ts `tell`, by you): undefined once it has them, else why not. */
-  wakeCaw: (projectId: string, text: string) => Promise<string | undefined>;
+  /**
+   * The person's change to an attempt's plan, a trigger on its task
+   * (triggers.ts): whoever is on the task hears it. Undefined once someone
+   * has it or it is held, else why not.
+   */
+  trigger: (
+    projectId: string,
+    planOf: string,
+    text: string
+  ) => Promise<string | undefined>;
 }
 
 /** A session as a message names it: its link, its title the label. */
@@ -192,8 +200,9 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   };
 
   /**
-   * Who hears a change to `row`'s plan: a task attempt's, the project's Caw;
-   * a delegate's, the session that delegated it; any other, the session.
+   * Who hears a change to `row`'s plan: a task attempt's, whoever is on its
+   * task (the trigger router, triggers.ts); a delegate's, the session that
+   * delegated it; any other, the session.
    */
   const receiverOf = (row: InstanceRow): PlanReceiver => {
     const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
@@ -206,11 +215,9 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
     return { kind: "session", instanceId: row.id };
   };
 
-  /** The session that runs a receiver now: the session, or the project's Caw's. */
+  /** The session that runs a receiver now: the session; a task's is the router's to find. */
   const sessionOfReceiver = (to: PlanReceiver): string | undefined =>
-    to.kind === "session"
-      ? to.instanceId
-      : (db.project(to.projectId)?.conversationInstanceId ?? undefined);
+    to.kind === "session" ? to.instanceId : undefined;
 
   /**
    * The message that tells `to` of `rows`, each plan's changes under the
@@ -253,7 +260,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
     if (to.kind === "caw") {
       return {
         whose: `the plan of ${who}, an attempt at a task of this project`,
-        next: "The attempt has not heard this. Decide whether to tell it (handoff), start a new attempt, or reshape the task.",
+        next: "If you are that attempt, work from it as it stands; todo_write writes it. Else decide whether to tell it (handoff), start a new attempt, or reshape the task.",
       };
     }
     return {
@@ -332,6 +339,39 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   };
 
   /**
+   * Changes to attempts' plans, each a trigger on its attempt's task
+   * (triggers.ts), told before it goes so a send it makes folds none of
+   * them in again (sends.ts `tellPlanFirst`); one nobody took is kept with
+   * why.
+   */
+  const toTasks = async (
+    to: Extract<PlanReceiver, { kind: "caw" }>,
+    rows: PlanChangeRow[]
+  ): Promise<void> => {
+    db.closePlanChanges(
+      rows.map((row) => row.id),
+      { at: new Date() }
+    );
+    for (const [planOf, changes] of Map.groupBy(
+      rows,
+      (row) => row.instanceId
+    )) {
+      const why = await deps.trigger(
+        to.projectId,
+        planOf,
+        message(to, changes)
+      );
+      if (why !== undefined) {
+        db.closePlanChanges(
+          changes.map((one) => one.id),
+          { undelivered: why }
+        );
+      }
+    }
+    plansMoved(rows);
+  };
+
+  /**
    * Tells `key`'s receiver every change it is owed, in one message: a
    * session through the one send path, Caw by his wake. A session that
    * cannot go on is followed by a new one (`goOnFrom`);
@@ -349,14 +389,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
       const ids = rows.map((row) => row.id);
       const text = message(to, rows);
       if (to.kind === "caw") {
-        // Told before the wake goes, so the wake's own send folds none of
-        // them in again (sends.ts `tellPlanFirst`); undone if it is refused.
-        db.closePlanChanges(ids, { at: new Date() });
-        const why = await deps.wakeCaw(to.projectId, text);
-        if (why !== undefined) {
-          db.closePlanChanges(ids, { undelivered: why });
-        }
-        plansMoved(rows);
+        await toTasks(to, rows);
         return;
       }
       const told = deps.tell(to.instanceId, text);
@@ -395,19 +428,11 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
 
   /**
    * What `instanceId` is owed of its plans' changes, as words a note ahead
-   * of its next turn carries, the changes then told: a session's own, and,
-   * when it is a project's Caw, his project's. Undefined when it is owed
-   * nothing.
+   * of its next turn carries, the changes then told: a session's own.
+   * Undefined when it is owed nothing.
    */
   const foldInto = (instanceId: string): string | undefined => {
-    const [row] = db.getInstancesByIds([instanceId]);
-    const keys = [
-      receiverKey({ kind: "session", instanceId }),
-      ...(row?.projectId &&
-      db.project(row.projectId)?.conversationInstanceId === instanceId
-        ? [receiverKey({ kind: "caw", projectId: row.projectId })]
-        : []),
-    ];
+    const keys = [receiverKey({ kind: "session", instanceId })];
     const words: string[] = [];
     for (const key of keys) {
       const rows = db.untoldPlanChanges(key);

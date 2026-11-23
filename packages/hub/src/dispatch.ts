@@ -13,14 +13,14 @@
  *   dispatcher asks"; {@link typeOf}). Starting one moves the task to its
  *   active stage (the stage that runs it, else the first of kind
  *   `active`), as `hub`.
- * - **Who it reports to.** A work item needs a parent session. `task_start`,
- *   or `delegate` naming the task, from any session of the project that
- *   orchestrates (`parentProblem`: a worker, or a delegate that may start
- *   any type) makes that session the parent; the
- *   project's conversation, Caw (caw.ts), takes the reports of every attempt
- *   nobody asked for, its session started for the first one while Caw is
- *   on. With Caw off there is no conversation to take them: such an attempt
- *   does not start.
+ * - **Who it reports to.** `task_start`, or `delegate` naming the task,
+ *   from any session of the project that orchestrates (`parentProblem`: a
+ *   worker, or a delegate that may start any type) makes that session the
+ *   parent. An attempt nobody named a session for (the hub's own, your
+ *   dashboard start) runs under its task (`taskParentOf`, core
+ *   `thingParentId`): it reports to no session, and its report is a
+ *   trigger on the task (triggers.ts), never a send to the project's Caw
+ *   conversation. With the project's triggers off the hub starts none.
  * - **The frontier** (tasks.ts `onFrontier`): the ready tasks (in a `todo`
  *   stage, every wait of theirs and their `part_of` chain settled, no live
  *   attempt, no coordinator holding them; task-waits.ts settles each) that
@@ -135,12 +135,12 @@ import type {
   TaskSummary,
   WaitWitness,
 } from "@cawco/core/task-views";
+import { thingParentId } from "@cawco/core/triggers";
 import type { StageKind, TaskMover } from "@cawco/core/views";
 import { withoutUndefined } from "@cawco/core/without-undefined";
 import { judgedWords } from "@cawco/core/words/judged";
 import { workWords } from "@cawco/core/words/work";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
-import type { Caw } from "./caw";
 import type { DbShape } from "./db";
 import type { WorkItemRow, WorkItemTexts } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
@@ -189,7 +189,13 @@ import {
   type TaskView,
   unreadLineOf,
 } from "./tasks";
-import { isLive, isRoutineParent, routineParent } from "./work-item-state";
+import {
+  isHubParent,
+  isLive,
+  isRoutineParent,
+  type Parent,
+  routineParent,
+} from "./work-item-state";
 import {
   type CloneRef,
   DEFAULT_DELEGATE_TYPE,
@@ -224,16 +230,6 @@ export interface DispatchDeps {
    * problem is passed up.
    */
   readonly context: Memory["contextFor"];
-  /**
-   * The project's conversation, started now if it has none (caw.ts
-   * `conversationFor`): for your ask on or off, for the dispatcher's own
-   * (`event`) only while its switch is on; undefined otherwise. The attempts
-   * the hub starts report to it, as any delegate's do to its parent.
-   */
-  readonly conversationFor: (
-    projectId: string,
-    by: Origin
-  ) => ReturnType<Caw["conversationFor"]>;
   readonly db: Pick<
     DbShape,
     | "accounts"
@@ -346,7 +342,7 @@ const HOOK_ORIGIN: Record<TaskMover, Origin | undefined> = {
 };
 
 const NO_LEAD =
-  "Turn the project's events on so its conversation takes the report, name a session of the project that orchestrates, or start it with task_start from one.";
+  "Turn the project's triggers on so the attempt's report goes to a session of Caw's, name a session of the project that orchestrates, or start it with task_start from one.";
 
 /** How often the dispatcher looks again with no event: a safety net, not a loop. */
 const SAFETY_MS = 5 * 60_000;
@@ -1010,7 +1006,6 @@ export const createDispatcher = ({
   context,
   db,
   designSection,
-  conversationFor,
   landedDiff,
   lifetime,
   pauses,
@@ -1061,16 +1056,36 @@ export const createDispatcher = ({
   const instance = (id: string): InstanceRow | undefined =>
     db.getInstancesByIds([id])[0];
 
-  /** The project's conversation, started now when it has none; undefined while its switch is off. */
-  const conversationOf = async (project: ProjectRow, by: Origin = "event") => {
-    const row =
-      by === "you" || project.eventsOn
-        ? await conversationFor(project.id, by)
-        : undefined;
-    if (row instanceof ElysiaStatus) {
-      return row;
+  /**
+   * The parent of an attempt nobody named a session for: its task (core
+   * `thingParentId`), which no session's row has. The attempt reports to
+   * no session; the hub hands its report to the trigger router as a
+   * trigger on the task (triggers.ts), never to the project's Caw
+   * conversation. Placed where the project's work runs. Undefined for the
+   * hub's own start (`event`) while the project's triggers are off.
+   */
+  const taskParentOf = (
+    project: ProjectRow,
+    taskId: string,
+    by: Origin = "event"
+  ): Parent | undefined => {
+    if (by !== "you" && !project.eventsOn) {
+      return;
     }
-    return row && !parentProblem(row, project.id) ? row : undefined;
+    const place = workPlace(project);
+    return {
+      id: thingParentId({ kind: "task", id: taskId }),
+      projectId: project.id,
+      machineId: place.kind === "none" ? "" : place.machineId,
+      cwd: place.kind === "none" ? "" : place.cwd,
+      title: taskId,
+      launchDir: "unknown",
+      harness: null,
+      model: null,
+      sessionId: null,
+      delegateType: null,
+      mayStart: [ANY_TYPE],
+    };
   };
 
   /** The machines `runsOn` names (runs-on.ts), online or not. */
@@ -1088,7 +1103,7 @@ export const createDispatcher = ({
   const placementOf = (
     project: ProjectRow,
     task: TaskView,
-    parent: InstanceRow,
+    parent: Parent,
     previous: WorkItemRow | undefined
   ) => {
     const runsOn = task.runsOn ?? project.runsOn;
@@ -1504,7 +1519,7 @@ export const createDispatcher = ({
   const launch = async (
     project: ProjectRow,
     task: TaskView,
-    parent: InstanceRow,
+    parent: Parent,
     active: Stage | undefined,
     {
       asked,
@@ -1553,7 +1568,7 @@ export const createDispatcher = ({
   const startBriefed = async (
     project: ProjectRow,
     task: TaskView,
-    parent: InstanceRow,
+    parent: Parent,
     {
       asked,
       lands,
@@ -1610,6 +1625,10 @@ export const createDispatcher = ({
     }
     if (guide) {
       return problem(409, { code: "dispatch-guidance-first", detail: guide });
+    }
+    if (isHubParent(parent.id)) {
+      const { parentInstanceId: _parent, ...own } = request;
+      return await startForHub(own, parent);
     }
     return await start(request);
   };
@@ -1750,20 +1769,30 @@ export const createDispatcher = ({
   const startAttempt = async (
     projectId: string,
     ref: string,
-    parent: InstanceRow,
+    chosen: Parent | undefined,
     how: AttemptHow = {}
   ) => {
     const project = projectOf(projectId);
     if (project instanceof ElysiaStatus) {
       return project;
     }
-    const unfit = parentProblem(parent, projectId, parent.id);
+    const unfit =
+      chosen && !isHubParent(chosen.id)
+        ? parentProblem(instance(chosen.id), projectId, chosen.id)
+        : undefined;
     if (unfit) {
       return problem(403, { code: "dispatch-parent-unfit", detail: unfit });
     }
     const task = await tasks.get(projectId, ref);
     if (task instanceof ElysiaStatus) {
       return task;
+    }
+    const reportsTo = chosen ?? taskParentOf(project, task.id, how.origin);
+    if (!reportsTo) {
+      return problem(409, {
+        code: "dispatch-no-reporter",
+        detail: `Nobody can take this attempt's report. ${NO_LEAD}`,
+      });
     }
     const key = keyOf(projectId, task.id);
     if (starting.has(key)) {
@@ -1775,7 +1804,7 @@ export const createDispatcher = ({
     // From here to its work item being filed, the start holds the task.
     starting.add(key);
     try {
-      return await startHeld(project, task, parent, how);
+      return await startHeld(project, task, reportsTo, how);
     } finally {
       starting.delete(key);
     }
@@ -1785,7 +1814,7 @@ export const createDispatcher = ({
   const startHeld = async (
     project: ProjectRow,
     task: TaskView,
-    parent: InstanceRow,
+    parent: Parent,
     { stage, retry = false, origin, asked }: AttemptHow
   ) => {
     const projectId = project.id;
@@ -1856,7 +1885,7 @@ export const createDispatcher = ({
   const launchOrQueue = async (
     project: ProjectRow,
     task: TaskView,
-    parent: InstanceRow,
+    parent: Parent,
     active: Stage | undefined,
     {
       asked,
@@ -1898,7 +1927,7 @@ export const createDispatcher = ({
   const queuedForOwns = (
     project: ProjectRow,
     task: TaskView,
-    parent: InstanceRow,
+    parent: Parent,
     active: Stage | undefined,
     because: string,
     {
@@ -2056,46 +2085,14 @@ export const createDispatcher = ({
     }
     const { project, ready } = look;
     const slots = project.maxAttempts - look.live;
-    const reportsTo = await conversationOf(project);
-    if (reportsTo instanceof ElysiaStatus) {
-      return await unreported(
-        projectId,
-        ready.slice(0, slots),
-        reportsTo.response.detail
-      );
-    }
-    if (reportsTo) {
-      await startReady(project, ready, slots, reportsTo);
-    }
+    await startReady(project, ready, slots);
   };
 
-  /** The tasks a look would have started, each saying why it did not: Caw, who takes their reports, did not start. */
-  const unreported = async (projectId: string, ids: string[], why: string) => {
-    const waiting = await Promise.all(
-      ids.map((id) => tasks.get(projectId, id))
-    );
-    const read: TaskView[] = [];
-    for (const task of waiting) {
-      if (task instanceof ElysiaStatus) {
-        return task;
-      }
-      read.push(task);
-    }
-    for (const task of read) {
-      note(
-        projectId,
-        task,
-        `It is ready to start, but Caw, who takes the reports of the attempts the hub starts, did not start: ${why}`
-      );
-    }
-  };
-
-  /** A look's ready tasks started in order, reporting to `reportsTo`, until its `slots` are taken; one that does not start says why in the log. */
+  /** A look's ready tasks started in order, each under its task ({@link taskParentOf}), until its `slots` are taken; one that does not start says why in the log. */
   const startReady = async (
     project: ProjectRow,
     ready: string[],
-    slots: number,
-    reportsTo: InstanceRow
+    slots: number
   ) => {
     let left = slots;
     for (const id of ready) {
@@ -2105,7 +2102,7 @@ export const createDispatcher = ({
       const unstarted = (why: string) =>
         console.warn(`[dispatch] ${project.name}: ${id} did not start: ${why}`);
       try {
-        const started = await startAttempt(project.id, id, reportsTo, {
+        const started = await startAttempt(project.id, id, undefined, {
           origin: "event",
         });
         if (started instanceof ElysiaStatus) {
@@ -2125,39 +2122,31 @@ export const createDispatcher = ({
     liveAttempts(projectId).length + startingIn(projectId);
 
   /**
-   * The session a hook's attempt reports to: the one that moved the task in
-   * when it can take reports, else the project's conversation. With neither, or a conversation whose
-   * session did not start (no account signed in, say), the reason is
-   * remembered on the task, so its card says why it did not start; `how`
-   * opens that sentence ("tsk-3 entered extract, which runs brand").
+   * The parent of a hook's attempt: the session that moved the task in
+   * when it can take reports, else its task ({@link taskParentOf}). With
+   * neither (the project's triggers off), the reason is remembered on the
+   * task, so its card says why it did not start; `how` opens that sentence
+   * ("tsk-3 entered extract, which runs brand").
    */
-  const hookParent = async (
+  const hookParent = (
     project: ProjectRow,
     task: TaskView,
     moverId: string | null | undefined,
     how: string
-  ): Promise<InstanceRow | undefined> => {
+  ): Parent | undefined => {
     const mover = moverId ? instance(moverId) : undefined;
     if (mover && !parentProblem(mover, project.id)) {
       return mover;
     }
-    const caw = await conversationOf(project);
-    if (caw instanceof ElysiaStatus) {
-      note(
-        project.id,
-        task,
-        `${how}, but Caw, who takes its report, did not start: ${caw.response.detail}`
-      );
-      return;
-    }
-    if (!caw) {
+    const own = taskParentOf(project, task.id);
+    if (!own) {
       note(
         project.id,
         task,
         `${how}, but no session can take the attempt's report. ${NO_LEAD}`
       );
     }
-    return caw;
+    return own;
   };
 
   /**
@@ -2226,7 +2215,7 @@ export const createDispatcher = ({
       );
       return;
     }
-    const parent = await hookParent(
+    const parent = hookParent(
       project,
       task,
       queued.parentInstanceId,
@@ -2342,7 +2331,7 @@ export const createDispatcher = ({
     how: string
   ): Promise<string | undefined> => {
     const { runs } = stage.hooks;
-    const parent = await hookParent(project, task, actor.instanceId, how);
+    const parent = hookParent(project, task, actor.instanceId, how);
     if (!parent) {
       return "no session can take its report";
     }
@@ -2838,7 +2827,7 @@ export const createDispatcher = ({
    * named, or the project's Caw, started for it on or off (it is your work);
    * refused when neither can take reports.
    */
-  const reporter = async (
+  const reporter = (
     projectId: string,
     parentInstanceId: string | undefined
   ) => {
@@ -2847,16 +2836,8 @@ export const createDispatcher = ({
       return project;
     }
     if (!parentInstanceId) {
-      const conversation = await conversationOf(project, "you");
-      if (conversation instanceof ElysiaStatus) {
-        return conversation;
-      }
-      return conversation
-        ? conversation
-        : problem(409, {
-            code: "dispatch-no-reporter",
-            detail: `Nobody can take this attempt's report. ${NO_LEAD}`,
-          });
+      // Its task's own: the attempt's report is a trigger on it (startAttempt).
+      return;
     }
     const parent = instance(parentInstanceId);
     const unfit = parentProblem(parent, projectId, parentInstanceId);
@@ -3047,7 +3028,7 @@ export const createDispatcher = ({
      * else in a new one, briefed with the failure and the to-dos as they
      * stand, reporting to `parent`. Not capped: a person asked for it.
      */
-    retryAttempt(projectId: string, ref: string, parent: InstanceRow) {
+    retryAttempt(projectId: string, ref: string, parent: Parent) {
       return startAttempt(projectId, ref, parent, { retry: true });
     },
 
@@ -3057,7 +3038,7 @@ export const createDispatcher = ({
       ref: string,
       parentInstanceId: string | undefined
     ) {
-      const parent = await reporter(projectId, parentInstanceId);
+      const parent = reporter(projectId, parentInstanceId);
       return parent instanceof ElysiaStatus
         ? parent
         : await startAttempt(projectId, ref, parent, {
@@ -3166,7 +3147,7 @@ export const createDispatcher = ({
       ref: string,
       parentInstanceId: string | undefined
     ) {
-      const parent = await reporter(projectId, parentInstanceId);
+      const parent = reporter(projectId, parentInstanceId);
       return parent instanceof ElysiaStatus
         ? parent
         : await startAttempt(projectId, ref, parent, { origin: "you" });

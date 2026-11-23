@@ -1,6 +1,7 @@
 import { ANY_TYPE } from "@cawco/core/delegate-types";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { InstanceRow } from "@cawco/core/protocol";
+import { isThingParent } from "@cawco/core/triggers";
 import type { WorkItemRow } from "./db/project-work";
 
 /**
@@ -38,12 +39,13 @@ export const isRoutineParent = (id: string | null | undefined): boolean =>
 const VERIFIER_PARENT = "verifier:";
 
 /**
- * Whether a parent id is the hub's own, a routine's or a design check's
- * (design-verify.ts): the item reports to no session, and the hub reads how
- * it ended.
+ * Whether a parent id is the hub's own, a routine's, a design check's
+ * (design-verify.ts) or a thing's (a fresh session for a trigger, core
+ * triggers.ts `thingParentId`): the item reports to no session, and the hub
+ * reads how it ended.
  */
 export const isHubParent = (id: string | null | undefined): boolean =>
-  isRoutineParent(id) || isVerifierParent(id);
+  isRoutineParent(id) || isVerifierParent(id) || isThingParent(id);
 
 /** Whether a parent id is a design check's: its session is that check's verifier. */
 export const isVerifierParent = (id: string | null | undefined): boolean =>

@@ -76,10 +76,8 @@ export type DecisionState = "picking" | "sent" | "making" | "decided";
 
 /** The session that wrote a page. */
 export interface DecisionWriter {
-  /** It takes no input now: what the person does on the page goes to {@link heardBy}, else to the project's Caw (hub artifacts/taker.ts). */
+  /** It takes no input now: what the person does on the page is a trigger on it, for a session of Caw's (hub artifacts/taker.ts, triggers.ts). */
   ended: boolean;
-  /** Who hears the person on the page instead while it takes none: the session that delegated it. Absent with `ended`: Caw. */
-  heardBy?: { instanceId: string; title: string };
   instanceId: string;
   title: string;
 }
@@ -324,7 +322,7 @@ export const picksMade = (
 
 /** What the hub answers a send on a page: who heard it. */
 export interface DecisionSent {
-  /** The project's conversation it went to, when it went there. */
+  /** The session of Caw's it went to (hub triggers.ts), when one took it; none while it waits on the project. */
   instanceId?: string;
   to: "session" | "caw";
 }

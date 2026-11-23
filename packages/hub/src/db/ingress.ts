@@ -53,12 +53,6 @@ export interface Delivery {
 
 /** The rows ingress.ts keeps. */
 export interface IngressDb {
-  /**
-   * The conversation's inbox, taken: every event routed to the project's conversation and not yet
-   * handled, oldest first, marked handled in the same statement, so two
-   * wakes never carry one line.
-   */
-  readonly claimInbox: (projectId: string, at: Date) => InboundEventRow[];
   readonly connectorPoll: (id: string) => ConnectorPollRow | undefined;
   /** What a connector poll's last call saw, item id to version. */
   readonly connectorPollItems: (id: string) => Map<string, string>;
@@ -97,8 +91,6 @@ export interface IngressDb {
     items: ReadonlyMap<string, string>,
     polledAt: Date
   ) => void;
-  /** Gives claimed inbox lines back, when the wake that took them did not go out. */
-  readonly releaseInbox: (ids: string[]) => void;
   readonly route: (id: string) => EventRouteRow | undefined;
   /**
    * A project's routes, oldest first: the order they are tried in. With
@@ -287,28 +279,6 @@ export const ingressDb = (db: BunSQLiteDatabase): IngressDb => {
         .get()?.n ?? 0,
     setEvent: (id, patch) => {
       db.update(inboundEvents).set(patch).where(eq(inboundEvents.id, id)).run();
-    },
-    claimInbox: (projectId, at) =>
-      db
-        .update(inboundEvents)
-        .set({ handledAt: at })
-        .where(
-          and(
-            eq(inboundEvents.projectId, projectId),
-            eq(inboundEvents.routedTo, "conversation"),
-            isNull(inboundEvents.handledAt)
-          )
-        )
-        .returning()
-        .all()
-        .sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime()),
-    releaseInbox: (ids) => {
-      if (ids.length > 0) {
-        db.update(inboundEvents)
-          .set({ handledAt: null })
-          .where(inArray(inboundEvents.id, ids))
-          .run();
-      }
     },
     routes: (projectId, kind) => {
       const ofRoute = eq(eventRouteKinds.routeId, eventRoutes.id);

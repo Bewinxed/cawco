@@ -242,6 +242,8 @@ typeOverrides:
     TranscriptBranchStatus: OpenEnums.TranscriptBranchStatus
     TranscriptEventOpenBlock: OpenEnums.TranscriptEventOpenBlock
     TriggerHold: OpenEnums.TriggerHold
+    TriggerSettingSource: OpenEnums.TriggerSettingSource
+    TriggerSourced.T: OpenEnums.TriggerSourced.T
     Verb: OpenEnums.Verb
     WaitKind: OpenEnums.WaitKind
     WaitReason: OpenEnums.WaitReason

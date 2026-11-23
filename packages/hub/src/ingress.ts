@@ -29,17 +29,17 @@
  *   project's enabled routes whose every condition holds (source pattern,
  *   kinds, author, label, branch, a regex over title and body, both matched
  *   on RE2 in linear time). Jev on: Jev chooses among their routines, or
- *   none, which is the project's conversation's; a Jev that does not answer leaves the event
+ *   none, which leaves it to the trigger router; a Jev that does not answer leaves the event
  *   stored and unrouted, and says so in the log. Jev off: the oldest
  *   matching route takes it. The routine runs with the event as the run's
  *   input (routines.ts `runForEvent`; behind a run still going it queues,
- *   and is handled when it starts). An event no route took is one send to
- *   the project's conversation (caw.ts `tell`) while its switch is on; while
- *   it is off, or no conversation can start, it waits in the inbox, and the
- *   inbox goes to the conversation as one send when it next starts
- *   ({@link Ingress.drain}).
+ *   and is handled when it starts). An event no route took is a trigger on
+ *   what it is about (triggers.ts): the session on it, else a fresh one,
+ *   never the project's Caw conversation; while the project's triggers are
+ *   off it is held on the project, and the session that starts when they
+ *   are switched on reads it with the rest.
  * - **Data, never instructions.** An event reaches a model only inside a
- *   delimited block ({@link eventData}, {@link inboxText}) whose JSON cannot
+ *   delimited block ({@link eventData}) whose JSON cannot
  *   close it, after a sentence that says it is untrusted content.
  * - **External items** (external-items.ts): every event stored is applied
  *   to the task links it names (an issue's, pull request's or discussion's
@@ -75,7 +75,6 @@ import { taskLinkWords } from "@cawco/core/words/task-links";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { RE2JS } from "re2js";
 import { z } from "zod";
-import type { Caw, ProjectEvent } from "./caw";
 import { readsOnly } from "./connection-writes";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
@@ -90,12 +89,7 @@ import type { Dispatcher } from "./dispatch";
 import type { ExternalItems } from "./external-items";
 import { githubReposOf, pollRepo, readRunWait } from "./github";
 import { byHandle } from "./handles";
-import {
-  eventData,
-  type InboundEvent,
-  sealedJson,
-  UNTRUSTED,
-} from "./inbound-event";
+import { eventData, type InboundEvent } from "./inbound-event";
 import type {
   ConnectorPollView,
   EventRouteView,
@@ -118,6 +112,8 @@ import type { Routines } from "./routines";
 import { normaliseTaskRef } from "./task-file";
 import type { GitHubWaitState } from "./task-waits";
 import { MODE } from "./tasks";
+import type { TriggerEvent } from "./trigger-event";
+import type { Routed } from "./triggers";
 
 /** What the poller says of a project that links no GitHub repository. */
 const NO_GITHUB_LINK =
@@ -155,8 +151,6 @@ const CUT = "[cut by the hub: the event was over 64 KB]";
  */
 const MATCH_TEXT_MAX = PAYLOAD_MAX;
 const REGEX_MAX = 200;
-/** The most inbox lines one send carries; the rest are counted. */
-const INBOX_SHOWN = 30;
 /** Events an ingress view lists a page of; `eventsMore` counts the older ones, which `skip` reaches. */
 const EVENTS_SHOWN = 50;
 
@@ -198,32 +192,7 @@ const storedPayload = (event: InboundEvent): string => {
   });
 };
 
-/** What the inbox shows of a stored event, whose payload may be cut ({@link storedPayload}). */
-const INBOX_SHOWS = z.object({
-  actor: z.string().nullable().optional(),
-  title: z.string().nullable().optional(),
-  url: z.string().nullable().optional(),
-});
-
-/** The inbox as one send carries it: newest {@link INBOX_SHOWN}, the rest counted. */
-const inboxText = (rows: InboundEventRow[]): string => {
-  const shown = rows.slice(-INBOX_SHOWN);
-  const lines = shown.map((row) => {
-    const event = INBOX_SHOWS.parse(JSON.parse(row.payload));
-    return {
-      source: row.source,
-      key: row.deliveryKey,
-      kind: row.kind,
-      actor: event.actor ?? null,
-      title: event.title ?? null,
-      url: event.url ?? null,
-    };
-  });
-  const more = rows.length - shown.length;
-  return `Inbound events no route took (${rows.length}${more > 0 ? `; the oldest ${more} are not shown` : ""}). ${UNTRUSTED}\n\n<inbound-events>\n${sealedJson(lines)}\n</inbound-events>`;
-};
-
-/** Which kind of event a stored one is, as the project's conversation hears it (caw.ts `EVENT_SKILLS`). */
+/** Which kind of trigger a stored event is (caw.ts `EVENT_SKILLS`). */
 const kindOf = (row: InboundEventRow): "github-event" | "inbound-event" =>
   row.source.startsWith("github") ? "github-event" : "inbound-event";
 
@@ -373,15 +342,8 @@ export interface IngressDeps {
   readonly lifetime: HubLifetimeShape;
   /** Runs a routine once with an event as its input (routines.ts). */
   readonly routines: Pick<Routines, "runForEvent">;
-  /**
-   * One send to a project's conversation (caw.ts `tell`): its session and
-   * the send, or why it did not take it. Read late: the conversation is made
-   * after ingress.
-   */
-  readonly tell: (
-    projectId: string,
-    event: ProjectEvent
-  ) => ReturnType<Caw["tell"]>;
+  /** A trigger on an event no route took, to the router (triggers.ts `route`). */
+  readonly trigger: (projectId: string, event: TriggerEvent) => Promise<Routed>;
   /** A run a project waits on changed state: its tasks look again (tasks.ts `waitsMoved`). */
   readonly waitsMoved?: (projectId: string) => void;
 }
@@ -492,7 +454,7 @@ export const createIngress = ({
   jevAccess,
   lifetime,
   routines,
-  tell,
+  trigger,
   waitsMoved,
 }: IngressDeps) => {
   const store = db.ingress;
@@ -654,48 +616,34 @@ export const createIngress = ({
   };
 
   /**
-   * An event no route took, one send to the project's conversation while
-   * its switch is on; handled once it went, else it waits in the inbox.
+   * An event no route took, a trigger on what it is about (triggers.ts):
+   * its pull request's, issue's or item's url, else the event itself, so a
+   * run of events on one pull request reaches one session. Handled once a
+   * session took it or the project holds it (its triggers off).
    */
   const toConversation = async (
     row: InboundEventRow,
     url: string | null | undefined
   ): Promise<void> => {
-    if (!db.project(row.projectId)?.eventsOn) {
-      return;
-    }
-    const told = await tell(row.projectId, {
-      by: "event",
+    const routed = await trigger(row.projectId, {
       kind: kindOf(row),
-      trigger: `${row.source} sent ${row.kind}${url ? ` (${url})` : ""}, and no route took it`,
-      text: eventData(row),
+      thing: {
+        kind: "event",
+        id: url ?? row.id,
+        name: url ?? `${row.source} ${row.deliveryKey}`,
+      },
+      what: `${row.source} sent ${row.kind}${url ? ` (${url})` : ""}, and no route took it.`,
+      delta: eventData(row),
+      who: row.source,
+      at: row.receivedAt,
     });
-    if (!(told instanceof ElysiaStatus)) {
+    if (routed.to !== "lost") {
       store.setEvent(row.id, { handledAt: new Date() });
-    }
-  };
-
-  /**
-   * The project's conversation started while its switch is on: the inbound
-   * events that waited for it (its switch was off, or none could start) go
-   * to it as one send. Taken first; given back when the send does not go.
-   */
-  const drain = async (projectId: string): Promise<void> => {
-    const inbox = store.claimInbox(projectId, new Date());
-    if (inbox.length === 0) {
       return;
     }
-    const told = await tell(projectId, {
-      by: "event",
-      kind: inbox.every((row) => kindOf(row) === "github-event")
-        ? "github-event"
-        : "inbound-event",
-      trigger: `${inbox.length} inbound event${inbox.length === 1 ? "" : "s"} no route took waited for the conversation to start`,
-      text: inboxText(inbox),
-    }).catch(() => undefined);
-    if (!told || told instanceof ElysiaStatus) {
-      store.releaseInbox(inbox.map((each) => each.id));
-    }
+    console.warn(
+      `[ingress] ${row.source} ${row.deliveryKey} reached no session: ${routed.why}`
+    );
   };
 
   /**
@@ -1733,7 +1681,6 @@ export const createIngress = ({
     createPoll,
     createRoute,
     deletePoll,
-    drain,
     deleteRoute,
     followConnection,
     ingest,

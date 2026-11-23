@@ -48,7 +48,6 @@ import type { ArtifactServiceDeps } from "./artifacts/deps";
 import { designFolderOf } from "./artifacts/design-folder";
 import type { MarksDelivery, MarksOutcome, StageAt } from "./artifacts/shapes";
 import { artifactTaker, takesNoInput } from "./artifacts/taker";
-import type { Caw } from "./caw";
 import { placeRefOf, stagePlaceRef } from "./caw";
 import { ARTIFACTS_ROOT } from "./config";
 import type { ArtifactRow } from "./db/artifacts";
@@ -60,7 +59,7 @@ import { externalizeImages } from "./media";
 import { handle as idHandle } from "./presenters/words";
 import { sendMode } from "./sends";
 import { unreachable } from "./unreachable";
-import { isLive, isRoutineParent } from "./work-item-state";
+import { isLive } from "./work-item-state";
 import type { PersonWait } from "./work-items";
 import type { DiscardAsked, Discarded } from "./workspace-discards";
 
@@ -81,7 +80,7 @@ export type ArtifactEventsContext = Pick<
   | "deliverSend"
   | "hubAsks"
   | "inputRefusal"
-  | "lead"
+  | "triggers"
   | "leftoverWords"
   | "lifetime"
   | "ownMachineIdRead"
@@ -283,11 +282,6 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       ? row
       : undefined;
   };
-  /** Project `projectId`'s Caw while he takes input; undefined outside a project or with none. */
-  const cawTaking = (projectId: string | null | undefined) => {
-    const project = projectId ? ctx.db.project(projectId) : undefined;
-    return takingInput(project?.conversationInstanceId);
-  };
   /**
    * Whether session `maker`'s turn now works on the person's own word: the
    * newest send it read is his (core `byPerson`: his words, picks, pins,
@@ -301,46 +295,25 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
   /**
    * THE SESSION `maker`'S ARTIFACTS GO TO, unopened (artifacts/service.ts
    * `ownerFor`): the session it reports to. Delegated work's go to the
-   * session that started it (work-items.ts `reportsBack`), Caw off or on;
-   * once that one has ended, to the project's Caw, else they stay its own
-   * (B2: the chain the person's pins follow, artifacts/taker.ts). A
-   * routine's run's go to its project's Caw, as its report does; in no
-   * project they stay its own. Undefined, it keeps its own: a session that
-   * reports to no one (one started with start_session, a design check's
-   * verifier), and one at work on the person's own word ({@link personsTurn}).
+   * session that started it (work-items.ts `reportsBack`), while that one
+   * takes input; else they stay its own, and the person's marks on them
+   * are a trigger on the artifact (artifacts/taker.ts, triggers.ts). A
+   * routine's run's, and any hub-started session's, stay its own: they
+   * never reach the project's Caw conversation. Undefined, it keeps its
+   * own: a session that reports to no one (one started with start_session,
+   * a design check's verifier), and one at work on the person's own word
+   * ({@link personsTurn}).
    */
   const artifactsTo = (maker: InstanceRow): InstanceRow | undefined => {
-    if (personsTurn(maker)) {
+    if (personsTurn(maker) || !ctx.workItems.reportsBack(maker)) {
       return;
     }
-    let to: InstanceRow | undefined;
-    if (isRoutineParent(maker.parentInstanceId)) {
-      to = cawTaking(maker.projectId);
-    } else if (ctx.workItems.reportsBack(maker)) {
-      to = takingInput(maker.parentInstanceId) ?? cawTaking(maker.projectId);
-    }
+    const to = takingInput(maker.parentInstanceId);
     return to?.id === maker.id ? undefined : to;
   };
-  /**
-   * Whether `parent` is woken by what `maker` hands it: it hears `maker`'s
-   * reports (work-items.ts `reportees`), or it is the project's Caw holding
-   * it for an ended parent while he is on. A Caw that is off, or a
-   * routine's run's (its report says it, routines.ts `surfaceRun`), is not.
-   */
-  const wokenBy = (parent: InstanceRow, maker: InstanceRow): boolean => {
-    if (ctx.workItems.reportees(maker).some((one) => one.id === parent.id)) {
-      return true;
-    }
-    const project = maker.projectId
-      ? ctx.db.project(maker.projectId)
-      : undefined;
-    return (
-      !isRoutineParent(maker.parentInstanceId) &&
-      maker.parentInstanceId !== parent.id &&
-      project?.conversationInstanceId === parent.id &&
-      project.eventsOn
-    );
-  };
+  /** Whether `parent` is woken by what `maker` hands it: it hears `maker`'s reports (work-items.ts `reportees`). */
+  const wokenBy = (parent: InstanceRow, maker: InstanceRow): boolean =>
+    ctx.workItems.reportees(maker).some((one) => one.id === parent.id);
   /**
    * A session's artifact went to the session it reports to, not opened
    * (artifacts/service.ts `handOver`): that one hears it once per
@@ -449,15 +422,10 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
         case "writer":
         case "none":
           return marksToSession(instance, artifact, delivery);
-        case "parent":
-          return marksToSession(taker.session, artifact, {
-            ...delivery,
-            text: `${delivery.text}\n\nThe session that made it, ${ctx.sessionName(instance)}, takes no input now (${taker.why}), so these come to you, the session that delegated it: answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.`,
-          });
-        case "caw":
-          return marksToCaw(
-            taker.caw,
+        case "route":
+          return marksRouted(
             instance,
+            artifact,
             taker.projectId,
             taker.why,
             delivery
@@ -468,55 +436,67 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     });
   /** Who takes what the person did on an artifact `writer` made (artifacts/taker.ts). */
   const takerOf = (writer: InstanceRow | undefined, artifact: ArtifactRow) =>
-    artifactTaker(writer, artifact, {
-      caw: ctx.lead,
-      instance: (id) => ctx.db.getInstancesByIds([id])[0],
-      refusal: artifactRefusal,
-    });
+    artifactTaker(writer, artifact, artifactRefusal);
   /** Why a send of the person's marks or answers to session `id` is refused, or nothing. */
   const artifactRefusal = (id: string): string | undefined =>
     ctx.inputRefusal(id, { kind: "system", name: ARTIFACT_ORIGIN })?.reason;
-  /** {@link deliverArtifactMarks} to the project's Caw: woken with them, or the writer's transcript says why not. */
-  const marksToCaw = async (
-    their: Caw,
+  /**
+   * {@link deliverArtifactMarks} once the writer takes no input: a trigger
+   * on the artifact (triggers.ts), told as marks to the session on it, else
+   * briefing a fresh one; held while the project's triggers are off. When
+   * nobody took them, the writer's transcript says why not.
+   */
+  const marksRouted = async (
     instance: InstanceRow,
+    artifact: ArtifactRow,
     projectId: string,
     why: string,
-    { text, images, attachments }: MarksDelivery
+    delivery: MarksDelivery
   ): Promise<MarksOutcome> => {
-    const woke = await their
-      .tell(projectId, {
-        by: "act",
-        kind: "person-request",
-        origin: { name: ARTIFACT_ORIGIN },
-        trigger: `the person marked an artifact ${ctx.sessionName(instance)} made, and that session takes no input now (${why.replace(CLOSING_STOP, "")})`,
-        text: `${text}\n\nThese come to you: answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.`,
-        ...(images.length > 0 || attachments.length > 0
-          ? {
-              carried: {
-                ...(images.length > 0 ? { images } : {}),
-                ...(attachments.length > 0 ? { attachments } : {}),
-              },
-            }
-          : {}),
-      })
-      .catch((error: unknown) =>
-        problem(502, {
-          code: "caw-failed",
-          detail: error instanceof Error ? error.message : String(error),
+    const { text, images, attachments } = delivery;
+    const reply =
+      "Answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.";
+    const link = artifactLink(artifact.id, artifact.title || artifact.name);
+    const routed = ctx.triggers
+      ? await ctx.triggers.route(projectId, {
+          kind: "person-request",
+          thing: {
+            kind: "artifact",
+            id: artifact.id,
+            name: `the ${artifact.kind} ${link}`,
+          },
+          what: `The person marked the ${artifact.kind} ${link}, made by ${ctx.sessionName(instance)}, which takes no input now (${why.replace(CLOSING_STOP, "")}).`,
+          delta: `${text}\n\n${reply}`,
+          who: "you",
+          ...(images.length > 0 || attachments.length > 0
+            ? {
+                carried: {
+                  ...(images.length > 0 ? { images } : {}),
+                  ...(attachments.length > 0 ? { attachments } : {}),
+                },
+              }
+            : {}),
+          deliver: async (owner) =>
+            (
+              await marksToSession(owner, artifact, {
+                ...delivery,
+                text: `${text}\n\n${reply}`,
+              })
+            ).ok,
         })
-      );
-    if (!(woke instanceof ElysiaStatus)) {
+      : { to: "lost" as const, why: "the hub is still starting" };
+    if (routed.to !== "lost") {
       console.log(
-        artifactToolWords.marksWokeCaw(
+        artifactToolWords.marksRouted(
           instance.id,
           projectId,
+          routed.to === "held" ? routed.why : routed.instanceId,
           why.replace(CLOSING_STOP, "")
         )
       );
       return { ok: true };
     }
-    const reason = `This session takes no input now, and the project's Caw couldn't take them: ${woke.response.detail.replace(CLOSING_STOP, "")}.`;
+    const reason = `This session takes no input now, and no session took them: ${routed.why.replace(CLOSING_STOP, "")}.`;
     recordUndelivered(instance, text, images, reason, attachments);
     return { ok: false, reason };
   };

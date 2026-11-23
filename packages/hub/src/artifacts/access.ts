@@ -650,8 +650,8 @@ export const createAccess = (ctx: AccessContext) => {
   /**
    * Whether the session is the one the artifact's marks go to
    * ({@link ArtifactServiceDeps.answersTo}, artifacts/taker.ts): its writer;
-   * once the writer takes no input, the session that delegated it, else
-   * its project's conversation. What it reads of them counts as heard.
+   * once the writer takes no input, a session the trigger router gave its
+   * project's things to. What it reads of them counts as heard.
    */
   const takes = (instance: InstanceRow, row: ArtifactRow): boolean => {
     if (row.instanceId === instance.id) {
@@ -663,7 +663,7 @@ export const createAccess = (ctx: AccessContext) => {
     }
     return "session" in to
       ? to.session.id === instance.id
-      : deps.ledProjects(instance).includes(to.caw.projectId);
+      : deps.ledProjects(instance).includes(to.route.projectId);
   };
   /**
    * Whether a decision page held by `owner` may draw `row` in its Canvas

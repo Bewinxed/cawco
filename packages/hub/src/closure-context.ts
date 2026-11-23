@@ -245,6 +245,7 @@ import type {
   HistoryRead,
 } from "./transcripts";
 import type { createTreeStops } from "./tree-stops";
+import type { Triggers } from "./triggers";
 import type { turnState } from "./turn-state";
 import type { turnUsageOf } from "./turn-usage";
 import type { TypeProposals } from "./type-proposals";
@@ -1446,6 +1447,8 @@ export interface ClosureContext {
   touched: Map<string, number>;
   transcripts: ReturnType<typeof createTranscripts>;
   treeStops: ReturnType<typeof createTreeStops>;
+  /** The trigger router (triggers.ts), once made. */
+  triggers: Triggers | undefined;
   turnInFlight: ReturnType<typeof turnState>;
   turnOver: (instanceId: string) => void;
   turnWaiters: Map<

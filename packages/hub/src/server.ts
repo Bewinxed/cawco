@@ -102,7 +102,6 @@ import {
 } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
-  ACT_ORIGIN,
   ARTIFACT_ORIGIN,
   ASK_ORIGIN,
   COMPACTION_ORIGIN,
@@ -249,6 +248,7 @@ import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import type { ReportedToolStatus } from "@cawco/core/tools";
 import { toolSpec } from "@cawco/core/tools";
 import type { TranscriptPage } from "@cawco/core/transcript-types";
+import { isThingParent, STANDING_CONTEXT_SHARE } from "@cawco/core/triggers";
 import { unhandled } from "@cawco/core/unhandled";
 import {
   USAGE_HARNESSES,
@@ -282,6 +282,7 @@ import {
 } from "@cawco/core/words/relaunch";
 import { CONVERSATION_GONE } from "@cawco/core/words/session-ends";
 import { spawnWords } from "@cawco/core/words/spawn";
+import { triggerWords } from "@cawco/core/words/triggers";
 import { updatesWords } from "@cawco/core/words/updates";
 import { workWords } from "@cawco/core/words/work";
 import {
@@ -378,13 +379,7 @@ import { BROWSER_CALL_MS, browserRoutes, createBrowsers } from "./browsers";
 import { bundledSkills, TEMPLATE_SKILLS } from "./bundled-skills";
 import { createCallKeys } from "./call-keys";
 import { capabilityCalls } from "./capability-calls";
-import {
-  type Caw,
-  cawRoutes,
-  createCaw,
-  type PersonsSend,
-  PROJECT_ORIGIN,
-} from "./caw";
+import { type Caw, cawRoutes, createCaw, type PersonsSend } from "./caw";
 import { stallOffer } from "./chatgpt-offer";
 import { createCompaction } from "./compaction";
 import {
@@ -414,7 +409,6 @@ import {
 } from "./dashboard-url";
 import type { DbShape } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
-import type { ContinuationRow } from "./db/continuations";
 import { accountReportOf } from "./db/machines";
 import {
   NOTICE_TITLES,
@@ -436,8 +430,6 @@ import { componentStoredSend } from "./db/sheet-notices";
 import type {
   AgentAuth,
   AttemptAsk,
-  ContinuationAsker,
-  ContinueRequest,
   StoredSendRefusal,
 } from "./db/stored-types";
 import { tagStoredSend } from "./db/tag-markers";
@@ -796,6 +788,12 @@ import { ToolReleases } from "./tool-releases";
 import { createTrackers, trackerRoutes } from "./tracker";
 import { createTranscripts } from "./transcripts";
 import { createTreeStops } from "./tree-stops";
+import { PROJECT_ORIGIN } from "./trigger-event";
+import {
+  createTriggerSettings,
+  triggerSettingsRoutes,
+} from "./trigger-settings";
+import { createTriggers, type Triggers } from "./triggers";
 import { turnState } from "./turn-state";
 import { turnOrigin, turnUsageOf } from "./turn-usage";
 import { createTypeProposals } from "./type-proposals";
@@ -1158,7 +1156,7 @@ const WAKES_AT_REST: ReadonlySet<string> = new Set([
   LIMIT_ORIGIN,
   // The turn a restart or a kill cut, handed back once (`resumeCutTurn`).
   "restore",
-  // A project's conversation, sent its project's events (caw.ts `tell`).
+  // A session on a project's thing, sent a trigger on it (triggers.ts).
   PROJECT_ORIGIN,
   // Its looping delegate, for it as that delegate's steward (fleet-watch.ts).
   "fleet-watch",
@@ -1703,6 +1701,7 @@ export const createServer = (
     decisions: () => decisions,
     hubAsks: () => hubAsks,
     lead: () => leadPort.now(),
+    triggers: () => triggersPort.now(),
     leftoverWords: () => leftoverWords,
     sentFrame: () => sentFrame,
     withdrawPending: () => withdrawPending,
@@ -3178,6 +3177,7 @@ export const createServer = (
   // Each project's Caw (caw.ts), made further down once its services are; the
   // settlement, answer and process-end paths above it reach it through this.
   const leadPort = portOf<Caw | undefined>("lead", undefined);
+  const triggersPort = portOf<Triggers | undefined>("triggers", undefined);
   /** A note of the hub's to the person about a project, kept with its conversation (caw.ts `notice`); one for a project the hub does not keep is said in the log. */
   const noticeProject = (
     projectId: string,
@@ -4788,8 +4788,7 @@ export const createServer = (
     },
     pageCards: (artifactId, cards) => artifacts.pageCards(artifactId, cards),
     project: (id) => db.project(id),
-    tellCaw: (projectId, event) =>
-      caw.tell(projectId, { by: "event", kind: "decision", ...event }),
+    trigger: (projectId, event) => triggers.route(projectId, event),
     heard: (decided) => push.decided(decided),
     seen: (artifactId, card) => push.decidedSeen(artifactId, card),
   });
@@ -4903,26 +4902,30 @@ export const createServer = (
     // Your picks on a session's own page reach that session as the page's
     // word for its tools to read (artifact_read), never as your message:
     // A session's decision page is its own to read, never a transcript line.
-    // A page whose session has ended goes to Caw, told it is his now.
+    // A page whose session has ended is a trigger on it (triggers.ts),
+    // told it is its now.
     signal: async (to, artifact, responses) => {
-      let heard: string;
+      let heard: string | null;
       let send: string | undefined;
       if ("session" in to) {
         send = await signalResponses(to.session, artifact, responses);
         heard = to.session.id;
       } else {
-        const told = await caw.tellYours(to.caw.projectId, {
-          by: "act",
+        const routed = await triggers.route(to.route.projectId, {
           kind: "person-request",
-          trigger: to.caw.trigger,
-          origin: { name: ACT_ORIGIN, line: to.caw.line },
-          text: to.caw.text,
+          thing: {
+            kind: "artifact",
+            id: artifact.id,
+            name: `the ${artifact.kind} ${artifactLink(artifact.id, artifact.title || artifact.name)}`,
+          },
+          what: to.route.what,
+          delta: to.route.text,
+          who: "you",
         });
-        if (told instanceof ElysiaStatus) {
-          return told;
+        if (routed.to === "lost") {
+          return problem(409, { code: "page-unheard", detail: routed.why });
         }
-        heard = told.instanceId;
-        ({ send } = told);
+        heard = routed.to === "held" ? null : routed.instanceId;
       }
       // A setup page sent is the approval of the AGENTS.md and delegate
       // types the session that reads its send writes from it (caw.ts
@@ -4938,20 +4941,18 @@ export const createServer = (
       const taker = takerOf(writer, artifact);
       switch (taker.to) {
         case "writer":
-        case "parent":
           return { session: taker.session };
-        case "caw":
+        case "route":
           return {
-            caw: {
+            route: {
               projectId: taker.projectId,
-              line: noticeWords.answeredPage(artifact.title),
               text: noticeWords.answeredPageYours(
                 artifact.title,
                 artifact.id,
                 writer ? sessionName(writer) : null,
                 taker.why
               ),
-              trigger: noticeWords.answeredPageTrigger,
+              what: noticeWords.answeredPageTrigger,
             },
           };
         case "none":
@@ -5013,11 +5014,18 @@ export const createServer = (
     },
     // Caw answers the pins of his project's sessions whose writer ended, and
     // reads every page of his project (decisions.ts).
-    ledProjects: (instance) =>
-      db
+    ledProjects: (instance) => [
+      ...db
         .listProjects()
         .filter((project) => project.conversationInstanceId === instance.id)
         .map((project) => project.id),
+      // A fresh session for a trigger (triggers.ts) reads its project's pages.
+      ...(instance.projectId &&
+      instance.parentInstanceId &&
+      isThingParent(instance.parentInstanceId)
+        ? [instance.projectId]
+        : []),
+    ],
     // A delegation tree reads its sessions' artifacts (delegation-tree.ts).
     tree: (instance) => treeSessions(db, instance),
     machines: () => db.namedMachines(),
@@ -8595,6 +8603,7 @@ export const createServer = (
     itemEnded: (item) =>
       soon(() => {
         dispatcher.itemEnded(item);
+        attemptEnded(item);
         push.itemEnded(item);
         routines.itemEnded(item);
         // A plan step waiting on its session settles now.
@@ -8795,9 +8804,9 @@ export const createServer = (
     "actionMoves",
     () => false
   );
-  /** The Actions runs a project's tasks wait on, as its GitHub poll reads them, and its inbox (ingress.ts); set once ingress is made. */
+  /** The Actions runs a project's tasks wait on, as its GitHub poll reads them (ingress.ts); set once ingress is made. */
   const githubWaitsPort = portOf<
-    Pick<Ingress, "drain" | "githubWait" | "githubWaitRefusal"> | undefined
+    Pick<Ingress, "githubWait" | "githubWaitRefusal"> | undefined
   >("githubWaits", undefined);
   /** A session a wait names by its handle (`cockpit#5a167bde`): the one whose id its handle begins, among every session the hub holds. */
   const sessionByHandle = (
@@ -9491,7 +9500,7 @@ export const createServer = (
     keepCopiesOn(machineId);
     previewsOnMachineMoved(machineId);
   };
-  // Each project's conversation: a session its events reach (caw.ts).
+  // Each project's conversation: the session the person's words reach (caw.ts).
   const caw = createCaw({
     blocks,
     caps,
@@ -9523,14 +9532,11 @@ export const createServer = (
     // The conversation ended a turn: the project's starters are asked again
     // (project-starters.ts).
     answered: (projectId) => projectStarters.conversationAnswered(projectId),
-    // A conversation's start drains the inbound events that waited for it.
-    // Ingress is made further down; nothing starts one before the hub is up.
-    conversationStarted: (projectId) => {
-      const githubWaits = githubWaitsPort.now();
-      if (githubWaits) {
-        detach(githubWaits.drain(projectId), "drain a project's inbox");
-      }
-    },
+    // The switch turned on: what was held while off goes to one fresh
+    // session (triggers.ts). The router is made just below.
+    switchedOn: (projectId) =>
+      detach(triggers.switchedOn(projectId), "triggers held while off"),
+    trigger: (projectId, event) => triggers.routeQuietly(projectId, event),
     // The project's conversation, started as any session is, in the mode
     // its payload names (caw.ts `startOf`: the project's, else the one you
     // last chose for its harness on that machine), or refused, saying so,
@@ -9560,6 +9566,87 @@ export const createServer = (
     views,
   });
   leadPort.fill(caw);
+  // Each kind of trigger's harness, model, mode and account (trigger-settings.ts).
+  const triggerSettings = createTriggerSettings({
+    accounts: () => db.accounts.list(),
+    db,
+  });
+  // The trigger router (triggers.ts): every trigger on a project's thing
+  // goes to the session on it, else a fresh one; never to Caw's conversation.
+  const triggers = createTriggers({
+    caps,
+    db,
+    idle: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const state = row ? followupState(row) : undefined;
+      return {
+        busy: state?.midTurn ?? false,
+        lastTurnAt: state?.lastTurnAt ? Date.parse(state.lastTurnAt) : null,
+      };
+    },
+    lifetime,
+    openAsk: (instanceId) => {
+      if (
+        db.asks.openOf(instanceId).length > 0 ||
+        pending.list().some((ask) => ask.instanceId === instanceId)
+      ) {
+        return "an ask of its is open";
+      }
+      return waitingNow().has(instanceId)
+        ? "it waits on the person"
+        : undefined;
+    },
+    overCap: async (session) => {
+      const [row] = db.getInstancesByIds([session.id]);
+      const tokens = row?.contextTokens ?? null;
+      if (!row || tokens === null) {
+        return;
+      }
+      const window = await contextWindowOf(
+        row.machineId,
+        row.harness,
+        row.model ?? undefined
+      ).catch(() => undefined);
+      const cap = window
+        ? Math.floor(window * STANDING_CONTEXT_SHARE)
+        : undefined;
+      return window && cap !== undefined && tokens > cap
+        ? triggerWords.overCap(tokens, cap, window)
+        : undefined;
+    },
+    place: (project) => caw.placeFor(project),
+    refusal: (row) =>
+      inputRefusal(row.id, { kind: "system", name: PROJECT_ORIGIN })?.reason,
+    send: (row, said) => {
+      const sent = deliverToSession(
+        byIdNow({
+          verb: "send",
+          machineId: row.machineId,
+          instanceId: row.id,
+          payload: {
+            ...said.carried,
+            instanceId: row.id,
+            message: {
+              type: "user",
+              uuid: crypto.randomUUID(),
+              message: { role: "user", content: said.content },
+              parent_tool_use_id: null,
+              origin: said.origin,
+            },
+          },
+        }),
+        false
+      );
+      return sent instanceof ElysiaStatus
+        ? { reason: sent.response.detail, state: "failed" }
+        : { reason: sent?.reason ?? null, state: sent?.state ?? "failed" };
+    },
+    sendYours: (row, said) => sendYours(row, said),
+    settings: triggerSettings,
+    tasks,
+    workItems,
+  });
+  triggersPort.fill(triggers);
   /** The tasks waiting in a stage of yours, read as the board reads them, and a sentence for each project whose tasks could not be read: Jump's waiting list (find.ts). */
   const tasksWaiting = async () => {
     const read = await Promise.all(
@@ -9752,8 +9839,8 @@ export const createServer = (
           kind: "hub",
           why: "fleet watch's triage stopped it",
         }),
-      tell: async (projectId, event) =>
-        !((await caw.tell(projectId, event)) instanceof ElysiaStatus),
+      trigger: async (projectId, event) =>
+        (await triggers.route(projectId, event)).to !== "lost",
     })
   );
   const dispatcher = createDispatcher({
@@ -9796,43 +9883,100 @@ export const createServer = (
     tasks,
     // A routine's run, under the routine's own parent (routines.ts).
     startForHub: (request, parent) => workItems.startForHub(request, parent),
-    conversationFor: (projectId, by) => caw.conversationFor(projectId, by),
     workPlace: workPlaceOf,
     pauses: (projectId) => caps.pauses(projectId),
     placement: {
       access: () => jevAccess(db),
       typesFor: (projectId) => projectTypes.typesFor(projectId),
-      judgeByLead: (projectId, task, item, text) => {
-        caw
-          .tell(projectId, {
-            by: "event",
-            kind: "attempt-judgement",
-            trigger: `${sessionLink(item.instanceId, item.title)}, an attempt at ${taskLink(projectId, task.id, task.title)}, passed its checks`,
-            text,
-          })
-          .catch((error: unknown) =>
-            console.warn(
-              `[dispatch] ${task.id}'s acceptance criteria did not reach Caw: ${error instanceof Error ? error.message : String(error)}`
-            )
-          );
-      },
+      // An attempt's acceptance to judge: a trigger on its task (triggers.ts).
+      judgeByLead: (projectId, task, item, text) =>
+        triggers.routeQuietly(projectId, {
+          kind: "attempt-judgement",
+          thing: {
+            kind: "task",
+            id: task.id,
+            name: taskLink(projectId, task.id, task.title),
+          },
+          what: `${sessionLink(item.instanceId, item.title)}, an attempt at ${taskLink(projectId, task.id, task.title)}, passed its checks.`,
+          delta: text,
+          who: "the hub",
+        }),
     },
     start: (request) => workItems.start(request),
     // A judgement that left acceptance lines, to whoever hears the
-    // attempt's report, after it.
+    // attempt's report, after it: its starter, or, for an attempt under its
+    // task, a trigger on the task (triggers.ts).
     tellStarter: (item, line) => {
+      if (
+        item.projectId &&
+        item.taskId &&
+        isThingParent(item.parentInstanceId)
+      ) {
+        attemptToRouter(item, "attempt-judgement", line);
+        return;
+      }
       const [delegate] = db.getInstancesByIds([item.instanceId]);
       if (delegate) {
         reportToParent(delegate, line, false, { notice: true });
       }
     },
   });
+  /**
+   * What an attempt under its task (dispatch.ts `taskParentOf`) says, its
+   * report or a judgement after it: a trigger on the task (triggers.ts),
+   * for the session on it or a fresh one; never the project's Caw.
+   */
+  const attemptToRouter = (
+    item: WorkItemRow,
+    kind: "attempt-judgement" | "delegate-report",
+    text: string
+  ): void => {
+    const { projectId, taskId } = item;
+    if (!(projectId && taskId)) {
+      return;
+    }
+    const attempt = sessionLink(item.instanceId, item.title);
+    triggers.routeQuietly(projectId, {
+      kind,
+      thing: { kind: "task", id: taskId, name: `${taskId} (${item.title})` },
+      what:
+        kind === "delegate-report"
+          ? `${attempt}, an attempt at ${taskId}, ended ${item.state}.`
+          : `${attempt}, an attempt at ${taskId}, was judged.`,
+      delta: text,
+      who: attempt,
+    });
+  };
+  /** An attempt under its task ended: its report, a trigger on the task. */
+  const attemptEnded = (item: WorkItemRow): void => {
+    if (!(item.taskId && isThingParent(item.parentInstanceId))) {
+      return;
+    }
+    const words = db.workItemTexts(item.id);
+    const report =
+      words.summary ??
+      words.digest ??
+      words.result ??
+      item.error ??
+      "It ended without a report.";
+    attemptToRouter(
+      item,
+      "delegate-report",
+      `${item.headline ? `${item.headline}\n\n` : ""}${report}`
+    );
+  };
   tasks.listen(dispatcher.taskChanged);
   tasks.listen(push.taskChanged);
   tasks.listen(caw.taskChanged);
-  // What the person writes on a task, to the project's conversation
-  // (task-input.ts), gathered over a quiet spell and read as one.
-  tasks.listen(createTaskInput({ caw, db, lifetime, tasks }).taskChanged);
+  // What the person writes on a task, a trigger on it (task-input.ts,
+  // triggers.ts), gathered over a quiet spell and read as one.
+  tasks.listen(
+    createTaskInput({
+      lifetime,
+      tasks,
+      trigger: (projectId, event) => triggers.routeQuietly(projectId, event),
+    }).taskChanged
+  );
   // Every dashboard showing the project reads its tasks again, whoever moved
   // them; one showing the task the change names reads it again too.
   tasks.listen((event) =>
@@ -9916,26 +10060,8 @@ export const createServer = (
         );
       }
     },
-    // The person's words or act to the project's conversation (caw.ts `tellYours`).
-    tellConversation: (projectId, said) =>
-      caw.tellYours(
-        projectId,
-        said.by === "you"
-          ? {
-              by: "you",
-              kind: "person-request",
-              trigger: "the person wrote on a decision page",
-              words: said.words,
-              note: said.note,
-            }
-          : {
-              by: "act",
-              kind: "person-request",
-              trigger: "the person sent a decision page",
-              origin: { name: ACT_ORIGIN, line: said.line },
-              text: said.text,
-            }
-      ),
+    // The person on a page whose session takes no input: a trigger on it (triggers.ts).
+    trigger: (projectId, event) => triggers.route(projectId, event),
     // The send's own record: unread while pending, then the turn that read
     // it until that session's next turn end (the send may have gone on to
     // a continuation: its record names where).
@@ -10153,15 +10279,25 @@ export const createServer = (
     sessionName,
     spawnFromHub,
     tell: tellPlan,
-    wakeCaw: async (projectId, text) => {
-      const woke = await caw.tell(projectId, {
-        by: "act",
+    // A change to an attempt's plan: a trigger on its task (triggers.ts).
+    trigger: async (projectId, planOf, text) => {
+      const [plan] = db.getInstancesByIds([planOf]);
+      const item = plan?.workItemId ? db.workItem(plan.workItemId) : undefined;
+      if (!item?.taskId) {
+        return "its plan's session is no attempt at a task now";
+      }
+      const routed = await triggers.route(projectId, {
         kind: "person-request",
-        origin: { name: PLAN_ORIGIN },
-        trigger: "the person changed the project's plan",
-        text,
+        thing: {
+          kind: "task",
+          id: item.taskId,
+          name: `${item.taskId} (${item.title})`,
+        },
+        what: `The person changed the plan of ${sessionLink(planOf, item.title)}, an attempt at ${item.taskId}.`,
+        delta: text,
+        who: "you",
       });
-      return woke instanceof ElysiaStatus ? woke.response.detail : undefined;
+      return routed.to === "lost" ? routed.why : undefined;
     },
   });
   planChangesPort.fill(changesOfPlans);
@@ -10210,94 +10346,19 @@ export const createServer = (
   // Your approval of a task, to the agent that filed it (task-approval.ts).
   tasks.listen(
     createTaskApproval({
-      caw,
-      db,
       tasks,
       sendYours,
-      refused: (row) => inputRefusal(row.id, { kind: "human" })?.reason,
+      trigger: (projectId, event) => triggers.routeQuietly(projectId, event),
     }).taskChanged
   );
-  /**
-   * Attach or spawn's cold branch (§5.3, jev-tasks.ts): task `taskId`'s
-   * ended attempt's session `row`, its cache cold, compressed and continued
-   * in a new session in the attempt's own workspace, which takes on the
-   * attempt as every continuation takes on its source's item, and opens on
-   * `comment` as its next step. The source is only read: it takes no filing
-   * turn. Our own call: the summary is written on the source's harness at
-   * its default model, and the new session runs on the source's harness and
-   * model, in its mode. Answers the new session's id and how the job ends
-   * (nothing once it started, else why not); the hub's problem when its
-   * source has no clone or nothing to continue from; throws why else it
-   * could not begin.
-   */
-  const continueAttempt = async (
-    row: InstanceRow,
-    taskId: string,
-    comment: string
-  ) => {
-    const release = await cloneForContinuation(row.id);
-    if (release instanceof ElysiaStatus) {
-      return release;
-    }
-    let job: ContinuationRow;
-    try {
-      const prepared = await prepareContinuation(row.id, comment);
-      if (prepared instanceof ElysiaStatus) {
-        return prepared;
-      }
-      const { harness } = prepared.source;
-      const request: ContinueRequest = {
-        summarizer: summarizerOf(row),
-        target: {
-          harness,
-          ...(row.model ? { model: row.model } : {}),
-        },
-        note: comment,
-      };
-      const asker: ContinuationAsker = { kind: "task", id: taskId };
-      const why = await continuationRefusal(prepared, request, asker);
-      if (why) {
-        throw new Error(why);
-      }
-      job = startContinuation(prepared, request, asker);
-    } finally {
-      release();
-    }
-    const begun: {
-      ended: Promise<string | undefined>;
-      targetInstanceId: string;
-    } = {
-      targetInstanceId: job.targetInstanceId,
-      ended: settledContinuation(job.id).then((settled) => {
-        if (settled?.stage === "started") {
-          return;
-        }
-        return settled?.stage === "cancelled"
-          ? CONTINUATION_CANCELLED
-          : (settled?.error ?? "the continuation failed");
-      }),
-    };
-    return begun;
-  };
   // Jev placement on the board (§5.9, jev-tasks.ts): Duplicates and Triage
-  // as a task is filed; Attach or spawn as you comment on a task (a live
-  // attempt reads your comment as any message of yours); phone requests.
+  // as a task is filed; phone requests. Your comment on a task is a
+  // trigger on it (task-input.ts, triggers.ts).
   const jevTasks = createJevTasks({
     caw,
-    continueAttempt,
     db,
     dispatcher,
     tasks,
-    refused: (row) =>
-      workItems.refusal(row, { kind: "human" })?.reason ?? undefined,
-    warmth: (row) => {
-      const state = followupState(row);
-      return {
-        warm: !provenCold(row, state.midTurn, state.lastTurnAt),
-        idle: !state.midTurn,
-      };
-    },
-    sendYours,
   });
   tasks.listen(jevTasks.taskChanged);
   /**
@@ -10732,9 +10793,7 @@ export const createServer = (
     isSetUp: (project) => isSetUp(project),
     // The nightly memory run's brief and end (memory-run.ts).
     memoryRun,
-    // A run's report lists what it handed Caw unopened.
-    handedUnopened: (holderId, makerId) =>
-      artifacts.handedUnopened(holderId, makerId),
+    toRouter: (projectId, event) => triggers.route(projectId, event),
     // A trim run's findings, read before any model is asked (unused-trim.ts).
     trimBrief: (projectId) => trim.brief(projectId),
     db,
@@ -10941,8 +11000,8 @@ export const createServer = (
     jevAccess: () => jevAccess(db),
     lifetime,
     routines,
-    // An event no route took, one send to the project's conversation.
-    tell: (projectId, event) => caw.tell(projectId, event),
+    // An event no route took, a trigger on what it is about (triggers.ts).
+    trigger: (projectId, event) => triggers.route(projectId, event),
     // A pull request or run a task waits on moved: its project looks again.
     waitsMoved: (projectId) => {
       detach(
@@ -14060,6 +14119,7 @@ export const createServer = (
         planChangeRoutes(changesOfPlans),
         dispatchRoutes(dispatcher),
         cawRoutes(caw),
+        triggerSettingsRoutes(triggerSettings),
         phoneRequestRoutes(jevTasks),
         memoryRoutes(projectMemory, {
           withdraw: (projectId, note) => memoryRun.withdraw(projectId, note),

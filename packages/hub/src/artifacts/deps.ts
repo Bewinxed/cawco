@@ -23,7 +23,6 @@ import type {
 } from "@cawco/core/stage";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type { problem } from "elysia";
-import type { Caw } from "../caw";
 import type {
   ArtifactRow,
   ArtifactsDb,
@@ -111,8 +110,8 @@ export interface ArtifactServiceDeps {
   /**
    * Who hears the person on `artifact`, which `writer` made: the one his
    * marks and the hub's own send of his answers go to (artifacts/taker.ts),
-   * its writer while it takes input, else the session that delegated it,
-   * else the project's Caw; none when no one can.
+   * its writer while it takes input, else a trigger on it in its project
+   * (triggers.ts); none when no one can.
    */
   answersTo: (
     writer: InstanceRow | undefined,
@@ -175,8 +174,8 @@ export interface ArtifactServiceDeps {
   delegatesIn: (instance: InstanceRow, workspaceId: string) => boolean;
   /**
    * Delivers the person's marks on `artifact` to the session that made it,
-   * waking it as their own words do; to the project's Caw when that session
-   * takes no input any more (server.ts `deliverMarks`).
+   * waking it as their own words do; a trigger on the artifact (triggers.ts)
+   * when that session takes no input any more (server.ts `deliverMarks`).
    */
   deliverMarks: (
     instance: InstanceRow,
@@ -214,7 +213,7 @@ export interface ArtifactServiceDeps {
     projectId: string,
     name: string
   ) => Promise<PageFolderProblem | undefined>;
-  /** Whether a session has ended or takes no input now (artifacts/taker.ts `takesNoInput`), so its marks go to its parent, else its project's Caw. */
+  /** Whether a session has ended or takes no input now (artifacts/taker.ts `takesNoInput`), so its marks are a trigger on the artifact. */
   ended: (instance: InstanceRow) => boolean;
   /**
    * Whether a session's asks are over for good (Needs you's rule 4): it
@@ -303,10 +302,10 @@ export interface ArtifactServiceDeps {
   /** Machine `machineId` told the pins whose files the hub has yet to move in (folder-move.ts): it lets go of every other one (agent stage.ts `keepPins`). Never throws. */
   keepPins: (machineId: string, pins: string[]) => void;
   /**
-   * The projects session `instance` is the conversation of (their Caw): an ended writer's
-   * marks are routed to him, and he answers them in their pins' threads.
-   * He also reads every page of his project, so a page whose session ended
-   * or is gone is his to act on (Projects spec §5.8, decisions.ts).
+   * The projects session `instance` reads every page of: the conversation
+   * of (their Caw), and those it is a fresh session in (triggers.ts), which
+   * answers an ended writer's marks in their pins' threads (Projects spec
+   * §5.8, decisions.ts).
    */
   ledProjects: (instance: InstanceRow) => string[];
   /** The hub's lifetime: the marks' delivery and the shown acks' keep run on it. */
@@ -496,14 +495,19 @@ export interface ArtifactServiceDeps {
    * which reads them from `since` with `artifact_read` (core
    * `artifactResponsesNotice`), one it has not read yet for the same
    * artifact superseded, not added to, so it hears once, from the earliest
-   * `since` it was not told of; or the project's Caw, in `to`'s words.
-   * Answers the session that heard it.
+   * `since` it was not told of; or a trigger on the page (triggers.ts), in
+   * `to`'s words. Answers the session that heard it; null while it waits
+   * on the project (its triggers off).
    */
   signal: (
     to: PageHearer,
     artifact: ArtifactRow,
     responses: { since: number }
-  ) => Promise<string | ProblemsOf<ReturnType<Caw["tell"]>>>;
+  ) => Promise<
+    | string
+    | null
+    | ReturnType<typeof problem<409, { code: "page-unheard"; detail: string }>>
+  >;
   /**
    * The stage story file `file` runs on in a workspace (agent stage.ts
    * `ensureStage`), started or woken there and waited on: its port, root and

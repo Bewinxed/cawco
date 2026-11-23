@@ -26,8 +26,9 @@
  *   routine's own parent (`routine:<id>`). A start dispatch turns down is
  *   filed as a skipped run with its sentence. Triggered runs are held by no
  *   dispatch switch, `max_attempts` or `review_limit`.
- * - **A conversation run** is a send to the project's conversation (caw.ts
- *   `tell`), no work item.
+ * - **A conversation run** is a trigger on the routine (triggers.ts): the
+ *   session already on it, else a fresh one whose first turn is the run;
+ *   never the project's Caw conversation.
  * - **A check** (routine-check.ts) gates every run but an event's: its
  *   approved command runs on each machine its file names before any model,
  *   and only output starts the run, with that output as its input. A quiet
@@ -36,7 +37,7 @@
  * - **The output contract**: exactly `NO_REPLY` is silent; `AUTOMATION_
  *   FAILED: <why>` fails it, retried once at once (attempt 2); a second
  *   failure stands in Needs you; anything else is delivered. A delegate
- *   run's delivered result reports to Caw and wakes him; the curator's and
+ *   run's delivered result is a trigger on the routine (triggers.ts); the curator's and
  *   the trim's are notes.
  * - **Stopping** (2026-11-22). Every run answers in its `task_result`: keep
  *   it going (the default), stop it (its stop condition holds: its task
@@ -97,7 +98,6 @@ import type { TaskRoutine } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import type { StageKind } from "@cawco/core/views";
 import { withoutUndefined } from "@cawco/core/without-undefined";
-import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { conditionWords } from "@cawco/core/words/conditions";
 import { curatorPrompt, memoryRunWords } from "@cawco/core/words/memory-run";
 import { checkWords } from "@cawco/core/words/routine-check";
@@ -105,7 +105,6 @@ import { routineToolWords } from "@cawco/core/words/routines";
 import cronstrue from "cronstrue";
 import { Cron, DateTime } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
-import type { Artifacts } from "./artifacts/service";
 import { type Caw, isProjectConversation } from "./caw";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
@@ -160,6 +159,8 @@ import {
   type TaskView,
   YOU_ACTOR,
 } from "./tasks";
+import type { TriggerEvent } from "./trigger-event";
+import type { Routed } from "./triggers";
 import { TRIM_CRON, TRIM_NAME, TRIM_PROMPT } from "./unused-trim";
 import { isRoutineParent, routineParent } from "./work-item-state";
 import { titleProblem, type WorkItems } from "./work-items";
@@ -278,8 +279,8 @@ export interface RoutineDeps {
   ) => Promise<string | undefined>;
   /** Routines made before routines were tasks, their tasks filed (routine-carry.ts). */
   readonly carry: Pick<CarryRoutines, "carry" | "due">;
-  /** A routine's notes and sends to the project's conversation (caw.ts). */
-  readonly caw: Pick<Caw, "notice" | "tell">;
+  /** A routine's notes in the project's conversation (caw.ts), waking nobody. */
+  readonly caw: Pick<Caw, "notice">;
   readonly db: Pick<
     DbShape,
     | "ingress"
@@ -292,8 +293,6 @@ export interface RoutineDeps {
   >;
   /** Starts a run a session does, and places a probe (dispatch.ts `startRun`, `placeRun`). */
   readonly dispatch: Pick<Dispatcher, "placeRun" | "startRun">;
-  /** What a run's session handed `holderId` that it has not opened: its report lists them. */
-  readonly handedUnopened: Artifacts["handedUnopened"];
   /** Whether a project is set up (tasks.ts `isSetUp`): the hub files its own tasks only there. */
   readonly isSetUp: (project: ProjectRow) => boolean;
   readonly lifetime: HubLifetimeShape;
@@ -321,6 +320,11 @@ export interface RoutineDeps {
     Tasks,
     "comment" | "create" | "get" | "move" | "stages" | "update"
   >;
+  /** A trigger on a routine, its run or its result, to the router (triggers.ts `route`). */
+  readonly toRouter: (
+    projectId: string,
+    event: TriggerEvent
+  ) => Promise<Routed>;
   /** A trim run's findings (unused-trim.ts `brief`): null for the fleet's. */
   readonly trimBrief: (
     projectId: string | null
@@ -468,9 +472,9 @@ const clipReason = (words: string): string => {
 };
 
 /**
- * Whether a run's delivered result reports to the project's lead, Caw,
- * waking him: a delegate's and an orchestrator's. A conversation run's
- * result is Caw's own; the curator's and the trim's are notes.
+ * Whether a run's delivered result is a trigger on its routine
+ * (triggers.ts): a delegate's and an orchestrator's. A conversation run's
+ * result is its own session's; the curator's and the trim's are notes.
  */
 const reportsToLead = (routine: Pick<RoutineRow, "target">): boolean =>
   routine.target === "delegate" || routine.target === "orchestrator";
@@ -570,9 +574,9 @@ export const createRoutines = ({
   askPerson,
   carry,
   caw,
+  toRouter,
   db,
   dispatch,
-  handedUnopened,
   isSetUp,
   lifetime,
   machines,
@@ -856,7 +860,45 @@ export const createRoutines = ({
     );
   };
 
-  /** A conversation run: one send to the project's conversation, its prompt the task's description, then what its check found. */
+  /** A conversation run as a trigger on its routine: its prompt, then what its check found, then how to answer. */
+  const runTrigger = (
+    routine: RoutineRow,
+    run: RoutineRunRow,
+    prompt: string,
+    input: string,
+    route: string | null | undefined
+  ): TriggerEvent => ({
+    kind: "routine-run",
+    routine: routine.id,
+    ...(route ? { route } : {}),
+    thing: {
+      kind: "routine",
+      id: routine.id,
+      name: `the routine ${linkOf(routine)}`,
+    },
+    what: `The routine ${linkOf(routine)} fired its ${slotLabel(run.slot, zoneOf(routine))} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}, run ${run.id}.`,
+    delta: `Its prompt:\n\n${prompt}${input ? `\n\n${input}` : ""}\n\n${leadContract(routine, run.id)}`,
+    who: "the routine's schedule",
+  });
+
+  /**
+   * A conversation run a session took: a fresh one's first turn is the
+   * run's; one already on the routine reads it as a send naming the
+   * routine (`sendChanged`).
+   */
+  const runTaken = (
+    run: RoutineRunRow,
+    woke: Extract<Routed, { to: "fresh" | "owner" }>
+  ): void => {
+    if (woke.to === "fresh" && woke.started) {
+      store.setRun(run.id, { state: "running", instanceId: woke.instanceId });
+      armed.add(woke.instanceId);
+      return;
+    }
+    store.setRun(run.id, { state: "running" });
+  };
+
+  /** A conversation run: a trigger on the routine (triggers.ts), its prompt the task's description, then what its check found. */
   const fireLead = async (
     routine: RoutineRow,
     run: RoutineRunRow,
@@ -877,16 +919,12 @@ export const createRoutines = ({
     const route = run.slot.startsWith(EVENT_SLOT)
       ? db.ingress.event(run.slot.slice(EVENT_SLOT.length))?.routeId
       : undefined;
-    const woke = await caw.tell(projectId, {
-      by: "event",
-      kind: "routine-run",
-      routine: routine.id,
-      ...(route ? { route } : {}),
-      trigger: `the routine ${linkOf(routine)}, its ${slotLabel(run.slot, zoneOf(routine))} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}`,
-      text: `Its prompt:\n\n${task?.description ?? routine.name}${input ? `\n\n${input}` : ""}\n\n${leadContract(routine, run.id)}`,
-    });
-    if (!(woke instanceof ElysiaStatus)) {
-      store.setRun(run.id, { state: "running" });
+    const woke = await toRouter(
+      projectId,
+      runTrigger(routine, run, task?.description ?? routine.name, input, route)
+    );
+    if (woke.to === "fresh" || woke.to === "owner") {
+      runTaken(run, woke);
       return;
     }
     const gate = projectGate(routine);
@@ -894,7 +932,7 @@ export const createRoutines = ({
       settle(run.id, {
         outcome: "failed",
         output: null,
-        reason: "Caw's session did not take the wake",
+        reason: `No session took the run: ${woke.why}`,
         usd: null,
       });
       return;
@@ -1424,14 +1462,15 @@ export const createRoutines = ({
   };
 
   /**
-   * A delivered result told: a project's delegate run reports to Caw and
-   * wakes him; with Caw off it is a note saying he did not hear it. Any
-   * other's is a note.
+   * A delivered result told: a project's delegate run's is a trigger on
+   * the routine (triggers.ts); held while the project's triggers are off,
+   * and then also a note saying no session heard it yet. Any other's is a
+   * note.
    */
   const delivered = (routine: RoutineRow, run: RoutineRunRow): void => {
     const output = run.output ?? "";
     const words = output.slice(0, NOTE_MAX);
-    const report = reportOf(routine, run);
+    const report = reportOf(run);
     const noted =
       output.length > NOTE_MAX
         ? `${words}${routineToolWords.noteCut(report?.session)}`
@@ -1445,38 +1484,38 @@ export const createRoutines = ({
         routine,
         run,
         "delivered",
-        `${noted}\n\nCaw did not hear this result: ${why}`
+        `${noted}\n\nNo session heard this result: ${why}`
       );
     const label = slotLabel(run.slot, zoneOf(routine));
-    caw
-      .tell(routine.projectId, {
-        by: "event",
-        kind: "routine-report",
-        trigger: `the routine ${linkOf(routine)}, its ${label} run${report ? ` in ${report.session}` : ""}, delivered its result`,
-        text: `Run ${run.id}.\n\n## Its result\n\n${words}${report?.summary ? `\n\n## Its report\n\n${report.summary.slice(0, NOTE_MAX)}` : ""}${report?.handed ?? ""}`,
-      })
-      .then(
-        (told) => {
-          if (told instanceof ElysiaStatus) {
-            unheard(told.response.detail);
-          }
-        },
-        (error: unknown) =>
-          unheard(error instanceof Error ? error.message : String(error))
-      );
+    toRouter(routine.projectId, {
+      kind: "routine-report",
+      routine: routine.id,
+      thing: {
+        kind: "routine",
+        id: routine.id,
+        name: `the routine ${linkOf(routine)}`,
+      },
+      what: `The routine ${linkOf(routine)}'s ${label} run${report ? ` in ${report.session}` : ""} delivered its result (run ${run.id}).`,
+      delta: `## Its result\n\n${words}${report?.summary ? `\n\n## Its report\n\n${report.summary.slice(0, NOTE_MAX)}` : ""}`,
+      who: report?.session ?? "the routine",
+    }).then(
+      (told) => {
+        if (told.to === "held" || told.to === "lost") {
+          unheard(told.why);
+        }
+      },
+      (error: unknown) =>
+        unheard(error instanceof Error ? error.message : String(error))
+    );
   };
 
   /** The run's session as a link and its full report, when it ran one. */
-  const reportOf = (routine: RoutineRow, run: RoutineRunRow) => {
+  const reportOf = (run: RoutineRunRow) => {
     const item = run.workItemId ? db.workItem(run.workItemId) : undefined;
     if (!item) {
       return;
     }
-    const lead = db.project(routine.projectId)?.conversationInstanceId;
     return {
-      handed: artifactToolWords.handedInReport(
-        lead ? handedUnopened(lead, item.instanceId) : []
-      ),
       session: sessionLink(item.instanceId, item.title),
       summary: db.workItemTexts(item.id).summary,
     };

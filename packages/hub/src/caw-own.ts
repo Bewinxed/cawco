@@ -1,3 +1,4 @@
+import { isThingParent } from "@cawco/core/triggers";
 import type { DbShape } from "./db";
 import { isHubParent } from "./work-item-state";
 
@@ -12,14 +13,18 @@ const isLead = (root: Row, project: ProjectRow): boolean =>
  * Whether the delegation chain above a session whose parent is
  * `parentInstanceId` tops at `project`'s Caw: each session's
  * `parentInstanceId` walked up (a follow-up item rewrites it to its own
- * parent) to a session with none. A routine's run (`routine:<id>`) tops at
- * no session.
+ * parent) to a session with none, or to a thing of the project's (a fresh
+ * session for a trigger, triggers.ts: Caw's too). A routine's run
+ * (`routine:<id>`) tops at no session.
  */
 export const topsAtCaw = (
   db: Pick<DbShape, "getInstancesByIds">,
   parentInstanceId: string,
   project: ProjectRow
 ): boolean => {
+  if (isThingParent(parentInstanceId)) {
+    return true;
+  }
   if (isHubParent(parentInstanceId)) {
     return false;
   }
@@ -27,6 +32,9 @@ export const topsAtCaw = (
   let [root] = db.getInstancesByIds([parentInstanceId]);
   while (root?.parentInstanceId && !seen.has(root.id)) {
     seen.add(root.id);
+    if (isThingParent(root.parentInstanceId)) {
+      return root.projectId === project.id;
+    }
     if (isHubParent(root.parentInstanceId)) {
       return false;
     }

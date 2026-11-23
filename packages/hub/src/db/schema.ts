@@ -145,6 +145,7 @@ import { HOUR_MS } from "@cawco/core/time";
 import type { ToolStatus } from "@cawco/core/tools";
 import { TOOL_STATES, TOOL_UPDATES } from "@cawco/core/tools";
 import { TRACKERS } from "@cawco/core/trackers";
+import { THING_KINDS, TRIGGER_KINDS } from "@cawco/core/triggers";
 import type { LimitWindow } from "@cawco/core/usage/types";
 import { USAGE_HARNESSES } from "@cawco/core/usage/types";
 import { STAGES_TEMPLATES } from "@cawco/core/views";
@@ -7350,4 +7351,63 @@ export const viewProposals = sqliteTable(
     proposedAt: timestamp("proposed_at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.projectId, table.view] })]
+);
+
+/** The settings each kind of trigger takes, one layer's: null is unset (core triggers.ts `TriggerSetting`). */
+const triggerSettingColumns = () => ({
+  harness: storedEnum(z.enum(HARNESSES))("harness"),
+  model: text("model"),
+  mode: storedEnum(z.enum(PERMISSION_MODES))("mode"),
+  account: text("account").references(() => accounts.id, {
+    onDelete: "set null",
+  }),
+});
+
+/**
+ * The fleet's default for each kind of trigger (core `TRIGGER_KINDS`): the
+ * harness, model, permission mode and account a fresh session for one
+ * starts on where its project sets none (hub trigger-settings.ts). A kind
+ * with no row sets nothing.
+ */
+export const fleetTriggerSettings = sqliteTable("fleet_trigger_settings", {
+  kind: storedEnum(z.enum(TRIGGER_KINDS))("kind").primaryKey(),
+  ...triggerSettingColumns(),
+});
+
+/** A project's own setting for a kind of trigger, over the fleet's ({@link fleetTriggerSettings}). */
+export const projectTriggerSettings = sqliteTable(
+  "project_trigger_settings",
+  {
+    projectId: projectKey(),
+    kind: storedEnum(z.enum(TRIGGER_KINDS))("kind").notNull(),
+    ...triggerSettingColumns(),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.kind] })]
+);
+
+/**
+ * A trigger held on its project (hub triggers.ts): it arrived while the
+ * project's trigger switch was off, or past its spend cap, so nothing
+ * started for it. When the switch turns on, one fresh session reads them
+ * all, grouped by thing, and the rows go.
+ */
+export const heldTriggers = sqliteTable(
+  "held_triggers",
+  {
+    id: text("id").primaryKey(),
+    projectId: projectKey(),
+    /** Its kind (hub caw.ts `EVENT_SKILLS`): the skill it names. */
+    kind: text("kind").notNull(),
+    thingKind: storedEnum(z.enum(THING_KINDS))("thing_kind").notNull(),
+    thingId: text("thing_id").notNull(),
+    /** The thing as a reader names it, with its link. */
+    thingName: text("thing_name").notNull(),
+    /** What happened, one line with the thing's link. */
+    what: text("what").notNull(),
+    /** What changed, verbatim. */
+    delta: text("delta").notNull(),
+    who: text("who").notNull(),
+    at: timestamp("at").notNull(),
+  },
+  (table) => [index("held_triggers_project").on(table.projectId, table.at)]
 );

@@ -511,12 +511,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    tracker-github-project.ts `statusOptionsAdded`), and binding a tracker
  *    can refuse with `tracker-github-statuses`. A page built for 101 reads
  *    them, so it reloads first.
+ * 103: a decision page's writer carries no `heardBy`, and a page's Send,
+ *    its note and its Make tasks may answer a 409 of their own: what the
+ *    person does on a page whose session ended is a trigger on it (hub
+ *    triggers.ts), never the session that delegated it. A page built for
+ *    102 may read either, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 102;
+export const WIRE_PROTOCOL = 103;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

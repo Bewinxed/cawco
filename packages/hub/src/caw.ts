@@ -4,10 +4,11 @@
  * names it (`projects.conversation_instance_id`), and Caw is its name and
  * face on the project's page.
  *
- * - **A switch per project** (`projects.caw`): whether the project's events
- *   reach a conversation. Your words reach it on or off; an event, only
- *   while it is on. Off, what it started still runs or stops as you choose
- *   ({@link turnOff}).
+ * - **A switch per project** (`projects.caw`): whether triggers on the
+ *   project's things start sessions (triggers.ts). Your words reach the
+ *   conversation on or off. Off, what it started still runs or stops as you
+ *   choose ({@link turnOff}), and what arrives is held on the project until
+ *   it is on again.
  * - **Started by the hub when an event needs one**: on a checkout of the
  *   project on a machine that is online, else its folder on the hub or a
  *   folder of its own ({@link CawDeps.leadHome}). A plain spawn in the
@@ -15,14 +16,15 @@
  *   ({@link modeFor}: the event route's, the routine's, the project's, the
  *   fleet's), else the one you last chose for its harness on that machine.
  *   A start that fails says why on the project's head until one goes.
- * - **Events are sends**: each event is one send to the conversation's
- *   session through the one send path ({@link Caw.tell}), with its context
- *   line ({@link eventContext}: the project and folder, the trigger, the
- *   skill for its kind). What the person typed is the whole of their
- *   message: their words' context rides in the send's reminder after them,
- *   and their acts are CawCo's notices ({@link ProjectEvent}). A report
- *   reaches it as any delegate's reaches its parent. Nothing is noted
- *   anywhere else: the person reads the conversation.
+ * - **The person's words, and the reports of what it started** (tsk-310;
+ *   the owner's card "Where triggers go"): what the person types to Caw
+ *   (the panel, the phone, a view's ask, a project's first words) is one send
+ *   through the one send path ({@link Caw.tell}), its context line
+ *   ({@link eventContext}) in the send's reminder after their words. A
+ *   delegate it started reports to it as any delegate reports to its
+ *   parent, whatever its size. Every other trigger (a comment, a task's
+ *   move, a pin, a card, a routine's run or report, an inbound event) goes
+ *   through the trigger router (triggers.ts) and never reaches it.
  * - **Notes**: what the hub says to the person about the project (a
  *   repository made, an offer to answer, a routine made) is a line in the
  *   conversation's transcript, waking nobody ({@link Caw.notice}).
@@ -43,7 +45,6 @@ import {
   type BlockPage,
   viewTitle,
 } from "@cawco/core/blocks";
-import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import type { ConnectionView } from "@cawco/core/connections";
 import type { HubEnvelope } from "@cawco/core/envelopes";
 import {
@@ -66,11 +67,7 @@ import {
   type ProjectNote,
   type ProjectSpend,
 } from "@cawco/core/project-conversation";
-import type {
-  InstanceRow,
-  SendPayload,
-  SpawnPayload,
-} from "@cawco/core/protocol";
+import type { InstanceRow, SpawnPayload } from "@cawco/core/protocol";
 import { projectLink, taskLink } from "@cawco/core/references";
 import type { RelayProvider } from "@cawco/core/relays";
 import type { NeutralOrigin } from "@cawco/core/session-messages";
@@ -88,12 +85,12 @@ import type { Blocks } from "./blocks";
 import { topsAtCaw } from "./caw-own";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
-import type { Origin, StoredSendRefusal } from "./db/stored-types";
+import type { StoredSendRefusal } from "./db/stored-types";
 import { boardTitle } from "./labels";
 import type { createLeadHome } from "./lead-home";
 import { awayProblem } from "./machine-answers";
 import { defineTool, type McpTool, sentence } from "./mcp-tool";
-import { personsTier, ROUTINE_ORIGIN } from "./memory";
+import { personsTier } from "./memory";
 import { INDEX_FILE } from "./memory-lessons";
 import { VIEW_PROMPT } from "./openui";
 import {
@@ -134,6 +131,12 @@ import {
   type Tasks,
   type TaskView,
 } from "./tasks";
+import {
+  type Carried,
+  EVENT_SKILLS,
+  type EventKind,
+  type TriggerEvent,
+} from "./trigger-event";
 import type { TypeProposals } from "./type-proposals";
 import type { Views } from "./views";
 import { budgetOf } from "./work-limits";
@@ -276,31 +279,6 @@ export const placeRefOf = (machineId: string, path: string): WorkspaceRef => ({
   path,
 });
 
-/**
- * The skill each kind of event names in its send's context line: the how-to
- * for that kind (packages/hub/skills/), which the conversation loads when it
- * reads it.
- */
-export const EVENT_SKILLS = {
-  "routine-run": "project-routine-run",
-  "routine-report": "project-routine-report",
-  "delegate-report": "project-delegate-report",
-  "attempt-judgement": "project-attempt-judgement",
-  "task-move": "project-task-move",
-  "github-event": "project-github-event",
-  "inbound-event": "project-inbound-event",
-  "person-request": "project-person-request",
-  "task-input": "project-task-input",
-  "fleet-watch": "project-fleet-watch",
-  connection: "project-connection",
-  decision: "project-decision",
-  "project-setup": "project-setup",
-  "view-request": "project-view",
-} as const;
-
-/** What kind of event a send to the project's conversation is ({@link EVENT_SKILLS}). */
-export type EventKind = keyof typeof EVENT_SKILLS;
-
 /** What every event says of itself: its kind, and what triggered it in words with its link. */
 interface EventBase {
   /** What rode with it (pictures, files). */
@@ -345,29 +323,12 @@ export type PersonsActOrigin =
   typeof ACT_ORIGIN | typeof ARTIFACT_ORIGIN | typeof PLAN_ORIGIN;
 
 /**
- * Anything else the conversation hears (a routine's run, an inbound event,
- * a task moving, a report), CawCo's word opening with its context, only
- * while the switch is on. A routine's run and an event route name
- * themselves, for the turn the run is and the mode a start takes
- * ({@link modeFor}).
+ * What the project's conversation hears, as one send to its session
+ * ({@link Caw.tell}): the person's words ({@link YourWords}) or acts
+ * ({@link YourAct}), on or off, waking it stopped. Only {@link YourWords} is
+ * drawn as the person's. Every other trigger is the router's (triggers.ts).
  */
-export interface HubEvent extends EventBase {
-  by: "event";
-  /** The event route that delivered it, when one did. */
-  route?: string;
-  /** The routine whose run it is. */
-  routine?: string;
-  text: string;
-}
-
-/**
- * One event the project's conversation hears, as one send to its session
- * ({@link Caw.tell}). Who wrote it and how it routes are apart: the
- * person's words ({@link YourWords}) and acts ({@link YourAct}) reach it on
- * or off and wake it stopped; an event ({@link HubEvent}) only while the
- * switch is on. Only {@link YourWords} is drawn as the person's.
- */
-export type ProjectEvent = YourWords | YourAct | HubEvent;
+export type ProjectEvent = YourWords | YourAct;
 
 /**
  * The person's words or act sent straight to one session (not through its
@@ -380,10 +341,6 @@ export type PersonsSend =
   | { by: "you"; note?: string; words: string }
   | { by: "act"; line: string; text: string };
 
-/** How an event routes: the person's (on or off, waking it stopped) or the hub's (only while on). */
-const routeOf = (event: Pick<ProjectEvent, "by">): Origin =>
-  event.by === "event" ? "event" : "you";
-
 /**
  * The two lines every event's send carries: where the conversation runs
  * (its project and folder), what triggered it, and the skill for its kind.
@@ -395,9 +352,6 @@ export const eventContext = (
   trigger: string
 ): string =>
   `[CawCo] ${projectLink(project.id, project.name)}, in ${folder}: ${trigger}.\nFor how to handle a ${kind.replaceAll("-", " ")}, use the ${EVENT_SKILLS[kind]} skill.`;
-
-/** What a send carries besides its words: pictures (base64) and attachments. */
-export type Carried = Pick<SendPayload, "attachments" | "images">;
 
 /**
  * One send as it goes to the conversation's session: its content (the
@@ -433,17 +387,6 @@ const saidOf = (
         content: event.text,
         origin: { kind: "system", ...event.origin },
         reminder: context,
-      };
-    case "event":
-      return {
-        ...carried,
-        content: `${context}\n\n${event.text}`,
-        origin: {
-          kind: "system",
-          name: event.routine
-            ? `${ROUTINE_ORIGIN}${event.routine}`
-            : PROJECT_ORIGIN,
-        },
       };
     default:
       return unhandled("project event", event);
@@ -501,19 +444,12 @@ const typeText = (
   return body;
 };
 
-/** The system origin's name of a send to the project's conversation for an event (core `NeutralOrigin`). */
-export const PROJECT_ORIGIN = "project";
-
 /** Statuses a conversation cannot be woken from: its row is gone for good. */
 const GONE: ReadonlySet<string> = new Set(["discarded"]);
 
 /** What a thrown error says. */
 const errorWords = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
-
-/** Why an event's send goes no further while the switch is off. */
-const CAW_OFF =
-  "Events don't reach this project's conversation while its switch is off.";
 
 /** Why a send went nowhere when its record names no reason. */
 const NOT_TAKEN = "Its session didn't take the message.";
@@ -525,11 +461,6 @@ export interface CawDeps {
   readonly blocks: Pick<Blocks, "propose">;
   /** The project's spend cap and the fleet's default for it (project-caps.ts). */
   readonly caps: Pick<Caps, "capOf" | "quiets">;
-  /**
-   * The project's conversation started while its switch is on: the inbound
-   * events kept for it go to it now (ingress.ts `drain`).
-   */
-  readonly conversationStarted: (projectId: string) => void;
   readonly db: Pick<
     DbShape,
     | "accounts"
@@ -628,6 +559,11 @@ export interface CawDeps {
     ) => Omit<CawRunning, "kind" | "taskId" | "taskTitle">[];
     stop: ProjectStops["stop"];
   };
+  /**
+   * The project's trigger switch turned on: what was held while it was off
+   * goes to one fresh session (triggers.ts `switchedOn`).
+   */
+  readonly switchedOn: (projectId: string) => void;
   /** A task as its project's files have it, or the problem of its read (tasks.ts `get`). */
   readonly task: (
     projectId: string,
@@ -636,6 +572,8 @@ export interface CawDeps {
     | Pick<TaskView, "id" | "kind" | "stage" | "title">
     | ProblemsOf<ReturnType<Tasks["get"]>>
   >;
+  /** A trigger on a thing of the project, to the router (triggers.ts `routeQuietly`). */
+  readonly trigger: (projectId: string, event: TriggerEvent) => void;
   /**
    * A session's turn ended (routines.ts `turnEnded`): the conversation runs
    * whose wake it read and that it gave no result fail, `why` when it is
@@ -656,7 +594,8 @@ export const createCaw = ({
   answered,
   blocks,
   caps,
-  conversationStarted,
+  switchedOn,
+  trigger,
   db,
   discard,
   end,
@@ -769,7 +708,7 @@ export const createCaw = ({
    */
   const modeFor = (
     project: ProjectRow,
-    event: Pick<HubEvent, "route" | "routine"> | undefined
+    event: { route?: string; routine?: string } | undefined
   ): OfferedMode | undefined =>
     (event?.route ? db.ingress.route(event.route)?.mode : undefined) ??
     (event?.routine ? db.routines.get(event.routine)?.mode : undefined) ??
@@ -844,9 +783,8 @@ export const createCaw = ({
       : { why: record.reason ?? NOT_TAKEN, refusal: record.refusal };
   };
 
-  /** What starts the conversation: how it routes, its first send once its row is there, and how. */
+  /** What starts the conversation: its first send once its row is there, its mode and skills. */
   interface Start {
-    by: Origin;
     first: (session: InstanceRow) => Said;
     mode?: OfferedMode;
     /** Skills in its context before its first send (the spawn's `skills`). */
@@ -906,9 +844,6 @@ export const createCaw = ({
     console.log(
       `[caw] ${project.name}: started its conversation on ${project.cawHarness} (${instanceId})`
     );
-    if (project.eventsOn) {
-      conversationStarted(project.id);
-    }
     return { conversation, sent: sent.uuid };
   };
 
@@ -925,9 +860,8 @@ export const createCaw = ({
   };
 
   /**
-   * The project's conversation: the one it has, or one started now with
-   * `start`'s words (its first message): for your words on or off, for an
-   * event while the switch is on. Undefined for an event while it is off.
+   * The project's conversation for the person's words: the one it has, or
+   * one started now with `start`'s words (its first message), on or off.
    * Callers at once share one start; `started` says whether this call's
    * words went out with it, as the send `sent`.
    */
@@ -935,9 +869,6 @@ export const createCaw = ({
     const project = projectOf(projectId);
     if (project instanceof ElysiaStatus) {
       return project;
-    }
-    if (start.by === "event" && !project.eventsOn) {
-      return;
     }
     const current = standing(project);
     if (current) {
@@ -962,11 +893,8 @@ export const createCaw = ({
       : { row: made.conversation, sent: made.sent, started: true };
   };
 
-  /** Why `event` goes nowhere now: events are off, or the project is past its cap; undefined when it goes. */
-  const heldBack = (project: ProjectRow, event: ProjectEvent) => {
-    if (routeOf(event) === "event" && !project.eventsOn) {
-      return problem(409, { code: "caw-off", detail: CAW_OFF });
-    }
+  /** Why the person's words go nowhere now: the project is past its cap; undefined when they go. */
+  const heldBack = (project: ProjectRow) => {
     const capped = caps.quiets(project.id);
     return capped === undefined
       ? undefined
@@ -974,15 +902,13 @@ export const createCaw = ({
   };
 
   /**
-   * One event, one send to the project's conversation (§5.3): an attempt's
-   * judgement, a task moving, a routine's run, an inbound event, the
-   * person's words or acts from another place, each said as
-   * {@link saidOf} says it, starting the conversation when it has none (in
-   * {@link modeFor}'s mode, with `skills` in its context first). The
-   * person's words and acts reach it on or off; an event, only while the
-   * switch is on. Past the project's spend cap nothing goes. There is no
-   * timer behind it. Answers the conversation's session and the send, or
-   * why nothing went.
+   * The person's words or act to Caw from another place (their phone, a
+   * view's ask, a project's first words), one send to the project's
+   * conversation (§5.3), said as {@link saidOf} says it, starting the
+   * conversation when it has none (in {@link modeFor}'s mode, with `skills`
+   * in its context first), on or off. Past the project's spend cap nothing
+   * goes. Answers the conversation's session and the send, or why nothing
+   * went.
    */
   const tell = async (
     projectId: string,
@@ -993,23 +919,19 @@ export const createCaw = ({
     if (project instanceof ElysiaStatus) {
       return project;
     }
-    const held = heldBack(project, event);
+    const held = heldBack(project);
     if (held) {
       return held;
     }
     const said = (session: InstanceRow) => saidOf(project, session.cwd, event);
-    const mode = modeFor(project, event.by === "event" ? event : undefined);
+    const mode = modeFor(project, undefined);
     const conversation = await conversationFor(projectId, {
-      by: routeOf(event),
       first: said,
       ...(skills ? { skills } : {}),
       ...(mode ? { mode } : {}),
     });
     if (conversation instanceof ElysiaStatus) {
       return conversation;
-    }
-    if (!conversation) {
-      return problem(409, { code: "caw-off", detail: CAW_OFF });
     }
     const sent =
       conversation.started && conversation.sent
@@ -1032,31 +954,6 @@ export const createCaw = ({
     sent.refusal?.kind === "machine-away"
       ? awayProblem(sent.refusal.machineId, sent.why)
       : problem(409, { code: "caw-send-not-taken", detail: sent.why });
-
-  /** {@link tell} for the tellers that only log what did not go: an event is never lost silently. */
-  const tellQuietly = (projectId: string, event: ProjectEvent): void => {
-    const said = (why: string) => {
-      console.warn(
-        `[caw] ${projectId}: the project's conversation did not hear ${event.kind}: ${why}`
-      );
-      sayNestedBoundaryFix(why);
-    };
-    tell(projectId, event).then(
-      (told) => {
-        if (told instanceof ElysiaStatus) {
-          said(told.response.detail);
-        }
-      },
-      (error: unknown) => said(errorWords(error))
-    );
-  };
-
-  /**
-   * {@link tell} for the person's words or acts from a page (a view's ask, a
-   * decided page): what held them back is the page's answer.
-   */
-  const tellYours = (projectId: string, event: YourWords | YourAct) =>
-    tell(projectId, event);
 
   /** Ends the project's conversation and clears it: its harness or model moved. */
   const retire = (project: ProjectRow): void => {
@@ -1479,7 +1376,7 @@ export const createCaw = ({
       projectsChanged();
     }
     if (next.on && !project.eventsOn) {
-      conversationStarted(project.id);
+      switchedOn(project.id);
     }
   };
 
@@ -1496,35 +1393,12 @@ export const createCaw = ({
   };
 
   const api = {
-    /**
-     * The session an attempt nobody asked for reports to (dispatch.ts): the
-     * project's conversation, started for that attempt when it has none.
-     * Undefined for the hub's attempt while the switch is off.
-     */
-    conversationFor: async (projectId: string, by: Origin) => {
-      const project = projectOf(projectId);
-      if (project instanceof ElysiaStatus) {
-        return project;
-      }
-      const mode = modeFor(project, undefined);
-      const conversation = await conversationFor(projectId, {
-        by,
-        first: (session) =>
-          saidOf(project, session.cwd, {
-            by: "event",
-            kind: "delegate-report",
-            trigger: `${by === "you" ? "the person" : "the hub"} started an attempt at one of its tasks`,
-            text: "Its report comes to you when it ends.",
-          }),
-        ...(mode ? { mode } : {}),
-      });
-      return conversation instanceof ElysiaStatus
-        ? conversation
-        : conversation?.row;
-    },
     tell,
-    tellQuietly,
-    tellYours,
+    /** Where a project's sessions start (triggers.ts): its checkout, else its folder. */
+    placeFor: async (project: ProjectRow) => {
+      const place = await placeFor(project);
+      return place instanceof ElysiaStatus ? undefined : place;
+    },
     /**
      * The person sent project `projectId`'s setup page, and send `uuid`
      * told its session: in the turn that reads it, that session's
@@ -1546,20 +1420,25 @@ export const createCaw = ({
     /**
      * §5.5: "Caw offers the relay when you connect a push-only service". The
      * project now has `connection` signed in, whose service pushes its
-     * events and is never polled, and no relay for `provider`: one send to
-     * the project's conversation (so only while the switch is on), which
-     * offers one (the project-connection skill).
+     * events and is never polled, and no relay for `provider`: a trigger on
+     * the connection (triggers.ts), whose session offers one (the
+     * project-connection skill).
      */
     offerRelay(
       projectId: string,
       connection: Pick<ConnectionView, "account" | "name" | "service">,
       provider: RelayProvider
     ): void {
-      tellQuietly(projectId, {
-        by: "event",
+      trigger(projectId, {
         kind: "connection",
-        trigger: `the person signed in the connection “${connection.name}” (${connection.service}, ${connection.account})`,
-        text: `${connection.service} pushes its events instead of being polled, so none reach the project until it has a relay. Offer one for the provider "${provider}".`,
+        thing: {
+          kind: "connection",
+          id: connection.name,
+          name: `the connection “${connection.name}”`,
+        },
+        what: `The person signed in the connection “${connection.name}” (${connection.service}, ${connection.account}).`,
+        delta: `${connection.service} pushes its events instead of being polled, so none reach the project until it has a relay. Offer one for the provider "${provider}".`,
+        who: "you",
       });
     },
 
@@ -1728,9 +1607,6 @@ export const createCaw = ({
       if (project.conversationInstanceId !== instanceId) {
         startProblems.delete(project.id);
         setConversation(project.id, instanceId);
-        if (project.eventsOn) {
-          conversationStarted(project.id);
-        }
       }
       return view(projectId);
     },
@@ -1751,7 +1627,7 @@ export const createCaw = ({
       if (words instanceof ElysiaStatus) {
         return words;
       }
-      const told = await tellYours(projectId, {
+      const told = await tell(projectId, {
         by: "you",
         kind: "view-request",
         trigger: "the person asked for a view of the project",
@@ -1777,7 +1653,7 @@ export const createCaw = ({
       if (kept instanceof ElysiaStatus) {
         return kept;
       }
-      const told = await tellYours(projectId, {
+      const told = await tell(projectId, {
         by: "you",
         kind: "view-request",
         trigger: `the person asked to change the view “${viewTitle(kept.name)}”`,
@@ -1868,14 +1744,14 @@ export const createCaw = ({
 
     /**
      * A task changed: one that entered a stage of kind `you` by anyone but
-     * the conversation or you is one send to the conversation (a needs-you
-     * item).
+     * the person is a trigger on the task (triggers.ts), so whoever is on it
+     * makes sure the person has what they need.
      */
     taskChanged(event: TaskEvent): void {
+      // What the person or their own Caw conversation did is no news to them.
       if (
         event.kind === "changed" ||
         event.actor.mover === "you" ||
-        !db.project(event.projectId)?.eventsOn ||
         isProjectConversation(
           { id: event.actor.instanceId ?? "", projectId: event.projectId },
           db.project
@@ -1888,11 +1764,20 @@ export const createCaw = ({
         .then((waiting) => {
           // A task that does not read sends nothing, as a failed read did.
           if ("kind" in waiting && waiting.kind === "you") {
-            tellQuietly(projectId, {
-              by: "event",
+            trigger(projectId, {
               kind: "task-move",
-              trigger: `${taskLink(projectId, waiting.id, waiting.title)} moved to ${waiting.stage}, a stage that waits for the person`,
-              text: `It moved there by ${event.actor.mover === "session" ? event.actor.author.name : `the ${event.actor.mover}`}${"reason" in event && event.reason ? `: ${event.reason}` : ""}.`,
+              thing: {
+                kind: "task",
+                id: waiting.id,
+                name: taskLink(projectId, waiting.id, waiting.title),
+              },
+              what: `${taskLink(projectId, waiting.id, waiting.title)} moved to ${waiting.stage}, a stage that waits for the person.`,
+              delta: `It moved there${"reason" in event && event.reason ? `: ${event.reason}` : "."}`,
+              who:
+                event.actor.mover === "session"
+                  ? event.actor.author.name
+                  : `the ${event.actor.mover}`,
+              ...(event.actor.instanceId ? { by: event.actor.instanceId } : {}),
             });
           }
         })

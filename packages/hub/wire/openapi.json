@@ -11650,6 +11650,135 @@
         }
       }
     },
+    "/api/fleet/trigger-settings": {
+      "get": {
+        "operationId": "getApiFleetTriggerSettings",
+        "responses": {
+          "200": {
+            "description": "getApiFleetTriggerSettings 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetTriggerSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiFleetTriggerSettings 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiFleetTriggerSettings422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fleet/trigger-settings/{kind}": {
+      "patch": {
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "comments",
+                "inbound-events",
+                "routine-results",
+                "task-moves"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "account": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "harness": {
+                    "enum": [
+                      "claude",
+                      "codex",
+                      "opencode",
+                      "pi"
+                    ],
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "mode": {
+                    "enum": [
+                      "acceptEdits",
+                      "bypassPermissions",
+                      "default",
+                      "fullSend",
+                      "plan"
+                    ],
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "model": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchApiFleetTriggerSettingsByKind",
+        "responses": {
+          "200": {
+            "description": "patchApiFleetTriggerSettingsByKind 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patchApiFleetTriggerSettingsByKind200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "patchApiFleetTriggerSettingsByKind 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patchApiFleetTriggerSettingsByKind400"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "patchApiFleetTriggerSettingsByKind 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patchApiFleetTriggerSettingsByKind422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/fleet/updates/check": {
       "post": {
         "operationId": "postApiFleetUpdatesCheck",
@@ -15196,16 +15325,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend500"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "postApiInstancesByIdArtifactsByArtifactSend 502",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSend502"
                 }
               }
             }
@@ -22104,16 +22223,6 @@
               }
             }
           },
-          "502": {
-            "description": "postApiProjectsByIdDecisionsByNameSend 502",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiProjectsByIdDecisionsByNameSend502"
-                }
-              }
-            }
-          },
           "503": {
             "description": "postApiProjectsByIdDecisionsByNameSend 503",
             "content": {
@@ -22235,16 +22344,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiProjectsByIdDecisionsByNameTasks500"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "postApiProjectsByIdDecisionsByNameTasks 502",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiProjectsByIdDecisionsByNameTasks502"
                 }
               }
             }
@@ -28766,6 +28865,173 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiProjectsByIdTrackerSync422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/trigger-settings": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdTriggerSettings",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdTriggerSettings 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTriggerSettings"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdTriggerSettings 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectsByIdTriggerSettings404"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdTriggerSettings 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectsByIdTriggerSettings422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/trigger-settings/{kind}": {
+      "patch": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "comments",
+                "inbound-events",
+                "routine-results",
+                "task-moves"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "account": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "harness": {
+                    "enum": [
+                      "claude",
+                      "codex",
+                      "opencode",
+                      "pi"
+                    ],
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "mode": {
+                    "enum": [
+                      "acceptEdits",
+                      "bypassPermissions",
+                      "default",
+                      "fullSend",
+                      "plan"
+                    ],
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "model": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchApiProjectsByIdTriggerSettingsByKind",
+        "responses": {
+          "200": {
+            "description": "patchApiProjectsByIdTriggerSettingsByKind 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTriggerSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "patchApiProjectsByIdTriggerSettingsByKind 400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patchApiProjectsByIdTriggerSettingsByKind400"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "patchApiProjectsByIdTriggerSettingsByKind 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patchApiProjectsByIdTriggerSettingsByKind404"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "patchApiProjectsByIdTriggerSettingsByKind 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patchApiProjectsByIdTriggerSettingsByKind422"
                 }
               }
             }
@@ -40951,7 +41217,7 @@
         "type": "object",
         "properties": {
           "instanceId": {
-            "description": "The project's conversation it went to, when it went there.",
+            "description": "The session of Caw's it went to (hub triggers.ts), when one took it; none while it waits on the project.",
             "type": "string"
           },
           "to": {
@@ -40983,24 +41249,8 @@
         "type": "object",
         "properties": {
           "ended": {
-            "description": "It takes no input now: what the person does on the page goes to {@link heardBy}, else to the project's Caw (hub artifacts/taker.ts).",
+            "description": "It takes no input now: what the person does on the page is a trigger on it, for a session of Caw's (hub artifacts/taker.ts, triggers.ts).",
             "type": "boolean"
-          },
-          "heardBy": {
-            "description": "Who hears the person on the page instead while it takes none: the session that delegated it. Absent with `ended`: Caw.",
-            "type": "object",
-            "properties": {
-              "instanceId": {
-                "type": "string"
-              },
-              "title": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "instanceId",
-              "title"
-            ]
           },
           "instanceId": {
             "type": "string"
@@ -44803,6 +45053,38 @@
             }
           }
         }
+      },
+      "FleetTriggerSettings": {
+        "description": "The fleet's own settings, kind by kind (`GET /api/fleet/trigger-settings`).",
+        "type": "object",
+        "properties": {
+          "kinds": {
+            "type": "object",
+            "properties": {
+              "comments": {
+                "$ref": "#/components/schemas/TriggerSetting"
+              },
+              "inbound-events": {
+                "$ref": "#/components/schemas/TriggerSetting"
+              },
+              "routine-results": {
+                "$ref": "#/components/schemas/TriggerSetting"
+              },
+              "task-moves": {
+                "$ref": "#/components/schemas/TriggerSetting"
+              }
+            },
+            "required": [
+              "comments",
+              "inbound-events",
+              "routine-results",
+              "task-moves"
+            ]
+          }
+        },
+        "required": [
+          "kinds"
+        ]
       },
       "FleetWatchNotice": {
         "description": "A needs-you notice from fleet watch: a triage told you, or a session in a\nproject whose Caw is off showed two signals (no model is woken there).\nKept by the hub until you act on the session or it moves on.",
@@ -55323,13 +55605,6 @@
           "artifact-unknown",
           "artifact-unnamed",
           "at-limit-needs-account",
-          "caw-home-unsaid",
-          "caw-no-machine",
-          "caw-off",
-          "caw-project-unknown",
-          "caw-send-not-taken",
-          "caw-spend-capped",
-          "caw-start-undone",
           "dispatch-project-unknown",
           "dispatch-runs-on-unknown",
           "dispatch-settings-unfit",
@@ -55368,10 +55643,7 @@
           "give-url-alone-connection",
           "large-files-live-https",
           "large-files-live-url",
-          "launch-account-unavailable",
           "lfs-refused",
-          "machine-away",
-          "machine-silent",
           "name-needed",
           "name-one-line",
           "name-too-long",
@@ -55379,15 +55651,7 @@
           "no-area",
           "no-project",
           "not-allowed",
-          "spawn-default-unnamed",
-          "spawn-not-placed",
-          "spawn-not-settled",
-          "spawn-payload-unnamed",
-          "spawn-project-deleted",
-          "spawn-session-key-held",
-          "spawn-start-failed",
-          "spawn-task-accounts-unread",
-          "starting-set-unread",
+          "page-unheard",
           "task-id-unfit",
           "task-link-unread",
           "task-project-unknown",
@@ -56227,6 +56491,86 @@
           "deferred",
           "failed",
           "stopped"
+        ]
+      },
+      "ProjectTriggerSettings": {
+        "description": "A project's settings, kind by kind: its own and what is in effect (`GET /api/projects/:id/trigger-settings`).",
+        "type": "object",
+        "properties": {
+          "kinds": {
+            "type": "object",
+            "properties": {
+              "comments": {
+                "type": "object",
+                "properties": {
+                  "inEffect": {
+                    "$ref": "#/components/schemas/TriggerSettingInEffect"
+                  },
+                  "own": {
+                    "$ref": "#/components/schemas/TriggerSetting"
+                  }
+                },
+                "required": [
+                  "inEffect",
+                  "own"
+                ]
+              },
+              "inbound-events": {
+                "type": "object",
+                "properties": {
+                  "inEffect": {
+                    "$ref": "#/components/schemas/TriggerSettingInEffect"
+                  },
+                  "own": {
+                    "$ref": "#/components/schemas/TriggerSetting"
+                  }
+                },
+                "required": [
+                  "inEffect",
+                  "own"
+                ]
+              },
+              "routine-results": {
+                "type": "object",
+                "properties": {
+                  "inEffect": {
+                    "$ref": "#/components/schemas/TriggerSettingInEffect"
+                  },
+                  "own": {
+                    "$ref": "#/components/schemas/TriggerSetting"
+                  }
+                },
+                "required": [
+                  "inEffect",
+                  "own"
+                ]
+              },
+              "task-moves": {
+                "type": "object",
+                "properties": {
+                  "inEffect": {
+                    "$ref": "#/components/schemas/TriggerSettingInEffect"
+                  },
+                  "own": {
+                    "$ref": "#/components/schemas/TriggerSetting"
+                  }
+                },
+                "required": [
+                  "inEffect",
+                  "own"
+                ]
+              }
+            },
+            "required": [
+              "comments",
+              "inbound-events",
+              "routine-results",
+              "task-moves"
+            ]
+          }
+        },
+        "required": [
+          "kinds"
         ]
       },
       "ProjectView": {
@@ -65219,6 +65563,115 @@
           "deadline",
           "failed",
           "failing"
+        ]
+      },
+      "TriggerSetting": {
+        "description": "One layer's setting for a kind of trigger (the fleet's, or a project's\nover it): null is unset, and the layer below speaks. `account` is an\naccount's id.",
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/EventRouteViewMode"
+          },
+          "model": {
+            "type": "string"
+          }
+        }
+      },
+      "TriggerSettingInEffect": {
+        "description": "One kind's settings in effect for a project, each field with its source.",
+        "type": "object",
+        "properties": {
+          "account": {
+            "description": "A setting in effect, and where it came from.",
+            "type": "object",
+            "properties": {
+              "from": {
+                "$ref": "#/components/schemas/TriggerSettingSource"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "from"
+            ]
+          },
+          "harness": {
+            "description": "A setting in effect, and where it came from.",
+            "type": "object",
+            "properties": {
+              "from": {
+                "$ref": "#/components/schemas/TriggerSettingSource"
+              },
+              "value": {
+                "$ref": "#/components/schemas/TriggerSourced.T"
+              }
+            },
+            "required": [
+              "from",
+              "value"
+            ]
+          },
+          "mode": {
+            "description": "A setting in effect, and where it came from.",
+            "type": "object",
+            "properties": {
+              "from": {
+                "$ref": "#/components/schemas/TriggerSettingSource"
+              },
+              "value": {
+                "$ref": "#/components/schemas/EventRouteViewMode"
+              }
+            },
+            "required": [
+              "from"
+            ]
+          },
+          "model": {
+            "description": "A setting in effect, and where it came from.",
+            "type": "object",
+            "properties": {
+              "from": {
+                "$ref": "#/components/schemas/TriggerSettingSource"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "from"
+            ]
+          }
+        },
+        "required": [
+          "account",
+          "harness",
+          "mode",
+          "model"
+        ]
+      },
+      "TriggerSettingSource": {
+        "description": "Where a trigger setting in effect came from: the project's own override,\nthe fleet's default for the kind, or neither, so the project's Caw\nsettings (its harness and model; its Caw mode, else its area's, else the\nfleet's; the account its sessions start on).",
+        "type": "string",
+        "enum": [
+          "caw",
+          "fleet",
+          "project"
+        ]
+      },
+      "TriggerSourced.T": {
+        "type": "string",
+        "enum": [
+          "claude",
+          "codex",
+          "opencode",
+          "pi"
         ]
       },
       "TurnImage": {
@@ -90739,6 +91192,42 @@
           }
         ]
       },
+      "getApiFleetTriggerSettings422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
       "getApiFleetWatch422": {
         "type": "object",
         "properties": {
@@ -110881,6 +111370,78 @@
           "type"
         ]
       },
+      "getApiProjectsByIdTriggerSettings404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "project-unknown"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "getApiProjectsByIdTriggerSettings422": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "unknown-fields"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              422
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
       "getApiProjectsByIdTrimRoutine200": {
         "type": "object",
         "properties": {
@@ -116452,6 +117013,213 @@
         ]
       },
       "patchApiFleetSkillsByName422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "patchApiFleetTriggerSettingsByKind200": {
+        "type": "object",
+        "properties": {
+          "kinds": {
+            "type": "object",
+            "properties": {
+              "comments": {
+                "$ref": "#/components/schemas/TriggerSetting"
+              },
+              "inbound-events": {
+                "$ref": "#/components/schemas/TriggerSetting"
+              },
+              "routine-results": {
+                "$ref": "#/components/schemas/TriggerSetting"
+              },
+              "task-moves": {
+                "$ref": "#/components/schemas/TriggerSetting"
+              }
+            },
+            "required": [
+              "comments",
+              "inbound-events",
+              "routine-results",
+              "task-moves"
+            ]
+          }
+        },
+        "required": [
+          "kinds"
+        ]
+      },
+      "patchApiFleetTriggerSettingsByKind400": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "ambiguous"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "no-account"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "patchApiFleetTriggerSettingsByKind422": {
         "anyOf": [
           {
             "type": "object",
@@ -126871,6 +127639,218 @@
           "status",
           "title",
           "type"
+        ]
+      },
+      "patchApiProjectsByIdTriggerSettingsByKind400": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "ambiguous"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "no-account"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "patchApiProjectsByIdTriggerSettingsByKind404": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "project-unknown"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              404
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "patchApiProjectsByIdTriggerSettingsByKind422": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {},
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "expected": {},
+              "found": {},
+              "on": {
+                "type": "string"
+              },
+              "property": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string",
+                "enum": [
+                  "Validation Error"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              }
+            },
+            "required": [
+              "code",
+              "on",
+              "status",
+              "title",
+              "type"
+            ]
+          }
         ]
       },
       "patchApiRoutinesById400": {
@@ -146420,13 +147400,6 @@
                   "artifact-unknown",
                   "artifact-unnamed",
                   "at-limit-needs-account",
-                  "caw-home-unsaid",
-                  "caw-no-machine",
-                  "caw-off",
-                  "caw-project-unknown",
-                  "caw-send-not-taken",
-                  "caw-spend-capped",
-                  "caw-start-undone",
                   "dispatch-project-unknown",
                   "dispatch-runs-on-unknown",
                   "dispatch-settings-unfit",
@@ -146465,10 +147438,7 @@
                   "give-url-alone-connection",
                   "large-files-live-https",
                   "large-files-live-url",
-                  "launch-account-unavailable",
                   "lfs-refused",
-                  "machine-away",
-                  "machine-silent",
                   "name-needed",
                   "name-one-line",
                   "name-too-long",
@@ -146476,15 +147446,7 @@
                   "no-area",
                   "no-project",
                   "not-allowed",
-                  "spawn-default-unnamed",
-                  "spawn-not-placed",
-                  "spawn-not-settled",
-                  "spawn-payload-unnamed",
-                  "spawn-project-deleted",
-                  "spawn-session-key-held",
-                  "spawn-start-failed",
-                  "spawn-task-accounts-unread",
-                  "starting-set-unread",
+                  "page-unheard",
                   "task-id-unfit",
                   "task-link-unread",
                   "task-project-unknown",
@@ -146508,7 +147470,6 @@
                   415,
                   422,
                   500,
-                  502,
                   503,
                   504
                 ],
@@ -146553,7 +147514,6 @@
               415,
               422,
               500,
-              502,
               503,
               504
             ],
@@ -146628,13 +147588,6 @@
                   "artifact-unknown",
                   "artifact-unnamed",
                   "at-limit-needs-account",
-                  "caw-home-unsaid",
-                  "caw-no-machine",
-                  "caw-off",
-                  "caw-project-unknown",
-                  "caw-send-not-taken",
-                  "caw-spend-capped",
-                  "caw-start-undone",
                   "dispatch-project-unknown",
                   "dispatch-runs-on-unknown",
                   "dispatch-settings-unfit",
@@ -146673,10 +147626,7 @@
                   "give-url-alone-connection",
                   "large-files-live-https",
                   "large-files-live-url",
-                  "launch-account-unavailable",
                   "lfs-refused",
-                  "machine-away",
-                  "machine-silent",
                   "name-needed",
                   "name-one-line",
                   "name-too-long",
@@ -146684,15 +147634,7 @@
                   "no-area",
                   "no-project",
                   "not-allowed",
-                  "spawn-default-unnamed",
-                  "spawn-not-placed",
-                  "spawn-not-settled",
-                  "spawn-payload-unnamed",
-                  "spawn-project-deleted",
-                  "spawn-session-key-held",
-                  "spawn-start-failed",
-                  "spawn-task-accounts-unread",
-                  "starting-set-unread",
+                  "page-unheard",
                   "task-id-unfit",
                   "task-link-unread",
                   "task-project-unknown",
@@ -146716,7 +147658,6 @@
                   415,
                   422,
                   500,
-                  502,
                   503,
                   504
                 ],
@@ -146761,7 +147702,6 @@
               415,
               422,
               500,
-              502,
               503,
               504
             ],
@@ -146836,13 +147776,6 @@
                   "artifact-unknown",
                   "artifact-unnamed",
                   "at-limit-needs-account",
-                  "caw-home-unsaid",
-                  "caw-no-machine",
-                  "caw-off",
-                  "caw-project-unknown",
-                  "caw-send-not-taken",
-                  "caw-spend-capped",
-                  "caw-start-undone",
                   "dispatch-project-unknown",
                   "dispatch-runs-on-unknown",
                   "dispatch-settings-unfit",
@@ -146881,10 +147814,7 @@
                   "give-url-alone-connection",
                   "large-files-live-https",
                   "large-files-live-url",
-                  "launch-account-unavailable",
                   "lfs-refused",
-                  "machine-away",
-                  "machine-silent",
                   "name-needed",
                   "name-one-line",
                   "name-too-long",
@@ -146892,15 +147822,7 @@
                   "no-area",
                   "no-project",
                   "not-allowed",
-                  "spawn-default-unnamed",
-                  "spawn-not-placed",
-                  "spawn-not-settled",
-                  "spawn-payload-unnamed",
-                  "spawn-project-deleted",
-                  "spawn-session-key-held",
-                  "spawn-start-failed",
-                  "spawn-task-accounts-unread",
-                  "starting-set-unread",
+                  "page-unheard",
                   "task-id-unfit",
                   "task-link-unread",
                   "task-project-unknown",
@@ -146924,7 +147846,6 @@
                   415,
                   422,
                   500,
-                  502,
                   503,
                   504
                 ],
@@ -146969,7 +147890,6 @@
               415,
               422,
               500,
-              502,
               503,
               504
             ],
@@ -147140,13 +148060,6 @@
                   "artifact-unknown",
                   "artifact-unnamed",
                   "at-limit-needs-account",
-                  "caw-home-unsaid",
-                  "caw-no-machine",
-                  "caw-off",
-                  "caw-project-unknown",
-                  "caw-send-not-taken",
-                  "caw-spend-capped",
-                  "caw-start-undone",
                   "dispatch-project-unknown",
                   "dispatch-runs-on-unknown",
                   "dispatch-settings-unfit",
@@ -147185,10 +148098,7 @@
                   "give-url-alone-connection",
                   "large-files-live-https",
                   "large-files-live-url",
-                  "launch-account-unavailable",
                   "lfs-refused",
-                  "machine-away",
-                  "machine-silent",
                   "name-needed",
                   "name-one-line",
                   "name-too-long",
@@ -147196,15 +148106,7 @@
                   "no-area",
                   "no-project",
                   "not-allowed",
-                  "spawn-default-unnamed",
-                  "spawn-not-placed",
-                  "spawn-not-settled",
-                  "spawn-payload-unnamed",
-                  "spawn-project-deleted",
-                  "spawn-session-key-held",
-                  "spawn-start-failed",
-                  "spawn-task-accounts-unread",
-                  "starting-set-unread",
+                  "page-unheard",
                   "task-id-unfit",
                   "task-link-unread",
                   "task-project-unknown",
@@ -147228,7 +148130,6 @@
                   415,
                   422,
                   500,
-                  502,
                   503,
                   504
                 ],
@@ -147273,50 +148174,6 @@
               415,
               422,
               500,
-              502,
-              503,
-              504
-            ],
-            "type": "number"
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "detail",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "postApiInstancesByIdArtifactsByArtifactSend502": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "$ref": "#/components/schemas/PostApiInstancesByIdArtifactsByArtifactSend403Code"
-          },
-          "detail": {
-            "type": "string"
-          },
-          "instance": {
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              400,
-              403,
-              404,
-              409,
-              413,
-              415,
-              422,
-              500,
-              502,
               503,
               504
             ],
@@ -147359,7 +148216,6 @@
               415,
               422,
               500,
-              502,
               503,
               504
             ],
@@ -147402,7 +148258,6 @@
               415,
               422,
               500,
-              502,
               503,
               504
             ],
@@ -166082,114 +166937,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-not-placed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-not-settled"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-payload-unnamed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "task-id-unfit"
                 ]
               },
@@ -166303,42 +167050,6 @@
                 "type": "string",
                 "enum": [
                   "artifact-unknown"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  404
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-project-unknown"
                 ]
               },
               "detail": {
@@ -166626,42 +167337,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-project-deleted"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  404
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "task-project-unknown"
                 ]
               },
@@ -166738,187 +167413,43 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "caw-no-machine"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-off"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-send-not-taken"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-spend-capped"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-start-undone"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "decision-page-no-artifact"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "decision-unheard"
                 ]
               },
               "detail": {
@@ -167170,115 +167701,7 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "launch-account-unavailable"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-session-key-held"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-task-accounts-unread"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "starting-set-unread"
+                  "page-unheard"
                 ]
               },
               "detail": {
@@ -167630,272 +168053,76 @@
           "type"
         ]
       },
-      "postApiProjectsByIdDecisionsByNameSend502": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-home-unsaid"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-default-unnamed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-start-failed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          }
-        ]
-      },
       "postApiProjectsByIdDecisionsByNameSend503": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "folder-git-missing"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "folder-git-missing"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "machine-away"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "machineId": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "machineId",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              503
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiProjectsByIdDecisionsByNameSend504": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "folder-git-unanswered"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  504
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "folder-git-unanswered"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "machine-silent"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  504
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiProjectsByIdDecisionsByNameTasks400": {
@@ -168554,114 +168781,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-not-placed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-not-settled"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-payload-unnamed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "task-id-unfit"
                 ]
               },
@@ -168732,42 +168851,6 @@
       },
       "postApiProjectsByIdDecisionsByNameTasks404": {
         "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-project-unknown"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  404
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
           {
             "type": "object",
             "properties": {
@@ -168918,42 +169001,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-project-deleted"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  404
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "task-project-unknown"
                 ]
               },
@@ -168988,186 +169035,6 @@
       },
       "postApiProjectsByIdDecisionsByNameTasks409": {
         "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-no-machine"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-off"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-send-not-taken"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-spend-capped"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-start-undone"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
           {
             "type": "object",
             "properties": {
@@ -169247,6 +169114,42 @@
                 "type": "string",
                 "enum": [
                   "decision-tasks-making"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "decision-unheard"
                 ]
               },
               "detail": {
@@ -169463,150 +169366,6 @@
                 "type": "string",
                 "enum": [
                   "folder-write-under-file"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "launch-account-unavailable"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-session-key-held"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-task-accounts-unread"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "starting-set-unread"
                 ]
               },
               "detail": {
@@ -169862,272 +169621,76 @@
           "type"
         ]
       },
-      "postApiProjectsByIdDecisionsByNameTasks502": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-home-unsaid"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-default-unnamed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-start-failed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          }
-        ]
-      },
       "postApiProjectsByIdDecisionsByNameTasks503": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "folder-git-missing"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "folder-git-missing"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "machine-away"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "machineId": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  503
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "machineId",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              503
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiProjectsByIdDecisionsByNameTasks504": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "folder-git-unanswered"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  504
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "folder-git-unanswered"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "machine-silent"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  504
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              504
             ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
           }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
         ]
       },
       "postApiProjectsByIdDesignOfferBuild400": {
@@ -179709,42 +179272,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "caw-off"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "caw-send-not-taken"
                 ]
               },
@@ -188756,42 +188283,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-payload-unnamed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "task-id-unfit"
                 ]
               },
@@ -189884,42 +189375,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "caw-project-unknown"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  404
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "dispatch-parent-unknown"
                 ]
               },
@@ -190469,78 +189924,6 @@
                 "type": "string",
                 "enum": [
                   "browse-unserved"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-no-machine"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-start-undone"
                 ]
               },
               "detail": {
@@ -191189,42 +190572,6 @@
                 "type": "string",
                 "enum": [
                   "preview-owner-gone"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-session-key-held"
                 ]
               },
               "detail": {
@@ -192158,42 +191505,6 @@
       },
       "postApiProjectsByIdTasksByTaskIdAttempts502": {
         "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-home-unsaid"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
           {
             "type": "object",
             "properties": {
@@ -197122,42 +196433,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "spawn-payload-unnamed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "task-id-unfit"
                 ]
               },
@@ -198250,42 +197525,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "caw-project-unknown"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  404
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "dispatch-parent-unknown"
                 ]
               },
@@ -198835,78 +198074,6 @@
                 "type": "string",
                 "enum": [
                   "browse-unserved"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-no-machine"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-start-undone"
                 ]
               },
               "detail": {
@@ -199555,42 +198722,6 @@
                 "type": "string",
                 "enum": [
                   "preview-owner-gone"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "spawn-session-key-held"
                 ]
               },
               "detail": {
@@ -200524,42 +199655,6 @@
       },
       "postApiProjectsByIdTasksByTaskIdRetry502": {
         "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-home-unsaid"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  502
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
           {
             "type": "object",
             "properties": {
@@ -205345,42 +204440,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "caw-off"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "caw-send-not-taken"
                 ]
               },
@@ -209339,42 +208398,6 @@
                 "type": "string",
                 "enum": [
                   "caw-no-machine"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  409
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "caw-off"
                 ]
               },
               "detail": {

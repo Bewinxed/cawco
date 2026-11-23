@@ -10,8 +10,9 @@ import type { AnyProblem } from "./refusal";
  *
  * - **You**: the card waits on the person.
  * - **The agent** (`asker`): the writer settles it itself.
- * - **Caw**: the project's conversation hears it as a `decision` event
- *   (caw.ts), and its session settles it.
+ * - **Caw**: a `decision` trigger on the page's cards (triggers.ts): the
+ *   session already on them, else a fresh one, settles it; never the
+ *   project's conversation.
  * - **An agent member** (the Advisor, Common practice, one he added): its
  *   cards in one project settle in one session. A live session of it for
  *   the project whose cache is warm is handed the new cards (the handoff
@@ -25,7 +26,7 @@ import type { AnyProblem } from "./refusal";
  *
  * Every card the hub sends somewhere has its row in `card_settlings`, the
  * ledger the decision surface reads. Who may `settle` a card (`settler`):
- * the writer for the asker, the conversation's session for Caw, the
+ * the writer for the asker, the session the trigger reached for Caw, the
  * member's session in the ledger for an agent member; no one for the
  * person. The pick itself is written by artifacts/service.ts `settle`.
  *
@@ -53,7 +54,6 @@ import { decisionLink, sessionLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import { decidesWords } from "@cawco/core/words/decides";
 import { routeLine } from "@cawco/core/words/decides-lines";
-import type { Caw } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
 import { type CardSettlingRow, type DecidesDb, holds } from "./db/decides";
 import { decidesTable } from "./decides-file";
@@ -65,6 +65,8 @@ import type {
   Settler,
   Signing,
 } from "./settling-answers";
+import type { TriggerEvent } from "./trigger-event";
+import type { Routed as TriggerRouted } from "./triggers";
 
 import {
   SESSION_TITLE_MAX,
@@ -123,11 +125,11 @@ export interface SettlingDeps {
   readonly seen: (artifactId: string, card: string) => void;
   /** Files and spawns a work item (work-items.ts `start`): what dispatch starts an attempt through. */
   readonly start: (request: WorkItemRequest) => ReturnType<WorkItems["start"]>;
-  /** Tells the project's conversation a `decision` event (caw.ts `tell`): its session, or why it didn't take it. */
-  readonly tellCaw: (
+  /** A trigger on the cards Caw settles, to the router (triggers.ts `route`): the session that took it, or why none did. */
+  readonly trigger: (
     projectId: string,
-    event: { text: string; trigger: string }
-  ) => ReturnType<Caw["tell"]>;
+    event: TriggerEvent
+  ) => Promise<TriggerRouted>;
   /** Whether session `id` is live and its prompt cache warm (keep-alive.ts `provenCold`). */
   readonly warm: (id: string) => boolean;
 }
@@ -409,21 +411,27 @@ export const createSettling = (deps: SettlingDeps) => {
     ...on,
   });
 
-  /** Caw's cards: one `decision` event to the project's conversation. */
+  /** Caw's cards: one `decision` trigger on the page's cards (triggers.ts), for the session on them or a fresh one. */
   const toCaw = async (
     fleet: FleetDecides,
     asker: InstanceRow,
     page: PageCards,
     projectId: string
   ): Promise<RouteState> => {
-    const told = await deps.tellCaw(projectId, {
-      trigger: decidesWords.decisionTrigger(
-        decisionLink(page.row.id, page.cards[0]?.id ?? "", page.row.title)
-      ),
-      text: briefOf(fleet, BUILT_IN.caw, null, asker, [page], false),
+    const link = decisionLink(
+      page.row.id,
+      page.cards[0]?.id ?? "",
+      page.row.title
+    );
+    const told = await deps.trigger(projectId, {
+      kind: "decision",
+      thing: { kind: "card", id: page.row.id, name: `the cards of ${link}` },
+      what: decidesWords.decisionTrigger(link),
+      delta: briefOf(fleet, BUILT_IN.caw, null, asker, [page], false),
+      who: sessionLink(asker.id, asker.title ?? asker.derivedTitle ?? asker.id),
     });
-    if (told instanceof ElysiaStatus) {
-      return { state: "failed", why: told.response.detail };
+    if (told.to === "held" || told.to === "lost") {
+      return { state: "failed", why: told.why };
     }
     deps.db.putSettlings(
       page.cards.map((card) =>

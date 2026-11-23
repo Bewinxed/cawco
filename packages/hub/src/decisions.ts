@@ -74,7 +74,7 @@ import { pageHash } from "@cawco/preview/proxy";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Artifacts } from "./artifacts/service";
 import type { ArtifactTaker } from "./artifacts/taker";
-import type { Caw, PersonsSend } from "./caw";
+import type { PersonsSend } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
 import type { FolderProblem } from "./decision-page";
 import type { DecisionLinks, DecisionProblem } from "./decision-problems";
@@ -83,6 +83,8 @@ import { boardTitle } from "./labels";
 import type { changeFolderFiles, folderFileNames } from "./project-folder";
 import type { ProblemsOf } from "./refusal";
 import type { Tasks } from "./tasks";
+import type { TriggerEvent } from "./trigger-event";
+import type { Routed } from "./triggers";
 
 const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 
@@ -392,9 +394,9 @@ export interface DecisionsDeps {
   /**
    * Who hears the person on `artifact`: the one his marks and the hub's own
    * send of his answers go to (artifacts/taker.ts), its writer while it
-   * takes input, else the session that delegated it, else Caw.
+   * takes input, else a trigger on it (triggers.ts).
    */
-  taker: (artifact: ArtifactRow) => ArtifactTaker<unknown>;
+  taker: (artifact: ArtifactRow) => ArtifactTaker;
   /** A Send's carried writes (core `SendBody.writes`) applied to the artifact's doc (artifacts/sync.ts `takeSentWrites`): why not, or null. */
   takeWrites: (artifactId: string, writes: string) => string | null;
   /** The project's tasks that name a card ({@link DECIDED_FIELD}). */
@@ -403,11 +405,8 @@ export interface DecisionsDeps {
   ) => Promise<DecidedTask[] | ProblemsOf<ReturnType<Tasks["list"]>>>;
   /** The person's words or act to a session ({@link PersonsSend}), through the one send path, as the send `uuid`. */
   tell: (instance: InstanceRow, said: PersonsSend, uuid: string) => void;
-  /** The person's words or act to the project's conversation (caw.ts `tellYours`): its session, and the send's uuid. */
-  tellConversation: (
-    projectId: string,
-    said: PersonsSend
-  ) => ReturnType<Caw["tellYours"]>;
+  /** A trigger on a page whose session takes no input now, to the router (triggers.ts `route`): who took it, or why none did. */
+  trigger: (projectId: string, event: TriggerEvent) => Promise<Routed>;
 }
 
 /** The record as written: what the hub reads back, with who it asked. */
@@ -683,14 +682,6 @@ export const createDecisions = (deps: DecisionsDeps) => {
       instanceId: row.id,
       title: boardTitle(row),
       ended: taker.to !== "writer",
-      ...(taker.to === "parent"
-        ? {
-            heardBy: {
-              instanceId: taker.session.id,
-              title: boardTitle(taker.session),
-            },
-          }
-        : {}),
     };
   };
 
@@ -878,30 +869,44 @@ export const createDecisions = (deps: DecisionsDeps) => {
   /**
    * Who hears a page's send or its Make tasks, as its read names them
    * ({@link writerOf}, from {@link DecisionsDeps.taker}): its writer while it
-   * takes input, else the session that delegated it, else Caw.
+   * takes input, else a trigger on it (triggers.ts).
    */
   const heardBy = (
     read: DecisionPageRead
-  ): { handed: string | null; instance: InstanceRow } | { caw: true } => {
+  ): { instance: InstanceRow } | { caw: true } => {
     const { writer } = read;
-    const heard = writer?.ended ? writer.heardBy : writer;
-    const instance = heard ? deps.instance(heard.instanceId) : undefined;
-    const { artifactId } = read;
-    if (!(writer && instance && artifactId)) {
-      return { caw: true };
-    }
-    return {
-      instance,
-      handed:
-        instance.id === writer.instanceId
-          ? null
-          : noticeWords.handedToParent(writer.title, artifactId),
-    };
+    const instance =
+      writer && !writer.ended ? deps.instance(writer.instanceId) : undefined;
+    return instance && read.artifactId ? { instance } : { caw: true };
   };
 
-  /** What tells Caw a page is his now: where it is and how to read it. */
+  /** What tells the session the router gave a page to that it is its now: where it is and how to read it. */
   const handedToCaw = (read: DecisionPageRead): string =>
     `${read.writer ? `Its session “${read.writer.title}” has ended, so this page is yours` : "No session holds this page now, so it is yours"}: read the person's picks and notes with artifact_read({ id: "${read.artifactId}" }).`;
+
+  /** A trigger on decision page `read` (its artifact), as the person's words or act there. */
+  const pageTrigger = (
+    read: DecisionPageRead,
+    name: string,
+    what: string,
+    delta: string
+  ): TriggerEvent => ({
+    kind: "person-request",
+    thing: {
+      kind: "artifact",
+      id: read.artifactId ?? `decisions/${name}`,
+      name: `the decision page “${read.title}” (decisions/${name}/)`,
+    },
+    what,
+    delta,
+    who: "you",
+  });
+
+  /** Why a trigger reached no session, as a refusal; undefined when one took it (held counts: it waits on the project). */
+  const unrouted = (routed: Routed) =>
+    routed.to === "lost"
+      ? problem(409, { code: "decision-unheard", detail: routed.why })
+      : undefined;
 
   /** Record writes, one at a time across the hub: each reads the record the last one left. */
   let writing: Promise<unknown> = Promise.resolve();
@@ -1079,33 +1084,44 @@ export const createDecisions = (deps: DecisionsDeps) => {
   };
 
   /**
-   * The Make tasks ask, said to its session as the record's send, or to the
-   * project's conversation, which the record is written again to name: the
-   * problem that kept it from the conversation (caw.ts `tell`'s, its
-   * machine away among them, or the folder's write), if anything.
+   * The Make tasks ask, said to its session as the record's send, or, its
+   * session taking no input, a trigger on the page (triggers.ts), the
+   * record written again to name the session that took it: the problem
+   * that kept it from every session, or the folder's write, if anything.
    */
   const askTasks = async (
     projectId: string,
     record: StoredRecord,
     to: ReturnType<typeof heardBy>,
-    ask: PersonsSend
+    ask: Extract<PersonsSend, { by: "act" }>,
+    read: DecisionPageRead
   ) => {
     if ("instance" in to) {
       deps.tell(to.instance, ask, record.askedSend ?? crypto.randomUUID());
       return;
     }
-    const told = await deps.tellConversation(projectId, ask);
-    if (told instanceof ElysiaStatus) {
-      return told;
+    const routed = await deps.trigger(
+      projectId,
+      pageTrigger(
+        read,
+        record.name,
+        `The person pressed Make tasks on the decision page “${read.title}”.`,
+        ask.text
+      )
+    );
+    const refused = unrouted(routed);
+    if (refused) {
+      return refused;
     }
-    const { send } = told;
+    const askedOf =
+      routed.to === "owner" || routed.to === "fresh" ? routed.instanceId : null;
     return await deps.commit(
       projectId,
       {
         writes: [
           {
             path: recordPath(record.name),
-            content: recordText({ ...record, askedSend: send }),
+            content: recordText({ ...record, askedOf }),
           },
         ],
         deletes: [],
@@ -1275,27 +1291,70 @@ export const createDecisions = (deps: DecisionsDeps) => {
     if ("instance" in to) {
       deps.tell(
         to.instance,
-        {
-          by: "you",
-          words,
-          note: [page, to.handed].filter(Boolean).join(" "),
-        },
+        { by: "you", words, note: page },
         crypto.randomUUID()
       );
       deps.changed(projectId);
       const sent: DecisionSent = { to: "session" };
       return sent;
     }
-    const told = await deps.tellConversation(projectId, {
-      by: "you",
-      words,
-      note: `${page} ${handedToCaw(read)}`,
-    });
-    if (told instanceof ElysiaStatus) {
-      return told;
+    const routed = await deps.trigger(
+      projectId,
+      pageTrigger(
+        read,
+        name,
+        `The person wrote a note on the decision page “${read.title}”. ${handedToCaw(read)}`,
+        words
+      )
+    );
+    const refused = unrouted(routed);
+    if (refused) {
+      return refused;
     }
     deps.changed(projectId);
-    const sent: DecisionSent = { to: "caw", instanceId: told.instanceId };
+    const sent: DecisionSent =
+      routed.to === "owner" || routed.to === "fresh"
+        ? { to: "caw", instanceId: routed.instanceId }
+        : { to: "caw" };
+    return sent;
+  };
+
+  /**
+   * His Send of page `name`, one path whoever hears it: its session while
+   * it stands, else a trigger on the page (triggers.ts), told the page is
+   * its now.
+   */
+  const sendPage = async (
+    projectId: string,
+    name: string,
+    read: DecisionPageRead,
+    artifactId: string,
+    to: ReturnType<typeof heardBy>
+  ) => {
+    const heard = await deps.send(
+      artifactId,
+      `POST /api/projects/${projectId}/decisions/${name}/send`,
+      "instance" in to
+        ? { session: to.instance }
+        : {
+            route: {
+              projectId,
+              what: `The person sent the decision page “${read.title}” (decisions/${name}/).`,
+              text: `The person is done picking on the decision page “${read.title}” (decisions/${name}/). ${handedToCaw(read)}`,
+            },
+          }
+    );
+    if (heard instanceof ElysiaStatus) {
+      return heard;
+    }
+    deps.changed(projectId);
+    const sent: DecisionSent =
+      "instance" in to
+        ? { to: "session" }
+        : {
+            to: "caw",
+            ...(typeof heard === "string" ? { instanceId: heard } : {}),
+          };
     return sent;
   };
 
@@ -1385,29 +1444,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
       if (words) {
         return await noted(projectId, name, read, to, words);
       }
-      // His Send, one path whoever hears it: its session while it stands,
-      // else Caw, told the page is his now.
-      const heard = await deps.send(
-        read.artifactId,
-        `POST /api/projects/${projectId}/decisions/${name}/send`,
-        "instance" in to
-          ? { session: to.instance }
-          : {
-              caw: {
-                projectId,
-                line: noticeWords.donePicking(read.title),
-                trigger: "the person sent a decision page",
-                text: `The person is done picking on the decision page “${read.title}” (decisions/${name}/). ${handedToCaw(read)}`,
-              },
-            }
-      );
-      if (heard instanceof ElysiaStatus) {
-        return heard;
-      }
-      deps.changed(projectId);
-      const sent: DecisionSent =
-        "instance" in to ? { to: "session" } : { to: "caw", instanceId: heard };
-      return sent;
+      return await sendPage(projectId, name, read, read.artifactId, to);
     },
 
     /**
@@ -1443,12 +1480,12 @@ export const createDecisions = (deps: DecisionsDeps) => {
         });
       }
       const to = heardBy(read);
-      const ask: PersonsSend = {
+      const ask: Extract<PersonsSend, { by: "act" }> = {
         by: "act",
         line: noticeWords.makeTasks(read.title),
         text: `The person pressed Make tasks on the decision page “${read.title}” (decisions/${name}/): load the to-tasks skill and file them now; their press approves the breakdown. ${
           "instance" in to
-            ? `${to.handed ? `${to.handed} ` : ""}artifact_read({ id: "${artifactId}" }) has their picks and notes by card id.`
+            ? `artifact_read({ id: "${artifactId}" }) has their picks and notes by card id.`
             : handedToCaw(read)
         } The record is decisions/${name}/record.json (each card's id, question, what they chose and their note), and log.md beside it says it in words. File one or more tasks for each card they decided and none for a card left open, and give each the field ${DECIDED_FIELD}: "${name}#<card id>" (task_create's fields), so it links back to its card.`,
       };
@@ -1492,7 +1529,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
           );
         let notAsked: Awaited<ReturnType<typeof askTasks>>;
         try {
-          notAsked = await askTasks(projectId, record, to, ask);
+          notAsked = await askTasks(projectId, record, to, ask, read);
         } catch (error) {
           // What was thrown is the answer; a record not restored is said.
           const unrestored = await restore();

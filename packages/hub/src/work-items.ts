@@ -53,7 +53,7 @@ import type { BriefTarget } from "@cawco/core/fleet";
 import { byPerson } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { WORK_ITEM_ORIGIN } from "@cawco/core/harness/kinds";
-import type { PermissionMode } from "@cawco/core/harness/modes";
+import type { OfferedMode, PermissionMode } from "@cawco/core/harness/modes";
 import type { CheckoutMove } from "@cawco/core/injected";
 import {
   type DashboardReach,
@@ -533,6 +533,12 @@ export interface WorkItemRequest extends DelegateCall {
    */
   detachAt?: string;
   /**
+   * The permission mode its session starts in, over the unwatched mode its
+   * parent's would give it (`unwatchedMode`): a fresh session for a
+   * trigger, in its kind's mode (triggers.ts). Set by the hub alone.
+   */
+  mode?: OfferedMode;
+  /**
    * Whose work it is (work_items.origin). Left out, its parent's: Caw's, the
    * origin of the turn he is in; a work item's session, its own item's; any
    * other session's, `you`. The dispatcher and routines set it.
@@ -974,6 +980,8 @@ interface Settings {
   harness: HarnessKind;
   /** The delegate types it may start: its request's or its type's, within its parent's. */
   mayStart: MayStart;
+  /** The request's mode, over the unwatched one ({@link WorkItemRequest.mode}). */
+  mode?: OfferedMode;
   model?: string;
   /** The request's role, over its type's ({@link WorkItemRequest.role}). */
   role?: SessionRole;
@@ -2930,6 +2938,7 @@ export const createWorkItems = ({
       ),
       ...(request.account ? { account: request.account } : {}),
       ...(request.role ? { role: request.role } : {}),
+      ...(request.mode ? { mode: request.mode } : {}),
     };
     if (!request.fork) {
       return settings;
@@ -4360,7 +4369,8 @@ export const createWorkItems = ({
         // permission prompt nobody is watching for. Questions still ask.
         // Its parent caused it: Full Send only when the parent is in it now,
         // read off its row as it stands after the workspace was cut.
-        unwatchedMode(db.getInstancesByIds([parent.id])[0]?.permissionMode),
+        settings.mode ??
+          unwatchedMode(db.getInstancesByIds([parent.id])[0]?.permissionMode),
         ahead && {
           ...(ahead.placement.accountId
             ? { accountId: ahead.placement.accountId }
@@ -5238,6 +5248,29 @@ export const createWorkItems = ({
     ].join("\n\n");
   };
 
+  /**
+   * The hub's own live item (a hub parent's) ended by the hub with `change`
+   * (core `isHubParent`): its session ends, and it reports to no session.
+   * `how` says it in the log when its session does not end.
+   */
+  const endHubItem = (
+    itemId: string,
+    how: string,
+    change: (item: WorkItemRow) => Parameters<DbShape["updateWorkItem"]>[1]
+  ): void => {
+    const item = db.workItem(itemId);
+    if (!(item && LIVE.has(item.state) && isHubParent(item.parentInstanceId))) {
+      return;
+    }
+    quiet.delete(item.id);
+    finish(item, { ...change(item), ...LANDING_ENDED });
+    end(item.instanceId).catch((error: unknown) =>
+      console.warn(
+        `[work-items] ${item.id} ${how}, and its session did not end: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
+  };
+
   return {
     start: (asked: WorkItemRequest) => start(asked),
 
@@ -5246,17 +5279,16 @@ export const createWorkItems = ({
       landingRun.landingWaitOf(itemId),
 
     /**
-     * The hub's own work: a routine's run (routines.ts, work-item-state.ts `routineParent`)
-     * or a design check's verifier (design-verify.ts, work-item-state.ts `verifierParent`).
-     * A fresh session in a new workspace cut from `parent.cwd` on
-     * `parent.machineId`. It reports to no session, the project's conversation
+     * The hub's own work: a routine's run (routines.ts, work-item-state.ts `routineParent`),
+     * a design check's verifier (design-verify.ts, work-item-state.ts `verifierParent`),
+     * a fresh session for a trigger or an attempt nobody named a session for
+     * (triggers.ts, dispatch.ts; core `thingParentId`). A fresh session in a
+     * new workspace cut from `parent.cwd` on `parent.machineId`, or a retry's
+     * last one (`reuse`). It reports to no session, the project's conversation
      * included: its owner reads how it ended from {@link WorkItemDeps.itemEnded}.
      */
     startForHub: (
-      request: Omit<
-        WorkItemRequest,
-        "parentInstanceId" | "workspace" | "fork" | "reuse"
-      >,
+      request: Omit<WorkItemRequest, "parentInstanceId" | "workspace" | "fork">,
       parent: Parent
     ) => start({ ...request, parentInstanceId: parent.id }, parent),
 
@@ -5269,6 +5301,19 @@ export const createWorkItems = ({
       if (row) {
         tell(row, content);
       }
+    },
+
+    /**
+     * The hub's own item ended as done by the hub: a fresh session for a
+     * trigger idle with nothing pending (triggers.ts). Its headline is the
+     * one it wrote, else `headline`; its session ends, and it reports to no
+     * session.
+     */
+    endForHub(itemId: string, headline: string): void {
+      endHubItem(itemId, "was ended idle", (item) => ({
+        state: "done",
+        headline: item.headline ?? headline,
+      }));
     },
 
     /**
@@ -5285,25 +5330,10 @@ export const createWorkItems = ({
      * session ends; it reports to no session.
      */
     stopForHub(itemId: string, why: string): void {
-      const item = db.workItem(itemId);
-      if (!(
-        item &&
-        LIVE.has(item.state) &&
-        isHubParent(item.parentInstanceId)
-      )) {
-        return;
-      }
-      quiet.delete(item.id);
-      finish(item, {
+      endHubItem(itemId, `was stopped (${why})`, () => ({
         state: "cancelled",
         stoppedBy: { kind: "hub", why },
-        ...LANDING_ENDED,
-      });
-      end(item.instanceId).catch((error: unknown) =>
-        console.warn(
-          `[work-items] ${item.id} was stopped (${why}), and its session did not end: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
+      }));
     },
 
     /**
