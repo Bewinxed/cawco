@@ -28,6 +28,7 @@ import {
 } from "@cawco/core/doc-meta";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { changeLink } from "@cawco/core/references";
+import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus, problem } from "elysia";
 import { applyPatch } from "rfc6902";
@@ -108,6 +109,7 @@ const answerOf = (
     }),
     ...said,
     ...(entry.settled ? { settled: entry.settled } : {}),
+    ...(entry.from ? { from: entry.from } : {}),
   };
 };
 
@@ -646,22 +648,20 @@ export const createPageKind = (ctx: PageKindContext) => {
     if ("html" in change) {
       return await htmlChanged(instance, row, change.html, ownersRead);
     }
+    // A decision page's state is its cards' picks and the person's dials:
+    // no key of it is an agent's to write, so a patch never lands there,
+    // whatever it names. A key it wrote beside the cards would become a
+    // pick the moment a revision named a card by it.
+    if (programOf(row) !== undefined) {
+      return problem(409, {
+        code: "artifact-patch-cards",
+        detail: artifactToolWords.patchDecisionPage(row.name),
+      });
+    }
     const doc = docs.doc(row.id);
     const before = stateOf(doc);
     const after: Record<string, unknown> = structuredClone(before);
     const errors = applyPatch(after, change.patch);
-    const program = programOf(row);
-    const carded = program
-      ? readKept(program)
-          .cards.map((card) => card.id)
-          .filter((card) => !Bun.deepEquals(after[card], before[card]))
-      : [];
-    if (carded.length > 0) {
-      return problem(409, {
-        code: "artifact-patch-cards",
-        detail: `${carded.join(", ")} ${carded.length === 1 ? "is a decision card" : "are decision cards"}: a card's pick is the person's, or settle's by the project's Who decides. Nothing was changed.`,
-      });
-    }
     const failed = errors.findIndex((error) => error !== null);
     if (failed !== -1) {
       return problem(422, {

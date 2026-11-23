@@ -256,10 +256,16 @@ import {
  * it, in place of the `command` target, which is gone (worker 31,689
  * measured; a delegate makes no routines). The worker's budget is raised
  * to it.
+ * 2026-11-23: record_pick, a pick recorded on a decision card from the
+ * person's own words (his pin on the page or a message he typed, quoted),
+ * which the hub checks are his; the owner's "Yes, from my own words" that
+ * day in cockpit#8eabb628, when his comment plainly answered a card and an
+ * agent had no proper way to record it (worker 31,979, delegate 12,649
+ * measured); both budgets are raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 31_689,
-  delegate: 12_344,
+  worker: 31_979,
+  delegate: 12_649,
   overseer: 770,
   "web-facing": 3400,
   curator: 1550,

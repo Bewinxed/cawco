@@ -12,6 +12,7 @@ import Value from "typebox/value";
 import { z } from "zod";
 import {
   askBody,
+  citeBody,
   closeQuestionBody,
   commentsFields,
   componentBody,
@@ -358,6 +359,14 @@ export const artifactTools = (artifacts: Artifacts, instanceId: string) => {
       return body instanceof ElysiaStatus
         ? body
         : await artifacts.settle(instanceId, page, body);
+    },
+    cite: (page: string, picked: unknown) => {
+      const body = shaped(citeBody, SHAPES.update, picked);
+      return Promise.resolve(
+        body instanceof ElysiaStatus
+          ? body
+          : artifacts.cite(instanceId, page, body)
+      );
     },
     closeQuestion: (closing: unknown) => {
       const body = shaped(closeQuestionBody, SHAPES.update, closing);

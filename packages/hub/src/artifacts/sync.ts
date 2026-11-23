@@ -11,8 +11,8 @@
  *
  * A page's client may write the doc's `state`, within the bridge's bounds
  * (core `choiceEntryProblem`), the same the pane checks before it writes,
- * and never a pick's `settled` record, which the hub alone writes (core
- * `settledWriteProblem`, artifacts/service.ts `settle`). A
+ * and never a pick's `settled` or `from` record, which the hub alone writes
+ * (core `hubRecordWriteProblem`, artifacts/service.ts `settle` and `cite`). A
  * canvas's screen may write its `elements` and `files`, its pen mode in
  * `meta`, and its claims and results on the agent's `requests`, within the
  * canvas's bounds (core `CANVAS_LIMITS`). Either may write the person's ink,

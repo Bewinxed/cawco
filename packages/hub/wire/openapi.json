@@ -14941,6 +14941,128 @@
         }
       }
     },
+    "/api/instances/{id}/artifacts/{artifact}/cite": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "card": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "message": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "options": {
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    }
+                  },
+                  "pin": {
+                    "minLength": 6,
+                    "maxLength": 36,
+                    "type": "string"
+                  },
+                  "quote": {
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "card",
+                  "options",
+                  "quote"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstancesByIdArtifactsByArtifactCite",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdArtifactsByArtifactCite 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cited"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiInstancesByIdArtifactsByArtifactCite 403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactCite403"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiInstancesByIdArtifactsByArtifactCite 404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactCite404"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiInstancesByIdArtifactsByArtifactCite 409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactCite409"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdArtifactsByArtifactCite 422",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactCite422"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/{id}/artifacts/{artifact}/promote": {
       "post": {
         "parameters": [
@@ -38691,6 +38813,42 @@
           "woke"
         ]
       },
+      "Cited": {
+        "description": "What `record_pick` answers: the card, the options it holds now, and the person's words they came from.",
+        "type": "object",
+        "properties": {
+          "card": {
+            "description": "The card's link, `[question](cawco:decision/<artifact>/<card>)`.",
+            "type": "string"
+          },
+          "from": {
+            "$ref": "#/components/schemas/PickFrom"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label"
+              ]
+            }
+          }
+        },
+        "required": [
+          "card",
+          "from",
+          "options"
+        ]
+      },
       "ClaudeExtraUsage": {
         "description": "Extra usage: requests past the plan's limits, paid as they go.",
         "type": "object",
@@ -40669,6 +40827,71 @@
                   "earlierRevision": {
                     "const": true,
                     "type": "boolean"
+                  },
+                  "from": {
+                    "description": "The person's own words an agent recorded it from (`record_pick`); absent for a pick he made himself.",
+                    "anyOf": [
+                      {
+                        "allOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "quote": {
+                                "type": "string"
+                              },
+                              "session": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "quote",
+                              "session"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "message"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "quote": {
+                                "type": "string"
+                              },
+                              "session": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "quote",
+                              "session"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "pin": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "pin"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
                   },
                   "note": {
                     "type": "string"
@@ -54502,6 +54725,71 @@
           "jev"
         ]
       },
+      "PickFrom": {
+        "description": "Where a pick an agent recorded for the person came from (`record_pick`):\nhis pin on the card's page (`pin`, its id) or a message he typed to a\nsession (`message`, the send's uuid), the words of it that answer the\ncard (`quote`, found in it by the hub), and the session that recorded it.",
+        "anyOf": [
+          {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "quote": {
+                    "type": "string"
+                  },
+                  "session": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "quote",
+                  "session"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "message"
+                ]
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "quote": {
+                    "type": "string"
+                  },
+                  "session": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "quote",
+                  "session"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "pin": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "pin"
+                ]
+              }
+            ]
+          }
+        ]
+      },
       "PictureCut": {
         "description": "How much of a page longer than `PICTURE_LIMITS.maxHeight` its picture drew: `drawn` of `of` CSS px, from the top.",
         "type": "object",
@@ -56895,6 +57183,71 @@
                 }
               ]
             }
+          },
+          "from": {
+            "description": "The person's words an agent recorded his pick from (`record_pick`): absent for a pick he made himself.",
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "quote": {
+                        "type": "string"
+                      },
+                      "session": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "quote",
+                      "session"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "message"
+                    ]
+                  }
+                ]
+              },
+              {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "quote": {
+                        "type": "string"
+                      },
+                      "session": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "quote",
+                      "session"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "pin": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "pin"
+                    ]
+                  }
+                ]
+              }
+            ]
           },
           "id": {
             "type": "string"
@@ -145877,6 +146230,866 @@
                   504
                 ],
                 "type": "number"
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactCite403": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "artifact-cite-other-project"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number",
+            "enum": [
+              403
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "status",
+          "title",
+          "type"
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactCite404": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-cite-no-message"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-cite-no-pin"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-session-unknown"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-settle-card-unknown"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-unknown"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-unnamed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  404
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactCite409": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-cite-his-pick"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-settle-no-cards"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          }
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactCite422": {
+        "anyOf": [
+          {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "artifact-shape"
+                    ]
+                  },
+                  "detail": {
+                    "type": "string"
+                  },
+                  "instance": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number",
+                    "enum": [
+                      422
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "detail",
+                  "status",
+                  "title",
+                  "type"
+                ]
+              },
+              {
+                "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "validation"
+                    ]
+                  },
+                  "detail": {
+                    "type": "string"
+                  },
+                  "errors": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": {},
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "expected": {},
+                  "found": {},
+                  "on": {
+                    "type": "string"
+                  },
+                  "property": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number",
+                    "enum": [
+                      422
+                    ]
+                  },
+                  "title": {
+                    "type": "string",
+                    "enum": [
+                      "Validation Error"
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "validation"
+                    ]
+                  }
+                },
+                "required": [
+                  "code",
+                  "on",
+                  "status",
+                  "title",
+                  "type"
+                ]
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "files-asked-shape-hub"
+                    ]
+                  },
+                  "detail": {
+                    "type": "string"
+                  },
+                  "instance": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number",
+                    "enum": [
+                      422
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "detail",
+                  "status",
+                  "title",
+                  "type"
+                ]
+              },
+              {
+                "description": "A route's 422: the exported `ValidationErrorResponse`, spelled out (and\npinned equal in `test/types`) because a consumer's d.ts prints a reference\nto it as an `import()`, which a d.ts reader such as `fromTypes` can't\nfollow. Not exported, so it prints inline. A mapped copy would print\n`detail?: string | undefined`",
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "validation"
+                    ]
+                  },
+                  "detail": {
+                    "type": "string"
+                  },
+                  "errors": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": {},
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "expected": {},
+                  "found": {},
+                  "on": {
+                    "type": "string"
+                  },
+                  "property": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "number",
+                    "enum": [
+                      422
+                    ]
+                  },
+                  "title": {
+                    "type": "string",
+                    "enum": [
+                      "Validation Error"
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "validation"
+                    ]
+                  }
+                },
+                "required": [
+                  "code",
+                  "on",
+                  "status",
+                  "title",
+                  "type"
+                ]
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-cite-entry-unfit"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-cite-one-option"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-cite-one-source"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-cite-option-twice"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-cite-quote-missing"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-settle-option-unknown"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-shape"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "files-asked-shape-hub"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unknown-fields"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  422
+                ]
               },
               "title": {
                 "type": "string"

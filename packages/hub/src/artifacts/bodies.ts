@@ -299,6 +299,18 @@ export const settleBody = t.Object({
   ),
 });
 
+/** A pick recorded for the person from his own words: his pin on the page or a message he typed, quoted. */
+export const citeBody = t.Object({
+  card: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.id }),
+  options: t.Array(
+    t.String({ minLength: 1, maxLength: CHOICE_LIMITS.option }),
+    { minItems: 1, maxItems: CHOICE_LIMITS.options }
+  ),
+  pin: t.Optional(t.String({ minLength: 6, maxLength: 36 })),
+  message: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+  quote: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.quote }),
+});
+
 /** `question_close`: taken from the person's answer, or withdrawn. */
 export const closeQuestionBody = t.Object({
   question: t.String({ minLength: 1, maxLength: 400 }),

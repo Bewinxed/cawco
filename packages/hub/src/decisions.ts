@@ -486,6 +486,7 @@ const recordCardsOf = (
       dials: dialsOf(state, card.id),
       note: entry?.note?.trim() ?? "",
       ...(entry?.settled ? { settled: entry.settled } : {}),
+      ...(entry?.from ? { from: entry.from } : {}),
       tasks: tasks
         .filter((task) => task.card === card.id)
         .map((task) => task.id),

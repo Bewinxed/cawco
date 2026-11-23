@@ -53,6 +53,7 @@ export const ARTIFACT_TOOLS = [
   "comment_resolve",
   "design_map",
   "settle",
+  "record_pick",
   "question_close",
 ] as const;
 
@@ -588,6 +589,36 @@ export const questionClose = {
       .describe(
         "taken: his words you acted on, quoted. withdrawn: what superseded it."
       ),
+  },
+};
+
+export const recordPick = {
+  name: "record_pick" as const,
+  description:
+    "Records the person's pick on a decision card from his own words: his comment on that page or a message he typed, quoted on the card for him to change. Use it only when his words plainly answer the card; a question, a doubt or a maybe picks nothing.",
+  input: {
+    card: z
+      .string()
+      .min(3)
+      .max(ARTIFACT_REF_MAX + CHOICE_LIMITS.id + 1)
+      .describe("<page>#<card>."),
+    options: z
+      .array(z.string().min(1).max(CHOICE_LIMITS.option))
+      .min(1)
+      .max(CHOICE_LIMITS.options)
+      .describe("The option ids his words pick."),
+    pin: pin.optional().describe("His comment on that page."),
+    message: z
+      .string()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("His message: a find hit's ref, or its id."),
+    quote: z
+      .string()
+      .min(1)
+      .max(CHOICE_LIMITS.quote)
+      .describe("His words that answer it, copied as written."),
   },
 };
 

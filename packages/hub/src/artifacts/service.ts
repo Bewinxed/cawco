@@ -40,6 +40,7 @@ import {
   type ChoiceEntry,
   choiceEntryProblem,
   noteText,
+  type PickFrom,
   type SettledBy,
   unsentChoices,
 } from "@cawco/core/choices";
@@ -162,6 +163,7 @@ import {
 import type { AnyProblem } from "../refusal";
 import { artifactNamed, boardOf, createAccess, named } from "./access";
 import { canvasEntries } from "./canvas";
+import { quoteIn, recordOfRef } from "./cite";
 import {
   type CanvasInput,
   CREATE_SHAPE,
@@ -213,6 +215,7 @@ import {
   type Browsed,
   type CanvasChange,
   type CanvasExport,
+  type Cited,
   type CommentRead,
   type ComponentRead,
   type Created,
@@ -1672,6 +1675,154 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return { row, card, option };
   };
 
+  /**
+   * A pick the hub writes on card `card` of page `id` for the person, with
+   * its record (`settle`'s `settled`, `record_pick`'s `from`): the same
+   * `state` entry his own pick is, his note and value kept, written as one
+   * transaction. Why it does not fit the bridge's bounds, and nothing
+   * written, else undefined.
+   */
+  const pickWritten = (
+    id: string,
+    card: string,
+    pick: { options: string[] } & ({ from: PickFrom } | { settled: SettledBy })
+  ): string | undefined => {
+    const doc = docs.doc(id);
+    const before = stateOf(doc)[card];
+    const entry: ChoiceEntry = {
+      note: before?.note ?? null,
+      value: before?.value ?? null,
+      pageHash: metaOf(doc).pageHash ?? before?.pageHash ?? "0".repeat(64),
+      at: new Date().toISOString(),
+      ...pick,
+    };
+    const misfit = choiceEntryProblem(card, entry);
+    if (misfit) {
+      return `${misfit} Nothing was changed.`;
+    }
+    docs.transact(id, "agent", (live) => live.getMap("state").set(card, entry));
+  };
+
+  /** Card `card`'s options `asked` names, in order (`record_pick`); refused in words when one is not its, one is named twice, or a card of one option is given more. */
+  const citedOptions = (card: DecisionCard, asked: readonly string[]) => {
+    const unknown = asked.find(
+      (id) => !card.options.some((option) => option.id === id)
+    );
+    if (unknown !== undefined) {
+      return problem(422, {
+        code: "artifact-settle-option-unknown",
+        detail: `“${unknown}” is not an option of ${card.id}. Its options: ${card.options.map((one) => one.id).join(", ")}.`,
+      });
+    }
+    if (new Set(asked).size !== asked.length) {
+      return problem(422, {
+        code: "artifact-cite-option-twice",
+        detail: artifactToolWords.citeOptionTwice,
+      });
+    }
+    if (!card.multiple && asked.length > 1) {
+      return problem(422, {
+        code: "artifact-cite-one-option",
+        detail: artifactToolWords.citeOneOption(card.id),
+      });
+    }
+    return asked.flatMap((id) =>
+      card.options.filter((option) => option.id === id)
+    );
+  };
+
+  /**
+   * The person's words `asked` cites for a card of page `row`
+   * (`record_pick`): his pin on that page, by id or handle, its thread's
+   * entries he wrote joined; or a message he typed (a find hit's ref, its
+   * record after the `#`, or the send's id) to a session of the page's
+   * project, or with no project, to the citing session or the page's
+   * own. Refused in words when it names none of his.
+   */
+  const citedWords = (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    asked: { message?: string; pin?: string }
+  ) => {
+    if ((asked.pin === undefined) === (asked.message === undefined)) {
+      return problem(422, {
+        code: "artifact-cite-one-source",
+        detail: artifactToolWords.citeOneSource,
+      });
+    }
+    if (asked.pin !== undefined) {
+      const wanted = asked.pin;
+      const pins = readPins(docs.doc(row.id));
+      const pin =
+        pins.get(wanted) ??
+        (wanted.length >= HANDLE_MIN
+          ? [...pins.values()].find((one) => one.id.startsWith(wanted))
+          : undefined);
+      if (!pin) {
+        return problem(404, {
+          code: "artifact-cite-no-pin",
+          detail: artifactToolWords.citeNoPin(wanted, row.name),
+        });
+      }
+      return {
+        source: "pin" as const,
+        id: pin.id,
+        text: pin.thread
+          .filter((entry) => entry.by === "person")
+          .map((entry) => entry.text)
+          .join("\n\n"),
+      };
+    }
+    const ref = asked.message ?? "";
+    const record = recordOfRef(ref);
+    const said = deps.personSaid(record);
+    if (!said) {
+      return problem(404, {
+        code: "artifact-cite-no-message",
+        detail: artifactToolWords.citeNoMessage(ref),
+      });
+    }
+    const to = deps.instance(said.instanceId);
+    const inPlace = row.projectId
+      ? to?.projectId === row.projectId
+      : said.instanceId === instance.id || said.instanceId === row.instanceId;
+    if (!inPlace) {
+      return problem(403, {
+        code: "artifact-cite-other-project",
+        detail: artifactToolWords.citeOtherProject(ref),
+      });
+    }
+    return { source: "message" as const, id: said.uuid, text: said.text };
+  };
+
+  /**
+   * What a pick `record_pick` records came from ({@link citedWords}), its
+   * quote trimmed and signed by the citing session; refused in words when
+   * the quote does not stand in his words.
+   */
+  const citedFrom = (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    asked: { message?: string; pin?: string; quote: string }
+  ) => {
+    const said = citedWords(instance, row, asked);
+    if (said instanceof ElysiaStatus) {
+      return said;
+    }
+    if (!quoteIn(asked.quote, said.text)) {
+      return problem(422, {
+        code: "artifact-cite-quote-missing",
+        detail: artifactToolWords.citeQuoteMissing(said.source),
+      });
+    }
+    const quote = asked.quote.trim();
+    const from: PickFrom =
+      said.source === "pin"
+        ? { pin: said.id, quote, session: instance.id }
+        : { message: said.id, quote, session: instance.id };
+    return from;
+  };
+
   /** What a create answers of a decision page: its decisions, and the components it dropped. */
   const programAnswer = (
     id: string,
@@ -1688,17 +1839,63 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * The cards among `cards` that page `id` does not ask now whose key in its
+   * `state` holds a pick an agent wrote (its last change not the person's)
+   * with neither `settle`'s record nor `record_pick`'s: written as a plain
+   * choice of an HTML page, or beside the cards, and so a pick the person
+   * never made, which the card would open holding. Each card's pick enters
+   * only by his own act, settle or his cited words.
+   */
+  const agentPicked = (
+    id: string,
+    state: Record<string, ChoiceEntry>,
+    cards: readonly DecisionCard[]
+  ): string[] => {
+    const row = db.get(id);
+    const program = row ? programOf(row) : undefined;
+    const asked = new Set(
+      program === undefined
+        ? []
+        : readKept(program).cards.map((card) => card.id)
+    );
+    const byAgent = new Set(
+      db.changes(id, { by: "agent" }).map((change) => change.key)
+    );
+    return cards
+      .filter((card) => {
+        const entry = state[card.id];
+        return (
+          !asked.has(card.id) &&
+          byAgent.has(card.id) &&
+          entry !== undefined &&
+          entry.options.length > 0 &&
+          !entry.settled &&
+          !entry.from
+        );
+      })
+      .map((card) => card.id);
+  };
+
+  /**
    * What decision page `name` drawn with `cards` leaves broken, for its
    * writer: the person's picks (artifact `id`'s state, none for a new page)
    * on a decision or option it no longer has, and in a project the `after`s
    * naming no decision and the decisions it lacks that other pages come
-   * after. Undefined when nothing is.
+   * after. Undefined when nothing is. Refused when a card it adds names a
+   * key holding a pick an agent wrote ({@link agentPicked}).
    */
   const brokenBy = async (
     page: { id: string | undefined; name: string; projectId: string | null },
     cards: DecisionCard[]
   ) => {
     const state = page.id ? stateOf(docs.doc(page.id)) : {};
+    const forged = page.id ? agentPicked(page.id, state, cards) : [];
+    if (forged.length > 0) {
+      return problem(422, {
+        code: "program-ids-unfit",
+        detail: artifactToolWords.cardsHoldAgentPicks(forged),
+      });
+    }
     const has = (id: string) => cards.some((card) => card.id === id);
     const picked = Object.entries(state)
       .filter(([key, entry]) => !has(key) && (entry.options ?? []).length > 0)
@@ -4864,24 +5061,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         why: asked.why.trim(),
         sources: asked.sources,
       };
-      const entry: ChoiceEntry = {
+      const unfit = pickWritten(row.id, card.id, {
         options: [option.id],
-        note: before?.note ?? null,
-        value: before?.value ?? null,
-        pageHash: metaOf(doc).pageHash ?? before?.pageHash ?? "0".repeat(64),
-        at: new Date().toISOString(),
         settled,
-      };
-      const misfit = choiceEntryProblem(card.id, entry);
-      if (misfit) {
+      });
+      if (unfit) {
         return problem(422, {
           code: "artifact-settle-entry-unfit",
-          detail: `${misfit} Nothing was changed.`,
+          detail: unfit,
         });
       }
-      docs.transact(row.id, "agent", (live) =>
-        live.getMap("state").set(card.id, entry)
-      );
       console.log(
         `[artifacts] ${row.name}#${card.id} settled ${option.id} by ${signed.by} (${instance.id})`
       );
@@ -4893,6 +5082,86 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         card: decisionLink(row.id, card.id, card.question),
         option: { id: option.id, label: option.label },
         settled,
+      };
+      return done;
+    },
+
+    /**
+     * A pick recorded for the person from his own words (`record_pick`):
+     * options `options` of card `card` on decision page `page`, which his
+     * pin on that page or a message he typed (`pin` or `message`) answers,
+     * `quote` being words of it. The hub reads the cited text itself: the
+     * pin's thread entries he wrote, or the send of origin `human` that the
+     * hub stamped where his words came in (db sends.ts `personSaidOf`),
+     * typed to a session of the page's project; the quote must stand in it.
+     * Written as settle's pick is, the same `state` entry as his own, its
+     * `from` naming the source, so it counts as his answer everywhere a
+     * pick does, and the card goes back from the member of Who decides it
+     * went to (settling.ts `personWrote`). Refused in words when the card
+     * holds his own pick (only he picks again), or when the citation does
+     * not hold. His own pick later replaces it and drops `from`.
+     */
+    cite: (
+      instanceId: string,
+      page: string,
+      asked: {
+        card: string;
+        message?: string;
+        options: string[];
+        pin?: string;
+        quote: string;
+      }
+    ) => {
+      const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
+      const [first = ""] = asked.options;
+      const toCite = cardToSettle(instance, page, {
+        card: asked.card,
+        option: first,
+      });
+      if (toCite instanceof ElysiaStatus) {
+        return toCite;
+      }
+      const { row, card } = toCite;
+      const options = citedOptions(card, asked.options);
+      if (options instanceof ElysiaStatus) {
+        return options;
+      }
+      const doc = docs.doc(row.id);
+      const before = stateOf(doc)[card.id];
+      if (pickMade(card, before) && !before?.settled && !before?.from) {
+        return problem(409, {
+          code: "artifact-cite-his-pick",
+          detail: artifactToolWords.citePickedByHim(card.question),
+        });
+      }
+      const from = citedFrom(instance, row, asked);
+      if (from instanceof ElysiaStatus) {
+        return from;
+      }
+      const unfit = pickWritten(row.id, card.id, {
+        options: asked.options,
+        from,
+      });
+      if (unfit) {
+        return problem(422, {
+          code: "artifact-cite-entry-unfit",
+          detail: unfit,
+        });
+      }
+      console.log(
+        `[artifacts] ${row.name}#${card.id} recorded ${asked.options.join(", ")} from the person's ${"pin" in from ? `pin ${from.pin}` : `message ${from.message}`} (${instance.id})`
+      );
+      deps.decides.cited(row, card);
+      const done: Cited = {
+        card: decisionLink(row.id, card.id, card.question),
+        options: options.map((option) => ({
+          id: option.id,
+          label: option.label,
+        })),
+        from,
       };
       return done;
     },

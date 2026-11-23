@@ -18,7 +18,10 @@ import {
   STAGE_RENDER_MS,
 } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
-import { decidedByLine } from "@cawco/core/words/decides-lines";
+import {
+  decidedByLine,
+  recordedFromLead,
+} from "@cawco/core/words/decides-lines";
 import { layoutWords } from "@cawco/core/words/layout-guides";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 import type { renderSaid } from "../artifacts/component";
@@ -27,6 +30,7 @@ import type {
   ArtifactRead,
   ArtifactStatus,
   Browsed,
+  Cited,
   CommentRead,
   ComponentRead,
   ComponentWritten,
@@ -196,7 +200,7 @@ const answerLine = (answer: DecisionAnswer, now: number): string => {
     case "open":
       return `- ${asked}: no pick yet${answer.note ? `; note ${verbatim(answer.note)}` : ""}`;
     case "picked":
-      return `- ${asked}: picked ${listed(answer.options.map((option) => (option.label ? `${option.id} ${quote(option.label, 60)}` : option.id)))} ${ago(answer.at, now)}${earlier}${note}${answer.settled ? `. ${decidedByLine(answer.settled)}${answer.settled.sources.length > 0 ? `: ${answer.settled.sources.join(", ")}` : ""}` : ""}`;
+      return `- ${asked}: picked ${listed(answer.options.map((option) => (option.label ? `${option.id} ${quote(option.label, 60)}` : option.id)))} ${ago(answer.at, now)}${earlier}${note}${answer.settled ? `. ${decidedByLine(answer.settled)}${answer.settled.sources.length > 0 ? `: ${answer.settled.sources.join(", ")}` : ""}` : ""}${answer.from ? `. ${recordedFromLead(answer.from)} ${verbatim(answer.from.quote)}` : ""}`;
     case "cleared":
       return `- ${asked}: picked, then cleared ${ago(answer.at, now)}${earlier}; nothing picked now${note}`;
     case "gone":
@@ -854,6 +858,10 @@ export const questionClosedWords = (answer: QuestionClosed): string =>
   answer.as === "taken"
     ? `${answer.link} is taken: it asks the person nothing more, and open_items lists it again only if he answers it anew.`
     : `${answer.link} is withdrawn: it asks the person nothing more.`;
+
+/** `record_pick`: the card, the options it holds now, and the person's words they came from. */
+export const citedWords = (answer: Cited): string =>
+  `${answer.card} now holds ${answer.options.map((option) => option.label).join(", ")}. ${recordedFromLead(answer.from)} ${verbatim(answer.from.quote)}. The card shows his words; its waits settle now, and he can pick again.`;
 
 export const settledWords = (answer: Settled): string =>
   `${answer.card} now holds ${answer.option.label}. ${decidedByLine(answer.settled)}. Its waits settle now; the person can pick again.`;

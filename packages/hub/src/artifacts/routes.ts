@@ -13,6 +13,7 @@ import { DESIGN_MAP_LIMITS } from "@cawco/core/stage";
 import { Elysia, ElysiaStatus, problem, t, ValidationError } from "elysia";
 import {
   askBody,
+  citeBody,
   closeQuestionBody,
   commentsFields,
   componentBody,
@@ -220,6 +221,12 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       { body: settleBody },
       async ({ params, body }) =>
         await artifacts.settle(params.id, params.artifact, body)
+    )
+    // A pick recorded from the person's own words (record_pick): his pin or message, quoted, checked by the hub.
+    .post(
+      "/api/instances/:id/artifacts/:artifact/cite",
+      { body: citeBody },
+      ({ params, body }) => artifacts.cite(params.id, params.artifact, body)
     )
     // question_close: the session takes a question from the person's answer, or withdraws it; nothing is deleted.
     .post(

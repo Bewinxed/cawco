@@ -29,6 +29,7 @@ import type {
   ArtifactsDb,
   SessionArtifact,
 } from "../db/artifacts";
+import type { PersonSaid } from "../db/sends";
 import type { DecisionLinks, DecisionProblem } from "../decision-problems";
 import type { ArtifactNamed } from "../decision-program";
 import type { HubLifetimeShape } from "../lifetime";
@@ -167,6 +168,8 @@ export interface ArtifactServiceDeps {
       row: ArtifactRow,
       card: DecisionCard
     ) => Promise<Settler>;
+    /** A pick recorded on `card` from the person's own words: his, so the member it went to has it no more (settling.ts `personWrote`). */
+    cited: (row: ArtifactRow, card: DecisionCard) => void;
   };
   /**
    * Whether `workspaceId` holds a work item of the session's delegates: one it
@@ -360,6 +363,8 @@ export interface ArtifactServiceDeps {
     /** The artifact a program's Canvas or Preview names, whole (`whole`). */
     artifact: ArtifactNamed
   ) => Promise<PageBuilt>;
+  /** A message the person typed, by its send's uuid or its harness's id (db sends.ts `personSaidOf`); undefined when he typed none by it. */
+  personSaid: (id: string) => PersonSaid | undefined;
   /**
    * Preview or page `artifact` drawn as the person's panel draws it, for
    * session `instance`'s `artifact_read` with `png` (server.ts, agent

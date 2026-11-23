@@ -42,6 +42,14 @@ The fleet's kinds of choice are listed in your instructions (`Kinds:`), each wit
 
 `artifact_create` and `artifact_update` answer where each card went: to the person (the card waits on them), to a member of Who decides that settles it (Caw, the advisor, common practice, an agent they added), or to you. A member that can't be reached sends the card to them, and the line says why. On a card that is yours, call `settle({ card: "<page>#<card>", option, why, sources })`: the pick is kept as yours, with your why, and the person can pick again. Wait on the card (`waitsOn: "<page>#<card>"` on a plan step or task) and build once it settles.
 
+A card's pick enters three ways only: the person's own press, `settle` by Who decides, and `record_pick` from his own words. `artifact_update`'s `patch` never writes a decision page's state.
+
+## His words elsewhere answer a card
+
+When a pin of his on the page, or a message he typed to you or another session of the project, plainly answers an open card, record it: `record_pick({ card: "<page>#<card>", options, pin | message, quote })`. `pin` is the pin's id or handle (`comment_read`); `message` is a `find` hit's ref with `by: "person"`. `quote` is the words that answer the card, copied as he wrote them. The hub checks the words are his and the quote stands in them, then keeps the pick as his: it counts everywhere his press does, and the card shows "Picked from your comment: “…”" until he picks otherwise.
+
+Record it only when his words name one option, or plainly approve it ("the second is fine", "go with the cache on disk"). A question, a doubt, a condition or a new idea picks nothing: answer it, and revise the card if it reopens it (step 7). A card holding his own pick stays his: `record_pick` refuses it.
+
 ## Steps
 
 1. **List the open choices.** Read the project's prior decisions first: each decided page's `decisions/<name>/log.md` (`folder_read` in a project). A choice one of them made is settled: build on it, and name it in the `why` of any card that rests on it. One Decision per choice the person must make and you can't settle from those decisions, the brief, the code or the design system. Give each decision and option a lowercase id that will not change (`row-density`, `quiet`). Done when every open question has a card and each card has its question, its options with a get, a cost and a builds line each, and one recommended with its reason.
@@ -54,6 +62,7 @@ The fleet's kinds of choice are listed in your instructions (`Kinds:`), each wit
 6. **Read the answers.** End your turn. When every card is answered (or they send early), you hear "The page … has new responses since N": call `artifact_read` with the `id` and `since` it names. Woken by anything else (a pin, after a compaction), read `open_items` first: it lists every question you and your delegates put to them, open or answered, with what they said. It lists every card under its Choices: picked (the option, any note, and whether it was picked on an earlier revision), picked then cleared, or no pick yet, each with its note; dials come back as the `dials` value, by panel name. Pass the `seq` it names as `since` next time. Then sort each card by what came back:
    - **A pick, no note**: the pick stands. Build on it.
    - **A pick and a note**: the pick stands, and the note shapes how you build it. Answer anything it asks.
+   - **A pin or a message of his that plainly answers a card**: record it with `record_pick` (Who decides, above), then treat it as a pick.
    - **A note, no pick**: the person is talking to you. Answer the note first, in your reply, with what it asks for (the fact, the source, the measurement). Then judge its intent. A note that plainly approves one option ("go with the recommended", "the second is fine") is that option's pick: treat it as picked and say so. Any other note (a question, a doubt, a new idea, a "why not X") reopens the card: revise it in step 7.
    - **Nothing**: the card is still open; leave it as it stands.
    Then close each answered card you acted on: `question_close({ question: <its link>, as: "taken", why: <what they decided, in plain words> })`, or `as: "withdrawn"` with what superseded it. A closed card asks them nothing more; a new answer of their reopens it in `open_items`.

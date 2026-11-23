@@ -38,8 +38,8 @@ import {
   CHOICE_LIMITS,
   type ChoiceEntry,
   choiceEntryProblem,
+  hubRecordWriteProblem,
   isChoiceEntry,
-  settledWriteProblem,
 } from "@cawco/core/choices";
 import {
   entryPin,
@@ -730,7 +730,7 @@ const stateProblem = (change: Change): string | null => {
   for (const [key, value] of written(change, "state")) {
     if (!Bun.deepEquals(value, before.get(key))) {
       const why = isChoiceEntry(key, value)
-        ? settledWriteProblem(before.get(key), value)
+        ? hubRecordWriteProblem(before.get(key), value)
         : choiceEntryProblem(key, value);
       if (why) {
         return why;

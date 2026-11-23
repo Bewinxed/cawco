@@ -1,6 +1,6 @@
 /** The routing record's sentences for a decided card. */
 
-import type { SettledBy } from "../choices";
+import type { PickFrom, SettledBy } from "../choices";
 import type { Kind, RouteState } from "../decides";
 import { unhandled } from "../unhandled";
 import { decidesWords } from "./decides";
@@ -25,6 +25,18 @@ export const decidedByLine = (
       ? [decidesWords.sources(settled.sources.length)]
       : []),
   ].join(" · ");
+
+/** Where a pick recorded from the person's words came from: his comment on the page, or a message he typed. */
+const sourceOf = (from: PickFrom): "comment" | "message" =>
+  "pin" in from ? "comment" : "message";
+
+/** The card's line for a pick recorded from his words: "Picked from your comment: “…”". */
+export const pickedFromYourLine = (from: PickFrom): string =>
+  decidesWords.pickedFromYour(sourceOf(from), from.quote);
+
+/** What agents read before such a pick's quote: "Recorded from the person's comment on this page:". */
+export const recordedFromLead = (from: PickFrom): string =>
+  decidesWords.recordedFrom(sourceOf(from));
 
 /** Where a card goes, said to the session that wrote it, after the card's link (one line per card). */
 export const routeLine = (
