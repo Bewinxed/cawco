@@ -13,15 +13,6 @@ export interface Band {
   y: number;
 }
 
-/** The scale's steps, in px: 1, 2, 3, 4, 6 and 8 on the 4px unit. */
-const STEPS = new Set([4, 8, 12, 16, 24, 32]);
-
-/** The step a length is, on the 4px scale: 8px is step 2. */
-export const stepOf = (px: number) => Math.round((px / 4) * 100) / 100;
-
-/** Whether a length is one of the scale's steps. */
-export const onScale = (px: number) => STEPS.has(Math.round(px * 100) / 100);
-
 /** Hairlines are edges, not spaces; anything from 2px up was chosen. */
 const chosen = (px: number) => px >= 2;
 
@@ -86,18 +77,45 @@ function gaps(
   return bands;
 }
 
-/** Every padding and every flex or grid gap inside `piece`, as it lays out now. */
-export function bandsIn(piece: HTMLElement): Band[] {
+/** A space runs across (a padding at a side, a gap between columns) or down. */
+export const across = (band: Band) => band.w === band.px;
+
+function spacesOf(element: Element, origin: DOMRect): Band[] {
+  const box = element.getBoundingClientRect();
+  if (box.width === 0 || box.height === 0) {
+    return [];
+  }
+  const style = getComputedStyle(element);
+  return [
+    ...paddings(box, style, origin),
+    ...gaps(element, box, style, origin),
+  ];
+}
+
+/**
+ * The spaces that set a piece's rhythm, one of each: its own padding, the gap
+ * between its parts, and the padding inside its first part. A space already
+ * shown at its size and direction is not shown again.
+ */
+export function keySpacesIn(piece: HTMLElement): Band[] {
   const origin = piece.getBoundingClientRect();
-  return [...piece.querySelectorAll<HTMLElement>("*")].flatMap((element) => {
-    const box = element.getBoundingClientRect();
-    if (box.width === 0 || box.height === 0) {
-      return [];
+  const root = piece.firstElementChild;
+  if (!root) {
+    return [];
+  }
+  const first = [...root.querySelectorAll("*")].find(
+    (element) => spacesOf(element, origin).length > 0
+  );
+  const seen = new Set<string>();
+  return [
+    ...spacesOf(root, origin),
+    ...(first ? spacesOf(first, origin) : []),
+  ].filter((band) => {
+    const key = `${across(band)}:${band.px}`;
+    if (seen.has(key)) {
+      return false;
     }
-    const style = getComputedStyle(element);
-    return [
-      ...paddings(box, style, origin),
-      ...gaps(element, box, style, origin),
-    ];
+    seen.add(key);
+    return true;
   });
 }
