@@ -89,15 +89,7 @@
     }
   };
   const OPTION =
-    "group col-span-full row-start-1 grid grid-cols-subgrid items-center rounded-sm border-none bg-transparent px-0 py-space-2 text-start text-ink-strong select-none press-tint transition-control aria-disabled:cursor-not-allowed";
-  /**
-   * The row's columns: its inset, the lead slot, the gap to the text, the
-   * text, the force's room, the trailing slot, its inset. The insets are
-   * tracks rather than the option's padding: on a subgrid, padding sits
-   * inside the edge tracks and pushed the lead and the check off them.
-   */
-  const ROW_COLS =
-    "var(--spacing-space-3) var(--spacing-icon-md) var(--spacing-space-3) minmax(0, 1fr) auto var(--spacing-icon-md) var(--spacing-space-3)";
+    "group row-cells row-start-1 rounded-sm border-none bg-transparent px-0 py-space-2 text-start text-ink-strong select-none press-tint transition-control aria-disabled:cursor-not-allowed";
 </script>
 
 {#snippet inside()}
@@ -154,14 +146,10 @@
   </span>
 {/snippet}
 
-<!-- One grid for the row. The option spans it on a subgrid, so the force
-     standing over its fifth column moves no other column off the edges
-     every row keeps. -->
-<div
-  data-slot="pick-row"
-  class="grid grid-cols-(--row-cols) items-center"
-  style:--row-cols={ROW_COLS}
->
+<!-- Spans its PickList's shared columns via `row-cells` (`grid-cols-subgrid`),
+     so every row's lead, body, force button, and trailing check stay locked to
+     the same vertical rails across the list. -->
+<div data-slot="pick-row" class="row-cells">
   <Tip {glide} label={full} side="right" title={name}>
     {#snippet children(tip)}
       {#if inMenu}

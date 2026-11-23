@@ -128,16 +128,21 @@
     <ul
       aria-busy={waiting || undefined}
       aria-label={label}
-      class="m-0 flex list-none flex-col p-0"
+      class={[
+        "m-0 list-none p-0",
+        glyphed ? "rows-grid" : "flex flex-col",
+      ]}
+      style:--row-col-gap={glyphed ? "var(--spacing-space-1)" : undefined}
+      style:--row-cols={glyphed
+        ? "var(--spacing-row-compact) minmax(0, 1fr)"
+        : undefined}
     >
       {#if waiting}
         {#each slots as slot (slot)}
           <li
             class={[
-              "grid min-h-control-lg content-center items-center gap-x-space-1 not-last:border-b not-last:border-border-hairline",
-              glyphed
-                ? "grid-cols-lead-fluid pe-space-3"
-                : "grid-cols-1 px-space-3",
+              "min-h-control-lg content-center items-center not-last:border-b not-last:border-border-hairline",
+              glyphed ? "row-cells pe-space-3" : "grid grid-cols-1 px-space-3",
             ]}
           >
             {#if glyphed}
@@ -150,14 +155,19 @@
         {/each}
       {:else}
         {#each items as { key, suggestion, Glyph } (key)}
-          <li class="not-last:border-b not-last:border-border-hairline">
+          <li
+            class={[
+              "not-last:border-b not-last:border-border-hairline",
+              glyphed && "row-cells",
+            ]}
+          >
             <button
               data-slot="suggestion"
               class={[
-                "group/item mark-line press-tint focus-inset grid w-full min-h-control-lg content-center items-start gap-x-space-1 rounded-sm py-space-3 text-start type-body text-ink-strong select-none transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover",
+                "group/item mark-line press-tint focus-inset w-full min-h-control-lg content-center items-start rounded-sm py-space-3 text-start type-body text-ink-strong select-none transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover",
                 glyphed
-                  ? "grid-cols-lead-fluid pe-space-3"
-                  : "grid-cols-1 px-space-3",
+                  ? "row-cells pe-space-3"
+                  : "grid grid-cols-1 px-space-3",
               ]}
               onclick={() => onpick(suggestion)}
               type="button"
@@ -191,9 +201,12 @@
         {#each slots as slot (slot)}
           <li
             class={[
-              "grid min-h-14 content-center items-start gap-x-space-3 rounded-sm bg-surface-raised px-space-4 py-space-3 shadow-sm",
-              glyphed ? "grid-cols-mark-fluid" : "grid-cols-1",
+              "min-h-14 content-center items-start rounded-sm bg-surface-raised px-space-4 py-space-3 shadow-sm",
+              glyphed ? "rows-grid" : "grid grid-cols-1",
             ]}
+            style:--row-cols={glyphed
+              ? "var(--spacing-icon-md) minmax(0, 1fr)"
+              : undefined}
           >
             {#if glyphed}
               <span class="mark-cell type-label"
@@ -237,10 +250,13 @@
             <button
               data-slot="suggestion"
               class={[
-                "mark-line press-tint grid w-full min-h-14 content-center items-start gap-x-space-3 rounded-sm bg-surface-raised px-space-4 py-space-3 text-start text-ink-strong shadow-sm select-none transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover",
-                glyphed ? "grid-cols-mark-fluid" : "grid-cols-1",
+                "mark-line press-tint w-full min-h-14 content-center items-start rounded-sm bg-surface-raised px-space-4 py-space-3 text-start text-ink-strong shadow-sm select-none transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover",
+                glyphed ? "rows-grid" : "grid grid-cols-1",
               ]}
               onclick={() => onpick(suggestion)}
+              style:--row-cols={glyphed
+                ? "var(--spacing-icon-md) minmax(0, 1fr)"
+                : undefined}
               type="button"
             >
               {#if glyphed}

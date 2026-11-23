@@ -19,7 +19,9 @@
   }: { label: string; divided?: boolean; children: Snippet } = $props();
 </script>
 
-<!-- The ghost's host: the list is a `ul`, which holds no layers of its own. -->
+<!-- The ghost's host: the list is a `ul` owning the subgrid columns once
+     (`rows-grid`: inset | lead | gutter | body | controls | inset), so every
+     SectionRow's lead, text, controls, and `below` note align by construction. -->
 <div class="-mx-space-2" {@attach highlight({ rows: '[data-slot="row"]' })}>
   <ul
     aria-label={label}

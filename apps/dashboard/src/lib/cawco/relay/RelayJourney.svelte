@@ -797,7 +797,12 @@
         </p>
       {/if}
       <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->
-      <ol class="m-0 grid list-none gap-space-3 p-0" role="list">
+      <ol
+        class="m-0 rows-grid list-none gap-y-space-3 p-0"
+        role="list"
+        style:--row-col-gap="var(--spacing-space-2)"
+        style:--row-cols="var(--spacing-icon-md) minmax(0, 1fr)"
+      >
         {#each steps as step, index (step.step)}
           <!-- Only the open step stands on the person; another that will
                ask once it is reached waits in the meantime. -->
@@ -806,7 +811,7 @@
               ? "waiting"
               : markOf(step)}
           <li
-            class="mark-line grid grid-cols-mark-fluid items-start gap-x-space-2 gap-y-space-1 type-label"
+            class="mark-line row-cells items-start gap-y-space-1 type-label"
             data-open={index === open || undefined}
             data-state={step.state}
             data-step={step.step}

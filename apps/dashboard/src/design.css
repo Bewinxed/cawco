@@ -1384,9 +1384,17 @@
 @utility grid-cols-fluid-auto {
   grid-template-columns: minmax(0, 1fr) auto;
 }
-/* A glyph's column before words that take the rest. */
-@utility grid-cols-mark-fluid {
-  grid-template-columns: var(--spacing-icon-md) minmax(0, 1fr);
+/* One shared subgrid for row lists (ui/row, SectionRow, PickList, Suggestions,
+   RelayJourney): the parent owns the columns once (`--row-cols`, `--row-col-gap`)
+   and each row spans them via `row-cells`, so lead marks, text, controls, and
+   secondary lines align across every row by construction. */
+@utility rows-grid {
+  display: grid;
+  grid-template-columns: var(
+    --row-cols,
+    var(--spacing-row-compact) minmax(0, 1fr) auto
+  );
+  column-gap: var(--row-col-gap, var(--spacing-space-3));
 }
 /* Rows of three pickers (model, mode, account) on fixed shares of the row,
    never their contents' widths, so a pick or a reset coming in changes its

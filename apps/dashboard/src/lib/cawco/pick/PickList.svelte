@@ -34,11 +34,23 @@
 
   const glide = provideGlide();
   providePickHost(() => (menu ? "menu" : "list"));
+  /**
+   * Shared column tracks for every PickRow in the list: leading inset, lead
+   * icon, gutter, body, optional force action, trailing check/dot, trailing
+   * inset. Owned by the list once (`rows-grid`) and inherited via `row-cells`.
+   */
+  const ROW_COLS =
+    "var(--spacing-space-3) var(--spacing-icon-md) var(--spacing-space-3) minmax(0, 1fr) auto var(--spacing-icon-md) var(--spacing-space-3)";
 </script>
 
 {#if menu}
   <ContextMenu.RadioGroup aria-label={label} value={menu.value}>
-    <div data-slot="list" class="grid gap-space-1">
+    <div
+      data-slot="list"
+      class="rows-grid gap-y-space-1"
+      style:--row-col-gap="0px"
+      style:--row-cols={ROW_COLS}
+    >
       {@render children()}
     </div>
   </ContextMenu.RadioGroup>
@@ -46,8 +58,10 @@
   <div
     data-slot="list"
     aria-label={label}
-    class="grid gap-space-1"
+    class="rows-grid gap-y-space-1"
     role="listbox"
+    style:--row-col-gap="0px"
+    style:--row-cols={ROW_COLS}
   >
     {@render children()}
   </div>

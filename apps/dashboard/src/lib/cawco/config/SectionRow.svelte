@@ -85,26 +85,20 @@
 
 <li
   data-slot="item"
-  class="@container/section-row flex min-w-0 flex-col gap-space-1 rounded-sm data-flash:animate-row-flash"
+  class="row-cells min-w-0 gap-y-space-1 rounded-sm data-flash:animate-row-flash"
   data-flash={flash || undefined}
   data-flip
   data-row-name={name}
 >
   <div
     data-slot="row"
-    class="group/row relative flex min-h-control-lg items-center gap-space-3 rounded-sm px-space-2 py-space-2 transition-control data-two:min-h-14 has-link-active:bg-surface-hover light:has-link-active:bg-surface-pressed light:has-link-active:inks-strong max-phone:grid max-phone:@min-xs/section-row:grid-cols-(--row-cols) max-phone:@min-xs/section-row:grid-rows-(--row-rows) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:@max-xs/section-row:grid-cols-(--row-cols-narrow) max-phone:@max-xs/section-row:grid-rows-(--row-rows-narrow)"
+    class="group/row relative row-cells min-h-control-lg gap-y-space-1 rounded-sm py-space-2 transition-control data-two:min-h-14 has-link-active:bg-surface-hover light:has-link-active:bg-surface-pressed light:has-link-active:inks-strong"
     data-off={enabled === false || undefined}
     data-two={meta !== undefined || undefined}
-    style:--row-cols="var(--spacing-row-compact) minmax(0, 1fr) auto"
-    style:--row-rows={meta === undefined ? "auto" : "auto auto"}
-    style:--row-cols-narrow="var(--spacing-row-compact) minmax(0, 1fr)"
-    style:--row-rows-narrow={meta === undefined
-      ? "auto auto"
-      : "auto auto auto"}
   >
     <span
       data-slot="tile"
-      class="inline-flex size-6.5 flex-none items-center justify-center rounded-sm bg-surface-raised text-ink-muted shadow-sm [&>*]:size-icon-md [&>*]:flex-none max-phone:row-span-full max-phone:self-center"
+      class="col-start-2 inline-flex size-row-compact flex-none items-center justify-center rounded-sm bg-surface-raised text-ink-muted shadow-sm [&>*]:size-icon-md [&>*]:flex-none @max-xs/rows:row-span-2 @max-xs/rows:self-center"
       data-share={href ? `icon:${href}` : undefined}
       style:color={hue}
       {@attach land(() => {
@@ -120,7 +114,7 @@
     </span>
     <span
       data-slot="text"
-      class="flex min-w-0 flex-auto flex-col gap-space-1 max-phone:contents"
+      class="col-start-4 flex min-w-0 flex-col gap-space-1 @max-xs/rows:col-span-2"
     >
       <!-- The name and its badge: where both don't fit, the badge goes
            under the name, so the name never truncates to nothing. -->
@@ -167,16 +161,14 @@
         >
       {/if}
     </span>
-    <!-- A 30px ⋯ and a 32px switch: on a coarse pointer the gap opens to 14px,
+    <!-- A 32px ⋯ and a 32px switch: on a coarse pointer the gap opens to 16px,
          so each touch area reaches 44px before meeting its neighbour's. The
-         cluster holds the row's trailing edge: on a phone the name gives way
-         beside it and the meta line runs on under both; in a row too narrow
-         to leave the name any room beside it (`section-row`, build-tokens.ts)
-         it takes a line of its own, last, from the name's start. -->
+         cluster holds the trailing subgrid rail; in a row too narrow to leave
+         the name room beside it (`@max-xs/rows`) it drops onto row 2 at the
+         body's start column. -->
     <span
       data-slot="controls"
-      class="relative z-1 flex flex-none items-center ghost-rest-fill gap-space-2 hit-gap-x-space-2 coarse:gap-space-4 coarse:hit-gap-x-space-4 max-phone:@min-xs/section-row:col-start-3 max-phone:@min-xs/section-row:row-start-1 max-phone:@max-xs/section-row:col-start-2 max-phone:@max-xs/section-row:row-start-(--row-controls) max-phone:@max-xs/section-row:justify-self-start"
-      style:--row-controls={meta === undefined ? 2 : 3}
+      class="relative z-1 col-start-5 flex flex-none items-center justify-self-end ghost-rest-fill gap-space-2 hit-gap-x-space-2 coarse:gap-space-4 coarse:hit-gap-x-space-4 not-empty:ms-space-3 @max-xs/rows:col-start-4 @max-xs/rows:col-span-2 @max-xs/rows:row-start-2 @max-xs/rows:ms-0 @max-xs/rows:justify-self-start"
     >
       {#if rollout}
         {@render rollout()}
@@ -200,8 +192,7 @@
   </div>
   {#if below || note}
     <div
-      class="flex min-w-0 flex-col gap-space-2 pt-0 pe-space-2 pb-space-2 ps-(--below-ps) empty:hidden max-phone:ps-space-2"
-      style:--below-ps={"calc(var(--spacing-space-2) + var(--spacing-row-compact) + var(--spacing-space-3))"}
+      class="col-start-4 col-span-2 max-phone:col-start-2 max-phone:col-span-4 flex min-w-0 flex-col gap-space-2 pb-space-2 empty:hidden"
     >
       {#if note}
         <p

@@ -72,7 +72,7 @@ const twMergeConfig = {
       animate: ["sheet-fade"],
       content: [{ content: ["data-n", "placeholder"] }],
       "grid-rows": [{ "grid-rows": ["shut", "open"] }],
-      "grid-cols": [{ "grid-cols": ["fluid-auto", "mark-fluid"] }],
+      "grid-cols": [{ "grid-cols": ["fluid-auto"] }, "rows-grid", "row-cells"],
       "auto-rows": [{ "auto-rows": ["line", "band", "band-phone"] }],
       "animation-duration": [{ "anim-dur": durations }],
       "animation-delay": [{ "anim-delay": durations }],
