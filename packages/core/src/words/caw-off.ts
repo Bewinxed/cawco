@@ -12,6 +12,8 @@ export const cawOffWords = {
   ask: (project: string) => `Turn Caw off for ${project || "this project"}?`,
   /** Its title once he is off. */
   off: (project: string) => `Caw is off for ${project || "this project"}`,
+  /** What turning him off means, under the title while it asks and stops. */
+  waits: "Triggers wait on their task, routine or page until Caw wakes.",
   /** The box over the rows that checks or clears them all. */
   all: (count: number) => `All ${count} running`,
   /** The list's name, for a screen reader. */
