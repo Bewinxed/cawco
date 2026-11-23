@@ -20,7 +20,7 @@ A choice that is no design reaches the person only as a decision card on a page,
 - **One Recommended**: exactly one option `recommended`, and the Decision's `why` is the one sentence that says why it. The card shows the why after that option's label ("Recommended: Per machine. …"), so the why never names the option again.
 - **Pick plus note**: the card gives both; it asks nothing else. Leave the Decision's `note` out and its button reads "Add a note". When the pick needs a particular note, give `note` a noun phrase the button finishes ("a reason for the rollback" reads "Add a reason for the rollback").
 - **The same facts for every option**: each line and each cost answers the same question in the same units, the Recommended option's cost included.
-- **One change per pair**: two options differ in one thing, said in each side's `line`; a behaviour card shows the states and the moves between them, each option's as a `Diagram`.
+- **One change per pair**: two options differ in one thing, said in each side's `line`.
 - **A reason that can be checked**: the `why` names the fact that makes the Recommended option right (a number, a limit, what breaks), never only that it is better.
 - **A stable order**: options stand in their own order (today first, small to large); never move the Recommended one to the top.
 - **Say what it changes**: the question or the `why` says what the pick changes. Where something stands today, mark that option `current`.
@@ -28,7 +28,7 @@ A choice that is no design reaches the person only as a decision card on a page,
 - **Words first**: the question, lines and costs carry the meaning; media shows it and never replaces it. Name an icon in words ("Attach"), never as a stand-in symbol or emoji. Figtree draws arrows (← → ↑ ↓), dashes, × ≠ ≤ ≥ and the like, but not ✓ ✗ ✕, the key symbols ⌘ ⌥ ⇧ ⌃ ⎋ ↵, ↔, ≈ or any emoji: write "Done" or "Command-K", for the hub refuses a program holding a character Figtree lacks.
 - **Few options**: around five at most; split a bigger choice into two cards.
 
-**Media is words, a diagram or a picture that is no UI.** A design never stands on a page: the hub refuses a `Preview` in a program and names the design graph. A behaviour or flow choice draws its states and the moves between them as a `Diagram` in each option (a Mermaid `stateDiagram-v2`, each edge labelled by what the person does). A picture that is no UI (a generated image, a logo, a photograph) is an `Image`: a file beside page.oui or a `generate_image` result by its absolute path. A drawing of what is not a screen is a `Canvas`. A choice that needs no picture needs no media.
+**Media is words, a diagram or a picture that is no UI.** A design never stands on a page: the hub refuses a `Preview` in a program and names the design graph. A `Diagram` (a Mermaid `stateDiagram-v2`, each edge labelled by what the person does) goes in each option only when the options differ in a sequence of states that their words leave hard to follow. A picture that is no UI (a generated image, a logo, a photograph) is an `Image`: a file beside page.oui or a `generate_image` result by its absolute path. A drawing of what is not a screen is a `Canvas`. A choice that needs no picture needs no media.
 
 **Fixes from the person's pins** are shown where they pinned: a design graph's fix is the code change itself, which their open graph shows as you save; a page is revised with `artifact_update`. Answer each pin in its own thread with what changed (`comment_reply`). A page's revision, or a graph's new `ask`, waits for them in Needs you until they open it.
 
@@ -46,7 +46,7 @@ The fleet's kinds of choice are listed in your instructions (`Kinds:`), each wit
 
 1. **List the open choices.** Read the project's prior decisions first: each decided page's `decisions/<name>/log.md` (`folder_read` in a project). A choice one of them made is settled: build on it, and name it in the `why` of any card that rests on it. One Decision per choice the person must make and you can't settle from those decisions, the brief, the code or the design system. Give each decision and option a lowercase id that will not change (`row-density`, `quiet`). Done when every open question has a card and each card has its question, its options with a get, a cost and a builds line each, and one recommended with its reason.
 2. **Order them.** The choice others hang on comes first, and each later card names it in `after`. A card whose options change with an earlier answer stays off the page until that answer is in. Done when every card's `after` names only cards above it.
-3. **Make the media.** A behaviour's `Diagram`, written in the program. A picture that is no UI, a file beside page.oui or a `generate_image` result by its absolute path. A drawing, a canvas (`artifact_create` with `kind: "canvas"`, `does: "draw"`) shown with `Canvas`. Done when every Image names its file and every Canvas the id `artifact_create` answered.
+3. **Make the media** a card needs. A `Diagram`, written in the program. A picture that is no UI, a file beside page.oui or a `generate_image` result by its absolute path. A drawing, a canvas (`artifact_create` with `kind: "canvas"`, `does: "draw"`) shown with `Canvas`. Done when every Image names its file and every Canvas the id `artifact_create` answered.
 4. **Write the program.** Read LIBRARY.md whole, then write `root = Decisions(…)` first, each Decision after it, its Options and its media. Put decisions that belong together in a Section. Done when every id is set, every statement is reachable from root, and the table below passes.
    - **With pictures beside it**: write the program as `page.oui` in a work folder of your own (not the project folder), the pictures beside it.
    - **Without a shell or file tools** (a project's Caw): write `decisions/<name>/page.oui` into the project's folder with `folder_write`; name pictures by their absolute paths.
@@ -79,7 +79,6 @@ Each row refuses the page until it is fixed.
 | Size or id captions ("99% of 272×101", "tsk-142") | Caption what the person judges, or nothing |
 | Media outside a card | Each picture is an option's media or its card's media |
 | More than one card for a choice already made | One card per choice; a made one leaves the root once built |
-| A behaviour choice told only in words | Each option draws its states and moves as a `Diagram`, each edge labelled by what the person does |
 
 ## When to write HTML instead
 

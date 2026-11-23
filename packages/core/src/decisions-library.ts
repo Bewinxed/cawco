@@ -134,7 +134,7 @@ export const decisionLibrary = <C>(
   );
   const Diagram = define(
     "Diagram",
-    "A Mermaid diagram, drawn on the house look: any type Mermaid has (flowchart, sequenceDiagram, gantt, stateDiagram-v2, erDiagram, classDiagram, mindmap, timeline…). A behaviour choice's states and moves, each edge labelled by what the person does; never a screen, whose design is on the design graph.",
+    "A Mermaid diagram, drawn on the house look: any type Mermaid has (flowchart, sequenceDiagram, gantt, stateDiagram-v2, erDiagram, classDiagram, mindmap, timeline…). For a choice whose options differ in a sequence of states their words leave hard to follow, each edge labelled by what the person does; never a screen, whose design is on the design graph.",
     z.object({
       mermaid: z
         .string()
@@ -229,7 +229,7 @@ export const decisionLibrary = <C>(
         .array(media)
         .optional()
         .describe(
-          "What shows it under its pick: a Diagram of its states and moves, or a picture that is no UI. Each piece stands on the row the other options' pieces at the same place share, so pieces in the same order in every option compare side by side."
+          "What shows it under its pick, when its words alone leave it unclear: a Diagram of its states and moves, or a picture that is no UI. Each piece stands on the row the other options' pieces at the same place share, so pieces in the same order in every option compare side by side."
         ),
       cost: z.string().optional().describe("What it costs them, in one line."),
       current: z

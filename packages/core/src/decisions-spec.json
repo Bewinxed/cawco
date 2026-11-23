@@ -313,7 +313,7 @@
           "mermaid"
         ],
         "additionalProperties": false,
-        "description": "A Mermaid diagram, drawn on the house look: any type Mermaid has (flowchart, sequenceDiagram, gantt, stateDiagram-v2, erDiagram, classDiagram, mindmap, timeline…). A behaviour choice's states and moves, each edge labelled by what the person does; never a screen, whose design is on the design graph."
+        "description": "A Mermaid diagram, drawn on the house look: any type Mermaid has (flowchart, sequenceDiagram, gantt, stateDiagram-v2, erDiagram, classDiagram, mindmap, timeline…). For a choice whose options differ in a sequence of states their words leave hard to follow, each edge labelled by what the person does; never a screen, whose design is on the design graph."
       },
       "Canvas": {
         "type": "object",
