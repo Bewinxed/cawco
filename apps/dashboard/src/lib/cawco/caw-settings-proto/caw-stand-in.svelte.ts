@@ -142,6 +142,8 @@ export class StandInCaw {
   });
   /** His chat's last change, refused: the hub's words. */
   refusedChat = $state<string | null>(null);
+  /** His proposing switch's last change, refused: the hub's words. */
+  refusedProposes = $state<string | null>(null);
   /** The kind whose last change was refused, and the hub's words. */
   refusedKind = $state<{ kind: TriggerKind; words: string } | null>(null);
   /** His panel is open (the seat's press). */
@@ -316,17 +318,17 @@ export class StandInCaw {
   /** Whether Caw may propose changes to Who decides (a project boolean, `cawProposesDecides`). */
   proposesDecides = $state(false);
 
-  /** His proposing switch's change; the hub answers, or his chat's line says why not. */
+  /** His proposing switch's change; the hub answers, or the switch's line says why not. */
   async setProposes(next: boolean): Promise<void> {
     const refusal = await this.#ask();
     if (refusal) {
-      this.refusedChat = cawSettingsWords.refused(
+      this.refusedProposes = cawSettingsWords.refused(
         cawSettingsWords.proposesUnchanged(this.proposesDecides),
         refusal
       );
       return;
     }
-    this.refusedChat = null;
+    this.refusedProposes = null;
     this.proposesDecides = next;
   }
 

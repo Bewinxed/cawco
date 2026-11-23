@@ -110,6 +110,7 @@
     {projectName}
     proposesDecides={caw.proposesDecides}
     refusedChat={caw.refusedChat}
+    refusedProposes={caw.refusedProposes}
     refusedKind={caw.refusedKind}
     {sheet}
     triggers={caw.triggers}
