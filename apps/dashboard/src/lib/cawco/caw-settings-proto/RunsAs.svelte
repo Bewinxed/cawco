@@ -226,6 +226,8 @@
     chipVariants({
       variant: "setting",
       tone: from[field] ? "muted" : undefined,
+      // In a column of pickers each chip takes the column's width.
+      class: columns ? "flex-1 [&>[data-slot=chevron]]:ms-auto" : undefined,
     });
 </script>
 
@@ -236,36 +238,11 @@
     : chipsVariants({ class: "min-w-0" })}
 >
   <NsPopoverGroup>
-    {#if byAccount}
-      <Tip disabled={!tipOf("account")} label={tipOf("account")}>
-        {#snippet children(tip)}
-          <span
-            {...tip}
-            data-slot="field"
-            class={[
-              "inline-flex min-w-0 items-center gap-space-1",
-              columns && "col-start-1 justify-self-start",
-            ]}
-          >
-            <AccountSwitch
-              bare={glyphOnly && !accountRow && Boolean(from.account)}
-              instance={holder}
-              {none}
-              short
-              tone={from.account ? "muted" : undefined}
-              onpick={(accountId) => onchange({ account: accountId })}
-              {readonly}
-            />
-            {@render reset("account", ["account"])}
-          </span>
-        {/snippet}
-      </Tip>
-    {/if}
     {#if readonly}
       <span
         data-tool
         data-variant="static"
-        class={[chip("model"), columns && "col-start-2 justify-self-start"]}
+        class={[chip("model"), columns && "col-start-1"]}
       >
         {@render harnessFace()}
         <span data-slot="chip-label">{modelName}</span>
@@ -273,7 +250,7 @@
       <span
         data-tool
         data-variant="static"
-        class={[chip("mode"), columns && "col-start-3 justify-self-start"]}
+        class={[chip("mode"), columns && "col-start-2"]}
       >
         {@render modeFace()}
       </span>
@@ -285,7 +262,7 @@
             data-slot="field"
             class={[
               "inline-flex min-w-0 items-center gap-space-1",
-              columns && "col-start-2 justify-self-start",
+              columns && "col-start-1",
             ]}
           >
             <NsPopover
@@ -343,7 +320,7 @@
             data-slot="field"
             class={[
               "inline-flex min-w-0 items-center gap-space-1",
-              columns && "col-start-3 justify-self-start",
+              columns && "col-start-2",
             ]}
           >
             <NsPopover
@@ -380,6 +357,32 @@
               />
             </NsPopover>
             {@render reset("mode", ["mode"])}
+          </span>
+        {/snippet}
+      </Tip>
+    {/if}
+    {#if byAccount}
+      <Tip disabled={!tipOf("account")} label={tipOf("account")}>
+        {#snippet children(tip)}
+          <span
+            {...tip}
+            data-slot="field"
+            class={[
+              "inline-flex min-w-0 items-center gap-space-1",
+              columns && "col-start-3 [&>[data-account-chip]]:flex-1",
+            ]}
+          >
+            <AccountSwitch
+              bare={glyphOnly && !accountRow && Boolean(from.account)}
+              instance={holder}
+              {none}
+              short
+              fill={columns}
+              tone={from.account ? "muted" : undefined}
+              onpick={(accountId) => onchange({ account: accountId })}
+              {readonly}
+            />
+            {@render reset("account", ["account"])}
           </span>
         {/snippet}
       </Tip>

@@ -14,8 +14,11 @@
    * in the card's own coordinates, written from `hang`); on a flush side
    * (`data-flush`) its top corner is square and the cut stops one pixel
    * short, so the anchor's flank runs straight on into the card's side. The
-   * cut (`::before`) is the card's top edge row drawn again in the neck's
-   * surface, clipped from the flare's outer circle (`--neck-cut`, written by
+   * cut (`::before`) is the card's top edge drawn again in the neck's
+   * surface, two pixels tall: a card hung at a fractional offset (the
+   * glass in Caw's settings hero) spreads its 1px edge over two device
+   * rows, which a 1px cut only part covered, leaving a hairline across the
+   * join. It is clipped from the flare's outer circle (`--neck-cut`, written by
    * hang's `setNeck`), so the anchor's curve runs on into the card's edge as
    * one stroke. A clip, not a mask: a mask drew the whole card's edge
    * through a buffer of its own on every paint. Its overlay shadow is cut at
@@ -44,7 +47,7 @@
    * out unseen.
    */
   const hangCardVariants = tv({
-    base: "relative border-0 bg-(--hang-surface) [--hang-neck:var(--hang-surface)] [--hang-surface:var(--color-surface-raised)] before:pointer-events-none before:absolute before:left-(--gap-from) before:z-2 before:h-px before:w-[calc(var(--gap-to)-var(--gap-from))] before:bg-(--hang-neck) after:pointer-events-none after:absolute after:inset-0 after:z-1 after:rounded-[inherit] after:border after:border-border-control data-[rehearsing]:invisible before:[--gap-from:calc(var(--neck-start)-var(--neck-flare-start,0px))] before:[--gap-to:calc(var(--neck-end)+var(--neck-flare-end,0px))] before:[clip-path:var(--neck-cut,none)] data-[flush=end]:before:[--gap-to:calc(var(--neck-end)-1px)] data-[flush=start]:before:[--gap-from:1px]",
+    base: "relative border-0 bg-(--hang-surface) [--hang-neck:var(--hang-surface)] [--hang-surface:var(--color-surface-raised)] before:pointer-events-none before:absolute before:left-(--gap-from) before:z-2 before:h-0.5 before:w-[calc(var(--gap-to)-var(--gap-from))] before:bg-(--hang-neck) after:pointer-events-none after:absolute after:inset-0 after:z-1 after:rounded-[inherit] after:border after:border-border-control data-[rehearsing]:invisible before:[--gap-from:calc(var(--neck-start)-var(--neck-flare-start,0px))] before:[--gap-to:calc(var(--neck-end)+var(--neck-flare-end,0px))] before:[clip-path:var(--neck-cut,none)] data-[flush=end]:before:[--gap-to:calc(var(--neck-end)-1px)] data-[flush=start]:before:[--gap-from:1px]",
     variants: {
       /**
        * Which edge meets the anchor: its top (it hangs) or its foot (it
