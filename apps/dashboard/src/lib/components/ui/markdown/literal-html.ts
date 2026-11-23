@@ -15,8 +15,8 @@
  * escape: its backslashes are kept, so it reads as the characters typed.
  */
 
-/** A fence's opening or closing line: three or more backticks or tildes. */
-const FENCE = /^\s{0,3}(`{3,}|~{3,})/u;
+import { fencedLines } from "@cawco/core/markdown-code";
+
 /** A code span: a run of backticks, what it holds, and a run as long. */
 const CODE_SPAN = /(`+)[\s\S]*?(?<!`)\1(?!`)/gu;
 const COMMENT = /<!--[\s\S]*?-->/gu;
@@ -58,25 +58,19 @@ export function literalHtml(source: string): string {
   }
   const out: string[] = [];
   let prose: string[] = [];
-  let fence: string | null = null;
   const flush = () => {
     if (prose.length > 0) {
       out.push(outsideSpans(prose.join("\n")));
       prose = [];
     }
   };
-  for (const line of source.split("\n")) {
-    const marker = line.match(FENCE)?.[1];
-    if (marker && (fence === null || marker.startsWith(fence))) {
-      if (fence === null) {
-        flush();
-      }
-      fence = fence === null ? marker : null;
+  const fenced = fencedLines(source);
+  for (const [at, line] of source.split("\n").entries()) {
+    if (fenced[at]) {
+      flush();
       out.push(line);
-    } else if (fence === null) {
-      prose.push(line);
     } else {
-      out.push(line);
+      prose.push(line);
     }
   }
   flush();

@@ -11,6 +11,8 @@
  * above", "the last message from the hub").
  */
 
+import { fencedLines } from "@cawco/core/markdown-code";
+
 /** Words that order or count the leaf's own messages: "my last", "my two chat". */
 const ORDINAL =
   "(?:previous|last|earlier|prior|preceding|final|first|second|two|three|four|\\d+|chat|assistant|own)";
@@ -44,17 +46,28 @@ const BARE_ABOVE = /\b(?:see|as|is|are)\s+above\b/iu;
 const NOTHING_ABOVE = 40;
 
 /**
- * Quoted words: code fences, inline code, and "…" or “…” spans. A report that
- * quotes a phrase talks about it rather than pointing with it.
+ * Quoted words on a line: code spans, and "…" or “…” spans. A report that
+ * quotes a phrase talks about it rather than pointing with it, and so does
+ * its fenced code (core markdown-code.ts).
  */
-const QUOTED = /```[\s\S]*?```|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”/gu;
+const QUOTED = /(`+)[^`\n]*?\1|"[^"\n]*"|“[^”\n]*”/gu;
+
+/** `report` with its quoted words and its fenced code blanked, every offset kept. */
+const unquoted = (report: string): string => {
+  const fenced = fencedLines(report);
+  return report
+    .split("\n")
+    .map((line, at) => (fenced[at] ? " ".repeat(line.length) : line))
+    .join("\n")
+    .replace(QUOTED, (quoted) => " ".repeat(quoted.length));
+};
 
 /**
  * The phrase in `report` that points at the chat as where the result is, or
  * undefined when the report carries its own work. Quoted words are skipped.
  */
 export const chatPointer = (report: string): string | undefined => {
-  const text = report.replace(QUOTED, (quoted) => " ".repeat(quoted.length));
+  const text = unquoted(report);
   for (const pattern of POINTERS) {
     const found = pattern.exec(text);
     if (found) {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fencedLines } from "@cawco/core/markdown-code";
   import { untrack } from "svelte";
   import Markdown from "#lib/cawco/Markdown.svelte";
   import { ThinkingIndicator } from "#lib/components/ui/thinking-indicator/index.js";
@@ -45,7 +46,6 @@
      */
     disclosed?: { get: () => boolean; set: (open: boolean) => void };
   } = $props();
-  const FENCE = /^\s*(```|~~~)/u;
   /** Emphasis, code ticks and heading marks: noise in a three-line glimpse. */
   const MARKUP = /[*_`#>]/gu;
   const TAIL_CHARS = 240;
@@ -57,12 +57,9 @@
   function splitBlocks(source: string): string[] {
     const blocks: string[] = [];
     let current: string[] = [];
-    let fenced = false;
-    for (const line of source.split("\n")) {
-      if (FENCE.test(line)) {
-        fenced = !fenced;
-      }
-      if (!fenced && line.trim() === "") {
+    const fenced = fencedLines(source);
+    for (const [at, line] of source.split("\n").entries()) {
+      if (!fenced[at] && line.trim() === "") {
         if (current.length) {
           blocks.push(current.join("\n"));
         }

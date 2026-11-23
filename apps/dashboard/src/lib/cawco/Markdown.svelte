@@ -6,6 +6,7 @@
    * `cawco:` link its kind's element.
    */
   import { inlineBlockName } from "@cawco/core/inline-blocks";
+  import { renameFences } from "@cawco/core/markdown-code";
   import type { ComponentProps } from "svelte";
   import type {
     CodeOptions,
@@ -92,44 +93,22 @@
     );
   }
 
-  /** A fence's opening line: up to three spaces, its marker, and its info string. */
-  const FENCE = /^( {0,3})(`{3,}|~{3,})(.*)$/u;
   /**
    * The language a named block's fence is drawn under: `openui:` and its
    * name. Markdown hands a fence's code only the first word of its info
    * string, and a block's name is in the rest (`name="…"`).
    */
   const BLOCK = "openui:";
-  const SPACES = /\s+/u;
 
   /** `words` with each fence naming a block written under its block's language ({@link BLOCK}). */
   function named(words: string): string {
     if (!words.includes("openui")) {
       return words;
     }
-    let open: string | null = null;
-    return words
-      .split("\n")
-      .map((line) => {
-        const fence = FENCE.exec(line);
-        if (!fence) {
-          return line;
-        }
-        const [, indent = "", marker = "", info = ""] = fence;
-        if (open !== null) {
-          if (marker.startsWith(open) && info.trim() === "") {
-            open = null;
-          }
-          return line;
-        }
-        open = marker;
-        const [lang = "", ...meta] = info.trim().split(SPACES);
-        const name = inlineBlockName(lang, meta.join(" "));
-        return name
-          ? `${indent}${marker}${BLOCK}${encodeURIComponent(name)}`
-          : line;
-      })
-      .join("\n");
+    return renameFences(words, ({ lang, meta }) => {
+      const name = inlineBlockName(lang, meta);
+      return name ? `${BLOCK}${encodeURIComponent(name)}` : null;
+    });
   }
 
   /** The block a fence's language names, or null when it is code. */

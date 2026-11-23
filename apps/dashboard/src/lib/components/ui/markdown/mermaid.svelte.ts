@@ -21,13 +21,18 @@
  * the house fonts have loaded. Its colours are the house's (design.css,
  * `[data-markdown="mermaid"]` beside `[data-slot="diagram"]`).
  */
+import { fencedBlocks } from "@cawco/core/markdown-code";
 import { createMermaidPlugin } from "@pierre/words/mermaid";
 import type { MermaidPlugin } from "svelte-words";
 
 type Pele = typeof import("pele/lazy");
 
-/** A fence's opening line naming mermaid as its language. */
-const MERMAID_FENCE = /^ {0,3}(?:`{3,}|~{3,})[ \t]*mermaid\b/mu;
+const MERMAID = "mermaid";
+
+/** Whether `source` holds a fence whose language is mermaid (core markdown-code.ts). */
+const holdsMermaid = (source: string): boolean =>
+  source.includes(MERMAID) &&
+  fencedBlocks(source).some((block) => block.lang === MERMAID);
 
 let loading: Promise<void> | undefined;
 let plugin = $state<MermaidPlugin>();
@@ -86,7 +91,7 @@ function pluginOf(
  * its diagrams once it is in.
  */
 export function mermaidFor(source: string): MermaidPlugin | undefined {
-  if (loading === undefined && MERMAID_FENCE.test(source)) {
+  if (loading === undefined && holdsMermaid(source)) {
     loading = Promise.all([import("pele/lazy"), document.fonts.ready]).then(
       ([pele]) => {
         plugin = pluginOf(pele, labelFont());

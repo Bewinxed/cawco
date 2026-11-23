@@ -13,6 +13,7 @@ import type {
 } from "@cawco/core/find";
 import { field, KIND_WORDS, type MatchEntry } from "@cawco/core/find-match";
 import { machineLabel } from "@cawco/core/machine-names";
+import { fencedBlocks } from "@cawco/core/markdown-code";
 import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
@@ -97,25 +98,31 @@ export interface ItemChanges {
   files: string[];
 }
 
-/** A report's commits and diffstat, read back (landing-run.ts `reportedChanges`). */
-const COMMITS_BLOCK = /Commits:\n```\n([\s\S]*?)\n```/u;
-const DIFFSTAT_BLOCK = /Diffstat:\n```\n([\s\S]*?)\n```/u;
 const COMMIT_LINE = /^([0-9a-f]{7,40}) (.+)$/u;
 const DIFFSTAT_LINE = /^\s*(\S.*?)\s+\|\s+/u;
 
+/**
+ * A report's commits and diffstat, read back (landing-run.ts
+ * `reportedChanges`): the code of the fence under its `Commits:` line, and
+ * of the one under its `Diffstat:` line (core markdown-code.ts).
+ */
 export const changesOf = (result: string | null): ItemChanges => {
-  const commits = (COMMITS_BLOCK.exec(result ?? "")?.[1] ?? "")
-    .split("\n")
-    .flatMap((line) => {
-      const hit = COMMIT_LINE.exec(line.trim());
-      return hit ? [{ sha: hit[1], subject: hit[2] }] : [];
-    });
-  const files = (DIFFSTAT_BLOCK.exec(result ?? "")?.[1] ?? "")
-    .split("\n")
-    .flatMap((line) => {
-      const hit = DIFFSTAT_LINE.exec(line);
-      return hit && !hit[1].startsWith("...") ? [hit[1]] : [];
-    });
+  const text = result ?? "";
+  const lines = text.split("\n");
+  const blocks = fencedBlocks(text);
+  const under = (label: string): string[] =>
+    (
+      blocks.find((block) => lines[block.from - 1]?.trim() === label)?.code ??
+      ""
+    ).split("\n");
+  const commits = under("Commits:").flatMap((line) => {
+    const hit = COMMIT_LINE.exec(line.trim());
+    return hit ? [{ sha: hit[1], subject: hit[2] }] : [];
+  });
+  const files = under("Diffstat:").flatMap((line) => {
+    const hit = DIFFSTAT_LINE.exec(line);
+    return hit && !hit[1].startsWith("...") ? [hit[1]] : [];
+  });
   return { commits, files };
 };
 

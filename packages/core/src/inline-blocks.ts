@@ -12,6 +12,7 @@
  * ({@link inlineBlockSlug}), so the transcript knows the artifact again.
  */
 
+import { fencedBlocks } from "./markdown-code";
 import { nameSlug } from "./name-slug";
 
 /** A block's fence language. */
@@ -48,43 +49,6 @@ export interface InlineBlockFence {
   source: string;
 }
 
-/** A fence's opening or closing line: up to three spaces, then three or more backticks or tildes. */
-const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/u;
-const SPACE = /\s/u;
-
-/** A fence being read: its marker, its block's name (null: no block), and its lines so far. */
-interface OpenFence {
-  lines: string[];
-  marker: string;
-  name: string | null;
-}
-
-/** The fence `line` opens, or null when it opens none. */
-const opened = (line: string): OpenFence | null => {
-  const fence = FENCE.exec(line);
-  if (!fence) {
-    return null;
-  }
-  const info = (fence[2] ?? "").trim();
-  const space = info.search(SPACE);
-  return {
-    marker: fence[1] ?? "```",
-    name: inlineBlockName(
-      space === -1 ? info : info.slice(0, space),
-      space === -1 ? "" : info.slice(space + 1)
-    ),
-    lines: [],
-  };
-};
-
-/** Whether `line` closes fence `open`: a marker at least as long, and nothing after it. */
-const closes = (line: string, open: OpenFence): boolean => {
-  const fence = FENCE.exec(line);
-  return (
-    !!fence?.[1]?.startsWith(open.marker) && (fence[2] ?? "").trim() === ""
-  );
-};
-
 /**
  * Every block `text` holds, in order: each fenced code block whose info
  * string names a block ({@link inlineBlockName}), with its program. A fence
@@ -95,27 +59,10 @@ export const inlineBlocksIn = (text: string): InlineBlockFence[] => {
   if (!text.includes(INLINE_BLOCK_LANG)) {
     return [];
   }
-  const found: InlineBlockFence[] = [];
-  const keep = (fence: OpenFence) => {
-    if (fence.name) {
-      found.push({ name: fence.name, source: fence.lines.join("\n") });
-    }
-  };
-  let open: OpenFence | null = null;
-  for (const line of text.split("\n")) {
-    if (!open) {
-      open = opened(line);
-    } else if (closes(line, open)) {
-      keep(open);
-      open = null;
-    } else {
-      open.lines.push(line);
-    }
-  }
-  if (open) {
-    keep(open);
-  }
-  return found;
+  return fencedBlocks(text).flatMap((block) => {
+    const name = inlineBlockName(block.lang, block.meta);
+    return name ? [{ name, source: block.code }] : [];
+  });
 };
 
 /** The artifact name a block is kept under: its name as a slug (name-slug.ts). */

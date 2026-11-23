@@ -22,6 +22,7 @@
 </script>
 
 <script lang="ts">
+  import { fencedLines } from "@cawco/core/markdown-code";
   import { untrack } from "svelte";
   import {
     Markdown,
@@ -120,28 +121,22 @@
     written(streaming ? source.slice(0, source.search(/\S*$/u)) : source)
   );
 
-  /** A fence's opening or closing line: three or more backticks or tildes. */
-  const FENCE = /^\s{0,3}(`{3,}|~{3,})/u;
-
   /**
-   * Where a block can end: after a blank line outside a fence, where the
-   * next line starts one. Cutting the text there leaves whole blocks, so
-   * each prefix renders as the finished message's first blocks do.
+   * Where a block can end: after a blank line outside fenced code (core
+   * markdown-code.ts), where the next line starts one. Cutting the text
+   * there leaves whole blocks, so each prefix renders as the finished
+   * message's first blocks do.
    */
   function blockEnds(text: string): number[] {
     const ends: number[] = [];
-    let fence: string | null = null;
+    const fenced = fencedLines(text);
     let blank = false;
     let offset = 0;
-    for (const line of text.split("\n")) {
-      const marker = line.match(FENCE)?.[1];
-      if (fence === null && blank && line.trim() !== "" && offset > 0) {
+    for (const [at, line] of text.split("\n").entries()) {
+      if (blank && line.trim() !== "" && offset > 0) {
         ends.push(offset);
       }
-      if (marker && (fence === null || marker.startsWith(fence))) {
-        fence = fence === null ? marker : null;
-      }
-      blank = line.trim() === "";
+      blank = !fenced[at] && line.trim() === "";
       offset += line.length + 1;
     }
     return ends;
