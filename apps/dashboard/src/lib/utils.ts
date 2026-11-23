@@ -113,7 +113,7 @@ const twMergeConfig = {
       "justify-content": ["justify-box-end"],
       "justify-self": ["justify-self-box-start"],
       "align-content": ["content-unsafe-end"],
-      "border-color": ["border-suggest-tint"],
+      "ring-color": ["ring-suggest-tint"],
       "bg-color": ["bg-suggest-tint", "bg-suggest-tint-hover"],
       "font-shorthand": ["font-inherit", "font-mono-meta"],
       "line-clamp-undo": ["line-clamp-undo"],

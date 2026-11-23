@@ -23,7 +23,7 @@
         "in-bar":
           "group-data-bar:min-w-0 group-data-bar:overflow-clip group-data-bar:concentric-xs",
         /** A plain field: the small corner, the control's edge, field pads. */
-        field: "rounded-sm ring ring-tx-2 px-space-3 py-space-2",
+        field: "rounded-sm ring ring-ui-3 px-space-3 py-space-2",
       },
       /** `end`: its value at its end, before its mark, as a number field
           writes its figure (the design graph's Controls: a select whose
@@ -73,7 +73,7 @@
     "press-tint transition-control",
     "mark-line flex w-fit",
     "items-center justify-between gap-1.5 whitespace-nowrap",
-    "ring ring-tx-2 [--hit-edge:1px]",
+    "ring ring-ui-3 [--hit-edge:1px]",
     "bg-bg px-3 text-tx",
     "type-body disabled:cursor-not-allowed",
     "disabled:opacity-50 aria-invalid:ring-red",

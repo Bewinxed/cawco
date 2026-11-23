@@ -139,7 +139,7 @@
          centred, and full width with 11px margins under 900px. -->
     <div
       data-slot="composer"
-      class="relative mx-auto mb-(--dock-foot) flex w-(--composer-w) flex-none items-end gap-space-2 rounded-lg ring ring-ui-2 bg-bg py-space-2 pr-space-2 pl-space-3 shadow-sm max-desk:mx-space-3 max-desk:w-auto"
+      class="relative mx-auto mb-(--dock-foot) flex w-(--composer-w) flex-none items-end gap-space-2 rounded-lg border border-ui-2 bg-bg py-space-2 pr-space-2 pl-space-3 shadow-sm max-desk:mx-space-3 max-desk:w-auto"
       data-composer
       data-safe-bottom
       style:--dock-foot="calc(var(--spacing-space-4) + var(--safe-bottom))"
@@ -154,7 +154,7 @@
       />
       <div data-slot="controls" class="flex gap-space-1">
         <button
-          class="select-none h-control-md rounded-xs ring ring-ui-2 bg-bg px-space-3 type-label text-tx"
+          class="select-none h-control-md rounded-xs border border-ui-2 bg-bg px-space-3 type-label text-tx"
           type="button">Attach</button
         >
         <button
@@ -203,7 +203,7 @@
       <!-- The glass's card, as it hangs: right-aligned under the bar, the page live under it. -->
       <div
         data-slot="finder-page-card"
-        class="absolute end-0 top-control-lg z-(--layer-float) flex max-h-(--card-max-h) w-130 flex-col overflow-hidden rounded-b-lg ring ring-ui-2 border-t-none bg-bg shadow-overlay-hung"
+        class="absolute end-0 top-control-lg z-(--layer-float) flex max-h-(--card-max-h) w-130 flex-col overflow-hidden rounded-b-lg border border-ui-2 border-t-none bg-bg shadow-overlay-hung"
         data-finder-card
         role="dialog"
         aria-label="Jump"

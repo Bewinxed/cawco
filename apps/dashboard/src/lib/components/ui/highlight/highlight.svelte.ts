@@ -114,11 +114,13 @@ const LAYERS = `
   z-index: -1;
   opacity: 0;
   will-change: opacity;
-  background-color: var(--color-ui);
+  --ghost-fill: var(--color-ui);
+  background-color: var(--ghost-ground, var(--color-bg));
+  background-image: linear-gradient(var(--ghost-fill), var(--ghost-fill));
 }
 [data-slot="highlight-ghost"] {
   display: none;
-  background-color: var(--ghost, var(--color-ui));
+  --ghost-fill: var(--ghost, var(--color-ui));
   transition: opacity var(--duration-fast) var(--ease-out);
 }
 @media (hover: hover) {
@@ -148,12 +150,14 @@ const LAYERS = `
   box-sizing: border-box;
   transform-origin: 0 0;
   background-color: inherit;
+  background-image: inherit;
 }
 :is([data-slot="highlight-ghost"], [data-slot="highlight-pill"]) [data-part] {
   will-change: transform;
 }
 [data-part^="edge-"] {
   background-color: var(--color-accent);
+  background-image: none;
 }
 :is([data-part="edge-top"], [data-part="edge-bottom"]) {
   height: 1px;
@@ -595,7 +599,42 @@ const draw = (
   };
 };
 
+/**
+ * The first opaque ground behind the list. The fills are translucent (an
+ * interface grey is text at low opacity) and a layer is drawn in parts that
+ * overlap at their seams, so each part paints its fill over this ground and
+ * is opaque: the seams never draw twice.
+ */
+let probe: CanvasRenderingContext2D | null = null;
+const groundOf = (from: Element): string | null => {
+  probe ??= document
+    .createElement("canvas")
+    .getContext("2d", { willReadFrequently: true });
+  if (!probe) {
+    return null;
+  }
+  for (let el: Element | null = from; el; el = el.parentElement) {
+    const colour = getComputedStyle(el).backgroundColor;
+    probe.clearRect(0, 0, 1, 1);
+    probe.fillStyle = "#0000";
+    probe.fillStyle = colour;
+    probe.fillRect(0, 0, 1, 1);
+    if (probe.getImageData(0, 0, 1, 1).data[3] === 255) {
+      return colour;
+    }
+  }
+  return null;
+};
+
 const show = (layer: Layer, on: boolean) => {
+  const root = layer.el.getRootNode();
+  if (on && root instanceof ShadowRoot && root.host instanceof HTMLElement) {
+    const { host } = root;
+    const ground = groundOf(host);
+    if (ground) {
+      host.style.setProperty("--ghost-ground", ground);
+    }
+  }
   layer.el.style.opacity = on ? "1" : "0";
 };
 

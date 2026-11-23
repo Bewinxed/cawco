@@ -1104,11 +1104,11 @@
 @utility scroll-timeline-transcript-head {
   scroll-timeline: --transcript-head block;
 }
-/* A suggestion chip's tint, a mix per chip (`--tint`): the border takes the
+/* A suggestion chip's tint, a mix per chip (`--tint`): the edge takes the
    fill's share at 1.5×, mixed in sRGB so the accent reads as if laid over
    the surface. */
-@utility border-suggest-tint {
-  border-color: color-mix(
+@utility ring-suggest-tint {
+  --tw-ring-color: color-mix(
     in srgb,
     var(--color-accent) calc(var(--tint) * 1.5),
     var(--color-bg)
