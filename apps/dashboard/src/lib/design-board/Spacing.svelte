@@ -4,7 +4,7 @@
    * browser lays out drawn over them and named by its step on the 4px scale.
    * The overlay measures the rendered layout; no value is written here.
    */
-  import type { Snippet } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import AlertFrame from "#lib/components/ui/alert/alert-frame.svelte";
   import RowFrame from "#lib/components/ui/row/row-frame.svelte";
   import { IconInfo } from "#lib/icons.js";
@@ -25,8 +25,10 @@
     };
 
   let measured = $state.raw<Band[][]>(PIECES.map(() => []));
+  // Written from the attachment, so the list it replaces is read untracked:
+  // a read there would make the attachment re-run on its own write.
   const setFor = (index: number) => (bands: Band[]) => {
-    measured = measured.with(index, bands);
+    measured = untrack(() => measured).with(index, bands);
   };
 </script>
 
