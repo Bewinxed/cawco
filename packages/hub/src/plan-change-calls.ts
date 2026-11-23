@@ -19,7 +19,8 @@ export interface PlanChangeCalls {
   /**
    * What `instanceId` is owed of its plans' changes, as words a note ahead
    * of its next turn carries, the changes then told. Undefined when it is
-   * owed nothing.
+   * owed nothing, or when a plan they change is not read yet: those are
+   * read and told into that turn.
    */
   foldInto: (instanceId: string) => string | undefined;
   /**

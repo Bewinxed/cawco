@@ -20,13 +20,13 @@ export const returnRecapWords = {
   title: (recap: ReturnRecap): string =>
     andList([
       ...(recap.waiting.length > 0
-        ? [counted(recap.waiting.length, "waits on you", "wait on you")]
+        ? [counted(recap.waiting.length, "waiting on you", "waiting on you")]
         : []),
       ...(recap.moved.length > 0
         ? [counted(recap.moved.length, "task moved", "tasks moved")]
         : []),
       ...(recap.landed.length > 0
-        ? [counted(recap.landed.length, "landed", "landed")]
+        ? [counted(recap.landed.length, "delegate landed", "delegates landed")]
         : []),
     ]),
   /** What opens under it: each part headed, each record by its link. */
@@ -43,7 +43,7 @@ export const returnRecapWords = {
       ...(recap.moved.length > 0
         ? [
             [
-              "Moved",
+              "Tasks moved",
               ...recap.moved.map(
                 ({ task, from, to }) => `- ${task}: ${from} → ${to}`
               ),
@@ -53,7 +53,7 @@ export const returnRecapWords = {
       ...(recap.landed.length > 0
         ? [
             [
-              "Landed",
+              "Delegates landed",
               ...recap.landed.map(
                 ({ work, commit, headline }) =>
                   `- ${work}${commit ? ` \`${shortSha(commit)}\`` : ""}${headline ? `: ${headline}` : ""}`

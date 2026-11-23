@@ -16,6 +16,10 @@
  *   change, every change of that window in one message; a tick or a move
  *   starts nothing and goes ahead of the receiver's next turn, whoever starts
  *   it ({@link PlanChanges.foldInto}), or in its next `todo_write` answer.
+ *   Every message lists each changed plan as its records say it: read for
+ *   the message, or for a note ahead of a turn, as last read; a plan the hub
+ *   has not read since it started is read first and its changes go into that
+ *   turn, as a busy receiver's do.
  * - **An ended receiver** (finished, archived, a delegate whose item is
  *   done) is reopened by the same send, as the person's own words reopen
  *   it. One that cannot go on, its conversation or its workspace gone, is
@@ -33,6 +37,7 @@ import {
   PLAN_WAKING_EDITS,
   type PlanEdit,
   type PlanReceiver,
+  type PlanStep,
   type SessionPlan,
 } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
@@ -109,6 +114,9 @@ export interface PlanChangesDeps {
     text: string
   ) => Promise<string | undefined>;
 }
+
+/** Each changed plan's steps, by its session, as a message lists them. */
+type PlansRead = Map<string, readonly PlanStep[]>;
 
 /** A session as a message names it: its link, its title the label. */
 const named = (row: InstanceRow): string =>
@@ -219,10 +227,47 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
     to.kind === "session" ? to.instanceId : undefined;
 
   /**
-   * The message that tells `to` of `rows`, each plan's changes under the
-   * words naming whose plan it is, then that plan as it stands.
+   * The steps of each plan `rows` change, each read now from its records
+   * (plans.ts `read`); the refusal of one that does not read.
    */
-  const message = (to: PlanReceiver, rows: PlanChangeRow[]): string => {
+  const readPlans = async (rows: readonly PlanChangeRow[]) => {
+    const read: PlansRead = new Map();
+    for (const instanceId of new Set(rows.map((row) => row.instanceId))) {
+      const plan = await plans.read(instanceId);
+      if (plan instanceof ElysiaStatus) {
+        return plan;
+      }
+      read.set(instanceId, plan.steps);
+    }
+    return read;
+  };
+
+  /**
+   * The steps of each plan `rows` change as the hub last read them (plans.ts
+   * `known`), for a note that cannot wait; undefined when one is not read
+   * since the hub started.
+   */
+  const knownPlans = (rows: readonly PlanChangeRow[]) => {
+    const read: PlansRead = new Map();
+    for (const instanceId of new Set(rows.map((row) => row.instanceId))) {
+      const steps = plans.known(instanceId);
+      if (!steps) {
+        return;
+      }
+      read.set(instanceId, steps);
+    }
+    return read;
+  };
+
+  /**
+   * The message that tells `to` of `rows`, each plan's changes under the
+   * words naming whose plan it is, then that plan as `read` holds it.
+   */
+  const message = (
+    to: PlanReceiver,
+    rows: PlanChangeRow[],
+    read: PlansRead
+  ): string => {
     const byPlan = new Map<string, PlanChangeRow[]>();
     for (const row of rows) {
       byPlan.set(row.instanceId, [...(byPlan.get(row.instanceId) ?? []), row]);
@@ -240,7 +285,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
         ...changes.map((change) => `- ${changeLine(change)}`),
         "",
         `${own ? "Your plan" : "That plan"} now:`,
-        stepLines(db, instanceId, plans.known(instanceId)),
+        stepLines(db, instanceId, read.get(instanceId) ?? []),
         "",
         next,
       ].join("\n");
@@ -344,7 +389,8 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
    */
   const toTasks = async (
     to: Extract<PlanReceiver, { kind: "caw" }>,
-    rows: PlanChangeRow[]
+    rows: PlanChangeRow[],
+    read: PlansRead
   ): Promise<void> => {
     db.closePlanChanges(
       rows.map((row) => row.id),
@@ -357,7 +403,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
       const why = await deps.trigger(
         to.projectId,
         planOf,
-        message(to, changes)
+        message(to, changes, read)
       );
       if (why !== undefined) {
         db.closePlanChanges(
@@ -370,24 +416,34 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   };
 
   /**
-   * Tells `key`'s receiver every change it is owed, in one message: a
-   * session through the one send path, Caw by his wake. A session that
-   * cannot go on is followed by a new one (`goOnFrom`);
-   * a refusal is kept on each change, in its words.
+   * Tells `key`'s receiver every change it is owed, in one message, each
+   * changed plan read first: a session through the one send path, Caw by his
+   * wake. A session that cannot go on is followed by a new one
+   * (`goOnFrom`); a refusal is kept on each change, in its words. A plan
+   * that does not read leaves its changes owed, the refusal in the hub's log.
    */
   const deliver = (key: string): Promise<void> =>
     inOrder(key, async () => {
       deps.lifetime.cancel(quiet.get(key));
       quiet.delete(key);
-      const rows = db.untoldPlanChanges(key);
+      const read = await readPlans(db.untoldPlanChanges(key));
+      if (read instanceof ElysiaStatus) {
+        return read;
+      }
+      // Read again after the reads: a note ahead of a turn may have told
+      // some meanwhile, and a change to a plan not read here waits for the
+      // next delivery or note.
+      const rows = db
+        .untoldPlanChanges(key)
+        .filter((row) => read.has(row.instanceId));
       if (rows.length === 0) {
         return;
       }
       const to = receiverOfKey(key);
       const ids = rows.map((row) => row.id);
-      const text = message(to, rows);
+      const text = message(to, rows, read);
       if (to.kind === "caw") {
-        await toTasks(to, rows);
+        await toTasks(to, rows, read);
         return;
       }
       const told = deps.tell(to.instanceId, text);
@@ -427,7 +483,9 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   /**
    * What `instanceId` is owed of its plans' changes, as words a note ahead
    * of its next turn carries, the changes then told: a session's own.
-   * Undefined when it is owed nothing.
+   * Undefined when it is owed nothing, or when a plan they change is not
+   * read since the hub started: those are read and told now ({@link
+   * deliver}), into the turn this note would have gone ahead of.
    */
   const foldInto = (instanceId: string): string | undefined => {
     const keys = [receiverKey({ kind: "session", instanceId })];
@@ -437,9 +495,14 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
       if (rows.length === 0) {
         continue;
       }
+      const read = knownPlans(rows);
+      if (!read) {
+        detach(deliver(key), "plan changes read for a turn");
+        continue;
+      }
       deps.lifetime.cancel(quiet.get(key));
       quiet.delete(key);
-      words.push(message(receiverOfKey(key), rows));
+      words.push(message(receiverOfKey(key), rows, read));
       db.closePlanChanges(
         rows.map((one) => one.id),
         { at: new Date() }
@@ -514,10 +577,14 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
           if (ended instanceof ElysiaStatus) {
             return ended;
           }
+          const read = await readPlans(rows);
+          if (read instanceof ElysiaStatus) {
+            return read;
+          }
           await goOn(
             ended,
             reason,
-            message(receiverOfKey(key), rows),
+            message(receiverOfKey(key), rows, read),
             rows.map((row) => row.id)
           );
           plansMoved(rows);

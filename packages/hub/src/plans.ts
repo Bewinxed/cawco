@@ -1233,20 +1233,13 @@ export const createPlans = (deps: PlansDeps) => {
     },
 
     /**
-     * The session's steps as the hub last read them whole for its followers,
-     * else as kept with each record's handle for its words: what a message
-     * that cannot wait for a read lists (plan-changes.ts `foldInto`).
+     * The session's steps as the hub last read them whole, each in its
+     * record's words, kept current by every read since; undefined while the
+     * hub has not read its plan since it started. What a note that goes
+     * ahead of a turn lists without waiting (plan-changes.ts `foldInto`).
      */
-    known(instanceId: string): PlanStep[] {
-      const known = held.get(instanceId);
-      if (known) {
-        return known.plan.steps;
-      }
-      return (db.sessionPlan(instanceId)?.steps ?? []).map((step) => ({
-        ...step,
-        ...stepRecord(step.id),
-        content: step.id,
-      }));
+    known(instanceId: string): PlanStep[] | undefined {
+      return held.get(instanceId)?.plan.steps;
     },
 
     /** The session's steps now, each read whole from its record, or the refusal of a read. */

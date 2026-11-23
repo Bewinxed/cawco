@@ -2263,7 +2263,7 @@ public enum Words {
 
         /// A step whose task or to-do is gone from the board, by the record it named.
         public static func gone(handle: String) -> String {
-            "\(handle), no longer on the board"
+            "\(handle) is no longer on the board"
         }
     }
 

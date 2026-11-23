@@ -20,5 +20,5 @@ export const planWords = {
   steps: "Steps",
   openInCanvas: "Open in canvas",
   /** A step whose task or to-do is gone from the board, by the record it named. */
-  gone: (handle: string) => `${handle}, no longer on the board`,
+  gone: (handle: string) => `${handle} is no longer on the board`,
 };
