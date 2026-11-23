@@ -25,7 +25,7 @@
         <span class="truncate type-meta text-ink-muted">macOS · Connected</span>
       </div>
       {#snippet trail()}
-        <Badge variant="done">Live</Badge>
+        <Badge variant="done"><span>Live</span></Badge>
       {/snippet}
       {#snippet below()}
         {#if withBelow}
@@ -52,7 +52,7 @@
         >
       </div>
       {#snippet trail()}
-        <Badge variant="secondary">Primary</Badge>
+        <Badge variant="secondary"><span>Primary</span></Badge>
       {/snippet}
     </Row>
     <Row>

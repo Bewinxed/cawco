@@ -648,7 +648,10 @@
   [data-slot="crepe-host"] .milkdown :is(button, [role="button"]):active {
     background: var(--color-surface-hover);
     box-shadow: inset 0 1px 1px
-      light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55));
+      light-dark(
+        oklch(from var(--color-ink-strong) l c h / 0.09),
+        oklch(from var(--color-surface-page) l c h / 0.55)
+      );
   }
   /* The block handle's open item: by day a step past its hover, with its glyph
      in the strong ink. Not through --crepe-color-selected, which is also the

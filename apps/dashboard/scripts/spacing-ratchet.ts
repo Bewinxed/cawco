@@ -21,6 +21,7 @@ import {
   dashboardSources,
   SPACING_UTILITY,
 } from "./class-strings";
+import { runRatchet } from "./lib/ratchet";
 
 /** The utilities that are rhythm: padding, margin, gap, space. */
 const RHYTHM = /^(?:[pm][xystblrse]?|gap(?:-[xy])?|space-[xy])$/u;
@@ -32,11 +33,6 @@ export const checkReads = [
 ];
 
 const BASELINE = join(DASHBOARD, "scripts/spacing-ratchet.baseline.json");
-
-interface Baseline {
-  count: number;
-  files: Record<string, number>;
-}
 
 /** Each file's numeric rhythm utilities. */
 async function counted(): Promise<Record<string, number>> {
@@ -53,30 +49,10 @@ async function counted(): Promise<Record<string, number>> {
   return files;
 }
 
-const files = await counted();
-const count = Object.values(files).reduce((a, b) => a + b, 0);
-const say = (s: string) => process.stdout.write(`${s}\n`);
-
-if (process.argv.includes("--write-baseline")) {
-  const baseline: Baseline = { count, files };
-  await Bun.write(BASELINE, `${JSON.stringify(baseline, null, 2)}\n`);
-  say(`spacing-ratchet: baseline written, ${count} rhythm utilities`);
-} else {
-  const baseline = (await Bun.file(BASELINE).json()) as Baseline;
-  if (count > baseline.count) {
-    say(
-      `spacing-ratchet: ${count} rhythm utilities, up from ${baseline.count}. Use a token's utility (theme.css), or a token, instead:`
-    );
-    for (const [path, n] of Object.entries(files)) {
-      const before = baseline.files[path] ?? 0;
-      if (n > before) {
-        say(`  ${path}: ${before} → ${n}`);
-      }
-    }
-    process.exitCode = 1;
-  } else {
-    say(
-      `spacing-ratchet: ${count} rhythm utilities (baseline ${baseline.count})`
-    );
-  }
-}
+await runRatchet({
+  name: "spacing-ratchet",
+  noun: "rhythm utilities",
+  baselinePath: BASELINE,
+  files: await counted(),
+  advice: "Use a token's utility (theme.css), or a token, instead:",
+});

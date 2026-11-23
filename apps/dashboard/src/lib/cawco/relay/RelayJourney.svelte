@@ -786,13 +786,13 @@
           {domain ? words.leadDomainShort(domain) : words.leadPlainShort}
         </p>
       {/if}
-      <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->
+      <!-- biome-ignore-start lint/a11y/noRedundantRoles: WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->
       <ol
-        class="m-0 rows-grid list-none gap-y-space-3 p-0"
+        class="m-0 rows-grid list-none gap-x-space-2 gap-y-space-3 p-0"
         role="list"
-        style:--row-col-gap="var(--spacing-space-2)"
         style:--row-cols="var(--spacing-icon-md) minmax(0, 1fr)"
       >
+        <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
         {#each steps as step, index (step.step)}
           <!-- Only the open step stands on the person; another that will
                ask once it is reached waits in the meantime. -->

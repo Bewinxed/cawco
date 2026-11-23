@@ -128,8 +128,10 @@
     <ul
       aria-busy={waiting || undefined}
       aria-label={label}
-      class={["m-0 list-none p-0", glyphed ? "rows-grid" : "flex flex-col"]}
-      style:--row-col-gap={glyphed ? "var(--spacing-space-1)" : undefined}
+      class={[
+        "m-0 list-none p-0",
+        glyphed ? "rows-grid gap-x-space-1" : "flex flex-col",
+      ]}
       style:--row-cols={glyphed
         ? "var(--spacing-row-compact) minmax(0, 1fr)"
         : undefined}
@@ -199,7 +201,7 @@
           <li
             class={[
               "min-h-14 content-center items-start rounded-sm bg-surface-raised px-space-4 py-space-3 shadow-sm",
-              glyphed ? "rows-grid" : "grid grid-cols-1",
+              glyphed ? "rows-grid gap-x-space-3" : "grid grid-cols-1",
             ]}
             style:--row-cols={glyphed
               ? "var(--spacing-icon-md) minmax(0, 1fr)"
@@ -248,7 +250,7 @@
               data-slot="suggestion"
               class={[
                 "mark-line press-tint w-full min-h-14 content-center items-start rounded-sm bg-surface-raised px-space-4 py-space-3 text-start text-ink-strong shadow-sm select-none transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover",
-                glyphed ? "rows-grid" : "grid grid-cols-1",
+                glyphed ? "rows-grid gap-x-space-3" : "grid grid-cols-1",
               ]}
               onclick={() => onpick(suggestion)}
               style:--row-cols={glyphed

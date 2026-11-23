@@ -461,16 +461,25 @@
     --diffs-fg-number-deletion-override: var(--color-status-fail);
 
     /* Cross-component paints & shared contracts derived from system tokens. */
-    --nest-ink: light-dark(oklch(70.5% 0.017 78), oklch(44.5% 0.011 73));
+    --nest-ink: light-dark(
+      oklch(from var(--color-border-strong) 70.5% c h),
+      oklch(from var(--color-border-strong) 44.5% c h)
+    );
     --rail: linear-gradient(
       oklch(from var(--color-ink-muted) l c h / 0.4),
       oklch(from var(--color-ink-muted) l c h / 0.4)
     );
     --shadow-overlay-hung:
       0 calc(var(--spacing) * 4.5) calc(var(--spacing) * 12)
-        light-dark(oklch(29.5% 0.01 70 / 0.2), oklch(18.4% 0.004 70 / 0.76)),
+        light-dark(
+          oklch(from var(--color-ink-strong) l c h / 0.2),
+          oklch(from var(--color-surface-page) l c h / 0.76)
+        ),
       0 2px calc(var(--spacing) * 1.5)
-        light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55));
+        light-dark(
+          oklch(from var(--color-ink-strong) l c h / 0.09),
+          oklch(from var(--color-surface-page) l c h / 0.55)
+        );
     --well-x: calc(var(--spacing) * 0.125);
     --composer-panel: calc(
       var(--spacing) * 8.5 + var(--spacing-space-2) * 2 + 2px
@@ -1392,7 +1401,6 @@
     --row-cols,
     var(--spacing-row-compact) minmax(0, 1fr) auto
   );
-  column-gap: var(--row-col-gap, var(--spacing-space-3));
 }
 /* Rows of three pickers (model, mode, account) on fixed shares of the row,
    never their contents' widths, so a pick or a reset coming in changes its
@@ -1695,8 +1703,16 @@
    ground it is cut from. */
 @utility arc-week {
   stroke: light-dark(
-    color-mix(in oklch, var(--c), oklch(0% 0 0) 32%),
-    color-mix(in oklch, var(--c), oklch(100% 0 0) 63%)
+    color-mix(
+      in oklch,
+      var(--c),
+      oklch(from var(--color-ink-strong) 0% 0 0) 32%
+    ),
+    color-mix(
+      in oklch,
+      var(--c),
+      oklch(from var(--color-on-accent) 100% 0 0) 63%
+    )
   );
 }
 @utility arc-ground {
@@ -1885,7 +1901,8 @@
   --rim-subtle: var(--tab-rim-mix-subtle);
   --rim-chosen: 0.97;
   --rim-idle: 0.86;
-  :where(.dark, [data-scheme="dark"]) & {
+
+  @variant dark {
     --rim-chosen: 0.78;
     --rim-idle: 0.54;
   }
@@ -2218,24 +2235,33 @@
 }
 @utility shadow-tab-start {
   box-shadow: -2px 0 calc(var(--spacing) * 1.25) -1px
-    light-dark(oklch(29.5% 0.01 70 / 0.24), oklch(93.4% 0.01 82 / 0.14));
+    light-dark(
+      oklch(from var(--color-ink-strong) l c h / 0.24),
+      oklch(from var(--color-ink-strong) l c h / 0.14)
+    );
 }
 @utility shadow-tab-end {
   box-shadow: 2px 0 calc(var(--spacing) * 1.25) -1px
-    light-dark(oklch(29.5% 0.01 70 / 0.24), oklch(93.4% 0.01 82 / 0.14));
+    light-dark(
+      oklch(from var(--color-ink-strong) l c h / 0.24),
+      oklch(from var(--color-ink-strong) l c h / 0.14)
+    );
 }
 @utility shadow-tab-start-chosen {
   box-shadow: -2px 0 calc(var(--spacing) * 1.25) -1px
-    light-dark(oklch(29.5% 0.01 70 / 0.24), transparent);
+    light-dark(oklch(from var(--color-ink-strong) l c h / 0.24), transparent);
 }
 @utility shadow-tab-end-chosen {
   box-shadow: 2px 0 calc(var(--spacing) * 1.25) -1px
-    light-dark(oklch(29.5% 0.01 70 / 0.24), transparent);
+    light-dark(oklch(from var(--color-ink-strong) l c h / 0.24), transparent);
 }
 @utility drop-shadow-near {
   filter: drop-shadow(
     0 2px var(--spacing-space-1)
-      light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55))
+      light-dark(
+        oklch(from var(--color-ink-strong) l c h / 0.09),
+        oklch(from var(--color-surface-page) l c h / 0.55)
+      )
   );
 }
 

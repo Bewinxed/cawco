@@ -136,6 +136,8 @@ export default {
         "scripts/memory-cutover-check.ts",
         // scripts/check.ts, beside spacing-ratchet.ts
         "scripts/tailwind-draws-check.ts",
+        // scripts/check.ts
+        "scripts/token-grid-check.ts",
         // Never imported: `golar tsc -b` type-checks its `@ts-expect-error` lines, the tool door's proof (scripts/lib/tool-call.ts).
         "scripts/lib/tool-call.fixtures.ts",
         // scripts/check.ts
@@ -288,6 +290,8 @@ export default {
         "scripts/svelte-unused-css.ts",
         // scripts/check.ts
         "scripts/spacing-ratchet.ts",
+        // scripts/check.ts
+        "scripts/row-ratchet.ts",
         // scripts/check.ts
         "scripts/css-layers-check.ts",
         // scripts/check.ts

@@ -167,7 +167,7 @@
 :where(.before\:ease-in-out)::before,
 :where(.before\:ease-out)::before,
 :where(.before\:end-0)::before,
-:where(.before\:from-\(--mark-deck-cast\))::before,
+:where(.before\:from-mark-deck-cast)::before,
 :where(.before\:from-transparent)::before,
 :where(.before\:glass-backdrop)::before,
 :where(.before\:h-\(--cast-h\))::before,
@@ -325,9 +325,7 @@
 :where(.edge-top\:before\:top-\(--dot-mid\)[data-edge="top"])::before,
 :where(.file-meta span + span)::before,
 :where(.focus-visible\:before\:-outline-offset-2:focus-visible)::before,
-:where(
-  .focus-visible\:before\:outline-\(length\:--focus-ring-width\):focus-visible
-)::before,
+:where(.focus-visible\:before\:outline-2:focus-visible)::before,
 :where(.focus-visible\:before\:outline-accent-ink:focus-visible)::before,
 :where(.focus-visible\:before\:outline-solid:focus-visible)::before,
 :where(
@@ -480,9 +478,9 @@
 :where(.after\:-inset-bs-px)::after,
 :where(.after\:-translate-x-1\/2)::after,
 :where(.after\:absolute)::after,
-:where(.after\:bg-\(--mark-deck-shade\))::after,
 :where(.after\:bg-border-hairline)::after,
 :where(.after\:bg-border-strong)::after,
+:where(.after\:bg-mark-deck-shade)::after,
 :where(.after\:border)::after,
 :where(.after\:border-border-control)::after,
 :where(.after\:border-border-hairline)::after,
@@ -543,13 +541,8 @@
 :where(.data-lifted\:after\:opacity-0[data-lifted])::after,
 :where(.disabled\:after\:content-none:disabled)::after,
 :where(.focus-visible\:after\:-outline-offset-2:focus-visible)::after,
-:where(
-  .focus-visible\:after\:outline-\(length\:--focus-ring-width\):focus-visible
-)::after,
+:where(.focus-visible\:after\:outline-2:focus-visible)::after,
 :where(.focus-visible\:after\:outline-accent-ink:focus-visible)::after,
-:where(
-  .focus-visible\:after\:outline-offset-\(--focus-ring-inset\):focus-visible
-)::after,
 :where(.focus-visible\:after\:outline-solid:focus-visible)::after,
 :where(.katex .katex-stretchy)::after,
 :where(.katex .katex-version)::after,

@@ -14,6 +14,7 @@
 import { join } from "node:path";
 import { parse } from "svelte/compiler";
 import { DASHBOARD, dashboardSources } from "./class-strings";
+import { runRatchet } from "./lib/ratchet";
 
 export const checkReads = [
   "apps/dashboard/src/",
@@ -21,93 +22,78 @@ export const checkReads = [
 ];
 
 const BASELINE = join(DASHBOARD, "scripts/row-ratchet.baseline.json");
-
-interface Baseline {
-  count: number;
-  files: Record<string, number>;
-}
-
 const FLEX_TOKEN = /(?:^|[\s"'`[{,])flex(?=$|[\s"'`}\],])/u;
 const ITEMS_CENTER = /(?:^|[\s"'`[{,])items-center(?=$|[\s"'`}\],])/u;
+const ROLE_OPTION = /role\s*=\s*["']option["']/u;
 const HAS_ICON = /\bsize-icon-(?:sm|md|lg)\b/u;
 const HAS_TYPE = /\btype-(?:meta|code|body|label|title|kpi)\b/u;
+const SKIP_KEYS = new Set(["attributes", "css", "instance", "module"]);
 
-interface AstNode {
-  attributes?: AstNode[];
-  fragment?: { nodes?: AstNode[] };
-  name?: string;
-  nodes?: AstNode[];
-  start?: number;
-  end?: number;
-  type?: string;
-  value?: unknown;
-  [key: string]: unknown;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
-function attrText(node: AstNode, attrName: string, source: string): string {
-  for (const attr of node.attributes ?? []) {
-    if (attr.type === "Attribute" && attr.name === attrName) {
-      return source.slice(attr.start ?? 0, attr.end ?? 0);
+function spanOf(node: Record<string, unknown>, source: string): string {
+  const start = typeof node.start === "number" ? node.start : 0;
+  const end = typeof node.end === "number" ? node.end : 0;
+  return source.slice(start, end);
+}
+
+function attrText(
+  node: Record<string, unknown>,
+  attrName: string,
+  source: string
+): string {
+  if (!Array.isArray(node.attributes)) {
+    return "";
+  }
+  for (const attr of node.attributes) {
+    if (isRecord(attr) && attr.type === "Attribute" && attr.name === attrName) {
+      return spanOf(attr, source);
     }
   }
   return "";
 }
 
-function isRowHost(node: AstNode, source: string): boolean {
+function isHandBuiltRow(
+  node: Record<string, unknown>,
+  source: string
+): boolean {
   if (node.type !== "RegularElement") {
     return false;
   }
-  if (node.name === "li") {
-    return true;
+  const isHost =
+    node.name === "li" || ROLE_OPTION.test(attrText(node, "role", source));
+  if (!isHost) {
+    return false;
   }
-  const role = attrText(node, "role", source);
-  return /role\s*=\s*["']option["']/u.test(role);
+  const cls = attrText(node, "class", source);
+  if (!(FLEX_TOKEN.test(cls) && ITEMS_CENTER.test(cls))) {
+    return false;
+  }
+  const snippet = spanOf(node, source);
+  return HAS_ICON.test(snippet) && HAS_TYPE.test(snippet);
+}
+
+function walkNode(node: unknown, source: string): number {
+  if (Array.isArray(node)) {
+    return node.reduce((sum, item) => sum + walkNode(item, source), 0);
+  }
+  if (!isRecord(node)) {
+    return 0;
+  }
+  let hits = isHandBuiltRow(node, source) ? 1 : 0;
+  for (const [key, value] of Object.entries(node)) {
+    if (!SKIP_KEYS.has(key) && typeof value === "object" && value !== null) {
+      hits += walkNode(value, source);
+    }
+  }
+  return hits;
 }
 
 function countInSource(source: string): number {
-  let ast: AstNode;
-  try {
-    ast = parse(source, { modern: true }) as unknown as AstNode;
-  } catch {
-    return 0;
-  }
-  let hits = 0;
-  const walk = (node: unknown): void => {
-    if (!node || typeof node !== "object") {
-      return;
-    }
-    if (Array.isArray(node)) {
-      for (const item of node) {
-        walk(item);
-      }
-      return;
-    }
-    const n = node as AstNode;
-    if (isRowHost(n, source)) {
-      const cls = attrText(n, "class", source);
-      if (FLEX_TOKEN.test(cls) && ITEMS_CENTER.test(cls)) {
-        const snippet = source.slice(n.start ?? 0, n.end ?? 0);
-        if (HAS_ICON.test(snippet) && HAS_TYPE.test(snippet)) {
-          hits += 1;
-        }
-      }
-    }
-    for (const [key, value] of Object.entries(n)) {
-      if (
-        key === "attributes" ||
-        key === "css" ||
-        key === "instance" ||
-        key === "module"
-      ) {
-        continue;
-      }
-      if (value && typeof value === "object") {
-        walk(value);
-      }
-    }
-  };
-  walk(ast.fragment);
-  return hits;
+  const ast = parse(source, { modern: true });
+  return walkNode(ast.fragment, source);
 }
 
 async function counted(): Promise<Record<string, number>> {
@@ -127,30 +113,10 @@ async function counted(): Promise<Record<string, number>> {
   return files;
 }
 
-const files = await counted();
-const count = Object.values(files).reduce((a, b) => a + b, 0);
-const say = (s: string) => process.stdout.write(`${s}\n`);
-
-if (process.argv.includes("--write-baseline")) {
-  const baseline: Baseline = { count, files };
-  await Bun.write(BASELINE, `${JSON.stringify(baseline, null, 2)}\n`);
-  say(`row-ratchet: baseline written, ${count} hand-built flex rows`);
-} else {
-  const baseline = (await Bun.file(BASELINE).json()) as Baseline;
-  if (count > baseline.count) {
-    say(
-      `row-ratchet: ${count} hand-built flex rows, up from ${baseline.count}. Use ui/row (rows-grid / row-cells subgrid) instead:`
-    );
-    for (const [path, n] of Object.entries(files)) {
-      const before = baseline.files[path] ?? 0;
-      if (n > before) {
-        say(`  ${path}: ${before} → ${n}`);
-      }
-    }
-    process.exitCode = 1;
-  } else {
-    say(
-      `row-ratchet: ${count} hand-built flex rows (baseline ${baseline.count})`
-    );
-  }
-}
+await runRatchet({
+  name: "row-ratchet",
+  noun: "hand-built flex rows",
+  baselinePath: BASELINE,
+  files: await counted(),
+  advice: "Use ui/row (rows-grid / row-cells subgrid) instead:",
+});

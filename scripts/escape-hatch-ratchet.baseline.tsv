@@ -114,7 +114,6 @@ as-cast	ArrayBuffer | string | Uint8Array<ArrayBuffer>	packages/preview/src/over
 as-cast	AtRule	apps/dashboard/scripts/specificity-trap.ts	1
 as-cast	AtRule	scripts/codemods/tokens-to-theme.proof.ts	1
 as-cast	AttachmentRecord	packages/jsonl-parser/src/text.ts	1
-as-cast	Baseline	apps/dashboard/scripts/spacing-ratchet.ts	1
 as-cast	Baseline	packages/hub/scripts/openapi.ts	1
 as-cast	Baseline	packages/hub/scripts/shipped.ts	1
 as-cast	Box	packages/preview/src/overlay/embeds.ts	1

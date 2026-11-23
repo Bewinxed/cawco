@@ -30,7 +30,7 @@ const CH = /^[\d.]+ch$/u;
 const CALC_SPACING =
   /^calc\(\s*(?:var\(--spacing\)\s*\*\s*([\d.]+)|([\d.]+)\s*\*\s*var\(--spacing\))\s*\)$/u;
 
-function parseLengthPx(raw: string, basePx: number): number | null {
+function parseLengthPx(raw: string, unitPx: number): number | null {
   const value = raw.replace(/\s+/gu, " ").trim();
   const px = PX.exec(value);
   if (px) {
@@ -42,7 +42,7 @@ function parseLengthPx(raw: string, basePx: number): number | null {
   }
   const calc = CALC_SPACING.exec(value);
   if (calc) {
-    return Number(calc[1] ?? calc[2]) * basePx;
+    return Number(calc[1] ?? calc[2]) * unitPx;
   }
   return null;
 }
@@ -55,7 +55,7 @@ root.walkDecls((decl) => {
   if (!decl.prop.startsWith("--")) {
     return;
   }
-  const parent = decl.parent;
+  const { parent } = decl;
   const inStatic =
     parent?.type === "atrule" &&
     parent.name === "theme" &&

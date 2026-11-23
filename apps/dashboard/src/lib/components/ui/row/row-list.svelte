@@ -12,7 +12,6 @@
   let {
     as = "ul",
     cols,
-    colGap,
     class: className,
     children,
     ...rest
@@ -21,8 +20,6 @@
     as?: "ul" | "ol" | "div";
     /** Override `--row-cols` track template when a list needs custom columns. */
     cols?: string;
-    /** Override `--row-col-gap` between columns. */
-    colGap?: string;
     children: Snippet;
   } = $props();
 </script>
@@ -31,11 +28,10 @@
   this={as}
   data-slot="row-list"
   class={cn(
-    "@container/rows rows-grid gap-y-space-1 m-0 p-0 list-none",
+    "@container/rows rows-grid gap-x-space-3 gap-y-space-1 m-0 p-0 list-none",
     className
   )}
   style:--row-cols={cols}
-  style:--row-col-gap={colGap}
   {...rest}
 >
   {@render children()}

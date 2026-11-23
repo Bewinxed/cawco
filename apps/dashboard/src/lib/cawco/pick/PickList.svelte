@@ -47,8 +47,7 @@
   <ContextMenu.RadioGroup aria-label={label} value={menu.value}>
     <div
       data-slot="list"
-      class="rows-grid gap-y-space-1"
-      style:--row-col-gap="0px"
+      class="rows-grid gap-x-0 gap-y-space-1"
       style:--row-cols={ROW_COLS}
     >
       {@render children()}
@@ -58,9 +57,8 @@
   <div
     data-slot="list"
     aria-label={label}
-    class="rows-grid gap-y-space-1"
+    class="rows-grid gap-x-0 gap-y-space-1"
     role="listbox"
-    style:--row-col-gap="0px"
     style:--row-cols={ROW_COLS}
   >
     {@render children()}

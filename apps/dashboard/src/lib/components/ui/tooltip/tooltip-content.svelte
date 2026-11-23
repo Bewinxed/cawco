@@ -61,7 +61,7 @@
         {#snippet child({ props })}
           <div
             class={cn(
-              "z-1 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-xs bg-ink-strong fill-ink-strong data-[side=left]:-translate-x-0.375",
+              "z-1 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-xs bg-ink-strong fill-ink-strong data-[side=left]:-translate-x-[--spacing(0.375)]",
               "data-[side=top]:translate-x-1/2 data-[side=top]:translate-y-[calc(-50%+2px)]",
               "data-[side=bottom]:-translate-x-1/2 data-[side=bottom]:-translate-y-[calc(-50%+1px)]",
               "data-[side=right]:translate-x-[calc(50%+2px)] data-[side=right]:translate-y-1/2",

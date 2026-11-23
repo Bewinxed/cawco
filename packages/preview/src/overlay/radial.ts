@@ -161,6 +161,8 @@ export const durationMs = (value: string): number =>
 type TokenProperty =
   | "color"
   | "font"
+  | "font-family"
+  | "font-size"
   | "opacity"
   | "transition-duration"
   | "transition-timing-function"
