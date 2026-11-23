@@ -1424,10 +1424,11 @@
 @utility grid-cols-mark-fluid {
   grid-template-columns: var(--spacing-icon-md) minmax(0, 1fr);
 }
-/* Rows of three pickers (account, model, mode), each a column at its widest
-   row's width, so the same picker lines up from row to row; the rest is room. */
+/* Rows of three pickers (model, mode, account) on fixed shares of the row,
+   never their contents' widths, so a pick or a reset coming in changes its
+   own chip and moves no other; a long name truncates in its chip. */
 @utility grid-cols-pickers {
-  grid-template-columns: repeat(3, auto) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 5fr) minmax(0, 3.5fr) minmax(0, 2.5fr);
 }
 /* A row's 28px lead column, its mark centred there, before words that take the rest. */
 @utility grid-cols-lead-fluid {
