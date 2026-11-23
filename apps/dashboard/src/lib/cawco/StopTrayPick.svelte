@@ -38,9 +38,11 @@
 
 <script lang="ts">
   /**
-   * Caw turned off while what his conversation started still runs: a
-   * section of his settings under the switch, a hairline over it, no card
-   * (CawOffTray wires it to its job in stop-work.svelte.ts). It grows in
+   * Caw turned off while what his conversation started still runs: the
+   * whole of a popover grown out of his switch (`look: "card"`), or,
+   * reopened where its stops were parked, a section under the project's
+   * row with a hairline over it (CawOffTray wires it to its job in
+   * stop-work.svelte.ts). It grows in
    * place through its steps, each its own height (Family,
    * benji.org/family-values: "each subsequent tray is designed to vary in
    * height"):
@@ -99,9 +101,17 @@
     oncancel,
     onconfirm,
     onagain,
+    look = "section",
     ...rest
   }: HTMLAttributes<HTMLElement> & {
     class?: string;
+    /**
+     * Where it stands: a section under the switch or the project's row (a
+     * hairline over it, unfolding in place), or the whole of a popover
+     * grown out of the switch (`card`: the popover is its surface and its
+     * motion, so no hairline, margin or unfold of its own).
+     */
+    look?: "section" | "card";
     projectName: string;
     rows: PickRow[];
     step?: PickStep;
@@ -128,6 +138,12 @@
   } = $props();
 
   const uid = $props.id();
+  /** A section unfolds in place; in a popover the popover's own grow is its motion. */
+  const tray = (
+    node: HTMLElement,
+    params: Parameters<typeof unfold>[1],
+    options: Parameters<typeof unfold>[2]
+  ) => (look === "card" ? { duration: 0 } : unfold(node, params, options));
 
   /** Between the parts of a row's second line. */
   const SEP = " · ";
@@ -431,12 +447,14 @@
 <section
   aria-labelledby="{uid}-title"
   class={cn(
-    "@container/stop-tray mt-space-1 min-w-0 border-t border-border-hairline pt-space-3 ps-(--ask-indent) pe-(--ask-end)",
+    "@container/stop-tray min-w-0 ps-(--ask-indent) pe-(--ask-end)",
+    look === "section" &&
+      "mt-space-1 border-t border-border-hairline pt-space-3",
     className
   )}
   data-stop-kind="caw-off"
   data-phase={step}
-  transition:unfold
+  transition:tray
   {...rest}
 >
   <div data-slot="body" class="grid grid-cols-1 gap-space-3">

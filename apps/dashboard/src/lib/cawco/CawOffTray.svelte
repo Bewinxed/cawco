@@ -1,9 +1,9 @@
 <script lang="ts">
   import { departBox, land } from "#lib/platform/motion/share.svelte.js";
   /**
-   * Caw off's tray: a job of stop-work.svelte.ts drawn as the pick section
-   * (StopTrayPick), under his switch (CawLeadSwitch) or, reopened from where
-   * it parked, under the project's row (ProjectEndTray). The job holds
+   * Caw off's tray: a job of stop-work.svelte.ts drawn as the pick
+   * (StopTrayPick), in a popover grown out of his switch (CawLeadSwitch) or,
+   * reopened from where it parked, under the project's row (ProjectEndTray). The job holds
    * the work (DESIGN.md, The Work Outlives Its Surface Rule): Cancel or
    * Escape before the confirm drops the ask and Caw stays on; after it, Stop
    * waiting, Close or Escape puts the section away and the job parks
@@ -31,10 +31,13 @@
   let {
     class: className,
     job,
+    look = "section",
   }: {
     /** The host's indent for the section (`--ask-indent`, `--ask-end`). */
     class?: string;
     job: StopJob;
+    /** A section in place, or the whole of a popover (StopTrayPick `look`). */
+    look?: "section" | "card";
   } = $props();
 
   const share = $derived(stopShare(job));
@@ -112,6 +115,7 @@
     checked={job.picked}
     class={className}
     data-stop-tray={job.projectId}
+    {look}
     onagain={(id) => stopWork.stopOne(job, id)}
     oncancel={leave}
     onconfirm={() => stopWork.press(job)}
