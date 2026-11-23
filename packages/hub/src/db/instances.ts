@@ -164,6 +164,7 @@ export type PublicInstanceRow = Omit<
   | "owedAt"
   | "freshStartAt"
   | "turnOpenAt"
+  | "personStoppedAt"
 >;
 
 /**
@@ -314,6 +315,7 @@ const {
   owedAt: _owedAt,
   freshStartAt: _freshStartAt,
   turnOpenAt: _turnOpenAt,
+  personStoppedAt: _personStoppedAt,
   ...publicColumns
 } = wholeColumns;
 
@@ -959,6 +961,8 @@ export interface InstancesDb {
       continuedInto?: string;
     }
   ) => PublicInstanceRow | undefined;
+  /** Whether the person stopped `id` and has not written to it since. */
+  readonly personStopped: (id: string) => boolean;
   /** The harness conversations a session had before the one it runs now, oldest first (`instance_conversations`). */
   readonly priorConversations: (instanceId: string) => PriorConversation[];
   readonly reconcileHeartbeat: (
@@ -1021,6 +1025,11 @@ export interface InstancesDb {
   readonly sessionOwnership: (machineId?: string) => OwnedInstanceRow[];
   /** Puts sessions in a project: a session made a project, and its delegates. */
   readonly setInstancesProject: (ids: string[], projectId: string) => void;
+  /**
+   * The person stopped `id` (their Stop or interrupt) at `at`, or wrote to
+   * it again (`null`): schema.ts `personStoppedAt`.
+   */
+  readonly setPersonStopped: (id: string, at: number | null) => void;
   readonly settleInstances: (
     machineId: string,
     liveIds: string[],
@@ -2123,6 +2132,20 @@ export const instancesDb = (core: DbCore): InstancesDb => {
     // activity, `touchInstanceActivity`, or a status change). Stamped here, a
     // sign-in that carried every session to an account read sessions asleep
     // for weeks as "active 1m ago", and kept stopped ones listed a day more.
+    setPersonStopped: (id, at) => {
+      db.update(instances)
+        .set({ personStoppedAt: at })
+        .where(eq(instances.id, id))
+        .run();
+    },
+    personStopped: (id) => {
+      const at = db
+        .select({ at: instances.personStoppedAt })
+        .from(instances)
+        .where(eq(instances.id, id))
+        .get()?.at;
+      return at !== null && at !== undefined;
+    },
     turnOpen: (id) => {
       const row = db
         .select({

@@ -3256,6 +3256,13 @@
       "when": 1795416604380,
       "tag": "0472_done_routes",
       "breakpoints": true
+    },
+    {
+      "idx": 473,
+      "version": "6",
+      "when": 1795418378992,
+      "tag": "0473_person_stopped",
+      "breakpoints": true
     }
   ]
 }

@@ -7418,6 +7418,7 @@ export const createServer = (
         return;
       }
       noteInterrupt(instanceId);
+      db.setPersonStopped(instanceId, Date.now());
       cutTurn(instanceId, turnCutWords.stop);
       await callAgent(
         row.machineId,
@@ -13707,12 +13708,15 @@ export const createServer = (
    * send brings it back (`wakeForSend`). Both Stop and Discard wait for
    * the machine's teardown receipt: persisting intent is not proof that the
    * runner has ended. Then it cuts the turn it lands in, as an interrupt
-   * does, and what it cut says it was the person's Stop.
+   * does, and what it cut says it was the person's Stop; the session is
+   * marked stopped by the person, so their return wakes it no more
+   * (sends.ts `holdsNews`).
    */
   const stopAskedByDashboard: DashboardVerbs["stop"] = (ws, message) => {
     stopFromDashboard(ws, message);
     if (message.instanceId) {
       noteInterrupt(message.instanceId);
+      db.setPersonStopped(message.instanceId, Date.now());
       cutTurn(message.instanceId, turnCutWords.stop);
     }
   };

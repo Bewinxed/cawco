@@ -884,6 +884,9 @@ export const createRelayControl = (ctx: RelayControlContext) => {
           : turnWords.fromScreen
       );
       ctx.noteInterrupt(message.instanceId);
+      // The person stopped it: the hub's word that they are back passes it
+      // over until they write to it again (sends.ts `holdsNews`).
+      ctx.db.setPersonStopped(message.instanceId, Date.now());
       // The error closing that turn is the stop's receipt, on every screen,
       // and the call it cut says it was the person's Stop.
       ctx.cutTurn(message.instanceId, turnCutWords.stop);

@@ -2003,6 +2003,9 @@ export const createSends = (ctx: SendsContext) => {
     }
     if (message.origin.kind === "human") {
       ctx.watch?.humanSend(instanceId);
+      // The person wrote to it: a Stop of theirs no longer keeps their
+      // return's word from it ({@link holdsNews}).
+      ctx.db.setPersonStopped(instanceId, null);
     }
     ctx.workItems.heard(instanceId, message.origin);
     if (!hasAttachments(payload)) {
@@ -2451,15 +2454,20 @@ export const createSends = (ctx: SendsContext) => {
   /**
    * Whether `row` holds news the person hasn't seen and may be told of their
    * return ({@link tellBack}): it talks with them, is not continued or
-   * discarded, its process is up ({@link processUp}), its plan holds away
-   * notes they have not seen ({@link recapFor}), and no "back" send already
-   * waits in it. Whether its cache is warm is {@link tellBack}'s to ask.
+   * discarded, its process is up ({@link processUp}), the person has not
+   * stopped it since they last wrote to it (db `personStopped`: their Stop
+   * or interrupt marks it, their next message clears it), its plan holds
+   * away notes they have not seen ({@link recapFor}), and no "back" send
+   * already waits in it. Whether its cache is warm is {@link tellBack}'s to
+   * ask. A session they stopped stays stopped however warm its cache:
+   * decided by the owner 2026-11-23 (cockpit#8eabb628).
    */
   const holdsNews = (row: PublicInstanceRow): boolean => {
     if (
       !talksWithPerson(row) ||
       row.continuedInto !== null ||
-      !processUp(row)
+      !processUp(row) ||
+      ctx.db.personStopped(row.id)
     ) {
       return false;
     }
@@ -2479,11 +2487,13 @@ export const createSends = (ctx: SendsContext) => {
    * `turned`: the rollup of every device's facts went from away to here).
    * Every session's away notes show at once in its plan, with no turn. The
    * hub's word that they are back (core `BACK_MESSAGE`) goes only to a
-   * session whose process is up ({@link holdsNews}) and whose prompt cache
+   * session whose process is up and that they have not stopped since they
+   * last wrote to it ({@link holdsNews}), and whose prompt cache
    * is warm (the one decision, decide.ts, a `recap` turn: warm only,
    * unknown counted cold); its presence line carries the notes
    * ({@link recapFor}), and its reply is the recap. Any other session is
-   * sent nothing and never woken: its notes stand unseen in its plan, the
+   * sent nothing and never woken, a session they stopped even while its
+   * cache is warm: its notes stand unseen in its plan, the
    * ring marks them, and the person's own next message to it carries them
    * ({@link personSaid}). Decided by the owner 2026-11-23 (cockpit#8eabb628).
    */

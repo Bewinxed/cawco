@@ -1173,6 +1173,13 @@ export const instances = sqliteTable(
      * from before the hub kept it, until its next turn.
      */
     turnOpenAt: integer("turn_open_at"),
+    /**
+     * When the person last stopped the session (their Stop or interrupt, from
+     * a dashboard or the app), on the hub's clock; null once they write to it
+     * again. While set, the hub's word that they are back never goes to it
+     * (sends.ts `holdsNews`).
+     */
+    personStoppedAt: integer("person_stopped_at"),
     keepAliveEnabled: integer("keep_alive", { mode: "boolean" })
       .notNull()
       .default(false),

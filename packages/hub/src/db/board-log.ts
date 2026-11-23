@@ -106,6 +106,7 @@ const LOGGED: readonly Logged[] = [
       "owed_at",
       "fresh_start_at",
       "turn_open_at",
+      "person_stopped_at",
       "keep_alive_turn",
     ],
   },

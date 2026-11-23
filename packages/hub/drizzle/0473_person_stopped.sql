@@ -1,0 +1,1 @@
+ALTER TABLE `instances` ADD `person_stopped_at` integer;
