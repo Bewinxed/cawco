@@ -82,15 +82,20 @@
   const effect = $derived(view.inEffect);
 </script>
 
-<li data-slot="trigger-row" data-kind={kind} class="grid gap-y-space-2">
-  <div class="grid min-w-0">
+<li
+  data-slot="trigger-row"
+  data-kind={kind}
+  class="col-span-full grid grid-cols-subgrid gap-y-space-2"
+>
+  <div class="col-span-full grid min-w-0">
     <span class="type-label font-medium text-ink-strong">{named.name}</span>
     {#if "what" in named}
       <span class="type-meta text-ink-muted text-pretty">{named.what}</span>
     {/if}
   </div>
-  <div class="min-w-0">
+  <div class="col-span-full grid grid-cols-subgrid">
     <RunsAs
+      columns
       account={effect.account.value}
       {from}
       harness={effect.harness.value}
@@ -113,7 +118,11 @@
     />
   </div>
   {#if refused}
-    <p data-slot="refused" class="m-0 type-meta text-error-11" role="alert">
+    <p
+      data-slot="refused"
+      class="col-span-full m-0 type-meta text-error-11"
+      role="alert"
+    >
       {refused}
     </p>
   {/if}

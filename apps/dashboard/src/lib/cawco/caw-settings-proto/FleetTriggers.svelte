@@ -47,7 +47,7 @@
   {#if kinds}
     <ul
       data-slot="fleet-triggers"
-      class="m-0 grid max-w-160 list-none gap-space-3 p-0"
+      class="m-0 grid max-w-160 list-none grid-cols-pickers gap-x-space-2 gap-y-space-3 p-0"
     >
       {#each TRIGGER_KINDS as kind (kind)}
         <TriggerRow
