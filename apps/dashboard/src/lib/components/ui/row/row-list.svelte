@@ -30,7 +30,10 @@
 <svelte:element
   this={as}
   data-slot="row-list"
-  class={cn("@container/rows rows-grid gap-y-space-1 m-0 p-0 list-none", className)}
+  class={cn(
+    "@container/rows rows-grid gap-y-space-1 m-0 p-0 list-none",
+    className
+  )}
   style:--row-cols={cols}
   style:--row-col-gap={colGap}
   {...rest}

@@ -580,9 +580,8 @@
       // over it, so what they share reads as one and only the rest (a
       // longer pick's further lines, flattened onto the row) dissolves.
       if (line && motionOk.current) {
-        const blur = getComputedStyle(shell).getPropertyValue(
-          "--spacing-space-1"
-        );
+        const blur =
+          getComputedStyle(shell).getPropertyValue("--spacing-space-1");
         line.animate(
           [
             { opacity: 1, filter: "blur(0)" },

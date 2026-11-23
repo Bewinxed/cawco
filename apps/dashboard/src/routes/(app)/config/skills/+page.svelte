@@ -888,11 +888,7 @@
                     {/each}
                   </div>
                 {:else if unread[row.name]}
-                  <p
-                    class="type-meta text-status-attn"
-                    role="alert"
-                    in:reveal
-                  >
+                  <p class="type-meta text-status-attn" role="alert" in:reveal>
                     {unread[row.name]}
                   </p>
                 {:else if (listings[row.name] ?? []).length === 0}

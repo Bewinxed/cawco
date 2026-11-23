@@ -264,8 +264,7 @@
         data-slot="top"
         class="mark-line flex flex-wrap items-center gap-space-2"
       >
-        <span data-slot="title" class="text-base font-medium"
-          >{copy.title}</span
+        <span data-slot="title" class="text-base font-medium">{copy.title}</span
         >
         <!-- Where, never left implicit: the whole point of the investigation this
          came out of was that a badge named no machine. The machine sits beside
@@ -373,8 +372,7 @@
             {/if}
             {#each toolchain.others as other (other.path)}
               <span class="flex flex-wrap items-baseline gap-space-2">
-                <code
-                  class="font-mono text-sm wrap-anywhere text-ink-strong"
+                <code class="font-mono text-sm wrap-anywhere text-ink-strong"
                   >{other.path}</code
                 >
                 <span class="num text-sm font-normal text-ink-muted"
@@ -463,15 +461,11 @@
               size="xs"
               variant="outline"
             />
-            <span class="text-sm font-normal opacity-80"
-              >{actionHint}</span
-            >
+            <span class="text-sm font-normal opacity-80">{actionHint}</span>
           {:else if copy.action === "settle" && group.scope === "skills"}
             {#each shown as fault (fault.key)}
               {#if group.faults.length > 1}
-                <code class="font-mono text-sm wrap-anywhere"
-                  >{fault.key}</code
-                >
+                <code class="font-mono text-sm wrap-anywhere">{fault.key}</code>
               {/if}
               <Button
                 disabled={!online || settling[fault.key] === "push"}

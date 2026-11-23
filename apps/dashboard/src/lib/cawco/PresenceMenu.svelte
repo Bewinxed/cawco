@@ -264,8 +264,7 @@
     {#if refusal}
       <!-- Wrapped whole: the setting's name and where to turn it on. -->
       <DropdownMenu.Label data-slot="presence-refusal" kind="line" role="alert"
-        ><span class="text-status-fail"
-          >{refusal.title}. {refusal.message}</span
+        ><span class="text-status-fail">{refusal.title}. {refusal.message}</span
         ></DropdownMenu.Label
       >
     {/if}

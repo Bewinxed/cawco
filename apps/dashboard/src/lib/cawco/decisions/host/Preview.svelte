@@ -1096,9 +1096,7 @@
       class="flex flex-wrap items-center gap-space-3 w-full"
       role="alert"
     >
-      <p
-        class="flex-1 min-w-0 m-0 type-meta text-status-fail wrap-anywhere"
-      >
+      <p class="flex-1 min-w-0 m-0 type-meta text-status-fail wrap-anywhere">
         {held.unopened}
       </p>
       <Button

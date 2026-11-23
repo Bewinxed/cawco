@@ -1223,7 +1223,8 @@
                 ? [
                     {
                       opacity: 0,
-                      transform: "translateY(calc(-1 * var(--spacing-space-2)))",
+                      transform:
+                        "translateY(calc(-1 * var(--spacing-space-2)))",
                     },
                     { opacity: 1, transform: "none" },
                   ]

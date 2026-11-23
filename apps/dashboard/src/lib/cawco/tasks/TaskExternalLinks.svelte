@@ -246,11 +246,7 @@
         >
           {#if glyph === "pending"}
             <span class="flex h-lh items-center" data-slot="link-title-bar">
-              <Skeleton
-                class="w-4/5 max-w-ch-60"
-                line="label"
-                radius="text"
-              />
+              <Skeleton class="w-4/5 max-w-ch-60" line="label" radius="text" />
             </span>
           {:else if link.title}
             <span

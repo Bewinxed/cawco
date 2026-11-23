@@ -78,7 +78,7 @@ export const openOnArrival = (projectId: string): void => {
 
 /** `--duration-breath` in ms, read from the root. */
 function breathMs(): number {
-  return (dur("--duration-loop") * 2);
+  return dur("--duration-loop") * 2;
 }
 
 /** What a seat of Caw's reads of him (CawSeat): where he stands and what he says. */

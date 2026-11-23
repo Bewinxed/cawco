@@ -143,9 +143,7 @@
       role="img"
     >
       {#if tone === "live"}
-        <span
-          data-slot="dot"
-          class="size-space-2 rounded-pill bg-status-live"
+        <span data-slot="dot" class="size-space-2 rounded-pill bg-status-live"
         ></span>
       {:else if tone === "needs"}
         <IconAsk />

@@ -1214,11 +1214,7 @@
                   width="age"
                 />
               </span>
-              <Skeleton
-                class="mt-space-1 w-17/20"
-                line="body"
-                radius="text"
-              />
+              <Skeleton class="mt-space-1 w-17/20" line="body" radius="text" />
             </span>
           </span>
         {/each}

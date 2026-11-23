@@ -358,7 +358,7 @@ export function bindScene(
   // motion they fade the same, since nothing travels.
   const fadeIn = (ids: string[]) => {
     const fade = tokenMs("--duration-fast");
-    const step = (tokenMs("--duration-fast") / 2) / Math.max(1, ids.length);
+    const step = tokenMs("--duration-fast") / 2 / Math.max(1, ids.length);
     const runs = new Map(
       ids.map((id, i) => [id, clock(ARRIVAL, fade, i * step)])
     );

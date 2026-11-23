@@ -647,7 +647,8 @@
   }
   [data-slot="crepe-host"] .milkdown :is(button, [role="button"]):active {
     background: var(--color-surface-hover);
-    box-shadow: inset 0 1px 1px light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55));
+    box-shadow: inset 0 1px 1px
+      light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55));
   }
   /* The block handle's open item: by day a step past its hover, with its glyph
      in the strong ink. Not through --crepe-color-selected, which is also the
@@ -727,13 +728,15 @@
   [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
-    font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans);
+    font: var(--font-weight-normal) var(--text-base) / var(--leading-base)
+      var(--font-sans);
   }
   /* The toast's action and cancel buttons: the label role, an item's radius,
      and the press every control gives. */
   [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-button] {
     border-radius: var(--radius-sm);
-    font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
+    font: var(--font-weight-medium) var(--text-base) / var(--leading-base)
+      var(--font-sans);
     transition: transform var(--duration-base) var(--ease-out);
 
     @media (prefers-reduced-motion: no-preference) {
@@ -1204,19 +1207,22 @@
       --ec-now-indicator-color: var(--color-accent);
       --ec-popup-bg-color: var(--color-surface-raised);
       color: var(--color-ink-strong);
-      font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans);
+      font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm)
+        var(--font-sans);
     }
     & .ec-toolbar {
       margin-block-end: var(--spacing-space-3);
     }
     & .ec-title {
-      font: var(--font-weight-medium) var(--text-lg) / var(--leading-lg) var(--font-sans);
+      font: var(--font-weight-medium) var(--text-lg) / var(--leading-lg)
+        var(--font-sans);
     }
     & .ec-button {
       block-size: var(--spacing-control-sm);
       padding-inline: var(--spacing-space-3);
       border-radius: var(--radius-sm);
-      font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
+      font: var(--font-weight-medium) var(--text-base) / var(--leading-base)
+        var(--font-sans);
       transition: background-color var(--duration-fast) var(--ease-out);
     }
     & .ec-button-group .ec-button:first-child {
@@ -1235,7 +1241,8 @@
     & .ec-day-head,
     & .ec-slots,
     & .ec-all-day {
-      font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans);
+      font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm)
+        var(--font-sans);
       color: var(--color-ink-muted);
     }
     /* A chip: as tall as the library makes its slot (a task is a half-hour
@@ -1246,7 +1253,8 @@
       align-items: center;
       overflow: hidden;
       border-radius: var(--radius-xs);
-      font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
+      font: var(--font-weight-medium) var(--text-base) / var(--leading-base)
+        var(--font-sans);
       line-height: 1;
       box-shadow: none;
     }
@@ -1303,7 +1311,8 @@
 @layer components {
   [data-slot="view-canvas"] .svelte-flow__attribution {
     --xy-attribution-background-color: transparent;
-    font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans);
+    font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm)
+      var(--font-sans);
 
     & a {
       display: inline-flex;

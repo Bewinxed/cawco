@@ -355,8 +355,7 @@
 
   /** A step's note: meta, muted; a failure's in the fail ink. */
   const NOTE = "min-w-0 type-meta text-ink-muted text-pretty wrap-anywhere";
-  const FAIL =
-    "min-w-0 type-meta text-status-fail text-pretty wrap-anywhere";
+  const FAIL = "min-w-0 type-meta text-status-fail text-pretty wrap-anywhere";
   /** Needs you's meta line (NeedsCard's `.meta`): meta, muted, one line, at every width. */
   const META = "min-w-0 max-w-full truncate type-meta text-ink-muted";
   /** A step's controls: side by side, each the column's width in a narrow card (one grid column), `space-2` apart. */
@@ -373,15 +372,9 @@
       data-slot="step-mark"
     >
       {#if mark === "done"}
-        <IconSuccess
-          aria-hidden="true"
-          class="size-icon-md text-status-done"
-        />
+        <IconSuccess aria-hidden="true" class="size-icon-md text-status-done" />
       {:else if mark === "failed"}
-        <IconError
-          aria-hidden="true"
-          class="size-icon-md text-status-fail"
-        />
+        <IconError aria-hidden="true" class="size-icon-md text-status-fail" />
       {:else if mark === "working"}
         <Spinner aria-hidden="true" role="none" />
       {:else}
@@ -458,10 +451,7 @@
       data-box
     >
       {#if done}
-        <IconSuccess
-          aria-hidden="true"
-          class="size-icon-md text-status-done"
-        />
+        <IconSuccess aria-hidden="true" class="size-icon-md text-status-done" />
       {:else}
         <IconMonitor aria-hidden="true" class="size-icon-md" />
       {/if}

@@ -501,8 +501,8 @@
          picture and under the hover and selected washes. -->
     <span
       class="contents"
-      style:--dot-at="calc(var(--spacing-space-1) - calc(var(--spacing) * 1.5) / 2)"
-      >{@render needsDot()}</span
+      style:--dot-at="calc(var(--spacing-space-1) - calc(var(--spacing) * 1.5) /
+      2)">{@render needsDot()}</span
     >
   {/if}
   <span class="mark-line flex min-w-0 items-center gap-space-1 px-space-1">

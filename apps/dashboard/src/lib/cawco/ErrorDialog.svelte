@@ -64,10 +64,7 @@
 
       <Dialog.Footer>
         <Button onclick={copy} type="button" variant="outline">
-          <span
-            class="icon-swap"
-            style:--icon-swap-dur="var(--duration-fast)"
-          >
+          <span class="icon-swap" style:--icon-swap-dur="var(--duration-fast)">
             <span data-active={!copied}><IconCopy /></span>
             <span data-active={copied}><IconCheck /></span>
           </span>

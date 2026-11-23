@@ -95,7 +95,10 @@ for (const { prop, value, line } of decls) {
       continue;
     }
     checked += 1;
-    if (prop.startsWith("--spacing-space-") && !value.includes("var(--spacing)")) {
+    if (
+      prop.startsWith("--spacing-space-") &&
+      !value.includes("var(--spacing)")
+    ) {
       errors.push(
         `theme.css:${line}: ${prop}: ${value} must be expressed in terms of var(--spacing)`
       );

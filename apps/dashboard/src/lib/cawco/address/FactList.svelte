@@ -25,10 +25,7 @@
     <li class="mark-line flex min-w-0 items-start gap-space-2 type-body">
       <span class={["mark-cell", cell]}>
         {#if fact.mark === "yes"}
-          <IconSuccess
-            aria-label="Yes"
-            class="size-icon-md text-status-done"
-          />
+          <IconSuccess aria-label="Yes" class="size-icon-md text-status-done" />
         {:else if fact.mark === "no"}
           <IconNeutral aria-label="No" class="size-icon-md text-ink-muted" />
         {:else if fact.mark === "wait"}

@@ -44,10 +44,7 @@
   in:crossIn
   out:crossOut
 >
-  <IconNeedsYou
-    aria-hidden="true"
-    class="size-icon-md text-status-attn"
-  />
+  <IconNeedsYou aria-hidden="true" class="size-icon-md text-status-attn" />
   <!-- In the view strip (`data-form="compact"`) its glyph and count stand
        alone. -->
   <span class="in-form-compact:hidden">Needs you</span>

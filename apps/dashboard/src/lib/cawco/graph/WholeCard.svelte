@@ -40,8 +40,7 @@
     card.kept
       ? "border-accent"
       : "border-border-control can-hover:has-[button:hover]:bg-surface-hover",
-    card.against &&
-      "outline-solid outline-2 outline-status-done",
+    card.against && "outline-solid outline-2 outline-status-done",
   ]}
   style:--xy-handle-background-color="transparent"
   style:--xy-handle-border-color="transparent"

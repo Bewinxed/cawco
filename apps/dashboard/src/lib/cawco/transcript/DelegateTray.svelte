@@ -1488,8 +1488,7 @@
         class="flex-initial min-w-0 text-base font-medium text-ink-strong overflow-clip text-ellipsis whitespace-nowrap"
         >{item.title}</span
       >
-      <span
-        class="flex-none ms-auto text-sm text-ink-muted whitespace-nowrap"
+      <span class="flex-none ms-auto text-sm text-ink-muted whitespace-nowrap"
         >{failedWhen(item)}</span
       >
       <a

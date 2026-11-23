@@ -93,7 +93,12 @@ function countInSource(source: string): number {
       }
     }
     for (const [key, value] of Object.entries(n)) {
-      if (key === "attributes" || key === "css" || key === "instance" || key === "module") {
+      if (
+        key === "attributes" ||
+        key === "css" ||
+        key === "instance" ||
+        key === "module"
+      ) {
         continue;
       }
       if (value && typeof value === "object") {
@@ -108,7 +113,10 @@ function countInSource(source: string): number {
 async function counted(): Promise<Record<string, number>> {
   const files: Record<string, number> = {};
   for (const { path, source } of await dashboardSources()) {
-    if (!path.endsWith(".svelte") || path.startsWith("src/lib/components/ui/row/")) {
+    if (
+      !path.endsWith(".svelte") ||
+      path.startsWith("src/lib/components/ui/row/")
+    ) {
       continue;
     }
     const n = countInSource(source);
@@ -141,6 +149,8 @@ if (process.argv.includes("--write-baseline")) {
     }
     process.exitCode = 1;
   } else {
-    say(`row-ratchet: ${count} hand-built flex rows (baseline ${baseline.count})`);
+    say(
+      `row-ratchet: ${count} hand-built flex rows (baseline ${baseline.count})`
+    );
   }
 }

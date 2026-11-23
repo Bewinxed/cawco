@@ -199,9 +199,7 @@
     style:--arm-clip="inset(0 calc(var(--chev) * var(--room)) 0 0)"
     class="@container flex-1 min-w-0 clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:duration-(--duration-base) motion-reduce:group-data-settled/divider:ease-out"
   >
-    <svg
-      aria-hidden="true"
-      class="block w-full h-1.5 -scale-x-100"
+    <svg aria-hidden="true" class="block w-full h-1.5 -scale-x-100"
       ><path
         d={WAVE}
         style:--run="calc((100cqi - 2px) * 1.08)"

@@ -153,6 +153,7 @@ export const GROUPS: { title: string; families: Family[] }[] = [
       { file: "sheet/sheet.stories.ts", wide: true, fill: true },
       { file: "drawer/drawer.stories.ts", fill: true },
       { file: "table/table.stories.ts", wide: true, fill: true },
+      { file: "row/row.stories.ts", fill: true },
       { file: "kbd/kbd.stories.ts" },
     ],
   },

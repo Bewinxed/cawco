@@ -131,9 +131,7 @@
     const by = 32 * toward;
     return {
       delay: motionOk.current ? 40 : 0,
-      duration: dur(
-        motionOk.current ? "--duration-slow" : "--duration-fast"
-      ),
+      duration: dur(motionOk.current ? "--duration-slow" : "--duration-fast"),
       easing: easeDrawer,
       css: (t) =>
         motionOk.current

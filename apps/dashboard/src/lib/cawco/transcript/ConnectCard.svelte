@@ -412,9 +412,7 @@
           <p class="m-0 min-w-0 text-sm">
             <ConnectAddress url={connect.url} />
           </p>
-          <p
-            class="m-0 max-w-measure text-base text-ink-muted text-pretty"
-          >
+          <p class="m-0 max-w-measure text-base text-ink-muted text-pretty">
             {askWords.connectReach(connect.server)}
           </p>
         {/if}

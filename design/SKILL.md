@@ -1,6 +1,6 @@
 ---
 name: cawco-design
-description: Caw&Co's design system: its two-layer tokens (primitive scales and semantic roles), type, spacing, motion and component recipes. Use when building or changing any Caw&Co screen, component, page, marketing image or brand asset.
+description: Caw&Co's design system: 24 semantic colour roles, 4 type sizes on 3 4px-grid line-heights, 4px spacing ladder, subgrid alignment primitives, motion, and component recipes. Use when building or changing any Caw&Co screen, component, page, marketing image or brand asset.
 ---
 
 # Caw&Co design system
@@ -8,6 +8,6 @@ description: Caw&Co's design system: its two-layer tokens (primitive scales and 
 Build in Caw&Co's look:
 
 1. Read `design/DESIGN.md` whole before you write any style.
-2. Take every colour, size, space, radius, shadow, duration and curve from `apps/dashboard/src/lib/tokens/theme.css` through the Tailwind utilities it makes: prefer Layer 2 semantic roles, and reach into Layer 1 only for the 4px spacing ladder, categorical marks (`mark-1..8`), or brand art pigments.
-3. Add a token to `theme.css` only for a genuinely shared scale step or semantic role under Tailwind's namespace for its kind — never for a feature name or component-private size (express one-off component geometry on `--spacing` inside the component or `apps/dashboard/src/design.css`).
-4. Compose from the kit in `apps/dashboard/src/lib/components/ui` (and inspect scales, roles, and states on the board in `apps/dashboard/src/lib/design-board/`); a screen's own decisions are in its surface brief under `apps/dashboard/.impeccable/surfaces/`.
+2. Take every colour, type role, space, size, radius, shadow, duration and curve from `apps/dashboard/src/lib/tokens/theme.css` through Tailwind's utilities (24 semantic colour roles, 7 categorical marks `mark-1..7`, 6 `type-*` roles on 4 sizes and 3 4px-grid line-heights, 6 `space-*` rhythm steps on the 4px base).
+3. Never add feature-named tokens to `theme.css` or smuggle component-local globals onto `:root` in `design.css`: derive one-off component dimensions on `--spacing` (Tailwind's numeric scale `w-*`, `h-*`, `size-*`) inside the component itself, and never write `±1px` / `±2px` spacing arithmetic.
+4. Build lists of rows with `ui/row` (`rows-grid` / `row-cells` subgrid) and equal-option tile grids with `OptionTiles` (`grid-rows-subgrid`) so alignment holds by construction; compose from `apps/dashboard/src/lib/components/ui` and inspect on `apps/dashboard/src/lib/design-board/`.

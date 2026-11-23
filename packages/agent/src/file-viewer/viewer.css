@@ -15,7 +15,8 @@ body {
   flex-direction: column;
   background: var(--color-surface-recess);
   color: var(--color-ink-strong);
-  font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans);
+  font: var(--font-weight-normal) var(--text-base) / var(--leading-base)
+    var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -33,13 +34,15 @@ body {
 .file-name {
   margin: 0;
   min-inline-size: 0;
-  font: var(--font-weight-medium) var(--text-lg) / var(--leading-lg) var(--font-sans);
+  font: var(--font-weight-medium) var(--text-lg) / var(--leading-lg)
+    var(--font-sans);
   color: var(--color-ink-strong);
   overflow-wrap: anywhere;
 }
 .file-meta {
   margin: 0;
-  font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans);
+  font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm)
+    var(--font-sans);
   color: var(--color-ink-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -49,7 +52,8 @@ body {
 }
 .file-download {
   margin-inline-start: auto;
-  font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
+  font: var(--font-weight-medium) var(--text-base) / var(--leading-base)
+    var(--font-sans);
   color: var(--color-accent-ink);
   text-underline-offset: 0.2em;
 }
@@ -69,7 +73,8 @@ body {
 .file-note {
   margin: var(--spacing-space-4) auto 0;
   max-inline-size: var(--spacing-measure);
-  font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans);
+  font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm)
+    var(--font-sans);
   color: var(--color-ink-muted);
   text-align: center;
 }
@@ -126,7 +131,8 @@ body {
   border-radius: var(--radius-sm);
 }
 .lines {
-  font: var(--font-weight-normal) var(--text-sm) / var(--leading-base) var(--font-mono);
+  font: var(--font-weight-normal) var(--text-sm) / var(--leading-base)
+    var(--font-mono);
   color: var(--color-ink-strong);
 }
 .line {
@@ -166,11 +172,13 @@ body {
 }
 .file-kind {
   margin: 0;
-  font: var(--font-weight-medium) var(--text-sm) / var(--leading-sm) var(--font-sans);
+  font: var(--font-weight-medium) var(--text-sm) / var(--leading-sm)
+    var(--font-sans);
   color: var(--color-ink-muted);
 }
 .file-card .file-name {
-  font: var(--font-weight-medium) var(--text-lg) / var(--leading-lg) var(--font-sans);
+  font: var(--font-weight-medium) var(--text-lg) / var(--leading-lg)
+    var(--font-sans);
 }
 .file-line {
   margin: 0;

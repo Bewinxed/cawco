@@ -127,9 +127,7 @@
             aria-hidden="true"
             class={[
               "size-1.5 rounded-pill",
-              machine?.status === "online"
-                ? "bg-status-done"
-                : "bg-ink-subtle",
+              machine?.status === "online" ? "bg-status-done" : "bg-ink-subtle",
             ]}
             data-box
           ></span>

@@ -27,8 +27,7 @@
     const bits: HTMLElement[] = [];
     for (let i = 0; i < COUNT; i += 1) {
       const bit = document.createElement("span");
-      bit.className =
-        "absolute top-0 start-1/2 h-space-2 w-space-1 rounded-xs";
+      bit.className = "absolute top-0 start-1/2 h-space-2 w-space-1 rounded-xs";
       bit.style.background = INKS[i % INKS.length];
       layer.append(bit);
       bits.push(bit);

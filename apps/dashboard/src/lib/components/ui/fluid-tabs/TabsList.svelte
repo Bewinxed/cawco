@@ -55,8 +55,7 @@
       {
         variant: "segmented",
         size: "compact",
-        class:
-          "[--item:var(--spacing-space-6)] [--pad:var(--spacing-space-1)]",
+        class: "[--item:var(--spacing-space-6)] [--pad:var(--spacing-space-1)]",
       },
     ],
   });

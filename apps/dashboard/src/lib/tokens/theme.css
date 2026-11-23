@@ -105,32 +105,17 @@
     oklch(96.6% 0.008 85),
     oklch(21% 0.005 70)
   );
-  --color-surface-sunk: light-dark(
-    oklch(92% 0.011 83),
-    oklch(15.6% 0.004 70)
-  );
-  --color-surface-hover: light-dark(
-    oklch(92% 0.011 83),
-    oklch(28.2% 0.007 70)
-  );
+  --color-surface-sunk: light-dark(oklch(92% 0.011 83), oklch(15.6% 0.004 70));
+  --color-surface-hover: light-dark(oklch(92% 0.011 83), oklch(28.2% 0.007 70));
   --color-surface-pressed: light-dark(
     oklch(85.4% 0.014 82),
     oklch(31.4% 0.008 70)
   );
 
   /* Inks (3): every ink holds >=4.5:1 on every surface it sits on. */
-  --color-ink-strong: light-dark(
-    oklch(29.5% 0.01 70),
-    oklch(93.4% 0.01 82)
-  );
-  --color-ink-muted: light-dark(
-    oklch(49.5% 0.014 74),
-    oklch(77.8% 0.012 78)
-  );
-  --color-ink-subtle: light-dark(
-    oklch(50.8% 0.014 74),
-    oklch(68.5% 0.012 76)
-  );
+  --color-ink-strong: light-dark(oklch(29.5% 0.01 70), oklch(93.4% 0.01 82));
+  --color-ink-muted: light-dark(oklch(49.5% 0.014 74), oklch(77.8% 0.012 78));
+  --color-ink-subtle: light-dark(oklch(50.8% 0.014 74), oklch(68.5% 0.012 76));
 
   /* Borders (3): hairline -> control -> strong (>=3:1 UI boundary). */
   --color-border-hairline: light-dark(
@@ -141,10 +126,7 @@
     oklch(89% 0.013 82),
     oklch(35.2% 0.009 70)
   );
-  --color-border-strong: light-dark(
-    oklch(52% 0.016 76),
-    oklch(58.5% 0.014 76)
-  );
+  --color-border-strong: light-dark(oklch(52% 0.016 76), oklch(58.5% 0.014 76));
 
   /* Accent (4): Caw coral marks where you act and what you chose. */
   --color-accent: light-dark(oklch(55.5% 0.17 33), oklch(55.5% 0.165 33));
@@ -154,38 +136,14 @@
 
   /* Status (8): four states (live, attn, done, fail) x ink/glyph and wash.
      Each chromatic token holds >=4.5:1 on its bg and >=3:1 on surfaces. */
-  --color-status-live: light-dark(
-    oklch(42% 0.135 252),
-    oklch(78% 0.105 245)
-  );
-  --color-status-live-bg: light-dark(
-    oklch(88% 0.042 245),
-    oklch(30% 0.06 252)
-  );
-  --color-status-attn: light-dark(
-    oklch(44% 0.115 78),
-    oklch(85% 0.125 92)
-  );
-  --color-status-attn-bg: light-dark(
-    oklch(92% 0.095 95),
-    oklch(31% 0.06 90)
-  );
-  --color-status-done: light-dark(
-    oklch(41% 0.125 150),
-    oklch(78% 0.12 152)
-  );
-  --color-status-done-bg: light-dark(
-    oklch(90% 0.05 152),
-    oklch(30% 0.06 152)
-  );
-  --color-status-fail: light-dark(
-    oklch(45% 0.17 18),
-    oklch(77% 0.13 18)
-  );
-  --color-status-fail-bg: light-dark(
-    oklch(91% 0.05 18),
-    oklch(31% 0.07 18)
-  );
+  --color-status-live: light-dark(oklch(42% 0.135 252), oklch(78% 0.105 245));
+  --color-status-live-bg: light-dark(oklch(88% 0.042 245), oklch(30% 0.06 252));
+  --color-status-attn: light-dark(oklch(44% 0.115 78), oklch(85% 0.125 92));
+  --color-status-attn-bg: light-dark(oklch(92% 0.095 95), oklch(31% 0.06 90));
+  --color-status-done: light-dark(oklch(41% 0.125 150), oklch(78% 0.12 152));
+  --color-status-done-bg: light-dark(oklch(90% 0.05 152), oklch(30% 0.06 152));
+  --color-status-fail: light-dark(oklch(45% 0.17 18), oklch(77% 0.13 18));
+  --color-status-fail-bg: light-dark(oklch(91% 0.05 18), oklch(31% 0.07 18));
 
   /* Categorical marks (7): perceptually even hues for accounts, tools, syntax. */
   --color-mark-1: light-dark(oklch(53% 0.15 47.4), oklch(70% 0.15 47.4));

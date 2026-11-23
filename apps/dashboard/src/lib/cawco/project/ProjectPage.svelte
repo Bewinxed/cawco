@@ -1977,11 +1977,7 @@
            The Empty Starts Work Rule): while his panel is open they are in
            it (CawFloat); put away, they stand here and open it with their
            words. -->
-      <div
-        data-slot="caw-empty"
-        class="mx-auto w-full max-w-182"
-        in:reveal
-      >
+      <div data-slot="caw-empty" class="mx-auto w-full max-w-182" in:reveal>
         <EmptyState
           centre="mark"
           line={cawLine}

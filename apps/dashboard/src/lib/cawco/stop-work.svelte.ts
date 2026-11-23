@@ -744,7 +744,7 @@ class StopWork {
     const parent = job.rows.find((each) => each.s.id === row.s.parentId);
     const flier = job.open ? this.fliers.get(jobKey(job)) : undefined;
     if (parent && flier) {
-      this.after(job, (dur("--duration-fast") / 2), () => flier.fly(parent));
+      this.after(job, dur("--duration-fast") / 2, () => flier.fly(parent));
     }
     if (job.rows.every((each) => each.arrived)) {
       this.after(job, dur("--duration-fast"), () => {

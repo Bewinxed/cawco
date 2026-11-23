@@ -21,7 +21,8 @@ body {
   overflow: hidden;
   background: var(--color-surface-raised);
   color: var(--color-ink-strong);
-  font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans);
+  font: var(--font-weight-normal) var(--text-base) / var(--leading-base)
+    var(--font-sans);
 }
 
 /* The canvas's ground and grid: Excalidraw draws on a clear canvas over
@@ -92,8 +93,7 @@ body {
   border: 1px solid var(--color-border-control);
   border-radius: var(--radius-lg);
   background: oklch(from var(--color-surface-raised) l c h / 0.72);
-  backdrop-filter: blur(calc(var(--blur-glass) * 1.4))
-    saturate(1.6);
+  backdrop-filter: blur(calc(var(--blur-glass) * 1.4)) saturate(1.6);
   box-shadow: var(--shadow-sm);
 
   @media (prefers-reduced-transparency: reduce) {
@@ -168,9 +168,7 @@ body {
   padding: 0;
   place-items: center;
   border: 0;
-  border-radius: calc(
-    var(--radius-lg) - var(--spacing-space-2) - 1px
-  );
+  border-radius: calc(var(--radius-lg) - var(--spacing-space-2) - 1px);
   background: transparent;
   color: var(--color-ink-muted);
   cursor: pointer;
@@ -335,7 +333,8 @@ body {
   background: transparent;
   color: var(--color-ink-strong);
   cursor: pointer;
-  font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
+  font: var(--font-weight-medium) var(--text-base) / var(--leading-base)
+    var(--font-sans);
   text-align: start;
 
   & > svg {
@@ -366,7 +365,8 @@ body {
 
 .rail-item-hint {
   color: var(--color-ink-muted);
-  font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans);
+  font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm)
+    var(--font-sans);
 }
 
 /* A checked item's tick (DESIGN.md, Menu item): in the item's own ink, no
@@ -409,7 +409,8 @@ body {
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-sm);
   color: var(--color-ink-strong);
-  font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans);
+  font: var(--font-weight-normal) var(--text-base) / var(--leading-base)
+    var(--font-sans);
   pointer-events: none;
   translate: -50% 0;
   animation: canvas-refusal-in var(--duration-base) var(--ease-out);
@@ -468,7 +469,8 @@ body {
   max-width: 60ch;
   margin: 0;
   color: var(--color-status-fail);
-  font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans);
+  font: var(--font-weight-normal) var(--text-base) / var(--leading-base)
+    var(--font-sans);
   text-align: center;
   animation: canvas-refusal-in var(--duration-base) var(--ease-out);
 }
@@ -501,13 +503,15 @@ body {
 .canvas-empty-title {
   margin: 0;
   color: var(--color-ink-strong);
-  font: var(--font-weight-medium) var(--text-lg) / var(--leading-lg) var(--font-sans);
+  font: var(--font-weight-medium) var(--text-lg) / var(--leading-lg)
+    var(--font-sans);
 }
 
 .canvas-empty-line {
   margin: 0;
   color: var(--color-ink-muted);
-  font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans);
+  font: var(--font-weight-normal) var(--text-base) / var(--leading-base)
+    var(--font-sans);
 }
 
 /* The kit's outline button at sm: 30px, 11px in, 10px radius. */
@@ -520,7 +524,8 @@ body {
   background: var(--color-surface-raised);
   color: var(--color-ink-strong);
   cursor: pointer;
-  font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
+  font: var(--font-weight-medium) var(--text-base) / var(--leading-base)
+    var(--font-sans);
   pointer-events: auto;
   transition:
     background-color var(--duration-fast) var(--ease-out),
@@ -631,7 +636,8 @@ body {
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-lg);
   color: var(--color-ink-strong);
-  font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
+  font: var(--font-weight-medium) var(--text-base) / var(--leading-base)
+    var(--font-sans);
   translate: -50% 0;
   animation: canvas-changes-in var(--duration-slow) var(--ease-out);
 

@@ -230,10 +230,7 @@
                  icon swap, at a control's pace). Out of the button's name:
                  `aria-busy` says it, and a status in here was read into the
                  name at rest. -->
-          <span
-            class="icon-swap"
-            style:--icon-swap-dur="var(--duration-fast)"
-          >
+          <span class="icon-swap" style:--icon-swap-dur="var(--duration-fast)">
             <span data-active={!pending}
               ><IconHistory class="size-icon-md" /></span
             >
@@ -248,9 +245,7 @@
         older</span
       >
       {#if failed > 0}
-        <span class="ms-space-1 text-status-fail"
-          >{failedWords(failed)}</span
-        >
+        <span class="ms-space-1 text-status-fail">{failedWords(failed)}</span>
       {/if}
     </button>
   {/snippet}

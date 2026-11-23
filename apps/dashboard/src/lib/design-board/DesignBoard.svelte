@@ -150,29 +150,29 @@
   <header class="flex flex-col gap-space-1">
     <h1 class="type-title">CawCo design system</h1>
     <p class="text-ink-muted type-body">
-      Primitive scales, semantic roles, and core kit components in their states,
+      Semantic roles, shared scales, and core kit components in their states,
       light and dark side by side.
     </p>
   </header>
 
   {@render layerSection(
-    "Layer 1 · Primitive scales",
-    "Raw steps declared once in theme.css: neutrals, coral, categorical marks, 4px spacing, type ramp, radii, motion, breakpoints, and z-layers.",
-    SCALES
+    "Roles",
+    "What every screen reaches for: 24 colour roles, 6 type roles on 4 sizes and 3 4px-grid leadings, and the 4px spacing and control ladder.",
+    ROLES
   )}
 
   {@render layerSection(
-    "Layer 2 · Semantic roles",
-    "Roles bound to Layer 1 by job across light and dark: surfaces, inks, borders, accent, status, type roles, semantic sizes, and elevations.",
-    ROLES
+    "Palette, shape, motion and layout",
+    "7 categorical marks, 3 brand art pigments, 5 radii, 3 shadows, 4 durations, 3 curves, 2 breakpoints, 4 containers, and 4 z-layers.",
+    SCALES
   )}
 
   <section class="flex flex-col gap-space-4" aria-label="Core components">
     <header class="flex flex-col gap-space-1">
       <h2 class="text-ink-strong type-label">Core components</h2>
       <p class="text-ink-muted type-meta">
-        The canonical UI kit primitives in their states, including folded
-        Dialog, Fluid tabs, and Icon toggle.
+        The canonical UI kit primitives in their states, including subgrid Row,
+        row-subgrid OptionTiles, Dialog, Fluid tabs, and Icon toggle.
       </p>
     </header>
 

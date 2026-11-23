@@ -1,14 +1,14 @@
 <script lang="ts">
   /**
    * One foundation group (foundations.ts) drawn in the scheme of the pane
-   * it stands in: every token renders through `var()` and reports what the
-   * browser computes for it there. No values are duplicated here.
+   * it stands in: every token renders through `var()` or its `type-*` utility
+   * and reports what the browser computes for it there. No values are duplicated.
    */
   import type { Foundation, Kind } from "./foundations.js";
 
   let { foundation }: { foundation: Foundation } = $props();
 
-  /** What the page computed for each token, read once after layout. */
+  /** What the page computed for each specimen, read once after layout. */
   let readings = $state.raw(new Map<string, string>());
 
   /** The CSS property each token kind probes and reads back. */
@@ -19,7 +19,7 @@
     leading: "line-height",
     tracking: "letter-spacing",
     weight: "font-weight",
-    type: "font",
+    type: "font-size",
     space: "width",
     measure: "width",
     radius: "border-top-left-radius",
@@ -30,10 +30,23 @@
     layer: "z-index",
   };
 
+  /** Static utility classes for each type role so Tailwind emits them. */
+  const TYPE_CLASS: Record<string, string> = {
+    "type-meta": "type-meta",
+    "type-code": "type-code liga-none",
+    "type-body": "type-body",
+    "type-label": "type-label",
+    "type-title": "type-title",
+    "type-kpi": "type-kpi",
+  };
+
   /** Sets the token on its probe element so the single pass reads it back. */
   const probe = (kind: Kind, name: string) => (node: HTMLElement) => {
-    node.style.setProperty(PROPERTY[kind], `var(${name})`);
+    if (kind !== "type") {
+      node.style.setProperty(PROPERTY[kind], `var(${name})`);
+    }
     node.dataset.token = name;
+    node.dataset.kind = kind;
     node.dataset.property = PROPERTY[kind];
   };
 
@@ -42,9 +55,18 @@
     const frame = requestAnimationFrame(() => {
       const read = new Map<string, string>();
       for (const one of node.querySelectorAll<HTMLElement>("[data-token]")) {
-        const { token, property } = one.dataset;
-        if (token && property) {
-          read.set(token, getComputedStyle(one).getPropertyValue(property));
+        const { token, kind, property } = one.dataset;
+        if (!(token && property)) {
+          continue;
+        }
+        const style = getComputedStyle(one);
+        if (kind === "type") {
+          read.set(
+            token,
+            `${style.fontSize} / ${style.lineHeight} · ${style.fontWeight}`
+          );
+        } else {
+          read.set(token, style.getPropertyValue(property));
         }
       }
       readings = read;
@@ -52,7 +74,7 @@
     return () => cancelAnimationFrame(frame);
   };
 
-  /** Multi-shelf colour groups flow across two columns when roomy. */
+  /** Multi-shelf wide groups flow across two columns when roomy. */
   const flowing = $derived(foundation.shelves.length >= 4 && foundation.wide);
 
   /** A token's name past its kind prefix: `--color-surface-raised` -> "surface-raised". */
@@ -69,7 +91,7 @@
 
   /** A token name's kind prefix stripped for display. */
   const KIND_PREFIX =
-    /^--(?:color|font-weight|font|text|leading|tracking|type|spacing|radius|shadow|duration|ease|breakpoint|container|layer)-/u;
+    /^--(?:color|font-weight|font|text|leading|tracking|spacing|radius|shadow|duration|ease|breakpoint|container|layer)-/u;
 
   const BEZIER = /cubic-bezier\(([^)]+)\)/u;
   /** A cubic-bezier's curve as an SVG path in a 100 by 100 box, y up. */
@@ -88,21 +110,18 @@
 
   /** Sample sentence per type role. */
   const sampleFor = (name: string): string => {
-    if (name === "--type-kpi") {
+    if (name === "type-kpi") {
       return "14,280";
     }
-    if (name === "--type-code") {
+    if (name === "type-code") {
       return "bun run check --all";
-    }
-    if (name === "--type-caps") {
-      return "RUNNING";
     }
     return "Move the session to studio-mac";
   };
 </script>
 
 <div
-  class={flowing ? "columns-2 gap-space-5" : "flex flex-col gap-space-5"}
+  class={flowing ? "columns-2 gap-space-4" : "flex flex-col gap-space-4"}
   {@attach readAll}
 >
   {#each foundation.shelves.filter((one) => one.names.length > 0) as shelf (shelf.title)}
@@ -130,19 +149,13 @@
           {#each shelf.names as name (name)}
             <li class="flex min-w-0 flex-col gap-space-1">
               <span
-                class={[
-                  "min-w-0 text-ink-strong",
-                  name === "--type-caps" && "tracking-caps uppercase",
-                  name === "--type-title" && "tracking-title",
-                  name === "--type-kpi" && "tabular-nums",
-                  name === "--type-code" && "liga-none",
-                ]}
+                class={["min-w-0 text-ink-strong", TYPE_CLASS[name]]}
                 {@attach probe(shelf.kind, name)}
               >
                 {sampleFor(name)}
               </span>
               <span class="text-ink-muted type-meta">
-                type-{short(name)}
+                {name} · {readings.get(name)}
               </span>
             </li>
           {/each}
@@ -183,7 +196,7 @@
               <span class="min-w-0 flex-1 overflow-clip">
                 <span
                   class={[
-                    "block h-2 rounded-hair bg-brand-solid",
+                    "block h-2 rounded-xs bg-accent",
                     shelf.kind === "space" && "max-w-full",
                     shelf.kind === "breakpoint" && "origin-left scale-x-25",
                   ]}
@@ -205,7 +218,7 @@
               </span>
               <span class="min-w-0 flex-1 overflow-clip">
                 <span
-                  class="block h-2 origin-left scale-x-25 rounded-hair bg-brand-solid"
+                  class="block h-2 origin-left scale-x-25 rounded-xs bg-accent"
                   {@attach probe(shelf.kind, name)}
                 ></span>
               </span>
@@ -226,7 +239,7 @@
               </span>
               <span class="min-w-0 flex-1 overflow-clip">
                 <span
-                  class="block h-2 w-(--bar) max-w-full rounded-hair bg-ink-muted"
+                  class="block h-2 w-(--bar) max-w-full rounded-xs bg-ink-muted"
                   style:--bar={`${Math.min(100, (z / 160) * 100)}%`}
                 ></span>
               </span>
@@ -234,14 +247,14 @@
           {/each}
         </ul>
       {:else if shelf.kind === "radius" || shelf.kind === "shadow"}
-        <ul class="flex flex-wrap gap-space-5">
+        <ul class="flex flex-wrap gap-space-4">
           {#each shelf.names as name (name)}
             <li class="flex w-24 flex-col gap-space-2">
               <span
                 class={[
                   "block size-16 bg-surface-raised",
                   shelf.kind === "radius" && "border border-border-control",
-                  shelf.kind === "shadow" && "rounded-md",
+                  shelf.kind === "shadow" && "rounded-sm",
                 ]}
                 {@attach probe(shelf.kind, name)}
               ></span>
@@ -268,15 +281,15 @@
               </span>
               <span class="min-w-0 flex-1 overflow-clip">
                 <span
-                  class="block h-2 w-(--bar) max-w-full rounded-hair bg-status-live-glyph"
-                  style:--bar={`${Math.min(100, (ms / 2000) * 100)}%`}
+                  class="block h-2 w-(--bar) max-w-full rounded-xs bg-status-live"
+                  style:--bar={`${Math.min(100, (ms / 1000) * 100)}%`}
                 ></span>
               </span>
             </li>
           {/each}
         </ul>
       {:else if shelf.kind === "ease"}
-        <ul class="flex flex-wrap gap-space-5">
+        <ul class="flex flex-wrap gap-space-4">
           {#each shelf.names as name (name)}
             {@const path = curve(readings.get(name))}
             <li class="mark-line flex w-28 flex-col gap-space-2">
@@ -287,7 +300,7 @@
               >
                 {#if path}
                   <svg
-                    class="size-full overflow-visible text-brand-solid"
+                    class="size-full overflow-visible text-accent"
                     aria-hidden="true"
                     viewBox="0 0 100 100"
                   >

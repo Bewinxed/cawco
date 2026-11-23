@@ -174,10 +174,7 @@ const PAIRS: Pair[] = [
         "accent-surface bottom stop",
         "oklch(from {color.accent} calc(l - 0.025) c h)",
       ],
-      [
-        "accent hover",
-        "oklch(from {color.accent} calc(l - 0.045) c h)",
-      ],
+      ["accent hover", "oklch(from {color.accent} calc(l - 0.045) c h)"],
       [
         "accent-surface-hover top stop",
         "oklch(from {color.accent} calc(l - 0.02) c h)",

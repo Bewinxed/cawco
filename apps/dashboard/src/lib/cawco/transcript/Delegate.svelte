@@ -620,9 +620,7 @@
           title={ask.detail}
         >
           <span data-slot="rail-cell" aria-hidden="true" class="rail-cell h-lh"
-            ><span
-              data-slot="dot"
-              class="size-1.5 rounded-pill bg-status-attn"
+            ><span data-slot="dot" class="size-1.5 rounded-pill bg-status-attn"
             ></span></span
           >
           <span

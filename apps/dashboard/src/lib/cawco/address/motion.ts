@@ -130,7 +130,7 @@ export function openFrom(tray: HTMLElement, source: Source | null): void {
   for (const one of content) {
     one.animate([{ opacity: 0 }, { opacity: 1 }], {
       duration: dur("--duration-base"),
-      delay: (dur("--duration-fast") / 2),
+      delay: dur("--duration-fast") / 2,
       easing: CURVE.out,
       fill: "backwards",
     });

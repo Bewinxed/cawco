@@ -441,30 +441,18 @@ const DISTILLED_THEME = `/* CawCo's design system, declared once by hand in Tail
 // ============================================================================
 
 const MULTIPLIED_LEADING_REWRITES: [RegExp, string][] = [
-  [
-    /var\(--text-meta\)\s*\*\s*var\(--leading-label\)/gu,
-    "var(--leading-sm)",
-  ],
+  [/var\(--text-meta\)\s*\*\s*var\(--leading-label\)/gu, "var(--leading-sm)"],
   [
     /var\(--text-label\)\s*\*\s*var\(--leading-label\)/gu,
     "var(--leading-base)",
   ],
-  [
-    /var\(--text-body\)\s*\*\s*var\(--leading-body\)/gu,
-    "var(--leading-base)",
-  ],
+  [/var\(--text-body\)\s*\*\s*var\(--leading-body\)/gu, "var(--leading-base)"],
   [
     /var\(--text-body\)\s*\*\s*var\(--who-lead,\s*var\(--leading-body\)\)/gu,
     "var(--who-lead, var(--leading-base))",
   ],
-  [
-    /var\(--text-title\)\s*\*\s*var\(--leading-ui\)/gu,
-    "var(--leading-lg)",
-  ],
-  [
-    /var\(--prompt-fs\)\s*\*\s*var\(--leading-body\)/gu,
-    "var(--leading-base)",
-  ],
+  [/var\(--text-title\)\s*\*\s*var\(--leading-ui\)/gu, "var(--leading-lg)"],
+  [/var\(--prompt-fs\)\s*\*\s*var\(--leading-body\)/gu, "var(--leading-base)"],
 ];
 
 // ============================================================================
@@ -868,14 +856,8 @@ const VAR_EXPR_REPLACEMENTS: [RegExp, string][] = [
     /var\(\s*--ring-track-spent\s*\)/gu,
     "light-dark(oklch(80.5% 0.016 80), oklch(48.8% 0.012 74))",
   ],
-  [
-    /var\(\s*--mark-deck-shade\s*\)/gu,
-    "oklch(14% 0.01 60)",
-  ],
-  [
-    /var\(\s*--mark-deck-cast\s*\)/gu,
-    "oklch(0% 0 0 / 0.16)",
-  ],
+  [/var\(\s*--mark-deck-shade\s*\)/gu, "oklch(14% 0.01 60)"],
+  [/var\(\s*--mark-deck-cast\s*\)/gu, "oklch(0% 0 0 / 0.16)"],
   [/var\(\s*--status-dot-size\s*\)/gu, "calc(var(--spacing) * 1.5)"],
   [/var\(\s*--row-mark-box\s*\)/gu, "calc(var(--spacing) * 4.5)"],
   [/dur\("--duration-step"\)/gu, '(dur("--duration-fast") / 2)'],
@@ -1145,7 +1127,10 @@ function transform(path: string, input: string): string {
   }
 
   // 11. Remove `text-row` references in `prompt-fs-(--text-row)` -> `prompt-fs-(--text-lg)` or `calc(var(--spacing) * 4)`.
-  out = out.replaceAll("prompt-fs-(--text-row)", "prompt-fs-(--text-input-floor)");
+  out = out.replaceAll(
+    "prompt-fs-(--text-row)",
+    "prompt-fs-(--text-input-floor)"
+  );
   out = out.replaceAll("var(--text-row)", "calc(var(--spacing) * 4)");
 
   return out;

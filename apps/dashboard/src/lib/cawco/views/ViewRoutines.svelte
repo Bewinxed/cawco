@@ -1181,7 +1181,9 @@
           >{words.trimReason}</span
         >
         <!-- On a narrow ledger, Turn on under why, on the name's edge. -->
-        <span data-slot="folded" class="hidden pt-space-2 @max-phone/table:block"
+        <span
+          data-slot="folded"
+          class="hidden pt-space-2 @max-phone/table:block"
           >{@render turnOn(busy)}</span
         >
       </Table.Cell>

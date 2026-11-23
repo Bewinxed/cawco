@@ -139,7 +139,7 @@
     if (!reduceMotion.current) {
       node.animate([{ opacity: 0 }, { opacity: 1 }], {
         duration: dur("--duration-base"),
-        delay: (dur("--duration-fast") / 2),
+        delay: dur("--duration-fast") / 2,
         easing: ease("--ease-out"),
         fill: "backwards",
       });

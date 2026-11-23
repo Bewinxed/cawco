@@ -219,8 +219,7 @@
       data-slot="section"
       aria-labelledby="caw-notices"
       class={[
-        needs.length > 0 &&
-          "mt-space-2 border-t border-bs-accent pt-space-2",
+        needs.length > 0 && "mt-space-2 border-t border-bs-accent pt-space-2",
       ]}
       data-flip="box"
     >

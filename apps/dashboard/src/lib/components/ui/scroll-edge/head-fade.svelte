@@ -67,9 +67,6 @@
   <!-- The chosen tab's sheet, over the blur, on the ramp. -->
   <div
     data-slot="layer"
-    class={[
-      "absolute inset-0 opacity-0 mask-head-tint head-fade-scrub",
-      tint,
-    ]}
+    class={["absolute inset-0 opacity-0 mask-head-tint head-fade-scrub", tint]}
   ></div>
 </div>

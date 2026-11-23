@@ -719,9 +719,7 @@
         <p class="m-0 me-auto min-w-0 type-meta text-ink-muted text-pretty">
           {decidesWords.fromNowOn}
           {#if setup.tried && count > 0}
-            <span class="text-status-fail">
-              {decidesWords.toFix(count)}</span
-            >
+            <span class="text-status-fail"> {decidesWords.toFix(count)}</span>
           {/if}
         </p>
         <div class="flex flex-none items-center gap-space-2">

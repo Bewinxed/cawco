@@ -25,10 +25,7 @@
   }}
 >
   {#snippet lead()}
-    <IconSuccess
-      aria-hidden="true"
-      class="size-icon-md text-status-done"
-    />
+    <IconSuccess aria-hidden="true" class="size-icon-md text-status-done" />
   {/snippet}
   <button
     type="button"

@@ -47,10 +47,7 @@
       class="grid size-icon-md place-items-center text-ink-muted"
     >
       {#if done}
-        <IconSuccess
-          aria-hidden="true"
-          class="size-icon-md text-status-done"
-        />
+        <IconSuccess aria-hidden="true" class="size-icon-md text-status-done" />
       {:else if live}
         <LiveDot />
       {:else}

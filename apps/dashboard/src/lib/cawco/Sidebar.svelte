@@ -804,8 +804,7 @@
                 <span
                   class="inline-flex items-center h-(--wordmark-h) wordmark text-base min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
                   data-box
-                  style:--wordmark-h={"var(--leading-base)"}
-                  >Caw&amp;Co</span
+                  style:--wordmark-h={"var(--leading-base)"}>Caw&amp;Co</span
                 >
               </a>
             {/snippet}

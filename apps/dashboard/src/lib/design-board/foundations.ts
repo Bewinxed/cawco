@@ -1,9 +1,8 @@
 /**
  * The system's structure as the board presents it, read live off Tailwind's
- * theme (`lib/tokens/theme.css`) through `readTailwindTheme`: Layer 1 primitive
- * scales first, then Layer 2 semantic roles. Every specimen draws through
- * `var()` and reads what the page computes in each scheme; no token value is
- * duplicated here.
+ * theme (`lib/tokens/theme.css`) through `readTailwindTheme`. Every specimen
+ * draws through `var()` or its `type-*` utility and reads what the page
+ * computes in each scheme; no token value is duplicated here.
  */
 import { readTailwindTheme } from "@cawco/design-tokens/tailwind-theme";
 
@@ -36,7 +35,7 @@ const exact =
   (name: string) =>
     names.includes(name);
 
-/** How the board draws a token: what property it sets and how it previews it. */
+/** How the board draws a specimen: what property it sets and how it previews it. */
 export type Kind =
   | "colour"
   | "face"
@@ -76,15 +75,77 @@ const shelf = (title: string, kind: Kind, names: string[]): Shelf => ({
   names,
 });
 
-/** Layer 1 — Primitive scales: raw steps from which semantic roles are bound. */
-export const SCALES: Foundation[] = [
+/** Semantic roles: what a screen reaches for first across light and dark. */
+export const ROLES: Foundation[] = [
   {
-    title: "Colour scales",
-    note: "Warm paper neutrals, Caw coral, eight perceptually even categorical marks, and brand art pigments.",
+    title: "Colour roles",
+    note: "24 semantic roles across light and dark: 6 surfaces, 3 inks (≥4.5:1), 3 borders, 4 coral accents, and 4 status pairs.",
     wide: true,
     shelves: [
-      shelf("Warm neutrals", "colour", named(starts("--color-neutral-"))),
-      shelf("Caw coral", "colour", named(starts("--color-coral-"))),
+      shelf("Surfaces", "colour", named(starts("--color-surface-"))),
+      shelf("Inks", "colour", named(starts("--color-ink-"))),
+      shelf("Borders", "colour", named(starts("--color-border-"))),
+      shelf(
+        "Accent (Caw coral)",
+        "colour",
+        named(
+          exact(
+            "--color-accent",
+            "--color-accent-ink",
+            "--color-accent-wash",
+            "--color-on-accent"
+          )
+        )
+      ),
+      shelf("Status", "colour", named(starts("--color-status-"))),
+    ],
+  },
+  {
+    title: "Typography",
+    note: "6 type roles built from 4 sizes (12, 14, 18, 24px), 3 line-heights on the 4px grid (16, 20, 24px), 3 faces, and 2 weights (≤500).",
+    wide: true,
+    shelves: [
+      shelf("Roles", "type", [
+        "type-meta",
+        "type-code",
+        "type-body",
+        "type-label",
+        "type-title",
+        "type-kpi",
+      ]),
+      shelf("Sizes", "size", named(starts("--text-"))),
+      shelf("Line heights (4px grid)", "leading", named(starts("--leading-"))),
+      shelf("Faces", "face", THEME.names.TokenFont),
+      shelf("Weights", "weight", named(starts("--font-weight-"))),
+      shelf("Tracking", "tracking", named(starts("--tracking-"))),
+    ],
+  },
+  {
+    title: "Spacing and sizes",
+    note: "One 4px unit (`--spacing`), 6 rhythm steps (4–32px), and 9 semantic sizes (rows step to 44px on touch/phone).",
+    wide: true,
+    shelves: [
+      shelf(
+        "4px rhythm ladder",
+        "space",
+        named(
+          (name) => name === "--spacing" || name.startsWith("--spacing-space-")
+        )
+      ),
+      shelf("Icons", "space", named(starts("--spacing-icon-"))),
+      shelf("Controls", "space", named(starts("--spacing-control-"))),
+      shelf("Rows", "space", named(starts("--spacing-row"))),
+      shelf("Measure", "measure", named(starts("--spacing-measure"))),
+    ],
+  },
+];
+
+/** Palette, shape, motion, and layout vocabulary supporting the roles. */
+export const SCALES: Foundation[] = [
+  {
+    title: "Marks and brand art",
+    note: "7 perceptually even categorical marks for accounts, tools, and syntax, plus 3 mascot/art pigments.",
+    shelves: [
       shelf("Categorical marks", "colour", named(starts("--color-mark-"))),
       shelf(
         "Brand art pigments",
@@ -94,117 +155,28 @@ export const SCALES: Foundation[] = [
     ],
   },
   {
-    title: "Spacing scale",
-    note: "One 4px base unit (`--spacing`) and the rhythm ladder.",
+    title: "Shape and elevation",
+    note: "5 radii on the 4px grid (4, 8, 12, 16px, pill) and 3 shadows softly ringed in dark.",
     shelves: [
-      shelf(
-        "4px rhythm ladder",
-        "space",
-        named(
-          (name) => name === "--spacing" || name.startsWith("--spacing-space-")
-        )
-      ),
+      shelf("Radii", "radius", named(starts("--radius-"))),
+      shelf("Shadows", "shadow", named(starts("--shadow-"))),
     ],
-  },
-  {
-    title: "Type scale",
-    note: "House faces, two UI weights (never above 500), six sizes, five leadings, and three trackings.",
-    shelves: [
-      shelf("Faces", "face", THEME.names.TokenFont),
-      shelf("Sizes", "size", named(starts("--text-"))),
-      shelf("Weights", "weight", named(starts("--font-weight-"))),
-      shelf("Line heights", "leading", named(starts("--leading-"))),
-      shelf("Tracking", "tracking", named(starts("--tracking-"))),
-    ],
-  },
-  {
-    title: "Radii",
-    note: "Seven corner steps from 2px hairline to full pill, nested concentrically.",
-    shelves: [shelf("Corners", "radius", named(starts("--radius-")))],
   },
   {
     title: "Motion",
-    note: "Seven durations and four easing curves; every transition and animation composes from these.",
+    note: "4 durations (120, 200, 320, 1000ms) and 3 easing curves.",
     shelves: [
       shelf("Durations", "duration", named(starts("--duration-"))),
       shelf("Curves", "ease", named(starts("--ease-"))),
     ],
   },
   {
-    title: "Breakpoints and z-layers",
-    note: "Three screen breakpoints, six container tiers, and six semantic stacking planes.",
+    title: "Layout and layers",
+    note: "2 screen breakpoints, 4 container tiers, and 4 z-index planes.",
     shelves: [
       shelf("Screen", "breakpoint", named(starts("--breakpoint-"))),
       shelf("Containers", "breakpoint", named(starts("--container-"))),
       shelf("Z-index planes", "layer", named(starts("--layer-"))),
     ],
-  },
-];
-
-/** Layer 2 — Semantic roles: tokens named for the job they perform across both schemes. */
-export const ROLES: Foundation[] = [
-  {
-    title: "Colour roles",
-    note: "Surfaces, inks (≥4.5:1), borders, coral brand/action/focus, and four status triads.",
-    wide: true,
-    shelves: [
-      shelf(
-        "Surfaces",
-        "colour",
-        named(
-          (name) =>
-            name.startsWith("--color-surface-") || name === "--color-scrim"
-        )
-      ),
-      shelf(
-        "Inks",
-        "colour",
-        named(
-          (name) => name.startsWith("--color-ink-") || name === "--color-on-ink"
-        )
-      ),
-      shelf(
-        "Borders and seam",
-        "colour",
-        named(
-          (name) =>
-            name.startsWith("--color-border-") || name === "--color-seam"
-        )
-      ),
-      shelf(
-        "Brand, action and selection",
-        "colour",
-        named(
-          (name) =>
-            name.startsWith("--color-brand-") ||
-            name.startsWith("--color-action-") ||
-            name === "--color-on-action" ||
-            name === "--color-selected-bg" ||
-            name === "--color-focus-ring" ||
-            name === "--color-selection"
-        )
-      ),
-      shelf("Status", "colour", named(starts("--color-status-"))),
-    ],
-  },
-  {
-    title: "Type roles",
-    note: "Eight font shorthands pairing face, weight, size, and leading by job.",
-    shelves: [shelf("Roles", "type", named(starts("--type-")))],
-  },
-  {
-    title: "Semantic sizes",
-    note: "Icons, controls, rows (stepping to 44px on coarse pointers or phones), and reading measures.",
-    shelves: [
-      shelf("Icons", "space", named(starts("--spacing-icon-"))),
-      shelf("Controls", "space", named(starts("--spacing-control-"))),
-      shelf("Rows", "space", named(starts("--spacing-row"))),
-      shelf("Measures", "measure", named(starts("--spacing-measure"))),
-    ],
-  },
-  {
-    title: "Elevations",
-    note: "Four shadow tiers from hairline lift to modal overlay, ringed softly in dark.",
-    shelves: [shelf("Shadows", "shadow", named(starts("--shadow-")))],
   },
 ];

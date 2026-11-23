@@ -201,9 +201,7 @@
                   <!-- Every machine: the tick. Short of that, the warning glyph,
                    in the attention hue only on the provider calls go to. -->
                   {#if stands.ready === stands.of}
-                    <IconTick
-                      class="size-icon-sm flex-none text-status-done"
-                    />
+                    <IconTick class="size-icon-sm flex-none text-status-done" />
                     <span class="text-ink-muted">{stands.words}</span>
                   {:else}
                     <IconWarningTriangle

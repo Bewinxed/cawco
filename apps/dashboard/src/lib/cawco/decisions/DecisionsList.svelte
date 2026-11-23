@@ -248,10 +248,7 @@
       data-slot="mark"
     >
       {#if isDecided(page) && page.state === "decided"}
-        <IconSuccess
-          aria-hidden="true"
-          class="size-icon-md text-status-done"
-        />
+        <IconSuccess aria-hidden="true" class="size-icon-md text-status-done" />
       {:else}
         <span
           class="grid place-items-center group-data-[standing=picking]/row:text-ink-strong text-ink-muted"

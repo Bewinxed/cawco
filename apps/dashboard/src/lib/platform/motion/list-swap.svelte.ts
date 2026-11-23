@@ -35,7 +35,7 @@ const outMs = () => dur("--duration-base");
 /** An incoming row's beat. @browser */
 export const inMs = () => dur("--duration-slow");
 /** Between one incoming row and the next. */
-const inStagger = () => (dur("--duration-fast") / 2);
+const inStagger = () => dur("--duration-fast") / 2;
 /** Rows past this all move together; a stagger that keeps growing down a
     forty-row list is a wait, not a rhythm. */
 const STAGGER_CAP = 9;

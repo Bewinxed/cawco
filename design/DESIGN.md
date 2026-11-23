@@ -1,15 +1,12 @@
 # Design
 
 ## System
-- One source of truth: `apps/dashboard/src/lib/tokens/theme.css` declares every design token once, by hand, in two layers inside Tailwind's `@theme`.
-- **Layer 1 (primitive scales)** holds the raw vocabulary: warm neutrals (`neutral-1..9`, `11..12`), coral (`coral-3`, `9..11`), eight perceptually even categorical marks (`mark-1..8`), three brand art pigments, one 4px spacing unit and rhythm ladder (`space-row`, `space-1..6`, `space-8`), three house faces (Figtree, JetBrains Mono, Nunito wordmark) with two UI weights (`normal` 400, `medium` 500 — never above 500), six text sizes, five leadings, three trackings, seven radii (`hair` → `pill`), seven durations (`step` → `breath`), four curves (`ease-out`, `ease-in-out`, `ease-drawer`, `ease-crossfade`), three breakpoints (`phone`, `desk`, `wide`), six container tiers (`xs` → `wide`), and six z-layers (`base` → `top`).
-- **Layer 2 (semantic roles)** binds values to jobs, never to features, across light and dark schemes:
-  - **Surfaces**: `surface-page` for chrome and shell ground; `surface-raised` for cards, panels and controls; `surface-recess` for recessed wells and code; `surface-sunk` for grooves and inactive tabs; `surface-shelf` for tab strips; `surface-hover` and `surface-pressed` for pointer states; `surface-glass` and `scrim` for translucent chrome.
-  - **Inks**: `ink-strong`, `ink-muted`, `ink-subtle`, and `on-ink`. Every text ink holds ≥4.5:1 WCAG 2.2 AA contrast on the surfaces it sits on.
-  - **Borders**: `border-hairline` for quiet dividers; `border-control` for cards and menus; `border-strong` (≥3:1) for interactive frames and inputs; `seam` for a coral divider.
-  - **Accent & status**: `brand-solid` / `brand-ink` / `brand-wash` and `selected-bg` mark brand and selection; `action-solid` / `action-hover` / `on-action` belong to the primary act; `focus-ring` marks keyboard focus. Four status triads (`live`, `attn`, `done`, `fail` × `bg` / `ink` / `glyph`) mean status only.
-  - **Sizes, type & elevation**: `icon-sm/md/lg`, `control-xs/sm/md/lg`, `row` / `row-compact` (`row` steps to 44px on coarse pointers or `<640px`), and `measure` / `measure-short`. Eight type roles (`type-meta`, `label`, `body`, `row`, `title`, `kpi`, `code`, `caps`) and four elevations (`shadow-xs` → `lg`, softly ringed at night).
-- **Rules for choosing**: Pick a Layer 2 semantic role first; use Layer 1 directly only for the spacing ladder, categorical marks (`mark-1..8`), or brand art. Never add feature-named tokens or component-private dimensions to `theme.css` — express one-off component geometry on the 4px `--spacing` scale inside the component or `design.css`. Choose duration by scale of change (`step` stagger, `control` micro-state, `fade` opacity/exit, `panel` surface travel, `settle` reveal, `loop`/`breath` continuous) and curve by motion (`ease-out` entrances/exits, `ease-in-out` on-screen travel, `ease-drawer` sheets/popovers, `ease-crossfade` opacity swaps).
+- One source of truth: `apps/dashboard/src/lib/tokens/theme.css` declares every design token once, by hand, in Tailwind's `@theme`. Hold the whole set in your head:
+  - **24 semantic colour roles** (in `light-dark()` OKLCH, no redundant primitive ramps): 6 surfaces (`surface-page`, `surface-raised`, `surface-recess`, `surface-sunk`, `surface-hover`, `surface-pressed`), 3 inks (`ink-strong`, `ink-muted`, `ink-subtle`, every one ≥4.5:1 on surfaces; `surface-page` serves as inverse ink on `ink-strong`), 3 borders (`border-hairline`, `border-control`, `border-strong` ≥3:1), 4 Caw coral accents (`accent`, `accent-ink`, `accent-wash`, `on-accent`), and 4 status pairs (`status-{live,attn,done,fail}` + `-bg`, each ≥4.5:1 on its wash and ≥3:1 on surfaces). Plus **7 categorical marks** (`mark-1..7`) and **3 brand art pigments** (`spark`, `paper`, `crow-ink`).
+  - **Typography**: 3 house faces (Figtree, JetBrains Mono, Nunito wordmark), 2 UI weights (`normal` 400, `medium` 500 — never above 500), **4 sizes** (`sm` 12px, `base` 14px, `lg` 18px, `xl` 24px), **3 line-heights as 4px-grid lengths** (`sm` 16px, `base` 20px, `lg` 24px), and 2 trackings (`tight`, `caps`), driving **6 type roles** (`type-meta`, `type-code`, `type-body`, `type-label`, `type-title`, `type-kpi`).
+  - **4px spatial grid**: one base unit (`--spacing: 0.25rem`), 6 rhythm steps (`space-1/2/3/4/6/8` = 4–32px, every step ≥33% apart), and 9 semantic sizes (`icon-sm/md/lg`, `control-sm/md/lg`, `row-compact` 28px, `row` 40px stepping to 44px on coarse/phone, `measure` 72ch) — every length derived via `calc(var(--spacing) * n)`.
+  - **Shape, depth, motion & layout**: 5 radii (`xs` 4px, `sm` 8px, `lg` 12px, `xl` 16px, `pill`), 3 shadows (`sm`, `md`, `lg`), 4 durations (`fast` 120ms, `base` 200ms, `slow` 320ms, `loop` 1000ms), 3 curves (`ease-out`, `ease-in-out`, `ease-drawer`), 2 breakpoints (`phone` 640px, `desk` 900px), 4 containers (`xs`, `sm`, `phone`, `desk`), 4 z-layers (`bar`, `sheet`, `float`, `top`), and 4 shared mechanics (`blur-glass`, `press-scale`, `pop-scale`, `breath-floor`).
+- **Rules for choosing**: Never add feature-named tokens or component-private dimensions to `theme.css`, and never smuggle them onto `:root` in `design.css`. A value either belongs to the system above or is derived from `--spacing` / system tokens inside the component that needs it (Tailwind's numeric scale `w-*`, `h-*`, `size-*` is valid for one-off component dimensions; rhythm `p/m/gap/space` stays on `space-*`). Never write `±1px` / `±2px` spacing arithmetic.
 
 ## Flow
 - A flow happens where the person's attention already is, and the thing they acted on shows its own result.
@@ -30,13 +27,13 @@
 
 ## Colour, focus and type
 - Colour appears only where it means something: the act, status, identity, focus, and data past a threshold.
-- Coral is the act: one per view, on the act the view is for. It also marks what is selected, focused or checked. Advice wears a badge; status wears a status hue.
-- Crimson, yellow, olive and blue mean status. Identity hues and categorical marks (`mark-1..8`) tell things apart and mean nothing else.
+- Coral (`accent`, `accent-ink`, `accent-wash`) is the act: one per view, on the act the view is for. It also marks what is selected, focused or checked. Advice wears a badge; status wears a status hue.
+- Crimson, yellow, olive and blue mean status (`status-{fail,attn,done,live}`). Identity hues and categorical marks (`mark-1..7`) tell things apart and mean nothing else.
 - Status reads by glyph, then word, then hue.
-- The focus ring means focus. A text field shows focus by its caret and its frame's edge, with no ring.
+- The focus ring (`accent-ink`) means focus. A text field shows focus by its caret and its frame's edge, with no ring.
 - The option chip is the one control that picks an answer. A setting that cannot change where it is shown is the same chip, sunk.
 - A count shows only above zero, unless zero is itself the reading.
-- Text takes its role from what it does: label, body or metadata. Emphasis is one step of weight or ink.
+- Text takes its role from what it does (`type-meta`, `type-code`, `type-body`, `type-label`, `type-title`, `type-kpi`). Emphasis is one step of weight or ink.
 - Every screen is drawn and checked in both schemes, at desk and phone width.
 
 ## Motion
@@ -48,7 +45,10 @@
 - Each kind of motion has a house helper: use it.
 
 ## Alignment
-- Everything in a composition shares an edge or an axis with its neighbours.
+- Alignment comes from layout structure, never per-row `calc()` offsets or `±1px` nudges.
+- Every line-height, spacing step, control height, and non-pill radius sits on the 4px grid (`--spacing`), so text lines and controls meet on whole steps.
+- Lists of rows own their column tracks once (`ui/row`: `rows-grid` on the list, `row-cells` subgrid on each row), so lead marks, body text, controls, and `below` notes share rails across every row by construction.
+- Equal-option tile grids (`OptionTiles`) use `grid-rows-subgrid` (`row-span-2`) so names and notes align across every card in a row.
 - Text that is read starts on one left edge: anything longer than a title and two lines, or standing over cards, rows, chips or a field, takes the edge of what is under it.
 - A short block alone in open room may be centred, as one block.
 - A mark sits nearer its text than anything else. A picture is centred over what is drawn under it; a small glyph starts on its text's edge; in a row the mark sits in the row's lead column.
@@ -81,7 +81,7 @@
 - A phone or a finger: `mobile-native`.
 
 ## Where the rest is
-- Tokens: `apps/dashboard/src/lib/tokens/theme.css`, Tailwind's `@theme`; add only genuinely shared scale steps or semantic roles there.
-- Components: `apps/dashboard/src/lib/components/ui` (`Dialog` covers standard and alert dialogs, `FluidTabs` covers folder and column tabs, `IconToggle` covers binary icon switches).
-- Board: `apps/dashboard/src/lib/design-board/`, showing primitive scales, semantic roles, and core kit components in both schemes.
+- Tokens: `apps/dashboard/src/lib/tokens/theme.css` (4px grid checked by `scripts/token-grid-check.ts`, WCAG contrast checked by `scripts/token-contrast-check.ts`).
+- Components: `apps/dashboard/src/lib/components/ui` (`Row`/`RowList` subgrid rows, `OptionTiles` row-subgrid cards, `Dialog`, `FluidTabs`, `IconToggle`).
+- Board: `apps/dashboard/src/lib/design-board/`, showing roles, scales, and core kit components in both schemes.
 - Checks: `bun run check`.

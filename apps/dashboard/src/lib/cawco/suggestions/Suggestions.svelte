@@ -128,10 +128,7 @@
     <ul
       aria-busy={waiting || undefined}
       aria-label={label}
-      class={[
-        "m-0 list-none p-0",
-        glyphed ? "rows-grid" : "flex flex-col",
-      ]}
+      class={["m-0 list-none p-0", glyphed ? "rows-grid" : "flex flex-col"]}
       style:--row-col-gap={glyphed ? "var(--spacing-space-1)" : undefined}
       style:--row-cols={glyphed
         ? "var(--spacing-row-compact) minmax(0, 1fr)"

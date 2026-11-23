@@ -828,8 +828,7 @@
                           data-slot="tool-group-field"
                           class="flex flex-col gap-space-1 min-w-0"
                         >
-                          <span
-                            class="text-base font-medium text-ink-muted"
+                          <span class="text-base font-medium text-ink-muted"
                             >result</span
                           >
                           <pre
@@ -855,8 +854,7 @@
                             data-slot="tool-group-field"
                             class="flex flex-col gap-space-1 min-w-0"
                           >
-                            <span
-                              class="text-base font-medium text-ink-muted"
+                            <span class="text-base font-medium text-ink-muted"
                               >{f.key}</span
                             >
                             <pre
@@ -868,8 +866,7 @@
                             data-slot="tool-group-field"
                             class="flex flex-col gap-space-1 min-w-0"
                           >
-                            <span
-                              class="text-base font-medium text-ink-muted"
+                            <span class="text-base font-medium text-ink-muted"
                               >result</span
                             >
                             <pre

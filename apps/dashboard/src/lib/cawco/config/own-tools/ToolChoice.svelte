@@ -118,10 +118,7 @@
                   role="img"
                 >
                   {#if line.state === "allowed"}
-                    <IconTick
-                      class="size-icon-md text-status-done"
-                      data-box
-                    />
+                    <IconTick class="size-icon-md text-status-done" data-box />
                   {:else if line.state === "denied"}
                     <IconMinus class="size-icon-md text-ink-subtle" data-box />
                   {:else}

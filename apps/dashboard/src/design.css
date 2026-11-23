@@ -461,10 +461,7 @@
     --diffs-fg-number-deletion-override: var(--color-status-fail);
 
     /* Cross-component paints & shared contracts derived from system tokens. */
-    --nest-ink: light-dark(
-      oklch(70.5% 0.017 78),
-      oklch(44.5% 0.011 73)
-    );
+    --nest-ink: light-dark(oklch(70.5% 0.017 78), oklch(44.5% 0.011 73));
     --rail: linear-gradient(
       oklch(from var(--color-ink-muted) l c h / 0.4),
       oklch(from var(--color-ink-muted) l c h / 0.4)
@@ -583,7 +580,8 @@
   /* The body's background is the screen's bottom edge (cawco/ScreenEdges). */
   body {
     @apply text-ink-strong;
-    font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans);
+    font: var(--font-weight-normal) var(--text-base) / var(--leading-base)
+      var(--font-sans);
   }
 
   /* The mono face never ligates: here for code, and in the `font-mono`
@@ -1613,7 +1611,10 @@
 @utility picture-row {
   [data-axis="row"] > & {
     flex: var(--ratio) 1
-      calc(var(--ratio) / var(--ratio-min, var(--ratio)) * calc(var(--spacing) * 40));
+      calc(
+        var(--ratio) / var(--ratio-min, var(--ratio)) *
+          calc(var(--spacing) * 40)
+      );
   }
   [data-axis="row"] > &:has([data-full]) {
     flex-basis: 100%;
@@ -1687,8 +1688,7 @@
   background-image: repeating-linear-gradient(
     -45deg,
     var(--color-border-control) 0 1px,
-    var(--ring-ground, var(--color-surface-raised)) 1px
-      var(--spacing-space-1)
+    var(--ring-ground, var(--color-surface-raised)) 1px var(--spacing-space-1)
   );
 }
 /* A usage ring's week arc, its account ink moved toward the week's, and the
@@ -1773,8 +1773,7 @@
 }
 /* The bar's glass, a step blurrier than the panel material (Shell). */
 @utility glass-backdrop {
-  backdrop-filter: blur(calc(var(--blur-glass) * 1.4))
-    saturate(1.6);
+  backdrop-filter: blur(calc(var(--blur-glass) * 1.4)) saturate(1.6);
 }
 /* The bar's join to the strip under it: a flared foot (--f) into a rounded
    top (--r) over its height (--h); on a phone its trailing top corner is
@@ -2218,19 +2217,26 @@
   box-shadow: var(--shadow-overlay-hung);
 }
 @utility shadow-tab-start {
-  box-shadow: -2px 0 calc(var(--spacing) * 1.25) -1px light-dark(oklch(29.5% 0.01 70 / 0.24), oklch(93.4% 0.01 82 / 0.14));
+  box-shadow: -2px 0 calc(var(--spacing) * 1.25) -1px
+    light-dark(oklch(29.5% 0.01 70 / 0.24), oklch(93.4% 0.01 82 / 0.14));
 }
 @utility shadow-tab-end {
-  box-shadow: 2px 0 calc(var(--spacing) * 1.25) -1px light-dark(oklch(29.5% 0.01 70 / 0.24), oklch(93.4% 0.01 82 / 0.14));
+  box-shadow: 2px 0 calc(var(--spacing) * 1.25) -1px
+    light-dark(oklch(29.5% 0.01 70 / 0.24), oklch(93.4% 0.01 82 / 0.14));
 }
 @utility shadow-tab-start-chosen {
-  box-shadow: -2px 0 calc(var(--spacing) * 1.25) -1px light-dark(oklch(29.5% 0.01 70 / 0.24), transparent);
+  box-shadow: -2px 0 calc(var(--spacing) * 1.25) -1px
+    light-dark(oklch(29.5% 0.01 70 / 0.24), transparent);
 }
 @utility shadow-tab-end-chosen {
-  box-shadow: 2px 0 calc(var(--spacing) * 1.25) -1px light-dark(oklch(29.5% 0.01 70 / 0.24), transparent);
+  box-shadow: 2px 0 calc(var(--spacing) * 1.25) -1px
+    light-dark(oklch(29.5% 0.01 70 / 0.24), transparent);
 }
 @utility drop-shadow-near {
-  filter: drop-shadow(0 2px var(--spacing-space-1) light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55)));
+  filter: drop-shadow(
+    0 2px var(--spacing-space-1)
+      light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55))
+  );
 }
 
 /* Component transitions composed from the seven durations and four curves. */
@@ -2380,26 +2386,28 @@
   animation: rail-label-in var(--duration-base) var(--ease-out) both;
 }
 @utility animate-thinking-word {
-  animation: thinking-word calc(calc(var(--duration-loop) * 2) * 8) var(--ease-out)
-    var(--word-delay, 0s) infinite both;
+  animation: thinking-word calc(calc(var(--duration-loop) * 2) * 8)
+    var(--ease-out) var(--word-delay, 0s) infinite both;
 }
 @utility animate-thinking-circle {
-  animation: thinking-circle calc(calc(var(--duration-loop) * 2) * 3) var(--ease-in-out)
-    infinite both;
+  animation: thinking-circle calc(calc(var(--duration-loop) * 2) * 3)
+    var(--ease-in-out) infinite both;
 }
 @utility animate-thinking-lemniscate {
   animation: thinking-lemniscate calc(calc(var(--duration-loop) * 2) * 3)
     var(--ease-in-out) infinite both;
 }
 @utility animate-thinking-sheen {
-  animation: thinking-sheen calc(var(--duration-loop) * 2) var(--ease-in-out) infinite;
-}
-@utility animate-thinking-sheen-hold {
-  animation: thinking-sheen-hold calc(var(--duration-loop) * 2) var(--ease-in-out)
+  animation: thinking-sheen calc(var(--duration-loop) * 2) var(--ease-in-out)
     infinite;
 }
+@utility animate-thinking-sheen-hold {
+  animation: thinking-sheen-hold calc(var(--duration-loop) * 2)
+    var(--ease-in-out) infinite;
+}
 @utility animate-step-shimmer {
-  animation: step-shimmer calc(var(--duration-loop) * 2) var(--ease-in-out) infinite;
+  animation: step-shimmer calc(var(--duration-loop) * 2) var(--ease-in-out)
+    infinite;
 }
 @utility animate-row-flash {
   animation: row-flash calc(var(--duration-base) * 3) var(--ease-out) both;
@@ -2435,7 +2443,8 @@
 }
 @utility animate-wave-breathe {
   animation:
-    wave-breath-draw calc(calc(var(--duration-loop) * 2) * 2) var(--ease-out) infinite,
+    wave-breath-draw calc(calc(var(--duration-loop) * 2) * 2) var(--ease-out)
+      infinite,
     wave-breath-fade calc(calc(var(--duration-loop) * 2) * 2) var(--ease-in-out)
       infinite;
 }
@@ -2449,8 +2458,8 @@
   animation: cell-swap var(--duration-fast) var(--ease-out);
 }
 @utility animate-arrive-late {
-  animation: fade-in var(--duration-fast) var(--ease-out)
-    var(--duration-fast) both;
+  animation: fade-in var(--duration-fast) var(--ease-out) var(--duration-fast)
+    both;
 }
 @utility animate-finish {
   animation: finish calc(var(--duration-base) * 2) var(--ease-out);
@@ -2876,23 +2885,17 @@
       content: "";
       position: absolute;
       inset-inline: max(
-        min(
-          0px,
-          calc(50% - var(--spacing-space-6) / 2 / var(--hit-scale, 1))
-        ),
+        min(0px, calc(50% - var(--spacing-space-6) / 2 / var(--hit-scale, 1))),
         calc(
-          var(--hit-gap-x, var(--spacing-space-6) / var(--hit-scale, 1)) /
-            -2 - var(--hit-edge, 0px)
+          var(--hit-gap-x, var(--spacing-space-6) / var(--hit-scale, 1)) / -2 -
+            var(--hit-edge, 0px)
         )
       );
       inset-block: max(
-        min(
-          0px,
-          calc(50% - var(--spacing-space-6) / 2 / var(--hit-scale, 1))
-        ),
+        min(0px, calc(50% - var(--spacing-space-6) / 2 / var(--hit-scale, 1))),
         calc(
-          var(--hit-gap-y, var(--spacing-space-6) / var(--hit-scale, 1)) /
-            -2 - var(--hit-edge, 0px)
+          var(--hit-gap-y, var(--spacing-space-6) / var(--hit-scale, 1)) / -2 -
+            var(--hit-edge, 0px)
         )
       );
     }
@@ -3446,12 +3449,15 @@
   ) {
     --layer-shown: 1;
     --layer-seen: visible;
-    --layer-fade: opacity var(--duration-base) var(--ease-out), visibility 0s linear;
+    --layer-fade:
+      opacity var(--duration-base) var(--ease-out), visibility 0s linear;
   }
   [data-composer-dock]:has([data-slot="waiting"]) {
     --waiting-shown: 0;
     --waiting-seen: hidden;
-    --waiting-fade: opacity var(--duration-base) var(--ease-out), visibility 0s linear var(--duration-base);
+    --waiting-fade:
+      opacity var(--duration-base) var(--ease-out),
+      visibility 0s linear var(--duration-base);
   }
   [data-slot="dock"]:has(> [data-slot="dock-lines"] > *) {
     --pills-step: var(--spacing-space-2);
@@ -3463,11 +3469,19 @@
   }
   [data-composer-dock] [data-slot="layer-ground"] {
     visibility: var(--layer-seen, hidden);
-    transition: var(--layer-fade, opacity var(--duration-base) var(--ease-out), visibility 0s linear var(--duration-base));
+    transition: var(
+      --layer-fade,
+      opacity var(--duration-base) var(--ease-out),
+      visibility 0s linear var(--duration-base)
+    );
   }
   [data-composer-dock] [data-minimized-bar] {
     visibility: var(--waiting-seen);
-    transition: var(--waiting-fade, opacity var(--duration-base) var(--ease-out), visibility 0s linear);
+    transition: var(
+      --waiting-fade,
+      opacity var(--duration-base) var(--ease-out),
+      visibility 0s linear
+    );
   }
 }
 

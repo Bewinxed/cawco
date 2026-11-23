@@ -345,7 +345,7 @@
       return;
     }
     const at = performance.now();
-    const due = lastLeft + (dur("--duration-fast") / 2);
+    const due = lastLeft + dur("--duration-fast") / 2;
     if (at - lastLeft < dur("--duration-slow") && due > at) {
       after(due - at, () => fly(row));
       return;

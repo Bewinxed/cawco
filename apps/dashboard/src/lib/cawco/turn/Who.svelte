@@ -86,8 +86,7 @@
   const at = $derived(timestamp ? new Date(timestamp) : null);
   const validAt = $derived(at && !Number.isNaN(at.getTime()) ? at : null);
   /** A grouped clock's line: the body's size at the words' leading (`--who-lead`, set where a host floats it beside rendered prose), else the body's. */
-  const LINE_H =
-    "calc(var(--who-lead, var(--leading-base)))";
+  const LINE_H = "calc(var(--who-lead, var(--leading-base)))";
   const clock = $derived.by(() => {
     if (!validAt) {
       return "";
@@ -169,10 +168,8 @@
     {/if}
     <span
       data-slot="note"
-      class={[
-        "text-sm font-normal text-ink-muted",
-        !noteLive && "ms-auto",
-      ]}>{note}</span
+      class={["text-sm font-normal text-ink-muted", !noteLive && "ms-auto"]}
+      >{note}</span
     >
   {/if}
   <!-- The controls name themselves; the heading says who, the note and

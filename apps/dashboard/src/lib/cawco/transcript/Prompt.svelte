@@ -1306,8 +1306,7 @@
             class="text-base font-normal text-ink-muted mb-space-2 max-w-measure"
           >
             This would allow <span
-              class="font-(family-name:--font-mono) text-base"
-              >{rule.full}</span
+              class="font-(family-name:--font-mono) text-base">{rule.full}</span
             >
             for
             {rule.scope}
