@@ -18,12 +18,7 @@
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import {
-    IconCloudCross,
-    IconError,
-    IconExternalLinear,
-    IconRefresh,
-  } from "#lib/icons.js";
+  import { IconCloudCross, IconError, IconRefresh } from "#lib/icons.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import AccountColumn from "./AccountColumn.svelte";
@@ -151,16 +146,6 @@
       ? { left: ["tasks", "git", "account"], right: ["places", "waits"] }
       : { left: ["tasks", "git", "places"], right: ["account", "waits"] };
   });
-
-  /** What stands at a card's head end: Who decides' way to the defaults, the repository beside Repository & Git. */
-  function headActs(section: SectionId) {
-    if (section === "waits" && record.whoDecides.ok) {
-      return waitsActs;
-    }
-    if (section === "git" && record.repos.length > 0) {
-      return repoLink;
-    }
-  }
 </script>
 
 {#snippet sectionReadFailed(section: SectionId, stage: StageId, reason: string)}
@@ -197,26 +182,18 @@
 {/snippet}
 
 {#snippet repoLink()}
-  <!-- The project's repository beside the card's title: a fact that opens
+  <!-- The project's repository on the card title's line: a fact that opens
        where it lives, so it takes no row of its own. -->
   {@const [first, ...rest] = record.repos}
   {#if first}
     <a
-      class="mark-line min-w-0 type-meta font-mono liga-none text-ink-muted no-underline hover:text-ink-strong"
+      class="ms-auto min-w-0 truncate type-meta font-mono liga-none text-ink-muted underline-offset-2 hover:text-ink-strong hover:underline"
       href={first.url}
       rel="noreferrer"
-      target="_blank"
-    >
-      <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-        >{first.owner}/{first.name}</span
-      >
-      <span data-box
-        ><IconExternalLinear aria-hidden="true" class="size-icon-sm" /></span
-      >
-    </a>
-    {#if rest.length > 0}
-      <span class="type-meta text-ink-muted">+{rest.length}</span>
-    {/if}
+      target="_blank">{first.owner}/{first.name}</a
+    >{#if rest.length > 0}<span class="type-meta text-ink-muted">
+        +{rest.length}</span
+      >{/if}
   {/if}
 {/snippet}
 
@@ -251,7 +228,10 @@
   {@const state = stateOf(section)}
   {@const failed = failedOf(section)}
   <SettingsSection
-    actions={headActs(section)}
+    actions={section === "waits" && record.whoDecides.ok
+      ? waitsActs
+      : undefined}
+    fact={section === "git" && record.repos.length > 0 ? repoLink : undefined}
     announcement={announcementOf(section)}
     id={section}
     {state}

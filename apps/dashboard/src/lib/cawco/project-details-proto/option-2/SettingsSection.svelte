@@ -7,7 +7,8 @@
    * that is offline or needs fixing leads its heading with the status
    * glyph in its status ink, the words in the heading's accessible name; a
    * running one with the live dot. What acts on the whole section
-   * (`actions`) stands at the heading's end.
+   * (`actions`) stands at the heading's end; a fact the heading carries
+   * (`fact`, words, not a control) stands there too, on the title's line.
    */
   import type { Snippet } from "svelte";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
@@ -22,6 +23,7 @@
     stateWords,
     announcement = "",
     actions,
+    fact,
     children,
   }: {
     id: SectionId;
@@ -33,6 +35,8 @@
     announcement?: string;
     /** What acts on the whole section, at the heading's end. */
     actions?: Snippet;
+    /** Words the heading carries at its end (the snippet places itself, ms-auto), set on the title's line rather than centred as a control. */
+    fact?: Snippet;
     children: Snippet;
   } = $props();
 
@@ -67,6 +71,9 @@
     <h2 class="m-0 min-w-0 type-row text-ink-strong" id={headingId}>
       {title}{#if stateWords}<span class="sr-only">, {stateWords}</span>{/if}
     </h2>
+    {#if fact}
+      {@render fact()}
+    {/if}
     {#if actions}
       <span class="ms-auto flex flex-none items-center gap-space-1" data-box>
         {@render actions()}
