@@ -183,7 +183,7 @@
     const inset = px("--spacing-space-2");
     const gap = px("--spacing-space-1");
     const span = innerWidth - 2 * inset;
-    const widest = Math.min(px("--hover-panel-max"), span);
+    const widest = Math.min(110 * px("--spacing-space-1"), span);
     const x = Math.round(
       Math.max(inset, Math.min(box.left, innerWidth - widest - inset))
     );
@@ -545,8 +545,8 @@
           class="flex min-h-0 min-w-0 w-(--thread-w) max-h-(--thread-h) flex-col gap-space-2"
           data-slot="thread-panel"
           style:--thread-h="calc(var(--room) - 2 * var(--spacing-space-3) - 2px)"
-          style:--thread-w="calc(min(var(--hover-panel-max), {place.span}px) - 2
-          * var(--spacing-space-3) - 2px)"
+          style:--thread-w="calc(min(calc(var(--spacing) * 110), {place.span}px)
+          - 2 * var(--spacing-space-3) - 2px)"
         >
           {@render thread(pin)}
         </div>

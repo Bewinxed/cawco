@@ -24,6 +24,7 @@ import {
   motionOk,
   numberOf,
   pinned,
+  SKELETON_REVEAL_BLUR,
 } from "#lib/platform/motion/curves.svelte.js";
 
 export function arrive(_node: Element): TransitionConfig {
@@ -35,7 +36,7 @@ export function arrive(_node: Element): TransitionConfig {
     };
   }
   const scale = numberOf("--press-scale");
-  const blur = numberOf("--skeleton-reveal-blur");
+  const blur = SKELETON_REVEAL_BLUR;
   return {
     duration: dur("--duration-slow"),
     easing: easeOut,

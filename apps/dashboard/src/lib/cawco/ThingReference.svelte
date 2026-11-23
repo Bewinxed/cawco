@@ -42,7 +42,7 @@
     () => chip,
     () => !!thing,
     (r) => {
-      const room = numberOf("--pin-card-w") || 280;
+      const room = 70 * (numberOf("--spacing-space-1") || 4);
       const inset = numberOf("--spacing-space-2") || 8;
       return {
         x: Math.max(inset, Math.min(r.left, innerWidth - room - inset)),

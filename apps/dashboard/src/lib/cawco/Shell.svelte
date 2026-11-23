@@ -122,8 +122,11 @@
    * reads it back for the handle's arithmetic.
    */
   const tokenWidth = () =>
+    57 *
     Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--sidebar-w")
+      getComputedStyle(document.documentElement).getPropertyValue(
+        "--spacing-space-1"
+      )
     );
 
   let {
@@ -1493,7 +1496,7 @@
       data-leaving={railLeaving || undefined}
       class="hidden desk:flex data-full:hidden data-away:hidden relative data-leaving:absolute data-leaving:inset-y-0 data-leaving:start-0 data-leaving:z-10 w-(--sidebar-width) grow-0 shrink-0 basis-(--sidebar-width) min-w-0 ps-(--rail-inset) bg-surface-page border-e border-e-border-hairline"
       style="--sidebar-width: var(--rail-w, {firstWidth === null
-        ? 'var(--sidebar-w)'
+        ? 'calc(var(--spacing) * 57)'
         : `${firstWidth}px`})"
       style:--rail-inset="env(safe-area-inset-left, 0px)"
       bind:this={railBox}

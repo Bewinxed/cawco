@@ -298,7 +298,7 @@
         ink: {
           stroke: px("--rim-w") || 1,
           taper: px("--tab-rim-taper"),
-          ease: px("--tab-rim-taper-ease") || 1,
+          ease: 6,
         },
       };
     };

@@ -982,7 +982,7 @@
                   title: viewLabel(view.name),
                   glyph: IconArtifactSheet,
                   content: viewBody,
-                  measure: "--block-view",
+                  measure: "view",
                   hideable: true,
                   body: "natural",
                   card: false,
@@ -1015,7 +1015,7 @@
         hideable: false,
         body: view === "board" ? "fill" : "natural",
         card: false,
-        measure: "--block-view",
+        measure: "view",
       },
       ...viewItemsOf(view),
     };

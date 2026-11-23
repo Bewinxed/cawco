@@ -109,11 +109,11 @@
       style:--frame-w={`${width}px`}
     >
       <div
-        class="absolute inset-x-0 top-0 z-2 flex h-(--head-room) min-w-0 items-center ps-space-4 pe-space-2"
+        class="absolute inset-x-0 top-0 z-2 flex h-13 min-w-0 items-center ps-space-4 pe-space-2"
       >
         {@render switcher()}
       </div>
-      <div class="h-space-8 mt-(--head-room)"></div>
+      <div class="h-21"></div>
     </div>
   </div>
 {/if}

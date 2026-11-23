@@ -112,14 +112,14 @@
 
   /** Each card's height as drawn, by its state. */
   let heights = $state<Record<string, number>>({});
-  /** The cards' lengths and the groups' room, read off the tokens. */
+  /** The cards' lengths and the groups' room, derived from the 4px grid unit. */
   const lengths = $derived(
     browser
       ? {
-          card: numberOf("--graph-node-w"),
+          card: 52 * (numberOf("--spacing-space-1") || 4),
           head: numberOf("--spacing-space-6"),
           pad: numberOf("--spacing-space-3"),
-          label: numberOf("--graph-label"),
+          label: 40 * (numberOf("--spacing-space-1") || 4),
           labelLine: numberOf("--spacing-space-4"),
         }
       : { card: 0, head: 0, pad: 0, label: 0, labelLine: 0 }

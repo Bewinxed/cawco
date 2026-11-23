@@ -236,92 +236,12 @@
   initial-value: 0.92;
 }
 /* Component-local lengths and numbers read numerically from JS. */
-@property --block-ledger {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --block-routines {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --block-view {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --decision-page-max {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --graph-label {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --graph-node-w {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --graph-stage-min {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --grid-2 {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --grid-4 {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --pin-card-w {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --sidebar-w {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
 @property --deck-step {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --hover-panel-max {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --ride-fade {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --skeleton-reveal-blur {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --c-deck-scale {
-  syntax: "<number>";
-  inherits: true;
-  initial-value: 0;
-}
 @property --deck-shrink {
-  syntax: "<number>";
-  inherits: true;
-  initial-value: 0;
-}
-@property --echo-opacity {
   syntax: "<number>";
   inherits: true;
   initial-value: 0;
@@ -331,25 +251,10 @@
   inherits: true;
   initial-value: 1.45;
 }
-@property --tab-rim-mix-subtle {
-  syntax: "<number>";
-  inherits: true;
-  initial-value: 0;
-}
 @property --tab-rim-taper {
   syntax: "<number>";
   inherits: true;
-  initial-value: 0;
-}
-@property --tab-rim-taper-ease {
-  syntax: "<number>";
-  inherits: true;
-  initial-value: 0;
-}
-@property --tab-rim-width {
-  syntax: "<number>";
-  inherits: true;
-  initial-value: 0;
+  initial-value: 32;
 }
 /* A folder tab track's shape (fluid-tabs TabsList, tab-strips), read by
    its tabs and the cards that hang from them; a bar glass's join sets its
@@ -465,10 +370,6 @@
       oklch(from var(--color-border-strong) 70.5% c h),
       oklch(from var(--color-border-strong) 44.5% c h)
     );
-    --rail: linear-gradient(
-      oklch(from var(--color-ink-muted) l c h / 0.4),
-      oklch(from var(--color-ink-muted) l c h / 0.4)
-    );
     --shadow-overlay-hung:
       0 calc(var(--spacing) * 4.5) calc(var(--spacing) * 12)
         light-dark(
@@ -489,41 +390,11 @@
       calc(100% - var(--spacing) * 13)
     );
     --tray-row: calc(var(--spacing-row-compact) + var(--spacing-space-2));
-    --draft-col-h: calc(
-      5 * var(--spacing-space-1) + var(--spacing-space-2) +
-        var(--spacing-control-sm) + 2 * var(--leading-sm)
-    );
-    --pin-card-reading-w: clamp(
-      calc(var(--spacing) * 70),
-      40cqi,
-      calc(var(--spacing) * 120)
-    );
-    --head-room: calc(var(--spacing-control-md) + 2 * var(--spacing-space-2));
 
-    /* JS-read component geometry & motion constants (paired with @property above). */
-    --tab-rim-mix-subtle: 0.5;
-    --tab-rim-width: 1;
-    --tab-rim-taper: 32;
-    --tab-rim-taper-ease: 6;
+    /* Shared CSS/JS geometry for TreeMark deck & echo (paired with @property above). */
     --deck-step: calc(var(--spacing-space-1) * 0.3125);
     --deck-shrink: 0.11;
-    --c-deck-scale: 0.94;
     --echo-scale: 1.45;
-    --echo-opacity: 0.45;
-    --ride-fade: calc(var(--spacing) * 3.5);
-    --skeleton-reveal-blur: 2px;
-    --hover-panel-max: calc(var(--spacing) * 110);
-    --decision-page-max: calc(var(--spacing) * 337);
-    --sidebar-w: calc(var(--spacing) * 57);
-    --pin-card-w: calc(var(--spacing) * 70);
-    --graph-node-w: calc(var(--spacing) * 52);
-    --graph-label: calc(var(--spacing) * 40);
-    --graph-stage-min: calc(var(--spacing) * 150);
-    --grid-4: calc(var(--spacing) * 240);
-    --grid-2: calc(var(--spacing) * 184);
-    --block-routines: calc(var(--spacing) * 136);
-    --block-ledger: calc(var(--spacing) * 75);
-    --block-view: calc(var(--spacing) * 62);
 
     /* A native checkbox, radio, range or progress takes the accent colour. */
     accent-color: var(--color-accent);
@@ -1516,7 +1387,7 @@
 /* A rim's width (`tab-rim-width`), whole under Increase Contrast and reduced
    transparency: a folder tab's (TabsList) and a comment pin's alike. */
 @utility tab-rim-w {
-  --rim-w: var(--tab-rim-width);
+  --rim-w: var(--tab-rim-width, 1);
 
   @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
     --rim-w: 1;
@@ -1577,7 +1448,7 @@
   --page-in: var(--spacing-space-6);
   --card-in: var(--spacing-space-4);
   --bleed: calc(var(--page-in) + var(--card-in));
-  --page-w: var(--decision-page-max);
+  --page-w: calc(var(--spacing) * 337);
   --column-w: var(--page-w);
 
   &:has([data-fills]) {
@@ -1750,7 +1621,14 @@
   margin-block-start: var(--rail-gap, var(--spacing-space-4));
   margin-inline-start: var(--x-rail);
   padding-inline-start: calc(var(--x-glyph) - var(--x-rail));
-  background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
+  background: var(
+      --rail-head,
+      linear-gradient(
+        oklch(from var(--color-ink-muted) l c h / 0.4),
+        oklch(from var(--color-ink-muted) l c h / 0.4)
+      )
+    )
+    left top / 2px 100% no-repeat;
 }
 @utility rail-line {
   display: flex;
@@ -1898,7 +1776,7 @@
    Increase Contrast and reduced transparency. Read on the tab, so an
    ancestor's `--tab-rim-mix-*` (the folder proof page) still reaches it. */
 @utility pane-tab-rims {
-  --rim-subtle: var(--tab-rim-mix-subtle);
+  --rim-subtle: var(--tab-rim-mix-subtle, 0.5);
   --rim-chosen: 0.97;
   --rim-idle: 0.86;
 
@@ -2204,7 +2082,10 @@
   );
 }
 @utility bg-rail {
-  background-image: var(--rail);
+  background-image: linear-gradient(
+    oklch(from var(--color-ink-muted) l c h / 0.4),
+    oklch(from var(--color-ink-muted) l c h / 0.4)
+  );
 }
 @utility mask-head-tint {
   mask-image: linear-gradient(

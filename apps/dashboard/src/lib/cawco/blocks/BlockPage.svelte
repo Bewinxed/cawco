@@ -3,10 +3,18 @@
   import type { BlockBody } from "./Block.svelte";
 
   /**
-   * The tokens a block's measure is read from, each typed as a length in
-   * design.css so BlockPage reads it in px (house/typed-property-read).
+   * Each block kind's minimum readable measure, in 4px `--spacing-space-1`
+   * steps (ledger 300px, routines 544px, view 248px).
    */
-  type BlockMeasure = "--block-ledger" | "--block-routines" | "--block-view";
+  type BlockMeasure = "ledger" | "routines" | "view";
+  const BLOCK_MEASURE_UNITS: Record<BlockMeasure, number> = {
+    ledger: 75,
+    routines: 136,
+    view: 62,
+  };
+  /** Grid column breakpoints in 4px `--spacing-space-1` steps (960px, 736px). */
+  const GRID_4_UNITS = 240;
+  const GRID_2_UNITS = 184;
 
   /** What a page knows of one block it can hold: its face and its body. */
   export interface BlockItem {
@@ -24,7 +32,7 @@
     content: Snippet<[string]>;
     glyph: Component;
     hideable: boolean;
-    /** The token holding its measure, the narrowest it reads at: `--block-ledger`. */
+    /** Its measure kind, the narrowest it reads at (`"ledger"`, `"routines"`, `"view"`). */
     measure: BlockMeasure;
     /** What follows the title: a count, a needs-you mark. */
     meta?: Snippet;
@@ -113,15 +121,15 @@
   } | null>(null);
 
   /**
-   * A length token's value in px: design.css types each grid and block
-   * measure token as a length, so it computes to px however it is written.
+   * A length token's value in px: design.css types `--spacing-space-1` as a
+   * length, so it computes to px however it is written.
    */
   function lengthOf(styles: CSSStyleDeclaration, token: string): number {
     return Number.parseFloat(styles.getPropertyValue(token)) || 0;
   }
   $effect(() => {
     const node = grid;
-    const tokens = [
+    const kinds = [
       ...new Set(Object.values(items).map((item) => item.measure)),
     ];
     if (!node) {
@@ -129,12 +137,13 @@
     }
     untrack(() => {
       const styles = getComputedStyle(node);
+      const unit = lengthOf(styles, "--spacing-space-1") || 4;
       px = {
-        four: lengthOf(styles, "--grid-4"),
-        two: lengthOf(styles, "--grid-2"),
+        four: GRID_4_UNITS * unit,
+        two: GRID_2_UNITS * unit,
         gap: Number.parseFloat(styles.columnGap) || 0,
         measures: Object.fromEntries(
-          tokens.map((token) => [token, lengthOf(styles, token)])
+          kinds.map((kind) => [kind, BLOCK_MEASURE_UNITS[kind] * unit])
         ),
       };
     });
@@ -314,7 +323,7 @@
               title: place.block,
               glyph: IconLayers,
               hideable: true,
-              measure: "--block-view",
+              measure: "view",
               body: "natural",
               card: true,
               content: newer,

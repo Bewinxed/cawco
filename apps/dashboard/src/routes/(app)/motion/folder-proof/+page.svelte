@@ -135,14 +135,11 @@
     }
     // Read once the theme has landed on the root.
     const frame = requestAnimationFrame(() => {
-      const style = getComputedStyle(document.documentElement);
-      const token = (name: string) =>
-        Number.parseFloat(style.getPropertyValue(name));
-      taper ??= token("--tab-rim-taper");
-      width ??= token("--tab-rim-width");
-      // The token is a strength 0 to 1; the slider reads it in percent.
+      taper ??= 32;
+      width ??= 1;
+      // The rim subtle strength is 0..1 (default 0.5); the slider reads percent.
       if (subtleAsked === null) {
-        subtle = Math.round(token("--tab-rim-mix-subtle") * 100);
+        subtle = 50;
       }
     });
     return () => cancelAnimationFrame(frame);

@@ -107,7 +107,7 @@
    * at 390 thirteen lines took the stage above the drawer.
    */
   const listShown = $derived(
-    listOpen ?? panel >= (browser ? numberOf("--graph-stage-min") : 0)
+    listOpen ?? panel >= (browser ? 150 * numberOf("--spacing-space-1") : 0)
   );
   const uid = $props.id();
   $effect(() => {

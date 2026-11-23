@@ -120,8 +120,10 @@ function setEnd(echo: Element, end: number): void {
  * style pass and a composite on all 66 frames of a second for nine echoes
  * at rest, 3 frames a second without the step.
  */
+const ECHO_OPACITY = 0.45;
+
 const beatFrames = (share: number): Keyframe[] => {
-  const start = { opacity: numberOf("--echo-opacity"), transform: "scale(1)" };
+  const start = { opacity: ECHO_OPACITY, transform: "scale(1)" };
   return [
     { ...start, easing: CURVE.out },
     {

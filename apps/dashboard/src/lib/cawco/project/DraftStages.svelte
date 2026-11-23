@@ -62,8 +62,8 @@
   /** The board's column width, wrapping into rows; one column where the room is narrower. */
   const COLS =
     "repeat(auto-fill, minmax(min(100%, calc(var(--spacing) * 60)), 1fr))";
-  /** Every row past a phone: one height, at least a whole stage's. */
-  const ROWS = "minmax(var(--draft-col-h), 1fr)";
+  /** Every row past a phone: one height, at least a whole stage's (88px = 22 * 4px). */
+  const ROWS = "minmax(calc(var(--spacing) * 22), 1fr)";
   let grid = $state<HTMLElement>();
 
   /** A new stage stands before the first closed one (done, dropped): in view, its name taking the caret. */
@@ -137,7 +137,7 @@
   {/each}
   {#if adds}
     <button
-      class="select-none press-tint mark-line flex min-h-(--draft-col-h) max-phone:min-h-control-md items-center justify-center gap-space-2 rounded-lg border-none bg-transparent text-ink-muted inset-ring inset-ring-border-control hover:bg-surface-hover"
+      class="select-none press-tint mark-line flex min-h-22 max-phone:min-h-control-md items-center justify-center gap-space-2 rounded-lg border-none bg-transparent text-ink-muted inset-ring inset-ring-border-control hover:bg-surface-hover"
       data-slot="add-stage"
       onclick={add}
       type="button"

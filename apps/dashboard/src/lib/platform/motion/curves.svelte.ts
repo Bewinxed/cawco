@@ -102,14 +102,10 @@ const TOKENS = [
   "--spacing-space-2",
   "--spacing-space-4",
   "--text-sm",
-  // Component-local motion tokens declared on :root in design.css.
-  "--skeleton-reveal-blur",
-  "--echo-opacity",
+  // Shared CSS/JS motion geometry declared on :root in design.css.
   "--echo-scale",
   "--deck-shrink",
   "--deck-step",
-  "--ride-fade",
-  "--pin-card-w",
 ];
 const tokens = new Map<string, string>();
 /** The element the tokens are read off; null for the document's root. */
@@ -444,11 +440,14 @@ export function crossIn(_node: Element) {
  * flow, or `out:reveal` where the two already share one cell. With reduced
  * motion the swap is at once, as the recipe's guard has it.
  */
+/** Skeleton-to-content reveal blur radius, px. */
+export const SKELETON_REVEAL_BLUR = 2;
+
 export function reveal(_node?: Element): TransitionConfig {
   if (!motionOk.current) {
     return { duration: 0 };
   }
-  const blur = numberOf("--skeleton-reveal-blur");
+  const blur = SKELETON_REVEAL_BLUR;
   return {
     duration: dur("--duration-slow"),
     easing: easeInOut,
@@ -472,7 +471,7 @@ export function revealOn(
   if (!duration) {
     return null;
   }
-  const blur = numberOf("--skeleton-reveal-blur");
+  const blur = SKELETON_REVEAL_BLUR;
   const standing = { opacity: 1, filter: "blur(0px)" };
   const away = { opacity: 0, filter: `blur(${blur}px)` };
   return node.animate(way === "in" ? [away, standing] : [standing, away], {

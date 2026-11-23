@@ -41,13 +41,15 @@ interface DeckPlace {
  * (`deck`) and where its first button stands now (`start`), from the
  * shell's inline start.
  */
+const DECK_SCALE = 0.94;
+
 function foldDeck(
   row: HTMLElement,
   from: number
 ): { deck: number; start: number; places: DeckPlace[] } {
   const style = getComputedStyle(row);
   const peek = Number.parseFloat(style.getPropertyValue("--spacing-space-1"));
-  const scale = Number.parseFloat(style.getPropertyValue("--c-deck-scale"));
+  const scale = DECK_SCALE;
   const cards = [...row.children]
     .filter((card): card is HTMLElement => card instanceof HTMLElement)
     .map((card) => ({ card, box: card.getBoundingClientRect() }))

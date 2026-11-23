@@ -585,6 +585,7 @@ suppression	biome-ignore lint/a11y/noNoninteractiveElementInteractions	apps/dash
 suppression	biome-ignore lint/a11y/noNoninteractiveElementInteractions	apps/dashboard/src/lib/components/ui/input-group/input-group.svelte	1
 suppression	biome-ignore lint/a11y/noNoninteractiveElementInteractions	apps/dashboard/src/lib/components/ui/option-group/option-group.svelte	1
 suppression	biome-ignore lint/a11y/noRedundantRoles	apps/dashboard/src/lib/cawco/relay/RelayJourney.svelte	1
+suppression	biome-ignore lint/a11y/noRedundantRoles	apps/dashboard/src/lib/cawco/transcript/LfsOfferActions.svelte	1
 suppression	biome-ignore lint/a11y/noStaticElementInteractions	apps/dashboard/src/lib/cawco/find/MentionMenu.svelte	1
 suppression	biome-ignore lint/a11y/noStaticElementInteractions	apps/dashboard/src/lib/cawco/transcript/Composer.svelte	3
 suppression	biome-ignore lint/a11y/noStaticElementInteractions	apps/dashboard/src/lib/components/ui/field-area.svelte	1
@@ -788,6 +789,7 @@ suppression	biome-ignore-start lint/a11y/noRedundantRoles	apps/dashboard/src/lib
 suppression	biome-ignore-start lint/a11y/noRedundantRoles	apps/dashboard/src/lib/cawco/decisions/host/DecidedBy.svelte	1
 suppression	biome-ignore-start lint/a11y/noRedundantRoles	apps/dashboard/src/lib/cawco/home/FirstRun.svelte	1
 suppression	biome-ignore-start lint/a11y/noRedundantRoles	apps/dashboard/src/lib/cawco/home/NeedsCard.svelte	1
+suppression	biome-ignore-start lint/a11y/noRedundantRoles	apps/dashboard/src/lib/cawco/relay/RelayJourney.svelte	1
 suppression	biome-ignore-start lint/correctness/noInvalidPositionAtImportRule	apps/dashboard/src/design.css	1
 suppression	biome-ignore-start lint/plugin/no-raw-css-values	apps/dashboard/src/design.css	1
 suppression	biome-ignore-start lint/style/noDescendingSpecificity	apps/dashboard/src/app.css	1

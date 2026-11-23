@@ -37,9 +37,9 @@ interface Room {
   w: number;
 }
 
-/** Its width: the reading card's, never past the well less `--spacing-space-2` each side. */
+/** Its width: the reading card's (280–480px, 40cqi), never past the well less `--spacing-space-2` each side. */
 export const FLOAT_W =
-  "min(var(--pin-card-reading-w), calc(100% - 2 * var(--spacing-space-2)))";
+  "min(clamp(calc(var(--spacing) * 70), 40cqi, calc(var(--spacing) * 120)), calc(100% - 2 * var(--spacing-space-2)))";
 
 /** Two boxes as one. */
 const union = (parts: Box[]): Box => {

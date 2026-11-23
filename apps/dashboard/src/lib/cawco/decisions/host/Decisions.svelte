@@ -145,7 +145,7 @@
       );
       const step =
         abreast > 0 ? abreast * (story + gap) - gap + insets : box.clientWidth;
-      pageWidth = Math.max(px("--decision-page-max"), step);
+      pageWidth = Math.max(337 * px("--spacing-space-1"), step);
     };
     read();
     const sizes = frameObserver(read);

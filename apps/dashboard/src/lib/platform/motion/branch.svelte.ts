@@ -1144,7 +1144,7 @@ function rideFrames(
   ride: Ride,
   times: number[]
 ): { glyph: Span; skin: Span } {
-  const fade = numberOf("--ride-fade");
+  const fade = 3.5 * numberOf("--spacing-space-1");
   const shrunk = ride.card * numberOf("--deck-shrink");
   const way = Math.max(ride.length - ride.lead, 1);
   const passed = [0, ride.lead, fade, ...ride.bends, ride.length].map((d) =>

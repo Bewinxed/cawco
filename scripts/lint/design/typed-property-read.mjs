@@ -80,14 +80,7 @@ const READERS = [
  * the rule cannot follow is let stand there, and its literal calls are still
  * checked. File from apps/dashboard, helper name, the parameter's index.
  */
-const UNFOLLOWED_ARGUMENTS = [
-  {
-    file: "src/lib/cawco/blocks/BlockPage.svelte",
-    name: "lengthOf",
-    index: 1,
-    why: "a block's `measure`, typed BlockMeasure: the union of the block measure tokens design.css types as lengths",
-  },
-];
+const UNFOLLOWED_ARGUMENTS = [];
 
 let registry = null;
 /** The custom properties a sheet app.css loads registers with a numeric syntax. */
