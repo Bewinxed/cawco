@@ -450,10 +450,16 @@
     "@container/stop-tray min-w-0 ps-(--ask-indent) pe-(--ask-end)",
     look === "section" &&
       "mt-space-1 border-t border-border-hairline pt-space-3",
+    // A card's own inset: its words and its actions stand one row gap in
+    // from the rows' fills, as a menu's do, the fills one gap in from its
+    // edge (the card's `c-floating-pad`).
+    look === "card" && "py-(--row-compact-gap)",
     className
   )}
   data-stop-kind="caw-off"
   data-phase={step}
+  style:--ask-indent={look === "card" ? "var(--row-compact-gap)" : undefined}
+  style:--ask-end={look === "card" ? "var(--row-compact-gap)" : undefined}
   transition:tray
   {...rest}
 >
@@ -506,12 +512,15 @@
         class="-mx-(--row-compact-gap) grid min-w-0 grid-cols-1 gap-space-1"
         transition:unfold
       >
-        {#if step === "pick" && total > 1}
+        {#if (step === "pick" || step === "stopping") && total > 1}
           <!-- Its box, in the rows' column, checks or clears them all. -->
           <label
             for="{uid}-all"
             data-slot="all"
-            class="mark-line flex min-h-(--row-compact-h) items-center gap-(--row-compact-gap) rounded-sm ps-(--row-compact-gap) pe-(--row-compact-pad-end) hover:bg-surface-hover"
+            class={[
+              "mark-line flex min-h-(--row-compact-h) items-center gap-(--row-compact-gap) rounded-sm ps-(--row-compact-gap) pe-(--row-compact-pad-end)",
+              step === "pick" && "hover:bg-surface-hover",
+            ]}
             transition:unfold
           >
             <span data-box class="min-w-0 flex-auto type-label text-ink-strong"
@@ -521,9 +530,12 @@
               data-box
               class="grid size-icon-md flex-none place-items-center"
             >
+              <!-- It stays through the stops, settled, so the list under it
+                   holds its place until the card folds. -->
               <Checkbox
                 id="{uid}-all"
                 checked={all}
+                disabled={step !== "pick"}
                 indeterminate={!all && picked.length > 0}
                 onCheckedChange={(next) => {
                   pick(next ? rows.map((row) => row.id) : []);
