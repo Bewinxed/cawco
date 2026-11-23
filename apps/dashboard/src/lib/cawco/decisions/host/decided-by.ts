@@ -1,20 +1,7 @@
 /**
- * Who decided a card, on its card (core decides.ts `decidedByLine`): a page
- * that draws it provides this context, and each Decision reads it.
+ * Who decided a card, on its card (core decides.ts `decidedByLine`): the
+ * sources DecidedBy lists under the line.
  */
-
-/** The context key. */
-export const DECIDED_BY = "decision-decided-by";
-
-export interface DecidedByShown {
-  /**
-   * What a card held when it was settled for the person and he has since
-   * picked otherwise: the member that settled it, by name, and the option's
-   * label; undefined for a card he never took back.
-   */
-  takenBack: (card: string) => { name: string; option: string } | undefined;
-}
-
 const GITHUB_ISSUE =
   /^https:\/\/github\.com\/([^/]+\/[^/]+)\/(?:issues|pull)\/(\d+)/u;
 

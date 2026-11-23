@@ -57,7 +57,6 @@
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import DecidedBy from "./DecidedBy.svelte";
-  import { DECIDED_BY, type DecidedByShown } from "./decided-by.js";
   import {
     bridge,
     hearWidths,
@@ -354,9 +353,6 @@
     };
   });
 
-  /** Who decided it, where the page draws that (decided-by.ts). */
-  const decidedBy = getContext<DecidedByShown | undefined>(DECIDED_BY);
-
   const stored = $derived(picks.now[id]?.note ?? "");
   /** The person's own words an agent recorded this card's pick from (`record_pick`); his own press replaces the pick and drops them. */
   const from = $derived(picks.now[id]?.from);
@@ -484,11 +480,8 @@
         {@render renderNode(props.options)}
       </div>
     </OptionGroup>
-    {#if decidedBy}
-      <DecidedBy
-        settled={picks.now[id]?.settled ?? null}
-        takenBack={decidedBy.takenBack(id)}
-      />
+    {#if picks.now[id]?.settled}
+      <DecidedBy settled={picks.now[id].settled} />
     {/if}
     {#if from}
       <p

@@ -247,7 +247,7 @@ export type DecisionAnswer = {
 );
 
 export interface ArtifactRead {
-  /** When his newest pick, note or value on it came; null before any. */
+  /** When his newest pick, note or value on it came, his own writes and the picks an agent recorded from his words alone; null before any. */
   answeredAt?: string | null;
   /** A canvas's elements the person changed since `since` (or since your last read). */
   changed?: string[];

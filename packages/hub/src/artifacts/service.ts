@@ -542,7 +542,6 @@ const promotedJson = (value: unknown): string =>
   `${JSON.stringify(value, null, 2)}\n`;
 /** A source common practice cites: a web link. */
 const WEB_SOURCE = /^https:\/\/\S+$/u;
-/** When the person's newest entry in `state` came (a pick, a note, a value); null before any. */
 /** His answer as a session's list shows it: what he picked, joined, or his words (core session-questions.ts). */
 const answerShown = (answer: Question["answer"]): SessionQuestion["answer"] =>
   answer
@@ -556,10 +555,21 @@ const answerShown = (answer: Question["answer"]): SessionQuestion["answer"] =>
       }
     : null;
 
-const answeredAtOf = (state: Record<string, ChoiceEntry>): string | null =>
-  Object.values(state).reduce<string | null>(
-    (latest, entry) =>
-      latest === null || entry.at > latest ? entry.at : latest,
+/**
+ * When the person last answered on a page: the newest entry whose last
+ * writer was he (`by` "person" in artifact_changes), or that an agent
+ * recorded from his own words (`record_pick`'s `from`). An agent's patch,
+ * `settle` and any other hub write are not his. Null before any.
+ */
+const answeredAtOf = (
+  state: Record<string, ChoiceEntry>,
+  his: ReadonlySet<string>
+): string | null =>
+  Object.entries(state).reduce<string | null>(
+    (latest, [key, entry]) =>
+      (his.has(key) || entry.from) && (latest === null || entry.at > latest)
+        ? entry.at
+        : latest,
     null
   );
 
@@ -1577,7 +1587,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       pageHash: meta.pageHash,
       sentAt: meta.sentAt,
       ...(meta.sentBy ? { sentBy: meta.sentBy } : {}),
-      answeredAt: answeredAtOf(state),
+      answeredAt: answeredAtOf(
+        state,
+        new Set(db.changes(row.id, { by: "person" }).map(({ key }) => key))
+      ),
       seq: row.seq,
       state: Object.fromEntries(
         keys.map((key) => [

@@ -35622,7 +35622,7 @@
         "type": "object",
         "properties": {
           "answeredAt": {
-            "description": "When his newest pick, note or value on it came; null before any.",
+            "description": "When his newest pick, note or value on it came, his own writes and the picks an agent recorded from his words alone; null before any.",
             "type": "string"
           },
           "changed": {
