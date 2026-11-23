@@ -122,9 +122,11 @@
       data-slot="text"
       class="flex min-w-0 flex-auto flex-col gap-space-row max-phone:contents"
     >
+      <!-- The name and its badge: where both don't fit, the badge goes
+           under the name, so the name never truncates to nothing. -->
       <span
         data-slot="name"
-        class="flex min-w-0 items-center gap-space-2 type-label text-ink-strong transition-opacity duration-(--duration-panel) ease-out group-data-off/row:opacity-55 max-phone:col-start-2 max-phone:row-start-1"
+        class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-row type-label text-ink-strong transition-opacity duration-(--duration-panel) ease-out group-data-off/row:opacity-55 max-phone:col-start-2 max-phone:row-start-1"
         data-mono={mono || undefined}
       >
         {#if href}
