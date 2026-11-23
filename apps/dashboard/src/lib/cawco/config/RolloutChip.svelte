@@ -26,7 +26,7 @@
    * the raw string the machine printed.
    *
    * The chip's glyph cross-fades between refused, landed everywhere and a
-   * sync on its way (--duration-control) while its tint turns over --duration-panel.
+   * sync on its way (--duration-fast) while its tint turns over --duration-slow.
    */
   import { failureWords } from "#lib/platform/hub-read.js";
   import { appear } from "../../platform/motion/curves.svelte";
@@ -116,16 +116,16 @@
     <span
       data-slot="glyph"
       aria-hidden="true"
-      class="group inline-grid w-icon-sm flex-none glyph-none:w-0 glyph-none:-me-space-1 motion-safe:transition-[width,margin] motion-safe:duration-(--duration-control) motion-safe:ease-out"
+      class="group inline-grid w-icon-sm flex-none glyph-none:w-0 glyph-none:-me-space-1 motion-safe:transition-[width,margin] motion-safe:duration-(--duration-fast) motion-safe:ease-out"
       data-box
       data-glyph={glyph}
     >
       <IconWarningTriangle
-        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-fail:opacity-100 motion-safe:transition-opacity motion-safe:duration-(--duration-control) motion-safe:ease-out"
+        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-fail:opacity-100 motion-safe:transition-opacity motion-safe:duration-(--duration-fast) motion-safe:ease-out"
         data-for="fail"
       />
       <IconCheck
-        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-done:opacity-100 motion-safe:transition-opacity motion-safe:duration-(--duration-control) motion-safe:ease-out"
+        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-done:opacity-100 motion-safe:transition-opacity motion-safe:duration-(--duration-fast) motion-safe:ease-out"
         data-for="done"
       />
       <Spinner
@@ -173,7 +173,7 @@
           >
             {#snippet trailing()}
               {#if item?.state === "failed"}
-                <span data-slot="mark" class="inline-flex text-status-fail-ink"
+                <span data-slot="mark" class="inline-flex text-status-fail"
                   ><IconWarningTriangle class="size-icon-sm flex-none" /></span
                 >
               {:else if item?.state === "applied"}
@@ -187,7 +187,7 @@
                   aria-disabled={syncing || undefined}
                   aria-label="Sync {machineLabel(machine.hostname)}"
                   data-slot="sync"
-                  class="select-none inline-flex h-control-xs items-center gap-space-1 rounded-sm px-space-2 type-label text-ink-strong transition-control hover:enabled:bg-surface-hover disabled:opacity-50 motion-safe:transition-control-press motion-safe:active:enabled:not-aria-busy:scale-(--press-scale)"
+                  class="select-none inline-flex h-space-6 items-center gap-space-1 rounded-sm px-space-2 type-label text-ink-strong transition-control hover:enabled:bg-surface-hover disabled:opacity-50 motion-safe:transition-control-press motion-safe:active:enabled:not-aria-busy:scale-(--press-scale)"
                   disabled={!online}
                   onclick={whileIdle(
                     () => syncing,
@@ -228,7 +228,7 @@
           <p
             data-rollout-chip-refused
             data-slot="note"
-            class="mark-line flex items-start gap-space-2 px-space-2 pt-0 pb-space-2 type-meta wrap-anywhere text-status-fail-ink"
+            class="mark-line flex items-start gap-space-2 px-space-2 pt-0 pb-space-2 type-meta wrap-anywhere text-status-fail"
             role="alert"
             in:appear
           >

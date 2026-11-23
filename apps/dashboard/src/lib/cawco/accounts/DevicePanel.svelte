@@ -10,7 +10,7 @@
    * Start makes it (`start`).
    *
    * The well arrives as a transcript row does: its place opens, then its
-   * content fades up --pop-rise into it.
+   * content fades up --spacing-space-2 into it.
    */
   import { accountsWords } from "@cawco/core/words/accounts";
   import type { TransitionConfig } from "svelte/transition";
@@ -55,18 +55,18 @@
   );
   const shown = $derived(phase === "waiting" || phase === "expired");
 
-  /** Its place opens (--duration-fade), then what it holds fades up --pop-rise (--duration-control). */
+  /** Its place opens (--duration-base), then what it holds fades up --spacing-space-2 (--duration-fast). */
   function openPlace(node: HTMLElement): TransitionConfig {
     if (!motionOk.current) {
       return {
-        duration: dur("--duration-control"),
+        duration: dur("--duration-fast"),
         easing: easeOut,
         css: (t) => `opacity: ${t}`,
       };
     }
     const height = node.offsetHeight;
-    const open = dur("--duration-fade");
-    const rise = dur("--duration-control");
+    const open = dur("--duration-base");
+    const rise = dur("--duration-fast");
     const total = open + rise;
     const split = open / total;
     return {
@@ -77,7 +77,7 @@
           return `height: ${p * height}px; overflow: hidden; opacity: 0`;
         }
         const p = easeOut((t - split) / (1 - split));
-        return `opacity: ${p}; transform: translateY(calc(var(--pop-rise) * ${1 - p}))`;
+        return `opacity: ${p}; transform: translateY(calc(var(--spacing-space-2) * ${1 - p}))`;
       },
     };
   }
@@ -102,7 +102,7 @@
       <div
         data-slot="well"
         data-dim={phase === "expired" || undefined}
-        class="flex items-center rounded-sm bg-surface-recess px-space-4 py-space-3 transition-[opacity] duration-(--duration-fade) ease-out data-dim:opacity-50"
+        class="flex items-center rounded-sm bg-surface-recess px-space-4 py-space-3 transition-[opacity] duration-(--duration-base) ease-out data-dim:opacity-50"
         in:openPlace
       >
         <span class="sr-only">{words.said(flow?.code ?? "")}</span>
@@ -153,7 +153,7 @@
       <p class="type-meta text-ink-muted">{words.expired}</p>
     {:else if flow?.phase === "mismatch"}
       <p
-        class="mark-line type-meta flex items-start gap-space-1 text-status-attn-ink"
+        class="mark-line type-meta flex items-start gap-space-1 text-status-attn"
         role="alert"
       >
         <span class="mark-cell"
@@ -166,7 +166,7 @@
       </p>
     {/if}
     {#if flow?.problem}
-      <p class="type-meta text-status-fail-ink" role="alert">{flow.problem}</p>
+      <p class="type-meta text-status-fail" role="alert">{flow.problem}</p>
     {/if}
   {/if}
 </div>

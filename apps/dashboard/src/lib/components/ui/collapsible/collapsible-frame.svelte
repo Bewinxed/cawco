@@ -26,14 +26,14 @@
     <Collapsible.Trigger class="group w-full" look="fold">
       <IconChevronRight
         aria-hidden="true"
-        class="size-icon-sm flex-none transition-[transform] duration-(--duration-control) ease-out group-state-open:transform-(--chev-turn)"
+        class="size-icon-sm flex-none transition-[transform] duration-(--duration-fast) ease-out group-state-open:transform-(--chev-turn)"
         style="--chev-turn: rotate(90deg)"
       />
       <span>{summary}</span>
     </Collapsible.Trigger>
     <Collapsible.Content>
       <ol
-        class="m-0 flex list-none flex-col gap-space-2 pt-space-2 pl-space-5 type-label"
+        class="m-0 flex list-none flex-col gap-space-2 pt-space-2 pl-space-4 type-label"
       >
         {#each lines as line (line)}
           <li>{line}</li>

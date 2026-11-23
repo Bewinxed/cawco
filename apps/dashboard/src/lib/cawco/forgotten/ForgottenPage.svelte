@@ -14,9 +14,9 @@
 
 <!-- The pages' one gutter (as Usage stands on it). -->
 <div
-  class="min-w-0 flex-auto overflow-y-auto pt-space-6 pr-space-6 pb-space-6 pl-space-6 max-desk:px-space-5 max-phone:px-space-5 max-phone:py-space-4"
+  class="min-w-0 flex-auto overflow-y-auto pt-space-6 pr-space-6 pb-space-6 pl-space-6 max-desk:px-space-4 max-phone:px-space-4 max-phone:py-space-4"
 >
-  <div class="flex max-w-245 flex-col gap-space-5">
+  <div class="flex max-w-245 flex-col gap-space-4">
     <h1 class="m-0 type-title text-balance text-ink-strong">
       {projectEndWords.forgottenTitle}
     </h1>

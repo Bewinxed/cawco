@@ -74,7 +74,7 @@
        is uncovered, each chip pops in, as the hub files it. -->
   <div
     data-slot="body"
-    class="flex min-w-0 flex-col items-start gap-space-3 p-space-5"
+    class="flex min-w-0 flex-col items-start gap-space-3 p-space-4"
     {@attach reflow()}
   >
     <h3
@@ -123,8 +123,8 @@
         <span aria-hidden="true" class="mark-cell"
           ><span
             data-slot="mark"
-            class="flex size-(--row-mark) flex-none items-center justify-center rounded-xs bg-action-surface leading-0 text-on-action"
-            data-box><IconUser class="size-(--row-mark-glyph)" /></span
+            class="flex size-4.25 flex-none items-center justify-center rounded-xs bg-accent-surface leading-0 text-on-accent"
+            data-box><IconUser class="size-2.75" /></span
           ></span
         >
         <span
@@ -156,7 +156,7 @@
           >
             <span
               data-slot="id"
-              class="num font-(family-name:--font-mono) text-size-meta text-ink-muted"
+              class="num font-(family-name:--font-mono) text-sm text-ink-muted"
               >{id}</span
             >
             {#if task}
@@ -192,21 +192,21 @@
             <IconChevronDown
               data-chev
               aria-hidden="true"
-              class="transition-[scale] duration-(--duration-panel) ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off [&>*]:vector-non-scaling"
+              class="transition-[scale] duration-(--duration-slow) ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off [&>*]:vector-non-scaling"
               data-icon="inline-end"
             />
           </Button>
         </div>
         <div
           data-slot="fold"
-          class="group/fold grid max-w-full grid-rows-shut transition-[grid-template-rows] duration-(--duration-fade) ease-out data-open:grid-rows-open data-open:duration-(--duration-panel) motion-reduce:transition-off motion-reduce:data-open:duration-(--duration-panel)"
+          class="group/fold grid max-w-full grid-rows-shut transition-[grid-template-rows] duration-(--duration-base) ease-out data-open:grid-rows-open data-open:duration-(--duration-slow) motion-reduce:transition-off motion-reduce:data-open:duration-(--duration-slow)"
           data-open={open || undefined}
           id="{fid}-others"
           inert={!open}
         >
           <div
             data-slot="fold-inner"
-            class="fold-item opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:duration-(--duration-panel) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--duration-fade) motion-reduce:group-data-open/fold:duration-(--duration-panel)"
+            class="fold-item opacity-0 blur-fold transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:duration-(--duration-slow) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--duration-base) motion-reduce:group-data-open/fold:duration-(--duration-slow)"
           >
             <div class="flex flex-col gap-space-2 pt-space-3">
               {#if card.why}

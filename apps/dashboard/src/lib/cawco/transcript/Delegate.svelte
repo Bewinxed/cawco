@@ -395,13 +395,13 @@
     }
   );
   /**
-   * A phase change cross-fades the line in one cell over --duration-control, the
+   * A phase change cross-fades the line in one cell over --duration-fast, the
    * old one going as the new one comes. A line with nothing after it — the
    * report's headline as the card opens — goes at once, as it always has.
    */
   function lineSwap(_node: Element) {
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
@@ -459,16 +459,16 @@
           class="rail-cell rounded-xs bg-mark-overlay bg-(--mark-bg)"
           style:--mark-bg="var(--color-mark-{markHue(hueSeed)})"
           {@attach trayCard(() => (elsewhere ? null : id))}
-          ><Sprite class="size-space-3 block text-on-ink" /></span
+          ><Sprite class="size-space-3 block text-surface-page" /></span
         >
         <span
-          class="font-(family-name:--font-mono) text-ink-strong group-hover/bhead:text-brand-ink flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap transition-[color] duration-(--duration-control) ease-out"
+          class="font-(family-name:--font-mono) text-ink-strong group-hover/bhead:text-accent-ink flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap transition-[color] duration-(--duration-fast) ease-out"
           >{label}</span
         >
         <span
           data-slot="chev"
           aria-hidden="true"
-          class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out group-state-open/bhead:rotate-90"
+          class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-out group-state-open/bhead:rotate-90"
           data-box><IconChevronRight class="size-icon-sm block" /></span
         >
         <!-- Its words on their x-height in the box (.mark-text): the trim's
@@ -476,14 +476,14 @@
         {#if started}
           <span
             data-slot="kind"
-            class="mark-text flex-none text-size-meta font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-4.5 whitespace-nowrap"
+            class="mark-text flex-none text-sm font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-4.5 whitespace-nowrap"
             data-box
             style:--kind-py="calc((1lh - 1ex) / 2)">session</span
           >
         {:else if type}
           <span
             data-slot="kind"
-            class="mark-text flex-none text-size-meta font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-4.5 whitespace-nowrap"
+            class="mark-text flex-none text-sm font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-4.5 whitespace-nowrap"
             data-box
             style:--kind-py="calc((1lh - 1ex) / 2)">{type}</span
           >
@@ -492,20 +492,20 @@
         {#if harness}
           <span
             data-slot="meta"
-            class="text-ink-muted text-size-meta font-normal flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap max-desk:hidden"
+            class="text-ink-muted text-sm font-normal flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap max-desk:hidden"
             >{harness}</span
           >
         {/if}
         {#if model}
           <span
             data-slot="meta"
-            class="text-ink-muted text-size-meta font-normal flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap max-desk:hidden"
+            class="text-ink-muted text-sm font-normal flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap max-desk:hidden"
             >{modelLabel(model)}</span
           >
         {/if}
         {#if mayDelegate}
           <span
-            class="flex-none text-size-meta font-normal text-brand-ink whitespace-nowrap"
+            class="flex-none text-sm font-normal text-accent-ink whitespace-nowrap"
             >may delegate</span
           >
         {/if}
@@ -513,11 +513,11 @@
              past the trim's room given back, so the box keeps its height. A phase
              change carries its tone across with its words. -->
         <span
-          class="mark-text ms-auto flex-none text-size-meta font-normal num rounded-xs py-(--pill-py) px-space-2 bg-transparent text-ink-muted whitespace-nowrap transition-[background-color,color] duration-(--duration-control) ease-out tone-live:bg-status-live-bg tone-live:text-status-live-ink tone-attn:bg-status-attn-bg tone-attn:text-status-attn-ink tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink"
+          class="mark-text ms-auto flex-none text-sm font-normal num rounded-xs py-(--pill-py) px-space-2 bg-transparent text-ink-muted whitespace-nowrap transition-[background-color,color] duration-(--duration-fast) ease-out tone-live:bg-status-live-bg tone-live:text-status-live tone-attn:bg-status-attn-bg tone-attn:text-status-attn tone-done:bg-status-done-bg tone-done:text-status-done tone-fail:bg-status-fail-bg tone-fail:text-status-fail"
           data-tone={tone}
           data-delegate-tone={tone}
           data-box
-          style:--pill-py="calc(var(--spacing-space-row) + (1lh - 1ex) / 2)"
+          style:--pill-py="calc(var(--spacing-space-1) + (1lh - 1ex) / 2)"
         >
           <MorphText text={pillWords} />
           {#if elapsed}
@@ -545,7 +545,7 @@
       {#if id}
         <a
           aria-label="Open {label} in its own view"
-          class="touch-hit flex-none size-6.5 grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
+          class="touch-hit flex-none size-6.5 grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-fast) ease-out hover:text-accent-ink hover:bg-surface-hover"
           href={conversationHref(id, boardStore.instanceIndex)}
           title="Open {label} in its own view"
         >
@@ -574,7 +574,7 @@
         {#key status.kind}
           <p
             data-slot="now"
-            class="rail-line col-start-1 row-start-1 mt-space-1 mb-0 items-box-start text-size-meta font-normal text-ink-strong data-err:text-status-fail-ink leading-body max-w-measure"
+            class="rail-line col-start-1 row-start-1 mt-space-1 mb-0 items-box-start text-sm font-normal text-ink-strong data-err:text-status-fail leading-base max-w-measure"
             data-err={status.err || undefined}
             in:lineSwap
             out:lineSwap
@@ -609,7 +609,7 @@
          card's only warm colour. The register is always there for an ask to
          land in; it takes room only with one in it. -->
     <ul
-      class="list-none m-0 p-0 flex flex-col gap-space-row max-w-measure"
+      class="list-none m-0 p-0 flex flex-col gap-space-1 max-w-measure"
       {@attach reflow()}
     >
       {#each waiting as ask (ask.key)}
@@ -622,11 +622,11 @@
           <span data-slot="rail-cell" aria-hidden="true" class="rail-cell h-lh"
             ><span
               data-slot="dot"
-              class="size-(--status-dot-size) rounded-pill bg-status-attn-ink"
+              class="size-1.5 rounded-pill bg-status-attn"
             ></span></span
           >
           <span
-            class="flex-none text-size-meta font-normal text-status-attn-ink uppercase tracking-caps"
+            class="flex-none text-sm font-normal text-status-attn uppercase tracking-caps"
             >{ask.status}</span
           >
           <span class="min-w-0 wrap-anywhere">{ask.short}</span>
@@ -648,7 +648,7 @@
               data-failed={report.failed || undefined}
             >
               <h4
-                class="text-size-label font-medium tracking-caps uppercase text-ink-muted group-data-failed/report:text-status-fail-ink mb-space-2"
+                class="text-base font-medium tracking-caps uppercase text-ink-muted group-data-failed/report:text-status-fail mb-space-2"
               >
                 {report.failed ? "Report — failed" : "Report"}
                 {#if report.count > 1}

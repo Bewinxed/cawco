@@ -332,7 +332,7 @@
         aria-label={connect.again
           ? askWords.reconnectAskFrom(asker)
           : askWords.connectAskFrom(asker)}
-        class="rail-hang mt-space-1 mb-space-2 flex flex-col gap-space-2 min-w-0 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-sm scroll-my-space-4"
+        class="rail-hang mt-space-1 mb-space-2 flex flex-col gap-space-2 min-w-0 rounded-sm border border-border-hairline bg-surface-raised p-space-3 shadow-sm scroll-my-space-4"
       >
         <!-- Who connects to what: Caw&Co, the arrow between, the service. -->
         <div
@@ -345,7 +345,7 @@
           {#if Mark}
             <Mark class="size-icon-lg flex-none" />
           {:else}
-            <IconKey class="size-icon-lg flex-none text-status-attn-glyph" />
+            <IconKey class="size-icon-lg flex-none text-status-attn" />
           {/if}
         </div>
         <h3
@@ -366,12 +366,12 @@
             role="alert"
           >
             <p
-              class="m-0 max-w-measure text-size-body font-medium leading-body text-ink-strong text-balance wrap-anywhere"
+              class="m-0 max-w-measure text-base font-medium leading-base text-ink-strong text-balance wrap-anywhere"
             >
               {failed.happened}
             </p>
             <p
-              class="m-0 max-w-measure text-size-label text-ink-muted text-pretty wrap-anywhere"
+              class="m-0 max-w-measure text-base text-ink-muted text-pretty wrap-anywhere"
             >
               {failed.next}
             </p>
@@ -404,16 +404,16 @@
           {#if reach}
             <p
               data-slot="connect-reach"
-              class="m-0 max-w-measure text-size-body leading-body text-ink-strong text-pretty wrap-anywhere"
+              class="m-0 max-w-measure text-base leading-base text-ink-strong text-pretty wrap-anywhere"
             >
               {reach}
             </p>
           {/if}
-          <p class="m-0 min-w-0 text-size-meta">
+          <p class="m-0 min-w-0 text-sm">
             <ConnectAddress url={connect.url} />
           </p>
           <p
-            class="m-0 max-w-measure text-size-label text-ink-muted text-pretty"
+            class="m-0 max-w-measure text-base text-ink-muted text-pretty"
           >
             {askWords.connectReach(connect.server)}
           </p>
@@ -421,7 +421,7 @@
         {#if signingIn}
           <p
             data-slot="wait"
-            class="m-0 text-size-meta text-ink-muted"
+            class="m-0 text-sm text-ink-muted"
             role="status"
             transition:unfold
           >
@@ -430,7 +430,7 @@
         {:else if !(reachable || done)}
           <p
             data-slot="wait"
-            class="m-0 text-size-meta text-ink-muted"
+            class="m-0 text-sm text-ink-muted"
             role="status"
             transition:unfold
           >
@@ -439,7 +439,7 @@
         {:else if declineRefused}
           <p
             data-slot="wait"
-            class="m-0 text-size-meta text-status-fail-ink wrap-anywhere"
+            class="m-0 text-sm text-status-fail wrap-anywhere"
             role="alert"
             transition:unfold
           >

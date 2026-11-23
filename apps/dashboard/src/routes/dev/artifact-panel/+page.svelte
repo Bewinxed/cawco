@@ -209,11 +209,11 @@
   if (slow > 1) {
     // `drain` slows its close alone: the card it drains pours at speed.
     const slowed = [
-      "--duration-panel",
-      "--duration-control",
+      "--duration-slow",
+      "--duration-fast",
       ...(asked === "drain"
         ? []
-        : ["--duration-settle", "--duration-fade", "--duration-control"]),
+        : ["--duration-slow", "--duration-base", "--duration-fast"]),
     ];
     for (const name of slowed) {
       // Read off the root as it stands, never through dur(), which would
@@ -431,7 +431,7 @@
           () => {
             cardOpen = false;
           },
-          dur("--duration-settle") / 2
+          dur("--duration-slow") / 2
         );
       }
       if (asked === "drain") {
@@ -440,7 +440,7 @@
           () => {
             cardOpen = false;
           },
-          dur("--duration-settle") + FITTED
+          dur("--duration-slow") + FITTED
         );
       }
       if (asked === "remove") {
@@ -751,7 +751,7 @@
           <!-- The element's chosen line, drawn while it is chosen. -->
           <span
             aria-hidden="true"
-            class="pointer-events-none absolute start-(--box-x) top-(--box-y) h-(--box-h) w-(--box-w) rounded-xs outline-(length:--border-width) outline-offset-(--border-width) outline-transparent outline-solid data-chosen:outline-brand-solid"
+            class="pointer-events-none absolute start-(--box-x) top-(--box-y) h-(--box-h) w-(--box-w) rounded-xs outline-1 outline-offset-1 outline-transparent outline-solid data-chosen:outline-accent"
             data-chosen={chosen === Number(key) || undefined}
             data-spot-box={key}
             style:--box-h="{h * 100}%"
@@ -764,7 +764,7 @@
           {@const [x, y, w] = spots[one.number] ?? [0, 0, 0, 0]}
           <button
             aria-label={commentWords.openThread(one.number)}
-            class="absolute start-(--spot-x) top-(--spot-y) z-1 flex -translate-y-full rounded-pill outline-off focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+            class="absolute start-(--spot-x) top-(--spot-y) z-1 flex -translate-y-full rounded-pill outline-off focus-visible:outline-2 focus-visible:outline-accent-ink"
             data-pin-spot={one.number}
             onclick={() => openFromPage(one)}
             onpointerenter={() => {

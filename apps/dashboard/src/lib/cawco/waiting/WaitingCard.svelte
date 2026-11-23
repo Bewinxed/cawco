@@ -95,7 +95,7 @@
        alike, the title on its centre line. -->
   <header class="flex flex-none items-center gap-space-2 p-space-2 ps-space-4">
     <h2
-      class="m-0 min-w-0 flex-auto truncate text-size-label font-medium text-ink-strong"
+      class="m-0 min-w-0 flex-auto truncate text-base font-medium text-ink-strong"
       id={titleId}
     >
       {waitingWords.title}

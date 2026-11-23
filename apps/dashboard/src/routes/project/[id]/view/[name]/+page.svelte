@@ -110,9 +110,9 @@
   data-view-alone={name}
   style:--pad-bottom="max(var(--spacing-space-6), var(--safe-bottom))"
   style:--pad-left="max(var(--spacing-space-6), env(safe-area-inset-left))"
-  style:--pad-left-narrow={"max(var(--spacing-space-5), env(safe-area-inset-left))"}
+  style:--pad-left-narrow={"max(var(--spacing-space-4), env(safe-area-inset-left))"}
   style:--pad-right="max(var(--spacing-space-6), env(safe-area-inset-right))"
-  style:--pad-right-narrow={"max(var(--spacing-space-5), env(safe-area-inset-right))"}
+  style:--pad-right-narrow={"max(var(--spacing-space-4), env(safe-area-inset-right))"}
 >
   {#if problem}
     <div in:reveal>

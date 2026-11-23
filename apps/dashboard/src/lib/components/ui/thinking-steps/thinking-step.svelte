@@ -17,10 +17,10 @@
     base: "grid h-lh min-h-icon-md w-icon-md place-items-center status-ahead:text-ink-subtle",
     variants: {
       ink: {
-        done: "text-status-done-glyph",
+        done: "text-status-done",
         active: "text-ink-strong",
-        fail: "text-status-fail-glyph",
-        attn: "text-status-attn-glyph",
+        fail: "text-status-fail",
+        attn: "text-status-attn",
         muted: "text-ink-muted",
       },
     },
@@ -66,7 +66,7 @@
     ink?: StepInk;
     /**
      * This step is new — it appeared under a block already on screen — and
-     * fades in (--duration-control). Read once, at mount: a step drawn with its block
+     * fades in (--duration-fast). Read once, at mount: a step drawn with its block
      * (history, a block opened, a remount) never replays.
      */
     enters?: boolean;
@@ -95,20 +95,20 @@
   const entering = untrack(() => enters);
 
   /**
-   * A step's glyph changing cross-fades in its cell (--duration-control), and the
+   * A step's glyph changing cross-fades in its cell (--duration-fast), and the
    * connector a step gains when the next one starts draws down from it
-   * (--duration-fade). Neither plays on a step's first render.
+   * (--duration-base). Neither plays on a step's first render.
    */
   function glyphFade(_node: Element) {
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
   }
   function draw(_node: Element) {
     return {
-      duration: dur("--duration-fade"),
+      duration: dur("--duration-base"),
       easing: easeOut,
       css: (t: number) => `transform-origin: top; scale: 1 ${t}`,
     };
@@ -143,7 +143,7 @@
        cell); the icon's box is at least that square and a line tall. -->
   <div
     class={cn(
-      "flex min-w-0 gap-space-2 type-body size-compact:text-size-meta",
+      "flex min-w-0 gap-space-2 type-body size-compact:text-sm",
       className
     )}
     data-size={size?.() ?? "default"}
@@ -183,7 +183,7 @@
          muted ink, strong at the middle of a band three times the words'
          width, sliding across them once a breath (`light`). -->
     <div
-      class="flex min-w-0 flex-1 flex-col gap-space-1 pb-space-2 motion-safe:data-enters:animate-fade-in motion-safe:data-enters:anim-dur-control"
+      class="flex min-w-0 flex-1 flex-col gap-space-1 pb-space-2 motion-safe:data-enters:animate-fade-in motion-safe:data-enters:anim-dur-fast"
       data-enters={entering || undefined}
     >
       {#if label}

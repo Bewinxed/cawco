@@ -89,24 +89,19 @@ export const easeDrawer = bezier(0.32, 0.72, 0, 1);
  * on no document root ({@link tokensOn}: an HTML page's dials).
  */
 const TOKENS = [
-  "--duration-step",
-  "--duration-control",
-  "--duration-fade",
-  "--duration-panel",
-  "--duration-settle",
+  "--duration-fast",
+  "--duration-base",
+  "--duration-slow",
   "--duration-loop",
-  "--duration-breath",
   "--ease-out",
   "--ease-in-out",
   "--ease-drawer",
-  "--ease-crossfade",
   "--pop-scale",
-  "--pop-rise",
   "--press-scale",
   "--spacing-space-1",
   "--spacing-space-2",
   "--spacing-space-4",
-  "--text-meta",
+  "--text-sm",
   // Component-local motion tokens declared on :root in design.css.
   "--skeleton-reveal-blur",
   "--echo-opacity",
@@ -161,7 +156,7 @@ export const dur = (name: `--duration-${string}`): number =>
  * many there are (a tree's rows are paced the same way, `glideSpeed`).
  */
 export const staggered = (n: number): string =>
-  `min(calc(var(--duration-step) * ${n}), var(--duration-settle))`;
+  `min(calc(var(--duration-fast) / 2 * ${n}), var(--duration-slow))`;
 /** An `--ease-*` token on the root, as CSS. @browser */
 export const ease = (name: `--ease-${string}`): string => rootToken(name);
 /** --pop-scale on the root, as its number. @browser */
@@ -230,11 +225,11 @@ export function glideSpeed(
   stops: number
 ): { least: number; speed: number } {
   const end = space("--spacing-space-1");
-  const least = (distance + end) / dur("--duration-settle");
+  const least = (distance + end) / dur("--duration-slow");
   const own =
     stops > 0
-      ? distance / stops / dur("--duration-step")
-      : (distance + end) / dur("--duration-panel");
+      ? distance / stops / (dur("--duration-fast") / 2)
+      : (distance + end) / dur("--duration-slow");
   return { least, speed: Math.max(own, least) };
 }
 
@@ -339,7 +334,7 @@ function between(from: Keyframe, to: Keyframe, p: number): Keyframe {
  */
 export function appear(_node: Element) {
   return {
-    duration: dur("--duration-fade"),
+    duration: dur("--duration-base"),
     easing: easeOut,
     css: (t: number) => `opacity: ${t}`,
   };
@@ -349,13 +344,13 @@ export function appear(_node: Element) {
 export interface Arrival {
   easing?: `--ease-${string}`;
   over: `--duration-${string}`;
-  /** It comes in from beside where it stands, by --pop-rise along x, as a sheet from its side. */
+  /** It comes in from beside where it stands, by --spacing-space-2 along x, as a sheet from its side. */
   rise?: "x";
 }
 
 /**
  * An element's entrance, attached: as it mounts it comes in by one Web
- * Animation on the element itself (`appear` by default: --duration-fade on
+ * Animation on the element itself (`appear` by default: --duration-base on
  * ease-out, opacity only). For an entrance that rises from its side (Caw's
  * docked panel), which `@starting-style` does not draw in iOS 27.2 Safari:
  * a starting translate set by Tailwind's `starting:translate-x-*` (the
@@ -374,7 +369,7 @@ export interface Arrival {
  */
 export function appearOnMount({
   when = () => true,
-  motion = { over: "--duration-fade" },
+  motion = { over: "--duration-base" },
   reduced = false,
 }: {
   motion?: Arrival | false;
@@ -390,7 +385,7 @@ export function appearOnMount({
     const to: Keyframe = { opacity: 1 };
     if (arrival.rise === "x") {
       const by = Number.parseFloat(
-        getComputedStyle(node).getPropertyValue("--pop-rise")
+        getComputedStyle(node).getPropertyValue("--spacing-space-2")
       );
       from.translate = `${by}px 0`;
       to.translate = "0 0";
@@ -404,13 +399,13 @@ export function appearOnMount({
 
 /**
  * A floating tag coming and going over the transcript's foot ("Jump to
- * latest", the catch-up): it rises --pop-rise and grows from .96 as it fades in,
- * and sinks back out. `token` is its duration: --duration-panel in, --duration-fade
+ * latest", the catch-up): it rises --spacing-space-2 and grows from .96 as it fades in,
+ * and sinks back out. `token` is its duration: --duration-slow in, --duration-base
  * out. Without motion it only fades.
  */
 export function rise(
   _node: Element,
-  token: "--duration-panel" | "--duration-fade"
+  token: "--duration-slow" | "--duration-base"
 ) {
   const travel = motionOk.current;
   return {
@@ -418,7 +413,7 @@ export function rise(
     easing: easeOut,
     css: (t: number) =>
       travel
-        ? `opacity: ${t}; transform: translateY(calc(var(--pop-rise) * ${1 - t})) scale(${0.96 + 0.04 * t})`
+        ? `opacity: ${t}; transform: translateY(calc(var(--spacing-space-2) * ${1 - t})) scale(${0.96 + 0.04 * t})`
         : `opacity: ${t}`,
   };
 }
@@ -426,26 +421,23 @@ export function rise(
 /**
  * One view handing its place to another — a document to the next, a reader
  * to its editor (a skeleton hands its place by `reveal`/`revealOut`): the two cross-fade
- * over --duration-control. The one leaving is taken out of the flow as it starts,
+ * over --duration-fast. The one leaving is taken out of the flow as it starts,
  * pinned where it stands (its parent is `position: relative`), so the box is only ever the size of
  * what arrives and a height morph around it has one change to follow.
  * Opacity only, so it runs with or without motion.
  */
 export function crossIn(_node: Element) {
   return {
-    duration: dur("--duration-control"),
+    duration: dur("--duration-fast"),
     easing: easeOut,
     css: (t: number) => `opacity: ${t}`,
   };
 }
 
-/** `--ease-crossfade` (CSS ease-in-out): a skeleton's pulse and its reveal. */
-const easeCrossfade = bezier(0.42, 0, 0.58, 1);
-
 /**
  * The reveal (transitions.dev Skeleton loader and reveal, DESIGN.md
  * Skeleton): a skeleton handing its place to what it stood for. Both layers
- * run on one clock, --duration-settle on --ease-crossfade: the content
+ * run on one clock, --duration-slow on --ease-in-out: the content
  * fades up out of a --skeleton-reveal-blur blur while the skeleton fades out
  * into one. Every swap from a skeleton to its content takes it: `in:reveal`
  * on what arrives, and `out:revealOut` on the skeleton where it leaves the
@@ -458,8 +450,8 @@ export function reveal(_node?: Element): TransitionConfig {
   }
   const blur = numberOf("--skeleton-reveal-blur");
   return {
-    duration: dur("--duration-settle"),
-    easing: easeCrossfade,
+    duration: dur("--duration-slow"),
+    easing: easeInOut,
     css: (t) => `opacity: ${t}; filter: blur(${((1 - t) * blur).toFixed(3)}px)`,
   };
 }
@@ -485,7 +477,7 @@ export function revealOn(
   const away = { opacity: 0, filter: `blur(${blur}px)` };
   return node.animate(way === "in" ? [away, standing] : [standing, away], {
     duration,
-    easing: ease("--ease-crossfade"),
+    easing: ease("--ease-in-out"),
     ...options,
   });
 }
@@ -572,7 +564,7 @@ export function crossOutWith(
     return { duration: 0 };
   }
   return lifting(node, pinned(node, more), {
-    duration: dur("--duration-control"),
+    duration: dur("--duration-fast"),
     easing: easeOut,
     css: (t: number) => `opacity: ${t}`,
   });

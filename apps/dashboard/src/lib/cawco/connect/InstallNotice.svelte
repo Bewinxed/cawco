@@ -27,7 +27,7 @@
   {#snippet lead()}
     <IconSuccess
       aria-hidden="true"
-      class="size-icon-md text-status-done-glyph"
+      class="size-icon-md text-status-done"
     />
   {/snippet}
   <button

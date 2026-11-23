@@ -43,7 +43,7 @@
     oldContent,
     newContent,
     fileDiff,
-    cap = "var(--tx-diff-cap)",
+    cap = "calc(var(--spacing) * 100)",
   }: Props = $props();
   let showModal = $state(false);
   /**
@@ -114,10 +114,10 @@
 </script>
 
 <div
-  class="rounded-md overflow-hidden border border-border-control bg-neutral-2"
+  class="rounded-sm overflow-hidden border border-border-control bg-surface-recess"
 >
   <div
-    class="flex items-center justify-between px-3 py-2 bg-surface-raised border-b border-border-control font-mono text-meta text-ink-muted"
+    class="flex items-center justify-between px-3 py-2 bg-surface-raised border-b border-border-control font-mono type-meta text-ink-muted"
   >
     <span class="break-all flex-1 min-w-0">{filePath}</span>
     <Button
@@ -142,7 +142,7 @@
   <div data-slot="body" class="relative grid" {@attach morph()}>
     {#if failure}
       <div
-        class="mark-line row-start-1 col-start-1 min-w-0 flex items-center justify-center gap-2 p-space-8 type-label text-status-fail-glyph"
+        class="mark-line row-start-1 col-start-1 min-w-0 flex items-center justify-center gap-2 p-space-8 type-label text-status-fail"
         role="alert"
         in:crossIn
         out:crossOut

@@ -6,7 +6,7 @@
  * Tailwind v4's variants weigh differently: `in-*` is `:where(X) &` and adds
  * nothing, while `not-*`, `data-*`, `aria-*`, `group-*` and the pseudo-classes
  * each add a class's weight. So on a title carrying
- * `not-data-quiet:text-ink-strong in-aria-current:text-brand-ink`, the
+ * `not-data-quiet:text-ink-strong in-aria-current:text-accent-ink`, the
  * first compiles to `.a:not([data-quiet])` (0,2,0) and the second to
  * `:where([aria-current="true"]) .b` (0,1,0): with both matching, the
  * current pin's title drew ink-strong on the selected wash. Tailwind's own

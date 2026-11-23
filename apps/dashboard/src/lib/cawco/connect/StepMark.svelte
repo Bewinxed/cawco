@@ -27,9 +27,9 @@
   } = $props();
 
   const MARKS = [
-    { key: "done", icon: IconSuccess, ink: "text-status-done-glyph" },
-    { key: "current", icon: IconWorking, ink: "text-status-live-glyph" },
-    { key: "failed", icon: IconError, ink: "text-status-fail-glyph" },
+    { key: "done", icon: IconSuccess, ink: "text-status-done" },
+    { key: "current", icon: IconWorking, ink: "text-status-live" },
+    { key: "failed", icon: IconError, ink: "text-status-fail" },
     { key: "stopped", icon: IconStopped, ink: "text-ink-muted" },
     { key: "future", icon: IconNotYet, ink: "text-ink-subtle" },
   ] as const;
@@ -37,7 +37,7 @@
 
 <span
   class="icon-swap flex-none"
-  style:--icon-swap-dur="var(--duration-control)"
+  style:--icon-swap-dur="var(--duration-fast)"
   data-box
   data-mark={state}
 >

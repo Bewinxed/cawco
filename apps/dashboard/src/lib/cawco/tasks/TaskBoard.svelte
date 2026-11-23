@@ -113,7 +113,7 @@
       () => {
         fresh = null;
       },
-      dur("--duration-fade") * 3
+      dur("--duration-base") * 3
     );
     await tick();
     // Before the frame the board's rows are read in (motion/rows), so the
@@ -213,7 +213,7 @@
       "max-phone:snap-x max-phone:snap-mandatory max-phone:group-data-rail-open:hidden",
       tasks.length > 0 && "max-phone:h-auto",
     ]}
-    style:--cols={"minmax(var(--board-col-min), var(--board-col-max))"}
+    style:--cols={"minmax(calc(var(--spacing) * 60), calc(var(--spacing) * 88))"}
     style:--cols-phone="calc(100% - var(--spacing-space-8))"
   >
     {#each stages as stage (stage.name)}
@@ -234,7 +234,7 @@
       <div
         data-slot="rail-open"
         class="mb-space-3 flex min-h-0 w-(--w) flex-none flex-col gap-space-1 max-phone:w-full"
-        style:--w="min(var(--board-col-max), 80%)"
+        style:--w="min(calc(var(--spacing) * 88), 80%)"
       >
         <TaskColumn
           archived

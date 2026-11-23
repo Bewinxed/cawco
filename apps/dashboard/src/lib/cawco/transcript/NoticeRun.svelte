@@ -50,7 +50,7 @@
   data-notice-run={row.messages.length}
   data-open={open || undefined}
   data-waiting={waiting || undefined}
-  class="group/notice mt-space-3 mb-space-1 data-waiting:opacity-(--ghost-presence)"
+  class="group/notice mt-space-3 mb-space-1 data-waiting:opacity-70"
 >
   <button
     aria-expanded={open}
@@ -75,7 +75,7 @@
       <span data-slot="chev" class="inline-flex flex-none" data-box
         ><IconChevron
           aria-hidden="true"
-          class="size-icon-sm group-data-open/notice:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--duration-fade) motion-safe:ease-in-out"
+          class="size-icon-sm group-data-open/notice:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--duration-base) motion-safe:ease-in-out"
         /></span
       ></span
     >

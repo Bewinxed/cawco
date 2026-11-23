@@ -45,7 +45,7 @@
    * the title saying what happened. Once live a last part says so, with
    * every address and Done; an optional station not done stays a line that
    * reopens it. The tray's height is its rows', carried by morph over
-   * --duration-panel on the drawer curve.
+   * --duration-slow on the drawer curve.
    */
   import Words from "./Words.svelte";
   import {
@@ -61,7 +61,7 @@
   const CAW = 64;
   /** Caw's box starts where the title does on a desk: the tray's padding and the body's. */
   const CAW_START =
-    "calc(var(--radius-modal) - var(--radius-lg) + var(--spacing-space-4))";
+    "calc(var(--radius-xl) - var(--radius-lg) + var(--spacing-space-4))";
   /** A station's line: its mark, its name, where it stands, its chevron. */
   const STATION_COLS =
     "var(--spacing-icon-md) auto minmax(0, 1fr) var(--spacing-icon-md)";
@@ -231,7 +231,7 @@
   data-form={form}
   data-step={tray.step}
   data-tray="stations"
-  {@attach (node) => morph({ ms: dur("--duration-panel") })(node)}
+  {@attach (node) => morph({ ms: dur("--duration-slow") })(node)}
 >
   <!-- Caw's room over the top edge, over the title's start: he stands
        behind the edge, leading the tray, and never moves. -->
@@ -329,12 +329,12 @@
                     {#if state === "done"}
                       <IconSuccess
                         aria-label="Done"
-                        class="size-icon-md text-status-done-ink"
+                        class="size-icon-md text-status-done"
                       />
                     {:else if state === "failed"}
                       <IconError
                         aria-label="Failed"
-                        class="size-icon-md text-status-fail-ink"
+                        class="size-icon-md text-status-fail"
                       />
                     {:else if state === "skipped"}
                       <IconNeutral
@@ -348,7 +348,7 @@
                         class={[
                           "box-border grid size-icon-md place-items-center rounded-pill border type-meta leading-none num before:content-data-n",
                           state === "open"
-                            ? "border-brand-solid text-brand-ink"
+                            ? "border-accent text-accent-ink"
                             : "border-border-control text-ink-muted",
                         ]}
                         aria-hidden="true"

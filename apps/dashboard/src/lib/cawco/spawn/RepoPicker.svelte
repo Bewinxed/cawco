@@ -942,7 +942,7 @@
     "calc((var(--spacing-row-compact) + var(--spacing-space-3)) * var(--lead-share)) minmax(0, 1fr) calc(var(--spacing-icon-md) + var(--spacing-space-3)) max-content";
   /** A row's lead cell: its mark on the lead's own width, clipped as the lead folds, fading with it. */
   const LEAD =
-    "col-start-1 mark-cell min-w-0 justify-start overflow-clip opacity-(--lead-share) motion-safe:transition-opacity motion-safe:duration-(--duration-panel) motion-safe:ease-in-out";
+    "col-start-1 mark-cell min-w-0 justify-start overflow-clip opacity-(--lead-share) motion-safe:transition-opacity motion-safe:duration-(--duration-slow) motion-safe:ease-in-out";
   /**
    * Where a row's trailing ink ends: the path field's edge and Browse's
    * (1px each), the field's inset and Browse's own, less the scrollbar's
@@ -958,7 +958,7 @@
 <div data-slot="repo-picker" class="grid min-w-0 gap-space-2">
   <label
     data-slot="location-section-field"
-    class="field-edge flex h-control-lg min-w-0 items-center gap-space-3 rounded-md border bg-surface-raised pe-space-3 shadow-xs transition-control"
+    class="field-edge flex h-control-lg min-w-0 items-center gap-space-3 rounded-sm border bg-surface-raised pe-space-3 shadow-sm transition-control"
   >
     <span class="grid w-row-compact flex-none place-items-center self-stretch"
       ><Search class="size-icon-md text-ink-subtle" /></span
@@ -1009,7 +1009,7 @@
           type="single"
         >
           <div
-            class="flex h-(--item) min-w-0 flex-1 flex-wrap gap-x-space-row overflow-clip"
+            class="flex h-(--item) min-w-0 flex-1 flex-wrap gap-x-space-1 overflow-clip"
             {@attach frameSize(lineOf, (read) => {
               line = read;
             })}
@@ -1139,7 +1139,7 @@
     data-slot="repo-list"
     aria-busy={reading || undefined}
     aria-label={spawnWords.location.repositories}
-    class="fai-scroll @container/repos relative grid max-h-72 scrollbar-gutter-stable auto-rows-max grid-cols-(--repo-cols) content-start overflow-y-auto overscroll-contain motion-safe:transition-[grid-template-columns] motion-safe:duration-(--duration-panel) motion-safe:ease-in-out"
+    class="fai-scroll @container/repos relative grid max-h-72 scrollbar-gutter-stable auto-rows-max grid-cols-(--repo-cols) content-start overflow-y-auto overscroll-contain motion-safe:transition-[grid-template-columns] motion-safe:duration-(--duration-slow) motion-safe:ease-in-out"
     id={`${uid}-list`}
     role="listbox"
     style:--repo-cols={REPO_COLS}
@@ -1273,7 +1273,7 @@
     {#if !(rows.length || reading)}
       <p
         data-slot="repo-list-empty"
-        class="col-span-full m-0 py-space-5 type-meta text-pretty text-ink-muted"
+        class="col-span-full m-0 py-space-4 type-meta text-pretty text-ink-muted"
         role="status"
       >
         {#if why}
@@ -1331,11 +1331,11 @@
       <span
         data-slot="name"
         data-box
-        class="col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label font-medium text-ink-strong group-aria-selected:text-brand-ink @max-sm/repos:col-span-3"
+        class="col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label font-medium text-ink-strong group-aria-selected:text-accent-ink @max-sm/repos:col-span-3"
         ><span
           data-slot="owner"
           aria-hidden={Boolean(owner) || undefined}
-          class="inline-grid grid-cols-(--owner-track) align-top font-normal text-ink-muted opacity-(--owner-ink) motion-safe:transition-[grid-template-columns,opacity] motion-safe:duration-(--duration-panel) motion-safe:ease-in-out"
+          class="inline-grid grid-cols-(--owner-track) align-top font-normal text-ink-muted opacity-(--owner-ink) motion-safe:transition-[grid-template-columns,opacity] motion-safe:duration-(--duration-slow) motion-safe:ease-in-out"
           data-box
           ><span class="min-w-0 overflow-hidden"
             ><Marked query={q} text={`${login}/`} /></span
@@ -1395,7 +1395,7 @@
   <span
     data-slot="name"
     data-box
-    class="col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label font-medium text-ink-strong group-aria-selected:text-brand-ink @max-sm/repos:col-span-3"
+    class="col-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label font-medium text-ink-strong group-aria-selected:text-accent-ink @max-sm/repos:col-span-3"
     ><span class="font-normal text-ink-muted"
       >{look.host
         ? spawnWords.location.onHost(look.host)
@@ -1434,7 +1434,7 @@
     <span
       data-slot="social-image"
       data-box
-      class="relative col-span-3 col-start-2 row-start-3 aspect-2/1 w-full max-w-64 overflow-clip rounded-xs bg-surface-sunk outline-1 -outline-offset-1 outline-image-outline"
+      class="relative col-span-3 col-start-2 row-start-3 aspect-2/1 w-full max-w-64 overflow-clip rounded-xs bg-surface-sunk outline-1 -outline-offset-1 outline-ink-strong/10"
       in:unfold
       out:unfold
     >

@@ -52,7 +52,7 @@
 
 {#snippet shell(title: string, pane: Snippet, note?: string)}
   <section
-    class="@container mb-space-5 flex break-inside-avoid flex-col overflow-clip rounded-lg border border-border-hairline"
+    class="@container mb-space-4 flex break-inside-avoid flex-col overflow-clip rounded-lg border border-border-hairline"
     aria-label={title}
   >
     <header
@@ -81,7 +81,7 @@
 {/snippet}
 
 {#snippet frames(one: ReturnType<typeof cardOf>)}
-  <div class="flex flex-wrap items-start gap-space-5">
+  <div class="flex flex-wrap items-start gap-space-4">
     {#each one.frames as frame (frame.name)}
       <figure
         class={[
@@ -129,14 +129,14 @@
 
 {#snippet layerSection(heading: string, summary: string, groups: Group[])}
   <section class="flex flex-col gap-space-3" aria-label={heading}>
-    <header class="flex flex-col gap-space-row">
+    <header class="flex flex-col gap-space-1">
       <h2 class="text-ink-strong type-label">{heading}</h2>
       <p class="text-ink-muted type-meta">{summary}</p>
     </header>
     {#each groups.filter((one) => one.wide) as one (one.title)}
-      <div class="-mb-space-5">{@render foundationCard(one)}</div>
+      <div class="-mb-space-4">{@render foundationCard(one)}</div>
     {/each}
-    <div class="-mb-space-5 columns-phone gap-space-5">
+    <div class="-mb-space-4 columns-phone gap-space-4">
       {#each groups.filter((one) => !one.wide) as one (one.title)}
         {@render foundationCard(one)}
       {/each}
@@ -145,7 +145,7 @@
 {/snippet}
 
 <div
-  class="flex min-h-dvh flex-col gap-space-6 bg-surface-page p-space-5 text-ink-strong max-phone:p-space-3"
+  class="flex min-h-dvh flex-col gap-space-6 bg-surface-page p-space-4 text-ink-strong max-phone:p-space-3"
 >
   <header class="flex flex-col gap-space-1">
     <h1 class="type-title">CawCo design system</h1>
@@ -167,8 +167,8 @@
     ROLES
   )}
 
-  <section class="flex flex-col gap-space-5" aria-label="Core components">
-    <header class="flex flex-col gap-space-row">
+  <section class="flex flex-col gap-space-4" aria-label="Core components">
+    <header class="flex flex-col gap-space-1">
       <h2 class="text-ink-strong type-label">Core components</h2>
       <p class="text-ink-muted type-meta">
         The canonical UI kit primitives in their states, including folded
@@ -180,14 +180,14 @@
       <div class="flex flex-col gap-space-3">
         <h3 class="text-ink-muted type-label">{section.title}</h3>
         {#if section.flowing.length > 0}
-          <div class="-mb-space-5 columns-phone gap-space-5">
+          <div class="-mb-space-4 columns-phone gap-space-4">
             {#each section.flowing as one (one.family.file)}
               {@render card(one)}
             {/each}
           </div>
         {/if}
         {#each section.wide as one (one.family.file)}
-          <div class="-mb-space-5">{@render card(one)}</div>
+          <div class="-mb-space-4">{@render card(one)}</div>
         {/each}
       </div>
     {/each}

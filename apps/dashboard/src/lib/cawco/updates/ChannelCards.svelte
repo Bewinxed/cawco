@@ -75,6 +75,9 @@
 <!-- Room above the cards for Caw's box, so nothing overlaps the header. -->
 <div
   class="pt-(--caw-peek-rise)"
+  style:--caw-peek="calc(var(--spacing) * 40)"
+  style:--caw-peek-rise="calc(var(--spacing) * 22.75)"
+  style:--channel-card-max="calc(var(--spacing) * 70)"
   style:--cards-w={"min(100%, calc(var(--channel-card-max) * 2 + var(--spacing-space-3)))"}
   style:--cols="repeat(2, minmax(0, var(--channel-card-max)))"
 >
@@ -92,7 +95,7 @@
       <span
         data-slot="frame"
         aria-hidden="true"
-        class="pointer-events-none absolute inset-y-0 z-1 rounded-md border border-brand-solid bg-surface-recess motion-safe:dir-end:transition-frame-end-first motion-safe:dir-start:transition-frame-start-first"
+        class="pointer-events-none absolute inset-y-0 z-1 rounded-sm border border-accent bg-surface-recess motion-safe:dir-end:transition-frame-end-first motion-safe:dir-start:transition-frame-start-first"
         data-dir={index === 1 ? "end" : "start"}
         style:inset-inline-end={index === 0 ? HALF : "0"}
         style:inset-inline-start={index === 0 ? "0" : HALF}
@@ -102,7 +105,7 @@
         <span
           data-slot="frame"
           aria-hidden="true"
-          class="pointer-events-none absolute inset-y-0 z-1 rounded-md border border-brand-solid bg-surface-recess"
+          class="pointer-events-none absolute inset-y-0 z-1 rounded-sm border border-accent bg-surface-recess"
           style:inset-inline-end={index === 0 ? HALF : "0"}
           style:inset-inline-start={index === 0 ? "0" : HALF}
           in:fade={{
@@ -118,7 +121,7 @@
     {#each CARDS as card (card.channel)}
       {@const found = release(card.channel)}
       <RadioGroup.Item
-        class="relative flex flex-col rounded-md border border-border-control bg-transparent px-space-4 pt-space-6 pb-space-4 type-meta text-start text-ink-strong transition-control hover:bg-surface-hover no-hover:active:bg-surface-hover unhovered:active:bg-surface-hover focus-visible:-outline-offset-2 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+        class="relative flex flex-col rounded-sm border border-border-control bg-transparent px-space-4 pt-space-6 pb-space-4 type-meta text-start text-ink-strong transition-control hover:bg-surface-hover no-hover:active:bg-surface-hover unhovered:active:bg-surface-hover focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent-ink"
         value={card.channel}
       >
         <span data-slot="name" class="relative z-2 type-label text-ink-strong"
@@ -142,12 +145,12 @@
           <span
             class="mark-line relative z-2 mt-space-2 flex items-center gap-space-2 text-ink-strong"
             in:blur={{
-              duration: dur("--duration-panel"),
+              duration: dur("--duration-slow"),
               easing: easeOut,
               amount: 2,
             }}
             out:blur={{
-              duration: dur("--duration-fade"),
+              duration: dur("--duration-base"),
               easing: easeOut,
               amount: 2,
             }}
@@ -164,11 +167,11 @@
                 cx="10"
                 cy="10"
                 r="10"
-                class="fill-selected-bg stroke-none"
+                class="fill-accent-wash stroke-none"
               ></circle>
               <path
                 d="M6.2 10.4l2.5 2.5 5.1-5.6"
-                class="stroke-brand-ink dash-unit motion-safe:animate-check-draw motion-safe:anim-delay-control"
+                class="stroke-accent-ink dash-unit motion-safe:animate-check-draw motion-safe:anim-delay-fast"
                 pathLength="1"
                 stroke-width="1.8"
               ></path>

@@ -117,7 +117,7 @@
   class="fixed inset-x-space-3 bottom-(--off-bottom) z-(--z) flex min-h-(--min-h) w-fit flex-wrap items-center justify-center gap-space-1 mx-auto border border-border-control rounded-lg bg-surface-raised shadow-lg py-space-1 pr-space-1 pl-space-3 max-phone:bottom-(--off-bottom-phone)"
   role="toolbar"
   style:--z="calc(var(--layer-bar) + 10)"
-  style:--off-bottom="calc(var(--spacing-space-5) + var(--safe-bottom, 0px))"
+  style:--off-bottom="calc(var(--spacing-space-4) + var(--safe-bottom, 0px))"
   style:--off-bottom-phone={"calc(var(--composer-panel) + var(--spacing-space-4) + var(--safe-bottom) + var(--spacing-space-2))"}
   style:--min-h="calc(var(--spacing-control-sm) + var(--spacing-space-2))"
 >
@@ -129,7 +129,7 @@
     >
       <TaskRing done={run.done} size="sm" total={run.total} />
       {#if run.failed}
-        <span data-slot="failed" class="text-status-fail-ink"
+        <span data-slot="failed" class="text-status-fail"
           >{run.verb} stopped at {run.failed.id}: {run.failed.text}</span
         >
       {:else}
@@ -262,7 +262,7 @@
         >
           {#if running.length > 0}
             <!-- What decides it: the work Drop would stop, by name. -->
-            <p class="type-meta text-status-attn-ink">
+            <p class="type-meta text-status-attn">
               {running.length === 1
                 ? "This one is"
                 : `These ${running.length} are`}
@@ -283,7 +283,7 @@
                   {#if task.attempts[0]}
                     <a
                       data-slot="session"
-                      class="ms-auto flex-none type-meta text-brand-ink"
+                      class="ms-auto flex-none type-meta text-accent-ink"
                       href="/session/{task.attempts[0].instanceId}"
                       >its session</a
                     >

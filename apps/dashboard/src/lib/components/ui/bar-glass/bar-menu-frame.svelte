@@ -79,7 +79,7 @@
   <div
     class={[
       "absolute inset-x-0 flex justify-center",
-      rises ? "bottom-space-5" : "top-space-5",
+      rises ? "bottom-space-4" : "top-space-4",
     ]}
   >
     {@render tools()}

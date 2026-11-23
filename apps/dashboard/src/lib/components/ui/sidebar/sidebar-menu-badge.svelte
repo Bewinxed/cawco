@@ -9,8 +9,8 @@
   const sidebarMenuBadgeVariants = tv({
     variants: {
       tone: {
-        row: "text-ink-strong peer-data-active/menu-button:text-brand-ink",
-        live: "bg-status-live-bg text-status-live-ink data-blocked:bg-status-attn-bg data-blocked:text-status-attn-ink",
+        row: "text-ink-strong peer-data-active/menu-button:text-accent-ink",
+        live: "bg-status-live-bg text-status-live data-blocked:bg-status-attn-bg data-blocked:text-status-attn",
       },
     },
     defaultVariants: { tone: "row" },

@@ -24,11 +24,11 @@
 
 <!-- The small button's height: where it rests is measured from it. -->
 <button
-  class="select-none mark-line pressable inline-flex items-center gap-space-2 h-control-sm py-0 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-lg text-size-label font-medium text-ink-strong hover:bg-surface-hover"
+  class="select-none mark-line pressable inline-flex items-center gap-space-2 h-control-sm py-0 px-space-3 border border-border-hairline rounded-sm bg-surface-raised shadow-lg text-base font-medium text-ink-strong hover:bg-surface-hover"
   onclick={onjump}
   type="button"
-  in:rise={"--duration-panel"}
-  out:rise={"--duration-fade"}
+  in:rise={"--duration-slow"}
+  out:rise={"--duration-base"}
 >
   <IconArrowDown class="size-icon-md" /><span
     >{back ? findInWords.back : "Jump to latest"}</span

@@ -33,7 +33,7 @@
       <span class="min-w-0 wrap-anywhere">obelisk</span>
     </li>
     <li
-      class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill border border-brand-solid bg-brand-wash px-space-2 py-space-1 type-meta text-brand-ink"
+      class="mark-line relative flex min-w-0 items-center gap-space-1 rounded-pill border border-accent bg-accent-wash px-space-2 py-space-1 type-meta text-accent-ink"
     >
       <IconPlus aria-hidden="true" class="size-icon-sm" />
       <span class="whitespace-nowrap">cawco</span>

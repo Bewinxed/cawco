@@ -58,7 +58,7 @@
     {#if done}
       <IconSuccess
         aria-hidden="true"
-        class="size-icon-md text-status-done-ink"
+        class="size-icon-md text-status-done"
       />
     {:else}
       <IconLink aria-hidden="true" class="size-icon-md" />

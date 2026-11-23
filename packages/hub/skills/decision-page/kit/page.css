@@ -13,7 +13,7 @@ body {
   background: var(--color-surface-page);
   color: var(--color-ink-strong);
   font-family: var(--font-sans);
-  font-size: var(--text-body);
+  font-size: var(--text-base);
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
@@ -33,7 +33,7 @@ code {
   font-size: calc(1em * 0.9);
 }
 a {
-  color: var(--color-brand-ink);
+  color: var(--color-accent-ink);
 }
 
 /* Caw, light and dark: always a pair, the page shows the right one. */
@@ -62,7 +62,7 @@ a {
     calc(
       var(--dp-real-w, 0px) + 2 *
         (
-          var(--spacing-space-4) + 1px + var(--spacing-space-5) +
+          var(--spacing-space-4) + 1px + var(--spacing-space-4) +
             var(--spacing-space-4) + var(--spacing-space-1)
         )
     )
@@ -83,11 +83,11 @@ a {
   align-items: center;
 }
 .dp-hero h1 {
-  font-size: var(--text-title);
+  font-size: var(--text-lg);
 }
 .dp-hero p {
   color: var(--color-ink-muted);
-  max-width: var(--spacing-measure-short);
+  max-width: 60ch;
   margin-top: var(--spacing-space-1);
 }
 .dp-meter {
@@ -96,12 +96,12 @@ a {
   align-items: flex-end;
   gap: var(--spacing-space-1);
   color: var(--color-ink-muted);
-  font-size: var(--text-label);
+  font-size: var(--text-base);
   font-variant-numeric: tabular-nums;
 }
 .dp-meter b {
   color: var(--color-ink-strong);
-  font-size: var(--text-title);
+  font-size: var(--text-lg);
 }
 .dp-bar {
   width: calc(var(--spacing) * 30);
@@ -114,13 +114,13 @@ a {
   display: block;
   height: 100%;
   width: 0;
-  background: var(--color-brand-solid);
-  transition: width var(--duration-control) var(--ease-out);
+  background: var(--color-accent);
+  transition: width var(--duration-fast) var(--ease-out);
 }
 .dp-offline {
-  color: var(--color-status-attn-ink);
+  color: var(--color-status-attn);
   background: var(--color-status-attn-bg);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   padding: var(--spacing-space-2) var(--spacing-space-3);
 }
 /* biome-ignore lint/plugin/no-raw-css-values: a plain stylesheet no Tailwind build reads, and a media query reads no custom property: the theme's --breakpoint-phone (640px). */
@@ -138,9 +138,9 @@ a {
 .dp-card {
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border-hairline);
-  border-radius: var(--radius-modal);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
-  padding: var(--spacing-space-5);
+  padding: var(--spacing-space-4);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-space-4);
@@ -157,11 +157,11 @@ a {
   flex-wrap: wrap;
 }
 .dp-card h2 {
-  font-size: var(--text-title);
+  font-size: var(--text-lg);
   flex: 1 1 calc(var(--spacing) * 60);
 }
 .dp-state {
-  font-size: var(--text-meta);
+  font-size: var(--text-sm);
   color: var(--color-ink-muted);
   min-inline-size: 0;
   overflow-wrap: anywhere;
@@ -180,12 +180,12 @@ a {
   min-block-size: var(--spacing-control-md);
   padding: 0 var(--spacing-space-4);
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background-color: var(--color-action-solid);
-  color: var(--color-on-action);
-  font: var(--type-label);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-accent);
+  color: var(--color-on-accent);
+  font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
   cursor: pointer;
-  transition: background-color var(--duration-control) var(--ease-out);
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
 .dp-send::before {
   content: "";
@@ -193,18 +193,18 @@ a {
   inset: -1px;
   z-index: -1;
   border-radius: inherit;
-  background-image: var(--action-surface);
+  background-image: linear-gradient(to bottom, oklch(from var(--color-accent) calc(l + 0.025) c h), oklch(from var(--color-accent) calc(l - 0.025) c h));
 }
 @media (hover: hover) and (pointer: fine) {
   .dp-send:not(:disabled):hover {
-    background-color: var(--color-action-hover);
+    background-color: oklch(from var(--color-accent) calc(l - 0.045) c h);
   }
   .dp-send:not(:disabled):hover::before {
-    background-image: var(--action-surface-hover);
+    background-image: linear-gradient(to bottom, oklch(from var(--color-accent) calc(l - 0.02) c h), oklch(from var(--color-accent) calc(l - 0.07) c h));
   }
 }
 .dp-send:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
+  outline: 2px solid var(--color-accent-ink);
   outline-offset: 2px;
 }
 .dp-send:disabled {
@@ -219,8 +219,8 @@ a {
 @media (prefers-reduced-motion: no-preference) {
   .dp-send {
     transition:
-      background-color var(--duration-control) var(--ease-out),
-      transform var(--duration-control) var(--ease-out);
+      background-color var(--duration-fast) var(--ease-out),
+      transform var(--duration-fast) var(--ease-out);
   }
   .dp-send:active:not(:disabled) {
     transform: scale(var(--press-scale));
@@ -262,7 +262,7 @@ a {
   min-width: 0;
 }
 .dp-pane > figcaption {
-  font-size: var(--text-meta);
+  font-size: var(--text-sm);
   color: var(--color-ink-muted);
   font-weight: var(--font-weight-medium);
 }
@@ -287,8 +287,8 @@ a {
    Its line and cost stand under the label, so it grows past 30px. */
 .dp-opt {
   font: inherit;
-  font-size: var(--text-label);
-  line-height: var(--leading-label);
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
   text-align: start;
   cursor: pointer;
   background: var(--color-surface-raised);
@@ -303,8 +303,8 @@ a {
   min-inline-size: 0;
   overflow-wrap: anywhere;
   transition:
-    border-color var(--duration-control) var(--ease-out),
-    background-color var(--duration-control) var(--ease-out);
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
   .dp-opt:not([data-cawco-picked]):hover {
@@ -312,7 +312,7 @@ a {
   }
 }
 .dp-opt:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
+  outline: 2px solid var(--color-accent-ink);
   outline-offset: 2px;
 }
 /* An option's keycap and label run, in its chip and on the decided line. */
@@ -342,25 +342,25 @@ a {
   background: var(--color-surface-recess);
   color: var(--color-ink-strong);
   font-family: var(--font-mono);
-  font-size: var(--text-meta);
+  font-size: var(--text-sm);
   font-weight: var(--font-weight-normal);
   line-height: 1;
   /* The chosen treatment arrives where the option stands, a colour change
-     over --duration-control on ease-out with the chip's edge and fill (and
+     over --duration-fast on ease-out with the chip's edge and fill (and
      Recommended's fill): a colour fade, so it runs with reduced motion too. */
   transition:
-    background-color var(--duration-control) var(--ease-out),
-    color var(--duration-control) var(--ease-out);
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 .dp-opt > span {
-  font-size: var(--text-label);
+  font-size: var(--text-base);
   color: var(--color-ink-muted);
   line-height: 1.4;
 }
 /* What it costs and what it builds, under what it gets: the meta size. */
 .dp-opt .dp-cost,
 .dp-opt .dp-builds {
-  font-size: var(--text-meta);
+  font-size: var(--text-sm);
 }
 /* Recommended, first in its option, over the label: the badge (DESIGN.md, Badges, chips and pills), so the option's line under the label reads as
    its reason. */
@@ -374,10 +374,10 @@ a {
   border-radius: var(--radius-xs);
   background: var(--color-surface-recess);
   color: var(--color-ink-strong);
-  font: var(--type-label);
+  font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
   line-height: 1;
   white-space: nowrap;
-  transition: background-color var(--duration-control) var(--ease-out);
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
 .dp-opt[data-cawco-picked] .dp-tag {
   background: var(--color-surface-raised);
@@ -386,12 +386,12 @@ a {
    fill and the keycap filled vermilion with a white digit; its words keep
    their ink. */
 .dp-opt[data-cawco-picked] {
-  border-color: var(--color-brand-solid);
+  border-color: var(--color-accent);
   background: var(--color-surface-recess);
 }
 .dp-opt[data-cawco-picked] .dp-kc {
-  background: var(--color-action-solid);
-  color: var(--color-on-action);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
 }
 /* An option chip stands taller than 44px, so a
    press tints it to surface-fill and moves nothing. */
@@ -409,7 +409,7 @@ a {
   flex-direction: column;
   gap: var(--spacing-space-1);
   color: var(--color-ink-muted);
-  font-size: var(--text-label);
+  font-size: var(--text-base);
 }
 .dp-note textarea {
   font: inherit;
@@ -417,7 +417,7 @@ a {
   color: var(--color-ink-strong);
   background: var(--color-surface-page);
   border: 1px solid var(--color-border-control);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   padding: var(--spacing-space-2) var(--spacing-space-3);
   resize: vertical;
 }
@@ -428,7 +428,7 @@ a {
 /* The 44 Touch Rule: under a finger the note stands 44px tall. */
 @media (pointer: coarse) {
   .dp-note textarea {
-    font-size: var(--text-row);
+    font-size: calc(var(--spacing) * 4);
     min-block-size: var(--spacing-control-lg);
   }
 }
@@ -481,14 +481,14 @@ a {
 @media (width <= 640px) {
   .dp-real {
     flex: none;
-    margin-inline: calc(-1 * var(--spacing-space-5));
+    margin-inline: calc(-1 * var(--spacing-space-4));
     max-inline-size: none;
-    inline-size: calc(100% + 2 * var(--spacing-space-5));
+    inline-size: calc(100% + 2 * var(--spacing-space-4));
     border-radius: 0;
     padding-inline: 0;
   }
   .dp-real > figcaption {
-    padding-inline: var(--spacing-space-5);
+    padding-inline: var(--spacing-space-4);
   }
   .dp-real-scroll {
     padding-inline: 0;

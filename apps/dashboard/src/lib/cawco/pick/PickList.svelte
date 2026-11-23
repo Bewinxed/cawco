@@ -38,7 +38,7 @@
 
 {#if menu}
   <ContextMenu.RadioGroup aria-label={label} value={menu.value}>
-    <div data-slot="list" class="grid gap-space-row">
+    <div data-slot="list" class="grid gap-space-1">
       {@render children()}
     </div>
   </ContextMenu.RadioGroup>
@@ -46,7 +46,7 @@
   <div
     data-slot="list"
     aria-label={label}
-    class="grid gap-space-row"
+    class="grid gap-space-1"
     role="listbox"
   >
     {@render children()}

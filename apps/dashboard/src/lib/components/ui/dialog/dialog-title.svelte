@@ -11,7 +11,7 @@
     base: "type-title",
     variants: {
       lead: { glyph: "mark-line flex items-center gap-2" },
-      look: { path: "dir-rtl truncate font-mono text-label" },
+      look: { path: "dir-rtl truncate font-mono type-label" },
       visible: { true: "", false: "sr-only" },
     },
     defaultVariants: { visible: true },

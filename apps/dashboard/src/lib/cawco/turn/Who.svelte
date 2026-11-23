@@ -87,7 +87,7 @@
   const validAt = $derived(at && !Number.isNaN(at.getTime()) ? at : null);
   /** A grouped clock's line: the body's size at the words' leading (`--who-lead`, set where a host floats it beside rendered prose), else the body's. */
   const LINE_H =
-    "calc(var(--text-body) * var(--who-lead, var(--leading-body)))";
+    "calc(var(--who-lead, var(--leading-base)))";
   const clock = $derived.by(() => {
     if (!validAt) {
       return "";
@@ -113,7 +113,7 @@
   data-turn-who
   data-grouped={grouped || undefined}
   class={[
-    "flex items-center gap-space-2 text-size-label text-ink-muted font-medium mb-space-2 data-grouped:float-end data-grouped:items-baseline data-grouped:justify-end data-grouped:text-size-meta data-grouped:min-w-ch-9 data-grouped:min-h-(--who-line-h) data-grouped:mb-0 data-grouped:ms-space-3",
+    "flex items-center gap-space-2 text-base text-ink-muted font-medium mb-space-2 data-grouped:float-end data-grouped:items-baseline data-grouped:justify-end data-grouped:text-sm data-grouped:min-w-ch-9 data-grouped:min-h-(--who-line-h) data-grouped:mb-0 data-grouped:ms-space-3",
     !grouped && "mark-line",
   ]}
   style:--who-line-h={LINE_H}
@@ -122,7 +122,7 @@
     <span class="sr-only">{name}</span>
     <span
       aria-hidden="true"
-      class="w-0 overflow-clip text-size-body leading-(--who-lead,var(--leading-body))"
+      class="w-0 overflow-clip text-base leading-(--who-lead,var(--leading-base))"
       data-slot="strut">&#8203;</span
     >
   {:else}
@@ -131,7 +131,7 @@
       <span
         data-slot="dot"
         aria-hidden="true"
-        class="size-(--row-mark-box) rounded-xs flex items-center justify-center leading-0 flex-none overflow-visible"
+        class="size-4.5 rounded-xs flex items-center justify-center leading-0 flex-none overflow-visible"
         data-face
         data-box>{@render voice.face(live)}</span
       >
@@ -145,21 +145,21 @@
         data-slot="dot"
         data-a={!you || undefined}
         aria-hidden="true"
-        class="relative size-(--row-mark-box) rounded-xs flex items-center justify-center leading-0 flex-none data-u:size-(--row-mark) data-u:mx-(--well-x) data-u:rounded-xs data-u:bg-action-surface not-data-a:data-u:text-on-action data-a:bg-brand-solid data-a:text-on-action"
+        class="relative size-4.5 rounded-xs flex items-center justify-center leading-0 flex-none data-u:size-4.25 data-u:mx-(--well-x) data-u:rounded-xs data-u:bg-accent-surface not-data-a:data-u:text-on-accent data-a:bg-accent data-a:text-on-accent"
         data-box
       >
         {#if you}
-          <IconUser class="block size-(--row-mark-glyph)" />
+          <IconUser class="block size-2.75" />
         {:else}
           <IconAgent class="block size-icon-sm" />
           {#if working}
             <!-- The status dot on the mark's top-end corner, as a pin's pill wears it. -->
-            <LiveDot class="absolute -end-space-row -top-space-row" cut />
+            <LiveDot class="absolute -end-space-1 -top-space-1" cut />
           {/if}
         {/if}
       </span>
     {/if}
-    <span data-slot="role" class="text-size-label font-medium text-ink-strong"
+    <span data-slot="role" class="text-base font-medium text-ink-strong"
       >{name}</span
     >
   {/if}
@@ -170,7 +170,7 @@
     <span
       data-slot="note"
       class={[
-        "text-size-meta font-normal text-ink-muted",
+        "text-sm font-normal text-ink-muted",
         !noteLive && "ms-auto",
       ]}>{note}</span
     >
@@ -191,7 +191,7 @@
       data-after-note={note || (actions ? "" : undefined)}
       data-shown={shown || undefined}
       data-part={(grouped && you) || undefined}
-      class="ms-auto text-size-meta font-normal text-ink-muted tabular-nums opacity-0 data-shown:opacity-100 data-part:opacity-100 group-hover/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out data-after-note:ms-0"
+      class="ms-auto text-sm font-normal text-ink-muted tabular-nums opacity-0 data-shown:opacity-100 data-part:opacity-100 group-hover/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--duration-fast) motion-safe:ease-out data-after-note:ms-0"
       datetime={validAt.toISOString()}>{clock}</time
     >
   {/if}

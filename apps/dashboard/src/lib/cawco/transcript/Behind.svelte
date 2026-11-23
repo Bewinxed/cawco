@@ -64,10 +64,10 @@
 <div
   data-floating={floating || undefined}
   data-slot="behind"
-  class="flex flex-wrap items-center justify-center gap-x-space-2 p-space-2 text-size-meta font-normal text-ink-muted text-center data-floating:w-max data-floating:max-w-full data-floating:px-space-3 data-floating:border data-floating:border-border-hairline data-floating:rounded-md data-floating:bg-surface-raised data-floating:shadow-lg data-floating:pointer-events-auto"
+  class="flex flex-wrap items-center justify-center gap-x-space-2 p-space-2 text-sm font-normal text-ink-muted text-center data-floating:w-max data-floating:max-w-full data-floating:px-space-3 data-floating:border data-floating:border-border-hairline data-floating:rounded-sm data-floating:bg-surface-raised data-floating:shadow-lg data-floating:pointer-events-auto"
   role="status"
-  in:rise={"--duration-panel"}
-  out:rise={"--duration-fade"}
+  in:rise={"--duration-slow"}
+  out:rise={"--duration-base"}
 >
   {#if reconnectingNow(fault)}
     <p class="min-w-0 text-balance">

@@ -15,7 +15,7 @@
 import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
 
 /** `--duration-breath` in ms, read from the root. */
-const breathMs = (): number => dur("--duration-breath");
+const breathMs = (): number => (dur("--duration-loop") * 2);
 
 export class TypedExamples {
   /** What the placeholder shows now. */
@@ -59,7 +59,7 @@ export class TypedExamples {
       this.text = this.#rest;
       return stop;
     }
-    const letter = dur("--duration-step");
+    const letter = (dur("--duration-fast") / 2);
     const hold = breathMs();
     const type = (words: string, then: () => void, at = 0) => {
       this.text = words.slice(0, at);

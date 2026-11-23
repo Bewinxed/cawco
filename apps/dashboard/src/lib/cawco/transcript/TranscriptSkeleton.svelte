@@ -24,8 +24,8 @@
 {#snippet who()}
   <div
     data-slot="who"
-    style:--who-h="max(var(--spacing-space-5), 1lh)"
-    class="flex items-center gap-space-2 text-size-label h-(--who-h) mb-space-2"
+    style:--who-h="max(var(--spacing-space-4), 1lh)"
+    class="flex items-center gap-space-2 text-base h-(--who-h) mb-space-2"
   >
     <Skeleton
       data-transcript-skeleton-mark
@@ -61,7 +61,7 @@
   aria-busy="true"
   style:--sk-foot="var(--composer-clearance, calc(var(--spacing-space-8) * 3))"
   style:--sk-line-my="calc((1lh - 1ex) / 2)"
-  class="relative flex flex-col justify-end flex-auto min-h-0 overflow-hidden pb-(--sk-foot) ps-space-6 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 tx-columns"
+  class="relative flex flex-col justify-end flex-auto min-h-0 overflow-hidden pb-(--sk-foot) ps-space-6 pe-space-6 max-desk:ps-space-4 max-desk:pe-space-4 tx-columns"
   role="status"
 >
   <!-- Read, never seen: off-screen rather than `display: none`, which
@@ -72,8 +72,8 @@
        exactly as MessageRow draws a run of one: under the header, its start
        edge on the reader's mark, the words inside at its padding. Who: the
        18px mark at --radius-xs and the speaker's name, on the line box
-       Who.svelte's label sets. A paragraph as MessageBody sets it: --text-body
-       at --leading-body in a 74ch measure, each bar centred in one line box,
+       Who.svelte's label sets. A paragraph as MessageBody sets it: --text-base
+       at --leading-base in a 74ch measure, each bar centred in one line box,
        so the pitch is the prose's pitch. The well pads by the turn's --pad,
        which steps down at the narrow breakpoint (`turn-pad`). -->
   <div data-you data-slot="block" class="mt-space-4 turn-pad">
@@ -83,7 +83,7 @@
       style:--well-pad-block="calc(var(--spacing-space-2) + 1px)"
       class="ms-(--well-x) py-(--well-pad-block) px-(--pad) inset-ring-1 inset-ring-border-control rounded-sm bg-surface-sunk"
     >
-      <div class="flex flex-col max-w-measure text-size-body leading-body">
+      <div class="flex flex-col max-w-measure text-base leading-base">
         {@render line("52%")}
       </div>
     </div>
@@ -95,7 +95,7 @@
     {#each ANSWER as lines, i (i)}
       <div
         class={[
-          "flex flex-col max-w-measure text-size-body leading-body",
+          "flex flex-col max-w-measure text-base leading-base",
           i > 0 && "mt-space-3",
         ]}
       >
@@ -111,7 +111,7 @@
        in the rail cell, the verb, then the mono argument. -->
   <div data-slot="tools" data-tx-rail class="rail-row">
     {#each TOOLS as width (width)}
-      <div class="min-h-(--tx-line) coarse:min-h-control-lg rail-line">
+      <div class="min-h-6.5 coarse:min-h-control-lg rail-line">
         <Skeleton data-rail-cell radius="text" cell="rail" data-box /><Skeleton
           class="w-space-8 flex-none"
           height="x-height"
@@ -131,7 +131,7 @@
   <!-- And what it said about them. -->
   <div data-slot="block" class="mt-space-4">
     {@render who()}
-    <div class="flex flex-col max-w-measure text-size-body leading-body">
+    <div class="flex flex-col max-w-measure text-base leading-base">
       {#each AFTER as width (width)}
         {@render line(width)}
       {/each}

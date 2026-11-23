@@ -177,7 +177,7 @@
   >
     <div
       data-slot="tile"
-      class="relative grid rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-sm"
+      class="relative grid rounded-sm border border-border-hairline bg-surface-raised p-space-3 shadow-sm"
     >
       {#key view}
         <div
@@ -204,7 +204,7 @@
                 class="mark-line m-0 flex items-center gap-space-2 type-label text-ink-strong"
                 id="{id}-title"
               >
-                <IconKey class="size-icon-md text-status-attn-glyph" />
+                <IconKey class="size-icon-md text-status-attn" />
                 <span>Unlock {machine.hostname}</span>
               </p>
               <p
@@ -235,7 +235,7 @@
 
               {#if phase.kind === "error"}
                 <p
-                  class="m-0 type-meta text-status-fail-ink"
+                  class="m-0 type-meta text-status-fail"
                   id="{id}-error"
                   role="alert"
                 >

@@ -269,7 +269,7 @@
   {@const problem = problemOf(row)}
   {#if problem}
     <p
-      class="m-0 type-meta text-status-fail-ink text-pretty"
+      class="m-0 type-meta text-status-fail text-pretty"
       data-problem
       role="alert"
       transition:unfold
@@ -432,13 +432,13 @@
     <p class="m-0 flex min-w-0 flex-col gap-space-1 type-label">
       {#if who.projectId !== null && project !== null}
         <a
-          class="text-brand-ink underline-offset-2 wrap-anywhere can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+          class="text-accent-ink underline-offset-2 wrap-anywhere can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs"
           href={folderFileHref(who.projectId, "AGENTS.md")}
           >{decidesWords.cawInstructions(project)}</a
         >
       {/if}
       <a
-        class="text-brand-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+        class="text-accent-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs"
         href="/config/skills">{decidesWords.cawSkills}</a
       >
     </p>
@@ -580,7 +580,7 @@
   <p class="m-0 type-meta text-ink-muted">{decidesWords.hearHint}</p>
   {#if who.projectId !== null}
     <a
-      class="self-start type-label text-brand-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+      class="self-start type-label text-accent-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs"
       href="/project/{encodeURIComponent(who.projectId)}?view=decisions"
       >{decidesWords.answersIn}</a
     >
@@ -619,7 +619,7 @@
       <button
         aria-expanded={setup.picking}
         aria-label={decidesWords.changePicture(face.name)}
-        class="relative flex-none rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
+        class="relative flex-none rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid"
         onclick={() => {
           setup.picking = !setup.picking;
         }}
@@ -719,7 +719,7 @@
         <p class="m-0 me-auto min-w-0 type-meta text-ink-muted text-pretty">
           {decidesWords.fromNowOn}
           {#if setup.tried && count > 0}
-            <span class="text-status-fail-ink">
+            <span class="text-status-fail">
               {decidesWords.toFix(count)}</span
             >
           {/if}
@@ -767,7 +767,7 @@
       </div>
       {#if member !== null && isAgent && member.delegateType}
         <a
-          class="self-end type-meta text-brand-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+          class="self-end type-meta text-accent-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs"
           href="/config/delegate-types/{encodeURIComponent(
             member.delegateType
           )}">{decidesWords.openType}</a

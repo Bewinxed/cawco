@@ -54,7 +54,7 @@
     }
   };
   const thumb =
-    "block size-space-4 rounded-pill border-2 border-surface-page shadow-sm outline-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-1";
+    "block size-space-4 rounded-pill border-2 border-surface-page shadow-sm outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-1";
 </script>
 
 <ColorPicker.Root
@@ -67,7 +67,7 @@
     aria-label={words.area}
     class={["relative w-full touch-none", wide ? "aspect-2/1" : "aspect-4/3"]}
   >
-    <ColorPicker.AreaBackground class="size-full rounded-md" />
+    <ColorPicker.AreaBackground class="size-full rounded-sm" />
     <ColorPicker.AreaThumb
       aria-label={words.area}
       class={thumb}

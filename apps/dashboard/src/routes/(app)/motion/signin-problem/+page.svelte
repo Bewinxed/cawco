@@ -34,9 +34,9 @@
 </script>
 
 <div
-  class={cn("ns-theme", glidePopoverVariants({ class: "mx-auto my-space-5" }))}
+  class={cn("ns-theme", glidePopoverVariants({ class: "mx-auto my-space-4" }))}
   data-bench
-  style="--ns-pop-width: var(--signin-pop-w)"
+  style="--ns-pop-width: calc(var(--spacing) * 85)"
 >
   <div class="p-space-2">
     <SigninPanel expected={null} {flow} machine="bench" online />

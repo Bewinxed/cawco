@@ -91,14 +91,14 @@ const OVERLAP = 1;
  *   a tap fires a synthetic mousemove and no mouseleave, so a ghost would
  *   park on the last tap as a second selection) there is none, unless the
  *   rows' own highlight drives it (`data-follow`). It fades in place over
- *   --duration-control; gliding (`GLIDES.ghost`), it moves 80ms on --ease-in-out.
+ *   --duration-fast; gliding (`GLIDES.ghost`), it moves 80ms on --ease-in-out.
  *   Unseen (`data-unseen`), it still marks the row it is on (`data-ghosted`)
  *   and is not drawn: folder tabs draw their own hover.
  * - The pill is the selection, the apricot wash its row's selected ink
  *   stands on; gliding, it moves 120ms on --ease-drawer. The trail is the
  *   old selection fading where it was (`data-fade`), and never glides: its
  *   parts stay off the compositor. With less motion a selection that moves
- *   cross-fades (`data-swap`) over --duration-fade.
+ *   cross-fades (`data-swap`) over --duration-base.
  * - `card` (the host's `data-highlight`): a grid of icon cards (updates/ChannelCards.svelte), whose pill is the channel card's selection frame, 1px
  *   brand-solid over the picked fill (option-picked) at the card's own radius, drawn over the
  *   card's border and fill and under its face (CardFace): its edges are
@@ -114,12 +114,12 @@ const LAYERS = `
   z-index: -1;
   opacity: 0;
   will-change: opacity;
-  background-color: var(--color-selected-bg);
+  background-color: var(--color-accent-wash);
 }
 [data-slot="highlight-ghost"] {
   display: none;
   background-color: var(--ghost, var(--color-surface-hover));
-  transition: opacity var(--duration-control) var(--ease-out);
+  transition: opacity var(--duration-fast) var(--ease-out);
 }
 @media (hover: hover) {
   [data-slot="highlight-ghost"] {
@@ -133,13 +133,13 @@ const LAYERS = `
   display: none;
 }
 [data-slot="highlight-pill"][data-swap] {
-  transition: opacity var(--duration-fade) var(--ease-out);
+  transition: opacity var(--duration-base) var(--ease-out);
 }
 [data-slot="highlight-trail"][data-fade] {
-  transition: opacity var(--duration-control) var(--ease-out);
+  transition: opacity var(--duration-fast) var(--ease-out);
 }
 [data-slot="highlight-trail"][data-fade][data-swap] {
-  transition: opacity var(--duration-fade) var(--ease-out);
+  transition: opacity var(--duration-base) var(--ease-out);
 }
 [data-part] {
   position: absolute;
@@ -153,19 +153,19 @@ const LAYERS = `
   will-change: transform;
 }
 [data-part^="edge-"] {
-  background-color: var(--color-brand-solid);
+  background-color: var(--color-accent);
 }
 :is([data-part="edge-top"], [data-part="edge-bottom"]) {
-  height: var(--border-width);
+  height: 1px;
 }
 :is([data-part="edge-left"], [data-part="edge-right"]) {
-  width: var(--border-width);
+  width: 1px;
 }
 [data-part="edge-bottom"] {
-  top: calc(-1 * var(--border-width));
+  top: calc(-1 * 1px);
 }
 [data-part="edge-right"] {
-  left: calc(-1 * var(--border-width));
+  left: calc(-1 * 1px);
 }
 [data-highlight-frame] {
   pointer-events: none;
@@ -179,16 +179,16 @@ const LAYERS = `
   background-color: var(--color-option-picked);
 }
 :host([data-highlight="card"]) :is([data-part="corner-tl"], [data-part="corner-tr"]) {
-  border-top: var(--border-width) solid var(--color-brand-solid);
+  border-top: 1px solid var(--color-accent);
 }
 :host([data-highlight="card"]) :is([data-part="corner-bl"], [data-part="corner-br"]) {
-  border-bottom: var(--border-width) solid var(--color-brand-solid);
+  border-bottom: 1px solid var(--color-accent);
 }
 :host([data-highlight="card"]) :is([data-part="corner-tl"], [data-part="corner-bl"]) {
-  border-left: var(--border-width) solid var(--color-brand-solid);
+  border-left: 1px solid var(--color-accent);
 }
 :host([data-highlight="card"]) :is([data-part="corner-tr"], [data-part="corner-br"]) {
-  border-right: var(--border-width) solid var(--color-brand-solid);
+  border-right: 1px solid var(--color-accent);
 }
 `;
 
@@ -367,8 +367,8 @@ interface Glide {
 }
 /** The ghost's glide and the pill's (the sheet's head says which is which). */
 const GLIDES = {
-  ghost: { duration: "--duration-step", easing: "--ease-in-out" },
-  pill: { duration: "--duration-control", easing: "--ease-drawer" },
+  ghost: { duration: "--duration-fast", easing: "--ease-in-out" },
+  pill: { duration: "--duration-fast", easing: "--ease-drawer" },
 } as const satisfies Record<string, Glide>;
 
 const layerOf = (slot: string, card: boolean): Layer => {
@@ -1048,7 +1048,7 @@ export function highlight(options: HighlightOptions) {
       draw(trail, from, card);
       show(trail, true);
       requestAnimationFrame(() => {
-        // With less motion the fade is the whole move: --duration-fade (`swap`).
+        // With less motion the fade is the whole move: --duration-base (`swap`).
         trail.el.toggleAttribute("data-fade", true);
         trail.el.toggleAttribute("data-swap", reduced.matches);
         show(trail, false);

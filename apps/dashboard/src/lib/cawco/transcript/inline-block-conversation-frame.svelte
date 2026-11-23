@@ -77,7 +77,7 @@
 
 <div
   data-slot="transcript"
-  class="tx-columns min-h-0 ps-space-6 pe-space-6 pt-space-2 pb-space-6 max-desk:ps-space-5 max-desk:pe-space-5"
+  class="tx-columns min-h-0 ps-space-6 pe-space-6 pt-space-2 pb-space-6 max-desk:ps-space-4 max-desk:pe-space-4"
 >
   {#each messages as message (message.id)}
     <Turn>

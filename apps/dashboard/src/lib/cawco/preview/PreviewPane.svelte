@@ -1162,7 +1162,7 @@
     <!-- biome-ignore lint/security/useIframeSandbox: the previewed app runs on its own origin (the preview proxy's), which is the boundary; a sandbox would take the forms, popups and downloads it is being tried with. -->
     <iframe
       data-ready={!current || previewFrame.loaded || undefined}
-      class="absolute inset-x-0 top-(--page-top) block h-(--page-h) w-full scheme-light scheme-dark:scheme-dark bg-system-canvas border-none border-current opacity-0 transition-[opacity] duration-(--duration-control) ease-out data-ready:opacity-100"
+      class="absolute inset-x-0 top-(--page-top) block h-(--page-h) w-full scheme-light scheme-dark:scheme-dark bg-system-canvas border-none border-current opacity-0 transition-[opacity] duration-(--duration-fast) ease-out data-ready:opacity-100"
       style:--page-top={previewFrame.headRoomTaken || paneSheet.inGraph
         ? "0px"
         : "var(--side-room, 0px)"}
@@ -1341,7 +1341,7 @@
         undefined}
       data-slot="cover"
       aria-hidden={stageCover.stageWaiting ? undefined : "true"}
-      class="group/cover absolute inset-x-0 top-(--side-room,0px) bottom-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] duration-(--duration-control) ease-out data-ready:opacity-0"
+      class="group/cover absolute inset-x-0 top-(--side-room,0px) bottom-0 p-space-4 bg-surface-recess pointer-events-none transition-[opacity] duration-(--duration-fast) ease-out data-ready:opacity-0"
       role={stageCover.stageWaiting ? "status" : undefined}
       {@attach (node) => {
         // Ready, the cover and its skeleton go in the skeleton's reveal and
@@ -1672,7 +1672,7 @@
       transition:appear
     >
       <p
-        class="flex-1 basis-56 min-w-0 m-0 text-status-fail-glyph text-size-body font-normal text-pretty wrap-anywhere"
+        class="flex-1 basis-56 min-w-0 m-0 text-status-fail text-base font-normal text-pretty wrap-anywhere"
       >
         {paneNotice.failure
           ? paneNotice.failure.message

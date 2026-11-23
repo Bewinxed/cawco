@@ -333,7 +333,7 @@
         handOn = false;
         next.focus();
       }
-    }, dur("--duration-panel"));
+    }, dur("--duration-slow"));
   });
 
   /**
@@ -685,7 +685,7 @@
     <p
       data-wait
       data-slot="refused"
-      class="mt-space-2 text-size-meta font-normal text-status-fail-ink"
+      class="mt-space-2 text-sm font-normal text-status-fail"
       role="status"
     >
       {takeRefused ?? refused}
@@ -693,7 +693,7 @@
   {:else if !out && offline}
     <p
       data-slot="wait"
-      class="mt-space-2 text-size-meta font-normal text-ink-muted"
+      class="mt-space-2 text-sm font-normal text-ink-muted"
       role="status"
     >
       Machine offline — can't answer yet.
@@ -701,7 +701,7 @@
   {:else if !(out || reachable)}
     <p
       data-slot="wait"
-      class="mt-space-2 text-size-meta font-normal text-ink-muted"
+      class="mt-space-2 text-sm font-normal text-ink-muted"
       role="status"
     >
       Reconnecting — can't answer yet.
@@ -712,7 +712,7 @@
 <!-- The title: what asks, and who, with where it stands among the asks
      waiting when there are several ("2 of 3"): they come one at a time.
      The title, the body and the foot come up with the shape one after the
-     other, out of a `--part-blur` blur as they fade and rise, and sink back
+     other, out of a `--spacing-space-1` blur as they fade and rise, and sink back
      together as it folds, each a stagger after the one before (`--part`);
      the delay outranks the shorthand, which resets it. Tested in iOS 27.2
      Safari on 2026-10-23 with a ~1,000-character Bash command's card
@@ -721,9 +721,9 @@
      (2.01px, 0.39px), then none. -->
 {#snippet title(text: string)}
   <h2
-    class="mark-line flex items-center gap-space-2 mb-space-2 text-size-label font-medium text-ink-strong opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
+    class="mark-line flex items-center gap-space-2 mb-space-2 text-base font-medium text-ink-strong opacity-0 blur-(length:--spacing-space-1) transition-fade-blur motion-safe:translate-y-space-2 group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
     style:--part="0"
-    style:--part-delay="calc(var(--part) * var(--duration-step))"
+    style:--part-delay="calc(var(--part) * calc(var(--duration-fast) / 2))"
   >
     <span
       data-slot="glyph"
@@ -796,9 +796,9 @@
          typing before they take over. -->
     <div
       data-slot="body"
-      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 blur-(length:--spacing-space-1) transition-fade-blur motion-safe:translate-y-space-2 group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="1"
-      style:--part-delay="calc(var(--part) * var(--duration-step))"
+      style:--part-delay="calc(var(--part) * calc(var(--duration-fast) / 2))"
     >
       <p
         data-slot="lede"
@@ -808,7 +808,7 @@
       </p>
       <p
         data-slot="browser-meta"
-        class="mb-space-2 min-w-0 text-size-meta text-ink-muted"
+        class="mb-space-2 min-w-0 text-sm text-ink-muted"
       >
         <!-- Broken only after its dots, never inside a label. -->
         <code
@@ -858,16 +858,16 @@
            permission card's own line for that. -->
       <p
         data-slot="detail"
-        class="text-size-label font-normal text-ink-muted mb-space-2"
+        class="text-base font-normal text-ink-muted mb-space-2"
       >
         No agent can see or use this browser until you hand it back.
       </p>
     </div>
     <div
       data-slot="foot"
-      class="flex-none pt-space-1 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="flex-none pt-space-1 opacity-0 blur-(length:--spacing-space-1) transition-fade-blur motion-safe:translate-y-space-2 group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
-      style:--part-delay="calc(var(--part) * var(--duration-step))"
+      style:--part-delay="calc(var(--part) * calc(var(--duration-fast) / 2))"
     >
       <!-- A refusal stands over the pair: the card grows upward from the
            composer's pill, so nothing under the thumb moves as it appears. -->
@@ -926,18 +926,18 @@
          past the box and drew a scrollbar beside the options. -->
     <div
       data-slot="body"
-      class="group/body kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain coarse:pb-(--hit-reach) opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="group/body kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain coarse:pb-(--hit-reach) opacity-0 blur-(length:--spacing-space-1) transition-fade-blur motion-safe:translate-y-space-2 group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       data-railed={questions.length > 1 || undefined}
       style:--hit-reach={"calc((var(--spacing-control-lg) - var(--spacing-control-sm)) / 2)"}
       style:--part="1"
-      style:--part-delay="calc(var(--part) * var(--duration-step))"
+      style:--part-delay="calc(var(--part) * calc(var(--duration-fast) / 2))"
     >
       <!-- The live question's rail, on its lede's inline edge. -->
       {#if rail}
         <span
           data-slot="rail"
           aria-hidden="true"
-          class="absolute top-0 start-0 w-px bg-brand-solid pointer-events-none motion-safe:transition-[translate,block-size] motion-safe:duration-(--duration-control) motion-safe:ease-drawer"
+          class="absolute top-0 start-0 w-px bg-accent pointer-events-none motion-safe:transition-[translate,block-size] motion-safe:duration-(--duration-fast) motion-safe:ease-drawer"
           style:block-size="{rail.height}px"
           style:translate="0 {rail.top}px"
         ></span>
@@ -946,7 +946,7 @@
       {#if presentation.detail}
         <p
           data-slot="detail"
-          class="text-size-label font-normal text-ink-muted mb-space-2 wrap-anywhere group-data-railed/body:ps-space-2"
+          class="text-base font-normal text-ink-muted mb-space-2 wrap-anywhere group-data-railed/body:ps-space-2"
         >
           {presentation.detail}
         </p>
@@ -998,7 +998,7 @@
           <Input
             data-open-answer
             aria-label={askWords.yourAnswerTo(q.question)}
-            class="mt-space-row mb-space-2"
+            class="mt-space-1 mb-space-2"
             disabled={!answerable}
             onfocusin={() => {
               current = qi;
@@ -1023,7 +1023,7 @@
              kit's option draws it. The card only sets where it sits. -->
           <OptionGroup
             aria-labelledby="{claimId}-q{qi}"
-            class="mt-space-row mb-space-2"
+            class="mt-space-1 mb-space-2"
             layout={list ? "list" : "chips"}
             multiple={q.multiSelect}
             onenter={enter}
@@ -1085,9 +1085,9 @@
          option's lower edge (DESIGN.md, The 44 Touch Rule). -->
     <div
       data-slot="foot"
-      class="flex-none pt-space-1 coarse:pt-space-2 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="flex-none pt-space-1 coarse:pt-space-2 opacity-0 blur-(length:--spacing-space-1) transition-fade-blur motion-safe:translate-y-space-2 group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
-      style:--part-delay="calc(var(--part) * var(--duration-step))"
+      style:--part-delay="calc(var(--part) * calc(var(--duration-fast) / 2))"
     >
       <div class="flex gap-space-2">
         <Button
@@ -1130,15 +1130,15 @@
          inside the clip, whole, and the words do not move. -->
     <div
       data-slot="body"
-      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain coarse:-mx-space-3 coarse:px-space-3 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain coarse:-mx-space-3 coarse:px-space-3 opacity-0 blur-(length:--spacing-space-1) transition-fade-blur motion-safe:translate-y-space-2 group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="1"
-      style:--part-delay="calc(var(--part) * var(--duration-step))"
+      style:--part-delay="calc(var(--part) * calc(var(--duration-fast) / 2))"
     >
       <!-- What will happen, in the title's weight: the line the grant is
            made on. -->
       <p
         data-slot="lede"
-        class="text-size-body font-medium leading-body text-ink-strong mb-space-1 max-w-measure wrap-anywhere text-pretty"
+        class="text-base font-medium leading-base text-ink-strong mb-space-1 max-w-measure wrap-anywhere text-pretty"
       >
         {presentation.summary}
       </p>
@@ -1146,7 +1146,7 @@
       {#if presentation.detail}
         <p
           data-slot="detail"
-          class="text-size-label font-normal text-ink-muted mb-space-2 whitespace-pre-line"
+          class="text-base font-normal text-ink-muted mb-space-2 whitespace-pre-line"
         >
           {presentation.detail}
         </p>
@@ -1160,7 +1160,7 @@
         >
           <code
             data-slot="cmd-text"
-            class="flex-auto min-w-0 font-mono text-size-label text-ink-muted overflow-hidden text-ellipsis whitespace-pre group-data-open/cmd:text-ink-strong group-data-open/cmd:whitespace-pre-wrap group-data-open/cmd:wrap-anywhere"
+            class="flex-auto min-w-0 font-mono text-base text-ink-muted overflow-hidden text-ellipsis whitespace-pre group-data-open/cmd:text-ink-strong group-data-open/cmd:whitespace-pre-wrap group-data-open/cmd:wrap-anywhere"
             bind:this={commandLine}
             >{commandOpen ? command : command.trim().split("\n")[0]}</code
           >
@@ -1181,7 +1181,7 @@
               variant="ghost"
             >
               <IconChevronDown
-                class="motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-drawer group-data-open/cmd:rotate-180"
+                class="motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-drawer group-data-open/cmd:rotate-180"
               />
             </Button>
           {/if}
@@ -1194,7 +1194,7 @@
         <div class="flex flex-col gap-space-2 mb-space-2">
           {#each presentation.changes as change, i (i)}
             <DiffView
-              cap="calc(var(--c-ask-diff-share) * 100dvh)"
+              cap="calc(0.4 * 100dvh)"
               filePath={change.path}
               newContent={change.after}
               oldContent={change.before}
@@ -1222,11 +1222,11 @@
               data-slot="prompt-field"
               class="flex flex-col gap-space-1 min-w-0"
             >
-              <dt class="text-size-label font-medium text-ink-muted">
+              <dt class="text-base font-medium text-ink-muted">
                 {field.key}
               </dt>
               <dd
-                class="max-h-50 overflow-auto font-(family-name:--font-mono) text-size-meta text-ink-strong whitespace-pre-wrap break-words"
+                class="max-h-50 overflow-auto font-(family-name:--font-mono) text-sm text-ink-strong whitespace-pre-wrap break-words"
               >
                 {field.value}
               </dd>
@@ -1237,9 +1237,9 @@
     </div>
     <div
       data-slot="foot"
-      class="flex-none pt-space-1 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="flex-none pt-space-1 opacity-0 blur-(length:--spacing-space-1) transition-fade-blur motion-safe:translate-y-space-2 group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
-      style:--part-delay="calc(var(--part) * var(--duration-step))"
+      style:--part-delay="calc(var(--part) * calc(var(--duration-fast) / 2))"
     >
       <!-- JOURNEY §Triage: the full row width sits between grant and
            refusal. At --spacing-space-2 the two sat 7px apart, close enough that a
@@ -1298,15 +1298,15 @@
       {@render wait()}
       {#if rule}
         <!-- A clear break from the gate above, on the scale (--spacing-space-8 /
-             --spacing-space-5). The permission scope actually being granted is
-             consequential text — it reads at --text-label, never the
+             --spacing-space-4). The permission scope actually being granted is
+             consequential text — it reads at --text-base, never the
              10.25px micro-label step. -->
-        <div class="mt-space-8 pt-space-5 border-t border-t-border-hairline">
+        <div class="mt-space-8 pt-space-4 border-t border-t-border-hairline">
           <p
-            class="text-size-body font-normal text-ink-muted mb-space-2 max-w-measure"
+            class="text-base font-normal text-ink-muted mb-space-2 max-w-measure"
           >
             This would allow <span
-              class="font-(family-name:--font-mono) text-size-label"
+              class="font-(family-name:--font-mono) text-base"
               >{rule.full}</span
             >
             for

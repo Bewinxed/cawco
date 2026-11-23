@@ -151,7 +151,7 @@
     data-box
     class={iconTileVariants({
       class: [
-        "transition-[border-color] duration-(--duration-control) ease-out",
+        "transition-[border-color] duration-(--duration-fast) ease-out",
         install.returning === null &&
           install.state !== "joined" &&
           "border border-dashed border-border-control shadow-none",
@@ -160,7 +160,7 @@
     style:color={machineHue(index, install.state === "joined")}
     ><Icon class="size-icon-md flex-none" /></span
   >
-  <span data-slot="words" class="flex min-w-0 flex-1 flex-col gap-space-row">
+  <span data-slot="words" class="flex min-w-0 flex-1 flex-col gap-space-1">
     <span class="mark-line flex min-w-0 items-center gap-space-2">
       <span
         data-slot="name"
@@ -173,7 +173,7 @@
         <span
           data-box
           data-slot="marks"
-          class="flex flex-none items-center gap-space-row"
+          class="flex flex-none items-center gap-space-1"
           aria-hidden="true"
         >
           {#each rows as row (row.step)}
@@ -186,7 +186,7 @@
       data-slot="step"
       class={[
         "mark-line flex min-w-0 items-center gap-space-2 type-meta",
-        past ? "text-status-attn-ink" : "text-ink-muted",
+        past ? "text-status-attn" : "text-ink-muted",
       ]}
     >
       <StepMark state={lead} size="sm" />

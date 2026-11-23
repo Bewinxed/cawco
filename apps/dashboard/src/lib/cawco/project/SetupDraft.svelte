@@ -105,7 +105,7 @@
         <p class="mark-line m-0 flex items-center gap-space-2">
           <IconNeedsYou
             aria-hidden="true"
-            class="size-icon-md flex-none text-status-attn-glyph"
+            class="size-icon-md flex-none text-status-attn"
           />
           <span class="type-label text-ink-strong"
             >{setupWords.waitingOn(waiting)}</span

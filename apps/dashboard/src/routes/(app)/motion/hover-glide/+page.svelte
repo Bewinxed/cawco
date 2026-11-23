@@ -4,7 +4,7 @@
    * The kit highlight's hover ghost in each place it glides, for its glide's
    * proof in one Chromium session over the DevTools protocol: the Animation
    * domain's runs as the pointer goes down the rail (each a `transform` on
-   * --duration-step and --ease-in-out, the fade an `opacity` on --duration-control),
+   * --duration-step and --ease-in-out, the fade an `opacity` on --duration-fast),
    * a Performance trace of that hover at 4x CPU (no non-composited run of
    * the highlight's, no forced layout from it), and the glide paused at its
    * midpoint across the widest change of size, the tabs'. The rail is the

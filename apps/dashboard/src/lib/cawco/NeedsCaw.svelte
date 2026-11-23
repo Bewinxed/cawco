@@ -94,7 +94,7 @@
    * The face's box takes it from the glass's form, which follows the shell
    * container (BarGlass `@max-desk/shell`), not the window: in the wide
    * bar's group a symbol's (`--bar-symbol`), on the phone's glass his own
-   * glass less the same 4px margin (`--spacing-control-xs`). The script
+   * glass less the same 4px margin (`--spacing-space-6`). The script
    * reads the box back (`faceSide`), since a container query is the
    * stylesheet's alone. Before the box is read (the first paint, both
    * sides), the width cookie's guess (`narrow`; first-render.svelte.ts).
@@ -151,7 +151,7 @@
   const ARCS = 9;
   /** The ring's box: his circle, in px (`--spacing-control-md`). */
   const RING_BOX = 36;
-  /** The arcs' stroke, px (`--spacing-space-row`). */
+  /** The arcs' stroke, px (`--spacing-space-1`). */
   const RIM_STROKE = 2;
   /** The glass's own edge, px: its hairline border (Shell `.tools::before`). */
   const GLASS_EDGE = 1;
@@ -298,7 +298,7 @@
    * way; with less motion, a fade. Each arc's path length is 1.
    */
   const drawn = (_node: Element) => ({
-    duration: dur("--duration-panel"),
+    duration: dur("--duration-slow"),
     easing: easeOut,
     css: (t: number) =>
       motionOk.current ? `stroke-dashoffset: ${1 - t}` : `opacity: ${t}`,
@@ -611,14 +611,14 @@
     data-slot="rim"
     data-foot={low || undefined}
     aria-hidden="true"
-    class="pointer-events-none absolute start-1/2 top-1/2 size-control-md -translate-1/2 overflow-visible @max-desk/shell:hidden data-foot:transition-[opacity] data-foot:duration-(--duration-fade) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:data-foot:duration-(--duration-panel)"
+    class="pointer-events-none absolute start-1/2 top-1/2 size-control-md -translate-1/2 overflow-visible @max-desk/shell:hidden data-foot:transition-[opacity] data-foot:duration-(--duration-base) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:data-foot:duration-(--duration-slow)"
     data-count={count}
     viewBox="0 0 {RING_BOX} {RING_BOX}"
   >
     <g data-slot="round">
       {#each arcSlots.filter((k) => roundLow(k) === low) as k (k)}
         <path
-          class="rim-arc fill-none stroke-status-attn-glyph"
+          class="rim-arc fill-none stroke-status-attn"
           d={arcPath(k)}
           pathLength="1"
           transition:drawn
@@ -626,7 +626,7 @@
       {/each}
       {#each lapSlots.filter((k) => roundLow(k) === low) as k (k)}
         <path
-          class="rim-arc fill-none stroke-status-fail-glyph"
+          class="rim-arc fill-none stroke-status-fail"
           d={arcPath(k)}
           pathLength="1"
           transition:drawn
@@ -635,7 +635,7 @@
       {#if ringClosed}
         <path
           data-slot="whole"
-          class="rim-arc fill-none stroke-status-fail-glyph"
+          class="rim-arc fill-none stroke-status-fail"
           d={low ? ROUND_HALF.low : ROUND_HALF.high}
           pathLength="1"
           transition:drawn
@@ -652,14 +652,14 @@
     data-slot="rim"
     data-foot={low || undefined}
     aria-hidden="true"
-    class="pointer-events-none absolute start-1/2 top-1/2 hidden size-control-sm -translate-1/2 overflow-visible @max-desk/shell:block data-foot:transition-[opacity] data-foot:duration-(--duration-fade) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:data-foot:duration-(--duration-panel)"
+    class="pointer-events-none absolute start-1/2 top-1/2 hidden size-control-sm -translate-1/2 overflow-visible @max-desk/shell:block data-foot:transition-[opacity] data-foot:duration-(--duration-base) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:data-foot:duration-(--duration-slow)"
     data-count={count}
     viewBox="{STAND_INSET} {STAND_INSET} {STAND_BOX} {STAND_BOX}"
   >
     <g data-slot="standing">
       {#each arcSlots.filter((k) => standLow(k) === low) as k (k)}
         <path
-          class="rim-arc fill-none stroke-status-attn-glyph"
+          class="rim-arc fill-none stroke-status-attn"
           d={outlinePath(k)}
           pathLength="1"
           transition:drawn
@@ -667,7 +667,7 @@
       {/each}
       {#each lapSlots.filter((k) => standLow(k) === low) as k (k)}
         <path
-          class="rim-arc fill-none stroke-status-fail-glyph"
+          class="rim-arc fill-none stroke-status-fail"
           d={outlinePath(k)}
           pathLength="1"
           transition:drawn
@@ -676,7 +676,7 @@
       {#if ringClosed}
         <path
           data-slot="whole"
-          class="rim-arc fill-none stroke-status-fail-glyph"
+          class="rim-arc fill-none stroke-status-fail"
           d={low ? STAND_HALF.low : STAND_HALF.high}
           pathLength="1"
           transition:drawn
@@ -711,7 +711,7 @@
            press's squash, it was work in the frame that press was waiting
            on. -->
   <span
-    class="pointer-events-none grid place-items-center motion-safe:will-change-transform motion-safe:transition-[transform] motion-safe:duration-(--duration-fade) motion-safe:ease-out motion-safe:data-pressed:transform-(--mug-squash)"
+    class="pointer-events-none grid place-items-center motion-safe:will-change-transform motion-safe:transition-[transform] motion-safe:duration-(--duration-base) motion-safe:ease-out motion-safe:data-pressed:transform-(--mug-squash)"
     data-pressed={pressed || undefined}
     style:--mug-squash="scale(var(--press-scale))"
   >
@@ -722,7 +722,7 @@
              under it for the frame the clip lands. -->
     <span
       data-needs-caw-covered={covering || undefined}
-      class="group/face relative col-start-1 row-start-1 start-(--face-x) top-(--face-y) grid size-4.5 data-needs-caw-covered:invisible @max-desk/shell:size-control-xs"
+      class="group/face relative col-start-1 row-start-1 start-(--face-x) top-(--face-y) grid size-4.5 data-needs-caw-covered:invisible @max-desk/shell:size-space-6"
       data-caw-phase={phase}
       {@attach faceSide}
       style:--bleed="{CAW_STILL_BLEED}px"

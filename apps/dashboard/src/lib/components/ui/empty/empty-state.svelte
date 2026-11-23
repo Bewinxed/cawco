@@ -10,7 +10,7 @@
    * it while there is room and under it when there is not, so the sentence
    * keeps its line. `pad`, its callers' looks: standing in a pane, a pane's
    * own side pads; standing where a transcript's first row would, the
-   * transcript's start edge (--spacing-space-6, --spacing-space-5 under the desk line).
+   * transcript's start edge (--spacing-space-6, --spacing-space-4 under the desk line).
    */
   const emptyStateVariants = tv({
     base: "flex flex-col items-start gap-space-2 py-space-6 text-start",
@@ -38,7 +38,7 @@
       },
       pad: {
         pane: "px-space-6",
-        transcript: "px-space-6 max-desk:px-space-5",
+        transcript: "px-space-6 max-desk:px-space-4",
       },
     },
   });
@@ -145,10 +145,10 @@
   {#if inline}
     <!-- One sentence: what is missing, then why, in meta. -->
     <p
-      class="mark-text min-w-0 flex-[1_1_auto] type-meta text-ink-muted text-pretty wrap-anywhere [&_code]:text-label"
+      class="mark-text min-w-0 flex-[1_1_auto] type-meta text-ink-muted text-pretty wrap-anywhere [&_code]:type-label"
     >
       <span
-        class="max-w-measure-short type-meta font-medium tracking-title text-ink-strong text-balance"
+        class="max-w-ch-60 type-meta font-medium tracking-tight text-ink-strong text-balance"
         data-slot="empty-title">{title}</span
       >
       {#if line}
@@ -162,14 +162,14 @@
          no break in it (a view's, a filter's) breaks rather than pushing
          the block past its column. -->
     <p
-      class="max-w-measure-short type-title text-ink-strong text-balance wrap-anywhere"
+      class="max-w-ch-60 type-title text-ink-strong text-balance wrap-anywhere"
       data-slot="empty-title"
     >
       {title}
     </p>
     {#if line}
       <p
-        class="mark-text max-w-measure-short type-body text-ink-muted text-pretty wrap-anywhere [&_code]:text-label"
+        class="mark-text max-w-ch-60 type-body text-ink-muted text-pretty wrap-anywhere [&_code]:type-label"
         data-slot="empty-line"
       >
         {@render why()}

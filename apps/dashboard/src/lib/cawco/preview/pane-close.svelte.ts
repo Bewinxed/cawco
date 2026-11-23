@@ -81,7 +81,7 @@ export class PaneClose {
     });
     document.body.append(stand);
     const done = () => stand.remove();
-    const flight = closeInto(stand, row, dur("--duration-panel"));
+    const flight = closeInto(stand, row, dur("--duration-slow"));
     if (flight) {
       flight.finished.then(done, done);
     } else {

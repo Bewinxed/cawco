@@ -102,7 +102,7 @@
   >
     <IconLock
       aria-label="Secure"
-      class="size-icon-md flex-none text-status-done-ink"
+      class="size-icon-md flex-none text-status-done"
     />
     <code class="min-w-0 type-code whitespace-nowrap text-ink-strong select-all"
       >https://{tray.long}</code
@@ -146,7 +146,7 @@
           <span class="mark-line inline-flex items-center gap-space-1">
             <IconSuccess
               aria-hidden="true"
-              class="size-icon-sm text-status-done-ink"
+              class="size-icon-sm text-status-done"
             />
             <span>{mark.label}</span>
           </span>

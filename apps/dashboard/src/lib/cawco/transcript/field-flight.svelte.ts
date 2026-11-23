@@ -410,7 +410,7 @@ export class FieldFlight {
         [
           start,
           {
-            transform: `translateX(calc(var(--swap-nudge) * ${-dir}))`,
+            transform: `translateX(calc(calc(var(--spacing) * 10) * ${-dir}))`,
             opacity: 0,
           },
         ],
@@ -419,7 +419,7 @@ export class FieldFlight {
       this.flightIn?.animate(
         [
           {
-            transform: `translateX(calc(var(--swap-nudge) * ${dir}))`,
+            transform: `translateX(calc(calc(var(--spacing) * 10) * ${dir}))`,
             opacity: 0,
           },
           { transform: "none", opacity: 1 },

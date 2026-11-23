@@ -430,8 +430,8 @@
     "in-variant-folder:data-trailed:pe-(--fold-end-pad)",
     "data-tab-item-selected:text-ink-strong hover-hover:data-ghosted:not-data-tab-item-selected:text-ink-strong",
     "in-variant-folder:data-tab-item-selected:text-ink-muted",
-    "motion-safe:transition-[color] motion-safe:duration-(--duration-step) motion-safe:ease-out",
-    "in-variant-folder:motion-safe:[transition:color_var(--duration-step)_var(--ease-out),--pick_var(--choose-dur)_var(--choose-ease)]",
+    "motion-safe:transition-[color] motion-safe:duration-(--duration-fast) motion-safe:ease-out",
+    "in-variant-folder:motion-safe:[transition:color_calc(var(--duration-fast)/2)_var(--ease-out),--pick_var(--choose-dur)_var(--choose-ease)]",
     "[[data-variant=folder]_[data-ride]_&]:transition-off",
     "hit-pressed:bg-surface-pressed in-variant-folder:hit-pressed:bg-transparent light:hit-pressed:text-ink-strong hit-pressed:[--sheet-press:var(--color-surface-pressed)]",
     // A glyph alone is narrower than a finger: under one it takes the touch
@@ -454,14 +454,14 @@
          inside its edge (clipped to it), the stroke's ink tapering up from
          each foot's tip (the gradient), drawn to the tab's measured box.
          The rim's glow stops at the shelf's line, and draws as far as
-         `--tab-rim-glow-room` past the tab's top and sides. -->
+         `--spacing-space-6` past the tab's top and sides. -->
     <svg
       data-slot="fold"
       aria-hidden="true"
       class="pick-inherit pointer-events-none absolute inset-y-0 start-(--fold-start) z-1 h-full w-(--fold-w) overflow-visible clip-path-(--fold-clip)"
       style:--fold-start="calc(-1 * var(--flare))"
       style:--fold-w="calc(100% + 2 * var(--flare))"
-      style:--fold-clip={"inset(calc(-1 * var(--tab-rim-glow-room)) calc(-1 * var(--tab-rim-glow-room)) 0)"}
+      style:--fold-clip={"inset(calc(-1 * var(--spacing-space-6)) calc(-1 * var(--spacing-space-6)) 0)"}
       preserveAspectRatio="none"
       viewBox="0 0 {shape.box.width + 2 * shape.box.flare} {shape.box.height}"
     >

@@ -135,7 +135,7 @@
       {:else if face === "strip"}
         <div
           data-bar-over={barOver || undefined}
-          class="relative z-1 flex min-h-control-md min-w-0 flex-none items-center bg-surface-shelf px-space-3 max-desk:data-bar-over:pt-(--bar-room)"
+          class="relative z-1 flex min-h-control-md min-w-0 flex-none items-center bg-surface-sunk px-space-3 max-desk:data-bar-over:pt-(--bar-room)"
           style:--bar-room={"calc(var(--spacing-control-lg) + var(--spacing-space-3))"}
         >
           <div class="min-w-0 flex-1">

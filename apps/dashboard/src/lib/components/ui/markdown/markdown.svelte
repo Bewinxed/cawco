@@ -13,7 +13,7 @@
        */
       look: {
         surface:
-          "[&_li]:wrap-anywhere font-inherit text-inherit [&_li]:m-0 [&_li]:p-0 [&_li]:marker:text-ink-muted [&_p]:m-0 [&_ul]:m-0 [&_ul]:grid [&_ul]:list-disc [&_ul]:gap-space-row [&_ul]:ps-space-4",
+          "[&_li]:wrap-anywhere font-inherit text-inherit [&_li]:m-0 [&_li]:p-0 [&_li]:marker:text-ink-muted [&_p]:m-0 [&_ul]:m-0 [&_ul]:grid [&_ul]:list-disc [&_ul]:gap-space-1 [&_ul]:ps-space-4",
       },
     },
   });
@@ -184,7 +184,7 @@
 
   /**
    * Each chunk's words fade in together: one short opacity fade per chunk
-   * (--duration-control, --ease-crossfade: app.css), no stagger inside it, nothing
+   * (--duration-fast, --ease-in-out: app.css), no stagger inside it, nothing
    * that moves.
    */
   const animated = $derived(
@@ -192,7 +192,7 @@
       ? {
           // Read as the fade runs: the token is the page's.
           get duration() {
-            return dur("--duration-control");
+            return dur("--duration-fast");
           },
         }
       : false

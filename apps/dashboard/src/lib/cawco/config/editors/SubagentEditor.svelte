@@ -36,7 +36,7 @@
   let { agent }: { agent: FleetAgent | null } = $props();
 
   const store = configStore();
-  const HUE = "var(--color-mark-2)";
+  const HUE = "var(--color-mark-1)";
 
   /** The docs' own shape: two required fields, then a role line and its rules. */
   const TEMPLATE = `---
@@ -203,7 +203,7 @@ You are a <role>, working in one repository at a time.
       it.
     </p>
     {#if refused}
-      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+      <p class="type-meta text-status-fail" role="alert" in:appear>
         {refused}
       </p>
     {/if}
@@ -217,7 +217,7 @@ You are a <role>, working in one repository at a time.
     {/snippet}
     {#if conflict}
       <div class="flex flex-col gap-space-2" in:unfold out:unfold>
-        <p class="type-meta text-status-attn-ink">
+        <p class="type-meta text-status-attn">
           {memoryWords.changedElsewhere}
         </p>
         {#key conflict.hash}
@@ -249,7 +249,7 @@ You are a <role>, working in one repository at a time.
       </div>
     {/if}
     {#if problem}
-      <p class="type-meta text-status-attn-ink">
+      <p class="type-meta text-status-attn">
         Not storable yet — {problem}.
       </p>
     {:else if front.description}

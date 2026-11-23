@@ -11,11 +11,11 @@
 </script>
 
 <div
-  style:--tray-pad="calc(var(--radius-modal) - var(--radius-lg))"
+  style:--tray-pad="calc(var(--radius-xl) - var(--radius-lg))"
   class={[
     "relative min-w-0",
     form === "desk"
-      ? "rounded-modal bg-surface-recess p-(--tray-pad) shadow-lg"
+      ? "rounded-xl bg-surface-recess p-(--tray-pad) shadow-lg"
       : "rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-lg",
   ]}
   data-slot="surface"

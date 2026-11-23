@@ -714,11 +714,11 @@
 
   /** Each kind's swatch in the key: its bar's wash and edge. */
   const BAR: Record<ClipKind, string> = {
-    size: "bg-mark-6/22 border-mark-6",
-    move: "bg-mark-7/22 border-mark-7",
-    fade: "bg-mark-3/22 border-mark-3",
-    tint: "bg-mark-8/22 border-mark-8",
-    effect: "bg-mark-5/22 border-mark-5",
+    size: "bg-mark-4/22 border-mark-4",
+    move: "bg-mark-5/22 border-mark-5",
+    fade: "bg-mark-1/22 border-mark-1",
+    tint: "bg-mark-6/22 border-mark-6",
+    effect: "bg-mark-3/22 border-mark-3",
     other: "bg-ink-muted/22 border-ink-muted",
   };
   /** The drawer's head line while the move has no rows to play. */
@@ -738,7 +738,7 @@
       .length
   );
   const bare =
-    "pointer-hit touch-hit grid size-control-sm flex-none place-items-center rounded-md text-ink-strong transition-control can-hover:hover:bg-surface-hover";
+    "pointer-hit touch-hit grid size-control-sm flex-none place-items-center rounded-sm text-ink-strong transition-control can-hover:hover:bg-surface-hover";
 </script>
 
 {#snippet title()}
@@ -753,7 +753,7 @@
           aria-label={move.kind === "none"
             ? words.chooseMove
             : `${words.moves}: ${words.move(move.from, move.to)}`}
-          class="mark-line pointer-hit touch-hit -ms-space-2 inline-flex h-control-sm max-w-full min-w-0 items-center gap-space-1 rounded-md px-space-2 type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover"
+          class="mark-line pointer-hit touch-hit -ms-space-2 inline-flex h-control-sm max-w-full min-w-0 items-center gap-space-1 rounded-sm px-space-2 type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover"
           data-slot="move-title"
           type="button"
         >
@@ -919,10 +919,10 @@
        animation's row says what it changes in words, its run and its
        parts; open, all in selected ink. -->
   {@const name = {
-    open: "text-brand-ink",
+    open: "text-accent-ink",
     rest: "text-ink-strong",
   }[tone]}
-  {@const rest = tone === "open" ? "text-brand-ink" : "text-ink-muted"}
+  {@const rest = tone === "open" ? "text-accent-ink" : "text-ink-muted"}
   <span class="min-w-0 truncate">
     {#if line.part}
       <span class={name}>{propertyName(line.part.property)}</span>
@@ -1046,7 +1046,7 @@
       <!-- Why it didn't play, and the way back: Try again plays it once
          more from its from state, as it played on arrival. -->
       <div class="flex min-w-0 flex-col items-start gap-space-3" role="alert">
-        <p class="m-0 type-body text-status-fail-ink wrap-anywhere">
+        <p class="m-0 type-body text-status-fail wrap-anywhere">
           {words.moveFailed(move.why)}
         </p>
         <Button onclick={onretry} size="sm" variant="outline"
@@ -1073,7 +1073,7 @@
         <div
           data-slot="timeline"
           class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 @max-sm/move:grid-cols-1"
-          style:--cols={"minmax(var(--graph-move-name-w), 38%) minmax(0, 1fr)"}
+          style:--cols={"minmax(calc(var(--spacing) * 48), 38%) minmax(0, 1fr)"}
           {@attach (node: HTMLElement) => {
             // Not passive: a pinch or a Ctrl-wheel zooms the lanes, never the page.
             return on(node, "wheel", wheel, { passive: false });
@@ -1148,7 +1148,7 @@
                     figure(Math.round(length))
                   )}
                   class={[
-                    "pointer-hit bottom-0 block h-space-4 w-space-2 cursor-ew-resize rounded-pill bg-ink-strong shadow-xs focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 coarse:w-space-3",
+                    "pointer-hit bottom-0 block h-space-4 w-space-2 cursor-ew-resize rounded-pill bg-ink-strong shadow-sm focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-2 coarse:w-space-3",
                     (handle < viewFrom || handle > viewTo) && "invisible",
                   ]}
                   data-slot="playhead-head"
@@ -1162,7 +1162,7 @@
                     aria-valuemax={Math.round(length)}
                     aria-valuemin={0}
                     aria-valuenow={Math.round(loopFrom)}
-                    class="pointer-hit touch-hit absolute top-0 start-(--at) z-1 block h-space-3 w-space-1 -translate-x-1/2 cursor-ew-resize touch-none rounded-pill bg-ink-muted focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 rtl:translate-x-1/2"
+                    class="pointer-hit touch-hit absolute top-0 start-(--at) z-1 block h-space-3 w-space-1 -translate-x-1/2 cursor-ew-resize touch-none rounded-pill bg-ink-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-2 rtl:translate-x-1/2"
                     data-slot="repeat-from"
                     onkeydown={loopKey}
                     onpointerdown={dragAlong(setLoopFrom, () => rulerLane)}
@@ -1194,13 +1194,13 @@
                   type="button"
                 >
                   <span
-                    class="grid w-control-xs flex-none place-items-center"
+                    class="grid w-space-6 flex-none place-items-center"
                     data-box
                   >
                     <IconChevronRight
                       aria-hidden="true"
                       class={[
-                        "size-icon-sm transition-transform duration-(--duration-control) ease-out rtl:-scale-x-100",
+                        "size-icon-sm transition-transform duration-(--duration-fast) ease-out rtl:-scale-x-100",
                         open && "rotate-90 rtl:-rotate-90",
                       ]}
                     />
@@ -1231,7 +1231,7 @@
                 <div
                   class={[
                     "flex min-h-control-lg min-w-0 items-center",
-                    line.part && "ps-control-xs",
+                    line.part && "ps-space-6",
                   ]}
                 >
                   <!-- The row's one press: it opens or closes the row, its
@@ -1240,21 +1240,21 @@
                     type="button"
                     aria-expanded={open}
                     aria-label={name}
-                    class="pointer-hit touch-hit flex h-control-sm min-w-0 flex-1 items-center rounded-sm pe-space-1 text-start type-label transition-control data-chosen:bg-selected-bg can-hover:not-data-chosen:hover:bg-surface-hover"
+                    class="pointer-hit touch-hit flex h-control-sm min-w-0 flex-1 items-center rounded-sm pe-space-1 text-start type-label transition-control data-chosen:bg-accent-wash can-hover:not-data-chosen:hover:bg-surface-hover"
                     data-chosen={chosen || undefined}
                     onclick={() => press(line)}
                     title={name}
                   >
                     <span
-                      class="grid w-control-xs flex-none place-items-center"
+                      class="grid w-space-6 flex-none place-items-center"
                       data-box
                     >
                       <IconChevronRight
                         aria-hidden="true"
                         class={[
-                          "size-icon-sm transition-transform duration-(--duration-control) ease-out rtl:-scale-x-100",
+                          "size-icon-sm transition-transform duration-(--duration-fast) ease-out rtl:-scale-x-100",
                           open && "rotate-90 rtl:-rotate-90",
-                          chosen ? "text-brand-ink" : "text-ink-muted",
+                          chosen ? "text-accent-ink" : "text-ink-muted",
                         ]}
                       />
                     </span>
@@ -1265,7 +1265,7 @@
                        keep one width as the glyph comes and goes, and the
                        lanes never move. -->
                   <span
-                    class="flex h-control-sm w-control-xs flex-none items-center justify-center"
+                    class="flex h-control-sm w-space-6 flex-none items-center justify-center"
                   >
                     {#if edited}
                       {@const said = words.resetRow(name)}
@@ -1330,7 +1330,7 @@
                 </div>
                 {#if chosen}
                   <div
-                    class="col-span-full min-w-0 ps-control-xs pt-space-2 pb-space-3"
+                    class="col-span-full min-w-0 ps-space-6 pt-space-2 pb-space-3"
                     in:unfold
                     out:unfold
                   >
@@ -1359,7 +1359,7 @@
             >
               <span
                 aria-hidden="true"
-                class={["h-space-2 w-space-4 rounded-hair border", BAR[kind]]}
+                class={["h-space-2 w-space-4 rounded-xs border", BAR[kind]]}
                 data-box
               ></span>
               <span>{words.kinds[kind]}</span>

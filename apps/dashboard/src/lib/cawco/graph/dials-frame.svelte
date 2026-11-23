@@ -38,7 +38,7 @@
   ] as const;
 </script>
 
-<div class="bg-surface-page p-space-5">
+<div class="bg-surface-page p-space-4">
   <div
     class="relative flex h-(--frame-h) w-(--frame-w) flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-sm timeline-scope-transcript-head"
     style:--face-top="var(--head-room)"

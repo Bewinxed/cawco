@@ -28,7 +28,7 @@
     onCheckedChange={onchange}
     bind:checked
   />
-  <span class="flex min-w-0 flex-col gap-space-row">
+  <span class="flex min-w-0 flex-col gap-space-1">
     <label
       data-slot="switch-field-label"
       class="type-label text-ink-strong"

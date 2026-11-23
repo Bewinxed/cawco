@@ -52,14 +52,14 @@
 
 <section
   data-slot="whole-list"
-  class="kit-edge-fade-block grid min-h-0 min-w-0 flex-1 content-start gap-space-5 overflow-y-auto overscroll-contain pt-(--face-top,0px) scroll-timeline-transcript-head"
+  class="kit-edge-fade-block grid min-h-0 min-w-0 flex-1 content-start gap-space-4 overflow-y-auto overscroll-contain pt-(--face-top,0px) scroll-timeline-transcript-head"
   aria-label={words.wholeMap(review.name)}
   {@attach openOnKept}
 >
   {#each review.machines as machine (machine.name)}
     <section aria-label={machine.name} class="grid min-w-0 gap-space-2">
       {#if review.machines.length > 1}
-        <h3 class="m-0 truncate text-ink-muted type-caps">{machine.name}</h3>
+        <h3 class="m-0 truncate text-ink-muted type-meta font-medium tracking-caps uppercase">{machine.name}</h3>
       {/if}
       <ol class="m-0 grid min-w-0 list-none gap-space-3 p-0">
         {#each machine.path as id (id)}

@@ -188,7 +188,7 @@
     // A reference on the prompt's line: one line box tall less its 1px
     // margin each side, so a line holding chips keeps the prompt's leading.
     chip.className =
-      "m-px inline-flex h-[calc(var(--prompt-lh)-2px)] items-center gap-space-1 rounded-sm border border-border-control bg-surface-hover ps-space-1 pe-space-2 align-top font-sans text-label leading-none font-medium whitespace-nowrap text-ink-strong select-all";
+      "m-px inline-flex h-[calc(var(--prompt-lh)-2px)] items-center gap-space-1 rounded-sm border border-border-control bg-surface-hover ps-space-1 pe-space-2 align-top font-sans type-label leading-none font-medium whitespace-nowrap text-ink-strong select-all";
     const mark = document.createElement("span");
     mark.className = "inline-flex [&>svg]:size-icon-sm";
     mark.style.color = item.hue ?? "";
@@ -371,16 +371,16 @@
 
 <div
   data-slot="editor-wrap"
-  class="relative prompt-fs-(--text-body) max-phone:prompt-fs-(--text-row) coarse:prompt-fs-(--text-row)"
+  class="relative prompt-fs-(--text-base) max-phone:prompt-fs-(--text-input-floor) coarse:prompt-fs-(--text-input-floor)"
   data-keeps-draft
-  style:--prompt-lh="calc(var(--prompt-fs) * var(--leading-body))"
+  style:--prompt-lh="calc(var(--leading-base))"
 >
   <!-- biome-ignore lint/a11y/useSemanticElements: a contenteditable is the only element that can hold inline chips; textarea cannot -->
   <div
     data-slot="editor"
     aria-label={spawnWords.firstPrompt}
     aria-multiline="true"
-    class="fai-scroll h-control-lg data-grown:h-30 max-phone:h-30 w-full overflow-auto rounded-t-lg bg-transparent px-space-4 pt-space-3 pb-space-2 font-sans text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong max-phone:overscroll-contain motion-safe:phone:transition-[height] motion-safe:phone:duration-(--duration-panel) motion-safe:phone:ease-in-out"
+    class="fai-scroll h-control-lg data-grown:h-30 max-phone:h-30 w-full overflow-auto rounded-t-lg bg-transparent px-space-4 pt-space-3 pb-space-2 font-sans text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong max-phone:overscroll-contain motion-safe:phone:transition-[height] motion-safe:phone:duration-(--duration-slow) motion-safe:phone:ease-in-out"
     contenteditable="true"
     id="session-prompt"
     onblur={closeMenu}

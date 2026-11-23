@@ -349,7 +349,7 @@
 <section
   data-slot="where-it-goes-card"
   aria-labelledby="where-title"
-  class="flex flex-col gap-space-4 rounded-lg bg-surface-raised p-space-5 shadow-sm max-phone:p-space-4"
+  class="flex flex-col gap-space-4 rounded-lg bg-surface-raised p-space-4 shadow-sm max-phone:p-space-4"
 >
   <header
     data-slot="head"
@@ -530,7 +530,7 @@
             <span {...props} class="flex min-w-0 items-center gap-space-2">
               <span
                 data-slot="fill"
-                class="h-space-2 w-(--fill-w) min-w-space-row flex-none rounded-hair bg-ink-muted motion-safe:transition-[inline-size] motion-safe:duration-(--duration-fade) motion-safe:ease-drawer"
+                class="h-space-2 w-(--fill-w) min-w-space-1 flex-none rounded-xs bg-ink-muted motion-safe:transition-[inline-size] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
                 style:--share={item.share}
                 style:--fill-w={"calc(var(--share) * (100% - calc(var(--spacing) * 22)))"}
               ></span>
@@ -549,7 +549,7 @@
       <span class="flex min-w-0 items-center gap-space-2">
         <span
           data-slot="fill"
-          class="h-space-2 w-(--fill-w) min-w-space-row flex-none rounded-hair bg-ink-muted motion-safe:transition-[inline-size] motion-safe:duration-(--duration-fade) motion-safe:ease-drawer"
+          class="h-space-2 w-(--fill-w) min-w-space-1 flex-none rounded-xs bg-ink-muted motion-safe:transition-[inline-size] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
           style:--fill-w={"calc(var(--share) * (100% - calc(var(--spacing) * 22)))"}
           style:--share={item.share}
         ></span>

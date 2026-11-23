@@ -55,9 +55,9 @@
 
   /** The app's own ramp, by position — the SDK's `color` is not a CSS colour. */
   const SWATCH = [
-    "var(--color-status-live-glyph)",
-    "var(--color-mark-7)",
-    "var(--color-status-attn-glyph)",
+    "var(--color-status-live)",
+    "var(--color-mark-5)",
+    "var(--color-status-attn)",
     "var(--color-ink-subtle)",
     "var(--color-ink-strong)",
   ];
@@ -142,8 +142,8 @@
         <span
           class={[
             "ml-auto type-label tabular-nums",
-            band === "critical" && "text-status-fail-glyph",
-            band === "warn" && "text-status-attn-glyph",
+            band === "critical" && "text-status-fail",
+            band === "warn" && "text-status-attn",
             band !== "critical" && band !== "warn" && "text-ink-muted",
           ]}>{usage.percentage}%</span
         >
@@ -158,7 +158,7 @@
     {:else}
       <div class="px-3 py-2.5">
         <div
-          class="flex h-1.5 w-full overflow-hidden rounded-full bg-neutral-2"
+          class="flex h-1.5 w-full overflow-hidden rounded-full bg-surface-recess"
         >
           {#each usage.categories as category, index (category.name)}
             <span
@@ -180,7 +180,7 @@
         {#each usage.categories as category, index (category.name)}
           <li class="flex items-center gap-2 py-space-1 type-label">
             <span
-              class="size-2 shrink-0 rounded-hair"
+              class="size-2 shrink-0 rounded-xs"
               style:background-color={swatch(index)}
             ></span>
             <span class="min-w-0 flex-1 truncate">{category.name}</span>

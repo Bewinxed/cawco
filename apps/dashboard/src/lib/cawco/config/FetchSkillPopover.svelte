@@ -195,10 +195,10 @@
   <WriteTrigger {down} icon={IconPlus} label={words.fetchSkill} />
   <Popover.Content
     align="end"
-    class="w-(--panel-w) max-w-(--bits-popover-content-available-width)"
     customAnchor={parked.fromRow}
     gap="form"
     pad="form"
+    width="panel"
     bind:ref={seat.surface}
   >
     <form
@@ -292,7 +292,7 @@
               data-slot="choice"
               class={menuItemVariants({
                 class:
-                  "select-none px-space-3 text-start font-(family-name:--font-mono) text-size-meta text-ink-strong focus-inset",
+                  "select-none px-space-3 text-start font-(family-name:--font-mono) text-sm text-ink-strong focus-inset",
               })}
               data-menu-item
               disabled={busy}

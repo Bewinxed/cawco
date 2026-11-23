@@ -255,7 +255,7 @@
   >
     <div
       class={[
-        "min-h-0 flex-auto overflow-hidden px-space-6 max-desk:px-space-5",
+        "min-h-0 flex-auto overflow-hidden px-space-6 max-desk:px-space-4",
         caw && "pbs-control-lg",
       ]}
     >
@@ -322,7 +322,7 @@
 {#if caw}
   <!-- A project's page with Caw's panel docked beside it, a conversation's width. -->
   <div
-    class="flex h-(--fixture-h) overflow-clip bg-surface-shelf text-ink-strong"
+    class="flex h-(--fixture-h) overflow-clip bg-surface-sunk text-ink-strong"
     data-slot="caw-fixture"
     style:--fixture-h="{height}px"
   >
@@ -374,7 +374,7 @@
   </div>
 {:else}
   <div
-    class="relative isolate flex h-(--fixture-h) flex-col overflow-clip bg-surface-shelf text-ink-strong"
+    class="relative isolate flex h-(--fixture-h) flex-col overflow-clip bg-surface-sunk text-ink-strong"
     data-slot="session-fixture"
     style:--fixture-h="{height}px"
   >
@@ -391,7 +391,7 @@
                 {#if live.length > 0}
                   <IconNeedsYou
                     aria-hidden="true"
-                    class="size-icon-md text-status-attn-glyph"
+                    class="size-icon-md text-status-attn"
                   />
                 {/if}
               {/snippet}

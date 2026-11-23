@@ -526,7 +526,7 @@
   <div
     class="flow-root"
     data-slot="later"
-    style:--who-lead="var(--leading-body)"
+    style:--who-lead="var(--leading-base)"
   >
     <Who grouped name={who} shown timestamp={at} {you} />
     {#if text.trim()}
@@ -741,7 +741,7 @@
       class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
     >
       <p
-        class="m-0 min-w-0 text-pretty wrap-anywhere text-status-fail-ink"
+        class="m-0 min-w-0 text-pretty wrap-anywhere text-status-fail"
         role="status"
       >
         {said.notSent(whyNotSent)}

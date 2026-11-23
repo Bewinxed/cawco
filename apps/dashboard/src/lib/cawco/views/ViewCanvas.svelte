@@ -10,7 +10,7 @@
    * and downward holds them larger. Nothing is placed by hand and nothing
    * drags. A change to the tasks (`tasks.changed` reaches the page, which
    * reads them again) lays it out again: the cards ease to their new places
-   * over --duration-panel on --ease-in-out, a new one fades in where it lands, and
+   * over --duration-slow on --ease-in-out, a new one fades in where it lands, and
    * the view refits when the count changes. The fit keeps the cards'
    * smallest text at 11px or more (TaskCanvasFit). A card opens its sheet.
    */
@@ -106,15 +106,15 @@
       canvasHeight = height;
     }
   );
-  /** The least zoom at which a card's smallest text (--text-meta) is 11px. */
+  /** The least zoom at which a card's smallest text (--text-sm) is 11px. */
   let floor = $state(1);
   let fitter = $state<ReturnType<typeof TaskCanvasFit>>();
   /** Which way the graph runs, as last laid out (the fit starts it from its start). */
   let direction = $state<Flow>("LR");
 
   onMount(() => {
-    // In px: design.css types --text-meta as a length.
-    floor = Math.min(1, 11 / numberOf("--text-meta"));
+    // In px: design.css types --text-sm as a length.
+    floor = Math.min(1, 11 / numberOf("--text-sm"));
     mounted = true;
   });
 

@@ -85,7 +85,7 @@
 
 <a
   data-task-card
-  class="press-tint focus-inset flex flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-sm transition-[background-color,opacity] duration-(--duration-control) ease-out data-dragging:opacity-40 not-group-data-picked/task:hover:bg-surface-hover not-data-dragging:group-data-moving/task:opacity-60 group-data-picked/task:bg-selected-bg"
+  class="press-tint focus-inset flex flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-sm transition-[background-color,opacity] duration-(--duration-fast) ease-out data-dragging:opacity-40 not-group-data-picked/task:hover:bg-surface-hover not-data-dragging:group-data-moving/task:opacity-60 group-data-picked/task:bg-accent-wash"
   data-flip-enter={flying ? "own" : undefined}
   data-share={key}
   data-task={task.id}
@@ -102,12 +102,12 @@
   >
     <span
       data-slot="id"
-      class="type-meta font-(family-name:--font-mono) liga-none text-ink-subtle group-data-picked/task:text-brand-ink"
+      class="type-meta font-(family-name:--font-mono) liga-none text-ink-subtle group-data-picked/task:text-accent-ink"
       >{task.id}</span
     >
     {#if task.problem}
       <span
-        class="inline-flex text-ink-muted group-data-picked/task:text-brand-ink"
+        class="inline-flex text-ink-muted group-data-picked/task:text-accent-ink"
         title={task.problem}
       >
         <IconWarningTriangle aria-hidden="true" class="size-icon-sm" />
@@ -140,13 +140,13 @@
   >
   {#if flags.live || task.kind === "you" || asks || approves || date}
     <span
-      class="mark-line inline-flex items-center gap-space-2 type-meta text-ink-muted group-data-picked/task:text-brand-ink"
+      class="mark-line inline-flex items-center gap-space-2 type-meta text-ink-muted group-data-picked/task:text-accent-ink"
     >
       {#if asks || approves}
         <!-- Waiting on you outranks working: the attempt is stopped on you. -->
         <IconNeedsYou
           aria-hidden="true"
-          class="size-icon-sm flex-none text-status-attn-glyph"
+          class="size-icon-sm flex-none text-status-attn"
         />
         <span>{asks ? "its session asks you" : "an action waits on you"}</span>
       {:else if flags.live}
@@ -160,7 +160,7 @@
         <!-- The design's ◆: the house's needs-you glyph, still. -->
         <IconNeedsYou
           aria-hidden="true"
-          class="size-icon-sm flex-none text-status-attn-glyph"
+          class="size-icon-sm flex-none text-status-attn"
         />
         <span>waiting on you</span>
       {:else if date}
@@ -171,7 +171,7 @@
   {#if task.todos.total > 0 || waitsOn.length > 0 || task.labels.length > 0 || task.links.length > 0}
     <span
       data-slot="foot"
-      class="mt-space-1 flex flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted group-data-picked/task:text-brand-ink"
+      class="mt-space-1 flex flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta text-ink-muted group-data-picked/task:text-accent-ink"
     >
       {#if task.todos.total > 0}
         <TodoCount

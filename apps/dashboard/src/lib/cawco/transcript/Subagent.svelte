@@ -81,7 +81,7 @@
         aria-hidden="true"
         class="rail-cell rounded-xs bg-mark-overlay bg-(--mark-bg)"
         style:--mark-bg="var(--color-mark-{markHue(seed)})"
-        ><Sprite class="size-icon-sm block text-on-ink" /></span
+        ><Sprite class="size-icon-sm block text-surface-page" /></span
       >
       <!-- A narrow head (DESIGN.md, The Truncate Inside Rule: the name
            stands, the rest gives way): the name stays whole; the model stands
@@ -107,20 +107,20 @@
         <span
           data-slot="chev"
           aria-hidden="true"
-          class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out group-state-open/bhead:rotate-90"
+          class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-out group-state-open/bhead:rotate-90"
           data-box><IconChevronRight class="size-icon-sm block" /></span
         >
         {#if title !== branch.subagentType}
           <span
             data-slot="task"
-            class="min-w-0 max-w-max grow basis-ch-6 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted text-size-meta font-normal"
+            class="min-w-0 max-w-max grow basis-ch-6 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted text-sm font-normal"
             >{title}</span
           >
         {/if}
         {#if model}
           <span
             data-slot="model"
-            class="flex-none whitespace-nowrap text-ink-muted text-size-meta font-normal"
+            class="flex-none whitespace-nowrap text-ink-muted text-sm font-normal"
             >{modelLabel(model)}</span
           >
         {/if}
@@ -130,11 +130,11 @@
            words on their x-height in the box (.mark-text): 2px past the
            trim's room given back, so the box keeps its height. -->
       <span
-        class="mark-text ms-auto flex-none text-size-meta font-normal num rounded-xs py-(--pill-py) px-space-2 bg-transparent text-ink-muted status-running:bg-status-live-bg status-running:text-status-live-ink status-done:bg-status-done-bg status-done:text-status-done-ink status-failed:bg-status-fail-bg status-failed:text-status-fail-ink"
+        class="mark-text ms-auto flex-none text-sm font-normal num rounded-xs py-(--pill-py) px-space-2 bg-transparent text-ink-muted status-running:bg-status-live-bg status-running:text-status-live status-done:bg-status-done-bg status-done:text-status-done status-failed:bg-status-fail-bg status-failed:text-status-fail"
         data-status={phase}
         data-subagent-phase={phase}
         data-box
-        style:--pill-py="calc(var(--spacing-space-row) + (1lh - 1ex) / 2)"
+        style:--pill-py="calc(var(--spacing-space-1) + (1lh - 1ex) / 2)"
         {@attach clock.watch}
       >
         {phase}
@@ -154,7 +154,7 @@
          running is said by its hue and the pill, not a loop. -->
     {#if view.running}
       <p
-        class="rail-line items-start mt-space-1 mb-0 text-size-meta font-normal text-ink-strong leading-body max-w-measure"
+        class="rail-line items-start mt-space-1 mb-0 text-sm font-normal text-ink-strong leading-base max-w-measure"
       >
         <span data-slot="rail-cell" aria-hidden="true" class="rail-cell h-lh"
           ><LiveDot /></span
@@ -163,14 +163,14 @@
     {:else if failed && branch.error}
       <p
         data-slot="now"
-        class="rail-hang mt-space-1 mb-0 items-box-start text-size-meta font-normal text-status-fail-ink leading-body max-w-measure"
+        class="rail-hang mt-space-1 mb-0 items-box-start text-sm font-normal text-status-fail leading-base max-w-measure"
       >
         {headline(branch.error)}
       </p>
     {:else if view.report}
       <p
         data-slot="now"
-        class="rail-hang mt-space-1 mb-0 items-box-start text-size-meta font-normal text-ink-strong leading-body max-w-measure"
+        class="rail-hang mt-space-1 mb-0 items-box-start text-sm font-normal text-ink-strong leading-base max-w-measure"
       >
         {headline(view.report)}
       </p>
@@ -216,7 +216,7 @@
 
           {#if failed && branch.error}
             <p
-              class="mt-space-4 p-space-3 rounded-xs text-size-body font-normal text-status-fail-ink bg-surface-raised shadow-sm whitespace-pre-wrap"
+              class="mt-space-4 p-space-3 rounded-xs text-base font-normal text-status-fail bg-surface-raised shadow-sm whitespace-pre-wrap"
             >
               {branch.error}
             </p>
@@ -225,7 +225,7 @@
               class="mt-space-4 p-space-3 rounded-xs bg-surface-raised shadow-sm"
             >
               <h4
-                class="text-size-label font-medium tracking-caps uppercase text-ink-muted mb-space-2"
+                class="text-base font-medium tracking-caps uppercase text-ink-muted mb-space-2"
               >
                 Report
               </h4>

@@ -10,8 +10,8 @@
    * when that is inside the horizon. Hour ticks under it, each a hairline
    * at its hour's place on the bar.
    *
-   * Motion: a new reading eases the bands' widths (--duration-panel, ease-out); a
-   * band arriving fades in (--duration-fade), one leaving fades out (--duration-fade).
+   * Motion: a new reading eases the bands' widths (--duration-slow, ease-out); a
+   * band arriving fades in (--duration-base), one leaving fades out (--duration-base).
    * The minute moving on re-lays them in place. Reduced motion: at once.
    */
   import type { CarrySpan } from "@cawco/core/accounts";
@@ -146,12 +146,12 @@
   // transitions-dev's donut chart: segments ease to their new share on the
   // smooth-out curve, and fade in slower than they fade out.
   const bandIn = () => ({
-    duration: instant ? 0 : dur("--duration-fade"),
+    duration: instant ? 0 : dur("--duration-base"),
     easing: easeOut,
   });
   const bandOut = (node: Element) =>
     fade(node, {
-      duration: instant ? 0 : dur("--duration-fade"),
+      duration: instant ? 0 : dur("--duration-base"),
       easing: easeOut,
     });
 
@@ -182,11 +182,11 @@
   class="group/relay flex flex-col"
   data-instant={instant || undefined}
   data-relay
-  style:--relay-gap="var(--spacing-space-row)"
+  style:--relay-gap="var(--spacing-space-1)"
 >
   <div
     aria-label="Next 5 hours: {label}"
-    class="flex h-space-2 gap-(--relay-gap) overflow-hidden rounded-hair bg-border-control hover-none:h-space-3 coarse:h-space-3 max-phone:h-space-3"
+    class="flex h-space-2 gap-(--relay-gap) overflow-hidden rounded-xs bg-border-control hover-none:h-space-3 coarse:h-space-3 max-phone:h-space-3"
     data-relay-bar
     role="img"
   >
@@ -206,7 +206,7 @@
             <span
               {...props}
               aria-label={tip}
-              class="min-w-0 shrink basis-0 rounded-hair bg-(--c) transition-[flex-grow] duration-(--duration-panel) ease-out group-data-instant/relay:transition-off data-stale:opacity-(--account-stale-opacity) motion-reduce:transition-off"
+              class="min-w-0 shrink basis-0 rounded-xs bg-(--c) transition-[flex-grow] duration-(--duration-slow) ease-out group-data-instant/relay:transition-off data-stale:opacity-82 motion-reduce:transition-off"
               data-relay-band={id}
               data-stale={seg.ring.state === "stale" || undefined}
               onpointerenter={(event) => {
@@ -235,7 +235,7 @@
         <span
           data-stop={seg.key === stopKey || undefined}
           aria-hidden="true"
-          class="min-w-0 shrink basis-0 hatched transition-[flex-grow] duration-(--duration-panel) ease-out group-data-instant/relay:transition-off data-stop:border-s data-stop:border-s-ink-strong motion-reduce:transition-off"
+          class="min-w-0 shrink basis-0 hatched transition-[flex-grow] duration-(--duration-slow) ease-out group-data-instant/relay:transition-off data-stop:border-s data-stop:border-s-ink-strong motion-reduce:transition-off"
           data-relay-stop={seg.key === stopKey ? "" : undefined}
           style:flex-grow={seg.ms}
         ></span>
@@ -245,13 +245,13 @@
   <div
     aria-hidden="true"
     class="relative h-(--ticks-h) type-meta num text-ink-subtle"
-    style:--ticks-h={"calc(var(--spacing-space-1) + var(--text-meta) * var(--leading-label))"}
+    style:--ticks-h={"calc(var(--spacing-space-1) + var(--leading-sm))"}
   >
     {#each ticks as tick (tick.hour)}
       <!-- mark-line: the tick stands above its hour, not beside it -->
       <span
         data-end={tick.hour === 5 || undefined}
-        class="absolute inset-y-0 flex -translate-x-1/2 flex-col items-center transition-[inset-inline-start] duration-(--duration-panel) ease-out group-data-instant/relay:transition-off not-data-end:data-start:translate-none not-data-end:data-start:items-start data-end:-translate-x-full data-end:items-end motion-reduce:transition-off"
+        class="absolute inset-y-0 flex -translate-x-1/2 flex-col items-center transition-[inset-inline-start] duration-(--duration-slow) ease-out group-data-instant/relay:transition-off not-data-end:data-start:translate-none not-data-end:data-start:items-start data-end:-translate-x-full data-end:items-end motion-reduce:transition-off"
         data-start={tick.hour === 0 || undefined}
         data-tick={tick.hour}
         style:inset-inline-start={tick.at}

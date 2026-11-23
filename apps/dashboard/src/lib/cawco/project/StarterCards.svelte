@@ -49,14 +49,14 @@
     data-slot="cards"
     aria-label={rows ? "Things to ask Caw" : "Starters"}
     class="m-0 grid list-none auto-rows-(--cards-rows) grid-cols-1 gap-space-2 p-0 @sm:grid-cols-(--cards-cols) group-data-rows/starters:flex group-data-rows/starters:flex-col group-data-rows/starters:items-start"
-    style:--cards-cols={"repeat(auto-fit, minmax(min(100%, var(--starter-w)), 1fr))"}
+    style:--cards-cols={"repeat(auto-fit, minmax(min(100%, calc(var(--spacing) * 44)), 1fr))"}
     style:--cards-rows="1fr"
   >
     {#each starters as starter (starter.text)}
       <li class="group-data-rows/starters:max-w-full">
         <button
           data-slot="starter"
-          class="select-none mark-line press-tint type-label flex size-full min-h-14 items-box-start gap-space-2 rounded-lg bg-surface-raised p-space-3 text-start text-pretty text-ink-strong shadow-sm transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover group-data-rows/starters:h-auto group-data-rows/starters:min-h-control-md group-data-rows/starters:w-auto group-data-rows/starters:max-w-full group-data-rows/starters:rounded-md group-data-rows/starters:border group-data-rows/starters:border-solid group-data-rows/starters:border-border-strong group-data-rows/starters:px-space-3 group-data-rows/starters:py-space-2 group-data-rows/starters:shadow-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
+          class="select-none mark-line press-tint type-label flex size-full min-h-14 items-box-start gap-space-2 rounded-lg bg-surface-raised p-space-3 text-start text-pretty text-ink-strong shadow-sm transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover group-data-rows/starters:h-auto group-data-rows/starters:min-h-control-md group-data-rows/starters:w-auto group-data-rows/starters:max-w-full group-data-rows/starters:rounded-sm group-data-rows/starters:border group-data-rows/starters:border-solid group-data-rows/starters:border-border-strong group-data-rows/starters:px-space-3 group-data-rows/starters:py-space-2 group-data-rows/starters:shadow-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-2"
           onclick={() => onpick(starter.text)}
           type="button"
         >

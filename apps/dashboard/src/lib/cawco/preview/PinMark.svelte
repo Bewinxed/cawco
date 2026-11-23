@@ -23,7 +23,7 @@
    * ring, then the xs shadow. Its face by state: provisional hollow and
    * bare, unsent hollow with its figure in the action ink, sent solid,
    * resolved recessed. `tail` names the corner that stands on the pressed
-   * point, a `--radius-hair` corner; none is the round pill (the page as a
+   * point, a `--radius-xs` corner; none is the round pill (the page as a
    * whole). `focused` is keyboard focus alone, a second ring in the focus
    * ink: an open pin is marked by its open card, never by a ring; a dot on its top end
    * says the agent is working (the live dot, ui/live-dot, on the shared
@@ -56,7 +56,7 @@
 <!-- mark-line: the dot stands on the pill's top-end corner, absolutely, not beside its figure -->
 <span
   aria-hidden="true"
-  class="relative inline-flex flex-none items-center justify-center h-row-compact min-w-row-compact data-inline:h-4.5 data-inline:min-w-4.5 rounded-pill px-space-2 whitespace-nowrap ring-2 ring-surface-raised shadow-xs type-label num data-tail:rounded-es-hair data-[state=provisional]:inset-ring-2 data-[state=provisional]:inset-ring-action-solid data-[state=provisional]:bg-surface-raised data-[state=unsent]:inset-ring-2 data-[state=unsent]:inset-ring-action-solid data-[state=unsent]:bg-surface-raised data-[state=unsent]:text-action-solid data-[state=sent]:bg-action-solid data-[state=sent]:text-on-action data-[state=resolved]:bg-surface-pressed data-[state=resolved]:text-ink-strong data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-focus-ring not-data-focused:data-gone:outline-dashed not-data-focused:data-gone:outline-offset-2 not-data-focused:data-gone:outline-(length:--border-width) not-data-focused:data-gone:outline-border-control"
+  class="relative inline-flex flex-none items-center justify-center h-row-compact min-w-row-compact data-inline:h-4.5 data-inline:min-w-4.5 rounded-pill px-space-2 whitespace-nowrap ring-2 ring-surface-raised shadow-sm type-label num data-tail:rounded-es-xs data-[state=provisional]:inset-ring-2 data-[state=provisional]:inset-ring-accent data-[state=provisional]:bg-surface-raised data-[state=unsent]:inset-ring-2 data-[state=unsent]:inset-ring-accent data-[state=unsent]:bg-surface-raised data-[state=unsent]:text-accent data-[state=sent]:bg-accent data-[state=sent]:text-on-accent data-[state=resolved]:bg-surface-pressed data-[state=resolved]:text-ink-strong data-focused:outline-2 data-focused:outline-offset-2 data-focused:outline-solid data-focused:outline-accent-ink not-data-focused:data-gone:outline-dashed not-data-focused:data-gone:outline-offset-2 not-data-focused:data-gone:outline-1 not-data-focused:data-gone:outline-border-control"
   data-focused={focused || undefined}
   data-gone={gone || undefined}
   data-inline={size === "inline" || undefined}

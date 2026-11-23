@@ -664,7 +664,7 @@
   function stepIn(_node: Element): TransitionConfig {
     const rise = motionOk.current ? 6 * toward : 0;
     return {
-      duration: dur("--duration-panel"),
+      duration: dur("--duration-slow"),
       easing: easeOut,
       css: (t) => `opacity: ${t}; transform: translateY(${(1 - t) * rise}px)`,
     };
@@ -679,7 +679,7 @@
       return { duration: 0 };
     }
     return lifting(node, pinned(node), {
-      duration: dur("--duration-fade"),
+      duration: dur("--duration-base"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     });
@@ -711,24 +711,24 @@
     >
       <ol
         aria-label={words.stepsLabel}
-        class="sticky top-0 m-0 flex list-none flex-col gap-space-row p-0 @max-phone/setup:static @max-phone/setup:flex-row @max-phone/setup:flex-wrap @max-phone/setup:gap-space-1"
+        class="sticky top-0 m-0 flex list-none flex-col gap-space-1 p-0 @max-phone/setup:static @max-phone/setup:flex-row @max-phone/setup:flex-wrap @max-phone/setup:gap-space-1"
       >
         {#each STEPS as id, place (id)}
           <li
             data-account-setup-done={place < step || undefined}
             aria-current={place === step ? "step" : undefined}
-            class="group mark-line flex min-h-control-md items-center gap-space-3 rounded-sm px-space-3 type-label text-ink-muted transition-[background-color,color] duration-(--duration-fade) ease-out @max-phone/setup:px-space-2 data-account-setup-done:text-ink-strong data-cur:bg-selected-bg data-cur:not-data-account-setup-done:text-brand-ink"
+            class="group mark-line flex min-h-control-md items-center gap-space-3 rounded-sm px-space-3 type-label text-ink-muted transition-[background-color,color] duration-(--duration-base) ease-out @max-phone/setup:px-space-2 data-account-setup-done:text-ink-strong data-cur:bg-accent-wash data-cur:not-data-account-setup-done:text-accent-ink"
             data-cur={place === step || undefined}
           >
             {#if place < step}
               <IconSuccess
                 aria-hidden="true"
-                class="size-icon-md flex-none text-status-done-glyph"
+                class="size-icon-md flex-none text-status-done"
               />
             {:else}
               <span
                 aria-hidden="true"
-                class="grid size-icon-md flex-none place-items-center after:size-space-2 after:rounded-pill after:bg-neutral-8 after:transition-[background-color] after:duration-(--duration-fade) after:ease-out group-data-cur:after:bg-brand-ink"
+                class="grid size-icon-md flex-none place-items-center after:size-space-2 after:rounded-pill after:bg-border-strong after:transition-[background-color] after:duration-(--duration-base) after:ease-out group-data-cur:after:bg-accent-ink"
                 data-box
               ></span>
             {/if}
@@ -775,7 +775,7 @@
               {:else if at === "atLimit" && pair}
                 <section class="flex min-w-0 flex-col">
                   <h2
-                    class="type-title mb-space-5 text-balance text-ink-strong"
+                    class="type-title mb-space-4 text-balance text-ink-strong"
                   >
                     {words.steps.atLimit}
                   </h2>
@@ -790,7 +790,7 @@
                 {@const line = routingLine(pair, { yours, delegates })}
                 <section class="flex min-w-0 flex-col">
                   <h2
-                    class="type-title mb-space-5 text-balance text-ink-strong"
+                    class="type-title mb-space-4 text-balance text-ink-strong"
                   >
                     {words.setUp(nameOf(pair[0]), nameOf(pair[1]))}
                   </h2>
@@ -807,7 +807,7 @@
         {#if refused}
           <p
             data-slot="refused"
-            class="type-meta mt-space-3 text-status-fail-ink"
+            class="type-meta mt-space-3 text-status-fail"
             role="alert"
             in:appear
           >
@@ -888,7 +888,7 @@
             data-choice
             {...props}
             aria-disabled={free ? undefined : "true"}
-            class="select-none mark-line grid min-h-control-lg w-full grid-cols-(--choice-cols) items-center gap-space-3 border-none border-current bg-transparent pr-space-4 pl-space-3 text-start text-inherit active:not-aria-disabled:bg-surface-hover focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) aria-disabled:opacity-50"
+            class="select-none mark-line grid min-h-control-lg w-full grid-cols-(--choice-cols) items-center gap-space-3 border-none border-current bg-transparent pr-space-4 pl-space-3 text-start text-inherit active:not-aria-disabled:bg-surface-hover focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-accent-ink focus-visible:-outline-offset-2 aria-disabled:opacity-50"
             onclick={(event) => {
               if (free) {
                 choose(
@@ -899,7 +899,7 @@
                 );
               }
             }}
-            style:--choice-cols={"var(--mark-box) minmax(0, 1fr) var(--spacing-icon-md)"}
+            style:--choice-cols={"var(--spacing-row-compact) minmax(0, 1fr) var(--spacing-icon-md)"}
             type="button"
           >
             <span
@@ -944,7 +944,7 @@
   <section class="flex min-w-0 flex-col">
     {#if choice}
       <h2
-        class="mark-line type-title mb-space-5 flex items-center gap-space-3 text-balance text-ink-strong"
+        class="mark-line type-title mb-space-4 flex items-center gap-space-3 text-balance text-ink-strong"
       >
         <span
           data-slot="ptile"
@@ -960,14 +960,14 @@
     {#if joined || (signedIn > 0 && choice?.signin !== "device-code")}
       <div
         data-slot="signed-as"
-        class="mark-line mb-space-4 flex items-start gap-space-3 rounded-md bg-surface-raised px-space-4 py-space-3"
+        class="mark-line mb-space-4 flex items-start gap-space-3 rounded-sm bg-surface-raised px-space-4 py-space-3"
         in:unfold
         out:unfold
       >
         <span class="mark-cell"
           ><IconSuccess
             aria-hidden="true"
-            class="size-icon-md flex-none text-status-done-glyph"
+            class="size-icon-md flex-none text-status-done"
           /></span
         >
         {#if joined}
@@ -1041,7 +1041,7 @@
                 />
               </div>
               <span
-                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted data-warn:text-status-attn-ink"
+                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted data-warn:text-status-attn"
                 data-warn={state === "mismatch" || undefined}
                 style:--area="st"
               >
@@ -1084,7 +1084,7 @@
                 />
               </div>
               <span
-                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted data-warn:text-status-attn-ink"
+                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted data-warn:text-status-attn"
                 data-warn={codex?.phase === "mismatch" || undefined}
                 style:--area="st"
               >
@@ -1111,7 +1111,7 @@
                 style:--area="name">{name}</b
               >
               <span
-                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted data-ok:not-data-warn:text-status-done-ink data-warn:text-status-attn-ink"
+                class="mark-line col-(--area) row-(--area) flex items-center gap-space-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted data-ok:not-data-warn:text-status-done data-warn:text-status-attn"
                 data-ok={done || undefined}
                 data-warn={state === "mismatch" || undefined}
                 style:--area="st"
@@ -1119,7 +1119,7 @@
                 {#if done}
                   <IconSuccess
                     aria-hidden="true"
-                    class="size-icon-sm text-status-done-glyph"
+                    class="size-icon-sm text-status-done"
                   /><span>{words.signedIn}</span>
                 {:else if paste?.phase === "mismatch" || state === "mismatch"}
                   {@render someoneElse()}
@@ -1208,7 +1208,7 @@
               {#if paste?.problem}
                 <p
                   data-slot="row-problem"
-                  class="col-(--area) row-(--area) type-meta text-status-fail-ink"
+                  class="col-(--area) row-(--area) type-meta text-status-fail"
                   role="alert"
                   in:appear
                   style:--area="problem"
@@ -1218,7 +1218,7 @@
               {:else if paste?.phase === "mismatch"}
                 <p
                   data-slot="row-warn"
-                  class="col-(--area) row-(--area) type-meta text-status-attn-ink"
+                  class="col-(--area) row-(--area) type-meta text-status-attn"
                   role="alert"
                   in:appear
                   style:--area="problem"
@@ -1242,10 +1242,10 @@
 
 {#snippet nameIt()}
   <section class="flex min-w-0 flex-col">
-    <h2 class="type-title mb-space-5 text-balance text-ink-strong">
+    <h2 class="type-title mb-space-4 text-balance text-ink-strong">
       {words.steps.nameIt}
     </h2>
-    <div class="mb-space-5 flex min-w-0 flex-col items-start gap-space-2">
+    <div class="mb-space-4 flex min-w-0 flex-col items-start gap-space-2">
       <span data-slot="account-setup-label" class="type-label text-ink-strong"
         >{words.howItShows}</span
       >
@@ -1254,7 +1254,7 @@
         <AccountName account={shown} />
       </div>
     </div>
-    <div class="mb-space-5 flex min-w-0 flex-col items-start gap-space-2">
+    <div class="mb-space-4 flex min-w-0 flex-col items-start gap-space-2">
       <label
         data-slot="account-setup-label"
         class="type-label text-ink-strong"
@@ -1272,7 +1272,7 @@
         bind:value={nickname}
       />
     </div>
-    <div class="mb-space-5 flex min-w-0 flex-col items-start gap-space-2">
+    <div class="mb-space-4 flex min-w-0 flex-col items-start gap-space-2">
       <span data-slot="account-setup-label" class="type-label text-ink-strong"
         >{accountsWords.colour}</span
       >
@@ -1287,7 +1287,7 @@
   onchoice: (choice: StrategyChoice) => void
 )}
   <section class="flex min-w-0 flex-col">
-    <h2 class="type-title mb-space-5 text-balance text-ink-strong">
+    <h2 class="type-title mb-space-4 text-balance text-ink-strong">
       {heading}
     </h2>
     {#if pair}

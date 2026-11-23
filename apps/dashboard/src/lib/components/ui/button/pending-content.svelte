@@ -25,7 +25,7 @@
    * ends well, cross-fading in one cell) and the label, which beside a rest
    * icon cross-fades to `pendingLabel` and back in a cell as wide as the
    * wider of the two, each centred in it, the slot beside the one drawn,
-   * all on one clock (--duration-fade, ease-out), so the button keeps its width
+   * all on one clock (--duration-base, ease-out), so the button keeps its width
    * and its inset is even at both ends in every state. A button with no rest icon keeps no slot: what
    * the slot shows stands over its label's start while the words fade out,
    * and its pending wording is its name alone, never drawn, so its label's
@@ -38,7 +38,7 @@
    *
    * Work that counts (`progress`, the share done): once any of it is done the
    * spinner gives way to a ring, the spinner's own track with its arc wound
-   * from the top to the share and easing to each new one over --duration-panel
+   * from the top to the share and easing to each new one over --duration-slow
    * (DESIGN.md, the TaskRing recipe). The arc starts where the spinner's was,
    * so the turning arc is seen to stop and fill. Whole, it gives way to the
    * check when the work ends well; ended failed, it holds where it got to.
@@ -140,7 +140,7 @@
    * wide as the wider; the slot stands beside the one drawn, half the
    * cell's slack in from its start, so the icon and the words drawn sit
    * centred in the button with one inset at both ends, at rest and while
-   * pending. The slot crosses on the label's clock (--duration-fade, ease-out).
+   * pending. The slot crosses on the label's clock (--duration-base, ease-out).
    */
   let restWidth = $state(0);
   let pendingWidth = $state(0);
@@ -242,7 +242,7 @@
         { rotate: `${from}deg`, strokeDasharray: "25 100" },
         { rotate: `${to}deg`, strokeDasharray: `${share * 100} 100` },
       ],
-      { duration: dur("--duration-panel"), easing: CURVE.out }
+      { duration: dur("--duration-slow"), easing: CURVE.out }
     );
   });
 </script>
@@ -258,14 +258,14 @@
 {/snippet}
 
 <!-- The icon slot: its icon at rest, the spinner while its work runs, the
-     check when it is done, cross-fading in one cell over --duration-fade, the
+     check when it is done, cross-fading in one cell over --duration-base, the
      clock its label crosses on. With no icon at rest it stays folded for
      good (no width and no gap) and draws what it shows over its label's
      start while the label fades, so its width never changes. -->
 <span
   style:--btn-words-slack={holds && Icon ? `${slack}px` : undefined}
   data-slot="btn-slot"
-  class="icon-swap w-(--btn-icon) flex-none [--icon-swap-dur:var(--duration-fade)] translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) data-placed:transition-[translate] data-placed:duration-(--duration-fade) data-placed:ease-out motion-reduce:transition-off data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
+  class="icon-swap w-(--btn-icon) flex-none [--icon-swap-dur:var(--duration-base)] translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) data-placed:transition-[translate] data-placed:duration-(--duration-base) data-placed:ease-out motion-reduce:transition-off data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
   data-over={Icon === undefined || undefined}
   data-placed={placed || undefined}
 >
@@ -292,7 +292,7 @@
       >
         <circle cx="12" cy="12" opacity="0.25" r="9" stroke-width="2.5" />
         <circle
-          class="origin-center -rotate-90 transform-view transition-[stroke-dasharray] duration-(--duration-panel) ease-out motion-reduce:transition-off"
+          class="origin-center -rotate-90 transform-view transition-[stroke-dasharray] duration-(--duration-slow) ease-out motion-reduce:transition-off"
           data-slot="ring-arc"
           cx="12"
           cy="12"
@@ -329,7 +329,7 @@
   <span
     ><span
       data-slot="label-text"
-      class="transition-[opacity] duration-(--duration-fade) ease-out covered-true:opacity-0"
+      class="transition-[opacity] duration-(--duration-base) ease-out covered-true:opacity-0"
       data-covered={covered}
       >{#if swapsLabel && Icon === undefined}
         <!-- No rest icon: its pending wording is never drawn (the spinner
@@ -387,7 +387,7 @@
     >
     {#if reason}
       <span
-        class="type-meta block max-w-ch-32 text-status-fail-ink whitespace-normal wrap-anywhere"
+        class="type-meta block max-w-ch-32 text-status-fail whitespace-normal wrap-anywhere"
         data-reason
         role="alert"
         transition:unfold>{reason}</span

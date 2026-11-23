@@ -411,7 +411,7 @@
             >
               <span
                 data-slot="mark"
-                class="grid place-items-center self-center text-status-attn-ink @max-desk/forgotten:row-span-3 @max-desk/forgotten:self-start @max-desk/forgotten:pt-space-2"
+                class="grid place-items-center self-center text-status-attn @max-desk/forgotten:row-span-3 @max-desk/forgotten:self-start @max-desk/forgotten:pt-space-2"
                 data-box
               >
                 <IconWarningTriangle aria-hidden="true" class="size-icon-md" />
@@ -422,7 +422,7 @@
                 {#if one.live}
                   <a
                     aria-label={projectTrashWords.heldOpenProject(one.name)}
-                    class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong no-underline hover:text-brand-ink"
+                    class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong no-underline hover:text-accent-ink"
                     href={`/project/${encodeURIComponent(one.id)}`}
                     title={one.name}>{one.name}</a
                   >
@@ -432,7 +432,7 @@
                     title={one.name}>{one.name}</span
                   >
                   <span
-                    class="mt-space-row block type-meta text-pretty text-ink-muted"
+                    class="mt-space-1 block type-meta text-pretty text-ink-muted"
                     data-slot="detail"
                     >{projectTrashWords.heldProjectGone(one.name)}</span
                   >
@@ -484,7 +484,7 @@
                  scrolls in its own place. -->
             <ul
               aria-label={projectTrashWords.heldListLabel(one.name)}
-              class="col-start-2 -col-end-1 m-0 grid max-h-48 list-none gap-space-row overflow-y-auto p-0 pb-space-2 type-meta break-words text-ink-muted"
+              class="col-start-2 -col-end-1 m-0 grid max-h-48 list-none gap-space-1 overflow-y-auto p-0 pb-space-2 type-meta break-words text-ink-muted"
               data-slot="held"
             >
               {#each one.rows as row, at (at)}
@@ -568,14 +568,14 @@
                   <!-- It wraps rather than cut: its end ("files changed …")
                      is often all that tells two stubs apart. -->
                   <span
-                    class="mt-space-row block type-meta text-pretty text-ink-muted"
+                    class="mt-space-1 block type-meta text-pretty text-ink-muted"
                     data-slot="detail"
                     title={detailOf(one)}>{detailOf(one)}</span
                   >
                 {/if}
                 {#if one.brings.tasksIn}
                   <span
-                    class="mt-space-row block overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+                    class="mt-space-1 block overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted"
                     >{projectEndWords.tasksIn(
                       one.brings.tasksIn.name,
                       one.brings.tasksIn.tasks

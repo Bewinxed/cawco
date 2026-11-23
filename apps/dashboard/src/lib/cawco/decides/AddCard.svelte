@@ -29,9 +29,9 @@
   {...props}
   bind:this={card}
   class={[
-    "row-span-3 flex min-h-control-lg min-w-0 flex-col items-center justify-center gap-space-2 rounded-lg border-2 p-space-4 text-center transition-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid",
+    "row-span-3 flex min-h-control-lg min-w-0 flex-col items-center justify-center gap-space-2 rounded-lg border-2 p-space-4 text-center transition-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid",
     open
-      ? "border-brand-solid bg-surface-raised"
+      ? "border-accent bg-surface-raised"
       : "border-dashed border-border-control can-hover:hover:bg-surface-hover",
   ]}
   data-add-member

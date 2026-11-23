@@ -86,7 +86,7 @@
       bind:value={title}
     />
     {#if problem}
-      <p class="type-meta text-status-fail-ink" role="alert">{problem}</p>
+      <p class="type-meta text-status-fail" role="alert">{problem}</p>
     {/if}
     <div data-slot="actions" class="flex items-center justify-end gap-space-1">
       {#if stages}

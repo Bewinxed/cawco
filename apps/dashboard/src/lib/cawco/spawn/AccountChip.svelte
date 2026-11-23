@@ -125,7 +125,7 @@
         {/if}
       </span>
       <Check
-        class="size-icon-md text-brand-ink opacity-0 transition-[opacity] duration-(--duration-control) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
+        class="size-icon-md text-accent-ink opacity-0 transition-[opacity] duration-(--duration-fast) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
       />
     </button>
     {#each tool.options as option (option.id)}
@@ -155,7 +155,7 @@
             ></span>
           {/if}
         </span>
-        <span data-slot="words" class="flex min-w-0 flex-col gap-space-row">
+        <span data-slot="words" class="flex min-w-0 flex-col gap-space-1">
           <span class="min-w-0 group-disabled:opacity-50"
             ><AccountName account={nameFields(option)} row wrap /></span
           >
@@ -166,7 +166,7 @@
           {/if}
         </span>
         <Check
-          class="size-icon-md text-brand-ink opacity-0 transition-[opacity] duration-(--duration-control) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
+          class="size-icon-md text-accent-ink opacity-0 transition-[opacity] duration-(--duration-fast) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
         />
       </button>
     {/each}

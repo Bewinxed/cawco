@@ -101,7 +101,7 @@
   <!-- Its slides stand in the kit's well, so a slide reads as one, and the
        tallest one's room is the well's. -->
   <div
-    class="min-w-0 overflow-clip rounded-md border border-border-control bg-surface-sunk"
+    class="min-w-0 overflow-clip rounded-sm border border-border-control bg-surface-sunk"
     data-slot="slides-well"
   >
     {#if media.still}

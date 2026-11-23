@@ -75,11 +75,11 @@
    * stands empty beside the undo glyphs.
    */
   const CARD_W =
-    "min(var(--spacing-measure), calc(var(--graph-move-name-w) + var(--graph-control-w) + var(--spacing-control-xs) + 4 * var(--spacing-space-3) + 2px))";
+    "min(var(--spacing-measure), calc(calc(var(--spacing) * 48) + calc(var(--spacing) * 64) + var(--spacing-space-6) + 4 * var(--spacing-space-3) + 2px))";
 </script>
 
 <div
-  class="flex justify-center bg-surface-page px-space-3 pt-space-5 pb-space-6"
+  class="flex justify-center bg-surface-page px-space-3 pt-space-4 pb-space-6"
 >
   <div
     class={floatingSurface({

@@ -19,7 +19,7 @@
 //   written as a number, or `element.animate(frames, 120)`: `dur("--dur-…")`;
 // - a length a keyframe travels, in `element.animate(frames)`'s frames or a
 //   Svelte transition's `css`, written out (`translateX(18px)`) or as a
-//   number before its unit (`${(1 - t) * 8}px`): `var(--pop-rise)` or its
+//   number before its unit (`${(1 - t) * 8}px`): `var(--spacing-space-2)` or its
 //   token. A template's number before `ms` or `s` is a time written out too.
 //   A stylesheet's `@keyframes` lengths are no-raw-css-values.grit's.
 // - Svelte's own transition (`fade`, `blur`, `fly`, `slide`, `scale`, `draw`

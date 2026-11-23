@@ -52,12 +52,12 @@
    */
   function arrive(_node: HTMLElement, { i }: { i: number }) {
     return {
-      delay: i * dur("--duration-step"),
-      duration: dur("--duration-panel"),
+      delay: i * (dur("--duration-fast") / 2),
+      duration: dur("--duration-slow"),
       easing: easeOut,
       css: (t: number, u: number) =>
         motionOk.current
-          ? `opacity: ${t}; transform: translateY(calc(var(--pop-rise) * ${u})) scale(${0.96 + 0.04 * t})`
+          ? `opacity: ${t}; transform: translateY(calc(var(--spacing-space-2) * ${u})) scale(${0.96 + 0.04 * t})`
           : `opacity: ${t}`,
     };
   }
@@ -190,7 +190,7 @@
    */
   function leave(node: HTMLElement) {
     return lifting(node, pinnedAtBox(node), {
-      duration: dur("--duration-control"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t: number) =>
         motionOk.current
@@ -215,8 +215,8 @@
   data-slot="suggest"
   data-filled={shown.length > 0 || slow || !!failure || undefined}
   style:--suggest-bottom="calc(100% + var(--spacing-space-2))"
-  style:--suggest-lift={"linear-gradient(to top, var(--color-surface-recess) 55%, var(--surface-recess-clear))"}
-  class="absolute inset-x-0 bottom-(--suggest-bottom) flex flex-col justify-end h-(--suggest-row) pt-space-4 pointer-events-none data-filled:bg-(image:--suggest-lift)"
+  style:--suggest-lift={"linear-gradient(to top, var(--color-surface-recess) 55%, color-mix(in oklch, var(--color-surface-recess) 0%, transparent))"}
+  class="absolute inset-x-0 bottom-(--suggest-bottom) flex flex-col justify-end h-14 pt-space-4 pointer-events-none data-filled:bg-(image:--suggest-lift)"
 >
   <!-- Drawn only with something in it: chips, the shimmer of an answer on
        its way, or a failure; laid out whether it is drawn or not. -->
@@ -226,7 +226,7 @@
       style:--hit-gap-x="var(--spacing-space-2)"
       style:--hit-gap-y="var(--spacing-space-2)"
       class="relative min-w-0 m-0 border-none border-current flex flex-nowrap items-center gap-space-2 p-space-1 overflow-x-auto overscroll-x-contain no-scrollbar"
-      out:fade={{ duration: dur("--duration-control"), easing: easeOut }}
+      out:fade={{ duration: dur("--duration-fast"), easing: easeOut }}
     >
       <legend class="sr-only flex-none pointer-events-auto"
         >Suggested skills, tools and MCP servers</legend
@@ -236,20 +236,20 @@
              (noul 0.6 → 1), and the accent's share of the fill runs 8% → 32%
              with it. The border takes the fill's share at 1.5×, mixed in
              sRGB so the accent reads as if laid over the surface; a
-             confidence that moves in place re-tints over --duration-panel. -->
+             confidence that moves in place re-tints over --duration-slow. -->
         <button
           data-slot="suggest-chip"
-          class="select-none inline-flex items-center h-(--suggest-chip) gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 border border-suggest-tint rounded-sm bg-suggest-tint shadow-sm text-ink-strong text-size-label font-medium whitespace-nowrap flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:scale-(--press-scale) hover:bg-suggest-tint-hover mark-line touch-hit"
+          class="select-none inline-flex items-center h-control-sm gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 border border-suggest-tint rounded-sm bg-suggest-tint shadow-sm text-ink-strong text-base font-medium whitespace-nowrap flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:scale-(--press-scale) hover:bg-suggest-tint-hover mark-line touch-hit"
           onclick={() => choose(candidate)}
           title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ""}`}
           type="button"
           style:--conf={confidence(noul)}
-          style:--hit-edge="var(--border-width)"
+          style:--hit-edge="1px"
           style:--tint="calc(8% + var(--conf) * 24%)"
           in:arrive={{ i }}
           out:leave
           animate:flip={{
-            duration: motionOk.current ? dur("--duration-panel") : 0,
+            duration: motionOk.current ? dur("--duration-slow") : 0,
             easing: easeDrawer,
           }}
         >
@@ -289,7 +289,7 @@
       {#if shown.length > 1}
         <span
           aria-hidden="true"
-          class="inline-flex items-center gap-space-1 text-ink-muted text-size-meta font-normal whitespace-nowrap flex-none pointer-events-auto coarse:hidden"
+          class="inline-flex items-center gap-space-1 text-ink-muted text-sm font-normal whitespace-nowrap flex-none pointer-events-auto coarse:hidden"
           ><Kbd>⇧ Tab</Kbd> all</span
         >
       {/if}
@@ -300,16 +300,16 @@
           aria-hidden="true"
           data-slot="suggest-shimmer"
           class="block w-36 flex-none pointer-events-auto"
-          in:fade={{ duration: dur("--duration-panel"), easing: easeOut }}
+          in:fade={{ duration: dur("--duration-slow"), easing: easeOut }}
           out:revealOut><Skeleton class="w-full" height="chip" /></span
         >
       {/if}
       {#if failure}
         <p
           data-slot="suggest-fail"
-          class="m-0 text-ink-muted text-size-meta font-normal whitespace-nowrap flex-none pointer-events-auto"
+          class="m-0 text-ink-muted text-sm font-normal whitespace-nowrap flex-none pointer-events-auto"
           role="status"
-          in:fade={{ duration: dur("--duration-panel"), easing: easeOut }}
+          in:fade={{ duration: dur("--duration-slow"), easing: easeOut }}
         >
           Suggestions failed: {failure}
         </p>

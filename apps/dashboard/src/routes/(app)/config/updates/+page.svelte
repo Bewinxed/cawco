@@ -184,7 +184,7 @@
   {#if policy}
     <div data-slot="group" class="flex flex-col gap-space-2">
       <SectionHeader
-        hue="var(--color-mark-6)"
+        hue="var(--color-mark-4)"
         icon={IconDownload}
         label="Channel"
       >
@@ -218,12 +218,12 @@
               aria-live="polite"
               class="type-meta max-w-measure text-ink-muted"
               in:blur={{
-                duration: dur("--duration-panel"),
+                duration: dur("--duration-slow"),
                 easing: easeOut,
                 amount: 2,
               }}
               out:blur={{
-                duration: dur("--duration-fade"),
+                duration: dur("--duration-base"),
                 easing: easeOut,
                 amount: 2,
               }}
@@ -245,7 +245,7 @@
           >
             <IconChevronRight
               data-chev
-              class="size-icon-sm transition-[rotate] duration-(--duration-control) ease-out group-aria-expanded:rotate-90"
+              class="size-icon-sm transition-[rotate] duration-(--duration-fast) ease-out group-aria-expanded:rotate-90"
             />
             <span>What's new in {displayVersion(release.version)}</span>
           </button>
@@ -260,10 +260,10 @@
 
     <div
       data-slot="group"
-      class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
+      class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-4"
     >
       <SectionHeader
-        hue="var(--color-mark-4)"
+        hue="var(--color-mark-2)"
         icon={IconMonitor}
         label="Machines"
       >

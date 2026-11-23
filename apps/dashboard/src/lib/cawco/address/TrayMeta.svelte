@@ -27,7 +27,7 @@
 </script>
 
 {#snippet tick()}
-  <IconSuccess aria-hidden="true" class="size-icon-sm text-status-done-ink" />
+  <IconSuccess aria-hidden="true" class="size-icon-sm text-status-done" />
 {/snippet}
 
 <p

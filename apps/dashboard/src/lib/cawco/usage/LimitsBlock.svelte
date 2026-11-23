@@ -113,7 +113,7 @@
           >{ring.sessions.length}</span
         ></span
       >
-      <div data-slot="sessions" class="flex flex-col gap-space-row">
+      <div data-slot="sessions" class="flex flex-col gap-space-1">
         {#each ring.sessions as row (row.id)}
           {@const project = projectOf(row)}
           <div
@@ -134,7 +134,7 @@
         {/each}
       </div>
     {:else}
-      <span class="type-meta px-0 py-space-row text-ink-muted"
+      <span class="type-meta px-0 py-space-1 text-ink-muted"
         >No sessions running</span
       >
     {/if}
@@ -167,7 +167,7 @@
     </div>
     <div data-slot="mark" class="flex items-center gap-space-4">
       <Rings {index} reveal {ring} size={56} />
-      <span class="flex min-w-0 flex-col gap-space-row">
+      <span class="flex min-w-0 flex-col gap-space-1">
         <span
           data-slot="value"
           class="type-title num text-ink-strong data-muted:text-ink-muted"
@@ -198,7 +198,7 @@
 <section
   data-slot="limits-block-card"
   aria-labelledby="limits-title"
-  class="flex flex-col gap-space-5 rounded-lg bg-surface-raised p-space-6 shadow-sm max-phone:p-space-4"
+  class="flex flex-col gap-space-4 rounded-lg bg-surface-raised p-space-6 shadow-sm max-phone:p-space-4"
   style:--ring-ground="var(--color-surface-raised)"
 >
   <h2 data-slot="title" class="type-label text-ink-muted" id="limits-title">
@@ -215,7 +215,7 @@
       <Skeleton class="w-3/4" line="body" />
       <div
         data-slot="grid"
-        class="grid grid-cols-usage-tiles gap-x-space-6 gap-y-space-5"
+        class="grid grid-cols-usage-tiles gap-x-space-6 gap-y-space-4"
       >
         {#each [0, 1, 2] as one (one)}
           <Skeleton class="w-full" height="chart" />
@@ -224,13 +224,13 @@
     </div>
   {:else}
     <!-- What the skeleton stood for, in its reveal. -->
-    <div class="flex flex-col gap-space-5" in:reveal>
+    <div class="flex flex-col gap-space-4" in:reveal>
       {#if lead}
         <div data-slot="lead" class="flex flex-col gap-space-2">
           <p class="flex flex-wrap items-baseline gap-space-3">
             <span
               data-slot="num"
-              class="type-kpi num tracking-title text-ink-strong data-muted:text-ink-muted"
+              class="type-kpi num tracking-tight text-ink-strong data-muted:text-ink-muted"
               data-lead-figure
               data-muted={claude?.stale || undefined}
               >{#if lead.back}
@@ -247,7 +247,7 @@
           </p>
           <p
             data-slot="sentence"
-            class="type-body max-w-measure-short text-ink-strong"
+            class="type-body max-w-ch-60 text-ink-strong"
             data-lead
           >
             <Words parts={lead.say} />
@@ -291,7 +291,7 @@
       {#if claude}
         <div
           data-slot="grid"
-          class="grid grid-cols-usage-tiles gap-x-space-6 gap-y-space-5"
+          class="grid grid-cols-usage-tiles gap-x-space-6 gap-y-space-4"
         >
           {#each claude.accounts as ring, i (ring.id)}
             {@render tile(
@@ -342,7 +342,7 @@
         {#if openCode}
           <div
             data-slot="grid"
-            class="grid grid-cols-usage-tiles gap-x-space-6 gap-y-space-5"
+            class="grid grid-cols-usage-tiles gap-x-space-6 gap-y-space-4"
           >
             {@render tile(
               openCode,

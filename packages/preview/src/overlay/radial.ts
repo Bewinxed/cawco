@@ -7,7 +7,7 @@ import { solarGlyphs } from "./glyphs" with { type: "macro" };
  *
  * When the pen lifts, a 24px raised circle with the pen glyph arrives at the
  * stroke's last point as a floating tag does (rising 8px, from 0.96, over
- * `--duration-panel`) and leaves the same way (`--duration-fade`) two breaths later or
+ * `--duration-slow`) and leaves the same way (`--duration-base`) two breaths later or
  * when the next stroke starts. A press on it that moves opens the menu: two
  * 180° sectors round the icon, Comment over Erase, outer radius 56px, in the
  * panel material with the control edge, each with its glyph and, outside the
@@ -17,8 +17,8 @@ import { solarGlyphs } from "./glyphs" with { type: "macro" };
  * The sector under the pointer takes `surface-fill` and its word
  * `selected-ink`; releasing on a sector picks it, releasing within 20px of
  * the centre picks nothing. A tap opens the same menu and a second tap
- * picks. The menu opens over `--duration-panel` on ease-out and closes over
- * `--duration-fade`; with reduced motion the icon fades and the menu appears and
+ * picks. The menu opens over `--duration-slow` on ease-out and closes over
+ * `--duration-base`; with reduced motion the icon fades and the menu appears and
  * goes. A pen never works the icon or the menu (a stroke that starts on
  * them is a stroke): they answer a finger, a mouse and the keyboard.
  */
@@ -94,7 +94,7 @@ const CHROME = `
     box-shadow: var(--shadow-sm); cursor: pointer; pointer-events: auto;
     touch-action: none;
   }
-  .ink-icon:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus-ring); outline-offset: 2px; }
+  .ink-icon:focus-visible { outline: 2px solid var(--color-accent-ink); outline-offset: 2px; }
   .ink-icon::after { content: ""; position: absolute; inset: -10px; }
   .ink-menu {
     position: fixed; z-index: 1; inline-size: ${OUTER * 2}px; block-size: ${OUTER * 2}px;
@@ -102,16 +102,16 @@ const CHROME = `
   }
   .ink-ring {
     position: absolute; inset: 0; border-radius: 50%;
-    -webkit-backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
-    backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate));
+    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.6);
+    backdrop-filter: blur(var(--blur-glass)) saturate(1.6);
     -webkit-mask: radial-gradient(circle, transparent ${INNER}px, #000 ${INNER + 0.5}px);
     mask: radial-gradient(circle, transparent ${INNER}px, #000 ${INNER + 0.5}px);
   }
   @media (prefers-reduced-transparency: reduce) { .ink-ring { display: none; } }
   .ink-menu > svg { position: absolute; inset: 0; overflow: visible; }
   .ink-sector {
-    fill: var(--color-surface-glass); stroke: var(--color-border-control); stroke-width: 1;
-    transition: fill var(--duration-control) var(--ease-out);
+    fill: oklch(from var(--color-surface-raised) l c h / 0.72); stroke: var(--color-border-control); stroke-width: 1;
+    transition: fill var(--duration-fast) var(--ease-out);
   }
   @media (prefers-reduced-transparency: reduce) { .ink-sector { fill: var(--color-surface-raised); } }
   .ink-sector[data-hot] { fill: var(--color-surface-hover); }
@@ -119,14 +119,14 @@ const CHROME = `
   .ink-word {
     position: absolute; margin: 0; padding: 2px 6px;
     border: 0; border-radius: var(--radius-xs); background: none;
-    color: var(--color-ink-muted); font: var(--type-label); white-space: nowrap;
-    cursor: pointer; transition: color var(--duration-control) var(--ease-out);
+    color: var(--color-ink-muted); font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans); white-space: nowrap;
+    cursor: pointer; transition: color var(--duration-fast) var(--ease-out);
   }
-  .ink-word[data-hot] { color: var(--color-brand-ink); }
-  .ink-word:focus-visible { outline: var(--focus-ring-width) solid var(--color-focus-ring); outline-offset: 0; }
+  .ink-word[data-hot] { color: var(--color-accent-ink); }
+  .ink-word:focus-visible { outline: 2px solid var(--color-accent-ink); outline-offset: 0; }
   .ink-said {
     position: fixed; z-index: 2; translate: -50% 12px; max-inline-size: 280px;
-    color: var(--color-ink-muted); font: var(--type-meta); pointer-events: none;
+    color: var(--color-ink-muted); font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans); pointer-events: none;
   }
 `;
 
@@ -239,7 +239,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
             { opacity: 0, translate: "-50% calc(-50% + 8px)", scale: "0.96" },
           ]
         : [{ opacity: 1 }, { opacity: 0 }],
-      { duration: ms("--duration-fade"), easing: easeOut(), fill: "forwards" }
+      { duration: ms("--duration-base"), easing: easeOut(), fill: "forwards" }
     );
     run.id = "ink-icon";
     run.finished.then(
@@ -264,7 +264,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
           { opacity: 1, scale: "1" },
           { opacity: 0, scale: "0.5" },
         ],
-        { duration: ms("--duration-fade"), easing: easeOut(), fill: "forwards" }
+        { duration: ms("--duration-base"), easing: easeOut(), fill: "forwards" }
       );
       run.id = "ink-menu";
       run.finished.then(
@@ -277,7 +277,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
     if (icon) {
       // Back to the icon's own clock: it leaves two breaths after the menu does.
       clearTimeout(leave);
-      leave = setTimeout(() => dropIcon(), 2 * ms("--duration-breath"));
+      leave = setTimeout(() => dropIcon(), 2 * (2 * ms("--duration-loop")));
     }
   };
 
@@ -436,7 +436,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
           { opacity: 0, scale: "0.5" },
           { opacity: 1, scale: "1" },
         ],
-        { duration: ms("--duration-panel"), easing: easeOut() }
+        { duration: ms("--duration-slow"), easing: easeOut() }
       );
       run.id = "ink-menu";
     }
@@ -536,10 +536,10 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
             { opacity: 1, translate: "-50% -50%", scale: "1" },
           ]
         : [{ opacity: 0 }, { opacity: 1 }],
-      { duration: ms("--duration-panel"), easing: easeOut() }
+      { duration: ms("--duration-slow"), easing: easeOut() }
     );
     run.id = "ink-icon";
-    leave = setTimeout(() => dropIcon(), 2 * ms("--duration-breath"));
+    leave = setTimeout(() => dropIcon(), 2 * (2 * ms("--duration-loop")));
   };
 
   const say: InkChrome["say"] = (message, x, y) => {
@@ -550,7 +550,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
     line.style.left = `${x}px`;
     line.style.top = `${y}px`;
     shadow.append(line);
-    setTimeout(() => line.remove(), 2 * ms("--duration-breath"));
+    setTimeout(() => line.remove(), 2 * (2 * ms("--duration-loop")));
   };
 
   return {

@@ -39,11 +39,11 @@
   } as const satisfies Record<(typeof SURFACES)[number], string>;
   /** The transcript's tool inks (tool-cards/descriptors.ts INKS), written out whole. */
   const INKS = [
-    "text-mark-2",
-    "text-mark-6",
-    "text-mark-7",
+    "text-mark-1",
+    "text-mark-4",
     "text-mark-5",
-    "text-mark-8",
+    "text-mark-3",
+    "text-mark-6",
     "text-ink-muted",
   ] as const;
 
@@ -88,7 +88,7 @@
 <main class="grid gap-space-2 p-space-4">
   {#each SURFACES as surface (surface)}
     <section
-      class="grid gap-space-2 rounded-md p-space-2 {BACKGROUND[surface]}"
+      class="grid gap-space-2 rounded-sm p-space-2 {BACKGROUND[surface]}"
       data-surface={surface}
     >
       <div data-breather="find-row">

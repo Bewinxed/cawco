@@ -90,8 +90,8 @@
                 <span class="mark-cell type-label">
                   <span
                     data-box
-                    class="size-(--status-dot-size) shrink-0 rounded-pill {on
-                      ? 'bg-status-done-glyph'
+                    class="size-1.5 shrink-0 rounded-pill {on
+                      ? 'bg-status-done'
                       : 'bg-ink-subtle'}"
                   ></span>
                 </span>

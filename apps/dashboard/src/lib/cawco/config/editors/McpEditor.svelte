@@ -55,7 +55,7 @@
   }: { server: FleetMcpServerView | null; taken: string[] } = $props();
 
   const store = configStore();
-  const HUE = "var(--color-mark-6)";
+  const HUE = "var(--color-mark-4)";
 
   type Mode = McpFields["mode"];
   const HOW: Record<Mode, string> = {
@@ -267,7 +267,7 @@
       bind:value={serverName}
     />
     {#if serverName !== "" && nameProblem}
-      <p class="type-meta text-status-fail-ink" in:appear>{nameProblem}</p>
+      <p class="type-meta text-status-fail" in:appear>{nameProblem}</p>
     {:else if server && serverName.trim() !== "" && serverName.trim() !== server.name}
       <!-- Said before Save, where the name is changed: that is its consequence. -->
       <p
@@ -283,14 +283,14 @@
       </p>
     {/if}
     {#if form.failed}
-      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+      <p class="type-meta text-status-fail" role="alert" in:appear>
         {form.failed}
       </p>
     {/if}
     {#if server}
       <McpSignIn {server} />
       {#if server.auth?.state === "failed"}
-        <p class="type-meta text-status-fail-ink" role="alert">
+        <p class="type-meta text-status-fail" role="alert">
           {server.auth.detail}
         </p>
       {/if}
@@ -311,12 +311,12 @@
       value={mode}
     />
     <!-- One kind's note and fields cross-fade into the next's
-         (--duration-control) in one box, whose height follows over --duration-panel on
+         (--duration-fast) in one box, whose height follows over --duration-slow on
          --ease-drawer. -->
     <div
       data-slot="kind"
       class="relative flex flex-col"
-      {@attach morph({ ms: dur("--duration-panel") })}
+      {@attach morph({ ms: dur("--duration-slow") })}
     >
       {#if mode === "bunx"}
         <div
@@ -451,7 +451,7 @@
         <div
           data-slot="kind"
           class="relative flex flex-col"
-          {@attach morph({ ms: dur("--duration-panel") })}
+          {@attach morph({ ms: dur("--duration-slow") })}
         >
           {#if mode === "remote"}
             <div in:crossIn out:crossOut>

@@ -51,7 +51,7 @@
   <HeadFade band="var(--side-room)" tint="bg-surface-recess" />
   <header
     data-slot="page-head"
-    class="absolute inset-x-0 top-0 z-2 flex h-(--side-room) items-center gap-space-2 pe-space-5 ps-space-3"
+    class="absolute inset-x-0 top-0 z-2 flex h-(--side-room) items-center gap-space-2 pe-space-4 ps-space-3"
   >
     <BarGlass form="group">
       <BarItem

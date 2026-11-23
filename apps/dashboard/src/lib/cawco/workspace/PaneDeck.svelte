@@ -34,7 +34,7 @@
   /** The page dots, and each dot, come and go as a fade at the control tier. */
   function fadeDots(_node: Element): TransitionConfig {
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
@@ -99,12 +99,12 @@
            symmetric, and long enough that the card is seen arriving. The
            set-down is declared on the base rule and the pick-up on the
            lifted one, which is how a single `transition` property gets a
-           different value in each direction. The pick-up is `--duration-fade`,
+           different value in each direction. The pick-up is `--duration-base`,
            derived from the base beat the way `--duration-breath` is. Fewer and gentler under
            reduced motion, not none: the fades stay, the movement goes. -->
       <div
         data-pane-lift
-        class="relative flex min-h-0 min-w-0 flex-auto rounded-none transform-(--lift-rest) will-change-transform motion-safe:transition-[transform,border-radius] motion-safe:duration-(--duration-panel) motion-safe:ease-in-out motion-safe:group-data-lifted/deck:rounded-lg motion-safe:group-data-lifted/deck:transform-(--lift-up) motion-safe:group-data-lifted/deck:duration-(--duration-fade) motion-safe:group-data-lifted/deck:ease-out motion-reduce:transition-off before:pointer-events-none before:absolute before:inset-0 before:rounded-lg before:opacity-0 before:shadow-lg before:transition-[opacity] before:duration-(--duration-panel) before:ease-in-out before:will-change-opacity group-data-lifted/deck:before:opacity-100 group-data-lifted/deck:before:duration-(--duration-fade) group-data-lifted/deck:before:ease-out motion-reduce:before:transition-off"
+        class="relative flex min-h-0 min-w-0 flex-auto rounded-none transform-(--lift-rest) will-change-transform motion-safe:transition-[transform,border-radius] motion-safe:duration-(--duration-slow) motion-safe:ease-in-out motion-safe:group-data-lifted/deck:rounded-lg motion-safe:group-data-lifted/deck:transform-(--lift-up) motion-safe:group-data-lifted/deck:duration-(--duration-base) motion-safe:group-data-lifted/deck:ease-out motion-reduce:transition-off before:pointer-events-none before:absolute before:inset-0 before:rounded-lg before:opacity-0 before:shadow-lg before:transition-[opacity] before:duration-(--duration-slow) before:ease-in-out before:will-change-opacity group-data-lifted/deck:before:opacity-100 group-data-lifted/deck:before:duration-(--duration-base) group-data-lifted/deck:before:ease-out motion-reduce:before:transition-off"
         style:--lift-rest="scale(1)"
         style:--lift-up="scale(var(--press-scale))"
       >
@@ -125,14 +125,14 @@
   {#if workspace.leaves.length > 1}
     <div
       aria-hidden="true"
-      class="pointer-events-none absolute top-1/2 right-space-3 z-5 -translate-y-1/2 opacity-0 transition-[opacity] duration-(--duration-control) ease-out group-data-lifted/deck:opacity-100"
+      class="pointer-events-none absolute top-1/2 right-space-3 z-5 -translate-y-1/2 opacity-0 transition-[opacity] duration-(--duration-fast) ease-out group-data-lifted/deck:opacity-100"
     >
       <div class="flex flex-col gap-space-2" transition:fadeDots>
         {#each workspace.leaves as leaf (leaf.id)}
           <span class="flex" transition:fadeDots>
             <span
               data-slot="dot"
-              class="size-space-2 rounded-pill bg-ink-muted opacity-50 transition-[height,opacity] duration-(--duration-fade) ease-out data-dot-on:h-space-5 data-dot-on:bg-ink-strong data-dot-on:opacity-100 motion-reduce:transition-[opacity] motion-reduce:duration-(--duration-fade)"
+              class="size-space-2 rounded-pill bg-ink-muted opacity-50 transition-[height,opacity] duration-(--duration-base) ease-out data-dot-on:h-space-4 data-dot-on:bg-ink-strong data-dot-on:opacity-100 motion-reduce:transition-[opacity] motion-reduce:duration-(--duration-base)"
               data-dot-on={leaf.id === workspace.focusedLeafId || undefined}
             ></span>
           </span>

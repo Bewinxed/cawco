@@ -183,7 +183,7 @@
       return "var(--color-surface-hover)";
     }
     if (ring.state === "limit") {
-      return "var(--meter-wash-over)";
+      return "light-dark(color-mix(in oklch, var(--color-status-fail) 6%, transparent), color-mix(in oklch, var(--color-status-fail) 10%, transparent))";
     }
     return undefined;
   }
@@ -475,7 +475,7 @@
       update(next: number) {
         if (next !== at && !motionOk.current) {
           node.animate([{ opacity: 0 }, { opacity: 1 }], {
-            duration: dur("--duration-fade"),
+            duration: dur("--duration-base"),
             easing: "linear",
           });
         }
@@ -510,11 +510,11 @@
          ascent), and a clip at the line's top cut them (the owner's audit,
          "45m" cut 1px). -->
     <span
-      class="-mt-space-1 flex h-(--usage-strip-clip) min-w-0 flex-1 flex-wrap gap-x-space-2 overflow-clip pt-space-1 group-variant-home/strip:gap-x-space-6"
+      class="-mt-space-1 flex h-10 min-w-0 flex-1 flex-wrap gap-x-space-2 overflow-clip pt-space-1 group-variant-home/strip:gap-x-space-6"
     >
       {#if claude}
         <span
-          class="flex h-(--usage-strip-row) flex-auto flex-col justify-center gap-space-1"
+          class="flex h-9 flex-auto flex-col justify-center gap-space-1"
           data-cell="claude"
         >
           <span
@@ -539,7 +539,7 @@
               {#each stripMarks as ring, i (ring.id)}
                 <span
                   data-slot="slot"
-                  class="absolute top-0 grid transition-[inset-inline-start] duration-(--duration-fade) ease-in-out motion-reduce:transition-off"
+                  class="absolute top-0 grid transition-[inset-inline-start] duration-(--duration-base) ease-in-out motion-reduce:transition-off"
                   style:inset-inline-start={slotAt(
                     i,
                     stripMarks.length + (stripMore > 0 ? 1 : 0)
@@ -555,7 +555,7 @@
                 <span
                   data-slot="slot"
                   data-more
-                  class="absolute top-0 grid h-icon-md min-w-icon-md place-items-center type-meta num text-ink-muted transition-[inset-inline-start] duration-(--duration-fade) ease-in-out motion-reduce:transition-off"
+                  class="absolute top-0 grid h-icon-md min-w-icon-md place-items-center type-meta num text-ink-muted transition-[inset-inline-start] duration-(--duration-base) ease-in-out motion-reduce:transition-off"
                   data-strip-more
                   style:inset-inline-start={slotAt(
                     stripMarks.length,
@@ -576,7 +576,7 @@
             <!-- The strip's time: its line here, the figure face on its own
                  span (`mono-figure`). -->
             <span
-              class="flex-none font-sans text-size-label leading-icon-md font-medium num text-ink-strong data-muted:text-ink-muted"
+              class="flex-none font-sans text-base leading-icon-md font-medium num text-ink-strong data-muted:text-ink-muted"
               data-muted={claude.stale !== null || undefined}
               data-strip-digits
               ><span class="mono-figure"
@@ -589,7 +589,7 @@
                marks and digits: only when the rail cannot fit it at all does
                it end in an ellipsis. -->
           <span
-            class="line-clamp-1 line-clamp-std-1 min-w-0 font-sans text-size-meta leading-4 font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-strong"
+            class="line-clamp-1 line-clamp-std-1 min-w-0 font-sans text-sm leading-4 font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-strong"
             data-next={claude.next?.id}
             data-strip-caption
             ><Words parts={caption(claude, now, nameOf)} /></span
@@ -598,7 +598,7 @@
       {/if}
       {#if openCode}
         <span
-          class="flex h-(--usage-strip-row) flex-none flex-col justify-center gap-space-1"
+          class="flex h-9 flex-none flex-col justify-center gap-space-1"
           data-cell="opencode"
         >
           <span
@@ -622,7 +622,7 @@
               >
             {/if}
             <span
-              class="flex-none font-sans text-size-label leading-icon-md font-medium num text-ink-strong"
+              class="flex-none font-sans text-base leading-icon-md font-medium num text-ink-strong"
               data-strip-go-time
               ><span class="mono-figure"
                 ><Figure text={goTime?.figure ?? ""} /></span
@@ -633,7 +633,7 @@
             <!-- mark-line: one clamped line of text; the week ring stands in
                  it on vertical-align: middle, the x-height's middle -->
             <span
-              class="line-clamp-1 line-clamp-std-1 min-w-0 font-sans text-size-meta leading-4 font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-strong"
+              class="line-clamp-1 line-clamp-std-1 min-w-0 font-sans text-sm leading-4 font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-strong"
               data-strip-go-week
               ><WeekMark ring={openCode} />
               <span class="mono-figure">{goWeek}%</span></span
@@ -704,7 +704,7 @@
     </Tip>
   {:else if time.guess}
     <span
-      class="mono-figure col-2 row-2 self-center justify-self-box-end text-size-meta leading-label text-ink-muted"
+      class="mono-figure col-2 row-2 self-center justify-self-box-end text-sm leading-base text-ink-muted"
       data-status-slot>~</span
     >
   {/if}
@@ -742,7 +742,7 @@
     <!-- The count, 16px. Its touch area reaches the full 44px up and down,
          and space-5 / 2 to either side: a count in the last column stays
          inside the wall's padding, so the accounts never scroll sideways. -->
-    <span class="ms-auto grid" style:--hit-gap-x="var(--spacing-space-5)">
+    <span class="ms-auto grid" style:--hit-gap-x="var(--spacing-space-4)">
       <SessionsChip
         account={ring.name}
         name={shown}
@@ -799,7 +799,7 @@
     data-usage-cell
     {...props}
     aria-label={cellLabel(ring, c, shown)}
-    class="relative col-span-5 grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-box-start items-box-start rounded-sm p-space-1 transition-[background-color] duration-(--duration-fade) ease-out data-carrying:inset-ring data-carrying:inset-ring-border-strong not-data-lit:data-limit:bg-(--meter-wash-over) data-lit:bg-surface-hover motion-reduce:transition-off"
+    class="relative col-span-5 grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-box-start items-box-start rounded-sm p-space-1 transition-[background-color] duration-(--duration-base) ease-out data-carrying:inset-ring data-carrying:inset-ring-border-strong not-data-lit:data-limit:bg-status-fail/8 data-lit:bg-surface-hover motion-reduce:transition-off"
     data-account={ring.id}
     data-bind={ring.bind}
     data-carrying={(c !== null && ring.id === c.carry?.id) || undefined}
@@ -894,7 +894,7 @@
       <header
         class={[
           "flex flex-none flex-col gap-space-2",
-          sheet ? "px-space-5 pt-space-1 pb-space-3" : "px-space-4 py-space-3",
+          sheet ? "px-space-4 pt-space-1 pb-space-3" : "px-space-4 py-space-3",
         ]}
         data-pop-head
       >
@@ -1004,7 +1004,7 @@
               >
                 {#if block.head}
                   <h4
-                    class="col-span-full px-space-1 pt-0 pb-space-row type-meta text-ink-muted group-not-first/block:mt-space-2"
+                    class="col-span-full px-space-1 pt-0 pb-space-1 type-meta text-ink-muted group-not-first/block:mt-space-2"
                     data-flyover-edge
                     data-org-head
                   >
@@ -1119,7 +1119,7 @@
      own ground, and the dials' reserve notch takes it (`ring-ground-*`). -->
 <div
   data-slot="strip"
-  class="group/strip relative w-full min-w-0 rounded-sm bg-(--ring-ground) variant-home:rounded-md"
+  class="group/strip relative w-full min-w-0 rounded-sm bg-(--ring-ground) variant-home:rounded-sm"
   data-variant={variant}
   style:--ring-ground="var(--strip-ground, var(--color-surface-page))"
   style:--strip-ground={variant === "home"
@@ -1166,7 +1166,7 @@
         pad="none"
         side="top"
         sideOffset={6}
-        style="--usage-pop-w: min(var(--panel-w), calc(100vw - 2 * var(--spacing-space-2)));"
+        style="--usage-pop-w: min(calc(var(--spacing) * 95), calc(100vw - 2 * var(--spacing-space-2)));"
       >
         {@render limits(false)}
       </Popover.Content>

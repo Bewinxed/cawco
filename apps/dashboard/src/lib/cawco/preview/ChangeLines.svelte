@@ -130,7 +130,7 @@
   {/if}
   <div class="flex min-w-0 flex-1 flex-col gap-space-1">
     {#if unanswered}
-      <p class="m-0 text-status-attn-ink type-meta" data-slot="no-answer">
+      <p class="m-0 text-status-attn type-meta" data-slot="no-answer">
         {commentWords.changedNoAnswer}
       </p>
     {/if}
@@ -149,7 +149,7 @@
               onclick={() => step(anchor)}
               type="button"
             >
-              <span aria-hidden="true" class="mark-cell text-status-done-glyph"
+              <span aria-hidden="true" class="mark-cell text-status-done"
                 ><IconRefresh class="size-icon-sm" /></span
               >
               {@render said(line, at)}
@@ -158,7 +158,7 @@
             <span
               class="flex min-w-0 items-start gap-space-1 type-meta mark-line"
             >
-              <span aria-hidden="true" class="mark-cell text-status-done-glyph"
+              <span aria-hidden="true" class="mark-cell text-status-done"
                 ><IconRefresh class="size-icon-sm" /></span
               >
               {@render said(line, at)}

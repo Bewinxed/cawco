@@ -160,7 +160,7 @@
     data-slot="top"
     class={[
       "flex flex-col gap-space-2 data-bare:p-0",
-      variant === "page" && "px-space-5 pt-space-5 pb-space-3",
+      variant === "page" && "px-space-4 pt-space-4 pb-space-3",
       wide && "w-full max-w-measure",
       variant === "rail" && "px-space-3 pt-space-2 pb-space-1",
     ]}
@@ -184,7 +184,7 @@
   <div
     class={[
       "flex flex-col",
-      variant === "page" && "gap-space-5 px-space-5 pt-space-2 pb-space-6",
+      variant === "page" && "gap-space-4 px-space-4 pt-space-2 pb-space-6",
       wide && "w-full max-w-measure",
       variant === "rail" && "gap-space-3 px-space-2 pt-space-1 empty:p-0",
     ]}
@@ -205,7 +205,7 @@
     {#if machinesThere}
       <!-- Anchored as New project's ask is (its page pads --spacing-space-6 on a
            phone): the groups' own top padding and this margin make that. -->
-      <div data-slot="machines" class="mx-0 mt-space-5 mb-space-6" data-flip>
+      <div data-slot="machines" class="mx-0 mt-space-4 mb-space-6" data-flip>
         <MachinesEmpty
           fleet={machinesThere}
           ongone={() => {
@@ -248,7 +248,7 @@
     {/if}
 
     {#if variant === "page" && firstRunning}
-      <div data-slot="first-run" class="mx-0 mt-space-5 mb-space-6" data-flip>
+      <div data-slot="first-run" class="mx-0 mt-space-4 mb-space-6" data-flip>
         <FirstRunHere />
       </div>
     {/if}
@@ -266,7 +266,7 @@
          while a machine is online to start one on. -->
     <div
       data-slot="dock"
-      class="sticky bottom-0 mt-auto bg-(image:--dock-fade) px-space-5 pt-space-3 pb-(--dock-foot)"
+      class="sticky bottom-0 mt-auto bg-(image:--dock-fade) px-space-4 pt-space-3 pb-(--dock-foot)"
       data-safe-bottom
       style:--dock-fade={"linear-gradient(transparent, var(--color-surface-recess) var(--spacing-space-4))"}
       style:--dock-foot="calc(var(--spacing-space-3) + var(--safe-bottom))"

@@ -91,7 +91,7 @@
     class="flex min-h-0 flex-1 flex-col overflow-y-auto pt-(--side-room) scroll-timeline-transcript-head"
     data-folder-file={path}
   >
-    <div class="flex flex-col gap-space-2 p-space-5">
+    <div class="flex flex-col gap-space-2 p-space-4">
       <!-- Its path, which the bar names by the file alone: words to read
            and copy, wrapping where it runs long. -->
       <bdi
@@ -125,7 +125,7 @@
         <pre
           in:reveal
           data-slot="text"
-          class="m-0 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong">{content}</pre>
+          class="m-0 font-mono text-sm wrap-anywhere whitespace-pre-wrap text-ink-strong">{content}</pre>
       {/if}
     </div>
   </div>

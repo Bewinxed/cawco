@@ -16,7 +16,7 @@
       measure: { share: "min-w-0 basis-0" },
       /** `edited`: a value the person changed from what it was, in the
           edit's ink (the design graph's clip editor). */
-      tone: { strong: "text-ink-strong", edited: "text-brand-ink" },
+      tone: { strong: "text-ink-strong", edited: "text-accent-ink" },
       look: {
         /** In a view's bar: it shrinks, takes the bar's control corner, and
             clips the name it morphs while its width follows. */
@@ -33,7 +33,7 @@
           its ink held over the placeholder's. */
       chosen: {
         selected:
-          "data-on:data-placeholder:text-brand-ink data-on:border-transparent data-on:bg-selected-bg data-on:text-brand-ink",
+          "data-on:data-placeholder:text-accent-ink data-on:border-transparent data-on:bg-accent-wash data-on:text-accent-ink",
       },
     },
   });
@@ -61,28 +61,28 @@
   }: WithoutChild<SelectPrimitive.TriggerProps> &
     SelectTriggerLooks & {
       /** Its trailing mark: the unfold mark, or a chevron that turns over
-        --duration-control while the list is open (a list that opens one way). */
+        --duration-fast while the list is open (a list that opens one way). */
       mark?: "unfold" | "chevron";
     } = $props();
 </script>
 
 <SelectPrimitive.Trigger
   class={cn(
-    "touch-hit rounded-md shadow-xs",
+    "touch-hit rounded-sm shadow-sm",
     // It opens a list, so it tints under a press and never moves (The Press Rule).
-    "press-tint [transition:var(--transition-control)]",
+    "press-tint transition-control",
     "mark-line flex w-fit",
     "items-center justify-between gap-1.5 whitespace-nowrap",
     "border border-border-strong [--hit-edge:1px]",
     "bg-surface-raised px-3 text-ink-strong",
     "type-body disabled:cursor-not-allowed",
-    "disabled:opacity-50 aria-invalid:border-status-fail-glyph",
+    "disabled:opacity-50 aria-invalid:border-status-fail",
     "data-placeholder:text-ink-muted",
     "[&>[data-slot=select-value]]:line-clamp-1",
     "[&>[data-slot=select-value]]:flex",
     "[&>[data-slot=select-value]]:items-center",
     "[&>[data-slot=select-value]]:gap-1.5",
-    "dark:aria-invalid:border-status-fail-glyph/50",
+    "dark:aria-invalid:border-status-fail/50",
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
     selectTriggerVariants({ size, measure, tone, look, chosen, align }),
@@ -105,7 +105,7 @@
   >
   {#if mark === "chevron"}
     <IconChevronDown
-      class="size-icon-md text-ink-muted pointer-events-none motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out in-data-[state=open]:rotate-180"
+      class="size-icon-md text-ink-muted pointer-events-none motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-out in-data-[state=open]:rotate-180"
       data-mark="chevron"
     />
   {:else}

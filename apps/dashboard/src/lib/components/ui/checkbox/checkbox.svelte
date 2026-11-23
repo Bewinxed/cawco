@@ -4,7 +4,7 @@
 
   /** Its callers' looks: a card's pick box, shown while its card is in
       reach (under the pointer, focused, picked, its column picking, or under
-      a finger), fading over --duration-control. Its hiding and showing hold over
+      a finger), fading over --duration-fast. Its hiding and showing hold over
       the kit's disabled dimming, as the board's own rules did: the rest's
       `disabled:` and field-disabled `opacity-0` take the kit's dimming's
       place (the same modifiers, so `cn` keeps only these), and each state
@@ -14,7 +14,7 @@
     variants: {
       reveal: {
         "card-pick":
-          "coarse:not-disabled:not-group-data-[disabled=true]/field:opacity-100 opacity-0 transition-[opacity] duration-(--duration-control) ease-out coarse:disabled:not-group-data-[disabled=true]/field:opacity-100 disabled:opacity-0 group-focus-within/card:not-disabled:not-group-data-[disabled=true]/field:opacity-100 group-focus-within/card:disabled:not-group-data-[disabled=true]/field:opacity-100 group-hover/card:not-disabled:not-group-data-[disabled=true]/field:opacity-100 group-hover/card:disabled:not-group-data-[disabled=true]/field:opacity-100 group-data-picked/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-picking/col:not-disabled:group-data-[disabled=true]/field:opacity-100 coarse:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-[disabled=true]/field:opacity-0 group-data-picked/card:not-disabled:not-group-data-[disabled=true]/field:opacity-100 group-data-picking/col:not-disabled:not-group-data-[disabled=true]/field:opacity-100 group-hover/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-focus-within/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-picked/card:disabled:group-data-[disabled=true]/field:opacity-100 group-data-picking/col:disabled:group-data-[disabled=true]/field:opacity-100 coarse:disabled:group-data-[disabled=true]/field:opacity-100 group-data-picked/card:disabled:not-group-data-[disabled=true]/field:opacity-100 group-data-picking/col:disabled:not-group-data-[disabled=true]/field:opacity-100 group-hover/card:disabled:group-data-[disabled=true]/field:opacity-100 group-focus-within/card:disabled:group-data-[disabled=true]/field:opacity-100",
+          "coarse:not-disabled:not-group-data-[disabled=true]/field:opacity-100 opacity-0 transition-[opacity] duration-(--duration-fast) ease-out coarse:disabled:not-group-data-[disabled=true]/field:opacity-100 disabled:opacity-0 group-focus-within/card:not-disabled:not-group-data-[disabled=true]/field:opacity-100 group-focus-within/card:disabled:not-group-data-[disabled=true]/field:opacity-100 group-hover/card:not-disabled:not-group-data-[disabled=true]/field:opacity-100 group-hover/card:disabled:not-group-data-[disabled=true]/field:opacity-100 group-data-picked/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-picking/col:not-disabled:group-data-[disabled=true]/field:opacity-100 coarse:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-[disabled=true]/field:opacity-0 group-data-picked/card:not-disabled:not-group-data-[disabled=true]/field:opacity-100 group-data-picking/col:not-disabled:not-group-data-[disabled=true]/field:opacity-100 group-hover/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-focus-within/card:not-disabled:group-data-[disabled=true]/field:opacity-100 group-data-picked/card:disabled:group-data-[disabled=true]/field:opacity-100 group-data-picking/col:disabled:group-data-[disabled=true]/field:opacity-100 coarse:disabled:group-data-[disabled=true]/field:opacity-100 group-data-picked/card:disabled:not-group-data-[disabled=true]/field:opacity-100 group-data-picking/col:disabled:not-group-data-[disabled=true]/field:opacity-100 group-hover/card:disabled:group-data-[disabled=true]/field:opacity-100 group-focus-within/card:disabled:group-data-[disabled=true]/field:opacity-100",
       },
     },
   });
@@ -29,15 +29,15 @@
    * dashed to the tick's length (Tick.svelte): one 20-unit dash, then a gap
    * longer than the path, offset so that no dash end (and no round cap)
    * sits on the path until it draws. On by `data-on="true"`. Its clock:
-   * --duration-fade in a checkbox, --duration-control in a menu, and in a button's
-   * slot the --duration-fade its label crosses on.
+   * --duration-base in a checkbox, --duration-fast in a menu, and in a button's
+   * slot the --duration-base its label crosses on.
    */
   export const tickVariants = tv({
-    base: "opacity-0 [--tick-dur:var(--duration-fade)] [transition:opacity_var(--tick-dur)_var(--ease-out)] data-[on=true]:opacity-100 motion-safe:opacity-100 motion-safe:[transition:none] motion-safe:[&_path]:[stroke-dasharray:20_30] motion-safe:[&_path]:[stroke-dashoffset:22] motion-safe:[&_path]:[transition:stroke-dashoffset_var(--tick-dur)_var(--ease-out)] motion-safe:data-[on=true]:[&_path]:[stroke-dashoffset:0]",
+    base: "opacity-0 [--tick-dur:var(--duration-base)] [transition:opacity_var(--tick-dur)_var(--ease-out)] data-[on=true]:opacity-100 motion-safe:opacity-100 motion-safe:[transition:none] motion-safe:[&_path]:[stroke-dasharray:20_30] motion-safe:[&_path]:[stroke-dashoffset:22] motion-safe:[&_path]:[transition:stroke-dashoffset_var(--tick-dur)_var(--ease-out)] motion-safe:data-[on=true]:[&_path]:[stroke-dashoffset:0]",
     variants: {
       clock: {
-        menu: "[--tick-dur:var(--duration-control)]",
-        morph: "[--tick-dur:var(--duration-fade)]",
+        menu: "[--tick-dur:var(--duration-fast)]",
+        morph: "[--tick-dur:var(--duration-base)]",
       },
     },
   });
@@ -60,7 +60,7 @@
 </script>
 
 <!-- specificity-trap: invalid and checked takes
-     aria-invalid:aria-checked:border-action-solid at the greater weight;
+     aria-invalid:aria-checked:border-accent at the greater weight;
      aria-checked and data-checked are one state, bits-ui writes both. -->
 <CheckboxPrimitive.Root
   class={cn(
@@ -72,12 +72,12 @@
     "touch-hit pointer-hit border-border-strong [--hit-edge:1px]",
     "disabled:cursor-not-allowed disabled:opacity-50",
     "group-data-[disabled=true]/field:opacity-50",
-    "aria-invalid:border-status-fail-glyph",
-    "aria-invalid:aria-checked:border-action-solid",
-    "data-checked:border-action-solid data-checked:bg-action-solid",
-    "data-checked:text-on-action dark:not-data-checked:bg-border-control/30",
-    "dark:data-checked:bg-action-solid",
-    "dark:aria-invalid:border-status-fail-glyph/50",
+    "aria-invalid:border-status-fail",
+    "aria-invalid:aria-checked:border-accent",
+    "data-checked:border-accent data-checked:bg-accent",
+    "data-checked:text-on-accent dark:not-data-checked:bg-border-control/30",
+    "dark:data-checked:bg-accent",
+    "dark:aria-invalid:border-status-fail/50",
     checkboxVariants({ reveal }),
     className
   )}

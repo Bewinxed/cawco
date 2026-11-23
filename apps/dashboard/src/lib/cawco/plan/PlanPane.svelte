@@ -130,7 +130,7 @@
     row.setAttribute("data-linked", "");
     setTimeout(
       () => row.removeAttribute("data-linked"),
-      dur("--duration-fade") * 4
+      dur("--duration-base") * 4
     );
   });
   // Esc shuts it: from inside, the focus back on its ring; from the tray row or the composer under it, the focus staying where it was.
@@ -138,8 +138,8 @@
 </script>
 
 <!-- It comes in by the kit's `@starting-style` (opacity, rise and scale on
-     one transition, --duration-panel on the drawer curve, from the ring's corner)
-     and leaves by `popOut` back down into the row (--duration-fade), global: the
+     one transition, --duration-slow on the drawer curve, from the ring's corner)
+     and leaves by `popOut` back down into the row (--duration-base), global: the
      pane's `{#if}` that shuts it is outside this component, a snippet
      render between. -->
 <section
@@ -168,7 +168,7 @@
     class="absolute inset-x-0 top-0 z-2 flex h-control-lg items-center gap-space-2 pe-space-2 ps-space-4"
   >
     <h2
-      class="flex-auto min-w-0 m-0 truncate text-size-label font-medium text-ink-strong"
+      class="flex-auto min-w-0 m-0 truncate text-base font-medium text-ink-strong"
       id={titleId}
     >
       {cardTitle}

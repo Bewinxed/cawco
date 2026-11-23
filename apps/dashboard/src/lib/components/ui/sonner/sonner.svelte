@@ -21,14 +21,14 @@
 
   /**
    * A toast arriving is marked `data-entering` for the length of its
-   * entrance, so app.css's sonner rules can give the arrival its --duration-panel
+   * entrance, so app.css's sonner rules can give the arrival its --duration-slow
    * rise while the toasts already there make room on the shorter stack
    * timing: sonner draws both from the same attribute change.
    *
    * With reduced motion, sonner's own sheet turns every transition and
    * animation off, so a toast would appear and vanish in one frame. Reduced
    * motion means stillness, not an instant swap (DESIGN.md, Reduced Motion
-   * Rule): the toast still fades in over --duration-panel and out over --duration-fade,
+   * Rule): the toast still fades in over --duration-slow and out over --duration-base,
    * both on --ease-out, through the Web Animations API, which that sheet does
    * not reach. A toast sonner keeps hidden (past the visible count) is left
    * hidden. With motion allowed, the transitions below do all of it.
@@ -43,7 +43,7 @@
       toast: HTMLElement,
       from: number | string,
       to: number,
-      length: "--duration-panel" | "--duration-fade"
+      length: "--duration-slow" | "--duration-base"
     ) => {
       if (motionOk.current || toast.dataset.visible === "false") {
         return;
@@ -58,12 +58,12 @@
       );
     };
     const enter = (toast: HTMLElement) => {
-      fade(toast, 0, 1, "--duration-panel");
+      fade(toast, 0, 1, "--duration-slow");
       toast.dataset.entering = "";
       const timer = setTimeout(() => {
         timers.delete(timer);
         delete toast.dataset.entering;
-      }, dur("--duration-panel"));
+      }, dur("--duration-slow"));
       timers.add(timer);
     };
     /** A toast leaving from wherever its entrance had got to. */
@@ -73,7 +73,7 @@
         toast,
         entering ? getComputedStyle(toast).opacity : 1,
         0,
-        "--duration-fade"
+        "--duration-base"
       );
     };
     // The first toast arrives inside the list sonner draws for it, so an
@@ -85,7 +85,7 @@
       if (toast.dataset.removed === "true") {
         leave(toast);
       } else if (was === "true") {
-        fade(toast, 0, 1, "--duration-panel");
+        fade(toast, 0, 1, "--duration-slow");
       }
     };
     /** Every toast an added node brings, the node itself included. */

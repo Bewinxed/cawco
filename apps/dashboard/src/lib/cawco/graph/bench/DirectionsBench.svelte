@@ -128,7 +128,7 @@
   };
   /**
    * The drawing swapped under a picture of the one it replaces, which
-   * fades out over it (one --duration-fade on --ease-crossfade), as the
+   * fades out over it (one --duration-base on --ease-in-out), as the
    * stage page swaps a direction (stage.ts `crossFade`).
    */
   const crossFade = (swap: () => void) => {
@@ -149,8 +149,8 @@
     swap();
     flushSync();
     const fade = leaving.animate([{ opacity: 1 }, { opacity: 0 }], {
-      duration: dur("--duration-fade"),
-      easing: ease("--ease-crossfade"),
+      duration: dur("--duration-base"),
+      easing: ease("--ease-in-out"),
       fill: "forwards",
     });
     const gone = () => leaving.remove();
@@ -326,7 +326,7 @@
        hidden beside it, as the page draws it, read for what differs. -->
   <div
     class={[
-      "relative h-full min-h-0 overflow-auto bg-surface-page p-space-5",
+      "relative h-full min-h-0 overflow-auto bg-surface-page p-space-4",
       dark ? "scheme-dark dark" : "scheme-light",
     ]}
     {@attach frameSize(

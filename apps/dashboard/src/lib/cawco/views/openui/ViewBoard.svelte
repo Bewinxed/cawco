@@ -16,7 +16,7 @@
   {/if}
   <div
     class="grid auto-cols-(--board-cols) grid-flow-col gap-space-3 overflow-x-auto overscroll-x-contain pb-space-3 max-phone:auto-cols-(--board-cols-narrow) max-phone:snap-x max-phone:snap-mandatory"
-    style:--board-cols={"minmax(var(--board-col-min), var(--board-col-max))"}
+    style:--board-cols={"minmax(calc(var(--spacing) * 60), calc(var(--spacing) * 88))"}
     style:--board-cols-narrow="calc(100% - var(--spacing-space-8))"
   >
     {@render renderNode(props.children)}

@@ -76,9 +76,9 @@
     ? "var(--spacing-icon-md)"
     : "var(--spacing-icon-sm)"}
   style:--peek-ink={artifact === undefined
-    ? "calc((var(--spacing-control-xs) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24)"
-    : "calc((var(--spacing-control-xs) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 5.25 / 24)"}
-  style:--peek-room={"calc(var(--spacing-control-xs) - var(--peek-ink) + var(--spacing-space-2))"}
+    ? "calc((var(--spacing-space-6) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 1.25 / 24)"
+    : "calc((var(--spacing-space-6) - var(--peek-glyph)) / 2 + var(--peek-glyph) * 5.25 / 24)"}
+  style:--peek-room={"calc(var(--spacing-space-6) - var(--peek-ink) + var(--spacing-space-2))"}
   style:--row-cols="auto minmax(0, 1fr) auto"
 >
   <!-- The whole row opens it; the panel closes. A choice opens nothing:

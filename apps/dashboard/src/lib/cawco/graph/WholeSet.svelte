@@ -120,7 +120,7 @@
           head: numberOf("--spacing-space-6"),
           pad: numberOf("--spacing-space-3"),
           label: numberOf("--graph-label"),
-          labelLine: numberOf("--spacing-space-5"),
+          labelLine: numberOf("--spacing-space-4"),
         }
       : { card: 0, head: 0, pad: 0, label: 0, labelLine: 0 }
   );
@@ -286,8 +286,8 @@
    * it opens whole. The fit tool frames the same way.
    */
   const READABLE = browser
-    ? // In px: design.css types --text-meta as a length.
-      LEAST_TEXT / numberOf("--text-meta")
+    ? // In px: design.css types --text-sm as a length.
+      LEAST_TEXT / numberOf("--text-sm")
     : 1;
   /**
    * How far the map pans: the set's own bounds, a gutter round them. A view
@@ -412,7 +412,7 @@
       })}
     class="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-surface-raised"
     style:--xy-edge-stroke="var(--color-border-strong)"
-    style:--xy-edge-stroke-width="var(--graph-edge)"
+    style:--xy-edge-stroke-width="calc(var(--spacing) * 0.375)"
   >
     <SvelteFlowProvider>
       <div

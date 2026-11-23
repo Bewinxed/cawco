@@ -10,7 +10,7 @@
   import { pressVariants } from "./press.js";
 
   export const buttonVariants = tv({
-    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md glass-item:concentric-at border border-border-strong bg-linear-to-b bg-surface-raised from-transparent to-transparent bg-clip-padding font-medium text-body text-ink-strong leading-none tracking-title [--hit-edge:1px] hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-status-fail-glyph [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-sm glass-item:concentric-at border border-border-strong bg-linear-to-b bg-surface-raised from-transparent to-transparent bg-clip-padding font-medium type-body text-ink-strong leading-none tracking-tight [--hit-edge:1px] hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-status-fail [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       /* The press, by size (./press.ts, The Press Rule): a compact button
          scales; one stretched full width, as a list row or a card's body,
@@ -30,20 +30,20 @@
            a switch to or from this variant, and its hover, cross the
            highlight with the fill on one clock (`--transition-control`). */
         default:
-          "border-transparent bg-action-solid action-stops bg-clip-border text-on-action hover:bg-action-hover hover:action-stops-hover",
+          "border-transparent bg-accent accent-stops bg-clip-border text-on-accent hover:bg-accent hover:accent-stops-hover",
         outline: "aria-expanded:not-aria-current-page:bg-surface-hover",
         secondary:
           "border-border-hairline bg-surface-recess hover:bg-surface-hover",
         ghost:
           "border-transparent bg-transparent aria-expanded:not-aria-current-page:bg-surface-hover",
         destructive:
-          "border-status-fail-glyph bg-transparent text-status-fail-ink hover:bg-status-fail-bg",
+          "border-status-fail bg-transparent text-status-fail hover:bg-status-fail-bg",
         /* A grant wider than what was asked (DESIGN.md, The Consequential
            Grant Rule): warning tint, warning ink and a real edge, the same at
            rest and under the pointer, so it is never made more inviting. */
         grant:
-          "border-status-attn-ink bg-status-attn-bg text-status-attn-ink hover:bg-status-attn-bg",
-        link: "border-transparent bg-transparent text-brand-ink underline-offset-4 hover:bg-transparent hover:underline",
+          "border-status-attn bg-status-attn-bg text-status-attn hover:bg-status-attn-bg",
+        link: "border-transparent bg-transparent text-accent-ink underline-offset-4 hover:bg-transparent hover:underline",
       },
       size: {
         default:
@@ -74,9 +74,9 @@
         quiet: "text-ink-muted hover:text-ink-strong",
         /** A bare symbol that removes (a list's minus in edit mode, as
             Reminders' is): the destructive ink, at rest and under the pointer. */
-        destructive: "text-status-fail-ink",
+        destructive: "text-status-fail",
         /** A changed value's own mark (the design graph's restore glyph, where his pick marks a change by its glyph alone): the edit's ink. */
-        edited: "text-brand-ink",
+        edited: "text-accent-ink",
       },
       /** An answer to an ask: filled in the status tint, edged on the recess,
           or edged with its strong ink held (a prompt's answers). Its hover
@@ -86,17 +86,17 @@
           under it (the callers' `background` shorthand put the clip back
           at the border box). */
       answer: {
-        deny: "border-transparent bg-status-fail-bg bg-clip-border text-status-fail-ink not-aria-expanded:hover:bg-status-fail-bg hover:text-status-fail-ink aria-expanded:hover:bg-status-fail-bg aria-invalid:border-transparent",
+        deny: "border-transparent bg-status-fail-bg bg-clip-border text-status-fail not-aria-expanded:hover:bg-status-fail-bg hover:text-status-fail aria-expanded:hover:bg-status-fail-bg aria-invalid:border-transparent",
         approve:
-          "border-transparent bg-status-done-bg bg-clip-border text-status-done-ink not-aria-expanded:hover:bg-status-done-bg hover:text-status-done-ink aria-expanded:hover:bg-status-done-bg aria-invalid:border-transparent",
+          "border-transparent bg-status-done-bg bg-clip-border text-status-done not-aria-expanded:hover:bg-status-done-bg hover:text-status-done aria-expanded:hover:bg-status-done-bg aria-invalid:border-transparent",
         "deny-edge":
-          "border-status-fail-ink bg-surface-recess text-ink-strong not-aria-invalid:hover:border-status-fail-ink not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-fail-ink aria-invalid:hover:border-status-fail-ink",
+          "border-status-fail bg-surface-recess text-ink-strong not-aria-invalid:hover:border-status-fail not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-fail aria-invalid:hover:border-status-fail",
         "approve-edge":
-          "border-status-done-ink bg-surface-recess text-ink-strong not-aria-invalid:hover:border-status-done-ink not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-done-ink aria-invalid:hover:border-status-done-ink",
+          "border-status-done bg-surface-recess text-ink-strong not-aria-invalid:hover:border-status-done not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-done aria-invalid:hover:border-status-done",
         "deny-strong":
-          "border-status-fail-ink bg-surface-recess text-ink-strong not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-fail-ink",
+          "border-status-fail bg-surface-recess text-ink-strong not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-fail",
         "approve-strong":
-          "border-status-done-ink bg-surface-recess text-ink-strong not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-done-ink",
+          "border-status-done bg-surface-recess text-ink-strong not-aria-expanded:hover:bg-surface-recess hover:text-ink-strong aria-expanded:hover:bg-surface-recess aria-invalid:border-status-done",
       },
       /** Its 44×44 area on every pointer, not only a finger's (DESIGN.md,
           The Peer Rule: Approve and Deny). */
@@ -154,13 +154,13 @@
         "value-hover":
           "coarse:opacity-100 opacity-0 not-disabled:focus-visible:opacity-100 coarse:disabled:opacity-100 disabled:opacity-0 disabled:focus-visible:opacity-100 group-[:hover]/value:not-disabled:opacity-100 group-[:hover]/value:disabled:opacity-100",
         "row-hover":
-          "can-hover:opacity-0 can-hover:transition-[opacity] can-hover:duration-(--duration-control) can-hover:ease-out can-hover:not-disabled:focus-visible:opacity-100 can-hover:disabled:opacity-0 can-hover:disabled:focus-visible:opacity-100 can-hover:group-hover:not-disabled:opacity-100 can-hover:group-hover:disabled:opacity-100",
+          "can-hover:opacity-0 can-hover:transition-[opacity] can-hover:duration-(--duration-fast) can-hover:ease-out can-hover:not-disabled:focus-visible:opacity-100 can-hover:disabled:opacity-0 can-hover:disabled:focus-visible:opacity-100 can-hover:group-hover:not-disabled:opacity-100 can-hover:group-hover:disabled:opacity-100",
         /* In reach whenever its row (`group/row`) is under the pointer or
            holds the focus anywhere in it, not only on the button itself
            (Files' Show in conversation, Files' surface brief, Files: "shown on the
            row's hover and focus and always under a finger"). */
         "row-reach":
-          "can-hover:opacity-0 can-hover:transition-[opacity] can-hover:duration-(--duration-control) can-hover:ease-out can-hover:group-focus-within/row:not-disabled:opacity-100 can-hover:group-hover/row:not-disabled:opacity-100",
+          "can-hover:opacity-0 can-hover:transition-[opacity] can-hover:duration-(--duration-fast) can-hover:ease-out can-hover:group-focus-within/row:not-disabled:opacity-100 can-hover:group-hover/row:not-disabled:opacity-100",
       },
       /** Its words and mark along its width, once it is wider than they
           are: from the start, as a row of a list does (a directory's row,
@@ -184,7 +184,7 @@
           Draw mode): half strength, still pressable. */
       dimmed: { true: "opacity-50" },
       /** A path, in the mono face at the label size. */
-      face: { path: "font-mono font-normal text-label" },
+      face: { path: "font-mono font-normal type-label" },
       /** The last of a row of actions: its end padding moved to its start
           (`--toggle-start`, `--end`), over the size's icon-side pads. */
       toggle: {
@@ -198,11 +198,11 @@
       head: { count: "ms-auto tabular-nums" },
       /** While its page is open (`aria-current="page"`), the selected tint
           (filling under the edge) and ink, at rest and under the pointer,
-          crossing over --duration-control; its press scales at once, and the
+          crossing over --duration-fast; its press scales at once, and the
           press tint still darkens it (The Press Rule). */
       current: {
         selected:
-          "[transition:background-color_var(--duration-control)_var(--ease-out),color_var(--duration-control)_var(--ease-out)] aria-current-page:bg-selected-bg aria-current-page:bg-clip-border aria-current-page:text-brand-ink aria-current-page:hover:bg-selected-bg aria-current-page:hover:text-brand-ink",
+          "[transition:background-color_var(--duration-fast)_var(--ease-out),color_var(--duration-fast)_var(--ease-out)] aria-current-page:bg-accent-wash aria-current-page:bg-clip-border aria-current-page:text-accent-ink aria-current-page:hover:bg-accent-wash aria-current-page:hover:text-accent-ink",
       },
     },
     defaultVariants: {

@@ -364,7 +364,7 @@
           {#if word !== "signed-in"}
             <span
               data-slot="machine-state"
-              class="mark-line inline-flex items-center gap-space-1 type-meta whitespace-nowrap text-ink-muted transition-[color] duration-(--duration-panel) ease-out state-mismatch:text-status-attn-ink"
+              class="mark-line inline-flex items-center gap-space-1 type-meta whitespace-nowrap text-ink-muted transition-[color] duration-(--duration-slow) ease-out state-mismatch:text-status-attn"
               data-parked={parked ? "" : undefined}
               data-state={word}
             >
@@ -407,7 +407,7 @@
                   variant: "outline",
                   size: "sm",
                 })}
-                width="var(--signin-pop-w)"
+                width="calc(var(--spacing) * 85)"
               >
                 {#snippet trigger()}
                   {parked ? resume : verb}
@@ -492,7 +492,7 @@
                put away, until it is opened and tried again. -->
           <p
             data-slot="refused"
-            class="col-span-full pb-space-2 type-meta text-status-fail-ink"
+            class="col-span-full pb-space-2 type-meta text-status-fail"
             data-flip
             role="alert"
           >
@@ -502,7 +502,7 @@
         {#if refusals.get(place.key)}
           <p
             data-slot="refused"
-            class="col-span-full pb-space-2 type-meta text-status-fail-ink"
+            class="col-span-full pb-space-2 type-meta text-status-fail"
             data-flip
             role="alert"
           >

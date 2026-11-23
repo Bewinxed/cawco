@@ -145,7 +145,7 @@
       <span class="mark-cell"
         ><IconWarningTriangle
           aria-hidden="true"
-          class="size-icon-md flex-none text-status-attn-glyph"
+          class="size-icon-md flex-none text-status-attn"
         /></span
       >
       <span class="min-w-0">{block.why}</span>
@@ -172,7 +172,7 @@
   {#if refused}
     <p
       data-slot="error"
-      class="type-meta text-status-fail-ink whitespace-pre-line wrap-anywhere"
+      class="type-meta text-status-fail whitespace-pre-line wrap-anywhere"
       role="alert"
       in:appear
     >
@@ -181,7 +181,7 @@
   {:else if block.fix.phase === "failed"}
     <p
       data-slot="error"
-      class="type-meta text-status-fail-ink whitespace-pre-line wrap-anywhere"
+      class="type-meta text-status-fail whitespace-pre-line wrap-anywhere"
       role="alert"
       in:appear
     >

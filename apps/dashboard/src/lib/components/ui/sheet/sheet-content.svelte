@@ -162,11 +162,11 @@
     class={cn(
       "fixed side-bottom:inset-x-0 side-top:inset-x-0 side-left:inset-y-0 side-right:inset-y-0 side-top:top-0 side-right:right-0 side-bottom:bottom-0 side-left:left-0 z-(--layer-float) flex side-bottom:h-auto side-left:h-full side-right:h-full side-top:h-auto side-left:w-3/4 side-right:w-3/4 side-left:phone:max-w-96 side-right:phone:max-w-96 flex-col side-bottom:border-t side-left:border-r side-top:border-b side-right:border-l bg-surface-raised bg-clip-padding text-ink-strong type-label shadow-lg timeline-scope-transcript-head",
       /* It travels its whole size from the edge it belongs to (`--sheet-away`),
-         over --duration-panel on the drawer curve, and leaves the same way over
-         --duration-fade; the entrance holds no end (no fill), since a drag writes
+         over --duration-slow on the drawer curve, and leaves the same way over
+         --duration-base; the entrance holds no end (no fill), since a drag writes
          the sheet's transform inline once it has landed. Asked for less
          motion, it fades in place. */
-      "motion-safe:state-closed:not-data-rest:animate-sheet-out motion-safe:state-open:animate-sheet-in motion-reduce:state-closed:not-data-rest:animate-fade-out motion-reduce:state-closed:not-data-rest:anim-dur-control motion-reduce:state-open:animate-fade-in motion-reduce:state-open:anim-dur-control",
+      "motion-safe:state-closed:not-data-rest:animate-sheet-out motion-safe:state-open:animate-sheet-in motion-reduce:state-closed:not-data-rest:animate-fade-out motion-reduce:state-closed:not-data-rest:anim-dur-fast motion-reduce:state-open:animate-fade-in motion-reduce:state-open:anim-dur-fast",
       /* Kept and at rest it stands away, its leave not run again, so it is
          never seen leaving at the page's first paint (SheetFrame `rest`). */
       "data-rest:transform-(--sheet-away) data-rest:content-visibility-hidden",

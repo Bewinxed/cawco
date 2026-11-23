@@ -13,7 +13,7 @@
    *   `setting` recipe, its press included.
    * - `state`: a state chip that opens what it reports (a rollout's): the
    *   recess, meta words in the muted ink, `data-fail` taking the fail pair,
-   *   its fill and ink settling over --duration-panel.
+   *   its fill and ink settling over --duration-slow.
    * - `count`: a count drawn on the kit's Badge (`badge`), a numeral at
    *   meta size (The Earned Count Rule) that opens what it counts.
    * - `strip`, `strip-home`: the usage strip, one control one height
@@ -42,20 +42,20 @@
       look: {
         chip: chipVariants({ variant: "setting" }),
         state:
-          "mark-line type-meta inline-flex h-control-xs items-center gap-space-1 whitespace-nowrap rounded-sm bg-surface-recess px-space-2 text-ink-muted transition-chip-settle not-data-fail:hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink motion-safe:pressed:scale-(--press-scale)",
+          "mark-line type-meta inline-flex h-space-6 items-center gap-space-1 whitespace-nowrap rounded-sm bg-surface-recess px-space-2 text-ink-muted transition-chip-settle not-data-fail:hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail motion-safe:pressed:scale-(--press-scale)",
         count:
           "pressable type-meta num h-icon-md min-w-icon-md overflow-visible px-space-1 text-ink-strong leading-none",
         strip:
-          "press-tint flex h-control-lg items-center rounded-sm px-space-3 text-start text-ink-strong transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
+          "press-tint flex h-control-lg items-center rounded-sm px-space-3 text-start text-ink-strong transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
         "strip-home":
-          "press-tint flex h-14 items-center rounded-md px-space-4 text-start text-ink-strong transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
+          "press-tint flex h-14 items-center rounded-sm px-space-4 text-start text-ink-strong transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
         mark: "pressable inline-flex rounded-xs",
         swatch:
-          "pointer-hit grid place-items-center rounded-xs outline-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-1",
+          "pointer-hit grid place-items-center rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-1",
         segment: `${segmentedVariants().segment()} num press-tint focus-inset shrink-0 aria-expanded:bg-surface-pressed`,
         "segment-compact": `${segmentedVariants({ compact: true }).segment()} num press-tint focus-inset shrink-0 aria-expanded:bg-surface-pressed`,
         meter:
-          "mark-line flex h-row-compact items-center gap-space-2 rounded-sm px-space-2 text-ink-muted type-label tabular-nums transition-[background-color,color] duration-(--duration-control) ease-out hover:bg-surface-hover data-compacting:text-ink-strong data-critical:not-data-compacting:text-status-fail-glyph data-warn:not-data-critical:not-data-compacting:text-status-attn-glyph",
+          "mark-line flex h-row-compact items-center gap-space-2 rounded-sm px-space-2 text-ink-muted type-label tabular-nums transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-surface-hover data-compacting:text-ink-strong data-critical:not-data-compacting:text-status-fail data-warn:not-data-critical:not-data-compacting:text-status-attn",
       },
     },
   });

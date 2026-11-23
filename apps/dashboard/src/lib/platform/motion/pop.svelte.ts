@@ -28,14 +28,14 @@ export function popOut(
   { side = "bottom" }: { side?: PopSide } = {}
 ): TransitionConfig {
   if (!motionOk.current) {
-    return { duration: dur("--duration-control"), css: (t) => `opacity: ${t}` };
+    return { duration: dur("--duration-fast"), css: (t) => `opacity: ${t}` };
   }
   const styles = getComputedStyle(node);
   const scale = Number.parseFloat(styles.getPropertyValue("--pop-scale"));
-  const rise = Number.parseFloat(styles.getPropertyValue("--pop-rise"));
+  const rise = Number.parseFloat(styles.getPropertyValue("--spacing-space-2"));
   const [x, y] = TOWARD[side];
   return {
-    duration: dur("--duration-fade"),
+    duration: dur("--duration-base"),
     easing: easeDrawer,
     css: (t) =>
       `opacity: ${t}; scale: ${scale + (1 - scale) * t}; translate: ${(x * (1 - t) * rise).toFixed(2)}px ${(y * (1 - t) * rise).toFixed(2)}px`,

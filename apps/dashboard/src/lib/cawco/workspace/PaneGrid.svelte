@@ -46,7 +46,7 @@
   const coarse = new IsCoarsePointer();
 
   /**
-   * One motion for a split opening and closing (--duration-panel,
+   * One motion for a split opening and closing (--duration-slow,
    * --ease-in-out), on paneforge's own `flex-grow`, the share of the room a
    * group has: the drop's picture, half the group, becomes the group, and
    * closing is the same run backwards.
@@ -91,7 +91,7 @@
       const run = pane.animate(
         [{ flexGrow: `${from[i]}` }, { flexGrow: `${to[i]}` }],
         {
-          duration: dur("--duration-panel"),
+          duration: dur("--duration-slow"),
           easing: ease("--ease-in-out"),
           fill: "forwards",
         }

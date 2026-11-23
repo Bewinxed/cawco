@@ -12,7 +12,7 @@
 <div
   data-fill={fill || undefined}
   aria-label="Loading"
-  class="group flex flex-col gap-space-row data-fill:min-h-0 data-fill:grow data-fill:shrink data-fill:basis-0 data-fill:overflow-hidden"
+  class="group flex flex-col gap-space-1 data-fill:min-h-0 data-fill:grow data-fill:shrink data-fill:basis-0 data-fill:overflow-hidden"
   role="status"
 >
   {#each rows as row (row)}

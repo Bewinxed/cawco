@@ -13,7 +13,7 @@
   <div
     class="flex flex-wrap items-center justify-between gap-space-3 py-space-3"
   >
-    <span class="grid gap-space-row">
+    <span class="grid gap-space-1">
       <span class="type-label text-ink-strong">{label}</span>
       <span class="type-meta text-ink-muted">{line}</span>
     </span>

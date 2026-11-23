@@ -18,7 +18,7 @@
    * tool call's chip (the owner, 10-26: "just like any tool call I can click
    * the chip to view the comment thread and reply").
    *
-   * Pressing it, or resting a mouse on it for `--duration-panel`, opens the
+   * Pressing it, or resting a mouse on it for `--duration-slow`, opens the
    * thread: on a desk and a tablet the house hover panel (HoverPanel) under
    * the chip, over it where the room under it is short; on a phone the
    * thread's bottom sheet (ThreadSheet). It holds the page's name with Open
@@ -180,7 +180,7 @@
       return;
     }
     const box = chip.getBoundingClientRect();
-    const inset = px("--hover-panel-inset");
+    const inset = px("--spacing-space-2");
     const gap = px("--spacing-space-1");
     const span = innerWidth - 2 * inset;
     const widest = Math.min(px("--hover-panel-max"), span);
@@ -344,7 +344,7 @@
     }
   }
 
-  /* Resting a mouse on the chip opens it after --duration-panel; a finger presses. */
+  /* Resting a mouse on the chip opens it after --duration-slow; a finger presses. */
   let restTimer: ReturnType<typeof setTimeout> | undefined;
   function rest(): void {
     clearTimeout(restTimer);
@@ -355,7 +355,7 @@
       stand();
       problem = null;
       show(true);
-    }, dur("--duration-panel"));
+    }, dur("--duration-slow"));
   }
   $effect(() => () => clearTimeout(restTimer));
 

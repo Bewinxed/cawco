@@ -66,7 +66,7 @@
     {#if mark}
       {@render mark()}
     {:else if Glyph}
-      <Glyph class={cn("block size-icon-sm", hue && "text-on-ink")} />
+      <Glyph class={cn("block size-icon-sm", hue && "text-surface-page")} />
     {/if}
   </span>
 {/if}

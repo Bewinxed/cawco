@@ -121,7 +121,7 @@
   </div>
 {:else}
   <div class="flex min-h-0 min-w-0 flex-auto bg-surface-recess">
-    <div class="flex min-h-0 py-space-2 pl-space-5 max-desk:hidden">
+    <div class="flex min-h-0 py-space-2 pl-space-4 max-desk:hidden">
       <ConfigRail current="helpers" />
     </div>
     <div class="flex min-h-0 min-w-0 flex-auto flex-col bg-surface-recess">

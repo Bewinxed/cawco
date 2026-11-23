@@ -141,7 +141,7 @@
           </div>
         {:else if empty && canTalk}
           <div
-            class="mx-auto w-full max-w-(--starters-w)"
+            class="mx-auto w-full max-w-182"
             data-slot="first-use"
           >
             <EmptyState centre="mark" line={words.emptyCaw} title={words.empty}>

@@ -846,7 +846,7 @@
   {#if said.needs > 0}
     <span
       data-slot="needs"
-      class="inline-flex text-status-attn-glyph"
+      class="inline-flex text-status-attn"
       title={said.said}
       ><IconNeedsYou aria-hidden="true" class="size-icon-sm" /><span
         class="sr-only">, {said.said}</span
@@ -975,7 +975,7 @@
             <span
               data-slot="lead"
               aria-label={rowLead.said}
-              class="grid w-row-compact place-items-center text-ink-muted lead-expiring:text-status-attn-glyph lead-paused:text-ink-subtle"
+              class="grid w-row-compact place-items-center text-ink-muted lead-expiring:text-status-attn lead-paused:text-ink-subtle"
               data-lead={leadOf(routine)}
               role="img"><rowLead.glyph class="size-icon-md" /></span
             >
@@ -997,7 +997,7 @@
               <!-- Its schedule drawn on the line from the hub's own runs
                    (DESIGN.md, The Show Don't Tell Rule); the words are the
                    strip's name. -->
-              <span class="block pt-space-1 pb-space-row">
+              <span class="block pt-space-1 pb-space-1">
                 <ScheduleStrip
                   compact
                   label={line.words}
@@ -1016,12 +1016,12 @@
                 <span data-slot="sub-words">{line.words}</span>
               {/if}
               {#if line.off}
-                <span class="text-status-attn-ink"
+                <span class="text-status-attn"
                   >{drawn ? line.off : `· ${line.off}`}</span
                 >
               {/if}
               <!-- On a narrow ledger, Last and Next in the same order. -->
-              <span data-slot="folded" class="hidden @max-md/table:inline">
+              <span data-slot="folded" class="hidden @max-phone/table:inline">
                 {lineHasLead ? "· " : ""}{words.lastShort}
                 <RunStatus
                   said={last.said}
@@ -1181,7 +1181,7 @@
           >{words.trimReason}</span
         >
         <!-- On a narrow ledger, Turn on under why, on the name's edge. -->
-        <span data-slot="folded" class="hidden pt-space-2 @max-md/table:block"
+        <span data-slot="folded" class="hidden pt-space-2 @max-phone/table:block"
           >{@render turnOn(busy)}</span
         >
       </Table.Cell>
@@ -1253,13 +1253,13 @@
     <div data-slot="starters" class="w-full p-space-3">
       {#if making}
         <!-- Create routine: the form in the empty state's place. -->
-        <div class="max-w-(--starters-w)">{@render routineForm()}</div>
+        <div class="max-w-182">{@render routineForm()}</div>
       {:else if canTalk}
         <!-- Caw stands as the mark, centred over what is drawn under him
              (EmptyState's `centre="mark"`, DESIGN.md's The Alignment Rule);
              the title, the line, the chips and his composer start on the
              column's one left edge, as on the empty board and Decisions. -->
-        <div data-slot="caw-empty" class="mx-auto w-full max-w-(--starters-w)">
+        <div data-slot="caw-empty" class="mx-auto w-full max-w-182">
           <EmptyState
             centre="mark"
             line={words.emptyCaw(project.name)}
@@ -1313,7 +1313,7 @@
              Rule's second sentence): the line says what the page is for, his
              reason stands in its own line over the way by hand, the routine
              form in this place, as every can't-start empty state has it. -->
-        <div class="max-w-(--starters-w)">
+        <div class="max-w-182">
           <EmptyState
             icon={IconClock}
             line={words.emptyWhat(project.name)}
@@ -1571,7 +1571,7 @@
           variant="ghost">{words.moreActions(actionsLeft)}</Button
         >
         {#if actionsFault}
-          <p class="m-0 type-meta text-status-fail-ink" role="status">
+          <p class="m-0 type-meta text-status-fail" role="status">
             {actionsFault}
           </p>
         {/if}

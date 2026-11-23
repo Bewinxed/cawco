@@ -116,13 +116,13 @@
          own flex row, so the headline is never laid out beside the label. -->
     <p
       data-slot="peer-label"
-      class="relative m-0 type-label leading-ui text-ink-muted"
+      class="relative m-0 type-label leading-lg text-ink-muted"
     >
       <span data-slot="line" class="min-h-space-6 rail-line">
         <span
           data-rail-cell
           data-slot="glyph"
-          class="text-brand-ink group-data-err/peer:text-status-fail-ink rail-cell"
+          class="text-accent-ink group-data-err/peer:text-status-fail rail-cell"
         >
           {#if row.kind === "rule"}
             <IconRules class="size-icon-md" />
@@ -149,7 +149,7 @@
           {#if senderId}
             <a
               data-slot="name"
-              class="text-ink-strong relative z-1 py-space-1 underline decoration-current/35 underline-offset-2 hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:duration-(--duration-control) can-hover:motion-safe:ease-out"
+              class="text-ink-strong relative z-1 py-space-1 underline decoration-current/35 underline-offset-2 hover:text-accent-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:duration-(--duration-fast) can-hover:motion-safe:ease-out"
               href={conversationHref(senderId, boardStore.instanceIndex)}
               >{row.name}</a
             >
@@ -158,9 +158,9 @@
           {/if}
         </span>
         {#if message.state === "failed"}
-          <span class="flex-none text-status-fail-ink">not sent</span>
+          <span class="flex-none text-status-fail">not sent</span>
         {:else if row.kind === "report" && row.failed}
-          <span class="flex-none text-status-fail-ink">failed</span>
+          <span class="flex-none text-status-fail">failed</span>
         {:else if message.state === "pending"}
           <span class="flex-none">queued</span>
         {/if}
@@ -183,7 +183,7 @@
           <span
             data-slot="chev"
             aria-hidden="true"
-            class="grid place-items-center group-state-open/toggle:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out"
+            class="grid place-items-center group-state-open/toggle:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-out"
             ><IconChevronRight class="size-icon-md block" /></span
           >
         </Collapsible.Trigger>
@@ -204,7 +204,7 @@
       <!-- Why it did not go, in MessageRow's own reason line. -->
       <p
         data-slot="reason"
-        class="mt-space-1 mb-0 text-size-meta font-normal text-status-fail-ink rail-hang"
+        class="mt-space-1 mb-0 text-sm font-normal text-status-fail rail-hang"
       >
         {meta.sendFailed}
       </p>

@@ -112,7 +112,7 @@
   >
     <IconLock
       aria-label="Secure"
-      class="size-icon-md flex-none text-status-done-ink"
+      class="size-icon-md flex-none text-status-done"
     />
     <p
       class="m-0 min-w-0 flex-1 rounded-sm border border-border-control bg-surface-sunk px-space-3 py-space-4 text-start type-label font-mono wrap-anywhere text-ink-strong select-all"
@@ -171,12 +171,12 @@
                   {#if mark.lock}
                     <IconLock
                       aria-label="Secure"
-                      class="size-icon-md text-status-done-ink"
+                      class="size-icon-md text-status-done"
                     />
                   {:else}
                     <IconSuccess
                       aria-label="Done"
-                      class="size-icon-md text-status-done-ink"
+                      class="size-icon-md text-status-done"
                     />
                   {/if}
                 </span>

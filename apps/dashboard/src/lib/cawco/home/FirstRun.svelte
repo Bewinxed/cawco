@@ -257,7 +257,7 @@
 
 <section
   aria-label={firstRunWords.title}
-  class="mx-auto flex w-full max-w-104 flex-col items-stretch gap-space-5"
+  class="mx-auto flex w-full max-w-104 flex-col items-stretch gap-space-4"
 >
   <figure class="m-0 flex flex-col items-center gap-space-2">
     <Caw
@@ -277,7 +277,7 @@
   <div
     data-slot="first-run"
     class="grid grid-cols-(--row-cols) gap-x-space-3 rounded-lg bg-surface-raised p-space-4 shadow-sm"
-    style:--row-cols="var(--mark-box) minmax(0, 1fr)"
+    style:--row-cols="var(--spacing-row-compact) minmax(0, 1fr)"
   >
     <span class="mark-cell row-span-2"
       ><IconFolder

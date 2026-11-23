@@ -31,20 +31,20 @@
   class={cn(
     "peer group/switch relative inline-flex shrink-0 items-center",
     "rounded-pill border border-transparent",
-    /* Its track's colour turns over --duration-fade, and it takes the press
+    /* Its track's colour turns over --duration-base, and it takes the press
        every compact control takes (DESIGN.md, The Press Rule) where motion
        is welcome. Its hit area is .pointer-hit's 24px on a pointer device
        and .touch-hit's 44px on a touch screen; the drawn track and the
        layout do not change. */
     "touch-hit pointer-hit",
-    "[transition:background-color_var(--duration-fade)_var(--ease-out),transform_var(--duration-fade)_var(--ease-out)]",
+    "[transition:background-color_var(--duration-base)_var(--ease-out),transform_var(--duration-base)_var(--ease-out)]",
     "motion-safe:active:not-data-[disabled]:[transform:scale(var(--press-scale))]",
-    "aria-invalid:border-status-fail-glyph",
+    "aria-invalid:border-status-fail",
     "data-[size=default]:h-[calc(var(--spacing-icon-md)+2px)] data-[size=sm]:h-[calc(var(--spacing-icon-sm)+2px)]",
     "data-[size=default]:w-[calc(2*var(--spacing-icon-md))] data-[size=sm]:w-[calc(2*var(--spacing-icon-sm))]",
-    "data-disabled:cursor-not-allowed data-checked:bg-action-solid",
+    "data-disabled:cursor-not-allowed data-checked:bg-accent",
     "data-unchecked:bg-border-strong data-disabled:opacity-50",
-    "dark:aria-invalid:border-status-fail-glyph/50",
+    "dark:aria-invalid:border-status-fail/50",
     switchVariants({ align }),
     className
   )}
@@ -56,7 +56,7 @@
 >
   <SwitchPrimitive.Thumb
     data-switch-block
-    class="rounded-pill bg-surface-page group-data-[size=default]/switch:size-icon-md group-data-[size=sm]/switch:size-icon-sm group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] dark:data-checked:bg-on-action group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 dark:data-unchecked:bg-ink-strong motion-safe:[transition:translate_var(--duration-fade)_var(--ease-in-out)] pointer-events-none block ring-0 rtl:data-[state=checked]:not-group-data-[size=default]/switch:not-group-data-[size=sm]/switch:translate-x-[calc(-100%)]"
+    class="rounded-pill bg-surface-page group-data-[size=default]/switch:size-icon-md group-data-[size=sm]/switch:size-icon-sm group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] dark:data-checked:bg-on-accent group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 dark:data-unchecked:bg-ink-strong motion-safe:[transition:translate_var(--duration-base)_var(--ease-in-out)] pointer-events-none block ring-0 rtl:data-[state=checked]:not-group-data-[size=default]/switch:not-group-data-[size=sm]/switch:translate-x-[calc(-100%)]"
     data-slot="switch-thumb"
   />
 </SwitchPrimitive.Root>

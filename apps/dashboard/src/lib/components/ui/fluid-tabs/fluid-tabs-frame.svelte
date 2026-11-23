@@ -34,7 +34,7 @@
   let value = $derived<string>(chosen);
 </script>
 
-<div class="flex bg-surface-page p-space-5">
+<div class="flex bg-surface-page p-space-4">
   <Tabs
     onValueChange={(next) => {
       value = next;

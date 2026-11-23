@@ -109,7 +109,7 @@
   <p
     class={[
       "ps-(--stand-in) type-meta text-pretty wrap-anywhere",
-      facts?.attention ? "text-status-attn-ink" : "text-ink-muted",
+      facts?.attention ? "text-status-attn" : "text-ink-muted",
     ]}
   >
     {#if parked && facts?.text}

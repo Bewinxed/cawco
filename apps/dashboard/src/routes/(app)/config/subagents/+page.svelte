@@ -242,7 +242,7 @@
 
   <div
     data-slot="group"
-    class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
+    class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-4"
   >
     <SectionHeader hue={HUE} icon={IconLaptop} label="On machines" />
     <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
@@ -293,7 +293,7 @@
                 >
               {:else}
                 {#if stored}
-                  <span class="type-meta whitespace-nowrap text-status-attn-ink"
+                  <span class="type-meta whitespace-nowrap text-status-attn"
                     >Managed · differs</span
                   >
                 {/if}

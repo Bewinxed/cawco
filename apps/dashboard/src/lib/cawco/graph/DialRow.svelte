@@ -193,7 +193,7 @@
     </div>
     <!-- The undo glyph's column, held in every row: a changed
          value's way back, in the edit's ink. -->
-    <span class="flex h-control-md w-control-xs items-center justify-center">
+    <span class="flex h-control-md w-space-6 items-center justify-center">
       {#if edited}
         {@const wasSaid = said(was)}
         <Tip label={words.dials.resetTo(wasSaid)}>
@@ -230,7 +230,7 @@
         {#if dial.kind === "color"}
           <span
             data-box
-            class="checker block size-space-3 flex-none overflow-clip rounded-hair border border-border-control"
+            class="checker block size-space-3 flex-none overflow-clip rounded-xs border border-border-control"
             ><span
               class="block size-full bg-(--was)"
               style:--was={paint(String(was ?? ""))}
@@ -248,7 +248,7 @@
   <!-- On a phone the picker unfolds under its row across the
        face, and is brought into view once it stands. -->
   <div
-    class="col-span-full min-w-0 scroll-mb-space-5"
+    class="col-span-full min-w-0 scroll-mb-space-4"
     data-vaul-no-drag
     onintroend={(event) => bringIntoView(event.currentTarget)}
     transition:unfold

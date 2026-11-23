@@ -190,21 +190,22 @@ export class GrownShape {
     // the layer moves (Playwright WebKit at 390, a fold's slow frames 3.75 a
     // round with it, 0.25 without), and draws no CSS filter on an SVG path.
     const u = numberOf("--spacing-space-1") || 4;
-    const hostStyle = getComputedStyle(host);
     const shadows: Shadow[] = [
       {
         dx: 0,
         dy: u * 3.5,
         blur: u * 7,
-        color: hostStyle.getPropertyValue("--shadow-tint-2").trim(),
+        color:
+          "light-dark(oklch(29.5% 0.01 70 / 0.14), oklch(18.4% 0.004 70 / 0.66))",
       },
       {
         dx: 0,
         dy: u * 0.5,
         blur: u,
-        color: hostStyle.getPropertyValue("--color-shadow-tint").trim(),
+        color:
+          "light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55))",
       },
-    ].filter((s) => s.color.length > 0);
+    ];
     const lay = shadows
       .map(
         ({ dx, dy, blur, color }) =>

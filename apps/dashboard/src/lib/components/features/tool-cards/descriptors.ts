@@ -98,17 +98,17 @@ const GLYPHS: Record<string, Component> = {
  * Tailwind only generates the classes it finds in the source.
  */
 const INKS: Record<string, string> = {
-  "tool-run": "text-mark-2",
-  "tool-read": "text-mark-6",
-  "tool-edit": "text-mark-7",
-  "tool-write": "text-mark-7",
-  "tool-search": "text-mark-5",
-  "tool-web": "text-mark-6",
-  "tool-skill": "text-mark-8",
-  "tool-agent": "text-mark-7",
-  "tool-mcp": "text-mark-5",
-  "tool-plan": "text-mark-8",
-  "tool-ask": "text-mark-5",
+  "tool-run": "text-mark-1",
+  "tool-read": "text-mark-4",
+  "tool-edit": "text-mark-5",
+  "tool-write": "text-mark-5",
+  "tool-search": "text-mark-3",
+  "tool-web": "text-mark-4",
+  "tool-skill": "text-mark-6",
+  "tool-agent": "text-mark-5",
+  "tool-mcp": "text-mark-3",
+  "tool-plan": "text-mark-6",
+  "tool-ask": "text-mark-3",
   "muted-foreground": "text-ink-muted",
 };
 

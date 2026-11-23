@@ -69,7 +69,7 @@
    * it, the lower one). Opened by its card's
    * Preview button in the transcript, it comes out of the card
    * (motion/share.svelte.ts, clipped open from the card's box over
-   * --duration-panel on --ease-drawer) standing still at that snap: vaul's own
+   * --duration-slow on --ease-drawer) standing still at that snap: vaul's own
    * rise is skipped for that one open, so the two never move the sheet at
    * once. Opened any other way (an agent showing a preview, or a preview
    * already open when the page loads), it rises from the bottom edge on

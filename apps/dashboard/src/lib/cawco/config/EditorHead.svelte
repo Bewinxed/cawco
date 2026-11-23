@@ -48,9 +48,9 @@
   bind:value={name}
 />
 {#if problem}
-  <p class="type-meta text-status-fail-ink" in:appear>{problem}</p>
+  <p class="type-meta text-status-fail" in:appear>{problem}</p>
 {:else if duplicate}
-  <p class="type-meta text-status-fail-ink" in:appear>{duplicate}</p>
+  <p class="type-meta text-status-fail" in:appear>{duplicate}</p>
 {/if}
 <SwitchField
   hint={enabled ? on : off}
@@ -59,7 +59,7 @@
   bind:checked={enabled}
 />
 {#if form.failed}
-  <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+  <p class="type-meta text-status-fail" role="alert" in:appear>
     {form.failed}
   </p>
 {/if}

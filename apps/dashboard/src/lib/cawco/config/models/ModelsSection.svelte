@@ -404,7 +404,7 @@
     detach(readImage(), "readImage");
   });
   /** A status line's swap: each line blurs in over the panel tier and out over the exit's. */
-  const lineBlur = (tier: "--duration-panel" | "--duration-fade") => ({
+  const lineBlur = (tier: "--duration-slow" | "--duration-base") => ({
     duration: dur(tier),
     easing: easeOut,
     amount: 2,
@@ -423,7 +423,7 @@
     ></circle>
     <path
       d="M6.2 10.4l2.5 2.5 5.1-5.6"
-      class="stroke-status-done-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
+      class="stroke-status-done motion-safe:animate-check-draw motion-safe:dash-unit"
       pathLength="1"
       stroke-linecap="round"
       stroke-linejoin="round"
@@ -470,7 +470,7 @@
       One way to reach Jev. A TypeSafe key held in Jev below takes over from it.
     </p>
     <div
-      class="overflow-hidden motion-safe:transition-[block-size] motion-safe:duration-(--duration-fade) motion-safe:ease-drawer"
+      class="overflow-hidden motion-safe:transition-[block-size] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
       style:block-size={openrouterHeight ? `${openrouterHeight}px` : undefined}
     >
       <!-- A status line that swaps: the lines cross-fade over each other in one grid cell. -->
@@ -481,8 +481,8 @@
             aria-live="polite"
             class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-space-2 text-ink-muted tone-ok:text-ink-strong"
             data-tone={phase === "connected" ? "ok" : "off"}
-            in:blur={lineBlur("--duration-panel")}
-            out:blur={lineBlur("--duration-fade")}
+            in:blur={lineBlur("--duration-slow")}
+            out:blur={lineBlur("--duration-base")}
           >
             {#if phase === "exchanging"}
               <LiveDot data-pulse data-slot="dot" size="row" tone="muted" />
@@ -498,7 +498,7 @@
               <span
                 data-slot="dot"
                 aria-hidden="true"
-                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-done-glyph group-tone-ok:opacity-100"
+                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-done group-tone-ok:opacity-100"
                 data-box
               ></span>
               <span>Not connected</span>
@@ -509,7 +509,7 @@
     </div>
     {#if openrouterError}
       <p
-        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail"
         role="alert"
         transition:unfold
       >
@@ -520,7 +520,7 @@
 
   <form
     data-slot="group"
-    class="flex flex-col gap-space-2 border-t border-border-hairline pt-space-5"
+    class="flex flex-col gap-space-2 border-t border-border-hairline pt-space-4"
     data-group="jev"
     onsubmit={saveKey}
   >
@@ -564,7 +564,7 @@
       <span
         data-slot="dot"
         aria-hidden="true"
-        class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-done-glyph group-tone-ok:opacity-100"
+        class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-done group-tone-ok:opacity-100"
         data-box
       ></span>
       <span>{routeLine}</span>
@@ -581,7 +581,7 @@
       />
     </Field>
     <div
-      class="overflow-hidden motion-safe:transition-[block-size] motion-safe:duration-(--duration-fade) motion-safe:ease-drawer"
+      class="overflow-hidden motion-safe:transition-[block-size] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
       style:block-size={keyHeight ? `${keyHeight}px` : undefined}
     >
       <div data-slot="stack" class="grid" {@attach measureKey}>
@@ -592,8 +592,8 @@
             class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-space-2 text-ink-muted tone-ok:text-ink-strong"
             data-testid="typesafe-key-state"
             data-tone={keyPhase === "held" ? "ok" : "off"}
-            in:blur={lineBlur("--duration-panel")}
-            out:blur={lineBlur("--duration-fade")}
+            in:blur={lineBlur("--duration-slow")}
+            out:blur={lineBlur("--duration-base")}
           >
             {#if jev?.typesafe}
               {@render doneCheck()}
@@ -602,7 +602,7 @@
               <span
                 data-slot="dot"
                 aria-hidden="true"
-                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-done-glyph group-tone-ok:opacity-100"
+                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-done group-tone-ok:opacity-100"
                 data-box
               ></span>
               <span>Not set</span>
@@ -623,7 +623,7 @@
     />
     {#if jevError}
       <p
-        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail"
         role="alert"
         transition:unfold
       >
@@ -634,7 +634,7 @@
 
   <div
     data-slot="group"
-    class="flex flex-col gap-space-2 border-t border-border-hairline pt-space-5"
+    class="flex flex-col gap-space-2 border-t border-border-hairline pt-space-4"
   >
     <SectionHeader level={2} hue={HUE} icon={IconRules} label="Fleet watch" />
     <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
@@ -674,7 +674,7 @@
     {/if}
     {#if watchError}
       <p
-        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail"
         role="alert"
         transition:unfold
       >

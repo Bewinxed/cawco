@@ -178,19 +178,19 @@
 {:else if open}
   <!-- The card recipe, its content edge to edge and clipped by its radius; it
        fills the place the page's grid gives it. It comes in as a sheet does,
-       from its own side by --pop-rise as it fades, over --duration-panel on the
+       from its own side by --spacing-space-2 as it fades, over --duration-slow on the
        drawer curve; with less motion it only fades (`appearOnMount`). Not
        by `@starting-style`: in iOS 27.2 Safari its starting-style rise ran
        no transition and the panel only faded (probe-kit ios-safari-motion,
        2026-10-23). -->
   <aside
     aria-label="Caw, {projectName}"
-    class="grid-area-dock in-data-caw-open:phone:mx-space-5 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@md:mt-space-6 in-data-caw-open:@md:mr-space-6 in-data-caw-open:@md:mb-space-6 in-data-caw-open:@md:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-sm"
+    class="grid-area-dock in-data-caw-open:phone:mx-space-4 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@phone:mt-space-6 in-data-caw-open:@phone:mr-space-6 in-data-caw-open:@phone:mb-space-6 in-data-caw-open:@phone:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-sm"
     data-caw-dock
     {@attach dock}
     {@attach appearOnMount({
-      motion: { over: "--duration-panel", easing: "--ease-drawer", rise: "x" },
-      reduced: { over: "--duration-panel", easing: "--ease-drawer" },
+      motion: { over: "--duration-slow", easing: "--ease-drawer", rise: "x" },
+      reduced: { over: "--duration-slow", easing: "--ease-drawer" },
     })}
   >
     {#key projectId}

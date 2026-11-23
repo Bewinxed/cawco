@@ -17,5 +17,5 @@
 </script>
 
 {#each marked(text, query) as piece, index (index)}{#if piece.hit}<mark
-      class="rounded-hair bg-selection text-inherit">{piece.part}</mark
+      class="rounded-xs bg-accent/20 text-inherit">{piece.part}</mark
     >{:else}{piece.part}{/if}{/each}

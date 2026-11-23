@@ -420,14 +420,14 @@
   <span
     data-slot="needs-dot"
     aria-hidden="true"
-    class="pointer-events-none absolute z-5 top-(--dot-at) right-(--dot-at) size-(--status-dot-size) rounded-pill bg-status-attn-glyph"
+    class="pointer-events-none absolute z-5 top-(--dot-at) right-(--dot-at) size-1.5 rounded-pill bg-status-attn"
   ></span>
   <span
     data-ping
     data-echo
     data-slot="needs-dot"
     aria-hidden="true"
-    class="pointer-events-none absolute z-5 top-(--dot-at) right-(--dot-at) size-(--status-dot-size) rounded-pill bg-status-attn-glyph opacity-0"
+    class="pointer-events-none absolute z-5 top-(--dot-at) right-(--dot-at) size-1.5 rounded-pill bg-status-attn opacity-0"
   ></span>
 {/snippet}
 
@@ -475,10 +475,10 @@
     data-files-thumb={pictured(artifact) ? "picture" : "glyph"}
     style:--shape="1 / {shape(artifact)}"
     style:--hole={waiting
-      ? "calc(var(--status-dot-size) / 2 + var(--status-dot-cut))"
+      ? "calc(calc(var(--spacing) * 1.5) / 2 + calc(var(--spacing) * 0.375))"
       : undefined}
     style:--hole-mask={waiting
-      ? "radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--tree-mark-hole-edge)), var(--color-ink-strong) calc(var(--hole) + var(--tree-mark-hole-edge)))"
+      ? "radial-gradient(circle at 100% 0, transparent calc(var(--hole) - calc(1px / 4)), var(--color-ink-strong) calc(var(--hole) + calc(1px / 4)))"
       : undefined}
   >
     {#if artifact.thumbnail && pictured(artifact)}
@@ -501,11 +501,11 @@
          picture and under the hover and selected washes. -->
     <span
       class="contents"
-      style:--dot-at="calc(var(--spacing-space-1) - var(--status-dot-size) / 2)"
+      style:--dot-at="calc(var(--spacing-space-1) - calc(var(--spacing) * 1.5) / 2)"
       >{@render needsDot()}</span
     >
   {/if}
-  <span class="mark-line flex min-w-0 items-center gap-space-1 px-space-row">
+  <span class="mark-line flex min-w-0 items-center gap-space-1 px-space-1">
     <Glyph aria-hidden="true" class="size-icon-md flex-none text-ink-muted" />
     <span
       data-slot="name"
@@ -514,13 +514,13 @@
     >
   </span>
   <span
-    class="type-meta flex min-w-0 gap-space-1 px-space-row whitespace-nowrap text-ink-muted"
+    class="type-meta flex min-w-0 gap-space-1 px-space-1 whitespace-nowrap text-ink-muted"
   >
     <span class="num flex-none">{age}</span>{@render metaParts(artifact, true)}
   </span>
   {#if card.within}
     <span
-      class="type-meta line-clamp-2 wrap-anywhere px-space-row text-ink-subtle"
+      class="type-meta line-clamp-2 wrap-anywhere px-space-1 text-ink-subtle"
       data-files-within>{@render within(card)}</span
     >
   {/if}
@@ -534,7 +534,7 @@
   <span
     class="relative grid size-row-compact flex-none place-items-center text-ink-muted"
     data-box
-    style:--dot-at={"calc((var(--spacing-row-compact) - var(--spacing-icon-md)) / 2 - var(--status-dot-size))"}
+    style:--dot-at={"calc((var(--spacing-row-compact) - var(--spacing-icon-md)) / 2 - calc(var(--spacing) * 1.5))"}
   >
     <Glyph aria-hidden="true" class="size-icon-md" />
     {#if artifact.pending}{@render needsDot()}{/if}

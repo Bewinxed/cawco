@@ -797,7 +797,7 @@ export function startInk(deps: InkDeps): Ink {
       }
       const path = document.createElementNS(SVG, "path");
       path.setAttribute("data-live", "");
-      path.setAttribute("fill", chrome.token("--color-brand-solid"));
+      path.setAttribute("fill", chrome.token("--color-accent"));
       layer.append(path);
       drawing = { id: event.pointerId, points: [], path };
       add(event);
@@ -1201,7 +1201,7 @@ export function startInk(deps: InkDeps): Ink {
     const now = Date.now();
     const { doc, ink } = maps();
     const recent =
-      last && now - last.at <= 2 * chrome.ms("--duration-breath")
+      last && now - last.at <= 2 * (2 * chrome.ms("--duration-loop"))
         ? ink.get(last.id)
         : undefined;
     const recentBox = recent ? placed.get(recent.id)?.box : undefined;
@@ -1519,7 +1519,7 @@ export function startInk(deps: InkDeps): Ink {
       fitToPage(layer, marked);
     }
     // Read only for a group to draw: a token is the page's style, read there and then.
-    const brand = groups.length > 0 ? chrome.token("--color-brand-solid") : "";
+    const brand = groups.length > 0 ? chrome.token("--color-accent") : "";
     const located = groups.map((group) => {
       const found =
         "selector" in group.anchor && deps.showsStory(group.anchor)

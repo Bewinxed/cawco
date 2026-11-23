@@ -18,7 +18,7 @@
     words: { saving: string; saved: string; notSaved: string };
   } = $props();
 
-  const lineBlur = (tier: "--duration-panel" | "--duration-fade") => ({
+  const lineBlur = (tier: "--duration-slow" | "--duration-base") => ({
     duration: dur(tier),
     easing: easeOut,
     amount: 2,
@@ -33,21 +33,21 @@
   {#key phase}
     <span
       class="mark-line col-start-1 row-start-1 flex items-center gap-space-2"
-      in:blur={lineBlur("--duration-panel")}
-      out:blur={lineBlur("--duration-fade")}
+      in:blur={lineBlur("--duration-slow")}
+      out:blur={lineBlur("--duration-base")}
     >
       {#if phase === "saving"}
         <LiveDot data-pulse size="row" tone="muted" />
         <span>{words.saving}</span>
       {:else if phase === "saved"}
-        <IconTick class="size-icon-md flex-none text-status-done-glyph" />
+        <IconTick class="size-icon-md flex-none text-status-done" />
         <span class="text-ink-strong">{words.saved}</span>
       {:else if phase === "failed"}
         <IconError
           aria-hidden="true"
-          class="size-icon-md flex-none text-status-fail-glyph"
+          class="size-icon-md flex-none text-status-fail"
         />
-        <span class="text-status-fail-ink">{words.notSaved}</span>
+        <span class="text-status-fail">{words.notSaved}</span>
       {/if}
     </span>
   {/key}

@@ -5,11 +5,11 @@
  * `meta.changes` less the person's looks in its `seen` map, read from the doc
  * this page holds, so every screen of the canvas marks the same.
  *
- * Each changed element wears the ring the pages wear (`--color-status-done-glyph`,
+ * Each changed element wears the ring the pages wear (`--color-status-done`,
  * `--focus-ring-width` heavy, `--spacing-space-1` outside its box,
  * so it never covers its strokes or words) on a layer of its own over the
  * scene, in the scene's coordinates: it pans and zooms with the drawing,
- * takes no press, and fades off over `--duration-fade` once seen. An ellipse is
+ * takes no press, and fades off over `--duration-base` once seen. An ellipse is
  * ringed as an ellipse, a diamond as a diamond, a rounded box at its own
  * radius grown by as much. A ring pings once as it lands and again when a
  * step reaches it: its halo, the same shape, grows `--spacing-space-3`
@@ -319,7 +319,7 @@ export function Changes({
     });
   }, [anchors]);
   /**
-   * Rings looked at, fading off over --duration-fade before they go: each one
+   * Rings looked at, fading off over --duration-base before they go: each one
    * the last rings held that these don't, kept until its fade has run
    * however often the view redraws meanwhile.
    */
@@ -341,7 +341,7 @@ export function Changes({
     const timer = setTimeout(() => {
       timers.current.delete(timer);
       setLeaving((was) => was.filter((ring) => !gone.includes(ring)));
-    }, tokenMs("--duration-fade"));
+    }, tokenMs("--duration-base"));
     timers.current.add(timer);
   }, [rings]);
   useEffect(() => {

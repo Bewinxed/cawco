@@ -10,7 +10,7 @@
    * object, closed when the state has none), a meta line with the live dot,
    * one button, and Show details under it. The card never rearranges: only
    * its words (MorphText), its object and its button change, and only the
-   * slot changes height, which morph carries over --duration-panel on the drawer
+   * slot changes height, which morph carries over --duration-slow on the drawer
    * curve. A second way on (Skip, Open Setup Keys) is a text action in its
    * own place under the button, so the card keeps its one button and the
    * meta line only ever says what it waits on. Caw never moves; a failure
@@ -42,21 +42,21 @@
 <section
   bind:this={ref}
   aria-labelledby={titleId}
-  style:--tray-pad="calc(var(--radius-modal) - var(--radius-lg))"
+  style:--tray-pad="calc(var(--radius-xl) - var(--radius-lg))"
   class={[
     "relative min-w-0",
     form === "desk"
-      ? "rounded-modal bg-surface-recess p-(--tray-pad) shadow-lg"
+      ? "rounded-xl bg-surface-recess p-(--tray-pad) shadow-lg"
       : "rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-lg",
   ]}
   data-form={form}
   data-step={tray.step}
   data-tray="card"
-  {@attach (node) => morph({ ms: dur("--duration-panel") })(node)}
+  {@attach (node) => morph({ ms: dur("--duration-slow") })(node)}
 >
   <TrayBody
     class="justify-items-center gap-space-4 text-center"
-    deskPad="p-space-5"
+    deskPad="p-space-4"
     {form}
   >
     <Button

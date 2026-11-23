@@ -61,7 +61,7 @@
 
 <div
   data-slot="group"
-  class="@container/tools flex flex-col gap-space-3 border-t border-border-hairline pt-space-5 first:border-t-0 first:pt-0"
+  class="@container/tools flex flex-col gap-space-3 border-t border-border-hairline pt-space-4 first:border-t-0 first:pt-0"
 >
   <SectionHeader {hue} {icon} label={heading} level={2}>
     {#snippet right()}
@@ -70,7 +70,7 @@
   </SectionHeader>
 
   <div
-    class="grid min-w-0 grid-cols-1 items-start gap-space-5 @phone/tools:grid-cols-2 @phone/tools:gap-space-6"
+    class="grid min-w-0 grid-cols-1 items-start gap-space-4 @phone/tools:grid-cols-2 @phone/tools:gap-space-6"
   >
     <div class="flex min-w-0 flex-col gap-space-3">
       <ToolOptions
@@ -119,7 +119,7 @@
                 >
                   {#if line.state === "allowed"}
                     <IconTick
-                      class="size-icon-md text-status-done-glyph"
+                      class="size-icon-md text-status-done"
                       data-box
                     />
                   {:else if line.state === "denied"}

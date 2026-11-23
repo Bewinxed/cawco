@@ -23,7 +23,7 @@ export default {
   title: "Configure/Models/Images",
   component: ImageDefault,
   args: {
-    hue: "var(--color-mark-2)",
+    hue: "var(--color-mark-1)",
     value: { provider: "chatgpt", model: null },
     readiness: today,
     phase: "idle",

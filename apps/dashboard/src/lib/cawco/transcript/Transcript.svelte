@@ -498,7 +498,7 @@
     <div
       data-tx-rail
       data-slot="livetool"
-      class="min-h-(--tx-line) coarse:min-h-control-lg text-size-label font-medium text-ink-strong rail-row rail-line"
+      class="min-h-6.5 coarse:min-h-control-lg text-base font-medium text-ink-strong rail-row rail-line"
     >
       <span data-slot="rail-cell" class="rail-cell {d.color}"
         ><LiveIcon class="size-icon-md" /></span
@@ -557,7 +557,7 @@
   data-slot="tr"
   aria-label={transcriptWords.transcript}
   style:--foot-room={FOOT_ROOM}
-  class="flex-auto overflow-y-auto anchor-none scroll-timeline-transcript-head py-0 ps-space-6 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 min-h-0 relative tx-columns"
+  class="flex-auto overflow-y-auto anchor-none scroll-timeline-transcript-head py-0 ps-space-6 pe-space-6 max-desk:ps-space-4 max-desk:pe-space-4 min-h-0 relative tx-columns"
   role="log"
   bind:this={pin.scroller}
   {@attach pin.measureView}
@@ -569,9 +569,9 @@
   {#if (session.loading || session.cursor !== null) && rowDraw.renderedRows.length === 0}
     <p
       data-slot="transcript-empty"
-      class="mark-line isolate flex items-center gap-space-2 text-size-meta font-normal text-ink-muted py-space-5"
+      class="mark-line isolate flex items-center gap-space-2 text-sm font-normal text-ink-muted py-space-4"
       style:padding-top={headRoom
-        ? `calc(var(--spacing-space-5) + ${headRoom})`
+        ? `calc(var(--spacing-space-4) + ${headRoom})`
         : undefined}
     >
       <LiveDot /><span>Loading transcript…</span>
@@ -616,7 +616,7 @@
   <!-- The failed line's button stands off the first row by the line's own
        block padding. -->
   <div
-    class="isolate pt-(--head-room,0px) has-data-retry:pb-space-5"
+    class="isolate pt-(--head-room,0px) has-data-retry:pb-space-4"
     style:--head-room={headRoom}
     bind:this={pin.headStrip}
     {@attach older.keepPlace}
@@ -624,7 +624,7 @@
     {#if rowDraw.renderedRows.length > 0 && session.olderFault}
       <p
         data-slot="transcript-empty"
-        class="text-size-meta font-normal text-ink-muted py-space-5"
+        class="text-sm font-normal text-ink-muted py-space-4"
       >
         {#if session.olderFault.reason !== "offline"}
           The turns before these couldn't be read:
@@ -646,7 +646,7 @@
     {:else if rowDraw.renderedRows.length > 0 && rowBuild.built.before}
       <p
         data-slot="transcript-empty"
-        class="mark-line flex items-center gap-space-2 text-size-meta font-normal text-ink-muted py-space-5"
+        class="mark-line flex items-center gap-space-2 text-sm font-normal text-ink-muted py-space-4"
       >
         <LiveDot /><span>Loading transcript…</span>
       </p>
@@ -738,7 +738,7 @@
       data-slot="loose-stop"
     >
       <p
-        class="text-center type-meta text-status-fail-ink wrap-anywhere"
+        class="text-center type-meta text-status-fail wrap-anywhere"
         role="alert"
       >
         {looseStop.words}
@@ -840,10 +840,10 @@
       {#if seek.unfound}
         <!-- The dock's raised line, as the not-caught-up line floats (Behind). -->
         <p
-          class="max-w-full py-space-2 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-lg text-size-meta font-normal text-ink-muted text-center text-balance"
+          class="max-w-full py-space-2 px-space-3 border border-border-hairline rounded-sm bg-surface-raised shadow-lg text-sm font-normal text-ink-muted text-center text-balance"
           data-open-at={seek.unfound}
-          in:rise={"--duration-panel"}
-          out:rise={"--duration-fade"}
+          in:rise={"--duration-slow"}
+          out:rise={"--duration-base"}
         >
           {seek.unfoundWords}
         </p>
@@ -878,14 +878,14 @@
   <div
     data-slot="first-screen"
     style:--foot-room={FOOT_ROOM}
-    class="absolute inset-0 isolate flex flex-col-reverse overflow-y-auto anchor-none ps-space-6 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 tx-columns"
+    class="absolute inset-0 isolate flex flex-col-reverse overflow-y-auto anchor-none ps-space-6 pe-space-6 max-desk:ps-space-4 max-desk:pe-space-4 tx-columns"
   >
     <div>
       {#if rowBuild.built.before}
         <div class="isolate">
           <p
             data-slot="transcript-empty"
-            class="mark-line flex items-center gap-space-2 text-size-meta font-normal text-ink-muted py-space-5"
+            class="mark-line flex items-center gap-space-2 text-sm font-normal text-ink-muted py-space-4"
           >
             <LiveDot /><span>Loading transcript…</span>
           </p>

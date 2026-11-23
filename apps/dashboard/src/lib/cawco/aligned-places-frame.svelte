@@ -52,7 +52,7 @@
 {#if place === "hero"}
   <div
     data-slot="panel"
-    class="flex h-160 w-95 max-w-full flex-col overflow-hidden rounded-modal bg-surface-raised shadow-sm max-desk:w-full max-desk:rounded-none"
+    class="flex h-160 w-95 max-w-full flex-col overflow-hidden rounded-xl bg-surface-raised shadow-sm max-desk:w-full max-desk:rounded-none"
   >
     <div
       data-slot="pane"

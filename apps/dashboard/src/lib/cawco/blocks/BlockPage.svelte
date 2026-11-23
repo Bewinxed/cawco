@@ -51,7 +51,7 @@
    * the hub, and the grid reflows when it answers (`reflow`, The Nothing
    * Jumps Rule): blocks that stay slide to their places, one that leaves
    * closes while fading, one that arrives is uncovered. A block whose width
-   * changes tweens its box over --duration-fade on the drawer curve (`morph`).
+   * changes tweens its box over --duration-base on the drawer curve (`morph`).
    * Hidden blocks wait at the page's end, each shown again from there; a
    * refused write is said there in the hub's words.
    */
@@ -240,7 +240,7 @@
           resizing = null;
         }
       },
-      dur("--duration-fade") * 2
+      dur("--duration-base") * 2
     );
   }
 </script>
@@ -284,7 +284,7 @@
 {:else}
   <div
     data-slot="block-page"
-    class="flex min-w-0 flex-col gap-space-5"
+    class="flex min-w-0 flex-col gap-space-4"
     data-columns={columns}
     data-page={page}
   >
@@ -292,7 +292,7 @@
       data-slot="blocks"
       bind:this={grid}
       {@attach measureGrid}
-      class="grid grid-flow-row grid-cols-(--block-cols) items-box-start gap-space-5 min-w-0"
+      class="grid grid-flow-row grid-cols-(--block-cols) items-box-start gap-space-4 min-w-0"
       style:--block-fill={fill === null ? undefined : `${fill}px`}
       style:--columns={columns}
       style:--block-cols="repeat(var(--columns), minmax(0, 1fr))"
@@ -331,7 +331,7 @@
         {#if refused}
           <p
             data-slot="refused"
-            class="type-meta m-0 max-w-measure grow basis-72 text-pretty text-status-fail-ink"
+            class="type-meta m-0 max-w-measure grow basis-72 text-pretty text-status-fail"
             role="status"
           >
             {refused}

@@ -26,8 +26,8 @@
    * part of the rim under the reserve is the reserved neutral, with a notch
    * cut where the reserve sits, in the ground's paint (`--ring-ground`).
    *
-   * Motion: a new reading eases each arc to its value (--duration-panel,
-   * in-out); a window that resets refills (--duration-settle, ease-out); with
+   * Motion: a new reading eases each arc to its value (--duration-slow,
+   * in-out); a window that resets refills (--duration-slow, ease-out); with
    * `reveal`, the arcs draw from empty as the mark first appears. Reduced
    * motion: every change lands at once.
    */
@@ -74,7 +74,7 @@
         () => {
           refill = false;
         },
-        dur("--duration-settle") * 2
+        dur("--duration-slow") * 2
       );
       wasLimit = limit;
       return () => clearTimeout(timer);
@@ -95,9 +95,9 @@
           { strokeDashoffset: arc.style.strokeDashoffset },
         ],
         {
-          duration: dur("--duration-settle"),
+          duration: dur("--duration-slow"),
           easing: CURVE.out,
-          delay: (index * arcs.length + i) * dur("--duration-step"),
+          delay: (index * arcs.length + i) * (dur("--duration-fast") / 2),
           fill: "backwards",
         }
       );
@@ -121,14 +121,14 @@
   style:--c={ring.color}
 >
   <circle
-    class="fill-border-control origin-center -rotate-90 data-spent:fill-(--ring-track-spent)"
+    class="fill-border-control origin-center -rotate-90 data-spent:fill-border-strong/55"
     cx="12"
     cy="12"
     data-spent={ring.limitOn === "5h" || undefined}
     r={geometry.rd.toFixed(3)}
   />
   <circle
-    class="fill-none stroke-(--c) origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:duration-(--duration-settle) group-data-refill/rings:ease-out group-data-stale/rings:opacity-(--account-stale-opacity) motion-reduce:transition-off"
+    class="fill-none stroke-(--c) origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:duration-(--duration-slow) group-data-refill/rings:ease-out group-data-stale/rings:opacity-82 motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-arc="disc"
@@ -140,7 +140,7 @@
     style:stroke-dashoffset={off(disc)}
   />
   <circle
-    class="fill-none stroke-border-control origin-center -rotate-90 data-spent:stroke-(--ring-track-spent)"
+    class="fill-none stroke-border-control origin-center -rotate-90 data-spent:stroke-border-strong/55"
     cx="12"
     cy="12"
     data-spent={ring.limitOn === "week" || undefined}
@@ -148,7 +148,7 @@
     stroke-width={geometry.w.toFixed(3)}
   />
   <circle
-    class="fill-none arc-week origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:duration-(--duration-settle) group-data-refill/rings:ease-out group-data-stale/rings:opacity-(--account-stale-opacity) motion-reduce:transition-off"
+    class="fill-none arc-week origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:duration-(--duration-slow) group-data-refill/rings:ease-out group-data-stale/rings:opacity-82 motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-arc="rim"
@@ -160,7 +160,7 @@
     style:stroke-dashoffset={off(rim)}
   />
   <circle
-    class="fill-none stroke-ink-subtle origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:duration-(--duration-settle) group-data-refill/rings:ease-out not-data-off:group-data-stale/rings:opacity-(--account-stale-opacity) data-off:opacity-0 motion-reduce:transition-off"
+    class="fill-none stroke-ink-subtle origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:duration-(--duration-slow) group-data-refill/rings:ease-out not-data-off:group-data-stale/rings:opacity-82 data-off:opacity-0 motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-off={reserve === null || Math.min(rim, reserve) <= 0 || undefined}
@@ -171,7 +171,7 @@
     style:stroke-dashoffset={off(reserve === null ? 0 : Math.min(rim, reserve))}
   />
   <circle
-    class="fill-none arc-ground origin-center -rotate-90 transition-[opacity] duration-(--duration-fade) ease-out data-off:opacity-0 motion-reduce:transition-off"
+    class="fill-none arc-ground origin-center -rotate-90 transition-[opacity] duration-(--duration-base) ease-out data-off:opacity-0 motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-off={reserve === null || undefined}

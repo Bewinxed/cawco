@@ -155,14 +155,14 @@
       {#if loading}
         <p
           data-slot="inline-transcript-empty"
-          class="mark-line flex items-center gap-space-2 p-space-2 text-size-meta font-normal text-ink-muted"
+          class="mark-line flex items-center gap-space-2 p-space-2 text-sm font-normal text-ink-muted"
         >
           <LiveDot /><span>Loading its transcript…</span>
         </p>
       {:else if shown.length === 0 && fault}
         <p
           data-slot="inline-transcript-empty"
-          class="p-space-2 text-size-meta font-normal text-ink-muted"
+          class="p-space-2 text-sm font-normal text-ink-muted"
         >
           {#if fault.reason !== "offline"}
             Its transcript couldn't be read:
@@ -189,7 +189,7 @@
       {:else if shown.length === 0}
         <p
           data-slot="inline-transcript-empty"
-          class="p-space-2 text-size-meta font-normal text-ink-muted"
+          class="p-space-2 text-sm font-normal text-ink-muted"
         >
           {id
             ? "Nothing in its transcript yet."

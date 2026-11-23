@@ -137,7 +137,7 @@
       "select-none grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit pointer-hit",
   });
   const CHIP =
-    "inline-flex items-center gap-space-2 max-w-full h-row-compact ps-space-1 pe-space-1 border border-border-hairline rounded-sm bg-surface-raised shadow-sm text-size-label font-medium text-ink-strong mark-line hit-gap-x-space-2 coarse:hit-gap-x-space-3";
+    "inline-flex items-center gap-space-2 max-w-full h-row-compact ps-space-1 pe-space-1 border border-border-hairline rounded-sm bg-surface-raised shadow-sm text-base font-medium text-ink-strong mark-line hit-gap-x-space-2 coarse:hit-gap-x-space-3";
   const BODY =
     "select-none inline-flex items-center gap-space-2 min-w-0 h-full p-0 border-none bg-transparent text-start text-ink-strong rounded-xs touch-hit pointer-hit mark-line";
 </script>
@@ -181,8 +181,8 @@
       <span
         data-slot="att-meta"
         class={[
-          "flex-none whitespace-nowrap text-size-meta font-normal tabular-nums",
-          chip.failed ? "text-status-fail-ink" : "text-ink-muted",
+          "flex-none whitespace-nowrap text-sm font-normal tabular-nums",
+          chip.failed ? "text-status-fail" : "text-ink-muted",
         ]}>{chip.meta}</span
       >
     {/if}

@@ -173,7 +173,7 @@
     label={madeWords.position}
   >
     <media-slider-track
-      class="relative block h-1 w-full overflow-clip rounded-pill bg-border-control transition-[height] duration-(--duration-control) ease-out group-data-interactive/scrub:h-1.5"
+      class="relative block h-1 w-full overflow-clip rounded-pill bg-border-control transition-[height] duration-(--duration-fast) ease-out group-data-interactive/scrub:h-1.5"
     >
       <media-slider-buffer
         class="absolute inset-y-0 start-0 block w-(--media-slider-buffer,0%) bg-border-strong"
@@ -183,7 +183,7 @@
       ></media-slider-fill>
     </media-slider-track>
     <media-slider-thumb
-      class="absolute start-(--media-slider-fill,0%) top-1/2 block size-3 -translate-x-1/2 rtl:translate-x-1/2 -translate-y-1/2 touch-hit rounded-full bg-ink-strong opacity-0 transition-opacity duration-(--duration-control) ease-out group-data-interactive/scrub:opacity-100 group-data-dragging/scrub:start-(--media-slider-pointer,0%) coarse:opacity-100 focus-visible:opacity-100"
+      class="absolute start-(--media-slider-fill,0%) top-1/2 block size-3 -translate-x-1/2 rtl:translate-x-1/2 -translate-y-1/2 touch-hit rounded-full bg-ink-strong opacity-0 transition-opacity duration-(--duration-fast) ease-out group-data-interactive/scrub:opacity-100 group-data-dragging/scrub:start-(--media-slider-pointer,0%) coarse:opacity-100 focus-visible:opacity-100"
     ></media-slider-thumb>
   </media-time-slider>
 {/snippet}
@@ -218,7 +218,7 @@
 {/snippet}
 
 {#if problem}
-  <p class="m-0 type-meta text-status-fail-ink wrap-anywhere">{problem}</p>
+  <p class="m-0 type-meta text-status-fail wrap-anywhere">{problem}</p>
 {:else if kind === "video"}
   <video-player class="contents" {@attach follows}>
     <!-- The frame: the clip's shape and width (`frame`), its hairline an
@@ -268,7 +268,7 @@
          glass's do (design.css `concentric-row`), each marked by where it
          stands (placeItems). -->
     <media-container
-      class="flex h-control-md w-full min-w-0 items-center gap-space-1 rounded-pill bg-surface-raised p-space-1 shadow-sm outline-1 -outline-offset-1 outline-border-hairline concentric-row r-inset-space-1 r-join-xs hit-gap-x-space-1 coarse:gap-space-5 coarse:hit-gap-x-space-5"
+      class="flex h-control-md w-full min-w-0 items-center gap-space-1 rounded-pill bg-surface-raised p-space-1 shadow-sm outline-1 -outline-offset-1 outline-border-hairline concentric-row r-inset-space-1 r-join-xs hit-gap-x-space-1 coarse:gap-space-4 coarse:hit-gap-x-space-4"
       data-glass
       style:--r-outer="calc(var(--spacing-control-md) / 2)"
       {@attach placeItems}

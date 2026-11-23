@@ -12,7 +12,7 @@
    * tray's one leading edge (text-align: start), at desk and phone alike:
    * only Caw, the illustration, is centred.
    *
-   * Motion (§4.9): the box's height tweens over --duration-panel on the drawer
+   * Motion (§4.9): the box's height tweens over --duration-slow on the drawer
    * curve (morph); the title, the live line and the buttons' words morph in
    * their held box (MorphText); the state's words and object arrive and the
    * old ones depart (motion.ts); a tick pops in (reflow, data-flip "pop").
@@ -84,9 +84,9 @@
   data-step={flow.step}
   data-tray="address"
   {@attach (node) =>
-    morph({ ms: dur("--duration-panel"), followUnfolds: true })(node)}
+    morph({ ms: dur("--duration-slow"), followUnfolds: true })(node)}
 >
-  <TraySurface class="gap-space-4" deskPad="p-space-5" {form}>
+  <TraySurface class="gap-space-4" deskPad="p-space-4" {form}>
     <div class="grid min-w-0 gap-space-3" data-tray-content>
       <div class="grid min-w-0 gap-space-2" data-slot="lead">
         <!-- Caw on the axis: the head row's sides are equal, so his centre

@@ -42,18 +42,19 @@ const arbitrary = [validators.isArbitraryVariable, validators.isArbitraryValue];
  * it has to know what each of the theme's names sets. Read from the theme
  * itself: a key it did not know would be kept beside its rival (`p-space-3`
  * and `p-space-1` both, the order in the stylesheet deciding), and a name it
- * misread would drop a class (`text-label` read as a colour drops the colour
- * beside it; `text-size-meta` too). `text-<role>` is a font size, as the
+ * misread would drop a class (`type-label` read as a colour drops the colour
+ * beside it; `text-sm` too). `text-<role>` is a font size, as the
  * role it sets is.
  */
 const twMergeConfig = {
   extend: {
     theme: {
-      text: utilities("text").filter((name) => !name.startsWith("size-")),
+      text: keys("text"),
       spacing: keys("spacing"),
       radius: keys("radius"),
       shadow: keys("shadow"),
       "drop-shadow": keys("drop-shadow"),
+      blur: keys("blur"),
       leading: keys("leading"),
       tracking: keys("tracking"),
       ease: keys("ease"),
@@ -64,7 +65,7 @@ const twMergeConfig = {
       animate: keys("animate"),
     },
     classGroups: {
-      "font-size": [{ "text-size": utilities("text-size") }],
+      "font-size": ["text-input-floor"],
       "bg-image": [{ bg: utilities("bg") }],
       // The theme's transition tokens, and app.css's `transition-off`.
       transition: [{ transition: [...utilities("transition"), "off"] }],
@@ -156,7 +157,7 @@ const twMergeConfig = {
     // A `font` shorthand class (a type role, `font-inherit`) resets every
     // font longhand, so it replaces an earlier class that set one, as a
     // later `font:` declaration did (`type-meta` on a Badge drops its
-    // `text-label leading-none`). A longhand class after it is kept: it
+    // `type-label leading-none`). A longhand class after it is kept: it
     // sorts after the shorthand and wins (scripts/role-order.ts).
     conflictingClassGroups: {
       "type-role": [...fontResets],

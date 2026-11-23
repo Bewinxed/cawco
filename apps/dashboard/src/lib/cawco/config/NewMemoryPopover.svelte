@@ -117,7 +117,7 @@
       </Field>
       {#if failed}
         <p
-          class="type-meta text-status-fail-ink"
+          class="type-meta text-status-fail"
           role="alert"
           transition:unfold
         >

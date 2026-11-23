@@ -39,10 +39,9 @@
     "group/turn",
     grouped ? "flow-root" : "mt-space-4",
     grouped && (you ? "mt-0" : "mt-space-2"),
-    you && "relative",
+    you && "relative turn-pad",
     extra
   )}
-  style:--pad={you ? "var(--seam-inset)" : undefined}
   {...rest}
 >
   {@render children()}

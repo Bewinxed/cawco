@@ -68,7 +68,7 @@ export interface ToolsState {
 }
 
 /** How long a saved row stays marked after the list comes back: its flash (`animate-row-flash`). */
-const flashMs = () => dur("--duration-fade") * 3;
+const flashMs = () => dur("--duration-base") * 3;
 
 export class ConfigStore {
   readonly rules = new Slot("the rules", async () => {

@@ -52,7 +52,7 @@
     height="cap"
     modal={peekRises()}
     pad="sheet-safe-bottom"
-    style="--drawer-max-height: var(--peek-sheet-h)"
+    style="--drawer-max-height: 80dvh"
     ownHead
     title="Peek"
     trapFocus={peekRises()}

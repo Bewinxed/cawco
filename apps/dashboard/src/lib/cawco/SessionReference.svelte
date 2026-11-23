@@ -59,7 +59,7 @@
       {#if caw}
         <CawFace size={14} status={caw} />
       {:else}
-        <Sprite class="block size-icon-sm text-on-ink" />
+        <Sprite class="block size-icon-sm text-surface-page" />
       {/if}
     {/snippet}
   </ReferenceFace>
@@ -73,7 +73,7 @@
     side="right"
     style="--x: {panel.place.x}px; --y: {panel.place.y}px; --origin: {panel
       .place
-      .origin}px; --room: var(--session-hover-room); --span: calc(100vw - 2 * var(--hover-panel-inset))"
+      .origin}px; --room: calc(var(--spacing) * 90); --span: calc(100vw - 2 * var(--spacing-space-2))"
     watch={panel.open ? id : null}
   >
     {#snippet children(shown)}

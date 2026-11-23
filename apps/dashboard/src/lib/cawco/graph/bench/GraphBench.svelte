@@ -609,7 +609,7 @@
        pads its own by the room the graph tells it. -->
   <div
     class={[
-      "h-full min-h-0 overflow-auto bg-surface-page p-space-5 scroll-timeline-transcript-head",
+      "h-full min-h-0 overflow-auto bg-surface-page p-space-4 scroll-timeline-transcript-head",
       dark ? "scheme-dark" : "scheme-light",
     ]}
     {@attach frameSize(

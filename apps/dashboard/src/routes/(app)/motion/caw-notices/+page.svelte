@@ -417,7 +417,7 @@
 {/if}
 
 {#if !stageOnly}
-  <main class="flex flex-wrap items-start gap-space-6 p-space-5">
+  <main class="flex flex-wrap items-start gap-space-6 p-space-4">
     <div
       data-slot="controls"
       class="grid max-w-95 justify-items-start gap-space-4"

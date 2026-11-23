@@ -105,7 +105,7 @@
   <span
     data-slot="labels"
     aria-hidden="true"
-    class="inline-grid overflow-hidden text-size-label leading-body font-medium data-compact:text-size-meta data-compact:font-normal"
+    class="inline-grid overflow-hidden text-base leading-base font-medium data-compact:text-sm data-compact:font-normal"
     data-compact={compact || undefined}
   >
     <!-- Every beat here is the breath (--duration-breath): each word stands for two
@@ -118,7 +118,7 @@
         class="loops col-start-1 row-start-1 whitespace-nowrap opacity-0 data-first:opacity-100 motion-safe:animate-thinking-word"
         data-first={index === 0 || undefined}
         data-slot="word"
-        style:--word-delay={`calc(var(--duration-breath) * ${index * 2 - 0.12})`}
+        style:--word-delay={`calc(calc(var(--duration-loop) * 2) * ${index * 2 - 0.12})`}
       >
         <!-- The light passing over the word: the word again in the strong
              ink, masked to a band three words wide (the band enters from the

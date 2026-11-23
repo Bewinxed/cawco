@@ -528,7 +528,7 @@
     const ext = extFor();
     if (shape && ext !== shape.ext) {
       box.height = shape.base + ext - measured.line.bottom;
-      shape.morphTo(1, ext, dur("--duration-fade"));
+      shape.morphTo(1, ext, dur("--duration-base"));
     }
   }
 
@@ -568,7 +568,7 @@
       // The ghost on the line becomes the field's own text.
       if (line && motionOk.current) {
         await line.animate([{ opacity: line.style.opacity }, { opacity: 1 }], {
-          duration: dur("--duration-control"),
+          duration: dur("--duration-fast"),
           fill: "forwards",
         }).finished;
       }
@@ -581,7 +581,7 @@
       // longer pick's further lines, flattened onto the row) dissolves.
       if (line && motionOk.current) {
         const blur = getComputedStyle(shell).getPropertyValue(
-          "--spacing-space-row"
+          "--spacing-space-1"
         );
         line.animate(
           [
@@ -589,7 +589,7 @@
             { opacity: 0, filter: `blur(${blur})` },
           ],
           {
-            duration: dur("--duration-fade"),
+            duration: dur("--duration-base"),
             easing: ease("--ease-out"),
             fill: "forwards",
           }
@@ -603,13 +603,13 @@
     // fading as they go, its foot on the pill as the field fits.
     if (ghosts && motionOk.current) {
       ghosts.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: dur("--duration-fade"),
+        duration: dur("--duration-base"),
         fill: "forwards",
       });
     }
     if (shape) {
       await Promise.all([
-        shape.morphTo(0, shape.ext, dur("--duration-panel"), base),
+        shape.morphTo(0, shape.ext, dur("--duration-slow"), base),
         home,
       ]);
     }
@@ -844,7 +844,7 @@
       felt("open");
     }
     ghosts?.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: dur("--duration-fade"),
+      duration: dur("--duration-base"),
       easing: ease("--ease-out"),
     });
     // Its drop and its far edge's blur come in once the rows stand still too.
@@ -853,7 +853,7 @@
         rested = done;
       })
     );
-    shape.morphTo(1, shape.ext, dur("--duration-panel"));
+    shape.morphTo(1, shape.ext, dur("--duration-slow"));
     // The newest message rolls down into the field as it grows.
     spinTo(1);
     return () => {
@@ -921,7 +921,7 @@
     <div
       data-slot="ghost"
       aria-selected={k === pick}
-      class="group/ghost absolute bottom-0 h-control-md py-(--ghost-pad) grid grid-cols-(--ghost-cols) gap-x-space-3 items-baseline font-sans text-(length:--ghost-size) leading-ui text-ink-strong origin-bottom invisible will-change-(--ghost-moves) transition-[color] duration-(--duration-control) ease-out data-own:text-transparent aria-selected:not-data-draft:not-data-none:text-brand-ink"
+      class="group/ghost absolute bottom-0 h-control-md py-(--ghost-pad) grid grid-cols-(--ghost-cols) gap-x-space-3 items-baseline font-sans text-(length:--ghost-size) leading-lg text-ink-strong origin-bottom invisible will-change-(--ghost-moves) transition-[color] duration-(--duration-fast) ease-out data-own:text-transparent aria-selected:not-data-draft:not-data-none:text-accent-ink"
       data-k={k}
       id="{id}-{k}"
       onclick={() => pickRow(k)}
@@ -932,7 +932,7 @@
       data-own={(entry.kind === "draft" && ownText) || undefined}
       style:--ghost-pad="calc((var(--spacing-control-md) - 1lh) / 2)"
       style:--ghost-cols="minmax(0, 1fr) auto"
-      style:--ghost-size="var(--text-row)"
+      style:--ghost-size="calc(var(--spacing) * 4)"
       style:--ghost-moves="translate, rotate, scale, opacity"
     >
       <span class="min-w-0 truncate group-data-none/ghost:text-ink-muted">
@@ -949,7 +949,7 @@
         {:else if entry.parts}
           {#each entry.parts as part, p (p)}
             {#if part.mark}
-              <mark class="bg-selection text-inherit rounded-hair"
+              <mark class="bg-accent/20 text-inherit rounded-xs"
                 >{part.text}</mark
               >
             {:else}
@@ -963,7 +963,7 @@
       <!-- specificity-trap: as the row's ink, `data-own` stands only on a draft. -->
       <span
         data-slot="num"
-        class="num text-size-meta font-normal text-ink-muted whitespace-nowrap transition-[color] duration-(--duration-control) ease-out group-data-own/ghost:text-transparent group-aria-selected/ghost:group-not-data-draft/ghost:text-brand-ink"
+        class="num text-sm font-normal text-ink-muted whitespace-nowrap transition-[color] duration-(--duration-fast) ease-out group-data-own/ghost:text-transparent group-aria-selected/ghost:group-not-data-draft/ghost:text-accent-ink"
         >{meta(entry.entry)}</span
       >
     </div>
@@ -979,7 +979,7 @@
     style:width="{measured.line.width}px"
   >
     <span
-      class="mark-line inline-flex items-center gap-space-1 max-w-9/20 py-space-row px-space-2 rounded-pill bg-surface-recess inset-ring-1 inset-ring-border-hairline text-size-meta font-medium text-ink-strong whitespace-nowrap"
+      class="mark-line inline-flex items-center gap-space-1 max-w-9/20 py-space-1 px-space-2 rounded-pill bg-surface-recess inset-ring-1 inset-ring-border-hairline text-sm font-medium text-ink-strong whitespace-nowrap"
       {@attach measureChip}
     >
       <IconSearch

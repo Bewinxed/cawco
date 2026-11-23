@@ -46,7 +46,7 @@
 <span
   data-slot="time"
   data-num
-  class="group/time mark-line num inline-flex max-w-full items-center gap-space-1 align-bottom type-meta whitespace-nowrap text-ink-muted status-failed:text-status-fail-ink status-running:text-status-live-ink status-waiting:text-status-attn-ink"
+  class="group/time mark-line num inline-flex max-w-full items-center gap-space-1 align-bottom type-meta whitespace-nowrap text-ink-muted status-failed:text-status-fail status-running:text-status-live status-waiting:text-status-attn"
   data-status={status}
   title={title ?? undefined}
 >
@@ -62,7 +62,7 @@
     {@const Glyph = GLYPH[status]}
     <Glyph
       aria-hidden="true"
-      class="size-icon-sm flex-none group-status-done/time:text-status-done-glyph group-status-failed/time:text-status-fail-glyph group-status-neutral/time:text-ink-subtle group-status-waiting/time:text-status-attn-glyph"
+      class="size-icon-sm flex-none group-status-done/time:text-status-done group-status-failed/time:text-status-fail group-status-neutral/time:text-ink-subtle group-status-waiting/time:text-status-attn"
     />
   {/if}
   {#if said}

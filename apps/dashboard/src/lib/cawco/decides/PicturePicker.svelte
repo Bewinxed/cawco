@@ -35,7 +35,7 @@
   <OptionGroup
     aria-label={decidesWords.pictureFor(member.name)}
     layout="tiles"
-    style="--tiles-cols: repeat(7, var(--pose-tile)); --tiles-cols-phone: repeat(4, var(--pose-tile))"
+    style="--tiles-cols: repeat(7, calc(var(--spacing) * 16)); --tiles-cols-phone: repeat(4, calc(var(--spacing) * 16))"
     bind:value={
       () => chosen,
       (next) => {

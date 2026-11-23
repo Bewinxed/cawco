@@ -164,7 +164,7 @@
     {@const who = whoOf(each)}
     <li
       data-slot="link-comment"
-      class="flex max-w-measure min-w-0 flex-col gap-space-2 rounded-md bg-surface-recess px-space-3 py-space-2"
+      class="flex max-w-measure min-w-0 flex-col gap-space-2 rounded-sm bg-surface-recess px-space-3 py-space-2"
     >
       <div
         data-slot="comment-text"
@@ -229,16 +229,16 @@
   >
     <!-- mark-line: the glyph, age and link-out stand in cells one title line tall, on the title's first line, beside words that wrap -->
     <div
-      class="group/row relative isolate col-span-full grid grid-cols-subgrid items-start gap-y-space-1 px-space-2 py-space-2 before:absolute before:inset-0 before:-z-1 before:rounded-sm before:transition-[background-color] before:duration-(--duration-step) before:ease-in-out hover:not-active:before:bg-surface-hover active:before:bg-surface-pressed"
+      class="group/row relative isolate col-span-full grid grid-cols-subgrid items-start gap-y-space-1 px-space-2 py-space-2 before:absolute before:inset-0 before:-z-1 before:rounded-sm before:transition-[background-color] before:duration-(--duration-fast) before:ease-in-out hover:not-active:before:bg-surface-hover active:before:bg-surface-pressed"
       data-slot="link-line"
     >
-      <span class="mark-cell type-row" data-slot="glyph"
+      <span class="mark-cell type-title" data-slot="glyph"
         ><LinkStateGlyph {glyph} /></span
       >
       <div class="flex min-w-0 flex-col gap-space-1" data-slot="link-main">
         <a
           aria-label={nameOf(link)}
-          class="block min-w-0 type-row text-ink-strong no-underline after:absolute after:inset-0 after:rounded-sm focus-visible:outline-none focus-visible:after:outline-(length:--focus-ring-width) focus-visible:after:outline-solid focus-visible:after:outline-focus-ring focus-visible:after:-outline-offset-2"
+          class="block min-w-0 type-title text-ink-strong no-underline after:absolute after:inset-0 after:rounded-sm focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-solid focus-visible:after:outline-accent-ink focus-visible:after:-outline-offset-2"
           data-slot="link-title"
           href={link.url}
           rel="noreferrer"
@@ -247,7 +247,7 @@
           {#if glyph === "pending"}
             <span class="flex h-lh items-center" data-slot="link-title-bar">
               <Skeleton
-                class="w-4/5 max-w-measure-short"
+                class="w-4/5 max-w-ch-60"
                 line="label"
                 radius="text"
               />
@@ -260,14 +260,14 @@
             >
           {:else if sentence}
             <span
-              class="block type-body text-pretty wrap-anywhere text-status-fail-ink"
+              class="block type-body text-pretty wrap-anywhere text-status-fail"
               role="alert">{sentence}</span
             >
           {/if}
         </a>
         {#if link.title && sentence}
           <p
-            class="m-0 max-w-measure type-body text-pretty wrap-anywhere text-status-fail-ink"
+            class="m-0 max-w-measure type-body text-pretty wrap-anywhere text-status-fail"
             data-slot="link-problem"
             role="alert"
           >
@@ -276,7 +276,7 @@
         {/if}
         {#if link.baselineUnread}
           <p
-            class="m-0 max-w-measure type-body text-pretty wrap-anywhere text-status-attn-ink"
+            class="m-0 max-w-measure type-body text-pretty wrap-anywhere text-status-attn"
             data-slot="link-held"
           >
             {words.baselineUnread}
@@ -289,7 +289,7 @@
           <span
             class="flex-none whitespace-nowrap font-medium"
             class:text-ink-strong={glyph !== "failed" && glyph !== "pending"}
-            class:text-status-fail-ink={glyph === "failed"}
+            class:text-status-fail={glyph === "failed"}
             class:text-ink-subtle={glyph === "pending"}
             data-slot="link-state">{said}</span
           >
@@ -323,7 +323,7 @@
         {/if}
       </div>
       <span
-        class="mark-cell hidden type-row @min-md/links:grid"
+        class="mark-cell hidden type-title @min-phone/links:grid"
         data-slot="link-author"
       >
         {#if link.author?.avatarUrl && !link.problem}
@@ -335,10 +335,10 @@
           />
         {/if}
       </span>
-      <span class="mark-cell type-row justify-items-end" data-slot="link-age"
+      <span class="mark-cell type-title justify-items-end" data-slot="link-age"
         >{@render age(link.updatedAt)}</span
       >
-      <span class="mark-cell type-row" data-slot="link-out"
+      <span class="mark-cell type-title" data-slot="link-out"
         ><IconArrowUpRight
           aria-hidden="true"
           class="size-icon-md text-ink-subtle"
@@ -395,7 +395,7 @@
     >
   </h3>
   <div
-    class="grid grid-cols-(--links-cols) gap-x-space-3 @min-md/links:grid-cols-(--links-cols-wide) @min-md/links:gap-x-space-4"
+    class="grid grid-cols-(--links-cols) gap-x-space-3 @min-phone/links:grid-cols-(--links-cols-wide) @min-phone/links:gap-x-space-4"
     data-slot="link-groups"
     style:--links-cols={COLS}
     style:--links-cols-wide={COLS_WIDE}
@@ -409,7 +409,7 @@
         {#if headed}
           <h4
             class="col-span-full m-0 flex items-baseline gap-space-2 px-space-2 pb-space-1 type-label text-ink-muted"
-            class:pt-space-5={index > 0}
+            class:pt-space-4={index > 0}
             id="{uid}-{group.mode}"
           >
             <span>{words.relation[group.mode]}</span>

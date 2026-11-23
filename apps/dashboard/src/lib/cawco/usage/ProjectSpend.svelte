@@ -274,13 +274,13 @@
   </Table.Row>
 {/snippet}
 
-<section aria-label="{projectName}'s spend" class="flex flex-col gap-space-5">
+<section aria-label="{projectName}'s spend" class="flex flex-col gap-space-4">
   {#if refused && !spend}
     <p data-slot="note" class="type-meta text-ink-muted" role="alert">
       The spend for {projectName} could not be read: {refused}
     </p>
   {:else if !spend}
-    <div class="flex flex-col gap-space-5" out:revealOut>
+    <div class="flex flex-col gap-space-4" out:revealOut>
       <div class="grid grid-cols-stat-tiles gap-space-3">
         {#each [0, 1, 2, 3, 4] as i (i)}
           <Skeleton height="stat" radius="tile" />
@@ -290,7 +290,7 @@
     </div>
   {:else}
     <!-- What the skeleton stood for, in its reveal. -->
-    <div class="flex flex-col gap-space-5" in:reveal>
+    <div class="flex flex-col gap-space-4" in:reveal>
       <div class="grid grid-cols-stat-tiles gap-space-3">
         <StatTile label="Today" value={usd(spend.todayUsd)} />
         <StatTile label="This month" value={usd(spend.monthUsd)} />
@@ -327,7 +327,7 @@
               <Popover.Content
                 align="start"
                 class="max-w-(--cap-max-w)"
-                style="--cap-max-w: calc(100vw - 2 * var(--spacing-space-5))"
+                style="--cap-max-w: calc(100vw - 2 * var(--spacing-space-4))"
                 width="wide"
               >
                 <form
@@ -397,7 +397,7 @@
                   {#if capRefused}
                     <p
                       data-slot="refused"
-                      class="type-meta text-status-fail-ink"
+                      class="type-meta text-status-fail"
                       role="alert"
                       in:appear
                     >
@@ -487,7 +487,7 @@
                   {#if budgetRefused}
                     <p
                       data-slot="refused"
-                      class="type-meta text-status-fail-ink"
+                      class="type-meta text-status-fail"
                       role="alert"
                       in:appear
                     >

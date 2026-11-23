@@ -669,7 +669,7 @@
     // The glyph in its chip's status ink (the chip's own `data-tone`), at
     // the 16px icon size; its hook is its own attribute, as the chip's is.
     glyph.className =
-      "inline-grid place-items-center text-ink-muted [&_svg]:size-icon-md [[data-tone=live]>&]:text-status-live-glyph [[data-tone=attn]>&]:text-status-attn-glyph [[data-tone=fail]>&]:text-status-fail-glyph";
+      "inline-grid place-items-center text-ink-muted [&_svg]:size-icon-md [[data-tone=live]>&]:text-status-live [[data-tone=attn]>&]:text-status-attn [[data-tone=fail]>&]:text-status-fail";
     glyph.setAttribute("data-mention-glyph", "");
     glyph.setAttribute("aria-hidden", "true");
     glyph.setAttribute("data-box", "");
@@ -700,7 +700,7 @@
             { opacity: 1, transform: "none" },
           ]
         : [{ opacity: 0 }, { opacity: 1 }],
-      { duration: dur("--duration-panel"), easing: CURVE.out }
+      { duration: dur("--duration-slow"), easing: CURVE.out }
     );
   }
 
@@ -967,7 +967,7 @@
   bind:this={editor}
   data-phone={phone || undefined}
   class={cn(
-    "type-body wrap-anywhere no-scrollbar relative max-h-50 min-h-control-md overflow-x-hidden overflow-y-auto whitespace-pre-wrap py-space-2 text-ink-strong leading-ui caret-brand-solid data-mention-field-empty:before:pointer-events-none data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-subtle data-mention-field-empty:before:content-placeholder",
+    "type-body wrap-anywhere no-scrollbar relative max-h-50 min-h-control-md overflow-x-hidden overflow-y-auto whitespace-pre-wrap py-space-2 text-ink-strong leading-lg caret-accent data-mention-field-empty:before:pointer-events-none data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-subtle data-mention-field-empty:before:content-placeholder",
     className
   )}
   aria-activedescendant={mention.open && mention.active
@@ -1009,7 +1009,7 @@
        its ligatures as the role's shorthand left them. -->
   <div
     data-slot="tip"
-    class="fixed z-(--layer-float) grid gap-space-row max-w-80 py-space-2 px-space-3 rounded-sm bg-ink-strong text-on-ink type-meta -translate-x-1/2 translate-y-(--tip-shift-y) pointer-events-none animate-fade-in anim-dur-control motion-safe:animate-mention-tip-in"
+    class="fixed z-(--layer-float) grid gap-space-1 max-w-80 py-space-2 px-space-3 rounded-sm bg-ink-strong text-surface-page type-meta -translate-x-1/2 translate-y-(--tip-shift-y) pointer-events-none animate-fade-in anim-dur-fast motion-safe:animate-mention-tip-in"
     role="tooltip"
     style:left={`${tip.x}px`}
     style:top={`${tip.y}px`}

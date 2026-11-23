@@ -12,7 +12,7 @@
    *   edge, the bar's width, 8px over it, every view in it, Caw's drafts
    *   with their badge and Decisions with the pages waiting on picks. A
    *   pick closes it, the word morphs to the new name (MorphText) and the
-   *   pill's width follows it over --duration-fade on --ease-out;
+   *   pill's width follows it over --duration-base on --ease-out;
    * - `tools`, the page's: the tasks' filter as its glyph and count while
    *   one stands on a view of the tasks (TaskFilterPopover `compact`; the
    *   head's `⋯` opens it);
@@ -23,7 +23,7 @@
    *   Glass Rule, One prominent action): it opens Caw's panel on a new conversation, the caret in his
    *   composer (work in a project starts by telling Caw).
    *
-   * The pill and "+" press to --press-scale over --duration-fade.
+   * The pill and "+" press to --press-scale over --duration-base.
    */
   import { type Snippet, untrack } from "svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -75,7 +75,7 @@
    */
   const glass = (layout: string) =>
     cn(
-      "rounded-pill border border-border-control bg-surface-glass p-space-2 shadow-sm backdrop-blur-(--material-blur) backdrop-saturate-(--material-saturate) concentric-in r-inset-(--inset-composer) r-outer-pill reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none",
+      "rounded-pill border border-border-control bg-surface-raised/72 p-space-2 shadow-sm backdrop-blur-glass backdrop-saturate-160 concentric-in r-inset-space-2 r-outer-pill reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none",
       layout
     );
 
@@ -100,7 +100,7 @@
   /**
    * The pill's width follows its word: read before the new name is drawn,
    * the pill runs from the width it stood at to the one the new name lays
-   * out at, on the morph's clock (--duration-fade, --ease-out), its word
+   * out at, on the morph's clock (--duration-base, --ease-out), its word
    * clipped inside while the letters cross. The widths are read before the
    * new name is drawn; the run starts after, in the update that starts the
    * word's morph, on its start time. Less motion: the width lands at once.
@@ -126,7 +126,7 @@
     follow = null;
     const run = pill.animate(
       [{ inlineSize: `${from}px` }, { inlineSize: `${to}px` }],
-      { duration: dur("--duration-fade"), easing: ease("--ease-out") }
+      { duration: dur("--duration-base"), easing: ease("--ease-out") }
     );
     // The morph's letters start now (torph pins theirs to the timeline's
     // time), not at the next frame as a fresh run would.
@@ -141,7 +141,7 @@
      Floating groups of bare symbols): the view and what filters it leading,
      Ask Caw trailing. Its list rises from the bar's whole width. -->
 <div
-  class="absolute inset-x-space-3 bottom-(--off-bottom) z-(--layer-dock) phone:hidden"
+  class="absolute inset-x-space-3 bottom-(--off-bottom) z-40 phone:hidden"
   data-safe-bottom
   style:--off-bottom="calc(var(--spacing-space-4) + var(--safe-bottom))"
 >

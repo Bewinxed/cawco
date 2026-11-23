@@ -260,7 +260,7 @@
   {#if each.kind === "comment"}
     <li
       data-slot="comment"
-      class="flex flex-col gap-space-1 rounded-md bg-surface-recess px-space-3 py-space-2"
+      class="flex flex-col gap-space-1 rounded-sm bg-surface-recess px-space-3 py-space-2"
     >
       <span
         class="mark-line flex flex-wrap items-baseline gap-x-space-2 type-meta"
@@ -358,7 +358,7 @@
                 <IconChevronRight
                   data-chev
                   aria-hidden="true"
-                  class="size-icon-sm flex-none transition-[transform] duration-(--duration-control) ease-out group-state-open:transform-(--chev-turn)"
+                  class="size-icon-sm flex-none transition-[transform] duration-(--duration-fast) ease-out group-state-open:transform-(--chev-turn)"
                   style="--chev-turn: rotate(90deg)"
                 />
                 <span>{piece.lines.length} changes</span>
@@ -372,7 +372,7 @@
               <Collapsible.Content fade reveal>
                 <ol
                   data-slot="inner"
-                  class="m-0 flex list-none flex-col gap-space-2 pt-space-2 pr-0 pb-0 pl-space-5"
+                  class="m-0 flex list-none flex-col gap-space-2 pt-space-2 pr-0 pb-0 pl-space-4"
                 >
                   {#each piece.lines as each (each.key)}
                     {@render line(each)}

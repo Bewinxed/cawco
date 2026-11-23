@@ -162,14 +162,14 @@
           aria-label={update.updatedAt === undefined && !ownCopy
             ? words.current
             : undefined}
-          class="size-icon-md text-status-done-glyph"
+          class="size-icon-md text-status-done"
         />
       {:else if update.kind === "updating"}
         <Spinner />
       {:else if update.kind === "failed"}
-        <IconWarningTriangle class="size-icon-md text-status-fail-glyph" />
+        <IconWarningTriangle class="size-icon-md text-status-fail" />
       {:else if update.kind === "own" || (update.kind === "asked" && blocks)}
-        <IconNeedsYou class="size-icon-md text-status-attn-glyph" />
+        <IconNeedsYou class="size-icon-md text-status-attn" />
       {:else}
         <IconNotYet class="size-icon-md" />
       {/if}
@@ -221,7 +221,7 @@
             <button
               aria-controls="tool-output-{machineId}-{spec.id}"
               aria-expanded={outputShown}
-              class="pointer-hit self-start rounded-xs type-meta text-brand-ink hover:text-brand-ink"
+              class="pointer-hit self-start rounded-xs type-meta text-accent-ink hover:text-accent-ink"
               onclick={() => {
                 outputShown = !outputShown;
               }}
@@ -244,7 +244,7 @@
           }
         }}
       >
-        {@render opener(words.failed, "text-status-fail-ink", head)}
+        {@render opener(words.failed, "text-status-fail", head)}
         {@render layer(head, why, words.retry)}
       </Popover.Root>
     {:else if update.kind === "own"}

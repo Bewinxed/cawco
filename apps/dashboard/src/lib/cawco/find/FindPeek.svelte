@@ -65,7 +65,7 @@
 <div
   data-slot="peek"
   {id}
-  class="group/peek grid grid-cols-(--peek-cols) gap-x-space-3 gap-y-space-row ms-(--peek-ms) mt-0 mb-space-2 py-space-1 pe-0 ps-space-3 border-s border-s-border-control type-meta leading-icon-lg data-phone:type-label data-phone:font-normal data-phone:leading-row-compact"
+  class="group/peek grid grid-cols-(--peek-cols) gap-x-space-3 gap-y-space-1 ms-(--peek-ms) mt-0 mb-space-2 py-space-1 pe-0 ps-space-3 border-s border-s-border-control type-meta leading-icon-lg data-phone:type-label data-phone:font-normal data-phone:leading-row-compact"
   data-phone={phone || undefined}
   style:--peek-cols="max-content minmax(0, 1fr)"
   style:--peek-ms={"calc(var(--spacing-space-3) + var(--spacing-icon-md) + var(--spacing-space-2))"}
@@ -153,7 +153,7 @@
     <span data-slot="value" class="min-w-0 text-ink-muted"
       >{momentsState.machine} didn't answer<span class="px-space-1">·</span
       ><button
-        class="select-none border-none border-current p-0 bg-transparent text-brand-ink"
+        class="select-none border-none border-current p-0 bg-transparent text-accent-ink"
         onclick={onretry}
         type="button">Retry</button
       ></span
@@ -164,7 +164,7 @@
     <span data-slot="value" class="min-w-0 text-ink-strong"
       ><span data-slot="num" class="num">{conversation.children.count}</span
       >{#if conversation.children.needsYou > 0}<span class="px-space-1">·</span
-        ><span class="text-status-attn-ink font-medium"
+        ><span class="text-status-attn font-medium"
           ><span data-slot="num" class="num"
             >{conversation.children.needsYou}</span
           > needs you</span

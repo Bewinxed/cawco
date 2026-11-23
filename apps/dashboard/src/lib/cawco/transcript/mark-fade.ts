@@ -1,7 +1,7 @@
 import { dur } from "#lib/platform/motion/curves.svelte.js";
 
 /**
- * A mark that fades where it stands: once its fade (`--duration-panel`) has
+ * A mark that fades where it stands: once its fade (`--duration-slow`) has
  * run, `clear` takes it away if it is still the mark of `key`, in `off`.
  */
 export function clearAfterFade(
@@ -14,5 +14,5 @@ export function clearAfterFade(
     if (mark?.key === key && mark.state === "off") {
       clear();
     }
-  }, dur("--duration-panel"));
+  }, dur("--duration-slow"));
 }

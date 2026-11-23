@@ -352,13 +352,13 @@ export function bindScene(
   };
 
   // The agent's elements arrive as a transcript row does: each fades up
-  // where it stands over `--duration-control`, the changed ones first, staggered
+  // where it stands over `--duration-fast`, the changed ones first, staggered
   // across `--duration-step` (the artifact panel's surface brief, The agent's turn on the canvas). Each
   // element's clock is an `agent-arrival` run (motion.ts); with reduced
   // motion they fade the same, since nothing travels.
   const fadeIn = (ids: string[]) => {
-    const fade = tokenMs("--duration-control");
-    const step = tokenMs("--duration-step") / Math.max(1, ids.length);
+    const fade = tokenMs("--duration-fast");
+    const step = (tokenMs("--duration-fast") / 2) / Math.max(1, ids.length);
     const runs = new Map(
       ids.map((id, i) => [id, clock(ARRIVAL, fade, i * step)])
     );
@@ -621,7 +621,7 @@ export const fitScene = (api: ExcalidrawImperativeAPI): void => {
  * canvas, the elements whose boxes it crosses) and puts the stroke's icon
  * there; Erase in its menu comes back as `cawco:erase`, which deletes it.
  *
- * A stroke whose pen stayed within {@link HOLD_PX} for `--duration-settle`
+ * A stroke whose pen stayed within {@link HOLD_PX} for `--duration-slow`
  * before it lifted is offered to `held` first (snap.ts); one it replaced
  * with a shape is ink no longer, and tells nothing.
  */
@@ -658,7 +658,7 @@ const tellStrokeEnds = (
     }
     const still =
       Math.hypot(event.clientX - rest.x, event.clientY - rest.y) <= HOLD_PX &&
-      performance.now() - rest.at >= tokenMs("--duration-settle");
+      performance.now() - rest.at >= tokenMs("--duration-slow");
     // Excalidraw finishes the freedraw on this same pointerup: read it after.
     later(() => {
       const elements = api.getSceneElements();

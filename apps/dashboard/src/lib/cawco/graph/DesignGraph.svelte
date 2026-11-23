@@ -1557,7 +1557,7 @@
     <DropdownMenu.RadioGroup onValueChange={flip} value={frontFile ?? ""}>
       {#each directions as one (one.file)}
         <DropdownMenu.RadioItem row="described" value={one.file}>
-          <span class="flex min-w-0 flex-1 flex-col gap-space-row" data-box>
+          <span class="flex min-w-0 flex-1 flex-col gap-space-1" data-box>
             <span class="truncate type-label font-medium text-ink-strong"
               >{one.name}</span
             >
@@ -1608,7 +1608,7 @@
           tip={false}
         >
           <span
-            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-row"
+            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-title"
             >{name}</span
           >
           <IconChevronDown
@@ -1694,7 +1694,7 @@
                 {#each path as id (id)}
                   <span
                     aria-hidden="true"
-                    class="invisible col-start-1 row-start-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-row"
+                    class="invisible col-start-1 row-start-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-title"
                     >{review.states[id]?.name ?? ""}</span
                   >
                 {/each}
@@ -1702,7 +1702,7 @@
                      view (motion/list-swap), in a box as wide as the longest. -->
                 {#key kept.state}
                   <span
-                    class="col-start-1 row-start-1 min-w-0 animate-(--swap) overflow-clip text-ellipsis whitespace-nowrap text-center text-ink-strong type-row"
+                    class="col-start-1 row-start-1 min-w-0 animate-(--swap) overflow-clip text-ellipsis whitespace-nowrap text-center text-ink-strong type-title"
                     style:--swap={stepSwap.rowAnim(0)}
                     out:stepSwap.leaveView>{keptState?.name ?? ""}</span
                   >
@@ -1747,7 +1747,7 @@
                     {#if state}
                       <DropdownMenu.RadioItem row="described" value={id}>
                         <span
-                          class="flex min-w-0 flex-col gap-space-row"
+                          class="flex min-w-0 flex-col gap-space-1"
                           data-box
                         >
                           <span
@@ -2044,8 +2044,8 @@
           ]}
           data-slot="graph-rising"
           style:--rise-foot={riseFoot}
-          in:rise={"--duration-panel"}
-          out:rise={"--duration-fade"}
+          in:rise={"--duration-slow"}
+          out:rise={"--duration-base"}
         >
           {@render risingBody()}
         </div>

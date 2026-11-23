@@ -481,13 +481,13 @@
            cards, a field's bleed is never cut, and what passes under the
            head fades under the house edge. -->
       <div
-        class="flex min-h-0 flex-auto flex-col ps-space-6 pe-space-6 max-desk:px-space-5"
+        class="flex min-h-0 flex-auto flex-col ps-space-6 pe-space-6 max-desk:px-space-4"
         style:--draft-bleed-end={desk.current
           ? "var(--spacing-space-6)"
-          : "var(--spacing-space-5)"}
+          : "var(--spacing-space-4)"}
         style:--draft-bleed-start={desk.current
           ? "var(--spacing-space-6)"
-          : "var(--spacing-space-5)"}
+          : "var(--spacing-space-4)"}
       >
         {#if at !== "set"}
           <div class="min-h-0 flex-auto">

@@ -29,7 +29,7 @@
 </script>
 
 {#if look === "starters" || look === "panel"}
-  <div class="mx-auto w-full max-w-(--starters-w)">
+  <div class="mx-auto w-full max-w-182">
     <EmptyState
       centre="mark"
       line="Tell Caw what to do: the tasks Caw files move through Backlog, In progress, Review and Done. One waiting on you shows in Review."

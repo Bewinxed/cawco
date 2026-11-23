@@ -251,14 +251,14 @@
       {#each FILTERS as one (one.value)}
         {@const count = find.counts[one.value]}
         <button
-          class="group/chip select-none inline-flex items-center gap-space-2 h-control-xs px-space-3 border border-border-control rounded-pill bg-surface-raised type-label text-ink-muted transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] aria-pressed:border-transparent aria-pressed:bg-brand-wash aria-pressed:text-brand-ink aria-pressed-false:hover:bg-surface-hover motion-safe:active:scale-(--press-scale) disabled:opacity-50"
+          class="group/chip select-none inline-flex items-center gap-space-2 h-space-6 px-space-3 border border-border-control rounded-pill bg-surface-raised type-label text-ink-muted transition-property-[background-color,color,border-color] motion-safe:transition-property-[background-color,color,border-color,scale] aria-pressed:border-transparent aria-pressed:bg-accent-wash aria-pressed:text-accent-ink aria-pressed-false:hover:bg-surface-hover motion-safe:active:scale-(--press-scale) disabled:opacity-50"
           aria-pressed={find.whose === one.value}
           disabled={count === 0 && one.value !== "all"}
           onclick={() => find.filter(one.value)}
           onmousedown={keepField}
           type="button"
           >{one.label}{#if count > 0}<span
-              class="num font-normal text-ink-subtle group-aria-pressed/chip:text-brand-ink"
+              class="num font-normal text-ink-subtle group-aria-pressed/chip:text-accent-ink"
               >{count}</span
             >{/if}</button
         >
@@ -272,7 +272,7 @@
         <span>{fault.words}</span>
         {#if fault.retries}
           <button
-            class="select-none border-none p-0 bg-transparent text-brand-ink active:opacity-72"
+            class="select-none border-none p-0 bg-transparent text-accent-ink active:opacity-72"
             onclick={() => find.retry()}
             type="button">{findInWords.retry}</button
           >

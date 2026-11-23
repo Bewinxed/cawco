@@ -161,7 +161,7 @@
       <Command.List class="relative">
         <!-- A typed id nothing covers and "no model goes by that" take
              turns at the top of the list: they cross-fade over
-             --duration-control while the popover's height follows (its morph). -->
+             --duration-fast while the popover's height follows (its morph). -->
         {#if custom}
           <div in:crossIn out:crossOut>
             <Command.Group forceMount heading="Custom">
@@ -193,7 +193,7 @@
               >
                 <ProviderLogo model={id} />
                 <span
-                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-mono text-meta"
+                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-mono type-meta"
                   >{id}</span
                 >
               </Command.Item>
@@ -237,8 +237,8 @@
 
       {#if note}
         <p
-          class="border-t border-ink-strong/5 px-3 py-2 text-meta {unread
-            ? 'text-status-fail-glyph'
+          class="border-t border-ink-strong/5 px-3 py-2 type-meta {unread
+            ? 'text-status-fail'
             : 'text-ink-muted'}"
           role={unread ? "alert" : undefined}
         >

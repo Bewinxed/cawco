@@ -199,12 +199,12 @@
    * the undo glyph stays beside what it marks.
    */
   const COLUMNS =
-    "fit-content(var(--graph-move-name-w)) minmax(0, 1fr) var(--spacing-control-xs)";
+    "fit-content(calc(var(--spacing) * 48)) minmax(0, 1fr) var(--spacing-space-6)";
   /** Narrow: the name takes what it needs up to two fifths, its control the rest. */
   const NARROW_COLUMNS =
-    "fit-content(40%) minmax(0, 1fr) var(--spacing-control-xs)";
+    "fit-content(40%) minmax(0, 1fr) var(--spacing-space-6)";
   const GRID_MAX =
-    "calc(var(--graph-move-name-w) + var(--graph-control-w) + var(--spacing-control-xs) + 2 * var(--spacing-space-3))";
+    "calc(calc(var(--spacing) * 48) + calc(var(--spacing) * 64) + var(--spacing-space-6) + 2 * var(--spacing-space-3))";
   /** A layer's open and close, for the control named `key`. */
   const layerOf = (key: string) => (next: boolean) => {
     if (next) {
@@ -228,7 +228,7 @@
      props. -->
 {#snippet partHead(text: string)}
   <h3
-    class="col-span-full m-0 flex min-w-0 items-end text-ink-strong type-row text-pretty"
+    class="col-span-full m-0 flex min-w-0 items-end text-ink-strong type-title text-pretty"
   >
     {text}
   </h3>
@@ -237,7 +237,7 @@
      muted ink, under the part's head, set apart by the space above it. -->
 {#snippet groupHead(text: string)}
   <h4
-    class="col-span-full m-0 flex min-h-control-xs min-w-0 items-end text-ink-muted type-label"
+    class="col-span-full m-0 flex min-h-space-6 min-w-0 items-end text-ink-muted type-label"
   >
     <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
       >{text}</span
@@ -268,7 +268,7 @@
     <!-- Under a floating head the rows clear it at rest (`--face-top`). -->
     <div aria-hidden="true" class="h-(--face-top,0px)"></div>
     <div
-      class="grid min-w-0 max-w-(--grid-max) grid-cols-(--cols) gap-x-space-3 gap-y-space-5 @max-sm/dials:grid-cols-(--narrow)"
+      class="grid min-w-0 max-w-(--grid-max) grid-cols-(--cols) gap-x-space-3 gap-y-space-4 @max-sm/dials:grid-cols-(--narrow)"
       data-slot="dials-grid"
     >
       {#if dials.length > 0}
@@ -281,7 +281,7 @@
             {@render partHead(words.dials.agentHead)}
           {/if}
           <div
-            class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-5"
+            class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-4"
           >
             {#each sections as section (section.head)}
               <section
@@ -321,7 +321,7 @@
           aria-label={title}
           class={[
             "col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-3",
-            dials.length > 0 && "border-t border-t-border-hairline pt-space-5",
+            dials.length > 0 && "border-t border-t-border-hairline pt-space-4",
           ]}
           data-slot="dials-props"
         >
@@ -334,7 +334,7 @@
             class="col-span-full flex min-w-0 flex-wrap items-center justify-between gap-x-space-4 gap-y-space-2"
             data-slot="dials-props-head"
           >
-            <h3 class="m-0 min-w-0 text-ink-strong type-row text-pretty">
+            <h3 class="m-0 min-w-0 text-ink-strong type-title text-pretty">
               {title}
             </h3>
             {#if own.content && own.content.cases.length > 0}

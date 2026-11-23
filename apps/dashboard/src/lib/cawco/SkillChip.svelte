@@ -88,7 +88,7 @@
       side="right"
       style="--x: {panel.place.x}px; --y: {panel.place.y}px; --origin: {panel
         .place
-        .origin}px; --room: var(--container-xs); --span: calc(100vw - 2 * var(--hover-panel-inset))"
+        .origin}px; --room: var(--container-xs); --span: calc(100vw - 2 * var(--spacing-space-2))"
     >
       {#snippet children()}
         <div data-slot="skill-card" class="grid min-w-0 gap-space-2">
@@ -99,7 +99,7 @@
             />
             <span
               data-slot="title"
-              class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-size-label font-medium text-ink-strong"
+              class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-base font-medium text-ink-strong"
               >{skill.name}</span
             >
           </div>

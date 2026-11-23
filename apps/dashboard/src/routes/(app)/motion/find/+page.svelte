@@ -256,7 +256,7 @@
   <!-- Caw's panel docked beside the project page (CawFloat's docked card),
        its bar floating over the conversation as ProjectConversation's does. -->
   <div
-    class="absolute inset-0 flex justify-end bg-surface-shelf text-ink-strong"
+    class="absolute inset-0 flex justify-end bg-surface-sunk text-ink-strong"
   >
     <div
       class="relative flex min-h-0 w-95 m-space-6 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-sm max-phone:m-0 max-phone:w-full max-phone:rounded-none"
@@ -297,7 +297,7 @@
     class="@container/leaf absolute inset-0 flex flex-col text-ink-strong"
     onclickcapture={benchClick(leaf)}
   >
-    <div class="bg-surface-shelf">
+    <div class="bg-surface-sunk">
       <PaneTabs {leaf} />
     </div>
     <div

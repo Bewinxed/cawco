@@ -67,8 +67,8 @@ interface Pair {
   bg: string[];
   /** A token path (`color.` taken as read) or raw CSS over the token CSS. */
   fg: string;
-  /** The fg's opacity: a number token's path, or a number. */
-  fgOpacity?: string | number;
+  /** The fg's opacity: a number token's path, a number, or per-theme numbers. */
+  fgOpacity?: string | Floor;
   floor: Floor;
   /** Measured today under its floor; the token change that fixes it is in the report. */
   known?: Partial<Record<Theme, number>>;
@@ -78,13 +78,13 @@ interface Pair {
 
 const IDENTITY_HUES = [55, 85, 115, 145, 175, 205, 235, 265, 295, 330];
 const ACCOUNT_MARK: Record<AccountHue, number> = {
-  orange: 2,
-  amber: 3,
-  green: 4,
-  cyan: 5,
-  blue: 6,
-  violet: 7,
-  rose: 8,
+  orange: 1,
+  amber: 2,
+  green: 3,
+  cyan: 4,
+  blue: 5,
+  violet: 6,
+  rose: 7,
 };
 const CODE_INKS = [
   "code-syntax-foreground",
@@ -116,7 +116,7 @@ const CODE_GROUNDS: [string, string[]][] = [
   ],
 ];
 const weekRim = (mark: number) =>
-  `color-mix(in oklch, {color.mark-${mark}}, {color.account-week-toward} calc({motion.account-week-mix} * 100%))`;
+  `light-dark(color-mix(in oklch, {color.mark-${mark}}, oklch(0% 0 0) 32%), color-mix(in oklch, {color.mark-${mark}}, oklch(100% 0 0) 63%))`;
 
 const S = {
   action: "DESIGN.md, Colour: coral is the act",
@@ -129,17 +129,17 @@ const S = {
     "token border-strong (theme.css, non-text 3:1 WCAG 2.2 SC 1.4.11)",
   inks: "the text inks (theme.css)",
   subtle: "token ink-subtle (theme.css)",
-  identity: "DESIGN.md, Colour: identity hues; token identity-ink",
-  rim: "session tabs' status rim (design.css tab-rim-mix-chosen/-idle)",
+  identity: "DESIGN.md, Colour: identity hues; utility identity-ink",
+  rim: "session tabs' status rim (design.css pane-tab-rims)",
   recall: "the recall wheel's rows (Composer), text 4.5:1 (WCAG 2.2 SC 1.4.3)",
   hairline:
-    "Caw's panel section rule; token brand-solid (non-text 3:1, WCAG 2.2 SC 1.4.11)",
-  stale: "usage relay bar (UsageMeter); token account-stale-opacity",
-  dial: "usage dial (UsageMeter); token account-week-mix",
+    "Caw's panel section rule; token accent (non-text 3:1, WCAG 2.2 SC 1.4.11)",
+  stale: "usage relay bar (UsageMeter); stale opacity 0.82",
+  dial: "usage dial (UsageMeter); week rim mix",
   week: "usage week mark (UsageMeter)",
-  spent: "usage cell at its limit (UsageMeter); token ring-track-spent",
+  spent: "usage cell at its limit (UsageMeter)",
   ring: "DESIGN.md, Colour: the focus ring (non-text 3:1, WCAG 2.2 SC 1.4.11)",
-  glyphs: "status glyphs (theme.css)",
+  glyphs: "status roles (theme.css)",
   breath: "DESIGN.md, Motion: live marks breathe; token breath-floor",
   nest: "token nest-ink ('about 2.3:1 to 2.5:1')",
 };
@@ -162,60 +162,56 @@ const PAIRS: Pair[] = [
       source: S.subtle,
     })
   ),
-  // White on coral: the action, its gradient stops, and hover.
+  // White on coral: accent fill, its sheen stops, and hover.
   ...(
     [
-      ["action-solid", "action-solid"],
+      ["accent", "accent"],
       [
-        "action-surface top stop",
-        "oklch(from {color.action-solid} calc(l + 0.03) c h)",
+        "accent-surface top stop",
+        "oklch(from {color.accent} calc(l + 0.025) c h)",
       ],
       [
-        "action-surface bottom stop",
-        "oklch(from {color.action-solid} calc(l - 0.03) c h)",
-      ],
-      ["action-hover", "action-hover"],
-      [
-        "action-hover top stop",
-        "oklch(from {color.action-hover} calc(l + 0.03) c h)",
+        "accent-surface bottom stop",
+        "oklch(from {color.accent} calc(l - 0.025) c h)",
       ],
       [
-        "action-hover bottom stop",
-        "oklch(from {color.action-hover} calc(l - 0.03) c h)",
+        "accent hover",
+        "oklch(from {color.accent} calc(l - 0.045) c h)",
+      ],
+      [
+        "accent-surface-hover top stop",
+        "oklch(from {color.accent} calc(l - 0.02) c h)",
+      ],
+      [
+        "accent-surface-hover bottom stop",
+        "oklch(from {color.accent} calc(l - 0.07) c h)",
       ],
     ] as const
   ).map(([name, bg]) => ({
-    label: `on-action on ${name}`,
-    fg: "on-action",
+    label: `on-accent on ${name}`,
+    fg: "on-accent",
     bg: [bg],
     floor: TEXT,
     source: S.action,
   })),
-  // Brand and selection inks on surfaces they sit on.
-  ...["surface-page", "surface-raised", "selected-bg"].map((bg) => ({
-    label: `brand-ink on ${bg}`,
-    fg: "brand-ink",
+  // Coral text and selection ink on surfaces it sits on.
+  ...["surface-page", "surface-raised", "accent-wash"].map((bg) => ({
+    label: `accent-ink on ${bg}`,
+    fg: "accent-ink",
     bg: [bg],
     floor: TEXT,
-    source: bg === "selected-bg" ? S.selected : S.brandInk,
+    source: bg === "accent-wash" ? S.selected : S.brandInk,
   })),
   {
-    label: "brand-ink on brand-wash (over surface-raised)",
-    fg: "brand-ink",
-    bg: ["surface-raised", "brand-wash"],
-    floor: TEXT,
-    source: S.brandInk,
-  },
-  {
-    label: "on-ink on ink-strong",
-    fg: "on-ink",
+    label: "surface-page on ink-strong",
+    fg: "surface-page",
     bg: ["ink-strong"],
     floor: TEXT,
     source: S.inkSolid,
   },
   ...STATUS_PAIRS.map((s) => ({
-    label: `status-${s}-ink on status-${s}-bg`,
-    fg: `status-${s}-ink`,
+    label: `status-${s} on status-${s}-bg`,
+    fg: `status-${s}`,
     bg: [`status-${s}-bg`],
     floor: TEXT,
     source: S.chips,
@@ -231,13 +227,13 @@ const PAIRS: Pair[] = [
   ),
   ...IDENTITY_HUES.map((h) => ({
     label: `identity-ink at hue ${h} on surface-hover`,
-    fg: `oklch(from {color.identity-ink} l c ${h})`,
+    fg: `light-dark(oklch(48% 0.12 ${h}), oklch(74% 0.11 ${h}))`,
     bg: ["surface-hover"],
     floor: TEXT,
     source: S.identity,
   })),
   // Non-text: edges, rings, rims, marks.
-  ...["surface-page", "surface-raised", "surface-recess", "surface-shelf"].map(
+  ...["surface-page", "surface-raised", "surface-recess", "surface-sunk"].map(
     (bg) => ({
       label: `border-strong on ${bg}`,
       fg: "border-strong",
@@ -256,16 +252,16 @@ const PAIRS: Pair[] = [
   },
   ...["surface-page", "surface-raised", "surface-recess", "surface-hover"].map(
     (bg) => ({
-      label: `focus-ring on ${bg}`,
-      fg: "focus-ring",
+      label: `accent-ink focus ring on ${bg}`,
+      fg: "accent-ink",
       bg: [bg],
       floor: UI,
       source: S.ring,
     })
   ),
   {
-    label: "brand-solid hairline on surface-raised",
-    fg: "brand-solid",
+    label: "accent hairline on surface-raised",
+    fg: "accent",
     bg: ["surface-raised"],
     floor: UI,
     source: S.hairline,
@@ -275,34 +271,34 @@ const PAIRS: Pair[] = [
       ["surface-raised"],
       ["surface-page"],
       ["surface-hover"],
-      ["selected-bg"],
+      ["accent-wash"],
       ["status-attn-bg"],
     ].map((bg) => ({
-      label: `status-${s}-glyph on ${bg[0]}`,
-      fg: `status-${s}-glyph`,
+      label: `status-${s} on ${bg[0]}`,
+      fg: `status-${s}`,
       bg,
       floor: UI,
       source: S.glyphs,
     }))
   ),
   {
-    label: "status-done-glyph on status-done-bg",
-    fg: "status-done-glyph",
+    label: "status-done on status-done-bg",
+    fg: "status-done",
     bg: ["status-done-bg"],
     floor: UI,
     source: S.glyphs,
   },
   // Every breather at its floor, on every surface it stands on.
   ...[
-    "status-live-glyph",
+    "status-live",
     "ink-muted",
+    "mark-1",
     "mark-2",
     "mark-3",
     "mark-4",
     "mark-5",
     "mark-6",
     "mark-7",
-    "mark-8",
   ].flatMap((ink) =>
     ["surface-page", "surface-raised", "surface-recess", "surface-sunk"].map(
       (bg) => ({
@@ -315,23 +311,22 @@ const PAIRS: Pair[] = [
       })
     )
   ),
-  // The chosen session tab's rim over surface-recess, read against shelf and neighbours.
+  // The chosen session tab's rim over surface-recess, read against sunk and neighbours.
   ...(
     [
-      ["status-live-glyph", "effect.tab-rim-mix-chosen"],
-      ["status-attn-glyph", "effect.tab-rim-mix-chosen"],
-      ["status-fail-glyph", "effect.tab-rim-mix-chosen"],
-      ["ink-muted", "effect.tab-rim-mix-idle"],
+      ["status-live", { light: 0.97, dark: 0.78 }],
+      ["status-attn", { light: 0.97, dark: 0.78 }],
+      ["status-fail", { light: 0.97, dark: 0.78 }],
+      ["ink-muted", { light: 0.86, dark: 0.54 }],
     ] as const
   ).flatMap(([ink, mix]) =>
     (
       [
-        ["top, against surface-shelf", "surface-shelf"],
+        ["top, against surface-sunk", "surface-sunk"],
         ["side, against surface-recess", "surface-recess"],
-        ["side, against surface-sunk", "surface-sunk"],
       ] as const
     ).map(([where, against]) => ({
-      label: `${ink} rim at ${mix.split(".")[1]}: ${where}`,
+      label: `${ink} rim: ${where}`,
       fg: ink,
       fgOpacity: mix,
       bg: ["surface-recess"],
@@ -356,7 +351,7 @@ const PAIRS: Pair[] = [
   })),
   ...(
     [
-      ["brand-ink", "the pick"],
+      ["accent-ink", "the pick"],
       ["ink-subtle", "an empty draft's hint"],
     ] as const
   ).map(([ink, what]) => ({
@@ -366,7 +361,7 @@ const PAIRS: Pair[] = [
     floor: TEXT,
     source: S.recall,
   })),
-  // Accounts (mapped to categorical marks 2..8): disc, rim and week sector on border-control.
+  // Accounts (mapped to categorical marks 1..7): disc, rim and week sector on border-control.
   ...ACCOUNT_HUES.flatMap((hue) => {
     const mark = ACCOUNT_MARK[hue];
     return [
@@ -392,9 +387,9 @@ const PAIRS: Pair[] = [
         source: S.dial,
       },
       {
-        label: `account ${hue} (mark-${mark}) at account-stale-opacity on border-control`,
+        label: `account ${hue} (mark-${mark}) at stale opacity on border-control`,
         fg: `mark-${mark}`,
-        fgOpacity: "motion.account-stale-opacity",
+        fgOpacity: 0.82,
         bg: ["border-control"],
         floor: UI,
         source: S.stale,
@@ -403,8 +398,11 @@ const PAIRS: Pair[] = [
   }),
   {
     label: "ring-track-spent on meter-wash-over (over surface-raised)",
-    fg: "ring-track-spent",
-    bg: ["surface-raised", "meter-wash-over"],
+    fg: "light-dark(oklch(80.5% 0.016 80), oklch(48.8% 0.012 74))",
+    bg: [
+      "surface-raised",
+      "light-dark(color-mix(in oklch, {color.status-fail} 6%, transparent), color-mix(in oklch, {color.status-fail} 10%, transparent))",
+    ],
     floor: { light: 1.6, dark: 2 },
     source: S.spent,
   },
@@ -512,12 +510,19 @@ function over(
   ];
 }
 
-const opacity = (spec: string | number | undefined, mode: string): number => {
+const opacity = (
+  spec: string | Floor | undefined,
+  theme: Theme,
+  mode: string
+): number => {
   if (spec === undefined) {
     return 1;
   }
   if (typeof spec === "number") {
     return spec;
+  }
+  if (typeof spec === "object") {
+    return spec[theme];
   }
   return ev.numeric(ev.cssOf(spec, mode, spec), spec, mode);
 };
@@ -552,7 +557,7 @@ function measure(pair: Pair, theme: Theme): Measure {
   const mode = MODE[theme];
   const under = ground(pair.bg, mode, pair.label);
   const ink = paint(pair.fg, mode).clone();
-  ink.alpha = Number(ink.alpha ?? 1) * opacity(pair.fgOpacity, mode);
+  ink.alpha = Number(ink.alpha ?? 1) * opacity(pair.fgOpacity, theme, mode);
   const fg = over(ink, under);
   const bg = pair.against ? ground(pair.against, mode, pair.label) : under;
   const ratio = Color.contrastWCAG21(

@@ -155,7 +155,7 @@
       data-canvas-stages-docked={stage.at === "panel" || undefined}
       data-slot="canvas-stage"
       class="fixed z-(--z) overflow-hidden bg-surface-raised data-canvas-stages-docked:rounded-sm data-over-sheet:z-(--z-sheet) data-standing:border-b data-standing:border-b-border-hairline"
-      style:--z="calc(var(--layer-dock) - 10)"
+      style:--z="calc(40 - 10)"
       style:--z-sheet="calc(var(--layer-sheet) + 10)"
       data-artifact={stage.id}
       hidden
@@ -191,7 +191,7 @@
           role="alert"
         >
           <p
-            class="flex-1 basis-56 min-w-0 m-0 text-size-body text-status-fail-glyph text-pretty"
+            class="flex-1 basis-56 min-w-0 m-0 text-base text-status-fail text-pretty"
           >
             {stage.unreached}
           </p>

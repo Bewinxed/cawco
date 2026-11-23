@@ -30,7 +30,7 @@
   import { pageOut, route } from "#lib/platform/motion/route.svelte.js";
 
   const fade = (): TransitionConfig => ({
-    duration: dur("--duration-control"),
+    duration: dur("--duration-fast"),
     easing: easeOut,
     css: (t) => `opacity: ${t}`,
   });

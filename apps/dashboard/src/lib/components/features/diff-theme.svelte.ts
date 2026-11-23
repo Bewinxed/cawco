@@ -33,7 +33,7 @@ const THEMES = { light: CODE_THEME, dark: CODE_THEME };
 
 /**
  * The face, size and line height of the product's code wells (`type-code`:
- * --font-mono, --text-meta, --leading-code), in the library's own variables
+ * --font-mono, --text-sm, --leading-base), in the library's own variables
  * (dist/style.js reads --diffs-font-family, --diffs-font-size and
  * --diffs-line-height off the host). Custom properties inherit into the
  * shadow root, so the host rule carries them; the library's own sheet leaves
@@ -41,8 +41,8 @@ const THEMES = { light: CODE_THEME, dark: CODE_THEME };
  */
 const CODE_FACE = `:host {
   --diffs-font-family: var(--font-mono);
-  --diffs-font-size: var(--text-meta);
-  --diffs-line-height: var(--leading-code);
+  --diffs-font-size: var(--text-sm);
+  --diffs-line-height: var(--leading-base);
 }`;
 
 /**

@@ -11,7 +11,7 @@ export default {
   component: MachineRow,
   args: {
     icon: IconServerSquare,
-    hue: "var(--color-mark-3)",
+    hue: "var(--color-mark-1)",
     name: "obelisk-of-light",
     meta: "Linux · 3 sessions · home",
     presence: "online",
@@ -25,7 +25,7 @@ export const Online = {};
 export const Away = {
   args: {
     icon: IconLaptopAlt,
-    hue: "var(--color-mark-4)",
+    hue: "var(--color-mark-2)",
     name: "studio-mac",
     meta: "macOS · last seen 2 hours ago",
     presence: "away",

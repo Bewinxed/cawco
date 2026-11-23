@@ -328,7 +328,7 @@
    *  tACK    the hub's record of it arrives (well under a second, on a live
    *          hub): "queued" at 0.7, after the live tail, until the session
    *          reads it
-   *  tREAD   presence 0.7 → 1.0 over --duration-control; Who's note slot swaps to
+   *  tREAD   presence 0.7 → 1.0 over --duration-fast; Who's note slot swaps to
    *          the real clock (the hub's), and the row slides into the place
    *          it was read at (Transcript's FLIP). No scale: arrival is
    *          subtraction.
@@ -336,8 +336,8 @@
    * fail (from the same ghost, instead of settling):
    *    0ms   presence 0.7 → 1.0 — the words matter MORE on failure, not less
    *    0ms   Who's note becomes "not sent"
-   *  +⅓ --duration-control   the reason line and its actions unfold (grid-rows
-   *          0fr → 1fr) over --duration-panel: the chip flips first, the reason
+   *  +⅓ --duration-fast   the reason line and its actions unfold (grid-rows
+   *          0fr → 1fr) over --duration-slow: the chip flips first, the reason
    *          follows — cause, then effect. The unfold is the one layout
    *          change, and it is the information: something new must be read.
    * ───────────────────────────────────────────────────────────────────────
@@ -715,7 +715,7 @@
     }
     requestAnimationFrame(() => {
       const timing = {
-        duration: dur("--duration-panel"),
+        duration: dur("--duration-slow"),
         easing: CURVE.drawer,
       };
       node.animate(
@@ -742,7 +742,7 @@
     data-message-actions
     data-slot="strip"
     data-pending={forkPending || copying || undefined}
-    class="flex items-center gap-space-1 -my-space-1 opacity-0 pointer-events-none motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out group-hover/turn:opacity-100 group-hover/turn:pointer-events-auto can-hover:group-focus-within/turn:opacity-100 can-hover:group-focus-within/turn:pointer-events-auto has-focus-visible:opacity-100 has-focus-visible:pointer-events-auto data-pending:opacity-100 data-pending:pointer-events-auto"
+    class="flex items-center gap-space-1 -my-space-1 opacity-0 pointer-events-none motion-safe:transition-[opacity] motion-safe:duration-(--duration-fast) motion-safe:ease-out group-hover/turn:opacity-100 group-hover/turn:pointer-events-auto can-hover:group-focus-within/turn:opacity-100 can-hover:group-focus-within/turn:pointer-events-auto has-focus-visible:opacity-100 has-focus-visible:pointer-events-auto data-pending:opacity-100 data-pending:pointer-events-auto"
     onfocusin={stripFocus}
     onfocusout={stripBlur}
   >
@@ -893,7 +893,7 @@
     {runsOn}
     you
     {@attach land(() => (grouped ? undefined : sent), {
-      ms: dur("--duration-panel"),
+      ms: dur("--duration-slow"),
       uniform: true,
     })}
   >
@@ -921,10 +921,10 @@
            run reads as one surface. -->
       <div
         data-slot="words"
-        class="flow-root group-data-ghost/turn:opacity-(--ghost-presence) motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out"
+        class="flow-root group-data-ghost/turn:opacity-70 motion-safe:transition-[opacity] motion-safe:duration-(--duration-fast) motion-safe:ease-out"
         bind:this={words}
         {@attach land(() => (grouped ? sent : undefined), {
-          ms: dur("--duration-panel"),
+          ms: dur("--duration-slow"),
           uniform: true,
         })}
       >
@@ -951,7 +951,7 @@
              opens to take them back; the words hide while they fly. -->
         <div
           {@attach folds(() => !lifted, {
-            ms: dur("--duration-panel"),
+            ms: dur("--duration-slow"),
             easing: CURVE.drawer,
           })}
         >
@@ -979,7 +979,7 @@
               <p
                 id={`${message.id}-edit-cost`}
                 data-slot="edit-cost"
-                class="mt-space-2 text-size-meta font-normal text-ink-muted text-pretty"
+                class="mt-space-2 text-sm font-normal text-ink-muted text-pretty"
               >
                 Sending goes back to this message and replaces everything after
                 it in the conversation.
@@ -1017,7 +1017,7 @@
             {#if editError}
               <p
                 data-slot="reason"
-                class="mt-space-2 text-size-meta font-normal text-status-fail-ink text-pretty"
+                class="mt-space-2 text-sm font-normal text-status-fail text-pretty"
                 role="alert"
               >
                 {editError}
@@ -1115,8 +1115,8 @@
           data-opens
           inert={!open}
           data-open={open || undefined}
-          style:--fail-delay="calc(var(--duration-control) / 3)"
-          class="grid grid-rows-shut opacity-0 data-open:grid-rows-open data-open:opacity-100 data-open:mt-space-2 motion-safe:transition-[grid-template-rows,opacity,margin-block-start] motion-safe:duration-(--duration-panel) motion-safe:ease-out motion-safe:delay-(--fail-delay)"
+          style:--fail-delay="calc(var(--duration-fast) / 3)"
+          class="grid grid-rows-shut opacity-0 data-open:grid-rows-open data-open:opacity-100 data-open:mt-space-2 motion-safe:transition-[grid-template-rows,opacity,margin-block-start] motion-safe:duration-(--duration-slow) motion-safe:ease-out motion-safe:delay-(--fail-delay)"
         >
           <div class="fold-item">
             {#if failed || retried}
@@ -1125,7 +1125,7 @@
               <p
                 data-slot="reason"
                 data-going={line === SENDING_AGAIN || undefined}
-                class="mark-line flex items-start gap-space-2 text-size-meta font-normal text-status-fail-ink data-going:text-ink-muted"
+                class="mark-line flex items-start gap-space-2 text-sm font-normal text-status-fail data-going:text-ink-muted"
               >
                 {#if line === SENDING_AGAIN}
                   <span class="mark-cell"><LiveDot /></span>

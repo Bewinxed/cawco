@@ -1,7 +1,7 @@
 /**
  * A held press or a swipe up on a touch screen. With the keyboard down the
  * composer is a control you can hold: a finger resting on it
- * --duration-settle brings the wheel up under it, and so does one that
+ * --duration-slow brings the wheel up under it, and so does one that
  * swipes up off it; dragging while still down rolls it. A swipe's own
  * rise is the opening's: the roll starts where the finger turns back
  * down, so a swipe lifted while still rising leaves the newest message
@@ -107,7 +107,7 @@ export class PressHold {
         this.#swallowClick = true;
         setTimeout(() => {
           this.#swallowClick = false;
-        }, dur("--duration-settle"));
+        }, dur("--duration-slow"));
         parts.wheel()?.release(press.flick);
       };
       document.addEventListener("pointermove", moved, { passive: false });
@@ -251,7 +251,7 @@ export class PressHold {
         this.hold.lastAt = performance.now();
         felt("hold");
         parts.openRecall(false);
-      }, dur("--duration-settle")),
+      }, dur("--duration-slow")),
     };
     this.hold = press;
   };

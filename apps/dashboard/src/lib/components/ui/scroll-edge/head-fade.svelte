@@ -68,7 +68,7 @@
   <div
     data-slot="layer"
     class={[
-      "absolute inset-0 opacity-0 mask-(--head-tint-ramp) head-fade-scrub",
+      "absolute inset-0 opacity-0 mask-head-tint head-fade-scrub",
       tint,
     ]}
   ></div>

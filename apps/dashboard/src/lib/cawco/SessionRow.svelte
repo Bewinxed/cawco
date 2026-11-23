@@ -6,7 +6,7 @@
 
   /** Peek and Archive: the row's end actions, one recipe. */
   const ROW_ACTION =
-    "touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) me-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted transition-control can-hover:absolute can-hover:inset-y-0 can-hover:end-(--action-end) can-hover:my-auto can-hover:me-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:not-group-data-current/session-row:text-ink-strong group-data-current/session-row:text-brand-ink group-data-swiping/session-row:translate-x-(--swipe-x) light:hover:not-group-data-current/session-row:bg-surface-pressed dark:hover:not-group-data-current/session-row:bg-surface-hover group-not-data-swiping/session-row:transition-control-slide";
+    "touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) me-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted transition-control can-hover:absolute can-hover:inset-y-0 can-hover:end-(--action-end) can-hover:my-auto can-hover:me-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-accent-wash group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:not-group-data-current/session-row:text-ink-strong group-data-current/session-row:text-accent-ink group-data-swiping/session-row:translate-x-(--swipe-x) light:hover:not-group-data-current/session-row:bg-surface-pressed dark:hover:not-group-data-current/session-row:bg-surface-hover group-not-data-swiping/session-row:transition-control-slide";
 
   /**
    * The selection pill for a list of these rows (highlight): it sits under
@@ -204,8 +204,8 @@
   /** Where a row's fault, note and question start: where its title does. */
   const faultIndent = $derived(
     compact
-      ? "calc(var(--spacing-space-2) * 2 + var(--mark-size, var(--spacing-space-5)))"
-      : "calc(var(--spacing-space-3) + var(--spacing-space-5) + var(--spacing-space-2))"
+      ? "calc(var(--spacing-space-2) * 2 + var(--mark-size, var(--spacing-space-4)))"
+      : "calc(var(--spacing-space-3) + var(--spacing-space-4) + var(--spacing-space-2))"
   );
   const faultEnd = $derived(
     compact ? "var(--spacing-space-2)" : "var(--spacing-space-3)"
@@ -387,10 +387,10 @@
         data-slot="title"
         data-stopped={stopped ? true : undefined}
         class={[
-          "block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label",
+          "block min-h-space-4 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label",
           quiet && "font-normal",
           stopped
-            ? "text-status-fail-ink"
+            ? "text-status-fail"
             : "group-data-context/session-row:group-not-data-current/session-row:text-ink-muted",
         ]}
         ><span class="sr-only"
@@ -402,7 +402,7 @@
     {#if !compact}
       <!-- mark-text: a line of text, trimmed by the words. -->
       <span
-        class="mark-text block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted group-data-current/session-row:text-brand-ink"
+        class="mark-text block min-h-space-4 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted group-data-current/session-row:text-accent-ink"
       >
         {#if pending || renaming !== null}
           <!-- What is on its way, in the meta line's place: the spinner, then
@@ -416,7 +416,7 @@
         {:else if stopped}
           <!-- Stopped at its account's limit: the error and its way out, in
                the meta line's place; the whole sentence on the pointer. -->
-          <span data-slot="stalled" class="text-status-fail-ink" title={stopped}
+          <span data-slot="stalled" class="text-status-fail" title={stopped}
             >{stopped}</span
           >
         {:else}
@@ -439,7 +439,7 @@
   >
     <span
       data-slot="num"
-      class="num mark-line flex items-center min-h-space-5 whitespace-nowrap type-meta text-ink-muted group-data-current/session-row:text-brand-ink group-data-compact/session-row:justify-end group-data-compact/session-row:w-ch-3"
+      class="num mark-line flex items-center min-h-space-4 whitespace-nowrap type-meta text-ink-muted group-data-current/session-row:text-accent-ink group-data-compact/session-row:justify-end group-data-compact/session-row:w-ch-3"
       title={pending ?? hint}
     >
       {#if compact && (pending || renaming !== null)}
@@ -449,7 +449,7 @@
       {/if}
     </span>
     {#if !compact}
-      <span class="flex items-center min-h-space-5"></span>
+      <span class="flex items-center min-h-space-4"></span>
     {/if}
   </span>
 {/snippet}
@@ -479,7 +479,7 @@
        under the row starts where its title does, per size. -->
   <div
     data-slot="item"
-    class="group/session-row relative flex items-center rounded-sm text-ink-strong transition-control data-current:text-brand-ink data-stale:opacity-55 data-archivable:touch-pan-y"
+    class="group/session-row relative flex items-center rounded-sm text-ink-strong transition-control data-current:text-accent-ink data-stale:opacity-55 data-archivable:touch-pan-y"
     data-archivable={onarchive ? true : undefined}
     data-branch-item
     data-compact={compact || undefined}
@@ -499,7 +499,7 @@
       <!-- What a finger uncovers as it draws the row away. -->
       <span
         aria-hidden="true"
-        class="mark-line absolute inset-y-0 end-0 flex items-center justify-center gap-space-1 w-(--reveal-w) overflow-hidden rounded-se-sm rounded-ee-sm bg-selected-bg text-brand-ink type-meta whitespace-nowrap pointer-events-none"
+        class="mark-line absolute inset-y-0 end-0 flex items-center justify-center gap-space-1 w-(--reveal-w) overflow-hidden rounded-se-sm rounded-ee-sm bg-accent-wash text-accent-ink type-meta whitespace-nowrap pointer-events-none"
         style:--reveal-w="var(--swipe, 0px)"
         ><IconArchive class="flex-none size-icon-md" /><span>Archive</span
         ></span
@@ -513,8 +513,8 @@
         class="flex flex-auto items-center gap-space-2 min-w-0 min-h-space-8 coarse:min-h-control-lg py-space-1 pl-space-3 pr-space-3 text-inherit no-underline rounded-inherit group-data-compact/session-row:gap-space-2 group-data-compact/session-row:min-h-row-compact coarse:group-data-compact/session-row:min-h-control-lg group-data-compact/session-row:py-0 group-data-compact/session-row:pl-space-2 group-data-compact/session-row:pr-space-2 group-data-swiping/session-row:translate-x-(--swipe-x) group-not-data-swiping/session-row:transition-control-slide"
         data-rail-row
         style:--mark-hit-max={compact
-          ? "calc((var(--spacing-row-compact) - var(--mark-size, var(--spacing-space-5))) / 2 + var(--tree-gap))"
-          : "calc((var(--spacing-control-lg) - var(--row-mark-box)) / 2 + var(--tree-gap))"}
+          ? "calc((var(--spacing-row-compact) - var(--mark-size, var(--spacing-space-4))) / 2 + var(--spacing-space-1))"
+          : "calc((var(--spacing-control-lg) - calc(var(--spacing) * 4.5)) / 2 + var(--spacing-space-1))"}
         style:--mark-hit-gap={compact
           ? "var(--spacing-space-2)"
           : "var(--spacing-space-2)"}
@@ -541,8 +541,8 @@
         data-share="session:{sessionId}"
         {href}
         style:--mark-hit-max={compact
-          ? "calc((var(--spacing-row-compact) - var(--mark-size, var(--spacing-space-5))) / 2 + var(--tree-gap))"
-          : "calc((var(--spacing-control-lg) - var(--row-mark-box)) / 2 + var(--tree-gap))"}
+          ? "calc((var(--spacing-row-compact) - var(--mark-size, var(--spacing-space-4))) / 2 + var(--spacing-space-1))"
+          : "calc((var(--spacing-control-lg) - calc(var(--spacing) * 4.5)) / 2 + var(--spacing-space-1))"}
         style:--mark-hit-gap={compact
           ? "var(--spacing-space-2)"
           : "var(--spacing-space-2)"}

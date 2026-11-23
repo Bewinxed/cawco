@@ -58,8 +58,8 @@
        */
       rises: {
         false:
-          "[clip-path:inset(0_calc(-1*var(--hang-shadow-room))_calc(-1*var(--hang-shadow-room))_round_0_0_var(--radius-lg)_var(--radius-lg))] before:top-0 data-[flush=start]:rounded-ss-none data-[flush=end]:rounded-se-none",
-        true: "[clip-path:inset(calc(-1*var(--hang-shadow-room))_calc(-1*var(--hang-shadow-room))_0_round_var(--radius-lg)_var(--radius-lg)_0_0)] before:bottom-0 before:-scale-y-100 data-[flush=start]:rounded-es-none data-[flush=end]:rounded-ee-none",
+          "[clip-path:inset(0_calc(-1*--spacing(30))_calc(-1*--spacing(30))_round_0_0_var(--radius-lg)_var(--radius-lg))] before:top-0 data-[flush=start]:rounded-ss-none data-[flush=end]:rounded-se-none",
+        true: "[clip-path:inset(calc(-1*--spacing(30))_calc(-1*--spacing(30))_0_round_var(--radius-lg)_var(--radius-lg)_0_0)] before:bottom-0 before:-scale-y-100 data-[flush=start]:rounded-es-none data-[flush=end]:rounded-ee-none",
       },
       tab: {
         true: "translate-none shadow-none will-change-auto [clip-path:path('M_0_0_Z')] before:hidden after:hidden",
@@ -196,7 +196,7 @@
     files: "flex w-(--frame-w) max-h-(--frame-h) flex-col gap-0 p-space-2",
     settings: "w-max max-w-(--frame-w) gap-0 p-0",
     details:
-      "flex max-h-[min(calc(var(--spacing)_*_190),var(--bits-popover-content-available-height,var(--sheet-max-h)))] overflow-hidden overscroll-contain p-0 @max-phone/shell:max-h-[min(calc(var(--shell-h)-var(--spacing-control-lg)-2*var(--spacing-space-3)-var(--safe-bottom)),var(--bits-popover-content-available-height,var(--sheet-max-h)))]",
+      "flex max-h-[min(calc(var(--spacing)_*_190),var(--bits-popover-content-available-height,85vh))] overflow-hidden overscroll-contain p-0 @max-phone/shell:max-h-[min(calc(var(--shell-h)-var(--spacing-control-lg)-2*var(--spacing-space-3)-var(--safe-bottom)),var(--bits-popover-content-available-height,85vh))]",
   };
   /** The shell less a floating card's edge each side. */
   const ROOM = "calc(100cqi - 2 * var(--spacing-space-3))";
@@ -209,18 +209,18 @@
     { w?: string; narrow?: string; h?: string }
   > = {
     caw: {
-      w: `min(var(--panel-w), ${ROOM})`,
-      narrow: `min(var(--panel-w), ${ROOM_NARROW})`,
+      w: `min(calc(var(--spacing) * 95), ${ROOM})`,
+      narrow: `min(calc(var(--spacing) * 95), ${ROOM_NARROW})`,
     },
     machines: { w: `min(var(--container-xs), ${ROOM})` },
     jump: {
-      w: `min(var(--find-w), ${ROOM})`,
+      w: `min(calc(var(--spacing) * 130), ${ROOM})`,
       narrow: ROOM_NARROW,
       h: "calc(100dvh - var(--spacing-control-lg) - var(--spacing-space-6))",
     },
     files: {
-      w: `min(var(--panel-w), ${ROOM})`,
-      h: "min(var(--caw-panel-h), calc(var(--bits-popover-content-available-height, 85dvh) - 2px))",
+      w: `min(calc(var(--spacing) * 95), ${ROOM})`,
+      h: "min(calc(var(--spacing) * 160), calc(var(--bits-popover-content-available-height, 85dvh) - 2px))",
     },
     details: {},
     settings: { w: ROOM },

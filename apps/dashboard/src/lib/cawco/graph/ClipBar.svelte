@@ -324,24 +324,24 @@
 
   /** Each kind's bar: its wash and its edge, as whole classes. */
   const BAR: Record<ClipKind, string> = {
-    size: "bg-mark-6/22 border-mark-6",
-    move: "bg-mark-7/22 border-mark-7",
-    fade: "bg-mark-3/22 border-mark-3",
-    tint: "bg-mark-8/22 border-mark-8",
-    effect: "bg-mark-5/22 border-mark-5",
+    size: "bg-mark-4/22 border-mark-4",
+    move: "bg-mark-5/22 border-mark-5",
+    fade: "bg-mark-1/22 border-mark-1",
+    tint: "bg-mark-6/22 border-mark-6",
+    effect: "bg-mark-3/22 border-mark-3",
     other: "bg-ink-muted/22 border-ink-muted",
   };
   /** Each kind's ink: an end's mark. */
   const INK: Record<ClipKind, string> = {
-    size: "bg-mark-6",
-    move: "bg-mark-7",
-    fade: "bg-mark-3",
-    tint: "bg-mark-8",
-    effect: "bg-mark-5",
+    size: "bg-mark-4",
+    move: "bg-mark-5",
+    fade: "bg-mark-1",
+    tint: "bg-mark-6",
+    effect: "bg-mark-3",
     other: "bg-ink-muted",
   };
   const ring =
-    "focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2";
+    "focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-2";
   const ms = (t: number) => words.ms(figureOf(Math.round(t), lang));
   /**
    * An end's grip, px wide, and the most it takes a pointer's press: the
@@ -353,7 +353,7 @@
    */
   const GRIPS = 3;
   let grip = $state(0);
-  const POINTER_FLOOR = browser ? numberOf("--spacing-control-xs") : 0;
+  const POINTER_FLOOR = browser ? numberOf("--spacing-space-6") : 0;
 </script>
 
 <div
@@ -414,7 +414,7 @@
       class={[
         "absolute inset-y-0 start-(--from) w-(--wide) touch-none rounded-xs border",
         BAR[track.kind],
-        selected && "ring-(length:--focus-ring-width) ring-ink-strong",
+        selected && "ring-2 ring-ink-strong",
         holding?.id === run.id && holding.part === "body"
           ? "cursor-grabbing"
           : "cursor-grab",
@@ -464,7 +464,7 @@
             end === "start"
               ? "coarse:-translate-x-full coarse:justify-items-end coarse:rtl:translate-x-full"
               : "coarse:translate-x-full coarse:justify-items-start coarse:rtl:-translate-x-full",
-            "focus-inset focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring",
+            "focus-inset focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink",
           ]}
           data-run-end={end}
           data-slot={end}

@@ -34,7 +34,7 @@
     <p class="mark-line m-0 flex items-center gap-space-2">
       <IconSuccess
         aria-hidden="true"
-        class="size-icon-md flex-none text-status-done-glyph"
+        class="size-icon-md flex-none text-status-done"
       />
       <span class="type-label text-ink-strong">{setupWords.isSetUp(name)}</span>
     </p>

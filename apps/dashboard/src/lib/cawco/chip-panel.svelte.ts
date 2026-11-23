@@ -46,7 +46,7 @@ export class ChipPanel {
    */
   #stand(at: HTMLElement): void {
     const box = at.getBoundingClientRect();
-    const inset = px("--hover-panel-inset");
+    const inset = px("--spacing-space-2");
     const widest = Math.min(px("--hover-panel-max"), innerWidth - 2 * inset);
     this.place = {
       x: Math.round(

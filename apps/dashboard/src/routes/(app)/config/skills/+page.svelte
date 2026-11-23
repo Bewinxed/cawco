@@ -736,7 +736,7 @@
                   <div
                     data-slot="listing"
                     aria-label={words.readingVersions(row.name)}
-                    class="flex flex-col gap-space-row"
+                    class="flex flex-col gap-space-1"
                     role="status"
                     out:revealOut
                   >
@@ -768,7 +768,7 @@
 
   <div
     data-slot="group"
-    class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
+    class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-4"
   >
     <SectionHeader hue={HUE} icon={IconShop} label={words.marketplaces} />
     {#if marketplaces.length + links.length === 0}
@@ -879,7 +879,7 @@
                   <div
                     data-slot="listing"
                     aria-label={words.reading(row.name)}
-                    class="flex flex-col gap-space-row"
+                    class="flex flex-col gap-space-1"
                     role="status"
                     out:revealOut
                   >
@@ -889,7 +889,7 @@
                   </div>
                 {:else if unread[row.name]}
                   <p
-                    class="type-meta text-status-attn-ink"
+                    class="type-meta text-status-attn"
                     role="alert"
                     in:reveal
                   >
@@ -912,7 +912,7 @@
                       >
                         <span
                           data-slot="text"
-                          class="flex min-w-0 shrink grow basis-60 flex-col gap-space-row"
+                          class="flex min-w-0 shrink grow basis-60 flex-col gap-space-1"
                         >
                           <span
                             class="flex flex-wrap items-baseline gap-space-2"
@@ -975,7 +975,7 @@
 
   <div
     data-slot="group"
-    class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
+    class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-4"
   >
     <SectionHeader hue={HUE} icon={IconLayers} label={words.plugins} />
     {#if plugins.length === 0}

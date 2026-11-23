@@ -335,7 +335,7 @@
       // On a phone's card: its own line under the machine and its version,
       // from the machine's name to the card's end, the quiet tick included,
       // so its Reinstall is in reach.
-      "@max-phone/table:col-span-full @max-phone/table:ps-(--ledger-text-inset)",
+      "@max-phone/table:col-span-full @max-phone/table:ps-space-6",
     ]}
   >
     {#if moved && update}
@@ -411,7 +411,7 @@
         >
           <IconCheck
             aria-label="Current"
-            class="size-icon-md shrink-0 text-status-done-glyph"
+            class="size-icon-md shrink-0 text-status-done"
           />
         </span>
         {#if !kept}
@@ -558,7 +558,7 @@
        so the State stays as narrow as its act. The row's own press is the
        way on, so the fault offers none of its own. -->
   <RowFault
-    class="@max-phone/table:col-span-full @max-phone/table:ps-(--ledger-text-inset)"
+    class="@max-phone/table:col-span-full @max-phone/table:ps-space-6"
     reason={pressRefused(machine.machineId, spec.id)}
   />
 {/snippet}
@@ -584,7 +584,7 @@
   {@const { state, verb, line } = open ? (heldView[key] ?? now) : now}
   {#if hasCopy(toolStatus) || flow}
     <div
-      class="flex flex-col gap-space-1 whitespace-normal @max-phone/table:ps-(--ledger-text-inset)"
+      class="flex flex-col gap-space-1 whitespace-normal @max-phone/table:ps-space-6"
     >
       <!-- One line on the row's first line: the state's glyph and word at
          the column's start, in meta, and its act at the column's end. -->
@@ -600,7 +600,7 @@
             {#if state === "signed-in" && flow?.phase === "signed-in"}
               <Check />
             {:else if state === "signed-in"}
-              <IconCheck class="size-icon-md text-status-done-glyph" />
+              <IconCheck class="size-icon-md text-status-done" />
             {:else if state === "waiting"}
               <LiveDot />
             {:else if state === "unknown"}
@@ -619,7 +619,7 @@
                 onchange={(next) => showRead(key, next)}
                 open={readOpen === key}
                 triggerClass="pointer-hit touch-hit rounded-xs text-ink-muted transition-colors hover:text-ink-strong"
-                width="var(--signin-pop-w)"
+                width="calc(var(--spacing) * 85)"
               >
                 {#snippet trigger()}
                   {toolWords.signinUnknown}
@@ -634,7 +634,7 @@
             <!-- Where focus lands once a sign-in here signs in (`closeFocus`). -->
             <span
               id="tool-signin-state-{key}"
-              class="min-w-0 rounded-xs text-pretty focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
+              class="min-w-0 rounded-xs text-pretty focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-accent-ink focus-visible:outline-offset-2"
               tabindex="-1">{SIGNIN_WORDS[state]}</span
             >
           {/if}
@@ -651,7 +651,7 @@
             onclosefocus={() => closeFocus(key)}
             {open}
             triggerClass={buttonVariants({ variant: "outline", size: "xs" })}
-            width="var(--signin-pop-w)"
+            width="calc(var(--spacing) * 85)"
           >
             {#snippet trigger()}
               <span class="grid">

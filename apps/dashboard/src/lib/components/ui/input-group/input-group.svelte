@@ -56,19 +56,19 @@
 <div
   class={cn(
     "touch-hit hit-under [--hit-edge:1px]",
-    "relative flex h-9 w-full min-w-0 items-center rounded-md",
+    "relative flex h-9 w-full min-w-0 items-center rounded-sm",
     "border",
-    "field-edge bg-surface-raised shadow-xs",
-    "[transition:var(--transition-control)]",
+    "field-edge bg-surface-raised shadow-sm",
+    "transition-control",
     "has-[>[data-align=block-end]]:h-auto",
     "has-[>[data-align=block-start]]:h-auto",
     "has-[>textarea]:h-auto",
     "has-[>[data-align=block-end]]:flex-col",
     "has-[>[data-align=block-start]]:flex-col",
-    "has-[textarea]:rounded-md",
-    "has-data-[align=block-end]:rounded-md",
-    "has-data-[align=block-start]:rounded-md",
-    "has-[[data-slot][aria-invalid=true]]:border-status-fail-glyph",
+    "has-[textarea]:rounded-sm",
+    "has-data-[align=block-end]:rounded-sm",
+    "has-data-[align=block-start]:rounded-sm",
+    "has-[[data-slot][aria-invalid=true]]:border-status-fail",
     // The field's own input steps clear of an addon beside it, asked of the
     // input by its siblings: asked of the frame (`has-[…]:[&>input]:`), the
     // `:has()` stood outside the rule's subject, where Blink's one shared
@@ -86,7 +86,7 @@
     share !== undefined &&
       "isolate cursor-ew-resize touch-pan-y not-focus-within:[&_*]:cursor-ew-resize can-hover:hover:not-has-[[data-slot][aria-invalid=true]]:before:opacity-100 data-dragging:not-has-[[data-slot][aria-invalid=true]]:before:opacity-100",
     look === "bar" &&
-      "h-control-md rounded-pill border-border-hairline bg-surface-glass shadow-sm glass-backdrop contrast-more:border-border-strong contrast-more:bg-surface-raised contrast-more:backdrop-filter-none reduced-transparency:border-border-strong reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none",
+      "h-control-md rounded-pill border-border-hairline bg-surface-raised/72 shadow-sm glass-backdrop contrast-more:border-border-strong contrast-more:bg-surface-raised contrast-more:backdrop-filter-none reduced-transparency:border-border-strong reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none",
     // The group's own Clear stands for the engine's: its search cancel glyph is not drawn.
     "[&>input::-webkit-search-cancel-button]:appearance-none",
     className

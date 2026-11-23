@@ -14,7 +14,7 @@
    * Both lists are the hub's (files.svelte.ts): until one answers it claims
    * nothing (no count, no "nothing" line); past `--duration-loop` its
    * skeleton stands at the real layout's size, and the read arrives over one
-   * `--duration-fade` cross-fade. A read refused says so in its region's place
+   * `--duration-base` cross-fade. A read refused says so in its region's place
    * (RowFault), with Try again and the hub's own words.
    *
    * The artifacts waiting on the person, the ones its needs-you mark is
@@ -476,7 +476,7 @@
 <div
   class="relative flex min-h-0 flex-1 flex-col"
   style:--lead-pad={"calc(var(--spacing-space-3) - (var(--spacing-row-compact) - var(--spacing-icon-md)) / 2)"}
-  style:--row-end="calc(var(--spacing-control-xs) + var(--spacing-space-2))"
+  style:--row-end="calc(var(--spacing-space-6) + var(--spacing-space-2))"
 >
   {#if nothing}
     <!-- What the skeleton stood in for, in its reveal (reveal). -->
@@ -662,7 +662,7 @@
                its sections is brand-solid whole"). -->
           <section
             aria-labelledby="{uid}-attachments"
-            class="mt-space-2 flex min-h-0 flex-col border-t border-brand-solid pt-space-2"
+            class="mt-space-2 flex min-h-0 flex-col border-t border-accent pt-space-2"
             data-files-region="attachments"
             data-files-rule
           >
@@ -703,8 +703,8 @@
   {#if artifacts && artifacts.length > 0}
     <Rail
       axis="x"
-      class="flex flex-none gap-space-row rounded-md concentric-in r-outer-md r-inset-space-row bg-surface-sunk p-space-row"
-      itemClass="touch-hit press-tint grid size-control-xs place-items-center"
+      class="flex flex-none gap-space-1 rounded-sm concentric-in r-outer-sm r-inset-space-1 bg-surface-sunk p-space-1"
+      itemClass="touch-hit press-tint grid size-space-6 place-items-center"
       items={VIEWS}
       label={filesWords.artifactsView}
       onpick={(id) => {
@@ -824,7 +824,7 @@
              card's edge, never past it. -->
         <div
           aria-busy={searching || undefined}
-          class="kit-edge-fade-block fade-len-(--edge-fade-len) min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
+          class="kit-edge-fade-block fade-len-row min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
           data-files-scroll
           id="{uid}-artifacts-scroll"
           in:reveal
@@ -912,7 +912,7 @@
         </p>
       {:else}
         <div
-          class="kit-edge-fade-block fade-len-(--edge-fade-len) min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
+          class="kit-edge-fade-block fade-len-row min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
           data-files-scroll
           id="{uid}-attachments-scroll"
           in:reveal
@@ -1007,7 +1007,7 @@
     {#if file.picture}
       <img
         alt=""
-        class="size-row-compact max-w-none rounded-sm bg-surface-sunk object-cover -outline-offset-1 outline-1 outline-image-outline"
+        class="size-row-compact max-w-none rounded-sm bg-surface-sunk object-cover -outline-offset-1 outline-1 outline-ink-strong/10"
         decoding="async"
         loading="lazy"
         src={file.picture}

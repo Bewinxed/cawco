@@ -330,7 +330,7 @@ const drawnShift = (el: HTMLElement): [number, number] => {
 
 /**
  * It travels from `before` to where it now stands, `now`, over
- * `--duration-fade` on `--ease-drawer`, starting from where it is drawn, a
+ * `--duration-base` on `--ease-drawer`, starting from where it is drawn, a
  * travel in flight counted (The Interruptible Rule). Returns the travel,
  * the one to cancel when the next starts.
  */
@@ -349,6 +349,6 @@ export const travelTo = (
       },
       { translate: "0px 0px" },
     ],
-    { duration: dur("--duration-fade"), easing: ease("--ease-drawer") }
+    { duration: dur("--duration-base"), easing: ease("--ease-drawer") }
   );
 };

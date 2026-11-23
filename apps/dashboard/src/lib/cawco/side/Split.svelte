@@ -369,7 +369,7 @@
           () => {
             mounted = false;
           },
-          motionOk.current ? dur("--duration-panel") : 1
+          motionOk.current ? dur("--duration-slow") : 1
         );
     return () => {
       gone = true;
@@ -382,8 +382,8 @@
   });
 
   /**
-   * The surface mounting already open slides --pop-rise in from the edge it opens
-   * against and fades up (--duration-panel, --ease-out), the same move its class
+   * The surface mounting already open slides --spacing-space-2 in from the edge it opens
+   * against and fades up (--duration-slow, --ease-out), the same move its class
    * transition makes when it opens later. Reduced motion keeps the fade.
    */
   function surfaceIn(_node: Element): TransitionConfig {
@@ -392,12 +392,12 @@
     }
     const still = !motionOk.current;
     return {
-      duration: dur("--duration-panel"),
+      duration: dur("--duration-slow"),
       easing: easeOut,
       css: (t, u) =>
         still
           ? `opacity: ${t}`
-          : `opacity: ${t}; transform: translateX(calc(var(--pop-rise) * ${u}));`,
+          : `opacity: ${t}; transform: translateX(calc(var(--spacing-space-2) * ${u}));`,
     };
   }
 </script>
@@ -528,14 +528,14 @@
         <div
           data-split-shown={open || undefined}
           hidden={squeezed}
-          class="w-full min-w-xs p-space-4 opacity-0 transform-(--surface-off) transition-[opacity] duration-(--duration-panel) ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:duration-(--duration-panel) data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
+          class="w-full min-w-xs p-space-4 opacity-0 transform-(--surface-off) transition-[opacity] duration-(--duration-slow) ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:duration-(--duration-slow) data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
           style:--surface-off="translateX(var(--spacing-space-6))"
           style:--surface-on="translateX(0)"
           in:surfaceIn
           {@attach landKey
             ? land(() => landKey, {
                 mode: "clip",
-                ms: dur("--duration-panel"),
+                ms: dur("--duration-slow"),
               })
             : undefined}
         >

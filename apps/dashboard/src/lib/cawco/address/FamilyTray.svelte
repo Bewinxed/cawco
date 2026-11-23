@@ -16,7 +16,7 @@
    * (design 6ddc57c4, Option A). One thing per tray, replaced in place: the
    * title and the button's words morph in their held box (MorphText), the
    * state's words and object cross in under them (`arrive`/`depart`), and
-   * the tray's height tweens to the new state's over --duration-panel on the drawer
+   * the tray's height tweens to the new state's over --duration-slow on the drawer
    * curve (morph), from wherever it is drawn. Caw keeps his spot on the
    * edge in every state; only a failure brings him down into the tray at
    * 80px, the house's failure shape (PairingScreen, MachinesEmpty).
@@ -48,7 +48,7 @@
   data-form={form}
   data-step={tray.step}
   data-tray="family"
-  {@attach (node) => morph({ ms: dur("--duration-panel") })(node)}
+  {@attach (node) => morph({ ms: dur("--duration-slow") })(node)}
 >
   {#if !failed}
     <!-- Caw's room over the top edge: he stands behind it, so only what
@@ -61,7 +61,7 @@
       <TrayCaw ledge pose={tray.pose.pose} size={CAW} />
     </div>
   {/if}
-  <TraySurface class="gap-space-4" deskPad="p-space-5" {form}>
+  <TraySurface class="gap-space-4" deskPad="p-space-4" {form}>
     <div class="grid min-w-0 gap-space-4" data-tray-content>
       {#if failed}
         <div class="flex justify-center pt-space-2">

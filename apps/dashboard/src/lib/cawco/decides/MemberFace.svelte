@@ -36,7 +36,7 @@
       "grid flex-none place-items-center overflow-hidden rounded-(--corner) size-(--side)",
       member.hue === null
         ? "bg-surface-sunk text-ink-muted"
-        : "bg-(--face) text-on-ink",
+        : "bg-(--face) text-surface-page",
     ]}
     style:--corner="{size * 0.28}px"
     style:--side="{size}px"

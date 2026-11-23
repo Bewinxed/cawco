@@ -676,7 +676,7 @@
                true, and the one thing that changes it, the machines, where
                the composer stands when there is one. -->
             <div
-              class="absolute inset-x-0 bottom-(--off-bottom) z-(--layer-dock) mx-auto w-(--composer-w)"
+              class="absolute inset-x-0 bottom-(--off-bottom) z-40 mx-auto w-(--composer-w)"
               data-safe-bottom
               style:--off-bottom={"calc(var(--spacing-space-4) + var(--safe-bottom))"}
               in:crossIn
@@ -748,7 +748,7 @@
       height="room"
       overflow="clip"
       pad="none"
-      style="--lead-w: min(calc(var(--spacing) * 104), calc(100vw - var(--spacing-space-6))); --pop-max-h: min(calc(var(--spacing) * 190), var(--bits-popover-content-available-height, var(--sheet-max-h)))"
+      style="--lead-w: min(calc(var(--spacing) * 104), calc(100vw - var(--spacing-space-6))); --pop-max-h: min(calc(var(--spacing) * 190), var(--bits-popover-content-available-height, 85vh))"
       collisionPadding={12}
       customAnchor={cardAnchor}
       onfocusin={() => {

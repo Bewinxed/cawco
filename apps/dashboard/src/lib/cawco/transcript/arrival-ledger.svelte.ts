@@ -164,7 +164,7 @@ export class ArrivalLedger {
     }
     return {
       kind: "arrive",
-      lead: Math.min(slot, STAGGER_ROWS - 1) * dur("--duration-step"),
+      lead: Math.min(slot, STAGGER_ROWS - 1) * (dur("--duration-fast") / 2),
       start: null,
     };
   }

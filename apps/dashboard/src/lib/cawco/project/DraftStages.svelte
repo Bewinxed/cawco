@@ -61,7 +61,7 @@
   const uid = $props.id();
   /** The board's column width, wrapping into rows; one column where the room is narrower. */
   const COLS =
-    "repeat(auto-fill, minmax(min(100%, var(--board-col-min)), 1fr))";
+    "repeat(auto-fill, minmax(min(100%, calc(var(--spacing) * 60)), 1fr))";
   /** Every row past a phone: one height, at least a whole stage's. */
   const ROWS = "minmax(var(--draft-col-h), 1fr)";
   let grid = $state<HTMLElement>();
@@ -96,7 +96,7 @@
        edges with the stages. -->
   <div class="flex flex-col gap-space-1" data-slot="setup-aim">
     <label
-      class="ps-(--field-inline-inset) type-meta text-ink-muted"
+      class="ps-space-3 type-meta text-ink-muted"
       for="{uid}-aim">{setupPageWords.aim}</label
     >
     <Textarea

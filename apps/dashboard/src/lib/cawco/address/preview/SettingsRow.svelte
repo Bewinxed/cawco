@@ -33,7 +33,7 @@
   class="flex min-w-0 flex-wrap items-center gap-x-space-4 gap-y-space-2 py-space-3"
   data-settings-row
 >
-  <div class="grid min-w-0 flex-1 gap-space-row">
+  <div class="grid min-w-0 flex-1 gap-space-1">
     <span class="type-label text-ink-strong">Word address</span>
     <RowLine class="type-meta text-ink-muted" {line} />
   </div>

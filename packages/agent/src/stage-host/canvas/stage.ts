@@ -1623,7 +1623,7 @@ export function bootStage(page: Page): Mode {
 
   /**
    * The drawing swapped under a picture of the one it replaces, which then
-   * fades out over it, one --duration-fade on --ease-crossfade: two states
+   * fades out over it, one --duration-base on --ease-in-out: two states
    * trading places where they stand. The picture is the old drawing's DOM
    * copied as it stands (inert, hidden from a reader), laid over the frame
    * at its box, so the swap holds no frame back; it goes once faded. A
@@ -1645,10 +1645,10 @@ export function bootStage(page: Page): Mode {
     frame.append(leaving);
     const swapped = swap();
     const fade = leaving.animate([{ opacity: 1 }, { opacity: 0 }], {
-      duration: page.style.duration("--duration-fade", 200),
+      duration: page.style.duration("--duration-base", 200),
       easing:
         getComputedStyle(document.documentElement)
-          .getPropertyValue("--ease-crossfade")
+          .getPropertyValue("--ease-in-out")
           .trim() || "ease-in-out",
       fill: "forwards",
     });
@@ -1661,9 +1661,8 @@ export function bootStage(page: Page): Mode {
   /** How the page scrolls to what it brings into view: at once where motion is reduced. */
   const scrolling = (): ScrollBehavior => (moving() ? "smooth" : "instant");
 
-  /** How far a change ring stands outside the box it rings, px: its offset and its width. */
-  const ringOut = () =>
-    tokenPx("--spacing-space-1") + tokenPx("--focus-ring-width");
+  /** How far a change ring stands outside the box it rings, px: its offset and its 2px width. */
+  const ringOut = () => tokenPx("--spacing-space-1") + 2;
 
   /** How far to scroll to stand `start`–`end` whole in a view `size` long by the least it takes; from its start where it can't stand whole. */
   const leastTo = (start: number, end: number, size: number): number => {
@@ -1819,7 +1818,7 @@ export function bootStage(page: Page): Mode {
   /** Reduced motion's Play: the end state fades in where it stands (DESIGN.md, The Reduced Motion Rule). */
   function fadeIn(): void {
     drawing.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: page.style.duration("--duration-fade", 200),
+      duration: page.style.duration("--duration-base", 200),
       easing: "linear",
     });
   }

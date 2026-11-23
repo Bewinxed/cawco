@@ -4,12 +4,12 @@
    * Backlot edit of his open-eyed source still; README.md lists the takes).
    * Between poses he plays the mascot's Appearing and Leaving contract as
    * TrayCaw plays it: the leaving pose holds its drawing and fades to
-   * --leave-scale over --duration-fade, out of the flow; the next fades in from
-   * --leave-scale over --duration-panel on ease-out. With less motion, a fade.
+   * --press-scale over --duration-base, out of the flow; the next fades in from
+   * --press-scale over --duration-slow on ease-out. With less motion, a fade.
    *
    * `big`: a failure's 80px box (--caw-hero) in place of the step's 64
    * (--address-caw); the box travels between the two as one object
-   * (FLIP) over --duration-panel on the drawer curve.
+   * (FLIP) over --duration-slow on the drawer curve.
    */
   import {
     CURVE,
@@ -59,25 +59,25 @@
           },
           { transformOrigin: "0 0", transform: "none" },
         ],
-        { duration: dur("--duration-panel"), easing: CURVE.drawer }
+        { duration: dur("--duration-slow"), easing: CURVE.drawer }
       );
     }
     before = null;
     wasBig = now;
   });
 
-  /** The next pose: from --leave-scale over --duration-panel. */
+  /** The next pose: from --press-scale over --duration-slow. */
   function enter(_node: HTMLElement) {
     if (!motionOk.current) {
       return {
-        duration: dur("--duration-fade"),
+        duration: dur("--duration-base"),
         easing: easeOut,
         css: (t: number) => `opacity: ${t}`,
       };
     }
-    const scale = numberOf("--leave-scale");
+    const scale = numberOf("--press-scale");
     return {
-      duration: dur("--duration-panel"),
+      duration: dur("--duration-slow"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}; scale: ${scale + (1 - scale) * t}`,
     };

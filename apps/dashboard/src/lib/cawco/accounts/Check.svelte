@@ -1,9 +1,9 @@
 <!-- A sign-in landed: the tick draws itself along its stroke over
-     --duration-fade as it arrives (Ticks and dots); with reduced motion it only
+     --duration-base as it arrives (Ticks and dots); with reduced motion it only
      fades in. -->
 <svg
   aria-hidden="true"
-  class="size-icon-md flex-none animate-fade-in text-status-done-glyph motion-safe:animate-none"
+  class="size-icon-md flex-none animate-fade-in text-status-done motion-safe:animate-none"
   fill="none"
   viewBox="0 0 24 24"
 >

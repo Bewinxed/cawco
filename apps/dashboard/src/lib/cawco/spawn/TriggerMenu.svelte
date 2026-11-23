@@ -42,9 +42,9 @@
 >
   <span
     aria-hidden="true"
-    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-control-md translate-y-(--fill-y) rounded-sm bg-surface-hover opacity-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:duration-(--duration-control) motion-safe:ease-in-out"
+    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-control-md translate-y-(--fill-y) rounded-sm bg-surface-hover opacity-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:duration-(--duration-fast) motion-safe:ease-in-out"
     data-shown={items.length > 0 || undefined}
-    style:--fill-y={`calc(${index} * (var(--spacing-control-md) + var(--spacing-space-row)))`}
+    style:--fill-y={`calc(${index} * (var(--spacing-control-md) + var(--spacing-space-1)))`}
   ></span>
   {#each items as item (item.key)}
     {@const Icon = item.icon}

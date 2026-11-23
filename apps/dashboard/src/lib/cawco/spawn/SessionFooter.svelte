@@ -36,7 +36,7 @@
 </script>
 
 <div
-  class="flex flex-none items-center justify-end gap-space-2 px-space-1 pt-space-3 pb-space-row"
+  class="flex flex-none items-center justify-end gap-space-2 px-space-1 pt-space-3 pb-space-1"
   data-ns-footer
 >
   <!-- Stands whether or not it says anything, so the row never shifts as a

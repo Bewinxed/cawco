@@ -117,7 +117,7 @@
         >Finder bench</span
       >
       <button
-        class="select-none inline-flex h-control-md items-center gap-space-2 rounded-md border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
+        class="select-none inline-flex h-control-md items-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
         data-jump
         onclick={() => (open ? hide() : show())}
         type="button"
@@ -129,7 +129,7 @@
 
   <main class="flex min-h-0 flex-1 flex-col">
     <ol
-      class="m-0 flex-1 list-none overflow-y-auto px-space-6 pt-space-5 pb-0"
+      class="m-0 flex-1 list-none overflow-y-auto px-space-6 pt-space-4 pb-0"
       aria-label="Sent"
     >
       {#each log.sent as text, i (i)}
@@ -161,7 +161,7 @@
         >
         <button
           data-slot="send"
-          class="select-none h-control-md rounded-xs border-none border-current bg-action-solid px-space-3 type-label text-on-action"
+          class="select-none h-control-md rounded-xs border-none border-current bg-accent px-space-3 type-label text-on-accent"
           data-send
           onclick={() => send(message)}
           type="button">Send</button
@@ -170,7 +170,7 @@
     </div>
     {#if phone}
       <button
-        class="select-none absolute top-space-3 end-space-3 inline-flex h-control-md items-center gap-space-2 rounded-md border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
+        class="select-none absolute top-space-3 end-space-3 inline-flex h-control-md items-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-3 type-label text-ink-muted"
         data-jump
         onclick={() => show()}
         type="button">Jump</button

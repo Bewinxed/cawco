@@ -20,17 +20,17 @@
        * the breath dims it to the floor and back like every breather.
        */
       tone: {
-        live: "bg-status-live-glyph",
-        "live-ink": "bg-status-live-ink",
+        live: "bg-status-live",
+        "live-ink": "bg-status-live",
         muted: "bg-ink-muted",
       },
       /** `status-dot-size` by default; `row`, a row's 7px dot beside its words (a task card's, a connection's). */
       size: {
-        dot: "size-(--status-dot-size)",
+        dot: "size-1.5",
         row: "size-space-2",
       },
       /** Cut round by `status-dot-cut` in the raised surface: on a mark's corner. */
-      cut: { true: "ring-(length:--status-dot-cut) ring-surface-raised" },
+      cut: { true: "ring-dot-cut ring-surface-raised" },
     },
     defaultVariants: { tone: "live", size: "dot" },
   });

@@ -886,7 +886,7 @@
   <!-- Fleet on a desk, as SessionSurface draws it beside the rail. -->
   <Home variant="page" wide />
 {:else}
-  <div class="flex flex-col gap-space-3 p-space-5 type-body text-ink-muted">
+  <div class="flex flex-col gap-space-3 p-space-4 type-body text-ink-muted">
     <p class="m-0">
       The sidebar's Recent list on a bench: {real
         ? `${real.instances.length} rows from a live hub's database`

@@ -30,7 +30,7 @@
   (`autoDirection`, at any width: the owner's pin on a sideways-scrolling
   flow), and one that still stands wider is scaled down to
   it, its height following its viewBox, but never below the scale that
-  keeps its words at the meta size (`--text-meta` over the label size Pele
+  keeps its words at the meta size (`--text-sm` over the label size Pele
   measured them in): past that floor it stands wider than its room and its
   well scrolls it sideways (tsk-330: "nothing scrolls sideways but a
   diagram in its well"), as a decision page's does. A drawing narrower than

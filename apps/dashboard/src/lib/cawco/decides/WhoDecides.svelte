@@ -106,7 +106,7 @@
   {:else if !ready}
     <div
       class="grid grid-cols-(--roster-cols) gap-space-3"
-      style:--roster-cols={"repeat(auto-fill, minmax(max(min(100%, var(--roster-card-min)), calc((100% - 3 * var(--spacing-space-3)) / 4)), 1fr))"}
+      style:--roster-cols={"repeat(auto-fill, minmax(max(min(100%, calc(var(--spacing) * 70)), calc((100% - 3 * var(--spacing-space-3)) / 4)), 1fr))"}
     >
       {#each [0, 1, 2, 3] as at (at)}
         <Skeleton height="board" radius="card" />
@@ -120,7 +120,7 @@
       </Alert>
     {/if}
     {#if who.problems.length > 0}
-      <p class="type-meta text-status-fail-ink text-pretty" role="alert">
+      <p class="type-meta text-status-fail text-pretty" role="alert">
         {decidesWords.fileProblems(who.problems.join(" "))}
       </p>
     {/if}
@@ -145,11 +145,11 @@
   <!-- Configure's section, its cards straight on the recessed ground: the
        section template's raised body would hold them card in card. -->
   <div
-    class="flex min-h-0 min-w-0 flex-auto flex-col overflow-y-auto bg-surface-recess px-space-5 py-space-2"
+    class="flex min-h-0 min-w-0 flex-auto flex-col overflow-y-auto bg-surface-recess px-space-4 py-space-2"
   >
-    <div class="flex max-w-245 min-w-0 flex-col gap-space-5 py-space-6">
+    <div class="flex max-w-245 min-w-0 flex-col gap-space-4 py-space-6">
       <div
-        class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
+        class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-4 gap-y-space-3 max-phone:grid-cols-1"
         style:--head-cols="minmax(0, 1fr) auto"
       >
         <!-- No head of its own: the rail, or the phone's bar, names the
@@ -164,9 +164,9 @@
   </div>
 {:else}
   <div
-    class="min-w-0 flex-auto overflow-y-auto pt-space-5 pr-space-6 pb-space-6 pl-space-6 max-desk:px-space-5 max-phone:py-space-4"
+    class="min-w-0 flex-auto overflow-y-auto pt-space-4 pr-space-6 pb-space-6 pl-space-6 max-desk:px-space-4 max-phone:py-space-4"
   >
-    <div class="flex flex-col gap-space-5">
+    <div class="flex flex-col gap-space-4">
       <nav
         aria-label={decidesWords.crumbs}
         class="flex flex-wrap items-baseline justify-between gap-x-space-4 gap-y-space-1 type-label"
@@ -176,7 +176,7 @@
         >
           <li class="min-w-0">
             <a
-              class="text-ink-muted wrap-anywhere can-hover:hover:text-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+              class="text-ink-muted wrap-anywhere can-hover:hover:text-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs"
               href="/config/decides">{decidesWords.fleet}</a
             >
           </li>
@@ -184,7 +184,7 @@
           <li class="min-w-0">
             {#if project}
               <a
-                class="text-ink-strong wrap-anywhere can-hover:hover:text-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+                class="text-ink-strong wrap-anywhere can-hover:hover:text-accent-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs"
                 href={projectHref}>{name}</a
               >
             {:else}
@@ -193,12 +193,12 @@
           </li>
         </ol>
         <a
-          class="flex-none text-brand-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+          class="flex-none text-accent-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs"
           href="{projectHref}?view=decisions">{decidesWords.decisions}</a
         >
       </nav>
       <div
-        class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
+        class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-4 gap-y-space-3 max-phone:grid-cols-1"
         style:--head-cols="minmax(0, 1fr) auto"
       >
         <header class="flex min-w-0 flex-col gap-space-2">
@@ -219,7 +219,7 @@
               {#if who.own.length > 0}
                 <button
                   aria-disabled={who.asking !== null || undefined}
-                  class="text-brand-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs aria-disabled:text-ink-muted"
+                  class="text-accent-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-accent-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid rounded-xs aria-disabled:text-ink-muted"
                   onclick={() => {
                     if (who.asking === null) {
                       who.useFleet(who.own);

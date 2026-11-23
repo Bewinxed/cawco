@@ -74,7 +74,7 @@
   let { path }: { path: string } = $props();
 
   const store = configStore();
-  const HUE = "var(--color-mark-6)";
+  const HUE = "var(--color-mark-4)";
   const LATEST = 5;
   const main = untrack(() => path === MAIN);
 
@@ -489,7 +489,7 @@
   <EditorSection hue={HUE} icon={IconDocument} label={words.contents}>
     {#if conflict}
       <div class="flex flex-col gap-space-2" in:unfold out:unfold>
-        <p class="type-meta text-status-attn-ink">{words.changedElsewhere}</p>
+        <p class="type-meta text-status-attn">{words.changedElsewhere}</p>
         {#key conflict.hash}
           <DiffView
             filePath={path}
@@ -525,7 +525,7 @@
          inside has focus (`field-edge`). -->
     <div
       data-slot="field"
-      class="field-edge transition-control min-h-80 rounded-md border bg-surface-raised px-space-2 py-space-1 shadow-xs"
+      class="field-edge transition-control min-h-80 rounded-sm border bg-surface-raised px-space-2 py-space-1 shadow-sm"
     >
       <!-- Crepe reads its text once, when it is made: it waits for a draft
            kept for this file to be back. -->
@@ -543,7 +543,7 @@
 
   <EditorSection hue={HUE} icon={IconHistory} label={words.history}>
     {#if historyError}
-      <p class="type-meta text-status-attn-ink" role="alert">{historyError}</p>
+      <p class="type-meta text-status-attn" role="alert">{historyError}</p>
     {:else if versions === null}
       <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
         {words.loading}

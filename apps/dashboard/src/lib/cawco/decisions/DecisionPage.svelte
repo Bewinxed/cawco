@@ -312,7 +312,7 @@
               <span class="text-ink-muted">{group.label}</span>
               {#each group.to as link, index (link.name)}
                 <a
-                  class="rounded-xs text-ink-strong underline decoration-border-control underline-offset-3 wrap-anywhere hover:decoration-ink-muted focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring"
+                  class="rounded-xs text-ink-strong underline decoration-border-control underline-offset-3 wrap-anywhere hover:decoration-ink-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink"
                   data-link-to={link.name}
                   href={pageHref(link.name)}
                   onclick={(event) => {
@@ -331,13 +331,13 @@
     {/if}
 
     {#if unread && !read}
-      <p class="type-body py-space-5 text-ink-muted" role="alert">
+      <p class="type-body py-space-4 text-ink-muted" role="alert">
         {words.unread(unread)}
       </p>
     {:else if decided && read?.record}
       <!-- The record on the page's own grid: two across on a desk, one under;
            the cards stretch to their row, their content at its top. -->
-      <div class="grid grid-cols-1 gap-space-3 wide:grid-cols-2" in:reveal>
+      <div class="grid grid-cols-1 gap-space-3 desk:grid-cols-2" in:reveal>
         {#each read.record.cards as each (each.id)}
           <RecordCard card={each} {hrefOf} {onopentask} {taskOf} />
         {/each}
@@ -352,9 +352,9 @@
         title={read.title}
       />
     {:else if read}
-      <p class="type-body py-space-5 text-ink-muted" in:reveal>{words.gone}</p>
+      <p class="type-body py-space-4 text-ink-muted" in:reveal>{words.gone}</p>
     {:else}
-      <div aria-hidden="true" class="p-space-5" out:revealOut>
+      <div aria-hidden="true" class="p-space-4" out:revealOut>
         <Skeleton class="w-2/5" data-slot="block" line="body" radius="text" />
       </div>
     {/if}
@@ -366,7 +366,7 @@
   <form
     data-slot="dock"
     data-safe-bottom
-    class="absolute inset-x-0 bottom-(--dock-bottom) z-(--layer-dock) mx-auto flex w-(--composer-w) max-w-full flex-col gap-space-2 max-desk:w-full"
+    class="absolute inset-x-0 bottom-(--dock-bottom) z-40 mx-auto flex w-(--composer-w) max-w-full flex-col gap-space-2 max-desk:w-full"
     style:--dock-bottom="calc(var(--spacing-space-4) + var(--safe-bottom))"
     onsubmit={(event) => {
       event.preventDefault();
@@ -377,7 +377,7 @@
     {#if refusal}
       <p
         data-slot="feedback"
-        class="type-meta m-0 px-space-3 text-status-fail-ink"
+        class="type-meta m-0 px-space-3 text-status-fail"
         role="alert"
         in:appear
       >
@@ -396,8 +396,8 @@
       class={dockShellVariants({
         class: "flex items-end gap-space-2 p-space-2 ps-space-3",
       })}
-      style:--note-leading="var(--leading-ui)"
-      style:--note-fs="var(--text-body)"
+      style:--note-leading="var(--leading-lg)"
+      style:--note-fs="var(--text-base)"
     >
       <Textarea
         {shell}

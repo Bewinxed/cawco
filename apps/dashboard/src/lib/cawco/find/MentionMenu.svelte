@@ -72,11 +72,11 @@
     const out = direction === "out";
     const travel = motionOk.current;
     return {
-      duration: dur(out ? "--duration-fade" : "--duration-panel"),
+      duration: dur(out ? "--duration-base" : "--duration-slow"),
       easing: out ? easeOut : easeDrawer,
       css: (t: number) =>
         travel
-          ? `opacity: ${t}; transform: translateY(calc(var(--pop-rise) * ${1 - t})) scale(${0.96 + 0.04 * t})`
+          ? `opacity: ${t}; transform: translateY(calc(var(--spacing-space-2) * ${1 - t})) scale(${0.96 + 0.04 * t})`
           : `opacity: ${t}`,
     };
   }
@@ -113,7 +113,7 @@
       >
         Can't reach the hub. Nothing can be named until it's back.
         <button
-          class="select-none border-none border-current p-0 bg-transparent text-brand-ink"
+          class="select-none border-none border-current p-0 bg-transparent text-accent-ink"
           onclick={() => mention.retry()}
           type="button">Retry</button
         >

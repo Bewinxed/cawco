@@ -70,7 +70,7 @@
      reflow, what follows sliding. -->
 <div class="flex flex-col gap-space-2" {@attach reflow()}>
   {#if failed}
-    <p class="type-meta text-status-attn-ink" role="alert">{failed}</p>
+    <p class="type-meta text-status-attn" role="alert">{failed}</p>
   {:else if versions.length === 0}
     <p data-slot="note" class="max-w-measure type-meta text-ink-muted">
       Nothing has been saved over yet.
@@ -84,7 +84,7 @@
           class="flex flex-wrap items-center justify-between gap-space-2 py-space-2 not-first:border-t not-first:border-t-border-hairline"
           data-flip
         >
-          <span class="flex flex-col gap-space-row">
+          <span class="flex flex-col gap-space-1">
             <span class="type-label text-ink-strong">{version.name}</span>
             <span
               data-slot="note"

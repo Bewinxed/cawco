@@ -45,7 +45,7 @@
 {#snippet listed(each: Place[])}
   <ul class="m-0 flex min-w-0 list-none flex-col gap-space-2 p-0">
     {#each each as place (`${place.machine}\0${place.path}`)}
-      <li class="flex min-w-0 flex-col gap-space-row">
+      <li class="flex min-w-0 flex-col gap-space-1">
         <span class="type-label text-ink-strong">{place.machine}</span>
         <!-- The path reads from its end: the folder's tail stays when
              it is cut, and one that fits starts under its machine's

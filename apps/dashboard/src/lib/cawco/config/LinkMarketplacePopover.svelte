@@ -215,10 +215,10 @@
   />
   <Popover.Content
     align="start"
-    class="w-(--panel-w) max-w-(--bits-popover-content-available-width)"
     customAnchor={parked.fromRow}
     gap="form"
     pad="form"
+    width="panel"
     bind:ref={seat.surface}
   >
     <form

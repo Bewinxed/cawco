@@ -67,14 +67,14 @@
       <LiveDot /><span>Loading…</span>
     </p>
   {:else if failed}
-    <p class="type-meta text-status-attn-ink" role="alert">{failed}</p>
+    <p class="type-meta text-status-attn" role="alert">{failed}</p>
   {:else if rows.length === 0}
     <p data-slot="note" class="max-w-measure type-meta text-ink-muted">
       It has not caught anything yet. Nothing to see is the good outcome.
     </p>
   {:else}
     {#if waiting > 0}
-      <p data-slot="num" class="num type-meta text-status-attn-ink" data-flip>
+      <p data-slot="num" class="num type-meta text-status-attn" data-flip>
         {waiting}
         {waiting === 1 ? "session is" : "sessions are"}
         still pending — it clears when their next turn ends without matching.
@@ -97,7 +97,7 @@
             >
               <span
                 data-slot="path"
-                class="font-(family-name:--font-mono) text-size-meta wrap-anywhere text-ink-strong"
+                class="font-(family-name:--font-mono) text-sm wrap-anywhere text-ink-strong"
                 >{row.where}</span
               >
               {#if row.harness}
@@ -112,7 +112,7 @@
           </div>
 
           {#if row.status === "pending"}
-            <p class="type-meta text-status-attn-ink">
+            <p class="type-meta text-status-attn">
               Fired {times(row.fireCount)} in a row.
             </p>
           {/if}

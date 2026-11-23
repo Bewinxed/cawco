@@ -40,7 +40,7 @@
 
 <main
   data-slot="pairing"
-  class="flex min-h-dvh flex-col items-center justify-center gap-space-4 bg-surface-page px-space-5 py-space-8"
+  class="flex min-h-dvh flex-col items-center justify-center gap-space-4 bg-surface-page px-space-4 py-space-8"
 >
   <div
     data-slot="caw-80"
@@ -73,7 +73,7 @@
           <p
             data-num
             data-slot="code"
-            class="num m-0 rounded-sm bg-surface-recess px-space-5 py-space-3 type-kpi font-(family-name:--font-mono) text-ink-strong select-all"
+            class="num m-0 rounded-sm bg-surface-recess px-space-4 py-space-3 type-kpi font-(family-name:--font-mono) text-ink-strong select-all"
           >
             <span class="sr-only">Pairing code </span>{stage.userCode}
           </p>

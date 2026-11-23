@@ -19,7 +19,7 @@
   }: {
     form: Form;
     class: ClassValue;
-    deskPad: "p-space-4" | "p-space-5";
+    deskPad: "p-space-4" | "p-space-4";
     children: Snippet;
   } = $props();
 </script>

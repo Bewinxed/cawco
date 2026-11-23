@@ -53,7 +53,7 @@
   {section}
 >
   {#if chosen}
-    <div class="flex flex-col gap-space-5" data-slot="own-tools">
+    <div class="flex flex-col gap-space-4" data-slot="own-tools">
       <ToolChoice
         fault={faults.helpers}
         heading={words.helpers.heading}
@@ -70,7 +70,7 @@
       <ToolChoice
         fault={faults.stepLists}
         heading={words.stepLists.heading}
-        hue="var(--color-mark-4)"
+        hue="var(--color-mark-2)"
         icon={IconListCheck}
         id="step-lists"
         lines={words.stepLists.lines}

@@ -26,7 +26,7 @@
    * buttons, MediaPlayer) takes this recipe on that element.
    */
   export const barItemVariants = tv({
-    base: "group/bar-item relative inline-flex group-data-joined/tools:data-open:after:absolute group-data-joined/tools:data-open:after:inset-x-0 group-data-joined/tools:data-open:after:top-full group-data-joined/tools:data-open:after:h-space-1 group-data-joined/tools:data-open:after:bg-inherit group-data-joined/tools:data-open:after:pointer-events-none h-row-compact min-w-row-compact flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:not-data-open:bg-surface-hover data-open:not-data-lit:unhovered:bg-surface-hover data-open:not-data-lit:hover:bg-surface-pressed data-lit:bg-selected-bg data-lit:text-brand-ink [&>[data-slot=bar-symbol]]:size-4.5 [&>[data-slot=bar-symbol]]:flex-none",
+    base: "group/bar-item relative inline-flex group-data-joined/tools:data-open:after:absolute group-data-joined/tools:data-open:after:inset-x-0 group-data-joined/tools:data-open:after:top-full group-data-joined/tools:data-open:after:h-space-1 group-data-joined/tools:data-open:after:bg-inherit group-data-joined/tools:data-open:after:pointer-events-none h-row-compact min-w-row-compact flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:not-data-open:bg-surface-hover data-open:not-data-lit:unhovered:bg-surface-hover data-open:not-data-lit:hover:bg-surface-pressed data-lit:bg-accent-wash data-lit:text-accent-ink [&>[data-slot=bar-symbol]]:size-4.5 [&>[data-slot=bar-symbol]]:flex-none",
     variants: {
       /** What it holds: a symbol, a title's words and chevron (a bar's title as a control), an action's words, or Caw's head. */
       form: {
@@ -40,7 +40,7 @@
         /* A word action (Cancel, a count said in words): its words at the
            label's size, an even inset either side, cut at their end. */
         words:
-          "mark-line min-w-0 max-w-full px-space-2 text-size-label font-medium text-ink-strong num",
+          "mark-line min-w-0 max-w-full px-space-2 text-base font-medium text-ink-strong num",
         /* His head in one cell, a circle a symbol's box wide whatever the
            strips' boxes (the beat's reach past it); on the phone's glass his
            ring over his own box, as the sidebar toggle's is, and a finger's
@@ -58,8 +58,8 @@
       /** Its symbol's ink, said of what it stands for. */
       tone: {
         muted: "[&>[data-slot=bar-symbol]]:text-ink-muted",
-        attn: "[&>[data-slot=bar-symbol]]:text-status-attn-glyph",
-        fail: "[&>[data-slot=bar-symbol]]:text-status-fail-glyph",
+        attn: "[&>[data-slot=bar-symbol]]:text-status-attn",
+        fail: "[&>[data-slot=bar-symbol]]:text-status-fail",
       },
       /** Drawn only from the phone breakpoint up (`wide`), or only on the desk's glass, gone from the phone's (`desk`: the shell container's desk line). */
       layout: {
@@ -72,7 +72,7 @@
       // Selected, its symbol takes the selected ink with its wash.
       {
         tone: "muted",
-        class: "data-lit:[&>[data-slot=bar-symbol]]:text-brand-ink",
+        class: "data-lit:[&>[data-slot=bar-symbol]]:text-accent-ink",
       },
     ],
     defaultVariants: {
@@ -240,7 +240,7 @@
     class={look}
     {href}
     style:--count-foot={COUNT_FOOT}
-    style:--count-glyph="var(--bar-symbol)"
+    style:--count-glyph="calc(var(--spacing) * 4.5)"
     style:--caw-hit-top={form === "head" ? CAW_HIT_TOP : undefined}
     type={href ? undefined : "button"}
     bind:this={ref}

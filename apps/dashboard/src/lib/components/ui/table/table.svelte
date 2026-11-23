@@ -29,7 +29,7 @@
           "@max-phone/table:grid @max-phone/table:grid-cols-(--card-cols) @max-phone/table:items-center @max-phone/table:border-b @max-phone/table:border-b-border-hairline @max-phone/table:last:border-b-none @max-phone/table:[&:is(tbody>tr):last-child]:border-b-none",
         /** Picked, spaced, ruled but the last. */
         "picks-stacks":
-          "@max-phone/table:grid @max-phone/table:grid-cols-(--card-cols) @max-phone/table:items-center @max-phone/table:gap-x-space-2 @max-phone/table:gap-y-space-1 @max-phone/table:border-b @max-phone/table:border-b-border-hairline data-[state=selected]:data-picked:@max-phone/table:bg-selected-bg @max-phone/table:px-space-3 @max-phone/table:py-space-2 data-picked:@max-phone/table:bg-selected-bg @max-phone/table:last:border-b-none",
+          "@max-phone/table:grid @max-phone/table:grid-cols-(--card-cols) @max-phone/table:items-center @max-phone/table:gap-x-space-2 @max-phone/table:gap-y-space-1 @max-phone/table:border-b @max-phone/table:border-b-border-hairline data-[state=selected]:data-picked:@max-phone/table:bg-accent-wash @max-phone/table:px-space-3 @max-phone/table:py-space-2 data-picked:@max-phone/table:bg-accent-wash @max-phone/table:last:border-b-none",
       },
       cell: {
         "ledger-stacks":
@@ -135,7 +135,7 @@
        * cell is a block at that tier, and the fold comes after it.
        */
       /** The task ledger's Labels: from a 1102px ledger, never in the card. */
-      "tasks-labels": "@max-wide/table:hidden @max-phone/table:hidden",
+      "tasks-labels": "@max-desk/table:hidden @max-phone/table:hidden",
       /** The task ledger's Created: from an 878px ledger, never in the card. */
       "tasks-created": "@max-desk/table:hidden @max-phone/table:hidden",
       /** The task ledger's To-dos: from a 766px ledger, and in the card. */
@@ -150,12 +150,12 @@
        * card (`stacks="narrow"`).
        */
       /** The runs ledger's Took: from a 576px ledger, never in the card. */
-      "runs-took": "@max-md/table:hidden",
+      "runs-took": "@max-phone/table:hidden",
       /**
        * In a ledger narrower than the Routines block's measure
        * (`c-block-routines`, 34rem), whose row then says it in its own line.
        */
-      measure: "@max-md/table:hidden",
+      measure: "@max-phone/table:hidden",
     },
   } as const;
 

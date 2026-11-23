@@ -112,19 +112,19 @@
 {#if !expired}
   <!-- The overlay: a card centred in the browser well, over the stream. -->
   <div
-    class="absolute inset-0 z-2 grid place-items-center bg-scrim"
+    class="absolute inset-0 z-2 grid place-items-center bg-surface-page/72"
     data-slot="passkey-qr-overlay"
     transition:appear
   >
     <!-- mark-line: the icon is in the title row, not beside the card's body -->
     <div
-      class="flex w-full max-w-95 flex-col items-center gap-space-4 rounded-modal border border-border-hairline bg-surface-raised p-space-5 shadow-sm"
+      class="flex w-full max-w-95 flex-col items-center gap-space-4 rounded-xl border border-border-hairline bg-surface-raised p-space-4 shadow-sm"
       data-slot="passkey-qr-card"
     >
       <!-- Title with key icon. -->
       <div class="mark-line flex items-center gap-space-2">
         <span class="mark-cell">
-          <IconKey class="size-icon-md text-coral-9" />
+          <IconKey class="size-icon-md text-accent" />
         </span>
         <span class="mark-text">
           <h3 class="m-0 type-title text-ink-strong">
@@ -136,7 +136,7 @@
       <!-- Inline QR code: the raised surface behind it, the modules in
              ink-strong, as the house's PhoneQr draws its own. -->
       <svg
-        class="block size-48 flex-none rounded-sm bg-surface-raised text-ink-strong shadow-xs"
+        class="block size-48 flex-none rounded-sm bg-surface-raised text-ink-strong shadow-sm"
         aria-label={passkeyWords.qrCode}
         role="img"
         viewBox="0 0 {code.size} {code.size}"

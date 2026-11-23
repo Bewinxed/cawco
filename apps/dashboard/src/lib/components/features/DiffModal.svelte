@@ -5,7 +5,7 @@
    * holds nothing (DESIGN.md, The Open Page Rule): no scrim, the page live
    * under it, as tall as the diff up to the dialog's cap. Each layout is drawn
    * into its own layer, so switching cross-fades the new one in over the
-   * old over --duration-control instead of redrawing in place.
+   * old over --duration-fast instead of redrawing in place.
    */
   import { type FileDiffMetadata, parseDiffFromFile } from "@pierre/diffs";
   import { CopyButton } from "#lib/components/ui/copy-button/index.js";
@@ -81,7 +81,7 @@
   >
     <header
       data-slot="head"
-      class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-2 py-space-3 ps-space-5 pe-13 border-b border-b-border-hairline"
+      class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-2 py-space-3 ps-space-4 pe-13 border-b border-b-border-hairline"
     >
       <div class="flex min-w-0 items-center gap-3">
         <div class="flex min-w-0 items-center gap-2">
@@ -96,8 +96,8 @@
           />
         </div>
         <div data-slot="num" class="num flex items-center gap-2 type-meta">
-          <span class="text-status-done-glyph">+{stats.additions}</span>
-          <span class="text-status-fail-glyph">-{stats.deletions}</span>
+          <span class="text-status-done">+{stats.additions}</span>
+          <span class="text-status-fail">-{stats.deletions}</span>
         </div>
       </div>
       <ToggleGroup.Root
@@ -124,8 +124,8 @@
         <div
           data-slot="layer"
           class="min-h-full"
-          style:--diffs-font-size="var(--text-label)"
-          style:--diffs-line-height="var(--leading-code)"
+          style:--diffs-font-size="var(--text-base)"
+          style:--diffs-line-height="var(--leading-base)"
           style:--diffs-bg-separator-override="var(--color-surface-recess)"
           in:crossIn
           out:crossOut

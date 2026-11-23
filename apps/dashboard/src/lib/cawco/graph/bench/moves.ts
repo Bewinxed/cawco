@@ -55,17 +55,17 @@ const swap = (start: number): ClipRead[] => [
     "Button “Create routine”",
     "--press-by",
     start,
-    "--duration-fade",
+    "--duration-base",
     [{ property: "--press-by", from: "1", to: "0.97" }]
   ),
-  clip(BUTTON, "Button “Create routine”", "opacity", start, "--duration-fade", [
+  clip(BUTTON, "Button “Create routine”", "opacity", start, "--duration-base", [
     { property: "opacity", from: "1", to: "0" },
   ]),
 ];
 
 /** A line unfolding under its field: its height and its ink, together. */
 const unfold = (thing: string, element: string, start: number): ClipRead[] => [
-  clip(thing, element, "height, opacity", start, "--duration-panel", [
+  clip(thing, element, "height, opacity", start, "--duration-slow", [
     { property: "height", from: "0px", to: "20px" },
     { property: "opacity", from: "0", to: "1" },
   ]),

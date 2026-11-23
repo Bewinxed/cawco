@@ -1520,7 +1520,7 @@
   /** A view that fills its pane stands on the pane's foot at its own padding. */
   const PANE_FOOT: Record<string, string> = {
     board: "pb-0",
-    canvas: "pb-space-5",
+    canvas: "pb-space-4",
     "decisions-page": "pb-0",
   };
   /**
@@ -1582,7 +1582,7 @@
 {#snippet strip(roomy: boolean)}
   <div
     data-slot="strip"
-    class="flex min-w-0 items-center gap-space-3 pt-0 pe-space-6 pb-space-4 ps-space-6 max-desk:px-space-5"
+    class="flex min-w-0 items-center gap-space-3 pt-0 pe-space-6 pb-space-4 ps-space-6 max-desk:px-space-4"
   >
     <ViewTabs
       {current}
@@ -1979,7 +1979,7 @@
            words. -->
       <div
         data-slot="caw-empty"
-        class="mx-auto w-full max-w-(--starters-w)"
+        class="mx-auto w-full max-w-182"
         in:reveal
       >
         <EmptyState
@@ -2145,7 +2145,7 @@
               "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:scroll-pb-(--reveal-foot) max-phone:fade-inset-end-(--bar-fade-inset)",
               fadeOn === "page" && "kit-edge-fade-block",
             ]}
-            style:--reveal-foot={`max(${docked ? "var(--sheet-max-h)" : "var(--bar-reach)"}, var(--fade-foot))`}
+            style:--reveal-foot={`max(${docked ? "85vh" : "var(--bar-reach)"}, var(--fade-foot))`}
             style:--bar-reach={"calc(var(--composer-panel) + var(--spacing-space-4) + var(--safe-bottom) + var(--spacing-space-3))"}
             style:--bar-fade-inset={"calc(var(--bar-reach) - var(--spacing-space-3))"}
           >
@@ -2172,7 +2172,7 @@
             {#if lead.problem}
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-6 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-6 w-auto max-desk:mx-space-4"
                 variant="warning"
               >
                 <AlertDescription>{lead.problem}</AlertDescription>
@@ -2181,7 +2181,7 @@
             {#if board.stages && board.stages.problems.length > 0}
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-6 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-6 w-auto max-desk:mx-space-4"
                 variant="warning"
               >
                 <AlertDescription>{unreadStages}</AlertDescription>
@@ -2190,7 +2190,7 @@
             {#if board.list && board.list.problems.length > 0}
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-6 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-6 w-auto max-desk:mx-space-4"
                 variant="warning"
               >
                 <AlertDescription
@@ -2203,7 +2203,7 @@
                  title or id, and why, and where they wait to be tried
                  again: said where the restore landed, until dismissed. -->
               <RestoreHeldAlert
-                class="me-space-6 mb-space-3 ms-space-6 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-6 w-auto max-desk:mx-space-4"
                 ondismiss={() => restoreHeld.dismiss(projectId)}
                 rows={heldBack}
               />
@@ -2213,7 +2213,7 @@
                  once, here, with its Retry. -->
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-6 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-6 w-auto max-desk:mx-space-4"
                 variant="warning"
               >
                 <AlertDescription>{unread}</AlertDescription>
@@ -2351,12 +2351,12 @@
     ]}
     data-view={reading.current ? "board" : paneView}
     style:--draft-bleed-end={sheetQuery.current
-      ? "var(--spacing-space-5)"
+      ? "var(--spacing-space-4)"
       : "var(--spacing-space-6)"}
     style:--draft-bleed-start={sheetQuery.current
-      ? "var(--spacing-space-5)"
+      ? "var(--spacing-space-4)"
       : "var(--spacing-space-6)"}
-    style:--pane-min={docked ? "calc(50cqb + var(--sheet-max-h))" : "50cqb"}
+    style:--pane-min={docked ? "calc(50cqb + 85vh)" : "50cqb"}
   >
     {#if reading.current}
       <!-- The board at its real layout, its columns standing empty: the
@@ -2364,7 +2364,7 @@
       <div
         aria-hidden="true"
         class="grid auto-cols-(--skeleton-col) grid-flow-col gap-space-3 overflow-hidden max-phone:auto-cols-(--skeleton-col-phone)"
-        style:--skeleton-col={"minmax(var(--board-col-min), var(--board-col-max))"}
+        style:--skeleton-col={"minmax(calc(var(--spacing) * 60), calc(var(--spacing) * 88))"}
         style:--skeleton-col-phone="calc(100% - var(--spacing-space-8))"
         out:revealOut
       >
@@ -2427,7 +2427,7 @@
       class="w-(--ask-w)"
       customAnchor={askAnchor}
       side="bottom"
-      style="--ask-w: min(var(--panel-w), calc(100vw - 2 * var(--spacing-space-3)))"
+      style="--ask-w: min(calc(var(--spacing) * 95), calc(100vw - 2 * var(--spacing-space-3)))"
     >
       <div
         class="relative w-full"

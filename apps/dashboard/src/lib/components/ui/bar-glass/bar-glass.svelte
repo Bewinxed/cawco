@@ -52,8 +52,8 @@
    * HangCard `glass`) the glass is one shape with the card (Caw's panel's surface brief, Caw's
    * panel): its join takes the card's `surface-raised` and `border-control`
    * edge over its top, down its flanks and up a `radius-lg` flare at its
-   * leading foot, with no edge across the foot, fading in over `--duration-panel`
-   * and out over `--duration-fade`; a card a key opened or shut changes it at
+   * leading foot, with no edge across the foot, fading in over `--duration-slow`
+   * and out over `--duration-base`; a card a key opened or shut changes it at
    * once (motion/keyed lands it). On the phone the join runs on down through the neck, square
    * on its trailing side, which goes straight on down into the card's.
    */
@@ -148,7 +148,7 @@
   {...attributes}
   data-slot="tools"
   class={[
-    "group/tools relative isolate flex items-center gap-space-1 p-space-1 rounded-pill concentric-row r-inset-space-1 r-join-xs hit-gap-x-space-1 coarse:gap-space-5 coarse:hit-gap-x-space-5 before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:bg-surface-glass before:shadow-sm before:glass-backdrop before:pointer-events-none contrast-more:before:border-border-strong contrast-more:before:bg-surface-raised contrast-more:before:backdrop-filter-none reduced-transparency:before:border-border-strong reduced-transparency:before:bg-surface-raised reduced-transparency:before:backdrop-filter-none",
+    "group/tools relative isolate flex items-center gap-space-1 p-space-1 rounded-pill concentric-row r-inset-space-1 r-join-xs hit-gap-x-space-1 coarse:gap-space-4 coarse:hit-gap-x-space-4 before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:bg-surface-raised/72 before:shadow-sm before:glass-backdrop before:pointer-events-none contrast-more:before:border-border-strong contrast-more:before:bg-surface-raised contrast-more:before:backdrop-filter-none reduced-transparency:before:border-border-strong reduced-transparency:before:bg-surface-raised reduced-transparency:before:backdrop-filter-none",
     // A title's words may take two lines on a phone (ArtifactMenu): its
     // ground grows with them.
     form === "title" ? "before:hidden min-h-control-md" : "h-control-md",
@@ -184,7 +184,7 @@
     data-slot="join"
     aria-hidden="true"
     class={[
-      "absolute pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--duration-fade) ease-out [--r:var(--r-outer)] group-data-joined/tools:opacity-100 group-data-joined/tools:duration-(--duration-panel) before:absolute before:inset-0 before:bg-surface-raised before:clip-join",
+      "absolute pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--duration-base) ease-out [--r:var(--r-outer)] group-data-joined/tools:opacity-100 group-data-joined/tools:duration-(--duration-slow) before:absolute before:inset-0 before:bg-surface-raised before:clip-join",
       flare === "start"
         ? "-start-(--f) end-0"
         : "start-0 -end-(--f) -scale-x-100",

@@ -160,7 +160,7 @@ export class GroupRelay<
       change.apply();
     });
 
-    let done = dur("--duration-panel");
+    let done = dur("--duration-slow");
     if (list && moving) {
       const driven = driveHeights(list, this.#boxes, before, relayed.lastOut);
       this.#heights = driven.runs;

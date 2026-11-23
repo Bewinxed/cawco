@@ -114,7 +114,7 @@
       {#if stage.kind === "you"}
         <IconNeedsYou
           aria-hidden="true"
-          class="size-icon-md flex-none text-status-attn-glyph"
+          class="size-icon-md flex-none text-status-attn"
         />
       {:else}
         {@const mark = markOf(stage)}
@@ -257,7 +257,7 @@
     </span>
     {#if showsKind}
       <span
-        class="type-meta whitespace-nowrap text-ink-subtle group-kind-you/col:text-status-attn-ink"
+        class="type-meta whitespace-nowrap text-ink-subtle group-kind-you/col:text-status-attn"
         >{kindWord}</span
       >
     {/if}

@@ -92,7 +92,7 @@
     {#if still}
       <img
         alt={caption || name}
-        class="block h-auto max-w-full rounded-sm outline-1 -outline-offset-1 outline-image-outline"
+        class="block h-auto max-w-full rounded-sm outline-1 -outline-offset-1 outline-ink-strong/10"
         data-slot="clip-still"
         src={still}
       />

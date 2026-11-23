@@ -60,7 +60,7 @@
   /** The page arriving: it fades in where it lays out. */
   function pageIn(_node: Element) {
     return {
-      duration: dur("--duration-fade"),
+      duration: dur("--duration-base"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
@@ -68,7 +68,7 @@
   /** The page leaving, pinned where it stood so the dialog is only ever the size of what arrives. */
   function pageOut(node: HTMLElement) {
     return lifting(node, pinned(node), {
-      duration: dur("--duration-fade"),
+      duration: dur("--duration-base"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     });
@@ -189,7 +189,7 @@
     const row = rowOf(parked);
     if (phone.current) {
       if (row) {
-        setTimeout(() => echo(row), dur("--duration-fade"));
+        setTimeout(() => echo(row), dur("--duration-base"));
       }
       return;
     }
@@ -201,7 +201,7 @@
     const flight = closeInto(
       node,
       target,
-      dur("--duration-panel"),
+      dur("--duration-slow"),
       CURVE.drawer
     );
     if (row && flight) {
@@ -278,7 +278,7 @@
           },
           { transformOrigin: "0 0", transform: "none", opacity: 1 },
         ],
-        { duration: dur("--duration-panel"), easing: CURVE.drawer }
+        { duration: dur("--duration-slow"), easing: CURVE.drawer }
       );
       flight.finished
         .catch(() => undefined)

@@ -36,15 +36,15 @@ import { spawnWords } from "@cawco/core/words/spawn";
 import { accountsStore } from "../stores/accounts.svelte";
 import { boardStore } from "../stores/board.svelte";
 
-/** Account hue mapped onto the categorical mark scale (`--color-mark-2..8`). */
+/** Account hue mapped onto the categorical mark scale (`--color-mark-1..7`). */
 const ACCOUNT_MARK: Record<AccountHue, number> = {
-  orange: 2,
-  amber: 3,
-  green: 4,
-  cyan: 5,
-  blue: 6,
-  violet: 7,
-  rose: 8,
+  orange: 1,
+  amber: 2,
+  green: 3,
+  cyan: 4,
+  blue: 5,
+  violet: 6,
+  rose: 7,
 };
 
 /** The colour token an account is drawn in. */

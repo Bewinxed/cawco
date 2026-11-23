@@ -21,7 +21,7 @@ body {
   overflow: hidden;
   background: var(--color-surface-raised);
   color: var(--color-ink-strong);
-  font: var(--type-body);
+  font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans);
 }
 
 /* The canvas's ground and grid: Excalidraw draws on a clear canvas over
@@ -91,9 +91,9 @@ body {
   padding: var(--spacing-space-2);
   border: 1px solid var(--color-border-control);
   border-radius: var(--radius-lg);
-  background: var(--color-surface-glass);
-  backdrop-filter: blur(calc(var(--material-blur) * 1.4))
-    saturate(var(--material-saturate));
+  background: oklch(from var(--color-surface-raised) l c h / 0.72);
+  backdrop-filter: blur(calc(var(--blur-glass) * 1.4))
+    saturate(1.6);
   box-shadow: var(--shadow-sm);
 
   @media (prefers-reduced-transparency: reduce) {
@@ -169,15 +169,15 @@ body {
   place-items: center;
   border: 0;
   border-radius: calc(
-    var(--radius-lg) - var(--spacing-space-2) - var(--border-width)
+    var(--radius-lg) - var(--spacing-space-2) - 1px
   );
   background: transparent;
   color: var(--color-ink-muted);
   cursor: pointer;
   transition:
-    background-color var(--duration-control) var(--ease-out),
-    color var(--duration-control) var(--ease-out),
-    scale var(--duration-control) var(--ease-out);
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    scale var(--duration-fast) var(--ease-out);
 
   &[data-chosen] {
     background: var(--color-surface-pressed);
@@ -187,8 +187,8 @@ body {
     scale: 0.97;
   }
   &:focus-visible {
-    outline: var(--focus-ring-width) solid var(--color-focus-ring);
-    outline-offset: var(--focus-ring-offset);
+    outline: 2px solid var(--color-accent-ink);
+    outline-offset: 2px;
   }
   &:focus:not(:focus-visible) {
     outline: none;
@@ -205,7 +205,7 @@ body {
 /* A box's glyph swapping (rail.tsx SwapGlyph), as the composer's Send and
    Stop do (Composer.svelte, icon-swap): the glyph going out and the one
    coming in share the box's one cell, trading places by opacity and scale
-   out of a 4px blur over --duration-control on ease-out. With reduced motion
+   out of a 4px blur over --duration-fast on ease-out. With reduced motion
    they only cross-fade. */
 .rail-glyphs {
   display: grid;
@@ -218,10 +218,10 @@ body {
   place-items: center;
 
   &[data-swap="in"] {
-    animation: rail-glyph-in var(--duration-control) var(--ease-out) both;
+    animation: rail-glyph-in var(--duration-fast) var(--ease-out) both;
   }
   &[data-swap="out"] {
-    animation: rail-glyph-out var(--duration-control) var(--ease-out) both;
+    animation: rail-glyph-out var(--duration-fast) var(--ease-out) both;
   }
   @media (prefers-reduced-motion: reduce) {
     &[data-swap="in"] {
@@ -303,7 +303,7 @@ body {
   transform-origin: top left;
 
   @media (prefers-reduced-motion: no-preference) {
-    animation: rail-menu-in var(--duration-panel) var(--ease-drawer);
+    animation: rail-menu-in var(--duration-slow) var(--ease-drawer);
   }
 }
 
@@ -316,7 +316,7 @@ body {
 @keyframes rail-menu-in {
   from {
     opacity: 0;
-    translate: 0 calc(-1 * var(--pop-rise));
+    translate: 0 calc(-1 * var(--spacing-space-2));
     scale: var(--pop-scale);
   }
 }
@@ -335,7 +335,7 @@ body {
   background: transparent;
   color: var(--color-ink-strong);
   cursor: pointer;
-  font: var(--type-label);
+  font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
   text-align: start;
 
   & > svg {
@@ -343,8 +343,8 @@ body {
     color: var(--color-ink-muted);
   }
   &:focus-visible {
-    outline: var(--focus-ring-width) solid var(--color-focus-ring);
-    outline-offset: var(--focus-ring-inset);
+    outline: 2px solid var(--color-accent-ink);
+    outline-offset: -2px;
   }
   &:focus:not(:focus-visible) {
     outline: none;
@@ -366,18 +366,18 @@ body {
 
 .rail-item-hint {
   color: var(--color-ink-muted);
-  font: var(--type-meta);
+  font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans);
 }
 
 /* A checked item's tick (DESIGN.md, Menu item): in the item's own ink, no
    fill; the hover is the only fill an item takes. It fades in over
-   --duration-control as the kit's menu tick does. */
+   --duration-fast as the kit's menu tick does. */
 .rail-item-tick {
   display: grid;
   flex: none;
   place-items: center;
   opacity: 0;
-  transition: opacity var(--duration-control) var(--ease-out);
+  transition: opacity var(--duration-fast) var(--ease-out);
 
   &[data-on="true"] {
     opacity: 1;
@@ -387,9 +387,9 @@ body {
 /* ---- A file the canvas wouldn't take (images.ts): one line in the error
    formula over the grid, under the rail (over it on a phone, whose rail
    stands at the foot), in the panel material's raised card. It fades in
-   over --duration-fade and stands until the person next acts on the canvas (a
+   over --duration-base and stands until the person next acts on the canvas (a
    press, a key, a paste or a drop: images.ts marks it `data-leaving`), then
-   fades out over --duration-fade, by opacity alone, so reduced motion keeps it
+   fades out over --duration-base, by opacity alone, so reduced motion keeps it
    as it is. No timer takes it away. It takes no press. */
 .canvas-refusal {
   --refusal-top: calc(
@@ -405,17 +405,17 @@ body {
   margin: 0;
   padding: var(--spacing-space-2) var(--spacing-space-3);
   border: 1px solid var(--color-border-control);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-sm);
   color: var(--color-ink-strong);
-  font: var(--type-body);
+  font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans);
   pointer-events: none;
   translate: -50% 0;
-  animation: canvas-refusal-in var(--duration-fade) var(--ease-out);
+  animation: canvas-refusal-in var(--duration-base) var(--ease-out);
 
   &[data-leaving] {
-    animation: canvas-refusal-out var(--duration-fade) var(--ease-out) forwards;
+    animation: canvas-refusal-out var(--duration-base) var(--ease-out) forwards;
   }
 }
 
@@ -453,7 +453,7 @@ body {
    centred over the grid, standing while it can't. The pen draws nothing
    under it (view mode); the rail still takes Done and Dock. Before the doc
    first syncs the line waits out --duration-loop (host.tsx), then fades in
-   over --duration-fade, by opacity alone, as the image refusal does. */
+   over --duration-base, by opacity alone, as the image refusal does. */
 .canvas-unlinked {
   position: absolute;
   z-index: 3;
@@ -467,10 +467,10 @@ body {
 .canvas-unlinked-line {
   max-width: 60ch;
   margin: 0;
-  color: var(--color-status-fail-ink);
-  font: var(--type-body);
+  color: var(--color-status-fail);
+  font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans);
   text-align: center;
-  animation: canvas-refusal-in var(--duration-fade) var(--ease-out);
+  animation: canvas-refusal-in var(--duration-base) var(--ease-out);
 }
 
 /* ---- The empty canvas: the empty recipe, centred. Only its action takes
@@ -501,13 +501,13 @@ body {
 .canvas-empty-title {
   margin: 0;
   color: var(--color-ink-strong);
-  font: var(--type-title);
+  font: var(--font-weight-medium) var(--text-lg) / var(--leading-lg) var(--font-sans);
 }
 
 .canvas-empty-line {
   margin: 0;
   color: var(--color-ink-muted);
-  font: var(--type-body);
+  font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans);
 }
 
 /* The kit's outline button at sm: 30px, 11px in, 10px radius. */
@@ -516,22 +516,22 @@ body {
   margin-top: var(--spacing-space-2);
   padding: 0 var(--spacing-space-3);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--color-surface-raised);
   color: var(--color-ink-strong);
   cursor: pointer;
-  font: var(--type-label);
+  font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
   pointer-events: auto;
   transition:
-    background-color var(--duration-control) var(--ease-out),
-    scale var(--duration-control) var(--ease-out);
+    background-color var(--duration-fast) var(--ease-out),
+    scale var(--duration-fast) var(--ease-out);
 
   &:active {
     scale: 0.97;
   }
   &:focus-visible {
-    outline: var(--focus-ring-width) solid var(--color-focus-ring);
-    outline-offset: var(--focus-ring-offset);
+    outline: 2px solid var(--color-accent-ink);
+    outline-offset: 2px;
   }
   @media (hover: hover) and (pointer: fine) {
     &:hover {
@@ -567,11 +567,11 @@ body {
 
 .canvas-change {
   fill: none;
-  stroke: var(--color-status-done-glyph);
-  stroke-width: var(--focus-ring-width);
+  stroke: var(--color-status-done);
+  stroke-width: 2px;
 
   &[data-leaving] {
-    animation: canvas-change-out var(--duration-fade) var(--ease-out) forwards;
+    animation: canvas-change-out var(--duration-base) var(--ease-out) forwards;
   }
 }
 
@@ -579,8 +579,8 @@ body {
    heavy as the ring's whatever its scale; none with less motion. */
 .canvas-change-ping {
   fill: none;
-  stroke: var(--color-status-done-glyph);
-  stroke-width: var(--focus-ring-width);
+  stroke: var(--color-status-done);
+  stroke-width: 2px;
   vector-effect: non-scaling-stroke;
   transform-box: fill-box;
   transform-origin: center;
@@ -627,13 +627,13 @@ body {
   padding: 0;
   align-items: stretch;
   border: 1px solid var(--color-border-hairline);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-lg);
   color: var(--color-ink-strong);
-  font: var(--type-label);
+  font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
   translate: -50% 0;
-  animation: canvas-changes-in var(--duration-panel) var(--ease-out);
+  animation: canvas-changes-in var(--duration-slow) var(--ease-out);
 
   @media (pointer: coarse) {
     height: var(--spacing-control-lg);
@@ -668,7 +668,7 @@ body {
   color: inherit;
   font: inherit;
   cursor: pointer;
-  transition: background-color var(--duration-control) var(--ease-out);
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
 /* Each by its own class: `&:hover` under the pair read as `:is(a, b):hover`,
    which Blink files under no key. */

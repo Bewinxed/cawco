@@ -30,10 +30,10 @@
 <main
   class="type-body grid min-h-dvh place-items-center bg-surface-recess p-space-6 text-ink-muted"
 >
-  <ul class="m-0 grid list-none gap-space-5 p-0" {@attach echoBeat()}>
+  <ul class="m-0 grid list-none gap-space-4 p-0" {@attach echoBeat()}>
     {#each marks as status, row (row)}
       <li
-        class="flex items-center gap-space-5"
+        class="flex items-center gap-space-4"
         data-renders={renders}
         data-row={row}
       >
@@ -59,8 +59,8 @@
   </ul>
   <!-- A working mark in no beat: it never echoes, and stands still on its
        live dot. -->
-  <p class="mark-line flex items-center gap-space-5" data-unbeaten>
-    <TreeMark fill="var(--color-mark-8)" status="live">
+  <p class="mark-line flex items-center gap-space-4" data-unbeaten>
+    <TreeMark fill="var(--color-mark-6)" status="live">
       {#snippet face()}
         <span></span>
       {/snippet}

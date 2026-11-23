@@ -88,7 +88,7 @@
   /** Its surface: raised while its list is open, deeper when this project set it. */
   const surface = $derived.by(() => {
     if (handing) {
-      return "bg-surface-raised inset-ring-2 inset-ring-brand-solid";
+      return "bg-surface-raised inset-ring-2 inset-ring-accent";
     }
     return own ? "bg-(--wash,var(--color-surface-sunk))" : "bg-surface-recess";
   });
@@ -233,7 +233,7 @@
   </div>
   {#if own && !brief}
     <button
-      class="self-center type-meta text-brand-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid aria-disabled:text-ink-muted"
+      class="self-center type-meta text-accent-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-accent-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink focus-visible:outline-solid aria-disabled:text-ink-muted"
       aria-disabled={asking !== null || undefined}
       onclick={() => {
         if (asking === null) {

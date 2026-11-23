@@ -126,7 +126,7 @@
        twice (its head and body hidden). -->
   <header
     data-slot="block-head"
-    class="mark-line press-tint flex min-h-control-sm min-w-0 cursor-grab items-center gap-space-2 rounded-md px-space-1 select-none touch-callout-none group-data-dragging/block:invisible coarse:min-h-control-lg data-block-preview:bg-surface-raised data-block-preview:px-space-3 data-block-preview:shadow-lg"
+    class="mark-line press-tint flex min-h-control-sm min-w-0 cursor-grab items-center gap-space-2 rounded-sm px-space-1 select-none touch-callout-none group-data-dragging/block:invisible coarse:min-h-control-lg data-block-preview:bg-surface-raised data-block-preview:px-space-3 data-block-preview:shadow-lg"
     {@attach dragHead(drag, () => ({ block: id, page }))}
   >
     <span
@@ -225,9 +225,9 @@
     <span
       data-slot="drop"
       aria-hidden="true"
-      class="pointer-events-none absolute z-2 rounded-hair bg-brand-solid before:absolute before:size-1.5 before:rounded-pill before:bg-brand-solid edge-bottom:inset-x-0 edge-bottom:bottom-(--drop-off) edge-bottom:h-0.5 edge-bottom:before:start-(--dot-out) edge-bottom:before:top-(--dot-mid) edge-left:inset-y-0 edge-left:start-(--drop-off) edge-left:w-0.5 edge-left:before:start-(--dot-mid) edge-left:before:top-(--dot-out) edge-right:inset-y-0 edge-right:end-(--drop-off) edge-right:w-0.5 edge-right:before:start-(--dot-mid) edge-right:before:top-(--dot-out) edge-top:inset-x-0 edge-top:top-(--drop-off) edge-top:h-0.5 edge-top:before:start-(--dot-out) edge-top:before:top-(--dot-mid)"
+      class="pointer-events-none absolute z-2 rounded-xs bg-accent before:absolute before:size-1.5 before:rounded-pill before:bg-accent edge-bottom:inset-x-0 edge-bottom:bottom-(--drop-off) edge-bottom:h-0.5 edge-bottom:before:start-(--dot-out) edge-bottom:before:top-(--dot-mid) edge-left:inset-y-0 edge-left:start-(--drop-off) edge-left:w-0.5 edge-left:before:start-(--dot-mid) edge-left:before:top-(--dot-out) edge-right:inset-y-0 edge-right:end-(--drop-off) edge-right:w-0.5 edge-right:before:start-(--dot-mid) edge-right:before:top-(--dot-out) edge-top:inset-x-0 edge-top:top-(--drop-off) edge-top:h-0.5 edge-top:before:start-(--dot-out) edge-top:before:top-(--dot-mid)"
       data-edge={over}
-      style:--drop-off={"calc(var(--spacing-space-5) / -2 - calc(var(--spacing) * 0.5) / 2)"}
+      style:--drop-off={"calc(var(--spacing-space-4) / -2 - calc(var(--spacing) * 0.5) / 2)"}
       style:--dot-mid={"calc((calc(var(--spacing) * 0.5) - calc(var(--spacing) * 1.5)) / 2)"}
       style:--dot-out={"calc(calc(var(--spacing) * 1.5) / -2)"}
     ></span>

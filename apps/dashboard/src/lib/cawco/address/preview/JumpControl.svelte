@@ -34,7 +34,7 @@
 
 <!-- Folded until pressed, so the picture as first drawn is the design alone. -->
 <details
-  class="group/jump grid gap-space-2 rounded-md border border-dashed border-border-control bg-surface-recess p-space-3"
+  class="group/jump grid gap-space-2 rounded-sm border border-dashed border-border-control bg-surface-recess p-space-3"
   data-jump-control
 >
   <summary

@@ -86,7 +86,7 @@
         aria-hidden="true"
       />
       <input
-        class="flex-1 min-w-0 h-control-md appearance-none border-none p-0 [&::-webkit-search-cancel-button]:hidden bg-transparent font-sans text-row text-ink-strong caret-brand-solid placeholder:text-ink-subtle outline-none"
+        class="flex-1 min-w-0 h-control-md appearance-none border-none p-0 [&::-webkit-search-cancel-button]:hidden bg-transparent font-sans text-input-floor text-ink-strong caret-accent placeholder:text-ink-subtle outline-none"
         aria-activedescendant={find.listOpen && find.index !== null
           ? placeId(find.viewId, find.index)
           : undefined}

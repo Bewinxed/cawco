@@ -123,7 +123,7 @@
   {:else if result}
     <span
       data-slot="bad"
-      class="mark-line type-meta inline-flex items-center gap-space-1 text-status-fail-ink"
+      class="mark-line type-meta inline-flex items-center gap-space-1 text-status-fail"
       ><IconWarningTriangle
         aria-hidden="true"
         class="size-icon-sm flex-none"
@@ -242,7 +242,7 @@
   {#if problem}
     <p
       data-slot="bad"
-      class="type-meta inline-flex items-center gap-space-1 text-status-fail-ink"
+      class="type-meta inline-flex items-center gap-space-1 text-status-fail"
       role="alert"
     >
       {problem}

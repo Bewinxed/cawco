@@ -87,7 +87,7 @@
       <img
         bind:this={shown}
         {alt}
-        class="block h-auto w-full rounded-sm outline-1 -outline-offset-1 outline-image-outline"
+        class="block h-auto w-full rounded-sm outline-1 -outline-offset-1 outline-ink-strong/10"
         data-block-picture
         data-caption={caption || undefined}
         decoding="async"

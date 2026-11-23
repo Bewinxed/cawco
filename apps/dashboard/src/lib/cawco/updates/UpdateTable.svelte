@@ -55,7 +55,7 @@
           class="mark-line inline-flex items-center gap-space-1 text-ink-strong"
         >
           {#if isCurrent(machine)}
-            <IconCheck class="size-icon-md shrink-0 text-status-done-glyph" />
+            <IconCheck class="size-icon-md shrink-0 text-status-done" />
           {/if}
           <code data-slot="num" class="num type-code">{runningOf(machine)}</code
           >

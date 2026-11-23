@@ -410,14 +410,14 @@
   /** The browser under the path box folds open and shut; read when a fold plays, the duration a root token. */
   const PANEL = {
     get ms() {
-      return dur("--duration-panel");
+      return dur("--duration-slow");
     },
     easing: CURVE.inOut,
   };
   /** The repository part, giving its column's gap back as it folds shut. */
   const REPO_PART = {
     get ms() {
-      return dur("--duration-panel");
+      return dur("--duration-slow");
     },
     easing: CURVE.inOut,
     fade: true,

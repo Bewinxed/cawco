@@ -113,7 +113,7 @@
   data-slot="group"
 >
   <SectionHeader
-    hue="var(--color-mark-4)"
+    hue="var(--color-mark-2)"
     icon={rows.length > 0 ? IconRefresh : IconCheck}
     label={rows.length > 0 ? words.behindHead(rows.length) : words.quietHead}
     level={2}
@@ -173,7 +173,7 @@
           variant="ledger-stacks"
         >
           <span
-            class="mark-line flex min-w-0 flex-wrap items-center gap-x-space-2 @phone/table:min-h-control-lg @max-phone/table:ps-(--ledger-text-inset)"
+            class="mark-line flex min-w-0 flex-wrap items-center gap-x-space-2 @phone/table:min-h-control-lg @max-phone/table:ps-space-6"
           >
             {#if hasMark(row.spec.id)}
               <HarnessLogo data-box harness={row.spec.id} />
@@ -203,7 +203,7 @@
           variant="ledger-stacks"
         >
           <div
-            class="flex flex-col items-start gap-space-1 whitespace-normal @phone/table:min-h-control-lg @phone/table:justify-center @max-phone/table:ps-(--ledger-text-inset)"
+            class="flex flex-col items-start gap-space-1 whitespace-normal @phone/table:min-h-control-lg @phone/table:justify-center @max-phone/table:ps-space-6"
           >
             <ToolUpdateCell
               blocks

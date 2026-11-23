@@ -345,7 +345,7 @@
         class="flex h-control-lg items-center gap-space-2 ps-space-4 pe-space-2"
       >
         <h2
-          class="mark-line m-0 flex min-w-0 flex-1 items-center gap-space-2 text-body font-medium"
+          class="mark-line m-0 flex min-w-0 flex-1 items-center gap-space-2 type-body font-medium"
         >
           <!-- The directory's hue, the same one its row wears: the peek
                belongs to a project. -->
@@ -422,7 +422,7 @@
     <!-- The state word in its own status ink: failed in crimson, needs you
          in spark's (DESIGN.md, Tertiary: status). -->
     <span
-      class="shrink-0 text-ink-muted tone-fail:font-medium tone-fail:text-status-fail-ink tone-attn:font-medium tone-attn:text-status-attn-ink"
+      class="shrink-0 text-ink-muted tone-fail:font-medium tone-fail:text-status-fail tone-attn:font-medium tone-attn:text-status-attn"
       data-tone={stateTone}>{stateLabel}</span
     >
     {#if activity === "working" && tool}
@@ -474,7 +474,7 @@
     <!-- The house alert (DESIGN.md, Alert: "a compact tinted row, never a
          slab"), in the needs-you pair, inset on the peek's own margins. -->
     <div
-      class="mx-4 mb-3 flex flex-col gap-2 rounded-md bg-status-attn-bg px-3 py-2.5 text-status-attn-ink"
+      class="mx-4 mb-3 flex flex-col gap-2 rounded-sm bg-status-attn-bg px-3 py-2.5 text-status-attn"
     >
       <p class="type-body">{summary}</p>
       {#if !question && request.presentation.command}
@@ -541,7 +541,7 @@
   {#if failed}
     <!-- The failure as the house alert, in the failed pair. -->
     <p
-      class="mx-4 mb-3 rounded-md bg-status-fail-bg px-3 py-2.5 type-body text-status-fail-ink"
+      class="mx-4 mb-3 rounded-sm bg-status-fail-bg px-3 py-2.5 type-body text-status-fail"
     >
       {row?.lastError || "Failed without saying why."}
     </p>
@@ -549,7 +549,7 @@
     <!-- A damaged record that does not stop the session (its wake-ups), or
          one whose process still runs: said where its failure would be. -->
     <p
-      class="mx-4 mb-3 rounded-md bg-status-fail-bg px-3 py-2.5 type-body text-status-fail-ink"
+      class="mx-4 mb-3 rounded-sm bg-status-fail-bg px-3 py-2.5 type-body text-status-fail"
     >
       {damagedWords(row.damaged)}
     </p>
@@ -595,7 +595,7 @@
         </p>
       {:else if session?.readFault && tail.length === 0}
         <!-- A read that failed is not a session with nothing to say. -->
-        <p class="type-meta text-status-fail-glyph">
+        <p class="type-meta text-status-fail">
           Couldn't read this session: {session.readFault.message}
         </p>
       {:else if tail.length === 0 && !session?.streaming}
@@ -619,14 +619,14 @@
           {:else if message.type === "user.peer"}
             <!-- The one voice worth tinting: what the session was asked. -->
             <p
-              class="line-clamp-4 rounded-lg bg-action-solid/10 px-3 py-2 type-body wrap-break-word whitespace-pre-wrap"
+              class="line-clamp-4 rounded-lg bg-accent/10 px-3 py-2 type-body wrap-break-word whitespace-pre-wrap"
             >
               {message.content}
             </p>
           {:else if message.type === "result.error"}
             <!-- A failed turn's last words are the agent's too: flat. -->
             <p
-              class="line-clamp-3 type-body wrap-break-word text-status-fail-glyph"
+              class="line-clamp-3 type-body wrap-break-word text-status-fail"
             >
               {plainMarkdown(message.content)}
             </p>
@@ -643,7 +643,7 @@
           <p class="type-body wrap-break-word whitespace-pre-wrap">
             {streamed}
             <span
-              class="inline-block h-icon-md w-space-1 rounded-xs bg-action-solid/60 align-text-bottom"
+              class="inline-block h-icon-md w-space-1 rounded-xs bg-accent/60 align-text-bottom"
             ></span>
           </p>
         {/if}

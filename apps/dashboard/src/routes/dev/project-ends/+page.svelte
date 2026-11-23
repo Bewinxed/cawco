@@ -343,7 +343,7 @@
 
 <div class="flex min-h-dvh flex-col bg-surface-recess">
   <div
-    class="flex flex-wrap items-center gap-space-3 px-space-6 pt-space-4 max-desk:px-space-5"
+    class="flex flex-wrap items-center gap-space-3 px-space-6 pt-space-4 max-desk:px-space-4"
   >
     <Tabs
       onValueChange={(next) => {
@@ -380,7 +380,7 @@
   {#if view === "project"}
     <!-- The project page's head, as it stands under the bar. -->
     <div
-      class="flex min-w-0 items-center gap-space-3 pt-space-5 ps-space-6 pe-space-6 max-desk:px-space-5"
+      class="flex min-w-0 items-center gap-space-3 pt-space-4 ps-space-6 pe-space-6 max-desk:px-space-4"
     >
       <h1 class="m-0 me-auto type-title text-balance text-ink-strong">
         {pageName}
@@ -438,7 +438,7 @@
       <!-- As the board's wrapper does (stop-tray-here): the focus on Cancel as it opens. -->
       <div
         class="contents"
-        style:--ask-end="var(--spacing-space-5)"
+        style:--ask-end="var(--spacing-space-4)"
         {@attach (node) => {
           const frame = requestAnimationFrame(() =>
             node.querySelector<HTMLElement>("[data-stop-cancel]")?.focus()
@@ -448,7 +448,7 @@
       >
         <StopTrayView
           activityOf={(id) => ACTIVITY[id] ?? "idle"}
-          class="tray-indent-space-6 max-w-128 max-desk:tray-indent-space-5"
+          class="tray-indent-space-6 max-w-128 max-desk:tray-indent-space-4"
           fillOf={(row) => `var(--color-mark-${(row.s.id.length % 8) + 1})`}
           job={tray.job}
           nameOf={(id) => MACHINES[id] ?? id}
@@ -487,7 +487,7 @@
   {:else if view === "home"}
     <!-- Where the app goes once a project's page is gone (stop-work's end,
          route.spoke): the home stands for it here. -->
-    <div class="px-space-6 pt-space-5 max-desk:px-space-5">
+    <div class="px-space-6 pt-space-4 max-desk:px-space-4">
       <h1 class="m-0 type-title text-ink-strong">Home</h1>
     </div>
   {:else}

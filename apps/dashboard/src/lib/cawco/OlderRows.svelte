@@ -101,7 +101,7 @@
   /** One row's height, for the row and the box that shows six of them. */
   const height = $derived(
     tall
-      ? "calc(2 * var(--spacing-space-5) + 2 * var(--spacing-space-1))"
+      ? "calc(2 * var(--spacing-space-4) + 2 * var(--spacing-space-1))"
       : "var(--spacing-row-compact)"
   );
 
@@ -232,7 +232,7 @@
                  name at rest. -->
           <span
             class="icon-swap"
-            style:--icon-swap-dur="var(--duration-control)"
+            style:--icon-swap-dur="var(--duration-fast)"
           >
             <span data-active={!pending}
               ><IconHistory class="size-icon-md" /></span
@@ -248,7 +248,7 @@
         older</span
       >
       {#if failed > 0}
-        <span class="ms-space-1 text-status-fail-ink"
+        <span class="ms-space-1 text-status-fail"
           >{failedWords(failed)}</span
         >
       {/if}
@@ -262,13 +262,13 @@
          attributes). -->
   <ul
     data-slot="older-rows-box"
-    class="kit-tree kit-tree-rail flex flex-col max-h-(--older-max) mt-(--tree-gap) overflow-y-auto overscroll-contain scrollbar-thin not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)"
+    class="kit-tree kit-tree-rail flex flex-col max-h-(--older-max) mt-space-1 overflow-y-auto overscroll-contain scrollbar-thin not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)"
     data-flip-anchor
     style:--fade="var(--spacing-space-4)"
     style:--fade-above={"linear-gradient(transparent, var(--color-ink-strong) var(--fade))"}
     style:--fade-below={"linear-gradient(var(--color-ink-strong) calc(100% - var(--fade)), transparent)"}
     style:--fade-both={"linear-gradient(transparent, var(--color-ink-strong) var(--fade), var(--color-ink-strong) calc(100% - var(--fade)), transparent)"}
-    style:--line-root-gap="calc(var(--tree-gap) / 2)"
+    style:--line-root-gap="calc(var(--spacing-space-1) / 2)"
     style:--older-max="calc(6 * {height} + 5 * var(--line-root-gap))"
     data-keep-scroll="{list}:{id}"
     bind:this={box}

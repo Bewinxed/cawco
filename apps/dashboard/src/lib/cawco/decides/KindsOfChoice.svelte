@@ -111,7 +111,7 @@
   {@const problem = problemOf(step)}
   {#if problem}
     <p
-      class="m-0 type-meta text-status-fail-ink text-pretty"
+      class="m-0 type-meta text-status-fail text-pretty"
       data-problem
       id="{uid}-{step}-problem"
       role="alert"

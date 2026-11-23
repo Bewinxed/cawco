@@ -27,7 +27,7 @@
    *   (`kit-edge-fade`), and a chosen tab is brought clear of each fade.
    */
   const tabsListVariants = tv({
-    base: "relative inline-flex flex-none select-none items-center gap-(--gap) p-(--pad) [--gap:var(--spacing-space-row)] [--icon:var(--spacing-icon-md)] [--px:calc(var(--spacing)_*_3)] [--text:var(--text-label)] coarse:[--item:var(--spacing-space-8)]",
+    base: "relative inline-flex flex-none select-none items-center gap-(--gap) p-(--pad) [--gap:var(--spacing-space-1)] [--icon:var(--spacing-icon-md)] [--px:calc(var(--spacing)_*_3)] [--text:var(--text-base)] coarse:[--item:var(--spacing-space-8)]",
     variants: {
       size: {
         default: "",
@@ -41,7 +41,7 @@
            lifted in surface-lift. */
         segmented: `${SEGMENTED_TRACK} [--sheet:var(--color-surface-raised)]`,
         folder:
-          "isolate gap-0 rounded-none bg-transparent [--item:calc(var(--spacing)_*_7)] [--pad:var(--spacing-space-1)] [--radius:var(--radius-sm)] [--sheet:var(--color-surface-raised)] ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--duration-settle)] [--choose-ease:var(--ease-crossfade)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:calc(var(--spacing)_*_0)] [--slope-start:calc(var(--spacing)_*_0.25)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-(--z,var(--z-rest,1)) [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap)",
+          "isolate gap-0 rounded-none bg-transparent [--item:calc(var(--spacing)_*_7)] [--pad:var(--spacing-space-1)] [--radius:var(--radius-sm)] [--sheet:var(--color-surface-raised)] ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--duration-slow)] [--choose-ease:var(--ease-in-out)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:calc(var(--spacing)_*_0)] [--slope-start:calc(var(--spacing)_*_0.25)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-(--z,var(--z-rest,1)) [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap)",
       },
       fill: {
         true: "flex w-full min-w-0 [&>[data-slot=ff-tab]]:min-w-0 [&>[data-slot=ff-tab]]:flex-1 [&_[data-slot=hit]]:justify-center",
@@ -56,7 +56,7 @@
         variant: "segmented",
         size: "compact",
         class:
-          "[--item:var(--spacing-control-xs)] [--pad:var(--spacing-space-row)]",
+          "[--item:var(--spacing-space-6)] [--pad:var(--spacing-space-1)]",
       },
     ],
   });
@@ -1190,7 +1190,7 @@
     <div
       data-slot="ring"
       aria-hidden="true"
-      class="pointer-events-none absolute start-0 top-0 z-4 rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:duration-(--duration-step) motion-safe:ease-out"
+      class="pointer-events-none absolute start-0 top-0 z-4 rounded-(--shape) border-2 border-accent-ink in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:duration-(--duration-fast) motion-safe:ease-out"
       style:transform="translate({focusRect.left}px,{focusRect.top}px)"
       style:width="{focusRect.width}px"
       style:height="{focusRect.height}px"

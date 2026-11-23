@@ -42,14 +42,14 @@
 
   const projects: ProjectItem[] = [
     {
-      hue: "var(--color-mark-6)",
+      hue: "var(--color-mark-4)",
       id: "p1",
       machineId: "m1",
       name: "cockpit",
       path: "~/cockpit",
     },
     {
-      hue: "var(--color-mark-2)",
+      hue: "var(--color-mark-1)",
       id: "p2",
       machineId: "m1",
       name: "landing",
@@ -58,7 +58,7 @@
   ];
   const machines: MachineItem[] = [
     {
-      hue: "var(--color-mark-6)",
+      hue: "var(--color-mark-4)",
       icon: IconLaptop,
       id: "m1",
       load: "2 sessions",
@@ -67,7 +67,7 @@
       os: "macOS",
     },
     {
-      hue: "var(--color-mark-2)",
+      hue: "var(--color-mark-1)",
       icon: IconServer,
       id: "m2",
       load: "idle",

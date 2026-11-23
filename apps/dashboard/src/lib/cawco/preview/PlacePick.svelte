@@ -87,7 +87,7 @@
 <form
   data-slot="place-pick"
   aria-label={words.title}
-  class="absolute inset-0 z-1 flex flex-col gap-space-3 overflow-y-auto p-space-5 bg-surface-raised"
+  class="absolute inset-0 z-1 flex flex-col gap-space-3 overflow-y-auto p-space-4 bg-surface-raised"
   onsubmit={use}
   transition:appear
 >
@@ -172,7 +172,7 @@
     />
     <Button label={words.cancel} onclick={oncancel} size="sm" variant="ghost" />
     {#if problem}
-      <span class="type-label text-status-fail-glyph" role="alert" in:appear
+      <span class="type-label text-status-fail" role="alert" in:appear
         >{problem}</span
       >
     {/if}

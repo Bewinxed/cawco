@@ -82,11 +82,10 @@ export interface Clip {
 
 /** The duration ladder a clip may name (DESIGN.md, Motion). */
 const LADDER = [
-  "--duration-step",
-  "--duration-control",
-  "--duration-fade",
-  "--duration-panel",
-  "--duration-settle",
+  "--duration-fast",
+  "--duration-base",
+  "--duration-slow",
+  "--duration-loop",
 ] as const;
 
 /**
@@ -109,7 +108,7 @@ const CURVES = [
   "--ease-out",
   "--ease-in-out",
   "--ease-drawer",
-  "--ease-crossfade",
+  "--ease-in-out",
 ] as const;
 
 const NUMBERS = /-?\d*\.?\d+/gu;

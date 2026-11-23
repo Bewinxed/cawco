@@ -499,7 +499,7 @@
 </script>
 
 <div
-  class="@container/shell contain-layout relative flex aspect-16/10 w-full flex-col bg-surface-shelf text-ink-strong"
+  class="@container/shell contain-layout relative flex aspect-16/10 w-full flex-col bg-surface-sunk text-ink-strong"
   data-hang-layer={layer.id}
   data-working-area
   style:--shell-h={`${shellHeight}px`}

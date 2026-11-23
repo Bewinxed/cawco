@@ -2,7 +2,7 @@
   /**
    * A labelled control: the label above, then one line under it that says
    * the hint, a caution, or the problem. The three share that line's box and
-   * cross-fade in it over --duration-control as they take turns, its height
+   * cross-fade in it over --duration-fast as they take turns, its height
    * following the words; the line folds open and shut when there is
    * something, or nothing, to say.
    */
@@ -40,13 +40,13 @@
       {#if problem}
         <span
           data-slot="field-problem"
-          class="max-w-measure type-meta text-status-fail-ink"
+          class="max-w-measure type-meta text-status-fail"
           in:crossIn
           out:crossOut>{problem}</span
         >
       {:else if warn}
         <span
-          class="max-w-measure type-meta text-status-attn-ink"
+          class="max-w-measure type-meta text-status-attn"
           in:crossIn
           out:crossOut>{@render warn()}</span
         >

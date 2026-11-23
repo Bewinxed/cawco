@@ -65,7 +65,7 @@
   data-slot="region-fault"
   data-room={room}
   role="alert"
-  class="grid w-full min-w-0 place-items-center not-data-[room=card]:h-full not-data-[room=card]:min-h-0 not-data-[room=card]:flex-1 not-data-[room=card]:overflow-y-auto not-data-[room=card]:overscroll-contain not-data-[room=card]:p-space-5 not-data-[room=card]:max-phone:p-space-3 data-[room=card]:rounded-modal data-[room=card]:bg-surface-raised data-[room=card]:p-(--card-in) data-[room=card]:shadow-sm"
+  class="grid w-full min-w-0 place-items-center not-data-[room=card]:h-full not-data-[room=card]:min-h-0 not-data-[room=card]:flex-1 not-data-[room=card]:overflow-y-auto not-data-[room=card]:overscroll-contain not-data-[room=card]:p-space-4 not-data-[room=card]:max-phone:p-space-3 data-[room=card]:rounded-xl data-[room=card]:bg-surface-raised data-[room=card]:p-(--card-in) data-[room=card]:shadow-sm"
   {@attach appearOnMount()}
 >
   <div class="flex w-full max-w-95 min-w-0 flex-col items-center">
@@ -96,7 +96,7 @@
     {/if}
     <div
       data-room={room}
-      class="w-full min-w-0 not-data-[room=card]:mt-space-5 data-[room=card]:mt-space-4"
+      class="w-full min-w-0 not-data-[room=card]:mt-space-4 data-[room=card]:mt-space-4"
     >
       <FaultActions
         {again}

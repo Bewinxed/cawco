@@ -149,7 +149,7 @@
    * pair to glide from, they cross-fade in place.
    */
   const [send, receive] = crossfade({
-    duration: () => dur("--duration-fade"),
+    duration: () => dur("--duration-base"),
     easing: easeInOut,
     fallback: (node) => crossIn(node),
   });
@@ -279,7 +279,7 @@
 
 <section data-slot="model" class="grid gap-space-2">
   {#if !runtime}
-    <SectionHeader hue="var(--color-mark-6)" icon={Cpu} {label}>
+    <SectionHeader hue="var(--color-mark-4)" icon={Cpu} {label}>
       {#snippet right()}
         {#if account}
           <span class="flex min-w-0 justify-end">
@@ -298,7 +298,7 @@
   {/if}
   <div
     data-slot="picker"
-    class="field-edge transition-control relative grid rounded-md border bg-surface-raised shadow-xs rail-step-(--rail-step-fine) coarse:rail-step-(--spacing-control-lg) data-railed:grid-cols-(--cols)"
+    class="field-edge transition-control relative grid rounded-sm border bg-surface-raised shadow-sm rail-step-(--rail-step-fine) coarse:rail-step-(--spacing-control-lg) data-railed:grid-cols-(--cols)"
     data-railed={!runtime || undefined}
     style:--cols="auto minmax(0, 1fr)"
     style:--rail-gap="calc(var(--rail-step) - var(--spacing-control-md))"
@@ -307,7 +307,7 @@
     {#if !runtime}
       <Rail
         axis="y"
-        class="grid content-box-start gap-(--rail-gap) hit-gap-x-(--rail-gap) hit-gap-y-(--rail-gap) rounded-s-md concentric-in r-outer-md r-inset-space-2 border-e border-e-border-hairline bg-surface-recess p-space-2"
+        class="grid content-box-start gap-(--rail-gap) hit-gap-x-(--rail-gap) hit-gap-y-(--rail-gap) rounded-s-sm concentric-in r-outer-sm r-inset-space-2 border-e border-e-border-hairline bg-surface-recess p-space-2"
         itemClass="ns-in touch-hit press-tint grid size-control-md place-items-center"
         stagger
         items={railItems}
@@ -331,7 +331,7 @@
         {#snippet tipExtra(tab: (typeof railItems)[number])}
           {#if tab.disabled}
             <span
-              class="font-sans text-size-label leading-none font-medium tracking-caps uppercase opacity-60"
+              class="font-sans text-base leading-none font-medium tracking-caps uppercase opacity-60"
               >{spawnWords.model.notInstalled}</span
             >
           {/if}
@@ -393,7 +393,7 @@
       <div
         data-slot="list"
         aria-label={spawnWords.model.list(harnessName(listHarness))}
-        class="fai-scroll relative grid h-75 content-box-start gap-space-row overflow-x-hidden overflow-y-auto p-space-1"
+        class="fai-scroll relative grid h-75 content-box-start gap-space-1 overflow-x-hidden overflow-y-auto p-space-1"
         id={`${uid}-models`}
         role="listbox"
         tabindex="-1"
@@ -403,7 +403,7 @@
         {#if swap.leaving.length}
           <div
             aria-hidden="true"
-            class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 grid content-box-start gap-space-row"
+            class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 grid content-box-start gap-space-1"
             data-leaving
             inert
           >

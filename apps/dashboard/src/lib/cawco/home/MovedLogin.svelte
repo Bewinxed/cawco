@@ -62,7 +62,7 @@
            of 24). -->
       <a
         data-slot="todo"
-        class="mark-line me-(--hang) ms-auto inline-flex items-center gap-space-row rounded-xs type-meta text-brand-ink no-underline whitespace-nowrap transition-[opacity] duration-(--duration-control) ease-out hover:text-brand-ink active:opacity-72"
+        class="mark-line me-(--hang) ms-auto inline-flex items-center gap-space-1 rounded-xs type-meta text-accent-ink no-underline whitespace-nowrap transition-[opacity] duration-(--duration-fast) ease-out hover:text-accent-ink active:opacity-72"
         href="/config/accounts/{one.account.id}"
         onclick={onchoose}
         style:--hang="calc(-1 * var(--spacing-icon-sm) * 8.25 / 24)"

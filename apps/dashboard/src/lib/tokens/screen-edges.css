@@ -7,7 +7,7 @@
   }
   :root[data-bar~="floating"],
   :root[data-bar~="hosting"] {
-    background: light-dark(oklch(89% 0.013 82), oklch(15.6% 0.004 70));
+    background: light-dark(oklch(92% 0.011 83), oklch(15.6% 0.004 70));
   }
   @media (width < --theme(--breakpoint-desk)),
     (pointer: coarse) and (orientation: portrait) {
@@ -34,7 +34,7 @@
     background: color-mix(
       in srgb,
       light-dark(oklch(96.6% 0.008 85), oklch(18.4% 0.004 70)) calc(72%),
-      light-dark(oklch(89% 0.013 82), oklch(15.6% 0.004 70))
+      light-dark(oklch(92% 0.011 83), oklch(15.6% 0.004 70))
     );
   }
   @media (width < --theme(--breakpoint-desk)),

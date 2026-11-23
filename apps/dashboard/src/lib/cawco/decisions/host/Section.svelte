@@ -21,7 +21,7 @@
   <h2 class="type-label pb-space-3 text-ink-muted wrap-anywhere">
     {String(props.title ?? "")}
   </h2>
-  <div class="flex min-w-0 flex-col gap-space-5">
+  <div class="flex min-w-0 flex-col gap-space-4">
     {@render renderNode(props.children)}
   </div>
 </section>

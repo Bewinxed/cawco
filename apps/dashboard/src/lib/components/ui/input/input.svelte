@@ -51,7 +51,7 @@
         inline: {
           box: "min-w-0",
           field:
-            "h-control-sm text-ellipsis border-transparent bg-transparent px-(--field-inline-inset) text-ink-strong shadow-none not-focus-visible:hover:bg-surface-hover focus-visible:bg-surface-raised",
+            "h-control-sm text-ellipsis border-transparent bg-transparent px-space-3 text-ink-strong shadow-none not-focus-visible:hover:bg-surface-hover focus-visible:bg-surface-raised",
         },
         /** A field in a list of keys and values (a task's own fields): a
             small button's height and its cell's tighter corner, flat, its
@@ -162,7 +162,7 @@
     "bg-surface-raised px-3 text-ink-strong",
     "type-body file:inline-flex file:h-7",
     "file:border-0 file:bg-transparent file:font-medium",
-    "file:text-ink-strong file:text-label",
+    "file:text-ink-strong file:type-label",
     "placeholder:text-ink-muted",
     "disabled:pointer-events-none disabled:cursor-not-allowed",
     "disabled:opacity-50 aria-invalid:border-error-9",

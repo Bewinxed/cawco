@@ -1,6 +1,6 @@
 <!--
   One decision: a raised card on the page's recessed ground (DESIGN.md, The
-  Frame Recesses Rule; --radius-modal, a decision page's panels; the tile
+  Frame Recesses Rule; --radius-xl, a decision page's panels; the tile
   shadow, no border; 18px in, 14px under a finger). The card carries its id
   twice: `data-cawco-choice`, which the overlay's bridge picks on (a click
   on an option's `data-option` stores it, pick.ts), and `id="decision-<id>"`,
@@ -30,7 +30,7 @@
   the page.
 
   "Add a note" folds into the note's field on one clock (open over
-  `--duration-panel`, shut over `--duration-fade`, The Fast Exit Rule), inside the
+  `--duration-slow`, shut over `--duration-base`, The Fast Exit Rule), inside the
   card's height tween; the note is kept as it is typed, and its field stays
   open while it holds words: emptied, it folds back into "Add a note" once
   focus leaves it. Its words name what the note is for when the program
@@ -395,7 +395,7 @@
   let noteKey = false;
   let noteFirst = true;
   // "Add a note" and the field fold on one clock, the field opening over
-  // --duration-panel and shutting over --duration-fade (The Fast Exit Rule), the card's
+  // --duration-slow and shutting over --duration-base (The Fast Exit Rule), the card's
   // height tween following them (motion/morph); a key's press lands at once.
   $effect(() => {
     const shown = noteOpen;
@@ -412,7 +412,7 @@
       return;
     }
     const clock = {
-      ms: dur(shown ? "--duration-panel" : "--duration-fade"),
+      ms: dur(shown ? "--duration-slow" : "--duration-base"),
       easing: ease("--ease-out"),
       fade: true,
     };
@@ -460,7 +460,7 @@
   </header>
   <div
     bind:this={body}
-    class="@container flex min-w-0 flex-col gap-space-5"
+    class="@container flex min-w-0 flex-col gap-space-4"
     data-slot="decision-body"
   >
     <OptionGroup

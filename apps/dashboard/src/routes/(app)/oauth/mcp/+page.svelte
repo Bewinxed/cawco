@@ -60,7 +60,7 @@
       {#snippet mark()}
         <IconWarningTriangle
           aria-hidden="true"
-          class="mb-space-1 size-icon-lg text-status-fail-glyph"
+          class="mb-space-1 size-icon-lg text-status-fail"
         />
       {/snippet}
       {#snippet action()}

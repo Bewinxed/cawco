@@ -10,8 +10,8 @@
 </script>
 
 <div
-  class="mx-auto flex w-full max-w-136 min-w-0 flex-col gap-space-5 p-space-4"
-  style:--card-in="var(--spacing-space-5)"
+  class="mx-auto flex w-full max-w-136 min-w-0 flex-col gap-space-4 p-space-4"
+  style:--card-in="var(--spacing-space-4)"
 >
   {@render renderNode(props.children)}
 </div>

@@ -1,5 +1,4 @@
-/* CawCo's design system, declared once by hand in Tailwind's @theme:
-   Layer 1 defines the primitive scales; Layer 2 binds semantic roles to them.
+/* CawCo's design system, declared once by hand in Tailwind's @theme.
    `static` emits every custom property so scheme and pointer overrides below
    reach every utility. */
 
@@ -7,17 +6,14 @@
   --*: initial;
 
   /* =========================================================================
-     Layer 1 — Primitive scales
+     Layout — 2 breakpoints, 4 containers, 4 z-layers
      ========================================================================= */
 
-  /* Breakpoints and container tiers. */
   --breakpoint-phone: 640px;
   --breakpoint-desk: 900px;
-  --breakpoint-wide: 1025px;
 
   --container-xs: 320px;
   --container-sm: 448px;
-  --container-md: 576px;
   --container-phone: 640px;
   --container-desk: 900px;
   --container-wide: 1025px;
@@ -62,54 +58,153 @@
   --container-section-row: 312px;
   --container-suggestion-rows-narrow: 340px;
 
-  /* Spacing: one 4px base unit and the house rhythm ladder. */
+  --layer-bar: 50;
+  --layer-sheet: 80;
+  --layer-float: 120;
+  --layer-top: 160;
+
+  /* =========================================================================
+     Spacing & Sizes — 4px base, 6 rhythm steps, 9 semantic sizes
+     ========================================================================= */
+
   --spacing: 0.25rem;
-  --spacing-space-row: 2px;
-  --spacing-space-1: 4px;
-  --spacing-space-2: 8px;
-  --spacing-space-3: 12px;
-  --spacing-space-4: 16px;
-  --spacing-space-5: 20px;
-  --spacing-space-6: 24px;
-  --spacing-space-8: 32px;
+  --spacing-space-1: calc(var(--spacing) * 1);
+  --spacing-space-2: calc(var(--spacing) * 2);
+  --spacing-space-3: calc(var(--spacing) * 3);
+  --spacing-space-4: calc(var(--spacing) * 4);
+  --spacing-space-6: calc(var(--spacing) * 6);
+  --spacing-space-8: calc(var(--spacing) * 8);
 
-  /* Warm neutrals (paper ~85 by day, roost ~70 at night; low chroma). */
-  --color-neutral-1: light-dark(oklch(99.3% 0.004 85), oklch(18.4% 0.004 70));
-  --color-neutral-2: light-dark(oklch(96.6% 0.008 85), oklch(21% 0.005 70));
-  --color-neutral-3: light-dark(oklch(94.4% 0.01 84), oklch(24.8% 0.006 70));
-  --color-neutral-4: light-dark(oklch(92% 0.011 83), oklch(28.2% 0.007 70));
-  --color-neutral-5: light-dark(oklch(89% 0.013 82), oklch(31.4% 0.008 70));
-  --color-neutral-6: light-dark(oklch(85.4% 0.014 82), oklch(35.2% 0.009 70));
-  --color-neutral-7: light-dark(oklch(81% 0.016 80), oklch(40.2% 0.01 72));
-  --color-neutral-8: light-dark(oklch(73.5% 0.017 78), oklch(48.8% 0.012 74));
-  --color-neutral-9: oklch(52% 0.016 76);
-  --color-neutral-11: light-dark(oklch(49.5% 0.014 74), oklch(77.8% 0.012 78));
-  --color-neutral-12: light-dark(oklch(29.5% 0.01 70), oklch(93.4% 0.01 82));
+  --spacing-icon-sm: calc(var(--spacing) * 3);
+  --spacing-icon-md: calc(var(--spacing) * 4);
+  --spacing-icon-lg: calc(var(--spacing) * 5);
 
-  /* Caw coral: brand and primary action. */
-  --color-coral-3: light-dark(oklch(94.6% 0.03 38), oklch(28% 0.06 32));
-  --color-coral-9: light-dark(oklch(64.5% 0.175 33), oklch(66.5% 0.17 33));
-  --color-coral-10: light-dark(oklch(60% 0.175 33), oklch(70.5% 0.16 34));
-  --color-coral-11: light-dark(oklch(50% 0.15 32), oklch(80% 0.1 34));
+  --spacing-control-sm: calc(var(--spacing) * 8);
+  --spacing-control-md: calc(var(--spacing) * 9);
+  --spacing-control-lg: calc(var(--spacing) * 11);
 
-  /* Categorical marks: eight perceptually even hues for identity, accounts, and data.
-     mark-8 sits at 70.5% L in dark so all seven account hues hold >=3.9:1 on border-control
-     and >=3.0:1 at breath-floor. */
-  --color-mark-1: light-dark(oklch(51% 0.168 27.9), oklch(70% 0.17 27.9));
-  --color-mark-2: light-dark(oklch(53% 0.15 47.4), oklch(70% 0.15 47.4));
-  --color-mark-3: light-dark(oklch(50% 0.115 86.8), oklch(70% 0.12 86.8));
-  --color-mark-4: light-dark(oklch(50% 0.132 121.2), oklch(70% 0.135 121.2));
-  --color-mark-5: light-dark(oklch(51% 0.093 186.7), oklch(70% 0.095 186.7));
-  --color-mark-6: light-dark(oklch(51% 0.14 251.4), oklch(70% 0.145 251.4));
-  --color-mark-7: light-dark(oklch(51% 0.15 292.5), oklch(70% 0.155 292.5));
-  --color-mark-8: light-dark(oklch(51% 0.165 349.8), oklch(70.5% 0.17 349.8));
+  --spacing-row-compact: calc(var(--spacing) * 7);
+  --spacing-row: calc(var(--spacing) * 10);
 
-  /* Brand art pigments (wordmark, mascot, OG art). */
+  --spacing-measure: 72ch;
+
+  /* =========================================================================
+     Colour — 24 semantic roles, 7 categorical marks, 3 brand art pigments
+     ========================================================================= */
+
+  /* Surfaces (6): frame recesses, content sits raised, sunk holds shelves. */
+  --color-surface-page: light-dark(
+    oklch(96.6% 0.008 85),
+    oklch(18.4% 0.004 70)
+  );
+  --color-surface-raised: light-dark(
+    oklch(99.3% 0.004 85),
+    oklch(24.8% 0.006 70)
+  );
+  --color-surface-recess: light-dark(
+    oklch(96.6% 0.008 85),
+    oklch(21% 0.005 70)
+  );
+  --color-surface-sunk: light-dark(
+    oklch(92% 0.011 83),
+    oklch(15.6% 0.004 70)
+  );
+  --color-surface-hover: light-dark(
+    oklch(92% 0.011 83),
+    oklch(28.2% 0.007 70)
+  );
+  --color-surface-pressed: light-dark(
+    oklch(85.4% 0.014 82),
+    oklch(31.4% 0.008 70)
+  );
+
+  /* Inks (3): every ink holds >=4.5:1 on every surface it sits on. */
+  --color-ink-strong: light-dark(
+    oklch(29.5% 0.01 70),
+    oklch(93.4% 0.01 82)
+  );
+  --color-ink-muted: light-dark(
+    oklch(49.5% 0.014 74),
+    oklch(77.8% 0.012 78)
+  );
+  --color-ink-subtle: light-dark(
+    oklch(50.8% 0.014 74),
+    oklch(68.5% 0.012 76)
+  );
+
+  /* Borders (3): hairline -> control -> strong (>=3:1 UI boundary). */
+  --color-border-hairline: light-dark(
+    oklch(93.6% 0.01 84),
+    oklch(29.5% 0.007 70)
+  );
+  --color-border-control: light-dark(
+    oklch(89% 0.013 82),
+    oklch(35.2% 0.009 70)
+  );
+  --color-border-strong: light-dark(
+    oklch(52% 0.016 76),
+    oklch(58.5% 0.014 76)
+  );
+
+  /* Accent (4): Caw coral marks where you act and what you chose. */
+  --color-accent: light-dark(oklch(55.5% 0.17 33), oklch(55.5% 0.165 33));
+  --color-accent-ink: light-dark(oklch(50% 0.155 32), oklch(78.5% 0.115 34));
+  --color-accent-wash: light-dark(oklch(92.5% 0.048 42), oklch(33% 0.068 38));
+  --color-on-accent: oklch(100% 0 0);
+
+  /* Status (8): four states (live, attn, done, fail) x ink/glyph and wash.
+     Each chromatic token holds >=4.5:1 on its bg and >=3:1 on surfaces. */
+  --color-status-live: light-dark(
+    oklch(42% 0.135 252),
+    oklch(78% 0.105 245)
+  );
+  --color-status-live-bg: light-dark(
+    oklch(88% 0.042 245),
+    oklch(30% 0.06 252)
+  );
+  --color-status-attn: light-dark(
+    oklch(44% 0.115 78),
+    oklch(85% 0.125 92)
+  );
+  --color-status-attn-bg: light-dark(
+    oklch(92% 0.095 95),
+    oklch(31% 0.06 90)
+  );
+  --color-status-done: light-dark(
+    oklch(41% 0.125 150),
+    oklch(78% 0.12 152)
+  );
+  --color-status-done-bg: light-dark(
+    oklch(90% 0.05 152),
+    oklch(30% 0.06 152)
+  );
+  --color-status-fail: light-dark(
+    oklch(45% 0.17 18),
+    oklch(77% 0.13 18)
+  );
+  --color-status-fail-bg: light-dark(
+    oklch(91% 0.05 18),
+    oklch(31% 0.07 18)
+  );
+
+  /* Categorical marks (7): perceptually even hues for accounts, tools, syntax. */
+  --color-mark-1: light-dark(oklch(53% 0.15 47.4), oklch(70% 0.15 47.4));
+  --color-mark-2: light-dark(oklch(50% 0.115 86.8), oklch(70% 0.12 86.8));
+  --color-mark-3: light-dark(oklch(50% 0.132 121.2), oklch(70% 0.135 121.2));
+  --color-mark-4: light-dark(oklch(51% 0.093 186.7), oklch(70% 0.095 186.7));
+  --color-mark-5: light-dark(oklch(51% 0.14 251.4), oklch(70% 0.145 251.4));
+  --color-mark-6: light-dark(oklch(51% 0.15 292.5), oklch(70% 0.155 292.5));
+  --color-mark-7: light-dark(oklch(51% 0.165 349.8), oklch(70.5% 0.17 349.8));
+
+  /* Brand art pigments (3): mascot, favicon, OG art. */
   --color-spark: #f2d36b;
   --color-paper: #f4f0e6;
   --color-crow-ink: #171715;
 
-  /* House faces, weights (UI never above 500), type ramp, leadings, and trackings. */
+  /* =========================================================================
+     Typography — 3 faces, 2 weights, 4 sizes, 3 4px-grid leadings, 2 trackings
+     ========================================================================= */
+
   --font-wordmark:
     "Nunito Variable", "Nunito Variable Fallback", ui-rounded, system-ui,
     sans-serif;
@@ -123,56 +218,62 @@
   --font-weight-normal: 400;
   --font-weight-medium: 500;
 
-  --text-meta: 0.75rem;
-  --text-label: 0.8125rem;
-  --text-body: 0.875rem;
-  --text-row: 1rem;
-  --text-title: clamp(1.125rem, 1.048rem + 0.3155vi, 1.25rem);
-  --text-kpi: clamp(1.25rem, 1.0962rem + 0.6309vi, 1.5rem);
+  --text-sm: 0.75rem;
+  --text-base: 0.875rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
 
-  --leading-kpi: 1;
-  --leading-ui: 1.25;
-  --leading-label: 1.4;
-  --leading-body: 1.5;
-  --leading-code: 1.6;
+  --leading-sm: calc(var(--spacing) * 4);
+  --leading-base: calc(var(--spacing) * 5);
+  --leading-lg: calc(var(--spacing) * 6);
 
-  --tracking-title: -0.01em;
+  --tracking-tight: -0.01em;
   --tracking-caps: 0.05em;
-  --tracking-wordmark: -0.045em;
 
-  /* Corner radii. */
-  --radius-hair: 2px;
+  /* =========================================================================
+     Shape & Elevation — 5 radii (4px grid + pill), 3 shadows
+     ========================================================================= */
+
   --radius-xs: 4px;
   --radius-sm: 8px;
-  --radius-md: 10px;
   --radius-lg: 12px;
-  --radius-modal: 18px;
+  --radius-xl: 16px;
   --radius-pill: 999px;
 
-  /* Motion: seven durations and four curves. */
-  --duration-step: 60ms;
-  --duration-control: 120ms;
-  --duration-fade: 180ms;
-  --duration-panel: 280ms;
-  --duration-settle: 400ms;
+  --shadow-sm:
+    0 1px 3px
+      light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55)),
+    0 1px 1px
+      light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55)),
+    inset 0 0 0 1px light-dark(transparent, oklch(93.4% 0.01 82 / 0.07));
+  --shadow-md:
+    0 3px 10px
+      light-dark(oklch(29.5% 0.01 70 / 0.14), oklch(18.4% 0.004 70 / 0.66)),
+    0 1px 2px
+      light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55)),
+    inset 0 0 0 1px light-dark(transparent, oklch(93.4% 0.01 82 / 0.07));
+  --shadow-lg:
+    0 18px 48px
+      light-dark(oklch(29.5% 0.01 70 / 0.2), oklch(18.4% 0.004 70 / 0.76)),
+    0 2px 6px
+      light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55)),
+    inset 0 0 0 1px light-dark(transparent, oklch(93.4% 0.01 82 / 0.07));
+
+  /* =========================================================================
+     Motion — 4 durations, 3 curves
+     ========================================================================= */
+
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
   --duration-loop: 1000ms;
-  --duration-breath: 2000ms;
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  --ease-crossfade: cubic-bezier(0.42, 0, 0.58, 1);
-
-  /* Z-index stack: six semantic planes. */
-  --layer-base: 20;
-  --layer-dock: 50;
-  --layer-bar: 60;
-  --layer-sheet: 80;
-  --layer-float: 120;
-  --layer-top: 160;
 
   /* =========================================================================
-     Layer 2 — Semantic roles
+     Shared Mechanics — 4 constants
      ========================================================================= */
 
   /* Surfaces: frame recesses, content sits raised; glass and scrim for chrome. */
@@ -854,26 +955,13 @@
   --scrim-mix: 72%;
   --press-scale: 0.97;
   --pop-scale: 0.92;
-  --pop-rise: 8px;
   --breath-floor: 0.77;
-  --mono-figure-cap: 0.703;
-  --weight-wordmark: 1000;
-  --action-surface: linear-gradient(
-    to bottom,
-    oklch(from var(--color-action-solid) calc(l + 0.03) c h),
-    oklch(from var(--color-action-solid) calc(l - 0.03) c h)
-  );
-  --action-surface-hover: linear-gradient(
-    to bottom,
-    oklch(from var(--color-action-hover) calc(l + 0.03) c h),
-    oklch(from var(--color-action-hover) calc(l - 0.03) c h)
-  );
 }
 
 @theme inline {
   --default-font-family: var(--font-sans);
   --default-mono-font-family: var(--font-mono);
-  --default-transition-duration: var(--duration-control);
+  --default-transition-duration: var(--duration-fast);
   --default-transition-timing-function: var(--ease-out);
 
   --animate-spin: spin var(--duration-loop) linear infinite;
@@ -1059,120 +1147,92 @@
       opacity: 0;
     }
   }
-  @keyframes fade-out {
-    to {
-      opacity: 0;
-    }
-  }
-  @keyframes rise-in {
-    from {
-      opacity: 0;
-      transform: translateY(var(--pop-rise));
-    }
-  }
-  @keyframes rise-out {
-    to {
-      opacity: 0;
-      transform: translateY(var(--pop-rise));
-    }
-  }
 }
 
-@utility bg-action-surface {
-  background-image: var(--action-surface);
-}
-
-@utility bg-action-surface-hover {
-  background-image: var(--action-surface-hover);
-}
-
+/* Six semantic type roles — font shorthands sorting before longhands. */
 @utility type-meta {
   --tw-sort: vertical-align;
-  font: var(--type-meta);
-}
-
-@utility type-label {
-  --tw-sort: vertical-align;
-  font: var(--type-label);
-}
-
-@utility type-body {
-  --tw-sort: vertical-align;
-  font: var(--type-body);
-}
-
-@utility type-row {
-  --tw-sort: vertical-align;
-  font: var(--type-row);
-}
-
-@utility type-title {
-  --tw-sort: vertical-align;
-  font: var(--type-title);
-  letter-spacing: var(--tracking-title);
-}
-
-@utility type-kpi {
-  --tw-sort: vertical-align;
-  font: var(--type-kpi);
-  font-variant-numeric: tabular-nums;
+  font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm)
+    var(--font-sans);
 }
 
 @utility type-code {
   --tw-sort: vertical-align;
-  font: var(--type-code);
+  font: var(--font-weight-normal) var(--text-sm) / var(--leading-base)
+    var(--font-mono);
 }
 
-@utility type-caps {
+@utility type-body {
   --tw-sort: vertical-align;
-  font: var(--type-caps);
-  letter-spacing: var(--tracking-caps);
+  font: var(--font-weight-normal) var(--text-base) / var(--leading-base)
+    var(--font-sans);
 }
 
-@utility text-size-meta {
-  font-size: var(--text-meta);
+@utility type-label {
+  --tw-sort: vertical-align;
+  font: var(--font-weight-medium) var(--text-base) / var(--leading-base)
+    var(--font-sans);
 }
 
-@utility text-size-label {
-  font-size: var(--text-label);
+@utility type-title {
+  --tw-sort: vertical-align;
+  font: var(--font-weight-medium) var(--text-lg) / var(--leading-lg)
+    var(--font-sans);
+  letter-spacing: var(--tracking-tight);
 }
 
-@utility text-size-body {
-  font-size: var(--text-body);
+@utility type-kpi {
+  --tw-sort: vertical-align;
+  font: var(--font-weight-medium) var(--text-xl) / var(--leading-lg)
+    var(--font-sans);
+  font-variant-numeric: tabular-nums;
 }
 
-@utility text-size-title {
-  font-size: var(--text-title);
+/* Primary coral fill sheen and hover state derived from --color-accent. */
+@utility bg-accent-surface {
+  background-image: linear-gradient(
+    to bottom,
+    oklch(from var(--color-accent) calc(l + 0.025) c h),
+    oklch(from var(--color-accent) calc(l - 0.025) c h)
+  );
 }
 
-@utility text-meta {
-  font-size: var(--text-meta);
-  line-height: var(--tw-leading, var(--leading-label));
-  font-weight: var(--tw-font-weight, var(--font-weight-normal));
+@utility bg-accent-surface-hover {
+  background-image: linear-gradient(
+    to bottom,
+    oklch(from var(--color-accent) calc(l - 0.02) c h),
+    oklch(from var(--color-accent) calc(l - 0.07) c h)
+  );
 }
 
-@utility text-label {
-  font-size: var(--text-label);
-  line-height: var(--tw-leading, var(--leading-label));
-  font-weight: var(--tw-font-weight, var(--font-weight-medium));
+/* Dynamic project hue ink, holding >=4.5:1 on surfaces across all hues. */
+@utility identity-ink {
+  color: light-dark(
+    oklch(48% 0.12 var(--identity-h, 120)),
+    oklch(74% 0.11 var(--identity-h, 120))
+  );
 }
 
-@utility text-body {
-  font-size: var(--text-body);
-  line-height: var(--tw-leading, var(--leading-body));
-  font-weight: var(--tw-font-weight, var(--font-weight-normal));
-}
-
+/* Shared transition shorthands composed from motion tokens. */
 @utility transition-control {
-  transition: var(--transition-control);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    --tw-gradient-from var(--duration-fast) var(--ease-out),
+    --tw-gradient-to var(--duration-fast) var(--ease-out);
 }
 
 @utility transition-fade-show {
-  transition: var(--transition-fade-show);
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    visibility 0s linear;
 }
 
 @utility transition-fade-hide {
-  transition: var(--transition-fade-hide);
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    visibility 0s linear var(--duration-base);
 }
 
 @utility liga-none {
@@ -1206,7 +1266,7 @@
 
   @media (pointer: coarse), (width < 640px) {
     :root {
-      --spacing-row: 44px;
+      --spacing-row: calc(var(--spacing) * 11);
     }
   }
 }

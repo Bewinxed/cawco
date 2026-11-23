@@ -12,22 +12,22 @@
     --code-syntax-foreground: var(--color-ink-strong);
     --code-syntax-background: var(--color-surface-recess);
     --code-syntax-token-keyword: light-dark(
-      oklch(from var(--color-mark-7) 44% c h),
-      oklch(from var(--color-mark-7) 75% c h)
+      oklch(from var(--color-mark-5) 44% c h),
+      oklch(from var(--color-mark-5) 75% c h)
     );
     --code-syntax-token-function: light-dark(
-      oklch(from var(--color-mark-6) 44% c h),
-      oklch(from var(--color-mark-6) 75% c h)
+      oklch(from var(--color-mark-4) 44% c h),
+      oklch(from var(--color-mark-4) 75% c h)
     );
     --code-syntax-token-link: var(--code-syntax-token-function);
     --code-syntax-token-string: light-dark(
-      oklch(from var(--color-mark-4) 43% c h),
-      oklch(from var(--color-mark-4) 75% c h)
+      oklch(from var(--color-mark-2) 43% c h),
+      oklch(from var(--color-mark-2) 75% c h)
     );
     --code-syntax-token-string-expression: var(--code-syntax-token-string);
     --code-syntax-token-constant: light-dark(
-      oklch(from var(--color-mark-2) 44% c h),
-      oklch(from var(--color-mark-2) 75% c h)
+      oklch(from var(--color-mark-1) 44% c h),
+      oklch(from var(--color-mark-1) 75% c h)
     );
     --code-syntax-token-comment: light-dark(
       oklch(from var(--color-ink-subtle) 43% c h),
@@ -60,8 +60,8 @@
     --pele-surface-alt: var(--color-surface-recess);
     --pele-border: var(--color-border-control);
     --pele-accent: var(--color-ink-strong);
-    --pele-critical: var(--color-status-fail-ink);
-    --pele-error: var(--color-status-fail-ink);
+    --pele-critical: var(--color-status-fail);
+    --pele-error: var(--color-status-fail);
     --pele-font: var(--font-sans);
     --pele-font-mono: var(--font-mono);
     --pele-title-weight: var(--font-weight-medium);
@@ -69,11 +69,11 @@
     --pele-bold-weight: var(--font-weight-medium);
     --pele-radius: var(--radius-sm);
     --pele-series-1: var(--color-ink-strong);
-    --pele-series-2: var(--color-status-live-glyph);
-    --pele-series-3: var(--color-mark-7);
-    --pele-series-4: var(--color-status-attn-glyph);
+    --pele-series-2: var(--color-status-live);
+    --pele-series-3: var(--color-mark-5);
+    --pele-series-4: var(--color-status-attn);
     --pele-series-5: var(--color-ink-subtle);
-    --pele-series-6: var(--color-brand-solid);
+    --pele-series-6: var(--color-accent);
     --pele-series-7: var(--color-ink-muted);
     --pele-series-8: var(--color-border-strong);
 
@@ -89,7 +89,7 @@
       stroke-width: 1px;
     }
     & .pele-edge-label {
-      font-size: var(--text-meta);
+      font-size: var(--text-sm);
       fill: var(--color-ink-muted);
     }
     & .pele-cluster > rect,
@@ -97,7 +97,7 @@
       stroke: var(--color-border-hairline);
     }
     & .pele-cluster-label {
-      font-size: var(--text-label);
+      font-size: var(--text-base);
       font-weight: var(--font-weight-medium);
       fill: var(--color-ink-muted);
     }

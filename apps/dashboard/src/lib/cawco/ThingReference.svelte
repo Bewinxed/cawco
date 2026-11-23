@@ -7,7 +7,7 @@
    * (reference-things.svelte.ts), else the written label, and its state.
    * Its whole name and state are its accessible name.
    *
-   * Resting a mouse on it peeks it under it after `--duration-panel`: its name,
+   * Resting a mouse on it peeks it under it after `--duration-slow`: its name,
    * its state and its facts (the floating tag recipe, as a pin's chip
    * peeks). Pressed in a conversation, a task or a to-do stands beside it
    * (the conversation's side card, or on a phone its sheet), the
@@ -84,7 +84,7 @@
     >
       <div
         aria-hidden="true"
-        class="absolute start-(--peek-x) top-(--peek-y) flex flex-col gap-space-1 max-w-70 mt-space-1 px-space-2 py-space-1 border border-border-control rounded-sm bg-surface-raised shadow-sm motion-safe:animate-fade-in motion-safe:anim-dur-control"
+        class="absolute start-(--peek-x) top-(--peek-y) flex flex-col gap-space-1 max-w-70 mt-space-1 px-space-2 py-space-1 border border-border-control rounded-sm bg-surface-raised shadow-sm motion-safe:animate-fade-in motion-safe:anim-dur-fast"
         style:--peek-x="{peek.at.x}px"
         style:--peek-y="{peek.at.y}px"
       >

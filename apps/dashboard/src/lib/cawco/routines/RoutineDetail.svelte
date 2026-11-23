@@ -403,7 +403,7 @@
       </p>
       <p class="m-0 type-meta text-ink-muted">{checkWords.hint}</p>
       {#if !check.approved}
-        <p class="m-0 type-body text-status-attn-ink">
+        <p class="m-0 type-body text-status-attn">
           {checkWords.unapprovedLine}
         </p>
       {/if}
@@ -501,12 +501,12 @@
             <Table.Row variant="band">
               <Table.Head
                 data-slot="routine-detail-col-when"
-                class="w-(--w) @max-md/table:w-(--w-narrow)"
+                class="w-(--w) @max-phone/table:w-(--w-narrow)"
                 style="--w: calc(var(--spacing) * 24); --w-narrow: calc(var(--spacing) * 18)"
                 variant="band">{words.columnWhen}</Table.Head
               >
               <Table.Head
-                class="w-(--w) @max-md/table:w-(--w-narrow)"
+                class="w-(--w) @max-phone/table:w-(--w-narrow)"
                 style="--w: calc(var(--spacing) * 44); --w-narrow: calc(var(--spacing) * 32)"
                 variant="band">{words.columnOutcome}</Table.Head
               >
@@ -531,7 +531,7 @@
                 variant="stacks"
               >
                 <Table.Cell
-                  class="w-(--w) @max-md/table:w-(--w-narrow)"
+                  class="w-(--w) @max-phone/table:w-(--w-narrow)"
                   style="--w: calc(var(--spacing) * 24); --w-narrow: calc(var(--spacing) * 18)"
                   data-cell="when"
                   rule="top"
@@ -545,7 +545,7 @@
                   >
                 </Table.Cell>
                 <Table.Cell
-                  class="w-(--w) @max-md/table:w-(--w-narrow)"
+                  class="w-(--w) @max-phone/table:w-(--w-narrow)"
                   style="--w: calc(var(--spacing) * 44); --w-narrow: calc(var(--spacing) * 32)"
                   data-cell="outcome"
                   rule="top"
@@ -572,14 +572,14 @@
                   {#if href}
                     <a
                       data-slot="result"
-                      class="block truncate text-ink-strong no-underline group-outcome-failed/run:text-status-fail-ink hover:underline hover:underline-offset-3 hover:not-group-outcome-failed/run:text-brand-ink"
+                      class="block truncate text-ink-strong no-underline group-outcome-failed/run:text-status-fail hover:underline hover:underline-offset-3 hover:not-group-outcome-failed/run:text-accent-ink"
                       {href}
                       title={result || undefined}>{result || words.readRun}</a
                     >
                   {:else}
                     <span
                       data-slot="result"
-                      class="block truncate text-ink-strong group-outcome-failed/run:text-status-fail-ink"
+                      class="block truncate text-ink-strong group-outcome-failed/run:text-status-fail"
                       title={result || undefined}>{result}</span
                     >
                   {/if}
@@ -600,7 +600,7 @@
         >
       {/if}
       {#if readFault}
-        <p class="m-0 type-meta text-status-fail-ink" role="status">
+        <p class="m-0 type-meta text-status-fail" role="status">
           {readFault}
         </p>
       {/if}

@@ -12,11 +12,11 @@
   /** How many bits, and the inks they are cut from. */
   const COUNT = 28;
   const INKS = [
-    "var(--color-brand-solid)",
+    "var(--color-accent)",
     "var(--color-spark)",
-    "var(--color-mark-6)",
     "var(--color-mark-4)",
-    "var(--color-mark-7)",
+    "var(--color-mark-2)",
+    "var(--color-mark-5)",
   ];
 
   function throwBits(layer: HTMLElement) {
@@ -28,7 +28,7 @@
     for (let i = 0; i < COUNT; i += 1) {
       const bit = document.createElement("span");
       bit.className =
-        "absolute top-0 start-1/2 h-space-2 w-space-1 rounded-hair";
+        "absolute top-0 start-1/2 h-space-2 w-space-1 rounded-xs";
       bit.style.background = INKS[i % INKS.length];
       layer.append(bit);
       bits.push(bit);
@@ -52,8 +52,8 @@
           ],
           {
             duration:
-              dur("--duration-loop") + Math.random() * dur("--duration-panel"),
-            delay: Math.random() * dur("--duration-control"),
+              dur("--duration-loop") + Math.random() * dur("--duration-slow"),
+            delay: Math.random() * dur("--duration-fast"),
             easing: CURVE.out,
             fill: "both",
           }

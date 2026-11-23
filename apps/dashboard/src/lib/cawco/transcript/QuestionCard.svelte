@@ -83,7 +83,7 @@
 
   /**
    * Answering morphs the card where it stands: the state pill cross-fades to
-   * its new word (--duration-control) and the picked option takes its selected
+   * its new word (--duration-fast) and the picked option takes its selected
    * look on the same beat. Only when the reader is watching; the card never
    * plays this on its first render.
    */
@@ -93,7 +93,7 @@
       return { duration: 0 };
     }
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
@@ -102,10 +102,10 @@
    * SETTLING. Answered, the card becomes its summary: each option picked is
    * the one chip left, and the options not picked go. The picked chip travels
    * from where it stood among the options to its place in the summary
-   * (`share`, --duration-panel on the drawer curve); the others fade where they
-   * stood (--duration-control), out of the flow from the start, so nothing else
+   * (`share`, --duration-slow on the drawer curve); the others fade where they
+   * stood (--duration-fast), out of the flow from the start, so nothing else
    * waits on them. Dismissed, every option fades and their row folds shut
-   * toward the question (--duration-fade). Only a card that settles while it is
+   * toward the question (--duration-base). Only a card that settles while it is
    * drawn plays this; one that is drawn settled is simply its summary.
    */
   const settled = $derived(answered || dismissed);
@@ -180,7 +180,7 @@
     fold(
       row,
       !dismissed,
-      { ms: dur("--duration-fade"), easing: CURVE.out },
+      { ms: dur("--duration-base"), easing: CURVE.out },
       was
     );
   }
@@ -201,7 +201,7 @@
           : {};
       },
       {
-        duration: dur("--duration-control"),
+        duration: dur("--duration-fast"),
         easing: easeOut,
         css: (t: number) => `opacity: ${t}`,
       }
@@ -239,19 +239,19 @@
   class="mt-space-4 ms-(--x-rail) py-space-3 pe-space-3 ps-(--hitl-start) border border-border-control rounded-lg bg-surface-raised shadow-sm"
   data-frame
   bind:this={section}
-  style:--hitl-start="calc(var(--x-glyph) - var(--x-rail) - var(--border-width))"
+  style:--hitl-start="calc(var(--x-glyph) - var(--x-rail) - 1px)"
 >
   <!-- The card's head is a rail line: its state's mark in the glyph cell,
        the title at the text column, the state in words after it. Each
        state cell is one grid cell, so the outgoing mark or word and the
        incoming one cross-fade in place. -->
-  <h2 class="rail-line text-size-label font-medium text-ink-strong mb-space-2">
+  <h2 class="rail-line text-base font-medium text-ink-strong mb-space-2">
     <span data-slot="rail-cell" class="rail-cell inline-grid">
       {#if answered}
         <span
           data-slot="mark"
           data-question-card-done
-          class="col-start-1 row-start-1 grid place-items-center text-status-done-ink"
+          class="col-start-1 row-start-1 grid place-items-center text-status-done"
           in:pillSwap
           out:pillSwap><IconCheck class="size-(--w-glyph)" /></span
         >
@@ -265,7 +265,7 @@
       {:else}
         <span
           data-slot="mark"
-          class="col-start-1 row-start-1 grid place-items-center text-status-attn-ink"
+          class="col-start-1 row-start-1 grid place-items-center text-status-attn"
           in:pillSwap
           out:pillSwap><IconAsk class="size-(--w-glyph)" /></span
         >
@@ -276,31 +276,31 @@
       {#if answered}
         <span
           data-slot="done"
-          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-size-label font-medium whitespace-nowrap bg-status-done-bg text-status-done-ink"
+          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-base font-medium whitespace-nowrap bg-status-done-bg text-status-done"
           in:pillSwap
           out:pillSwap><span>answered</span></span
         >
       {:else if dismissed}
         <span
-          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-size-label font-medium whitespace-nowrap bg-surface-recess text-ink-muted"
+          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-base font-medium whitespace-nowrap bg-surface-recess text-ink-muted"
           in:pillSwap
           out:pillSwap><span>dismissed</span></span
         >
       {:else if withdrawn}
         <span
-          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-size-label font-medium whitespace-nowrap bg-surface-recess text-ink-muted"
+          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-base font-medium whitespace-nowrap bg-surface-recess text-ink-muted"
           in:pillSwap
           out:pillSwap><span>withdrawn</span></span
         >
       {:else if failed}
         <span
-          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-size-label font-medium whitespace-nowrap bg-surface-recess text-ink-muted"
+          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-base font-medium whitespace-nowrap bg-surface-recess text-ink-muted"
           in:pillSwap
           out:pillSwap><span>not asked</span></span
         >
       {:else}
         <span
-          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-size-label font-medium whitespace-nowrap bg-status-attn-bg text-status-attn-ink"
+          class="mark-line col-start-1 row-start-1 inline-flex items-center h-icon-lg py-0 px-space-2 rounded-pill text-base font-medium whitespace-nowrap bg-status-attn-bg text-status-attn"
           in:pillSwap
           out:pillSwap><span>needs you</span></span
         >
@@ -324,7 +324,7 @@
     <div
       data-slot="qopts"
       class={chipsVariants({
-        class: "rail-hang relative mt-space-row mb-space-2",
+        class: "rail-hang relative mt-space-1 mb-space-2",
       })}
     >
       {#each settled ? [] : q.options as opt, i (i)}
@@ -339,7 +339,7 @@
             class={chipVariants()}
             data-chosen
             {@attach land(() => shareKey(index, at), {
-              ms: dur("--duration-panel"),
+              ms: dur("--duration-slow"),
             })}
           >
             <Kbd data-box look="keycap">{at + 1}</Kbd><span>{opt.label}</span>
@@ -353,7 +353,7 @@
         in:crossIn
       >
         <span
-          class="text-size-label font-medium uppercase tracking-caps text-ink-muted flex-none"
+          class="text-base font-medium uppercase tracking-caps text-ink-muted flex-none"
           >Answered</span
         >{otherText(q)}
       </p>
@@ -366,7 +366,7 @@
       in:crossIn
     >
       <span
-        class="text-size-label font-medium uppercase tracking-caps text-ink-muted flex-none"
+        class="text-base font-medium uppercase tracking-caps text-ink-muted flex-none"
         >In your own words</span
       >{freeform}
     </p>

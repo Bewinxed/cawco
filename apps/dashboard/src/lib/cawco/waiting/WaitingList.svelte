@@ -87,7 +87,7 @@
           >
             <Glyph aria-hidden="true" class="size-icon-md" />
           </span>
-          <span class="flex min-w-0 flex-col gap-space-row">
+          <span class="flex min-w-0 flex-col gap-space-1">
             <span class="type-body line-clamp-3 wrap-anywhere text-ink-strong"
               >{row.words}</span
             >

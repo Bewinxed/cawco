@@ -135,7 +135,7 @@
           <IconChevronDown
             data-chev
             aria-hidden="true"
-            class="[&>*]:vector-non-scaling transition-[scale] duration-(--duration-panel) ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off"
+            class="[&>*]:vector-non-scaling transition-[scale] duration-(--duration-slow) ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off"
             data-icon="inline-end"
           />
         </Button>
@@ -145,7 +145,7 @@
            opening; the chevron flips with it. -->
       <div
         data-slot="fold"
-        class="group grid grid-rows-shut data-open:grid-rows-open motion-safe:transition-[grid-template-rows] motion-safe:duration-(--duration-fade) motion-safe:ease-out motion-safe:data-open:duration-(--duration-panel)"
+        class="group grid grid-rows-shut data-open:grid-rows-open motion-safe:transition-[grid-template-rows] motion-safe:duration-(--duration-base) motion-safe:ease-out motion-safe:data-open:duration-(--duration-slow)"
         data-open={open || undefined}
         id="moved-done"
         inert={!open}
@@ -153,7 +153,7 @@
       >
         <div
           data-slot="fold-inner"
-          class="fold-item opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open:opacity-100 motion-safe:group-data-open:blur-(--fold-clear) motion-safe:group-data-open:duration-(--duration-panel) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--duration-fade) motion-reduce:ease-out motion-reduce:group-data-open:blur-(--fold-clear) motion-reduce:group-data-open:duration-(--duration-panel)"
+          class="fold-item opacity-0 blur-fold transition-fold-fade group-data-open:opacity-100 motion-safe:group-data-open:blur-(--fold-clear) motion-safe:group-data-open:duration-(--duration-slow) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--duration-base) motion-reduce:ease-out motion-reduce:group-data-open:blur-(--fold-clear) motion-reduce:group-data-open:duration-(--duration-slow)"
           style:--fold-clear="0"
         >
           <ul data-slot="list" class="m-0 flex list-none flex-col p-0">

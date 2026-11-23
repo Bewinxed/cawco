@@ -68,8 +68,8 @@
     <span class="type-label text-ink-strong">Try it</span>
     <span
       aria-live="polite"
-      class="type-meta transition-colors duration-(--duration-panel) ease-out {firing
-        ? 'text-status-done-ink'
+      class="type-meta transition-colors duration-(--duration-slow) ease-out {firing
+        ? 'text-status-done'
         : 'text-ink-muted'}"
       role="status"
     >
@@ -89,11 +89,11 @@
   {#if sample.trim() && draft.pattern.trim()}
     <!-- The text, and over it the marks alone (their text transparent), in
          one cell: when the hits move, the new marks cross-fade over the old
-         over --duration-control while the words stay put. The hits take the
+         over --duration-fast while the words stay put. The hits take the
          selection tint, as a search's matched words do. -->
     <div
       data-slot="grid"
-      class="relative grid max-h-40 overflow-y-auto rounded-md border border-border-hairline type-body"
+      class="relative grid max-h-40 overflow-y-auto rounded-sm border border-border-hairline type-body"
     >
       <p
         data-slot="layer"
@@ -111,7 +111,7 @@
         >
           {#each segments as segment, index (index)}
             {#if segment.hit}
-              <mark class="rounded-hair bg-selection text-transparent"
+              <mark class="rounded-xs bg-accent/20 text-transparent"
                 >{segment.text}</mark
               >
             {:else}

@@ -123,7 +123,7 @@
       <img
         bind:this={shown}
         {alt}
-        class="block h-auto max-w-full rounded-xs outline-1 -outline-offset-1 outline-image-outline"
+        class="block h-auto max-w-full rounded-xs outline-1 -outline-offset-1 outline-ink-strong/10"
         decoding="async"
         height={Math.round(size.height / size.scale)}
         loading="lazy"

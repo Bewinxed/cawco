@@ -102,11 +102,11 @@
   });
 </script>
 
-<!-- A failure fades up in place (--duration-control), with a retry. -->
+<!-- A failure fades up in place (--duration-fast), with a retry. -->
 {#if failed}
   <div
     data-slot="failed"
-    class="flex flex-wrap items-center gap-space-3 py-space-3 px-space-6 type-label text-status-fail-ink"
+    class="flex flex-wrap items-center gap-space-3 py-space-3 px-space-6 type-label text-status-fail"
     role="alert"
     in:crossIn
   >

@@ -1343,7 +1343,7 @@
        clips what it holds). -->
   <div
     bind:this={well}
-    class="relative grid flex-1 min-h-0 place-items-center overflow-hidden bg-surface-recess data-framed:content-start data-framed:justify-items-start data-framed:gap-space-3 data-framed:p-space-3 not-data-framed:not-data-fill:data-[form=phone]:p-space-5"
+    class="relative grid flex-1 min-h-0 place-items-center overflow-hidden bg-surface-recess data-framed:content-start data-framed:justify-items-start data-framed:gap-space-3 data-framed:p-space-3 not-data-framed:not-data-fill:data-[form=phone]:p-space-4"
     data-form={mine ? form : undefined}
     data-fill={handheld || undefined}
     data-framed={addressAtFoot || undefined}
@@ -1378,7 +1378,7 @@
          the field the person tapped stands over the keyboard. -->
     <div
       bind:this={screenBox}
-      class="relative h-(--screen-h) w-(--screen-w) translate-y-(--keyboard-shift) overflow-hidden in-data-framed:rounded-md in-data-framed:border in-data-framed:border-border-hairline not-in-data-framed:not-in-data-fill:in-data-[form=phone]:rounded-modal not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border-border-hairline not-in-data-framed:not-in-data-fill:in-data-[form=phone]:shadow-md"
+      class="relative h-(--screen-h) w-(--screen-w) translate-y-(--keyboard-shift) overflow-hidden in-data-framed:rounded-sm in-data-framed:border in-data-framed:border-border-hairline not-in-data-framed:not-in-data-fill:in-data-[form=phone]:rounded-xl not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border not-in-data-framed:not-in-data-fill:in-data-[form=phone]:border-border-hairline not-in-data-framed:not-in-data-fill:in-data-[form=phone]:shadow-md"
       data-slot="browser-screen"
       style:--keyboard-shift="{-keyboardShift}px"
       style:--screen-h="{screen.h}px"
@@ -1460,7 +1460,7 @@
           role="status"
         >
           <Skeleton fill="frame" hold="cover" radius="flush" />
-          <div class="relative px-space-5">
+          <div class="relative px-space-4">
             <CoverState waiting={{ line: shown.line }} />
           </div>
         </div>
@@ -1482,7 +1482,7 @@
           <canvas bind:this={overviewCanvas} class="absolute inset-0 size-full"
           ></canvas>
           <div
-            class="absolute start-(--view-x) top-(--view-y) h-(--view-h) w-(--view-w) rounded-hair border-2 border-coral-9"
+            class="absolute start-(--view-x) top-(--view-y) h-(--view-h) w-(--view-w) rounded-xs border-2 border-accent"
             style:--view-h="{Math.min(100, (screen.h / pageBox.h) * 100)}%"
             style:--view-w="{Math.min(100, (screen.w / pageBox.w) * 100)}%"
             style:--view-x="{(pageBox.x / pageBox.w) * 100}%"
@@ -1578,7 +1578,7 @@
     {/if}
     {#if refusal}
       <p
-        class="absolute inset-x-0 bottom-0 m-0 px-space-3 py-space-2 border-t border-border-hairline bg-surface-raised text-status-fail-glyph text-size-body text-pretty wrap-anywhere"
+        class="absolute inset-x-0 bottom-0 m-0 px-space-3 py-space-2 border-t border-border-hairline bg-surface-raised text-status-fail text-base text-pretty wrap-anywhere"
         data-slot="browser-refusal"
         role="alert"
       >
@@ -1602,7 +1602,7 @@
          under it, Show details last. It runs to the card's top under the
          head and takes its room on its own scroller. -->
     <div
-      class="absolute inset-0 z-1 grid place-items-center overflow-y-auto overscroll-contain px-space-5 pt-(--side-room,0px) pb-space-5 bg-surface-sunk max-phone:px-space-3"
+      class="absolute inset-0 z-1 grid place-items-center overflow-y-auto overscroll-contain px-space-4 pt-(--side-room,0px) pb-space-4 bg-surface-sunk max-phone:px-space-3"
       data-slot="browser-down"
       role="alert"
       transition:appear
@@ -1619,7 +1619,7 @@
         >
           {failed.line}
         </p>
-        <div class="mt-space-5 flex flex-col items-center gap-space-2">
+        <div class="mt-space-4 flex flex-col items-center gap-space-2">
           {#if failed.again}
             <Button
               data-lead

@@ -16,7 +16,7 @@ export const ROUTINE_DIALS: GraphDial[] = [
     max: 20,
     step: 1,
     unit: "px",
-    target: { cssVar: "--radius-md" },
+    target: { cssVar: "--radius-sm" },
   },
   {
     kind: "select",

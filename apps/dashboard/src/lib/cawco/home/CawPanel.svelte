@@ -175,7 +175,7 @@
     overflowing && "kit-edge-fade-block",
   ]}
   data-safe-bottom
-  style:--fade-len="var(--edge-fade-len)"
+  style:--fade-len="var(--spacing-row)"
   style:--list-max={"min(calc(var(--spacing) * 140), calc(100dvh - calc(var(--spacing) * 30)))"}
   style:--list-max-phone={"calc(100dvh - var(--spacing-control-lg) - var(--spacing-space-3) - var(--safe-bottom) - calc(var(--spacing) * 24))"}
   style:--stuck-fade={"linear-gradient(to bottom, transparent, var(--color-ink-strong) var(--fade-start), var(--color-ink-strong))"}
@@ -193,7 +193,7 @@
         <span
           data-slot="needs"
           data-caw-panel-glyph
-          class="me-space-1 grid w-row-compact flex-none place-items-center self-center text-status-attn-glyph"
+          class="me-space-1 grid w-row-compact flex-none place-items-center self-center text-status-attn"
           data-box
           ><IconNeedsYou aria-hidden="true" class="size-icon-md" /></span
         >
@@ -220,14 +220,14 @@
       aria-labelledby="caw-notices"
       class={[
         needs.length > 0 &&
-          "mt-space-2 border-t border-bs-brand-solid pt-space-2",
+          "mt-space-2 border-t border-bs-accent pt-space-2",
       ]}
       data-flip="box"
     >
       <div
         data-slot="head"
         class="mark-line flex items-center gap-space-2 px-space-3 pt-space-2 pb-space-1"
-        style:--clear-hang={"calc(-1 * (1px + 2 * var(--spacing) + var(--figure-bearing)))"}
+        style:--clear-hang={"calc(-1 * (1px + 2 * var(--spacing) + calc(1em * 0.07)))"}
       >
         <span
           data-slot="glyph"
@@ -281,7 +281,7 @@
           >
             <p
               data-slot="words"
-              class="m-0 type-meta text-status-fail-ink"
+              class="m-0 type-meta text-status-fail"
               role="alert"
             >
               {damagedHubRecordWords("notices", damaged)}
@@ -353,7 +353,7 @@
     <!-- mark-line: Caw stands above the words, not beside them -->
     <div
       data-slot="caw-panel-empty"
-      class="grid justify-items-center gap-space-2 px-space-4 pt-space-6 pb-space-5 type-label text-ink-muted outline-off"
+      class="grid justify-items-center gap-space-2 px-space-4 pt-space-6 pb-space-4 type-label text-ink-muted outline-off"
       data-flip
       role="status"
       tabindex="-1"

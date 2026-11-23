@@ -19,7 +19,7 @@
      */
     entering?: boolean;
     /**
-     * Grow open (240ms) and fold shut (160ms, --duration-fade), both on
+     * Grow open (240ms) and fold shut (160ms, --duration-base), both on
      * --ease-out, on the Web Animations API,
      * from whatever height is drawn at the moment, so a toggle caught
      * mid-flight turns back from where it is. bits-ui waits on the fold
@@ -66,7 +66,7 @@
         node,
         opening,
         {
-          ms: dur(opening ? "--duration-panel" : "--duration-fade"),
+          ms: dur(opening ? "--duration-slow" : "--duration-base"),
           easing: CURVE.out,
           fade,
         },

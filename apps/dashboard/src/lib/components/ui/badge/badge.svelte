@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
 
   export const badgeVariants = tv({
-    base: "group/badge mark-line inline-flex h-icon-lg w-fit shrink-0 items-center justify-center gap-space-1 overflow-hidden whitespace-nowrap rounded-xs bg-surface-recess px-space-2 text-ink-strong text-label leading-none transition-colors has-data-[icon=inline-end]:pr-space-1 has-data-[icon=inline-start]:pl-space-1 [&>svg]:pointer-events-none [&>svg]:size-icon-sm",
+    base: "group/badge mark-line inline-flex h-icon-lg w-fit shrink-0 items-center justify-center gap-space-1 overflow-hidden whitespace-nowrap rounded-xs bg-surface-recess px-space-2 text-ink-strong type-label leading-none transition-colors has-data-[icon=inline-end]:pr-space-1 has-data-[icon=inline-start]:pl-space-1 [&>svg]:pointer-events-none [&>svg]:size-icon-sm",
     variants: {
       variant: {
         default: "",
@@ -14,29 +14,29 @@
         secondary: "text-ink-muted",
         outline: "",
         ghost: "bg-transparent text-ink-muted",
-        destructive: "bg-status-fail-bg text-status-fail-ink",
-        live: "bg-status-live-bg text-status-live-ink",
+        destructive: "bg-status-fail-bg text-status-fail",
+        live: "bg-status-live-bg text-status-live",
         /* Needs you is a mark, never a surface (DESIGN.md, Badges: "`attn`
            has no fill, its Status dot before its word in
            `status-attn-ink`"): the dot is drawn before its children. */
-        attn: "bg-transparent text-status-attn-ink",
-        done: "bg-status-done-bg text-status-done-ink",
-        fail: "bg-status-fail-bg text-status-fail-ink",
+        attn: "bg-transparent text-status-attn",
+        done: "bg-status-done-bg text-status-done",
+        fail: "bg-status-fail-bg text-status-fail",
         /* A release note's section (Caw's panel's surface brief, Update notice: "New in
            `note-new-*` with stars, Improved in `note-improved-*` with a
            rising graph, Fixed in `note-fixed-*` with a bug; each ink holds
            4.5:1 on its fill in both themes"). */
-        "note-new": "bg-status-done-bg text-status-done-ink",
-        "note-improved": "bg-status-live-bg text-status-live-ink",
-        "note-fixed": "bg-status-attn-bg text-status-attn-ink",
-        link: "bg-transparent text-brand-ink underline-offset-4 hover:underline",
+        "note-new": "bg-status-done-bg text-status-done",
+        "note-improved": "bg-status-live-bg text-status-live",
+        "note-fixed": "bg-status-attn-bg text-status-attn",
+        link: "bg-transparent text-accent-ink underline-offset-4 hover:underline",
         /* A count of what is set in its control's own hue (a filter's
            active count): the brand wash under brand ink. */
-        brand: "bg-brand-wash text-brand-ink",
+        brand: "bg-accent-wash text-accent-ink",
         /* A count of what waits on the person (a settings section's
            faults): the attention pair, filled, for a figure with no word to
            carry the Status dot. */
-        "attn-count": "bg-status-attn-bg text-status-attn-ink",
+        "attn-count": "bg-status-attn-bg text-status-attn",
       },
       /* The looks its callers draw over a variant, each as they drew it. */
       /**
@@ -80,24 +80,24 @@
          * as a held row's pill is.
          */
         corner:
-          "pointer-events-none absolute top-[calc(var(--count-foot,0%)_-_var(--spacing-icon-md)_/_2)] start-[calc(50%_+_var(--count-glyph)_/_2_-_var(--spacing-icon-md)_/_2)] h-icon-md min-w-icon-md rounded-pill bg-ink-strong px-space-1 type-label text-on-ink tabular-nums data-[look=attn]:bg-status-attn-bg data-[look=attn]:text-status-attn-ink data-[look=held]:border data-[look=held]:border-ink-muted data-[look=held]:bg-surface-raised data-[look=held]:text-ink-strong",
+          "pointer-events-none absolute top-[calc(var(--count-foot,0%)_-_var(--spacing-icon-md)_/_2)] start-[calc(50%_+_var(--count-glyph)_/_2_-_var(--spacing-icon-md)_/_2)] h-icon-md min-w-icon-md rounded-pill bg-ink-strong px-space-1 type-label text-surface-page tabular-nums data-[look=attn]:bg-status-attn-bg data-[look=attn]:text-status-attn data-[look=held]:border data-[look=held]:border-ink-muted data-[look=held]:bg-surface-raised data-[look=held]:text-ink-strong",
       },
       /** Its figures in tabular widths (DESIGN.md, The Tabular Figure Rule). */
       figures: { tabular: "tabular-nums" },
       /** Its ink, alone or with its edge in the same ink (an outline badge). */
       tone: {
-        success: "text-status-done-glyph",
+        success: "text-status-done",
         muted: "text-ink-muted",
         subtle: "text-ink-subtle",
-        "success-edge": "border-status-done-glyph text-status-done-glyph",
-        "warning-edge": "border-status-attn-glyph text-status-attn-glyph",
+        "success-edge": "border-status-done text-status-done",
+        "warning-edge": "border-status-attn text-status-attn",
         "muted-edge": "border-border-control text-ink-muted",
       },
       /** Its glyph and words a hairline apart. */
-      gap: { tight: "gap-space-row" },
+      gap: { tight: "gap-space-1" },
       /** A row's meta tag: the recess with no edge, meta size at body weight, muted ink held. */
       kind: {
-        meta: "rounded-xs border-transparent bg-surface-recess px-space-2 py-px font-normal text-ink-muted text-size-meta",
+        meta: "rounded-xs border-transparent bg-surface-recess px-space-2 py-px font-normal text-ink-muted text-sm",
       },
     },
     defaultVariants: {
@@ -151,7 +151,7 @@
   {#if variant === "attn"}
     <span
       aria-hidden="true"
-      class="size-(--status-dot-size) shrink-0 rounded-pill bg-status-attn-glyph"
+      class="size-1.5 shrink-0 rounded-pill bg-status-attn"
       data-box
       data-slot="badge-dot"
     ></span>

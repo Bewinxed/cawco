@@ -155,12 +155,12 @@
     const width = node.offsetWidth;
     if (!motionOk.current) {
       return {
-        duration: dur("--duration-fade"),
+        duration: dur("--duration-base"),
         css: (t: number) => `opacity:${t}`,
       };
     }
     return {
-      duration: dur("--duration-panel"),
+      duration: dur("--duration-slow"),
       easing: easeInOut,
       css: (t: number) => `inline-size:${t * width}px;opacity:${t}`,
     };
@@ -247,7 +247,7 @@
 
 <header
   data-slot="project-head"
-  class="flex flex-none flex-nowrap items-center gap-x-space-4 min-h-12 pt-space-6 pe-space-6 pb-space-4 ps-space-6 max-desk:pt-space-5 max-desk:pe-space-5 max-desk:pb-space-3 max-desk:ps-space-5"
+  class="flex flex-none flex-nowrap items-center gap-x-space-4 min-h-12 pt-space-6 pe-space-6 pb-space-4 ps-space-6 max-desk:pt-space-4 max-desk:pe-space-4 max-desk:pb-space-3 max-desk:ps-space-4"
 >
   <!-- Leading: the name, then the place. The pair is as wide as it holds
        and gives way first: the name ends in its ellipsis before anything
@@ -279,7 +279,7 @@
       {:else}
         <button
           data-slot="name"
-          class="select-none press-tint block max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover focus-visible:outline-offset-(--focus-ring-inset)"
+          class="select-none press-tint block max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover focus-visible:-outline-offset-2"
           onclick={editName}
           title="Rename {project.name}"
           type="button"
@@ -468,7 +468,7 @@
      words: a rename. -->
 <div
   data-slot="head-faults"
-  class="ps-space-6 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5"
+  class="ps-space-6 pe-space-6 max-desk:ps-space-4 max-desk:pe-space-4"
 >
   <RowFault again={commitName} reason={renameFault} />
 </div>
@@ -484,12 +484,12 @@
 <div
   data-slot="project-end"
   class="contents"
-  style:--ask-end="var(--spacing-space-5)"
+  style:--ask-end="var(--spacing-space-4)"
 >
   <ProjectEndTray
     at={endAt}
     opener={() => more}
     projectId={project.id}
-    class="tray-indent-space-6 max-w-128 max-desk:tray-indent-space-5"
+    class="tray-indent-space-6 max-w-128 max-desk:tray-indent-space-4"
   />
 </div>

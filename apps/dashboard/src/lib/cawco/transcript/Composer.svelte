@@ -342,18 +342,18 @@
 
   /**
    * The composer arriving where a read-only note stood (and back): the two
-   * cross-fade over --duration-control and the composer rises --pop-rise into place.
+   * cross-fade over --duration-fast and the composer rises --spacing-space-2 into place.
    * Reduced motion keeps the fade.
    */
   function rise(_node: Element): TransitionConfig {
     const still = !motionOk.current;
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t, u) =>
         still
           ? `opacity: ${t}`
-          : `opacity: ${t}; translate: 0 calc(var(--pop-rise) * ${u})`,
+          : `opacity: ${t}; translate: 0 calc(var(--spacing-space-2) * ${u})`,
     };
   }
   /**
@@ -365,7 +365,7 @@
   function glyphOut(_node: Element): TransitionConfig {
     const still = !motionOk.current;
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t, u) =>
         still
@@ -375,35 +375,35 @@
   }
   function fade(_node: Element): TransitionConfig {
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
   }
   /**
    * A minimized question's bar comes into the tray row once the card's
-   * fold (--duration-panel) has landed, so the two never stand in one place
+   * fold (--duration-slow) has landed, so the two never stand in one place
    * at once: the fold speeds up as it goes and only crosses the tray row in
-   * its last frames (measured at 390: 210 of its 220ms). It comes up --pop-rise
-   * out of a --part-blur blur over --duration-control, as the card's own parts come up
+   * its last frames (measured at 390: 210 of its 220ms). It comes up --spacing-space-2
+   * out of a --spacing-space-1 blur over --duration-fast, as the card's own parts come up
    * (Prompt `.part`). Reduced motion keeps the fade, with no wait.
    */
   function askedIn(_node: Element): TransitionConfig {
     const still = !motionOk.current;
     return {
-      delay: still ? 0 : dur("--duration-panel"),
-      duration: dur("--duration-control"),
+      delay: still ? 0 : dur("--duration-slow"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t, u) =>
         still
           ? `opacity: ${t}`
-          : `opacity: ${t}; translate: 0 calc(var(--pop-rise) * ${u}); filter: blur(calc(var(--part-blur) * ${u}))`,
+          : `opacity: ${t}; translate: 0 calc(var(--spacing-space-2) * ${u}); filter: blur(calc(var(--spacing-space-1) * ${u}))`,
     };
   }
-  /** The bar gives way to the card growing over it: a fade over --duration-fade. */
+  /** The bar gives way to the card growing over it: a fade over --duration-base. */
   function askedOut(_node: Element): TransitionConfig {
     return {
-      duration: dur("--duration-fade"),
+      duration: dur("--duration-base"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
@@ -789,7 +789,7 @@
   const GROUND_H =
     "calc(var(--dock-foot, 0px) + var(--layer-foot) + var(--spacing-space-8))";
   const LAYER_GROUND =
-    "linear-gradient(to top, var(--color-surface-recess) calc(var(--dock-foot, 0px) + var(--layer-foot)), var(--surface-recess-clear))";
+    "linear-gradient(to top, var(--color-surface-recess) calc(var(--dock-foot, 0px) + var(--layer-foot)), color-mix(in oklch, var(--color-surface-recess) 0%, transparent))";
   /** The offers standing on the tray row: each conversation's, built, the one written to seen. */
   const offerStack = new OfferStack({
     showing: () => showing,
@@ -838,7 +838,7 @@
   data-drawing={canvas.up || undefined}
   data-minimized={grown.minimized || undefined}
   data-flush={flush || undefined}
-  class="group/dock not-data-flush:absolute not-data-flush:inset-x-0 not-data-flush:top-0 not-data-flush:bottom-(--dock-foot) data-flush:relative z-(--layer-dock) flex flex-col justify-end items-center pointer-events-none"
+  class="group/dock not-data-flush:absolute not-data-flush:inset-x-0 not-data-flush:top-0 not-data-flush:bottom-(--dock-foot) data-flush:relative z-40 flex flex-col justify-end items-center pointer-events-none"
   data-composer-dock
   data-keeps-draft
   data-safe-bottom
@@ -974,7 +974,7 @@
           class={chipVariants({
             variant: "tray",
             class:
-              "touch-hit w-full min-w-0 text-status-attn-ink before:bg-status-attn-bg",
+              "touch-hit w-full min-w-0 text-status-attn before:bg-status-attn-bg",
           })}
           data-tray-chip
           onclick={() => grown.restoreAsk()}
@@ -1123,7 +1123,7 @@
            machine's words, and the way on. -->
       <div
         data-slot="relaunch-error"
-        class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-status-fail-ink text-size-meta font-normal wrap-anywhere group-data-drawing/dock:relative group-data-drawing/dock:z-2"
+        class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-status-fail text-sm font-normal wrap-anywhere group-data-drawing/dock:relative group-data-drawing/dock:z-2"
         role="alert"
         transition:unfold
       >
@@ -1140,7 +1140,7 @@
     {:else if sender.sendNotice}
       <div
         data-slot="send-error"
-        class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-status-fail-ink text-size-meta font-normal group-data-drawing/dock:relative group-data-drawing/dock:z-2"
+        class="pointer-events-auto flex flex-wrap items-center gap-x-space-2 px-space-3 text-status-fail text-sm font-normal group-data-drawing/dock:relative group-data-drawing/dock:z-2"
         role="alert"
         transition:unfold
       >
@@ -1165,7 +1165,7 @@
       </div>
     {:else if sender.signInNote}
       <p
-        class="pointer-events-auto px-space-3 text-ink-muted text-size-meta font-normal"
+        class="pointer-events-auto px-space-3 text-ink-muted text-sm font-normal"
         role="status"
         transition:unfold
       >
@@ -1177,7 +1177,7 @@
            sign-in's note takes. -->
       <p
         data-slot="composer-note"
-        class="pointer-events-auto px-space-3 text-ink-muted text-size-meta font-normal"
+        class="pointer-events-auto px-space-3 text-ink-muted text-sm font-normal"
         transition:unfold
       >
         {note}
@@ -1234,7 +1234,7 @@
            composer grows while a queued message is edited, inset past the
            shoulders' curve, and clear of the fade at the grown top. The
            label and the hints come up with the shape one after the other,
-           out of a `--part-blur` blur as they fade and rise, and sink back
+           out of a `--spacing-space-1` blur as they fade and rise, and sink back
            as it folds; they start on the shape's own clock of drawn frames
            (`growRow`), so frames iOS Safari holds while its keyboard rises
            take none of it. The hints and Keep it come up a stagger after
@@ -1244,7 +1244,7 @@
         <div
           data-composer-shown={queued.edit.shown || undefined}
           data-slot="edit-row"
-          class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-size-meta font-medium text-ink-muted pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:blur-(--part-blur) [&_[data-keep]]:transition-fade-blur [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-(--pop-rise) motion-safe:[&_[data-keep]]:transition-fade-slide-blur coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:filter-none data-composer-shown:[&_[data-keep]]:delay-(--duration-step)"
+          class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-sm font-medium text-ink-muted pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:blur-(length:--spacing-space-1) [&_[data-keep]]:transition-fade-blur [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-space-2 motion-safe:[&_[data-keep]]:transition-fade-slide-blur coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:filter-none data-composer-shown:[&_[data-keep]]:delay-(--duration-fast)"
           bind:this={queued.editRow}
           style:--edit-inset="{queued.edit.inset}px"
           style:bottom="{queued.edit.base}px"
@@ -1252,14 +1252,14 @@
         >
           <span
             data-slot="what"
-            class="inline-flex items-center gap-space-2 me-auto text-ink-strong opacity-0 blur-(--part-blur) transition-fade-blur before:size-(--status-dot-size) before:rounded-pill before:bg-brand-ink motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none"
+            class="inline-flex items-center gap-space-2 me-auto text-ink-strong opacity-0 blur-(length:--spacing-space-1) transition-fade-blur before:size-1.5 before:rounded-pill before:bg-accent-ink motion-safe:translate-y-space-2 motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none"
             >Editing your queued message</span
           >
           <!-- A touch screen has no Esc: a button keeps the message as it
              was, and the keys are not shown. -->
           <span
             data-slot="hint"
-            class="inline-flex items-center gap-space-1 whitespace-nowrap coarse:hidden max-phone:hidden opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none group-data-composer-shown/edit:delay-(--duration-step)"
+            class="inline-flex items-center gap-space-1 whitespace-nowrap coarse:hidden max-phone:hidden opacity-0 blur-(length:--spacing-space-1) transition-fade-blur motion-safe:translate-y-space-2 motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none group-data-composer-shown/edit:delay-(--duration-fast)"
           >
             <Kbd>Enter</Kbd>
             replaces it · <Kbd>Esc</Kbd> keeps it
@@ -1422,7 +1422,7 @@
                         {#if entry.detail}
                           <span
                             data-slot="e-detail"
-                            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-size-meta font-normal text-ink-muted flex-auto"
+                            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-sm font-normal text-ink-muted flex-auto"
                             >{entry.detail}</span
                           >
                         {/if}
@@ -1508,8 +1508,8 @@
           inert={grown.askOpen}
           bind:this={recalling.fieldWrap}
           style:--roll-move="0 var(--roll-y)"
-          style:--roll-clip={"inset(calc(var(--roll-reach) * -1) calc(var(--roll-reach) * -1) var(--roll-y))"}
-          style:--fold-clip={"inset(calc(var(--roll-reach) * -1) calc(var(--roll-reach) * -1) calc(var(--field-pad) + var(--roll-y, 0px)))"}
+          style:--roll-clip={"inset(calc(100vmax * -1) calc(100vmax * -1) var(--roll-y))"}
+          style:--fold-clip={"inset(calc(100vmax * -1) calc(100vmax * -1) calc(var(--field-pad) + var(--roll-y, 0px)))"}
           style:--cue-top-fade={"linear-gradient(to bottom, transparent, var(--color-ink-strong) var(--cue-run))"}
           style:--cue-bottom-fade={"linear-gradient(to top, transparent, var(--color-ink-strong) var(--cue-run))"}
           style:--cue-both-fade={"linear-gradient(to bottom, transparent, var(--color-ink-strong) var(--cue-run), var(--color-ink-strong) calc(100% - var(--cue-run)), transparent)"}
@@ -1615,7 +1615,7 @@
             <span
               data-slot="flight"
               aria-hidden="true"
-              class="absolute inset-0 z-2 grid grid-cols-1 content-unsafe-end items-unsafe-end py-(--field-pad) px-0 font-sans text-row leading-ui text-ink-strong whitespace-pre-wrap wrap-break-word pointer-events-none clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
+              class="absolute inset-0 z-2 grid grid-cols-1 content-unsafe-end items-unsafe-end py-(--field-pad) px-0 font-sans text-input-floor leading-lg text-ink-strong whitespace-pre-wrap wrap-break-word pointer-events-none clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
               style:--flight-clip={"inset(0 calc(-1 * var(--spacing-space-2)) 0 calc(-1 * var(--spacing-space-3)))"}
             >
               <span
@@ -1645,7 +1645,7 @@
             <span
               data-slot="more"
               aria-hidden="true"
-              class="absolute end-0 bottom-0 z-2 flex items-center justify-end w-18 h-(--cin-ctl) text-ink-muted text-size-meta font-normal num whitespace-nowrap pointer-events-none opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-asking/dock:invisible group-data-asking/cin:invisible"
+              class="absolute end-0 bottom-0 z-2 flex items-center justify-end w-18 h-(--cin-ctl) text-ink-muted text-sm font-normal num whitespace-nowrap pointer-events-none opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-asking/dock:invisible group-data-asking/cin:invisible"
               >+{fieldFold.lines - 1}
               {fieldFold.lines === 2 ? "line" : "lines"}</span
             >
@@ -1736,7 +1736,7 @@
                    `translate`, which the swap's `transform` does not touch. -->
               <span
                 data-slot="swap"
-                class="row-start-1 col-start-1 grid place-items-center motion-safe:animate-icon-swap motion-reduce:animate-icon-swap-still group-enabled/stop:translate-x-(--optical-nudge) group-enabled/stop:-translate-y-(--optical-nudge)"
+                class="row-start-1 col-start-1 grid place-items-center motion-safe:animate-icon-swap motion-reduce:animate-icon-swap-still group-enabled/stop:translate-x-optical group-enabled/stop:-translate-y-optical"
                 out:glyphOut
               >
                 {#if sender.pending}

@@ -19,7 +19,7 @@
     inline?: boolean;
   } = $props();
   const place = $derived(
-    inline ? "relative" : "absolute -end-space-row -top-space-row"
+    inline ? "relative" : "absolute -end-space-1 -top-space-1"
   );
 </script>
 
@@ -32,7 +32,7 @@
     aria-hidden="true"
     class={[
       place,
-      "size-(--status-dot-size) rounded-pill border border-ink-muted bg-surface-raised ring-(length:--status-dot-cut) ring-surface-raised",
+      "size-1.5 rounded-pill border border-ink-muted bg-surface-raised ring-dot-cut ring-surface-raised",
     ]}
     data-dot="held"
   ></span>
@@ -41,14 +41,14 @@
     aria-hidden="true"
     class={[
       place,
-      "size-(--status-dot-size) rounded-pill bg-status-attn-glyph ring-(length:--status-dot-cut) ring-surface-raised",
+      "size-1.5 rounded-pill bg-status-attn ring-dot-cut ring-surface-raised",
     ]}
     data-dot="unread"
     data-unread
   >
     <!-- The needs-you dot's echo: three loops, then still. -->
     <span
-      class="absolute inset-0 rounded-pill bg-status-attn-glyph opacity-0 motion-safe:opacity-100 motion-safe:animate-ping"
+      class="absolute inset-0 rounded-pill bg-status-attn opacity-0 motion-safe:opacity-100 motion-safe:animate-ping"
       data-echo
     ></span>
   </span>

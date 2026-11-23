@@ -8,16 +8,16 @@ import { tv } from "#lib/utils.js";
  * machine hue. Chosen, it inverts to an `ink-strong` fill with an `on-ink`
  * glyph"). Its glyph's hue is the caller's (`style:color`, left off while
  * chosen). Chosen is the element's state, `data-ink`; its fill and ink cross
- * over --duration-panel.
+ * over --duration-slow.
  *
  * - `empty`: a dashed outline with no fill, for a row that adds the thing
  *   ("Connect a machine…", "New project…").
  */
 export const iconTileVariants = tv({
-  base: "inline-flex size-6.5 flex-none items-center justify-center rounded-sm bg-surface-raised shadow-sm transition-[background-color,color] duration-(--duration-panel) ease-out data-ink:bg-ink-strong data-ink:text-on-ink data-ink:shadow-none [&_svg]:flex-none",
+  base: "inline-flex size-6.5 flex-none items-center justify-center rounded-sm bg-surface-raised shadow-sm transition-[background-color,color] duration-(--duration-slow) ease-out data-ink:bg-ink-strong data-ink:text-surface-page data-ink:shadow-none [&_svg]:flex-none",
   variants: {
     empty: {
-      true: "border border-dashed border-neutral-8 bg-transparent shadow-none",
+      true: "border border-dashed border-border-strong bg-transparent shadow-none",
     },
   },
 });

@@ -64,7 +64,7 @@
         {#if row.secure}
           <IconLock
             aria-label="Secure"
-            class="size-icon-sm flex-none text-status-done-ink"
+            class="size-icon-sm flex-none text-status-done"
           />
         {/if}
         <code

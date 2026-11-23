@@ -183,7 +183,7 @@
   /**
    * The bar's fill, a scale along its track (the compositor's: Vercel's Web
    * Interface Guidelines, "prioritize GPU-accelerated properties"): one move
-   * with the count, on the count's clock (MorphText's: --duration-fade on
+   * with the count, on the count's clock (MorphText's: --duration-base on
    * ease-out, started at the frame's own time as its letters are), from
    * where it is drawn, so a change caught mid-way turns from there (L489).
    * With less motion it lands at once (L517: a bar is travel, not a fade).
@@ -205,7 +205,7 @@
         return;
       }
       run = node.animate([{ scale: from }, { scale: to }], {
-        duration: dur("--duration-fade"),
+        duration: dur("--duration-base"),
         easing: CURVE.out,
       });
       run.startTime = document.timeline.currentTime;
@@ -290,7 +290,7 @@
     data-slot="page-scroll"
   >
     <div
-      class="mx-auto flex w-full min-w-0 max-w-(--column-w) flex-col gap-space-5 overflow-x-clip px-(--page-in) pt-(--page-in) pb-space-5"
+      class="mx-auto flex w-full min-w-0 max-w-(--column-w) flex-col gap-space-4 overflow-x-clip px-(--page-in) pt-(--page-in) pb-space-4"
       data-slot="page-column"
     >
       <!-- The page's title: under a panel's head, which names the page by
@@ -330,7 +330,7 @@
           <IconWarningTriangle />
           <AlertDescription>
             Picks are kept only when CawCo shows this page: publish it with <code
-              class="text-size-meta wrap-anywhere">artifact_create</code
+              class="text-sm wrap-anywhere">artifact_create</code
             >.
           </AlertDescription>
         </Alert>
@@ -363,7 +363,7 @@
         >
           <i
             {@attach fill}
-            class="block h-full w-full origin-left bg-brand-solid rtl:origin-right"
+            class="block h-full w-full origin-left bg-accent rtl:origin-right"
           ></i>
         </span>
       </p>

@@ -118,7 +118,7 @@
       />
       {#if problems.name}
         <p
-          class="m-0 type-meta text-status-fail-ink text-pretty"
+          class="m-0 type-meta text-status-fail text-pretty"
           id="{uid}-name-problem"
           role="alert"
         >
@@ -140,7 +140,7 @@
       />
       {#if problems.example}
         <p
-          class="m-0 type-meta text-status-fail-ink text-pretty"
+          class="m-0 type-meta text-status-fail text-pretty"
           id="{uid}-example-problem"
           role="alert"
         >

@@ -29,7 +29,7 @@
   class="absolute inset-x-0 bottom-0 z-1 h-(--foot-fade-h) pointer-events-none bg-(image:--foot-fade-image) data-standing:bg-(image:--foot-fade-standing-image)"
   style:--fade-solid={solid ?? null}
   style:--foot-fade-h={solid === undefined
-    ? "var(--composer-clearance, var(--foot-fade))"
+    ? "var(--composer-clearance, calc(var(--spacing) * 24))"
     : `calc(${solid} + var(--spacing-space-8))`}
   style:--foot-fade-image={"linear-gradient(to top, var(--color-surface-recess) 22%, var(--color-surface-recess-clear))"}
   style:--foot-fade-standing-image={"linear-gradient(to top, var(--color-surface-recess) var(--fade-solid), var(--color-surface-recess-clear))"}

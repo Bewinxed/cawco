@@ -263,12 +263,12 @@
 
 <figure
   data-thumb={size === "thumb" || undefined}
-  class="group/shot m-0 w-full max-w-full data-thumb:w-(--tx-shot-thumb)"
+  class="group/shot m-0 w-full max-w-full data-thumb:w-12"
 >
   {#if video && failed !== src}
     <div
       data-slot="shot-box"
-      class="relative flex items-center justify-start w-full h-(--tx-shot) p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-(--tx-shot-thumb) group-data-thumb/shot:h-(--tx-shot-thumb)"
+      class="relative flex items-center justify-start w-full h-60 p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-12 group-data-thumb/shot:h-12"
     >
       {#if captionsReady}
         <!-- Captions come from the sidecar .vtt when the video has one; a video without one has none to show. Svelte and Biome read only an unconditional <track>. -->
@@ -276,7 +276,7 @@
         <!-- biome-ignore lint/a11y/useMediaCaption: the <track> is conditional on the sidecar .vtt, which Biome does not read -->
         <video
           aria-label={alt}
-          class="block max-w-full max-h-(--tx-shot) h-full object-contain"
+          class="block max-w-full max-h-60 h-full object-contain"
           controls
           onerror={() => {
             failed = src;
@@ -300,7 +300,7 @@
   {:else if failed === src}
     <div
       data-slot="shot-box"
-      class="relative flex flex-col items-start justify-center w-full h-(--tx-shot) p-space-3 border border-border-hairline rounded-sm overflow-hidden bg-surface-recess text-ink-muted text-size-meta font-normal group-data-thumb/shot:w-(--tx-shot-thumb) group-data-thumb/shot:h-(--tx-shot-thumb)"
+      class="relative flex flex-col items-start justify-center w-full h-60 p-space-3 border border-border-hairline rounded-sm overflow-hidden bg-surface-recess text-ink-muted text-sm font-normal group-data-thumb/shot:w-12 group-data-thumb/shot:h-12"
     >
       <span>{missing ?? (video ? "Video" : "Image")} not available</span>
       {#if path}
@@ -314,7 +314,7 @@
     <button
       data-slot="shot-box"
       aria-label={`Open ${alt}`}
-      class="select-none relative flex items-center justify-start w-full h-(--tx-shot) p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-(--tx-shot-thumb) group-data-thumb/shot:h-(--tx-shot-thumb)"
+      class="select-none relative flex items-center justify-start w-full h-60 p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-12 group-data-thumb/shot:h-12"
       onclick={open}
       type="button"
     >
@@ -322,7 +322,7 @@
         data-sized={intrinsic !== null || undefined}
         class="group/frame relative flex items-center w-full h-full rounded-sm data-sized:w-(--frame-w) data-sized:h-auto data-sized:aspect-(--frame-ratio)"
         style:--frame-ratio="var(--w) / var(--h)"
-        style:--frame-w={"min(100%, calc(var(--w) * 1px), calc(var(--tx-shot) * var(--w) / var(--h)))"}
+        style:--frame-w={"min(100%, calc(var(--w) * 1px), calc(calc(var(--spacing) * 60) * var(--w) / var(--h)))"}
         style:--h={intrinsic?.height}
         style:--w={intrinsic?.width}
       >
@@ -336,7 +336,7 @@
           {alt}
           data-cached={cached || undefined}
           data-loaded={loaded === src || undefined}
-          class="block max-w-full max-h-(--tx-shot) object-contain opacity-0 data-loaded:opacity-100 not-data-cached:transition-[opacity] not-data-cached:duration-(--duration-control) not-data-cached:ease-out group-data-thumb/shot:w-full group-data-thumb/shot:h-full group-data-thumb/shot:object-cover group-data-sized/frame:w-full group-data-sized/frame:h-full"
+          class="block max-w-full max-h-60 object-contain opacity-0 data-loaded:opacity-100 not-data-cached:transition-[opacity] not-data-cached:duration-(--duration-fast) not-data-cached:ease-out group-data-thumb/shot:w-full group-data-thumb/shot:h-full group-data-thumb/shot:object-cover group-data-sized/frame:w-full group-data-sized/frame:h-full"
           data-caption={caption}
           data-path={path}
           data-shot={size}
@@ -368,7 +368,7 @@
   {/if}
   {#if caption || path}
     <figcaption
-      class="flex flex-col gap-space-1 mt-space-2 text-size-meta font-normal text-ink-muted"
+      class="flex flex-col gap-space-1 mt-space-2 text-sm font-normal text-ink-muted"
     >
       {#if caption}
         <span>{caption}</span>

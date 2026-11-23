@@ -259,14 +259,14 @@
         <Skeleton class="w-full" height="block" />
       </div>
     {:else if before.kind === "missing"}
-      <p class="text-size-label text-ink-muted" role="alert" in:reveal>
+      <p class="text-base text-ink-muted" role="alert" in:reveal>
         The version this {removes ? "removed" : "replaced"} can't be shown:
         {before.why}.
       </p>
     {:else if before.kind === "unchanged"}
       <p
         data-slot="memory-body-label"
-        class="text-size-label font-medium text-ink-muted"
+        class="text-base font-medium text-ink-muted"
         in:reveal
       >
         Saved unchanged: the content matched what was there.
@@ -295,7 +295,7 @@
       <Skeleton class="w-full" height="block" />
     </div>
   {:else if action === "list_docs" && listed.kind === "missing"}
-    <p class="text-size-label text-ink-muted" role="alert" in:reveal>
+    <p class="text-base text-ink-muted" role="alert" in:reveal>
       The documents it listed can't be shown: {listed.why}.
     </p>
   {:else if action === "list_docs" && listed.kind === "docs"}
@@ -311,18 +311,18 @@
             {#if doc.updatedAt}
               <span
                 data-slot="meta"
-                class="flex-none text-size-meta font-normal text-ink-muted num"
+                class="flex-none text-sm font-normal text-ink-muted num"
                 >{day(doc.updatedAt)}</span
               >
             {/if}
             <span
               data-slot="meta"
-              class="flex-none text-size-meta font-normal text-ink-muted num"
+              class="flex-none text-sm font-normal text-ink-muted num"
               >{lines(doc.content)} lines</span
             >
             <span
               data-slot="chev"
-              class="flex-none grid place-items-center text-ink-muted transition-[rotate] duration-(--duration-control) ease-out motion-reduce:transition-off group-state-open:rotate-90"
+              class="flex-none grid place-items-center text-ink-muted transition-[rotate] duration-(--duration-fast) ease-out motion-reduce:transition-off group-state-open:rotate-90"
               data-box><IconChevronRight class="size-icon-sm block" /></span
             >
           </Collapsible.Trigger>

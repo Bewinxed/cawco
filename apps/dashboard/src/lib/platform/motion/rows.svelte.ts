@@ -169,9 +169,9 @@ function anonymous(copy: HTMLElement): void {
  * marks inside it are read against it, so they travel only for what moves
  * inside it, and it is never slid, uncovered or copied here.
  *
- * Movement eases in-out over --duration-panel (over --duration-fade in a batch a
- * tree's closing paces, `atTravel`); entrances ease out over --duration-panel and
- * exits over --duration-fade (app.css), except that a row's fade, in a batch that
+ * Movement eases in-out over --duration-slow (over --duration-base in a batch a
+ * tree's closing paces, `atTravel`); entrances ease out over --duration-slow and
+ * exits over --duration-base (app.css), except that a row's fade, in a batch that
  * paces its moves, runs over its clip's duration (`heldWithClip`). With reduced motion nothing travels:
  * arrivals and departures only fade.
  */
@@ -232,8 +232,8 @@ interface Move {
  * and laying them out are two tasks, each inside a frame.
  *
  * `pace`, how the batch's moves travel. A tree closing asks with `close`
- * (motion/branch `fold`): every move in its batch travels over --duration-fade
- * rather than --duration-panel, so closing is quicker than opening and never
+ * (motion/branch `fold`): every move in its batch travels over --duration-base
+ * rather than --duration-slow, so closing is quicker than opening and never
  * waits. A tree opening asks with its line's
  * `speed` (px a ms): every move in its batch glides at that speed
  * (curves `glide`), as its line does, so its room's edge, and every row under
@@ -245,7 +245,7 @@ interface Move {
  * the list it was opened in, which asks a task before the other: each line
  * runs at that speed too, so no room falls behind its line. A later tree
  * only makes it faster, as far as its `least`: the speed it needs to open
- * within --duration-settle. A closing and an opening are batches apart, each at
+ * within --duration-slow. A closing and an opening are batches apart, each at
  * its own pace.
  */
 interface Pace {
@@ -429,7 +429,7 @@ function onClock(animation: Animation, clock: ReflowClock): Animation {
  * batch that paces its moves (a tree closing, `closing`; a tree opening at its
  * line's speed, `glide`), run over the duration that pace gave the clip, so
  * the row is uncovered or closed and faded on one clock. In any other batch it
- * keeps its own length (arrivals --duration-panel, departures --duration-fade).
+ * keeps its own length (arrivals --duration-slow, departures --duration-base).
  */
 function heldWithClip(fade: Animation, clip: Animation, distance: number) {
   heldToTravel(fade);
@@ -588,20 +588,20 @@ function offsetTranslate(own: string, x: number, y: number): string {
 }
 
 const entrance = () => ({
-  duration: dur("--duration-panel"),
+  duration: dur("--duration-slow"),
   easing: ease("--ease-out"),
 });
 const exit = () => ({
-  duration: dur("--duration-fade"),
+  duration: dur("--duration-base"),
   easing: ease("--ease-out"),
 });
 const travel = () => ({
-  duration: dur("--duration-panel"),
+  duration: dur("--duration-slow"),
   easing: ease("--ease-in-out"),
 });
 /** Travel in a batch a tree's closing paces (`atTravel`). */
 const closing = () => ({
-  duration: dur("--duration-fade"),
+  duration: dur("--duration-base"),
   easing: ease("--ease-in-out"),
 });
 

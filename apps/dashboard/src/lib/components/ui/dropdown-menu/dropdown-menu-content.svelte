@@ -81,7 +81,7 @@
     collisionPadding ??
       (browser
         ? numberOf(
-            width === "tiles" ? "--spacing-space-3" : "--spacing-space-5"
+            width === "tiles" ? "--spacing-space-3" : "--spacing-space-4"
           )
         : 0)
   );

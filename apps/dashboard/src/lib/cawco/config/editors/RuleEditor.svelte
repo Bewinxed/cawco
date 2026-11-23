@@ -61,7 +61,7 @@
   let { rule, taken }: { rule: RuleRow | null; taken: string[] } = $props();
 
   const store = configStore();
-  const HUE = "var(--color-mark-4)";
+  const HUE = "var(--color-mark-2)";
 
   let draft = $state<RuleDraft>(
     untrack(() => (rule ? draftOf(rule) : blankRule()))
@@ -222,7 +222,7 @@
       on the drawer curve, read when the fold plays. */
   const FOLD = {
     get ms() {
-      return dur("--duration-panel");
+      return dur("--duration-slow");
     },
     get easing() {
       return ease("--ease-drawer");
@@ -358,7 +358,7 @@
         value={draft.watch}
       />
       {#if draft.watch !== "text" && draft.timing === "turn"}
-        <p class="type-meta text-status-attn-ink" in:unfold out:unfold>
+        <p class="type-meta text-status-attn" in:unfold out:unfold>
           Reasoning is not kept once a turn is over. To watch thinking, fire on
           the message or the moment instead.
         </p>

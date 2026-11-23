@@ -92,12 +92,12 @@
 >
   <div
     data-slot="row"
-    class="group/row relative flex min-h-control-lg items-center gap-space-3 rounded-sm px-space-2 py-space-2 transition-control data-two:min-h-14 has-link-active:bg-surface-hover light:has-link-active:bg-surface-pressed light:has-link-active:inks-strong max-phone:grid max-phone:@min-xs/section-row:grid-cols-(--row-cols) max-phone:@min-xs/section-row:grid-rows-(--row-rows) max-phone:gap-x-space-3 max-phone:gap-y-space-row max-phone:@max-xs/section-row:grid-cols-(--row-cols-narrow) max-phone:@max-xs/section-row:grid-rows-(--row-rows-narrow)"
+    class="group/row relative flex min-h-control-lg items-center gap-space-3 rounded-sm px-space-2 py-space-2 transition-control data-two:min-h-14 has-link-active:bg-surface-hover light:has-link-active:bg-surface-pressed light:has-link-active:inks-strong max-phone:grid max-phone:@min-xs/section-row:grid-cols-(--row-cols) max-phone:@min-xs/section-row:grid-rows-(--row-rows) max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:@max-xs/section-row:grid-cols-(--row-cols-narrow) max-phone:@max-xs/section-row:grid-rows-(--row-rows-narrow)"
     data-off={enabled === false || undefined}
     data-two={meta !== undefined || undefined}
-    style:--row-cols="var(--mark-box) minmax(0, 1fr) auto"
+    style:--row-cols="var(--spacing-row-compact) minmax(0, 1fr) auto"
     style:--row-rows={meta === undefined ? "auto" : "auto auto"}
-    style:--row-cols-narrow="var(--mark-box) minmax(0, 1fr)"
+    style:--row-cols-narrow="var(--spacing-row-compact) minmax(0, 1fr)"
     style:--row-rows-narrow={meta === undefined
       ? "auto auto"
       : "auto auto auto"}
@@ -120,7 +120,7 @@
     </span>
     <span
       data-slot="text"
-      class="flex min-w-0 flex-auto flex-col gap-space-row max-phone:contents"
+      class="flex min-w-0 flex-auto flex-col gap-space-1 max-phone:contents"
     >
       <!-- The name and its badge: where both don't fit, the badge goes
            under the name, so the name never truncates to nothing. -->
@@ -131,7 +131,7 @@
       >
         {#if href}
           <a
-            class="truncate text-inherit no-underline outline-off in-data-mono:type-code after:absolute after:inset-0 after:rounded-inherit focus-visible:after:outline-solid focus-visible:after:outline-(length:--focus-ring-width) focus-visible:after:outline-focus-ring focus-visible:after:outline-offset-(--focus-ring-inset)"
+            class="truncate text-inherit no-underline outline-off in-data-mono:type-code after:absolute after:inset-0 after:rounded-inherit focus-visible:after:outline-solid focus-visible:after:outline-2 focus-visible:after:outline-accent-ink focus-visible:after:-outline-offset-2"
             data-link
             data-share="title:{href}"
             {href}
@@ -201,12 +201,12 @@
   {#if below || note}
     <div
       class="flex min-w-0 flex-col gap-space-2 pt-0 pe-space-2 pb-space-2 ps-(--below-ps) empty:hidden max-phone:ps-space-2"
-      style:--below-ps={"calc(var(--spacing-space-2) + var(--mark-box) + var(--spacing-space-3))"}
+      style:--below-ps={"calc(var(--spacing-space-2) + var(--spacing-row-compact) + var(--spacing-space-3))"}
     >
       {#if note}
         <p
           data-slot="note"
-          class="mark-line flex items-start gap-space-2 type-meta wrap-anywhere text-ink-muted tone-fail:text-status-fail-ink"
+          class="mark-line flex items-start gap-space-2 type-meta wrap-anywhere text-ink-muted tone-fail:text-status-fail"
           data-flip
           data-tone={note.tone}
           role={note.tone === "fail" ? "alert" : "status"}

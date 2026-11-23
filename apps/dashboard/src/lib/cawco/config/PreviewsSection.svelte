@@ -169,7 +169,7 @@
         </p>
         <ol
           data-slot="note"
-          class="type-meta flex max-w-measure flex-col gap-space-1 ps-space-5 text-ink-muted list-decimal"
+          class="type-meta flex max-w-measure flex-col gap-space-1 ps-space-4 text-ink-muted list-decimal"
         >
           {#if byPort}
             <li>

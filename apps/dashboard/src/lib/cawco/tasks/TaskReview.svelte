@@ -325,10 +325,10 @@
   {@const Icon = GLYPH[one.kind]}
   <a
     data-slot="attachment"
-    class="inline-flex items-center gap-space-1 max-w-(--attach-max-w) min-h-control-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-control-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
+    class="inline-flex items-center gap-space-1 max-w-(--attach-max-w) min-h-space-6 px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-control-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
     href={hrefOf(one)}
     rel="noopener"
-    style:--attach-my="calc((1lh - var(--spacing-control-xs)) / 2)"
+    style:--attach-my="calc((1lh - var(--spacing-space-6)) / 2)"
     style:--attach-my-coarse="calc((1lh - var(--spacing-control-lg)) / 2)"
     style:--attach-max-w="calc(100% + var(--spacing-space-1) * 2)"
     target="_blank"
@@ -346,7 +346,7 @@
     <h4 class="mt-space-2 mx-0 mb-0 type-label text-ink-strong">Check</h4>
     <ul
       data-slot="check-list"
-      class="m-0 ps-space-5 type-body text-ink-strong list-disc marker:text-ink-muted"
+      class="m-0 ps-space-4 type-body text-ink-strong list-disc marker:text-ink-muted"
     >
       {#each check as line, index (index)}
         <li>{line}</li>
@@ -399,7 +399,7 @@
         {/if}
         <a
           aria-label="Open its session beside this task"
-          class="inline-flex flex-none items-center gap-space-1 ms-auto h-control-xs px-space-2 rounded-sm type-label text-ink-strong no-underline hover:bg-surface-hover hover:text-ink-strong mark-line press-tint focus-inset"
+          class="inline-flex flex-none items-center gap-space-1 ms-auto h-space-6 px-space-2 rounded-sm type-label text-ink-strong no-underline hover:bg-surface-hover hover:text-ink-strong mark-line press-tint focus-inset"
           data-box
           href={rowHref(from.instanceId)}
           onclick={(event) => {
@@ -414,7 +414,7 @@
       {#if ended && newest?.endedHow}
         <p
           data-slot="ended"
-          class="m-0 type-body text-ink-muted wrap-anywhere data-fail:text-status-fail-ink"
+          class="m-0 type-body text-ink-muted wrap-anywhere data-fail:text-status-fail"
           data-fail={newest.state === "failed" || undefined}
         >
           {newest.endedHow}

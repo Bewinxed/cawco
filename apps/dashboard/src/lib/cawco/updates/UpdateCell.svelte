@@ -36,7 +36,7 @@
   {#key cell.row}
     <div
       data-slot="swap"
-      class="flex flex-wrap items-center gap-space-2 type-label motion-safe:animate-cell-swap motion-reduce:animate-fade-in motion-reduce:anim-dur-control"
+      class="flex flex-wrap items-center gap-space-2 type-label motion-safe:animate-cell-swap motion-reduce:animate-fade-in motion-reduce:anim-dur-fast"
     >
       {#if cell.plain}
         <span class="type-meta text-ink-muted">{cell.text}</span>
@@ -50,7 +50,7 @@
           <Badge size="cell-tall" variant={cell.fail ? "destructive" : "ghost"}>
             {#if cell.fail}
               <span
-                class="size-(--status-dot-size) shrink-0 rounded-pill bg-status-fail-glyph"
+                class="size-1.5 shrink-0 rounded-pill bg-status-fail"
                 data-box
               ></span>
             {:else if cell.icon === "clock"}

@@ -107,7 +107,7 @@
   <a
     data-setup={account.setupStep}
     data-slot="account-list-row-link"
-    class="grid min-w-0 flex-auto grid-areas-(--link-areas) grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-row px-space-2 py-space-3 text-inherit no-underline transition-control focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) active:bg-surface-hover data-two:grid-areas-(--link-areas-two)"
+    class="grid min-w-0 flex-auto grid-areas-(--link-areas) grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-1 px-space-2 py-space-3 text-inherit no-underline transition-control focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-accent-ink focus-visible:-outline-offset-2 active:bg-surface-hover data-two:grid-areas-(--link-areas-two)"
     data-two={Boolean(problem) || undefined}
     {href}
     style:--link-areas={'"dot name chev"'}
@@ -116,7 +116,7 @@
     <i
       data-slot="dot"
       aria-hidden="true"
-      class="col-(--area) row-(--area) size-space-3 rounded-pill bg-(--c) transition-[background-color] duration-(--duration-fade) ease-out"
+      class="col-(--area) row-(--area) size-space-3 rounded-pill bg-(--c) transition-[background-color] duration-(--duration-base) ease-out"
       style:--area="dot"
       style:--c={hueVar(account.hue)}
     ></i>
@@ -130,7 +130,7 @@
     >
     {#if problem}
       <span
-        class="mark-line col-(--area) row-(--area) flex min-w-0 items-start gap-space-1 type-meta text-status-attn-ink transition-[color] duration-(--duration-panel) ease-out"
+        class="mark-line col-(--area) row-(--area) flex min-w-0 items-start gap-space-1 type-meta text-status-attn transition-[color] duration-(--duration-slow) ease-out"
         data-flip
         style:--area="problem"
       >
@@ -153,7 +153,7 @@
   {#if checkable}
     <div
       data-slot="refusal-check"
-      class="grid min-w-0 grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-row px-space-2 pb-space-3"
+      class="grid min-w-0 grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-1 px-space-2 pb-space-3"
     >
       <span
         class="col-start-2 flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-1"

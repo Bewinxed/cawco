@@ -163,14 +163,14 @@
     />
     {#if confirming === "on"}
       <div
-        class="flex max-w-measure flex-col gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-sm"
+        class="flex max-w-measure flex-col gap-space-3 rounded-sm border border-border-hairline bg-surface-raised p-space-3 shadow-sm"
         transition:unfold
       >
         <p data-slot="lead" class="type-body text-ink-strong">
           Require paired devices? From the moment you confirm:
         </p>
         <ul
-          class="type-body flex list-disc flex-col gap-space-1 ps-space-5 text-ink-muted"
+          class="type-body flex list-disc flex-col gap-space-1 ps-space-4 text-ink-muted"
         >
           <li>This browser is the first paired device.</li>
           <li>
@@ -216,7 +216,7 @@
       </div>
     {:else if confirming === "off"}
       <div
-        class="flex max-w-measure flex-col gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-sm"
+        class="flex max-w-measure flex-col gap-space-3 rounded-sm border border-border-hairline bg-surface-raised p-space-3 shadow-sm"
         transition:unfold
       >
         <p data-slot="lead" class="type-body text-ink-strong">
@@ -261,7 +261,7 @@
     />
     {#if findProblem}
       <p
-        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail"
         role="alert"
         transition:unfold
       >
@@ -437,7 +437,7 @@
 
   {#if problem}
     <p
-      class="type-meta mt-space-4 wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
+      class="type-meta mt-space-4 wrap-anywhere whitespace-pre-wrap text-status-fail"
       role="alert"
       transition:unfold
     >

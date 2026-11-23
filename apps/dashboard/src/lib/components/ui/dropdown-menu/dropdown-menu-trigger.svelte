@@ -9,7 +9,7 @@
    * the head's own title (SideSurface's `title`; DESIGN.md, The Role, Not
    * Size Rule, The Mark Line Rule), its padding the title's inset there,
    * its corner concentric with the card whose head's corner it stands in
-   * (The Concentric Rule; `concentric-md` where no card declares one).
+   * (The Concentric Rule; `concentric-sm` where no card declares one).
    * `count`: a glyph and the count it holds on one line (a pane head's
    * More: menu-dots, then the counted control's own glyph and its count),
    * at `space-2` in so the three stand where Send keeps its room. `look`: the trigger by its role.
@@ -22,12 +22,12 @@
     variants: {
       face: {
         title:
-          "mark-line type-label min-w-0 gap-space-1 px-space-2 text-ink-strong concentric-md",
+          "mark-line type-label min-w-0 gap-space-1 px-space-2 text-ink-strong concentric-sm",
         count: "mark-line px-space-2",
       },
       look: {
         attach:
-          "hit-edge-hair grid size-control-md place-items-center concentric-xs border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] duration-(--duration-control) ease-out hover:bg-surface-hover hover:text-ink-strong group-inert/ctrls:not-aria-invalid:border-border-strong group-inert/ctrls:shadow-xs motion-safe:pressed:scale-(--press-scale) motion-safe:transition-[background-color,color,scale]",
+          "hit-edge-hair grid size-control-md place-items-center concentric-xs border border-border-control bg-surface-raised text-ink-muted transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-surface-hover hover:text-ink-strong group-inert/ctrls:not-aria-invalid:border-border-strong group-inert/ctrls:shadow-sm motion-safe:pressed:scale-(--press-scale) motion-safe:transition-[background-color,color,scale]",
       },
     },
   });

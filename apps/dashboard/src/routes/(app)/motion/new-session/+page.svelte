@@ -14,7 +14,7 @@
 
 <svelte:head><title>{commonWords.newSession} | CawCo</title></svelte:head>
 <main class="p-space-8 text-ink-strong">
-  <h1 class="text-size-title font-medium text-ink-strong">
+  <h1 class="text-lg font-medium text-ink-strong">
     {commonWords.newSession}
   </h1>
   <button class="select-none" onclick={open} type="button"

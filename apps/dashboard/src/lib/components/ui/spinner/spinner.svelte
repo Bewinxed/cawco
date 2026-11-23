@@ -13,7 +13,7 @@
       /** The muted ink; or the live glyph while its run is running. */
       tone: {
         muted: "text-ink-muted",
-        "live-running": "group-status-running/time:text-status-live-glyph",
+        "live-running": "group-status-running/time:text-status-live",
       },
       /** Its box by where it stands (DESIGN.md Icons, Sizes): 16px in a
           control or a row by default; `small`, 12px beside meta text and
@@ -23,7 +23,7 @@
           fading in and out; held still while hidden. */
       reveal: {
         "glyph-busy":
-          "not-group-glyph-busy:animation-paused opacity-0 group-glyph-busy:opacity-100 motion-safe:transition-opacity motion-safe:duration-(--duration-control) motion-safe:ease-out",
+          "not-group-glyph-busy:animation-paused opacity-0 group-glyph-busy:opacity-100 motion-safe:transition-opacity motion-safe:duration-(--duration-fast) motion-safe:ease-out",
       },
     },
   });

@@ -379,7 +379,7 @@
   </Sidebar.GroupLabel>
   {#if !home.ready}
     <!-- Rows where the list will stand while the first read is out. -->
-    <div aria-busy="true" class="flex flex-col gap-(--tree-gap)" role="status">
+    <div aria-busy="true" class="flex flex-col gap-space-1" role="status">
       {#each [0, 1, 2] as row (row)}
         <Skeleton class="w-full" height="control-sm" />
       {/each}

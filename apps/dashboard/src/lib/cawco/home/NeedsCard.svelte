@@ -794,7 +794,7 @@
         {#if item.done}
           <IconSuccess
             aria-hidden="true"
-            class="size-icon-md text-status-done-ink"
+            class="size-icon-md text-status-done"
           />
         {:else if onPhone()}
           <!-- The device asked about: this phone, or this computer. -->
@@ -806,7 +806,7 @@
         {#if item.done}
           <IconSuccess
             aria-hidden="true"
-            class="size-icon-md text-status-done-ink"
+            class="size-icon-md text-status-done"
           />
         {:else}
           <IconTailnetHttps aria-hidden="true" class="size-icon-md" />
@@ -856,7 +856,7 @@
         <span
           data-slot="end"
           class="absolute end-(--end-x) top-(--end-top) flex type-label"
-          style:--end-top={"calc(var(--spacing-space-2) + (1lh - var(--spacing-control-xs)) / 2)"}
+          style:--end-top={"calc(var(--spacing-space-2) + (1lh - var(--spacing-space-6)) / 2)"}
           style:--end-x="calc(var(--spacing-space-3) - var(--peek-ink))"
         >
           <Tip disabled={peekTipOff()} label="Peek">
@@ -869,11 +869,11 @@
                 data-needs-card-peek
                 {...tip}
                 aria-label="Peek {item.title}"
-                class="select-none touch-hit pointer-hit focus-inset grid size-control-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press) coarse:after:start-(--peek-hit-start) coarse:after:end-(--peek-hit-end)"
+                class="select-none touch-hit pointer-hit focus-inset grid size-space-6 place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press) coarse:after:start-(--peek-hit-start) coarse:after:end-(--peek-hit-end)"
                 onclick={peekAsk}
                 {onkeydown}
-                style:--peek-hit-end={"calc((var(--spacing-control-xs) - var(--spacing-control-lg)) / 2 + var(--peek-ink))"}
-                style:--peek-hit-start={"calc((var(--spacing-control-xs) - var(--spacing-control-lg)) / 2 - var(--peek-ink))"}
+                style:--peek-hit-end={"calc((var(--spacing-space-6) - var(--spacing-control-lg)) / 2 + var(--peek-ink))"}
+                style:--peek-hit-start={"calc((var(--spacing-space-6) - var(--spacing-control-lg)) / 2 - var(--peek-ink))"}
                 style:--peek-press="scale(var(--press-scale))"
                 type="button"
               >
@@ -890,7 +890,7 @@
         <span
           data-slot="end"
           class="absolute end-(--end-x) top-(--end-top) flex type-label"
-          style:--end-top={"calc(var(--spacing-space-2) + (1lh - var(--spacing-control-xs)) / 2)"}
+          style:--end-top={"calc(var(--spacing-space-2) + (1lh - var(--spacing-space-6)) / 2)"}
           style:--end-x="calc(var(--spacing-space-3) - var(--peek-ink))"
         >
           <Tip disabled={peekTipOff()} label={artifactWords.notNow}>
@@ -899,10 +899,10 @@
                 data-needs-card-not-now
                 {...tip}
                 aria-label={artifactWords.notNowNamed(item.title)}
-                class="select-none touch-hit pointer-hit focus-inset grid size-control-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--x-press) coarse:after:start-(--x-hit-start) coarse:after:end-(--x-hit-end)"
+                class="select-none touch-hit pointer-hit focus-inset grid size-space-6 place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--x-press) coarse:after:start-(--x-hit-start) coarse:after:end-(--x-hit-end)"
                 onclick={notNow}
-                style:--x-hit-end={"calc((var(--spacing-control-xs) - var(--spacing-control-lg)) / 2 + var(--peek-ink))"}
-                style:--x-hit-start={"calc((var(--spacing-control-xs) - var(--spacing-control-lg)) / 2 - var(--peek-ink))"}
+                style:--x-hit-end={"calc((var(--spacing-space-6) - var(--spacing-control-lg)) / 2 + var(--peek-ink))"}
+                style:--x-hit-start={"calc((var(--spacing-space-6) - var(--spacing-control-lg)) / 2 - var(--peek-ink))"}
                 style:--x-press="scale(var(--press-scale))"
                 type="button"
               >
@@ -921,7 +921,7 @@
            an ellipsis. -->
         <code
           data-slot="needs-command"
-          class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-row mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-size-meta text-ellipsis whitespace-pre text-ink-muted"
+          class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-1 mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-sm text-ellipsis whitespace-pre text-ink-muted"
           >{item.request.presentation.command.trim().split("\n")[0]}</code
         >
       {/if}
@@ -931,7 +931,7 @@
            domain is at its end), broken only after its dots. -->
         <code
           data-slot="needs-origin"
-          class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-row mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-size-meta wrap-break-word whitespace-normal text-ink-muted"
+          class="pointer-events-none relative col-start-2 col-end-4 row-3 mt-space-1 mb-space-1 min-w-0 overflow-hidden border-s-2 border-s-border-hairline ps-space-2 font-mono text-sm wrap-break-word whitespace-normal text-ink-muted"
           ><OriginText origin={item.request.browserAsk.origin} /></code
         >
       {/if}
@@ -995,7 +995,7 @@
           <span
             data-slot="send"
             class="relative col-3 row-3 flex items-center self-center justify-self-end"
-            style:--send-hang={"calc(-1 * (1px + var(--spacing-space-2) + var(--figure-bearing)))"}
+            style:--send-hang={"calc(-1 * (1px + var(--spacing-space-2) + calc(1em * 0.07)))"}
           >
             <Button
               data-needs-card-send
@@ -1182,7 +1182,7 @@
                to turn it on are the whole point of it. -->
             <p
               data-slot="desk-refusal"
-              class="type-meta m-0 w-full text-pretty wrap-anywhere text-status-fail-ink"
+              class="type-meta m-0 w-full text-pretty wrap-anywhere text-status-fail"
               role="alert"
             >
               {person.refusal.title}. {person.refusal.message}

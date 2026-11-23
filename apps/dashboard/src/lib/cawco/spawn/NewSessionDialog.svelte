@@ -68,7 +68,7 @@
   {open}
   shouldScaleBackground={false}
 >
-  <!-- Its exit is the house's (--duration-fade on --ease-out), set on its closed
+  <!-- Its exit is the house's (--duration-base on --ease-out), set on its closed
        state in app.css by `data-ns-dialog`, never through `style`: a changed
        style attribute is written whole, which wiped the transform vaul writes
        on the node while a finger drags it, and a sheet swiped down jumped

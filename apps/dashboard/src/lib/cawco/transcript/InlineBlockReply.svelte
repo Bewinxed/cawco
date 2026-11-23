@@ -45,7 +45,7 @@
 
 <div
   data-slot="transcript"
-  class="tx-columns min-h-0 ps-space-6 pe-space-6 pt-space-2 pb-space-6 max-desk:ps-space-5 max-desk:pe-space-5"
+  class="tx-columns min-h-0 ps-space-6 pe-space-6 pt-space-2 pb-space-6 max-desk:ps-space-4 max-desk:pe-space-4"
 >
   <Turn you>
     <Who name="You" timestamp="2026-11-11T14:02:00Z" you />
@@ -55,7 +55,7 @@
     <Who name="Claude" timestamp="2026-11-11T14:03:00Z" />
     <MessageBody source={before} streaming={block.streaming} />
     <!-- Where the reply's markdown stands its block (MessageBody, TranscriptBlock). -->
-    <div class={[REPLY_FRAME, "text-size-body"]}>
+    <div class={[REPLY_FRAME, "text-base"]}>
       <div class="min-w-0" data-block-key="story">
         <InlineBlock {...block} />
       </div>

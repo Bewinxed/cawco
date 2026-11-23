@@ -303,7 +303,7 @@
   /**
    * A key steps the width, and the step is a tween: the rail goes from the
    * width it is drawn at (a step still in flight included) to the new one
-   * over --duration-control, so held arrows glide instead of stuttering. The
+   * over --duration-fast, so held arrows glide instead of stuttering. The
    * pointer drag above stays 1:1: it writes the width directly and nothing
    * tweens it.
    */
@@ -342,7 +342,7 @@
           { width: `${from}px`, flexBasis: `${from}px` },
           { width: `${to}px`, flexBasis: `${to}px` },
         ],
-        { duration: dur("--duration-control"), easing: ease("--ease-out") }
+        { duration: dur("--duration-fast"), easing: ease("--ease-out") }
       );
     }
   }
@@ -368,8 +368,8 @@
    * and then only transforms move: the rail slides between
    * `translateX(-100%)` and its place (mirrored right to left) and the page
    * slides from where it was drawn to its own place, on one curve both
-   * ways, `--ease-drawer`: showing is an entrance, over `--duration-panel`;
-   * hiding is the rail's exit, over the shorter `--duration-panel`
+   * ways, `--ease-drawer`: showing is an entrance, over `--duration-slow`;
+   * hiding is the rail's exit, over the shorter `--duration-slow`
    * (DESIGN.md, The Fast Exit Rule). A press
    * mid-slide turns both back from where they are drawn, never from the
    * slide's start (The Interruptible Rule). The rail's width and the page's
@@ -425,7 +425,7 @@
       if (!hide) {
         railMoves = [
           rail.animate([{ opacity: 0 }, { opacity: 1 }], {
-            duration: dur("--duration-fade"),
+            duration: dur("--duration-base"),
             easing: ease("--ease-out"),
           }),
         ];
@@ -469,10 +469,10 @@
   const railClock = (hide: boolean) =>
     hide
       ? {
-          duration: dur("--duration-panel"),
+          duration: dur("--duration-slow"),
           easing: ease("--ease-drawer"),
         }
-      : { duration: dur("--duration-panel"), easing: ease("--ease-drawer") };
+      : { duration: dur("--duration-slow"), easing: ease("--ease-drawer") };
 
   /**
    * The toggle's chevron turning and its glass fading (the corner's own CSS
@@ -707,7 +707,7 @@
    * The page the rail and the bar leave room for glides to where it stands
    * now, from where it stood: its box is read before the change is drawn
    * and after, and the page travels the difference on the drawer curve
-   * over --duration-panel (motion/route's page travel). It is one object on both
+   * over --duration-slow (motion/route's page travel). It is one object on both
    * sides (DESIGN.md, The One Object Rule); the rail and the bar fade as
    * they go and come. With less motion, the page only fades.
    */
@@ -728,7 +728,7 @@
     }
     const to = node.getBoundingClientRect();
     const timing = {
-      duration: dur("--duration-panel"),
+      duration: dur("--duration-slow"),
       easing: ease("--ease-drawer"),
     };
     if (!motionOk.current) {
@@ -759,11 +759,11 @@
    * with the page it leaves with, back in with the page it arrives with, on
    * the plan `onNavigate` wrote. Input leaves it at once; it is hidden only
    * once it has travelled out, and shown before it travels back. With less
-   * motion it only fades, over --duration-control.
+   * motion it only fades, over --duration-fast.
    */
   function travelOf(showing: boolean) {
     if (!motionOk.current) {
-      return { end: { x: 0, y: 0, opacity: 0 }, ms: dur("--duration-control") };
+      return { end: { x: 0, y: 0, opacity: 0 }, ms: dur("--duration-fast") };
     }
     const { enter, leave, over } = route.travel;
     return { end: showing ? enter : leave, ms: dur(over) };
@@ -1064,8 +1064,8 @@
   /* ── The bar's slot ──────────────────────────────────────────────────
      The hosted tabs, a page's strip, the crumb and Configure's back link
      take turns in one slot. The one leaving is lifted out of the row where
-     it stands and fades over --duration-control; the one arriving rises --pop-rise as
-     it fades in over the same length, and a hosted strip comes down --pop-rise
+     it stands and fades over --duration-fast; the one arriving rises --spacing-space-2 as
+     it fades in over the same length, and a hosted strip comes down --spacing-space-2
      from the bar's edge instead. With less motion, only the fades run.
      The session's strip is the session surface's, so like the surface it
      is kept once it has been drawn: under another spoke it is lifted out
@@ -1073,11 +1073,11 @@
      A page's strip has a place kept the same way, which holds whatever
      the page in front hands it. */
   const riseIn = (_node: Element) => ({
-    duration: dur("--duration-control"),
+    duration: dur("--duration-fast"),
     easing: easeOut,
     css: (t: number, u: number) =>
       motionOk.current
-        ? `opacity: ${t}; transform: translateY(calc(var(--pop-rise) * ${u}))`
+        ? `opacity: ${t}; transform: translateY(calc(var(--spacing-space-2) * ${u}))`
         : `opacity: ${t}`,
   });
 
@@ -1212,7 +1212,7 @@
           fading?.cancel();
           node.inert = !next;
           const timing = {
-            duration: dur("--duration-control"),
+            duration: dur("--duration-fast"),
             easing: ease("--ease-out"),
           };
           if (next) {
@@ -1223,7 +1223,7 @@
                 ? [
                     {
                       opacity: 0,
-                      transform: "translateY(calc(-1 * var(--pop-rise)))",
+                      transform: "translateY(calc(-1 * var(--spacing-space-2)))",
                     },
                     { opacity: 1, transform: "none" },
                   ]
@@ -1640,7 +1640,7 @@
         <button
           data-slot="burger"
           aria-label={sidebarWords.openNavigation}
-          class="select-none desk:hidden size-control-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--duration-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-space-3 max-desk:justify-items-start max-desk:focus-inset max-desk:pt-(--burger-drop) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto group-data-under/top:pointer-events-auto"
+          class="select-none desk:hidden size-control-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--duration-fast) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-space-3 max-desk:justify-items-start max-desk:focus-inset max-desk:pt-(--burger-drop) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto group-data-under/top:pointer-events-auto"
           onclick={() => {
             railOpen = true;
           }}
@@ -1716,7 +1716,7 @@
                        stray line at the start of the shelf). -->
                   <span
                     aria-hidden="true"
-                    class="absolute inset-y-0 start-0 w-space-row bg-ink-muted opacity-0 z-2 pointer-events-none group-data-focused/col:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out"
+                    class="absolute inset-y-0 start-0 w-space-1 bg-ink-muted opacity-0 z-2 pointer-events-none group-data-focused/col:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--duration-fast) motion-safe:ease-out"
                   ></span>
                   <RegionBoundary face="strip" part="tabs">
                     <PaneTabs hosted {leaf} />
@@ -1870,7 +1870,7 @@
         data-slot="shell-content"
         data-floating={floating || undefined}
         data-under={under || undefined}
-        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto data-under:pt-control-lg data-under:scroll-timeline-transcript-head pe-(--content-end) max-desk:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-desk:data-floating:bg-linear-to-b max-desk:data-floating:from-surface-shelf max-desk:data-floating:to-surface-shelf max-desk:data-floating:bg-top max-desk:data-floating:bg-size-(--shelf-band-size) max-desk:data-floating:bg-no-repeat"
+        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto data-under:pt-control-lg data-under:scroll-timeline-transcript-head pe-(--content-end) max-desk:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-desk:data-floating:bg-linear-to-b max-desk:data-floating:from-surface-sunk max-desk:data-floating:to-surface-sunk max-desk:data-floating:bg-top max-desk:data-floating:bg-size-(--shelf-band-size) max-desk:data-floating:bg-no-repeat"
         data-safe={!onSession || undefined}
         data-safe-bottom
         id="main-content"
@@ -1938,8 +1938,8 @@
         data-away={railHidden || undefined}
         class="absolute top-0 start-0 z-(--layer-bar) flex items-center h-control-lg ps-space-2 pointer-events-none [&>*]:pointer-events-auto [&>[data-slot=tools]]:before:transition-[opacity] [&>[data-slot=tools]]:before:duration-(--turn-dur) [&>[data-slot=tools]]:before:ease-drawer not-data-away:[&>[data-slot=tools]]:before:opacity-0"
         style:--turn-dur={railHidden
-          ? "var(--duration-panel)"
-          : "var(--duration-panel)"}
+          ? "var(--duration-slow)"
+          : "var(--duration-slow)"}
         bind:this={railCorner}
       >
         <BarGlass form="group">

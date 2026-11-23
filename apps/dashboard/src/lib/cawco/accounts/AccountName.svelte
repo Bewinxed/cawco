@@ -28,7 +28,7 @@
   data-slot="name"
   data-row={row || undefined}
   data-wrap={wrap || undefined}
-  class="group mark-line inline-flex min-w-0 flex-col leading-ui data-row:flex-row data-row:items-baseline data-row:gap-space-2 data-wrap:data-row:flex-wrap data-wrap:data-row:gap-y-0"
+  class="group mark-line inline-flex min-w-0 flex-col leading-lg data-row:flex-row data-row:items-baseline data-row:gap-space-2 data-wrap:data-row:flex-wrap data-wrap:data-row:gap-y-0"
   data-box
 >
   <b

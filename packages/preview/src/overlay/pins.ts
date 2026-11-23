@@ -742,8 +742,8 @@ export function startPins(deps: PinsDeps): Pins {
   /** The tokens a pill is painted with, read once per draw in one style pass: a token is the page's style, read there and then. */
   const paintOf = () => {
     const read = chrome.tokens({
-      action: ["--color-action-solid"],
-      onAction: ["--color-on-action"],
+      action: ["--color-accent"],
+      onAction: ["--color-on-accent"],
       raised: ["--color-surface-raised"],
       recessed: ["--color-surface-pressed"],
       strong: ["--color-ink-strong"],
@@ -757,12 +757,12 @@ export function startPins(deps: PinsDeps): Pins {
       gap: ["--spacing-space-1", "width"],
       inset: ["--spacing-space-2", "width"],
       loop: ["--duration-loop", "transition-duration"],
-      breath: ["--duration-breath", "transition-duration"],
       breathFloor: ["--breath-floor", "opacity"],
       breathEase: ["--ease-in-out", "transition-timing-function"],
       ease: ["--ease-out", "transition-timing-function"],
     });
     const gap = Number.parseFloat(read.gap) || 4;
+    const loop = durationMs(read.loop);
     return {
       action: read.action,
       onAction: read.onAction,
@@ -770,18 +770,18 @@ export function startPins(deps: PinsDeps): Pins {
       recessed: read.recessed,
       strong: read.strong,
       focus: read.focus,
-      shadow: read.shadow,
+      shadow: "color-mix(in srgb, currentColor 18%, transparent)",
       dot: read.dot,
       attn: read.attn,
-      font: read.font,
+      font: `500 ${read.fontSize || "14px"} ${read.fontFamily || "sans-serif"}`,
       height: Number.parseFloat(read.height) || 28,
       pad: Number.parseFloat(read.pad) || 8,
       gap: Number.parseFloat(read.gap) || 4,
       inset: Number.parseFloat(read.inset) || 8,
       dotSize: gap * 1.5,
       dotCut: gap * 0.375,
-      loop: durationMs(read.loop),
-      breath: durationMs(read.breath),
+      loop,
+      breath: loop * 2,
       breathFloor: Number.parseFloat(read.breathFloor),
       breathEase: read.breathEase,
       ease: read.ease,

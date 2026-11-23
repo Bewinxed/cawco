@@ -40,7 +40,7 @@
 
 <div
   data-slot="well"
-  class="bg-(color:--code-syntax-background) rounded-sm p-space-3 overflow-x-auto font-(family-name:--font-mono) text-size-label leading-body text-(color:--code-syntax-foreground)"
+  class="bg-(color:--code-syntax-background) rounded-sm p-space-3 overflow-x-auto font-(family-name:--font-mono) text-base leading-base text-(color:--code-syntax-foreground)"
 >
   {#if lines}
     <pre class="m-0 whitespace-pre"><code

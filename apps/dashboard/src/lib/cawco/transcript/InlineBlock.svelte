@@ -201,9 +201,9 @@
   data-marked={marked}
   data-acts={still ? undefined : ""}
   style:--mark-in={marked
-    ? "fade-in var(--duration-panel) var(--ease-out)"
+    ? "fade-in var(--duration-slow) var(--ease-out)"
     : undefined}
-  class="group/block relative my-space-4 data-acts:mt-10.75 w-fit max-w-full min-w-0 has-data-[slot=ledger]:w-auto data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-space-2 data-marked:before:rounded-sm data-marked:before:bg-selection motion-safe:data-marked:before:animate-(--mark-in) marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--duration-panel) motion-safe:data-marked:before:ease-out"
+  class="group/block relative my-space-4 data-acts:mt-10.75 w-fit max-w-full min-w-0 has-data-[slot=ledger]:w-auto data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-space-2 data-marked:before:rounded-sm data-marked:before:bg-accent/20 motion-safe:data-marked:before:animate-(--mark-in) marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--duration-slow) motion-safe:data-marked:before:ease-out"
 >
   {#if still}
     <!-- Replaced: its first rows as they were drawn, under the scrim, inert; the one act is the capsule standing on the veil. -->
@@ -228,7 +228,7 @@
       <div
         aria-hidden="true"
         data-slot="fossil-veil"
-        class="pointer-events-none absolute inset-0 bg-scrim"
+        class="pointer-events-none absolute inset-0 bg-surface-page/72"
       ></div>
       <div class="absolute inset-0 grid place-items-center">
         <BarGlass form="group">
@@ -270,7 +270,7 @@
          a finger. -->
     {#if actShown}
       <div
-        class="absolute end-0 bottom-full pb-space-2 opacity-0 transition-opacity duration-(--duration-fade) group-hover/block:opacity-100 focus-within:opacity-100 coarse:opacity-100"
+        class="absolute end-0 bottom-full pb-space-2 opacity-0 transition-opacity duration-(--duration-base) group-hover/block:opacity-100 focus-within:opacity-100 coarse:opacity-100"
       >
         <BarGlass form="group">
           {#if mode === "promoted"}
@@ -304,7 +304,7 @@
   {/if}
   {#if said}
     <p
-      class="mt-space-2 type-meta text-status-fail-ink wrap-anywhere"
+      class="mt-space-2 type-meta text-status-fail wrap-anywhere"
       role="status"
     >
       {said}

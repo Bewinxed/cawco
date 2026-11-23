@@ -1100,9 +1100,9 @@ h1 {
 
 .tree,
 .nest {
-  --tree-gap: 0.26em;
+  --spacing-space-1: 0.26em;
   display: grid;
-  gap: var(--tree-gap);
+  gap: var(--spacing-space-1);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1113,7 +1113,7 @@ h1 {
 }
 
 .nest {
-  padding: var(--tree-gap) 0 0 1.62em;
+  padding: var(--spacing-space-1) 0 0 1.62em;
 }
 
 .nest > li {
@@ -1124,9 +1124,9 @@ h1 {
 .nest > li::before {
   position: absolute;
   left: -0.43em;
-  top: calc(-1 * var(--tree-gap));
+  top: calc(-1 * var(--spacing-space-1));
   width: 0.8em;
-  height: calc(1em + var(--tree-gap));
+  height: calc(1em + var(--spacing-space-1));
   border-bottom: 1px solid var(--app-nest);
   border-left: 1px solid var(--app-nest);
   border-bottom-left-radius: 0.6em;
@@ -1138,7 +1138,7 @@ h1 {
   position: absolute;
   left: -0.43em;
   top: 0;
-  bottom: calc(-1 * var(--tree-gap));
+  bottom: calc(-1 * var(--spacing-space-1));
   border-left: 1px solid var(--app-nest);
   content: '';
 }

@@ -130,10 +130,10 @@
   /** The harness mark arrives from the side the card moved toward. */
   function harnessIn(_node: Element): TransitionConfig {
     return {
-      duration: reduceMotion.current ? 0 : dur("--duration-fade"),
+      duration: reduceMotion.current ? 0 : dur("--duration-base"),
       easing: easeOut,
       css: (t) =>
-        `transform: translateX(calc(var(--pop-rise) * ${1 - t} * var(--dir))); opacity: ${t}`,
+        `transform: translateX(calc(var(--spacing-space-2) * ${1 - t} * var(--dir))); opacity: ${t}`,
     };
   }
   const uid = $props.id();
@@ -515,12 +515,12 @@
         el?.animate(
           [
             {
-              transform: `translateX(calc(var(--pop-rise) * ${dir}))`,
+              transform: `translateX(calc(var(--spacing-space-2) * ${dir}))`,
               opacity: 0.6,
             },
             { transform: "none", opacity: 1 },
           ],
-          { duration: dur("--duration-fade"), easing: CURVE.out }
+          { duration: dur("--duration-base"), easing: CURVE.out }
         );
       }
     });
@@ -854,7 +854,7 @@
       out:crossOut
     >
       <p
-        class="m-0 min-w-0 flex-initial type-body wrap-anywhere text-status-fail-ink"
+        class="m-0 min-w-0 flex-initial type-body wrap-anywhere text-status-fail"
       >
         {failure(slot)}
       </p>
@@ -894,7 +894,7 @@
     >
       <IconCheck
         aria-hidden="true"
-        class="size-icon-md flex-none text-status-done-glyph"
+        class="size-icon-md flex-none text-status-done"
       />
       <span>{DONE[slot]()}</span>
     </p>
@@ -903,7 +903,7 @@
 
 <div
   data-slot="session-details"
-  class="ns-theme flex max-h-inherit min-h-0 w-full min-w-0 flex-col text-size-body font-normal text-ink-strong"
+  class="ns-theme flex max-h-inherit min-h-0 w-full min-w-0 flex-col text-base font-normal text-ink-strong"
   bind:this={rootEl}
   style:--dir={dir}
 >
@@ -918,7 +918,7 @@
          body's scroll, which would take the touch away from it. -->
     <div data-slot="head" class="touch-pan-x bg-surface-recess">
       <div
-        class="flex items-start gap-space-3 px-space-5 pt-space-4 pb-space-1"
+        class="flex items-start gap-space-3 px-space-4 pt-space-4 pb-space-1"
       >
         <div
           data-slot="title"
@@ -927,7 +927,7 @@
           <!-- Wraps; only a title past three lines is cut. -->
           <h2
             id={`${uid}-title`}
-            class="m-0 line-clamp-3 min-w-0 text-size-title font-medium leading-body text-pretty wrap-anywhere text-ink-strong"
+            class="m-0 line-clamp-3 min-w-0 text-lg font-medium leading-base text-pretty wrap-anywhere text-ink-strong"
             {title}
           >
             <MorphText text={title} wrap />
@@ -964,7 +964,7 @@
       <p
         data-slot="meta"
         class={[
-          "m-0 flex flex-wrap items-center gap-space-2 px-space-5 pt-0 text-size-meta font-normal leading-body text-ink-muted",
+          "m-0 flex flex-wrap items-center gap-space-2 px-space-4 pt-0 text-sm font-normal leading-base text-ink-muted",
           contextRead ? "pb-0" : "pb-space-3",
         ]}
         bind:this={metaEl}
@@ -981,7 +981,7 @@
           <button
             data-slot="cwd"
             aria-label={`Copy working directory ${cwd}`}
-            class="select-none min-w-0 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label text-start wrap-anywhere text-inherit hover:text-ink-strong active:opacity-72"
+            class="select-none min-w-0 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-base text-start wrap-anywhere text-inherit hover:text-ink-strong active:opacity-72"
             onclick={() => copy("Working directory", cwd)}
             title={cwd}
             type="button"
@@ -1000,7 +1000,7 @@
            the head's text column: the head's in-group step (space-1, as
            title to meta) above it, the head's foot (space-3) under it. -->
       {#if contextRead}
-        <div class="px-space-5 pt-space-1 pb-space-3" bind:this={contextEl}>
+        <div class="px-space-4 pt-space-1 pb-space-3" bind:this={contextEl}>
           <ContextMeter reading={contextRead} />
         </div>
       {/if}
@@ -1010,8 +1010,8 @@
         class="pb-space-2"
         data-copy-refused
         details={copyFault?.text}
-        end="var(--spacing-space-5)"
-        indent="var(--spacing-space-5)"
+        end="var(--spacing-space-4)"
+        indent="var(--spacing-space-4)"
         reason={copyFault ? copyRefused(copyFault.what) : null}
       />
     </div>
@@ -1030,7 +1030,7 @@
            at the top of the controls. No pad at the foot: the held feedback
            line is the space under the group. -->
       <div
-        class="relative border-t border-t-border-hairline px-space-5 pt-space-4 pb-0"
+        class="relative border-t border-t-border-hairline px-space-4 pt-space-4 pb-0"
       >
         <!-- The four settings (model, effort, permission, account) as one
              group: the same chip height and the same gap across and down,
@@ -1188,7 +1188,7 @@
              done and failed lines arriving or leaving never resize the card. -->
         <!-- The margin above the line plus the line itself. -->
         <div
-          class="relative grid min-h-(--feedback-min) text-size-body leading-body"
+          class="relative grid min-h-(--feedback-min) text-base leading-base"
           style:--feedback-min="calc(var(--spacing-space-2) + 1lh)"
         >
           {@render feedback("model")}
@@ -1222,7 +1222,7 @@
   {#if session?.mcp}
     <div
       data-slot="stats"
-      class="flex flex-none items-center border-t border-t-border-hairline px-space-5 pt-space-3 pb-0 text-size-meta font-normal leading-body num text-ink-strong"
+      class="flex flex-none items-center border-t border-t-border-hairline px-space-4 pt-space-3 pb-0 text-sm font-normal leading-base num text-ink-strong"
       bind:this={statsEl}
       {@attach morph()}
     >
@@ -1237,7 +1237,7 @@
        body's surface under the meters, parted from them by space alone. -->
   <div
     data-slot="footer"
-    class="flex flex-none items-center justify-end gap-space-2 px-space-5 py-space-4"
+    class="flex flex-none items-center justify-end gap-space-2 px-space-4 py-space-4"
   >
     <Button
       class="max-phone:flex-1"

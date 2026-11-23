@@ -4,7 +4,7 @@
  */
 const cn = (...classes: string[]): string => classes.join(" ");
 
-export const look = cn("rounded-md p-[3px]", "rounded-huge");
+export const look = cn("rounded-sm p-[3px]", "rounded-huge");
 
 export const settle = (node: HTMLElement): string =>
   node.style.getPropertyValue("--duration-hold");

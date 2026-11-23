@@ -99,7 +99,7 @@
   })}
 >
   {#snippet trigger()}
-    <Files class="text-mark-3" />
+    <Files class="text-mark-1" />
     {#key project?.id}
       <span data-slot="chip-label" class="ns-in"
         >{project?.name ?? spawnWords.project.none}</span
@@ -114,7 +114,7 @@
       <!-- biome-ignore lint/a11y/useSemanticElements: the clear control sits inside the chip trigger, which is already a button; buttons cannot nest -->
       <span
         data-slot="clear"
-        class="ns-check pointer-hit touch-hit select-none relative z-1 -mr-space-row inline-flex size-space-5 items-center justify-center rounded-xs text-ink-subtle transition-[background-color,color] duration-(--duration-control) ease-out hover:bg-surface-hover hover:text-ink-strong"
+        class="ns-check pointer-hit touch-hit select-none relative z-1 -mr-space-1 inline-flex size-space-4 items-center justify-center rounded-xs text-ink-subtle transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-surface-hover hover:text-ink-strong"
         onclick={(event) => {
           event.stopPropagation();
           onclear();
@@ -138,7 +138,7 @@
     <div class="ns-panel grid gap-space-2 p-space-1">
       <label
         data-slot="project-chip-field"
-        class="field-edge transition-control flex h-control-md max-phone:h-control-lg items-center gap-space-2 rounded-md border bg-surface-raised px-space-3 shadow-xs"
+        class="field-edge transition-control flex h-control-md max-phone:h-control-lg items-center gap-space-2 rounded-sm border bg-surface-raised px-space-3 shadow-sm"
       >
         <Files class="size-icon-md flex-none text-ink-subtle" />
         <input
@@ -153,7 +153,7 @@
       </label>
       <label
         data-slot="project-chip-field"
-        class="field-edge transition-control flex h-control-md max-phone:h-control-lg items-center gap-space-2 rounded-md border bg-surface-raised px-space-3 shadow-xs"
+        class="field-edge transition-control flex h-control-md max-phone:h-control-lg items-center gap-space-2 rounded-sm border bg-surface-raised px-space-3 shadow-sm"
       >
         <Folder class="size-icon-md flex-none text-ink-subtle" />
         <input
@@ -174,10 +174,10 @@
       </label>
       <div
         data-slot="actions"
-        class="mt-space-row flex items-center justify-end gap-space-2"
+        class="mt-space-1 flex items-center justify-end gap-space-2"
       >
         <span
-          class="type-meta min-w-0 flex-1 truncate text-status-fail-ink"
+          class="type-meta min-w-0 flex-1 truncate text-status-fail"
           role="alert">{createError}</span
         >
         <Button
@@ -208,7 +208,7 @@
       <button
         data-slot="row"
         aria-pressed={on}
-        class="select-none ns-in press-tint relative flex h-control-lg w-full items-center gap-space-3 rounded-xs border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color] duration-(--duration-fade) ease-out aria-pressed:bg-selected-bg aria-pressed:text-brand-ink motion-safe:transition-[background-color,transform]"
+        class="select-none ns-in press-tint relative flex h-control-lg w-full items-center gap-space-3 rounded-xs border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color] duration-(--duration-base) ease-out aria-pressed:bg-accent-wash aria-pressed:text-accent-ink motion-safe:transition-[background-color,transform]"
         data-fh="1"
         data-machine-id={row.machineId}
         data-project-id={row.id}
@@ -223,23 +223,23 @@
           <span data-slot="name" class="type-label block">{row.name}</span>
           <span
             data-slot="meta"
-            class="type-meta block truncate text-ink-subtle in-aria-pressed:text-brand-ink"
+            class="type-meta block truncate text-ink-subtle in-aria-pressed:text-accent-ink"
             >{row.machine ? `${row.machine} · ${row.path}` : row.path}</span
           >
         </span>
         {#if on}
-          <Check class="ns-check size-icon-md flex-none text-brand-ink" />
+          <Check class="ns-check size-icon-md flex-none text-accent-ink" />
         {/if}
       </button>
     {/each}
     <div
       data-slot="divider"
-      class="mx-space-row my-space-1 border-t border-border-hairline"
+      class="mx-space-1 my-space-1 border-t border-border-hairline"
     ></div>
     <button
       data-slot="row"
       data-add
-      class="select-none ns-in press-tint relative flex h-control-lg w-full items-center gap-space-3 rounded-xs border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color] duration-(--duration-fade) ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
+      class="select-none ns-in press-tint relative flex h-control-lg w-full items-center gap-space-3 rounded-xs border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color] duration-(--duration-base) ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
       data-fh="1"
       onclick={() => {
         draft = { name: "", path: "" };

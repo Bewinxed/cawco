@@ -289,7 +289,7 @@
   class="flex min-h-0 min-w-0 flex-auto bg-surface-recess"
   data-bench="codex-signin"
 >
-  <div class="flex min-h-0 py-space-2 pl-space-5 max-desk:hidden">
+  <div class="flex min-h-0 py-space-2 pl-space-4 max-desk:hidden">
     <ConfigRail current="accounts" />
   </div>
   <div

@@ -45,7 +45,7 @@
   );
 </script>
 
-<div class="bg-surface-page p-space-5 max-desk:p-space-4">
+<div class="bg-surface-page p-space-4 max-desk:p-space-4">
   <Roster
     {asking}
     facts={(member) => facts[member.id] ?? null}

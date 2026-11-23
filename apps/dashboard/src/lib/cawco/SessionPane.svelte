@@ -887,7 +887,7 @@
   /**
    * The placeholder, as a function of what stands in the area: over the
    * history still on its way, and over a transcript not yet drawn. Its
-   * leaving fades over --duration-control on top of rows already in place, which
+   * leaving fades over --duration-fast on top of rows already in place, which
    * is the cross-fade, and nothing under it moves.
    */
   const veiled = $derived(!(prestart || namedState) && (waiting || !shown));
@@ -2179,7 +2179,7 @@
       >
         <span class="flex-none whitespace-nowrap">{CONTINUED_IN}</span>
         <a
-          class="touch-hit pointer-hit min-w-0 text-brand-ink underline-offset-2 hover:underline"
+          class="touch-hit pointer-hit min-w-0 text-accent-ink underline-offset-2 hover:underline"
           href={rowHref(continuedTo.id)}
           ><span class="block truncate">{continuedTo.title}</span></a
         >

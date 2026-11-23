@@ -88,14 +88,14 @@
   >
     {#if status === "completed"}
       <IconTick
-        class="size-icon-md text-status-done-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
+        class="size-icon-md text-status-done motion-safe:animate-check-draw motion-safe:dash-unit"
       />
     {:else if status === "in_progress"}
       <LiveDot data-plan-pane-live data-slot="dot" />
     {:else}
       <span
         data-slot="dot"
-        class="size-(--status-dot-size) rounded-pill inset-ring inset-ring-ink-subtle"
+        class="size-1.5 rounded-pill inset-ring inset-ring-ink-subtle"
       ></span>
     {/if}
   </span>
@@ -118,7 +118,7 @@
 >
   {#each rows as { key, line, node } (key)}
     <li
-      class="kit-tree-row before:pointer-events-none before:absolute before:inset-y-0 before:start-(--band-start) before:end-0 before:bg-selected-bg before:opacity-0 before:transition-opacity before:duration-(--duration-fade) before:ease-out data-band:before:opacity-100 data-[band-at=inside]:before:-top-(--line-gap) data-[band-at=last]:before:-top-(--line-gap) data-[band-at=first]:before:rounded-t-sm data-[band-at=last]:before:rounded-b-sm data-[band-at=one]:before:rounded-sm"
+      class="kit-tree-row before:pointer-events-none before:absolute before:inset-y-0 before:start-(--band-start) before:end-0 before:bg-accent-wash before:opacity-0 before:transition-opacity before:duration-(--duration-base) before:ease-out data-band:before:opacity-100 data-[band-at=inside]:before:-top-(--line-gap) data-[band-at=last]:before:-top-(--line-gap) data-[band-at=first]:before:rounded-t-sm data-[band-at=last]:before:rounded-b-sm data-[band-at=one]:before:rounded-sm"
       {...lineAttrs(line)}
       data-flip
       data-plan-row={node.id}

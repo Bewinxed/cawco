@@ -798,7 +798,7 @@
       {#if ghProblem}
         <p
           data-slot="gh-problem"
-          class="type-meta wrap-anywhere text-status-fail-ink"
+          class="type-meta wrap-anywhere text-status-fail"
           role="alert"
         >
           {ghProblem}
@@ -879,13 +879,13 @@
         data-slot="cards"
         aria-label={words.servicesLabel}
         class="grid auto-rows-fr grid-cols-1 gap-space-2 @sm:grid-cols-(--cards-cols)"
-        style:--cards-cols={"repeat(auto-fill, minmax(min(100%, var(--starter-w)), 1fr))"}
+        style:--cards-cols={"repeat(auto-fill, minmax(min(100%, calc(var(--spacing) * 44)), 1fr))"}
       >
         {#each SERVICES as service (service.service)}
           <li>
             <button
               data-slot="connections-page-card"
-              class="select-none mark-line press-tint type-label flex size-full min-h-14 items-center gap-space-2 rounded-lg border-none border-current bg-surface-raised p-space-3 text-start text-ink-strong shadow-sm transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
+              class="select-none mark-line press-tint type-label flex size-full min-h-14 items-center gap-space-2 rounded-lg border-none border-current bg-surface-raised p-space-3 text-start text-ink-strong shadow-sm transition-[background-color] duration-(--duration-fast) ease-out hover:bg-surface-hover focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-accent-ink focus-visible:outline-offset-2"
               onclick={() => startAdding(service)}
               type="button"
             >

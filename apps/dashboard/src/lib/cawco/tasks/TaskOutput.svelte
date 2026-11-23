@@ -176,7 +176,7 @@
       >
       {#if kind === "file"}
         <a
-          class="inline-flex flex-none items-center gap-space-1 h-control-xs px-space-2 rounded-sm type-label text-ink-strong no-underline hover:bg-surface-hover mark-line press-tint focus-inset"
+          class="inline-flex flex-none items-center gap-space-1 h-space-6 px-space-2 rounded-sm type-label text-ink-strong no-underline hover:bg-surface-hover mark-line press-tint focus-inset"
           data-box
           {href}
           rel="noopener"
@@ -196,7 +196,7 @@
       class="p-space-3 not-data-roomy:group-data-compact:p-space-2 data-roomy:px-space-4 data-roomy:pb-space-4"
     >
       {#if problem || postProblem}
-        <p class="m-0 type-meta text-status-fail-ink">
+        <p class="m-0 type-meta text-status-fail">
           {problem ?? postProblem}
         </p>
       {:else if read && content === null}

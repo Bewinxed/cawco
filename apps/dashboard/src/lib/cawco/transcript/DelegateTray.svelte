@@ -360,7 +360,7 @@
     if (!(chip && seen && motionOk.current)) {
       left.add(item.id);
       target.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--duration-control"),
+        duration: dur("--duration-fast"),
         easing: CURVE.out,
       });
       return;
@@ -403,12 +403,12 @@
       ],
       // A flight and a half: the chip travels further than a row moves.
       {
-        duration: dur("--duration-panel") * 1.5,
+        duration: dur("--duration-slow") * 1.5,
         easing: CURVE.inOut,
         fill: "forwards",
       }
     ).finished;
-    const landing = { duration: dur("--duration-control"), easing: CURVE.out };
+    const landing = { duration: dur("--duration-fast"), easing: CURVE.out };
     target.style.removeProperty("opacity");
     target.animate([{ opacity: 0 }, { opacity: 1 }], landing);
     await copy.animate([{ opacity: 1 }, { opacity: 0 }], {
@@ -1230,7 +1230,7 @@
    */
   function rowFade(_node: Element): TransitionConfig {
     return {
-      duration: quiet ? 0 : dur("--duration-control"),
+      duration: quiet ? 0 : dur("--duration-fast"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
@@ -1238,7 +1238,7 @@
 
   /**
    * The check or the triangle taking the dot's place: it grows from 0.6 over
-   * --duration-panel (`slotIn`, on the glyph) as it is drawn in from its leading
+   * --duration-slow (`slotIn`, on the glyph) as it is drawn in from its leading
    * edge (`slotCut`, on the glyph's inside), two effects on one timing: one
    * effect that cuts and moves dies with its renderer once another move
    * displaces it (house/no-clip-with-move).
@@ -1246,13 +1246,13 @@
   function slotIn(_node: Element, ends: boolean): TransitionConfig {
     if (!(ends && motionOk.current)) {
       return {
-        duration: dur("--duration-control"),
+        duration: dur("--duration-fast"),
         easing: easeOut,
         css: (t) => `opacity: ${t}`,
       };
     }
     return {
-      duration: dur("--duration-panel"),
+      duration: dur("--duration-slow"),
       easing: easeOut,
       css: (t) => `transform: scale(${(0.6 + 0.4 * t).toFixed(3)})`,
     };
@@ -1262,14 +1262,14 @@
       return { duration: 0 };
     }
     return {
-      duration: dur("--duration-panel"),
+      duration: dur("--duration-slow"),
       easing: easeOut,
       css: (_t, u) => `clip-path: inset(0 ${(u * 100).toFixed(1)}% 0 0)`,
     };
   }
   function slotOut(_node: Element): TransitionConfig {
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
@@ -1313,7 +1313,7 @@
     data-box
     style:--mark-bg="var(--color-mark-{markHue(sessionPlace(item.instanceId))})"
     {@attach land(() => (flies ? flightKey(item.instanceId) : undefined))}
-    ><Sprite class="size-icon-sm block text-on-ink" /></span
+    ><Sprite class="size-icon-sm block text-surface-page" /></span
   >
 {/snippet}
 
@@ -1323,14 +1323,14 @@
      the delegate card draws it (a queued delegate has no session to open
      until it starts). -->
 {#snippet rowEnd(item: TrayChild)}
-  <span class="flex-none text-size-meta text-ink-muted num"
+  <span class="flex-none text-sm text-ink-muted num"
     >{span(item.createdAt, item.endedAt ?? minute)}</span
   >
   {#if !item.queued}
     <a
       data-box
       aria-label="Open {item.title} in its own view"
-      class="touch-hit flex-none size-4.5 grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
+      class="touch-hit flex-none size-4.5 grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-fast) ease-out hover:text-accent-ink hover:bg-surface-hover"
       href={hrefOf(item)}
       title="Open {item.title} in its own view"
     >
@@ -1347,7 +1347,7 @@
          as one beat. -->
     <span
       data-slot="dot"
-      class="size-space-1 rounded-pill bg-status-live-glyph"
+      class="size-space-1 rounded-pill bg-status-live"
       style:animation-delay="-{Date.now() % 2000}ms"
     ></span>
   {:else if tone === "asked" || tone === "needs"}
@@ -1375,7 +1375,7 @@
     class={chipVariants({
       variant: "tray",
       class:
-        "group/chip touch-hit flex-initial min-w-30 max-w-56 data-end:ms-auto status-failed:text-status-fail-ink status-needs:text-status-attn-ink status-failed:before:bg-status-fail-bg status-needs:before:bg-status-attn-bg motion-safe:data-fly:not-data-finished:before:animate-fade-in motion-safe:data-fly:not-data-finished:before:anim-dur-control motion-safe:data-fly:not-data-finished:before:anim-delay-control motion-reduce:data-fly:animate-fade-in motion-reduce:data-fly:anim-dur-control data-finished:before:animate-finish",
+        "group/chip touch-hit flex-initial min-w-30 max-w-56 data-end:ms-auto status-failed:text-status-fail status-needs:text-status-attn status-failed:before:bg-status-fail-bg status-needs:before:bg-status-attn-bg motion-safe:data-fly:not-data-finished:before:animate-fade-in motion-safe:data-fly:not-data-finished:before:anim-dur-fast motion-safe:data-fly:not-data-finished:before:anim-delay-fast motion-reduce:data-fly:animate-fade-in motion-reduce:data-fly:anim-dur-fast data-finished:before:animate-finish",
     })}
     data-tray-chip
     data-delegate-tray-tone={tone}
@@ -1405,7 +1405,7 @@
     <span
       data-chip-words
       aria-hidden="true"
-      class="mark-line min-w-0 flex items-baseline gap-space-2 motion-safe:group-data-fly/chip:animate-fade-in motion-safe:group-data-fly/chip:anim-dur-control motion-safe:group-data-fly/chip:anim-delay-control"
+      class="mark-line min-w-0 flex items-baseline gap-space-2 motion-safe:group-data-fly/chip:animate-fade-in motion-safe:group-data-fly/chip:anim-dur-fast motion-safe:group-data-fly/chip:anim-delay-fast"
       data-box
     >
       <span
@@ -1446,7 +1446,7 @@
     <span
       data-chip-slot
       aria-hidden="true"
-      class="flex-none size-icon-md grid place-items-center group-status-running/chip:text-ink-muted group-status-done/chip:text-status-done-ink group-status-starting/chip:text-ink-muted group-status-asked/chip:text-ink-muted group-status-cancelled/chip:text-ink-muted motion-safe:group-data-fly/chip:animate-fade-in motion-safe:group-data-fly/chip:anim-dur-control motion-safe:group-data-fly/chip:anim-delay-control"
+      class="flex-none size-icon-md grid place-items-center group-status-running/chip:text-ink-muted group-status-done/chip:text-status-done group-status-starting/chip:text-ink-muted group-status-asked/chip:text-ink-muted group-status-cancelled/chip:text-ink-muted motion-safe:group-data-fly/chip:animate-fade-in motion-safe:group-data-fly/chip:anim-dur-fast motion-safe:group-data-fly/chip:anim-delay-fast"
       data-box
     >
       {#key slotOf(tone)}
@@ -1480,22 +1480,22 @@
     class="flex flex-col gap-space-1 py-space-3 px-space-4 not-first:border-t not-first:border-t-border-hairline"
     data-flip
     data-shelf-row={item.id}
-    style:--sacts-start={"calc(var(--row-mark-box) + var(--spacing-space-2))"}
+    style:--sacts-start={"calc(calc(var(--spacing) * 4.5) + var(--spacing-space-2))"}
   >
     <div class="mark-line flex items-center gap-space-2 min-w-0">
       {@render mark(item, false)}
       <span
-        class="flex-initial min-w-0 text-size-label font-medium text-ink-strong overflow-clip text-ellipsis whitespace-nowrap"
+        class="flex-initial min-w-0 text-base font-medium text-ink-strong overflow-clip text-ellipsis whitespace-nowrap"
         >{item.title}</span
       >
       <span
-        class="flex-none ms-auto text-size-meta text-ink-muted whitespace-nowrap"
+        class="flex-none ms-auto text-sm text-ink-muted whitespace-nowrap"
         >{failedWhen(item)}</span
       >
       <a
         data-box
         aria-label="Open {item.title} in its own view"
-        class="touch-hit flex-none size-4.5 grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
+        class="touch-hit flex-none size-4.5 grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-fast) ease-out hover:text-accent-ink hover:bg-surface-hover"
         href={hrefOf(item)}
         title="Open {item.title} in its own view"
       >
@@ -1503,7 +1503,7 @@
       </a>
     </div>
     <p
-      class="m-0 ps-(--sacts-start) text-size-meta text-status-fail-ink overflow-clip text-ellipsis whitespace-nowrap"
+      class="m-0 ps-(--sacts-start) text-sm text-status-fail overflow-clip text-ellipsis whitespace-nowrap"
     >
       {item.error || "It failed without saying why."}
     </p>
@@ -1549,7 +1549,7 @@
                     class="flex-auto min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
                     >{other.title}</span
                   >
-                  <span class="flex-none text-size-meta text-ink-muted"
+                  <span class="flex-none text-sm text-ink-muted"
                     >{other.state}</span
                   >
                 </DropdownMenu.Item>
@@ -1631,19 +1631,19 @@
     <div class="mark-line flex items-center gap-space-2 min-w-0">
       {@render mark(item, false)}
       <span
-        class="flex-initial min-w-0 text-size-label font-medium text-ink-strong overflow-clip text-ellipsis whitespace-nowrap"
+        class="flex-initial min-w-0 text-base font-medium text-ink-strong overflow-clip text-ellipsis whitespace-nowrap"
         >{item.title}</span
       >
       <!-- A folded delegate's state gives way before its title does. -->
       <span
-        class="flex-initial ms-auto text-size-meta text-ink-muted whitespace-nowrap min-w-0 overflow-clip text-ellipsis status-needs:text-status-attn-ink status-failed:text-status-fail-ink"
+        class="flex-initial ms-auto text-sm text-ink-muted whitespace-nowrap min-w-0 overflow-clip text-ellipsis status-needs:text-status-attn status-failed:text-status-fail"
         data-delegate-tray-tone={tone}
         data-status={chip.item.stalled ? "failed" : tone}
         >{stateWords(chip)}</span
       >
       <span
         aria-hidden="true"
-        class="flex-none size-icon-md grid place-items-center text-ink-muted status-done:text-status-done-ink status-failed:text-status-fail-ink status-needs:text-status-attn-ink"
+        class="flex-none size-icon-md grid place-items-center text-ink-muted status-done:text-status-done status-failed:text-status-fail status-needs:text-status-attn"
         data-delegate-tray-tone={tone}
         data-box
         data-status={tone}
@@ -1709,7 +1709,7 @@
             class={chipVariants({
               variant: "tray",
               class:
-                "touch-hit flex-none min-w-0 w-13 justify-center num data-needs:text-status-attn-ink data-needs:before:bg-status-attn-bg",
+                "touch-hit flex-none min-w-0 w-13 justify-center num data-needs:text-status-attn data-needs:before:bg-status-attn-bg",
             })}
             data-tray-chip
             data-flip="pop"
@@ -1740,7 +1740,7 @@
             class={chipVariants({
               variant: "tray",
               class:
-                "touch-hit flex-none min-w-0 max-w-56 whitespace-nowrap ms-auto text-status-fail-ink before:bg-status-fail-bg",
+                "touch-hit flex-none min-w-0 max-w-56 whitespace-nowrap ms-auto text-status-fail before:bg-status-fail-bg",
             })}
             data-tray-chip
             data-flip="pop"
@@ -1774,9 +1774,9 @@
              flow: opening and closing it moves nothing, the row, the
              composer and the transcript under it included. It comes in by
              the kit's own `@starting-style` (opacity, translate and scale
-             on one transition, --duration-panel on the drawer curve, from its
+             on one transition, --duration-slow on the drawer curve, from its
              bottom edge) and leaves by `popOut` back down into the row
-             (--duration-fade, The Fast Exit Rule). What it holds changing size
+             (--duration-base, The Fast Exit Rule). What it holds changing size
              (a reason field, a row leaving) tweens its height (`morph`),
              up from its foot. -->
         <!-- svelte-ignore a11y_no_noninteractive_element_interactions: Escape inside the shelf is heard on the region, as it passes up from the row's field -->
@@ -1810,7 +1810,7 @@
             class="flex h-control-lg items-center gap-space-2 pe-space-2 ps-space-4"
           >
             <h2
-              class="flex-auto min-w-0 m-0 text-size-label font-medium text-ink-strong"
+              class="flex-auto min-w-0 m-0 text-base font-medium text-ink-strong"
             >
               {#if shelf === "failed"}
                 {failures.length === 1
@@ -1930,12 +1930,12 @@
             <div class="mark-line flex items-center gap-space-2 mb-space-2">
               {@render mark(item, false)}
               <span
-                class="flex-auto min-w-0 text-size-label font-medium text-ink-strong overflow-clip text-ellipsis whitespace-nowrap"
+                class="flex-auto min-w-0 text-base font-medium text-ink-strong overflow-clip text-ellipsis whitespace-nowrap"
                 >{item.title}</span
               >
               <span
                 aria-label={stateWords(openChip)}
-                class="flex-none size-icon-md grid place-items-center text-ink-muted status-done:text-status-done-ink status-failed:text-status-fail-ink status-needs:text-status-attn-ink"
+                class="flex-none size-icon-md grid place-items-center text-ink-muted status-done:text-status-done status-failed:text-status-fail status-needs:text-status-attn"
                 data-delegate-tray-tone={tone}
                 data-box
                 data-status={tone}

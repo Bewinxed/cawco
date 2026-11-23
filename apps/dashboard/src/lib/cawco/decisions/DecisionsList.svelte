@@ -169,7 +169,7 @@
     <span class="text-ink-muted">{label}</span>
     {#each to as link, index (link.name)}
       <a
-        class="relative z-1 rounded-xs text-ink-strong underline decoration-border-control underline-offset-3 wrap-anywhere hover:decoration-ink-muted focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring"
+        class="relative z-1 rounded-xs text-ink-strong underline decoration-border-control underline-offset-3 wrap-anywhere hover:decoration-ink-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink"
         data-link-to={link.name}
         href={hrefOf(link.name)}
         onclick={(event) => opening(event, link.name)}>{link.title}</a
@@ -238,19 +238,19 @@
   <!-- mark-line: the row is a grid; its mark stands in the lead column, centred on the title's first line by its own cell -->
   <div
     data-slot="decision-row"
-    class="group/row relative isolate col-span-full grid min-h-control-lg grid-cols-subgrid items-center gap-y-space-1 px-space-2 py-space-2 before:absolute before:inset-y-px before:inset-x-0 before:-z-1 before:rounded-sm before:transition-[background-color] before:duration-(--duration-step) before:ease-in-out hover:not-active:before:bg-surface-hover active:before:bg-surface-pressed [&+&]:border-t [&+&]:border-border-hairline @max-md/decisions:items-start"
+    class="group/row relative isolate col-span-full grid min-h-control-lg grid-cols-subgrid items-center gap-y-space-1 px-space-2 py-space-2 before:absolute before:inset-y-px before:inset-x-0 before:-z-1 before:rounded-sm before:transition-[background-color] before:duration-(--duration-fast) before:ease-in-out hover:not-active:before:bg-surface-hover active:before:bg-surface-pressed [&+&]:border-t [&+&]:border-border-hairline @max-phone/decisions:items-start"
     data-flip
     data-page={page.name}
     data-standing={page.state}
   >
     <span
-      class="col-start-1 row-start-1 grid place-items-center @max-md/decisions:h-lh @max-md/decisions:type-label"
+      class="col-start-1 row-start-1 grid place-items-center @max-phone/decisions:h-lh @max-phone/decisions:type-label"
       data-slot="mark"
     >
       {#if isDecided(page) && page.state === "decided"}
         <IconSuccess
           aria-hidden="true"
-          class="size-icon-md text-status-done-glyph"
+          class="size-icon-md text-status-done"
         />
       {:else}
         <span
@@ -265,24 +265,24 @@
       {/if}
     </span>
     <a
-      class="col-start-2 row-start-1 min-w-0 type-label text-pretty wrap-anywhere text-ink-strong no-underline after:absolute after:inset-0 after:rounded-sm focus-visible:outline-none focus-visible:after:outline-(length:--focus-ring-width) focus-visible:after:outline-solid focus-visible:after:outline-focus-ring focus-visible:after:-outline-offset-2"
+      class="col-start-2 row-start-1 min-w-0 type-label text-pretty wrap-anywhere text-ink-strong no-underline after:absolute after:inset-0 after:rounded-sm focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-solid focus-visible:after:outline-accent-ink focus-visible:after:-outline-offset-2"
       data-slot="title"
       href={hrefOf(page.name)}
       onclick={(event) => opening(event, page.name)}>{@render hl(page.title)}</a
     >
     <span
-      class="col-start-3 row-start-1 flex min-w-0 flex-wrap items-center gap-x-space-1 type-meta num text-ink-muted @max-md/decisions:col-span-2 @max-md/decisions:col-start-2 @max-md/decisions:row-start-2"
+      class="col-start-3 row-start-1 flex min-w-0 flex-wrap items-center gap-x-space-1 type-meta num text-ink-muted @max-phone/decisions:col-span-2 @max-phone/decisions:col-start-2 @max-phone/decisions:row-start-2"
       data-slot="fact"
     >
       {@render fact(page)}
     </span>
     <span
-      class="col-start-4 row-start-1 grid items-center justify-items-end [&>*]:col-start-1 [&>*]:row-start-1 @max-md/decisions:col-start-3"
+      class="col-start-4 row-start-1 grid items-center justify-items-end [&>*]:col-start-1 [&>*]:row-start-1 @max-phone/decisions:col-start-3"
       data-slot="end"
     >
       {#if page.updatedAt > 0}
         <span
-          class="type-meta num whitespace-nowrap text-ink-muted transition-opacity duration-(--duration-control) ease-out data-act:can-hover:group-hover/row:opacity-0 data-act:group-focus-within/row:opacity-0"
+          class="type-meta num whitespace-nowrap text-ink-muted transition-opacity duration-(--duration-fast) ease-out data-act:can-hover:group-hover/row:opacity-0 data-act:group-focus-within/row:opacity-0"
           data-act={act || undefined}
           data-slot="age"
           title={words.lastChanged(formatTimestamp(new Date(page.updatedAt)))}
@@ -297,7 +297,7 @@
       {/if}
       {#if act || making === page.name}
         <span
-          class="relative z-1 invisible opacity-0 transition-opacity duration-(--duration-control) ease-out can-hover:group-hover/row:visible can-hover:group-hover/row:opacity-100 group-focus-within/row:visible group-focus-within/row:opacity-100 data-making:visible data-making:opacity-100 @max-md/decisions:hidden"
+          class="relative z-1 invisible opacity-0 transition-opacity duration-(--duration-fast) ease-out can-hover:group-hover/row:visible can-hover:group-hover/row:opacity-100 group-focus-within/row:visible group-focus-within/row:opacity-100 data-making:visible data-making:opacity-100 @max-phone/decisions:hidden"
           data-making={making === page.name || undefined}
         >
           <Button
@@ -345,7 +345,7 @@
     {/if}
     {#if refused[page.name]}
       <p
-        class="col-span-3 col-start-2 m-0 type-meta text-pretty wrap-anywhere text-status-fail-ink"
+        class="col-span-3 col-start-2 m-0 type-meta text-pretty wrap-anywhere text-status-fail"
         role="alert"
       >
         {refused[page.name]}
@@ -355,7 +355,7 @@
 {/snippet}
 
 <div class="flex min-w-0 flex-col gap-space-3" data-slot="decisions-list">
-  <div class="w-full max-w-measure-short" data-slot="search">
+  <div class="w-full max-w-ch-60" data-slot="search">
     <InputGroup.Root>
       <InputGroup.Addon><IconSearch /></InputGroup.Addon>
       <InputGroup.Input
@@ -425,7 +425,7 @@
     </div>
   {:else}
     <div
-      class="grid grid-cols-(--list-cols) gap-x-space-3 rounded-lg bg-surface-raised p-space-1 shadow-sm @max-md/decisions:grid-cols-(--list-cols-narrow)"
+      class="grid grid-cols-(--list-cols) gap-x-space-3 rounded-lg bg-surface-raised p-space-1 shadow-sm @max-phone/decisions:grid-cols-(--list-cols-narrow)"
       data-slot="list"
       style:--list-cols={COLS}
       style:--list-cols-narrow={COLS_NARROW}
@@ -442,7 +442,7 @@
           data-group={group.key}
         >
           <div
-            class="col-span-full grid min-h-control-xs grid-cols-subgrid items-center px-space-2 pt-space-3 pb-space-2"
+            class="col-span-full grid min-h-space-6 grid-cols-subgrid items-center px-space-2 pt-space-3 pb-space-2"
           >
             <span class="grid place-items-center" data-slot="group-mark">
               {#if group.key === "open"}
@@ -450,7 +450,7 @@
                   <!-- Needs you: the status dot in spark beside its word, never a fill. -->
                   <span
                     aria-hidden="true"
-                    class="size-(--status-dot-size) rounded-pill bg-status-attn-glyph"
+                    class="size-1.5 rounded-pill bg-status-attn"
                   ></span>
                 {/if}
               {:else if group.key === "sent"}
@@ -461,7 +461,7 @@
               {:else}
                 <IconSuccess
                   aria-hidden="true"
-                  class="size-icon-md text-status-done-glyph"
+                  class="size-icon-md text-status-done"
                 />
               {/if}
             </span>
@@ -491,7 +491,7 @@
           {#if rest > 0}
             <button
               aria-expanded="false"
-              class="mark-line col-span-3 col-start-2 -ms-space-2 mt-space-1 mb-space-2 inline-flex h-control-xs items-center gap-space-1 justify-self-start rounded-xs px-space-2 type-label text-ink-muted transition-[background-color,color] duration-(--duration-control) ease-out hover:bg-surface-hover hover:text-ink-strong focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring"
+              class="mark-line col-span-3 col-start-2 -ms-space-2 mt-space-1 mb-space-2 inline-flex h-space-6 items-center gap-space-1 justify-self-start rounded-xs px-space-2 type-label text-ink-muted transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-surface-hover hover:text-ink-strong focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink"
               data-more={group.key}
               onclick={() => {
                 unfolded = { ...unfolded, [group.key]: true };

@@ -472,7 +472,7 @@
     class="@container/task-frame flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain pt-(--side-room) scroll-timeline-transcript-head"
     data-task-pane={taskId}
     style:--pane-inline={page
-      ? "var(--spacing-space-5)"
+      ? "var(--spacing-space-4)"
       : "var(--spacing-space-3)"}
   >
     <header
@@ -511,7 +511,7 @@
                   >
                     <span>{stageLabel(stage.name)}</span>
                     {#if stage.kind === "you"}
-                      <IconNeedsYou class="text-status-attn-glyph" />
+                      <IconNeedsYou class="text-status-attn" />
                     {/if}
                   </Select.Item>
                 {/each}
@@ -598,7 +598,7 @@
       <RowFault again={saveTitle} reason={titleProblem} />
       {#if decided}
         <p data-slot="decided" class="m-0 type-meta text-ink-muted">
-          Decided on <a class="text-brand-ink" href={decided.href}
+          Decided on <a class="text-accent-ink" href={decided.href}
             >{decided.question
               ? `${decided.page} › ${decided.question}`
               : decided.page}</a
@@ -662,7 +662,7 @@
       <div
         data-slot="task-body"
         in:arriveBody
-        class="flex flex-auto flex-col gap-space-5 pt-space-3 px-(--pane-inline) pb-space-6 border-t border-t-border-hairline"
+        class="flex flex-auto flex-col gap-space-4 pt-space-3 px-(--pane-inline) pb-space-6 border-t border-t-border-hairline"
       >
         <TaskNeeds
           ended={false}

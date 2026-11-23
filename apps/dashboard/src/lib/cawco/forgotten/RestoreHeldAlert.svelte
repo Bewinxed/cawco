@@ -33,11 +33,11 @@
   <AlertDescription>
     <p>
       {projectTrashWords.heldWhere.before}<a
-        class="text-brand-ink hover:text-brand-ink"
+        class="text-accent-ink hover:text-accent-ink"
         href="/project/forgotten">{projectTrashWords.heldWhere.place}</a
       >{projectTrashWords.heldWhere.after}
     </p>
-    <ul class="max-h-48 list-disc overflow-y-auto ps-space-5 break-words">
+    <ul class="max-h-48 list-disc overflow-y-auto ps-space-4 break-words">
       {#each rows as row, at (at)}
         <li>{projectTrashWords.heldRow(row)}</li>
       {/each}

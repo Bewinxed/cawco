@@ -20,7 +20,7 @@
    * The house hover panel: the delegate tray's chip panel, and the rail's
    * session card. One surface for whichever thing the pointer rests on; when
    * it moves to the next one the panel glides there (translate on
-   * --duration-fade, --ease-drawer) and takes the new content's size (morph)
+   * --duration-base, --ease-drawer) and takes the new content's size (morph)
    * while the content cross-fades, rather than closing and opening again.
    * It comes in with a 4px rise from .98 and leaves as a fade.
    *
@@ -223,7 +223,7 @@
   function panelIn(_node: Element): TransitionConfig {
     if (!motionOk.current) {
       return {
-        duration: dur("--duration-control"),
+        duration: dur("--duration-fast"),
         css: (t) => `opacity: ${t}`,
       };
     }
@@ -232,7 +232,7 @@
     const lift = side === "above" || edge ? "translateY" : "translateX";
     const from = side === "above" || edge === "bottom" ? 4 : -4;
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t, u) =>
         `opacity: ${t}; transform: ${lift}(${(u * from).toFixed(2)}px) scale(${(0.98 + 0.02 * t).toFixed(4)})`,
@@ -240,7 +240,7 @@
   }
   function panelOut(_node: Element): TransitionConfig {
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
@@ -248,7 +248,7 @@
   /** The content, when the panel moves to another trigger: the new one fades in. */
   function swapIn(_node: Element): TransitionConfig {
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
@@ -265,7 +265,7 @@
         inset: "var(--spacing-space-3) var(--spacing-space-3) auto",
       }),
       {
-        duration: dur("--duration-control"),
+        duration: dur("--duration-fast"),
         easing: easeOut,
         css: (t) => `opacity: ${t}`,
       }
@@ -277,21 +277,21 @@
   <!-- Over a row of chips (`above`, the base): at its chip, pulled back inside
        the row's end, and raised by --rise over whatever stands on the row
        between them. Beside a list (`right`): level with its row, pulled back
-       inside the viewport by its own height (the 100%), --hover-panel-inset
+       inside the viewport by its own height (the 100%), --spacing-space-2
        clear of either edge; it grows from its row's centre, which is --origin
        under the row's top (--y) wherever the panel's own top (--top) ends up;
        standing over its trigger (`edge` bottom), from its own bottom edge.
        The 4px bridge between the panel and its trigger is its `after:`. -->
   <div
     {...rest}
-    class="pointer-events-auto absolute start-0 bottom-(--panel-bottom) z-2 w-max origin-(--panel-origin-above) translate-x-(--panel-x) rounded-lg border border-border-control bg-surface-raised shadow-lg side-right:fixed side-right:start-(--x) side-right:top-0 side-right:bottom-auto side-right:z-(--layer-float) side-right:origin-(--panel-origin-right) side-right:translate-x-0 side-right:translate-y-(--top) motion-safe:data-gliding:transition-[translate] motion-safe:data-gliding:duration-(--duration-fade) motion-safe:data-gliding:ease-drawer side-above:after:absolute side-above:after:inset-x-0 side-above:after:top-full side-above:after:h-space-1 side-right:after:absolute side-right:after:inset-y-0 side-right:after:end-full side-right:after:w-space-1"
+    class="pointer-events-auto absolute start-0 bottom-(--panel-bottom) z-2 w-max origin-(--panel-origin-above) translate-x-(--panel-x) rounded-lg border border-border-control bg-surface-raised shadow-lg side-right:fixed side-right:start-(--x) side-right:top-0 side-right:bottom-auto side-right:z-(--layer-float) side-right:origin-(--panel-origin-right) side-right:translate-x-0 side-right:translate-y-(--top) motion-safe:data-gliding:transition-[translate] motion-safe:data-gliding:duration-(--duration-base) motion-safe:data-gliding:ease-drawer side-above:after:absolute side-above:after:inset-x-0 side-above:after:top-full side-above:after:h-space-1 side-right:after:absolute side-right:after:inset-y-0 side-right:after:end-full side-right:after:w-space-1"
     data-gliding={gliding || undefined}
     data-side={side}
     style:--panel-bottom="calc(100% + var(--spacing-space-1) + var(--rise, 0px))"
     style:--panel-origin-above="var(--origin) 100%"
     style:--panel-origin-right="0 calc(var(--y) + {growsFrom} - var(--top))"
     style:--panel-x="max(0px, min(var(--x), calc(var(--span) - 100%)))"
-    style:--top={"clamp(var(--hover-panel-inset), var(--y), calc(100dvh - 100% - var(--hover-panel-inset)))"}
+    style:--top={"clamp(var(--spacing-space-2), var(--y), calc(100dvh - 100% - var(--spacing-space-2)))"}
     onintroend={() => {
       entered = true;
     }}

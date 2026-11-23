@@ -202,7 +202,7 @@
   const coarse = new MediaQuery("(pointer: coarse)");
 
   let query = $state("");
-  /** What the rows are searched for: the query once it has rested `--duration-control`. */
+  /** What the rows are searched for: the query once it has rested `--duration-fast`. */
   let asked = $state("");
   $effect(() => {
     const now = query;
@@ -210,7 +210,7 @@
       () => {
         asked = now;
       },
-      now ? dur("--duration-control") : 0
+      now ? dur("--duration-fast") : 0
     );
     return () => clearTimeout(wait);
   });
@@ -220,7 +220,7 @@
   /**
    * The search field opens from Search's place at the bar's trailing end,
    * across to its leading end, and the bar it replaces is wiped away by the
-   * same edge: one clip on the drawer's curve over --duration-panel, the field's
+   * same edge: one clip on the drawer's curve over --duration-slow, the field's
    * from its leading side and the bar's from its trailing side, so at every
    * frame each stands where the other doesn't and nothing stands on
    * anything (as Safari's and Mail's search fields grow out of their
@@ -230,7 +230,7 @@
   const wipe = (from: "start" | "end") => (t: number) =>
     `clip-path: inset(0 ${from === "end" ? ((1 - t) * 100).toFixed(2) : 0}% 0 ${from === "start" ? ((1 - t) * 100).toFixed(2) : 0}% round var(--radius-pill))`;
   const wiping = (from: "start" | "end") => ({
-    duration: dur("--duration-panel"),
+    duration: dur("--duration-slow"),
     easing: easeDrawer,
     css: wipe(from),
   });
@@ -443,7 +443,7 @@
 
   /**
    * A row leaving the tab in front of him folds shut as it fades, over
-   * `--duration-fade` on `--ease-out`; with less motion it fades. One that goes
+   * `--duration-base` on `--ease-out`; with less motion it fades. One that goes
    * with its tab (another tab chosen) goes at once.
    */
   function rowOut(node: HTMLElement) {
@@ -452,7 +452,7 @@
     }
     const height = node.offsetHeight;
     return {
-      duration: dur("--duration-fade"),
+      duration: dur("--duration-base"),
       easing: easeOut,
       css: motionOk.current
         ? (t: number) =>
@@ -657,7 +657,7 @@
       aria-current={chosen || undefined}
       data-focused={pin.id === focused || undefined}
       data-moved={gone || undefined}
-      class="flex items-start gap-space-2 w-full min-h-control-lg px-space-2 py-space-2 border-none rounded-sm bg-transparent text-start transition-[background-color] duration-(--duration-control) ease-out not-active:not-aria-current:group-hover/row:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-surface-hover aria-current:not-focus-visible:outline-1 aria-current:not-focus-visible:-outline-offset-1 aria-current:not-focus-visible:outline-solid aria-current:not-focus-visible:outline-border-control focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
+      class="flex items-start gap-space-2 w-full min-h-control-lg px-space-2 py-space-2 border-none rounded-sm bg-transparent text-start transition-[background-color] duration-(--duration-fast) ease-out not-active:not-aria-current:group-hover/row:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-surface-hover aria-current:not-focus-visible:outline-1 aria-current:not-focus-visible:-outline-offset-1 aria-current:not-focus-visible:outline-solid aria-current:not-focus-visible:outline-border-control focus-visible:outline-2 focus-visible:outline-accent-ink focus-visible:-outline-offset-2"
       data-pin-row={pin.number}
       onblur={() => onhover(null)}
       onclick={(event) =>
@@ -675,7 +675,7 @@
            The cell stands on every row, one dot wide, so every title starts
            at one x. -->
       <span
-        class="flex h-lh w-(--status-dot-size) flex-none items-center type-body"
+        class="flex h-lh w-1.5 flex-none items-center type-body"
         data-slot="need"
       >
         {#if need}<PinDot dot={need} inline />{/if}
@@ -696,7 +696,7 @@
           <span
             data-slot="age"
             class={[
-              "ms-auto flex-none type-meta num transition-opacity duration-(--duration-control) ease-out not-coarse:group-hover/row:opacity-0 not-coarse:group-focus-within/row:opacity-0",
+              "ms-auto flex-none type-meta num transition-opacity duration-(--duration-fast) ease-out not-coarse:group-hover/row:opacity-0 not-coarse:group-focus-within/row:opacity-0",
               "text-ink-muted",
             ]}>{formatAgeShort(Date.parse(lastActivity(pin)))}</span
           >
@@ -705,11 +705,11 @@
           <span
             data-line="words"
             class={[
-              "mt-space-row line-clamp-2 type-body text-pretty wrap-anywhere",
+              "mt-space-1 line-clamp-2 type-body text-pretty wrap-anywhere",
               "text-ink-strong",
             ]}
             >{#each segments(wordsOf(pin, firstWords)) as part, at (at)}{#if part.hit}<mark
-                  class="bg-selection text-inherit rounded-xs">{part.text}</mark
+                  class="bg-accent/20 text-inherit rounded-xs">{part.text}</mark
                 >{:else}{part.text}{/if}{/each}</span
           >
         {/if}
@@ -749,7 +749,7 @@
           <span
             class={[
               "mt-space-1 type-meta line-clamp-2 text-pretty wrap-anywhere",
-              "text-status-fail-ink",
+              "text-status-fail",
             ]}
             data-line="back"
             data-not-sent="">{said.notSent(back.why)}</span
@@ -775,16 +775,16 @@
               aria-hidden="true"
               class={[
                 "grid size-icon-sm flex-none place-items-center",
-                back.by === "you" && "text-brand-ink",
+                back.by === "you" && "text-accent-ink",
               ]}
               data-box
               data-speaker={back.by}><Speaker class="size-icon-sm" /></span
             ><span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
               >{#if back.unread}<span
-                  class="text-status-attn-ink font-medium"
+                  class="text-status-attn font-medium"
                   data-slot="new-answer">{`${said.newAnswer} · `}</span
                 >{/if}{#each segments(marked.length > 0 ? aroundHit(back.text) : back.text) as part, at (at)}{#if part.hit}<mark
-                    class="bg-selection text-inherit rounded-xs"
+                    class="bg-accent/20 text-inherit rounded-xs"
                     >{part.text}</mark
                   >{:else}{part.text}{/if}{/each}</span
             ></span
@@ -810,7 +810,7 @@
     {/if}
     {#if !coarse.current}
       <span
-        class="absolute end-space-1 top-space-1 opacity-0 transition-opacity duration-(--duration-control) ease-out group-hover/row:opacity-100 group-focus-within/row:opacity-100"
+        class="absolute end-space-1 top-space-1 opacity-0 transition-opacity duration-(--duration-fast) ease-out group-hover/row:opacity-100 group-focus-within/row:opacity-100"
       >
         <Button
           aria-label={pin.resolvedAt ? said.reopen : said.resolve}
@@ -861,7 +861,7 @@
        Title Bars Follow Liquid Glass Rule). -->
   <HeadFade
     band="var(--rail-head)"
-    tint={layout === "beside" ? "bg-surface-glass" : "bg-surface-raised"}
+    tint={layout === "beside" ? "bg-surface-raised/72" : "bg-surface-raised"}
   />
   <div
     class="absolute inset-x-0 top-0 z-2 flex flex-col"
@@ -881,14 +881,14 @@
     <header
       data-slot="head"
       data-searching={searching || undefined}
-      class="relative grid flex-none grid-cols-1 items-center h-control-lg px-space-2 hit-gap-x-space-1 coarse:hit-gap-x-space-5 data-[layout=beside]:mt-space-2 [&>*]:col-start-1 [&>*]:row-start-1"
+      class="relative grid flex-none grid-cols-1 items-center h-control-lg px-space-2 hit-gap-x-space-1 coarse:hit-gap-x-space-4 data-[layout=beside]:mt-space-2 [&>*]:col-start-1 [&>*]:row-start-1"
       data-layout={layout}
     >
       {#if searching}
         <!-- The field opens from where Search stood, at the bar's trailing
              end, across the bar, the bar wiped away by the same edge (`wipe`). -->
         <div
-          class="flex min-w-0 flex-1 items-center gap-space-1 coarse:gap-space-5"
+          class="flex min-w-0 flex-1 items-center gap-space-1 coarse:gap-space-4"
           data-slot="search-row"
           in:fieldIn
           out:fieldOut
@@ -944,7 +944,7 @@
         </div>
       {:else}
         <div
-          class="flex min-w-0 flex-1 items-center gap-space-1 coarse:gap-space-5"
+          class="flex min-w-0 flex-1 items-center gap-space-1 coarse:gap-space-4"
           data-slot="bar-row"
           in:barIn
           out:barOut
@@ -957,7 +957,7 @@
              368 on a phone), and the title gave way (HIG, Toolbars: "an
              overflow menu" for what doesn't fit). -->
           <div
-            class="flex min-w-0 flex-1 basis-0 items-center gap-space-1 coarse:gap-space-5"
+            class="flex min-w-0 flex-1 basis-0 items-center gap-space-1 coarse:gap-space-4"
             data-slot="lead"
           >
             {#if layout === "sheet"}
@@ -1028,7 +1028,7 @@
           </div>
 
           <div
-            class="flex min-w-max flex-1 basis-0 items-center justify-end gap-space-1 coarse:gap-space-5"
+            class="flex min-w-max flex-1 basis-0 items-center justify-end gap-space-1 coarse:gap-space-4"
             data-slot="trail"
           >
             {#if !sending}
@@ -1140,7 +1140,7 @@
           bind:value={note}
         />
         {#if noteRefused}
-          <p class="m-0 type-meta text-status-fail-ink" role="alert">
+          <p class="m-0 type-meta text-status-fail" role="alert">
             {noteRefused}
           </p>
         {/if}
@@ -1203,7 +1203,7 @@
             class="flex items-start gap-space-2 min-h-control-lg px-space-2 py-space-2"
             data-slot="skeleton-row"
           >
-            <span class="w-(--status-dot-size) flex-none"></span>
+            <span class="w-1.5 flex-none"></span>
             <span class="flex flex-1 min-w-0 flex-col">
               <span class="flex min-w-0 items-start gap-space-2">
                 <Skeleton class="w-3/5" line="label" radius="text" />
@@ -1215,7 +1215,7 @@
                 />
               </span>
               <Skeleton
-                class="mt-space-row w-17/20"
+                class="mt-space-1 w-17/20"
                 line="body"
                 radius="text"
               />
@@ -1247,7 +1247,7 @@
               >
                 {group.name} <span class="num">{group.pins.length}</span>
               </h3>
-              <ol class="flex flex-col gap-space-row m-0 p-0 list-none">
+              <ol class="flex flex-col gap-space-1 m-0 p-0 list-none">
                 {#each group.pins as pin (pin.id)}
                   {@render boundedRow(pin)}
                 {/each}
@@ -1275,7 +1275,7 @@
                 out:listSwap.leaveView
               >
                 {#if shown.length > 0}
-                  <ol class="flex flex-col gap-space-row m-0 p-0 list-none">
+                  <ol class="flex flex-col gap-space-1 m-0 p-0 list-none">
                     {#each shown as pin (pin.id)}
                       {@render boundedRow(pin)}
                     {/each}

@@ -114,7 +114,7 @@
      drags it, so a sheet swiped down jumped back up before it slid out
      (spawn/NewSessionDialog, probe parked-start). */
   [data-vaul-drawer][data-ns-dialog][data-state="closed"] {
-    animation-duration: var(--duration-fade);
+    animation-duration: var(--duration-base);
     animation-timing-function: var(--ease-out);
   }
 
@@ -166,7 +166,7 @@
      animation about two frames after its start time, and the house ease-out
      has done 76% of its change by then, so the words landed at full ink. */
   [data-slot="md"] [data-markdown][data-animated="true"] {
-    animation: fade-in var(--duration-control) var(--ease-crossfade) backwards;
+    animation: fade-in var(--duration-fast) var(--ease-in-out) backwards;
   }
   /* A Mermaid diagram in the markdown (ui/markdown/mermaid.svelte.ts):
      Words sets it in its code block frame, whose header names the language
@@ -203,7 +203,7 @@
      row. */
   [data-slot="shots"] > figure,
   [data-slot="shots"] > button {
-    flex: 1 1 var(--tx-shot);
+    flex: 1 1 calc(var(--spacing) * 60);
     min-inline-size: 0;
     max-inline-size: 100%;
   }
@@ -248,7 +248,7 @@
     }
     & ul,
     & ol {
-      padding-inline-start: var(--spacing-space-5);
+      padding-inline-start: var(--spacing-space-4);
     }
     /* biome-ignore-end lint/style/noDescendingSpecificity: the gaps above. */
     & :not(pre) > code {
@@ -256,19 +256,19 @@
       max-inline-size: 100%;
       vertical-align: baseline;
       font-family: var(--font-mono);
-      font-size: var(--text-label);
-      line-height: var(--leading-ui);
+      font-size: var(--text-base);
+      line-height: var(--leading-lg);
       background: var(--color-surface-recess);
       box-shadow: inset 0 0 0 1px var(--color-border-hairline);
       padding-block: 0;
-      padding-inline: var(--spacing-space-row);
+      padding-inline: var(--spacing-space-1);
       border-radius: var(--radius-xs);
       overflow-wrap: anywhere;
     }
     & .prose {
-      font-size: var(--text-body);
+      font-size: var(--text-base);
       font-weight: var(--font-weight-normal);
-      line-height: var(--leading-body);
+      line-height: var(--leading-base);
       color: var(--color-ink-strong);
     }
     & .prose > * {
@@ -286,8 +286,8 @@
     & .prose h4,
     & .prose h5,
     & .prose h6 {
-      font-size: var(--text-body);
-      line-height: var(--leading-ui);
+      font-size: var(--text-base);
+      line-height: var(--leading-lg);
       font-weight: var(--font-weight-medium);
       color: var(--color-ink-strong);
     }
@@ -297,12 +297,12 @@
     & .prose > h4:where(:not(:first-child)),
     & .prose > h5:where(:not(:first-child)),
     & .prose > h6:where(:not(:first-child)) {
-      margin-block-start: var(--spacing-space-5);
+      margin-block-start: var(--spacing-space-4);
     }
     & .prose > pre {
       font-family: var(--font-mono);
-      font-size: var(--text-label);
-      line-height: var(--leading-body);
+      font-size: var(--text-base);
+      line-height: var(--leading-base);
       background: var(--color-surface-recess);
       border-radius: var(--radius-sm);
       padding: var(--spacing-space-3);
@@ -385,16 +385,16 @@
       outline: none;
     }
     &:focus-visible::after {
-      outline: var(--focus-ring-width) solid var(--color-focus-ring);
-      outline-offset: var(--focus-ring-inset);
+      outline: 2px solid var(--color-accent-ink);
+      outline-offset: -2px;
     }
   }
   [data-slot="turn"][data-ghost] > [data-turn-who] {
-    opacity: var(--ghost-presence);
+    opacity: 0.7;
   }
   @media (prefers-reduced-motion: no-preference) {
     [data-slot="turn"][data-you] > [data-turn-who] {
-      transition: opacity var(--duration-control) var(--ease-out);
+      transition: opacity var(--duration-fast) var(--ease-out);
     }
   }
   /* The composer's chips (MentionField's script makes them): clear while
@@ -414,7 +414,7 @@
   [data-slot="menu"] [data-slot="command-group"] [data-command-group-heading] {
     padding: var(--spacing-space-1) var(--spacing-space-2)
       var(--spacing-space-2);
-    font-size: var(--text-label);
+    font-size: var(--text-base);
     font-weight: var(--font-weight-medium);
     letter-spacing: var(--tracking-caps);
     text-transform: uppercase;
@@ -437,7 +437,7 @@
         [data-pane-state="expanding"] ~ *,
         :has(~ [data-pane-state="collapsing"], ~ [data-pane-state="expanding"])
       ) {
-      transition: flex-grow var(--duration-panel) var(--ease-in-out);
+      transition: flex-grow var(--duration-slow) var(--ease-in-out);
     }
   }
 
@@ -506,7 +506,7 @@
     --crepe-color-hover: var(--color-surface-hover);
     --crepe-color-selected: var(--color-surface-hover);
 
-    --crepe-base-font-size: var(--text-body);
+    --crepe-base-font-size: var(--text-base);
     --crepe-font-title: var(--font-sans);
     --crepe-font-default: var(--font-sans);
     --crepe-font-code: var(--font-mono);
@@ -532,8 +532,8 @@
      the label size in the mono). */
   [data-slot="crepe-host"] .milkdown * {
     font-weight: var(--font-weight-normal);
-    font-size: var(--text-body);
-    line-height: var(--leading-body);
+    font-size: var(--text-base);
+    line-height: var(--leading-base);
     animation: none;
     transition: none;
     scroll-behavior: auto;
@@ -555,18 +555,18 @@
   [data-slot="crepe-host"] .milkdown .ProseMirror h4,
   [data-slot="crepe-host"] .milkdown .ProseMirror h5,
   [data-slot="crepe-host"] .milkdown .ProseMirror h6 {
-    margin-top: var(--spacing-space-5);
+    margin-top: var(--spacing-space-4);
     padding: var(--spacing-space-1) 0;
   }
   [data-slot="crepe-host"] .milkdown .ProseMirror h1,
   [data-slot="crepe-host"] .milkdown .ProseMirror h2 {
-    font-size: var(--text-title);
+    font-size: var(--text-lg);
   }
   [data-slot="crepe-host"] .milkdown .ProseMirror h3,
   [data-slot="crepe-host"] .milkdown .ProseMirror h4,
   [data-slot="crepe-host"] .milkdown .ProseMirror h5,
   [data-slot="crepe-host"] .milkdown .ProseMirror h6 {
-    font-size: var(--text-body);
+    font-size: var(--text-base);
   }
   [data-slot="crepe-host"] .milkdown .ProseMirror {
     padding: var(--spacing-space-4)
@@ -583,7 +583,7 @@
     padding: var(--spacing-space-1) 0;
   }
   [data-slot="crepe-host"] .milkdown .ProseMirror code {
-    font-size: var(--text-label);
+    font-size: var(--text-base);
     padding-inline: var(--spacing-space-1);
     border-radius: var(--radius-xs);
   }
@@ -616,8 +616,8 @@
   }
   [data-slot="crepe-host"] .milkdown :is(button, input, [role="button"]) {
     border-radius: var(--radius-sm);
-    font-size: var(--text-label);
-    line-height: var(--leading-ui);
+    font-size: var(--text-base);
+    line-height: var(--leading-lg);
   }
   [data-slot="crepe-host"] .milkdown button {
     border: 1px solid var(--color-border-control);
@@ -628,8 +628,8 @@
      caret being its focus (DESIGN.md, The Caret Rule); the host's frame
      steps its edge (MemoryEditor, `field-edge`). */
   [data-slot="crepe-host"] .milkdown :focus-visible {
-    outline: var(--focus-ring-width) solid var(--color-focus-ring);
-    outline-offset: var(--focus-ring-offset);
+    outline: 2px solid var(--color-accent-ink);
+    outline-offset: 2px;
   }
   [data-slot="crepe-host"]
     .milkdown
@@ -641,13 +641,13 @@
     outline-style: none;
 
     @media (forced-colors: active) {
-      outline: var(--focus-ring-width) solid transparent;
-      outline-offset: var(--focus-ring-inset);
+      outline: 2px solid transparent;
+      outline-offset: -2px;
     }
   }
   [data-slot="crepe-host"] .milkdown :is(button, [role="button"]):active {
     background: var(--color-surface-hover);
-    box-shadow: inset 0 1px 1px var(--color-shadow-tint);
+    box-shadow: inset 0 1px 1px light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55));
   }
   /* The block handle's open item: by day a step past its hover, with its glyph
      in the strong ink. Not through --crepe-color-selected, which is also the
@@ -670,8 +670,8 @@
     .tab-group
     ul
     li.selected {
-    background: var(--color-selected-bg);
-    color: var(--color-brand-ink);
+    background: var(--color-accent-wash);
+    color: var(--color-accent-ink);
   }
   /* Milkdown renders its own toolbar and menus, so they cannot carry
      `.touch-hit`; under a finger they keep a 44px box. */
@@ -705,9 +705,9 @@
     touch-action: none;
     position: absolute;
     top: var(--spacing-space-1);
-    left: calc(50% - var(--grabber-w) / 2);
-    width: var(--grabber-w);
-    height: var(--grabber-h);
+    left: calc(50% - calc(var(--spacing) * 25) / 2);
+    width: calc(var(--spacing) * 25);
+    height: calc(var(--spacing) * 1.5);
     border-radius: var(--radius-pill);
     background: var(--color-border-control);
     margin: 0;
@@ -727,14 +727,14 @@
   [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
-    font: var(--type-body);
+    font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans);
   }
   /* The toast's action and cancel buttons: the label role, an item's radius,
      and the press every control gives. */
   [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-button] {
     border-radius: var(--radius-sm);
-    font: var(--type-label);
-    transition: transform var(--duration-fade) var(--ease-out);
+    font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
+    transition: transform var(--duration-base) var(--ease-out);
 
     @media (prefers-reduced-motion: no-preference) {
       &:active {
@@ -745,13 +745,13 @@
 
   /* Motion on the kit's scale. Sonner has no timing options, so its
      transitions are restated here.
-     - Enter: from --pop-rise short of its place on the side of the edge it
+     - Enter: from --spacing-space-2 short of its place on the side of the edge it
        comes from (below at the desktop's bottom-right, above at the phone's
-       top-centre), fading and moving over --duration-panel on --ease-out. The
+       top-centre), fading and moving over --duration-slow on --ease-out. The
        toast is marked `data-entering` for that length (sonner.svelte).
-     - The stack closing up or making room: --duration-fade on --ease-in-out.
+     - The stack closing up or making room: --duration-base on --ease-in-out.
      - Exit: toward the edge it came from (sonner's own direction) over
-       --duration-fade on --ease-out, inside sonner's 200ms before unmount; a toast
+       --duration-base on --ease-out, inside sonner's 200ms before unmount; a toast
        swiped away leaves the way the finger threw it, on the same timing.
      - A toast under a finger keeps sonner's own "no transition", so it tracks
        the finger 1:1; sonner dismisses past 45px or on a flick faster than
@@ -763,33 +763,33 @@
      instead, through the Web Animations API. */
   [data-sonner-toaster]
     [data-sonner-toast][data-y-position="bottom"][data-mounted="false"] {
-    --y: translateY(var(--pop-rise));
+    --y: translateY(var(--spacing-space-2));
   }
   [data-sonner-toaster]
     [data-sonner-toast][data-y-position="top"][data-mounted="false"] {
-    --y: translateY(calc(-1 * var(--pop-rise)));
+    --y: translateY(calc(-1 * var(--spacing-space-2)));
   }
   [data-sonner-toaster] [data-sonner-toast]:not([data-swiping="true"]) {
     transition:
-      transform var(--duration-fade) var(--ease-in-out),
-      opacity var(--duration-fade) var(--ease-out),
-      box-shadow var(--duration-control) var(--ease-out);
+      transform var(--duration-base) var(--ease-in-out),
+      opacity var(--duration-base) var(--ease-out),
+      box-shadow var(--duration-fast) var(--ease-out);
   }
   [data-sonner-toaster]
     [data-sonner-toast][data-entering]:not([data-swiping="true"]) {
     transition:
-      transform var(--duration-panel) var(--ease-out),
-      opacity var(--duration-panel) var(--ease-out),
-      box-shadow var(--duration-control) var(--ease-out);
+      transform var(--duration-slow) var(--ease-out),
+      opacity var(--duration-slow) var(--ease-out),
+      box-shadow var(--duration-fast) var(--ease-out);
   }
   [data-sonner-toaster]
     [data-sonner-toast][data-removed="true"]:not([data-swiping="true"]) {
     transition:
-      transform var(--duration-fade) var(--ease-out),
-      opacity var(--duration-fade) var(--ease-out);
+      transform var(--duration-base) var(--ease-out),
+      opacity var(--duration-base) var(--ease-out);
   }
   [data-sonner-toaster] [data-sonner-toast][data-swipe-out="true"] {
-    animation-duration: var(--duration-fade);
+    animation-duration: var(--duration-base);
     animation-timing-function: var(--ease-out);
   }
 
@@ -879,11 +879,11 @@
     /* biome-ignore lint/plugin/no-raw-motion: a step a millisecond long is no beat: it ends in transitionend, where ScreenEdges reads the colour, and a 0s change fires none. */
     --edge-bottom-fade: 1ms;
     --edge-shown: 1;
-    --edge-show-fade: var(--duration-fade);
+    --edge-show-fade: var(--duration-base);
   }
   :root[data-bar~="floating"] [data-screen-edge],
   :root[data-bar~="hosting"] [data-screen-edge] {
-    --edge-top-under: var(--color-surface-shelf);
+    --edge-top-under: var(--color-surface-sunk);
   }
   @media (width < --theme(--breakpoint-desk)),
     (pointer: coarse) and (orientation: portrait) {
@@ -895,20 +895,20 @@
   :root[data-scrim~="lightbox"] [data-screen-edge] {
     --edge-top-background: color-mix(
       in srgb,
-      var(--color-surface-page) var(--scrim-mix),
+      var(--color-surface-page) 72%,
       var(--edge-top-under)
     );
     --edge-bottom-background: color-mix(
       in srgb,
-      var(--color-surface-page) var(--scrim-mix),
+      var(--color-surface-page) 72%,
       var(--edge-bottom-under)
     );
-    --edge-top-fade: var(--duration-panel);
-    --edge-bottom-fade: var(--duration-panel);
+    --edge-top-fade: var(--duration-slow);
+    --edge-bottom-fade: var(--duration-slow);
   }
   :root[data-scrim~="closed"] [data-screen-edge] {
-    --edge-top-fade: var(--duration-fade);
-    --edge-bottom-fade: var(--duration-fade);
+    --edge-top-fade: var(--duration-base);
+    --edge-bottom-fade: var(--duration-base);
   }
   :root[data-kit-sheet~="bottom"] [data-screen-edge] {
     --edge-bottom-background: var(--color-surface-raised);
@@ -949,7 +949,7 @@
     svg {
     inline-size: var(--spacing-icon-sm);
     block-size: var(--spacing-icon-sm);
-    color: var(--color-on-ink);
+    color: var(--color-surface-page);
   }
   [data-delegate-tail-kind="stream"] [data-slot="text"] * {
     display: inline;
@@ -967,8 +967,8 @@
   @media (prefers-reduced-motion: no-preference) {
     [data-slot="view-canvas"][data-settled] .svelte-flow__node {
       transition:
-        transform var(--duration-panel) var(--ease-in-out),
-        opacity var(--duration-fade) var(--ease-out);
+        transform var(--duration-slow) var(--ease-in-out),
+        opacity var(--duration-base) var(--ease-out);
 
       @starting-style {
         opacity: 0;
@@ -1053,7 +1053,7 @@
   }
   [data-bits-floating-content-wrapper][data-details-morph] {
     @variant motion-safe {
-      transition: transform var(--duration-panel) var(--ease-drawer);
+      transition: transform var(--duration-slow) var(--ease-drawer);
     }
   }
 }
@@ -1093,10 +1093,10 @@
     --tw-prose-body: var(--color-ink-strong);
     --tw-prose-headings: var(--color-ink-strong);
     --tw-prose-lead: var(--color-ink-muted);
-    --tw-prose-links: var(--color-brand-ink);
+    --tw-prose-links: var(--color-accent-ink);
     --tw-prose-bold: var(--color-ink-strong);
     --tw-prose-counters: var(--color-ink-muted);
-    --tw-prose-bullets: var(--prose-bullet);
+    --tw-prose-bullets: oklch(from var(--color-ink-muted) l c h / 0.55);
     --tw-prose-hr: var(--color-border-control);
     --tw-prose-quotes: var(--color-ink-muted);
     --tw-prose-quote-borders: var(--color-border-control);
@@ -1134,21 +1134,21 @@
      sizes come from the type roles. */
   .prose h1:not(:where(pre, .not-prose) *),
   .prose h2:not(:where(pre, .not-prose) *) {
-    font-size: var(--text-title);
-    line-height: var(--leading-ui);
-    letter-spacing: var(--tracking-title);
+    font-size: var(--text-lg);
+    line-height: var(--leading-lg);
+    letter-spacing: var(--tracking-tight);
     font-weight: var(--font-weight-medium);
   }
   .prose h3:not(:where(pre, .not-prose) *) {
-    font-size: var(--text-body);
-    line-height: var(--leading-ui);
+    font-size: var(--text-base);
+    line-height: var(--leading-lg);
     font-weight: var(--font-weight-medium);
   }
   .prose h4:not(:where(pre, .not-prose) *),
   .prose h5:not(:where(pre, .not-prose) *),
   .prose h6:not(:where(pre, .not-prose) *) {
-    font-size: var(--text-body);
-    line-height: var(--leading-ui);
+    font-size: var(--text-base);
+    line-height: var(--leading-lg);
     font-weight: var(--font-weight-medium);
   }
   /* Emphasis reads as ink weight, not as a second typeface. */
@@ -1201,23 +1201,23 @@
       --ec-bg-event-color: var(--color-surface-recess);
       --ec-bg-event-opacity: 1;
       --ec-event-col-gap: var(--spacing-space-1);
-      --ec-now-indicator-color: var(--color-brand-solid);
+      --ec-now-indicator-color: var(--color-accent);
       --ec-popup-bg-color: var(--color-surface-raised);
       color: var(--color-ink-strong);
-      font: var(--type-meta);
+      font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans);
     }
     & .ec-toolbar {
       margin-block-end: var(--spacing-space-3);
     }
     & .ec-title {
-      font: var(--type-title);
+      font: var(--font-weight-medium) var(--text-lg) / var(--leading-lg) var(--font-sans);
     }
     & .ec-button {
       block-size: var(--spacing-control-sm);
       padding-inline: var(--spacing-space-3);
-      border-radius: var(--radius-md);
-      font: var(--type-label);
-      transition: background-color var(--duration-control) var(--ease-out);
+      border-radius: var(--radius-sm);
+      font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
+      transition: background-color var(--duration-fast) var(--ease-out);
     }
     & .ec-button-group .ec-button:first-child {
       border-start-end-radius: 0;
@@ -1235,7 +1235,7 @@
     & .ec-day-head,
     & .ec-slots,
     & .ec-all-day {
-      font: var(--type-meta);
+      font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans);
       color: var(--color-ink-muted);
     }
     /* A chip: as tall as the library makes its slot (a task is a half-hour
@@ -1246,7 +1246,7 @@
       align-items: center;
       overflow: hidden;
       border-radius: var(--radius-xs);
-      font: var(--type-label);
+      font: var(--font-weight-medium) var(--text-base) / var(--leading-base) var(--font-sans);
       line-height: 1;
       box-shadow: none;
     }
@@ -1278,11 +1278,11 @@
     }
     & .ec-event.chip-done {
       background: var(--color-status-done-bg);
-      color: var(--color-status-done-ink);
+      color: var(--color-status-done);
     }
     & .ec-event.chip-attn {
       background: var(--color-status-attn-bg);
-      color: var(--color-status-attn-ink);
+      color: var(--color-status-attn);
     }
     /* In the phone's list a chip is inset on both sides of its day: the
        library sizes an event at its day's full width, so its width gives way
@@ -1303,16 +1303,16 @@
 @layer components {
   [data-slot="view-canvas"] .svelte-flow__attribution {
     --xy-attribution-background-color: transparent;
-    font: var(--type-meta);
+    font: var(--font-weight-normal) var(--text-sm) / var(--leading-sm) var(--font-sans);
 
     & a {
       display: inline-flex;
       align-items: center;
-      min-height: var(--spacing-control-xs);
+      min-height: var(--spacing-space-6);
       color: var(--color-ink-subtle);
 
       &:focus-visible {
-        outline-offset: var(--focus-ring-inset);
+        outline-offset: -2px;
       }
     }
   }

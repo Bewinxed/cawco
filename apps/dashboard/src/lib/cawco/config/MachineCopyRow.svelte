@@ -130,7 +130,7 @@
   <MachineAway away={copies.waits.away(`settle:${at}`)} />
   {#if detail}
     <pre
-      class="max-h-24 overflow-auto rounded-sm bg-surface-raised px-space-2 py-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap"
+      class="max-h-24 overflow-auto rounded-sm bg-surface-raised px-space-2 py-space-2 font-mono text-sm wrap-anywhere whitespace-pre-wrap"
       in:unfold
       out:unfold>{detail}</pre>
   {/if}
@@ -162,7 +162,7 @@
           </p>
         {:else if copies.unread[at]}
           <p
-            class="type-meta text-status-attn-ink"
+            class="type-meta text-status-attn"
             role="alert"
             in:crossIn
             out:crossOut

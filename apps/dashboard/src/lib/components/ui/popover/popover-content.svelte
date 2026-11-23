@@ -9,11 +9,11 @@
    * wears it, and HangCard's cards.
    *
    * `pop` (DESIGN.md, Navigation, menus and floating surfaces): it opens from its trigger's
-   * side (`--kit-rise`, by bits-ui's `data-side`) over --duration-panel on the
-   * drawer curve, rising --pop-rise and growing from --pop-scale as it fades
+   * side (`--kit-rise`, by bits-ui's `data-side`) over --duration-slow on the
+   * drawer curve, rising --spacing-space-2 and growing from --pop-scale as it fades
    * in from its @starting-style (which iOS 27.2 Safari applies to a surface
    * just added: probe-kit ios-safari-motion, 2026-10-23), and leaves the
-   * same way over --duration-fade.
+   * same way over --duration-base.
    * Transitions on `data-state`, so a close caught mid-open turns back from
    * where it is; bits-ui holds it mounted until they end (getAnimations()).
    * It grows from its trigger through bits' transform-origin, which each
@@ -30,7 +30,7 @@
    * anchor; it leaves by `popOut` with the same side.
    */
   export const popMotion =
-    "transition-opacity duration-(--duration-panel) ease-drawer [--kit-rise:0_calc(-1*var(--pop-rise))] side-left:[--kit-rise:var(--pop-rise)_0] side-right:[--kit-rise:calc(-1*var(--pop-rise))_0] side-top:[--kit-rise:0_var(--pop-rise)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--duration-fade) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)]";
+    "transition-opacity duration-(--duration-slow) ease-drawer [--kit-rise:0_calc(-1*var(--spacing-space-2))] side-left:[--kit-rise:var(--spacing-space-2)_0] side-right:[--kit-rise:calc(-1*var(--spacing-space-2))_0] side-top:[--kit-rise:0_var(--spacing-space-2)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--duration-base) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)]";
 
   export const floatingSurface = tv({
     base: "rounded-lg concentric-in r-outer-lg border border-border-control bg-surface-raised p-space-2 text-ink-strong",
@@ -49,7 +49,7 @@
       },
       motion: {
         pop: popMotion,
-        hang: "motion-reduce:transition-opacity motion-reduce:duration-(--duration-panel) motion-reduce:ease-drawer motion-reduce:data-closed:opacity-0 motion-reduce:starting:data-open:opacity-0 motion-reduce:data-closed:duration-(--duration-fade)",
+        hang: "motion-reduce:transition-opacity motion-reduce:duration-(--duration-slow) motion-reduce:ease-drawer motion-reduce:data-closed:opacity-0 motion-reduce:starting:data-open:opacity-0 motion-reduce:data-closed:duration-(--duration-base)",
       },
       /**
        * Where its edge is drawn, for its rows' concentric radius
@@ -58,7 +58,7 @@
        * (HangCard's `::after`), so they stand the pad in.
        */
       edge: {
-        own: "r-inset-(--inset-floating)",
+        own: "r-inset-space-2",
         drawn: "r-inset-space-2",
       },
     },
@@ -80,6 +80,7 @@
         narrow: "w-64",
         wide: "w-80",
         widest: "w-96",
+        panel: "w-95 max-w-(--bits-popover-content-available-width)",
         room: "w-(--pop-w)",
       },
       /* `available`: as tall as the room bits-ui measures on its side of
@@ -151,7 +152,7 @@
     child: callerChild,
     children,
     /* Off, as the sheet has it: while this layer is mounted, bits-ui's
-       text-selection lock writes `user-select` on <body> at every
+       text-accent/20 lock writes `user-select` on <body> at every
        pointerdown inside it and again at pointerup, and each write restyles
        the whole page (3,700 elements, 35-50 ms in Chromium on a session with
        a component canvas open). */
@@ -195,7 +196,7 @@
   const inset = $derived(
     collisionPadding ??
       (browser
-        ? numberOf(phone.current ? "--spacing-space-3" : "--spacing-space-5")
+        ? numberOf(phone.current ? "--spacing-space-3" : "--spacing-space-4")
         : 0)
   );
   /* A hanging card (motion `hang`) frames its own width, a bare one is what

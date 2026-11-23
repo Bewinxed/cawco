@@ -148,7 +148,7 @@
 <!-- The way to put something right: a link in the meta line it follows. -->
 {#snippet fixLink(fix: ImageFix)}
   <a
-    class="mark-line touch-hit pointer-hit inline-flex items-center gap-space-row type-meta whitespace-nowrap text-brand-ink no-underline transition-[opacity] duration-(--duration-control) ease-out hover:text-brand-ink active:opacity-72"
+    class="mark-line touch-hit pointer-hit inline-flex items-center gap-space-1 type-meta whitespace-nowrap text-accent-ink no-underline transition-[opacity] duration-(--duration-fast) ease-out hover:text-accent-ink active:opacity-72"
     href={fixHref(fix)}
   >
     <span>{fix.label}</span>
@@ -158,7 +158,7 @@
 
 <div
   data-slot="group"
-  class="@container/images flex flex-col gap-space-2 border-t border-border-hairline pt-space-5"
+  class="@container/images flex flex-col gap-space-2 border-t border-border-hairline pt-space-4"
   data-group="images"
 >
   <SectionHeader {hue} icon={IconImage} label={words.heading} level={2}>
@@ -171,7 +171,7 @@
   </p>
 
   <div
-    class="grid min-w-0 grid-cols-1 items-start gap-space-5 @phone/images:grid-cols-2 @phone/images:gap-space-6"
+    class="grid min-w-0 grid-cols-1 items-start gap-space-4 @phone/images:grid-cols-2 @phone/images:gap-space-6"
     data-slot="split"
   >
     <div class="flex min-w-0 flex-col gap-space-2" data-slot="providers">
@@ -186,7 +186,7 @@
             <span class="grid h-lh place-items-center type-label">
               <ProviderMark provider={MARKS[provider]} />
             </span>
-            <span class="flex min-w-0 flex-col gap-space-row">
+            <span class="flex min-w-0 flex-col gap-space-1">
               <span class="type-label text-ink-strong"
                 >{words.name(provider)}</span
               >
@@ -202,7 +202,7 @@
                    in the attention hue only on the provider calls go to. -->
                   {#if stands.ready === stands.of}
                     <IconTick
-                      class="size-icon-sm flex-none text-status-done-glyph"
+                      class="size-icon-sm flex-none text-status-done"
                     />
                     <span class="text-ink-muted">{stands.words}</span>
                   {:else}
@@ -211,13 +211,13 @@
                       class={[
                         "size-icon-sm flex-none",
                         provider === value.provider
-                          ? "text-status-attn-glyph"
+                          ? "text-status-attn"
                           : "text-ink-subtle",
                       ]}
                     />
                     <span
                       class={provider === value.provider
-                        ? "text-status-attn-ink"
+                        ? "text-status-attn"
                         : "text-ink-muted"}>{stands.words}</span
                     >
                   {/if}
@@ -231,7 +231,7 @@
            to it by the rule down its lead edge; it waits, disabled, while
            another provider is chosen. -->
       <div
-        class="ms-space-5 border-s border-border-hairline ps-space-3"
+        class="ms-space-4 border-s border-border-hairline ps-space-3"
         data-slot="model"
       >
         <Field id="images-model" label={words.model}>
@@ -269,7 +269,7 @@
       <SaveFault {fault} />
     </div>
 
-    <div class="flex min-w-0 flex-col gap-space-5" data-slot="chosen">
+    <div class="flex min-w-0 flex-col gap-space-4" data-slot="chosen">
       <div class="flex min-w-0 flex-col gap-space-1">
         <h3 class="m-0 type-label text-ink-muted" id="images-machines">
           {words.machinesHead(value.provider)}
@@ -338,7 +338,7 @@
                     >
                       {#if state === "ready"}
                         <IconTick
-                          class="size-icon-md text-status-done-glyph"
+                          class="size-icon-md text-status-done"
                           data-box
                         />
                       {:else if state === "installing"}
@@ -346,13 +346,13 @@
                       {:else if state === "offline"}
                         <!-- The machine list's offline mark: a still dot in the presence-off ink. -->
                         <span
-                          class="size-(--status-dot-size) rounded-pill bg-ink-subtle"
+                          class="size-1.5 rounded-pill bg-ink-subtle"
                           data-box
                         ></span>
                       {:else}
                         <IconWarningTriangle
                           aria-hidden="true"
-                          class="size-icon-md text-status-attn-glyph"
+                          class="size-icon-md text-status-attn"
                           data-box
                         />
                       {/if}

@@ -33,7 +33,7 @@ export interface Travel {
 const nudge = (x: number, y: number): Travel => ({
   leave: { x: -x, y: -y, opacity: 0 },
   enter: { x, y, opacity: 0 },
-  over: "--duration-control",
+  over: "--duration-fast",
   leavingOnTop: false,
 });
 
@@ -63,12 +63,12 @@ export interface Plan {
  * - Between two sidebar spokes: vertical, ±8%, the way the sidebar runs.
  * - Configure on a phone is a stack: a deeper page pushes in from the inline
  *   end over the one it leaves, which falls back 30% and dims to 0.6
- *   (--duration-panel); back pops it off the same way, on the shorter --duration-panel.
+ *   (--duration-slow); back pops it off the same way, on the shorter --duration-slow.
  * - Between two Configure sections on a wide screen: the section rises or
- *   drops in 4% the way the rail runs (--duration-control) while the rail holds
+ *   drops in 4% the way the rail runs (--duration-fast) while the rail holds
  *   still.
  * - Anything else deeper or shallower: a horizontal ±8% nudge
- *   (--duration-control).
+ *   (--duration-fast).
  * Browser back and forward go by the history step, not the path.
  */
 export function plan({
@@ -106,7 +106,7 @@ function configTravel(
     return {
       leave: { x: -30 * side, y: 0, opacity: 0.6 },
       enter: { x: 100 * side, y: 0, opacity: 1 },
-      over: "--duration-panel",
+      over: "--duration-slow",
       leavingOnTop: false,
     };
   }
@@ -114,7 +114,7 @@ function configTravel(
     return {
       leave: { x: 100 * side, y: 0, opacity: 1 },
       enter: { x: -30 * side, y: 0, opacity: 0.6 },
-      over: "--duration-panel",
+      over: "--duration-slow",
       leavingOnTop: true,
     };
   }
@@ -125,7 +125,7 @@ function configTravel(
   return {
     leave: { x: 0, y: 0, opacity: 0 },
     enter: { x: 0, y: section(to) > section(from) ? 4 : -4, opacity: 0 },
-    over: "--duration-control",
+    over: "--duration-fast",
     leavingOnTop: false,
   };
 }
@@ -149,9 +149,9 @@ export function leaving(from: URL): void {
   }
 }
 
-/** Reduced motion: a --duration-control cross-fade in place, nothing travels. */
+/** Reduced motion: a --duration-fast cross-fade in place, nothing travels. */
 const STILL: End = { x: 0, y: 0, opacity: 0 };
-const STILL_OVER: DurToken = "--duration-control";
+const STILL_OVER: DurToken = "--duration-fast";
 
 export function pageOut(node: HTMLElement) {
   const { over } = route.travel;

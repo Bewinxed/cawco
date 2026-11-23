@@ -184,14 +184,14 @@
       bind:value={fields.nickname}
     />
     {#if refused}
-      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+      <p class="type-meta text-status-fail" role="alert" in:appear>
         {refused}
       </p>
     {/if}
   {/snippet}
 
   <EditorSection
-    hue="var(--color-mark-6)"
+    hue="var(--color-mark-4)"
     icon={IconServer}
     label={words.editor.machines}
   >
@@ -208,7 +208,7 @@
 
   {#if limits}
     <EditorSection
-      hue="var(--color-mark-3)"
+      hue="var(--color-mark-1)"
       icon={IconUsage}
       label={words.editor.limits}
     >
@@ -259,7 +259,7 @@
         </span>
       </div>
       {#if !floorsRead}
-        <p class="type-meta text-status-fail-ink" id="reserve-line" in:appear>
+        <p class="type-meta text-status-fail" id="reserve-line" in:appear>
           {words.editor.reserveInvalid}
         </p>
       {/if}

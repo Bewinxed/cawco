@@ -256,7 +256,7 @@
   /** `--duration-breath` as the browser resolves it, in ms. */
   function breathMs(): number {
     const probe = document.createElement("div");
-    probe.style.transitionDuration = "var(--duration-breath)";
+    probe.style.transitionDuration = "calc(var(--duration-loop) * 2)";
     document.body.append(probe);
     const value = getComputedStyle(probe).transitionDuration;
     probe.remove();
@@ -440,7 +440,7 @@
 
 <div
   data-slot="wait"
-  class="group/wait flex flex-col items-center justify-center gap-space-5 flex-auto min-h-0 overflow-y-auto py-space-8 px-space-6 bg-surface-recess data-phone:justify-start data-phone:pbs-space-6 data-phone:px-space-4 data-phone:pbe-(--wait-pad-end)"
+  class="group/wait flex flex-col items-center justify-center gap-space-4 flex-auto min-h-0 overflow-y-auto py-space-8 px-space-6 bg-surface-recess data-phone:justify-start data-phone:pbs-space-6 data-phone:px-space-4 data-phone:pbe-(--wait-pad-end)"
   data-move={job.id}
   data-phone={phone || undefined}
   style:--wait-pad-end={"calc(var(--spacing-space-4) + env(safe-area-inset-bottom))"}
@@ -545,13 +545,13 @@
                 </div>
               {/if}
               {#if row.phase === "asking" && job.ask}
-                <!-- Under a finger its rows open to --spacing-space-5, so the Details
+                <!-- Under a finger its rows open to --spacing-space-4, so the Details
                      fold's 44px area and the answers' under it both stand
                      whole (DESIGN.md, The 44 Touch Rule: "clusters open their
                      gap on touch"). -->
                 <div
                   data-slot="move-wait-card"
-                  class="grid gap-space-3 coarse:gap-space-5 mbs-space-1 p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-sm"
+                  class="grid gap-space-3 coarse:gap-space-4 mbs-space-1 p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-sm"
                   in:unfold
                   out:unfold
                 >

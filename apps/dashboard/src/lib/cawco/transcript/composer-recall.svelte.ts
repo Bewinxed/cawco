@@ -289,13 +289,13 @@ export class ComposerRecall {
 
   /**
    * The buttons slide together into the deck on the wheel's own growth:
-   * its --duration-panel on the drawer curve. Transform and opacity only, by the
+   * its --duration-slow on the drawer curve. Transform and opacity only, by the
    * Web Animations API, so the buttons' own transitions stay theirs.
    */
   #deckIn(places: DeckPlace[], from: number, to: number): void {
     this.deckOut(0);
     const timing = {
-      duration: dur("--duration-panel"),
+      duration: dur("--duration-slow"),
       easing: CURVE.drawer,
       fill: "forwards",
     } as const;
@@ -335,10 +335,10 @@ export class ComposerRecall {
 
   /**
    * They fan back out to their places from wherever they are, on the
-   * wheel's fold: its --duration-panel on the drawer curve (`ms`: 0 puts
+   * wheel's fold: its --duration-slow on the drawer curve (`ms`: 0 puts
    * them back at once).
    */
-  deckOut(ms = dur("--duration-panel")): void {
+  deckOut(ms = dur("--duration-slow")): void {
     const was = this.#decked;
     this.#decked = null;
     if (!was) {
@@ -467,7 +467,7 @@ export class ComposerRecall {
     clearTimeout(this.hintBack);
     this.hintBack = setTimeout(() => {
       this.hintBack = 0;
-    }, dur("--duration-fade"));
+    }, dur("--duration-base"));
     await tick();
     const took = was?.text !== draft().text;
     // Back to the draft and asked for again: it comes straight back up. A

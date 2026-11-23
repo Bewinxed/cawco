@@ -3,7 +3,7 @@
       0.6 as it fades in. With reduced motion both only fade"), the dropdown's
       and the context menu's. */
   export const radioDot =
-    "block size-1.5 rounded-pill bg-current opacity-0 transition-opacity duration-(--duration-control) ease-out data-[on=true]:opacity-100 motion-safe:scale-60 motion-safe:transition-[opacity,scale] motion-safe:data-[on=true]:scale-100";
+    "block size-1.5 rounded-pill bg-current opacity-0 transition-opacity duration-(--duration-fast) ease-out data-[on=true]:opacity-100 motion-safe:scale-60 motion-safe:transition-[opacity,scale] motion-safe:data-[on=true]:scale-100";
 </script>
 
 <script lang="ts">
@@ -46,7 +46,7 @@
     row === "artifact" && "min-h-control-lg aria-busy:opacity-50",
     row === "described" && "min-h-control-lg py-space-2",
     tile &&
-      "size-control-sm min-h-control-sm justify-center p-0 coarse:size-control-lg aria-checked:bg-selected-bg aria-checked:text-brand-ink",
+      "size-control-sm min-h-control-sm justify-center p-0 coarse:size-control-lg aria-checked:bg-accent-wash aria-checked:text-accent-ink",
     className
   )}
   data-menu-item

@@ -43,7 +43,7 @@
     onclick={onopen}
     type="button"
   >
-    <IconNeedsYou aria-hidden="true" class="text-status-attn-glyph" />
+    <IconNeedsYou aria-hidden="true" class="text-status-attn" />
     <span aria-hidden="true" class="num whitespace-nowrap"
       >{waiting}<span class="@max-phone/tray:hidden"
         >{` ${waitingWords.needYouWord(waiting)}`}</span

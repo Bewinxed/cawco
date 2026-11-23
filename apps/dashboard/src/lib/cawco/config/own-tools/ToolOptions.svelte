@@ -44,7 +44,7 @@
 >
   {#each options as option, index (option.value)}
     <OptionGroupItem digit={index + 1} value={option.value}>
-      <span class="flex min-w-0 flex-col gap-space-row">
+      <span class="flex min-w-0 flex-col gap-space-1">
         <span class="flex flex-wrap items-center gap-space-2">
           <span class="type-label text-ink-strong">{option.name}</span>
           {#if option.value === recommended}

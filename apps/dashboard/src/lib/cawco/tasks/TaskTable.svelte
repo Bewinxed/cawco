@@ -352,7 +352,7 @@
                   {#if task.kind === "you"}
                     <IconNeedsYou
                       aria-hidden="true"
-                      class="size-icon-sm flex-none text-status-attn-glyph"
+                      class="size-icon-sm flex-none text-status-attn"
                     />
                   {/if}
                   <span class="type-label">{stageLabel(task.stage)}</span>

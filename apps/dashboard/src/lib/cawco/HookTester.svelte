@@ -98,7 +98,7 @@
   </label>
 
   <!-- The verdict appears with the first sample and its two readings
-       cross-fade over --duration-control in one line box. -->
+       cross-fade over --duration-fast in one line box. -->
   {#if sample.trim()}
     <p
       aria-live="polite"
@@ -109,7 +109,7 @@
     >
       {#key hit}
         <span
-          class={hit ? "text-status-done-ink" : "text-ink-muted"}
+          class={hit ? "text-status-done" : "text-ink-muted"}
           in:crossIn
           out:crossOut
           >{hit

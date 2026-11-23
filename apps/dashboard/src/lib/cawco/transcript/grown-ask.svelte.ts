@@ -232,10 +232,10 @@ export class GrownAsk {
         return;
       }
       // In the next frame (frameObserver): the fit eases the shape to the
-      // card over --duration-fade, which resizes it.
+      // card over --duration-base, which resizes it.
       const sizes = frameObserver(() => {
         if (this.askRaised) {
-          this.#fitAsk(dur("--duration-fade"));
+          this.#fitAsk(dur("--duration-base"));
         }
       });
       sizes.observe(node);
@@ -350,7 +350,7 @@ export class GrownAsk {
       bottom: 0,
       height: (this.askBox?.base ?? 0) + (this.askBox?.ext ?? 0),
     }));
-    shape.morphTo(1, ext, dur("--duration-panel"));
+    shape.morphTo(1, ext, dur("--duration-slow"));
     // Partway up, once there is room for it.
     setTimeout(
       () => {
@@ -358,7 +358,7 @@ export class GrownAsk {
           this.askShown = true;
         }
       },
-      motionOk.current ? dur("--duration-control") : 0
+      motionOk.current ? dur("--duration-fast") : 0
     );
   }
 
@@ -370,7 +370,7 @@ export class GrownAsk {
       this.#parts.draft().askRun += 1;
       this.askShown = false;
       if (motionOk.current) {
-        await new Promise((done) => setTimeout(done, dur("--duration-fade")));
+        await new Promise((done) => setTimeout(done, dur("--duration-base")));
       }
       if (turn !== this.#askTurn) {
         return;
@@ -384,7 +384,7 @@ export class GrownAsk {
     if (this.askBox) {
       this.askBox.max = this.#askRoom();
     }
-    this.#fitAsk(dur("--duration-fade"), true);
+    this.#fitAsk(dur("--duration-base"), true);
     this.askShown = true;
   }
 
@@ -403,7 +403,7 @@ export class GrownAsk {
         shape.ext += shape.base - base;
         shape.base = base;
       }
-      await shape.morphTo(0, shape.ext, dur("--duration-panel"));
+      await shape.morphTo(0, shape.ext, dur("--duration-slow"));
     }
     if (turn !== this.#askTurn) {
       return;

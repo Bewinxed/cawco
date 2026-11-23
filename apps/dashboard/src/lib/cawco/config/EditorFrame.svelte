@@ -115,7 +115,7 @@
             { height: `${from}px`, overflow: "hidden" },
             { height: `${to}px`, overflow: "hidden" },
           ],
-          { duration: dur("--duration-fade"), easing: CURVE.drawer }
+          { duration: dur("--duration-base"), easing: CURVE.drawer }
         );
       }
     });
@@ -143,7 +143,7 @@
        height on a list and in its editor. The commit row is the card's own
        foot, held at the page's foot while the fields run on under it. -->
   <div
-    class="flex flex-auto flex-col min-h-0 overflow-y-auto px-space-5 py-space-2"
+    class="flex flex-auto flex-col min-h-0 overflow-y-auto px-space-4 py-space-2"
   >
     <div
       data-slot="body"
@@ -158,7 +158,7 @@
         {#if tile}
           <span
             data-slot="tile"
-            class="inline-flex items-center justify-center flex-none size-6.5 mt-space-row rounded-sm bg-surface-raised shadow-sm [&>*]:size-icon-md"
+            class="inline-flex items-center justify-center flex-none size-6.5 mt-space-1 rounded-sm bg-surface-raised shadow-sm [&>*]:size-icon-md"
             data-share="icon:{page.url.pathname}"
             {@attach land(() => `icon:${page.url.pathname}`)}
           >
@@ -167,7 +167,7 @@
         {:else if section}
           <span
             data-slot="tile"
-            class="inline-flex items-center justify-center flex-none size-6.5 mt-space-row rounded-sm bg-surface-raised shadow-sm [&>*]:size-icon-md"
+            class="inline-flex items-center justify-center flex-none size-6.5 mt-space-1 rounded-sm bg-surface-raised shadow-sm [&>*]:size-icon-md"
             data-share="icon:{page.url.pathname}"
             style:color={section.hue}
             {@attach land(() => `icon:${page.url.pathname}`)}
@@ -207,7 +207,7 @@
       >
         <div
           data-slot="slot"
-          class="col-start-1 row-start-1 flex flex-col gap-space-5 min-w-0 data-veiled:invisible data-veiled:opacity-0"
+          class="col-start-1 row-start-1 flex flex-col gap-space-4 min-w-0 data-veiled:invisible data-veiled:opacity-0"
           data-veiled={veiled || undefined}
           {@attach (node) => {
             if (!veiled) {
@@ -221,7 +221,7 @@
           <div
             data-slot="slot"
             aria-hidden="true"
-            class="col-start-1 row-start-1 flex flex-col gap-space-5 min-w-0"
+            class="col-start-1 row-start-1 flex flex-col gap-space-4 min-w-0"
             out:reveal
           >
             <SkeletonRows fill={card !== null} />

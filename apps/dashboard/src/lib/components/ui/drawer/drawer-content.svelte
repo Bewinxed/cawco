@@ -25,7 +25,7 @@
           max-height keeps it inside the visible area (app.css). */
       height: {
         shrink: "min-h-0",
-        cap: "vaul-drawer-direction-bottom:h-(--drawer-max-height) [--drawer-max-height:var(--sheet-max-h)]",
+        cap: "vaul-drawer-direction-bottom:h-(--drawer-max-height) [--drawer-max-height:85vh]",
       },
       /** A side sheet as wide as the room the page gives it (the peek's,
           `c-peek-sheet-w`, the Shell's trailing pad while it stands open). */
@@ -260,7 +260,7 @@
        sheet's is full-bleed: edge to edge and flush on the screen's foot,
        its corners rounded and its hairline drawn along the top edge only.
        Its foot keeps the safe area clear, the same for every sheet. Under
-       reduced motion it fades in and out over --duration-control instead of
+       reduced motion it fades in and out over --duration-fast instead of
        sliding (DESIGN.md, Sheet: "with reduced motion it fades over
        120ms"); vaul's slide stands in the `vendor` layer under it
        (vite.config.ts, vendorComponentSheets). -->
@@ -317,7 +317,7 @@
       type="button"
       aria-label={grabber.label}
       data-slot="drawer-grabber"
-      class="touch-hit mx-auto mt-space-2 mb-space-1 coarse:mb-space-4 hidden h-space-5 w-25 shrink-0 place-items-center rounded-pill group-data-[vaul-drawer-direction=bottom]/drawer-content:grid"
+      class="touch-hit mx-auto mt-space-2 mb-space-1 coarse:mb-space-4 hidden h-space-4 w-25 shrink-0 place-items-center rounded-pill group-data-[vaul-drawer-direction=bottom]/drawer-content:grid"
       onclick={() => {
         setTimeout(grabber.onpress);
       }}

@@ -172,10 +172,10 @@
     const source = thumb(doc.share);
     let exit: Animation | undefined;
     if (source) {
-      exit = closeInto(sheet, source, dur("--duration-fade"));
+      exit = closeInto(sheet, source, dur("--duration-base"));
     } else if (motionOk.current) {
       exit = sheet.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: dur("--duration-fade"),
+        duration: dur("--duration-base"),
         easing: ease("--ease-out"),
         fill: "forwards",
       });
@@ -235,13 +235,13 @@
     <div
       class={dialogTray.tray({
         class:
-          "pointer-events-auto flex w-(--lightbox-sheet-w) max-h-(--lightbox-sheet-max-h) flex-col",
+          "pointer-events-auto flex w-full max-w-240 max-h-dvh-86 flex-col",
       })}
       bind:this={sheet}
       {@attach land(() => doc.share, {
         mode: "grow",
         anchor: '[data-slot="doc-head"]',
-        ms: dur("--duration-panel"),
+        ms: dur("--duration-slow"),
       })}
     >
       <div
@@ -254,7 +254,7 @@
           class="flex items-center gap-space-1 -me-space-2 -mt-space-2"
         >
           <DialogPrimitive.Title
-            class="min-w-0 flex-1 truncate text-size-label font-medium"
+            class="min-w-0 flex-1 truncate text-base font-medium"
             >{doc.name}</DialogPrimitive.Title
           >
           <CopyButton

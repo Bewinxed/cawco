@@ -17,7 +17,7 @@
 <button
   data-bar-item
   aria-pressed={comparing}
-  class="aria-pressed:bg-selected-bg"
+  class="aria-pressed:bg-accent-wash"
   onclick={() => {
     comparing = !comparing;
   }}

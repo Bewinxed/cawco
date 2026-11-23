@@ -6,12 +6,12 @@
  * The timeline:
  * - The old rows (the first LEAVING) are copied into an inert `leaving`
  *   layer laid over the list's top and leave the other way (`ns-out-*`)
- *   together over --duration-fade (DESIGN.md, The Nothing Jumps Rule:
+ *   together over --duration-base (DESIGN.md, The Nothing Jumps Rule:
  *   departures all start on the same frame); the layer is cleared once
  *   they are out.
  * - The new rows mount at once, keyed `${gen}:${id}` so even a row in both
  *   lists enters as new, and come in from the side the choice moved toward
- *   (`ns-in-*`, --pop-rise and a fade) over --duration-panel: the first once the old
+ *   (`ns-in-*`, --spacing-space-2 and a fade) over --duration-slow: the first once the old
  *   rows are out, each next --duration-step later, capped at STAGGER_CAP.
  * A relay: each new row arrives no sooner than the old row in its place
  * has gone (`rowAnim`'s `notBefore`, which a caller that knows the places
@@ -31,11 +31,11 @@ import type { TransitionConfig } from "svelte/transition";
 import { dur, ease, motionOk } from "./curves.svelte";
 
 /** The leaving rows' beat. */
-const outMs = () => dur("--duration-fade");
+const outMs = () => dur("--duration-base");
 /** An incoming row's beat. @browser */
-export const inMs = () => dur("--duration-panel");
+export const inMs = () => dur("--duration-slow");
 /** Between one incoming row and the next. */
-const inStagger = () => dur("--duration-step");
+const inStagger = () => (dur("--duration-fast") / 2);
 /** Rows past this all move together; a stagger that keeps growing down a
     forty-row list is a wait, not a rhythm. */
 const STAGGER_CAP = 9;
@@ -174,7 +174,7 @@ export class ListSwap<T> {
     rows.forEach((row, i) => {
       row.animate(
         [
-          { opacity: 0, transform: "translateX(var(--pop-rise))" },
+          { opacity: 0, transform: "translateX(var(--spacing-space-2))" },
           { opacity: 1, transform: "none" },
         ],
         {
@@ -209,7 +209,7 @@ export class ListSwap<T> {
     if (this.phase !== "in" || !motionOk.current) {
       return "none";
     }
-    return `${this.dir > 0 ? "ns-in-r" : "ns-in-l"} var(--duration-panel) var(--ease-out) both ${ListSwap.enterAt(i, notBefore)}ms`;
+    return `${this.dir > 0 ? "ns-in-r" : "ns-in-l"} var(--duration-slow) var(--ease-out) both ${ListSwap.enterAt(i, notBefore)}ms`;
   }
 
   /** The `animation` for a leaving row: every one leaves on the same frame. */
@@ -217,7 +217,7 @@ export class ListSwap<T> {
     if (!motionOk.current) {
       return "none";
     }
-    return `${this.#leaveDir > 0 ? "ns-out-l" : "ns-out-r"} var(--duration-fade) var(--ease-out) both`;
+    return `${this.#leaveDir > 0 ? "ns-out-l" : "ns-out-r"} var(--duration-base) var(--ease-out) both`;
   }
 
   /**

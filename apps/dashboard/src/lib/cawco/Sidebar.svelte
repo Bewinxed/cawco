@@ -297,7 +297,7 @@
    * varies; the column does not, which is the only reason every label in the
    * rail starts at the same x (10px of row padding + 18 + 10 of gap = 38px).
    */
-  const SLOT = "inline-flex size-space-5 shrink-0 items-center justify-center";
+  const SLOT = "inline-flex size-space-4 shrink-0 items-center justify-center";
   /** A line glyph in the slot: 16px, 1px of air. */
   const SLOT_GLYPH = "size-icon-md";
 
@@ -614,7 +614,7 @@
     <div class="flex h-space-8 items-center px-space-3">
       <Skeleton height="x-height" radius="line" type="label" width="label" />
     </div>
-    <div class="flex flex-col gap-space-row">
+    <div class="flex flex-col gap-space-1">
       {#each Array.from({ length: rows }, (_, row) => row) as row (row)}
         <Skeleton class="w-full" height="control-sm" />
       {/each}
@@ -793,7 +793,7 @@
                      keeps its shape on the rail in either theme. -->
                 <img
                   alt=""
-                  class="flex-none size-space-5 rounded-xs outline outline-image-outline -outline-offset-1"
+                  class="flex-none size-space-4 rounded-xs outline outline-ink-strong/10 -outline-offset-1"
                   height="18"
                   src={cawcoIcon}
                   width="18"
@@ -802,9 +802,9 @@
                      icon in its own box (its face is Nunito, not a label's),
                      a body line tall. -->
                 <span
-                  class="inline-flex items-center h-(--wordmark-h) font-wordmark text-size-body font-(--weight-wordmark) tracking-wordmark leading-kpi min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
+                  class="inline-flex items-center h-(--wordmark-h) wordmark text-base min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
                   data-box
-                  style:--wordmark-h={"calc(var(--text-body) * var(--leading-body))"}
+                  style:--wordmark-h={"var(--leading-base)"}
                   >Caw&amp;Co</span
                 >
               </a>
@@ -826,7 +826,7 @@
             onclick={(event) => newSession(undefined, event.currentTarget)}
             type="button"
           >
-            <IconPlus class="size-space-5" />
+            <IconPlus class="size-space-4" />
           </button>
         {/snippet}
       </Tip>
@@ -981,7 +981,7 @@
             class="min-w-0 flex-auto overflow-hidden text-ellipsis whitespace-nowrap"
             >Projects</span
           >
-          <div class="ms-auto flex flex-none items-center gap-space-row">
+          <div class="ms-auto flex flex-none items-center gap-space-1">
             <GroupMenu
               label={sidebarWords.groupProjects}
               levels={grouping.projects}
@@ -1039,7 +1039,7 @@
               data-slot="sidebar-menu"
               style:--line-root-gap={projectLevels.length > 0
                 ? "var(--spacing-space-3)"
-                : "var(--spacing-space-row)"}
+                : "var(--spacing-space-1)"}
             >
               {#each build ? build.rows(projectRows, RAIL_STAGE.projects) : projectRows as item (item.key)}
                 {@render projectTreeRow(item)}

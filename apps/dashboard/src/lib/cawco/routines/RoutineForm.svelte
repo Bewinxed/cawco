@@ -619,7 +619,7 @@
     {#if failure}
       <p
         data-slot="form-failure"
-        class="m-0 max-w-measure type-body text-pretty wrap-anywhere text-status-fail-ink"
+        class="m-0 max-w-measure type-body text-pretty wrap-anywhere text-status-fail"
         role="alert"
         in:unfold
         out:unfold

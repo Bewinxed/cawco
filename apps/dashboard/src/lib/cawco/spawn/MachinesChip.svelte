@@ -80,7 +80,7 @@
   })}
 >
   {#snippet trigger()}
-    <Server class="text-mark-6" />
+    <Server class="text-mark-4" />
     <span data-slot="chip-label">{label}</span>
     <Down data-slot="chevron" />
   {/snippet}
@@ -89,7 +89,7 @@
     <button
       data-slot="row"
       aria-pressed={on}
-      class="select-none ns-in press-tint relative flex h-control-lg w-full items-center gap-space-3 border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color,border-radius] duration-(--duration-fade) ease-out aria-pressed:bg-selected-bg aria-pressed:[&_:is([data-slot=name],[data-slot=meta])]:text-brand-ink disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
+      class="select-none ns-in press-tint relative flex h-control-lg w-full items-center gap-space-3 border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color,border-radius] duration-(--duration-base) ease-out aria-pressed:bg-accent-wash aria-pressed:[&_:is([data-slot=name],[data-slot=meta])]:text-accent-ink disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
       data-fh="1"
       data-machine-id={row.id}
       disabled={!row.online}
@@ -107,7 +107,7 @@
         presence={presenceOf(row)}
       />
       <Check
-        class="size-icon-md flex-none text-ink-strong in-aria-pressed:text-brand-ink transition-[opacity] duration-(--duration-fade) ease-out motion-safe:transition-[opacity,transform]"
+        class="size-icon-md flex-none text-ink-strong in-aria-pressed:text-accent-ink transition-[opacity] duration-(--duration-base) ease-out motion-safe:transition-[opacity,transform]"
         style={`opacity:${on ? 1 : 0};transform:scale(${on ? 1 : 0.94})`}
       />
     </button>
@@ -121,12 +121,12 @@
   {/if}
   <div
     data-slot="divider"
-    class="mx-space-row my-space-1 border-t border-border-hairline"
+    class="mx-space-1 my-space-1 border-t border-border-hairline"
   ></div>
   <button
     data-slot="row"
     data-add
-    class="select-none ns-in press-tint relative flex h-control-lg w-full items-center gap-space-3 rounded-xs border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color,border-radius] duration-(--duration-fade) ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
+    class="select-none ns-in press-tint relative flex h-control-lg w-full items-center gap-space-3 rounded-xs border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color,border-radius] duration-(--duration-base) ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
     data-fh="1"
     onclick={addMachine}
     style:--delay={staggered(machines.length + 1)}

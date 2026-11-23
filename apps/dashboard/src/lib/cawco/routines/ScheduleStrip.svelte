@@ -192,15 +192,15 @@
   >
     <span
       data-slot="schedule-bar"
-      class="@container relative block h-space-2 rounded-hair bg-border-control"
+      class="@container relative block h-space-2 rounded-xs bg-border-control"
     >
       {#each schedule.runs as at, i (at)}
         {@const nextRun = i === 0 && !paused}
         <span
           data-run-tick
           class={[
-            "absolute start-(--at) w-space-row translate-x-(--keep) rounded-hair",
-            nextRun && "-inset-y-space-row bg-ink-strong",
+            "absolute start-(--at) w-space-1 translate-x-(--keep) rounded-xs",
+            nextRun && "-inset-y-space-1 bg-ink-strong",
             !nextRun && "inset-y-0",
             !nextRun && (paused ? "bg-ink-subtle" : "bg-ink-muted"),
           ]}
@@ -222,7 +222,7 @@
         bind:this={markRow}
         aria-hidden="true"
         class="@container relative block h-(--marks-h) type-meta num text-ink-subtle"
-        style:--marks-h={"calc(var(--spacing-space-1) + var(--text-meta) * var(--leading-label))"}
+        style:--marks-h={"calc(var(--spacing-space-1) + var(--leading-sm))"}
       >
         {#each marks as mark (mark.at)}
           <!-- mark-line: the hairline stands above its label, not beside it -->

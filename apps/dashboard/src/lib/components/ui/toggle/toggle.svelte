@@ -12,7 +12,7 @@
       size: {
         default:
           "h-control-md min-w-control-md px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5",
-        xs: "h-control-xs min-w-control-xs gap-1.5 px-2 type-meta has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
+        xs: "h-space-6 min-w-space-6 gap-1.5 px-2 type-meta has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
         sm: "h-control-sm min-w-control-sm glass-item:h-row-compact glass-item:min-w-row-compact px-2.5 glass-item:px-space-1 glass-item:[&_svg:not([class*='size-'])]:size-4.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         lg: "h-control-lg min-w-control-lg px-4 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
       },

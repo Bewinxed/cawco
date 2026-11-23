@@ -96,7 +96,7 @@
             aria-hidden="true"
             data-box
             class={[
-              "pointer-events-none absolute start-(--step-rail-x) top-(--step-rail-top) -bottom-(--step-rail-gap) w-px -translate-x-1/2 origin-top bg-border-hairline transition-[scale] duration-(--duration-fade) ease-out",
+              "pointer-events-none absolute start-space-2 top-space-6 -bottom-space-2 w-px -translate-x-1/2 origin-top bg-border-hairline transition-[scale] duration-(--duration-base) ease-out",
               row.state === "done" ? "scale-y-100" : "scale-y-0",
             ]}
           ></span>
@@ -117,7 +117,7 @@
               data-slot="time"
               class={[
                 "num flex-none whitespace-nowrap type-meta",
-                time.past ? "text-status-attn-ink" : "text-ink-muted",
+                time.past ? "text-status-attn" : "text-ink-muted",
               ]}>{time.text}</span
             >
           {/if}
@@ -139,7 +139,7 @@
                   class={[
                     "type-meta",
                     check.state === "failed"
-                      ? "text-status-fail-ink"
+                      ? "text-status-fail"
                       : "text-ink-muted",
                   ]}>{check.words}</span
                 >

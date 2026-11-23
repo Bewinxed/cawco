@@ -18,10 +18,10 @@
 >
   <span>Today</span>
   <span class="relative flex h-icon-md items-center" aria-hidden="true">
-    <span class="size-space-2 flex-none rounded-pill bg-status-live-glyph"
+    <span class="size-space-2 flex-none rounded-pill bg-status-live"
     ></span>
     <span
-      class="h-px flex-1 bg-ink-muted data-off:bg-status-done-ink"
+      class="h-px flex-1 bg-ink-muted data-off:bg-status-done"
       data-off={off || undefined}
     ></span>
     {#if !off}

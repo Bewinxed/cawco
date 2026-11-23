@@ -138,8 +138,8 @@
     }
     if (!reduceMotion.current) {
       node.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--duration-fade"),
-        delay: dur("--duration-step"),
+        duration: dur("--duration-base"),
+        delay: (dur("--duration-fast") / 2),
         easing: ease("--ease-out"),
         fill: "backwards",
       });
@@ -251,7 +251,7 @@
                   ? highlight({ rows: surface.rows })
                   : undefined}
                 {@attach morph({
-                  ms: dur("--duration-panel"),
+                  ms: dur("--duration-slow"),
                   followUnfolds: true,
                   on: ["data-room"],
                   placed: true,

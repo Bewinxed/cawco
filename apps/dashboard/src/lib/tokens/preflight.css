@@ -26,7 +26,7 @@
 :where(
   :is(
     :where(.group\/cin)[data-hint-back]
-      .group-data-hint-back\/cin\:data-mention-field-empty\:before\:duration-\(--duration-fade\)
+      .group-data-hint-back\/cin\:data-mention-field-empty\:before\:duration-\(--duration-base\)
   )[data-mention-field-empty]
 )::before,
 :where(
@@ -50,7 +50,7 @@
 :where(
   :is(
     :where(.group\/deck)[data-lifted]
-      .group-data-lifted\/deck\:before\:duration-\(--duration-fade\)
+      .group-data-lifted\/deck\:before\:duration-\(--duration-base\)
   )
 )::before,
 :where(
@@ -140,15 +140,14 @@
 :where(.before\:absolute)::before,
 :where(.before\:bg-\(--hang-neck\))::before,
 :where(.before\:bg-\(color\:--tray-chip-fill\))::before,
+:where(.before\:bg-accent)::before,
+:where(.before\:bg-accent-ink)::before,
+:where(.before\:bg-accent-wash)::before,
 :where(.before\:bg-border-control)::before,
-:where(.before\:bg-brand-ink)::before,
-:where(.before\:bg-brand-solid)::before,
 :where(.before\:bg-linear-to-b)::before,
 :where(.before\:bg-linear-to-b\/srgb)::before,
-:where(.before\:bg-selected-bg)::before,
 :where(.before\:bg-status-attn-bg)::before,
 :where(.before\:bg-status-fail-bg)::before,
-:where(.before\:bg-surface-glass)::before,
 :where(.before\:bg-surface-raised)::before,
 :where(.before\:bg-surface-recess-deep)::before,
 :where(.before\:border)::before,
@@ -162,10 +161,9 @@
 :where(.before\:clip-join)::before,
 :where(.before\:content-\[attr\(data-text\)\])::before,
 :where(.before\:content-data-n)::before,
-:where(.before\:duration-\(--duration-control\))::before,
-:where(.before\:duration-\(--duration-fade\))::before,
-:where(.before\:duration-\(--duration-panel\))::before,
-:where(.before\:duration-\(--duration-step\))::before,
+:where(.before\:duration-\(--duration-base\))::before,
+:where(.before\:duration-\(--duration-fast\))::before,
+:where(.before\:duration-\(--duration-slow\))::before,
 :where(.before\:ease-in-out)::before,
 :where(.before\:ease-out)::before,
 :where(.before\:end-0)::before,
@@ -189,13 +187,10 @@
 :where(.before\:pointer-events-none)::before,
 :where(.before\:rounded-inherit)::before,
 :where(.before\:rounded-lg)::before,
-:where(.before\:rounded-md)::before,
 :where(.before\:rounded-pill)::before,
 :where(.before\:rounded-sm)::before,
 :where(.before\:shadow-lg)::before,
 :where(.before\:shadow-sm)::before,
-:where(.before\:shadow-xs)::before,
-:where(.before\:size-\(--status-dot-size\))::before,
 :where(.before\:size-1\.5)::before,
 :where(.before\:start-\(--band-start\))::before,
 :where(.before\:to-surface-raised)::before,
@@ -220,7 +215,7 @@
 :where(.contrast-more\:before\:bg-surface-raised)::before,
 :where(.contrast-more\:before\:border-border-strong)::before,
 :where(
-  .dark\:has-\[select\[aria-invalid\=true\]\]\:before\:border-status-fail-glyph\/50:where(
+  .dark\:has-\[select\[aria-invalid\=true\]\]\:before\:border-status-fail\/50:where(
       .dark,
       .dark *,
       [data-scheme="dark"],
@@ -272,9 +267,9 @@
 :where(.data-drop-before\:before\:-start-space-row[data-drop-before])::before,
 :where(.data-drop-before\:before\:absolute[data-drop-before])::before,
 :where(.data-drop-before\:before\:bg-ink-strong[data-drop-before])::before,
-:where(.data-drop-before\:before\:inset-y-space-row[data-drop-before])::before,
+:where(.data-drop-before\:before\:inset-y-space-1[data-drop-before])::before,
 :where(.data-drop-before\:before\:rounded-pill[data-drop-before])::before,
-:where(.data-drop-before\:before\:w-space-row[data-drop-before])::before,
+:where(.data-drop-before\:before\:w-space-1[data-drop-before])::before,
 :where(.data-drop-before\:before\:z-4[data-drop-before])::before,
 :where(.data-finished\:before\:animate-finish[data-finished])::before,
 :where(
@@ -288,7 +283,7 @@
 :where(.data-marked\:before\:-inset-space-2[data-marked])::before,
 :where(.data-marked\:before\:-inset-x-space-2[data-marked])::before,
 :where(.data-marked\:before\:absolute[data-marked])::before,
-:where(.data-marked\:before\:bg-selection[data-marked])::before,
+:where(.data-marked\:before\:bg-accent\/20[data-marked])::before,
 :where(.data-marked\:before\:inset-y-0[data-marked])::before,
 :where(.data-marked\:before\:pointer-events-none[data-marked])::before,
 :where(.data-marked\:before\:rounded-sm[data-marked])::before,
@@ -308,7 +303,7 @@
   .data-mention-field-empty\:before\:text-ink-subtle[data-mention-field-empty]
 )::before,
 :where(
-  .data-mention-field-empty\:before\:tracking-title[data-mention-field-empty]
+  .data-mention-field-empty\:before\:tracking-tight[data-mention-field-empty]
 )::before,
 :where(
   .data-mention-field-empty\:before\:whitespace-nowrap[data-mention-field-empty]
@@ -333,10 +328,10 @@
 :where(
   .focus-visible\:before\:outline-\(length\:--focus-ring-width\):focus-visible
 )::before,
-:where(.focus-visible\:before\:outline-focus-ring:focus-visible)::before,
+:where(.focus-visible\:before\:outline-accent-ink:focus-visible)::before,
 :where(.focus-visible\:before\:outline-solid:focus-visible)::before,
 :where(
-  .has-\[select\[aria-invalid\=true\]\]\:before\:border-status-fail-glyph:has(
+  .has-\[select\[aria-invalid\=true\]\]\:before\:border-status-fail:has(
     :is(select[aria-invalid="true"])
   )
 )::before,
@@ -363,12 +358,12 @@
 :where(.motion-reduce\:before\:transition-off)::before,
 :where(.motion-safe\:before\:transition-well-surface)::before,
 :where(
-  .motion-safe\:data-fly\:not-data-finished\:before\:anim-delay-control[data-fly]:not(
+  .motion-safe\:data-fly\:not-data-finished\:before\:anim-delay-fast[data-fly]:not(
       [data-finished]
     )
 )::before,
 :where(
-  .motion-safe\:data-fly\:not-data-finished\:before\:anim-dur-control[data-fly]:not(
+  .motion-safe\:data-fly\:not-data-finished\:before\:anim-dur-fast[data-fly]:not(
       [data-finished]
     )
 )::before,
@@ -381,7 +376,7 @@
   .motion-safe\:data-marked\:before\:animate-\(--mark-in\)[data-marked]
 )::before,
 :where(
-  .motion-safe\:data-marked\:before\:duration-\(--duration-panel\)[data-marked]
+  .motion-safe\:data-marked\:before\:duration-\(--duration-slow\)[data-marked]
 )::before,
 :where(.motion-safe\:data-marked\:before\:ease-out[data-marked])::before,
 :where(
@@ -398,7 +393,7 @@
 :where(.not-first\:before\:bottom-full:not(:first-child))::before,
 :where(.not-first\:before\:h-\(--joint-reach\):not(:first-child))::before,
 :where(.not-first\:before\:start-\(--joint-x\):not(:first-child))::before,
-:where(.not-first\:before\:w-space-row:not(:first-child))::before,
+:where(.not-first\:before\:w-space-1:not(:first-child))::before,
 :where(
   .prose-code\:before\:content-none
     :is(:where(code):not(:where([class~="not-prose"], [class~="not-prose"] *)))
@@ -411,7 +406,7 @@
 :where([data-sonner-toast][data-swiping="false"][data-removed="true"])::before,
 :where([data-sonner-toast][data-swiping="true"])::before,
 :where(
-  :is(:where(.group)[data-cur] .group-data-cur\:after\:bg-brand-ink)
+  :is(:where(.group)[data-cur] .group-data-cur\:after\:bg-accent-ink)
 )::after,
 :where(
   :is(
@@ -487,12 +482,12 @@
 :where(.after\:absolute)::after,
 :where(.after\:bg-\(--mark-deck-shade\))::after,
 :where(.after\:bg-border-hairline)::after,
-:where(.after\:bg-neutral-8)::after,
+:where(.after\:bg-border-strong)::after,
 :where(.after\:border)::after,
 :where(.after\:border-border-control)::after,
 :where(.after\:border-border-hairline)::after,
 :where(.after\:content-rest)::after,
-:where(.after\:duration-\(--duration-fade\))::after,
+:where(.after\:duration-\(--duration-base\))::after,
 :where(.after\:ease-out)::after,
 :where(.after\:h-px)::after,
 :where(.after\:hidden)::after,
@@ -506,7 +501,6 @@
 :where(.after\:pointer-events-none)::after,
 :where(.after\:rounded-\[inherit\])::after,
 :where(.after\:rounded-inherit)::after,
-:where(.after\:rounded-md)::after,
 :where(.after\:rounded-pill)::after,
 :where(.after\:rounded-sm)::after,
 :where(.after\:size-space-2)::after,
@@ -536,12 +530,12 @@
 :where(
   .data-\[direction\=vertical\]\:after\:w-full[data-direction="vertical"]
 )::after,
-:where(.data-drop-after\:after\:-end-space-row[data-drop-after])::after,
+:where(.data-drop-after\:after\:-end-space-1[data-drop-after])::after,
 :where(.data-drop-after\:after\:absolute[data-drop-after])::after,
 :where(.data-drop-after\:after\:bg-ink-strong[data-drop-after])::after,
-:where(.data-drop-after\:after\:inset-y-space-row[data-drop-after])::after,
+:where(.data-drop-after\:after\:inset-y-space-1[data-drop-after])::after,
 :where(.data-drop-after\:after\:rounded-pill[data-drop-after])::after,
-:where(.data-drop-after\:after\:w-space-row[data-drop-after])::after,
+:where(.data-drop-after\:after\:w-space-1[data-drop-after])::after,
 :where(.data-drop-after\:after\:z-4[data-drop-after])::after,
 :where(.data-expanded\:after\:left-px[data-expanded])::after,
 :where(.data-expanded\:after\:translate-x-0[data-expanded])::after,
@@ -552,7 +546,7 @@
 :where(
   .focus-visible\:after\:outline-\(length\:--focus-ring-width\):focus-visible
 )::after,
-:where(.focus-visible\:after\:outline-focus-ring:focus-visible)::after,
+:where(.focus-visible\:after\:outline-accent-ink:focus-visible)::after,
 :where(
   .focus-visible\:after\:outline-offset-\(--focus-ring-inset\):focus-visible
 )::after,
@@ -560,7 +554,7 @@
 :where(.katex .katex-stretchy)::after,
 :where(.katex .katex-version)::after,
 :where(.milkdown .milkdown-table-block .cell-handle .button-group)::after,
-:where(.motion-safe\:after\:duration-\(--duration-panel\))::after,
+:where(.motion-safe\:after\:duration-\(--duration-slow\))::after,
 :where(.motion-safe\:after\:ease-out)::after,
 :where(.motion-safe\:after\:transition-\[opacity\])::after,
 :where(

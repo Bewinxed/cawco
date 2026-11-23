@@ -131,7 +131,7 @@
 >
   <svg
     aria-hidden="true"
-    class="size-full overflow-visible rounded-md border border-border-hairline bg-surface-recess text-ink-strong"
+    class="size-full overflow-visible rounded-sm border border-border-hairline bg-surface-recess text-ink-strong"
     data-slot="curve-graph"
     fill="none"
     preserveAspectRatio="none"
@@ -171,7 +171,7 @@
     <span
       aria-label={words.curvePoint(index + 1)}
       aria-valuetext="{point.x.toFixed(2)}, {point.y.toFixed(2)}"
-      class="pointer-hit touch-hit absolute start-(--x) top-(--y) size-space-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-pill border border-border-strong bg-surface-raised shadow-xs focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 rtl:translate-x-1/2"
+      class="pointer-hit touch-hit absolute start-(--x) top-(--y) size-space-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-pill border border-border-strong bg-surface-raised shadow-sm focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-accent-ink focus-visible:outline-offset-2 rtl:translate-x-1/2"
       onkeydown={key(which)}
       onpointerdown={take(which)}
       role="slider"

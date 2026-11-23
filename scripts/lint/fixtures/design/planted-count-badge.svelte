@@ -11,11 +11,11 @@
 </script>
 
 <span
-  class="absolute start-0 top-0 h-icon-sm min-w-icon-sm rounded-pill bg-ink-strong text-on-ink num"
+  class="absolute start-0 top-0 h-icon-sm min-w-icon-sm rounded-pill bg-ink-strong text-surface-page num"
   >{count}</span
 >
 <span
-  class="inline-grid h-space-5 min-w-space-5 rounded-xs bg-brand-wash text-brand-ink tabular-nums"
+  class="inline-grid h-space-4 min-w-space-4 rounded-xs bg-accent-wash text-accent-ink tabular-nums"
   >{count}</span
 >
 <Badge size="corner">{count}</Badge>

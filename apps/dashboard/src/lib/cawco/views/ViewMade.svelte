@@ -74,12 +74,12 @@
           data-you={task.kind === "you" || undefined}
           data-is-you={task.kind === "you" || undefined}
           data-slot="stage"
-          class="mark-line type-meta inline-flex items-center gap-space-1 text-ink-muted data-is-you:text-status-attn-ink"
+          class="mark-line type-meta inline-flex items-center gap-space-1 text-ink-muted data-is-you:text-status-attn"
         >
           {#if task.kind === "you"}
             <IconNeedsYou
               data-view-made-glyph
-              class="size-icon-sm text-status-attn-glyph"
+              class="size-icon-sm text-status-attn"
             />
           {/if}
           <span>{stageLabel(task.stage)}</span>

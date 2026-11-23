@@ -82,10 +82,10 @@
       {@const length = postLength(text)}
       <li
         data-slot="post-card-card"
-        class="relative flex flex-col gap-space-2 rounded-md bg-surface-raised px-space-4 py-space-3 shadow-sm group-data-compact:px-space-3 group-data-compact:py-space-2 not-first:before:absolute not-first:before:start-(--joint-x) not-first:before:bottom-full not-first:before:h-(--joint-reach) not-first:before:w-space-row not-first:before:bg-border-control"
+        class="relative flex flex-col gap-space-2 rounded-sm bg-surface-raised px-space-4 py-space-3 shadow-sm group-data-compact:px-space-3 group-data-compact:py-space-2 not-first:before:absolute not-first:before:start-(--joint-x) not-first:before:bottom-full not-first:before:h-(--joint-reach) not-first:before:w-space-1 not-first:before:bg-border-control"
         data-part={index}
         style:--joint-reach="calc(var(--spacing-space-2) + 1px)"
-        style:--joint-x={"calc(var(--spacing-space-4) + var(--mark-box) / 2 - var(--spacing-space-row) / 2)"}
+        style:--joint-x={"calc(var(--spacing-space-4) + var(--spacing-row-compact) / 2 - var(--spacing-space-1) / 2)"}
       >
         <div
           data-slot="who"
@@ -117,7 +117,7 @@
           <span
             data-num
             data-slot="count"
-            class="num self-end type-meta text-ink-muted data-over:text-status-fail-ink"
+            class="num self-end type-meta text-ink-muted data-over:text-status-fail"
             data-over={length > POST_LIMIT || undefined}
             title={words.countTitle}>{length}/{POST_LIMIT}</span
           >
@@ -128,7 +128,7 @@
   {#if !compact && (post.community || post.media)}
     <dl class="m-0 flex flex-col gap-space-1">
       {#if post.community}
-        <div class="flex flex-col gap-space-row">
+        <div class="flex flex-col gap-space-1">
           <dt class="type-meta text-ink-muted">{words.community}</dt>
           <dd data-slot="name" class="m-0 type-label text-ink-strong">
             {post.community}
@@ -136,7 +136,7 @@
         </div>
       {/if}
       {#if media.length > 0}
-        <div class="flex flex-col gap-space-row">
+        <div class="flex flex-col gap-space-1">
           <dt class="type-meta text-ink-muted">{words.media}</dt>
           <!-- mark-line: each media file stands on its own, a picture or a player, beside no words -->
           <dd class="m-0 flex flex-wrap gap-space-2 type-meta text-ink-strong">
@@ -166,7 +166,7 @@
           </dd>
         </div>
       {:else if post.media}
-        <div class="flex flex-col gap-space-row">
+        <div class="flex flex-col gap-space-1">
           <dt class="type-meta text-ink-muted">{words.mediaPlan}</dt>
           <dd
             data-slot="sentence"

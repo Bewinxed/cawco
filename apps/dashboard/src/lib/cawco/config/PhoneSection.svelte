@@ -141,7 +141,7 @@
         <span
           data-slot="dot"
           aria-hidden="true"
-          class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-bad:bg-status-attn-glyph group-tone-bad:opacity-100 group-tone-ok:bg-status-done-glyph group-tone-ok:opacity-100"
+          class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-bad:bg-status-attn group-tone-bad:opacity-100 group-tone-ok:bg-status-done group-tone-ok:opacity-100"
           data-box
         ></span>
         <span>{line.text}</span>
@@ -188,7 +188,7 @@
               <span
                 data-num
                 data-slot="meta"
-                class="num type-meta wrap-anywhere text-ink-muted tone-bad:text-status-fail-ink"
+                class="num type-meta wrap-anywhere text-ink-muted tone-bad:text-status-fail"
                 data-tone={device.lastError ? "bad" : "ok"}
               >
                 {#if device.lastError}
@@ -221,7 +221,7 @@
     {/if}
     {#if deviceError}
       <p
-        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail"
         role="alert"
         transition:unfold
       >

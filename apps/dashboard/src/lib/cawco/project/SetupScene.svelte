@@ -40,7 +40,7 @@
 
 <div
   data-slot="setup-scene"
-  class="flex h-full min-h-0 w-full flex-auto flex-col items-center justify-center px-space-5 pt-space-6 pb-space-4"
+  class="flex h-full min-h-0 w-full flex-auto flex-col items-center justify-center px-space-4 pt-space-6 pb-space-4"
 >
   <div class="w-full max-w-measure">
     {#if seat}

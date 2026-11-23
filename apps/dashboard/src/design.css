@@ -170,11 +170,6 @@
   inherits: true;
   initial-value: 0px;
 }
-@property --spacing-space-5 {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
 @property --spacing-space-6 {
   syntax: "<length>";
   inherits: true;
@@ -186,11 +181,6 @@
   initial-value: 0px;
 }
 @property --spacing-row-compact {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --spacing-control-xs {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
@@ -215,6 +205,37 @@
   inherits: true;
   initial-value: 0px;
 }
+@property --radius-xs {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --radius-sm {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --radius-lg {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --text-sm {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --press-scale {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0.97;
+}
+@property --pop-scale {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0.92;
+}
+/* Component-local lengths and numbers read numerically from JS. */
 @property --block-ledger {
   syntax: "<length>";
   inherits: true;
@@ -270,42 +291,12 @@
   inherits: true;
   initial-value: 0px;
 }
-@property --radius-hair {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --radius-sm {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --radius-lg {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
 @property --deck-step {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
 }
-@property --goo-join {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --hover-panel-inset {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
 @property --hover-panel-max {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --pop-rise {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
@@ -316,11 +307,6 @@
   initial-value: 0px;
 }
 @property --skeleton-reveal-blur {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --text-meta {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
@@ -340,15 +326,10 @@
   inherits: true;
   initial-value: 0;
 }
-@property --leave-scale {
+@property --echo-scale {
   syntax: "<number>";
   inherits: true;
-  initial-value: 0;
-}
-@property --pop-scale {
-  syntax: "<number>";
-  inherits: true;
-  initial-value: 0;
+  initial-value: 1.45;
 }
 @property --tab-rim-mix-subtle {
   syntax: "<number>";
@@ -369,12 +350,6 @@
   syntax: "<number>";
   inherits: true;
   initial-value: 0;
-}
-/* --echo-scale's one fallback is its own value (ConnectWindow). */
-@property --echo-scale {
-  syntax: "<number>";
-  inherits: true;
-  initial-value: 1.45;
 }
 /* A folder tab track's shape (fluid-tabs TabsList, tab-strips), read by
    its tabs and the cards that hang from them; a bar glass's join sets its
@@ -443,26 +418,11 @@
 
     /* Inherited, so it is set once here rather than worked out on every
        element. */
-    scrollbar-color: var(--scrollbar-thumb) transparent;
-    /* The seam's inset (the home's seam between one machine's rows and the
-       next, and the transcript's user-message hairline): the text column's
-       own padding. */
-    --seam-inset: var(--spacing-space-3);
-    /* The gap between the rows of a tree, and between a parent and its
-       first child: one value for every tree (the rail's projects, sessions
-       and delegates; the home's Working and Finished). */
-    --tree-gap: var(--spacing-space-1);
-    /* How far each level of a tree is set in from the one above it, mark to
-       mark: the same in every tree, whatever inset its rows keep. */
-    --tree-step: calc(
-      var(--spacing-space-1) + var(--spacing-space-2) + var(--spacing-space-3)
-    );
+    scrollbar-color: oklch(from var(--color-ink-muted) l c h / 0.35) transparent;
+
     /* One device pixel as a CSS length, from the screen's resolution: a
        hairline drawn outside a box (a session mark's rim) is sized in whole
-       device pixels with it (`round(1.5px, var(--dpx))`), so the pixel grid
-       moves each of its edges by the same amount as the box's own. Set by
-       media queries, so the server's HTML has it from the first paint and
-       it follows a zoom or a move to another display. */
+       device pixels with it (`round(1.5px, var(--dpx))`). */
     --dpx: 1px;
     @media (resolution >= 1.25dppx) {
       --dpx: calc(1px / 1.25);
@@ -481,300 +441,91 @@
        drawn at it too. */
     --tree-line: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
 
-    @media (width < --theme(--breakpoint-desk)) {
-      --seam-inset: var(--spacing-space-2);
-    }
-
-    /* A diff's added, removed and changed lines (@pierre/diffs), on the
-       grounds the syntax tokens are measured against (libraries.css). The
-       library reads its line colours from a theme's git colours, which a
-       CSS-palette theme does not carry, so everything is set where it
-       documents overrides. Line numbers are text: each
-       ramp's text step, not its fill. */
-    --diffs-addition-color-override: var(--color-status-done-glyph);
-    --diffs-deletion-color-override: var(--color-status-fail-glyph);
+    /* A diff's added, removed and changed lines (@pierre/diffs). */
+    --diffs-addition-color-override: var(--color-status-done);
+    --diffs-deletion-color-override: var(--color-status-fail);
     --diffs-modified-color-override: var(--code-syntax-token-function);
     --diffs-bg-addition-override: oklch(
-      from var(--color-status-done-glyph) l c h / 0.11
+      from var(--color-status-done) l c h / 0.11
     );
     --diffs-bg-deletion-override: oklch(
-      from var(--color-status-fail-glyph) l c h / 0.11
+      from var(--color-status-fail) l c h / 0.11
     );
     --diffs-bg-addition-emphasis-override: oklch(
-      from var(--color-status-done-glyph) l c h / 0.08
+      from var(--color-status-done) l c h / 0.08
     );
     --diffs-bg-deletion-emphasis-override: oklch(
-      from var(--color-status-fail-glyph) l c h / 0.08
+      from var(--color-status-fail) l c h / 0.08
     );
-    --diffs-fg-number-addition-override: var(--color-status-done-ink);
-    --diffs-fg-number-deletion-override: var(--color-status-fail-ink);
+    --diffs-fg-number-addition-override: var(--color-status-done);
+    --diffs-fg-number-deletion-override: var(--color-status-fail);
 
-    /* Component-local paints, derived strictly from system tokens. */
+    /* Cross-component paints & shared contracts derived from system tokens. */
     --nest-ink: light-dark(
-      color-mix(in oklch, var(--color-neutral-8) 85%, var(--color-neutral-9)),
-      color-mix(in oklch, var(--color-neutral-7) 50%, var(--color-neutral-8))
-    );
-    --account-week-toward: light-dark(
-      oklch(from var(--color-neutral-12) 0% 0 0),
-      oklch(from var(--color-neutral-1) 100% 0 0)
-    );
-    --account-week-mix: 0.32;
-    --account-stale-opacity: 0.82;
-    --ring-track-spent: light-dark(
-      oklch(from var(--color-neutral-7) 80.5% 0.016 80),
-      var(--color-neutral-8)
-    );
-    --meter-wash-over: light-dark(
-      color-mix(in oklch, var(--color-status-fail-ink) 6%, transparent),
-      color-mix(in oklch, var(--color-status-fail-ink) 10%, transparent)
-    );
-    --mark-deck-shade: oklch(from var(--color-neutral-12) 14% 0.01 60);
-    --mark-deck-cast: oklch(from var(--color-neutral-12) 0 0 0 / 0.16);
-    --scrollbar-thumb: oklch(from var(--color-ink-muted) l c h / 0.35);
-    --prose-bullet: oklch(from var(--color-ink-muted) l c h / 0.55);
-    --tab-shade: light-dark(
-      oklch(from var(--color-neutral-12) l c h / 0.24),
-      oklch(from var(--color-neutral-12) l c h / 0.14)
-    );
-    --tab-shade-chosen: light-dark(var(--tab-shade), transparent);
-    --shadow-tint-2: light-dark(
-      oklch(from var(--color-neutral-12) l c h / 0.14),
-      oklch(from var(--color-neutral-1) l c h / 0.66)
-    );
-    --shadow-tint-3: light-dark(
-      oklch(from var(--color-neutral-12) l c h / 0.2),
-      oklch(from var(--color-neutral-1) l c h / 0.76)
-    );
-    --mark-overlay: linear-gradient(
-      oklch(from var(--color-neutral-1) l c h / 0.22),
-      oklch(from var(--color-neutral-12) l c h / 0.06)
+      oklch(70.5% 0.017 78),
+      oklch(44.5% 0.011 73)
     );
     --rail: linear-gradient(
-      oklch(from var(--color-neutral-11) l c h / 0.4),
-      oklch(from var(--color-neutral-11) l c h / 0.4)
+      oklch(from var(--color-ink-muted) l c h / 0.4),
+      oklch(from var(--color-ink-muted) l c h / 0.4)
     );
-    --head-tint-ramp: linear-gradient(
-      oklch(from var(--color-ink-strong) l c h / 1),
-      oklch(from var(--color-ink-strong) l c h / 0.996),
-      oklch(from var(--color-ink-strong) l c h / 0.968),
-      oklch(from var(--color-ink-strong) l c h / 0.892),
-      oklch(from var(--color-ink-strong) l c h / 0.744),
-      oklch(from var(--color-ink-strong) l c h / 0.5),
-      oklch(from var(--color-ink-strong) l c h / 0.256),
-      oklch(from var(--color-ink-strong) l c h / 0.108),
-      oklch(from var(--color-ink-strong) l c h / 0.032),
-      oklch(from var(--color-ink-strong) l c h / 0.004),
-      oklch(from var(--color-ink-strong) l c h / 0)
-    );
-    --surface-recess-clear: oklch(from var(--color-surface-recess) l c h / 0);
     --shadow-overlay-hung:
       0 calc(var(--spacing) * 4.5) calc(var(--spacing) * 12)
-        var(--shadow-tint-3),
-      0 2px calc(var(--spacing) * 1.5) var(--color-shadow-tint);
-
-    /* Component-local motion and rim mechanics. */
-    --ghost-presence: 0.7;
-    --tab-rim-mix-chosen: 0.97;
-    --tab-rim-mix-idle: 0.86;
-    --tab-rim-mix-subtle: 0.5;
-    --tab-rim-width: 1;
-    --tab-rim-taper: 32;
-    --tab-rim-taper-ease: 6;
-    --tab-rim-glow: calc(var(--spacing) * 1.5);
-    --tab-rim-glow-room: var(--spacing-space-6);
-    --leave-scale: 0.97;
-    --deck-step: calc(var(--spacing-space-1) * 0.3125);
-    --deck-shrink: 0.11;
-    --deck-shade-step: 0.2;
-    --c-deck-scale: 0.94;
-    --echo-scale: 1.45;
-    --echo-opacity: 0.45;
-    --ride-fade: calc(var(--spacing) * 3.5);
-    --tip-rise: 2px;
-    --swap-nudge: calc(var(--spacing) * 10);
-    --fold-blur: 2px;
-    --part-blur: var(--spacing-space-1);
-    --goo-join: var(--radius-lg);
-    --skeleton-pulse-floor: 0.5;
-    --skeleton-reveal-blur: 2px;
-    --roll-reach: 100vmax;
-    --optical-nudge: calc(1px / 2);
-    --hit-nudge: calc(1px / 2);
-    --figure-bearing: calc(1em * 0.07);
-    --c-ask-diff-share: 0.4;
-    --blur-fade-transition:
-      opacity var(--duration-fade) var(--ease-out),
-      filter var(--duration-fade) var(--ease-out);
-    --blur-slide-fade-transition:
-      opacity var(--duration-fade) var(--ease-out),
-      translate var(--duration-panel) var(--ease-drawer),
-      filter var(--duration-fade) var(--ease-out);
-
-    /* Component-local geometry, expressed on the 4px spacing unit. */
-    --caw-peek: calc(var(--spacing) * 40);
-    --caw-peek-rise: calc(var(--spacing) * 22.75);
-    --channel-card-max: calc(var(--spacing) * 70);
-    --row-mark: calc(var(--spacing) * 4.25);
-    --row-mark-glyph: calc(var(--spacing) * 2.75);
-    --row-mark-box: calc(var(--spacing) * 4.5);
-    --well-x: calc((var(--row-mark-box) - var(--row-mark)) / 2);
-    --tx-x-rail: var(--spacing-space-2);
-    --tx-x-rail-narrow: 0px;
-    --tx-w-glyph: var(--spacing-icon-md);
-    --hover-panel-max: calc(var(--spacing) * 110);
-    --hover-panel-inset: var(--spacing-space-2);
-    --tx-line: calc(var(--spacing) * 6.5);
-    --tx-compact-caw: calc(var(--spacing) * 4.5);
-    --tx-compact-wave: calc(var(--spacing) * 1.5);
-    --tx-diff-cap: calc(var(--spacing) * 100);
-    --tx-field-cap: calc(var(--spacing) * 75);
-    --tx-shot: calc(var(--spacing) * 60);
-    --tx-shot-thumb: calc(var(--spacing) * 12);
-    --tx-preview-max: calc(var(--spacing) * 110);
-    --tx-preview-min: calc(var(--spacing) * 20);
-    --tx-preview-thumb-w: calc(var(--spacing) * 22.5);
-    --tx-preview-thumb-h: calc(var(--spacing) * 16);
-    --status-dot-size: calc(var(--spacing) * 1.5);
-    --status-dot-cut: calc(var(--spacing) * 0.375);
-    --row-tall-h: calc(2 * var(--spacing-space-5) + 2 * var(--spacing-space-1));
-    --fig-pad: var(--spacing-space-3);
-    --fig-chip: calc(var(--spacing) * 2.5);
-    --fig-cap-line: var(--spacing-space-4);
-    --fig-cap-foot: var(--spacing-space-2);
-    --composer-field: calc(var(--spacing) * 8.5);
+        light-dark(oklch(29.5% 0.01 70 / 0.2), oklch(18.4% 0.004 70 / 0.76)),
+      0 2px calc(var(--spacing) * 1.5)
+        light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55));
+    --well-x: calc(var(--spacing) * 0.125);
     --composer-panel: calc(
-      var(--composer-field) + var(--spacing-space-2) * 2 + 2px
+      var(--spacing) * 8.5 + var(--spacing-space-2) * 2 + 2px
     );
     --composer-w: min(
       calc(var(--spacing) * 180),
       calc(100% - var(--spacing) * 13)
     );
-    --inset-composer: calc(var(--spacing-space-2) + var(--border-width));
-    --inset-floating: calc(var(--border-width) + var(--spacing) * 1.5);
-    --suggest-chip: calc(
-      var(--spacing-space-5) + var(--spacing-space-1) * 2 + 2px
-    );
-    --suggest-row: calc(
-      var(--spacing-space-4) + var(--spacing-space-1) * 2 + var(--suggest-chip)
-    );
-    --suggest-room: calc(var(--suggest-row) + var(--spacing-space-2));
-    --starter-w: calc(var(--spacing) * 44);
-    --starters-w: calc(var(--starter-w) * 4 + var(--spacing-space-2) * 3);
-    --tray-chip: var(--spacing-row-compact);
-    --tray-gap: var(--spacing-space-2);
-    --tray-row: calc(var(--tray-chip) + var(--tray-gap));
-    --ledger-text-inset: calc(var(--spacing-icon-md) + var(--spacing-space-2));
-    --field-inline-inset: calc(var(--spacing-space-3) - var(--border-width));
+    --tray-row: calc(var(--spacing-row-compact) + var(--spacing-space-2));
     --draft-col-h: calc(
       5 * var(--spacing-space-1) + var(--spacing-space-2) +
-        var(--spacing-control-sm) + 2 * var(--text-meta) * var(--leading-label)
+        var(--spacing-control-sm) + 2 * var(--leading-sm)
     );
-    --usage-strip-row: calc(
-      var(--spacing-icon-md) + var(--spacing-space-1) + var(--spacing) * 3.75
-    );
-    --usage-strip-clip: calc(var(--usage-strip-row) + var(--spacing-space-1));
     --pin-card-reading-w: clamp(
       calc(var(--spacing) * 70),
       40cqi,
       calc(var(--spacing) * 120)
     );
-    --step-rail-x: calc(var(--spacing-icon-md) / 2);
-    --step-rail-top: calc(
-      (var(--spacing-control-sm) + var(--spacing-icon-md)) / 2
-    );
-    --step-rail-gap: calc(
-      (var(--spacing-control-sm) - var(--spacing-icon-md)) / 2
-    );
     --head-room: calc(var(--spacing-control-md) + 2 * var(--spacing-space-2));
-    --edge-fade-len: var(--spacing-row);
+
+    /* JS-read component geometry & motion constants (paired with @property above). */
+    --tab-rim-mix-subtle: 0.5;
+    --tab-rim-width: 1;
+    --tab-rim-taper: 32;
+    --tab-rim-taper-ease: 6;
+    --deck-step: calc(var(--spacing-space-1) * 0.3125);
+    --deck-shrink: 0.11;
+    --c-deck-scale: 0.94;
+    --echo-scale: 1.45;
+    --echo-opacity: 0.45;
+    --ride-fade: calc(var(--spacing) * 3.5);
+    --skeleton-reveal-blur: 2px;
+    --hover-panel-max: calc(var(--spacing) * 110);
     --decision-page-max: calc(var(--spacing) * 337);
-    --picture-min: calc(var(--spacing) * 40);
-    --usage-tile-min: calc(var(--spacing) * 62);
-    --stat-tile-min: calc(var(--spacing) * 38);
-    --model-list-max: calc(var(--spacing) * 58);
-    --drag-dots-tile: calc(var(--spacing) * 1.25);
-    --drag-dots-edge: calc(var(--spacing) * 0.375);
-    --corner-grip-stroke: calc(var(--spacing) * 0.375);
-    --graph-edge: calc(var(--spacing) * 0.375);
-    --tree-mark-hole-edge: calc(1px / 4);
-    --tip-arrow-nudge: calc(var(--spacing) * 0.375);
-    --hang-shadow-room: calc(var(--spacing) * 30);
-    --tab-strip-uncapped: 100vw;
-    --compaction-word-bleed: calc(1em / 2);
     --sidebar-w: calc(var(--spacing) * 57);
     --pin-card-w: calc(var(--spacing) * 70);
     --graph-node-w: calc(var(--spacing) * 52);
     --graph-label: calc(var(--spacing) * 40);
     --graph-stage-min: calc(var(--spacing) * 150);
-    --graph-move-name-w: calc(var(--spacing) * 48);
-    --graph-control-w: calc(var(--spacing) * 64);
-    --signin-pop-w: calc(var(--spacing) * 85);
-    --panel-w: calc(var(--spacing) * 95);
-    --find-w: calc(var(--spacing) * 130);
-    --connect-w: calc(var(--spacing) * 120);
-    --caw-panel-h: calc(var(--spacing) * 160);
-    --board-col-min: calc(var(--spacing) * 60);
-    --board-col-max: calc(var(--spacing) * 88);
-    --roster-card-min: calc(var(--spacing) * 70);
-    --line-answer-w: calc(var(--spacing) * 33);
-    --line-answer-w-narrow: calc(var(--spacing) * 32);
-    --answer-w: calc(var(--spacing) * 28);
-    --foot-fade: calc(var(--spacing) * 24);
-    --session-hover-room: calc(var(--spacing) * 90);
-    --block-body-max: calc(var(--spacing) * 120);
     --grid-4: calc(var(--spacing) * 240);
     --grid-2: calc(var(--spacing) * 184);
     --block-routines: calc(var(--spacing) * 136);
     --block-ledger: calc(var(--spacing) * 75);
     --block-view: calc(var(--spacing) * 62);
-    --sheet-max-h: 85vh;
-    --peek-sheet-h: 80dvh;
-    --line-sheet-h: 70dvh;
-    --grabber-w: calc(var(--spacing) * 25);
-    --grabber-h: calc(var(--spacing) * 1.5);
-    --decision-meter-w: calc(var(--spacing) * 30);
-    --decision-option-min: calc(var(--spacing) * 47.5);
-    --decision-code: calc(1em * 0.9);
-    --canvas-skeleton-w: calc(var(--spacing) * 60);
-    --address-qr: calc(var(--spacing) * 28);
-    --address-caw: calc(var(--spacing) * 16);
-    --address-phone-h: calc(var(--spacing) * 195);
-    --caw-hero: calc(var(--spacing) * 20);
-    --pose-tile: calc(var(--spacing) * 16);
-    --roster-face: calc(var(--spacing) * 12);
-    --bench-phone-h: calc(var(--spacing) * 211);
-    --mark-box: calc(var(--spacing) * 6.5);
-    --bar-symbol: calc(var(--spacing) * 4.5);
-    --context-bar-min: calc(var(--spacing) * 12);
-    --context-bar-max: calc(var(--spacing) * 24);
-    --lightbox-sheet-w: min(100%, calc(var(--spacing) * 240));
-    --lightbox-sheet-max-h: min(86dvh, 100%);
-    --doc-max: min(100%, calc(var(--spacing) * 64));
 
-    /* A native checkbox, radio, range or progress takes the act colour, never
-       the browser's blue (DESIGN.md, Coral Action: "checked checkboxes and
-       switches"; blue is a status hue). Inherited, so every native control in
-       the page takes it. */
-    accent-color: var(--color-action-solid);
-  }
-
-  :root.dark,
-  [data-scheme="dark"] {
-    --account-week-mix: 0.63;
-    --tab-rim-mix-chosen: 0.78;
-    --tab-rim-mix-idle: 0.54;
-  }
-
-  [data-scheme="light"] {
-    --account-week-mix: 0.32;
-    --tab-rim-mix-chosen: 0.97;
-    --tab-rim-mix-idle: 0.86;
+    /* A native checkbox, radio, range or progress takes the accent colour. */
+    accent-color: var(--color-accent);
   }
 
   @media (pointer: coarse) {
     :root {
-      --tray-chip: calc(var(--spacing) * 8.5);
-      --tray-gap: var(--spacing-space-3);
+      --tray-row: calc(var(--spacing) * 8.5 + var(--spacing-space-3));
     }
   }
 
@@ -797,7 +548,7 @@
   :where(iframe),
   :where([tabindex]),
   :where([contenteditable]:not([contenteditable="false"])) {
-    outline-color: var(--color-focus-ring);
+    outline-color: var(--color-accent-ink);
   }
 
   /* An enabled button takes the pointer hand; a disabled or pending one
@@ -832,7 +583,7 @@
   /* The body's background is the screen's bottom edge (cawco/ScreenEdges). */
   body {
     @apply text-ink-strong;
-    font: var(--type-body);
+    font: var(--font-weight-normal) var(--text-base) / var(--leading-base) var(--font-sans);
   }
 
   /* The mono face never ligates: here for code, and in the `font-mono`
@@ -861,7 +612,7 @@
      lib/tokens/selection.css). */
   input,
   textarea {
-    caret-color: var(--color-brand-solid);
+    caret-color: var(--color-accent);
   }
 
   /* A native range is a groove with the act's thumb: its track sits below
@@ -885,7 +636,7 @@
     &::-moz-range-progress {
       block-size: var(--spacing-space-1);
       border-radius: var(--radius-pill);
-      background: var(--color-action-solid);
+      background: var(--color-accent);
     }
     &::-webkit-slider-thumb {
       appearance: none;
@@ -896,14 +647,14 @@
       );
       border: none;
       border-radius: var(--radius-pill);
-      background: var(--color-action-solid);
+      background: var(--color-accent);
     }
     &::-moz-range-thumb {
       inline-size: var(--spacing-icon-md);
       block-size: var(--spacing-icon-md);
       border: none;
       border-radius: var(--radius-pill);
-      background: var(--color-action-solid);
+      background: var(--color-accent);
     }
   }
 
@@ -914,11 +665,11 @@
      been focused using the keyboard" (tailwindcss.com/docs/hover-focus-
      and-other-states). */
   :focus-visible {
-    outline: var(--focus-ring-width) solid var(--color-focus-ring);
-    outline-offset: var(--focus-ring-offset);
+    outline: 2px solid var(--color-accent-ink);
+    outline-offset: 2px;
     /* A scroller brings a focused control in with room for its ring, so
        the scroller's edge never cuts it. */
-    scroll-margin: calc(var(--focus-ring-offset) + var(--focus-ring-width));
+    scroll-margin: calc(2px + 2px);
   }
 
   /* A select and the rows: the ring sits on the element's own border box. */
@@ -930,7 +681,7 @@
     [role="row"],
     [role="gridcell"]
   ):focus-visible {
-    outline-offset: var(--focus-ring-inset);
+    outline-offset: -2px;
   }
 
   /* A control standing in a bar's glass (the `glass-item` variant's
@@ -950,7 +701,7 @@
           *
       )
     ):focus-visible {
-    outline-offset: var(--focus-ring-inset);
+    outline-offset: -2px;
   }
 
   /* Text entry draws no ring (DESIGN.md, The Caret Rule): its focus
@@ -979,8 +730,8 @@
     outline-style: none;
 
     @media (forced-colors: active) {
-      outline: var(--focus-ring-width) solid transparent;
-      outline-offset: var(--focus-ring-inset);
+      outline: 2px solid transparent;
+      outline-offset: -2px;
     }
   }
 
@@ -1046,10 +797,10 @@
   textarea,
   select {
     @variant max-phone {
-      font-size: max(var(--text-row), 1em);
+      font-size: max(calc(var(--spacing) * 4), 1em);
     }
     @variant coarse {
-      font-size: max(var(--text-row), 1em);
+      font-size: max(calc(var(--spacing) * 4), 1em);
     }
   }
 
@@ -1133,14 +884,6 @@
   }
 }
 
-/* ---- Project identity colour (see lib/cawco/identity.ts). Elements set
-   --identity-h inline; this utility fixes lightness and chroma per theme.
-   Identity is ink — never a status dot. */
-@utility identity-ink {
-  /* The token's lightness and chroma per scheme, at the project's hue. */
-  color: oklch(from var(--color-identity-ink) l c var(--identity-h, 120));
-}
-
 /* A row held under a finger (utils/longpress.ts marks it `data-holding`,
    whatever row it is) takes the press tint (`press-tint`, the behaviours,
    below) for as long as it is held, over the row's own fill:
@@ -1155,7 +898,7 @@
   :root:not(.dark) [data-holding] {
     --color-ink-muted: var(--color-ink-strong);
     --color-ink-subtle: var(--color-ink-strong);
-    --color-brand-ink: var(--color-ink-strong);
+    --color-accent-ink: var(--color-ink-strong);
   }
 }
 
@@ -1165,7 +908,7 @@
    less than the field's own inset). Its hover fill is the whole box. */
 @utility pe-measure {
   padding-inline-end: max(
-    var(--field-inline-inset),
+    var(--spacing-space-3),
     calc(100% - var(--spacing-measure))
   );
 }
@@ -1175,7 +918,7 @@
    scroller, where the outside ring would cross the edge or be cut. */
 @utility focus-inset {
   &:focus-visible {
-    outline-offset: var(--focus-ring-inset);
+    outline-offset: -2px;
   }
 }
 
@@ -1441,7 +1184,7 @@
    height normal, every other font subproperty reset. */
 @utility font-mono-meta {
   --tw-sort: vertical-align;
-  font: var(--text-meta) var(--font-mono);
+  font: var(--text-sm) var(--font-mono);
 }
 /* The box keywords Tailwind does not write (its `items-start` is
    `flex-start`), and the unsafe alignments. */
@@ -1494,21 +1237,21 @@
 @utility border-suggest-tint {
   border-color: color-mix(
     in srgb,
-    var(--color-action-solid) calc(var(--tint) * 1.5),
+    var(--color-accent) calc(var(--tint) * 1.5),
     var(--color-surface-raised)
   );
 }
 @utility bg-suggest-tint {
   background: color-mix(
     in srgb,
-    var(--color-action-solid) var(--tint),
+    var(--color-accent) var(--tint),
     var(--color-surface-raised)
   );
 }
 @utility bg-suggest-tint-hover {
   background: color-mix(
     in srgb,
-    var(--color-action-solid) calc(var(--tint) + 6%),
+    var(--color-accent) calc(var(--tint) + 6%),
     var(--color-surface-raised)
   );
 }
@@ -1520,9 +1263,9 @@
    beat instead of sliding (DESIGN.md Sheet: "with reduced motion it fades
    over 120ms"), the sheet's own fade animations. */
 @utility sheet-fade {
-  animation: fade-in var(--duration-control) var(--ease-out) backwards;
+  animation: fade-in var(--duration-fast) var(--ease-out) backwards;
   &[data-state="closed"] {
-    animation: fade-out var(--duration-control) var(--ease-out) both;
+    animation: fade-out var(--duration-fast) var(--ease-out) both;
   }
 }
 
@@ -1565,7 +1308,7 @@
   }
   & ul,
   & ol {
-    padding-inline-start: var(--spacing-space-5);
+    padding-inline-start: var(--spacing-space-4);
   }
   & strong {
     color: var(--color-ink-strong);
@@ -1591,7 +1334,7 @@
 /* Caw's attention rim: round-capped arcs of the ring's width, each a dash of
    its own path (pathLength="1"). */
 @utility rim-arc {
-  stroke-width: var(--spacing-space-row);
+  stroke-width: 2px;
   stroke-linecap: round;
   stroke-dasharray: 1;
   stroke-dashoffset: 0;
@@ -1602,9 +1345,9 @@
   background-image: radial-gradient(
     circle,
     var(--color-ink-subtle) 1px,
-    transparent var(--drag-dots-edge)
+    transparent calc(var(--spacing) * 0.375)
   );
-  background-size: var(--drag-dots-tile) var(--drag-dots-tile);
+  background-size: calc(var(--spacing) * 1.25) calc(var(--spacing) * 1.25);
 }
 
 /* A row's ghost controls rest on the strong fill under a resting pointer by
@@ -1697,7 +1440,7 @@
   --fade-len: --value(--spacing-*, [*]);
 }
 @utility hit-edge-hair {
-  --hit-edge: var(--border-width);
+  --hit-edge: 1px;
 }
 @utility tray-indent-* {
   --ask-indent: --value(--spacing-*);
@@ -1752,7 +1495,7 @@
 }
 @utility rim-glow {
   filter: drop-shadow(
-    0 0 var(--tab-rim-glow)
+    0 0 calc(var(--spacing) * 1.5)
       color-mix(in oklab, var(--rim-ink, transparent) 50%, transparent)
   );
 }
@@ -1818,7 +1561,7 @@
    edges are one. */
 @utility decision-page-insets {
   --page-in: var(--spacing-space-6);
-  --card-in: var(--spacing-space-5);
+  --card-in: var(--spacing-space-4);
   --bleed: calc(var(--page-in) + var(--card-in));
   --page-w: var(--decision-page-max);
   --column-w: var(--page-w);
@@ -1862,7 +1605,7 @@
 @utility picture-row {
   [data-axis="row"] > & {
     flex: var(--ratio) 1
-      calc(var(--ratio) / var(--ratio-min, var(--ratio)) * var(--picture-min));
+      calc(var(--ratio) / var(--ratio-min, var(--ratio)) * calc(var(--spacing) * 40));
   }
   [data-axis="row"] > &:has([data-full]) {
     flex-basis: 100%;
@@ -1912,41 +1655,40 @@
    selection pill under it on the ghost's own clock. */
 @utility transition-well-surface {
   transition:
-    border-color var(--duration-panel) var(--ease-out),
-    border-radius var(--duration-panel) var(--ease-out),
-    opacity var(--duration-panel) var(--ease-drawer),
-    background-color var(--duration-control) var(--ease-out);
+    border-color var(--duration-slow) var(--ease-out),
+    border-radius var(--duration-slow) var(--ease-out),
+    opacity var(--duration-slow) var(--ease-drawer),
+    background-color var(--duration-fast) var(--ease-out);
 }
 /* Tiles as many to a row as fit at their least width, a lone tile no wider
    than its row (Limits, a project's spend). */
 @utility grid-cols-usage-tiles {
   grid-template-columns: repeat(
     auto-fill,
-    minmax(min(100%, var(--usage-tile-min)), 1fr)
+    minmax(min(100%, calc(var(--spacing) * 62)), 1fr)
   );
 }
 @utility grid-cols-stat-tiles {
   grid-template-columns: repeat(
     auto-fit,
-    minmax(min(100%, var(--stat-tile-min)), 1fr)
+    minmax(min(100%, calc(var(--spacing) * 38)), 1fr)
   );
 }
 /* The reserve's hatch on a usage meter. */
 @utility hatched {
   background-image: repeating-linear-gradient(
     -45deg,
-    var(--color-border-control) 0 var(--border-width),
-    var(--ring-ground, var(--color-surface-raised)) var(--border-width)
+    var(--color-border-control) 0 1px,
+    var(--ring-ground, var(--color-surface-raised)) 1px
       var(--spacing-space-1)
   );
 }
 /* A usage ring's week arc, its account ink moved toward the week's, and the
    ground it is cut from. */
 @utility arc-week {
-  stroke: color-mix(
-    in oklch,
-    var(--c),
-    var(--account-week-toward) calc(var(--account-week-mix) * 100%)
+  stroke: light-dark(
+    color-mix(in oklch, var(--c), oklch(0% 0 0) 32%),
+    color-mix(in oklch, var(--c), oklch(100% 0 0) 63%)
   );
 }
 @utility arc-ground {
@@ -1954,7 +1696,7 @@
 }
 /* Svelte Flow's handle reads its colour off this property. */
 @utility xy-handle-brand {
-  --xy-handle-background-color: var(--color-brand-solid);
+  --xy-handle-background-color: var(--color-accent);
 }
 /* ---- The transcript's columns. Every row kind lays out on these four
    edges, measured from the row's own inline start: the rail, the glyph cell
@@ -1964,16 +1706,16 @@
    them, so every level of nesting steps in by exactly one text column. A
    phone's rows stand the rail on their own edge. */
 @utility tx-columns {
-  --x-rail: var(--tx-x-rail);
+  --x-rail: var(--spacing-space-2);
   --x-glyph: calc(var(--x-rail) + var(--spacing-space-3));
-  --w-glyph: var(--tx-w-glyph);
+  --w-glyph: var(--spacing-icon-md);
   --x-text: calc(var(--x-glyph) + var(--w-glyph) + var(--spacing-space-2));
   /* How far a hung body sits from the rail row's content edge (the glyph
      column): the text column, relative. */
   --x-hang: calc(var(--x-text) - var(--x-glyph));
 
   @media (width < --theme(--breakpoint-desk)) {
-    --x-rail: var(--tx-x-rail-narrow);
+    --x-rail: 0px;
   }
 }
 /* A rail-led row: in its place, its 2px rail at --x-rail and its content
@@ -2019,12 +1761,12 @@
   background:
     linear-gradient(var(--color-border-hairline), var(--color-border-hairline))
       bottom / 100% 1px no-repeat,
-    var(--color-surface-shelf);
+    var(--color-surface-sunk);
 }
 /* The bar's glass, a step blurrier than the panel material (Shell). */
 @utility glass-backdrop {
-  backdrop-filter: blur(calc(var(--material-blur) * 1.4))
-    saturate(var(--material-saturate));
+  backdrop-filter: blur(calc(var(--blur-glass) * 1.4))
+    saturate(1.6);
 }
 /* The bar's join to the strip under it: a flared foot (--f) into a rounded
    top (--r) over its height (--h); on a phone its trailing top corner is
@@ -2085,16 +1827,16 @@
   & [data-slot="search"] input {
     --autowidth: 1;
     @variant motion-safe {
-      transition: width var(--duration-control) var(--ease-out);
+      transition: width var(--duration-fast) var(--ease-out);
     }
   }
   & [data-slot="list"] {
     height: auto;
-    max-height: var(--model-list-max);
+    max-height: calc(var(--spacing) * 58);
     overflow: hidden auto;
     scroll-snap-type: y mandatory;
     /* The row gap, so a snapped row's neighbour shows none of itself. */
-    scroll-padding: var(--spacing-space-row);
+    scroll-padding: var(--spacing-space-1);
   }
   & [data-slot="pick-row"] {
     scroll-snap-align: start;
@@ -2110,7 +1852,7 @@
     color: var(--color-ink-strong);
 
     @variant motion-safe {
-      transition: color var(--duration-panel) var(--ease-out);
+      transition: color var(--duration-slow) var(--ease-out);
     }
   }
 }
@@ -2122,11 +1864,11 @@
    `--overlap` resolve there: a pixel short of the kit's at the end, and on
    the phone's row a title's room at each end that clears the overlap. */
 @utility pane-tab-pads {
-  --px-end: calc(var(--px) - var(--border-width));
+  --px-end: calc(var(--px) - 1px);
 
   @media (width < --theme(--breakpoint-desk)) {
     --px-start: calc(var(--overlap) + var(--spacing-space-3));
-    --px-end: calc(var(--overlap) + var(--radius-lg) - var(--border-width));
+    --px-end: calc(var(--overlap) + var(--radius-lg) - 1px);
   }
 }
 /* The strengths a pane tab's rim takes (PaneTabs `RIM`), solid under
@@ -2134,8 +1876,12 @@
    ancestor's `--tab-rim-mix-*` (the folder proof page) still reaches it. */
 @utility pane-tab-rims {
   --rim-subtle: var(--tab-rim-mix-subtle);
-  --rim-chosen: var(--tab-rim-mix-chosen);
-  --rim-idle: var(--tab-rim-mix-idle);
+  --rim-chosen: 0.97;
+  --rim-idle: 0.86;
+  :where(.dark, [data-scheme="dark"]) & {
+    --rim-chosen: 0.78;
+    --rim-idle: 0.54;
+  }
 
   @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
     --rim-subtle: 1;
@@ -2148,23 +1894,23 @@
    beside the word. It leaves a little quicker than it arrives; a state that
    shows it names the arrival's clock. */
 @utility divider-chevron {
-  --line: var(--color-brand-solid);
+  --line: var(--color-accent);
   --chev: 0;
-  --chev-dur: var(--duration-control);
+  --chev-dur: var(--duration-fast);
   --chev-ease: var(--ease-out);
 
   /* In for keyboard focus and while the brief is open. */
   &:is(:focus-visible, [aria-expanded="true"]) {
     --chev: 1;
-    --chev-dur: var(--duration-fade);
+    --chev-dur: var(--duration-base);
   }
   /* Under the pointer the line and word step to the stronger vermillion and
      the chevron comes in. */
   @media (hover: hover) and (pointer: fine) {
     &:hover:not(:disabled) {
-      --line: var(--color-brand-ink);
+      --line: var(--color-accent-ink);
       --chev: 1;
-      --chev-dur: var(--duration-fade);
+      --chev-dur: var(--duration-base);
     }
   }
   /* A finger has no hover: what opens always shows that it does. */
@@ -2188,7 +1934,7 @@
     translate var(--chev-dur) var(--chev-ease),
     scale var(--chev-dur) var(--chev-ease),
     filter var(--chev-dur) var(--chev-ease),
-    rotate var(--duration-fade) var(--ease-in-out);
+    rotate var(--duration-base) var(--ease-in-out);
 }
 /* A turn's pad (the transcript skeleton's reader well), a step down at the
    narrow breakpoint. */
@@ -2357,7 +2103,7 @@
    a role's `font` shorthand on the same element would reset the face. */
 @utility mono-figure {
   font-family: var(--font-mono);
-  font-size-adjust: cap-height var(--mono-figure-cap);
+  font-size-adjust: cap-height 0.703;
   font-variant-ligatures: none;
   font-variant-numeric: tabular-nums;
 }
@@ -2428,259 +2174,281 @@
 }
 
 @utility bg-mark-overlay {
-  background-image: var(--mark-overlay);
+  background-image: linear-gradient(
+    oklch(from var(--color-surface-raised) l c h / 0.22),
+    oklch(from var(--color-ink-strong) l c h / 0.06)
+  );
 }
 @utility bg-rail {
   background-image: var(--rail);
 }
-@utility bg-head-tint-ramp {
-  background-image: var(--head-tint-ramp);
+@utility mask-head-tint {
+  mask-image: linear-gradient(
+    oklch(from var(--color-ink-strong) l c h / 1),
+    oklch(from var(--color-ink-strong) l c h / 0.996),
+    oklch(from var(--color-ink-strong) l c h / 0.968),
+    oklch(from var(--color-ink-strong) l c h / 0.892),
+    oklch(from var(--color-ink-strong) l c h / 0.744),
+    oklch(from var(--color-ink-strong) l c h / 0.5),
+    oklch(from var(--color-ink-strong) l c h / 0.256),
+    oklch(from var(--color-ink-strong) l c h / 0.108),
+    oklch(from var(--color-ink-strong) l c h / 0.032),
+    oklch(from var(--color-ink-strong) l c h / 0.004),
+    oklch(from var(--color-ink-strong) l c h / 0)
+  );
 }
-@utility action-stops {
-  --tw-gradient-from: oklch(from var(--color-action-solid) calc(l + 0.03) c h);
-  --tw-gradient-to: oklch(from var(--color-action-solid) calc(l - 0.03) c h);
+@utility accent-stops {
+  --tw-gradient-from: oklch(from var(--color-accent) calc(l + 0.025) c h);
+  --tw-gradient-to: oklch(from var(--color-accent) calc(l - 0.025) c h);
 }
-@utility action-stops-hover {
-  --tw-gradient-from: oklch(from var(--color-action-hover) calc(l + 0.03) c h);
-  --tw-gradient-to: oklch(from var(--color-action-hover) calc(l - 0.03) c h);
+@utility accent-stops-hover {
+  --tw-gradient-from: oklch(from var(--color-accent) calc(l - 0.02) c h);
+  --tw-gradient-to: oklch(from var(--color-accent) calc(l - 0.07) c h);
 }
 
 @utility shadow-overlay-hung {
   box-shadow: var(--shadow-overlay-hung);
 }
 @utility shadow-tab-start {
-  box-shadow: -2px 0 calc(var(--spacing) * 1.25) -1px var(--tab-shade);
+  box-shadow: -2px 0 calc(var(--spacing) * 1.25) -1px light-dark(oklch(29.5% 0.01 70 / 0.24), oklch(93.4% 0.01 82 / 0.14));
 }
 @utility shadow-tab-end {
-  box-shadow: 2px 0 calc(var(--spacing) * 1.25) -1px var(--tab-shade);
+  box-shadow: 2px 0 calc(var(--spacing) * 1.25) -1px light-dark(oklch(29.5% 0.01 70 / 0.24), oklch(93.4% 0.01 82 / 0.14));
 }
 @utility shadow-tab-start-chosen {
-  box-shadow: -2px 0 calc(var(--spacing) * 1.25) -1px var(--tab-shade-chosen);
+  box-shadow: -2px 0 calc(var(--spacing) * 1.25) -1px light-dark(oklch(29.5% 0.01 70 / 0.24), transparent);
 }
 @utility shadow-tab-end-chosen {
-  box-shadow: 2px 0 calc(var(--spacing) * 1.25) -1px var(--tab-shade-chosen);
+  box-shadow: 2px 0 calc(var(--spacing) * 1.25) -1px light-dark(oklch(29.5% 0.01 70 / 0.24), transparent);
 }
 @utility drop-shadow-near {
-  filter: drop-shadow(0 2px var(--spacing-space-1) var(--color-shadow-tint));
+  filter: drop-shadow(0 2px var(--spacing-space-1) light-dark(oklch(29.5% 0.01 70 / 0.09), oklch(18.4% 0.004 70 / 0.55)));
 }
 
 /* Component transitions composed from the seven durations and four curves. */
 @utility transition-fade-blur {
-  transition: var(--blur-fade-transition);
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    filter var(--duration-base) var(--ease-out);
 }
 @utility transition-fade-slide-blur {
-  transition: var(--blur-slide-fade-transition);
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    translate var(--duration-slow) var(--ease-drawer),
+    filter var(--duration-base) var(--ease-out);
 }
 @utility transition-fold-fade {
-  transition: var(--blur-fade-transition);
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    filter var(--duration-base) var(--ease-out);
 }
 @utility transition-tint-press {
   transition:
-    background-color var(--duration-control) var(--ease-out),
-    color var(--duration-control) var(--ease-out),
-    transform var(--duration-fade) var(--ease-out);
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
 }
 @utility transition-control-press {
   transition:
-    background-color var(--duration-control) var(--ease-out),
-    border-color var(--duration-control) var(--ease-out),
-    color var(--duration-control) var(--ease-out),
-    --tw-gradient-from var(--duration-control) var(--ease-out),
-    --tw-gradient-to var(--duration-control) var(--ease-out),
-    transform var(--duration-fade) var(--ease-out);
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    --tw-gradient-from var(--duration-fast) var(--ease-out),
+    --tw-gradient-to var(--duration-fast) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
 }
 @utility transition-control-slide {
   transition:
-    background-color var(--duration-control) var(--ease-out),
-    border-color var(--duration-control) var(--ease-out),
-    color var(--duration-control) var(--ease-out),
-    translate var(--duration-fade) var(--ease-out);
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    translate var(--duration-base) var(--ease-out);
 }
 @utility transition-control-ring {
   transition:
-    background-color var(--duration-control) var(--ease-out),
-    border-color var(--duration-control) var(--ease-out),
-    color var(--duration-control) var(--ease-out),
-    box-shadow var(--duration-control) var(--ease-out);
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 @utility transition-chip-settle {
   transition:
-    background-color var(--duration-panel) var(--ease-out),
-    color var(--duration-panel) var(--ease-out),
-    transform var(--duration-fade) var(--ease-out);
+    background-color var(--duration-slow) var(--ease-out),
+    color var(--duration-slow) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
 }
 @utility transition-pick-card {
   transition:
-    border-color var(--duration-fade) var(--ease-out),
-    background-color var(--duration-fade) var(--ease-out),
-    transform var(--duration-control) var(--ease-out);
+    border-color var(--duration-base) var(--ease-out),
+    background-color var(--duration-base) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
 }
 @utility transition-frame-end-first {
   transition:
-    inset-inline-end var(--duration-fade) var(--ease-in-out) 0ms,
-    inset-inline-start var(--duration-fade) var(--ease-in-out)
-      var(--duration-control);
+    inset-inline-end var(--duration-base) var(--ease-in-out) 0ms,
+    inset-inline-start var(--duration-base) var(--ease-in-out)
+      var(--duration-fast);
 }
 @utility transition-frame-start-first {
   transition:
-    inset-inline-start var(--duration-fade) var(--ease-in-out) 0ms,
-    inset-inline-end var(--duration-fade) var(--ease-in-out)
-      var(--duration-control);
+    inset-inline-start var(--duration-base) var(--ease-in-out) 0ms,
+    inset-inline-end var(--duration-base) var(--ease-in-out)
+      var(--duration-fast);
 }
 @utility transition-split-surface {
   transition:
-    opacity var(--duration-panel) var(--ease-out),
-    transform var(--duration-panel) var(--ease-out),
-    padding var(--duration-panel) var(--ease-drawer);
+    opacity var(--duration-slow) var(--ease-out),
+    transform var(--duration-slow) var(--ease-out),
+    padding var(--duration-slow) var(--ease-drawer);
 }
 @utility transition-ring-arc {
   transition:
-    stroke-dashoffset var(--duration-panel) var(--ease-in-out),
-    stroke var(--duration-fade) var(--ease-out),
-    opacity var(--duration-fade) var(--ease-out);
+    stroke-dashoffset var(--duration-slow) var(--ease-in-out),
+    stroke var(--duration-base) var(--ease-out),
+    opacity var(--duration-base) var(--ease-out);
 }
 @utility transition-rail-tip {
   transition:
-    transform var(--duration-fade) var(--ease-in-out),
-    width var(--duration-fade) var(--ease-in-out),
-    opacity var(--duration-control) var(--ease-out);
+    transform var(--duration-base) var(--ease-in-out),
+    width var(--duration-base) var(--ease-in-out),
+    opacity var(--duration-fast) var(--ease-out);
 }
 @utility transition-suggest-chip {
   transition:
-    scale var(--duration-fade) var(--ease-out),
-    background-color var(--duration-panel) var(--ease-out),
-    border-color var(--duration-panel) var(--ease-out),
-    color var(--duration-control) var(--ease-out);
+    scale var(--duration-base) var(--ease-out),
+    background-color var(--duration-slow) var(--ease-out),
+    border-color var(--duration-slow) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 @utility transition-segment {
   transition:
-    transform var(--duration-fade) var(--ease-out),
-    width var(--duration-fade) var(--ease-out),
-    height var(--duration-fade) var(--ease-out),
-    opacity var(--duration-control) var(--ease-out);
+    transform var(--duration-base) var(--ease-out),
+    width var(--duration-base) var(--ease-out),
+    height var(--duration-base) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
 }
 @utility transition-band-hide {
   transition:
-    opacity var(--duration-fade) var(--ease-out),
-    visibility var(--duration-fade) linear,
-    background-color var(--duration-control) var(--ease-out),
-    color var(--duration-control) var(--ease-out);
+    opacity var(--duration-base) var(--ease-out),
+    visibility var(--duration-base) linear,
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 @utility transition-band-show {
   transition:
-    opacity var(--duration-panel) var(--ease-drawer),
-    visibility var(--duration-panel) linear,
-    background-color var(--duration-control) var(--ease-out),
-    color var(--duration-control) var(--ease-out);
+    opacity var(--duration-slow) var(--ease-drawer),
+    visibility var(--duration-slow) linear,
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 @utility transition-band-slide-hide {
   transition:
-    translate var(--duration-fade) var(--ease-out),
-    opacity var(--duration-fade) var(--ease-out),
-    visibility var(--duration-fade) linear,
-    background-color var(--duration-control) var(--ease-out),
-    color var(--duration-control) var(--ease-out);
+    translate var(--duration-base) var(--ease-out),
+    opacity var(--duration-base) var(--ease-out),
+    visibility var(--duration-base) linear,
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 @utility transition-band-slide-show {
   transition:
-    translate var(--duration-panel) var(--ease-drawer),
-    opacity var(--duration-panel) var(--ease-drawer),
-    visibility var(--duration-panel) linear,
-    background-color var(--duration-control) var(--ease-out),
-    color var(--duration-control) var(--ease-out);
+    translate var(--duration-slow) var(--ease-drawer),
+    opacity var(--duration-slow) var(--ease-drawer),
+    visibility var(--duration-slow) linear,
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 @utility transition-band-row-shut {
-  transition: grid-template-rows var(--duration-fade) var(--ease-out);
+  transition: grid-template-rows var(--duration-base) var(--ease-out);
 }
 @utility transition-band-row-open {
-  transition: grid-template-rows var(--duration-panel) var(--ease-drawer);
+  transition: grid-template-rows var(--duration-slow) var(--ease-drawer);
 }
 
 /* Component animations composed from the seven durations and four curves. */
 @utility animate-check-draw {
-  animation: check-draw var(--duration-fade) var(--ease-out) both;
+  animation: check-draw var(--duration-base) var(--ease-out) both;
 }
 @utility animate-rail-label-in {
-  animation: rail-label-in var(--duration-fade) var(--ease-out) both;
+  animation: rail-label-in var(--duration-base) var(--ease-out) both;
 }
 @utility animate-thinking-word {
-  animation: thinking-word calc(var(--duration-breath) * 8) var(--ease-out)
+  animation: thinking-word calc(calc(var(--duration-loop) * 2) * 8) var(--ease-out)
     var(--word-delay, 0s) infinite both;
 }
 @utility animate-thinking-circle {
-  animation: thinking-circle calc(var(--duration-breath) * 3) var(--ease-in-out)
+  animation: thinking-circle calc(calc(var(--duration-loop) * 2) * 3) var(--ease-in-out)
     infinite both;
 }
 @utility animate-thinking-lemniscate {
-  animation: thinking-lemniscate calc(var(--duration-breath) * 3)
+  animation: thinking-lemniscate calc(calc(var(--duration-loop) * 2) * 3)
     var(--ease-in-out) infinite both;
 }
 @utility animate-thinking-sheen {
-  animation: thinking-sheen var(--duration-breath) var(--ease-in-out) infinite;
+  animation: thinking-sheen calc(var(--duration-loop) * 2) var(--ease-in-out) infinite;
 }
 @utility animate-thinking-sheen-hold {
-  animation: thinking-sheen-hold var(--duration-breath) var(--ease-in-out)
+  animation: thinking-sheen-hold calc(var(--duration-loop) * 2) var(--ease-in-out)
     infinite;
 }
 @utility animate-step-shimmer {
-  animation: step-shimmer var(--duration-breath) var(--ease-in-out) infinite;
+  animation: step-shimmer calc(var(--duration-loop) * 2) var(--ease-in-out) infinite;
 }
 @utility animate-row-flash {
-  animation: row-flash calc(var(--duration-fade) * 3) var(--ease-out) both;
+  animation: row-flash calc(var(--duration-base) * 3) var(--ease-out) both;
 }
 @utility animate-mention-tip-in {
-  animation: mention-tip-in var(--duration-control) var(--ease-out);
+  animation: mention-tip-in var(--duration-fast) var(--ease-out);
 }
 @utility animate-mark-in {
-  animation: mark-in var(--duration-panel) var(--ease-out) both;
+  animation: mark-in var(--duration-slow) var(--ease-out) both;
 }
 @utility animate-sheet-in {
-  animation: sheet-in var(--duration-panel) var(--ease-drawer);
+  animation: sheet-in var(--duration-slow) var(--ease-drawer);
 }
 @utility animate-sheet-out {
-  animation: sheet-out var(--duration-fade) var(--ease-drawer) forwards;
+  animation: sheet-out var(--duration-base) var(--ease-drawer) forwards;
 }
 @utility animate-ns-sec {
-  animation: ns-in var(--duration-panel) var(--ease-out) var(--delay, 0s)
+  animation: ns-in var(--duration-slow) var(--ease-out) var(--delay, 0s)
     backwards;
 }
 @utility animate-ns-pop-in {
-  animation: ns-pop-in var(--duration-panel) var(--ease-drawer) both;
+  animation: ns-pop-in var(--duration-slow) var(--ease-drawer) both;
 }
 @utility animate-ns-pop-out {
-  animation: ns-pop-out var(--duration-fade) var(--ease-out) both;
+  animation: ns-pop-out var(--duration-base) var(--ease-out) both;
 }
 @utility animate-wave-arrive {
-  animation: wave-draw var(--duration-panel) var(--ease-out)
-    calc(var(--duration-fade) + var(--lead)) backwards;
+  animation: wave-draw var(--duration-slow) var(--ease-out)
+    calc(var(--duration-base) + var(--lead)) backwards;
 }
 @utility animate-wave-draw {
-  animation: wave-draw var(--duration-panel) var(--ease-out) backwards;
+  animation: wave-draw var(--duration-slow) var(--ease-out) backwards;
 }
 @utility animate-wave-breathe {
   animation:
-    wave-breath-draw calc(var(--duration-breath) * 2) var(--ease-out) infinite,
-    wave-breath-fade calc(var(--duration-breath) * 2) var(--ease-in-out)
+    wave-breath-draw calc(calc(var(--duration-loop) * 2) * 2) var(--ease-out) infinite,
+    wave-breath-fade calc(calc(var(--duration-loop) * 2) * 2) var(--ease-in-out)
       infinite;
 }
 @utility animate-icon-swap {
-  animation: icon-swap var(--duration-control) var(--ease-out) both;
+  animation: icon-swap var(--duration-fast) var(--ease-out) both;
 }
 @utility animate-icon-swap-still {
-  animation: icon-swap-still var(--duration-control) var(--ease-out) both;
+  animation: icon-swap-still var(--duration-fast) var(--ease-out) both;
 }
 @utility animate-cell-swap {
-  animation: cell-swap var(--duration-control) var(--ease-out);
+  animation: cell-swap var(--duration-fast) var(--ease-out);
 }
 @utility animate-arrive-late {
-  animation: fade-in var(--duration-control) var(--ease-out)
-    var(--duration-control) both;
+  animation: fade-in var(--duration-fast) var(--ease-out)
+    var(--duration-fast) both;
 }
 @utility animate-finish {
-  animation: finish calc(var(--duration-fade) * 2) var(--ease-out);
+  animation: finish calc(var(--duration-base) * 2) var(--ease-out);
 }
 @utility animate-tip-in {
-  animation: kit-tip-in var(--duration-fade) var(--ease-out) both;
+  animation: kit-tip-in var(--duration-base) var(--ease-out) both;
 }
 
 /* ---- Motion is opt-in: every travelling transition and keyframe animation
@@ -2799,7 +2567,7 @@
 @keyframes ns-in {
   from {
     opacity: 0;
-    transform: translateY(var(--pop-rise));
+    transform: translateY(var(--spacing-space-2));
   }
   to {
     opacity: 1;
@@ -2819,7 +2587,7 @@
 @keyframes ns-panel {
   from {
     opacity: 0;
-    transform: translateY(var(--pop-rise));
+    transform: translateY(var(--spacing-space-2));
   }
   to {
     opacity: 1;
@@ -2836,7 +2604,7 @@
   from {
     opacity: 0;
     scale: var(--pop-scale);
-    translate: 0 calc(-1 * var(--pop-rise));
+    translate: 0 calc(-1 * var(--spacing-space-2));
   }
 }
 @keyframes wave-draw {
@@ -2892,7 +2660,7 @@
 @keyframes ns-in-r {
   from {
     opacity: 0;
-    transform: translateX(var(--pop-rise));
+    transform: translateX(var(--spacing-space-2));
   }
   to {
     opacity: 1;
@@ -2902,7 +2670,7 @@
 @keyframes ns-in-l {
   from {
     opacity: 0;
-    transform: translateX(calc(-1 * var(--pop-rise)));
+    transform: translateX(calc(-1 * var(--spacing-space-2)));
   }
   to {
     opacity: 1;
@@ -2912,13 +2680,13 @@
 @keyframes ns-out-l {
   to {
     opacity: 0;
-    transform: translateX(calc(-1 * var(--pop-rise)));
+    transform: translateX(calc(-1 * var(--spacing-space-2)));
   }
 }
 @keyframes ns-out-r {
   to {
     opacity: 0;
-    transform: translateX(var(--pop-rise));
+    transform: translateX(var(--spacing-space-2));
   }
 }
 /* The rail's travelling label (motion/Rail) settling in as it re-labels. */
@@ -2939,7 +2707,7 @@
 @layer base {
   :root::view-transition-old(root),
   :root::view-transition-new(root) {
-    animation-duration: var(--duration-fade);
+    animation-duration: var(--duration-base);
     animation-timing-function: var(--ease-out);
   }
 }
@@ -3003,7 +2771,7 @@
     :where(&)::after {
       content: "";
       position: absolute;
-      translate: var(--hit-nudge) var(--hit-nudge);
+      translate: calc(1px / 2) calc(1px / 2);
       @supports (-moz-orient: inline) {
         translate: none;
       }
@@ -3042,7 +2810,7 @@
     :where(&)::after {
       content: "";
       position: absolute;
-      translate: var(--hit-nudge) var(--hit-nudge);
+      translate: calc(1px / 2) calc(1px / 2);
       @supports (-moz-orient: inline) {
         translate: none;
       }
@@ -3102,20 +2870,20 @@
       inset-inline: max(
         min(
           0px,
-          calc(50% - var(--spacing-control-xs) / 2 / var(--hit-scale, 1))
+          calc(50% - var(--spacing-space-6) / 2 / var(--hit-scale, 1))
         ),
         calc(
-          var(--hit-gap-x, var(--spacing-control-xs) / var(--hit-scale, 1)) /
+          var(--hit-gap-x, var(--spacing-space-6) / var(--hit-scale, 1)) /
             -2 - var(--hit-edge, 0px)
         )
       );
       inset-block: max(
         min(
           0px,
-          calc(50% - var(--spacing-control-xs) / 2 / var(--hit-scale, 1))
+          calc(50% - var(--spacing-space-6) / 2 / var(--hit-scale, 1))
         ),
         calc(
-          var(--hit-gap-y, var(--spacing-control-xs) / var(--hit-scale, 1)) /
+          var(--hit-gap-y, var(--spacing-space-6) / var(--hit-scale, 1)) /
             -2 - var(--hit-edge, 0px)
         )
       );
@@ -3204,7 +2972,7 @@
     display: inline-flex;
     grid-area: 1 / 1;
     transition-property: opacity, scale;
-    transition-duration: var(--icon-swap-dur, var(--duration-panel));
+    transition-duration: var(--icon-swap-dur, var(--duration-slow));
     transition-timing-function: var(--icon-swap-ease, var(--ease-out));
   }
   :where(&) > :where([data-active="false"]) {
@@ -3235,7 +3003,7 @@
    brings it back with `swap-shown`. */
 @utility swap-move {
   transition-property: opacity, scale;
-  transition-duration: var(--icon-swap-dur, var(--duration-panel));
+  transition-duration: var(--icon-swap-dur, var(--duration-slow));
   transition-timing-function: var(--icon-swap-ease, var(--ease-out));
 }
 @utility swap-gone {
@@ -3278,8 +3046,8 @@
 @utility pressable {
   --tw-sort: transition-property;
   transition:
-    transform var(--duration-fade) var(--ease-out),
-    box-shadow var(--duration-control) var(--ease-out);
+    transform var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 
   @media (prefers-reduced-motion: no-preference) {
     &:is(:active, [data-pressed]) {
@@ -3303,7 +3071,7 @@
     &:is(:active, [data-pressed]):not(:disabled, [aria-disabled="true"]) {
       --color-ink-muted: var(--color-ink-strong);
       --color-ink-subtle: var(--color-ink-strong);
-      --color-brand-ink: var(--color-ink-strong);
+      --color-accent-ink: var(--color-ink-strong);
     }
   }
 }
@@ -3430,23 +3198,23 @@
 @utility kit-tree {
   /* The gap between the rows of a level, and between a parent and its
      first child; the gap between two rows at the root, the list's own. */
-  --line-gap: var(--tree-gap);
+  --line-gap: var(--spacing-space-1);
   --line-root-gap: var(--line-gap);
   /* The depth-0 rows' glyph centre from a row's start: the column every
      level steps in from. */
   --line-root: calc(
     var(--tree-inset, var(--spacing-space-2)) +
-      var(--tree-glyph, var(--mark-size, var(--spacing-space-5))) / 2
+      var(--tree-glyph, var(--mark-size, var(--spacing-icon-lg))) / 2
   );
   /* A rail to the edge of the glyph one level in: a tree mark's step less
      half the mark, so a narrower glyph stands closer in. */
   --line-arm: calc(
-    var(--tree-step) - var(--mark-size, var(--spacing-space-5)) / 2
+    var(--spacing-space-6) - var(--mark-size, var(--spacing-icon-lg)) / 2
   );
   /* Glyph centre to glyph centre, one level in. */
   --line-step: calc(
     var(--line-arm) +
-      var(--tree-glyph, var(--mark-size, var(--spacing-space-5))) / 2
+      var(--tree-glyph, var(--mark-size, var(--spacing-icon-lg))) / 2
   );
   position: relative;
   min-width: 0;
@@ -3457,7 +3225,7 @@
   }
   &[data-roots-tall] {
     --line-root: calc(
-      var(--spacing-space-3) + var(--mark-size, var(--spacing-space-5)) / 2
+      var(--spacing-space-3) + var(--mark-size, var(--spacing-icon-lg)) / 2
     );
   }
 }
@@ -3469,7 +3237,7 @@
   padding-inline-start: calc(
     var(--line-depth) * var(--line-step) + var(--line-root) -
       var(--tree-inset, var(--spacing-space-2)) -
-      var(--tree-glyph, var(--mark-size, var(--spacing-space-5))) / 2
+      var(--tree-glyph, var(--mark-size, var(--spacing-icon-lg))) / 2
   );
   &[data-line-depth="0"] {
     margin-block-start: var(--line-root-gap);
@@ -3498,26 +3266,26 @@
    steps every level in from their column. */
 @utility kit-tree-tall {
   --tree-inset: var(--spacing-space-3);
-  --tree-y: calc(var(--row-tall-h) / 2);
+  --tree-y: calc(calc(var(--spacing) * 12) / 2);
 }
 /* A plan's steps (PlanTree): each row's mark an icon wide and a label line
    tall, at the row's own start and top. */
 @utility kit-tree-plan {
   --tree-glyph: var(--spacing-icon-md);
   --tree-inset: 0px;
-  --tree-y: calc(var(--text-label) * var(--leading-label) / 2);
+  --tree-y: calc(var(--leading-base) / 2);
   --tree-foot: var(--tree-y);
 }
 /* A row whose mark stands at the top of a first line as tall as the mark
    (an away row on a narrow stop tray, its status on a second line). */
 @utility kit-tree-on-mark {
-  --tree-y: calc(var(--mark-size, var(--spacing-space-5)) / 2);
+  --tree-y: calc(var(--mark-size, var(--spacing-icon-lg)) / 2);
 }
 @utility kit-tree-line {
   --line-y: var(--tree-y, calc(var(--spacing-row-compact) / 2));
   --line-foot: var(
     --tree-foot,
-    calc(var(--tree-glyph, var(--mark-size, var(--spacing-space-5))) / 2)
+    calc(var(--tree-glyph, var(--mark-size, var(--spacing-icon-lg))) / 2)
   );
   /* The row's whole box, from its own start: right to left mirrors it. */
   position: absolute;
@@ -3670,12 +3438,12 @@
   ) {
     --layer-shown: 1;
     --layer-seen: visible;
-    --layer-fade: var(--transition-fade-show);
+    --layer-fade: opacity var(--duration-base) var(--ease-out), visibility 0s linear;
   }
   [data-composer-dock]:has([data-slot="waiting"]) {
     --waiting-shown: 0;
     --waiting-seen: hidden;
-    --waiting-fade: var(--transition-fade-hide);
+    --waiting-fade: opacity var(--duration-base) var(--ease-out), visibility 0s linear var(--duration-base);
   }
   [data-slot="dock"]:has(> [data-slot="dock-lines"] > *) {
     --pills-step: var(--spacing-space-2);
@@ -3687,11 +3455,11 @@
   }
   [data-composer-dock] [data-slot="layer-ground"] {
     visibility: var(--layer-seen, hidden);
-    transition: var(--layer-fade, var(--transition-fade-hide));
+    transition: var(--layer-fade, opacity var(--duration-base) var(--ease-out), visibility 0s linear var(--duration-base));
   }
   [data-composer-dock] [data-minimized-bar] {
     visibility: var(--waiting-seen);
-    transition: var(--waiting-fade, var(--transition-fade-show));
+    transition: var(--waiting-fade, opacity var(--duration-base) var(--ease-out), visibility 0s linear);
   }
 }
 
@@ -3710,11 +3478,11 @@
    element under the list, rather than the list alone. */
 @layer base {
   [data-find-marks] ::highlight(find-place) {
-    background-color: var(--color-brand-wash);
+    background-color: var(--color-accent-wash);
   }
   [data-find-marks] ::highlight(find-current) {
-    background-color: var(--color-action-solid);
-    color: var(--color-on-action);
+    background-color: var(--color-accent);
+    color: var(--color-on-accent);
   }
 }
 

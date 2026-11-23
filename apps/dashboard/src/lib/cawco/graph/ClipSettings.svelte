@@ -133,7 +133,7 @@
     "--ease-out",
     "--ease-in-out",
     "--ease-drawer",
-    "--ease-crossfade",
+    "--ease-in-out",
     "--ease-drawer",
     "linear",
   ] as const;
@@ -313,7 +313,7 @@
   <!-- The undo glyph's slot after its chip, held whether or not the value
        changed (as the Controls face holds its column), so no chip moves or
        wraps to another line as the glyph comes and goes. -->
-  <span class="flex w-control-xs flex-none items-center justify-center">
+  <span class="flex w-space-6 flex-none items-center justify-center">
     {#if resets[key]}
       {@const said = resets[key]}
       <Tip label={said}>

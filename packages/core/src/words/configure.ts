@@ -67,7 +67,7 @@ export interface ConfigSectionDefinition {
   /** It lists rows the rail counts beside its name; a setting has no count. */
   counted: boolean;
   group: ConfigGroup;
-  /** Its hue, as a token: `mark-6` (`--color-mark-6`, `Palette.named`). */
+  /** Its hue, as a token: `mark-6` (`--color-mark-4`, `Palette.named`). */
   hue: string;
   /** Its glyph, as Solar names it (`~icons/solar/<icon>`, the app's `Glyph` raw value). */
   icon: string;
@@ -90,7 +90,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: true,
     badge: "fleet-faults",
     icon: "shield-check-bold-duotone",
-    hue: "mark-4",
+    hue: "mark-2",
   },
   {
     slug: "hooks",
@@ -100,7 +100,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: true,
     badge: "fleet-faults",
     icon: "routing-2-bold-duotone",
-    hue: "mark-6",
+    hue: "mark-4",
   },
   {
     slug: "delegate-types",
@@ -110,7 +110,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: true,
     badge: "fleet-faults",
     icon: "users-group-rounded-bold-duotone",
-    hue: "mark-6",
+    hue: "mark-4",
   },
   {
     slug: "decides",
@@ -120,7 +120,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: false,
     badge: "fleet-faults",
     icon: "scale-bold-duotone",
-    hue: "mark-4",
+    hue: "mark-2",
   },
   {
     slug: "helpers",
@@ -130,7 +130,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: false,
     badge: "fleet-faults",
     icon: "tuning-2-bold-duotone",
-    hue: "mark-2",
+    hue: "mark-1",
   },
   {
     slug: "subagents",
@@ -140,7 +140,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: true,
     badge: "fleet-faults",
     icon: "branching-paths-down-bold-duotone",
-    hue: "mark-2",
+    hue: "mark-1",
   },
   {
     slug: "cli-tools",
@@ -150,7 +150,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: true,
     badge: "fleet-faults",
     icon: "code-square-bold-duotone",
-    hue: "mark-4",
+    hue: "mark-2",
   },
   {
     slug: "mcp",
@@ -160,7 +160,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: true,
     badge: "fleet-faults",
     icon: "plug-circle-bold-duotone",
-    hue: "mark-6",
+    hue: "mark-4",
   },
   {
     slug: "connections",
@@ -170,7 +170,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: false,
     badge: "fleet-faults",
     icon: "link-bold-duotone",
-    hue: "mark-6",
+    hue: "mark-4",
   },
   {
     slug: "skills",
@@ -180,7 +180,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: true,
     badge: "fleet-faults",
     icon: "bolt-bold-duotone",
-    hue: "mark-3",
+    hue: "mark-1",
   },
   {
     slug: "memory",
@@ -190,7 +190,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: true,
     badge: "fleet-faults",
     icon: "book-bold-duotone",
-    hue: "mark-6",
+    hue: "mark-4",
   },
   {
     slug: "accounts",
@@ -200,7 +200,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: true,
     badge: "account-faults",
     icon: "users-group-rounded-bold-duotone",
-    hue: "mark-6",
+    hue: "mark-4",
   },
   {
     slug: "models",
@@ -211,7 +211,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: false,
     badge: "fleet-faults",
     icon: "cpu-bold-duotone",
-    hue: "mark-2",
+    hue: "mark-1",
   },
   {
     slug: "spend",
@@ -221,7 +221,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: false,
     badge: "fleet-faults",
     icon: "dollar-bold-duotone",
-    hue: "mark-3",
+    hue: "mark-1",
   },
   {
     slug: "triggers",
@@ -241,7 +241,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: false,
     badge: "fleet-faults",
     icon: "smartphone-bold-duotone",
-    hue: "mark-4",
+    hue: "mark-2",
   },
   {
     slug: "devices",
@@ -252,7 +252,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: false,
     badge: "fleet-faults",
     icon: "lock-keyhole-minimalistic-bold-duotone",
-    hue: "mark-2",
+    hue: "mark-1",
   },
   {
     slug: "previews",
@@ -263,7 +263,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: false,
     badge: "fleet-faults",
     icon: "square-top-down-bold-duotone",
-    hue: "mark-6",
+    hue: "mark-4",
   },
   {
     slug: "browsers",
@@ -274,7 +274,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: false,
     badge: "fleet-faults",
     icon: "global-bold-duotone",
-    hue: "mark-6",
+    hue: "mark-4",
   },
   {
     slug: "updates",
@@ -284,7 +284,7 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     counted: false,
     badge: "updates-waiting",
     icon: "download-bold-duotone",
-    hue: "mark-6",
+    hue: "mark-4",
   },
   {
     slug: "feedback",

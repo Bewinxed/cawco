@@ -165,15 +165,15 @@
       <section
         data-slot="needs"
         aria-label="Its session asks"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-status-attn-bg/45"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn/40 rounded-sm bg-status-attn-bg/45"
       >
         <h3
           data-slot="head"
-          class="flex items-center gap-space-2 m-0 type-label text-status-attn-ink mark-line"
+          class="flex items-center gap-space-2 m-0 type-label text-status-attn mark-line"
         >
           <IconNeedsYou
             data-task-needs-glyph
-            class="flex-none size-icon-md text-status-attn-glyph"
+            class="flex-none size-icon-md text-status-attn"
           />
           <span>Its session asks you</span>
           <span
@@ -198,22 +198,22 @@
       <section
         data-slot="needs"
         aria-label="An approved action"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-status-attn-bg/45"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn/40 rounded-sm bg-status-attn-bg/45"
       >
         <h3
           data-slot="head"
-          class="flex items-center gap-space-2 m-0 type-label text-status-attn-ink mark-line"
+          class="flex items-center gap-space-2 m-0 type-label text-status-attn mark-line"
         >
           {#if proposed}
             <IconNeedsYou
               data-task-needs-glyph
-              class="flex-none size-icon-md text-status-attn-glyph"
+              class="flex-none size-icon-md text-status-attn"
             />
             <span>Approve {action.tool} on {action.connection}</span>
           {:else}
             <IconError
               data-task-needs-glyph
-              class="flex-none size-icon-md text-status-fail-glyph"
+              class="flex-none size-icon-md text-status-fail"
             />
             <span
               >{action.state === "unknown"
@@ -293,16 +293,16 @@
       <section
         data-slot="needs"
         aria-label={commonWords.itsSession}
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn-glyph/40 rounded-md bg-status-attn-bg/45"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-status-attn/40 rounded-sm bg-status-attn-bg/45"
         data-reason="failed"
       >
         <h3
           data-slot="head"
-          class="flex items-center gap-space-2 m-0 type-label text-status-attn-ink mark-line"
+          class="flex items-center gap-space-2 m-0 type-label text-status-attn mark-line"
         >
           <IconError
             data-task-needs-glyph
-            class="flex-none size-icon-md text-status-fail-glyph"
+            class="flex-none size-icon-md text-status-fail"
           />
           <span
             >{lastAttempt.state === "cancelled"
@@ -341,7 +341,7 @@
       <section
         data-slot="needs"
         aria-label="Waits on"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-border-hairline rounded-md bg-surface-recess"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-border-hairline rounded-sm bg-surface-recess"
       >
         <h3
           data-slot="head"
@@ -422,7 +422,7 @@
       <section
         data-slot="needs"
         aria-label="Built on a decision that moved"
-        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-border-hairline rounded-md bg-surface-recess"
+        class="flex flex-col gap-space-3 pt-space-3 px-space-4 pb-space-4 border border-border-hairline rounded-sm bg-surface-recess"
       >
         <ul class="flex flex-col gap-space-1 m-0 p-0 list-none">
           {#each builtOn as moved (moved.target)}

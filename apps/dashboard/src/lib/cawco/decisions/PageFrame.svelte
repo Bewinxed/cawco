@@ -343,7 +343,7 @@
     <!-- The page's Send that didn't go: said over the page, never over its
          Send, which goes again from where it stands. -->
     <p
-      class="m-0 flex-none px-space-3 py-space-2 bg-surface-raised border-b border-border-hairline text-status-fail-glyph text-size-body text-pretty wrap-anywhere"
+      class="m-0 flex-none px-space-3 py-space-2 bg-surface-raised border-b border-border-hairline text-status-fail text-base text-pretty wrap-anywhere"
       role="alert"
       in:reveal
     >
@@ -361,7 +361,7 @@
     in:reveal
   ></iframe>
 {:else}
-  <div aria-hidden="true" class="flex-auto p-space-5" out:revealOut>
+  <div aria-hidden="true" class="flex-auto p-space-4" out:revealOut>
     <Skeleton class="w-2/5" data-slot="block" line="body" radius="text" />
   </div>
 {/if}

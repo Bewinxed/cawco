@@ -13,7 +13,7 @@ const HOUSE = [
   "--ease-out",
   "--ease-in-out",
   "--ease-drawer",
-  "--ease-crossfade",
+  "--ease-in-out",
   "--ease-drawer",
   "linear",
 ] as const;

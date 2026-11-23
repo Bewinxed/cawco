@@ -115,20 +115,20 @@
       tone: fullSend ? "grant" : undefined,
     })
   );
-  /** Apply the level now, but keep the picker open while the chip settles on it (--duration-panel). */
+  /** Apply the level now, but keep the picker open while the chip settles on it (--duration-slow). */
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
   function commitEffort(level: EffortLevel) {
     tools.oneffort(level);
     clearTimeout(closeTimer);
     closeTimer = setTimeout(() => {
       pop = null;
-    }, dur("--duration-panel"));
+    }, dur("--duration-slow"));
   }
   $effect(() => () => clearTimeout(closeTimer));
 </script>
 
 {#snippet effortChip()}
-  <Tuning class="text-mark-2" />
+  <Tuning class="text-mark-1" />
   <span data-slot="chip-label" class="capitalize"
     >{tools.effort ?? spawnWords.effort.default}</span
   >
@@ -143,7 +143,7 @@
       data-variant={readonly ? "static" : undefined}
       title={effortOff.reason}
     >
-      <Tuning class="text-mark-2" />
+      <Tuning class="text-mark-1" />
       <span data-slot="chip-label">{effortOff.label}</span>
       <span class="sr-only">: {effortOff.reason}</span>
     </span>

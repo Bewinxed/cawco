@@ -13,17 +13,15 @@
  */
 @utility ns-theme {
   :where(&) {
-    --ns-check-ms: var(--duration-fade);
-    --ns-fill-ms: var(--duration-fade);
-    --ns-row-ms: var(--duration-fade);
-
-    font: var(--type-body);
+    font: var(--font-weight-normal) var(--text-base) / var(--leading-base)
+      var(--font-sans);
     color: var(--color-ink-strong);
   }
   /* E1: the drawer card (vaul's on a phone) keeps the body role and ink
-     over the kit's own `text-ink-strong text-label`. */
+     over the kit's own `text-ink-strong type-label`. */
   &[data-slot="drawer-content"] {
-    font: var(--type-body);
+    font: var(--font-weight-normal) var(--text-base) / var(--leading-base)
+      var(--font-sans);
     color: var(--color-ink-strong);
   }
 }
@@ -33,14 +31,14 @@
 @utility fai-scroll {
   :where(.ns-theme &) {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-neutral-5) transparent;
+    scrollbar-color: var(--color-border-control) transparent;
   }
   :where(.ns-theme &)::-webkit-scrollbar {
     width: var(--spacing-space-2);
     height: var(--spacing-space-2);
   }
   :where(.ns-theme &)::-webkit-scrollbar-thumb {
-    background: var(--color-neutral-5);
+    background: var(--color-border-control);
     border-radius: var(--radius-pill);
     border: 2px solid transparent;
     background-clip: content-box;
@@ -65,7 +63,7 @@
   @variant motion-safe {
     /* biome-ignore lint/suspicious/noDuplicateSelectors: `&` here is this @utility's own class; the rule reads every utility's `&` as one selector. */
     :where(.ns-theme &) {
-      animation: ns-in var(--ns-row-ms) var(--ease-out) backwards;
+      animation: ns-in var(--duration-base) var(--ease-out) backwards;
       animation-delay: var(--delay, 0ms);
     }
   }
@@ -75,7 +73,7 @@
   @variant motion-safe {
     /* biome-ignore lint/suspicious/noDuplicateSelectors: `&` here is this @utility's own class; the rule reads every utility's `&` as one selector. */
     :where(.ns-theme &) {
-      animation: ns-check var(--ns-check-ms) var(--ease-out) both;
+      animation: ns-check var(--duration-base) var(--ease-out) both;
     }
   }
 }
@@ -84,7 +82,7 @@
   @variant motion-safe {
     /* biome-ignore lint/suspicious/noDuplicateSelectors: `&` here is this @utility's own class; the rule reads every utility's `&` as one selector. */
     :where(.ns-theme &) {
-      animation: ns-panel var(--duration-fade) var(--ease-out) both;
+      animation: ns-panel var(--duration-base) var(--ease-out) both;
     }
   }
 }

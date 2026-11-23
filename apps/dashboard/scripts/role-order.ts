@@ -28,6 +28,7 @@ const TAILWIND_FONT_UTILITIES = ["font-(family-name:--font-mono)"];
 const FONT_NAMESPACES: Record<string, string> = {
   font: "font-",
   "font-weight": "font-",
+  text: "text-",
   leading: "leading-",
   tracking: "tracking-",
 };
@@ -63,7 +64,7 @@ async function fontOrderDrift(): Promise<string[]> {
   ];
   const longhands = [
     ...TAILWIND_FONT_UTILITIES,
-    ...utilities.filter((u) => u.startsWith("text-size-") || u === "liga-none"),
+    ...utilities.filter((u) => u === "liga-none"),
     ...Object.entries(FONT_NAMESPACES).flatMap(([ns, prefix]) =>
       keys(ns).map((key) => `${prefix}${key}`)
     ),

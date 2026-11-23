@@ -356,7 +356,7 @@
   /** A step's note: meta, muted; a failure's in the fail ink. */
   const NOTE = "min-w-0 type-meta text-ink-muted text-pretty wrap-anywhere";
   const FAIL =
-    "min-w-0 type-meta text-status-fail-ink text-pretty wrap-anywhere";
+    "min-w-0 type-meta text-status-fail text-pretty wrap-anywhere";
   /** Needs you's meta line (NeedsCard's `.meta`): meta, muted, one line, at every width. */
   const META = "min-w-0 max-w-full truncate type-meta text-ink-muted";
   /** A step's controls: side by side, each the column's width in a narrow card (one grid column), `space-2` apart. */
@@ -375,12 +375,12 @@
       {#if mark === "done"}
         <IconSuccess
           aria-hidden="true"
-          class="size-icon-md text-status-done-ink"
+          class="size-icon-md text-status-done"
         />
       {:else if mark === "failed"}
         <IconError
           aria-hidden="true"
-          class="size-icon-md text-status-fail-ink"
+          class="size-icon-md text-status-fail"
         />
       {:else if mark === "working"}
         <Spinner aria-hidden="true" role="none" />
@@ -391,7 +391,7 @@
         <span
           aria-hidden="true"
           class={[
-            "box-border grid size-full place-items-center rounded-pill border bg-transparent text-meta leading-none num before:content-data-n",
+            "box-border grid size-full place-items-center rounded-pill border bg-transparent type-meta leading-none num before:content-data-n",
             mark === "standing"
               ? "border-border-strong text-ink-strong"
               : "border-border-control text-ink-muted",
@@ -422,7 +422,7 @@
          inside it, so a third line is cut at the words' edge, never shown
          in the box's padding. -->
     <code
-      class="block min-w-0 rounded-md border border-border-control bg-surface-hover px-space-3 py-space-2 font-mono text-meta text-ink-strong"
+      class="block min-w-0 rounded-sm border border-border-control bg-surface-hover px-space-3 py-space-2 font-mono type-meta text-ink-strong"
       title={text}
       ><span class={clamp ? "line-clamp-2" : "block"} data-slot="copy-words"
         ><span class="sr-only">{label}:{" "}</span
@@ -460,7 +460,7 @@
       {#if done}
         <IconSuccess
           aria-hidden="true"
-          class="size-icon-md text-status-done-ink"
+          class="size-icon-md text-status-done"
         />
       {:else}
         <IconMonitor aria-hidden="true" class="size-icon-md" />
@@ -870,7 +870,7 @@
        running underneath. -->
   <section
     aria-label={words.title}
-    class="@container flex min-w-0 max-w-measure-short flex-col items-start gap-space-3"
+    class="@container flex min-w-0 max-w-ch-60 flex-col items-start gap-space-3"
     data-relay-entry
   >
     <p

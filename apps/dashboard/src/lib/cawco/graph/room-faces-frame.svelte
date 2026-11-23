@@ -103,7 +103,7 @@
     {/if}
   </div>
 {:else}
-  <div class="bg-surface-page p-space-5">
+  <div class="bg-surface-page p-space-4">
     <div
       class="relative flex w-(--frame-w) flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-sm"
       style:--frame-w={`${width}px`}

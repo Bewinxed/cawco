@@ -34,7 +34,7 @@
          * the last row, its row's picked fill on it in the ledger.
          */
         "ledger-picks-stacks":
-          "type-meta num h-control-lg border-b border-b-border-hairline px-space-3 py-0 text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-selected-bg",
+          "type-meta num h-control-lg border-b border-b-border-hairline px-space-3 py-0 text-ink-muted group-last/row:border-b-none group-data-picked/row:bg-accent-wash",
         /** A generated view's cell, label text over a hairline. */
         view: "type-label num h-control-lg border-b border-b-border-hairline px-space-3 text-ink-muted",
         /** A generated view's lead column, on the row's spacing; its words wrap. */

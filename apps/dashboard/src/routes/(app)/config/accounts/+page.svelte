@@ -59,7 +59,7 @@
         >
           <header
             data-slot="head"
-            class="mark-line flex min-h-control-xs items-center gap-space-2 px-space-2"
+            class="mark-line flex min-h-space-6 items-center gap-space-2 px-space-2"
           >
             <ProviderMark provider={group.provider} />
             <h2
@@ -71,7 +71,7 @@
             </h2>
             {#if hasRouting(group.accounts.length)}
               <a
-                class="mark-line touch-hit pointer-hit type-label inline-flex flex-none items-center gap-space-row rounded-xs text-brand-ink no-underline transition-[opacity] duration-(--duration-control) ease-out hover:text-brand-ink active:opacity-72"
+                class="mark-line touch-hit pointer-hit type-label inline-flex flex-none items-center gap-space-1 rounded-xs text-accent-ink no-underline transition-[opacity] duration-(--duration-fast) ease-out hover:text-accent-ink active:opacity-72"
                 data-box
                 data-flip="pop"
                 href="/config/accounts/{encodeURIComponent(

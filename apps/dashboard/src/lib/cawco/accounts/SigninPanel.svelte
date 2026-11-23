@@ -89,7 +89,7 @@
     role="alert"
     in:appear
   >
-    <p class="type-meta text-pretty wrap-anywhere text-status-fail-ink">
+    <p class="type-meta text-pretty wrap-anywhere text-status-fail">
       {sentence}
     </p>
     {#if lines}
@@ -174,7 +174,7 @@
   {:else if flow.phase === "signed-in"}
     <p
       data-slot="got"
-      class="type-meta flex items-start gap-space-2 self-start rounded-xs text-ink-muted focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
+      class="type-meta flex items-start gap-space-2 self-start rounded-xs text-ink-muted focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-accent-ink focus-visible:outline-offset-2"
       role="status"
       tabindex="-1"
       bind:this={outcome}
@@ -194,7 +194,7 @@
   {:else if flow.phase === "mismatch"}
     <p
       data-slot="warn"
-      class="mark-line type-meta flex items-start gap-space-2 text-status-attn-ink"
+      class="mark-line type-meta flex items-start gap-space-2 text-status-attn"
       role="alert"
       in:appear
     >

@@ -49,9 +49,9 @@
   {variant}
   bind:ref
 >
-  <!-- The icon cross-fades to the result over --duration-control, holds it for
+  <!-- The icon cross-fades to the result over --duration-fast, holds it for
        --duration-loop (the clipboard hook), then fades back. -->
-  <span class="icon-swap" style="--icon-swap-dur: var(--duration-control)">
+  <span class="icon-swap" style="--icon-swap-dur: var(--duration-fast)">
     <span data-active={clipboard.status === "success"}
       ><IconCheck tabindex={-1} /></span
     >

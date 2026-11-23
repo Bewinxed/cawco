@@ -114,7 +114,7 @@
           return;
         }
         fold(node, next, {
-          ms: dur(next ? "--duration-panel" : "--duration-fade"),
+          ms: dur(next ? "--duration-slow" : "--duration-base"),
           easing: CURVE.out,
           fade: true,
           gap,
@@ -264,7 +264,7 @@
         data-slot="top"
         class="mark-line flex flex-wrap items-center gap-space-2"
       >
-        <span data-slot="title" class="text-size-label font-medium"
+        <span data-slot="title" class="text-base font-medium"
           >{copy.title}</span
         >
         <!-- Where, never left implicit: the whole point of the investigation this
@@ -275,13 +275,13 @@
           {#if group.origin === "hub"}
             <span
               data-slot="tag"
-              class="inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-size-meta font-normal whitespace-nowrap text-ink-muted"
+              class="inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-sm font-normal whitespace-nowrap text-ink-muted"
               >at the hub</span
             >
           {:else if machine}
             <span
               data-slot="tag"
-              class="mark-line inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-size-meta font-normal whitespace-nowrap text-ink-muted"
+              class="mark-line inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-sm font-normal whitespace-nowrap text-ink-muted"
             >
               <OsMark class="size-icon-md shrink-0" os={machine.os} />
               <span
@@ -293,7 +293,7 @@
           {:else}
             <span
               data-slot="tag"
-              class="inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-size-meta font-normal whitespace-nowrap text-ink-muted"
+              class="inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-sm font-normal whitespace-nowrap text-ink-muted"
               >{group.machineId}</span
             >
           {/if}
@@ -303,7 +303,7 @@
            minimum; measured at 14.6px. -->
           <button
             aria-expanded={expanded}
-            class="select-none group/disclose mark-line touch-hit inline-flex min-h-space-6 items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 ms-auto hover:opacity-100"
+            class="select-none group/disclose mark-line touch-hit inline-flex min-h-space-6 items-center gap-space-1 self-start rounded-sm px-space-2 text-sm font-normal opacity-80 ms-auto hover:opacity-100"
             data-box
             onclick={() => {
               expanded = !expanded;
@@ -311,7 +311,7 @@
             type="button"
           >
             <IconChevronRight
-              class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
+              class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
             />
             <span>{expanded ? "Hide" : "Details"}</span>
           </button>
@@ -326,23 +326,23 @@
         <p
           class="flex min-w-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1"
         >
-          <span class="text-size-meta font-normal opacity-80"
+          <span class="text-sm font-normal opacity-80"
             >{fleetFaultWords.noun[group.scope]}
             {group.faults.length === 1 ? "" : "s"}:</span
           >
           {#each shown as fault (fault.scope + fault.key)}
-            <code class="font-mono text-size-meta wrap-anywhere"
+            <code class="font-mono text-sm wrap-anywhere"
               >{faultLabel(fault)}</code
             >
           {/each}
           {#if extra > 0}
-            <span data-slot="more" class="text-size-meta font-normal opacity-80"
+            <span data-slot="more" class="text-sm font-normal opacity-80"
               >and {extra} more</span
             >
           {/if}
         </p>
 
-        <p data-slot="why" class="max-w-measure text-size-body font-normal">
+        <p data-slot="why" class="max-w-measure text-base font-normal">
           {copy.why}
         </p>
 
@@ -351,22 +351,22 @@
          newer one is sitting on the same machine behind it. -->
           <div
             data-slot="tool"
-            class="flex flex-col gap-space-row rounded-sm border border-border-hairline bg-surface-recess p-space-2"
+            class="flex flex-col gap-space-1 rounded-sm border border-border-hairline bg-surface-recess p-space-2"
           >
-            <span class="text-size-meta font-normal text-ink-muted"
+            <span class="text-sm font-normal text-ink-muted"
               >claude on this machine</span
             >
             {#if toolchain.used}
               <span class="flex flex-wrap items-baseline gap-space-2">
                 <code
-                  class="font-mono text-size-meta font-medium wrap-anywhere text-ink-strong"
+                  class="font-mono text-sm font-medium wrap-anywhere text-ink-strong"
                   >{toolchain.used.path}</code
                 >
-                <span class="num text-size-meta font-normal text-ink-muted"
+                <span class="num text-sm font-normal text-ink-muted"
                   >{toolchain.used.version ?? "version unknown"}</span
                 >
                 <span
-                  class="rounded-pill bg-surface-raised px-space-2 py-0 text-size-meta font-normal text-ink-muted"
+                  class="rounded-pill bg-surface-raised px-space-2 py-0 text-sm font-normal text-ink-muted"
                   >ran this sync</span
                 >
               </span>
@@ -374,16 +374,16 @@
             {#each toolchain.others as other (other.path)}
               <span class="flex flex-wrap items-baseline gap-space-2">
                 <code
-                  class="font-mono text-size-meta wrap-anywhere text-ink-strong"
+                  class="font-mono text-sm wrap-anywhere text-ink-strong"
                   >{other.path}</code
                 >
-                <span class="num text-size-meta font-normal text-ink-muted"
+                <span class="num text-sm font-normal text-ink-muted"
                   >{other.version ?? "version unknown"}</span
                 >
               </span>
             {/each}
             {#if toolchain.shadowed}
-              <p class="pt-space-1 text-size-meta font-normal text-ink-strong">
+              <p class="pt-space-1 text-sm font-normal text-ink-strong">
                 A newer claude is installed on this machine and is not the one
                 PATH resolves first. Until that changes, updating again will not
                 help.
@@ -395,19 +395,19 @@
         {#if group.faults[0]?.detail}
           {#if group.cause === "unknown"}
             <pre
-              class="max-h-48 overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong">{group
+              class="max-h-48 overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-sm wrap-anywhere whitespace-pre-wrap text-ink-strong">{group
                 .faults[0].detail}</pre>
           {:else}
             <button
               aria-expanded={disclosureOpen}
-              class="select-none group/disclose mark-line touch-hit -ms-space-2 inline-flex min-h-space-6 items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 hover:opacity-100"
+              class="select-none group/disclose mark-line touch-hit -ms-space-2 inline-flex min-h-space-6 items-center gap-space-1 self-start rounded-sm px-space-2 text-sm font-normal opacity-80 hover:opacity-100"
               onclick={() => {
                 disclosureOpen = !disclosureOpen;
               }}
               type="button"
             >
               <IconChevronRight
-                class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
+                class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
               />
               <span>What it said</span>
             </button>
@@ -419,7 +419,7 @@
               {#each shown as fault (fault.scope + fault.key)}
                 {#if fault.detail}
                   <pre
-                    class="max-h-48 overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong"><span
+                    class="max-h-48 overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-sm wrap-anywhere whitespace-pre-wrap text-ink-strong"><span
                       class="block text-ink-muted">{faultLabel(fault)}</span
                     >{fault.detail}</pre>
                 {/if}
@@ -428,7 +428,7 @@
           {/if}
         {/if}
 
-        <p class="max-w-measure text-size-body font-normal">
+        <p class="max-w-measure text-base font-normal">
           {copy.fix}
         </p>
 
@@ -445,7 +445,7 @@
               size="xs"
               variant="outline"
             />
-            <span class="text-size-meta font-normal opacity-80"
+            <span class="text-sm font-normal opacity-80"
               >{online
                 ? actionHint
                 : "It syncs on its own the moment it comes back."}</span
@@ -463,13 +463,13 @@
               size="xs"
               variant="outline"
             />
-            <span class="text-size-meta font-normal opacity-80"
+            <span class="text-sm font-normal opacity-80"
               >{actionHint}</span
             >
           {:else if copy.action === "settle" && group.scope === "skills"}
             {#each shown as fault (fault.key)}
               {#if group.faults.length > 1}
-                <code class="font-mono text-size-meta wrap-anywhere"
+                <code class="font-mono text-sm wrap-anywhere"
                   >{fault.key}</code
                 >
               {/if}
@@ -494,7 +494,7 @@
                 variant="outline"
               />
             {/each}
-            <span class="text-size-meta font-normal opacity-80"
+            <span class="text-sm font-normal opacity-80"
               >Adopt this machine’s copy into the fleet, or overwrite it with
               the fleet’s.</span
             >
@@ -502,7 +502,7 @@
             <Button {href} size="xs" variant="outline"
               >Compare the two copies</Button
             >
-            <span class="text-size-meta font-normal opacity-80"
+            <span class="text-sm font-normal opacity-80"
               >Adopt this machine’s copy into the fleet, or overwrite it with
               the fleet’s.</span
             >
@@ -514,7 +514,7 @@
         {#if result}
           <p
             data-slot="result"
-            class="text-size-meta font-normal wrap-anywhere tone-fail:text-status-fail-ink"
+            class="text-sm font-normal wrap-anywhere tone-fail:text-status-fail"
             data-flip
             data-tone={result.tone}
             role={result.tone === "fail" ? "alert" : "status"}

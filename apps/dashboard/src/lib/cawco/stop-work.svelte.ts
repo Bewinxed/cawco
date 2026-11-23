@@ -720,7 +720,7 @@ class StopWork {
       const flier = job.open ? this.fliers.get(jobKey(job)) : undefined;
       if (flier) {
         // Its word and glyph turn first; its tile leaves after the fade.
-        this.after(job, dur("--duration-fade"), () => flier.fly(row));
+        this.after(job, dur("--duration-base"), () => flier.fly(row));
       } else {
         row.departed = true;
         row.gone = true;
@@ -744,10 +744,10 @@ class StopWork {
     const parent = job.rows.find((each) => each.s.id === row.s.parentId);
     const flier = job.open ? this.fliers.get(jobKey(job)) : undefined;
     if (parent && flier) {
-      this.after(job, dur("--duration-step"), () => flier.fly(parent));
+      this.after(job, (dur("--duration-fast") / 2), () => flier.fly(parent));
     }
     if (job.rows.every((each) => each.arrived)) {
-      this.after(job, dur("--duration-control"), () => {
+      this.after(job, dur("--duration-fast"), () => {
         detach(this.finish(job), "finish");
       });
     }
@@ -804,7 +804,7 @@ class StopWork {
     // label's morph waits for the morph to land.
     const morphing =
       job.rows.length > 0
-        ? dur("--duration-fade") - (performance.now() - started)
+        ? dur("--duration-base") - (performance.now() - started)
         : 0;
     if (morphing > 0 && job.open) {
       await new Promise<void>((resolve) => setTimeout(resolve, morphing));
@@ -857,7 +857,7 @@ class StopWork {
     this.keep();
   }
 
-  /** The tray folds away as it is (--duration-fade), then the job goes. */
+  /** The tray folds away as it is (--duration-base), then the job goes. */
   private close(job: StopJob): void {
     if (!job.open) {
       this.drop(job);
@@ -865,7 +865,7 @@ class StopWork {
     }
     job.open = false;
     this.keep();
-    setTimeout(() => this.drop(job), dur("--duration-fade"));
+    setTimeout(() => this.drop(job), dur("--duration-base"));
   }
 
   /* ── After a reload ─────────────────────────────────────────────── */

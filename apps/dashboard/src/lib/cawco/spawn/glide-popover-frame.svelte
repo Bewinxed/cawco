@@ -37,14 +37,14 @@
       id: "cockpit",
       name: "cockpit",
       path: "~/code/cockpit",
-      hue: "var(--color-mark-3)",
+      hue: "var(--color-mark-1)",
       machineId: "studio",
     },
     {
       id: "site",
       name: "site",
       path: "~/code/site",
-      hue: "var(--color-mark-6)",
+      hue: "var(--color-mark-4)",
       machineId: "studio",
     },
   ];
@@ -59,7 +59,7 @@
     load,
     online: true,
     icon: Server,
-    hue: "var(--color-mark-6)",
+    hue: "var(--color-mark-4)",
   });
   const MACHINES: MachineItem[] = [
     machine("studio", "macOS"),
@@ -82,7 +82,7 @@
 </script>
 
 <div
-  class="relative min-h-(--frame-h) p-space-5"
+  class="relative min-h-(--frame-h) p-space-4"
   style:--frame-h={`${height}px`}
 >
   {#if which === "lifetime"}

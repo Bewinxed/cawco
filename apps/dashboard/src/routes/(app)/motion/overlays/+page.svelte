@@ -89,7 +89,7 @@
 
 <main
   class={[
-    "type-body relative grid grow gap-space-5 p-space-5 text-ink-strong",
+    "type-body relative grid grow gap-space-4 p-space-4 text-ink-strong",
     // The ledger right under the openers, where what they open stands.
     ledger && "content-start",
   ]}
@@ -285,7 +285,7 @@
        lands on it once the overlay has gone, and the shell's own chrome (the
        top bar, the burger) stays the shell's. -->
   <button
-    class="select-none absolute inset-0 z-0 grid items-box-end justify-items-center border-none border-current bg-transparent p-space-5 text-ink-muted"
+    class="select-none absolute inset-0 z-0 grid items-box-end justify-items-center border-none border-current bg-transparent p-space-4 text-ink-muted"
     data-page
     onclick={() => {
       counts.page += 1;

@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
 
   const tableRowVariants = tv({
-    base: "border-b transition-colors data-[state=selected]:bg-neutral-2",
+    base: "border-b transition-colors data-[state=selected]:bg-surface-recess",
     variants: {
       variant: {
         /** The header's band: no rule, on the band surface. */

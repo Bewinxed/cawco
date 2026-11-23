@@ -5,7 +5,7 @@
    * changes. A pose is a rest with no drawn enter, so the first time his
    * picture lands here he fades in as the apps bring in a file with none
    * (assets/mascot/README.md, Contract: opacity 0 to 1 and scale from
-   * --leave-scale over --duration-panel on --ease-out), then rests; with less motion
+   * --press-scale over --duration-slow on --ease-out), then rests; with less motion
    * he is simply there. No Rive runs here once he is drawn.
    *
    * `size` is the picture's side, his whole artboard, which is the pose's
@@ -45,10 +45,10 @@
       if (motionOk.current) {
         canvas.animate(
           [
-            { opacity: 0, transform: `scale(${numberOf("--leave-scale")})` },
+            { opacity: 0, transform: `scale(${numberOf("--press-scale")})` },
             { opacity: 1, transform: "none" },
           ],
-          { duration: dur("--duration-panel"), easing: ease("--ease-out") }
+          { duration: dur("--duration-slow"), easing: ease("--ease-out") }
         );
       }
     };

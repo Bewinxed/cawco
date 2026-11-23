@@ -238,7 +238,7 @@
       </div>
       {#if terms}
         <a
-          class="mark-line inline-flex items-center gap-space-1 self-start rounded-xs type-label text-pretty text-brand-ink no-underline hover:text-brand-ink"
+          class="mark-line inline-flex items-center gap-space-1 self-start rounded-xs type-label text-pretty text-accent-ink no-underline hover:text-accent-ink"
           href={TERMS_URL}
           rel="noopener noreferrer"
           target="_blank"

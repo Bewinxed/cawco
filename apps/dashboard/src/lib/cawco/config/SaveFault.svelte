@@ -13,7 +13,7 @@
 
 {#if fault}
   <p
-    class="m-0 type-meta text-pretty text-status-fail-ink"
+    class="m-0 type-meta text-pretty text-status-fail"
     onintroend={(event) =>
       bringIntoView(event.currentTarget, {
         behavior: motionOk.current ? "smooth" : "auto",

@@ -42,7 +42,7 @@
   );
 </script>
 
-<div data-slot="context" class="min-h-lh text-size-meta leading-body">
+<div data-slot="context" class="min-h-lh text-sm leading-base">
   {#if reading.kind === "read"}
     {@const said = words.context(reading.used)}
     <Tip label={reading.detail}>
@@ -51,7 +51,7 @@
         <button
           {...tip}
           aria-label={`${said}. ${reading.detail}`}
-          class="mark-line flex w-full cursor-default items-center gap-x-space-2 rounded-hair border-none bg-transparent p-0 text-start text-inherit text-ink-muted outline-offset-2"
+          class="mark-line flex w-full cursor-default items-center gap-x-space-2 rounded-xs border-none bg-transparent p-0 text-start text-inherit text-ink-muted outline-offset-2"
           data-slot="context-meter"
           type="button"
         >
@@ -63,7 +63,7 @@
             data-state={reading.state}
           >
             <span
-              class="absolute inset-y-0 start-0 w-(--fill-w) rounded-pill bg-ink-muted group-state-near/bar:bg-status-attn-glyph group-state-over/bar:bg-status-fail-glyph group-state-reached/bar:bg-status-fail-glyph group-state-stale/bar:bg-ink-subtle motion-safe:transition-[inline-size] motion-safe:duration-(--duration-fade) motion-safe:ease-drawer"
+              class="absolute inset-y-0 start-0 w-(--fill-w) rounded-pill bg-ink-muted group-state-near/bar:bg-status-attn group-state-over/bar:bg-status-fail group-state-reached/bar:bg-status-fail group-state-stale/bar:bg-ink-subtle motion-safe:transition-[inline-size] motion-safe:duration-(--duration-base) motion-safe:ease-drawer"
               data-slot="fill"
               style:--fill-w={share > 0 ? `max(${share}%, 1ex)` : "0px"}
             ></span>

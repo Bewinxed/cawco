@@ -69,7 +69,7 @@
     markerEnd={`url(#${data.marker})`}
     path={route[0]}
     style={data.landed
-      ? "stroke: var(--color-border-control); stroke-width: var(--graph-edge)"
-      : "stroke: var(--color-ink-muted); stroke-width: var(--graph-edge)"}
+      ? "stroke: var(--color-border-control); stroke-width: calc(var(--spacing) * 0.375)"
+      : "stroke: var(--color-ink-muted); stroke-width: calc(var(--spacing) * 0.375)"}
   />
 {/if}

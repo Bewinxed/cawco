@@ -54,9 +54,9 @@
     handle === "top" &&
       "start-1/2 top-0 h-control-lg w-40 -translate-x-1/2 cursor-ns-resize justify-center pt-space-1",
     handle === "top-left" &&
-      "top-0 size-control-lg start-(--corner-in) cursor-nwse-resize transition-[opacity] duration-(--duration-panel) ease-out starting:opacity-0",
+      "top-0 size-control-lg start-(--corner-in) cursor-nwse-resize transition-[opacity] duration-(--duration-slow) ease-out starting:opacity-0",
     handle === "top-right" &&
-      "top-0 size-control-lg end-(--corner-in) cursor-nesw-resize justify-end transition-[opacity] duration-(--duration-panel) ease-out starting:opacity-0",
+      "top-0 size-control-lg end-(--corner-in) cursor-nesw-resize justify-end transition-[opacity] duration-(--duration-slow) ease-out starting:opacity-0",
   ]}
   data-canvas-stages-grab={handle}
   onkeydown={(event) => onkey(handle, event)}
@@ -75,7 +75,7 @@
     aria-hidden="true"
     data-slot="grip"
     class={[
-      "group-focus-visible/grab:outline-(length:--focus-ring-width) group-focus-visible/grab:outline-offset-2 group-focus-visible/grab:outline-focus-ring group-focus-visible/grab:outline-solid",
+      "group-focus-visible/grab:outline-2 group-focus-visible/grab:outline-offset-2 group-focus-visible/grab:outline-accent-ink group-focus-visible/grab:outline-solid",
       handle === "top" && "h-1.5 w-25 rounded-pill bg-border-control",
       handle !== "top" && "relative m-1.5 size-3 overflow-clip",
       handle === "top-left" && "rounded-ss-(--grip-r)",
@@ -87,7 +87,7 @@
     {#if handle !== "top"}
       <span
         class={[
-          "absolute top-0 size-(--grip-box) rounded-(--grip-r) inset-ring-(length:--corner-grip-stroke) inset-ring-border-control",
+          "absolute top-0 size-(--grip-box) rounded-(--grip-r) inset-ring-1.5 inset-ring-border-control",
           handle === "top-left" ? "start-0" : "end-0",
         ]}
       ></span>

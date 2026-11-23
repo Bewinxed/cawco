@@ -275,7 +275,7 @@
   /**
    * A call's status changing is a crossfade on its glyph: the outgoing glyph
    * fades while the new one fades up out of a slight shrink, both on one
-   * cell, over --duration-control. Svelte plays these only when the status
+   * cell, over --duration-fast. Svelte plays these only when the status
    * changes under a mounted row — never on a row's first render.
    */
   function glyphIn(_node: Element) {
@@ -283,7 +283,7 @@
       return { duration: 0 };
     }
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}; scale: ${0.8 + 0.2 * t}`,
     };
@@ -293,19 +293,19 @@
       return { duration: 0 };
     }
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
   }
   /**
    * A favicon that fails to load gives way to the tool's glyph, the two
-   * cross-fading in one cell over --duration-control. Opacity only, so it runs
+   * cross-fading in one cell over --duration-fast. Opacity only, so it runs
    * with reduced motion as well; never on a row's first render.
    */
   function iconSwap(_node: Element) {
     return {
-      duration: dur("--duration-control"),
+      duration: dur("--duration-fast"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
@@ -475,7 +475,7 @@
                over it. -->
           <span
             data-slot="glyph"
-            class="col-start-1 row-start-1 grid place-items-center {d.color} data-err:text-status-fail-glyph"
+            class="col-start-1 row-start-1 grid place-items-center {d.color} data-err:text-status-fail"
             data-err={failed || undefined}
             in:glyphIn
             out:glyphOut
@@ -507,7 +507,7 @@
            chevron stay inside the row. -->
       {#if d.label}
         <span
-          class="font-medium text-ink-strong text-size-label flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+          class="font-medium text-ink-strong text-base flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
           >{d.label}</span
         >
       {/if}
@@ -554,7 +554,7 @@
           >{#each factParts(d.fact) as part, i (i)}
             <span
               data-add={part.add || undefined}
-              class="not-data-del:data-add:text-status-done-glyph data-del:text-status-fail-glyph"
+              class="not-data-del:data-add:text-status-done data-del:text-status-fail"
               data-del={part.del || undefined}>{part.text}</span
             >
           {/each}</span
@@ -568,7 +568,7 @@
         <!-- What the call changed on the page, or the comment it answered: each a chip that opens it there. -->
         <p
           data-slot="call-chips"
-          class="flex flex-wrap items-baseline gap-x-space-1 gap-y-space-1 m-0 ms-(--x-hang) mt-space-1 mb-space-2 text-size-label"
+          class="flex flex-wrap items-baseline gap-x-space-1 gap-y-space-1 m-0 ms-(--x-hang) mt-space-1 mb-space-2 text-base"
         >
           {#each pointedBy(m) as pointed (pointed.href)}
             {@const drawn = referenceOf(pointed.href)}
@@ -617,7 +617,7 @@
                  stands in. -->
             <div
               data-slot="preview-tool"
-              class="relative flex items-center gap-space-2 max-w-(--tx-preview-max) min-h-(--tx-preview-min) p-space-2 my-space-2 border border-border-hairline rounded-md bg-surface-raised shadow-sm not-has-[[data-slot=page-thumb]]:w-fit has-hover:bg-surface-hover has-focus-visible:outline-(length:--focus-ring-width) has-focus-visible:outline-focus-ring has-focus-visible:outline-offset-(--focus-ring-inset)"
+              class="relative flex items-center gap-space-2 max-w-110 min-h-20 p-space-2 my-space-2 border border-border-hairline rounded-sm bg-surface-raised shadow-sm not-has-[[data-slot=page-thumb]]:w-fit has-hover:bg-surface-hover has-focus-visible:outline-2 has-focus-visible:outline-accent-ink has-focus-visible:-outline-offset-2"
               data-artifact={called?.id}
               data-share="preview:{m.instanceId}"
               data-share-ttl="10000"
@@ -631,7 +631,7 @@
                 aria-disabled={busy || !called || undefined}
                 aria-label={preview?.title || name}
                 data-slot="artifact-open"
-                class="select-none flex items-center gap-space-2 flex-1 min-w-0 border-none border-current p-space-2 bg-transparent text-ink-strong text-size-label font-medium text-start coarse:min-h-control-lg after:absolute after:inset-0 after:rounded-md focus-visible:outline-off"
+                class="select-none flex items-center gap-space-2 flex-1 min-w-0 border-none border-current p-space-2 bg-transparent text-ink-strong text-base font-medium text-start coarse:min-h-control-lg after:absolute after:inset-0 after:rounded-sm focus-visible:outline-off"
                 onclick={whileIdle(
                   () => busy || !called,
                   () => {
@@ -646,7 +646,7 @@
               >
                 <span
                   data-slot="mark"
-                  class="size-4.5 shrink-0 grid place-items-center rounded-xs text-on-ink bg-mark-overlay bg-mark-6"
+                  class="size-4.5 shrink-0 grid place-items-center rounded-xs text-surface-page bg-mark-overlay bg-mark-4"
                   ><IconWindow class="size-icon-sm" /></span
                 >
                 <!-- The name wraps, whole, and breaks inside a word only
@@ -681,7 +681,7 @@
               <!-- What happened and the way back, under the row that asked;
                    the row itself is still the way to open it. -->
               <p
-                class="max-w-(--tx-preview-max) mb-space-2 text-status-fail-glyph text-size-meta font-normal"
+                class="max-w-110 mb-space-2 text-status-fail text-sm font-normal"
                 role="alert"
               >
                 Couldn't open {name}: {openFailed.get(callId(m))}
@@ -702,7 +702,7 @@
               aria-controls={opened.has(callId(m)) ? body : undefined}
               aria-expanded={disclosed.get()}
               data-slot="trow"
-              class="select-none group/trow rail-line press-tint w-full min-h-(--tx-line) coarse:min-h-control-lg text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
+              class="select-none group/trow rail-line press-tint w-full min-h-6.5 coarse:min-h-control-lg text-base font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
               data-state={disclosed.get() ? "open" : "closed"}
               onclick={() => disclosed.set(!disclosed.get())}
               type="button"
@@ -712,7 +712,7 @@
                    is unchanged. -->
               <span
                 data-slot="chev"
-                class="flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out group-state-open/trow:rotate-90"
+                class="flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--duration-fast) motion-safe:ease-out group-state-open/trow:rotate-90"
                 data-box><IconChevronRight class="size-icon-md block" /></span
               >
             </button>
@@ -749,7 +749,7 @@
                             said.by === "agent" ? IconAgent : IconUser}
                           <li
                             data-slot="exchange-entry"
-                            class="flex items-start gap-space-2 min-w-0 text-size-body leading-body"
+                            class="flex items-start gap-space-2 min-w-0 text-base leading-base"
                             data-by={said.by}
                           >
                             <span class="sr-only"
@@ -757,7 +757,7 @@
                             >
                             <span
                               aria-hidden="true"
-                              class="mark-cell text-ink-muted data-you:text-brand-ink"
+                              class="mark-cell text-ink-muted data-you:text-accent-ink"
                               data-box
                               data-you={said.by === "person" || undefined}
                               ><Speaker class="size-icon-sm" /></span
@@ -795,7 +795,7 @@
                         {#if refusal}
                           <p
                             data-slot="refusal"
-                            class="ms-(--diffs-inset) text-size-label text-status-fail-glyph wrap-anywhere"
+                            class="ms-(--diffs-inset) text-base text-status-fail wrap-anywhere"
                           >
                             {refusal}
                           </p>
@@ -829,11 +829,11 @@
                           class="flex flex-col gap-space-1 min-w-0"
                         >
                           <span
-                            class="text-size-label font-medium text-ink-muted"
+                            class="text-base font-medium text-ink-muted"
                             >result</span
                           >
                           <pre
-                            class="max-h-(--tx-field-cap) overflow-auto type-code liga-none text-ink-strong whitespace-pre-wrap break-word">{result.text}</pre>
+                            class="max-h-75 overflow-auto type-code liga-none text-ink-strong whitespace-pre-wrap break-word">{result.text}</pre>
                         </div>
                       </div>
                     {:else if d.expanded === "prose" && !failed}
@@ -856,11 +856,11 @@
                             class="flex flex-col gap-space-1 min-w-0"
                           >
                             <span
-                              class="text-size-label font-medium text-ink-muted"
+                              class="text-base font-medium text-ink-muted"
                               >{f.key}</span
                             >
                             <pre
-                              class="max-h-(--tx-field-cap) overflow-auto type-code liga-none text-ink-strong whitespace-pre-wrap break-word">{f.text}</pre>
+                              class="max-h-75 overflow-auto type-code liga-none text-ink-strong whitespace-pre-wrap break-word">{f.text}</pre>
                           </div>
                         {/each}
                         {#if result}
@@ -869,15 +869,15 @@
                             class="flex flex-col gap-space-1 min-w-0"
                           >
                             <span
-                              class="text-size-label font-medium text-ink-muted"
+                              class="text-base font-medium text-ink-muted"
                               >result</span
                             >
                             <pre
-                              class="max-h-(--tx-field-cap) overflow-auto type-code liga-none text-ink-strong whitespace-pre-wrap break-word">{result.text}</pre>
+                              class="max-h-75 overflow-auto type-code liga-none text-ink-strong whitespace-pre-wrap break-word">{result.text}</pre>
                             {#if result.more}
                               <span
                                 data-slot="more"
-                                class="text-size-meta font-normal text-ink-muted"
+                                class="text-sm font-normal text-ink-muted"
                                 >… {result.more.toLocaleString()} more chars</span
                               >
                             {/if}
@@ -892,7 +892,7 @@
           {:else}
             <div
               data-slot="trow"
-              class="rail-line w-full min-h-(--tx-line) coarse:min-h-control-lg text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
+              class="rail-line w-full min-h-6.5 coarse:min-h-control-lg text-base font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
             >
               {@render line()}
             </div>

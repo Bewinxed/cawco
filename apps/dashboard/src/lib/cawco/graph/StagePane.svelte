@@ -172,7 +172,7 @@
         <BarGlass form="group" title={words.stale}>
           <p
             role="status"
-            class="mark-line m-0 inline-flex min-w-0 items-center gap-space-1 px-space-2 type-label text-status-attn-ink"
+            class="mark-line m-0 inline-flex min-w-0 items-center gap-space-1 px-space-2 type-label text-status-attn"
             data-slot="stage-stale"
           >
             <IconCloudCross
@@ -263,7 +263,7 @@
             aria-hidden="true"
             data-box
             class={[
-              "inline-block size-space-3 flex-none rounded-xs border-(length:--focus-ring-width) border-status-done-glyph",
+              "inline-block size-space-3 flex-none rounded-xs border-2 border-status-done",
               line.kind === "went" && "border-dashed",
             ]}
           ></span>
@@ -298,7 +298,7 @@
   <span
     aria-hidden="true"
     data-box
-    class="inline-block size-space-3 flex-none rounded-xs border-(length:--focus-ring-width) border-status-done-glyph"
+    class="inline-block size-space-3 flex-none rounded-xs border-2 border-status-done"
   ></span>
   <span class="num"
     >{words.differenceCount(found.length, figureOf(found.length, lang))}</span
@@ -306,7 +306,7 @@
   <IconChevronDown
     aria-hidden="true"
     class={[
-      "size-icon-sm flex-none text-ink-muted transition-transform duration-(--duration-control) ease-out",
+      "size-icon-sm flex-none text-ink-muted transition-transform duration-(--duration-fast) ease-out",
       listShown && "rotate-180",
     ]}
     data-box

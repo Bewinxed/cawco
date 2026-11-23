@@ -78,7 +78,7 @@ export const openOnArrival = (projectId: string): void => {
 
 /** `--duration-breath` in ms, read from the root. */
 function breathMs(): number {
-  return dur("--duration-breath");
+  return (dur("--duration-loop") * 2);
 }
 
 /** What a seat of Caw's reads of him (CawSeat): where he stands and what he says. */
@@ -158,7 +158,7 @@ export class CawLead {
   /**
    * The seats standing now, oldest first ({@link seat}). Two stand at once
    * while one comes and the other goes (the head's slides out over
-   * --duration-panel as the 80 over the board lands), and an outro the page
+   * --duration-slow as the 80 over the board lands), and an outro the page
    * calls back resumes its seat as it stood, without standing it again:
    * one slot that each seat wrote as it stood and cleared as it went was
    * left empty under the head's seat, its panel never drawn at a desk

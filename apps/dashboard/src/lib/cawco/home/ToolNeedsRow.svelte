@@ -140,7 +140,7 @@
               >{/if}{#if line.state.found && why}{" · "}{/if}{#if line.state.kind === "failed" && line.state.output}<button
                 aria-controls={outputId}
                 aria-expanded={opened[line.machineId] === true}
-                class="pointer-hit touch-hit rounded-xs text-status-fail-ink underline decoration-dotted underline-offset-2 hover:text-ink-strong"
+                class="pointer-hit touch-hit rounded-xs text-status-fail underline decoration-dotted underline-offset-2 hover:text-ink-strong"
                 onclick={() => {
                   opened[line.machineId] = !opened[line.machineId];
                 }}
@@ -168,7 +168,7 @@
               {#if line.state.kind === "failed" && line.state.cause}
                 <!-- The installer's own line that says why, under the name. -->
                 <code
-                  class="line-clamp-2 type-code wrap-anywhere text-status-fail-ink"
+                  class="line-clamp-2 type-code wrap-anywhere text-status-fail"
                   >{line.state.cause}</code
                 >
               {/if}

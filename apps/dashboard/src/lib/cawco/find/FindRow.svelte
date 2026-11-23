@@ -150,7 +150,7 @@
         data-box
       >
         <span
-          class="font-medium text-ink-muted tone-live:text-status-live-ink tone-attn:text-status-attn-ink tone-fail:text-status-fail-ink"
+          class="font-medium text-ink-muted tone-live:text-status-live tone-attn:text-status-attn tone-fail:text-status-fail"
           data-tone={row.state.tone}>{row.state.word}</span
         >
         {#each row.meta as word (word)}
@@ -164,7 +164,7 @@
            column. -->
       <span
         data-slot="reason"
-        class="row-start-3 col-start-2 col-end-4 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta leading-space-5 text-ink-subtle group-data-phone/row:type-label group-data-phone/row:font-normal group-data-phone/row:leading-icon-md group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-2 group-data-phone/row:line-clamp-std-2 group-data-phone/row:overflow-clip"
+        class="row-start-3 col-start-2 col-end-4 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta leading-space-4 text-ink-subtle group-data-phone/row:type-label group-data-phone/row:font-normal group-data-phone/row:leading-icon-md group-data-phone/row:whitespace-normal group-data-phone/row:line-clamp-2 group-data-phone/row:line-clamp-std-2 group-data-phone/row:overflow-clip"
         aria-hidden="true"
         data-box
         {@attach said(row.reason.parts, shown, {
@@ -187,7 +187,7 @@
       type="button"
     >
       <ChevronDown
-        class="size-icon-md motion-safe:transition-[rotate] motion-safe:duration-(--duration-fade) motion-safe:ease-in-out group-aria-expanded/disclose:rotate-180"
+        class="size-icon-md motion-safe:transition-[rotate] motion-safe:duration-(--duration-base) motion-safe:ease-in-out group-aria-expanded/disclose:rotate-180"
       />
     </button>
   {/if}

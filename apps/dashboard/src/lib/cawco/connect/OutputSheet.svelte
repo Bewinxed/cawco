@@ -123,7 +123,7 @@
   aria-label="Output of {titleOf(install)}"
   style:--output-head="{headHeight}px"
   class={[
-    "fixed z-(--layer-float) flex flex-col bg-surface-raised shadow-lg timeline-scope-transcript-head transition-[translate,opacity] duration-(--duration-panel) ease-drawer",
+    "fixed z-(--layer-float) flex flex-col bg-surface-raised shadow-lg timeline-scope-transcript-head transition-[translate,opacity] duration-(--duration-slow) ease-drawer",
     phone.current
       ? "inset-0 data-[state=closed]:translate-y-full"
       : "inset-y-0 end-0 w-120 border-s border-s-border-hairline data-[state=closed]:translate-x-full",
@@ -152,7 +152,7 @@
        first line, in its content. -->
     <header
       data-slot="bar"
-      class="flex h-control-lg flex-none items-center gap-space-2 ps-space-5 pe-space-2"
+      class="flex h-control-lg flex-none items-center gap-space-2 ps-space-4 pe-space-2"
     >
       <h2
         class="m-0 min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
@@ -178,7 +178,7 @@
     </header>
     <p
       data-slot="step"
-      class="m-0 flex-none overflow-clip text-ellipsis whitespace-nowrap px-space-5 pb-space-2 type-meta text-ink-muted"
+      class="m-0 flex-none overflow-clip text-ellipsis whitespace-nowrap px-space-4 pb-space-2 type-meta text-ink-muted"
       aria-live="polite"
     >
       {step}
@@ -187,16 +187,16 @@
       asker={asks}
       at="stop-output"
       class="flex-none py-space-3"
-      end="var(--spacing-space-5)"
-      indent="var(--spacing-space-5)"
+      end="var(--spacing-space-4)"
+      indent="var(--spacing-space-4)"
     />
   </div>
   <div
     bind:this={scroller}
-    class="kit-edge-fade-block min-h-0 flex-1 overflow-y-auto bg-surface-recess px-space-5 pt-(--output-head) pb-space-3 scroll-timeline-transcript-head"
+    class="kit-edge-fade-block min-h-0 flex-1 overflow-y-auto bg-surface-recess px-space-4 pt-(--output-head) pb-space-3 scroll-timeline-transcript-head"
   >
     {#if failed}
-      <p class="m-0 type-meta text-status-fail-ink">
+      <p class="m-0 type-meta text-status-fail">
         The output couldn't be read. {failed}
       </p>
     {/if}

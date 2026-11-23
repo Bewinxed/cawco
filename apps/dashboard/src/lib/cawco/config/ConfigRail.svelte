@@ -37,7 +37,7 @@
 
   /**
    * A section's fault badge pops in from the pop scale as it fades
-   * (--duration-control) and leaves the same way on the exit tier; its figure ticks
+   * (--duration-fast) and leaves the same way on the exit tier; its figure ticks
    * over through MorphText. With reduced motion, a fade.
    */
   /**
@@ -64,7 +64,7 @@
     const scale = popScale();
     return {
       duration: dur(
-        direction === "out" ? "--duration-fade" : "--duration-control"
+        direction === "out" ? "--duration-base" : "--duration-fast"
       ),
       easing: easeOut,
       css: (t: number) =>
@@ -78,7 +78,7 @@
 <nav
   data-slot="rail"
   aria-label={words.title}
-  class="group/rail flex flex-col px-space-2 pb-space-5 variant-rail:relative variant-rail:w-58 variant-rail:flex-none variant-rail:overflow-y-auto variant-rail:rounded-lg variant-rail:bg-surface-raised variant-list:pb-space-2"
+  class="group/rail flex flex-col px-space-2 pb-space-4 variant-rail:relative variant-rail:w-58 variant-rail:flex-none variant-rail:overflow-y-auto variant-rail:rounded-lg variant-rail:bg-surface-raised variant-list:pb-space-2"
   data-variant={variant}
   {@attach highlight({
     rows: '[data-slot="row"]',
@@ -104,7 +104,7 @@
               data-slot="row"
               aria-busy={section.counted && count === null ? "true" : undefined}
               aria-current={current === section.slug ? "page" : undefined}
-              class="group/row relative flex items-center gap-space-3 h-row pl-space-2 pr-space-3 rounded-sm text-ink-strong no-underline transition-control aria-current-page:text-brand-ink group-variant-list/rail:h-control-lg focus-inset press-tint"
+              class="group/row relative flex items-center gap-space-3 h-row pl-space-2 pr-space-3 rounded-sm text-ink-strong no-underline transition-control aria-current-page:text-accent-ink group-variant-list/rail:h-control-lg focus-inset press-tint"
               href="/config/{section.slug}"
             >
               <span
@@ -119,7 +119,7 @@
               >
               {#if unsavedIn(store, section.slug)}
                 <span
-                  class="flex-none size-space-2 rounded-pill bg-ink-strong motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out motion-safe:starting:opacity-0"
+                  class="flex-none size-space-2 rounded-pill bg-ink-strong motion-safe:transition-[opacity] motion-safe:duration-(--duration-fast) motion-safe:ease-out motion-safe:starting:opacity-0"
                   title={words.unsaved}
                   ><span class="sr-only">{words.unsaved}</span></span
                 >
@@ -149,7 +149,7 @@
                 {#if count !== null && count > 0}
                   <span
                     data-slot="count"
-                    class="flex-none min-w-ch-3 text-end type-meta num text-ink-muted group-aria-current-page/row:text-brand-ink"
+                    class="flex-none min-w-ch-3 text-end type-meta num text-ink-muted group-aria-current-page/row:text-accent-ink"
                     >{count}</span
                   >
                 {/if}

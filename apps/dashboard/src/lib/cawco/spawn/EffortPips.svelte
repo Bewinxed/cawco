@@ -183,11 +183,11 @@
      (DESIGN.md, The 44 Touch Rule), and a clip round it would take the press
      away with the drawing. The fill and pips clip in their own layer. -->
 <div
-  class="relative grid rounded-md border border-border-hairline bg-surface-recess p-space-3 data-embedded:border-none data-embedded:border-current data-embedded:bg-transparent data-embedded:p-0"
+  class="relative grid rounded-sm border border-border-hairline bg-surface-recess p-space-3 data-embedded:border-none data-embedded:border-current data-embedded:bg-transparent data-embedded:p-0"
   data-embedded={embedded || undefined}
 >
   <div
-    class="col-start-1 row-start-1 grid content-box-start transition-[opacity] duration-(--duration-panel) ease-out"
+    class="col-start-1 row-start-1 grid content-box-start transition-[opacity] duration-(--duration-slow) ease-out"
     style:opacity={n ? 1 : 0.55}
     style:pointer-events={n ? "auto" : "none"}
   >
@@ -195,7 +195,7 @@
       data-slot="track"
       data-focus={focused || undefined}
       data-ready={ready || undefined}
-      class="group touch-hit hit-edge-hair relative h-control-sm max-phone:h-9.5 cursor-ew-resize touch-none rounded-md border border-border-control bg-surface-raised shadow-none transition-control-ring select-none not-data-ready:transition-none data-focus:outline-solid data-focus:outline-(length:--focus-ring-width) data-focus:outline-focus-ring data-focus:outline-offset-(--focus-ring-inset)"
+      class="group touch-hit hit-edge-hair relative h-control-sm max-phone:h-9.5 cursor-ew-resize touch-none rounded-sm border border-border-control bg-surface-raised shadow-none transition-control-ring select-none not-data-ready:transition-none data-focus:outline-solid data-focus:outline-2 data-focus:outline-accent-ink data-focus:-outline-offset-2"
       onpointercancel={() => {
         draft = null;
         drag = false;
@@ -211,16 +211,16 @@
     >
       <div
         data-slot="clip"
-        class="pointer-events-none absolute inset-0 overflow-hidden rounded-md"
+        class="pointer-events-none absolute inset-0 overflow-hidden rounded-sm"
       >
         <div
           data-slot="fill"
-          class="pointer-events-none absolute top-0 bottom-0 left-0 flex items-center justify-end rounded-md bg-surface-sunk p-space-row motion-safe:transition-[width] motion-safe:duration-(--ns-fill-ms) motion-safe:ease-in-out group-not-data-ready:transition-none"
+          class="pointer-events-none absolute top-0 bottom-0 left-0 flex items-center justify-end rounded-sm bg-surface-sunk p-space-1 motion-safe:transition-[width] motion-safe:duration-(--ns-fill-ms) motion-safe:ease-in-out group-not-data-ready:transition-none"
           style:width={`calc(var(--kw) + ${p} * (100% - var(--kw)))`}
         >
           <div
             data-slot="knob"
-            class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-raised px-space-2 font-sans text-size-label leading-none font-medium text-ink-muted capitalize num shadow-sm transition-[color,opacity] pointer-events-none duration-(--duration-control) ease-out whitespace-nowrap group-not-data-ready:transition-none data-active:text-ink-strong"
+            class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-raised px-space-2 font-sans text-base leading-none font-medium text-ink-muted capitalize num shadow-sm transition-[color,opacity] pointer-events-none duration-(--duration-fast) ease-out whitespace-nowrap group-not-data-ready:transition-none data-active:text-ink-strong"
             data-active={active || undefined}
             style:--bars={n}
             style:opacity={n ? 1 : 0.7}
@@ -233,7 +233,7 @@
               data-slot="ghost"
               aria-hidden="true"
               class="invisible col-start-1 row-start-1 grid justify-items-start ps-(--ps)"
-              style:--ps={"calc(var(--bars) * var(--spacing-space-1) - var(--spacing-space-row) + var(--spacing-space-1))"}
+              style:--ps={"calc(var(--bars) * var(--spacing-space-1) - var(--spacing-space-1) + var(--spacing-space-1))"}
             >
               {#each efforts as level (level)}
                 <span class="col-start-1 row-start-1">{level}</span>
@@ -262,7 +262,7 @@
                     />
                     <rect
                       data-slot="bar-fill"
-                      class="origin-bottom transform-(--t) transform-fill fill-ink-strong motion-safe:transition-[transform] motion-safe:delay-(--delay) motion-safe:duration-(--duration-fade) motion-safe:ease-out group-not-data-ready:transition-none"
+                      class="origin-bottom transform-(--t) transform-fill fill-ink-strong motion-safe:transition-[transform] motion-safe:delay-(--delay) motion-safe:duration-(--duration-base) motion-safe:ease-out group-not-data-ready:transition-none"
                       height="10"
                       rx="1"
                       style:--delay={staggered(barStep(i))}
@@ -288,8 +288,8 @@
         {#each pips as pip, i (i)}
           <span
             data-slot="pip"
-            class="pointer-events-none absolute top-1/2 size-space-1 -translate-x-1/2 -translate-y-1/2 rounded-pill bg-ink-strong transition-[opacity] duration-(--duration-control) ease-out group-not-data-ready:transition-none motion-safe:transition-[left,opacity] motion-safe:duration-(--pip-durs) motion-safe:ease-(--pip-eases)"
-            style:--pip-durs="var(--ns-fill-ms), var(--duration-control)"
+            class="pointer-events-none absolute top-1/2 size-space-1 -translate-x-1/2 -translate-y-1/2 rounded-pill bg-ink-strong transition-[opacity] duration-(--duration-fast) ease-out group-not-data-ready:transition-none motion-safe:transition-[left,opacity] motion-safe:duration-(--pip-durs) motion-safe:ease-(--pip-eases)"
+            style:--pip-durs="var(--duration-base), var(--duration-fast)"
             style:--pip-eases="var(--ease-in-out), var(--ease-out)"
             style:left={`calc(var(--kw) / 2 + ${pip.frac} * (100% - var(--kw)))`}
             style:opacity={pip.on ? 0.3 : 0}

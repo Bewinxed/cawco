@@ -85,7 +85,7 @@
           <span
             data-slot="mark"
             data-enter
-            class="grid size-control-md place-items-center tone-caution:text-status-attn-glyph tone-ok:text-status-done-glyph motion-safe:animate-mark-in"
+            class="grid size-control-md place-items-center tone-caution:text-status-attn tone-ok:text-status-done motion-safe:animate-mark-in"
             data-tone={ok ? "ok" : "caution"}
           >
             {#if ok}

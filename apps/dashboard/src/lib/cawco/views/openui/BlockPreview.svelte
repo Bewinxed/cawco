@@ -194,7 +194,7 @@
     {#if still}
       <img
         alt={title}
-        class="block aspect-16/10 w-full rounded-sm object-cover object-top outline-1 -outline-offset-1 outline-image-outline"
+        class="block aspect-16/10 w-full rounded-sm object-cover object-top outline-1 -outline-offset-1 outline-ink-strong/10"
         data-slot="page-still"
         src={still}
       />
@@ -210,7 +210,7 @@
     {/if}
   {:else}
     <div
-      class="relative aspect-16/10 w-full overflow-clip rounded-sm bg-surface-raised outline-1 -outline-offset-1 outline-image-outline"
+      class="relative aspect-16/10 w-full overflow-clip rounded-sm bg-surface-raised outline-1 -outline-offset-1 outline-ink-strong/10"
     >
       {#if served}
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: its load greets the page. -->

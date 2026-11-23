@@ -46,7 +46,7 @@
   function arrive(_node: Element) {
     const travel = motionOk.current;
     return {
-      duration: dur("--duration-fade"),
+      duration: dur("--duration-base"),
       easing: easeOut,
       css: (t: number) =>
         travel
@@ -126,9 +126,9 @@
           <span
             aria-hidden="true"
             class={[
-              "size-(--status-dot-size) rounded-pill",
+              "size-1.5 rounded-pill",
               machine?.status === "online"
-                ? "bg-status-done-glyph"
+                ? "bg-status-done"
                 : "bg-ink-subtle",
             ]}
             data-box
@@ -209,7 +209,7 @@
           <StepMark state="failed" />
           <p
             data-slot="headline"
-            class="m-0 type-label text-status-fail-ink"
+            class="m-0 type-label text-status-fail"
             aria-live="assertive"
           >
             {words.headline}
@@ -254,7 +254,7 @@
       />
     {/if}
     {#if refused}
-      <p class="m-0 type-meta text-status-fail-ink" aria-live="polite">
+      <p class="m-0 type-meta text-status-fail" aria-live="polite">
         {refused}
       </p>
     {/if}

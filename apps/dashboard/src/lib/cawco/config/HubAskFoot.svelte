@@ -28,7 +28,7 @@
 {#if failed}
   <p
     data-slot="refused"
-    class="type-meta wrap-anywhere text-status-fail-ink"
+    class="type-meta wrap-anywhere text-status-fail"
     role="alert"
     transition:unfold
   >

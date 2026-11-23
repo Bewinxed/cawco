@@ -47,7 +47,7 @@
     !!file && file.progress !== undefined && !file.failed && !file.href
   );
   const BOX =
-    "inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--duration-control) motion-safe:ease-out";
+    "inline-flex items-center gap-space-2 h-12 w-full max-w-64 py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--duration-fast) motion-safe:ease-out";
 </script>
 
 {#snippet face()}
@@ -68,7 +68,7 @@
   <span data-slot="text" class="flex flex-col min-w-0">
     <span
       data-slot="name"
-      class="flex min-w-0 text-size-label font-medium leading-ui whitespace-nowrap"
+      class="flex min-w-0 text-base font-medium leading-lg whitespace-nowrap"
       >{#if parts.head}<span data-slot="head" class="min-w-0 truncate"
           >{parts.head}</span
         >{/if}<span class="flex-none">{parts.tail}</span></span
@@ -77,13 +77,13 @@
       <span
         data-slot="meta"
         data-doc-thumb-failed
-        class="text-size-meta font-normal tabular-nums leading-ui text-status-fail-ink whitespace-nowrap"
+        class="text-sm font-normal tabular-nums leading-lg text-status-fail whitespace-nowrap"
         >Couldn't upload</span
       >
     {:else}
       <span
         data-slot="meta"
-        class="text-size-meta font-normal tabular-nums leading-ui text-ink-muted whitespace-nowrap"
+        class="text-sm font-normal tabular-nums leading-lg text-ink-muted whitespace-nowrap"
         >{meta}</span
       >
     {/if}

@@ -102,10 +102,10 @@
 </script>
 
 <div
-  class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
+  class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-4"
 >
   <SectionHeader
-    hue="var(--color-mark-3)"
+    hue="var(--color-mark-1)"
     icon={IconLaptop}
     label={words.onEachMachine}
   />
@@ -119,7 +119,7 @@
   {#if machines.length === 0}
     <NoMachines line="Each one reports what it has once it registers." />
   {:else}
-    <ul data-slot="machines" class="-mx-space-2 flex flex-col gap-space-row">
+    <ul data-slot="machines" class="-mx-space-2 flex flex-col gap-space-1">
       {#each machines as machine (machine.machineId)}
         {@const inspection = found[machine.machineId]}
         {@const rows =
@@ -190,12 +190,12 @@
                   >
                     <span
                       data-slot="text"
-                      class="flex min-w-0 grow basis-60 flex-col gap-space-row"
+                      class="flex min-w-0 grow basis-60 flex-col gap-space-1"
                     >
                       <span class="flex flex-wrap items-center gap-space-2">
                         <span
                           data-slot="name"
-                          class="font-(family-name:--font-mono) text-size-meta text-ink-strong"
+                          class="font-(family-name:--font-mono) text-sm text-ink-strong"
                           >{row.name}</span
                         >
                         <Badge variant="outline"><span>{row.scope}</span></Badge

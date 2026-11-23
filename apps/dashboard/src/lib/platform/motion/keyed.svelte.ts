@@ -6,14 +6,14 @@
  * keeps its motion.
  *
  * One listener on the window, watching every key the page takes (installed
- * once, on the root layout, `trackKeyed`). From a key to `--duration-control`
+ * once, on the root layout, `trackKeyed`). From a key to `--duration-fast`
  * after it, every motion that began since the key (a CSS transition, a CSS
  * animation, a Web Animation: a Svelte transition, a `reflow`, a flight, a
  * house helper's clock) is finished on the frame it would first be drawn,
  * so the change is drawn landed. `getAnimations()` brings the page's style
  * up to date first, so a transition the key's change starts exists by then.
  * A loop (a breath, a spinner) is never touched, nor a wait (a delay past
- * --duration-settle: The Real Wait Rule's grace), nor a clock longer than any
+ * --duration-slow: The Real Wait Rule's grace), nor a clock longer than any
  * beat (past --duration-loop: a progress drawn over minutes), nor anything that
  * was already moving before the key.
  *
@@ -110,7 +110,7 @@ const typed = (event: KeyboardEvent): boolean =>
  * fade drawn over the first row whatever the scroll.
  */
 function land(from: number): void {
-  const wait = dur("--duration-settle");
+  const wait = dur("--duration-slow");
   const longest = dur("--duration-loop");
   for (const animation of document.getAnimations()) {
     const timing = animation.effect?.getComputedTiming();
@@ -149,7 +149,7 @@ function step(): void {
   land(since);
   if (
     Number(document.timeline.currentTime ?? 0) - since >=
-    dur("--duration-control")
+    dur("--duration-fast")
   ) {
     key = null;
     keyed.current = false;

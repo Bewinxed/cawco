@@ -51,13 +51,13 @@
     <div class="flex flex-col gap-space-6">
       <Dialog.Header foot="report">
         <Dialog.Title lead="glyph">
-          <IconAlert class="size-icon-md shrink-0 text-status-fail-glyph" />
+          <IconAlert class="size-icon-md shrink-0 text-status-fail" />
           <span>{title}</span>
         </Dialog.Title>
       </Dialog.Header>
 
       <pre
-        class="m-0 max-h-vh-60 min-w-0 overflow-auto wrap-anywhere whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-size-meta leading-body text-ink-strong select-text"
+        class="m-0 max-h-vh-60 min-w-0 overflow-auto wrap-anywhere whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-sm leading-base text-ink-strong select-text"
         data-error-text>{message}</pre>
 
       <RowFault again={copy} data-copy-refused reason={refusals.reason(key)} />
@@ -66,7 +66,7 @@
         <Button onclick={copy} type="button" variant="outline">
           <span
             class="icon-swap"
-            style:--icon-swap-dur="var(--duration-control)"
+            style:--icon-swap-dur="var(--duration-fast)"
           >
             <span data-active={!copied}><IconCopy /></span>
             <span data-active={copied}><IconCheck /></span>

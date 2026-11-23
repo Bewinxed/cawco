@@ -118,7 +118,7 @@
   function slideOut(node: HTMLElement): TransitionConfig {
     const by = -32 * toward;
     return lifting(node, pinned(node), {
-      duration: dur("--duration-fade"),
+      duration: dur("--duration-base"),
       easing: easeOut,
       css: (t) =>
         motionOk.current
@@ -132,7 +132,7 @@
     return {
       delay: motionOk.current ? 40 : 0,
       duration: dur(
-        motionOk.current ? "--duration-panel" : "--duration-control"
+        motionOk.current ? "--duration-slow" : "--duration-fast"
       ),
       easing: easeDrawer,
       css: (t) =>
@@ -160,7 +160,7 @@
       {title}
     </h1>
     {#if refused}
-      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+      <p class="type-meta text-status-fail" role="alert" in:appear>
         {refused}
       </p>
     {/if}
@@ -215,7 +215,7 @@
   {#if limits}
     <section
       data-slot="well"
-      class="border-t border-border-hairline pt-space-5"
+      class="border-t border-border-hairline pt-space-4"
     >
       <AtLimitBlock
         accounts={limitLanes}

@@ -37,17 +37,15 @@ const CURVE_NAMES: Record<string, string> = {
   "--ease-out": "Ease-out",
   "--ease-in-out": "Ease-in-out",
   "--ease-drawer": "Drawer",
-  "--ease-crossfade": "Crossfade",
   linear: "Linear",
 };
 
 /** {@link graphWords}`.durations`, by its key: any other key reads as none. */
 const DURATION_NAMES: Record<string, string> = {
-  "--duration-step": "Step",
-  "--duration-control": "Control",
-  "--duration-fade": "Fade",
-  "--duration-panel": "Panel",
-  "--duration-settle": "Settle",
+  "--duration-fast": "Fast",
+  "--duration-base": "Base",
+  "--duration-slow": "Slow",
+  "--duration-loop": "Loop",
 };
 
 /** {@link graphWords}`.clipRepeats`, by its key: any other key reads as none. */

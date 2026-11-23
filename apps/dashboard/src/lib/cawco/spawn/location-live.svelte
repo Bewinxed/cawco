@@ -156,7 +156,7 @@
 
 <div
   bind:this={root}
-  class="relative flex min-h-(--frame-h) items-start gap-space-2 p-space-5"
+  class="relative flex min-h-(--frame-h) items-start gap-space-2 p-space-4"
   style:--frame-h={`${height}px`}
 >
   {#if bare}

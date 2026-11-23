@@ -59,7 +59,7 @@
   /**
    * A folder's listing arrives from the side it lies on: entering a folder
    * slides it in from 8% to the right, going up a level from 8% to the left,
-   * over --duration-panel on the drawer curve, fading in as it comes. The listing
+   * over --duration-slow on the drawer curve, fading in as it comes. The listing
    * it replaces goes at once. With reduced motion, the fade alone.
    */
   function drill(_node: Element, from: -1 | 0 | 1) {
@@ -68,7 +68,7 @@
     }
     const travel = motionOk.current ? from * 8 : 0;
     return {
-      duration: dur("--duration-panel"),
+      duration: dur("--duration-slow"),
       easing: easeDrawer,
       css: (t: number, u: number) =>
         `opacity: ${t}; transform: translateX(${(u * travel).toFixed(2)}%)`,
@@ -195,7 +195,7 @@
         >
           <IconArrowUp />
         </Button>
-        <span class="truncate font-mono text-meta text-ink-muted" title={path}
+        <span class="truncate font-mono type-meta text-ink-muted" title={path}
           >{path}</span
         >
       </div>
@@ -222,7 +222,7 @@
             {:else if errorMessage}
               <span
                 data-slot="block"
-                class="block px-2 py-space-1 type-meta text-status-fail-glyph"
+                class="block px-2 py-space-1 type-meta text-status-fail"
                 >{errorMessage}</span
               >
             {:else}

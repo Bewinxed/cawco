@@ -72,9 +72,9 @@
       : "gap-space-2 px-space-2"
   );
   /** The glyph's box: the sheet's nav row's (space-5), or the glyph's own. */
-  const glyphBox = $derived(rail ? "w-space-5" : "w-icon-md");
+  const glyphBox = $derived(rail ? "w-space-4" : "w-icon-md");
   const TILE_LEAD =
-    "calc(var(--spacing-space-3) - (var(--mark-box) - var(--spacing-space-5)) / 2)";
+    "calc(var(--spacing-space-3) - (var(--spacing-row-compact) - var(--spacing-space-4)) / 2)";
 
   /** Each machine the fleet lists that an install is bringing back: its row is that install's. */
   const returning = $derived(
@@ -230,7 +230,7 @@
   <!-- Machines waiting to be admitted (hub hub-auth.ts): first, as they wait on you. -->
   <ul
     data-slot="list"
-    class="mx-0 mt-0 mb-space-1 flex list-none flex-col gap-space-row border-b border-b-border-hairline px-0 pt-0 pb-space-1"
+    class="mx-0 mt-0 mb-space-1 flex list-none flex-col gap-space-1 border-b border-b-border-hairline px-0 pt-0 pb-space-1"
   >
     {#each hubAuth.waiting as machine (machine.machineId)}
       {@const name = machineLabel(machine.hostname ?? machine.machineId)}
@@ -283,7 +283,7 @@
   <ul
     data-slot="list"
     data-installs
-    class="mx-0 mt-0 mb-space-1 flex list-none flex-col gap-space-row px-0 pt-0 pb-space-1"
+    class="mx-0 mt-0 mb-space-1 flex list-none flex-col gap-space-1 px-0 pt-0 pb-space-1"
     {@attach reflow()}
   >
     {#each newcomers as install, index (install.id)}
@@ -303,7 +303,7 @@
   >
     Connect a machine to run sessions
   </p>
-  <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-row p-0">
+  <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-1 p-0">
     {#each CONNECT_WAYS as way (way.route)}
       {@const Icon = way.icon}
       <li>
@@ -339,7 +339,7 @@
   <SignInWaits names={signInsWaiting(boardStore.machines)} />
   <ul
     data-slot="list"
-    class="m-0 flex list-none flex-col gap-space-row p-0"
+    class="m-0 flex list-none flex-col gap-space-1 p-0"
     {@attach reflow()}
   >
     {#each boardStore.machines as machine, index (machine.machineId)}

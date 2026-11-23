@@ -129,7 +129,7 @@
 <section
   data-slot="column"
   aria-label="{label}, {count} {count === 1 ? 'task' : 'tasks'}"
-  class="group/col flex min-h-0 flex-col max-phone:snap-start gap-space-1 rounded-lg bg-surface-recess p-space-1 transition-[background-color,opacity] duration-(--duration-control) ease-out data-closed:opacity-50 data-over:bg-surface-hover inset-ring inset-ring-border-hairline"
+  class="group/col flex min-h-0 flex-col max-phone:snap-start gap-space-1 rounded-lg bg-surface-recess p-space-1 transition-[background-color,opacity] duration-(--duration-fast) ease-out data-closed:opacity-50 data-over:bg-surface-hover inset-ring inset-ring-border-hairline"
   data-closed={closed ? "" : undefined}
   data-kind={kind ?? "none"}
   data-over={over ? "" : undefined}
@@ -138,11 +138,11 @@
   {@attach land(() => `stage:${label}`)}
 >
   <header data-slot="head" class="flex flex-col gap-0 px-space-2 py-space-1">
-    <span class="mark-line flex min-h-control-xs items-center gap-space-2">
+    <span class="mark-line flex min-h-space-6 items-center gap-space-2">
       {#if kind === "you"}
         <IconNeedsYou
           aria-hidden="true"
-          class="-me-space-1 size-icon-md flex-none text-status-attn-glyph"
+          class="-me-space-1 size-icon-md flex-none text-status-attn"
         />
       {:else if kind}
         {@const mark = markOf({ kind, icon, color })}
@@ -173,7 +173,7 @@
     </span>
     <span
       data-slot="kind"
-      class="flex-none type-meta whitespace-nowrap text-ink-subtle group-kind-you/col:text-status-attn-ink"
+      class="flex-none type-meta whitespace-nowrap text-ink-subtle group-kind-you/col:text-status-attn"
       >{kindWord}</span
     >
   </header>

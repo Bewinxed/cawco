@@ -133,7 +133,7 @@
 {/snippet}
 
 <div
-  class="flex min-h-0 min-w-0 flex-auto flex-col overflow-y-auto bg-surface-recess px-space-5 py-space-2"
+  class="flex min-h-0 min-w-0 flex-auto flex-col overflow-y-auto bg-surface-recess px-space-4 py-space-2"
 >
   <div
     data-slot="body"
@@ -179,7 +179,7 @@
         {#if ready}
           <div
             data-slot="slot"
-            class="col-start-1 row-start-1 flex min-w-0 flex-col gap-space-5"
+            class="col-start-1 row-start-1 flex min-w-0 flex-col gap-space-4"
             in:reveal
             {@attach holding && !settling ? settleThen : undefined}
           >
@@ -203,7 +203,7 @@
         {:else}
           <div
             data-slot="slot"
-            class="col-start-1 row-start-1 flex min-w-0 flex-col gap-space-5"
+            class="col-start-1 row-start-1 flex min-w-0 flex-col gap-space-4"
             out:reveal
           >
             <SkeletonRows fill={card !== null} />

@@ -6,7 +6,7 @@
    * the head. On a phone the panel is the bottom sheet, and the page keeps
    * it all.
    *
-   * The side column (`@md`) stands from the width where one board
+   * The side column (`@phone`) stands from the width where one board
    * column and the pane's padding leave the panel a phone's composer width:
    * the panel at its full width where that fits, narrower down to there, so
    * a project in a desk's split keeps its board beside him. Where the page
@@ -38,7 +38,7 @@
 
 <div class="@container flex h-full min-h-0 min-w-0 flex-1 flex-col">
   <div
-    class="grid min-h-0 flex-1 grid-areas-(--docked-areas) grid-cols-(--docked-cols) grid-rows-(--docked-rows) motion-safe:transition-[grid-template-columns,grid-template-rows] motion-safe:duration-(--duration-panel) motion-safe:ease-drawer phone:data-caw-open:grid-areas-(--docked-areas-row) phone:data-caw-open:grid-rows-(--docked-rows-row) phone:@md:data-caw-open:grid-areas-(--docked-areas-side) phone:@md:data-caw-open:grid-cols-(--docked-cols-side) phone:@md:data-caw-open:grid-rows-(--docked-rows)"
+    class="grid min-h-0 flex-1 grid-areas-(--docked-areas) grid-cols-(--docked-cols) grid-rows-(--docked-rows) motion-safe:transition-[grid-template-columns,grid-template-rows] motion-safe:duration-(--duration-slow) motion-safe:ease-drawer phone:data-caw-open:grid-areas-(--docked-areas-row) phone:data-caw-open:grid-rows-(--docked-rows-row) phone:@phone:data-caw-open:grid-areas-(--docked-areas-side) phone:@phone:data-caw-open:grid-cols-(--docked-cols-side) phone:@phone:data-caw-open:grid-rows-(--docked-rows)"
     data-caw-open={docked || undefined}
     data-caw-preview={(docked && preview) || undefined}
     style:--docked-areas={'"page"'}
@@ -46,12 +46,12 @@
     style:--docked-areas-side={'"page dock"'}
     style:--docked-cols="minmax(0, 1fr)"
     style:--docked-cols-side={preview
-      ? "minmax(0, 1fr) min(calc(2 * var(--panel-w) + var(--spacing-space-6)), calc(100% - var(--board-col-min) - var(--spacing-space-6)))"
-      : "minmax(0, 1fr) min(calc(var(--panel-w) + var(--spacing-space-6)), calc(100% - var(--board-col-min) - var(--spacing-space-6) - var(--spacing-space-6)))"}
+      ? "minmax(0, 1fr) min(calc(2 * calc(var(--spacing) * 95) + var(--spacing-space-6)), calc(100% - calc(var(--spacing) * 60) - var(--spacing-space-6)))"
+      : "minmax(0, 1fr) min(calc(calc(var(--spacing) * 95) + var(--spacing-space-6)), calc(100% - calc(var(--spacing) * 60) - var(--spacing-space-6) - var(--spacing-space-6)))"}
     style:--docked-rows="minmax(0, 1fr)"
     style:--docked-rows-row={preview
       ? "minmax(0, 1fr) 75%"
-      : "minmax(0, 1fr) min(var(--caw-panel-h), 50%)"}
+      : "minmax(0, 1fr) min(calc(var(--spacing) * 160), 50%)"}
   >
     <div class="grid-area-page flex min-h-0 min-w-0 flex-col">
       {@render page()}

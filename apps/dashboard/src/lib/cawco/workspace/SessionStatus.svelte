@@ -17,7 +17,7 @@
 
 <span
   aria-label={status.label}
-  class="mark-line inline-flex items-center gap-space-1 text-ink-muted text-size-label font-medium whitespace-nowrap"
+  class="mark-line inline-flex items-center gap-space-1 text-ink-muted text-base font-medium whitespace-nowrap"
   data-slot="session-status"
   data-session-status-tone={status.tone}
   role="img"

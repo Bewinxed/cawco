@@ -148,7 +148,7 @@
      (apps/dashboard/scripts/has-subject-check.ts). -->
 <span
   data-tree-mark
-  class="group/mark relative z-(--mark-z) inline-block flex-none size-(--size) text-on-ink data-bare:text-ink-muted"
+  class="group/mark relative z-(--mark-z) inline-block flex-none size-(--size) text-surface-page data-bare:text-ink-muted"
   data-box
   data-bare={fill ? undefined : ""}
   data-dot={dot}
@@ -160,7 +160,7 @@
   style:--dot={dot ? `var(--color-status-${dot}-glyph)` : undefined}
   style:--fill={fill}
   style:--n={Math.min(count, 3)}
-  style:--size="var(--mark-size, var(--spacing-space-5))"
+  style:--size="var(--mark-size, var(--spacing-space-4))"
   style:--mark-z="var(--mark-level, 2)"
 >
   {#if has}
@@ -181,10 +181,10 @@
       {#each [1, 2, 3] as i (i)}
         <span
           data-slot="tree-mark-card"
-          class="absolute inset-0 overflow-hidden rounded-xs bg-(--fill) bg-mark-overlay opacity-(--card-seen) origin-(--card-origin) transform-(--card-scale) after:absolute after:inset-0 after:bg-(--mark-deck-shade) after:opacity-(--shade-seen) before:absolute before:z-1 before:inset-x-0 before:top-0 before:h-(--cast-h) before:bg-linear-to-b before:from-(--mark-deck-cast) before:to-transparent before:translate-y-(--cast-y)"
+          class="absolute inset-0 overflow-hidden rounded-xs bg-(--fill) bg-mark-overlay opacity-(--card-seen) origin-(--card-origin) transform-(--card-scale) after:absolute after:inset-0 after:bg-mark-deck-shade after:opacity-(--shade-seen) before:absolute before:z-1 before:inset-x-0 before:top-0 before:h-(--cast-h) before:bg-linear-to-b before:from-mark-deck-cast before:to-transparent before:translate-y-(--cast-y)"
           style:--i={i}
           style:--p="max(0, calc(var(--n) - var(--i) + 1))"
-          style:--shade-seen="calc(var(--p) * var(--deck-shade-step))"
+          style:--shade-seen="calc(var(--p) * 0.2)"
           style:--cast-h="calc(var(--deck-step) * 1.5)"
           style:--cast-y={"calc((var(--size) - var(--deck-step) - var(--size) * var(--deck-shrink) * var(--p)) / (1 - var(--deck-shrink) * var(--p)))"}
           style:--card-seen="clamp(0, calc(var(--n) - var(--i) + 1), 1)"
@@ -217,13 +217,13 @@
       !(has && !faceAlways) && "bg-mark-overlay",
     ]}
     style:--hole={dot
-      ? "calc(var(--status-dot-size) / 2 + var(--status-dot-cut))"
+      ? "calc(calc(var(--spacing) * 1.5) / 2 + calc(var(--spacing) * 0.375))"
       : undefined}
-    style:--hole-mask={"var(--beat-mask, radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--tree-mark-hole-edge)), var(--color-ink-strong) calc(var(--hole) + var(--tree-mark-hole-edge))))"}
+    style:--hole-mask={"var(--beat-mask, radial-gradient(circle at 100% 0, transparent calc(var(--hole) - calc(1px / 4)), var(--color-ink-strong) calc(var(--hole) + calc(1px / 4))))"}
   >
     <span
       data-slot="tree-mark-rest"
-      style:--icon-swap-dur="var(--duration-control)"
+      style:--icon-swap-dur="var(--duration-fast)"
       class="col-start-1 row-start-1 inline-grid place-items-center swap-move group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-gone group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-gone"
     >
       {#if has && !faceAlways}
@@ -242,7 +242,7 @@
     {#if parent && !faceAlways}
       <span
         data-slot="chev"
-        style:--icon-swap-dur="var(--duration-control)"
+        style:--icon-swap-dur="var(--duration-fast)"
         class="col-start-1 row-start-1 inline-grid place-items-center size-icon-sm swap-move swap-gone group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-shown group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-shown"
         ><!-- Open, the chevron points down at the rows. --><ChevronIcon
           aria-hidden="true"
@@ -259,10 +259,10 @@
        its way to its row (motion/branch). Unseen at rest. -->
   <span
     aria-hidden="true"
-    class="absolute inset-0 overflow-hidden rounded-xs bg-(--skin-fill) bg-mark-overlay opacity-0 pointer-events-none after:absolute after:inset-0 after:bg-(--mark-deck-shade) after:opacity-(--shade-seen) before:absolute before:z-1 before:inset-x-0 before:top-0 before:h-(--cast-h) before:bg-linear-to-b before:from-(--mark-deck-cast) before:to-transparent before:translate-y-(--cast-y)"
+    class="absolute inset-0 overflow-hidden rounded-xs bg-(--skin-fill) bg-mark-overlay opacity-0 pointer-events-none after:absolute after:inset-0 after:bg-mark-deck-shade after:opacity-(--shade-seen) before:absolute before:z-1 before:inset-x-0 before:top-0 before:h-(--cast-h) before:bg-linear-to-b before:from-mark-deck-cast before:to-transparent before:translate-y-(--cast-y)"
     data-ride-skin
     style:--p="1"
-    style:--shade-seen="calc(var(--p) * var(--deck-shade-step))"
+    style:--shade-seen="calc(var(--p) * 0.2)"
     style:--cast-h="calc(var(--deck-step) * 1.5)"
     style:--cast-y={"calc((var(--size) - var(--deck-step) - var(--size) * var(--deck-shrink) * var(--p)) / (1 - var(--deck-shrink) * var(--p)))"}
     style:--skin-fill="var(--pfill, var(--fill))"
@@ -279,8 +279,8 @@
     <span
       data-slot="dot"
       aria-hidden="true"
-      class="absolute z-5 top-(--dot-off) right-(--dot-off) size-(--status-dot-size) rounded-pill bg-(--dot) pointer-events-none"
-      style:--dot-off="calc(var(--status-dot-size) / -2)"
+      class="absolute z-5 top-(--dot-off) right-(--dot-off) size-1.5 rounded-pill bg-(--dot) pointer-events-none"
+      style:--dot-off="calc(calc(var(--spacing) * 1.5) / -2)"
     ></span>
   {/if}
   {#if status === "live"}
@@ -326,11 +326,11 @@
       data-ping
       data-slot="dot"
       aria-hidden="true"
-      class="absolute z-5 top-(--dot-off) right-(--dot-off) size-(--status-dot-size) rounded-pill bg-(--dot) pointer-events-none opacity-0"
+      class="absolute z-5 top-(--dot-off) right-(--dot-off) size-1.5 rounded-pill bg-(--dot) pointer-events-none opacity-0"
       data-echo
       data-echo-key={echoKey}
       data-echo-status={status}
-      style:--dot-off="calc(var(--status-dot-size) / -2)"
+      style:--dot-off="calc(calc(var(--spacing) * 1.5) / -2)"
     ></span>
   {/if}
   {#if switches}
@@ -349,11 +349,11 @@
       aria-expanded={open}
       aria-label={label}
       class="focus-inset touch-hit select-none touch-callout-none absolute z-4 -inset-x-(--reach) -top-(--reach) bottom-(--hit-foot) coarse:-bottom-(--reach) rounded-xs coarse:hit-gap-x-(--hit-stop-x) coarse:hit-gap-y-(--hit-stop-y)"
-      style:--reach="calc(var(--status-dot-size) / 2)"
-      style:--hit-max={"var(--mark-hit-max, calc(var(--spacing-space-1) + var(--tree-gap)))"}
+      style:--reach="calc(calc(var(--spacing) * 1.5) / 2)"
+      style:--hit-max={"var(--mark-hit-max, calc(var(--spacing-space-1) + var(--spacing-space-1)))"}
       style:--hit-foot={"calc(-1 * min(var(--n) * var(--deck-step) + var(--reach), var(--hit-max)))"}
       style:--hit-stop-x={"calc(2 * (var(--mark-hit-gap, var(--spacing-space-2)) - var(--reach)))"}
-      style:--hit-stop-y={"calc(2 * (var(--hit-max) - var(--tree-gap) / 2 - var(--reach)))"}
+      style:--hit-stop-y={"calc(2 * (var(--hit-max) - var(--spacing-space-1) / 2 - var(--reach)))"}
       onclick={toggle}
       onkeydown={(event) => {
         if (event.key === "Enter" || event.key === " ") {

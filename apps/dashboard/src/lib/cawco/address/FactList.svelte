@@ -27,7 +27,7 @@
         {#if fact.mark === "yes"}
           <IconSuccess
             aria-label="Yes"
-            class="size-icon-md text-status-done-ink"
+            class="size-icon-md text-status-done"
           />
         {:else if fact.mark === "no"}
           <IconNeutral aria-label="No" class="size-icon-md text-ink-muted" />

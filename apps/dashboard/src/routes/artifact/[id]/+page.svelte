@@ -87,7 +87,7 @@
     {:else}
       <div
         aria-hidden="true"
-        class="flex-1 rounded-lg bg-surface-recess p-space-5"
+        class="flex-1 rounded-lg bg-surface-recess p-space-4"
         out:revealOut
       >
         <Skeleton class="w-5/12" data-slot="block" line="body" radius="text" />

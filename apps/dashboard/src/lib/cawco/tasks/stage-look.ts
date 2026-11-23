@@ -69,10 +69,10 @@ export const STAGE_GLYPHS: Record<StageIcon, Component> = {
 
 /** Each colour's section hue token; a stage with none takes the muted ink. */
 export const STAGE_HUES: Record<StageColor, string> = {
-  cyan: "var(--color-mark-6)",
-  amber: "var(--color-mark-3)",
-  orange: "var(--color-mark-2)",
-  green: "var(--color-mark-4)",
+  cyan: "var(--color-mark-4)",
+  amber: "var(--color-mark-1)",
+  orange: "var(--color-mark-1)",
+  green: "var(--color-mark-2)",
 };
 
 /**

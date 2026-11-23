@@ -22,9 +22,9 @@
   let { glyph }: { glyph: LinkGlyph } = $props();
 
   const TONE: Record<LinkGlyph, string> = {
-    open: "text-status-live-glyph",
+    open: "text-status-live",
     draft: "text-ink-muted",
-    merged: "text-status-done-glyph",
+    merged: "text-status-done",
     closed: "text-ink-muted",
     canceled: "text-ink-subtle",
     failed: "text-status-fail-glyph",

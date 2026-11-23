@@ -152,13 +152,13 @@
   }
   /* The fade's length and the inline mask, at no weight under every host's
      own: the house 40px, a phone's 16px so it reads as an edge, not a band
-     (`--edge-fade-len`, `-phone`), which `fade-len-*` sets per scroller;
+     (`--spacing-row`, `-phone`), which `fade-len-*` sets per scroller;
      PaneTabs' phone strip redraws the inline mask on its own run
      (`strip-edge-mask`). */
   :where(.kit-edge-fade),
   :where(.kit-edge-fade-block),
   :where(.kit-edge-fade-pan) {
-    --fade-len: var(--edge-fade-len);
+    --fade-len: var(--spacing-row);
   }
   @media (width < --theme(--breakpoint-phone)) {
     :where(.kit-edge-fade),

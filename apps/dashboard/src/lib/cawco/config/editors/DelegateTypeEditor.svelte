@@ -46,7 +46,7 @@
     $props();
 
   const store = configStore();
-  const HUE = "var(--color-mark-6)";
+  const HUE = "var(--color-mark-4)";
 
   const name = $derived(type?.name ?? null);
 
@@ -246,12 +246,12 @@
       {name ? words.nameKept : words.nameRule}
     </p>
     {#if problemFor("name")}
-      <p class="type-meta text-status-fail-ink" in:appear>{problem}</p>
+      <p class="type-meta text-status-fail" in:appear>{problem}</p>
     {:else if duplicate}
-      <p class="type-meta text-status-fail-ink" in:appear>{duplicate}</p>
+      <p class="type-meta text-status-fail" in:appear>{duplicate}</p>
     {/if}
     {#if form.failed}
-      <p class="type-meta text-status-fail-ink" role="alert" in:appear>
+      <p class="type-meta text-status-fail" role="alert" in:appear>
         {form.failed}
       </p>
     {/if}

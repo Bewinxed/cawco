@@ -117,7 +117,7 @@
         { translate: "-2px 0" },
         { translate: "0 0" },
       ],
-      { duration: dur("--duration-panel"), easing: CURVE.out }
+      { duration: dur("--duration-slow"), easing: CURVE.out }
     );
   }
 
@@ -420,7 +420,7 @@
                     type="button"
                     data-slot="port"
                     aria-label="Port 22. Change the port"
-                    class="select-none pressable touch-hit mark-line col-start-1 row-start-1 inline-flex h-control-md w-full items-center justify-center gap-space-1 rounded-md border border-border-control bg-surface-raised type-body text-ink-strong shadow-xs transition-control hover:bg-surface-hover"
+                    class="select-none pressable touch-hit mark-line col-start-1 row-start-1 inline-flex h-control-md w-full items-center justify-center gap-space-1 rounded-sm border border-border-control bg-surface-raised type-body text-ink-strong shadow-sm transition-control hover:bg-surface-hover"
                     onclick={() => {
                       // Its field takes focus in this press's own task. A
                       // frame later (`tick`, in async mode) it would take
@@ -444,7 +444,7 @@
             <p
               id="connect-said"
               aria-live="polite"
-              class="m-0 min-h-lh ps-row-compact type-meta text-status-fail-ink"
+              class="m-0 min-h-lh ps-row-compact type-meta text-status-fail"
             >
               {said || refused}
             </p>
@@ -542,7 +542,7 @@
             {#if connect.joinFailed}
               <div data-slot="join-failed" class="flex items-start gap-space-3">
                 <p
-                  class="m-0 min-w-0 flex-1 type-meta text-pretty text-status-fail-ink"
+                  class="m-0 min-w-0 flex-1 type-meta text-pretty text-status-fail"
                   aria-live="polite"
                 >
                   The hub's addresses couldn't be read: {connect.joinFailed} It asks
@@ -569,14 +569,14 @@
                   <label
                     data-address={row.kind}
                     class={[
-                      "mark-line flex min-h-control-sm items-center gap-space-2 rounded-sm px-space-1 py-space-row coarse:min-h-control-lg",
+                      "mark-line flex min-h-control-sm items-center gap-space-2 rounded-sm px-space-1 py-space-1 coarse:min-h-control-lg",
                       row.address ? "hover:bg-surface-hover" : "opacity-50",
                     ]}
                   >
                     <input
                       type="radio"
                       name="connect-address"
-                      class="size-icon-md flex-none accent-action-solid"
+                      class="size-icon-md flex-none accent-accent"
                       data-box
                       disabled={!row.address}
                       checked={row.address !== null && row.address === address}
@@ -648,7 +648,7 @@
           </div>
           <Checklist />
           {#if refused}
-            <p class="m-0 type-meta text-status-fail-ink" aria-live="polite">
+            <p class="m-0 type-meta text-status-fail" aria-live="polite">
               {refused}
             </p>
           {/if}
@@ -680,14 +680,14 @@
               <span class="grid" data-box>
                 <span
                   class={[
-                    "col-start-1 row-start-1 transition-opacity duration-(--duration-fade) ease-out",
+                    "col-start-1 row-start-1 transition-opacity duration-(--duration-base) ease-out",
                     copied && "opacity-0",
                   ]}>{commonWords.copyCommand}</span
                 >
                 <span
                   aria-hidden="true"
                   class={[
-                    "col-start-1 row-start-1 transition-opacity duration-(--duration-fade) ease-out",
+                    "col-start-1 row-start-1 transition-opacity duration-(--duration-base) ease-out",
                     !copied && "opacity-0",
                   ]}
                   >{connectWords.copiedListening}<span

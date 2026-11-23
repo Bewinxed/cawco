@@ -67,11 +67,11 @@
   {/if}
   <p
     aria-live="polite"
-    class="m-0 min-h-(--tx-line) rail-line text-size-label font-medium text-ink-strong"
+    class="m-0 min-h-6.5 rail-line text-base font-medium text-ink-strong"
   >
     <span data-slot="rail-cell" class="rail-cell">
       {#if waiting}
-        <IconNeedsYou class="size-icon-md text-status-attn-glyph" />
+        <IconNeedsYou class="size-icon-md text-status-attn" />
       {:else if present}
         <LiveDot />
       {/if}

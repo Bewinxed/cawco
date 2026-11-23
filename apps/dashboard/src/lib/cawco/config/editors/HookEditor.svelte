@@ -82,7 +82,7 @@
   let { hook, taken }: { hook: FleetHook | null; taken: string[] } = $props();
 
   const store = configStore();
-  const HUE = "var(--color-mark-6)";
+  const HUE = "var(--color-mark-4)";
 
   let draft = $state<HookDraft>(
     untrack(() => (hook ? draftOf(hook) : blankHook()))
@@ -457,7 +457,7 @@
       />
     </Field>
     {#if shown("event")}
-      <p class="type-meta text-status-fail-ink" in:appear>{wrong.event}</p>
+      <p class="type-meta text-status-fail" in:appear>{wrong.event}</p>
     {:else if eventInfo}
       <p data-slot="note" class="type-meta max-w-measure text-ink-muted">
         Runs {eventInfo.blurb}.
@@ -512,11 +512,11 @@
       options={HANDLERS}
       value={draft.handler.type}
     />
-    <!-- One handler's fields cross-fade into the next's (--duration-control) in
-         one box, whose height follows over --duration-panel on --ease-drawer. -->
+    <!-- One handler's fields cross-fade into the next's (--duration-fast) in
+         one box, whose height follows over --duration-slow on --ease-drawer. -->
     <div
       class="relative flex flex-col"
-      {@attach morph({ ms: dur("--duration-panel") })}
+      {@attach morph({ ms: dur("--duration-slow") })}
     >
       {#if draft.handler.type === "command"}
         <div
@@ -750,7 +750,7 @@
       />
     </Field>
     {#if shown("scope")}
-      <p class="type-meta text-status-fail-ink" in:appear>{wrong.scope}</p>
+      <p class="type-meta text-status-fail" in:appear>{wrong.scope}</p>
     {/if}
   </EditorSection>
 

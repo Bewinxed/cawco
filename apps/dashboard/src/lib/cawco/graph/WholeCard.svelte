@@ -35,13 +35,13 @@
   data-slot="whole-state"
   data-kept={card.kept ? "" : undefined}
   class={[
-    "relative flex min-w-0 flex-col gap-space-row rounded-md border bg-surface-raised px-space-3 py-space-2 transition-control",
+    "relative flex min-w-0 flex-col gap-space-1 rounded-sm border bg-surface-raised px-space-3 py-space-2 transition-control",
     wide ? "w-auto" : "w-52",
     card.kept
-      ? "border-brand-solid"
+      ? "border-accent"
       : "border-border-control can-hover:has-[button:hover]:bg-surface-hover",
     card.against &&
-      "outline-solid outline-(length:--focus-ring-width) outline-status-done-glyph",
+      "outline-solid outline-2 outline-status-done",
   ]}
   style:--xy-handle-background-color="transparent"
   style:--xy-handle-border-color="transparent"
@@ -55,8 +55,8 @@
       aria-current={card.kept ? "true" : undefined}
       aria-describedby={card.marks.length > 0 ? `${uid}-marks` : undefined}
       class={[
-        "min-w-0 flex-1 text-start type-label wrap-anywhere outline-none before:absolute before:inset-0 focus-visible:before:outline-(length:--focus-ring-width) focus-visible:before:outline-solid focus-visible:before:outline-focus-ring focus-visible:before:-outline-offset-2",
-        "text-ink-strong before:rounded-md",
+        "min-w-0 flex-1 text-start type-label wrap-anywhere outline-none before:absolute before:inset-0 focus-visible:before:outline-2 focus-visible:before:outline-solid focus-visible:before:outline-accent-ink focus-visible:before:-outline-offset-2",
+        "text-ink-strong before:rounded-sm",
       ]}
       onclick={() => card.onpress(card.id)}
     >
@@ -73,7 +73,7 @@
         <span
           {...tip}
           id={`${uid}-marks`}
-          class="relative z-1 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-row self-start"
+          class="relative z-1 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 self-start"
         >
           <span class="sr-only"
             >{card.marks.map((mark) => mark.said).join(". ")}</span
@@ -86,12 +86,12 @@
             >
               {#if mark.tone === "fail"}
                 <IconError
-                  class="size-icon-sm flex-none text-status-fail-glyph"
+                  class="size-icon-sm flex-none text-status-fail"
                   data-box
                 />
               {:else}
                 <IconWarningTriangle
-                  class="size-icon-sm flex-none text-status-attn-glyph"
+                  class="size-icon-sm flex-none text-status-attn"
                   data-box
                 />
               {/if}

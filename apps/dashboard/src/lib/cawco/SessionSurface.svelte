@@ -543,7 +543,7 @@
   /* ── Board ↔ conversation ───────────────────────────────────────────
      The board is the home the groups push in over: opening a conversation
      slides the groups in from 8% toward the inline end as the board recedes
-     8% the other way and dims to 0.6, over --duration-panel on the drawer curve;
+     8% the other way and dims to 0.6, over --duration-slow on the drawer curve;
      going back to the board slides the groups off the way they came as the
      board returns. The one leaving stays drawn until its slide ends, then
      is hidden (below); input goes to the one arriving at once. Parked under
@@ -570,7 +570,7 @@
     const side =
       getComputedStyle(document.documentElement).direction === "rtl" ? -1 : 1;
     const timing: KeyframeAnimationOptions = {
-      duration: dur("--duration-panel"),
+      duration: dur("--duration-slow"),
       easing: ease("--ease-drawer"),
       fill: "forwards",
     };
@@ -672,7 +672,7 @@
            conversation is never kept waiting on him. The line under him
            cross-fades in one cell. -->
       <div
-        class="relative flex flex-auto items-center justify-center bg-surface-recess type-body text-ink-muted transition-[background-color] duration-(--duration-fade) ease-out data-over:pointer-events-none data-over:absolute data-over:inset-0 data-over:z-1 data-over:bg-transparent"
+        class="relative flex flex-auto items-center justify-center bg-surface-recess type-body text-ink-muted transition-[background-color] duration-(--duration-base) ease-out data-over:pointer-events-none data-over:absolute data-over:inset-0 data-over:z-1 data-over:bg-transparent"
         data-over={!detailShown || undefined}
       >
         {#if firstRunning && !machinesThere && !cawThere}

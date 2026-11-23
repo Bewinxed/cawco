@@ -44,7 +44,7 @@
         /** A badge or a run's status chip. */
         badge: "h-icon-lg",
         /** A suggestion chip under the composer. */
-        chip: "h-(--suggest-chip)",
+        chip: "h-control-sm",
         /** A stat tile. */
         stat: "h-22",
         /** A card on a project's board. */
@@ -73,12 +73,12 @@
       },
       radius: {
         card: "rounded-lg",
-        tile: "rounded-md",
+        tile: "rounded-sm",
         chip: "rounded-sm",
         text: "rounded-xs",
         flush: "rounded-none",
         /** A text line's bar, too thin to round further (the hair). */
-        line: "rounded-hair",
+        line: "rounded-xs",
         /** A pin's disc, a status dot. */
         pill: "rounded-pill",
       },

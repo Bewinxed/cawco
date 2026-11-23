@@ -20,7 +20,7 @@
     Number.parseFloat(getComputedStyle(n).getPropertyValue("--duration-hold"));
 </script>
 
-<div class="rounded-huge nodrag nopan rounded-md"></div>
+<div class="rounded-huge nodrag nopan rounded-sm"></div>
 <div class="p-[13px] transition-[opacity]"></div>
 <div class:rounded-huge-too={picked !== ""}></div>
 <Button class="p-space-4 {steady}">Restyled</Button>

@@ -854,9 +854,9 @@
 {/snippet}
 
 {#snippet wait()}
-  <!-- The well's wait (BrowserView.svelte's wait): one muted meta line at the well's top, `--spacing-space-5` in, after the live dot, arriving after the wait grace. The well stands it over its piece and holds it at the page's top while any of the piece is in view (Well.svelte `status`), so a frame taller than the view says it however far it is scrolled, never from a middle below the fold or under the page's foot. The live region stands throughout; its line comes and goes inside it. -->
+  <!-- The well's wait (BrowserView.svelte's wait): one muted meta line at the well's top, `--spacing-space-4` in, after the live dot, arriving after the wait grace. The well stands it over its piece and holds it at the page's top while any of the piece is in view (Well.svelte `status`), so a frame taller than the view says it however far it is scrolled, never from a middle below the fold or under the page's foot. The live region stands throughout; its line comes and goes inside it. -->
   <p
-    class="m-0 p-space-5 text-ink-muted type-meta"
+    class="m-0 p-space-4 text-ink-muted type-meta"
     data-slot="wait-row"
     role="status"
   >
@@ -890,7 +890,7 @@
   status={framed && !fault ? wait : undefined}
 >
   {#if pageAddress !== null}
-    <!-- A page taller than its frame scrolls inside it, under the house edge fade (its 40px, `--edge-fade-len`) at its head and foot while more is past them. Wider than its well, its well scrolls it sideways. Until its frame has loaded it holds a screen's skeleton at the frame's own box, and past the grace the wait's line stands over it (`status`), as a screen's embed does: never a blank box. -->
+    <!-- A page taller than its frame scrolls inside it, under the house edge fade (its 40px, `--spacing-row`) at its head and foot while more is past them. Wider than its well, its well scrolls it sideways. Until its frame has loaded it holds a screen's skeleton at the frame's own box, and past the grace the wait's line stands over it (`status`), as a screen's embed does: never a blank box. -->
     <div
       class={["relative", picture === undefined ? "w-full" : "flex-none"]}
       data-cawco-embed-place={id}
@@ -900,7 +900,7 @@
       <iframe
         bind:this={frame}
         class={[
-          "block rounded-xs border-0 bg-surface-page outline-1 -outline-offset-1 outline-image-outline transition-opacity duration-(--duration-fade) not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)",
+          "block rounded-xs border-0 bg-surface-page outline-1 -outline-offset-1 outline-ink-strong/10 transition-opacity duration-(--duration-base) not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)",
           screenTall === null && "max-h-vb-80",
           picture === undefined ? "w-full" : "flex-none",
           tall === null && screenTall === null && "aspect-16/10",
@@ -917,7 +917,7 @@
           sized();
         }}
         src={pageAddress}
-        style:--fade="var(--edge-fade-len)"
+        style:--fade="var(--spacing-row)"
         style:--fade-above={"linear-gradient(transparent, var(--color-ink-strong) var(--fade))"}
         style:--fade-below={"linear-gradient(var(--color-ink-strong) calc(100% - var(--fade)), transparent)"}
         style:--fade-both={"linear-gradient(transparent, var(--color-ink-strong) var(--fade), var(--color-ink-strong) calc(100% - var(--fade)), transparent)"}
@@ -994,7 +994,7 @@
               {decisionsWords.previewUnreached(named())}
             </p>
             <p
-              class="type-meta text-status-fail-ink wrap-anywhere"
+              class="type-meta text-status-fail wrap-anywhere"
               data-slot="embed-cause"
             >
               {fault.cause}
@@ -1024,7 +1024,7 @@
           <iframe
             bind:this={frame}
             class={[
-              "block w-full rounded-xs border-0 bg-surface-page outline-1 -outline-offset-1 outline-image-outline transition-opacity duration-(--duration-fade)",
+              "block w-full rounded-xs border-0 bg-surface-page outline-1 -outline-offset-1 outline-ink-strong/10 transition-opacity duration-(--duration-base)",
               tall === null &&
                 screenTall === null &&
                 (screen ? "aspect-16/10 max-h-vb-80" : "h-0"),
@@ -1097,7 +1097,7 @@
       role="alert"
     >
       <p
-        class="flex-1 min-w-0 m-0 type-meta text-status-fail-glyph wrap-anywhere"
+        class="flex-1 min-w-0 m-0 type-meta text-status-fail wrap-anywhere"
       >
         {held.unopened}
       </p>

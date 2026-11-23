@@ -67,7 +67,7 @@
     | TailNote;
 
   /** A failed call's glyph ink, the transcript's (ToolGroup `.glyph.err`). */
-  const FAILED_INK = "text-status-fail-glyph";
+  const FAILED_INK = "text-status-fail";
 
   /** Rows on screen, the height of the tail; one row's height, in px. */
   const SLOTS = 6;
@@ -309,13 +309,13 @@
     untrack(() => take(target));
   });
 
-  /** Plays the queue one row at a time: the first lift over --duration-fade, the rest back to back at --duration-control. */
+  /** Plays the queue one row at a time: the first lift over --duration-base, the rest back to back at --duration-fast. */
   function pump(): void {
     if (playing) {
       return;
     }
     playing = true;
-    detach(lift(dur("--duration-fade")), "lift");
+    detach(lift(dur("--duration-base")), "lift");
   }
 
   /** One row into the bottom slot, then the next one queued, if any. */
@@ -332,11 +332,11 @@
       await column?.lastElementChild?.animate(
         [{ opacity: 0 }, { opacity: 1 }],
         {
-          duration: dur("--duration-control"),
+          duration: dur("--duration-fast"),
           easing: CURVE.out,
         }
       ).finished;
-      return lift(dur("--duration-control"));
+      return lift(dur("--duration-fast"));
     }
     shown = [...shown, key];
     await tick();
@@ -356,7 +356,7 @@
       timing
     ).finished;
     shown = shown.slice(-SLOTS);
-    return lift(dur("--duration-control"));
+    return lift(dur("--duration-fast"));
   }
 </script>
 
@@ -383,7 +383,7 @@
         {@const row = dataOf(key)}
         <div
           data-slot="row"
-          class="mark-line flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-size-meta whitespace-nowrap kind-ask:text-status-attn-ink kind-asked:text-ink-muted kind-fail:text-status-fail-ink"
+          class="mark-line flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-sm whitespace-nowrap kind-ask:text-status-attn kind-asked:text-ink-muted kind-fail:text-status-fail"
           data-delegate-tail-kind={row?.kind}
           data-kind={row?.kind}
         >
@@ -451,7 +451,7 @@
     <!-- Its facts as the hub has them: state, project, role, machine, age. -->
     <p
       data-slot="facts"
-      class="m-0 flex-none h-(--row) flex items-center min-w-0 text-size-meta text-ink-muted"
+      class="m-0 flex-none h-(--row) flex items-center min-w-0 text-sm text-ink-muted"
       in:arrive
     >
       <span class="min-w-0 truncate">{sessionFacts(answer)}</span>
@@ -468,19 +468,19 @@
     >
       <div
         data-slot="row"
-        class="flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-size-meta whitespace-nowrap"
+        class="flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-sm whitespace-nowrap"
       >
         <Skeleton class="w-2/3" line="meta" />
       </div>
       <div
         data-slot="row"
-        class="flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-size-meta whitespace-nowrap"
+        class="flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-sm whitespace-nowrap"
       >
         <Skeleton class="w-1/2" line="meta" />
       </div>
       <div
         data-slot="row"
-        class="flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-size-meta whitespace-nowrap"
+        class="flex-none h-(--row) flex items-center gap-space-2 min-w-0 text-sm whitespace-nowrap"
       >
         <Skeleton class="w-3/4" line="meta" />
       </div>

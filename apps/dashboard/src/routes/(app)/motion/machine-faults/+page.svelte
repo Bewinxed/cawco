@@ -117,13 +117,13 @@
     },
   ];
   const panel = floatingSurface({
-    class: "mx-auto my-space-5 w-full max-w-xs p-space-1",
+    class: "mx-auto my-space-4 w-full max-w-xs p-space-1",
   });
 </script>
 
 <div class={panel} data-bench data-cause={OPENCODE}>
   <SignInWaits names={signInsWaiting(MACHINES)} />
-  <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-row p-0">
+  <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-1 p-0">
     {#each MACHINES as machine, index (machine.name)}
       {@const failedCount = machine.items.filter(
         (item) => item.state === "failed"

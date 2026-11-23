@@ -23,7 +23,7 @@
 </script>
 
 <div
-  class="relative min-h-(--frame-h) p-space-5 contain-layout"
+  class="relative min-h-(--frame-h) p-space-4 contain-layout"
   style:--frame-h={`${height}px`}
 >
   <Popover.Root open>

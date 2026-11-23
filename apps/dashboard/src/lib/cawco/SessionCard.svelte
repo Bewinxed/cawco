@@ -131,12 +131,12 @@
     </span>
     <span
       data-slot="title"
-      class="min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap text-size-label font-medium text-ink-strong"
+      class="min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap text-base font-medium text-ink-strong"
       >{sessionTitle(id) ?? ""}</span
     >
     <span
       aria-label={WORD[tone]}
-      class="grid size-icon-md flex-none place-items-center text-ink-muted status-needs:text-status-attn-ink status-done:text-status-done-ink status-failed:text-status-fail-ink"
+      class="grid size-icon-md flex-none place-items-center text-ink-muted status-needs:text-status-attn status-done:text-status-done status-failed:text-status-fail"
       data-session-hover-tone={tone}
       data-status={tone}
       data-box
@@ -145,7 +145,7 @@
       {#if tone === "live"}
         <span
           data-slot="dot"
-          class="size-space-2 rounded-pill bg-status-live-glyph"
+          class="size-space-2 rounded-pill bg-status-live"
         ></span>
       {:else if tone === "needs"}
         <IconAsk />

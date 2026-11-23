@@ -37,7 +37,7 @@
 </script>
 
 <div
-  class="group flex h-full min-h-22 flex-col rounded-md bg-surface-raised p-space-2 shadow-sm"
+  class="group flex h-full min-h-22 flex-col rounded-sm bg-surface-raised p-space-2 shadow-sm"
   data-tone={tone}
   {...rest}
 >
@@ -51,7 +51,7 @@
       <span
         data-slot="num"
         data-stat-value
-        class="num min-h-lh type-kpi text-ink-strong group-tone-live:text-status-live-ink group-tone-attn:text-status-attn-ink group-tone-done:text-status-done-ink group-tone-fail:text-status-fail-ink group-tone-caution:text-status-attn-glyph group-tone-bad:text-status-fail-glyph max-desk:type-title"
+        class="num min-h-lh type-kpi text-ink-strong group-tone-live:text-status-live group-tone-attn:text-status-attn group-tone-done:text-status-done group-tone-fail:text-status-fail group-tone-caution:text-status-attn group-tone-bad:text-status-fail max-desk:type-title"
         ><MorphText text={String(value)} /></span
       >
       {#if unit}

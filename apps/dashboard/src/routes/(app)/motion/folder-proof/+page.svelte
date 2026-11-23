@@ -188,7 +188,7 @@
 >
   <div
     data-slot="group"
-    class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-shelf pt-space-6"
+    class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-sunk pt-space-6"
     data-strip="session"
     onclickcapture={benchClick(leaf)}
   >
@@ -197,7 +197,7 @@
   </div>
   <div
     data-slot="group"
-    class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-shelf pt-space-6"
+    class="@container/leaf flex min-h-0 flex-auto flex-col bg-surface-sunk pt-space-6"
     data-strip="session-idle"
     onclickcapture={benchClick(idleLeaf)}
   >
@@ -207,7 +207,7 @@
   <!-- The rims' tokens, tuned live. The bench's own controls, at the foot,
        clear of every strip. -->
   <div
-    class="type-label flex flex-wrap gap-x-space-5 gap-y-space-2 border-t border-t-border-hairline bg-surface-raised px-space-5 py-space-3 text-ink-muted"
+    class="type-label flex flex-wrap gap-x-space-4 gap-y-space-2 border-t border-t-border-hairline bg-surface-raised px-space-4 py-space-3 text-ink-muted"
   >
     <label class="flex items-center gap-space-2">
       <span>Taper</span>

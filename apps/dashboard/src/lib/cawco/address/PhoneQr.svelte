@@ -38,10 +38,10 @@
 <div
   class="grid min-w-0 grid-cols-(--qr-cols) items-center gap-x-space-4"
   data-slot="phone-qr"
-  style:--qr-cols="var(--address-qr) minmax(0, 1fr)"
+  style:--qr-cols="var(--address-qr, calc(var(--spacing) * 28)) minmax(0, 1fr)"
 >
   <svg
-    class="block size-28 flex-none rounded-sm bg-surface-raised text-ink-strong shadow-xs"
+    class="block size-28 flex-none rounded-sm bg-surface-raised text-ink-strong shadow-sm"
     aria-label="QR code for {address}"
     role="img"
     viewBox="0 0 {code.size} {code.size}"
