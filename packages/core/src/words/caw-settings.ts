@@ -22,18 +22,15 @@ export const cawSettingsWords = {
   /** The hub is out of reach: what shows is what it said last, and the controls are sunk. */
   hubAway:
     "The hub isn't answering, so these are its last settings and can't be changed yet.",
-  /** What Caw may change in the project: the heading. */
-  changes: "What Caw can change",
   /** His chat's settings: the heading. */
   chat: "Your chat with Caw",
   /** Whether Caw may propose changes to Who decides: the switch's label. */
-  proposes: "Propose changes to who decides",
-  /** What follows a proposal, under the switch. */
-  proposesHint: "You approve or decline each one.",
+  proposes: "Allow Caw to change these settings",
   /** What stands when the switch's change was refused. */
   proposesUnchanged: (on: boolean) =>
-    on ? "Caw can still propose changes" : "Caw still only reads who decides",
-  /** The triggers' settings: the heading. */
+    on
+      ? "Caw can still change these settings"
+      : "Caw still can't change these settings",
   triggers: "Triggers",
   // triggersMean: cut. The line under the heading comes off the panel.
   /** A trigger row's fields, as a reset names them. */
@@ -83,7 +80,6 @@ export const triggerKindWords = {
   },
   "task-moves": {
     name: "Task moves",
-    what: "A task moved or created",
   },
   "inbound-events": {
     name: "Inbound events",

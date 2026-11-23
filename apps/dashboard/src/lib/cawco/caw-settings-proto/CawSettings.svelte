@@ -7,7 +7,7 @@
    * - A hero picture of Caw awake or asleep across the panel's top
    *   (CawHero), his one switch on its faded lower edge with the line of
    *   what that state means; it crossfades as he turns.
-   * - What Caw can change: whether he may propose changes to Who decides.
+   * - Whether Caw may change Who decides: one switch, under the hero.
    * - Your chat with Caw: what it runs as (RunsAs: account, harness and
    *   model, mode), the project's Caw.
    * - Triggers: each kind (TriggerRow) and what its short sessions start
@@ -120,12 +120,10 @@
         <span>{words.hubAway}</span>
       </p>
     {/if}
-    <section data-slot="changes" class="grid gap-space-2">
-      <h3 class="m-0 type-row text-ink-strong">{words.changes}</h3>
+    <div data-slot="changes" class="grid gap-space-2">
       <SwitchField
         checked={proposesDecides}
         disabled={hubAway}
-        hint={words.proposesHint}
         id={`caw-proposes-${projectId}`}
         label={words.proposes}
         onchange={onproposes}
@@ -135,7 +133,7 @@
           {refusedProposes}
         </p>
       {/if}
-    </section>
+    </div>
     <section data-slot="chat" class="grid gap-space-2">
       <h3 class="m-0 type-row text-ink-strong">{words.chat}</h3>
       <RunsAs
