@@ -85,7 +85,7 @@
       />
     {/each}
     <!-- The scrim: the scene's lower part fades into the panel's surface,
-         solid by its foot, where the switch and its line stand. -->
+         solid by its foot; the line stands below it, clear of the scene. -->
     <span
       class="absolute inset-x-0 bottom-0 h-1/4 bg-linear-to-b/srgb from-transparent to-surface-raised to-70%"
     ></span>
@@ -113,7 +113,7 @@
   </div>
   <div
     class={[
-      "relative -mt-space-6 flex flex-col gap-space-3",
+      "flex flex-col gap-space-3 pt-space-3",
       sheet ? "px-4" : "px-space-4",
     ]}
   >
