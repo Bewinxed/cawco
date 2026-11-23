@@ -23,8 +23,7 @@
   import { cawSettingsWords as words } from "@cawco/core/words/caw-settings";
   import type { SwitchedLead } from "#lib/cawco/project/CawLeadSwitch.svelte";
   import { sheetScroller } from "#lib/components/ui/drawer/sheet-head.js";
-  import { SectionHeader } from "#lib/components/ui/section-header/index.js";
-  import { IconBolt, IconChat, IconCloudCross, IconPen } from "#lib/icons.js";
+  import { IconCloudCross } from "#lib/icons.js";
   import SwitchField from "../config/SwitchField.svelte";
   import CawHero from "./CawHero.svelte";
   import type {
@@ -88,8 +87,6 @@
      */
     sheet?: boolean;
   } = $props();
-
-  const HEAD = "var(--color-ink-muted)";
 </script>
 
 <div
@@ -124,12 +121,7 @@
       </p>
     {/if}
     <section data-slot="changes" class="grid gap-space-2">
-      <SectionHeader
-        hue={HEAD}
-        icon={IconPen}
-        label={words.changes}
-        level={3}
-      />
+      <h3 class="m-0 type-row text-ink-strong">{words.changes}</h3>
       <SwitchField
         checked={proposesDecides}
         disabled={hubAway}
@@ -145,7 +137,7 @@
       {/if}
     </section>
     <section data-slot="chat" class="grid gap-space-2">
-      <SectionHeader hue={HEAD} icon={IconChat} label={words.chat} level={3} />
+      <h3 class="m-0 type-row text-ink-strong">{words.chat}</h3>
       <RunsAs
         account={chat.account}
         harness={chat.harness}
@@ -165,12 +157,7 @@
       {/if}
     </section>
     <section data-slot="triggers" class="grid gap-space-1">
-      <SectionHeader
-        hue={HEAD}
-        icon={IconBolt}
-        label={words.triggers}
-        level={3}
-      />
+      <h3 class="m-0 type-row text-ink-strong">{words.triggers}</h3>
       {#if triggers}
         <ul class="m-0 grid list-none p-0">
           {#each TRIGGER_KINDS as kind (kind)}
