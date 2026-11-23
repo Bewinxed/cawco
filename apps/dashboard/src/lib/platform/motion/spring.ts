@@ -35,12 +35,17 @@ export interface Sample {
 }
 
 /**
- * The settle from `x0` px away from rest, moving at `v0` px/s, to rest at 0.
- * Always at least two points, the last exactly at rest.
+ * The settle from `x0` px away from rest, moving at `v0` px/s, to rest at 0,
+ * over --duration-settle unless a surface names its own perceptual
+ * duration (`ms`). Always at least two points, the last exactly at rest.
  */
-export function integrate(x0: number, v0: number): Sample[] {
+export function integrate(
+  x0: number,
+  v0: number,
+  ms: number = dur("--duration-settle")
+): Sample[] {
   /** The perceptual duration, in seconds. */
-  const settle = dur("--duration-settle") / 1000;
+  const settle = ms / 1000;
   const stiffness = ((2 * Math.PI) / settle) ** 2;
   const damping = (4 * Math.PI * (1 - BOUNCE)) / settle;
   const out: Sample[] = [{ t: 0, x: x0, v: v0 }];
@@ -109,4 +114,51 @@ export function sampleAt(path: Sample[], seconds: number): Sample {
   const b = path[i];
   const f = (seconds - a.t) / (b.t - a.t);
   return { t: seconds, x: a.x + (b.x - a.x) * f, v: a.v + (b.v - a.v) * f };
+}
+
+/** Samples older than this say nothing about the release, in ms. */
+const VELOCITY_WINDOW = 80;
+
+/**
+ * The hand's speed at release along one axis: where it was drawn at each
+ * step, the last 80ms of them, read as px/ms. What `integrate` takes as the
+ * settle's starting speed (×1000) for anything a hand lets go of.
+ */
+export class Release {
+  #samples: Array<{ at: number; t: number }> = [];
+
+  /** The hand drew it at `at` px, at `t` ms. */
+  push(at: number, t: number) {
+    this.#samples.push({ at, t });
+    while (
+      this.#samples.length > 2 &&
+      t - this.#samples[0].t > VELOCITY_WINDOW
+    ) {
+      this.#samples.shift();
+    }
+  }
+
+  /**
+   * Speed at the last step, px/ms; read at `now` (ms, the samples' clock),
+   * a hand that has not moved for the window is still, whatever it did
+   * before it stopped.
+   */
+  velocity(now?: number): number {
+    const last = this.#samples.at(-1);
+    const first = this.#samples.find(
+      (sample) => last && last.t - sample.t <= VELOCITY_WINDOW
+    );
+    if (
+      !(first && last) ||
+      last.t === first.t ||
+      (now !== undefined && now - last.t > VELOCITY_WINDOW)
+    ) {
+      return 0;
+    }
+    return (last.at - first.at) / (last.t - first.t);
+  }
+
+  clear() {
+    this.#samples = [];
+  }
 }

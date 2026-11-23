@@ -79,7 +79,6 @@ export interface SettingsRead {
   onCap: SettingRead;
   /** Why dispatch starts nothing now; null when it would. */
   paused: string | null;
-  review: boolean;
   /** Tasks waiting in review now. */
   reviewing: number;
   reviewLimit: number;
@@ -107,7 +106,6 @@ export const projectSettingsWords = {
       `- Each attempt may spend: ${budgetText(now.budget)} (set_budget)`,
       `- Work lands on: ${now.lands} (set_lands)`,
       `- Attempts run on: ${now.runsOn ?? "any machine with a checkout"} (set_runs_on)`,
-      `- Review before done: ${onOff(now.review)} (set_review)`,
       `- Repositories: ${now.links.length > 0 ? now.links.join(", ") : "none linked"} (link_repo, create_repo with folder)`,
       `- Connections granted: ${now.connections.length > 0 ? now.connections.join(", ") : "none"} (grant_connection)`,
       `- ${projectSettingsWords.startingSetRead(now.startingSet)} (set_starting_set)`,

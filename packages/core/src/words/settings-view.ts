@@ -1,0 +1,250 @@
+/**
+ * Every word the project's Settings view says (the dashboard's
+ * project/settings/), written from the person's side: one label and at
+ * most one short line each. A line that told the person nothing they act
+ * on was cut, not reworded.
+ */
+
+import type { BuiltInKind, BuiltInMember } from "../decides";
+import type { LandsMode } from "../injected";
+
+type TaskHome = "files" | "github" | "linear";
+type Decider = Exclude<BuiltInMember, "asker">;
+
+/** A refused change's way on, beside the hub's words: the control is back where it was. */
+const RETRY_CHANGE = "Retry change";
+
+export const settingsViewWords = {
+  /** The view's tab in the project's views strip. */
+  tab: "Settings",
+  viewLabel: "Project settings",
+  cancel: "Cancel",
+  save: "Save",
+  tryAgain: "Retry",
+  retryChange: RETRY_CHANGE,
+
+  /** The hub out of reach: what shows was read `age` ago, and nothing can change. */
+  hubOutOfReach: (age: string) =>
+    `Server is offline, leaving settings from ${age} read-only.`,
+
+  /** The settings' sections, in the order they stand. */
+  sections: {
+    tasks: "Task sync",
+    places: "Run environments",
+    git: "Repository & Git",
+    account: "Account & usage limits",
+    waits: "What needs you",
+  },
+
+  stageState: {
+    settled: "",
+    busy: "Updating",
+    away: "Offline",
+    fault: "Needs fixing",
+  } satisfies Record<"settled" | "busy" | "away" | "fault", string>,
+
+  readFailedTitle: (section: string) => `Could not load ${section}`,
+  sectionLoading: (section: string) => `Loading ${section}`,
+
+  tasks: {
+    groupLabel: "Where tasks live",
+    homes: {
+      files: {
+        name: "Local files",
+        note: "Tasks stay local, keeping any past issue links.",
+      },
+      github: {
+        name: "GitHub Issues",
+        note: "Both sides sync, GitHub wins, and outside issues wait.",
+      },
+      linear: {
+        name: "Linear",
+        note: "Both sides sync, Linear wins, and outside issues wait.",
+      },
+    } satisfies Record<TaskHome, { name: string; note: string }>,
+    syncNow: "Sync now",
+    syncing: "Syncing…",
+    firstSync: "Running first sync…",
+    inStep: (age: string) => `Synced ${age}`,
+    syncRefused: (age: string) => `Sync failed ${age}`,
+    linkedCount: (count: number) => `${count.toLocaleString()} synced`,
+    stagesVia: "Columns from",
+    stagesNone: "Columns:",
+    changeTie: "Change sync",
+    setupTitle: (home: "github" | "linear") =>
+      home === "github" ? "Sync with GitHub Issues" : "Sync with Linear",
+    setupFieldsNote:
+      "Only new items sync, sharing details, labels, and comments.",
+    connectionLabel: "Sign-in",
+    noConnection: (home: "github" | "linear") =>
+      home === "github"
+        ? "Add a GitHub App or token to sync."
+        : "Add a Linear app or API key to sync.",
+    openConnections: "Manage sign-ins",
+    repoLabel: "Repository",
+    teamLabel: "Team",
+    projectRepoTag: "This project",
+    githubProjectLabel: "GitHub Project for columns",
+    githubProjectNone: "Open and closed only",
+    saveTie: "Start syncing",
+    /** Leaving a tie for the project's own files, said before it happens. */
+    leaveTie: {
+      says: (tracker: string) => `Syncing with ${tracker} stops.`,
+      keeps: (site: string) =>
+        `Synced tasks stay here and keep their links. Nothing is deleted on ${site}.`,
+      act: "Stop syncing",
+    },
+    /** Where a tie's tasks live, as the site is called. */
+    site: { github: "GitHub", linear: "Linear" } satisfies Record<
+      "github" | "linear",
+      string
+    >,
+  },
+
+  places: {
+    heading: "Folders",
+    addPlace: "Add folder",
+    machineLabel: "Machine",
+    folderPath: "Path",
+    add: "Add",
+    adding: "Adding…",
+    offlineNote: "Adds now while offline, then checks when back online.",
+    scratchRefused:
+      "Not added because temporary folders get deleted after runs.",
+    startsHere: "Runs here",
+    hub: "CawCo server",
+    /** The hub's own copy, said beside its row: why it has no menu. */
+    hubOwn: "The hub's own copy",
+    missing: "Not found",
+    missingTip: "Folder not found here, so agents cannot start.",
+    away: "Offline",
+    awayTip: "Machine is offline, so agents wait until it reconnects.",
+    moving: "Moving…",
+    move: "Move",
+    findFolder: "Change path",
+    copyToMachine: "Copy elsewhere",
+    drop: "Stop using",
+    /** Stop using a folder, said before it happens. */
+    dropSays: (path: string, machine: string) =>
+      `Agents stop using ${path} on ${machine}.`,
+    dropKeeps: "The folder and its files stay.",
+    repositories: "Repositories",
+    largeFilesHeading: "Git LFS",
+    largeFilesGroupLabel: "Git LFS storage",
+    largeFilesOwn: {
+      name: "Repository default",
+      note: "Uses each repository's Git host for large files.",
+    },
+    largeFilesDeclared: {
+      name: "Custom server",
+      note: "Overrides every repository to use one server you set.",
+    },
+    largeFilesAddress: "Server URL",
+    largeFilesAddressPlaceholder: "https://lfs.example.com/project",
+    largeFilesKey: "Sign-in key",
+    addKey: "Add key",
+  },
+
+  account: {
+    heading: "Account",
+    fleetRouting: "Use fleet routing rules",
+    signedOut: "Signed out",
+    signedOutAlert: (name: string) =>
+      `${name} is signed out, so nothing can start.`,
+    openAccounts: "Manage accounts",
+    atLimitHeading: "When usage runs out",
+    atLimitGroupLabel: "When usage runs out",
+    atLimitWait: {
+      name: "Pause until reset",
+      note: "Agents wait here and keep this account's tools.",
+    },
+    atLimitMove: {
+      name: "Use another account",
+      note: "Agents continue elsewhere without this account's tools.",
+    },
+  },
+
+  waits: {
+    fleetDefaults: "Manage defaults",
+    unreadTitle: "Rules failed to load, so agents ask you everything.",
+    members: {
+      you: { name: "You", job: "Waits for your answer before moving on." },
+      caw: { name: "Caw", job: "Answers as project lead in its thread." },
+      advisor: {
+        name: "Advisor",
+        job: "Checks your code, docs, and brief, then answers.",
+      },
+      practice: {
+        name: "Standard practice",
+        job: "Follows industry norms and cites a source.",
+      },
+    } satisfies Record<Decider, { name: string; job: string }>,
+    kinds: {
+      look: {
+        name: "Design and copy",
+        example: "Layout, colors, motion, wording, and screen labels.",
+      },
+      behaviour: {
+        name: "Behavior",
+        example: "User flows, notifications, and how agents act.",
+      },
+      scope: {
+        name: "Scope changes",
+        example: "What to cut or save for later.",
+      },
+      approach: {
+        name: "Implementation",
+        example: "Picking how to build among valid options.",
+      },
+      rules: {
+        name: "Rule exceptions",
+        example: "Disabled lint, skipped checks, and spec deviations.",
+      },
+      tools: {
+        name: "Libraries and style",
+        example: "Packages, versions, config values, and code names.",
+      },
+      done: {
+        name: "Marking tasks done",
+        example:
+          "With you, finished tasks wait in a review column for you. With anyone else, agents mark their own tasks done.",
+      },
+    } satisfies Record<BuiltInKind, { name: string; example: string }>,
+    /** The roster's own parts (its tiles, their hand-over, an empty card), in this view's words. */
+    roster: {
+      handOver: "Reassign",
+      handOverKind: (kind: string) => `Reassign ${kind}`,
+      handTo: (kind: string) => `Assign future ${kind.toLowerCase()} to`,
+      fleetsChoice: "Default",
+      followsFleetTip: (subject: string) =>
+        `Uses your default, assigned to ${subject}.`,
+      ownTip: (_project: string, subject: string) =>
+        `Custom here, overriding your default of ${subject}.`,
+      giveBack: "Reset to default",
+      holdsNothing: (_project: string) => "Nothing assigned",
+      tryAgain: RETRY_CHANGE,
+    },
+  },
+
+  lands: {
+    groupLabel: "Where code goes",
+    options: {
+      main: {
+        name: "Default branch",
+        note: "Pushes commits straight to your default branch.",
+      },
+      branch: {
+        name: "Separate branch",
+        note: "Pushes a task branch, leaving your default untouched.",
+      },
+      pr: {
+        name: "Pull request",
+        note: "Pushes a task branch and opens a pull request.",
+      },
+      none: {
+        name: "Files only",
+        note: "Saves output files without committing or pushing anything.",
+      },
+    } satisfies Record<LandsMode, { name: string; note: string }>,
+  },
+};

@@ -148,6 +148,10 @@ const RULES: readonly [string, RegExp, Access][] = [
   ["GET", /^\/api\/lfs\/projects\/[^/]+$/u, "machine"],
   ["POST", /^\/api\/lfs\/projects\/[^/]+\/refused$/u, "machine"],
   ["POST", /^\/api\/session-identities\/install$/u, "machine-proof"],
+  // A folder move's bytes between two machines (folder-move-relay.ts): each
+  // side a machine's agent; the token names one copy's stream.
+  ["PUT", /^\/api\/folder-moves\/relay\/[^/]+$/u, "machine"],
+  ["GET", /^\/api\/folder-moves\/relay\/[^/]+$/u, "machine"],
 ];
 
 /** A browser's take-over and hand-back (browsers.ts): the person's act alone, refused to a session in its own words. */

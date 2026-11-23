@@ -6,15 +6,11 @@ import {
 } from "@cawco/core/commands/controls";
 import { cutShort } from "@cawco/core/words/helpers";
 import { queueWords } from "@cawco/core/words/queue";
-import {
-  CONTROL_FOLDERS_STAND,
-  type WorkspaceRef,
-} from "@cawco/core/workspace/controls";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type { ClosureContext } from "./closure-context";
+import { folderStandsOn } from "./folder-stands";
 import type { CommandOptions } from "./machine-pause";
 import { throwIfStopped, WouldWait, whenStopped } from "./machine-pause";
-import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
-import { mergeSameRemote } from "./project-merge";
 import { readCheckout } from "./projects";
 import { unreachable } from "./unreachable";
 
@@ -24,7 +20,6 @@ export type MachineCommandsContext = Pick<
   | "commandQueues"
   | "db"
   | "machinePause"
-  | "merging"
   | "projectsChanged"
   | "readAgent"
   | "silentWords"
@@ -272,26 +267,6 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
   };
 
   /**
-   * Whether a folder stands at `path` on `machineId`
-   * (`CONTROL_FOLDERS_STAND`); undefined when the machine did not say (away,
-   * silent, or an agent that predates the read).
-   */
-  const folderStands = async (
-    machineId: string,
-    path: string
-  ): Promise<boolean | undefined> => {
-    const answer = await ctx.readAgent(
-      machineId,
-      CONTROL_FOLDERS_STAND,
-      [[path]],
-      READ_TIMEOUT_MS
-    );
-    return answer.kind === "answered" && answer.value.ok
-      ? answer.value.result[0]
-      : undefined;
-  };
-
-  /**
    * What one of a project's checkouts says, read there: whether its folder
    * stands, kept on the checkout (`missing`, and `found` once it has) and
    * told to every client when it changes, so a folder moved or removed by
@@ -299,8 +274,9 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
    * root commit, kept on the checkout (a move compares it with the
    * source's machine away, moves.ts `plan`), and its `origin`, linked to the
    * project. Nothing read (the machine away, no `origin`, no commit) leaves
-   * it for the next chance. A link another project already has makes the
-   * two one project (project-merge.ts).
+   * it for the next chance. A link another project already has is not
+   * made: two projects become one only with the person's yes (Locate
+   * folder, project-locate.ts), never from what a folder reads.
    */
   const learnCheckout = async (place: {
     id: string;
@@ -308,7 +284,11 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
     machineId: string;
     path: string;
   }): Promise<void> => {
-    const stands = await folderStands(place.machineId, place.path);
+    const stands = await folderStandsOn(
+      ctx.readAgent,
+      place.machineId,
+      place.path
+    );
     if (stands !== undefined && ctx.db.setPlaceFolder(place.id, stands)) {
       ctx.projectsChanged();
     }
@@ -323,9 +303,17 @@ export const createMachineCommands = (ctx: MachineCommandsContext) => {
     if (root) {
       ctx.db.setPlaceRoot(place.id, root);
     }
-    if (remote && ctx.db.addProjectLink(place.projectId, remote)) {
-      await mergeSameRemote(ctx.merging, remote);
+    if (!remote) {
+      return;
     }
+    const owner = ctx.db.projectByRemote(remote);
+    if (owner && owner.id !== place.projectId) {
+      console.log(
+        `[hub] ${place.path} on ${place.machineId} is a checkout of ${remote}, which ${owner.name} (${owner.id}) has; it is not linked to project ${place.projectId}, and the two stay apart until the person makes them one (Locate folder)`
+      );
+      return;
+    }
+    ctx.db.addProjectLink(place.projectId, remote);
   };
 
   return {

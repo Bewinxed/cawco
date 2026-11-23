@@ -15,6 +15,7 @@ typeOverrides:
     AccountSigninRefusalReach: OpenEnums.AccountSigninRefusalReach
     ActionState: OpenEnums.ActionState
     AgentBusyReportRecovery: OpenEnums.AgentBusyReportRecovery
+    AgentHereWay: OpenEnums.AgentHereWay
     AgentMemberHear: OpenEnums.AgentMemberHear
     AgentMemberPose: OpenEnums.AgentMemberPose
     ArtifactDoes: OpenEnums.ArtifactDoes
@@ -98,11 +99,13 @@ typeOverrides:
     FleetRefreshOutcome: OpenEnums.FleetRefreshOutcome
     FleetScope: OpenEnums.FleetScope
     FolderEntryKind: OpenEnums.FolderEntryKind
+    FolderMoveProgressFramePhase: OpenEnums.FolderMoveProgressFramePhase
     FormName: OpenEnums.FormName
     FrameState: OpenEnums.FrameState
     FsEntryKind: OpenEnums.FsEntryKind
     GetApiAccountsPlacement200Strategy: OpenEnums.GetApiAccountsPlacement200Strategy
     GetApiRulesByIdActivity200Status: OpenEnums.GetApiRulesByIdActivity200Status
+    GhRepoOwnerKind: OpenEnums.GhRepoOwnerKind
     HarnessBlockType: OpenEnums.HarnessBlockType
     HarnessConfigKind: OpenEnums.HarnessConfigKind
     HarnessKind: OpenEnums.HarnessKind

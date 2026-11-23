@@ -678,7 +678,16 @@ export const githubTargets = async (
             })
           ).data
     );
-  const repos: { full_name: string; html_url: string }[] = [];
+  const repos: {
+    clone_url: string;
+    description: string | null;
+    full_name: string;
+    html_url: string;
+    owner: { avatar_url: string; login: string; type: string };
+    private: boolean;
+    ssh_url: string;
+    updated_at?: string | null;
+  }[] = [];
   let last = PER_PAGE;
   for (
     let number = 1;
@@ -702,6 +711,20 @@ export const githubTargets = async (
         id: each.full_name,
         name: each.full_name,
         url: each.html_url,
+        // As the New session form's picker draws a repository (core GhRepo).
+        repo: {
+          nameWithOwner: each.full_name,
+          description: each.description,
+          isPrivate: each.private,
+          owner: {
+            login: each.owner.login,
+            avatarUrl: each.owner.avatar_url,
+            kind: each.owner.type === "Organization" ? "org" : "user",
+          },
+          sshUrl: each.ssh_url,
+          updatedAt: each.updated_at ?? "",
+          url: each.clone_url,
+        },
       })),
   };
 };

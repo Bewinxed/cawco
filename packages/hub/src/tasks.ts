@@ -401,6 +401,12 @@ export interface TaskStore {
   readonly commentSaid: (
     id: string
   ) => { projectId: string; taskId: string } | undefined;
+  /**
+   * Whether the project's Who decides hands marking tasks done to the
+   * person (core `doneByYou`): only they then move a task to a done stage
+   * (stages.ts `ruledStages`).
+   */
+  readonly doneByYou: (projectId: string) => Promise<boolean>;
   readonly drop: (projectId: string, paths: string[]) => void;
   readonly index: (projectId: string) => TaskIndexRow[];
   /** The tasks that link an item (`task_read`'s `link`): a URL, or `#12` in the project's repository; a refusal in words. */
@@ -422,8 +428,6 @@ export interface TaskStore {
         /** It starts attempts on its own (dispatch.ts), while its events are on. */
         dispatch: boolean;
         id: string;
-        /** Review before done: only you move a task to a done stage (stages.ts `ruledStages`). */
-        review: boolean;
         template: StagesTemplate | null;
         tracker: Tracker;
       }
@@ -3277,17 +3281,18 @@ export const createTasks = (store: TaskStore) => {
   };
 
   /**
-   * A reading with the project's Review before done applied: the one place
-   * the rules the hub checks moves against are made (stages.ts `ruledStages`).
+   * A reading with who marks the project's tasks done applied (its Who
+   * decides' `done` kind): the one place the rules the hub checks moves
+   * against are made (stages.ts `ruledStages`).
    */
-  const ruled = (projectId: string, reading: StagesReading): StagesReading =>
+  const ruled = async (
+    projectId: string,
+    reading: StagesReading
+  ): Promise<StagesReading> =>
     reading.ok
       ? {
           ok: true,
-          stages: ruledStages(
-            reading.stages,
-            store.project(projectId)?.review ?? false
-          ),
+          stages: ruledStages(reading.stages, await store.doneByYou(projectId)),
         }
       : reading;
 
@@ -3337,7 +3342,7 @@ export const createTasks = (store: TaskStore) => {
 
   /**
    * The project's stages as the hub applies them: stages.md as it reads; the
-   * template its row records, with its Review before done on top, while it
+   * template its row records, with who marks its tasks done on top, while it
    * has none; or none at all while it is not set up yet (no stages.md, no
    * template, no task file: Caw's setup page writes them when the person
    * sends it, setup.ts). A project with task files and neither (made before
@@ -3351,7 +3356,7 @@ export const createTasks = (store: TaskStore) => {
       return stagesAs(
         "file",
         file.content,
-        ruled(projectId, readStages(file.content))
+        await ruled(projectId, readStages(file.content))
       );
     }
     if (file.status !== 404) {
@@ -3376,7 +3381,7 @@ export const createTasks = (store: TaskStore) => {
     return stagesAs(
       "template",
       templateText(template),
-      ruled(projectId, { ok: true, stages: templateStages(template) })
+      await ruled(projectId, { ok: true, stages: templateStages(template) })
     );
   };
 
@@ -3411,7 +3416,7 @@ export const createTasks = (store: TaskStore) => {
   /**
    * A stages.md that is the code template, now or as it was (stages.ts
    * `isCodeTemplate`), goes: the project reads the hub's code template,
-   * so it follows the template and its Review before done. A project's own
+   * so it follows the template and who marks its tasks done. A project's own
    * stages stay, and so does the file of one whose row records another
    * template, which it would read in the file's place ({@link stagesOf}).
    */
@@ -3432,7 +3437,7 @@ export const createTasks = (store: TaskStore) => {
     }
     const deleted = await deleteFolderFile(projectId, STAGES_FILE, {
       message:
-        "stages: the code template, as the hub has it; Review before done is the project's own setting",
+        "stages: the code template, as the hub has it; who marks tasks done is the project's Who decides",
     });
     if (deleted instanceof ElysiaStatus) {
       return deleted;
@@ -5695,7 +5700,7 @@ export const createTasks = (store: TaskStore) => {
     return stagesView(
       "file",
       content,
-      ruled(projectId, reading),
+      await ruled(projectId, reading),
       startersOf(projectId)
     );
   };
@@ -5749,7 +5754,7 @@ export const createTasks = (store: TaskStore) => {
       ...stagesView(
         template === DEFAULT_TEMPLATE ? "template" : "file",
         content,
-        ruled(projectId, { ok: true, stages }),
+        await ruled(projectId, { ok: true, stages }),
         startersOf(projectId)
       ),
       stranded: synced.rows

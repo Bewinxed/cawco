@@ -4,6 +4,7 @@ import {
   IconBolt,
   IconFilter,
   IconLayersMinimal,
+  IconListCheck,
   IconPalette,
   IconSettings,
   IconShield,
@@ -17,6 +18,8 @@ const GLYPHS: Record<string, Component> = {
   approach: IconLayersMinimal,
   rules: IconShield,
   tools: IconSettings,
+  // Marking tasks done (the project's work path folds its review setting into the roster as this kind).
+  done: IconListCheck,
 };
 
 export const kindGlyph = (id: string): Component =>

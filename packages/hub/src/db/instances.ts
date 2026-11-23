@@ -754,6 +754,16 @@ export interface InstancesDb {
     at: Date | null
   ) => (typeof instances.$inferSelect)[];
   /**
+   * A session's folder moved with its project's (folder-moves.ts): it runs
+   * in `cwd` on `machineId` from its next launch, its launch directory known
+   * there. Bookkeeping, as {@link patchInstance} is: its activity stays.
+   */
+  readonly moveInstanceFolder: (
+    id: string,
+    machineId: string,
+    cwd: MachinePath
+  ) => void;
+  /**
    * Gives the session its name. The owner's always lands; the session's own
    * (`set_title`) is refused once the owner has named it, and the answer
    * carries the owner's name. Undefined when there is no such session.
@@ -977,6 +987,21 @@ export interface InstancesDb {
   ) => void;
   /** `machineId`'s rows for sessions removed with a machine (`machineRemoved`). */
   readonly removedOn: (machineId: string) => OwnedInstanceRow[];
+  /**
+   * Every session of `projectId` on `machineId` launched in folder `from`, or
+   * a folder inside it, launches from now on in the same folder under `to`
+   * (Locate folder, project-locate.ts): its next start resumes its
+   * conversation there, which its machine files under that folder as it
+   * starts (agent claude-sessions.ts `fileUnder`, pi-services.ts
+   * `piFileUnder`, opencode.ts's `session.move`; Codex resumes by id with
+   * the folder it is given). The ids of the rows it rewrote.
+   */
+  readonly repointSessions: (
+    projectId: string,
+    machineId: string,
+    from: string,
+    to: string
+  ) => string[];
   readonly restoreRemovedSessions: (
     machineId: string,
     held: string[],
@@ -1076,6 +1101,11 @@ export interface InstancesDb {
    * Called off the daemon's pulse and throttled by the caller.
    */
   readonly touchInstanceActivity: (id: string) => void;
+  /**
+   * Whether `id`'s turn is under way, as the hub last heard: opened in the
+   * launch it runs now (a turn opened before its last start is a cut one).
+   */
+  readonly turnOpen: (id: string) => boolean;
   /** Forgets where a line taken back stood. */
   readonly unanchorLine: (instanceId: string, lineId: string) => void;
   /**
@@ -2093,6 +2123,48 @@ export const instancesDb = (core: DbCore): InstancesDb => {
     // activity, `touchInstanceActivity`, or a status change). Stamped here, a
     // sign-in that carried every session to an account read sessions asleep
     // for weeks as "active 1m ago", and kept stopped ones listed a day more.
+    turnOpen: (id) => {
+      const row = db
+        .select({
+          turnOpenAt: instances.turnOpenAt,
+          spawnedAt: instances.spawnedAt,
+        })
+        .from(instances)
+        .where(eq(instances.id, id))
+        .get();
+      return (
+        !!row &&
+        row.turnOpenAt !== null &&
+        row.turnOpenAt >= Number(row.spawnedAt ?? 0)
+      );
+    },
+    moveInstanceFolder: (id, machineId, cwd) => {
+      db.update(instances)
+        .set({ machineId, cwd, launchDir: "known" })
+        .where(eq(instances.id, id))
+        .run();
+    },
+    repointSessions: (projectId, machineId, from, to) => {
+      const inside = from.endsWith("/") ? from : `${from}/`;
+      return db
+        .update(instances)
+        .set({
+          cwd: sql`${to} || substr(${instances.cwd}, ${from.length + 1})`,
+        })
+        .where(
+          and(
+            eq(instances.projectId, projectId),
+            eq(instances.machineId, machineId),
+            or(
+              sql`${instances.cwd} = ${from}`,
+              sql`substr(${instances.cwd}, 1, ${inside.length}) = ${inside}`
+            )
+          )
+        )
+        .returning({ id: instances.id })
+        .all()
+        .map((row) => row.id);
+    },
     patchInstance: (id, patch) =>
       db
         .update(instances)

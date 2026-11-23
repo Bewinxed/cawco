@@ -184,7 +184,12 @@ export interface DecidesOwn {
   yours: string[];
 }
 
-/** The six kinds every fleet starts with, in the order they are listed. */
+/**
+ * The kinds every fleet starts with, in the order they are listed. `done`
+ * is who marks a project's tasks done: on You, only you move a task into a
+ * done stage and landed work waits in review (hub stages.ts `ruledStages`);
+ * on anyone else, agents mark their own tasks done.
+ */
 const BUILT_IN_KINDS = [
   "look",
   "behaviour",
@@ -192,6 +197,7 @@ const BUILT_IN_KINDS = [
   "approach",
   "rules",
   "tools",
+  "done",
 ] as const;
 export type BuiltInKind = (typeof BUILT_IN_KINDS)[number];
 /** The kinds' seed rows. */
@@ -211,7 +217,15 @@ export const DEFAULT_ROUTES: Record<BuiltInKind, BuiltInMember> = {
   approach: "advisor",
   rules: "advisor",
   tools: "practice",
+  done: "you",
 };
+
+/** The kind that says who marks a project's tasks done ({@link BUILT_IN_KINDS}). */
+export const DONE_KIND = "done" satisfies BuiltInKind;
+
+/** Whether a project's table routes marking tasks done to the person: only they move a task into a done stage. */
+export const doneByYou = (routes: Record<string, string>): boolean =>
+  (routes[DONE_KIND] ?? DEFAULT_ROUTES.done) === BUILT_IN.you.id;
 
 /** Each flock member's pose until he picks one. */
 const DEFAULT_POSES: Record<FlockMember, CawPoseId> = {

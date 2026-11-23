@@ -36,6 +36,7 @@ import {
   fleetHooks,
   fleetMemoryDocProjects,
   fleetWatchNotices,
+  folderMoves,
   githubPollers,
   inboundEvents,
   instanceAliases,
@@ -211,6 +212,8 @@ export const OWNED_ROWS = [
   { column: fleetWatchNotices.machineId, rekey: "move" },
   { column: moves.sourceMachineId, rekey: "move" },
   { column: moves.targetMachineId, rekey: "move" },
+  { column: folderMoves.sourceMachineId, rekey: "move" },
+  { column: folderMoves.targetMachineId, rekey: "move" },
   { column: rules.scopeMachineId, rekey: "move" },
   {
     column: projectPlaces.machineId,

@@ -17,6 +17,7 @@ import type {
 } from "@cawco/core/browser";
 import type { CommandQueueFrame } from "@cawco/core/commands/controls";
 import type { MachineSend } from "@cawco/core/envelopes";
+import type { FolderMoveProgressFrame } from "@cawco/core/folder-move";
 import type { MoveProgressFrame } from "@cawco/core/move";
 import type { StageCloneFrame, StageFrame } from "@cawco/core/stage";
 import type { RelayFrame } from "@cawco/core/stream-relay";
@@ -30,6 +31,8 @@ export interface AgentPorts {
   readonly commandQueue: (frame: CommandQueueFrame) => void;
   /** An envelope a harness builds itself, or the supervisor hands off (session.ts `emit`). */
   readonly emit: (envelope: MachineSend) => void;
+  /** How far a move of a project's folder is on this machine (folder-move.ts). */
+  readonly folderMoveProgress: (frame: FolderMoveProgressFrame) => void;
   /** The machine this agent is: the browsers' and the relay's frames name it. */
   readonly machineId: string;
   /** A project move's progress (move.ts). */

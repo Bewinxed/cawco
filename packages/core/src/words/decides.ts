@@ -75,6 +75,11 @@ export const decidesWords = {
       name: "Tools and conventions",
       example: "a library, a version, a format, a config value, a name in code",
     },
+    done: {
+      name: "Marking tasks done",
+      example:
+        "With you, finished tasks wait in a review column for you. With anyone else, agents mark their own tasks done.",
+    },
   },
   /** A card filed under no kind, as a routed line names it. */
   noKind: "A card with no kind",
@@ -234,11 +239,6 @@ export const decidesWords = {
   decisions: "Decisions",
   /** The project page's title. */
   title: (project: string) => `Who decides in ${project}`,
-  /** The project's Review before done: its switch's label, and what on means. */
-  review: {
-    label: "Review before done",
-    note: "Only you move a task to done; landed work waits in review.",
-  },
   /** The lede, every kind following the fleet. */
   follows: (project: string) =>
     `${project} follows the fleet on every kind of choice.`,

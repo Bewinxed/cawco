@@ -34,6 +34,7 @@ import {
   decidesMembers,
   decidesRoutes,
   decidesSettings,
+  doneRoutesOwed,
   turnUsage,
 } from "./schema";
 
@@ -74,6 +75,10 @@ export interface MemberRecord {
 
 /** Who decides' rows: the fleet's table, its members and kinds (decides.ts), and where every card went (settling.ts). */
 export interface DecidesDb {
+  /** A project's owed `done` line is written: its row goes (done-routes-carried.ts). */
+  readonly doneRouteCarried: (projectId: string) => void;
+  /** The projects owed a decides.md line handing marking tasks done to Caw (migration 0472). */
+  readonly doneRoutesOwed: () => string[];
   /** The fleet's Who decides, whole: the built-in members with what he changed, the members he added, every kind and its member. */
   readonly fleet: () => FleetDecides;
   /** Every kind, in order. */
@@ -295,6 +300,17 @@ export const decidesDb = (
   };
 
   return {
+    doneRouteCarried: (projectId) => {
+      db.delete(doneRoutesOwed)
+        .where(eq(doneRoutesOwed.projectId, projectId))
+        .run();
+    },
+    doneRoutesOwed: () =>
+      db
+        .select()
+        .from(doneRoutesOwed)
+        .all()
+        .map((row) => row.projectId),
     fleet,
     kinds,
     members,

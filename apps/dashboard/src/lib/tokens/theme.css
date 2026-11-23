@@ -33,6 +33,11 @@
   --container-stop-tray-rail: 300px;
   --container-forgotten: 51.25rem;
   --container-kinds: 480px;
+  /* Who decides' cards two across, and four: --spacing-c-roster-card-min (17.5rem, 280px) each, with --spacing-space-3 (11px) between. */
+  --container-roster-two: 571px;
+  --container-roster-four: 1153px;
+  /* A project's work path view in two columns at all: two 320px columns and the space-4 between them; under it the cards stand one under another. */
+  --container-settings-two: 654px;
   --container-images: 44rem;
   --container-decisions-520px: 520px;
   --container-leaf: 620px;
@@ -40,6 +45,10 @@
   --container-member-setup: 35rem;
   --container-media-split: 640px;
   --container-pictures-split: 680px;
+  /* The project details card's room for its two columns (proto/details-card): under it, one column in the same order. */
+  --container-details-card: 680px;
+  /* The shell's width from which the project details card takes its wide form, so a folder's whole path stands on its row. */
+  --container-details-wide: 1280px;
   --container-decisions-900px: 900px;
   --container-project-dock: 600px;
   --container-section-row: 312px;
@@ -391,6 +400,15 @@
     to bottom,
     var(--color-action-hover-top),
     var(--color-action-hover-bottom)
+  );
+  /* A picked option's fill (the option chip, row and tile; the gliding pick's pill): the warm recess by day; at night the apricot wash a third over raised, since the recess there is darker than raised and reads as no fill. */
+  --color-option-picked: light-dark(
+    var(--color-surface-recess),
+    color-mix(
+      in oklab,
+      var(--color-selected-bg) 30%,
+      var(--color-surface-raised)
+    )
   );
   /* Selected nav / chosen row: warm apricot wash, coral ink, no shadow. */
   --color-selected-bg: light-dark(oklch(90.5% 0.062 48), oklch(34% 0.075 40));
@@ -1102,6 +1120,14 @@
   --spacing-c-decision-meter-w: 120px;
   /* The narrowest a decision card's option column stands before the options stand one under another. */
   --spacing-c-decision-option-min: 190px;
+  /* The narrowest a choice tile stands in a row of tiles before the row wraps (a project's four landings sit in one row from a 640px column). */
+  --spacing-c-choice-tile-min: 160px;
+  /* A project's settings: one of its work path view's two columns, as wide as its widest option row needs (Where code goes' four chips, 516px, inside a card's space-4 inset and edge). */
+  --spacing-c-settings-col: 548px;
+  /* A project's settings at their widest: the two columns and the space-4 between them, so no card stretches past what it holds (--container-settings-pair). */
+  --spacing-c-settings-max: calc(
+    2 * var(--spacing-c-settings-col) + var(--spacing-space-4)
+  );
   /* The narrowest a picture stands beside others in a decision page's Row before the Row's pictures wrap, one to a line. A 390px-wide phone shot at 160px is drawn at 41%: its layout, its headings and its controls still read, where at the 70px it fell to (18%) nothing on it could be judged. */
   --spacing-c-picture-min: 160px;
   /* Code inside a decision page's words: a step under the words around it, at any size they stand at. */
@@ -2184,6 +2210,122 @@
     :root {
       --spacing-c-nav-h: 44px;
       --spacing-c-rail-row-h: 44px;
+    }
+  }
+}
+
+/* The 4px base, worn by the project's Settings view alone (the owner,
+   2026-11-23: the 4px base for that screen; the rest of the app waits for
+   tsk-477's redesign of the system). Its root carries `data-grid="4px"`
+   (project/settings/SettingsView.svelte). A custom property is substituted
+   where it is declared, so a token theme.css builds from these at :root
+   would keep today's numbers inside the view: each one is declared again
+   here with its own formula, so it follows the base on this element and
+   everything under it (scripts/grid-scope-check.ts keeps the list whole).
+   The layer its menus, popovers and tips open in
+   (on the body, its BitsConfig `defaultPortalTo`) carries it too. */
+@layer theme {
+  [data-grid="4px"] {
+    /* Each text role's line box a length on the base. */
+    --leading-meta: calc(var(--spacing) * 4);
+    --leading-label: calc(var(--spacing) * 5);
+    --leading-body: calc(var(--spacing) * 5);
+    --leading-code: calc(var(--spacing) * 5);
+    --leading-prose: calc(var(--spacing) * 6);
+    --type-row: 500 var(--text-row) / calc(var(--spacing) * 6) var(--font-sans);
+    --type-title: 500 var(--text-title) / calc(var(--spacing) * 6)
+      var(--font-sans);
+    --type-kpi: 500 var(--text-kpi) / calc(var(--spacing) * 6) var(--font-sans);
+    --spacing-c-draft-col-h: calc(
+      5 * var(--spacing-space-1) + var(--spacing-space-2) +
+        var(--spacing-c-btn-h-sm) + 2 * var(--leading-meta)
+    );
+    /* The eight steps on the base: 4 8 12 16 20 24 28 32. */
+    --spacing-space-1: calc(var(--spacing) * 1);
+    --spacing-space-2: calc(var(--spacing) * 2);
+    --spacing-space-3: calc(var(--spacing) * 3);
+    --spacing-space-4: calc(var(--spacing) * 4);
+    --spacing-space-5: calc(var(--spacing) * 5);
+    --spacing-space-6: calc(var(--spacing) * 6);
+    --spacing-space-7: calc(var(--spacing) * 7);
+    --spacing-space-8: calc(var(--spacing) * 8);
+    /* Every token built from them at :root (here and in design.css), again. */
+    --radius-glide-row: calc(
+      var(--radius-lg) - var(--spacing-space-2) - var(--border-width)
+    );
+    --radius-inner-well: calc(var(--radius-xs) + var(--spacing-space-1));
+    --row-tall-h: calc(2 * var(--spacing-space-5) + 2 * var(--spacing-space-1));
+    --seam-inset: var(--spacing-space-3);
+    --spacing-c-composer-inset: var(--spacing-space-2);
+    --spacing-c-composer-panel: calc(
+      var(--spacing-c-composer-field) + var(--spacing-c-composer-inset) * 2 +
+        2px
+    );
+    --spacing-c-composer-w: min(
+      720px,
+      calc(100% - var(--spacing-space-7) - var(--spacing-space-6))
+    );
+    --spacing-c-field-inline-inset: calc(
+      var(--spacing-space-3) - var(--border-width)
+    );
+    --spacing-c-head-room: calc(
+      var(--spacing-c-btn-h) + 2 * var(--spacing-space-2)
+    );
+    --spacing-c-inset-composer: calc(
+      var(--spacing-c-composer-inset) + var(--border-width)
+    );
+    --spacing-c-ledger-text-inset: calc(
+      var(--spacing-icon-md) + var(--spacing-space-2)
+    );
+    --spacing-c-segment-pad-x-compact: var(--spacing-space-2);
+    --spacing-c-settings-max: calc(
+      2 * var(--spacing-c-settings-col) + var(--spacing-space-4)
+    );
+    --spacing-c-starters-w: calc(
+      var(--spacing-c-starter-w) * 4 + var(--spacing-space-2) * 3
+    );
+    --spacing-c-suggest-chip: calc(1.25rem + var(--spacing-space-1) * 2 + 2px);
+    --spacing-c-suggest-room: calc(
+      var(--spacing-c-suggest-row) + var(--spacing-space-2)
+    );
+    --spacing-c-suggest-row: calc(
+      var(--spacing-space-4) + var(--spacing-space-1) * 2 +
+        var(--spacing-c-suggest-chip)
+    );
+    --spacing-c-tray-gap: var(--spacing-space-2);
+    --spacing-c-tray-row: calc(
+      var(--spacing-c-tray-chip) + var(--spacing-c-tray-gap)
+    );
+    --spacing-c-usage-strip-clip: calc(
+      var(--spacing-c-usage-strip-row) + var(--spacing-space-1)
+    );
+    --spacing-c-usage-strip-row: calc(
+      var(--spacing-icon-md) + var(--spacing-space-1) +
+        var(--spacing-c-usage-cap-lh)
+    );
+    --spacing-space-group: var(--spacing-space-5);
+    --tree-gap: var(--spacing-space-1);
+    --tree-step: calc(
+      var(--spacing-space-1) + var(--spacing-space-2) + var(--spacing-space-3)
+    );
+    --tx-compacting-caw: var(--spacing-space-8);
+    --tx-x-rail: var(--spacing-space-2);
+    --type-body: 400 var(--text-body) / var(--leading-body) var(--font-sans);
+    --type-code: 400 var(--text-code) / var(--leading-code) var(--font-mono);
+    --type-label: 500 var(--text-label) / var(--leading-label) var(--font-sans);
+    --type-meta: 400 var(--text-meta) / var(--leading-meta) var(--font-sans);
+    --type-prose: 400 var(--text-body) / var(--leading-prose) var(--font-sans);
+  }
+
+  @media (pointer: coarse) {
+    [data-grid="4px"] {
+      --spacing-c-tray-gap: var(--spacing-space-3);
+    }
+  }
+
+  @media (width < --theme(--breakpoint-desk)) {
+    [data-grid="4px"] {
+      --seam-inset: var(--spacing-space-2);
     }
   }
 }

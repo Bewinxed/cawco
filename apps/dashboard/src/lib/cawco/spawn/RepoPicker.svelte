@@ -1,9 +1,15 @@
 <script lang="ts" module>
+  import type { Bounded } from "@cawco/core/bounded";
   import type { GhRepo } from "@cawco/core/connections";
   import { isGitUrl, repoIdentity, repoPath } from "@cawco/core/protocol";
   import { unhandled } from "@cawco/core/unhandled";
   import { spawnWords } from "@cawco/core/words/spawn";
-  import type { MachineRepo, MachineRepos } from "../stores/machines";
+  import {
+    type MachineRepo,
+    type MachineRepos,
+    machineRepo,
+    machineRepos,
+  } from "../stores/machines";
 
   /**
    * Each machine's last answer, so a popover opened again shows its list at
@@ -18,6 +24,13 @@
    */
   const lastLooked = new Map<string, MachineRepo>();
 
+  /** Where a picker's repositories come from: the list, and what a pasted URL names. */
+  export interface RepoSource {
+    list: (id: string) => Promise<Bounded<MachineRepos>>;
+    look: (id: string, url: string) => Promise<Bounded<MachineRepo>>;
+  }
+  /** A machine's gh: the New session form's source. */
+  const MACHINE_SOURCE: RepoSource = { list: machineRepos, look: machineRepo };
   /** How long a URL in the search holds still before it is looked up: a paste is one change, a URL typed is one per key. */
   const LOOKUP_SETTLE_MS = 250;
 
@@ -325,7 +338,6 @@
   import { formatAgeShort } from "#lib/utils/time.js";
   import { didntAnswer } from "../hub/control";
   import Marked from "../Marked.svelte";
-  import { machineRepo, machineRepos } from "../stores/machines";
   import { TRY_AGAIN } from "../unanswered";
 
   let {
@@ -336,6 +348,8 @@
     oncommit,
     focus = false,
     shown = true,
+    mark,
+    source = MACHINE_SOURCE,
   }: {
     machineId: string;
     machineName: string;
@@ -354,6 +368,18 @@
      * picked row in view.
      */
     shown?: boolean;
+    /**
+     * A word a listed repository wears at the head of its description line
+     * ("This project"), "" for none: a surface that knows which of the
+     * machine's repositories are its own says so on their rows.
+     */
+    mark?: (repo: GhRepo) => string;
+    /**
+     * Where the list and a pasted URL's lookup come from: the machine's gh
+     * by default; a connection's repositories where the picker is for one
+     * (a project's GitHub tie), `machineId` then naming the list's key.
+     */
+    source?: RepoSource;
   } = $props();
 
   /**
@@ -403,7 +429,8 @@
       return;
     }
     let stale = false;
-    machineRepos(id)
+    source
+      .list(id)
       .then((read) => {
         if (stale) {
           return;
@@ -548,7 +575,7 @@
     const url = untrack(() => urlRow);
     let stale = false;
     const settle = setTimeout(() => {
-      machineRepo(id, url).then(
+      source.look(id, url).then(
         (read) => {
           if (read.kind !== "answered") {
             return;
@@ -1323,12 +1350,18 @@
         class="col-start-4 ps-space-3 num type-meta text-end whitespace-nowrap text-ink-muted @max-repo-narrow/repos:row-start-2"
         >{formatAgeShort(Date.parse(one.updatedAt))}</span
       >
-      {#if one.description}
+      {@const worn = mark?.(one) ?? ""}
+      {#if one.description || worn}
         <span
           data-slot="description"
           data-box
           class="col-start-2 row-start-2 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted"
-          ><Marked query={q} text={one.description} /></span
+          >{#if worn}<span data-slot="mark" class="font-medium text-ink-strong"
+              >{worn}</span
+            >{#if one.description}{" · "}{/if}{/if}{#if one.description}<Marked
+              query={q}
+              text={one.description}
+            />{/if}</span
         >
       {/if}
     {/if}

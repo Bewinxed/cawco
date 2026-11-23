@@ -2989,3 +2989,70 @@
     @apply clip-block-end;
   }
 }
+
+@layer overrides {
+  /*
+   * The Row on the 4px base: a section list (RowList's `ul` of SectionRows)
+   * is the grid, its tracks set once, and each row takes them as a subgrid
+   * (columns only), so every row's tile, text and controls start on the
+   * list's edges whatever they hold. The insets are tracks, not the row's
+   * padding, which on a subgrid would push the edge items off their tracks.
+   * What a row opens under it (its note, a step, Stop using's confirm)
+   * starts on the text's track. The list, not each row, is the
+   * `section-row` container: a row that is a size container lays out on
+   * its own and so cannot be a subgrid ("forced to establish an
+   * independent formatting context … the grid container is not a
+   * subgrid", CSS Grid 2 §9). Worn by the screen on the 4px base alone
+   * (theme.css `[data-grid="4px"]`, the project's Settings view), in
+   * `overrides` so it outranks the row's own utilities.
+   */
+  [data-grid="4px"] ul:has(> li[data-slot="item"] > [data-slot="row"]) {
+    display: grid;
+    grid-template-columns:
+      [in] var(--spacing-space-2) [lead] var(--spacing-c-mark)
+      var(--spacing-space-3) [body] minmax(0, 1fr) var(--spacing-space-3)
+      [trail] auto [trail-end] var(--spacing-space-2) [out];
+    column-gap: 0;
+    container: section-row / inline-size;
+  }
+
+  [data-grid="4px"] ul > li[data-slot="item"]:has(> [data-slot="row"]) {
+    container-type: normal;
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+    align-content: start;
+  }
+
+  [data-grid="4px"] li[data-slot="item"] > [data-slot="row"] {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+    grid-template-rows: auto;
+    align-items: center;
+    column-gap: 0;
+    padding-inline: 0;
+
+    & > [data-slot="tile"] {
+      grid-column: lead;
+      grid-row: 1;
+    }
+
+    & > [data-slot="text"] {
+      display: flex;
+      grid-column: body;
+      grid-row: 1;
+    }
+
+    & > [data-slot="controls"] {
+      grid-column: trail;
+      grid-row: 1;
+      justify-self: end;
+    }
+  }
+
+  [data-grid="4px"] li[data-slot="item"] > [data-slot="row"] ~ div {
+    grid-column: body / trail-end;
+    padding-inline: 0;
+  }
+}

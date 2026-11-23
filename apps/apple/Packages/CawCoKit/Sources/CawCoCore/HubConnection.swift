@@ -822,13 +822,13 @@ public final class HubConnection {
         }
     }
 
-    /// The person's own edit of a project: its name, or its Review before
-    /// done (`PATCH /api/projects/:id`). The projects are read again before
+    /// The person's own edit of a project: its name
+    /// (`PATCH /api/projects/:id`). The projects are read again before
     /// it returns; `projects.changed` brings it to every other client. A
     /// refusal throws the hub's words ("A project needs a name.").
-    public func editProject(id: String, name: String? = nil, review: Bool? = nil) async throws {
+    public func editProject(id: String, name: String? = nil) async throws {
         let api = try self.api
-        let response = try await api.projects.update(.init(path: .init(id: id), body: .json(.init(name: name, review: review))))
+        let response = try await api.projects.update(.init(path: .init(id: id), body: .json(.init(name: name))))
         switch response {
         case .ok:
             break

@@ -73,6 +73,12 @@ export interface DecidesDeps {
     from: string,
     to: string
   ) => Promise<boolean>;
+  /**
+   * A table changed where tasks read who marks them done (core `doneByYou`):
+   * project `projectId`'s, or the fleet's (null), which every project
+   * following it reads.
+   */
+  readonly rulesChanged: (projectId: string | null) => void;
   /** The fleet's skills catalog. */
   readonly skills: () => { id: string; note: string }[];
   /** The cost of `instances`' turns since `since`, in dollars. */
@@ -151,6 +157,39 @@ const projectOwn = async (projectId: string, fleet: FleetDecides) => {
   return reading.ok
     ? { own: { routes: reading.routes, yours: reading.yours }, text }
     : undefined;
+};
+
+/** Project `projectId`'s decides.md with `routes` set over its own (null: back to the fleet's), refused when the file doesn't read. */
+export const decidesFileWith = async (
+  projectId: string,
+  fleet: FleetDecides,
+  routes: Record<string, string | null>
+) => {
+  const read = await decidesText(projectId);
+  if (read instanceof ElysiaStatus) {
+    return read;
+  }
+  const text = read ?? null;
+  const reading = text === null ? undefined : readDecides(text, fleet);
+  if (reading && !reading.ok) {
+    return problem(409, {
+      code: "decides-file-unread",
+      detail: decidesWords.fileUnread(reading.problems.join(" ")),
+    });
+  }
+  const own = { ...(reading?.routes ?? {}) };
+  for (const [kind, member] of Object.entries(routes)) {
+    if (member === null) {
+      delete own[kind];
+    } else {
+      own[kind] = member;
+    }
+  }
+  return decidesFileOf(
+    { routes: own, yours: reading?.yours ?? [] },
+    fleet.kinds,
+    text
+  );
 };
 
 export const decidesRoutes = (deps: DecidesDeps) => {
@@ -367,39 +406,6 @@ export const decidesRoutes = (deps: DecidesDeps) => {
     return { moved, projects };
   };
 
-  /** Project `projectId`'s decides.md with `routes` set over its own (null: back to the fleet's), refused when the file doesn't read. */
-  const projectFile = async (
-    projectId: string,
-    fleet: FleetDecides,
-    routes: Record<string, string | null>
-  ) => {
-    const read = await decidesText(projectId);
-    if (read instanceof ElysiaStatus) {
-      return read;
-    }
-    const text = read ?? null;
-    const reading = text === null ? undefined : readDecides(text, fleet);
-    if (reading && !reading.ok) {
-      return problem(409, {
-        code: "decides-file-unread",
-        detail: decidesWords.fileUnread(reading.problems.join(" ")),
-      });
-    }
-    const own = { ...(reading?.routes ?? {}) };
-    for (const [kind, member] of Object.entries(routes)) {
-      if (member === null) {
-        delete own[kind];
-      } else {
-        own[kind] = member;
-      }
-    }
-    return decidesFileOf(
-      { routes: own, yours: reading?.yours ?? [] },
-      fleet.kinds,
-      text
-    );
-  };
-
   /** Each project's decides.md as `change` rewrites it, for one commit each ({@link writeRewrites}); a project it leaves is not among them. */
   const rewriteProjects = async (
     fleet: FleetDecides,
@@ -455,6 +461,7 @@ export const decidesRoutes = (deps: DecidesDeps) => {
             return unknown;
           }
           db.setRoutes(body.routes);
+          deps.rulesChanged(null);
           return db.fleet();
         }
       )
@@ -797,7 +804,7 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           if (unknown) {
             return unknown;
           }
-          const file = await projectFile(params.id, fleet, body.routes);
+          const file = await decidesFileWith(params.id, fleet, body.routes);
           if (file instanceof ElysiaStatus) {
             return file;
           }
@@ -808,6 +815,7 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           if (written instanceof ElysiaStatus) {
             return written;
           }
+          deps.rulesChanged(params.id);
           const decides = await decidesTable(
             { projectId: params.id, areaId: areaOf(params.id) },
             db.fleet()

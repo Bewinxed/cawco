@@ -30,11 +30,10 @@ export const projectWords = {
   fullSize: "Full size",
   /** The head's way back from Full size: the rail and the tabs return. */
   exitFullSize: "Exit full size",
-  /** The head's place: its name, which opens the project's details. */
-  details: "Project details",
+  /** The head's place, and More's way to the same: the project page's Settings view. */
+  details: "Project settings",
   /** The head's place's tooltip while the project's one place is its folder on the hub. */
   hubFolder: "Its folder on the hub",
-  projectDetails: "Project details…",
   cawSettings: "Caw settings…",
   /** A task card whose attempt the hub couldn't start. */
   cantStart: "Can't start",

@@ -148,6 +148,7 @@ import type { FleetMcp } from "./fleet-mcp";
 import type { FleetMcpChanges, RidingChanges } from "./fleet-mcp-changes";
 import type { FleetSync } from "./fleet-sync";
 import type { FleetWatch } from "./fleet-watch";
+import type { createFolderMoves } from "./folder-moves";
 import type { createForgePosts } from "./forge-posts";
 import type { HarnessConfigBody } from "./harness-config-body";
 import type { Caller, createHubAuth } from "./hub-auth";
@@ -211,8 +212,7 @@ import type { createProjectEdits } from "./project-edit";
 import type { CreateOrJoinProject, NewProject } from "./project-making";
 import type { MergeDeps } from "./project-merge";
 import type { createProjectOffers } from "./project-offers";
-import type { createProjectOut, placeAddedOf } from "./project-out";
-import type { ScratchPlaceProblem } from "./project-place-scratch";
+import type { createProjectOut } from "./project-out";
 import type { createProjectStarters } from "./project-starters";
 import type { createProjectStops } from "./project-stops";
 import type { ProjectTrash } from "./project-trash";
@@ -325,21 +325,6 @@ export interface ClosureContext {
   ) =>
     { accountId?: string; moved?: true; placed?: string } | { refusal: string };
   accountWords: (accountId: string | null | undefined) => string;
-  addProjectPlace: (
-    projectId: string,
-    machineId: string,
-    asked: string
-  ) => Promise<
-    | ReturnType<typeof placeAddedOf>
-    | ReturnType<
-        typeof problem<404, { code: "place-project-unknown"; detail: string }>
-      >
-    | ReturnType<
-        typeof problem<404, { code: "place-machine-unknown"; detail: string }>
-      >
-    | Exclude<ReturnType<ClosureContext["askedMachinePath"]>, MachinePath>
-    | ScratchPlaceProblem
-  >;
   admission: ReturnType<typeof createAdmission>;
   advanceCompaction: (instanceId: string) => void;
   advanceMove: (move: LoginMove) => Promise<void>;
@@ -554,6 +539,8 @@ export interface ClosureContext {
   fleetChanged: (why?: string) => void;
   fleetMcp: FleetMcp;
   fleetSyncs: FleetSync;
+  /** Moves of a project's folder, files and all (folder-moves.ts). */
+  folderMoves: ReturnType<typeof createFolderMoves>;
   followupState: SessionCallsDeps["followupState"];
   forgePosts: ReturnType<typeof createForgePosts>;
   forgetInstances: (ids: readonly string[]) => void;

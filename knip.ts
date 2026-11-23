@@ -130,6 +130,8 @@ export default {
         // scripts/check.ts
         "scripts/shell-bodies-check.ts",
         // scripts/check.ts
+        "scripts/grid-scope-check.ts",
+        // scripts/check.ts
         "scripts/memory-cutover-check.ts",
         // scripts/check.ts, beside spacing-ratchet.ts
         "scripts/tailwind-draws-check.ts",

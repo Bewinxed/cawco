@@ -209,6 +209,7 @@ import {
   unreachable,
   waitForMcp,
 } from "./opencode-client";
+import { isExportList, opencodeFolderCarry } from "./opencode-folder";
 import {
   catalogLaunchEnv,
   holdsCatalog,
@@ -1368,6 +1369,13 @@ const sessionToInfo = (
  * OpenCode's settled messages, the export's own filter). A copy short of it
  * throws, saying so, before the homes record or the source is touched.
  */
+/** A session as OpenCode exports it whole: its info and its messages. */
+type SessionTransfer = Awaited<ReturnType<OpencodeClient["session"]["export"]>>;
+
+/** A file a move kept of OpenCode's exports, read back as what it wrote (opencode-folder.ts). */
+const isTransfers = (value: unknown): value is SessionTransfer[] =>
+  isExportList(value);
+
 const confirmMoved = async (
   target: OpencodeClient,
   sent: readonly Awaited<ReturnType<OpencodeClient["session"]["export"]>>[],
@@ -6010,6 +6018,125 @@ class OpencodeHarness implements Harness<"opencode"> {
     return moving;
   }
 
+  /**
+   * What a move of a project's folder asks of this machine's OpenCode
+   * sessions (agent folder-carry.ts): a session and its subagent sessions
+   * re-pointed at the new folder in the server that holds them; exported
+   * whole, for another machine; imported at the new folder, each read back
+   * to as many messages as were sent; and removed once carried away.
+   */
+  readonly folders = {
+    move: (sessionId: string, directory: string): Promise<void> =>
+      this.#moveFolder(sessionId, directory),
+    exportTree: (sessionId: string): Promise<SessionTransfer[]> =>
+      this.#exportTree(sessionId),
+    importTree: (
+      sent: readonly SessionTransfer[],
+      directory: string,
+      home?: string
+    ): Promise<void> => this.#importTree(sent, directory, home),
+    removeTree: (sessionId: string): Promise<void> =>
+      this.#removeSessionTree(sessionId),
+    homeOf: async (sessionId: string): Promise<string> =>
+      (await readHomes())[sessionId] ?? "",
+  };
+  readonly folderCarry = opencodeFolderCarry(this.folders, isTransfers);
+
+  /**
+   * OpenCode's own move of a session's folder, for it and each subagent
+   * session, once the old folder is gone: recorded at once, no turn run
+   * (OpenCode 2.3.0, proven by run in the carry proof of 2026-11-18).
+   */
+  async #moveFolder(sessionId: string, directory: string): Promise<void> {
+    const client = await this.#homeClient(sessionId);
+    const children = await allSessions(client, { parentID: sessionId });
+    for (const id of [sessionId, ...children.map((child) => child.id)]) {
+      answerOf(
+        await askOpencode((options) =>
+          client.session.move(
+            { sessionID: id, directory, delivery: "queue" },
+            options
+          )
+        ),
+        `the move of ${id} to ${directory}`
+      );
+    }
+  }
+
+  /** A session and its subagent sessions, exported whole from the server that holds them. */
+  async #exportTree(sessionId: string): Promise<SessionTransfer[]> {
+    const client = await this.#homeClient(sessionId);
+    const ask = async <T>(
+      what: string,
+      read: (options: { signal: AbortSignal }) => Promise<T>
+    ): Promise<T> => answerOf(await askOpencode(read), what);
+    const root = await ask(`the export of ${sessionId}`, (options) =>
+      client.session.export({ sessionID: sessionId }, options)
+    );
+    const children = await allSessions(client, { parentID: sessionId });
+    const rest = await Promise.all(
+      children.map((child) =>
+        ask(`the export of ${child.id}`, (options) =>
+          client.session.export({ sessionID: child.id }, options)
+        )
+      )
+    );
+    return [root, ...rest];
+  }
+
+  /**
+   * Sessions exported elsewhere imported into `home`'s server (the
+   * machine's when none is named) at `directory`, each read back to as many
+   * messages as were sent before its home is recorded. An import a run cut
+   * half-way already made is the same session (409).
+   */
+  async #importTree(
+    sent: readonly SessionTransfer[],
+    directory: string,
+    home = ""
+  ): Promise<void> {
+    const target = await this.#ensureHome(home);
+    for (const one of sent) {
+      try {
+        answerOf(
+          await askOpencode((options) =>
+            target.session.import(
+              {
+                info: one.info,
+                messages: one.messages,
+                location: { directory },
+              },
+              options
+            )
+          ),
+          `the import of ${one.info.id}`
+        );
+      } catch (error) {
+        if (errorText(error).startsWith("ConflictError")) {
+          continue;
+        }
+        throw error;
+      }
+    }
+    const rootId = sent[0]?.info.id ?? "";
+    await confirmMoved(target, sent, rootId, home, home);
+    await setHome(
+      sent.map((one) => one.info.id),
+      home
+    );
+  }
+
+  /** A session removed from the server that holds it, once it was carried away. */
+  async #removeSessionTree(sessionId: string): Promise<void> {
+    const client = await this.#homeClient(sessionId);
+    answerOf(
+      await askOpencode((options) =>
+        client.session.remove({ sessionID: sessionId }, options)
+      ),
+      `the removal of ${sessionId}`
+    );
+  }
+
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: creates/resumes/forks a session across three branches, then wires the session up
   async #open(
     spec: SpawnPayload,
@@ -6146,6 +6273,26 @@ class OpencodeHarness implements Harness<"opencode"> {
           unhandled("read", found);
       }
       sessionId = sessionKey;
+      // Its project's folder was pointed elsewhere (Locate folder, hub
+      // project-locate.ts): the session goes on in the folder it runs in
+      // now. OpenCode records the move at once when the old folder is gone
+      // and nothing runs (`session.move`, @opencode/client 2.3.0), and
+      // otherwise queues it for the session's next turn.
+      const was = found.value.location.directory;
+      const now = await realpath(ctx.cwd).catch(() => ctx.cwd);
+      if ((await realpath(was).catch(() => was)) !== now) {
+        await ask(
+          `the move of session ${sessionKey} to ${ctx.cwd}`,
+          (options) =>
+            client.session.move(
+              { sessionID: sessionKey, directory: ctx.cwd, delivery: "queue" },
+              options
+            )
+        );
+        console.info(
+          `[opencode] session ${sessionKey} moved from ${was} to ${ctx.cwd}`
+        );
+      }
     } else {
       // Its permission set is put before its first turn, whole, with what it
       // needs then (a fenced session's fence reads the location's MCP servers).

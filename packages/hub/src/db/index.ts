@@ -43,6 +43,7 @@ import {
 } from "./find";
 import { type FleetCatalogDb, fleetCatalogDb } from "./fleet-catalog";
 import { type FoldDb, foldDb } from "./fold";
+import { type FolderMovesDb, folderMovesDb } from "./folder-moves";
 import { type ForgetDb, forgetDb, schemaTables } from "./forget";
 import { type HeldPicksDb, heldPicksDb } from "./held-picks";
 import { type HubAuthDb, hubAuthDb } from "./hub-auth";
@@ -143,6 +144,8 @@ interface HubStore {
   readonly documents: ArtifactDocumentsDb;
   /** What the find engine reads (find.ts), and when the person last looked at each session. */
   readonly find: FindDb;
+  /** Moves of a project's folder, files and all (folder-moves.ts). */
+  readonly folderMoves: FolderMovesDb;
   /**
    * A project forgotten, every row its delete takes and every link it cuts
    * handed to `keep` first (forget.ts); and those rows put back.
@@ -411,6 +414,7 @@ const make = async (path: string): Promise<DbShape> => {
     find: findDb(db),
     previews: previewsDb(db),
     moveEndings: moveEndingsDb(db),
+    folderMoves: folderMovesDb(db),
     sessionTasks: sessionTasksDb(db),
     owedMoves: owedMovesDb(db),
     heldPicks: heldPicksDb(db),

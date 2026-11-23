@@ -672,7 +672,7 @@ const TEMPLATE_TEXT: Record<StagesTemplate, { block: string; about: string }> =
   {
     code: {
       about:
-        "Stages for code: a task waits in ready, is worked on, and lands in done.\nReview is for the tasks you want a look at; turn on Review before done\nand every task waits there for you.",
+        "Stages for code: a task waits in ready, is worked on, and lands in done.\nReview is for the tasks you want a look at; hand Marking tasks done to\nyou in Who decides and every task waits there for you.",
       block: `ready      todo
 working    active
 review     you
@@ -904,13 +904,14 @@ export const templateOf = (
 
 /**
  * A project's stages as the hub applies them: its stages.md (or the code
- * template) with the project's Review before done on top. On, every stage of
- * kind done is entered by you alone (`by: you`), so sessions reach
- * no further than review; a done stage whose own `by:` names someone keeps
- * it. Off, the stages are as written.
+ * template) with who marks its tasks done on top (its Who decides' `done`
+ * kind, core `doneByYou`). On You, every stage of kind done is entered by
+ * you alone (`by: you`), so sessions reach no further than review; a done
+ * stage whose own `by:` names someone keeps it. On anyone else, the stages
+ * are as written.
  */
-export const ruledStages = (stages: Stages, review: boolean): Stages =>
-  review
+export const ruledStages = (stages: Stages, byYou: boolean): Stages =>
+  byYou
     ? {
         ...stages,
         stages: stages.stages.map((stage) =>

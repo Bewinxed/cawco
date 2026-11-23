@@ -9,8 +9,11 @@
   import type { Member } from "@cawco/core/decides";
   import { decidesWords } from "@cawco/core/words/decides";
   import type { Snippet } from "svelte";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import type { Facts } from "./decides.svelte";
   import MemberFace from "./MemberFace.svelte";
+  import { ROSTER_WORDS, type RosterWords } from "./roster-words";
 
   let {
     member,
@@ -19,8 +22,11 @@
     tiles,
     editing = false,
     parked = false,
+    over = false,
     card = $bindable(),
     pencil,
+    said = ROSTER_WORDS,
+    brief = false,
   }: {
     /** What it runs on, or why it can't be reached; null for members with none. */
     facts: Facts | null;
@@ -35,8 +41,14 @@
     parked?: boolean;
     /** The card, which its settings hang from. */
     card?: HTMLElement | null;
+    /** A dragged kind's tile is over it, from another card (kind-dnd.svelte.ts). */
+    over?: boolean;
     /** The pencil that opens its settings; none for members with none. */
     pencil?: Snippet;
+    /** Its words: Who decides' unless the surface drawing it says its own. */
+    said?: RosterWords;
+    /** Its name alone, its job in the house tooltip on its head (Roster `brief`). */
+    brief?: boolean;
   } = $props();
 
   const factsLine = $derived(
@@ -50,30 +62,50 @@
   bind:this={card}
   aria-labelledby="member-{member.id}"
   class={[
-    "row-span-3 grid min-w-0 grid-rows-subgrid gap-y-space-2 rounded-lg bg-surface-raised p-space-3 text-ink-strong shadow-tile transition-control",
+    "row-span-3 grid min-w-0 grid-rows-subgrid gap-y-space-2 rounded-lg bg-surface-raised p-space-3 text-ink-strong shadow-tile transition-control data-over:bg-surface-hover data-over:inset-ring-1 data-over:inset-ring-brand-solid",
     editing && "inset-ring-2 inset-ring-brand-solid",
   ]}
   data-editing={editing || undefined}
   data-member={member.id}
+  data-over={over || undefined}
   style:--stand-in="calc(var(--spacing-c-roster-face) + var(--spacing-space-3))"
 >
-  <div class="flex items-start gap-x-space-3">
-    <MemberFace {member} size={48} />
-    <div class="flex min-w-0 flex-auto flex-col">
-      <div class="flex min-w-0 items-start gap-x-space-1">
-        <h2
-          class="min-w-0 flex-auto type-body font-medium wrap-anywhere"
-          id="member-{member.id}"
+  {#snippet head(props: Record<string, unknown> = {})}
+    <div
+      {...props}
+      class={["flex gap-x-space-3", brief ? "items-center" : "items-start"]}
+    >
+      <MemberFace {member} size={48} />
+      <div class="flex min-w-0 flex-auto flex-col">
+        <div class="flex min-w-0 items-start gap-x-space-1">
+          <h2
+            class="min-w-0 flex-auto type-body font-medium wrap-anywhere"
+            id="member-{member.id}"
+          >
+            {member.name}
+          </h2>
+          {@render pencil?.()}
+        </div>
+        <p
+          class={[
+            "type-meta text-ink-muted text-pretty wrap-anywhere",
+            brief && "sr-only",
+          ]}
         >
-          {member.name}
-        </h2>
-        {@render pencil?.()}
+          {member.job}
+        </p>
       </div>
-      <p class="type-meta text-ink-muted text-pretty wrap-anywhere">
-        {member.job}
-      </p>
     </div>
-  </div>
+  {/snippet}
+  {#if brief}
+    <Tip label={member.job} tap>
+      {#snippet children(props)}
+        {@render head(props)}
+      {/snippet}
+    </Tip>
+  {:else}
+    {@render head()}
+  {/if}
   <p
     class={[
       "ps-(--stand-in) type-meta text-pretty wrap-anywhere",
@@ -87,7 +119,9 @@
       {factsLine}
     {/if}
   </p>
-  <div class="flex min-w-0 flex-col gap-space-2">
+  <!-- Its tiles are a reflow list: a tile arriving opens its place, one
+       leaving closes it (Roster). -->
+  <div class="flex min-w-0 flex-col gap-space-2" {@attach reflow()}>
     {#if tiles}
       {@render tiles()}
     {:else}
@@ -96,7 +130,7 @@
       >
         {project === null
           ? decidesWords.holdsNothingFleet
-          : decidesWords.holdsNothing(project)}
+          : said.holdsNothing(project)}
       </p>
     {/if}
   </div>

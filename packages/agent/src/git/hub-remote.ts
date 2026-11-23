@@ -20,7 +20,7 @@ import { gitUntil } from "./run";
  */
 
 /** The hub's HTTP origin, from the socket address this daemon is connected on. */
-const hubOrigin = (): string => {
+export const hubOrigin = (): string => {
   const ws = process.env[CAWCO_ENV.hubUrl];
   if (!ws) {
     throw new Error("This machine is not connected to a hub.");

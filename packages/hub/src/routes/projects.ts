@@ -31,7 +31,6 @@ export const projectsListed = ({
 };
 
 export const projectRoutes = ({
-  addProjectPlace,
   askerOf,
   caps,
   db,
@@ -41,6 +40,8 @@ export const projectRoutes = ({
   presenceSaid,
   previewListeners,
   projectEdits,
+  projectConnect,
+  projectLocate,
   projectMoved,
   projectOut,
   projectStops,
@@ -48,7 +49,6 @@ export const projectRoutes = ({
   tasks,
 }: Pick<
   HubContext,
-  | "addProjectPlace"
   | "askerOf"
   | "caps"
   | "db"
@@ -58,6 +58,8 @@ export const projectRoutes = ({
   | "presenceSaid"
   | "previewListeners"
   | "projectEdits"
+  | "projectConnect"
+  | "projectLocate"
   | "projectMoved"
   | "projectOut"
   | "projectStops"
@@ -148,17 +150,16 @@ export const projectRoutes = ({
         );
       }
     )
-    // The person's own edit of a project: its name, whether it reviews
-    // before done, where its work lands, its large files and the account
-    // its sessions start on (project-edit.ts). Every dashboard and the app hear
-    // it at once (`projects.changed`; a review change, `tasks.changed` too).
+    // The person's own edit of a project: its name, where its work lands,
+    // its large files and the account its sessions start on
+    // (project-edit.ts). Every dashboard and the app hear it at once
+    // (`projects.changed`).
     .patch(
       "/api/projects/:id",
       {
         body: t.Object(
           {
             name: t.Optional(t.String({ maxLength: PROJECT_NAME_LENGTH })),
-            review: t.Optional(t.Boolean()),
             lands: t.Optional(LANDS),
             // The account its sessions start on, by id, nickname or email;
             // null: the fleet's routing.
@@ -184,7 +185,7 @@ export const projectRoutes = ({
             // Something to change: an empty edit names nothing.
             minProperties: 1,
             error: schemaRefusal(
-              "Name what changes: the project's name, whether it reviews before done, where its work lands, where its large files live, the account its sessions start on, or what they do at its limit."
+              "Name what changes: the project's name, where its work lands, where its large files live, the account its sessions start on, or what they do at its limit."
             ),
           }
         ),
@@ -418,12 +419,52 @@ export const projectRoutes = ({
         return discarded;
       }
     )
-    // Another checkout of the project's repository, named by hand.
+    // Connect existing folder (project-connect.ts): what connecting a folder
+    // would do, read from its machine, before anything runs.
     .post(
-      "/api/projects/:id/places",
+      "/api/projects/:id/places/preview",
       { body: t.Object({ machineId: t.String(), path: t.String() }) },
       ({ params, body }) =>
-        addProjectPlace(params.id, body.machineId, body.path)
+        projectConnect.preview(params.id, body.machineId, body.path)
+    )
+    // Connect existing folder: another folder of the project's, named by
+    // hand. `joins` is the person's yes to the project the preview named as
+    // already having the folder's codebase.
+    .post(
+      "/api/projects/:id/places",
+      {
+        body: t.Object({
+          machineId: t.String(),
+          path: t.String(),
+          joins: t.Optional(t.String()),
+        }),
+      },
+      ({ params, body }) =>
+        projectConnect.connect(params.id, body.machineId, body.path, body.joins)
+    )
+    // Locate folder (project-locate.ts): what pointing a checkout at where
+    // its folder is now would do, read from its machine, before anything runs.
+    .post(
+      "/api/projects/:id/places/:placeId/locate/preview",
+      { body: t.Object({ path: t.String() }) },
+      ({ params, body }) =>
+        projectLocate.preview(params.id, params.placeId, body.path)
+    )
+    // Locate folder: the checkout pointed there, or held while its machine is
+    // away. `joins` is the person's yes to the project the preview named as
+    // already having the folder's codebase.
+    .post(
+      "/api/projects/:id/places/:placeId/locate",
+      {
+        body: t.Object({ path: t.String(), joins: t.Optional(t.String()) }),
+      },
+      ({ params, body }) =>
+        projectLocate.locate(params.id, params.placeId, body.path, body.joins)
+    )
+    // Locate folder held for a computer that is away, called off: the folder
+    // stays as it was.
+    .delete("/api/projects/:id/places/:placeId/locate", ({ params }) =>
+      projectLocate.callOff(params.id, params.placeId)
     )
     // The accounts the project's sessions may run on; null: every account.
     .put(

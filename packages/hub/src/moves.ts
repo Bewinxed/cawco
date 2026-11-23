@@ -344,12 +344,17 @@ export const createMoves = (deps: MovesDeps) => {
    */
   const holdRow = (row: MoveRow): void => {
     const { state, request } = row;
+    const { harness } = request.spawn;
+    // A copy that starts no session holds no row.
+    if (!harness) {
+      return;
+    }
     db.holdMovingInstance({
       id: state.targetInstanceId,
       machineId: state.targetMachineId,
       cwd: state.targetPath,
       projectId: row.projectId,
-      harness: request.spawn.harness,
+      harness,
       model: request.spawn.model,
       permissionMode: request.spawn.permissionMode,
       title: request.spawn.title?.trim() || undefined,
@@ -364,6 +369,9 @@ export const createMoves = (deps: MovesDeps) => {
    * while the move has failed, `moving` again on Retry, gone once cancelled.
    */
   const followRow = (row: MoveRow): void => {
+    if (!row.request.spawn.harness) {
+      return;
+    }
     const id = row.state.targetInstanceId;
     if (row.stage === "cancelled") {
       db.dropMovingInstance(id);
@@ -1058,30 +1066,18 @@ export const createMoves = (deps: MovesDeps) => {
 
   /** A move: `POST /api/projects/:id/moves`. Answers the job once it is recorded. */
   const start = async (projectId: string, asked: MoveRequest) => {
-    // Its session starts on the harness it names, and nothing stands in for
-    // one it left out.
+    // Its session starts on the harness it names; one that names none is a
+    // copy that starts no session, and nothing stands in for it.
     const { harness } = asked.spawn;
-    if (!harness) {
-      return problem(400, {
-        code: "move-needs-harness",
-        detail:
-          "A move names the harness its session starts on. Pick one, then move it again.",
-      });
-    }
     // Its session's mode is settled as every start's is, before anything
     // moves: a move whose start could only be refused copies nothing.
-    const unfit = deps.modeRefusal(
-      asked.machineId,
-      harness,
-      asked.spawn.permissionMode
-    );
+    const unfit = harness
+      ? deps.modeRefusal(asked.machineId, harness, asked.spawn.permissionMode)
+      : undefined;
     if (unfit) {
       return problem(400, { code: "mode-refused", detail: unfit });
     }
-    const request: NamedMoveRequest = {
-      ...asked,
-      spawn: { ...asked.spawn, harness },
-    };
+    const request: NamedMoveRequest = asked;
     const plotted = await plan(projectId, request.machineId, {
       ...(request.from === undefined ? {} : { from: request.from }),
       ...(request.path === undefined ? {} : { path: request.path }),
@@ -1279,6 +1275,11 @@ export const createMoves = (deps: MovesDeps) => {
     if (added) {
       deps.placesChanged(place.machineId, row.projectId);
     }
+    // A copy that names no harness starts no session: the folder is all it leaves.
+    const { harness } = request.spawn;
+    if (!harness) {
+      return readyWords(row);
+    }
     // Every Start spawns, and only the machine's answer says the session is
     // in place: a row's status is not that (a try that timed out may have
     // come up after, or not). A session that already began its conversation
@@ -1297,6 +1298,7 @@ export const createMoves = (deps: MovesDeps) => {
       cwd: state.targetPath,
       projectId: row.projectId,
       ...request.spawn,
+      harness,
       ...(sessionKey ? { resume: { sessionKey } } : {}),
     });
     if (spawned instanceof ElysiaStatus) {

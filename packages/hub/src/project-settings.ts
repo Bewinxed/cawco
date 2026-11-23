@@ -32,10 +32,6 @@
  * - `rename`: the project's name, checked and written as the person's own
  *   edit is (project-edit.ts). A name is a label the person can change back
  *   in a click, so it applies at once like the others.
- * - `set_review`: Review before done on or off (project-edit.ts). Whether
- *   every task waits for the person before done is the person's choice
- *   either way (on routes work through them, off takes away a look they
- *   chose), so it is always asked, `ask` or not.
  * - `set_dispatch`, `set_max_attempts`, `set_review_limit`, `set_budget`:
  *   the rest of the project's dispatch settings, each checked by the rule
  *   the dashboard's own change is (dispatch.ts `dispatchProblem`) and
@@ -149,24 +145,6 @@ const renamed = (project: ProjectRow, asked: { name?: string }) => {
   return { kind: "rename", name } satisfies ProjectSettingChange;
 };
 
-/** Review before done turned on or off, refused when it is that already. */
-const reviewSet = (project: ProjectRow, asked: { review?: boolean }) => {
-  const { review } = asked;
-  if (review === null || review === undefined) {
-    return problem(400, {
-      code: "set-review-says-true",
-      detail: "set_review says on (true) or off (false).",
-    });
-  }
-  if (review === project.review) {
-    return problem(400, {
-      code: "review-before-done-project",
-      detail: `Review before done is ${review ? "on" : "off"} for this project already.`,
-    });
-  }
-  return { kind: "set_review", review } satisfies ProjectSettingChange;
-};
-
 /** What the tool takes: changes, flat, each read by its `kind`. */
 const ASKED_CHANGE = z.object({
   kind: z.enum(PROJECT_SETTING_KINDS),
@@ -180,7 +158,6 @@ const ASKED_CHANGE = z.object({
   runs_on: z.string().nullable().optional(),
   name: z.string().optional(),
   private: z.boolean().optional(),
-  review: z.boolean().optional(),
   dispatch: z.boolean().optional(),
   max_attempts: z.number().int().optional(),
   review_limit: z.number().int().optional(),
@@ -222,9 +199,7 @@ const definition = z.object({
   ask: z
     .boolean()
     .optional()
-    .describe(
-      "true asks the person first; create_repo and set_review always do."
-    ),
+    .describe("true asks the person first; create_repo always does."),
   project: z.string().optional(),
 });
 
@@ -264,7 +239,6 @@ const ParkedChange: GenericSchema<unknown, ProjectSettingChange> = variant(
     object({ kind: literal("set_lands"), lands: picklist(PROJECT_LANDS) }),
     object({ kind: literal("set_runs_on"), runsOn: nullable(string()) }),
     object({ kind: literal("rename"), name: string() }),
-    object({ kind: literal("set_review"), review: boolean() }),
     object({ dispatch: boolean(), kind: literal("set_dispatch") }),
     object({ kind: literal("set_max_attempts"), maxAttempts: number() }),
     object({ kind: literal("set_review_limit"), reviewLimit: number() }),
@@ -340,8 +314,6 @@ const askedOf = (change: ProjectSettingChange): AskedChange => {
       };
     case "rename":
       return { kind: change.kind, name: change.name };
-    case "set_review":
-      return { kind: change.kind, review: change.review };
     case "set_dispatch":
       return { kind: change.kind, dispatch: change.dispatch };
     case "set_max_attempts":
@@ -513,7 +485,7 @@ export interface ProjectSettingsDeps {
    */
   readonly dispatch: Pick<Dispatcher, "configure" | "view">;
   /**
-   * The project's name, Review before done, default landing and account,
+   * The project's name, default landing and account,
    * through the person's own edit (project-edit.ts).
    */
   readonly edit: ReturnType<typeof createProjectEdits>["edit"];
@@ -913,8 +885,6 @@ export const createProjectSettings = ({
         return runsOnChange(project, asked.runs_on);
       case "rename":
         return renamed(project, asked);
-      case "set_review":
-        return reviewSet(project, asked);
       case "set_dispatch":
       case "set_max_attempts":
       case "set_review_limit":
@@ -1008,8 +978,6 @@ export const createProjectSettings = ({
         break;
       case "rename":
         return await editSaid(change, project.id, { name: change.name });
-      case "set_review":
-        return await editSaid(change, project.id, { review: change.review });
       case "create_repo": {
         // A publish links what it made, as its repository's copy.
         const published = await publish.publish(project, change);
@@ -1224,7 +1192,6 @@ export const createProjectSettings = ({
       runsOn: now.runsOn,
       startingSet:
         own.set ?? (own.problems ? { problems: own.problems } : null),
-      review: project.review,
       links: project.links,
       connections: connections.list().flatMap((view) => {
         if (view.projects.includes(project.id)) {
@@ -1263,13 +1230,9 @@ export const createProjectSettings = ({
     if (changes instanceof ElysiaStatus) {
       return changes;
     }
-    // Creating a remote and pushing reach outside, and whether work waits
-    // for the person's review is theirs to choose: always the person's.
+    // Creating a remote and pushing reach outside: always the person's.
     const asking =
-      input.ask === true ||
-      changes.some(
-        (one) => one.kind === "create_repo" || one.kind === "set_review"
-      );
+      input.ask === true || changes.some((one) => one.kind === "create_repo");
     if (!asking) {
       const said = await apply(project, changes, boardTitle(actor));
       if (said instanceof ElysiaStatus) {

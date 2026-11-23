@@ -4,7 +4,10 @@
  * check of it found. A stored limit only warns: a pick on it asks again
  * (limit-checks.svelte.ts).
  */
+import { clockWords } from "@cawco/core/words/account-lines";
 import { limitPickWords as words } from "@cawco/core/words/limit-picks";
+import { sessionStatWords } from "@cawco/core/words/session-stats";
+import { fillState, type Meter, type MeterState } from "../usage";
 import { fmt } from "../usage/rings";
 import { limitChecks } from "./limit-checks.svelte";
 import type { Room } from "./room-of";
@@ -53,5 +56,42 @@ export function limitRowOf(
     held: answer !== undefined,
     limited: room?.kind === "limit",
     why: unread,
+  };
+}
+
+/** An account's room as the house ring draws it (UsageRing): the share left, in the state of what is used; at its limit, the ring reached (stale while its reading is old). */
+export function meterOf(
+  room: Room | null
+): { share: number; state: MeterState } | null {
+  if (room === null) {
+    return null;
+  }
+  if (room.kind === "limit") {
+    return { share: 0, state: room.stale ? "stale" : "reached" };
+  }
+  return { share: room.percent, state: fillState(100 - room.percent) };
+}
+
+/**
+ * An account's room as its chip draws it (AccountSwitch `quota`): the window
+ * that stops it first (usage `firstToStop`), its share used and state, when
+ * it resets, and how old its reading is while stale (`seenAt` its read).
+ */
+export function chipQuota(
+  limit: { label: string; meter: Meter },
+  seenAt: number,
+  now: number
+): { detail: string; label: string; state: MeterState; used: number } {
+  const { meter } = limit;
+  return {
+    used: meter.used,
+    state: meter.state,
+    detail: sessionStatWords.limitResets(
+      meter.window.resetsAt
+        ? clockWords(Date.parse(meter.window.resetsAt))
+        : null,
+      meter.state === "stale" ? fmt(now - seenAt) : null
+    ),
+    label: limit.label,
   };
 }

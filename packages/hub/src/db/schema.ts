@@ -94,6 +94,7 @@ import {
   FleetScopeSchema,
   FleetSyncOutcomeSchema,
   FleetSyncReportSchema,
+  FolderMoveStageSchema,
   GithubProjectSchema,
   HookHandlerSchema,
   InstanceStatusSchema,
@@ -104,7 +105,7 @@ import {
   MachineStateSchema,
   McpPlatformSchema,
   ModelInfoSchema,
-  MoveEndedSchema,
+  MoveEndedShape,
   MoveStageSchema,
   NamedHarnessReportSchema,
   NamedMoveRequestSchema,
@@ -184,6 +185,7 @@ import {
   DesignFindingSchema,
   DesignOfferAnswerSchema,
   DesignProposalFileSchema,
+  FolderMoveStateSchema,
   GitHubResourceSchema,
   InboundViaSchema,
   InstanceKindSchema,
@@ -753,12 +755,6 @@ export const projects = sqliteTable("projects", {
    */
   tapped: storedEnum(z.enum(STAGES_TEMPLATES))("tapped"),
   /**
-   * Review before done: only you move a task into a done stage, and an
-   * attempt that lands sends its task to review (stages.ts `ruledStages`).
-   * Off: the project's conversation and sessions close tasks as the project's stages allow.
-   */
-  review: integer("review", { mode: "boolean" }).notNull().default(false),
-  /**
    * Where its large files live (its Large files setting): an LFS endpoint
    * every git-lfs run on a machine for it is held to (agent host-lfs.ts),
    * with {@link lfsConnection}'s credential. Null: each repository's own
@@ -1090,6 +1086,12 @@ export const projectPlaces = sqliteTable(
      * makes it, as a new project's folder is made by its first session.
      */
     found: integer("found", { mode: "boolean" }).notNull().default(false),
+    /**
+     * A folder the person pointed the checkout at with its machine away
+     * (Locate folder, project-locate.ts): held until that machine can read
+     * it, at its next register, and pointed there then. Null: none held.
+     */
+    locateTo: text("locate_to").$type<PlacePath>(),
     createdAt: stampedNow("created_at"),
   },
   (table) => [
@@ -3519,7 +3521,7 @@ export const moveEndings = sqliteTable("move_endings", {
   instanceId: sessionColumn("instance_id")
     .primaryKey()
     .references(() => instances.id, { onDelete: "cascade" }),
-  ended: storedJson(MoveEndedSchema)("ended").notNull(),
+  ended: storedJson(MoveEndedShape)("ended").notNull(),
   createdAt: stampedNow("created_at"),
 });
 
@@ -4522,6 +4524,17 @@ export const decidesRoutes = sqliteTable("decides_routes", {
 });
 
 /**
+ * The projects whose Review before done was off when it became the `done`
+ * kind of Who decides (migration 0472): each is owed a decides.md line
+ * handing marking tasks done to Caw, written by the hub as it starts
+ * (done-routes-carried.ts), and its row goes once the line is written. A
+ * project whose review was on follows the fleet's `done`, which is You.
+ */
+export const doneRoutesOwed = sqliteTable("done_routes_owed", {
+  projectId: projectKey().primaryKey(),
+});
+
+/**
  * Where the hub sent a decision card (settling.ts), one row per card, the
  * ledger the decision surface's record reads: the member it went to
  * (`route`: `advisor`, `practice`, `caw`, an added agent's id, or `you` when
@@ -4726,11 +4739,12 @@ export const continuations = sqliteTable(
         "session",
         "task",
         "move",
+        "folder",
       ] as const satisfies readonly ContinuationAsker["kind"][])
     )("asked_by_kind")
       .notNull()
       .default("person"),
-    /** The session or task that asked, for `session` and `task`; null otherwise. */
+    /** The session or task that asked, for `session` and `task`, and the folder move for `folder`; null otherwise. */
     askedById: text("asked_by_id"),
     /** A move's own fields, for `move`; null otherwise. */
     askedByMove: storedJson(MoveAskerSchema)("asked_by_move"),
@@ -4958,6 +4972,39 @@ export const moves = sqliteTable(
     index("moves_stop_on").on(table.stopOn),
     index("moves_target_instance").on(table.targetInstanceId),
     index("moves_ask").on(table.askId),
+  ]
+);
+
+/**
+ * Moves of a project's folder, files and all (folder-moves.ts, core
+ * folder-move.ts): the one record of each, so a hub that restarts mid-way
+ * carries the job on from its stage. A done or called-off job is kept a
+ * while for a card that was away, then deleted; a failed one stays until
+ * it is tried again or called off.
+ */
+export const folderMoves = sqliteTable(
+  "folder_moves",
+  {
+    id: text("id").primaryKey(),
+    projectId: projectKey(),
+    /** The place moved. */
+    placeId: text("place_id").notNull(),
+    /** The machine the folder is on before the move. */
+    sourceMachineId: machineColumn("source_machine_id").notNull(),
+    /** The machine it moves to: the same one, or another. */
+    targetMachineId: machineColumn("target_machine_id").notNull(),
+    stage: storedEnum(FolderMoveStageSchema)("stage").notNull(),
+    /** Everything the job learned and decided (`FolderMoveState`), read and written whole. */
+    state: storedJson(FolderMoveStateSchema)("state").notNull(),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (table) => [
+    index("folder_moves_machines").on(
+      table.sourceMachineId,
+      table.targetMachineId
+    ),
+    index("folder_moves_place").on(table.placeId),
   ]
 );
 

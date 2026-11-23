@@ -4,10 +4,14 @@
    * same structure whatever it holds: a lead slot (the account's dot, the
    * model's maker), a name line and one second line, each one line that
    * ends in an ellipsis inside the row, and one trailing slot. Its height is
-   * the two lines', whichever details it has. Its whole name and second
+   * the two lines', whichever details it has; a row with no second line
+   * (empty `detail`) is its name alone. Its whole name and second
    * line are its tooltip, the list's one tooltip gliding to it (focus opens
    * it too). The hover ghost is the popover's (NsPopover `rows`
    * `[data-pick-row]`), so the row draws none of its own.
+   *
+   * With `meter` (an account's room) the second line leads with the room
+   * as the house ring, its words saying the figure.
    *
    * The trailing slot holds the check on the one the session shows, or the
    * live dot while the row's limit is checked again. A row at its limit
@@ -30,6 +34,8 @@
   import { glideHere } from "#lib/components/ui/tooltip/glide.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconCheck } from "#lib/icons.js";
+  import type { MeterState } from "../usage";
+  import UsageRing from "../usage/UsageRing.svelte";
   import { pickHost } from "./pick-host";
 
   let {
@@ -44,6 +50,7 @@
     disabled = false,
     mono = false,
     force,
+    meter = null,
     onpick,
   }: {
     /** The lead slot's mark: the account's dot, the model's maker. */
@@ -66,6 +73,8 @@
     mono?: boolean;
     /** The force past a limit that held. */
     force?: { action: string; onforce: () => void };
+    /** A budget's share as a meter (DESIGN.md: a fact with a shape is drawn): the ring leading the second line, which says its figure. */
+    meter?: { share: number; state: MeterState } | null;
     onpick: () => void;
   } = $props();
 
@@ -107,11 +116,27 @@
       class="min-w-0 truncate type-label text-ink-strong group-aria-disabled:opacity-50 group-data-limited:text-ink-muted"
       ><bdi>{name}</bdi></span
     >
-    <span
-      data-slot="detail"
-      class="min-w-0 truncate type-meta text-ink-muted tabular-nums group-data-limited:text-status-attn-ink data-mono:font-(family-name:--font-mono)"
-      data-mono={mono || undefined}>{detail}</span
-    >
+    {#if detail && meter}
+      <!-- The room as the account chip draws it (AccountSwitch): the ring
+           and its figure one unit, the ring a word space from the words. -->
+      <span
+        data-slot="detail"
+        class="mark-line flex min-w-0 items-center gap-word type-meta text-ink-muted tabular-nums group-data-limited:text-status-attn-ink"
+      >
+        <span class="flex-none" data-box
+          ><UsageRing share={meter.share} state={meter.state} /></span
+        >
+        <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+          >{detail}</span
+        >
+      </span>
+    {:else if detail}
+      <span
+        data-slot="detail"
+        class="min-w-0 truncate type-meta text-ink-muted tabular-nums group-data-limited:text-status-attn-ink data-mono:font-(family-name:--font-mono)"
+        data-mono={mono || undefined}>{detail}</span
+      >
+    {/if}
   </span>
   <span
     data-slot="trail"

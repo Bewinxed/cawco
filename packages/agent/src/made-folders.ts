@@ -137,3 +137,27 @@ export const forgetMade = async (path: string): Promise<void> => {
     );
   }
 };
+
+/**
+ * The record of the folder CawCo made at `from` moved to `to`, as a rename
+ * moved the folder itself (folder-move.ts): its identity on disk is the one
+ * it was made with, so a delete still knows it. Nothing recorded at `from`
+ * moves nothing; a failure is said.
+ */
+export const moveMade = async (from: string, to: string): Promise<void> => {
+  const was = normalize(from);
+  const now = normalize(to);
+  try {
+    await changeMade((file) => {
+      const { [was]: made, ...folders } = file.folders;
+      return {
+        file: { folders: made ? { ...folders, [now]: made } : file.folders },
+        out: undefined,
+      };
+    });
+  } catch (error) {
+    console.warn(
+      `[made-folders] ${was} moved to ${now}, but its record stays at the old path: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+};

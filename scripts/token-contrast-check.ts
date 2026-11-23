@@ -127,6 +127,7 @@ const PAIRS: Pair[] = [
       "surface-recess",
       "surface-fill",
       "surface-hover",
+      "option-picked",
     ].map((bg) => ({
       label: `${ink} on ${bg}`,
       fg: ink,

@@ -15,6 +15,7 @@
  * it ships new UI concepts, teach the dashboard's folding layer about them
  * (they arrive as `raw` frames until then).
  */
+
 import type { AskAnswer } from "@cawco/core/asks";
 import type { TextAttachment } from "@cawco/core/attachments";
 import type { RestartHold } from "@cawco/core/binary-updates";
@@ -26,6 +27,7 @@ import type {
 } from "@cawco/core/control-table";
 import type { MachineSend } from "@cawco/core/envelopes";
 import type { FleetSyncReport, PlacedFleetConfig } from "@cawco/core/fleet";
+import type { FolderCarrySession } from "@cawco/core/folder-move";
 import type { FramePayload } from "@cawco/core/frames";
 import type {
   HarnessCapabilities,
@@ -56,6 +58,7 @@ import type {
 } from "@cawco/core/session-messages";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import type { FleetPart } from "./fleet-parts";
+import type { TreeTop } from "./folder-tree";
 import type { HarnessCli } from "./harness-cli";
 import type { KeeperReading } from "./keepers";
 import type { KeeperRefused } from "./sessiond-client";
@@ -560,6 +563,21 @@ export interface CarryHost {
   running: (instanceId: string) => HarnessSession | undefined;
 }
 
+/**
+ * A harness's own part in a move of a project's folder (folder-carry.ts):
+ * how one session's stored conversation is filed again for its new folder
+ * on this machine; what of it goes to another machine, each file or folder
+ * under the name it goes by; how what arrived is filed where the harness
+ * reads it there (`mine`: its part of what was received); and how the copy
+ * left here once it was carried away is removed.
+ */
+export interface FolderCarry {
+  drop: (one: FolderCarrySession) => Promise<void>;
+  here: (one: FolderCarrySession, jobId: string) => Promise<void>;
+  take: (one: FolderCarrySession, mine: string) => Promise<void>;
+  tops: (one: FolderCarrySession, jobId: string) => Promise<TreeTop[]>;
+}
+
 /** A harness's carry of its sessions' conversations into the account directory each row is to say ({@link CONTROL_CARRY_SESSIONS}). */
 export interface SessionCarry {
   carrySessions: (
@@ -648,6 +666,11 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
   >;
   /** What the harness has of what cawco last put on it, without changing it. */
   fleetStatus: () => Promise<FleetSyncReport>;
+  /**
+   * How its stored conversations follow a project's folder that moved
+   * (folder-carry.ts, core `CONTROL_FOLDER_SESSIONS_CARRY`).
+   */
+  readonly folderCarry: FolderCarry;
   /** The stored session under `sessionKey`; null when this harness keeps none under it. */
   getSessionInfo: (
     sessionKey: string,

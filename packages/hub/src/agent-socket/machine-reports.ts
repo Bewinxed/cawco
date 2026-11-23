@@ -19,6 +19,7 @@ export type MachineReportsContext = Pick<
   | "fleetSyncs"
   | "keepFleetReport"
   | "moves"
+  | "folderMoves"
   | "passkeyRelay"
   | "pendingInstalls"
   | "registry"
@@ -242,6 +243,10 @@ export const machineReportStagesOf = (ctx: MachineReportsContext) => {
     const body = message.payload;
     if (body.kind === "move_progress") {
       ctx.moves.progress(message.machineId, body);
+      return "stop";
+    }
+    if (body.kind === "folder_move_progress") {
+      ctx.folderMoves.progress(message.machineId, body);
       return "stop";
     }
     return "continue";

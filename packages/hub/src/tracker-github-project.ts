@@ -124,6 +124,29 @@ const SET_MUTATION = `mutation CawcoProjectStatus($project: ID!, $item: ID!, $fi
   ) { projectV2Item { id } }
 }`;
 
+const FIELD_OPTIONS_QUERY = `query CawcoStatusOptions($field: ID!) {
+  node(id: $field) {
+    ... on ProjectV2SingleSelectField { options { id name color description } }
+  }
+}`;
+
+const FIELD_OPTIONS_MUTATION = `mutation CawcoStatusOptionsAdd($field: ID!, $options: [ProjectV2SingleSelectFieldOptionInput!]!) {
+  updateProjectV2Field(input: { fieldId: $field, singleSelectOptions: $options }) {
+    projectV2Field { ... on ProjectV2SingleSelectField { options { id name } } }
+  }
+}`;
+
+/** A Status option as `updateProjectV2Field` takes it back: its id keeps it, and every item standing in it. */
+interface OptionInput {
+  color: string;
+  description: string;
+  id?: string;
+  name: string;
+}
+
+/** The colour an option the hub adds wears: GitHub's quiet one. Our choice. */
+const ADDED_COLOR = "GRAY";
+
 interface RawProject {
   closed?: boolean;
   field?: { id?: string; options?: StatusOption[] } | null;
@@ -279,6 +302,69 @@ export const githubProjects = async (
       ...owned.map((one) => choiceOf(one, false)),
     ],
   };
+};
+
+/**
+ * The Project's Status options with one added for each of `stages` it has
+ * none named as (core `statusOptionFor` matches by name, ignoring case),
+ * through `updateProjectV2Field`. That mutation replaces the field's whole
+ * list ("provided values overwrite existing options, and existing options
+ * should be fetched for partial updates"), so every option it has is sent
+ * back with its `id` ("Include this to preserve the option's identity
+ * during updates, preventing item field values from being cleared",
+ * docs.github.com/en/graphql/reference/projects), its colour and its
+ * description; an added one takes no id. Answers the options as they stand
+ * after, or GitHub's refusal in its words.
+ */
+export const statusOptionsAdded = async (
+  octokit: Octokit,
+  project: Pick<GithubProject, "title">,
+  fieldId: string,
+  stages: readonly string[]
+): Promise<StatusOption[] | TrackerProblem> => {
+  const on = `the Project “${project.title}”`;
+  const read = await ask<{
+    node: { options?: (OptionInput & { id: string })[] } | null;
+  }>(octokit, "read its Status options", on, FIELD_OPTIONS_QUERY, {
+    field: fieldId,
+  });
+  if (read instanceof ElysiaStatus) {
+    return read;
+  }
+  const options = read.node?.options ?? [];
+  const named = (stage: string) =>
+    options.some(
+      (option) =>
+        option.name.trim().toLowerCase() === stage.trim().toLowerCase()
+    );
+  const missing = stages.filter((stage) => !named(stage));
+  if (missing.length === 0) {
+    return options.map(({ id, name }) => ({ id, name }));
+  }
+  const sent: OptionInput[] = [
+    ...options.map(({ id, name, color, description }) => ({
+      id,
+      name,
+      color,
+      description,
+    })),
+    ...missing.map((name) => ({ name, color: ADDED_COLOR, description: "" })),
+  ];
+  const added = await ask<{
+    updateProjectV2Field: {
+      projectV2Field: { options?: StatusOption[] } | null;
+    };
+  }>(
+    octokit,
+    `add the Status ${missing.length === 1 ? "option" : "options"} ${missing.join(", ")}`,
+    on,
+    FIELD_OPTIONS_MUTATION,
+    { field: fieldId, options: sent }
+  );
+  if (added instanceof ElysiaStatus) {
+    return added;
+  }
+  return added.updateProjectV2Field.projectV2Field?.options ?? [];
 };
 
 /** One Project's Status for one repository's issues, as the sync asks of it; a problem when the name is no `owner/repo`. */

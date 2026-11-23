@@ -19,10 +19,8 @@
    * opens every kind and who decides it across the fleet in a popover hung
    * from it (KindsOfChoice); under the phone line it stands under the lede.
    *
-   * A project's head also holds its Review before done, the one place it is
-   * turned on and off. While the hub answers, the switch shows what was
-   * asked and waits; a refusal puts it back, with the hub's words under it
-   * and Try again (RowFault).
+   * Who marks the project's tasks done is one of the kinds (`done`): on
+   * You, only you move a task to done.
    *
    * A read that failed stands in the page with the hub's words and Try
    * again; decides.md that doesn't read is said under the head, every kind
@@ -33,20 +31,15 @@
   import { configureWords } from "@cawco/core/words/configure";
   import { decidesWords } from "@cawco/core/words/decides";
   import { untrack } from "svelte";
-  import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import { listTasks, type TaskSummary } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
-  import {
-    editProject,
-    projectsStore,
-  } from "#lib/cawco/stores/projects.svelte.js";
+  import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconFolder, IconGlobe, IconWarningTriangle } from "#lib/icons.js";
-  import { failureWords } from "#lib/platform/hub-read.js";
   import { WhoDecides } from "./decides.svelte";
   import KindsOfChoice from "./KindsOfChoice.svelte";
   import WhoRoster from "./WhoRoster.svelte";
@@ -102,30 +95,6 @@
     ids.map(
       (id) => projectsStore.projects.find((one) => one.id === id)?.name ?? id
     );
-  /** Review before done as asked, while the hub answers. */
-  let reviewAsked = $state<boolean | null>(null);
-  let reviewFault = $state<string | null>(null);
-
-  async function setReview(next: boolean): Promise<void> {
-    if (
-      projectId === null ||
-      project === undefined ||
-      reviewAsked !== null ||
-      next === project.review
-    ) {
-      return;
-    }
-    reviewAsked = next;
-    reviewFault = null;
-    try {
-      await editProject(projectId, { review: next });
-    } catch (error) {
-      reviewFault = failureWords(error);
-    } finally {
-      reviewAsked = null;
-    }
-  }
-
   const projectHref = $derived(
     projectId === null ? "" : `/project/${encodeURIComponent(projectId)}`
   );
@@ -275,22 +244,6 @@
                 <span class="wrap-anywhere">{decidesWords.own(name)}</span>
               </li>
             </ul>
-            <div class="flex min-w-0 flex-col gap-space-1 pt-space-2">
-              <SwitchField
-                disabled={reviewAsked !== null}
-                hint={decidesWords.review.note}
-                id="decides-review"
-                label={decidesWords.review.label}
-                bind:checked={
-                  () => reviewAsked ?? project?.review ?? false,
-                  (next) => setReview(next)
-                }
-              />
-              <RowFault
-                again={() => setReview(!(project?.review ?? false))}
-                reason={reviewFault}
-              />
-            </div>
           {/if}
         </header>
         <KindsOfChoice {named} {who} />

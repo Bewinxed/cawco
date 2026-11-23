@@ -11,12 +11,8 @@
  * press there scrolls the board and opens nothing, and the task drawer's
  * stage picker does the same job by tap.
  */
-import {
-  draggable,
-  dropTargetForElements,
-} from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
-import { combine } from "@atlaskit/pragmatic-drag-and-drop/utils/combine";
-import { bareDrag, internalData } from "../internal-drag";
+import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
+import { internalDraggable } from "../internal-drag";
 
 interface TaskDrag {
   from: string;
@@ -59,23 +55,16 @@ export function dragTask(params: () => { taskId: string; from: string }) {
       return;
     }
     // A card's text never types into a field it is let go over (internal-drag.ts).
-    return combine(
-      bareDrag(node),
-      draggable({
-        element: node,
-        getInitialData: () => ({ kind: "cawco/task", ...params() }),
-        getInitialDataForExternal: internalData,
-        onDragStart: () => {
-          node.dataset.dragging = "";
-          hint.from = params().from;
-        },
-        onDrop: () => {
-          delete node.dataset.dragging;
-          hint.from = null;
-          hint.over = null;
-        },
-      })
-    );
+    return internalDraggable(node, {
+      data: () => ({ kind: "cawco/task", ...params() }),
+      onStart: () => {
+        hint.from = params().from;
+      },
+      onEnd: () => {
+        hint.from = null;
+        hint.over = null;
+      },
+    });
   };
 }
 

@@ -43,6 +43,7 @@
   import { madeWords } from "@cawco/core/words/made";
   import { setupWords } from "@cawco/core/words/onboarding";
   import { projectWords } from "@cawco/core/words/project";
+  import { settingsViewWords } from "@cawco/core/words/settings-view";
   import { viewsWords } from "@cawco/core/words/views";
   import { onMount, type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -55,7 +56,6 @@
   import BlockPage, {
     type BlockItem,
   } from "#lib/cawco/blocks/BlockPage.svelte";
-
   import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
   import { ProjectDecisions } from "#lib/cawco/decisions/decisions.svelte.js";
   import RestoreHeldAlert from "#lib/cawco/forgotten/RestoreHeldAlert.svelte";
@@ -186,6 +186,10 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import type { ProjectPageData } from "./project-page-data";
+  import { faultCount } from "./settings/changes";
+  import ProjectSettings, {
+    settingsHubFor,
+  } from "./settings/ProjectSettings.svelte";
 
   let {
     front,
@@ -237,6 +241,14 @@
   const project = $derived(
     projectsStore.project(projectId) ?? untrack(() => seed?.project) ?? null
   );
+  /** The Settings view's tie to the hub, for the page's life: its tab counts what needs fixing from any view. */
+  const settings = settingsHubFor(() => project);
+  const settingsReadable = $derived(project !== null);
+  $effect(() => {
+    if (settingsReadable) {
+      untrack(() => settings.read());
+    }
+  });
   const machine = $derived.by(() => {
     const primary = project ? checkoutOf(project) : undefined;
     return primary
@@ -497,13 +509,23 @@
         label: viewLabel(view.name),
         draft: view.draft,
       })),
+    // The project's settings, Caw's on and off aside (JOURNEY.md spec 3).
+    { value: "settings", label: settingsViewWords.tab, draft: false },
   ]);
-  /** The views as a phone's bar lists them: Decisions with the pages waiting on picks. */
+  /** The views as the strip and a phone's bar list them: Decisions with the pages waiting on picks, Settings with what needs fixing. */
+  const settingsFaults = $derived(
+    project === null ? 0 : faultCount(settings.record)
+  );
   const barViews = $derived(
-    tabs.map((each) => ({
-      ...each,
-      count: each.value === "decisions" ? decisions.waiting : 0,
-    }))
+    tabs.map((each) => {
+      let count = 0;
+      if (each.value === "decisions") {
+        count = decisions.waiting;
+      } else if (each.value === "settings") {
+        count = settingsFaults;
+      }
+      return { ...each, count };
+    })
   );
   let tab = $derived(here.searchParams.get("view") ?? "board");
   /** The decision page open in the tab. */
@@ -521,6 +543,13 @@
       return "board";
     }
     return tabs.some((each) => each.value === tab) ? tab : "board";
+  });
+  /** The Settings view stands open: what it reads is read again as it opens, as Caw or another tab may have moved it. */
+  const settingsOpen = $derived(current === "settings");
+  $effect(() => {
+    if (settingsOpen && settingsReadable) {
+      untrack(() => settings.read());
+    }
   });
   /** A view the URL names is still being read: its place holds a skeleton. */
   const awaiting = $derived(
@@ -1475,7 +1504,9 @@
       !adding &&
       !(notSetUp && drafting) &&
       !(setUpFresh && current === "board") &&
-      !current.startsWith("view:")
+      !current.startsWith("view:") &&
+      // Settings holds no empty board for him to stand over.
+      current !== "settings"
     );
   });
   /** What the pane holds, as its layout reads it: a decision page fills it. */
@@ -1854,6 +1885,9 @@
       viewItems={viewItemsOf("routines")}
       bind:standing={routinesStand}
     />
+  {:else if value === "settings" && project}
+    <!-- The project's settings (settings/), Caw's switch staying in the head. -->
+    <ProjectSettings hub={settings} />
   {:else if value === "decisions"}
     <DecisionsView
       {canTalk}
@@ -2119,6 +2153,7 @@
               {lead}
               {machine}
               onask={canTalk ? ask : null}
+              onsettings={() => choose("settings")}
               onfilter={(anchor) => {
                 filterAnchor = anchor;
                 filterOpen = true;

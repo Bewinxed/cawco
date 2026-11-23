@@ -18,7 +18,7 @@
  * on it is none (the decision-page skill: such a pick is an HTML page, and a
  * setup page is a program the board draws). A project with no checkout runs
  * its work in its folder on the hub (work-place.ts); a checkout is added in
- * the project's details (server.ts `addProjectPlace`).
+ * the project's details (project-connect.ts).
  */
 
 import { SETUP_PAGE } from "@cawco/core/artifact-needs";

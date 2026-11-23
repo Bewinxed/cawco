@@ -1,17 +1,16 @@
 /**
- * A project's name, its Review before done, where its work lands and the
- * account its sessions start on, changed by the person (`PATCH
- * /api/projects/:id`, the project head's details tray, the setup page's
- * `account`) or by its Caw (`project_settings` `rename`, `set_review`,
- * `set_lands`, `set_account`): one check and one write for all. Where work lands is a dispatch
+ * A project's name, where its work lands and the account its sessions
+ * start on, changed by the person (`PATCH /api/projects/:id`, the project
+ * page's Settings view, the setup page's `account`) or by its Caw
+ * (`project_settings` `rename`, `set_lands`, `set_account`): one check and one write for all. Where work lands is a dispatch
  * setting, written by the dispatcher's own `configure` (`lands`), so the
  * dispatcher looks at the project again as it changes. Where its large
  * files live (`lfs`) is the person's alone: an LFS endpoint bound to a
  * fleet connection, which every git-lfs run on a machine for the project is
  * held to with that connection's key (agent host-lfs.ts). The change reaches
  * every dashboard and the app at once: `projects.changed` makes each read
- * the projects again, and a review change is a change to the stages the hub
- * applies, so the project's boards read its tasks and stages again too.
+ * the projects again. Who marks its tasks done is its Who decides' `done`
+ * kind (decides.ts), never a field here.
  *
  * Names are not unique: a project is known by its id, and the hub makes two
  * projects of one name as readily (`POST /api/projects`).
@@ -53,7 +52,6 @@ export interface ProjectEdit {
    */
   lfs?: { connection: string; url: string } | null;
   name?: string;
-  review?: boolean;
 }
 
 /** A name as the hub keeps it: trimmed, one line, not empty, at most 200 characters. */
@@ -139,8 +137,6 @@ export interface ProjectEditsDeps {
   readonly lfsProblem: (connection: string) => string | undefined;
   /** Every dashboard and the app read the projects again. */
   readonly projectsChanged: () => void;
-  /** The project's boards read its tasks and stages again (tasks.ts `touched`). */
-  readonly stagesChanged: (projectId: string) => void;
 }
 
 /** The Large files setting as the row keeps it, checked; undefined when not asked or not changed. */
@@ -257,9 +253,6 @@ const changeOf = (project: ProjectRow, asked: ProjectEdit) => {
       change.name = name;
     }
   }
-  if (asked.review !== undefined && asked.review !== project.review) {
-    change.review = asked.review;
-  }
   if (asked.accountAtLimit !== undefined) {
     if (!PROJECT_AT_LIMIT.includes(asked.accountAtLimit)) {
       return problem(400, {
@@ -322,10 +315,9 @@ export const createProjectEdits = ({
   lands,
   lfsProblem,
   projectsChanged,
-  stagesChanged,
 }: ProjectEditsDeps) => ({
   /**
-   * Checks and applies a change to a project's name, Review before done,
+   * Checks and applies a change to a project's name,
    * landing, large files and account; answers the project as it is now,
    * and, when its account changed, what became of its running
    * conversation. Nothing asked is refused.
@@ -355,9 +347,6 @@ export const createProjectEdits = ({
       return landed;
     }
     projectsChanged();
-    if (details.review !== undefined) {
-      stagesChanged(projectId);
-    }
     const now = db.project(projectId) ?? project;
     // Sessions started from now start on it; its conversation, the one
     // session that lives on, moves to it as a person's move would.

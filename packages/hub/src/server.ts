@@ -53,8 +53,13 @@ import {
   pushOnlyProvider,
 } from "@cawco/core/connections";
 import { CONTINUATION_CANCELLED } from "@cawco/core/continuation";
-import type { AddressedControl } from "@cawco/core/control-table";
-import { decidesFileProblems } from "@cawco/core/decides";
+import type { ControlReply } from "@cawco/core/control-replies";
+import type {
+  AddressedControl,
+  ControlArgs,
+  ControlName,
+} from "@cawco/core/control-table";
+import { decidesFileProblems, doneByYou } from "@cawco/core/decides";
 import { type StartingSet, startsAny } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { docMeta } from "@cawco/core/doc-meta";
@@ -439,7 +444,7 @@ import { tagStoredSend } from "./db/tag-markers";
 import { refOf as linkRefOf, viaOf as linkViaOf } from "./db/task-links";
 import { undoable } from "./db/trash";
 import { decide, type HubTurn, type TurnChoice } from "./decide";
-import { decidesRoutes, type HarnessOffer } from "./decides";
+import { decidesFileWith, decidesRoutes, type HarnessOffer } from "./decides";
 import { DECIDES_FILE, decidesTable } from "./decides-file";
 import { refiledStatements } from "./decision-program";
 import { createDecisions, decidedTasks, decisionRoutes } from "./decisions";
@@ -459,6 +464,7 @@ import { createDesignRevive } from "./design-revive";
 import { createDesignSystem, designSection } from "./design-system";
 import { createDesignVerify } from "./design-verify";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
+import { carryDoneRoutes } from "./done-routes-carried";
 import { createExternalItems } from "./external-items";
 import { faviconRoutes } from "./favicon";
 import { createFind } from "./find";
@@ -473,6 +479,7 @@ import {
 } from "./fleet-sources";
 import { FleetSync, warmHashes } from "./fleet-sync";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
+import { createFolderMoves } from "./folder-moves";
 import { createForgePosts } from "./forge-posts";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import { githubReposOf } from "./github";
@@ -608,6 +615,7 @@ import { previewRoutes } from "./preview-routes";
 import { createPreviewService } from "./preview-service";
 import { createPreviewUnavailable } from "./preview-unavailable";
 import { createCaps } from "./project-caps";
+import { createProjectConnect } from "./project-connect";
 import { createProjectCreate } from "./project-create";
 import {
   isTypeFile,
@@ -626,12 +634,13 @@ import {
   onFolderCommits,
   projectFolderRoutes,
   readFolderFile,
+  writeFolderFile,
 } from "./project-folder";
 import { createProjectJoining } from "./project-joining";
+import { createProjectLocate } from "./project-locate";
 import { type MergeDeps, mergeSameRemote } from "./project-merge";
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
-import { createProjectOut, placeAddedOf } from "./project-out";
-import { scratchPlaceRefusal } from "./project-place-scratch";
+import { createProjectOut } from "./project-out";
 import {
   foldPlaced,
   onPlacesChanged,
@@ -689,6 +698,7 @@ import { fleetPluginRoutes } from "./routes/fleet-plugins";
 import { fleetSkillRoutes } from "./routes/fleet-skills";
 import { fleetSyncRoutes } from "./routes/fleet-sync";
 import { fleetWatchRoutes } from "./routes/fleet-watch";
+import { folderMoveRoutes } from "./routes/folder-moves";
 import { followupStateRoutes } from "./routes/followup-state";
 import { hubInfoRoutes } from "./routes/hub-info";
 import { imageSettingRoutes } from "./routes/image-settings";
@@ -1304,6 +1314,11 @@ type DashboardVerbs = {
   [V in ClientVerb]: (ws: DashboardSocket, message: ClientEnvelope<V>) => void;
 };
 
+/** How long a machine gets to interrupt a reply a folder move waits for. */
+const FOLDER_MOVE_INTERRUPT_MS = 20_000;
+/** The system origin name of the hub's word to a session whose folder moved. */
+const FOLDER_MOVE_ORIGIN = "folder-move";
+
 export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
   { serves = true }: ServerOptions = {}
@@ -1486,6 +1501,7 @@ export const createServer = (
     marketplaceLinks: () => marketplaceLinks,
     mcpReady: () => mcpReady,
     moves: () => moves,
+    folderMoves: () => folderMoves,
     noteFetch: () => noteFetch,
     notifications: () => notifications,
     pending: () => pending,
@@ -1515,7 +1531,6 @@ export const createServer = (
     workItems: () => workItems,
     workspaceArchived: () => workspaceArchived,
     workspaceRetire: () => workspaceRetire,
-    addProjectPlace: () => addProjectPlace,
     askerOf: () => askerOf,
     caps: () => caps,
     createOrJoinProject: () => createOrJoinProject,
@@ -1527,6 +1542,8 @@ export const createServer = (
     projectEdits: () => projectEdits,
     projectMoved: () => projectMoved,
     projectOut: () => projectOut,
+    projectConnect: () => projectConnect,
+    projectLocate: () => projectLocate,
     projectStops: () => projectStops,
     ruleEngine: () => ruleEngine,
     ruleRowsOf: () => ruleRowsOf,
@@ -4561,60 +4578,6 @@ export const createServer = (
     };
   };
 
-  /**
-   * Another checkout of a project's repository: named by hand
-   * (`POST /api/projects/:id/places`) or picked on its setup page. A project
-   * or machine the hub does not have, a path that is none on the machine, or
-   * one in its scratch root (project-place-scratch.ts), is the problem it
-   * answers.
-   */
-  const addProjectPlace = async (
-    projectId: string,
-    machineId: string,
-    asked: string
-  ) => {
-    const project = db.project(projectId);
-    if (!project) {
-      return problem(404, {
-        code: "place-project-unknown",
-        detail: "No project with that id on this hub.",
-      });
-    }
-    if (!db.machineKnown(machineId)) {
-      return problem(404, {
-        code: "place-machine-unknown",
-        detail: "No machine with that id on this hub.",
-      });
-    }
-    const path = askedMachinePath(machineId, asked);
-    if (path instanceof ElysiaStatus) {
-      return path;
-    }
-    const scratch = scratchPlaceRefusal(db.machineHome(machineId), path);
-    if (scratch) {
-      return scratch;
-    }
-    const { place, added } = db.addPlace({
-      projectId: project.id,
-      machineId,
-      path,
-      kind: "checkout",
-    });
-    if (added) {
-      placesChanged(machineId, project.id);
-    }
-    // A plain folder stays one: a workspace is a private copy of any folder
-    // (agent layer.ts), a move makes it a repository with the person's yes
-    // (moves.ts `askFor`), and a publish as it reads it (repo-publish.ts).
-    // Its repository, a project's second among them, is linked by its origin.
-    await learnCheckout(place);
-    return placeAddedOf(
-      projectOut(db.project(project.id) ?? project),
-      place,
-      added
-    );
-  };
-
   // Artifacts (Projects spec §5.10): one Yjs doc each, synced on the preview
   // listener; the person's Send tells the session to read their picks, and
   // carries their marks to it (artifacts/).
@@ -6464,6 +6427,12 @@ export const createServer = (
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
     timeoutMs: READ_TIMEOUT_MS,
   });
+  // Locate folder: a project's checkout pointed at where its folder is now
+  // (project-locate.ts); `merging` is read as a fold runs, once it is made.
+  const projectLocate = createProjectLocate(ctx);
+  // Connect existing folder: another folder of a project's, two projects
+  // made one only with the person's yes (project-connect.ts).
+  const projectConnect = createProjectConnect(ctx);
   const waitForEnd = (
     instanceId: string,
     waitMs = SPAWN_START_TIMEOUT_MS
@@ -7317,6 +7286,55 @@ export const createServer = (
   keyAtStart();
 
   /**
+   * A machine's control for a job's step (moves.ts, folder-moves.ts), of a
+   * session when `session` names one: {@link awayError} when the machine is
+   * not here or went while it answered, so the job waits for its register;
+   * else silent or the machine's own failure, by its cause.
+   */
+  const stepCall = async <K extends ControlName>(
+    machineId: string,
+    method: K,
+    args: ControlArgs<K>,
+    timeoutMs: number,
+    session?: { harness: HarnessKind; instanceId: string }
+  ): Promise<ControlReply<K>> => {
+    const asked = await callAgent(
+      machineId,
+      method,
+      args,
+      timeoutMs,
+      session?.harness,
+      session?.instanceId
+    );
+    switch (asked.kind) {
+      case "unanswered":
+        throw asked.reason === "dead"
+          ? awayError(machineId)
+          : new MachineProblem(
+              silentProblem(`${silentWords(machineId, asked)}.`)
+            );
+      case "answered":
+        break;
+      default:
+        throw unreachable(asked);
+    }
+    const answer = asked.value;
+    if (!answer.ok) {
+      throw answer.error === MACHINE_DISCONNECTED ||
+        answer.error === AGENT_RESTARTING
+        ? awayError(machineId)
+        : new MachineProblem(
+            failedProblem(
+              answer,
+              "machine-call-failed",
+              `${machineName(machineId)} gave no answer.`
+            )
+          );
+    }
+    return answer.result;
+  };
+
+  /**
    * Project moves (moves.ts): a machine's control throws {@link awayError}
    * when the machine is not here or went while it answered, so the job
    * waits for its register; else silent or the machine's own failure, by
@@ -7326,35 +7344,8 @@ export const createServer = (
     db,
     lifetime,
     gitRoot: GIT_ROOT,
-    call: async (machineId, method, args, timeoutMs) => {
-      const asked = await callAgent(machineId, method, args, timeoutMs);
-      switch (asked.kind) {
-        case "unanswered":
-          throw asked.reason === "dead"
-            ? awayError(machineId)
-            : new MachineProblem(
-                silentProblem(`${silentWords(machineId, asked)}.`)
-              );
-        case "answered":
-          break;
-        default:
-          throw unreachable(asked);
-      }
-      const answer = asked.value;
-      if (!answer.ok) {
-        throw answer.error === MACHINE_DISCONNECTED ||
-          answer.error === AGENT_RESTARTING
-          ? awayError(machineId)
-          : new MachineProblem(
-              failedProblem(
-                answer,
-                "machine-call-failed",
-                `${machineName(machineId)} gave no answer.`
-              )
-            );
-      }
-      return answer.result;
-    },
+    call: (machineId, method, args, timeoutMs) =>
+      stepCall(machineId, method, args, timeoutMs),
     online: (machineId) => registry.agent(machineId) !== undefined,
     machineName,
     // A move starts a new session: its mode is the one its request names.
@@ -7390,6 +7381,93 @@ export const createServer = (
           `[moves] its first message was not sent: ${sent.response.detail}`
         );
       }
+    },
+  });
+
+  /**
+   * Moves of a project's folder, files and all (folder-moves.ts): each
+   * machine's step through the same call a project's copy takes, a paused
+   * session's start through the wake every session takes, and a summary's
+   * continuation through the person's own, its asker the folder's move.
+   */
+  const folderMoves = createFolderMoves({
+    db,
+    lifetime,
+    call: stepCall,
+    online: (machineId) => registry.agent(machineId) !== undefined,
+    machineName,
+    sessionName: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      return row ? sessionName(row) : instanceId.slice(0, 8);
+    },
+    projectMoved: (projectId, machines, folderMoved) =>
+      projectMoved(projectId, machines, folderMoved),
+    resume: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (!row) {
+        return "its session is gone";
+      }
+      const agent = registry.agent(row.machineId);
+      if (!agent) {
+        return `${machineName(row.machineId)} is offline`;
+      }
+      resumeSpawn(agent, row.machineId, row, true);
+    },
+    interrupt: async (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (!row) {
+        return;
+      }
+      noteInterrupt(instanceId);
+      cutTurn(instanceId, turnCutWords.stop);
+      await callAgent(
+        row.machineId,
+        CONTROL_INTERRUPT,
+        [],
+        FOLDER_MOVE_INTERRUPT_MS,
+        row.harness,
+        instanceId
+      );
+    },
+    tell: (instanceId, words) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (!row) {
+        return;
+      }
+      const sent = deliverSend(
+        sessionWord(
+          row,
+          words,
+          { kind: "system", name: FOLDER_MOVE_ORIGIN },
+          { shouldQuery: false }
+        )
+      );
+      if (sent instanceof ElysiaStatus) {
+        console.warn(
+          `[folder-moves] ${instanceId} wasn't told where its folder went: ${sent.response.detail}`
+        );
+      }
+    },
+    continueFromSummary: async (instanceId, target, moveId) => {
+      const prepared = await prepareContinuation(instanceId);
+      if (prepared instanceof ElysiaStatus) {
+        return { why: prepared.response.detail };
+      }
+      const [row] = db.getInstancesByIds([instanceId]);
+      const request = {
+        target: {
+          harness: target.harness,
+          machineId: target.machineId,
+          cwd: target.cwd,
+          ...(row?.projectId ? { projectId: row.projectId } : {}),
+        },
+      };
+      const asker = { kind: "folder" as const, id: moveId };
+      const refusal = await continuationRefusal(prepared, request, asker);
+      if (refusal) {
+        return { why: refusal };
+      }
+      return { job: startContinuation(prepared, request, asker).id };
     },
   });
 
@@ -8753,6 +8831,19 @@ export const createServer = (
       actionMovesPort.now()(projectId, taskId, to, actionId),
     approvalRefusal: (projectId, taskId) =>
       designApprovalPort.now()(projectId, taskId),
+    // Who marks its tasks done, from its Who decides in effect: a table that
+    // does not read is every kind the person's, so is this.
+    doneByYou: async (projectId) => {
+      const project = db.project(projectId);
+      if (!project) {
+        return false;
+      }
+      const table = await decidesTable(
+        { projectId, areaId: project.areaId },
+        db.decides.fleet()
+      );
+      return table instanceof ElysiaStatus || doneByYou(table.routes);
+    },
     project: (id) => db.project(id),
     machines: () => db.machineFacts(),
     projectIds: () => db.listProjects().map((project) => project.id),
@@ -10894,7 +10985,7 @@ export const createServer = (
   });
   // The stage engine's one door for a `by: action` move (tasks.ts).
   actionMovesPort.fill(actions.actionMove);
-  // A project's name, Review before done, where its work lands, its large
+  // A project's name, where its work lands, its large
   // files and its account: the person's PATCH and Caw's project_settings
   // both change them here (project-edit.ts), its landing through the
   // dispatcher's own write.
@@ -10955,7 +11046,6 @@ export const createServer = (
     lands: (projectId, lands) => dispatcher.configure(projectId, { lands }),
     lfsProblem: (connection) => connections.lfsProblem(connection),
     projectsChanged,
-    stagesChanged: (projectId) => tasks.touched(projectId),
   });
   // A setup page's picks applied as the person's own edits (setup.ts).
   const applySetupPicks = createSetupPicksApply({
@@ -12628,6 +12718,7 @@ export const createServer = (
           // Moves go on from their records: an approval is asked again, every
           // other step waits for its machine's register.
           moves.resume();
+          folderMoves.resume();
         },
       },
       {
@@ -12680,8 +12771,30 @@ export const createServer = (
                 }
               })
               .then(() => renameViewTaskTables(viewTaskTables))
-              .then(() => moveKeptBlocks(keptBlocks)),
-            "project merge, task catch-up, the views' task tables and kept blocks"
+              .then(() => moveKeptBlocks(keptBlocks))
+              .then(() =>
+                carryDoneRoutes({
+                  owed: () => db.decides.doneRoutesOwed(),
+                  carried: (projectId) => {
+                    db.decides.doneRouteCarried(projectId);
+                    tasks.touched(projectId);
+                  },
+                  fleet: () => db.decides.fleet(),
+                  fileWith: decidesFileWith,
+                  write: async (projectId, content, message) => {
+                    const written = await writeFolderFile(
+                      projectId,
+                      DECIDES_FILE,
+                      content,
+                      { author: { name: "hub" }, message }
+                    );
+                    return written instanceof ElysiaStatus
+                      ? written
+                      : undefined;
+                  },
+                })
+              ),
+            "project merge, task catch-up, the views' task tables, kept blocks and marking tasks done"
           );
         },
       },
@@ -12749,6 +12862,11 @@ export const createServer = (
   // one list of them all run the checker past it (TS2589; see the list below),
   // as `.ws` does after them, so the sockets are registered first.
 
+  // A project's moves, a statement of their own for its depth allowance.
+  const moveFamilies = new Elysia().use([
+    moveRoutes(ctx),
+    folderMoveRoutes(ctx),
+  ]);
   const hubRoutesPart1 = new Elysia().use([
     mcpRoutes(ctx, delegationMcp),
     delegationRoutes(ctx, delegationMcp),
@@ -12759,7 +12877,7 @@ export const createServer = (
     instanceMediaRoutes(ctx),
     modelWindowRoutes(ctx),
     continuationRoutes(ctx),
-    moveRoutes(ctx),
+    moveFamilies,
     instancePreviewRoutes(ctx),
     agentMediaRoutes(ctx),
     instanceDeleteRoutes(ctx),
@@ -13856,6 +13974,14 @@ export const createServer = (
             db.trash.put({ kind: "delegateType", key: name }, Date.now()),
           project: (id) => db.project(id),
           projects: () => db.listProjects(),
+          // Who marks tasks done is part of the stages' rules (tasks.ts `ruled`).
+          rulesChanged: (projectId) => {
+            for (const id of projectId
+              ? [projectId]
+              : db.listProjects().map((project) => project.id)) {
+              tasks.touched(id);
+            }
+          },
           harnesses: harnessOffers,
           skills: () =>
             db

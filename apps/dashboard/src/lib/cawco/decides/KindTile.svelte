@@ -9,19 +9,31 @@
    * open. Escape gives the focus back to the tile; a press elsewhere closes
    * it and lands where it lands.
    *
+   * Brief (the project's settings view), it is this tile with its name
+   * alone: its example is its tooltip and its hand-over's head, and while it
+   * is custom here the design graph dials' reset arrow stands in it, which
+   * puts this kind alone back.
+   *
    * While the hub writes a hand-over or a put-back the swap glyph breathes;
    * a refusal stands under the tile in the hub's words, with Try again.
    */
   import type { Kind, Member } from "@cawco/core/decides";
-  import { decidesWords } from "@cawco/core/words/decides";
   import type { Snippet } from "svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
-  import { IconFolder, IconGlobe, IconTransfer } from "#lib/icons.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import {
+    IconFolder,
+    IconGlobe,
+    IconReset,
+    IconTransfer,
+  } from "#lib/icons.js";
   import type { Fault } from "./decides.svelte";
   import { kindGlyph } from "./kind-glyph";
+  import { ROSTER_WORDS, type RosterWords } from "./roster-words";
 
   let {
     kind,
@@ -36,6 +48,8 @@
     onhanding,
     onputback,
     list,
+    said = ROSTER_WORDS,
+    brief = false,
   }: {
     /** A write the hub has not answered moves it. */
     asking: string | null;
@@ -59,6 +73,10 @@
     project: string | null;
     /** The popover's width, for the rows it holds. */
     width: string;
+    /** Its words: Who decides' unless the surface drawing it says its own. */
+    said?: RosterWords;
+    /** Its name alone, its example in its tooltip, no put-back of its own (Roster `brief`). */
+    brief?: boolean;
   } = $props();
 
   const uid = $props.id();
@@ -81,20 +99,22 @@
       return null;
     }
     const subject = fleetWho?.subject ?? "";
-    return own
-      ? decidesWords.ownTip(project, subject)
-      : decidesWords.followsFleetTip(subject);
+    return own ? said.ownTip(project, subject) : said.followsFleetTip(subject);
   });
-  const tip = $derived(
-    scopeTip ? `${decidesWords.handOver} · ${scopeTip}` : decidesWords.handOver
-  );
+  const tip = $derived.by(() => {
+    if (brief) {
+      return own && scopeTip ? `${kind.example} ${scopeTip}` : kind.example;
+    }
+    return scopeTip ? `${said.handOver} · ${scopeTip}` : said.handOver;
+  });
 </script>
 
 <div class="flex min-w-0 flex-col items-stretch gap-space-1">
   <div
     bind:this={tile}
     class={[
-      "relative flex min-w-0 items-start gap-x-space-2 rounded-well p-space-2 transition-control",
+      "relative flex min-w-0 gap-x-space-2 rounded-well p-space-2 transition-control",
+      brief ? "items-center" : "items-start",
       surface,
     ]}
     data-handing={handing || undefined}
@@ -121,11 +141,38 @@
           />
         {/if}
       </span>
-      <span
-        class="block type-meta text-ink-muted wrap-anywhere first-letter:uppercase"
-        >{kind.example}</span
-      >
+      {#if !brief}
+        <span
+          class="block type-meta text-ink-muted wrap-anywhere first-letter:uppercase"
+          >{kind.example}</span
+        >
+      {/if}
     </div>
+    {#if own && brief}
+      <!-- Custom here: the design graph dials' reset arrow (DialRow), over
+           the tile's press, which puts this kind alone back. -->
+      <span class="relative z-1 -my-space-1 flex flex-none">
+        <Tip label={said.giveBack}>
+          {#snippet children(tip)}
+            <Button
+              {...tip}
+              aria-disabled={asking !== null || undefined}
+              aria-label="{said.giveBack}: {kind.name}"
+              icon={IconReset}
+              onclick={() => {
+                if (asking === null) {
+                  onputback();
+                }
+              }}
+              press="pressable"
+              size="icon-xs"
+              tone="edited"
+              variant="ghost"
+            />
+          {/snippet}
+        </Tip>
+      </span>
+    {/if}
     <span class="grid size-icon-sm flex-none place-items-center">
       {#if asking}
         <LiveDot />
@@ -144,9 +191,13 @@
               {#snippet child({ props })}
                 <button
                   {...props}
-                  aria-label={scopeTip
-                    ? `${decidesWords.handOverKind(kind.name)}. ${scopeTip}`
-                    : decidesWords.handOverKind(kind.name)}
+                  aria-label={[
+                    said.handOverKind(kind.name),
+                    brief ? kind.example : null,
+                    scopeTip,
+                  ]
+                    .filter(Boolean)
+                    .join(". ")}
                   class="absolute inset-0 rounded-well can-hover:hover:bg-ink-strong/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid"
                   aria-disabled={asking !== null || undefined}
                   data-kind-press={kind.id}
@@ -182,7 +233,7 @@
       </Popover.Content>
     </Popover.Root>
   </div>
-  {#if own}
+  {#if own && !brief}
     <button
       class="self-center type-meta text-brand-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-brand-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid aria-disabled:text-ink-muted"
       aria-disabled={asking !== null || undefined}
@@ -191,8 +242,12 @@
           onputback();
         }
       }}
-      type="button">{decidesWords.giveBack}</button
+      type="button">{said.giveBack}</button
     >
   {/if}
-  <RowFault again={fault?.again} reason={fault?.reason} />
+  <RowFault
+    again={fault?.again}
+    againLabel={said.tryAgain}
+    reason={fault?.reason}
+  />
 </div>

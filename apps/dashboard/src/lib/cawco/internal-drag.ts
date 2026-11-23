@@ -17,6 +17,11 @@
  * any file let go where nothing takes it ({@link guardDrops}).
  */
 
+import { draggable } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
+import { disableNativeDragPreview } from "@atlaskit/pragmatic-drag-and-drop/element/disable-native-drag-preview";
+import { preventUnhandled } from "@atlaskit/pragmatic-drag-and-drop/prevent-unhandled";
+import { combine } from "@atlaskit/pragmatic-drag-and-drop/utils/combine";
+
 /** The private type every internal drag carries, and nothing a field reads. */
 const INTERNAL_DRAG = "application/x-cawco-drag";
 
@@ -43,6 +48,92 @@ export function bareDrag(node: HTMLElement): () => void {
   };
   node.addEventListener("dragstart", empty);
   return () => node.removeEventListener("dragstart", empty);
+}
+
+/** Where the pointer is, in the viewport, at a step of a drag. */
+export interface DragPoint {
+  x: number;
+  y: number;
+}
+
+/** How a drag ended: where it was let go, and the drop targets under it, innermost first. */
+export interface DragEnd {
+  at: DragPoint;
+  targets: { data: Record<string | symbol, unknown>; element: Element }[];
+}
+
+/** The pointer of a Pragmatic location. */
+export const pointOf = (input: {
+  clientX: number;
+  clientY: number;
+}): DragPoint => ({ x: input.clientX, y: input.clientY });
+
+/** A Pragmatic drop's end, from its location. */
+export const endOf = (location: {
+  current: {
+    dropTargets: { data: Record<string | symbol, unknown>; element: Element }[];
+    input: { clientX: number; clientY: number };
+  };
+}): DragEnd => ({
+  at: pointOf(location.current.input),
+  targets: location.current.dropTargets.map(({ data, element }) => ({
+    data,
+    element,
+  })),
+});
+
+/**
+ * One of the dashboard's own drag sources (a task card, a kind's tile) on
+ * Pragmatic drag and drop: the browser's data emptied ({@link bareDrag}),
+ * {@link internalData} alone carried, and `data-dragging` on `node` while it
+ * is in the air. A source that draws its own ghost passes `ghost`: the
+ * browser's snapshot is turned off, and its steps and its end are heard
+ * by a monitor of its own (Pragmatic hands a source its drop only while it
+ * is still registered, and a monitor whatever became of the source).
+ * `onEnd` hears where it was let go and the drop targets under it,
+ * innermost first. Returns its removal.
+ */
+export function internalDraggable(
+  node: HTMLElement,
+  source: {
+    canDrag?: () => boolean;
+    data: () => Record<string, unknown>;
+    ghost?: boolean;
+    onEnd?: (drop: DragEnd) => void;
+    onStart: (at: DragPoint) => void;
+  }
+): () => void {
+  return combine(
+    bareDrag(node),
+    draggable({
+      element: node,
+      canDrag: source.canDrag,
+      getInitialData: source.data,
+      getInitialDataForExternal: internalData,
+      onGenerateDragPreview: ({ nativeSetDragImage }) => {
+        if (source.ghost) {
+          disableNativeDragPreview({ nativeSetDragImage });
+        }
+      },
+      onDragStart: ({ location }) => {
+        node.dataset.dragging = "";
+        // A ghost the page draws lands where it is let go: the browser's
+        // own put-back (a dragend held while its snapshot slides home) is
+        // not drawn, so a drop anywhere is taken at once.
+        if (source.ghost) {
+          preventUnhandled.start();
+        }
+        source.onStart(pointOf(location.current.input));
+      },
+      onDrop: ({ location }) => {
+        delete node.dataset.dragging;
+        if (source.ghost) {
+          preventUnhandled.stop();
+        }
+        source.onEnd?.(endOf(location));
+      },
+    })
+  );
 }
 
 /** A field a default drop types into: a textarea, a text input, an editable host. */

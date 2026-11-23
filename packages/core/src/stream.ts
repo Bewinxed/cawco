@@ -505,12 +505,18 @@ import type { TailnetServing } from "./tailnet-https";
  *    up reading a live browser's page, it brings the browser back or calls
  *    it not live (agent front-origin.ts, browsers.ts `reviveBrowser`). A
  *    page built for 100 may read it, so it reloads first.
+ * 102: a project carries no `review` (who marks its tasks done is its Who
+ *    decides' `done` kind, core decides.ts), a GitHub Project binding no
+ *    `map` (each stage takes the Status option named as it, hub
+ *    tracker-github-project.ts `statusOptionsAdded`), and binding a tracker
+ *    can refuse with `tracker-github-statuses`. A page built for 101 reads
+ *    them, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 101;
+export const WIRE_PROTOCOL = 102;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

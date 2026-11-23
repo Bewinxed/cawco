@@ -18,6 +18,14 @@ import type {
   SetHook as SetHookType,
 } from "./fleet-set-rows";
 import type { LegacyFleetSidecar as LegacyFleetSidecarType } from "./fleet-sidecar-move";
+import type {
+  GitFacts as GitFactsType,
+  TreeEnd as TreeEndType,
+  TreeEntry as TreeEntryType,
+  TreeFail as TreeFailType,
+  TreeHead as TreeHeadType,
+  TreeSum as TreeSumType,
+} from "./folder-tree";
 import type { FleetSidecar as FleetSidecarType } from "./harnesses/fleet-common";
 import type { OpencodeServerFacts as OpencodeServerFactsType } from "./harnesses/opencode";
 import type {
@@ -28,6 +36,10 @@ import type {
   MadeFolders as MadeFoldersType,
   MadeFolder as MadeFolderType,
 } from "./made-folders";
+import type {
+  SeenFolders as SeenFoldersType,
+  SeenFolder as SeenFolderType,
+} from "./seen-folders";
 import type { Worktree as WorktreeType } from "./spin-offs";
 import type {
   BrowserRecordOutput,
@@ -36,6 +48,7 @@ import type {
   FleetMcpSetOutput,
   FleetPlaceSetOutput,
   FleetSidecarOutput,
+  GitFactsOutput,
   LegacyFleetSidecarOutput,
   MachineNetworkOutput,
   MadeFolderOutput,
@@ -43,12 +56,19 @@ import type {
   MediaMeasurementOutput,
   OpencodeServerFactsOutput,
   OpencodeServerRecordOutput,
+  SeenFolderOutput,
+  SeenFoldersOutput,
   ServerIdentityOutput,
   SetHarnessConfigOutput,
   SetHookOutput,
   ToolInstallRecordOutput,
   ToolInstallsOutput,
   ToolInstallUnderwayOutput,
+  TreeEndOutput,
+  TreeEntryOutput,
+  TreeFailOutput,
+  TreeHeadOutput,
+  TreeSumOutput,
   WorktreeOutput,
 } from "./stored-shapes";
 import type {
@@ -95,9 +115,17 @@ prove<
     Same<OpencodeServerFactsOutput, OpencodeServerFactsType>,
     Same<ServerIdentityOutput, ServerIdentityType>,
     Same<OpencodeServerRecordOutput, OpencodeServerRecordType>,
+    Same<SeenFolderOutput, SeenFolderType>,
+    Same<SeenFoldersOutput, SeenFoldersType>,
     Same<ToolInstallRecordOutput, ToolInstallRecordType>,
     Same<ToolInstallUnderwayOutput, ToolInstallUnderwayType>,
     Same<ToolInstallsOutput, ToolInstallsType>,
+    Same<GitFactsOutput, GitFactsType>,
+    Same<TreeEndOutput, TreeEndType>,
+    Same<TreeEntryOutput, TreeEntryType>,
+    Same<TreeFailOutput, TreeFailType>,
+    Same<TreeHeadOutput, TreeHeadType>,
+    Same<TreeSumOutput, TreeSumType>,
     Same<WorktreeOutput, WorktreeType>,
   ]
 >();

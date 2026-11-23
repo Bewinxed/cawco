@@ -2454,7 +2454,7 @@ export const createDispatcher = ({
   };
 
   /**
-   * Review before done (stages.ts `ruledStages`): its done stage is entered
+   * Marking tasks done on You (stages.ts `ruledStages`): its done stage is entered
    * by you alone, and a `you` stage stands before it, so a task whose
    * attempt landed waits there for you.
    */

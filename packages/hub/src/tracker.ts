@@ -126,6 +126,7 @@ import {
   githubProjects,
   type ProjectRead,
   type StatusItem,
+  statusOptionsAdded,
 } from "./tracker-github-project";
 import { linearAdapter, linearTargets } from "./tracker-linear";
 
@@ -177,11 +178,11 @@ export interface BindInput {
   /** The connection's name: GitHub Issues and Linear need one. */
   connection?: string;
   /**
-   * GitHub: the Project whose Status carries its stages, and each stage's
-   * option; null for none. Left out, the first Project linked to the
-   * repository, each stage on the option named as it.
+   * GitHub: the Project whose Status carries its stages, each stage on the
+   * option named as it; null for none. Left out, the first Project linked
+   * to the repository.
    */
-  githubProject?: { id: string; map: Record<string, string | null> } | null;
+  githubProject?: { id: string } | null;
   /** GitHub: `owner/repo`; Linear: the team's id. */
   target?: string;
   tracker: Tracker;
@@ -237,6 +238,7 @@ type Stopped =
   | TrackerProblem
   | Said<
       | "tracker-github-project-unknown"
+      | "tracker-github-statuses"
       | "tracker-issue-unseen"
       | "tracker-no-hold"
       | "tracker-stages-unread"
@@ -1555,10 +1557,13 @@ export const createTrackers = (deps: TrackersDeps) => {
     }
     checkedAt.set(binding.projectId, Date.now());
     const bound = binding.githubProject;
+    // Options are added as it binds alone: a stage added to the board
+    // since leaves Status alone until the binding is saved again.
     const probe = await projectOf(
       binding.connection,
       binding.target,
-      bound ? { id: bound.id, map: bound.map } : undefined
+      bound ? { id: bound.id } : undefined,
+      []
     );
     if (probe instanceof ElysiaStatus) {
       if (stopsSync(probe)) {
@@ -1974,7 +1979,8 @@ export const createTrackers = (deps: TrackersDeps) => {
     const read = await targetOf(
       draft,
       connection.auth === "app",
-      input.githubProject
+      input.githubProject,
+      staged.stages.map((stage) => stage.name)
     );
     if (read instanceof ElysiaStatus) {
       return read;
@@ -2013,7 +2019,8 @@ export const createTrackers = (deps: TrackersDeps) => {
   const targetOf = async (
     draft: TrackerBindingRow,
     asApp: boolean,
-    asked: BindInput["githubProject"]
+    asked: BindInput["githubProject"],
+    stages: readonly string[]
   ) => {
     // A GitHub App that may only read issues would be refused on every
     // sync: it is refused here, with what to grant on GitHub.
@@ -2041,7 +2048,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     }
     const onProject =
       draft.provider === "github"
-        ? await projectOf(draft.connection, target.id, asked)
+        ? await projectOf(draft.connection, target.id, asked, stages)
         : { githubProject: null, githubProjectReason: null };
     return onProject instanceof ElysiaStatus
       ? onProject
@@ -2050,14 +2057,20 @@ export const createTrackers = (deps: TrackersDeps) => {
 
   /**
    * The Project a GitHub binding's stages show on: the one asked for, else
-   * (left out) the first linked to the repository, each stage on the option
-   * named as it unless the form set another. A connection that may not read
-   * the owner's Projects binds with none, GitHub's words kept.
+   * (left out) the first linked to the repository, each stage on the Status
+   * option named as it, ignoring case (core `statusOptionFor`). A stage
+   * whose name no option carries has one added on GitHub as it binds
+   * (tracker-github-project.ts `statusOptionsAdded`), every option it had
+   * kept with its items; GitHub's refusal of that refuses the binding in
+   * its words, so the person can pick no Project or grant what it needs. A
+   * connection that may not read the owner's Projects binds with none,
+   * GitHub's words kept.
    */
   const projectOf = async (
     connection: string,
     repo: string,
-    asked: BindInput["githubProject"]
+    asked: BindInput["githubProject"],
+    stages: readonly string[]
   ) => {
     const octokit = await signedIn(() =>
       deps.connections.githubClient(connection)
@@ -2085,6 +2098,15 @@ export const createTrackers = (deps: TrackersDeps) => {
         detail: `${connection} reaches no open GitHub Project ${asked.id} for ${repo}: pick one it lists.`,
       });
     }
+    const options = chosen?.fieldId
+      ? await statusOptionsAdded(octokit, chosen, chosen.fieldId, stages)
+      : (chosen?.options ?? []);
+    if (options instanceof ElysiaStatus) {
+      return problem(400, {
+        code: "tracker-github-statuses",
+        detail: options.response.detail,
+      });
+    }
     const onProject: Pick<
       TrackerBindingRow,
       "githubProject" | "githubProjectReason"
@@ -2096,8 +2118,7 @@ export const createTrackers = (deps: TrackersDeps) => {
             title: chosen.title,
             url: chosen.url,
             fieldId: chosen.fieldId,
-            options: chosen.options,
-            map: asked?.map ?? {},
+            options,
           }
         : null,
       githubProjectReason: null,
@@ -2216,15 +2237,9 @@ export const trackerRoutes = (trackers: Trackers) =>
           connection: t.Optional(t.String()),
           /** GitHub: `owner/repo`; Linear: the team's id. */
           target: t.Optional(t.String()),
-          /** GitHub: the Project whose Status carries the stages, and each stage's option (null leaves Status alone); null for none; left out, the first linked to the repository. */
+          /** GitHub: the Project whose Status carries the stages, each on the option named as it (one added where none is); null for none; left out, the first linked to the repository. */
           githubProject: t.Optional(
-            t.Union([
-              t.Null(),
-              t.Object({
-                id: t.String(),
-                map: t.Record(t.String(), t.Union([t.String(), t.Null()])),
-              }),
-            ])
+            t.Union([t.Null(), t.Object({ id: t.String() })])
           ),
         }),
       },

@@ -1471,7 +1471,6 @@ export const PROJECT_SETTING_KINDS = [
   "set_runs_on",
   "create_repo",
   "rename",
-  "set_review",
   "set_dispatch",
   "set_max_attempts",
   "set_review_limit",
@@ -1501,8 +1500,6 @@ export type ProjectSettingChange =
   /** Where its attempts run (hub runs-on.ts): a machine or a capability; null: any machine. */
   | { kind: "set_runs_on"; runsOn: string | null }
   | { kind: "rename"; name: string }
-  /** Review before done: on, only you move a task to done. */
-  | { kind: "set_review"; review: boolean }
   /** Whether the hub starts attempts at ready tasks on its own (hub dispatch.ts). */
   | { dispatch: boolean; kind: "set_dispatch" }
   | { kind: "set_max_attempts"; maxAttempts: number }
@@ -1579,10 +1576,6 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
         : "Run this project's attempts on any machine with a checkout";
     case "rename":
       return `Rename this project to ${change.name}`;
-    case "set_review":
-      return change.review
-        ? "Review every task before done: only you close one"
-        : "Stop reviewing before done: the project's conversation and sessions close finished tasks";
     case "set_dispatch":
       return projectSettingsWords.dispatchOn(change.dispatch);
     case "set_max_attempts":

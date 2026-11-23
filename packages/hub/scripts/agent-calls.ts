@@ -21,6 +21,7 @@
 // which has the classic parser API (the repository's TypeScript 7 does not).
 import { GATE_PREFIX, HOSTED_PREFIX } from "@cawco/core/gateway-paths";
 import { ts } from "typescript-json-schema";
+import { BYTE_CALLS } from "../src/client";
 import { NOT_HUB } from "./not-hub";
 
 /** The agent's source, from the repository's root. */
@@ -216,7 +217,7 @@ const ROUTES_ONLY = new Set(["hubRoutes", "hubPath"]);
 /** Eden's member that answers a chain's path: no segment, the chain's end. */
 const PATH_MEMBER = "~path";
 /** The members that send a request at the end of a client's chain (Eden treaty2's methods), not path segments. */
-const EDEN_METHODS = new Set([
+const EDEN_METHODS = new Set<string>([
   "get",
   "post",
   "put",
@@ -227,6 +228,8 @@ const EDEN_METHODS = new Set([
   "head",
   "connect",
   "subscribe",
+  // The client's own byte-stream calls on a byte route (client.ts).
+  ...BYTE_CALLS,
 ]);
 
 /** The function or variable `statements` declare by `name`. */

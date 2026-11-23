@@ -62,6 +62,15 @@ import type {
   RegisterPayload,
 } from "@cawco/core/envelopes";
 import { sayFetchCap } from "@cawco/core/fetch-cap";
+import {
+  CONTROL_FOLDER_MOVE_COPY,
+  CONTROL_FOLDER_MOVE_DROP,
+  CONTROL_FOLDER_MOVE_PLACE,
+  CONTROL_FOLDER_MOVE_READ,
+  CONTROL_FOLDER_MOVE_REMOVE,
+  CONTROL_FOLDER_MOVE_RENAME,
+  CONTROL_FOLDER_SESSIONS_CARRY,
+} from "@cawco/core/folder-move";
 import { keepFoldersPrivate } from "@cawco/core/folders";
 import { CONTROL_FORGE_POST } from "@cawco/core/forge-post";
 import {
@@ -171,6 +180,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import {
   CONTROL_CLONE_HOLDING,
+  CONTROL_FOLDER_LOOK,
   CONTROL_FOLDERS_STAND,
   CONTROL_HOST_OUTPUTS,
   CONTROL_HOST_SCRATCH_REMOVE,
@@ -257,6 +267,9 @@ import { onVersionAnswered } from "./claude-version";
 import { readConfig, writeConfig } from "./config";
 import {
   commandLane,
+  folderMoveDropLane,
+  folderMoveLane,
+  folderMoveReadLane,
   moveLane,
   workspaceCreateLane,
   workspaceLane,
@@ -264,7 +277,17 @@ import {
 import { damagedRecords, sweepRecords } from "./damaged-records";
 import { dropWrittenDenials } from "./denied-tools";
 import { hubIdAt, rediscoverHub, toHttpBase, toWsUrl } from "./discovery";
+import { placedCopiesIn } from "./fleet";
 import { moveLegacyFleetSidecar } from "./fleet-sidecar-move";
+import { carryConversations } from "./folder-carry";
+import {
+  folderMoveCopy,
+  folderMoveDrop,
+  folderMovePlace,
+  folderMoveRead,
+  folderMoveRemove,
+  folderMoveRename,
+} from "./folder-move";
 import { forgePost } from "./forges/forge";
 import { setHubCredential } from "./git/hub-credential";
 import { setHubGitOrigins } from "./git-credential";
@@ -302,7 +325,6 @@ import {
   savePicture,
   writeInputs,
 } from "./inputs";
-import { isDirectory } from "./is-directory";
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
@@ -362,6 +384,7 @@ import {
   moveRedactionStores,
 } from "./runtime-dir-move";
 import { TranscriptSearchService } from "./search";
+import { folderStands, foldersStand, sameFolderAs } from "./seen-folders";
 import { resumableSessions, SessionSupervisor } from "./session";
 import { serviceManaged, setSessionLimits } from "./sessiond-client";
 import {
@@ -2361,6 +2384,7 @@ const attach = (
         frame.kind === "moves" ||
         frame.kind === "installs" ||
         frame.kind === "move_progress" ||
+        frame.kind === "folder_move_progress" ||
         frame.kind === "command_queue" ||
         frame.kind === "stage" ||
         frame.kind === "browsers" ||
@@ -3318,6 +3342,7 @@ const startDaemon = (rediscover = false) =>
       emit: (envelope) => hubLine.send(envelope),
       machineId: machineIdValue,
       moveProgress: framed,
+      folderMoveProgress: framed,
       opencodeAccounts,
       passkeyQr: framed,
       relay: framed,
@@ -3549,9 +3574,22 @@ const startDaemon = (rediscover = false) =>
       CONTROL_REMOVE_FOLDER_REFUSAL,
       async (asked) => (await removalRefusal(asked)) ?? null
     );
-    // Whether each checkout's folder stands, read at the register: read only.
+    // Whether each checkout's folder stands, read at the register; each
+    // one standing is recorded as seen there (seen-folders.ts).
     supervisor.declareControl(CONTROL_FOLDERS_STAND, (paths) =>
-      Promise.all(paths.map((path) => isDirectory(path)))
+      foldersStand(paths)
+    );
+    // What this machine can tell of a folder a checkout is to point at: read only.
+    supervisor.declareControl(
+      CONTROL_FOLDER_LOOK,
+      async ({ path, placeId, was }) => {
+        const stands = await folderStands(path);
+        return {
+          stands,
+          sameFolder: stands ? await sameFolderAs(path, was) : null,
+          placed: stands ? await placedCopiesIn(placeId, path) : false,
+        };
+      }
     );
     // The checkout a folder is in, as a workspace cut there reads it: read only.
     supervisor.declareControl(CONTROL_REPO_ROOT, (path) => repoRoot(path));
@@ -3945,6 +3983,42 @@ const startDaemon = (rediscover = false) =>
       moveLane
     );
     supervisor.declareControl(CONTROL_MOVE_CANCEL, moveCancel);
+    // A project's folder moved, files and all (folder-move.ts, folder-carry.ts).
+    supervisor.declareControl(
+      CONTROL_FOLDER_MOVE_READ,
+      folderMoveRead,
+      folderMoveReadLane
+    );
+    supervisor.declareControl(
+      CONTROL_FOLDER_MOVE_RENAME,
+      unfenced(folderMoveRename),
+      folderMoveLane
+    );
+    supervisor.declareControl(
+      CONTROL_FOLDER_MOVE_COPY,
+      unfenced((ask) => folderMoveCopy(ask, ports.folderMoveProgress)),
+      folderMoveLane
+    );
+    supervisor.declareControl(
+      CONTROL_FOLDER_MOVE_PLACE,
+      unfenced(folderMovePlace),
+      folderMoveLane
+    );
+    supervisor.declareControl(
+      CONTROL_FOLDER_MOVE_REMOVE,
+      unfenced((ask) => folderMoveRemove(ask, ports.folderMoveProgress)),
+      folderMoveLane
+    );
+    supervisor.declareControl(
+      CONTROL_FOLDER_MOVE_DROP,
+      folderMoveDrop,
+      folderMoveDropLane
+    );
+    supervisor.declareControl(
+      CONTROL_FOLDER_SESSIONS_CARRY,
+      unfenced(carryConversations),
+      folderMoveLane
+    );
     // Stopped where they run once the hub lets them go (CONTROL_ABANDON).
     supervisor.declareRead(
       CONTROL_SEARCH_TRANSCRIPTS,

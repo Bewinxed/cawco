@@ -979,8 +979,7 @@
 
 /* ---- What hangs from a tab (PaneTabs): HangCard's portalled content, the
    tab's box (TabItem) and bits-ui's floating wrapper, one silhouette with
-   the tab. The card is c-details-card-w wide, the screen less its margins at
-   most; a phone's card stands a margin in from each side, under its tab,
+   the tab. The card is no wider than the screen less its margins; a phone's card stands a margin in from each side, under its tab,
    clear of the screen's foot. The card's width floor, width and stack are
    classes PaneTabs gives HangCard. A tab's rim ink (--hang-rim) is read off
    the tab alone: inherited, its value moving with --pick restyled every

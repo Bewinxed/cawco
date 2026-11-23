@@ -7,6 +7,8 @@
  * checks.
  */
 
+import type { GhRepo } from "./connections";
+
 export const TRACKERS = ["cawco", "github", "linear"] as const;
 /** Where a project's tasks live: CawCo's files alone, or an outside tracker beside them (tracker.ts). */
 export type Tracker = (typeof TRACKERS)[number];
@@ -45,8 +47,6 @@ export interface GithubProject {
   fieldId: string | null;
   /** GitHub's node id for the Project. */
   id: string;
-  /** Each stage's Status option by the stage's name, as set in the binding's form; null leaves Status alone for that stage. A stage missing here takes the option named as it. */
-  map: Record<string, string | null>;
   number: number;
   /** Its Status field's options, in GitHub's order. */
   options: StatusOption[];
@@ -77,21 +77,19 @@ const sameName = (a: string, b: string): boolean =>
   a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /**
- * The Status option a stage puts its issue's Project item in: the one the
- * binding set for it, else the option named as the stage; null when it
- * leaves Status alone.
+ * The Status option a stage puts its issue's Project item in: the option
+ * named as the stage, ignoring case (the hub adds one for each stage as it
+ * binds, hub tracker-github-project.ts `statusOptionsAdded`); null when it
+ * has none, and Status is left alone.
  */
 export const statusOptionFor = (
   stage: string,
-  project: Pick<GithubProject, "map" | "options">
+  project: Pick<GithubProject, "options">
 ): string | null =>
-  Object.hasOwn(project.map, stage)
-    ? (project.map[stage] ?? null)
-    : (project.options.find((option) => sameName(option.name, stage))?.id ??
-      null);
+  project.options.find((option) => sameName(option.name, stage))?.id ?? null;
 
 /** A project's binding: one connection and one target on it. */
-export interface TrackerBindingView {
+interface TrackerBindingView {
   /** When the project was bound, ms epoch: issues opened after it become tasks. */
   boundAt: number;
   /** The connection's name (hub connections.ts). */
@@ -132,5 +130,7 @@ export interface TrackerTarget {
   id: string;
   /** `owner/repo`, or `ENG · Engineering`. */
   name: string;
+  /** GitHub: the repository as a repository picker draws it (its owner, description, when it was updated); absent for a Linear team. */
+  repo?: GhRepo;
   url: string;
 }

@@ -64,7 +64,6 @@
     name,
     places: [],
     primaryPlaceId: null,
-    review: false,
   }));
   debug.projectsState.projectsRead = true;
   debug.boardState.fleetRead = true;

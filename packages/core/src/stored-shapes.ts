@@ -32,6 +32,7 @@ import type {
 } from "./fleet";
 import { FAULT_CAUSES, MCP_PLATFORMS, PLACED_SECTIONS } from "./fleet";
 import type { FleetScope as FleetScopeType } from "./fleet-placement";
+import { FOLDER_MOVE_STEPS } from "./folder-move";
 import type {
   ConnectAccess as ConnectAccessType,
   ProjectOfferReason as ProjectOfferReasonType,
@@ -935,12 +936,11 @@ const EndedTaskShape = declared(
 );
 export type EndedTaskOutput = z.output<typeof EndedTaskShape>;
 
-const MoveEndedShape = declared(
+export const MoveEndedShape = declared(
   z.object({ tasks: z.array(EndedTaskShape), wakeups: z.number() }),
   "MoveEnded",
   "packages/core/src/session/controls.ts"
 );
-export const MoveEndedSchema = MoveEndedShape;
 export type MoveEndedOutput = z.output<typeof MoveEndedShape>;
 
 const CarrySessionOutcomeShape = declared(
@@ -2549,6 +2549,201 @@ const FleetSyncReportShape = declared(
 export const FleetSyncReportSchema = FleetSyncReportShape;
 export type FleetSyncReportOutput = z.output<typeof FleetSyncReportShape>;
 
+const FolderCarriedShape = declared(
+  z.record(
+    z.string(),
+    z.union([
+      z.object({ carried: z.literal(true) }),
+      z.object({ carried: z.literal(false), why: z.string() }),
+    ])
+  ),
+  "FolderCarried",
+  "packages/core/src/folder-move.ts"
+);
+export const FolderCarriedSchema = FolderCarriedShape;
+export type FolderCarriedOutput = z.output<typeof FolderCarriedShape>;
+
+const FolderLookShape = declared(
+  z.object({
+    placed: z.boolean(),
+    sameFolder: z.boolean().nullable(),
+    stands: z.boolean(),
+  }),
+  "FolderLook",
+  "packages/core/src/workspace/controls.ts"
+);
+export const FolderLookSchema = FolderLookShape;
+export type FolderLookOutput = z.output<typeof FolderLookShape>;
+
+export const FolderMoveCopiedShape = declared(
+  z.object({
+    bytes: z.number(),
+    dirs: z.number(),
+    files: z.number(),
+    head: z.string().nullable(),
+    links: z.number(),
+  }),
+  "FolderMoveCopied",
+  "packages/core/src/folder-move.ts"
+);
+export type FolderMoveCopiedOutput = z.output<typeof FolderMoveCopiedShape>;
+
+const FolderMoveBlockShape = declared(
+  z.union([
+    z.object({ kind: z.literal("source-gone") }),
+    z.object({ kind: z.literal("source-not-folder") }),
+    z.object({ kind: z.literal("machine-home") }),
+    z.object({ dir: z.string(), kind: z.literal("machine-cawco") }),
+    z.object({ kind: z.literal("into-itself") }),
+    z.object({ kind: z.literal("destination-holds") }),
+    z.object({ kind: z.literal("destination-not-folder") }),
+    z.object({ dir: z.string(), kind: z.literal("destination-cawco") }),
+    z.object({ kind: z.literal("mounts"), paths: z.array(z.string()) }),
+    z.object({ kind: z.literal("unreadable"), paths: z.array(z.string()) }),
+    z.object({ kind: z.literal("devices"), paths: z.array(z.string()) }),
+    z.object({ kind: z.literal("case-clash"), paths: z.array(z.string()) }),
+    z.object({
+      free: z.number(),
+      kind: z.literal("no-room"),
+      need: z.number(),
+    }),
+  ]),
+  "FolderMoveBlock",
+  "packages/core/src/folder-move.ts"
+);
+export type FolderMoveBlockOutput = z.output<typeof FolderMoveBlockShape>;
+
+const FolderMoveDestinationReadingShape = declared(
+  z.object({
+    block: FolderMoveBlockShape.optional(),
+    caseBlind: z.boolean(),
+    path: z.string(),
+    room: z.number().nullable(),
+  }),
+  "FolderMoveDestinationReading",
+  "packages/core/src/folder-move.ts"
+);
+export type FolderMoveDestinationReadingOutput = z.output<
+  typeof FolderMoveDestinationReadingShape
+>;
+
+export const FolderWalkShape = declared(
+  z.object({
+    bytes: z.number(),
+    dirs: z.number(),
+    files: z.number(),
+    links: z.number(),
+    whole: z.boolean(),
+  }),
+  "FolderWalk",
+  "packages/core/src/folder-move.ts"
+);
+export type FolderWalkOutput = z.output<typeof FolderWalkShape>;
+
+const FolderMoveSourceReadingShape = declared(
+  z.object({
+    block: FolderMoveBlockShape.optional(),
+    copyBlock: FolderMoveBlockShape.optional(),
+    head: z.string().nullable(),
+    links: z.number(),
+    namesByCase: z.array(z.string()),
+    path: z.string(),
+    walk: FolderWalkShape.optional(),
+  }),
+  "FolderMoveSourceReading",
+  "packages/core/src/folder-move.ts"
+);
+export type FolderMoveSourceReadingOutput = z.output<
+  typeof FolderMoveSourceReadingShape
+>;
+
+const FolderMoveReadingShape = declared(
+  z.object({
+    destination: FolderMoveDestinationReadingShape.optional(),
+    home: z.string(),
+    sameDisk: z.boolean().optional(),
+    source: FolderMoveSourceReadingShape.optional(),
+  }),
+  "FolderMoveReading",
+  "packages/core/src/folder-move.ts"
+);
+export const FolderMoveReadingSchema = FolderMoveReadingShape;
+export type FolderMoveReadingOutput = z.output<typeof FolderMoveReadingShape>;
+
+export const FolderMoveLeftShape = declared(
+  z.object({
+    path: z.string(),
+    why: z.enum(["changed", "busy", "uncopied"]),
+    words: z.string().optional(),
+  }),
+  "FolderMoveLeft",
+  "packages/core/src/folder-move.ts"
+);
+export type FolderMoveLeftOutput = z.output<typeof FolderMoveLeftShape>;
+
+const FolderMoveRemovedShape = declared(
+  z.object({ left: z.array(FolderMoveLeftShape), removed: z.number() }),
+  "FolderMoveRemoved",
+  "packages/core/src/folder-move.ts"
+);
+export const FolderMoveRemovedSchema = FolderMoveRemovedShape;
+export type FolderMoveRemovedOutput = z.output<typeof FolderMoveRemovedShape>;
+
+const FolderMoveRenamedShape = declared(
+  z.object({ renamed: z.boolean() }),
+  "FolderMoveRenamed",
+  "packages/core/src/folder-move.ts"
+);
+export const FolderMoveRenamedSchema = FolderMoveRenamedShape;
+export type FolderMoveRenamedOutput = z.output<typeof FolderMoveRenamedShape>;
+
+export const FolderMoveStepShape = declared(
+  z.enum(FOLDER_MOVE_STEPS),
+  "FolderMoveStep",
+  "packages/core/src/folder-move.ts"
+);
+export type FolderMoveStepOutput = z.output<typeof FolderMoveStepShape>;
+
+const FolderMoveStageShape = declared(
+  z.union([
+    FolderMoveStepShape,
+    z.literal("done"),
+    z.literal("failed"),
+    z.literal("calledOff"),
+  ]),
+  "FolderMoveStage",
+  "packages/core/src/folder-move.ts"
+);
+export const FolderMoveStageSchema = FolderMoveStageShape;
+export type FolderMoveStageOutput = z.output<typeof FolderMoveStageShape>;
+
+export const MachinePathShape = declared(
+  z.custom<MachinePathType>(
+    (value) => typeof value === "string" && isMachinePath(value),
+    "an absolute, normalised path"
+  ),
+  "MachinePath",
+  "packages/core/src/machine-path.ts"
+);
+export type MachinePathOutput = z.output<typeof MachinePathShape>;
+
+export const FolderMoveProgressFrameShape = declared(
+  z.object({
+    bytes: z.number(),
+    bytesTotal: z.number(),
+    files: z.number(),
+    filesTotal: z.number(),
+    jobId: z.string(),
+    kind: z.literal("folder_move_progress"),
+    phase: z.enum(["copy", "check", "remove"]),
+  }),
+  "FolderMoveProgressFrame",
+  "packages/core/src/folder-move.ts"
+);
+export type FolderMoveProgressFrameOutput = z.output<
+  typeof FolderMoveProgressFrameShape
+>;
+
 const FolderRemovedShape = declared(
   z.object({ removed: z.boolean() }),
   "FolderRemoved",
@@ -2772,7 +2967,6 @@ const GithubProjectShape = declared(
   z.object({
     fieldId: z.string().nullable(),
     id: z.string(),
-    map: z.record(z.string(), z.string().nullable()),
     number: z.number(),
     options: z.array(StatusOptionShape),
     title: z.string(),
@@ -3659,16 +3853,6 @@ export const MoveJobShape = declared(
 );
 export type MoveJobOutput = z.output<typeof MoveJobShape>;
 
-export const MachinePathShape = declared(
-  z.custom<MachinePathType>(
-    (value) => typeof value === "string" && isMachinePath(value),
-    "an absolute, normalised path"
-  ),
-  "MachinePath",
-  "packages/core/src/machine-path.ts"
-);
-export type MachinePathOutput = z.output<typeof MachinePathShape>;
-
 const NamedHarnessReportShape = declared(
   HarnessReportShape.omit({
     accounts: true,
@@ -3721,9 +3905,7 @@ const MoveRequestShape = declared(
 export type MoveRequestOutput = z.output<typeof MoveRequestShape>;
 
 const NamedMoveRequestShape = declared(
-  MoveRequestShape.extend({
-    spawn: MoveRequestShape.shape.spawn.extend({ harness: HarnessKindShape }),
-  }),
+  MoveRequestShape,
   "NamedMoveRequest",
   "packages/core/src/move.ts"
 );
@@ -4035,6 +4217,21 @@ const PasskeyAdvertFrameShape = declared(
 );
 export const PasskeyAdvertFrameSchema = PasskeyAdvertFrameShape;
 export type PasskeyAdvertFrameOutput = z.output<typeof PasskeyAdvertFrameShape>;
+
+const PausedForMoveShape = declared(
+  z.union([
+    z.object({ ended: MoveEndedShape.optional(), paused: z.literal(true) }),
+    z.object({
+      paused: z.literal(false),
+      replying: z.boolean(),
+      why: z.string(),
+    }),
+  ]),
+  "PausedForMove",
+  "packages/core/src/folder-move.ts"
+);
+export const PausedForMoveSchema = PausedForMoveShape;
+export type PausedForMoveOutput = z.output<typeof PausedForMoveShape>;
 
 const PermissionModeSetShape = declared(
   z.object({ permissionMode: z.string() }),

@@ -22,10 +22,12 @@ import {
   type ProjectConversationView,
   type ProjectSpend,
 } from "@cawco/core/project-conversation";
+import type { FindPlan } from "@cawco/core/project-folders";
 import type { StagesTemplate } from "@cawco/core/views";
 import { projectWords } from "@cawco/core/words/project";
 import { projectEndWords } from "@cawco/core/words/project-ends";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
+import type { HubClient } from "@cawco/hub/client";
 import { hub } from "#lib/platform/hub.js";
 import {
   hubData,
@@ -69,7 +71,7 @@ export function takeProjectStop(frame: FrameOf<"project.stop">): void {
 }
 
 /**
- * The person's own edit of a project: its name, its Review before done,
+ * The person's own edit of a project: its name,
  * where its work lands, or where its large files live
  * (`PATCH /api/projects/:id`). The answer lands in the
  * projects at once; the hub's `projects.changed` brings it to every other
@@ -86,12 +88,12 @@ export async function editProject(
     /** Where its large files live, and the connection that signs in there; null: each origin's own LFS. */
     lfs?: { connection: string; url: string } | null;
     name?: string;
-    review?: boolean;
-  }
+  },
+  client: HubClient = hub
 ): Promise<ProjectRow> {
   const asked = projectsLeave();
   const row = await hubData(
-    hub.api.projects({ id: projectId }).patch(change),
+    client.api.projects({ id: projectId }).patch(change),
     (refused) => hubRefusal(refused, projectWords.notChangedThen)
   );
   keepProject(row, asked);
@@ -107,18 +109,43 @@ function keepProject(row: ProjectRow, asked: ProjectsAsked): void {
 }
 
 /**
- * Another checkout of the project's repository, named by hand: a machine
- * and an absolute folder on it (`POST /api/projects/:id/places`). Throws
- * the refusal in the hub's words; the project as it stands lands at once.
+ * What connecting a folder would do, read from its machine before anything
+ * runs (`POST /api/projects/:id/places/preview`): What will happen, and the
+ * project that already has its codebase, which connecting makes one with
+ * this one.
+ */
+export function previewProjectPlace(
+  projectId: string,
+  machineId: string,
+  path: string,
+  client: HubClient = hub
+): Promise<FindPlan> {
+  return hubData(
+    client.api
+      .projects({ id: projectId })
+      .places.preview.post({ machineId, path })
+  );
+}
+
+/**
+ * Another folder of the project's, named by hand: a machine and an absolute
+ * folder on it (`POST /api/projects/:id/places`). `joins` is the project
+ * the preview named as already having its codebase, sent back as the
+ * person's yes to the two becoming one. Throws the refusal in the hub's
+ * words; the project as it stands lands at once.
  */
 export async function addProjectPlace(
   projectId: string,
   machineId: string,
-  path: string
+  path: string,
+  joins: string | null,
+  client: HubClient = hub
 ): Promise<ProjectRow> {
   const asked = projectsLeave();
   const row = await hubData(
-    hub.api.projects({ id: projectId }).places.post({ machineId, path }),
+    client.api
+      .projects({ id: projectId })
+      .places.post({ machineId, path, ...(joins ? { joins } : {}) }),
     (refused) => hubRefusal(refused, projectWords.placeNotAddedThen)
   );
   keepProject(row, asked);
@@ -132,13 +159,14 @@ export async function addProjectPlace(
  */
 export async function removeProjectPlace(
   projectId: string,
-  placeId: string
+  placeId: string,
+  client: HubClient = hub
 ): Promise<void> {
   await hubDone(
-    hub.api.projects({ id: projectId }).places({ placeId }).delete(),
+    client.api.projects({ id: projectId }).places({ placeId }).delete(),
     (refused) => hubRefusal(refused, projectWords.placeNotRemovedThen)
   );
-  await readProjects();
+  await readProjects(client);
 }
 
 /**
@@ -267,8 +295,8 @@ export const readRoutine = (routineId: string) =>
   hubData(hub.api.routines({ id: routineId }).get(), refusedOrUnreached);
 
 /** The fleet's connections, never their keys (`GET /api/connections`). */
-export const readConnections = async () =>
-  (await hubData(hub.api.connections.get(), refusedOrUnreached)).connections;
+export const readConnections = async (client: HubClient = hub) =>
+  (await hubData(client.api.connections.get(), refusedOrUnreached)).connections;
 
 /** Keeps a routine past its 7 days, or turns it off: the routine as it stands after. */
 export const changeRoutine = (
@@ -446,9 +474,9 @@ export async function discardHeldRows(
 }
 
 /** Reads the projects again, as the hub has them now. */
-export async function readProjects(): Promise<void> {
+export async function readProjects(client: HubClient = hub): Promise<void> {
   const asked = projectsLeave();
-  const projects = await load(hubData(hub.api.projects.get()));
+  const projects = await load(hubData(client.api.projects.get()));
   if (projects) {
     keepProjects(projects, asked);
   }

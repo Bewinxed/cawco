@@ -181,7 +181,6 @@
     links: [],
     places: [],
     primaryPlaceId: null,
-    review: false,
   };
   if (beat !== "first-run") {
     debug.projectsState.projects.push(row);
@@ -469,6 +468,7 @@
           }}
           onfilter={none}
           onnewtask={none}
+          onsettings={none}
           {project}
           seated
           setup={null}

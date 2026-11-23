@@ -331,6 +331,7 @@ import {
 } from "../wakeups";
 import { FULL_CAPABILITIES } from "./capabilities";
 import { ClaudeCarry } from "./claude-carry";
+import { claudeFolderCarry } from "./claude-folder";
 import { claudeStoredRun, homeLoginAccount } from "./claude-stored-run";
 import {
   CLAUDE_PROMPT_TYPES,
@@ -5159,6 +5160,7 @@ class ClaudeHarness implements Harness<"claude"> {
   carrier(host: CarryHost): SessionCarry {
     return new ClaudeCarry(this, host);
   }
+  readonly folderCarry = claudeFolderCarry;
   readonly detectStartsNothing = true;
   readonly healsFleetMcp = true;
   readonly relaunchesOnManualCompact = true;
@@ -5402,7 +5404,9 @@ class ClaudeHarness implements Harness<"claude"> {
         }
       } else {
         const carried = (
-          await carrySessions([{ sessionId: spec.resume.sessionKey, ...place }])
+          await carrySessions([
+            { sessionId: spec.resume.sessionKey, ...place, cwd },
+          ])
         ).get(spec.resume.sessionKey);
         if (carried && "error" in carried) {
           throw new Error(
