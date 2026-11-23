@@ -26,6 +26,7 @@
   import { cawSettingsWords as words } from "@cawco/core/words/caw-settings";
   import { spawnWords } from "@cawco/core/words/spawn";
   import { MediaQuery } from "svelte/reactivity";
+  import type { TransitionConfig } from "svelte/transition";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     chipsVariants,
@@ -39,6 +40,11 @@
     IconReset,
     IconShield,
   } from "#lib/icons.js";
+  import {
+    dur,
+    easeDrawer,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
   import { nameOf } from "../accounts/model.svelte";
   import HarnessLogo from "../HarnessLogo.svelte";
@@ -229,6 +235,40 @@
       // In a column of pickers each chip takes the column's width.
       class: columns ? "flex-1 [&>[data-slot=chevron]]:ms-auto" : undefined,
     });
+
+  /**
+   * A field's reset comes and goes in place: it widens from nothing beside
+   * its chip (the field's gap with it), growing from the pop scale as it
+   * fades in (--duration-pop), and folds back the same way at the exit
+   * tier, so the chip beside it eases to its new width instead of jumping.
+   */
+  function widen(
+    node: HTMLElement,
+    _: unknown,
+    { direction }: { direction?: "in" | "out" | "both" } = {}
+  ): TransitionConfig {
+    if (!motionOk.current) {
+      return {
+        duration: dur("--duration-control"),
+        css: (t) => `opacity: ${t}`,
+      };
+    }
+    const { width } = node.getBoundingClientRect();
+    const gap =
+      Number.parseFloat(
+        getComputedStyle(node.parentElement ?? node).columnGap
+      ) || 0;
+    const scale =
+      Number.parseFloat(
+        getComputedStyle(node).getPropertyValue("--pop-scale")
+      ) || 0.96;
+    return {
+      duration: dur(direction === "out" ? "--duration-exit" : "--duration-pop"),
+      easing: easeDrawer,
+      css: (t) =>
+        `overflow: hidden; inline-size: ${(t * width).toFixed(2)}px; margin-inline-start: ${((t - 1) * gap).toFixed(2)}px; opacity: ${t}; scale: ${scale + (1 - scale) * t}`,
+    };
+  }
 </script>
 
 <div
@@ -393,20 +433,22 @@
 {#snippet reset(field: "account" | "model" | "mode", fields: TriggerField[])}
   {#if resettable(field)}
     {@const label = resetLabel?.(field) ?? field}
-    <Tip {label}>
-      {#snippet children(tip)}
-        <Button
-          {...tip}
-          aria-label={label}
-          data-slot="reset"
-          onclick={() => onreset?.(fields)}
-          size="icon-xs"
-          variant="ghost"
-        >
-          <IconReset />
-        </Button>
-      {/snippet}
-    </Tip>
+    <span class="inline-flex flex-none" transition:widen>
+      <Tip {label}>
+        {#snippet children(tip)}
+          <Button
+            {...tip}
+            aria-label={label}
+            data-slot="reset"
+            onclick={() => onreset?.(fields)}
+            size="icon-xs"
+            variant="ghost"
+          >
+            <IconReset />
+          </Button>
+        {/snippet}
+      </Tip>
+    </span>
   {/if}
 {/snippet}
 
