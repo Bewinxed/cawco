@@ -218,6 +218,13 @@ export interface SendsDb {
     limit: number
   ) => PersonSaid[];
   /**
+   * One message the person typed, by the send's uuid or the id its harness
+   * stored it under (a find hit's record): a send of origin `human`, pending
+   * or read, not replaced by a retry, not a slash command. Undefined when
+   * the id names nothing he typed (an agent's handoff, a hub notice).
+   */
+  readonly personSaidOf: (id: string) => PersonSaid | undefined;
+  /**
    * The person's last message to the session, when it has no reply after it:
    * `read`, the session has it, or `pending`, it waits to reach it. His last
    * words are his newest send that reached it or waits to (a failed, replaced
@@ -574,6 +581,28 @@ export const sendsDb = (core: DbCore): SendsDb => {
           const text = wordsOf(body).trim();
           return text && !text.startsWith("/") ? [{ ...said, text }] : [];
         }),
+    personSaidOf: (id) => {
+      const [said] = sends()
+        .where(
+          and(
+            or(eq(sentMessages.uuid, id), eq(sentMessages.harnessId, id)),
+            eq(sentMessages.originKind, "human"),
+            inArray(sentMessages.state, ["pending", "read"]),
+            isNull(sentMessages.replacedBy)
+          )
+        )
+        .limit(1)
+        .all();
+      const text = said ? wordsOf(said.body).trim() : "";
+      return said && text && !text.startsWith("/")
+        ? {
+            uuid: said.uuid,
+            instanceId: said.instanceId,
+            acceptedAt: said.acceptedAt,
+            text,
+          }
+        : undefined;
+    },
     latestSends: (id) => {
       const [read] = sends()
         .where(

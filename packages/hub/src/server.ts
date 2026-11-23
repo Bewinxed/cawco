@@ -4871,7 +4871,9 @@ export const createServer = (
       settler: (settler, row, card) => settling.settler(settler, row, card),
       settled: (row, card, member, answer) =>
         settling.settled(row, card, member, answer),
+      cited: (row, card) => settling.personWrote(row.id, [card.id]),
     },
+    personSaid: (id) => db.personSaidOf(id),
     // The panel closes at once; what it showed is still served on its own
     // origin, for its tab and its decision cards.
     close: (instanceId) => {

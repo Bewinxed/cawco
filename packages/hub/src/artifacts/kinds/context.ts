@@ -55,6 +55,9 @@ export interface KindContext {
     | PageBroken
     | undefined
     | Awaited<ReturnType<ArtifactServiceDeps["afterLinks"]>>
+    | ReturnType<
+        typeof problem<422, { code: "program-ids-unfit"; detail: string }>
+      >
   >;
   cardLinks: (
     id: string,

@@ -166,6 +166,34 @@ export const artifactToolWords = {
   /** A decision page's Canvas or Preview (`component`) naming `id`, which is neither its panel's, its delegation tree's nor a page of its project. */
   noMediaArtifact: (component: string, id: string) =>
     `${component}("${id}"): no artifact ${id} is this page's session's, its delegation tree's or a page of its project.`,
+  /** `artifact_update`'s patch on a decision page: its state is the person's picks, settle's and record_pick's alone. */
+  patchDecisionPage: (name: string) =>
+    `${name} is a decision page: its cards' picks are the person's, settle's by the project's Who decides, or record_pick's from his own words, and no patch writes its state. Nothing was changed.`,
+  /** A program whose new card names a key an agent wrote: it would open as that agent's pick. */
+  cardsHoldAgentPicks: (cards: readonly string[]) =>
+    `${cards.join(", ")} already ${cards.length === 1 ? "holds a pick" : "hold picks"} an agent wrote outside settle and record_pick, so ${cards.length === 1 ? "that card" : "those cards"} would open decided. Give ${cards.length === 1 ? "the card" : "each card"} another id. Nothing was changed.`,
+  /** record_pick on a card the person picked himself. */
+  citePickedByHim: (question: string) =>
+    `${question} holds the person's own pick, and it stands: only he picks again. Nothing was changed.`,
+  /** record_pick naming both sources or neither. */
+  citeOneSource:
+    "Name where his words are: pin (his comment on this page) or message (a message he typed), one of them.",
+  /** record_pick's options on a card that takes one. */
+  citeOneOption: (card: string) => `${card} takes one option: name one.`,
+  /** record_pick naming an option twice. */
+  citeOptionTwice: "Name each option once.",
+  /** record_pick's pin, on no pin of the page. */
+  citeNoPin: (pin: string, page: string) =>
+    `${page} holds no pin ${pin}: cite a pin on the card's own page. comment_read with the page lists its pins with their ids.`,
+  /** record_pick's message, on nothing the person typed. */
+  citeNoMessage: (message: string) =>
+    `${message} is no message the person typed: pass a find hit's ref (by: person) or the message's id. A message an agent wrote, a handoff or a hub notice is not his.`,
+  /** record_pick's message, typed to a session of another project. */
+  citeOtherProject: (message: string) =>
+    `${message} was typed to a session outside this page's project: cite his words from this project.`,
+  /** record_pick's quote, not in the cited words. */
+  citeQuoteMissing: (where: "pin" | "message") =>
+    `The quote is not in his ${where === "pin" ? "comment" : "message"}: copy the words that answer the card as he wrote them. Nothing was changed.`,
   /** A pin on no artifact the session reads: its own, its delegation tree's, its project's pages, what its project's cold sessions left. */
   noPin: (pin: string) =>
     `No artifact this session reads holds pin ${pin}: not its own, its delegation tree's, its project's pages or what its project's cold sessions left. comment_read with the artifact lists its pins with their ids.`,

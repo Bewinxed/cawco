@@ -12,6 +12,12 @@
  */
 export interface ChoiceEntry {
   at: string;
+  /**
+   * The person's own words an agent recorded this pick from (`record_pick`):
+   * his pin on the page or a message he typed, quoted. Absent on a pick he
+   * made himself. Only the hub writes it, and his own pick clears it.
+   */
+  from?: PickFrom;
   note: string | null;
   /** Options picked, in the order picked; empty when cleared. */
   options: string[];
@@ -25,6 +31,16 @@ export interface ChoiceEntry {
   /** What `cawco.set` stored under this id; null when nothing was set. */
   value: unknown;
 }
+
+/**
+ * Where a pick an agent recorded for the person came from (`record_pick`):
+ * his pin on the card's page (`pin`, its id) or a message he typed to a
+ * session (`message`, the send's uuid), the words of it that answer the
+ * card (`quote`, found in it by the hub), and the session that recorded it.
+ */
+export type PickFrom = { quote: string; session: string } & (
+  { pin: string } | { message: string }
+);
 
 /** A pick the hub wrote for a card from `settle`: by which member of Who decides (core decides.ts), why, and on what sources. */
 export interface SettledBy {
@@ -66,6 +82,8 @@ export const CHOICE_LIMITS = {
   /** A settled pick's sources, and each one's length. */
   sources: 20,
   source: 2000,
+  /** The person's words a recorded pick quotes. */
+  quote: 500,
   /** Ids one artifact's `state` keeps. */
   perArtifact: 500,
 } as const;
@@ -168,8 +186,37 @@ export const choiceEntryProblem = (
   if (JSON.stringify(entry.value ?? null).length > CHOICE_LIMITS.value) {
     return `A set value stops at ${CHOICE_LIMITS.value} characters of JSON.`;
   }
-  return "settled" in entry && entry.settled !== undefined
-    ? settledProblem(entry.settled)
+  if ("settled" in entry && entry.settled !== undefined) {
+    const settled = settledProblem(entry.settled);
+    if (settled) {
+      return settled;
+    }
+  }
+  if ("from" in entry && entry.from !== undefined) {
+    return "settled" in entry && entry.settled !== undefined
+      ? `${key} holds both a settled record and the person's words: a pick is one or the other.`
+      : fromProblem(entry.from);
+  }
+  return null;
+};
+
+/** Why `given` is not a recorded pick's source ({@link PickFrom}), or null when it is. */
+const fromProblem = (given: unknown): string | null => {
+  if (
+    given === null ||
+    typeof given !== "object" ||
+    !("quote" in given) ||
+    typeof given.quote !== "string" ||
+    !("session" in given) ||
+    typeof given.session !== "string" ||
+    "pin" in given === "message" in given ||
+    ("pin" in given && typeof given.pin !== "string") ||
+    ("message" in given && typeof given.message !== "string")
+  ) {
+    return "from holds quote, session, and one of pin or message.";
+  }
+  return given.quote.length === 0 || given.quote.length > CHOICE_LIMITS.quote
+    ? `A recorded pick's quote is 1 to ${CHOICE_LIMITS.quote} characters.`
     : null;
 };
 
@@ -236,8 +283,9 @@ export const noteText = (note: string | null | undefined): string | null =>
 
 /**
  * The entry `change` makes of `before` (absent: nothing kept yet), stamped
- * `at`. A pick the hub settled keeps who settled it until the person picks
- * otherwise: a note or a value beside it leaves it theirs.
+ * `at`. A pick the hub settled, or recorded from the person's words, keeps
+ * its record until the person picks otherwise: a note or a value beside it
+ * leaves it as it is, and his own pick replaces it whole.
  */
 export const changedEntry = (
   before: ChoiceEntry | undefined,
@@ -246,17 +294,15 @@ export const changedEntry = (
 ): ChoiceEntry => {
   const options =
     "options" in change ? change.options : (before?.options ?? []);
-  const settled =
-    before?.settled && sameOptions(before.options, options)
-      ? { settled: before.settled }
-      : {};
+  const same = before !== undefined && sameOptions(before.options, options);
   return {
     options,
     note: "note" in change ? noteText(change.note) : (before?.note ?? null),
     value: "value" in change ? (change.value ?? null) : (before?.value ?? null),
     pageHash: change.pageHash,
     at,
-    ...settled,
+    ...(same && before.settled ? { settled: before.settled } : {}),
+    ...(same && before.from ? { from: before.from } : {}),
   };
 };
 
@@ -265,20 +311,23 @@ const sameOptions = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((option) => b.includes(option));
 
 /**
- * Why a person's write of `after` over `before` may not be kept for its
- * `settled`, or null: only the hub settles a pick, so the person's write
- * carries the settled record it had, unchanged, on the same pick, or none.
+ * Why a person's write of `after` over `before` may not be kept for the
+ * records only the hub writes on a pick (`settled`, `from`), or null: his
+ * write carries each record it had, unchanged, on the same pick, or none.
  */
-export const settledWriteProblem = (
+export const hubRecordWriteProblem = (
   before: ChoiceEntry | undefined,
   after: ChoiceEntry
 ): string | null => {
-  if (after.settled === undefined) {
-    return null;
+  const kept = (record: "settled" | "from") =>
+    after[record] === undefined ||
+    (before?.[record] !== undefined &&
+      JSON.stringify(before[record]) === JSON.stringify(after[record]) &&
+      sameOptions(before.options, after.options));
+  if (!kept("settled")) {
+    return "Only the hub settles a pick: the person's pick carries no settled record of its own.";
   }
-  return before?.settled &&
-    JSON.stringify(before.settled) === JSON.stringify(after.settled) &&
-    sameOptions(before.options, after.options)
+  return kept("from")
     ? null
-    : "Only the hub settles a pick: the person's pick carries no settled record of its own.";
+    : "Only the hub records a pick from the person's words: his own pick carries no quote of its own.";
 };

@@ -135,6 +135,16 @@ export const decidesWords = {
   /** Caw's runs-on line: "Claude Code · Opus 5.5 · leads Roost iOS". */
   leads: (runs: string, project: string) => `${runs} · leads ${project}`,
 
+  // ── A pick recorded from the person's own words (record_pick) ─────────
+  /** The card's line under its options: the lead, then his words in curly quotes, line breaks read as spaces. */
+  pickedFromYour: (source: "comment" | "message", quote: string) =>
+    `Picked from your ${source}: “${quote.replace(/\s+/gu, " ").trim()}”`,
+  /** What agents read before his words, which follow quoted (log.md's `> ` lines, artifact_read's verbatim). */
+  recordedFrom: (source: "comment" | "message") =>
+    source === "comment"
+      ? "Recorded from the person's comment on this page:"
+      : "Recorded from the person's message:",
+
   // ── Settling ────────────────────────────────────────────────────────────
   /** Why `settle` is refused on a card the person decides. */
   settleYours: (kind: string, here: string) =>

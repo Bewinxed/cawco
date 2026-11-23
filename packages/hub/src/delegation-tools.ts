@@ -40,6 +40,7 @@ import {
   commentResolve,
   designMap,
   questionClose,
+  recordPick,
   settle,
 } from "./artifacts/tools";
 import type {
@@ -62,6 +63,7 @@ import {
   artifactShownWords,
   artifactUpdatedDetailed,
   artifactUpdatedWords,
+  citedWords,
   commentReadWords,
   commentRepliedWords,
   commentResolvedWords,
@@ -115,6 +117,15 @@ const ISO_TIME =
   "an ISO date or datetime, like 2026-10-20 or 2026-10-20T14:00Z";
 /** A day, as `find` and `list_sessions` take `since`. */
 const DAY = /^\d{4}-\d{2}-\d{2}$/u;
+
+/** A `<page>#<card>` read as its page and its card; thrown in words when it names no card. */
+const pageCard = (ref: string): [string, string] => {
+  const hash = ref.lastIndexOf("#");
+  if (hash <= 0 || hash === ref.length - 1) {
+    throw new Error(`“${ref}” names no card: write <page>#<card>.`);
+  }
+  return [ref.slice(0, hash), ref.slice(hash + 1)];
+};
 
 /** `list_sessions`'s `since`: its day's first ms in UTC, or the refusal with one call that works. */
 const dayStart = (day: string): number => {
@@ -1238,16 +1249,20 @@ export function handoffTools(view: ToolView) {
       settle.description,
       settle.input,
       ({ card, ...picked }, _format, bound) => {
-        const hash = card.lastIndexOf("#");
-        if (hash <= 0 || hash === card.length - 1) {
-          throw new Error(`“${card}” names no card: write <page>#<card>.`);
-        }
-        return bound.actions.artifacts.settle(card.slice(0, hash), {
-          card: card.slice(hash + 1),
-          ...picked,
-        });
+        const [page, id] = pageCard(card);
+        return bound.actions.artifacts.settle(page, { card: id, ...picked });
       },
       settledWords
+    ),
+    handoffTool(
+      recordPick.name,
+      recordPick.description,
+      recordPick.input,
+      ({ card, ...picked }, _format, bound) => {
+        const [page, id] = pageCard(card);
+        return bound.actions.artifacts.cite(page, { card: id, ...picked });
+      },
+      citedWords
     ),
     handoffTool(
       questionClose.name,

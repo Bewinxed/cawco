@@ -45,6 +45,7 @@
 -->
 <script lang="ts">
   import { DECISION_WELLS } from "@cawco/core/decisions-library";
+  import { pickedFromYourLine } from "@cawco/core/words/decides-lines";
   import { decisionsWords as words } from "@cawco/core/words/decisions";
   import { getContext, setContext, tick } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -357,6 +358,8 @@
   const decidedBy = getContext<DecidedByShown | undefined>(DECIDED_BY);
 
   const stored = $derived(picks.now[id]?.note ?? "");
+  /** The person's own words an agent recorded this card's pick from (`record_pick`); his own press replaces the pick and drops them. */
+  const from = $derived(picks.now[id]?.from);
   let note = $state("");
   let typing = false;
   $effect(() => {
@@ -486,6 +489,14 @@
         settled={picks.now[id]?.settled ?? null}
         takenBack={decidedBy.takenBack(id)}
       />
+    {/if}
+    {#if from}
+      <p
+        class="type-meta max-w-c-measure text-pretty text-ink-muted wrap-anywhere"
+        data-slot="picked-from"
+      >
+        {pickedFromYourLine(from)}
+      </p>
     {/if}
     <div data-slot="note">
       <!-- A ghost's ink starts inside its box: it hangs back by its padding so its first letter stands on the card's text edge, as RelayJourney's ghosts do. -->

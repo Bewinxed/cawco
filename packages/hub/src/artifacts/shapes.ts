@@ -2,7 +2,7 @@ import type { ArtifactDoes, ArtifactKind } from "@cawco/core/artifact-kinds";
 import type { PictureCut } from "@cawco/core/artifact-picture";
 import type { SendAttachment, TurnImage } from "@cawco/core/attachments";
 import type { excalidrawFile } from "@cawco/core/canvas";
-import type { ChoiceEntry, SettledBy } from "@cawco/core/choices";
+import type { ChoiceEntry, PickFrom, SettledBy } from "@cawco/core/choices";
 import type { Pin } from "@cawco/core/comments/model";
 import type { ProgramRead } from "@cawco/core/decisions";
 import type { QuestionClose, SentBy } from "@cawco/core/doc-meta";
@@ -232,6 +232,8 @@ export type DecisionAnswer = {
       options: { id: string; label?: string }[];
       /** Who settled it for the person (`settle`), why and its sources; absent for his own pick. */
       settled?: SettledBy;
+      /** The person's own words an agent recorded it from (`record_pick`); absent for a pick he made himself. */
+      from?: PickFrom;
     }
   | { answer: "cleared"; at: string; earlierRevision?: true; note?: string }
   | {
@@ -408,6 +410,14 @@ export interface Settled {
   card: string;
   option: { id: string; label: string };
   settled: SettledBy;
+}
+
+/** What `record_pick` answers: the card, the options it holds now, and the person's words they came from. */
+export interface Cited {
+  /** The card's link, `[question](cawco:decision/<artifact>/<card>)`. */
+  card: string;
+  from: PickFrom;
+  options: { id: string; label: string }[];
 }
 
 /** One artifact's questions to the person as `open_items` lists them (questions.ts): each open or answered; one taken or withdrawn is left out. */

@@ -262,10 +262,16 @@ import {
  * that left with review becoming the `done` kind), and its description
  * says so (worker 31,766 measured; a delegate has no project_settings).
  * The worker's budget is raised to it.
+ * 2026-11-23: record_pick, a pick recorded on a decision card from the
+ * person's own words (his pin on the page or a message he typed, quoted),
+ * which the hub checks are his; the owner's "Yes, from my own words" that
+ * day in cockpit#8eabb628, when his comment plainly answered a card and an
+ * agent had no proper way to record it (worker 32,071 with set_decides, delegate 12,649
+ * measured); both budgets are raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 31_766,
-  delegate: 12_344,
+  worker: 32_071,
+  delegate: 12_649,
   overseer: 770,
   "web-facing": 3400,
   curator: 1550,

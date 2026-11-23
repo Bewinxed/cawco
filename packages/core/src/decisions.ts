@@ -33,9 +33,9 @@
  */
 import type { ElementNode } from "@openuidev/lang-core";
 import { z } from "zod";
-import type { ChoiceEntry, SettledBy } from "./choices";
+import type { ChoiceEntry, PickFrom, SettledBy } from "./choices";
 import type { DecisionComponentName } from "./decisions-library";
-import { decidedByLine } from "./words/decides-lines";
+import { decidedByLine, recordedFromLead } from "./words/decides-lines";
 
 /** One option of a card, as the page labelled it. */
 export interface DecisionOption {
@@ -141,6 +141,8 @@ export interface RecordCard {
   chosen: string[];
   /** Its dials' values, in order: a panel named as the card. */
   dials: [string, string][];
+  /** The person's words an agent recorded his pick from (`record_pick`): absent for a pick he made himself. */
+  from?: PickFrom;
   id: string;
   mockup: string | null;
   /** The person's note; empty when none. */
@@ -184,6 +186,15 @@ const SETTLED = z.looseObject({
   why: z.string(),
 }) satisfies z.ZodType<SettledBy>;
 
+const FROM = z.union([
+  z.looseObject({ pin: z.string(), quote: z.string(), session: z.string() }),
+  z.looseObject({
+    message: z.string(),
+    quote: z.string(),
+    session: z.string(),
+  }),
+]) satisfies z.ZodType<PickFrom>;
+
 const RECORD = z.looseObject({
   askedOf: z.string().nullable(),
   cards: z.array(
@@ -206,6 +217,7 @@ const RECORD = z.looseObject({
       ),
       question: z.string(),
       settled: SETTLED.optional(),
+      from: FROM.optional(),
       still: z.string().nullable(),
       tasks: z.array(z.string()),
       why: z.string(),
@@ -252,13 +264,13 @@ export interface PickRecord {
   /** The session that settled it; null for the person's. */
   session: string | null;
   sources: string[];
-  /** The settler's why; the person's note for his own pick, "" when none. */
+  /** The settler's why; the person's note for his own pick, else the words a recorded pick quotes, "" when none. */
   why: string;
 }
 
-/** A pick's record of who made it ({@link PickRecord}): the hub's `settled`, else the person's with his note as the why. A page's choice or its record's card. */
+/** A pick's record of who made it ({@link PickRecord}): the hub's `settled`, else the person's with his note (or the words it was recorded from) as the why. A page's choice or its record's card. */
 export const pickRecord = (
-  entry: Pick<ChoiceEntry, "note" | "settled">
+  entry: Pick<ChoiceEntry, "from" | "note" | "settled">
 ): PickRecord =>
   entry.settled
     ? {
@@ -267,7 +279,12 @@ export const pickRecord = (
         why: entry.settled.why,
         sources: entry.settled.sources,
       }
-    : { by: "person", session: null, why: entry.note ?? "", sources: [] };
+    : {
+        by: "person",
+        session: null,
+        why: entry.note || entry.from?.quote || "",
+        sources: [],
+      };
 
 /** A card's pick: whether it is picked, and the options of it the card no longer offers. */
 export const pickOf = (
@@ -593,6 +610,13 @@ export const logOf = (
         "",
         sentence(decidedByLine(card.settled)),
         ...card.settled.sources.map((source) => `- ${source}`)
+      );
+    }
+    if (card.from) {
+      lines.push(
+        "",
+        recordedFromLead(card.from),
+        ...card.from.quote.split("\n").map((line) => `> ${line}`)
       );
     }
     if (card.dials.length > 0) {
