@@ -67,6 +67,7 @@
     onreset,
     resetLabel,
     tight = false,
+    columns = false,
     tips = {},
   }: {
     /** Prefix for its popovers' ids. */
@@ -101,6 +102,13 @@
      * their tooltip, so the row's three pickers keep one line.
      */
     tight?: boolean;
+    /**
+     * Its row is one of a list laid on its parent's columns (the trigger
+     * rows): the account, the model and the mode each keep their own column
+     * of the parent's grid (subgrid), so the same field lines up from row to
+     * row, and a row with no account leaves that column empty.
+     */
+    columns?: boolean;
     /** A field's own tooltip, in place of where it inherits from (a trigger's default mode). */
     tips?: Partial<Record<TriggerField, string>>;
   } = $props();
@@ -221,7 +229,12 @@
     });
 </script>
 
-<div data-slot="runs-as" class={chipsVariants({ class: "min-w-0" })}>
+<div
+  data-slot="runs-as"
+  class={columns
+    ? "col-span-full grid min-w-0 grid-cols-subgrid items-center"
+    : chipsVariants({ class: "min-w-0" })}
+>
   <NsPopoverGroup>
     {#if byAccount}
       <Tip disabled={!tipOf("account")} label={tipOf("account")}>
@@ -229,7 +242,10 @@
           <span
             {...tip}
             data-slot="field"
-            class="inline-flex min-w-0 items-center gap-space-1"
+            class={[
+              "inline-flex min-w-0 items-center gap-space-1",
+              columns && "col-start-1 justify-self-start",
+            ]}
           >
             <AccountSwitch
               bare={glyphOnly && !accountRow && Boolean(from.account)}
@@ -246,11 +262,19 @@
       </Tip>
     {/if}
     {#if readonly}
-      <span data-tool data-variant="static" class={chip("model")}>
+      <span
+        data-tool
+        data-variant="static"
+        class={[chip("model"), columns && "col-start-2 justify-self-start"]}
+      >
         {@render harnessFace()}
         <span data-slot="chip-label">{modelName}</span>
       </span>
-      <span data-tool data-variant="static" class={chip("mode")}>
+      <span
+        data-tool
+        data-variant="static"
+        class={[chip("mode"), columns && "col-start-3 justify-self-start"]}
+      >
         {@render modeFace()}
       </span>
     {:else}
@@ -259,7 +283,10 @@
           <span
             {...tip}
             data-slot="field"
-            class="inline-flex min-w-0 items-center gap-space-1"
+            class={[
+              "inline-flex min-w-0 items-center gap-space-1",
+              columns && "col-start-2 justify-self-start",
+            ]}
           >
             <NsPopover
               aria-label={modelName}
@@ -314,7 +341,10 @@
           <span
             {...tip}
             data-slot="field"
-            class="inline-flex min-w-0 items-center gap-space-1"
+            class={[
+              "inline-flex min-w-0 items-center gap-space-1",
+              columns && "col-start-3 justify-self-start",
+            ]}
           >
             <NsPopover
               align={side.mode}

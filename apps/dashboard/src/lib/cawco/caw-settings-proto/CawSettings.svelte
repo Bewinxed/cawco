@@ -105,16 +105,11 @@
 >
   <CawHero disabled={hubAway} {lead} {projectId} {projectName} {sheet} />
   <!-- The settings, from the hero's edge; on the sheet its own inset holds them. -->
-  <div
-    class={[
-      "flex flex-col divide-y divide-border-hairline *:py-space-4 *:first:pt-0 *:last:pb-0",
-      !sheet && "px-space-4 pb-space-4",
-    ]}
-  >
+  <div class={["flex flex-col", !sheet && "px-space-4 pb-space-4"]}>
     {#if hubAway}
       <p
         data-slot="hub-away"
-        class="mark-line m-0 flex items-center gap-space-2 type-meta text-ink-muted"
+        class="mark-line m-0 flex items-center gap-space-2 pb-space-4 type-meta text-ink-muted"
         role="status"
       >
         <IconCloudCross
@@ -125,7 +120,7 @@
         <span>{words.hubAway}</span>
       </p>
     {/if}
-    <div data-slot="changes" class="grid gap-space-2">
+    <div data-slot="changes" class="grid gap-space-2 pb-space-4">
       <SwitchField
         checked={proposesDecides}
         disabled={hubAway}
@@ -139,7 +134,10 @@
         </p>
       {/if}
     </div>
-    <section data-slot="chat" class="grid gap-space-2">
+    <section
+      data-slot="chat"
+      class="grid gap-space-2 border-t border-border-hairline py-space-4"
+    >
       <h3 class="m-0 type-row text-ink-strong">{words.chat}</h3>
       <RunsAs
         account={chat.account}
@@ -159,10 +157,15 @@
         </p>
       {/if}
     </section>
-    <section data-slot="triggers" class="grid gap-space-3">
+    <section
+      data-slot="triggers"
+      class="grid gap-space-3 border-t border-border-hairline pt-space-4"
+    >
       <h3 class="m-0 type-row text-ink-strong">{words.triggers}</h3>
       {#if triggers}
-        <ul class="m-0 grid list-none gap-space-3 p-0">
+        <ul
+          class="m-0 grid list-none grid-cols-pickers gap-x-space-2 gap-y-space-3 p-0"
+        >
           {#each TRIGGER_KINDS as kind (kind)}
             <TriggerRow
               {installed}

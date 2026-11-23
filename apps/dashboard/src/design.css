@@ -1424,6 +1424,11 @@
 @utility grid-cols-mark-fluid {
   grid-template-columns: var(--spacing-icon-md) minmax(0, 1fr);
 }
+/* Rows of three pickers (account, model, mode), each a column at its widest
+   row's width, so the same picker lines up from row to row; the rest is room. */
+@utility grid-cols-pickers {
+  grid-template-columns: repeat(3, auto) minmax(0, 1fr);
+}
 /* A row's 28px lead column, its mark centred there, before words that take the rest. */
 @utility grid-cols-lead-fluid {
   grid-template-columns: var(--spacing-c-row-lead) minmax(0, 1fr);
