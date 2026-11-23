@@ -19,3 +19,8 @@ export default {
 
 /** Caw's settings open from the project's More, him awake. */
 export const Live = { args: { overridden: true } };
+
+/** Turning him off from the hero's switch while what he started still runs: the confirm hangs from its glass. */
+export const TurningOff = {
+  args: { projectId: "cockpit-live-off", asked: "off" },
+};
