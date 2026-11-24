@@ -1165,6 +1165,7 @@
    --control-on-edge       the edge while chosen or on   accent
    --control-on-layer      the layer while chosen or on  ui
    --control-focus-ink     its focus edge and halo's ink accent (red when invalid)
+   --control-focus-halo    the halo focus draws          a 3px glow (none on a field)
 
    Focus (owner's pick, 2026-11-24): the edge turns the focus ink and a
    3px halo of it at 35% hugs the box, no gap. A transparent outline stays
@@ -1192,12 +1193,13 @@
   background-color: var(--control-fill, var(--color-bg));
   background-image: linear-gradient(var(--control-layer), var(--control-layer));
   --control-halo: 0 0 #0000;
-  --control-focus-halo: 0 0 0 3px
+  --control-focus-glow: 0 0 0 3px
     color-mix(
       in oklab,
       var(--control-focus-ink, var(--color-accent)) 35%,
       transparent
     );
+  --control-focus-halo: var(--control-focus-glow);
   box-shadow:
     var(--control-halo),
     var(
@@ -1234,11 +1236,25 @@
   &:is(:active, [data-pressed]):not(:disabled, [aria-disabled="true"]) {
     --control-layer: var(--control-press, var(--color-ui-2));
   }
-  &:focus-visible {
+  &:focus-visible,
+  &:has(:focus-visible) {
     --control-edge: var(--control-focus-ink, var(--color-accent));
     --control-halo: var(--control-focus-halo);
     outline: 2px solid transparent;
     outline-offset: 2px;
+  }
+  /* A composed control (a field with a button in it, a chip with its
+     remove) shows focus as one: a part reached inside it draws none of its
+     own, and the control round it shows it (`:has` above). */
+  & :focus-visible {
+    outline-color: transparent;
+  }
+  & .control:focus-visible {
+    --control-edge: var(
+      --control-rest-edge,
+      var(--control-intent, var(--control-default-edge, var(--color-ui-3)))
+    );
+    --control-halo: 0 0 #0000;
   }
   &:is(:disabled, [aria-disabled="true"]) {
     opacity: 0.5;
@@ -1325,11 +1341,17 @@
   --control-press: var(--control-field-hover, transparent);
   --control-focus-halo: 0 0 #0000;
 
-  &:is(:focus-visible, :focus-within):not(
+  &:is(:focus-visible, :focus-within, :has(:focus-visible)):not(
       [aria-invalid="true"],
       :has([aria-invalid="true"])
     ) {
     --control-edge: var(--color-tx-2);
+  }
+  /* A part in it that takes no typing (a field's button) has focus: the
+     field shows it as any control does. */
+  &:has(:focus-visible:not(input, textarea, select, [contenteditable])) {
+    --control-edge: var(--control-focus-ink, var(--color-accent));
+    --control-focus-halo: var(--control-focus-glow);
   }
 }
 
