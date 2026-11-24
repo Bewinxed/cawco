@@ -34,6 +34,7 @@
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
   import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import MorphText from "../morph-text/morph-text.svelte";
   import { type Glide, isGlideWords, type GlideWords as Words } from "./glide";
@@ -45,13 +46,92 @@
   /** How far it stands clear of the viewport's edges, px: it never touches one. */
   const CLEAR = 8;
 
+  /** The properties whose run moves what stands inside the element run on: its place, its size, its transform. */
+  const MOVES =
+    /^(?:transform|translate|scale|rotate|top|right|bottom|left|inset.*|width|height|margin.*)$/u;
+  const moves = (effect: KeyframeEffect): boolean =>
+    effect
+      .getKeyframes()
+      .some((frame) => Object.keys(frame).some((key) => MOVES.test(key)));
+
+  /**
+   * The runs that still move `el`: on it or round it, running, ending (a
+   * loop is the page's own), and of a property that moves it, so a row's
+   * own colour easing in under the pointer holds no tooltip back.
+   */
+  const movingAround = (el: Element): Animation[] =>
+    document.getAnimations().filter((one) => {
+      const { effect } = one;
+      return (
+        one.playState === "running" &&
+        effect instanceof KeyframeEffect &&
+        effect.target?.contains(el) &&
+        Number.isFinite(effect.getComputedTiming().endTime) &&
+        moves(effect)
+      );
+    });
+
   let open = $state(false);
   /** It has stood a frame: a move from here glides, its first placing never does. */
   let gliding = $state(false);
   let tip = $state<HTMLElement | null>(null);
 
+  /** The item it stands at, and its words: bits-ui's registry of the tethered triggers. */
+  const item = $derived(tether.state.registry.activeTriggerNode);
+
+  /**
+   * Its item stands still: the tooltip is built (`shown`) only once nothing
+   * moves the item, and a frame past the open at the soonest. A row the
+   * surface focused as it opened (a popover's list opened by a key) moves
+   * with the surface's entrance: built then, the tooltip's floating layer
+   * was mounted in the frames the surface rose in, and floating-ui placed it
+   * again on every frame of the rise, its layout-shift observer seeing the
+   * row move (the accounts tray, main thread slowed 4×: frames dropped
+   * through the entrance). Once open, it glides from item to item without
+   * waiting again.
+   */
+  let standing = $state(false);
+  const shown = $derived(open && standing);
   $effect(() => {
     if (!open) {
+      standing = false;
+      return;
+    }
+    const at = item;
+    if (!at || untrack(() => standing)) {
+      return;
+    }
+    let moving: Animation[] = [];
+    let gone = false;
+    // Read on the layout the frame has done (frame-observer `readNext`): asked
+    // in a frame callback, the read laid the page out ahead of that frame.
+    const still = frameObserver(
+      () => {
+        if (moving.length === 0) {
+          standing = true;
+          return;
+        }
+        Promise.allSettled(moving.map((one) => one.finished)).then(() => {
+          if (!gone) {
+            still.readNext();
+          }
+        });
+      },
+      {
+        read: () => {
+          moving = movingAround(at);
+        },
+      }
+    );
+    still.readNext();
+    return () => {
+      gone = true;
+      still.disconnect();
+    };
+  });
+
+  $effect(() => {
+    if (!shown) {
       gliding = false;
       return;
     }
@@ -60,9 +140,6 @@
     });
     return () => cancelAnimationFrame(frame);
   });
-
-  /** The item it stands at, and its words: bits-ui's registry of the tethered triggers. */
-  const item = $derived(tether.state.registry.activeTriggerNode);
   const words = $derived.by(() => {
     const payload = tether.state.registry.activePayload;
     return isGlideWords(payload) ? payload : null;
@@ -195,7 +272,7 @@
     const at = item;
     const now = words;
     const node = tip;
-    if (!(open && node && at && now)) {
+    if (!(shown && node && at && now)) {
       drawnFor = null;
       if (node) {
         settle(node);
@@ -219,7 +296,7 @@
 
 <Root {tether} bind:open>
   {#snippet children({ payload })}
-    {#if payload}
+    {#if payload && shown}
       <!-- 8px clear of the viewport's edges: it never touches one. Its words
            stand in its centre, so a box narrower or wider than them for a
            frame of the glide clips them evenly. -->

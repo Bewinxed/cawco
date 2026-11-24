@@ -4,16 +4,31 @@
    * trigger (or a caret rect), collision-handled, scaled from the trigger side,
    * and capped rather than full-screen on small screens. Decision §8.6: the design's
    * `fixedOrigin` maths is unnecessary here because the content is portaled.
+   *
+   * Out of a group, its surface is kept as NsPopoverGroup keeps a member's:
+   * built the first time it opens, or while the page is idle before any
+   * press (`prebuild`), and kept shut (bits-ui's forceMount, unseen and
+   * inert), so a press draws it as it was left, nothing mounted. Built on
+   * each press, the session card's account list (its rows, their tips, its
+   * popover's layers) held the press's frame about 20ms at 4x CPU, frames
+   * dropped before the surface's entrance began (LimitPickerChecks
+   * AccountsOpen). It is laid out while shut (hidden, not skipped), so
+   * the press only turns it visible.
    */
   import { Popover as PopoverPrimitive } from "bits-ui";
   import type { Snippet } from "svelte";
-  import { pressable } from "#lib/components/ui/floating-presence.js";
+  import {
+    drawn,
+    own,
+    pressable,
+  } from "#lib/components/ui/floating-presence.js";
   import {
     glidePopoverVariants,
     popoverRoom,
   } from "#lib/components/ui/glide-popover/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import PopoverRoot from "#lib/components/ui/popover/popover.svelte";
+  import { whenIdle } from "#lib/platform/idle-build.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { cn } from "#lib/utils.js";
   import {
@@ -101,7 +116,7 @@
      */
     follows?: boolean;
     "aria-label"?: string;
-    /** Its content is built while the page is idle, before any press opens it (`PopoverMember.prebuild`). */
+    /** Its content is built while the page is idle, before any press opens it: in a group, the group's surface builds it (`PopoverMember.prebuild`); alone, its own. */
     prebuild?: boolean;
   } = $props();
 
@@ -165,6 +180,22 @@
     },
   };
   $effect(() => group?.add(member));
+
+  /** Its surface is built: opened once, or built ahead while the page was idle (`prebuild`). */
+  let built = $state(false);
+  $effect(() => {
+    if (open) {
+      built = true;
+    }
+  });
+  $effect(() => {
+    if (group || built || !prebuild) {
+      return;
+    }
+    return whenIdle(() => {
+      built = true;
+    });
+  });
   function toggle() {
     if (!open) {
       group?.opening(member);
@@ -209,54 +240,66 @@
       </PopoverPrimitive.Trigger>
     {/if}
     <PopoverPrimitive.Portal>
-      <PopoverPrimitive.Content
-        preventOverflowTextSelection={false}
-        strategy="fixed"
-        data-ns-pop
-        data-fit={fit || undefined}
-        {align}
-        aria-label={rest["aria-label"]}
-        class={cn(
-          "ns-theme",
-          glidePopoverVariants({ pad, height: tall ? "room" : "cap" })
-        )}
-        collisionPadding={inset}
-        customAnchor={anchor}
-        id={`${id}-popover`}
-        onCloseAutoFocus={(event) => {
-          if (onclosefocus?.()) {
-            event.preventDefault();
-          }
-        }}
-        onOpenAutoFocus={(event) => {
-          if (!trapFocus) {
-            event.preventDefault();
-          }
-        }}
-        side="bottom"
-        sideOffset={6}
-        style={`--ns-pop-width:${popoverWidth(width)};--ns-pop-gap:${gap}px`}
-        {trapFocus}
-        updatePositionStrategy={follows ? "always" : "optimized"}
-      >
-        {#snippet child({ props, wrapperProps, open })}
-          <!-- Closing, it lets presses through to the page (floating-presence). -->
-          <div {...wrapperProps} style:pointer-events={pressable(open)}>
+      {#if built || open}
+        <PopoverPrimitive.Content
+          forceMount
+          preventOverflowTextSelection={false}
+          strategy="fixed"
+          data-ns-pop
+          data-fit={fit || undefined}
+          {align}
+          aria-label={rest["aria-label"]}
+          class={cn(
+            "ns-theme",
+            glidePopoverVariants({ pad, height: tall ? "room" : "cap" })
+          )}
+          collisionPadding={inset}
+          customAnchor={anchor}
+          id={`${id}-popover`}
+          onCloseAutoFocus={(event) => {
+            if (onclosefocus?.()) {
+              event.preventDefault();
+            }
+          }}
+          onOpenAutoFocus={(event) => {
+            if (!trapFocus) {
+              event.preventDefault();
+            }
+          }}
+          side="bottom"
+          sideOffset={6}
+          style={`--ns-pop-width:${popoverWidth(width)};--ns-pop-gap:${gap}px`}
+          {trapFocus}
+          updatePositionStrategy={follows ? "always" : "optimized"}
+        >
+          {#snippet child({ props, wrapperProps, open })}
+            <!-- Seen from the flush that opens it, so it turns visible in the
+               style pass floating-ui's first read takes, not one of its own. -->
+            {@const seen = open || drawn(props)}
+            <!-- Closing, it lets presses through to the page (floating-presence).
+               Shut and kept, it stands unseen and out of reach. -->
             <div
-              {...props}
-              id={`${id}-popover`}
-              role="presentation"
-              style:--ns-pop-room={room}
+              {...wrapperProps}
+              class={seen ? undefined : "invisible"}
+              inert={!seen}
               style:pointer-events={pressable(open)}
-              {@attach roomed}
-              {@attach rows ? highlight({ rows }) : undefined}
-              {@attach morph({ followUnfolds: true })}
             >
-              {@render children()}
+              <div
+                {...own(props)}
+                id={`${id}-popover`}
+                role="presentation"
+                style:--ns-pop-room={room}
+                style:pointer-events={pressable(open)}
+                {@attach roomed}
+                {@attach rows ? highlight({ rows }) : undefined}
+                {@attach morph({ followUnfolds: true })}
+              >
+                {@render children()}
+              </div>
             </div>
-          </div>
-        {/snippet}
-      </PopoverPrimitive.Content>
+          {/snippet}
+        </PopoverPrimitive.Content>
+      {/if}
     </PopoverPrimitive.Portal>
   </PopoverRoot>
 {/if}

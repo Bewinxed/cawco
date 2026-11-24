@@ -50,6 +50,11 @@ export const glidePopoverVariants = tv({
   defaultVariants: { pad: "roomy", height: "cap" },
 });
 
+/** bits-ui's available height on the floating wrapper (use-floating-layer `wrapperProps`). */
+const AVAILABLE_HEIGHT = "--bits-floating-available-height";
+/** A length in pixels: bits-ui writes `undefinedpx` until floating-ui has measured. */
+const PX = /^-?\d+(?:\.\d+)?px$/u;
+
 /**
  * The room floating-ui leaves the surface, handed to `set` a frame after
  * floating-ui writes it: for the surface's `--ns-pop-room`, set with a
@@ -66,16 +71,22 @@ export const glidePopoverVariants = tv({
  * reads off an observer does (frame-observer.ts). Until the first copy the
  * surface takes floating-ui's own value: it opens placed, not inside a
  * delivery.
+ *
+ * The room is read off the wrapper's own style attribute, where bits-ui
+ * writes it, never off the surface's computed style: a computed read in
+ * the frame after the open recalculated the style of the whole page the
+ * open had just changed, a forced style read in the accounts tray's open
+ * (LimitPickerChecks AccountsOpen, main thread slowed 4×).
  */
 export function popoverRoom(set: (room: string | undefined) => void) {
   return (node: HTMLElement) => {
     let frame = 0;
     const read = () => {
       frame = 0;
-      const room = getComputedStyle(node)
-        .getPropertyValue("--bits-popover-content-available-height")
+      const room = node.parentElement?.style
+        .getPropertyValue(AVAILABLE_HEIGHT)
         .trim();
-      set(room || undefined);
+      set(room && PX.test(room) ? room : undefined);
     };
     const ask = () => {
       if (frame === 0) {

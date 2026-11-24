@@ -20,3 +20,17 @@ export const sizingChanges = (
   attributes: true,
   attributeFilter: [...SIZING, ...on],
 });
+
+/**
+ * A turning that moves nothing however it is heard: a tooltip trigger's
+ * `data-state` (bits-ui marks the trigger `data-tooltip-trigger`) is the
+ * tooltip's, which stands in a portal of its own; the trigger's box stays
+ * as it was. Heard as a size, a row focused in a popover's list opened its
+ * tooltip and the popover's box was measured for it, a forced style read
+ * in the frame the list opened in (the accounts tray, main thread slowed 4×).
+ */
+export const movesNothing = (record: MutationRecord): boolean =>
+  record.type === "attributes" &&
+  record.attributeName === "data-state" &&
+  record.target instanceof Element &&
+  record.target.hasAttribute("data-tooltip-trigger");

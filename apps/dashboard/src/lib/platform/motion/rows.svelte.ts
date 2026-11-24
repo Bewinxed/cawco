@@ -13,7 +13,7 @@ import {
   popScale,
   revealOn,
 } from "./curves.svelte";
-import { sizingChanges } from "./sizing";
+import { movesNothing, sizingChanges } from "./sizing";
 
 /** The `data-*` names the page's styles select on, and the sheets they were read from. */
 let styled: { sheets: number; names: Set<string> } | undefined;
@@ -2151,8 +2151,9 @@ const takesRoom = (node: Node): boolean =>
  * with it, for a change that moved nothing.
  */
 const canMove = (record: MutationRecord): boolean =>
-  record.type !== "childList" ||
-  [...record.addedNodes, ...record.removedNodes].some(takesRoom);
+  !movesNothing(record) &&
+  (record.type !== "childList" ||
+    [...record.addedNodes, ...record.removedNodes].some(takesRoom));
 
 /**
  * `on`: the attributes inside it that carry a state its rows' sizes follow

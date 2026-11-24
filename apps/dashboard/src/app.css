@@ -989,6 +989,15 @@
   inherits: false;
 }
 
+/* The room floating-ui leaves a glide popover's surface (glide-popover
+   `popoverRoom`), read by the surface alone, its height's cap: written a
+   frame after the popover opens, inherited it restyled the surface's every
+   row (the accounts tray's ~120 elements, in the frame its list took focus). */
+@property --ns-pop-room {
+  syntax: "*";
+  inherits: false;
+}
+
 /* A Files card's least width (ArtifactCards), which its masonry reads in px
    to count its columns. Typed as a length, so its computed value is px
    whatever it is written as: untyped, `calc(var(--spacing) * 37)` read back
@@ -1003,8 +1012,12 @@
   /* bits-ui rewrites where the card may stand a few times a frame as it opens
      and follows its tab; only the card reads those properties (its
      max-height, HangCard's `details` frame), so they stop at its children
-     and restyle nothing inside. */
-  [data-session-details-popover] > * {
+     and restyle nothing inside. So with a glide popover's surface
+     (glide-popover, NsPopover and NsPopoverGroup's `data-ns-pop`): placed
+     as it opened, each write restyled its every row (the accounts tray, its
+     ~120 elements recalculated twice more in the press's frame). */
+  [data-session-details-popover] > *,
+  [data-ns-pop] > * {
     --bits-floating-transform-origin: initial;
     --bits-floating-available-width: initial;
     --bits-floating-available-height: initial;

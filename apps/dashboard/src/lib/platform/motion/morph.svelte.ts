@@ -97,7 +97,7 @@ import { cutterOf, cutters, EdgeCut } from "./edge-cut";
 import { folding, foldStarts, leaving, unfolding } from "./fold.svelte";
 import { keyed } from "./keyed.svelte";
 import { heldToTravel } from "./rows.svelte";
-import { sizingChanges } from "./sizing";
+import { movesNothing, sizingChanges } from "./sizing";
 
 interface Size {
   h: number;
@@ -709,7 +709,11 @@ export function morph({
       inPlace(one);
     /** A change that can move the box's natural size. */
     const sizes = (record: MutationRecord) =>
-      !(outOfFlow(record.target) || inPlace(record.target)) &&
+      !(
+        movesNothing(record) ||
+        outOfFlow(record.target) ||
+        inPlace(record.target)
+      ) &&
       (record.type !== "childList" ||
         ![...record.addedNodes, ...record.removedNodes].every(
           (one) => blank(one) || outOfFlow(one)

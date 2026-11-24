@@ -234,6 +234,7 @@
         open = value;
       }}
       {open}
+      prebuild
       rows="[data-pick-row]"
       triggerClass={chip}
       triggerData={{ "data-tool": true, "data-account-chip": true }}

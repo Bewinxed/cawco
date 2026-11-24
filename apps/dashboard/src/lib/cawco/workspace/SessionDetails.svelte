@@ -1063,6 +1063,7 @@
               }}
               open={modelOpen}
               fit
+              prebuild
               triggerClass={chipVariants({
                 variant: "setting",
                 size: "compact",
