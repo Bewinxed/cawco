@@ -420,7 +420,7 @@
        label, so the trim reaches its first and last lines (text-box-trim
        reaches no flex or grid container, which kept its whole line and the
        recipe's padding on top: a refused menu item stood 10px tall). -->
-  <span
+  <span class="px-(--btn-word-pad,0px)"
     ><span
       data-slot="label-text"
       class="transition-[opacity] duration-(--duration-base) ease-out covered-true:opacity-0"

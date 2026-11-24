@@ -1597,6 +1597,28 @@
   }
 }
 
+/* A button's padding, split between the button and its words (owner,
+   2026-11-24, after rohitcreates' button construction): the button keeps
+   --btn-pad and its words carry --btn-word-pad of their own, so words
+   stand --btn-pad + --btn-word-pad from an edge and an icon --btn-pad,
+   with no rule per icon side. The kit draws the words' padding on its
+   label (button pending-content); a button drawn from its children has no
+   label to pad, so the button adds the words' padding itself on each side
+   no icon (`data-icon`) stands on. */
+@utility btn-pad {
+  padding-inline: var(--btn-pad);
+
+  &:not(:has([data-slot="btn-slot"])) {
+    padding-inline: calc(var(--btn-pad) + var(--btn-word-pad));
+  }
+  &:not(:has([data-slot="btn-slot"])):has(> [data-icon="inline-start"]) {
+    padding-inline-start: var(--btn-pad);
+  }
+  &:not(:has([data-slot="btn-slot"])):has(> [data-icon="inline-end"]) {
+    padding-inline-end: var(--btn-pad);
+  }
+}
+
 @utility control-danger {
   --control-intent: var(--color-red);
 }
