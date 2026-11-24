@@ -39,16 +39,13 @@
  *   the change's author and source. A line taken out by anyone stays out
  *   of the next run's adds unless a source newer than its removal says it
  *   ({@link removedOf}, read off git).
- * - **Saves through git** ({@link commit}): every step reads the files
- *   from disk with the folder's HEAD, in its commit queue ({@link treeOf}),
- *   works out its change, and commits it on HEAD, rebased onto it when it
- *   moved since (project-folder.ts `rebased`, a three-way merge of each
- *   file). A rebase that meets a commit changing the same lines writes
- *   nothing, and the step reads again and works out its change again
- *   (project-folder.ts `againOnConflict`, three tries). What a step does
- *   outside the memory comes after its commit stands (a check filed), or
- *   is safe to do again: a read (a machine's file,
- *   a task's state, Jev). No writer writes over a newer commit.
+ * - **One way to write** ({@link written}): every change is decided where
+ *   it is slow (Jev, a machine's file, the tasks, each read once), then
+ *   made in the folder's commit queue (project-folder.ts
+ *   `changeFolderInTurn`): the files read from disk, the change worked out
+ *   on them, committed before any other commit lands. No base, no rebase,
+ *   no retry; a change whose lesson or note left meanwhile is refused as
+ *   no longer there. A check's task is filed once its operation stands.
  * - **Checks** ({@link plannedCheck}): a rule a tool can test is filed as
  *   a task in the project (`Check: <rule>`, through the tasks module, in
  *   the stage new tasks enter), its field `check` the lesson's id, the
@@ -136,23 +133,28 @@ import {
   rootOf,
 } from "./memory-sources";
 import {
-  againOnConflict,
-  changeFolderFiles,
+  changeFolderInTurn,
   type FolderAuthor,
+  type FolderChangeAsked,
   folderLineChanges,
   folderPath,
-  REBASE_CONFLICT,
-  readAtHead,
-  turnTaker,
   YOU,
 } from "./project-folder";
+import { type AnyProblem, isProblem } from "./refusal";
 import { redactSecrets } from "./secret-filter";
 import { outsideUrls } from "./web-reads";
 
-/** The project's memory files and ledger as one read found them, with the folder's HEAD they were read at: what a commit is rebased from. */
-interface MemoryRead {
-  head: string;
-  tree: MemoryTree;
+/** Why a memory write was not made: a sentence for the curator, or the folder's refusal. */
+type Refusal = string | AnyProblem;
+
+/** A memory change as the one write path commits it ({@link MemoryRun} `written`): the tree after, its commit, each note it consumes archived with what came of it, files of `memory/` beside the tree, and its answer. */
+interface MemoryWrite<T> {
+  after: MemoryTree;
+  author: FolderAuthor;
+  extra?: { content: string; path: string }[];
+  message: string;
+  notes?: { note: Note; outcome: string }[];
+  value: T;
 }
 
 /** A correction is short; a longer message is a paste or a brief, and its start says which. */
@@ -741,28 +743,6 @@ export const createMemoryRun = ({
 }: MemoryRunDeps) => {
   /** Each project's run under way. */
   const runs = new Map<string, Run>();
-  /** The projects whose run is being briefed: their inbox is being read. */
-  const briefing = new Set<string>();
-  /** Each project's session withdrawals under way, which a brief waits for before it reads the inbox. */
-  const unnoting = new Map<string, Set<Promise<unknown>>>();
-
-  /**
-   * `read` run as the inbox's reader: from its first step a session's
-   * withdrawal is refused, and it starts once the withdrawals already under
-   * way have committed, so it reads each note either withdrawn or whole.
-   */
-  const asReader = async <T>(
-    projectId: string,
-    read: () => Promise<T>
-  ): Promise<T> => {
-    briefing.add(projectId);
-    try {
-      await Promise.allSettled(unnoting.get(projectId) ?? []);
-      return await read();
-    } finally {
-      briefing.delete(projectId);
-    }
-  };
 
   const projectOf = (projectId: string) => {
     const project = db.project(projectId);
@@ -797,91 +777,122 @@ export const createMemoryRun = ({
     return files;
   };
 
-  /**
-   * The project's memory files and ledger, read from disk with the folder's
-   * HEAD in its commit queue (project-folder.ts `readAtHead`), so they are
-   * HEAD's: the base a commit of them is rebased from.
-   */
-  const treeOf = (projectId: string) =>
-    readAtHead(projectId, async (head) => {
-      const files = await filesOf(projectId);
-      if (files instanceof ElysiaStatus) {
-        return files;
-      }
-      const ledgerText = await fileOr(projectId, LEDGER_FILE);
-      if (ledgerText instanceof ElysiaStatus) {
-        return ledgerText;
-      }
-      const ledger = parseLedger(ledgerText);
-      if (typeof ledger === "string") {
-        return problem(500, { code: "memory-ledger-unread", detail: ledger });
-      }
-      const read: MemoryRead = { tree: { files, ledger }, head };
-      return read;
-    });
+  /** The project's memory files and ledger as they stand on disk. */
+  const treeOf = async (projectId: string) => {
+    const files = await filesOf(projectId);
+    if (files instanceof ElysiaStatus) {
+      return files;
+    }
+    const ledgerText = await fileOr(projectId, LEDGER_FILE);
+    if (ledgerText instanceof ElysiaStatus) {
+      return ledgerText;
+    }
+    const ledger = parseLedger(ledgerText);
+    if (typeof ledger === "string") {
+      return problem(500, { code: "memory-ledger-unread", detail: ledger });
+    }
+    const tree: MemoryTree = { files, ledger };
+    return tree;
+  };
 
   /**
-   * One commit of `after` over `from`'s tree: every memory file it changed, the
-   * ledger when it changed, and each note it consumed archived with what
-   * came of it. Nothing when nothing changed. Committed on HEAD: when HEAD
-   * moved since `from` was read, rebased onto it (project-folder.ts
-   * `rebased`), and refused {@link REBASE_CONFLICT} when another commit
-   * changed the same lines, so no writer writes over a newer commit; the
-   * writer then makes its change again from the files as they stand.
+   * The one way the project's memory changes (§5.2 step 7): in the folder's
+   * commit queue (project-folder.ts `changeFolderInTurn`), the files read
+   * from disk, `decide` works out its change on them, and it is committed
+   * before any other commit lands, so no writer writes over another and
+   * nothing is tried twice. `decide` only reads and works out: what is slow
+   * (Jev, a machine's file, the tasks) is done before, on a read of its
+   * own. Its change is the tree after, each note it consumes archived with
+   * what came of it, and files of `memory/` beside the tree; a note that
+   * left the inbox meanwhile refuses it, no longer there. Its answer, or
+   * why not (a sentence for the curator, or the folder's refusal); nothing
+   * is written when nothing changed.
    */
-  const commit = async (
+  const written = async <T>(
     projectId: string,
-    from: MemoryRead,
-    after: MemoryTree,
-    change: {
-      author: FolderAuthor;
-      /** Files of `memory/` beside the tree: the run's state. */
-      extra?: { content: string; path: string }[];
-      /** Files of `memory/` taken out. */
-      gone?: string[];
-      message: string;
-      notes?: { note: Note; outcome: string }[];
+    decide: (
+      tree: MemoryTree,
+      head: string
+    ) => MemoryWrite<T> | Refusal | Promise<MemoryWrite<T> | Refusal>
+  ): Promise<{ sha?: string; value: T } | Refusal> => {
+    const done = await changeFolderInTurn(
+      projectId,
+      async (
+        head
+      ): Promise<
+        | {
+            change?: FolderChangeAsked;
+            value: { kept: T } | { refused: string };
+          }
+        | AnyProblem
+      > => {
+        const tree = await treeOf(projectId);
+        if (isProblem(tree)) {
+          return tree;
+        }
+        const decided = await decide(tree, head);
+        if (isProblem(decided)) {
+          return decided;
+        }
+        if (typeof decided === "string") {
+          return { value: { refused: decided } };
+        }
+        for (const { note } of decided.notes ?? []) {
+          if ((await fileOr(projectId, note.path)) === "") {
+            return { value: { refused: memoryRunWords.noteGone(note.id) } };
+          }
+        }
+        const change = changeOf(tree, decided);
+        return change
+          ? { change, value: { kept: decided.value } }
+          : { value: { kept: decided.value } };
+      }
+    );
+    if (isProblem(done)) {
+      return done;
     }
+    if ("refused" in done.value) {
+      return done.value.refused;
+    }
+    if (done.commits) {
+      folderChanged(projectId);
+      console.log(
+        `[memory] ${projectId}: ${done.commits.paths.length} file(s) at ${done.commits.sha.slice(0, 9)}`
+      );
+    }
+    return {
+      value: done.value.kept,
+      ...(done.commits ? { sha: done.commits.sha } : {}),
+    };
+  };
+
+  /** A decided write as the folder commits it: every memory file and the ledger it changed, each note archived, the extra files; none when nothing changed. */
+  const changeOf = <T>(
+    tree: MemoryTree,
+    { after, author, extra, message, notes = [] }: MemoryWrite<T>
   ) => {
     const writes = Object.entries(after.files).flatMap(([path, content]) =>
-      content !== undefined && content !== from.tree.files[path]
+      content !== undefined && content !== tree.files[path]
         ? [{ path, content }]
         : []
     );
     const ledger = renderLedger(after.ledger);
-    if (ledger !== renderLedger(from.tree.ledger)) {
+    if (ledger !== renderLedger(tree.ledger)) {
       writes.push({ path: LEDGER_FILE, content: ledger });
     }
-    const notes = change.notes ?? [];
     for (const { note, outcome } of notes) {
       writes.push(archivedNote(note, outcome));
     }
-    writes.push(...(change.extra ?? []));
-    const archivedPaths = new Set(
+    writes.push(...(extra ?? []));
+    const archived = new Set(
       notes.map(({ note }) => archivedNote(note, "").path)
     );
-    const deletes = [
-      ...notes
-        .map(({ note }) => note.path)
-        .filter((path) => !archivedPaths.has(path)),
-      ...(change.gone ?? []),
-    ];
-    if (writes.length + deletes.length === 0) {
-      return;
-    }
-    const done = await changeFolderFiles(
-      projectId,
-      { writes, deletes },
-      { author: change.author, message: change.message, base: from.head }
-    );
-    if (done instanceof ElysiaStatus) {
-      return done;
-    }
-    folderChanged(projectId);
-    console.log(
-      `[memory] ${projectId}: ${change.message.split("\n")[0]} at ${done.sha.slice(0, 9)}`
-    );
-    return done.sha;
+    const deletes = notes
+      .map(({ note }) => note.path)
+      .filter((path) => !archived.has(path));
+    return writes.length + deletes.length === 0
+      ? undefined
+      : { writes, deletes, author, message };
   };
 
   /** Each knowledge lesson's last carry into a brief (db `fact_uses`), by its id. */
@@ -905,94 +916,106 @@ export const createMemoryRun = ({
   /**
    * The project's memory made whole before a run reads it (§2 A): every
    * line and entry agreed, the index in its shape, inbox notes no run
-   * reached in a week let go, knowledge no brief
-   * carried for the archive's days archived, and retired entries past their
-   * days taken out of the ledger. One commit, `memory: upkeep <day>`. Its
-   * machine and task reads are reads, so a clash reads and works it all
-   * out again ({@link againOnConflict}).
+   * reached in a week let go, knowledge no brief carried for the archive's
+   * days archived, every file a lesson rests on read again, a lesson whose
+   * check's task is done enforced, and retired entries past their days
+   * taken out of the ledger. The machines and the tasks are read first;
+   * what they found is made on the memory as it stands, in one commit,
+   * `memory: upkeep <day>`.
    */
-  const upkeep = (project: ProjectRow) =>
-    againOnConflict(() => upkeepOnce(project));
-
-  /** {@link upkeep} once, on the memory as it stands. */
-  const upkeepOnce = async (project: ProjectRow) => {
-    const read = await treeOf(project.id);
-    if (read instanceof ElysiaStatus) {
-      return read;
+  const upkeep = async (project: ProjectRow) => {
+    const first = await treeOf(project.id);
+    if (first instanceof ElysiaStatus) {
+      return first;
     }
     const today = dayOf(new Date());
-    const before = read.tree;
-    const agreed = reconcile(before, today, read.head).tree;
-    let tree: MemoryTree = {
-      ...agreed,
-      files: {
-        ...agreed.files,
-        [INDEX_FILE]: indexShape(project.name, agreed.files[INDEX_FILE] ?? ""),
-      },
-    };
-    const uses = usesOf(project.id);
-    for (const [id, lesson] of Object.entries(tree.ledger.lessons)) {
-      const change = expiryOf(id, lesson, uses.get(id), today);
-      if (change) {
-        tree = changedBy(tree, change, today);
+    const found = [
+      ...(await anchorsRead(project.id, first, today)),
+      ...(await tasksEnded(project.id, first)),
+    ];
+    return await written(project.id, async (tree, head) => {
+      const agreed = reconcile(tree, today, head).tree;
+      let after: MemoryTree = {
+        ...agreed,
+        files: {
+          ...agreed.files,
+          [INDEX_FILE]: indexShape(
+            project.name,
+            agreed.files[INDEX_FILE] ?? ""
+          ),
+        },
+      };
+      const uses = usesOf(project.id);
+      for (const [id, lesson] of Object.entries(after.ledger.lessons)) {
+        const change = expiryOf(id, lesson, uses.get(id), today);
+        if (change) {
+          after = changedBy(after, change, today);
+        }
       }
-    }
-    tree = await anchorsRead(project.id, tree, today);
-    tree = await tasksEnded(project.id, tree, today);
-    tree = withoutOldRetired(tree, today);
-    const inbox = await notesIn(project.id, INBOX_DIR);
-    if (inbox instanceof ElysiaStatus) {
-      return inbox;
-    }
-    const unread = inbox.filter((note) =>
-      olderThan(dayOf(note.time), today, NOTE_DAYS)
-    );
-    return await commit(project.id, read, tree, {
-      author: HUB,
-      message: `memory: upkeep ${today}`,
-      notes: unread.map((note) => ({ note, outcome: "dropped: unread" })),
+      for (const made of found) {
+        after = made(after);
+      }
+      after = withoutOldRetired(after, today);
+      const inbox = await notesIn(project.id, INBOX_DIR);
+      if (inbox instanceof ElysiaStatus) {
+        return inbox;
+      }
+      return {
+        after,
+        author: HUB,
+        message: `memory: upkeep ${today}`,
+        notes: inbox
+          .filter((note) => olderThan(dayOf(note.time), today, NOTE_DAYS))
+          .map((note) => ({ note, outcome: "dropped: unread" })),
+        value: undefined,
+      };
     });
   };
 
   /**
-   * Every file a lesson rests on read again (§2 A.3): a lesson whose file or match is gone goes stale, its line
-   * taken out; one whose file is there keeps the day and the sha256 it was
-   * read at. A file no machine answered for is tried the next night.
+   * Every file a lesson rests on read again (§2 A.3): a lesson whose file
+   * or match is gone goes stale, its line taken out; one whose file is
+   * there keeps the day and the sha256 it was read at. A file no machine
+   * answered for is tried the next night. What each read found, to make on
+   * the memory as it stands.
    */
   const anchorsRead = async (
     projectId: string,
     tree: MemoryTree,
     today: string
-  ): Promise<MemoryTree> => {
+  ): Promise<((now: MemoryTree) => MemoryTree)[]> => {
     const places = checkoutsOf(projectId);
-    let now = tree;
+    const found: ((now: MemoryTree) => MemoryTree)[] = [];
     for (const [id, lesson] of Object.entries(tree.ledger.lessons)) {
-      if (lesson.state === "live") {
-        now = await anchorsOf(now, id, lesson, places, today);
+      const made =
+        lesson.state === "live"
+          ? await anchorsOf(id, lesson, places, today)
+          : undefined;
+      if (made) {
+        found.push(made);
       }
     }
-    return now;
+    return found;
   };
 
-  /** {@link anchorsRead} for one lesson: its files read, and `now` with what came of them. */
+  /** {@link anchorsRead} for one lesson: its files read, and what came of them; nothing for a lesson resting on no file. */
   const anchorsOf = async (
-    now: MemoryTree,
     id: string,
     lesson: Lesson,
     places: readonly AnchorPlace[],
     today: string
-  ): Promise<MemoryTree> => {
+  ): Promise<((now: MemoryTree) => MemoryTree) | undefined> => {
     const files = lesson.sources.flatMap((source, at) =>
       source.kind === "file" ? [{ at, source }] : []
     );
     if (files.length === 0) {
-      return now;
+      return;
     }
     const reads = await Promise.all(
       files.map(({ source }) => anchorRead(machine, places, source))
     );
     if (reads.some((read) => read.kind === "gone")) {
-      return changedBy(now, { kind: "stale", id }, today);
+      return (now) => changedBy(now, { kind: "stale", id }, today);
     }
     const sources = [...lesson.sources];
     files.forEach(({ at, source }, n) => {
@@ -1001,7 +1024,7 @@ export const createMemoryRun = ({
         sources[at] = { ...source, sha256: read.sha256, read: today };
       }
     });
-    return withSources(now, id, sources);
+    return (now) => withSources(now, id, sources);
   };
 
   /**
@@ -1011,26 +1034,24 @@ export const createMemoryRun = ({
    */
   const tasksEnded = async (
     projectId: string,
-    tree: MemoryTree,
-    today: string
-  ): Promise<MemoryTree> => {
+    tree: MemoryTree
+  ): Promise<((now: MemoryTree) => MemoryTree)[]> => {
     const filed = await tasks.withField(projectId, CHECK_FIELD);
     if ("refused" in filed) {
       console.warn(
         `[memory] ${projectId}: its checks' tasks were not read: ${filed.refused}`
       );
-      return tree;
+      return [];
     }
-    let now = tree;
-    for (const task of filed) {
-      if (
-        task.kind === "done" &&
-        now.ledger.lessons[task.value]?.state === "live"
-      ) {
-        now = changedBy(now, { kind: "enforce", id: task.value }, today);
-      }
-    }
-    return now;
+    const today = dayOf(new Date());
+    return filed.flatMap((task) =>
+      task.kind === "done" && tree.ledger.lessons[task.value]?.state === "live"
+        ? [
+            (now: MemoryTree) =>
+              changedBy(now, { kind: "enforce", id: task.value }, today),
+          ]
+        : []
+    );
   };
 
   /** The ledger without retired, stale and expired entries past their days. */
@@ -1238,8 +1259,7 @@ export const createMemoryRun = ({
    * `none` when nothing is left for the run,
    * its mark kept; else the brief. Jev failing throws its words.
    */
-  const brief = (projectId: string) =>
-    asReader(projectId, () => briefOf(projectId));
+  const brief = (projectId: string) => briefOf(projectId);
 
   const briefOf = async (projectId: string) => {
     const project = projectOf(projectId);
@@ -1247,7 +1267,7 @@ export const createMemoryRun = ({
       return project;
     }
     const night = await nightRead(project);
-    if (night instanceof ElysiaStatus) {
+    if (isProblem(night)) {
       return night;
     }
     const { state, said, waiting, jev } = night;
@@ -1287,7 +1307,10 @@ export const createMemoryRun = ({
    */
   const nightRead = async (project: ProjectRow) => {
     const kept = await upkeep(project);
-    if (kept instanceof ElysiaStatus) {
+    if (typeof kept === "string") {
+      return problem(409, { code: "memory-upkeep-refused", detail: kept });
+    }
+    if (isProblem(kept)) {
       return kept;
     }
     const state = await stateOf(project.id);
@@ -1326,11 +1349,11 @@ export const createMemoryRun = ({
     if (changes instanceof ElysiaStatus) {
       return changes;
     }
-    run.removed = removedOf(changes, read.tree);
+    run.removed = removedOf(changes, read);
     runs.set(project.id, run);
     return {
       kind: "run" as const,
-      text: briefText(project, read.tree, run),
+      text: briefText(project, read, run),
     };
   };
 
@@ -2030,12 +2053,12 @@ export const createMemoryRun = ({
     }
     const answers = await answersOrRefusal(
       projectId,
-      questionsOf(run, ops, read.tree)
+      questionsOf(run, ops, read)
     );
     if (answers instanceof ElysiaStatus) {
       return answers;
     }
-    const lines = await appliedAll(projectId, run, read, ops, answers);
+    const lines = await appliedAll(projectId, run, ops, answers);
     // Every message and note of the brief is named by some operation, a drop included (§2 C).
     const unnamed = [
       ...[...run.messages.keys()].filter((handle) => !run.consumed.has(handle)),
@@ -2049,90 +2072,96 @@ export const createMemoryRun = ({
     };
   };
 
-  /** Each operation checked and, when it passes, committed alone, in order: one line each. */
+  /**
+   * Each operation checked on the memory as it stands, then, when it
+   * passes, made and committed alone, in order: one line each. Its checks
+   * (Jev, a machine's file) run on a read of their own; the change is made
+   * in the folder's commit queue on the memory as it then is
+   * ({@link written}), and one whose lesson left meanwhile is refused as no
+   * longer there.
+   */
   const appliedAll = async (
     projectId: string,
     run: Run,
-    first: { head: string; tree: MemoryTree },
     ops: MemoryOp[],
     answers: Map<string, number> | undefined
   ): Promise<string[]> => {
-    let read = first;
     const lines: string[] = [];
     for (const [index, op] of ops.entries()) {
-      // The first try on the memory as the last commit left it; on a clash,
-      // planned again on the memory as it stands now.
-      let tries = 0;
-      const committedOp = await againOnConflict(async () => {
-        tries += 1;
-        const at = tries === 1 ? read : await treeOf(projectId);
-        if (at instanceof ElysiaStatus) {
-          return at;
-        }
-        const plan = await planned(projectId, run, at.tree, op, index, answers);
-        if (typeof plan === "string") {
-          return plan;
-        }
-        const made = await committed(projectId, run, at, plan, op);
-        return typeof made === "string" || made instanceof ElysiaStatus
-          ? made
-          : { ...made, plan, at };
-      });
-      if (
-        typeof committedOp === "string" ||
-        committedOp instanceof ElysiaStatus
-      ) {
-        const why =
-          typeof committedOp === "string"
-            ? committedOp
-            : committedOp.response.detail;
+      const read = await treeOf(projectId);
+      const plan = isProblem(read)
+        ? read
+        : await planned(projectId, run, read, op, index, answers);
+      const made =
+        typeof plan === "string" || isProblem(plan)
+          ? plan
+          : await committed(projectId, run, plan, op);
+      if (typeof made === "string" || isProblem(made)) {
+        const why = typeof made === "string" ? made : made.response.detail;
         lines.push(`${index + 1}. ${memoryRunWords.refused(why)}`);
         continue;
       }
       // Its check, once the operation stands.
-      const said = await followedUp(
-        projectId,
-        run,
-        committedOp.plan,
-        committedOp.said
-      );
+      const said = await followedUp(projectId, run, made.plan, made.said);
       lines.push(`${index + 1}. ${memoryRunWords.applied(said)}`);
-      read = {
-        tree: committedOp.tree,
-        head: committedOp.sha ?? committedOp.at.head,
-      };
     }
     return lines;
   };
 
-  /** A planned operation applied and committed: one commit by the Memory curator, its consumed notes archived in it; the run's counts moved. */
+  /**
+   * A planned operation made on the memory as it stands and committed
+   * ({@link written}): one commit by the Memory curator, its consumed notes
+   * archived in it; refused when the lesson it changes is no longer live, or
+   * a new lesson's id was taken meanwhile, or its file would pass its
+   * character budget. The run's counts moved once it stands.
+   */
   const committed = async (
     projectId: string,
     run: Run,
-    read: { head: string; tree: MemoryTree },
     plan: Exclude<Planned, string>,
     op: MemoryOp
   ) => {
-    const applied = plan.change
-      ? applyOp(read.tree, checked(plan.change), dayOf(new Date()))
-      : { tree: read.tree };
-    if ("over" in applied) {
-      return memoryRunWords.overBudget(applied.over);
-    }
-    const sha = await commit(projectId, read, applied.tree, {
-      author: CURATOR,
-      message: `memory: ${plan.subject ?? plan.said}`,
-      notes: plan.notes.map(({ note, outcome }) => ({
-        note: run.notes.get(note.id) ?? note,
-        outcome,
-      })),
+    const done = await written(projectId, (tree) => {
+      const gone = plan.change ? goneFrom(tree, plan.change) : undefined;
+      if (gone) {
+        return gone;
+      }
+      const applied = plan.change
+        ? applyOp(tree, checked(plan.change), dayOf(new Date()))
+        : { tree };
+      if ("over" in applied) {
+        return memoryRunWords.overBudget(applied.over);
+      }
+      return {
+        after: applied.tree,
+        author: CURATOR,
+        message: `memory: ${plan.subject ?? plan.said}`,
+        notes: plan.notes.map(({ note, outcome }) => ({
+          note: run.notes.get(note.id) ?? note,
+          outcome,
+        })),
+        value: undefined,
+      };
     });
-    if (sha instanceof ElysiaStatus) {
-      return sha;
+    if (typeof done === "string" || isProblem(done)) {
+      return done;
     }
     consume(run, plan.consumed);
     count(run, plan.change, op);
-    return { tree: applied.tree, said: plan.said, sha };
+    return { plan, said: plan.said };
+  };
+
+  /** Why `change`, decided on an earlier read, cannot be made on `tree`: its lesson is no longer live, or a new lesson's id is taken. Nothing when it can. */
+  const goneFrom = (tree: MemoryTree, change: Change): string | undefined => {
+    const { lessons } = tree.ledger;
+    if (change.kind === "add") {
+      return change.id in lessons
+        ? memoryRunWords.noLongerThere(change.id)
+        : undefined;
+    }
+    return lessons[change.id]?.state === "live"
+      ? undefined
+      : memoryRunWords.noLongerThere(change.id);
   };
 
   /** A committed operation's check filed ({@link fileCheck}): what the operation said, and what filing it said. */
@@ -2316,27 +2345,23 @@ export const createMemoryRun = ({
    * is read again the next night), messages it was given and named in no
    * operation carried once, the run's counts kept.
    */
-  const closed = (projectId: string, run: Run, outcome: RunOutcome) =>
-    stateTurn(projectId, () =>
-      // Read, worked out and committed again on a clash.
-      againOnConflict(async () => {
-        const state = await stateOf(projectId);
-        if (state instanceof ElysiaStatus) {
-          return state;
-        }
-        const read = await treeOf(projectId);
-        if (read instanceof ElysiaStatus) {
-          return read;
-        }
-        const sha = await commit(
-          projectId,
-          read,
-          read.tree,
-          markOfRun(state, run, outcome)
-        );
-        return sha instanceof ElysiaStatus ? sha : undefined;
-      })
-    );
+  const closed = async (projectId: string, run: Run, outcome: RunOutcome) => {
+    const done = await written(projectId, async (tree) => {
+      const state = await stateOf(projectId);
+      if (state instanceof ElysiaStatus) {
+        return state;
+      }
+      return {
+        ...markOfRun(state, run, outcome),
+        after: tree,
+        value: undefined,
+      };
+    });
+    if (typeof done === "string") {
+      return problem(409, { code: "memory-mark-refused", detail: done });
+    }
+    return isProblem(done) ? done : undefined;
+  };
 
   /**
    * A run's end, as its routine settles it (routines.ts): its mark kept and
@@ -2393,9 +2418,6 @@ export const createMemoryRun = ({
     );
   };
 
-  /** Each project's read-modify-write of `memory/state.json`, one at a time. */
-  const stateTurn = turnTaker();
-
   // --- a note withdrawn -----------------------------------------------------------
 
   const idUnfit = (id: string) =>
@@ -2441,54 +2463,58 @@ export const createMemoryRun = ({
    * commit every lesson resting on it alone is retired as withdrawn; a
    * lesson with other sources keeps them.
    */
-  const withdraw = (projectId: string, id: string) =>
-    againOnConflict(() => withdrawOnce(projectId, id));
-
-  /** {@link withdraw} once, on the memory as it stands. */
-  const withdrawOnce = async (projectId: string, id: string) => {
-    const note = await withdrawable(projectId, id);
-    if (note instanceof ElysiaStatus) {
-      return note;
-    }
-    const read = await treeOf(projectId);
-    if (read instanceof ElysiaStatus) {
-      return read;
-    }
-    const today = dayOf(new Date());
-    let { tree } = read;
-    let retires = 0;
-    let keeps = 0;
-    for (const [lessonId, lesson] of Object.entries(read.tree.ledger.lessons)) {
-      const others = lesson.sources.filter(
-        (source) => !(source.kind === "note" && source.id === id)
-      );
-      if (
-        lesson.state === "retired" ||
-        others.length === lesson.sources.length
-      ) {
-        continue;
+  const withdraw = async (
+    projectId: string,
+    id: string
+  ): Promise<
+    | { keeps: number; retires: number; sha: string; withdrawn: string }
+    | AnyProblem
+  > => {
+    const done = await written(projectId, async (tree) => {
+      const note = await withdrawable(projectId, id);
+      if (note instanceof ElysiaStatus) {
+        return note;
       }
-      if (others.length === 0) {
-        retires += 1;
-        tree = changedBy(
-          tree,
-          { kind: "retire", id: lessonId, why: "withdrawn" },
-          today
+      const today = dayOf(new Date());
+      let after = tree;
+      let retires = 0;
+      let keeps = 0;
+      for (const [lessonId, lesson] of Object.entries(tree.ledger.lessons)) {
+        const others = lesson.sources.filter(
+          (source) => !(source.kind === "note" && source.id === id)
         );
-      } else {
-        keeps += 1;
-        tree = withSources(tree, lessonId, others);
+        if (
+          lesson.state === "retired" ||
+          others.length === lesson.sources.length
+        ) {
+          continue;
+        }
+        if (others.length === 0) {
+          retires += 1;
+          after = changedBy(
+            after,
+            { kind: "retire", id: lessonId, why: "withdrawn" },
+            today
+          );
+        } else {
+          keeps += 1;
+          after = withSources(after, lessonId, others);
+        }
       }
-    }
-    const sha = await commit(projectId, read, tree, {
-      author: YOU,
-      message: `memory: ${id} withdrawn`,
-      notes: [{ note, outcome: "withdrawn" }],
+      return {
+        after,
+        author: YOU,
+        message: `memory: ${id} withdrawn`,
+        notes: [{ note, outcome: "withdrawn" }],
+        value: { retires, keeps },
+      };
     });
-    if (sha instanceof ElysiaStatus) {
-      return sha;
+    if (typeof done === "string") {
+      return problem(409, { code: "memory-note-read", detail: done });
     }
-    return { withdrawn: id, sha: sha ?? "", retires, keeps };
+    return isProblem(done)
+      ? done
+      : { withdrawn: id, sha: done.sha ?? "", ...done.value };
   };
 
   const notYours = (id: string) =>
@@ -2530,31 +2556,12 @@ export const createMemoryRun = ({
       : notYours(id);
   };
 
-  /** `change` run as one of the project's withdrawals under way, which a brief waits for ({@link asReader}). */
-  const asUnnoting = async <T>(
-    projectId: string,
-    change: () => Promise<T>
-  ): Promise<T> => {
-    const pending = unnoting.get(projectId) ?? new Set<Promise<unknown>>();
-    unnoting.set(projectId, pending);
-    const done = change();
-    pending.add(done);
-    try {
-      return await done;
-    } finally {
-      pending.delete(done);
-      if (pending.size === 0) {
-        unnoting.delete(projectId);
-      }
-    }
-  };
-
   /**
    * A session takes back a note it left (`memory_withdraw`): the note leaves
    * the inbox for the archive `withdrawn`, one commit by its author, so no
    * run reads it. Refused for a note another session left, and for one a
-   * run has read: archived already, or in the brief of a run being made or
-   * under way. No lesson rests on a note no run read, so none changes.
+   * run has archived already; a run whose brief holds it finds it no longer
+   * there. No lesson rests on a note no run read, so none changes.
    */
   const unnote = async (
     actor: { id: string; projectId?: string | null },
@@ -2571,34 +2578,23 @@ export const createMemoryRun = ({
     if (unfit) {
       return unfit;
     }
-    const note = await ownInboxNote(projectId, actor.id, id);
-    if (note instanceof ElysiaStatus) {
-      return note;
+    const done = await written(projectId, async (tree) => {
+      const note = await ownInboxNote(projectId, actor.id, id);
+      if (note instanceof ElysiaStatus) {
+        return note;
+      }
+      return {
+        after: tree,
+        author: { name: note.author },
+        message: `memory: ${id} withdrawn by the session that left it`,
+        notes: [{ note, outcome: "withdrawn" }],
+        value: note.text,
+      };
+    });
+    if (typeof done === "string") {
+      return problem(409, { code: "memory-note-read", detail: done });
     }
-    // Checked with no await before asUnnoting registers the withdrawal: a
-    // brief that starts later waits for it, one already started refuses it.
-    if (briefing.has(projectId) || runs.get(projectId)?.notes.has(id)) {
-      return problem(409, {
-        code: "memory-note-read",
-        detail: `The memory run is reading ${id} now, so it can no longer be withdrawn.`,
-      });
-    }
-    const sha = await asUnnoting(projectId, () =>
-      againOnConflict(async () => {
-        const read = await treeOf(projectId);
-        if (read instanceof ElysiaStatus) {
-          return read;
-        }
-        return await commit(projectId, read, read.tree, {
-          author: { name: note.author },
-          message: `memory: ${id} withdrawn by the session that left it`,
-          notes: [{ note, outcome: "withdrawn" }],
-        });
-      })
-    );
-    return sha instanceof ElysiaStatus
-      ? sha
-      : { withdrawn: id, text: note.text };
+    return isProblem(done) ? done : { withdrawn: id, text: done.value };
   };
 
   /**
@@ -2794,36 +2790,6 @@ export const createMemoryRun = ({
     }
   };
 
-  /** {@link ruleAsked} once, on the memory as it stands: the change checked, applied and committed by the session. */
-  const ruleOnce = async (actor: InstanceRow, ask: RuleAsk) => {
-    const projectId = actor.projectId ?? "";
-    const read = await treeOf(projectId);
-    if (read instanceof ElysiaStatus) {
-      return read;
-    }
-    const asked = await ruleChange(read.tree, ask);
-    if (asked instanceof ElysiaStatus) {
-      return asked;
-    }
-    const applied = applyOp(
-      read.tree,
-      checked(asked.change),
-      dayOf(new Date())
-    );
-    if ("over" in applied) {
-      return problem(409, {
-        code: "memory-rule-over-budget",
-        detail: memoryRunWords.overBudget(applied.over),
-      });
-    }
-    const author = boardTitle(actor);
-    const sha = await commit(projectId, read, applied.tree, {
-      author: { name: author },
-      message: `memory: ${memoryRunWords.ruleCommit(asked.subject)}\n\n${memoryRunWords.ruleBy(author, actor.id)}`,
-    });
-    return sha instanceof ElysiaStatus ? sha : asked.answer;
-  };
-
   /**
    * A session changes one of the project's rules at once (`memory_rule`):
    * removes it, rewords it or adds one, through the change the run's own
@@ -2832,9 +2798,9 @@ export const createMemoryRun = ({
    * its own, whatever the person said in its chain. Refused for a session in
    * no project, and for a change that would take AGENTS.md past its
    * character budget. A removed rule is a line taken out: the next run's
-   * brief lists it, and an add saying it again needs a newer source. Made
-   * again on the memory as it then stands when another writer committed
-   * under it.
+   * brief lists it, and an add saying it again needs a newer source. Its
+   * checks are quick, so the change is checked, made and committed in one
+   * turn of the folder's commit queue ({@link written}).
    */
   const ruleAsked = async (actor: InstanceRow, ask: RuleAsk) => {
     const { projectId } = actor;
@@ -2848,7 +2814,30 @@ export const createMemoryRun = ({
     if (project instanceof ElysiaStatus) {
       return project;
     }
-    return await againOnConflict(() => ruleOnce(actor, ask));
+    const author = boardTitle(actor);
+    const done = await written(projectId, async (tree) => {
+      const asked = await ruleChange(tree, ask);
+      if (asked instanceof ElysiaStatus) {
+        return asked;
+      }
+      const applied = applyOp(tree, checked(asked.change), dayOf(new Date()));
+      if ("over" in applied) {
+        return problem(409, {
+          code: "memory-rule-over-budget",
+          detail: memoryRunWords.overBudget(applied.over),
+        });
+      }
+      return {
+        after: applied.tree,
+        author: { name: author },
+        message: `memory: ${memoryRunWords.ruleCommit(asked.subject)}\n\n${memoryRunWords.ruleBy(author, actor.id)}`,
+        value: asked.answer,
+      };
+    });
+    if (typeof done === "string") {
+      return problem(409, { code: "memory-rule-refused", detail: done });
+    }
+    return isProblem(done) ? done : done.value;
   };
 
   /** A send's words, by its uuid, when the hub still keeps it as the person's. */

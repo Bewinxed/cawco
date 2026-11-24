@@ -7187,7 +7187,6 @@ public enum OpenEnums {
         case folderPlaceTaken
         case folderProjectIdUnfit
         case folderReadFolder
-        case folderRebaseConflict
         case folderWriteNone
         case folderWriteOntoFolder
         case folderWriteTooLarge
@@ -7255,7 +7254,6 @@ public enum OpenEnums {
             case "folder-place-taken": self = .folderPlaceTaken
             case "folder-project-id-unfit": self = .folderProjectIdUnfit
             case "folder-read-folder": self = .folderReadFolder
-            case "folder-rebase-conflict": self = .folderRebaseConflict
             case "folder-write-none": self = .folderWriteNone
             case "folder-write-onto-folder": self = .folderWriteOntoFolder
             case "folder-write-too-large": self = .folderWriteTooLarge
@@ -7324,7 +7322,6 @@ public enum OpenEnums {
             case .folderPlaceTaken: "folder-place-taken"
             case .folderProjectIdUnfit: "folder-project-id-unfit"
             case .folderReadFolder: "folder-read-folder"
-            case .folderRebaseConflict: "folder-rebase-conflict"
             case .folderWriteNone: "folder-write-none"
             case .folderWriteOntoFolder: "folder-write-onto-folder"
             case .folderWriteTooLarge: "folder-write-too-large"
@@ -7354,7 +7351,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.ambiguous, .artifactAskAgainGone, .artifactAskAgainNoSession, .artifactCommentHeard, .artifactCommentUndelivered, .artifactCommentsOnTheirWay, .artifactOthers, .artifactSessionUnknown, .artifactUnknown, .artifactUnnamed, .atLimitNeedsAccount, .dispatchProjectUnknown, .dispatchRunsOnUnknown, .dispatchSettingsUnfit, .folderAreaIdUnfit, .folderChangeNone, .folderChangeTwice, .folderDeleteFolder, .folderFileBinary, .folderFileMissing, .folderFileTooLarge, .folderFileUnnamed, .folderForgotten, .folderGitFailed, .folderGitMissing, .folderGitUnanswered, .folderLinkInGit, .folderLinkOutside, .folderListedFile, .folderMessageMissing, .folderMessageTooLong, .folderPathAbsolute, .folderPathBackslash, .folderPathControl, .folderPathInGit, .folderPathOutside, .folderPathThroughLink, .folderPathTooLong, .folderPlaceTaken, .folderProjectIdUnfit, .folderReadFolder, .folderRebaseConflict, .folderWriteNone, .folderWriteOntoFolder, .folderWriteTooLarge, .folderWriteUnderFile, .folderWriteUnfit, .giveUrlAloneConnection, .largeFilesLiveHttps, .largeFilesLiveUrl, .lfsRefused, .nameNeeded, .nameOneLine, .nameTooLong, .noAccount, .noArea, .noProject, .notAllowed, .pageUnheard, .taskIdUnfit, .taskLinkUnread, .taskProjectUnknown, .workLandsNoneThem]
+        public static let allCases: [Self] = [.ambiguous, .artifactAskAgainGone, .artifactAskAgainNoSession, .artifactCommentHeard, .artifactCommentUndelivered, .artifactCommentsOnTheirWay, .artifactOthers, .artifactSessionUnknown, .artifactUnknown, .artifactUnnamed, .atLimitNeedsAccount, .dispatchProjectUnknown, .dispatchRunsOnUnknown, .dispatchSettingsUnfit, .folderAreaIdUnfit, .folderChangeNone, .folderChangeTwice, .folderDeleteFolder, .folderFileBinary, .folderFileMissing, .folderFileTooLarge, .folderFileUnnamed, .folderForgotten, .folderGitFailed, .folderGitMissing, .folderGitUnanswered, .folderLinkInGit, .folderLinkOutside, .folderListedFile, .folderMessageMissing, .folderMessageTooLong, .folderPathAbsolute, .folderPathBackslash, .folderPathControl, .folderPathInGit, .folderPathOutside, .folderPathThroughLink, .folderPathTooLong, .folderPlaceTaken, .folderProjectIdUnfit, .folderReadFolder, .folderWriteNone, .folderWriteOntoFolder, .folderWriteTooLarge, .folderWriteUnderFile, .folderWriteUnfit, .giveUrlAloneConnection, .largeFilesLiveHttps, .largeFilesLiveUrl, .lfsRefused, .nameNeeded, .nameOneLine, .nameTooLong, .noAccount, .noArea, .noProject, .notAllowed, .pageUnheard, .taskIdUnfit, .taskLinkUnread, .taskProjectUnknown, .workLandsNoneThem]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

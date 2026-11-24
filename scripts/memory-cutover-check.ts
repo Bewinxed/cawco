@@ -17,18 +17,14 @@
  * unless it is the argument of one of the reads in {@link READS}, which
  * write no message. A new place joins {@link SPEAKS} with its reason.
  *
- * C3, one writer. `writeFolderFile`, `writeFolderFiles` and
- * `changeFolderFiles` are called with a path under AGENTS.md, `lessons/` or
- * `knowledge/` only from the places in {@link C3_WRITERS}: memory-run.ts
- * (the nightly run, and `ruleAsked`, a rule a session changes at once
- * through `memory_rule`), and memory.ts's
- * `makeNote` (the person's own note, its write `notedInIndex`). A call's path arguments are read for
- * those names. Each of them reads the files from disk with the folder's
- * HEAD, in its commit queue (project-folder.ts `readAtHead`), and passes
- * that HEAD as the write's `base`, so project-folder.ts rebases the change
- * onto HEAD and refuses it, writing nothing, when another commit changed
- * the same lines; the writer then reads again and works out its change
- * again (`againOnConflict`): git keeps one writer from writing over another.
+ * C3, one way to write. A memory file (AGENTS.md, `lessons/`,
+ * `knowledge/`) is read, changed and committed in one turn of the folder's
+ * commit queue (project-folder.ts `changeFolderInTurn`), so no writer
+ * writes over another: `changeFolderInTurn` is called only from the places
+ * in {@link C3_WRITERS} (memory-run.ts: the nightly run, its upkeep and
+ * `memory_rule`; memory.ts), and `writeFolderFile`, `writeFolderFiles` and
+ * `changeFolderFiles` are never called with a path under those names (a
+ * call's path arguments are read for them).
  *
  * C6, one checked change. `new CheckedOp(` (memory-lessons.ts), the only
  * change `applyOp` takes, is made only in memory-run.ts, where every rule of
@@ -70,16 +66,18 @@ const C3_WRITES = new Set([
   "writeFolderFiles",
   "changeFolderFiles",
 ]);
+/** The one write path of the memory files (C3). */
+const C3_TURN = "changeFolderInTurn";
 const C3_WRITERS: readonly { file: string; fn: string; who: string }[] = [
   {
     file: "packages/hub/src/memory-run.ts",
     fn: "",
-    who: "the nightly run's checked operations, and ruleAsked: memory_rule, one rule removed, reworded or added at once by a session",
+    who: "every memory change: the nightly run's checked operations, its upkeep and mark, memory_rule, a note withdrawn",
   },
   {
     file: "packages/hub/src/memory.ts",
-    fn: "notedInIndex",
-    who: "makeNote's write: the person's own Make a note, into the index's Notes, read at HEAD and committed on it",
+    fn: "",
+    who: "the person's own Make a note, into the index's Notes",
   },
 ];
 /** A path argument that names a memory file: by its words, or by the names the code gives them. */
@@ -309,14 +307,16 @@ const c3c6 = (): { c3: Found[]; c6: Found[] } => {
       }
       continue;
     }
-    if (
-      C3_WRITES.has(name) &&
-      namesMemory(call, source) &&
-      !mayWrite(file, fn)
-    ) {
+    if (C3_WRITES.has(name) && namesMemory(call, source)) {
       c3.push({
         at: `${at}${fn ? ` (${fn})` : ""}`,
-        why: "writes a memory file outside memory-run.ts and makeNote: memory-run.ts is its one writer (the nightly run, and memory_rule's ruleAsked), and its checks stand between any source and the file",
+        why: "writes a memory file around the one write path: a memory change is read, worked out and committed in one turn of the folder's queue (project-folder.ts changeFolderInTurn), from memory-run.ts or memory.ts",
+      });
+    }
+    if (name === C3_TURN && !mayWrite(file, fn)) {
+      c3.push({
+        at: `${at}${fn ? ` (${fn})` : ""}`,
+        why: "commits through changeFolderInTurn outside memory-run.ts and memory.ts: a new writer of the folder in one turn joins C3_WRITERS in scripts/memory-cutover-check.ts with what it writes",
       });
     }
   }
@@ -337,5 +337,5 @@ if (found.length > 0) {
   process.exit(1);
 }
 console.log(
-  `memory-cutover-check: C1, C2, C3 and C6 hold: the approval path is named nowhere (${C1_KEPT.length} line kept for shipped builds); the person's origin is given in ${SPEAKS.length} places, read in ${READS.length}; the memory files are written by memory-run.ts (the nightly run, and memory_rule's ruleAsked) and makeNote alone; a checked change is made in memory-run.ts alone`
+  `memory-cutover-check: C1, C2, C3 and C6 hold: the approval path is named nowhere (${C1_KEPT.length} line kept for shipped builds); the person's origin is given in ${SPEAKS.length} places, read in ${READS.length}; the memory files are written through changeFolderInTurn, from memory-run.ts and memory.ts alone; a checked change is made in memory-run.ts alone`
 );

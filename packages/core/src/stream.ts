@@ -538,12 +538,20 @@ import type { TailnetServing } from "./tailnet-https";
  *    held them is rebased onto HEAD and refused when another commit changed
  *    the same lines (hub project-folder.ts `rebased`). A page built for 106
  *    reads each route's 409 codes closed, so it reloads first.
+ * 108: no route answers `folder-rebase-conflict` any more (a memory write
+ *    is decided and committed in one turn of the folder's commit queue,
+ *    hub project-folder.ts `changeFolderInTurn`); a folder file's read
+ *    carries its `sha256`, and the folder editor's write
+ *    (`PUT /api/projects/:id/folder/file`, and an area's) names the file
+ *    as it read it (`read`: that sha256, or null for none) and answers 409
+ *    `folder-file-changed` when it changed since, never writing over it. A
+ *    page built for 107 sends no `read`, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 107;
+export const WIRE_PROTOCOL = 108;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

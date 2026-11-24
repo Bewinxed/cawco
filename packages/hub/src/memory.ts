@@ -18,12 +18,9 @@
  *   (`memory_rule`, memory-run.ts `ruleAsked`), which removes, rewords or
  *   adds one at once; the person's Make a note (`makeNote`), into the
  *   index's `## Notes`, which the run never changes; a session's note
- *   (`note`), into the inbox. Each reads the files from disk with the
- *   folder's HEAD, in its commit queue (project-folder.ts `readAtHead`),
- *   and commits on HEAD, rebased onto it when it moved since
- *   (project-folder.ts `rebased`); a rebase that meets a commit changing
- *   the same lines writes nothing, and the writer reads again and makes its
- *   change again (`againOnConflict`, three tries).
+ *   (`note`), into the inbox. Each reads the files, works out its change
+ *   and commits it in one turn of the folder's commit queue
+ *   (project-folder.ts `changeFolderInTurn`), so none writes over another.
  * - **Notes** (`memory_note`, and `cawco tool memory_note`): an agent's
  *   words into the inbox, with who wrote them, in what role and kind of
  *   session, for which task and when.
@@ -80,17 +77,16 @@ import {
   type Noted,
 } from "./presenters/project";
 import {
-  againOnConflict,
+  changeFolderInTurn,
   folderFileNames,
   folderFilePaths,
   folderPath,
   listFolder,
-  readAtHead,
   readFolderFile,
   writeFolderFile,
   YOU,
 } from "./project-folder";
-import type { AnyProblem } from "./refusal";
+import { type AnyProblem, isProblem } from "./refusal";
 import { roleOf } from "./roles";
 import type { EnsureCurator } from "./routine-schedule";
 import { redactSecrets } from "./secret-filter";
@@ -913,26 +909,35 @@ export const createMemory = ({
         detail: `The note is ${words.length} characters long; a note stops at ${NOTE_LIMIT}.`,
       });
     }
-    const notedInIndex = async () => {
-      // AGENTS.md read from disk with HEAD, in the folder's queue: the base its commit is rebased from.
-      const index = await readAtHead(projectId, async (base) => {
-        const before = await fileOr(projectId, INDEX_FILE);
-        return before instanceof ElysiaStatus ? before : { base, before };
+    // AGENTS.md read, changed and committed in one turn of the folder's commit queue.
+    const noted = await changeFolderInTurn(projectId, async () => {
+      const before = await fileOr(projectId, INDEX_FILE);
+      return before instanceof ElysiaStatus
+        ? before
+        : {
+            change: {
+              author: YOU,
+              message: "AGENTS.md: a note from you",
+              writes: [
+                {
+                  path: INDEX_FILE,
+                  content: withNote(project.name, before, words),
+                },
+              ],
+              deletes: [],
+            },
+            value: undefined,
+          };
+    });
+    if (isProblem(noted)) {
+      return noted;
+    }
+    const written = noted.commits;
+    if (!written) {
+      return problem(500, {
+        code: "memory-note-unwritten",
+        detail: "AGENTS.md was not written.",
       });
-      if (index instanceof ElysiaStatus) {
-        return index;
-      }
-      return await writeFolderFile(
-        projectId,
-        INDEX_FILE,
-        withNote(project.name, index.before, words),
-        { author: YOU, message: "AGENTS.md: a note from you", base: index.base }
-      );
-    };
-    // A commit since the read changed the same lines: the note goes into AGENTS.md as it stands.
-    const written = await againOnConflict(notedInIndex);
-    if (written instanceof ElysiaStatus) {
-      return written;
     }
     folderChanged(projectId);
     console.log(

@@ -1,4 +1,4 @@
-import type { ElysiaStatus, ValidationErrorResponse } from "elysia";
+import { ElysiaStatus, type ValidationErrorResponse } from "elysia";
 
 /**
  * Any problem Elysia's `problem(status, { code, detail })` returns, read
@@ -12,6 +12,10 @@ export interface AnyProblem extends Pick<
   ElysiaStatus<ProblemStatus, { code: string; detail: string }>,
   "~status" | "response" | "status"
 > {}
+
+/** Whether `answer` is a problem, not a value: narrows a `T | AnyProblem`, which `instanceof ElysiaStatus` reads structurally and cannot. */
+export const isProblem = (answer: unknown): answer is AnyProblem =>
+  answer instanceof ElysiaStatus;
 
 /** What a call answers instead of its value: the problems in its result (a function's, or its promise's), read off the function. */
 export type ProblemsOf<R> = Extract<Awaited<R>, { readonly "~status": true }>;

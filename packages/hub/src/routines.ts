@@ -127,6 +127,7 @@ import { type CommandOptions, WouldWait } from "./machine-pause";
 import type { MemoryRun } from "./memory-run";
 import type { Push } from "./push";
 import { recordsProjectOf } from "./records-project";
+import { isProblem } from "./refusal";
 import type { CarryRoutines } from "./routine-carry";
 import {
   answerOf,
@@ -940,7 +941,7 @@ export const createRoutines = ({
   const fireCurator = async (routine: RoutineRow, run: RoutineRunRow) => {
     const { projectId } = routine;
     const brief = await memoryRun.brief(projectId);
-    if (brief instanceof ElysiaStatus) {
+    if (isProblem(brief)) {
       return brief;
     }
     if (brief.kind === "none") {

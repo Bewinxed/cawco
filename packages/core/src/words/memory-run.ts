@@ -79,6 +79,12 @@ export const memoryRunWords = {
   /** A lesson that says what a line taken out since the last run said, its sources older than the removal. */
   removedSince: (id: string, day: string) =>
     `${id}, which says this, was taken out on ${day}: only a message or note newer than that brings it back.`,
+  /** A note an operation consumes that left the inbox since the run read it (withdrawn, or archived). */
+  noteGone: (id: string) =>
+    `${id} is no longer in the inbox (withdrawn or archived since you read it), so nothing was written: leave it out.`,
+  /** A change whose lesson left the memory, or whose new id was taken, since it was checked. */
+  noLongerThere: (id: string) =>
+    `${id} is no longer there: the memory changed since this was checked. Read it again and decide on it as it stands.`,
   /** A change that would take a file past its character budget. */
   overBudget: ({
     budget,
