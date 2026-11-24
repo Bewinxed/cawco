@@ -83,6 +83,7 @@ import {
 } from "./codex-rpc";
 import { credentialControls } from "./credential-controls";
 import { sessionMemory } from "./session-memory";
+import { listedSkillFiles } from "./skill-files";
 
 /** The machine's keepers as Codex's app-servers reach them. */
 export const codexKeepers = new KeeperPool();
@@ -937,7 +938,7 @@ class CodexSession implements HarnessSession {
       {
         type: "text",
         text: withPastedText(
-          withSkillMarkers(text, skills, false),
+          withSkillMarkers(text, listedSkillFiles(skills), false),
           extras.attachments ?? []
         ),
         text_elements: [],

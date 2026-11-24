@@ -1698,7 +1698,13 @@ class PiSession implements HarnessSession {
     const skills = new Map(
       this.#session.resourceLoader
         .getSkills()
-        .skills.map((skill) => [skill.name, skill.filePath] as const)
+        .skills.map(
+          (skill) =>
+            [
+              skill.name,
+              { path: skill.filePath, hidden: skill.disableModelInvocation },
+            ] as const
+        )
     );
     this.#session
       .prompt(

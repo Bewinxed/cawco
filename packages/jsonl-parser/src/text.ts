@@ -115,14 +115,15 @@ const CAWCO_TAG = /^\[cawco:([a-z-]+)[ \]]/;
 /**
  * The marker a harness writes after each skill a message names (core
  * skill-words.ts `withSkillMarkers`): `/name [load skill name now with your
- * skill tool; if the tool refuses it, read <path>]`, after the name's
- * closing punctuation. Dropped from a user turn, its `/name` kept, so the
+ * skill tool; if the tool refuses it, read <path>]`, or for a hidden skill
+ * `/name [load skill name now by reading <path>]`, after the name's closing
+ * punctuation. Dropped from a user turn, its `/name` kept, so the
  * turn is indexed as it was written. Kept
  * here, not imported, as {@link CAWCO_TAG} is: keep it in step with core's
  * `MARKED`.
  */
 const SKILL_MARKER =
-  /(\/(\S+?)[,.;:!?)\]}"'’”»›]*) \[load skill \2 now with your skill tool(?:; if the tool refuses it, read [^\]\n]+)?\]/gu;
+  /(\/(\S+?)[,.;:!?)\]}"'’”»›]*) \[load skill \2 now (?:with your skill tool(?:; if the tool refuses it, read [^\]\n]+)?|by reading [^\]\n]+)\]/gu;
 
 /** Who wrote a message CawCo tagged, by its kind: a report, another agent's words, or CawCo's own notice. */
 const TAGGED: Readonly<Record<string, DocAuthor>> = {

@@ -157,6 +157,7 @@ import {
   toolNameOf,
   toolResultOf,
 } from "./opencode-transcript";
+import { listedSkillFiles } from "./skill-files";
 
 /** Recovery cancels the actual HTTP operation, never races an abandoned promise. */
 const RECOVERY_TIMEOUT_MS = 10_000;
@@ -3384,7 +3385,7 @@ export class OpencodeSession implements HarnessSession {
       return text;
     }
     const { files } = await this.#commandsOf();
-    return withSkillMarkers(text, files, false);
+    return withSkillMarkers(text, listedSkillFiles(files), false);
   }
 
   /** A `/name` send: OpenCode's command, a skill, `/compact`, `/mcp`, or else a plain prompt. */

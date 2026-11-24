@@ -5,16 +5,22 @@
  * tells the agent to load that skill now ({@link withSkillMarkers}); what
  * reads the harness's transcript back drops the markers.
  *
- * A name is a whole word: at the start of the text or after whitespace, and
- * ending at whitespace, the text's end, or closing punctuation before either
- * (`/clean-copy,` `(see /clean-copy).`), so a path
- * (`src/clean-copy`, `/clean-copy/x`) or a longer name (`/clean-copy-old`)
+ * A name is a whole word: at the start of the text or after whitespace, or
+ * after opening punctuation that follows either (`"/clean-copy"`
+ * `(/clean-copy)`), and ending at whitespace, the text's end, or closing
+ * punctuation before either (`/clean-copy,` `(see /clean-copy).`), so a
+ * path (`src/clean-copy`, `/clean-copy/x`, `https://x.dev/clean-copy`), a
+ * link's target (`[docs](/clean-copy)`) or a longer name (`/clean-copy-old`)
  * never reads as a shorter skill. Only a skill the session has is one; any
  * other `/word` is plain text.
  */
+import { frontMatterBlock } from "./fleet";
 import { codeBlanked } from "./outside-code";
 
 const SPECIAL = /[.*+?^${}()|[\]\\/]/gu;
+
+/** What may open a name after the whitespace or start before it: a bracket's or a quote's start. */
+const OPENING = "[(\\[{\"'‘“«‹]*";
 
 /** What may close a name before the whitespace or end after it: a sentence's or a bracket's or a quote's end. */
 const CLOSING = "[,.;:!?)\\]}\"'’”»›]*";
@@ -43,7 +49,10 @@ export function skillWords(
   }
   const after =
     ends === "end" ? `(?=${CLOSING}(?:\\s|$))` : `(?=${CLOSING}\\s)`;
-  return new RegExp(`(?<=^|\\s)/(${list.join("|")})${after}`, "gu");
+  return new RegExp(
+    `(?<=(?:^|\\s)${OPENING})/(${list.join("|")})${after}`,
+    "gu"
+  );
 }
 
 /** One time a message names a skill: its name, and where `/name` stands in the text. */
@@ -90,17 +99,37 @@ const opensWith = (text: string, named: SkillNamed): boolean =>
   (named.end === text.length || WHITESPACE.test(text.charAt(named.end)));
 
 /**
+ * A skill's SKILL.md on the machine the session runs on: its `path`, and
+ * whether it is `hidden` (`disable-model-invocation: true`, read by
+ * {@link hiddenSkill}), a skill the harness's skill tool refuses to load.
+ */
+export interface SkillPlace {
+  hidden: boolean;
+  path: string;
+}
+
+/**
+ * A session's skills as its harness knows them: their names, and each one's
+ * SKILL.md, looked up only for a skill a message names.
+ */
+export interface KnownSkills {
+  get: (name: string) => SkillPlace | undefined;
+  keys: () => Iterable<string>;
+}
+
+/**
  * `text` as a harness hands it to the model: each skill of `skills` it
  * names followed by its marker ({@link skillMarker}), past any closing
- * punctuation, which tells the agent to load that skill now with its own
- * skill tool, or read its SKILL.md at the path `skills` gives for it, the
- * way for a skill the tool refuses. `runsOpening`: the harness runs the
- * text's opening `/name` itself ({@link opensWith}), which keeps no marker;
- * an opening `/name,` stays no command of its, the marker after its comma.
+ * punctuation, which tells the agent to load that skill now: by reading its
+ * SKILL.md for a hidden one, else with its own skill tool, its SKILL.md
+ * named as the way should the tool refuse. `runsOpening`: the harness runs
+ * the text's opening `/name` itself ({@link opensWith}), which keeps no
+ * marker; an opening `/name,` stays no command of its, the marker after its
+ * comma.
  */
 export function withSkillMarkers(
   text: string,
-  skills: ReadonlyMap<string, string | undefined>,
+  skills: KnownSkills,
   runsOpening: boolean
 ): string {
   if (!text.includes("/")) {
@@ -121,19 +150,29 @@ export function withSkillMarkers(
   return marked;
 }
 
-/** The marker's wording, between the brackets after the name: the instruction, then the file for a skill the skill tool refuses. */
+/**
+ * The marker's wording, between the brackets after the name: the
+ * instruction, then how. A hidden skill is read from its file, as its
+ * harness's skill tool refuses it and says to load it by no other means; any
+ * other loads with the skill tool, its file named for a tool that refuses.
+ */
 const MARKER_LEAD = "load skill";
 const MARKER_TOOL = "now with your skill tool";
 const MARKER_READ = "; if the tool refuses it, read";
+const MARKER_HIDDEN = "now by reading";
 
 /**
- * The marker for skill `name`, whose SKILL.md is at `path` on the machine
- * the session runs on (none when the harness names no file for it): the
- * words written after its `/name`, as
- * `/clean-copy [load skill clean-copy now with your skill tool; if the tool refuses it, read /…/clean-copy/SKILL.md]`.
+ * The marker for skill `name`, whose SKILL.md is `file` (none when the
+ * harness names no file for it): the words written after its `/name`, as
+ * `/clean-copy [load skill clean-copy now with your skill tool; if the tool refuses it, read /…/clean-copy/SKILL.md]`,
+ * or for a hidden one `/unslop-ui [load skill unslop-ui now by reading /…/unslop-ui/SKILL.md]`.
  */
-const skillMarker = (name: string, path: string | undefined): string =>
-  ` [${MARKER_LEAD} ${name} ${MARKER_TOOL}${path ? `${MARKER_READ} ${path}` : ""}]`;
+const skillMarker = (name: string, file: SkillPlace | undefined): string => {
+  if (file?.hidden) {
+    return ` [${MARKER_LEAD} ${name} ${MARKER_HIDDEN} ${file.path}]`;
+  }
+  return ` [${MARKER_LEAD} ${name} ${MARKER_TOOL}${file ? `${MARKER_READ} ${file.path}` : ""}]`;
+};
 
 /**
  * A marker after the `/name` it belongs to and the name's closing
@@ -142,7 +181,7 @@ const skillMarker = (name: string, path: string | undefined): string =>
  * `SKILL_MARKER`): keep the two in step.
  */
 const MARKED = new RegExp(
-  `(/(\\S+?)${CLOSING}) \\[${MARKER_LEAD} \\2 ${MARKER_TOOL}(?:${MARKER_READ} [^\\]\\n]+)?\\]`,
+  `(/(\\S+?)${CLOSING}) \\[${MARKER_LEAD} \\2 (?:${MARKER_TOOL}(?:${MARKER_READ} [^\\]\\n]+)?|${MARKER_HIDDEN} [^\\]\\n]+)\\]`,
   "gu"
 );
 
@@ -153,3 +192,15 @@ const MARKED = new RegExp(
  */
 export const withoutSkillMarkers = (text: string): string =>
   text.includes(` [${MARKER_LEAD} `) ? text.replace(MARKED, "$1") : text;
+
+/** A front matter value that says yes: `true`, quoted or not. */
+const YES = /^["']?true["']?$/u;
+
+/**
+ * Whether a SKILL.md's `content` hides its skill: its front matter sets
+ * `disable-model-invocation: true`, which Claude Code's skill tool refuses.
+ */
+export const hiddenSkill = (content: string): boolean =>
+  frontMatterBlock(content)?.lines.some(
+    (line) => line.key === "disable-model-invocation" && YES.test(line.value)
+  ) ?? false;

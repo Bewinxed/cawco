@@ -11,7 +11,7 @@
  */
 
 import type { UUID } from "node:crypto";
-import { type Dirent, existsSync } from "node:fs";
+import type { Dirent } from "node:fs";
 import {
   access,
   appendFile,
@@ -188,7 +188,12 @@ import {
   MESSAGES_HELD,
   MESSAGES_READ,
 } from "@cawco/core/session-messages";
-import { withoutSkillMarkers, withSkillMarkers } from "@cawco/core/skill-words";
+import {
+  type KnownSkills,
+  type SkillPlace,
+  withoutSkillMarkers,
+  withSkillMarkers,
+} from "@cawco/core/skill-words";
 import { isDamagedRecord } from "@cawco/core/state-file";
 import { TaskOutputSchema } from "@cawco/core/stored-shapes";
 import { resumeCursor } from "@cawco/core/stream";
@@ -247,6 +252,7 @@ import {
   fleetPluginsAt,
   fleetStatus,
   inspectConfig,
+  pluginDirsAt,
   readHookScript,
   readMemoryFile,
   readSkillFiles,
@@ -351,6 +357,7 @@ import { credentialControls } from "./credential-controls";
 import { keeperCustody } from "./keeper-custody";
 import { lastPromptAt } from "./last-prompt";
 import { neutralSubagentChange } from "./neutral-subagents";
+import { claudeSkillFile } from "./skill-files";
 import { tailLines } from "./transcript-tail";
 
 /**
@@ -2308,6 +2315,13 @@ const withInstructions = (
   };
 };
 
+/** Each plugin folder a session's CLI loads (fleet.ts `pluginDirsAt`): none for a clean one, which loads no plugin ({@link launchFleet}). */
+const sessionPluginDirs = (
+  session: SessionSpec,
+  cwd: string
+): Promise<string[]> =>
+  session.clean ? Promise.resolve([]) : pluginDirsAt(cwd);
+
 /** Plugin dirs as the SDK loads them: "Load plugins by providing their local file system paths in your options configuration" (code.claude.com/docs/en/agent-sdk/plugins). */
 const localPlugins = (paths: readonly string[]) =>
   paths.length > 0
@@ -2759,6 +2773,10 @@ class ClaudeSession implements HarnessSession {
    * looked for beside them ({@link #skillFile}).
    */
   #skillFiles: ReadonlyMap<string, string> = new Map();
+  /** Each plugin folder its CLI loads, where a plugin skill's SKILL.md is looked for ({@link #skillFile}). */
+  readonly #pluginDirs: readonly string[];
+  /** Each skill's file as a send named it ({@link #skillFile}), until the CLI's skills change. */
+  readonly #skillFileOf = new Map<string, SkillPlace | undefined>();
   /**
    * The wake-ups the session has scheduled for itself (a cron, a loop's next
    * tick), as the CLI listed them when its last turn ended: its `Stop` hook
@@ -2843,6 +2861,8 @@ class ClaudeSession implements HarnessSession {
      * project's Claude Code settings, `memory` the fleet's main memory and
      * `plugins` the fleet's plugins it loads ({@link launchFleet}). An attach starts nothing and
      * passes none of them: its CLI keeps the settings it was launched with.
+     * Both pass `pluginDirs`, each plugin folder its CLI loads (fleet.ts
+     * `pluginDirsAt`), where its plugin skills are.
      */
     launch: {
       conversationKept?: () => Promise<boolean>;
@@ -2851,6 +2871,7 @@ class ClaudeSession implements HarnessSession {
       fleetSettings?: Record<string, unknown>;
       memory?: string;
       plugins?: string[];
+      pluginDirs: readonly string[];
     },
     /**
      * The sessiond connection this session's CLI child lives under: `spawn()`
@@ -2874,6 +2895,7 @@ class ClaudeSession implements HarnessSession {
   ) {
     this.instanceId = instanceId;
     this.#ctx = ctx;
+    this.#pluginDirs = launch.pluginDirs;
     const { conversationKept, fleetMcp } = launch;
     const {
       options,
@@ -4175,9 +4197,10 @@ class ClaudeSession implements HarnessSession {
     if (names.size === 0 || !texts.some((text) => text.includes("/"))) {
       return wire;
     }
-    const files = new Map(
-      [...names].map((name) => [name, this.#skillFile(name)] as const)
-    );
+    const files: KnownSkills = {
+      keys: () => names.values(),
+      get: (name) => this.#skillFile(name),
+    };
     const mark = (text: string): string => withSkillMarkers(text, files, true);
     return {
       ...wire,
@@ -4196,25 +4219,34 @@ class ClaudeSession implements HarnessSession {
   }
 
   /**
-   * Skill `name`'s SKILL.md on this machine: the one the CLI named, else one
-   * in a skills dir beside those it named, the fleet's, the project's or
-   * the user layer's (a skill the model may not load, which its listing
-   * leaves out). Undefined when none holds it.
+   * Skill `name`'s SKILL.md on this machine, and whether it is hidden
+   * (skill-files.ts `claudeSkillFile`): the one the CLI named, else a plugin
+   * skill's in its plugin's folder, else one in a skills dir beside those
+   * it named, the fleet's, the project's or the user layer's (a skill the
+   * model may not load, which its listing leaves out). Undefined when none
+   * holds it.
    */
-  #skillFile(name: string): string | undefined {
-    const named = this.#skillFiles.get(name);
-    if (named || name.includes(":")) {
-      return named;
+  #skillFile(name: string): SkillPlace | undefined {
+    if (!this.#skillFileOf.has(name)) {
+      this.#skillFileOf.set(
+        name,
+        claudeSkillFile(name, {
+          listed: this.#skillFiles,
+          plugins: this.#pluginDirs,
+          dirs: [
+            ...new Set([
+              ...[...this.#skillFiles.values()].map((file) =>
+                dirname(dirname(file))
+              ),
+              claudeSkillsDir(),
+              join(this.#ctx.cwd, PROJECT_SKILLS),
+              join(this.#configDir ?? claudeHome(), "skills"),
+            ]),
+          ],
+        })
+      );
     }
-    const dirs = new Set([
-      ...[...this.#skillFiles.values()].map((file) => dirname(dirname(file))),
-      claudeSkillsDir(),
-      join(this.#ctx.cwd, PROJECT_SKILLS),
-      join(this.#configDir ?? claudeHome(), "skills"),
-    ]);
-    return [...dirs]
-      .map((dir) => join(dir, name, "SKILL.md"))
-      .find((file) => existsSync(file));
+    return this.#skillFileOf.get(name);
   }
 
   /** The SKILL.md of each skill in the model's listing, as the CLI names them ({@link #skillFiles}). */
@@ -4225,6 +4257,7 @@ class ClaudeSession implements HarnessSession {
         skill.path ? [[skill.name, skill.path] as const] : []
       )
     );
+    this.#skillFileOf.clear();
   }
 
   /** Moves the CLI into `asked`, one CawCo offers; the session takes it once the CLI is in it. */
@@ -5558,6 +5591,7 @@ class ClaudeHarness implements Harness<"claude"> {
         fleetSettings: launch.settings,
         ...(launch.memory ? { memory: launch.memory } : {}),
         plugins: launch.plugins,
+        pluginDirs: await sessionPluginDirs(session, ctx.cwd),
       },
       { client, procId: procIdFor("claude", ctx.instanceId), executable }
     );
@@ -5766,13 +5800,14 @@ class ClaudeHarness implements Harness<"claude"> {
     if (!executable) {
       throw new Error(CLAUDE_NOT_INSTALLED);
     }
+    const attached = sessionSpecOf(spec, spec.accountDir?.accountId);
     const session = new ClaudeSession(
       instanceId,
       ctx,
       ctx.cwd,
-      sessionSpecOf(spec, spec.accountDir?.accountId),
+      attached,
       [],
-      {},
+      { pluginDirs: await sessionPluginDirs(attached, ctx.cwd) },
       {
         client,
         procId,

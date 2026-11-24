@@ -1073,8 +1073,9 @@ const marketplaceStates = (
   }
 };
 
-/** An install of a plugin the person made himself, as Claude Code's own registry records it: its scope, and the project a project or local one is for. */
+/** An install of a plugin the person made himself, as Claude Code's own registry records it: its scope, the project a project or local one is for, and the copy Claude Code unpacked. */
 interface OwnInstall {
+  installPath?: string;
   projectPath?: string;
   scope: string;
 }
@@ -1110,6 +1111,7 @@ const ownPluginInstalls = async (
       ...entries.map((entry) => ({
         scope: entry.scope ?? "user",
         ...(entry.projectPath ? { projectPath: entry.projectPath } : {}),
+        ...(entry.installPath ? { installPath: entry.installPath } : {}),
       })),
     ]);
   }
@@ -1135,14 +1137,40 @@ const loadsIn = (installs: readonly OwnInstall[], cwd?: string): boolean =>
  * "Load plugins by providing their local file system paths in your options
  * configuration" (code.claude.com/docs/en/agent-sdk/plugins).
  */
-export const fleetPluginsAt = async (cwd: string): Promise<string[]> => {
+export const fleetPluginsAt = async (cwd: string): Promise<string[]> =>
+  (await pluginsAt(cwd)).fleet;
+
+/**
+ * Each plugin folder a Claude Code session in `cwd` loads: the fleet's
+ * ({@link fleetPluginsAt}), and each one the person installed himself that
+ * loads there, at the copy Claude Code unpacked (`installPath`), where its
+ * skills are read (harnesses/skill-files.ts).
+ */
+export const pluginDirsAt = async (cwd: string): Promise<string[]> => {
+  const { fleet, own } = await pluginsAt(cwd);
+  return [...fleet, ...own];
+};
+
+/** The fleet's plugin folders a session in `cwd` loads, and the person's own ({@link pluginDirsAt}). */
+const pluginsAt = async (
+  cwd: string
+): Promise<{ fleet: string[]; own: string[] }> => {
   const managed = await readSidecar();
   const own = await ownPluginInstalls(managed.userLayer?.plugins ?? []);
-  return Object.keys(managed.vendoredPlugins ?? {}).flatMap((id) =>
-    loadsIn(own.get(pluginNameOf(id)) ?? [], cwd)
-      ? []
-      : [join(vendorDir(marketplaceOf(id)), "plugins", pluginNameOf(id))]
-  );
+  return {
+    fleet: Object.keys(managed.vendoredPlugins ?? {}).flatMap((id) =>
+      loadsIn(own.get(pluginNameOf(id)) ?? [], cwd)
+        ? []
+        : [join(vendorDir(marketplaceOf(id)), "plugins", pluginNameOf(id))]
+    ),
+    own: [...own.values()]
+      .flat()
+      .flatMap((install) =>
+        install.installPath && loadsIn([install], cwd)
+          ? [install.installPath]
+          : []
+      ),
+  };
 };
 
 /**
