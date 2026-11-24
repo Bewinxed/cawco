@@ -2,6 +2,8 @@
  * A component artifact's sheet: the props of its state (the inspector), what its design graph hands the head, and the graph's line to its stage page.
  */
 
+import { madeViewOf, type Unplaced } from "@cawco/core/comments/made-view";
+import type { Pin } from "@cawco/core/comments/model";
 import { canvasOf } from "@cawco/core/stage";
 import { shownName, stageDialsOf, stageLeftOut } from "@cawco/core/stage-graph";
 import { graphWords } from "@cawco/core/words/graph";
@@ -26,6 +28,31 @@ export interface PaneSheetDeps {
   readonly previewFrame: PreviewFrame;
   readonly previewReach: PreviewReach;
 }
+/**
+ * The design graph shown as pin `pin` was made, for a pin this view can't
+ * draw because it shows another state, or the pin's state at another width
+ * or scheme (`away`, pane-doc `awayOf`): its state, width and scheme set
+ * through the graph's own controls (StageLink `showMade`). Null off a
+ * design graph (no `link`: a page preview has no such controls), and for a
+ * pin that stands nowhere for another reason.
+ */
+export const showMadeAction = (
+  link: StageLink | null,
+  pin: Pin,
+  away: Unplaced | undefined
+): (() => void) | null => {
+  const anchor = "selector" in pin.anchor ? pin.anchor : null;
+  const sheet = anchor?.sheet;
+  if (
+    !(link && anchor && sheet) ||
+    (away?.why !== "story" && away?.why !== "elsewhere")
+  ) {
+    return null;
+  }
+  const made = madeViewOf(anchor) ?? { scheme: "page", width: null };
+  return () => link.showMade(sheet.file, sheet.story, made);
+};
+
 export class PaneSheet {
   readonly #deps: PaneSheetDeps;
 
@@ -119,6 +146,10 @@ export class PaneSheet {
     const one = sheet?.stories.find((each) => each.name === story);
     return sheet && one ? shownName(one, sheet.stories) : null;
   };
+
+  /** The design graph shown as pin `pin` was made ({@link showMadeAction}), through this pane's line to its stage. */
+  readonly showMadeOf = (pin: Pin, away: Unplaced | undefined) =>
+    showMadeAction(this.link, pin, away);
 
   /** The component artifact's states files and the agent's spec, as its address carries them (core `canvasPath`). */
   readonly sheetCanvas = $derived.by(() =>

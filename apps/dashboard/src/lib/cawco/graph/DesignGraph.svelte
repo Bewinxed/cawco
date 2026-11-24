@@ -50,6 +50,7 @@
    * surface holds both whole the room is the kit's bottom drawer, its stops
    * head, half and whole, the stage whole above it at the head stop.
    */
+  import type { MadeView } from "@cawco/core/comments/made-view";
   import { detach } from "@cawco/core/detach";
   import {
     type CanvasSpec,
@@ -746,17 +747,25 @@
       if (!(wish && on && found)) {
         return;
       }
-      if (on.file !== frontFile) {
-        // Another component in front: it compares with nothing of the last one.
-        setComparing(false);
+      if (found.pick.variant === null) {
+        // A state as the States menu steps to it.
+        stepIn(on.file, found.pick.state);
+      } else {
+        if (on.file !== frontFile) {
+          // Another component in front: it compares with nothing of the last one.
+          setComparing(false);
+        }
+        chosenFile = on.file;
+        keptOf = { ...keptOf, [on.file]: found.pick };
       }
-      chosenFile = on.file;
-      keptOf = { ...keptOf, [on.file]: found.pick };
       if (found.width !== undefined) {
         widthPick = found.width ?? "adapt";
       } else if (refOf(on, found.pick, width).story !== wish.story) {
         // At a width it has a story of its own for, the state as written is that story: back to Adapt.
         widthPick = "adapt";
+      }
+      if (wish.view) {
+        showView(wish.view);
       }
       link.wanted = null;
     });
@@ -1352,6 +1361,21 @@
       reachAgain += 1;
     } else {
       keep(toId, null);
+    }
+  };
+  /**
+   * The stage set to the view a comment was made at, as the View's own
+   * Width and Light/Dark set it: its width (Adapt where the stage is that
+   * wide now; else that width, one of the widths' or the one it adapted
+   * to then), and its scheme where it named one.
+   */
+  const showView = (view: MadeView) => {
+    if (view.width !== null && !content) {
+      pickWidth(view.width === stageAcross ? "adapt" : String(view.width));
+    }
+    const { scheme: made } = view;
+    if (made !== "page") {
+      scheme = made;
     }
   };
   /** The view's width choice, as the widths' switch names it. */

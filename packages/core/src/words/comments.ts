@@ -44,10 +44,8 @@ export const commentWords = {
   },
   /** The card's line for a pin whose element is on the page but not drawn: the next step. */
   hiddenHere: "Show its element on the page to see the pin.",
-  /** The card's line for a pin made at another width or appearance, under the title that names them: the next step. */
+  /** The card's line in a page preview for a pin made at another width or appearance, under the title that names them: the next step. On a design graph the card's Show the pin does it, and no line stands. */
   madeElsewhere: "Show the page that way to see the pin.",
-  /** The card's line for a pin made on another story of the sheet, under the title that names it: the next step. */
-  madeOnStory: "Show that state to see the pin.",
   // The thread beside its pin.
   replyHint: { full: "Reply", short: "Reply" },
   reopenHint: { full: "Reply to reopen", short: "Reply to reopen" },
@@ -56,6 +54,8 @@ export const commentWords = {
   reopen: "Reopen",
   copyLink: commonWords.copyLink,
   placeElsewhere: "Pin it somewhere else",
+  /** The card's button on a design graph that sets its state, width and appearance to where a pin was made, so the pin stands on its element again. */
+  showPin: "Show the pin",
   placeHere: "Tap the page where it goes.",
   deleteComment: "Delete comment",
   deleteTitle: (n: number) => `Delete comment ${n}?`,

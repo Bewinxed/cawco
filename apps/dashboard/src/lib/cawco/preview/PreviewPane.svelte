@@ -930,6 +930,7 @@
       ondraft={() => commentKit.drafts?.changed(pin.id)}
       onfind={() => pinThread.focusPin(pin.id, true)}
       onplace={paneMode.placeElsewhere}
+      onshowmade={paneSheet.showMadeOf(pin, paneDoc.awayOf(pin.id))}
       onhold={(text) => pinThread.reply(text, true)}
       onreply={(text) => pinThread.reply(text)}
       onresolve={(resolved) => pinThread.resolvePin(resolved)}

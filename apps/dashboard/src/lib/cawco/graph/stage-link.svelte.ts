@@ -8,6 +8,7 @@
  * press), held as state the graph reads. One per component artifact's pane (PreviewPane), which hears the
  * page and hands each word here.
  */
+import type { MadeView } from "@cawco/core/comments/made-view";
 import type { FrameSays } from "@cawco/core/page-wire";
 import type { SheetOnPage } from "@cawco/core/stage";
 import {
@@ -65,8 +66,18 @@ export class StageLink {
   presses = $state(0);
   /** The state the graph keeps, as the page names it: the Dials card's props follow its story. Null until the graph has a state. */
   kept = $state<StateRef | null>(null);
-  /** A story the person added on the Dials card (Save as new state), by its states file: the graph keeps its state, then lets it go. */
-  wanted = $state<{ file: string; story: string } | null>(null);
+  /**
+   * A story asked for from outside the graph, by its states file: one the
+   * person added on the Dials card (Save as new state), or the state a
+   * comment was made in, with the view it was made at (its width and
+   * scheme: a pin's card, `showMade`). The graph keeps its state and sets
+   * its view through its own controls, then lets it go.
+   */
+  wanted = $state<{
+    file: string;
+    story: string;
+    view?: MadeView;
+  } | null>(null);
   /** The Compare the graph last asked for; null while it doesn't compare. */
   comparing = $state<StageCompare | null>(null);
   /** What differs, as the page last read it for that Compare (`cawco:stage-differences`); null until it has. */
@@ -220,6 +231,11 @@ export class StageLink {
   /** The person added story `story` of `file` on the Dials card: the graph keeps its state. */
   want(file: string, story: string): void {
     this.wanted = { file, story };
+  }
+
+  /** The graph shown as a comment was made: story `story` of `file`, at the width and scheme of `view` (core comments made-view.ts `madeViewOf`). */
+  showMade(file: string, story: string, view: MadeView): void {
+    this.wanted = { file, story, view };
   }
 
   /** A new page said it is ready: what the last one said of its drawing is gone with it. */

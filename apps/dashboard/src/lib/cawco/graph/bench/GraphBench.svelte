@@ -1,4 +1,7 @@
 <script lang="ts">
+  import type { Unplaced } from "@cawco/core/comments/made-view";
+  import type { Pin } from "@cawco/core/comments/model";
+  import { named } from "@cawco/core/named";
   import type {
     CanvasSpec,
     PropMeta,
@@ -15,7 +18,9 @@
     STAGE_SEEK,
     type StageCompare,
     type StagePlay,
+    shownName,
   } from "@cawco/core/stage-graph";
+  import { commentWords } from "@cawco/core/words/comments";
   import { graphWords } from "@cawco/core/words/graph";
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -36,7 +41,10 @@
   import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
   import type { SheetChange } from "../../artifact-api";
+  import PinCard from "../../preview/PinCard.svelte";
+  import { showMadeAction } from "../../preview/pane-sheet.svelte";
   import { SheetInspector } from "../../preview/sheet-inspector.svelte";
+  import { ComposerDraft } from "../../transcript/composer-draft.svelte";
   import DesignGraph from "../DesignGraph.svelte";
   import {
     cssValueOf,
@@ -55,6 +63,7 @@
     also = [],
     props = false,
     stale = false,
+    pins = false,
   }: {
     /** The agent's dials, as its canvas spec writes them. */
     dials?: GraphDial[];
@@ -68,6 +77,8 @@
     props?: boolean;
     /** The hub's link down: the stage holds its last drawing (Not live). */
     stale?: boolean;
+    /** Two pins made in views the graph doesn't open on, each in the real PinCard with its Show the pin (pane-sheet `showMadeAction`). */
+    pins?: boolean;
   } = $props();
 
   /** Under 640px the panel is a phone's sheet: Close leads its head. */
@@ -456,6 +467,77 @@
   const width = $derived(fixed ?? Math.min(measure, space));
   /** A width he picked wider than the page, scaled to fit it; 1:1 otherwise. */
   const fit = $derived(fixed === null ? 1 : Math.min(1, space / fixed));
+  /** A pin made on this states file at story `story`, `width` and `scheme`, on the form's name field. */
+  const madePin = (
+    id: string,
+    number: number,
+    madeOn: string,
+    madeWidth: number,
+    madeScheme: "light" | "dark"
+  ): Pin => ({
+    id,
+    number,
+    at: "2026-11-24T09:00:00.000Z",
+    by: "person",
+    kind: "comment",
+    title: "Field “Name”",
+    anchor: {
+      selector: "#routine-name",
+      source: null,
+      text: "",
+      sheet: {
+        file: FILE,
+        story: madeOn,
+        state: {
+          interaction: "rest",
+          scheme: madeScheme,
+          width: madeWidth,
+        },
+      },
+    },
+    elements: [],
+    thread: [
+      {
+        id: `${id}-1`,
+        at: "2026-11-24T09:00:00.000Z",
+        by: "person",
+        text: "This field should say what the name is for.",
+      },
+    ],
+  });
+  /** Pin 1 made on another state at a desk's width in the dark; pin 2 on the state the graph opens on, at a tablet's width in the dark. */
+  const madePins: Pin[] = [
+    madePin("bench-pin-1", 1, "FailedSave", 1440, "dark"),
+    madePin("bench-pin-2", 2, "JustOpened", 768, "dark"),
+  ];
+  /**
+   * Why the stand-in stage doesn't draw pin `pin` (overlay made-view.ts
+   * `madeAway`, as this page's stand-in answers it): another story stands,
+   * or its story at another width or scheme; none where it stands as made.
+   */
+  const awayOf = (pin: Pin): Unplaced | undefined => {
+    const sheet = "selector" in pin.anchor ? pin.anchor.sheet : undefined;
+    const state = sheet?.state;
+    if (!(sheet && state)) {
+      return;
+    }
+    if (sheet.story !== standing) {
+      const one = file.stories.find((each) => each.name === sheet.story);
+      return {
+        why: "story",
+        file: sheet.file,
+        story: sheet.story,
+        state: one ? shownName(one, file.stories) : sheet.story,
+      };
+    }
+    if (state.width !== width || state.scheme !== (dark ? "dark" : "light")) {
+      return {
+        why: "elsewhere",
+        made: { scheme: state.scheme, width: state.width },
+      };
+    }
+  };
+  const benchDraft = new ComposerDraft();
   /** The drawing's height as laid out, px, for the box its scale stands in. */
   let tall = $state(0);
   // The drawing laid out: its measure the stage's split gives it, as the page says it.
@@ -513,6 +595,15 @@
 </script>
 
 {#snippet frame()}
+  {#if pins}
+    <!-- Each pin made here stands on its element: the form's name field, marked as the overlay's pill would mark it. -->
+    {#each madePins.filter((one) => !awayOf(one)) as one (one.id)}
+      <span
+        class="fixed z-10 top-space-2 left-space-2 rounded-full bg-action-solid px-space-2 text-on-action type-meta"
+        data-bench-pill={one.number}>{one.number}</span
+      >
+    {/each}
+  {/if}
   <!-- The stand-in stage page: its gutter, the drawing at its width, its top
        clearing the stage's floating head (`--stage-room`), as the stage page
        pads its own by the room the graph tells it. -->
@@ -593,6 +684,40 @@
     placement={phone.current ? "sheet" : "beside"}
     title="Routine form, every state"
   >
+    {#if pins}
+      <!-- The pins' cards, as the pane opens them: the real PinCard, its Show the pin the pane's own action. -->
+      <div
+        class="absolute z-20 right-space-2 bottom-space-2 flex w-80 flex-col gap-space-2"
+        data-slot="bench-pins"
+      >
+        {#each madePins as one (one.id)}
+          {@const away = awayOf(one)}
+          <div data-bench-card={one.number}>
+            <PinCard
+              agentName={named("The session")}
+              {away}
+              draft={benchDraft}
+              link={`#comment-${one.number}`}
+              name={away ? commentWords.offPage(away) : (one.title ?? "")}
+              onclose={() => undefined}
+              ondelete={() => Promise.resolve()}
+              onfind={() => undefined}
+              onhold={() => undefined}
+              onplace={() => undefined}
+              onreply={() => undefined}
+              onresolve={() => undefined}
+              onretry={() => undefined}
+              onshowmade={showMadeAction(link, one, away)}
+              parent={null}
+              pin={away ? { ...one, movedAt: one.at } : one}
+              placing={false}
+              problem={null}
+              whyNotSent={null}
+            />
+          </div>
+        {/each}
+      </div>
+    {/if}
     <div class="absolute inset-0" data-slot="graph-host">
       <DesignGraph
         ask="Judge the routine form's dials"

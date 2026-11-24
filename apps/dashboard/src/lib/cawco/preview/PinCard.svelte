@@ -62,6 +62,8 @@
   import {
     IconChevronLeft,
     IconClose,
+    IconEye,
+    IconEyeLinear,
     IconLink,
     IconLinkLinear,
     IconMoreLinear,
@@ -115,6 +117,7 @@
     onresolve,
     ondelete,
     onplace,
+    onshowmade = null,
     onclose,
     back,
     sheet = false,
@@ -171,6 +174,8 @@
     ondelete: () => Promise<void>;
     /** Pin it somewhere else (true), or Cancel (false). */
     onplace: (placing: boolean) => void;
+    /** Sets the design graph to the state, width and scheme it was made in, where the pin stands again; null where the page has no such controls (a page preview), or it is off the page for another reason. */
+    onshowmade?: (() => void) | null;
     onclose: () => void;
     /**
      * Opened from the Comments list in the same sheet (a phone's, a narrow
@@ -371,21 +376,26 @@
     asked = id;
   });
 
-  /** Why it stands off the page, said once: its element gone, hidden in this view, or drawn only in the view it was made in. */
-  const goneLine = $derived.by(() => {
+  /**
+   * Why it stands off the page, said once: its element gone, hidden in this
+   * view, or drawn only in the view it was made in. None where Show the pin
+   * does that step (a design graph), or for another state, which only a
+   * design graph has.
+   */
+  const goneLine = $derived.by((): string | null => {
     switch (away?.why) {
       case "hidden":
         return said.hiddenHere;
       case "elsewhere":
-        return said.madeElsewhere;
+        return onshowmade ? null : said.madeElsewhere;
       case "story":
-        return said.madeOnStory;
+        return null;
       case "gone":
       case undefined:
         return words.pinElementGone;
     }
   });
-  /** ⋯'s actions: Copy link, and Pin it somewhere else while its element is gone; each with its glyph as a row (duotone) and as a bar's symbol (linear), where one stands alone in the bar. */
+  /** ⋯'s actions: Copy link, and Show the pin (on a design graph, made in another view) and Pin it somewhere else while it stands off the page; each with its glyph as a row (duotone) and as a bar's symbol (linear), where one stands alone in the bar. */
   const moreActions = $derived([
     {
       icon: IconLink,
@@ -393,6 +403,16 @@
       label: said.copyLink,
       onselect: copyLink,
     },
+    ...(pin.movedAt && onshowmade
+      ? [
+          {
+            icon: IconEye,
+            barIcon: IconEyeLinear,
+            label: said.showPin,
+            onselect: onshowmade,
+          },
+        ]
+      : []),
     ...(pin.movedAt
       ? [
           {
@@ -683,9 +703,19 @@
       data-slot="gone"
       class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
     >
-      <p class="m-0 min-w-0 text-ink-row" role="status">
-        {placing ? said.placeHere : goneLine}
-      </p>
+      {#if placing || goneLine}
+        <p class="m-0 min-w-0 text-ink-row" role="status">
+          {placing ? said.placeHere : goneLine}
+        </p>
+      {/if}
+      {#if onshowmade && !placing}
+        <Button
+          label={said.showPin}
+          onclick={onshowmade}
+          size="sm"
+          variant="outline"
+        />
+      {/if}
       <Button
         label={placing ? "Cancel" : said.placeElsewhere}
         onclick={() => onplace(!placing)}
