@@ -143,7 +143,7 @@ index 71450921c005d323a927c824c6f9335ff9ce5467..7c454215fd220b40b3afa5943d7b019e
  
  declare function segmentText(value: string, locale: Intl.LocalesArgument, numbers?: boolean): Segment[];
 diff --git a/dist/index.js b/dist/index.js
-index b39fd811d30915896b85a14f1b8dbf7b5255823d..9b6c3a3905b2a0ebd4c950498a29d4052faa5d4f 100644
+index b39fd811d30915896b85a14f1b8dbf7b5255823d..c97b6521746b3a67b8d05e453c00539ddfc33265 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -1,38 +1,791 @@
@@ -965,7 +965,7 @@ index b39fd811d30915896b85a14f1b8dbf7b5255823d..9b6c3a3905b2a0ebd4c950498a29d405
    position: absolute;
    width: 1px;
    height: 1px;
-@@ -46,55 +799,808 @@
+@@ -46,55 +799,830 @@
    user-select: none;
  }
  
@@ -978,9 +978,6 @@ index b39fd811d30915896b85a14f1b8dbf7b5255823d..9b6c3a3905b2a0ebd4c950498a29d405
 - * anything but visible has its baseline synthesized to the bottom margin edge
 - * (CSS 2.1 \xA710.8.1), and engines disagree on whether overflow: clip counts.
 - * The inline axis stays open so glyph overhang is not shaved.
-- */
--[${F}] {
--  clip-path: inset(0 -100vw);
 +[${ATTR_ROOT}][${ATTR_DEBUG}] {
 +  outline: 2px solid magenta;
 +  [${ATTR_ITEM}] {
@@ -1003,11 +1000,8 @@ index b39fd811d30915896b85a14f1b8dbf7b5255823d..9b6c3a3905b2a0ebd4c950498a29d405
 +  if (refCount > 0 || !styleEl) return;
 +  styleEl.remove();
 +  styleEl = null;
- }
- 
--[${F}] > span {
--  display: inline-block;
--  will-change: opacity, transform;
++}
++
 +// src/lib/utils/alignment.ts
 +var px = (value) => Number.parseFloat(value) || 0;
 +function autoMargins(el, axis) {
@@ -1032,6 +1026,9 @@ index b39fd811d30915896b85a14f1b8dbf7b5255823d..9b6c3a3905b2a0ebd4c950498a29d405
 +  const gap = flex || grid ? px(horizontal ? style.columnGap : style.rowGap) : 0;
 +  if (grid) {
 +    return inArea(style, child, childRect, axis, lead, trail, gap);
++  }
++  if (horizontal && !flex && inlineLevel(child)) {
++    return lineShare(style);
 +  }
 +  const spans = [];
 +  const range = document.createRange();
@@ -1091,6 +1088,27 @@ index b39fd811d30915896b85a14f1b8dbf7b5255823d..9b6c3a3905b2a0ebd4c950498a29d405
 +    if (growBefore + growAfter > 0) return growBefore / (growBefore + growAfter);
 +  }
 +  return null;
++}
++/**
++ * An inline-level box in a block's line is placed by the line's text-align,
++ * whatever room the line has left: read from the free space, a box that
++ * fills its line (one held at the larger of two values mid-morph) gave no
++ * share, and a centred value was laid out at its start, then jumped to its
++ * centre as the morph settled.
+  */
+-[${F}] {
+-  clip-path: inset(0 -100vw);
++function inlineLevel(el) {
++  return getComputedStyle(el).display.startsWith("inline");
++}
++function lineShare(style) {
++  const rtl = style.direction === "rtl";
++  const align = style.textAlign;
++  if (align === "center" || align === "-webkit-center") return 0.5;
++  if (align === "right" || align === "-webkit-right") return 1;
++  if (align === "left" || align === "-webkit-left") return 0;
++  if (align === "end") return rtl ? 0 : 1;
++  return rtl ? 1 : 0;
 +}
 +function inArea(style, child, childRect, axis, lead, trail, gap) {
 +  const horizontal = axis === "x";
@@ -1153,6 +1171,36 @@ index b39fd811d30915896b85a14f1b8dbf7b5255823d..9b6c3a3905b2a0ebd4c950498a29d405
 +  return fallback;
  }
  
+-[${F}] > span {
+-  display: inline-block;
+-  will-change: opacity, transform;
++// src/lib/utils/laid-out.ts
++var waiting = /* @__PURE__ */ new Map();
++var observer;
++function deliver(entries) {
++  const reads = [];
++  for (const { target } of entries) {
++    const read = waiting.get(target);
++    observer?.unobserve(target);
++    if (read) {
++      waiting.delete(target);
++      reads.push(read);
++    }
++  }
++  const writes = reads.map((read) => read());
++  for (const write of writes) write?.();
++}
++function onceLaidOut(el, read) {
++  observer ??= new ResizeObserver(deliver);
++  waiting.set(el, read);
++  observer.unobserve(el);
++  observer.observe(el);
++}
++function forget(el) {
++  waiting.delete(el);
++  observer?.unobserve(el);
+ }
+ 
 -/*
 - * Softens the clip above into a gradient, positionally rather than on a timer, so
 - * it stays in step with the slide at any duration. The band (--torph-fade, 0 for a
@@ -1175,44 +1223,12 @@ index b39fd811d30915896b85a14f1b8dbf7b5255823d..9b6c3a3905b2a0ebd4c950498a29d405
 -    mask-repeat: repeat-x;
 -    -webkit-mask-clip: no-clip;
 -    mask-clip: no-clip;
-+// src/lib/utils/laid-out.ts
-+var waiting = /* @__PURE__ */ new Map();
-+var observer;
-+function deliver(entries) {
-+  const reads = [];
-+  for (const { target } of entries) {
-+    const read = waiting.get(target);
-+    observer?.unobserve(target);
-+    if (read) {
-+      waiting.delete(target);
-+      reads.push(read);
-+    }
-   }
-+  const writes = reads.map((read) => read());
-+  for (const write of writes) write?.();
-+}
-+function onceLaidOut(el, read) {
-+  observer ??= new ResizeObserver(deliver);
-+  waiting.set(el, read);
-+  observer.unobserve(el);
-+  observer.observe(el);
-+}
-+function forget(el) {
-+  waiting.delete(el);
-+  observer?.unobserve(el);
- }
- 
--[${Y}][${Z}] {
--  outline: 2px solid magenta;
--  [${Q}] {
--    outline: 2px solid cyan;
--    outline-offset: -4px;
 +// src/lib/utils/reduced-motion.ts
 +function createReducedMotionListener() {
 +  if (typeof window === "undefined") {
 +    return { prefersReducedMotion: false, destroy: () => {
 +    } };
-+  }
+   }
 +  const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 +  const state = { prefersReducedMotion: mediaQuery.matches, destroy };
 +  function onChange(event) {
@@ -1223,8 +1239,13 @@ index b39fd811d30915896b85a14f1b8dbf7b5255823d..9b6c3a3905b2a0ebd4c950498a29d405
 +  }
 +  mediaQuery.addEventListener("change", onChange);
 +  return state;
-+}
-+
+ }
+ 
+-[${Y}][${Z}] {
+-  outline: 2px solid magenta;
+-  [${Q}] {
+-    outline: 2px solid cyan;
+-    outline-offset: -4px;
 +// src/lib/text-morph/controller.ts
 +var MorphController = class _MorphController {
 +  instance = null;
@@ -1820,7 +1841,7 @@ index b39fd811d30915896b85a14f1b8dbf7b5255823d..9b6c3a3905b2a0ebd4c950498a29d405
 +exports.segmentNumber = segmentNumber;
 +exports.segmentText = segmentText;
 diff --git a/dist/index.mjs b/dist/index.mjs
-index b857eac7b66450ee6bf07a0925a1ad929be07d49..75e05efd62b873362168ab3fc2c6ee6160f17b63 100644
+index b857eac7b66450ee6bf07a0925a1ad929be07d49..6b7cb4935f9d54d7a952a598753181b46bec2a95 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -1,38 +1,789 @@
@@ -2640,7 +2661,7 @@ index b857eac7b66450ee6bf07a0925a1ad929be07d49..75e05efd62b873362168ab3fc2c6ee61
    position: absolute;
    width: 1px;
    height: 1px;
-@@ -46,55 +797,800 @@ var _t={locale:"en",duration:400,ease:"cubic-bezier(0.19, 1, 0.22, 1)",disabled:
+@@ -46,55 +797,822 @@ var _t={locale:"en",duration:400,ease:"cubic-bezier(0.19, 1, 0.22, 1)",disabled:
    user-select: none;
  }
  
@@ -2653,9 +2674,6 @@ index b857eac7b66450ee6bf07a0925a1ad929be07d49..75e05efd62b873362168ab3fc2c6ee61
 - * anything but visible has its baseline synthesized to the bottom margin edge
 - * (CSS 2.1 \xA710.8.1), and engines disagree on whether overflow: clip counts.
 - * The inline axis stays open so glyph overhang is not shaved.
-- */
--[${F}] {
--  clip-path: inset(0 -100vw);
 +[${ATTR_ROOT}][${ATTR_DEBUG}] {
 +  outline: 2px solid magenta;
 +  [${ATTR_ITEM}] {
@@ -2678,11 +2696,8 @@ index b857eac7b66450ee6bf07a0925a1ad929be07d49..75e05efd62b873362168ab3fc2c6ee61
 +  if (refCount > 0 || !styleEl) return;
 +  styleEl.remove();
 +  styleEl = null;
- }
- 
--[${F}] > span {
--  display: inline-block;
--  will-change: opacity, transform;
++}
++
 +// src/lib/utils/alignment.ts
 +var px = (value) => Number.parseFloat(value) || 0;
 +function autoMargins(el, axis) {
@@ -2707,6 +2722,9 @@ index b857eac7b66450ee6bf07a0925a1ad929be07d49..75e05efd62b873362168ab3fc2c6ee61
 +  const gap = flex || grid ? px(horizontal ? style.columnGap : style.rowGap) : 0;
 +  if (grid) {
 +    return inArea(style, child, childRect, axis, lead, trail, gap);
++  }
++  if (horizontal && !flex && inlineLevel(child)) {
++    return lineShare(style);
 +  }
 +  const spans = [];
 +  const range = document.createRange();
@@ -2766,6 +2784,27 @@ index b857eac7b66450ee6bf07a0925a1ad929be07d49..75e05efd62b873362168ab3fc2c6ee61
 +    if (growBefore + growAfter > 0) return growBefore / (growBefore + growAfter);
 +  }
 +  return null;
++}
++/**
++ * An inline-level box in a block's line is placed by the line's text-align,
++ * whatever room the line has left: read from the free space, a box that
++ * fills its line (one held at the larger of two values mid-morph) gave no
++ * share, and a centred value was laid out at its start, then jumped to its
++ * centre as the morph settled.
+  */
+-[${F}] {
+-  clip-path: inset(0 -100vw);
++function inlineLevel(el) {
++  return getComputedStyle(el).display.startsWith("inline");
++}
++function lineShare(style) {
++  const rtl = style.direction === "rtl";
++  const align = style.textAlign;
++  if (align === "center" || align === "-webkit-center") return 0.5;
++  if (align === "right" || align === "-webkit-right") return 1;
++  if (align === "left" || align === "-webkit-left") return 0;
++  if (align === "end") return rtl ? 0 : 1;
++  return rtl ? 1 : 0;
 +}
 +function inArea(style, child, childRect, axis, lead, trail, gap) {
 +  const horizontal = axis === "x";
@@ -2828,6 +2867,36 @@ index b857eac7b66450ee6bf07a0925a1ad929be07d49..75e05efd62b873362168ab3fc2c6ee61
 +  return fallback;
  }
  
+-[${F}] > span {
+-  display: inline-block;
+-  will-change: opacity, transform;
++// src/lib/utils/laid-out.ts
++var waiting = /* @__PURE__ */ new Map();
++var observer;
++function deliver(entries) {
++  const reads = [];
++  for (const { target } of entries) {
++    const read = waiting.get(target);
++    observer?.unobserve(target);
++    if (read) {
++      waiting.delete(target);
++      reads.push(read);
++    }
++  }
++  const writes = reads.map((read) => read());
++  for (const write of writes) write?.();
++}
++function onceLaidOut(el, read) {
++  observer ??= new ResizeObserver(deliver);
++  waiting.set(el, read);
++  observer.unobserve(el);
++  observer.observe(el);
++}
++function forget(el) {
++  waiting.delete(el);
++  observer?.unobserve(el);
+ }
+ 
 -/*
 - * Softens the clip above into a gradient, positionally rather than on a timer, so
 - * it stays in step with the slide at any duration. The band (--torph-fade, 0 for a
@@ -2850,38 +2919,6 @@ index b857eac7b66450ee6bf07a0925a1ad929be07d49..75e05efd62b873362168ab3fc2c6ee61
 -    mask-repeat: repeat-x;
 -    -webkit-mask-clip: no-clip;
 -    mask-clip: no-clip;
-+// src/lib/utils/laid-out.ts
-+var waiting = /* @__PURE__ */ new Map();
-+var observer;
-+function deliver(entries) {
-+  const reads = [];
-+  for (const { target } of entries) {
-+    const read = waiting.get(target);
-+    observer?.unobserve(target);
-+    if (read) {
-+      waiting.delete(target);
-+      reads.push(read);
-+    }
-   }
-+  const writes = reads.map((read) => read());
-+  for (const write of writes) write?.();
-+}
-+function onceLaidOut(el, read) {
-+  observer ??= new ResizeObserver(deliver);
-+  waiting.set(el, read);
-+  observer.unobserve(el);
-+  observer.observe(el);
-+}
-+function forget(el) {
-+  waiting.delete(el);
-+  observer?.unobserve(el);
- }
- 
--[${Y}][${Z}] {
--  outline: 2px solid magenta;
--  [${Q}] {
--    outline: 2px solid cyan;
--    outline-offset: -4px;
 +// src/lib/utils/reduced-motion.ts
 +function createReducedMotionListener() {
 +  if (typeof window === "undefined") {
@@ -2892,14 +2929,19 @@ index b857eac7b66450ee6bf07a0925a1ad929be07d49..75e05efd62b873362168ab3fc2c6ee61
 +  const state = { prefersReducedMotion: mediaQuery.matches, destroy };
 +  function onChange(event) {
 +    state.prefersReducedMotion = event.matches;
-+  }
+   }
 +  function destroy() {
 +    mediaQuery.removeEventListener("change", onChange);
 +  }
 +  mediaQuery.addEventListener("change", onChange);
 +  return state;
-+}
-+
+ }
+ 
+-[${Y}][${Z}] {
+-  outline: 2px solid magenta;
+-  [${Q}] {
+-    outline: 2px solid cyan;
+-    outline-offset: -4px;
 +// src/lib/text-morph/controller.ts
 +var MorphController = class _MorphController {
 +  instance = null;
