@@ -204,7 +204,6 @@
               data-edited={dial.name}
               icon={IconReset}
               onclick={onreset}
-              press="pressable"
               size="icon-xs"
               tone="edited"
               variant="ghost"

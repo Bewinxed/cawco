@@ -227,7 +227,6 @@
       <Button
         aria-label="Ask Caw"
         onclick={onnewsession}
-        press="tint"
         shape="inset"
         size="icon-composer"
         title="Ask Caw"

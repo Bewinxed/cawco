@@ -10,7 +10,6 @@
    * via the stage's `cawco-<state>` classes.
    */
   import type { Snippet } from "svelte";
-  import ButtonProposal from "./ButtonProposal.svelte";
   import Foundation from "./Foundation.svelte";
   import { type Family, framesOf, GROUPS, titleOf } from "./families.js";
   import { type Foundation as Group, ROLES, SCALES } from "./foundations.js";
@@ -153,16 +152,6 @@
   {@render foundations(ROLES)}
 
   {@render foundations(SCALES)}
-
-  {#snippet proposal()}
-    <ButtonProposal />
-  {/snippet}
-  {@render shell(
-    "Button, proposed",
-    proposal,
-    "Three emphases (primary, secondary, quiet), two intents on any of them (danger, caution), three sizes on the control tokens (32, 36, 44) with icon squares. Today's Button is the first card under Core components.",
-    true
-  )}
 
   <section class="flex flex-col gap-space-4" aria-label="Core components">
     <header class="flex flex-col gap-space-1">

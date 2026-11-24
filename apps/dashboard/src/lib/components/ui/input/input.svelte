@@ -48,10 +48,12 @@
           margin into a neighbour or its row's padding (owner's pin,
           onboarding-first-minutes #2); its words stand a row's inset in. */
       look: {
+        /** Inside a frame that draws the field (an input group): no
+            surface of its own. */
+        bare: { box: "min-w-0", field: "bg-transparent" },
         inline: {
           box: "min-w-0",
-          field:
-            "h-control-sm text-ellipsis ring-0 bg-transparent px-space-3 text-tx shadow-none not-focus-visible:hover:bg-ui focus-visible:bg-bg",
+          field: "control-inline h-control-sm text-ellipsis px-space-3 text-tx",
         },
         /** A field in a list of keys and values (a task's own fields): a
             small button's height and its cell's tighter corner, flat, its

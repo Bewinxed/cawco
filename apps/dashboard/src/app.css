@@ -626,7 +626,7 @@
   /* Crepe's own focus styles give way to the app's: its controls take the
      house ring, and its text entry (the document, a link's field) none, its
      caret being its focus (DESIGN.md, The Caret Rule); the host's frame
-     steps its edge (MemoryEditor, `field-edge`). */
+     steps its edge (MemoryEditor, theme.css `control-field`). */
   [data-slot="crepe-host"] .milkdown :focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;

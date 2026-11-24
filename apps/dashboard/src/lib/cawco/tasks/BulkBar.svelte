@@ -143,7 +143,7 @@
       {/if}
     </span>
     {#if run.failed}
-      <Button onclick={onretry} press="pressable" size="sm" variant="outline"
+      <Button onclick={onretry} size="sm" variant="outline"
         >{commonWords.tryAgain}</Button
       >
       <Button

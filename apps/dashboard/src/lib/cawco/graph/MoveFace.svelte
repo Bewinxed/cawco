@@ -1282,7 +1282,6 @@
                                   .filter((clip) => clip.was)
                                   .map((clip) => clip.id)
                               )}
-                            press="pressable"
                             size="icon-xs"
                             tone="edited"
                             variant="ghost"

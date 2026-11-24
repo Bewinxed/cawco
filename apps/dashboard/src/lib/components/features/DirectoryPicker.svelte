@@ -233,7 +233,6 @@
                     align="row"
                     face="path"
                     onclick={() => go(join(path, dir.name), 1)}
-                    press="tint"
                     size="sm"
                     variant="ghost"
                   >

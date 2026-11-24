@@ -52,7 +52,7 @@
           ]}
         >
           {#each rows as row (row)}
-            <Button align="row" press="tint" variant="ghost">{row}</Button>
+            <Button align="row" variant="ghost">{row}</Button>
           {/each}
         </div>
       </Drawer.Content>

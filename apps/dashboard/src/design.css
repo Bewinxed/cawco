@@ -584,7 +584,7 @@
      browser matches :focus-visible on any focus of a text field, a click
      as much as a key, so a ring here stood the whole time it was typed in.
      A field with a frame of its own steps that frame's edge instead
-     (`field-edge`, below). Tailwind's `outline-hidden`: no outline, and
+     (theme.css `control-field`). Tailwind's `outline-hidden`: no outline, and
      under forced colours a transparent one the system paints. */
   :is(
     input:not(

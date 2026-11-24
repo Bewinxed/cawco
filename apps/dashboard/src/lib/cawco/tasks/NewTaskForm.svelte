@@ -120,7 +120,6 @@
   </form>
 {:else if primary}
   <Button
-    press="pressable"
     onclick={() => {
       open = true;
     }}
@@ -134,7 +133,6 @@
     onclick={() => {
       open = true;
     }}
-    press="tint"
     tone="muted"
     size="sm"
     variant="ghost"

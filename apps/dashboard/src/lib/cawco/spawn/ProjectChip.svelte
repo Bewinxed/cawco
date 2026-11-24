@@ -138,7 +138,7 @@
     <div class="ns-panel grid gap-space-2 p-space-1">
       <label
         data-slot="project-chip-field"
-        class="field-edge transition-control flex h-control-md max-phone:h-control-lg items-center gap-space-2 rounded-sm border bg-bg px-space-3 shadow-sm"
+        class="control control-field flex h-control-md max-phone:h-control-lg items-center gap-space-2 rounded-sm px-space-3"
       >
         <Files class="size-icon-md flex-none text-tx-2" />
         <input
@@ -153,7 +153,7 @@
       </label>
       <label
         data-slot="project-chip-field"
-        class="field-edge transition-control flex h-control-md max-phone:h-control-lg items-center gap-space-2 rounded-sm border bg-bg px-space-3 shadow-sm"
+        class="control control-field flex h-control-md max-phone:h-control-lg items-center gap-space-2 rounded-sm px-space-3"
       >
         <Folder class="size-icon-md flex-none text-tx-2" />
         <input

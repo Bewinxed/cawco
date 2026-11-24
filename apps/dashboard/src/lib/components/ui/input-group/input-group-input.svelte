@@ -12,11 +12,9 @@
 </script>
 
 <Input
-  class={cn(
-    "flex-1 rounded-none ring-0 bg-transparent shadow-none dark:bg-transparent",
-    className
-  )}
+  class={cn("flex-1 rounded-none", className)}
   area={false}
+  look="bare"
   data-slot="input-group-control"
   bind:ref
   bind:value

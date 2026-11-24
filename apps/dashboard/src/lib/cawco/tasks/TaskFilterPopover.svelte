@@ -100,7 +100,6 @@
           {...props}
           aria-label={compactName}
           {look}
-          press="pressable"
           size={compact ? "icon-sm" : "sm"}
           title={find.problem ?? compactName}
           variant={active > 0 ? "secondary" : "ghost"}

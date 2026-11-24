@@ -186,7 +186,6 @@
 :where(.before\:pointer-events-none)::before,
 :where(.before\:ring)::before,
 :where(.before\:ring-ui)::before,
-:where(.before\:ring-ui-3)::before,
 :where(.before\:rounded-inherit)::before,
 :where(.before\:rounded-lg)::before,
 :where(.before\:rounded-pill)::before,
@@ -201,7 +200,6 @@
 :where(.before\:top-1\/2)::before,
 :where(.before\:transition-\[background-color\])::before,
 :where(.before\:transition-\[opacity\])::before,
-:where(.before\:transition-control)::before,
 :where(.before\:transition-opacity)::before,
 :where(.before\:translate-y-\(--cast-y\))::before,
 :where(.before\:w-\[calc\(var\(--gap-to\)-var\(--gap-from\)\)\])::before,
@@ -216,16 +214,6 @@
 :where(.contrast-more\:before\:backdrop-filter-none)::before,
 :where(.contrast-more\:before\:bg-bg)::before,
 :where(.contrast-more\:before\:ring-tx-2)::before,
-:where(
-  .dark\:has-\[select\[aria-invalid\=true\]\]\:before\:ring-red\/50:where(
-      .dark,
-      .dark *,
-      [data-scheme="dark"],
-      [data-scheme="dark"] *
-    ):not(:where([data-scheme="light"], [data-scheme="light"] *)):has(
-      :is(select[aria-invalid="true"])
-    )
-)::before,
 :where(
   .data-\[band-at\=first\]\:before\:rounded-t-sm[data-band-at="first"]
 )::before,
@@ -327,11 +315,6 @@
 :where(.focus-visible\:before\:outline-2:focus-visible)::before,
 :where(.focus-visible\:before\:outline-accent:focus-visible)::before,
 :where(.focus-visible\:before\:outline-solid:focus-visible)::before,
-:where(
-  .has-\[select\[aria-invalid\=true\]\]\:before\:ring-red:has(
-    :is(select[aria-invalid="true"])
-  )
-)::before,
 :where(.hover\:not-active\:before\:bg-ui:hover:not(:active))::before,
 :where(.katex .eqn-num)::before,
 :where(.katex .katex-stretchy)::before,

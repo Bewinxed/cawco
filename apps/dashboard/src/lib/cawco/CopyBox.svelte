@@ -61,7 +61,6 @@
   <Button
     class="flex-none in-data-wrap:ms-auto"
     onclick={() => clipboard.copy(text)}
-    press="pressable"
     size="xs"
     type="button"
     variant="outline"

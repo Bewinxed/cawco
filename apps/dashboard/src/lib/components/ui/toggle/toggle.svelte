@@ -3,11 +3,11 @@
   import { tv } from "#lib/utils.js";
 
   const toggleVariants = tv({
-    base: "group/toggle mark-line touch-hit inline-flex items-center justify-center gap-space-1 whitespace-nowrap rounded-sm glass-item:concentric-at text-tx type-label transition-control-press not-aria-pressed:hover:bg-ui disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-ui-2 motion-safe:active:not-disabled:not-glass-item:[transform:scale(var(--press-scale))] glass-item:press-tint [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "control control-toggle group/toggle mark-line touch-hit inline-flex items-center justify-center gap-space-1 whitespace-nowrap rounded-sm glass-item:concentric-at text-tx type-label [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       variant: {
-        default: "bg-transparent",
-        outline: "ring ring-ui-2 bg-transparent [--hit-edge:1px]",
+        default: "control-quiet",
+        outline: "control-outline [--hit-edge:1px]",
       },
       size: {
         default:

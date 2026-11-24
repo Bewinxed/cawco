@@ -2458,7 +2458,7 @@
       </div>
       <div
         data-slot="composer"
-        class="field-edge relative grid grid-cols-1 rounded-lg border bg-bg shadow-sm transition-control"
+        class="control control-field relative grid grid-cols-1 rounded-lg"
       >
         <div class="contents group-data-stepped:hidden">
           <PromptEditor

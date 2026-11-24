@@ -37,9 +37,8 @@
             padding (owner's pin, onboarding-first-minutes #2). Its words
             stand a boxed row's inset in (`c-field-inline-inset`, space-3
             less its edge), on the text column of the rows beside it. */
-        prose:
-          "min-h-0 ring-0 bg-transparent px-space-3 py-space-1 shadow-none hover:bg-ui",
-        note: "max-h-50 min-h-control-md min-w-0 ring-0 bg-transparent px-0 py-space-2 leading-lg shadow-none placeholder-shown:truncate",
+        prose: "control-inline min-h-0 px-space-3 py-space-1",
+        note: "control-quiet max-h-50 min-h-control-md min-w-0 px-0 py-space-2 leading-lg placeholder-shown:truncate",
       },
     },
   });

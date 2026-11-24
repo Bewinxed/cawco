@@ -1634,7 +1634,6 @@
           aria-label="New task"
           data-wide
           layout="wide"
-          press="pressable"
           onclick={() => {
             if (current !== "table") {
               choose("board");
@@ -1654,7 +1653,6 @@
           aria-label={viewsWords.ask}
           data-wide
           layout="wide"
-          press="pressable"
           onclick={(event) => ask(event.currentTarget)}
           size="sm"
           title={viewsWords.ask}

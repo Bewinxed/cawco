@@ -776,7 +776,6 @@
                   onclick={() => connectGh(one)}
                   pending={ghPending === ghKey(one)}
                   pendingLabel={words.ghConnecting}
-                  press="pressable"
                   size="sm"
                 />
               {/if}
@@ -958,7 +957,6 @@
                     ? words.deviceCopied
                     : words.deviceCopy}
                   onclick={() => copyCode(row)}
-                  press="pressable"
                   size="xs"
                   variant="ghost"
                 />
@@ -982,7 +980,6 @@
                 />
                 <div class="flex justify-end gap-space-2">
                   <Button
-                    press="pressable"
                     disabled={appPending}
                     label={words.cancel}
                     onclick={() => {
@@ -993,7 +990,6 @@
                     variant="ghost"
                   />
                   <Button
-                    press="pressable"
                     label={words.saveApp}
                     pending={appPending}
                     pendingLabel={words.saving}
@@ -1026,7 +1022,6 @@
                   bind:value={key}
                 />
                 <Button
-                  press="pressable"
                   label={words.saveKey}
                   pending={keyPending}
                   pendingLabel={words.saving}
@@ -1034,7 +1029,6 @@
                   type="submit"
                 />
                 <Button
-                  press="pressable"
                   label={words.cancel}
                   onclick={() => {
                     keying = null;
@@ -1069,7 +1063,6 @@
             {/if}
             {#if row.state !== "signed-in" && needsApp(row) && appFor !== row.name}
               <Button
-                press="pressable"
                 label={words.setAppNow}
                 onclick={() => {
                   rowApp = emptyApp();
@@ -1087,7 +1080,6 @@
                   row
                 )} {row.account}"
                 data-sign-in
-                press="pressable"
                 label={row.signIn ? again : words.signIn}
                 onclick={() => signIn(row)}
                 pending={signing[row.name] ?? false}
@@ -1097,7 +1089,6 @@
               />
             {:else if row.state !== "signed-in" && takesKey(row) && keying !== row.name}
               <Button
-                press="pressable"
                 label={words.setKey}
                 onclick={() => {
                   key = "";

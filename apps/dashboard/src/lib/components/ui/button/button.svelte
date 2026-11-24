@@ -7,40 +7,23 @@
   } from "svelte/elements";
   import type { VariantProps } from "tailwind-variants";
   import { cn, tv, type WithElementRef } from "#lib/utils.js";
-  import { pressVariants } from "./press.js";
 
   export const buttonVariants = tv({
-    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-sm glass-item:concentric-at ring ring-ui-3 bg-linear-to-b bg-bg from-transparent to-transparent bg-clip-padding font-medium type-body text-tx leading-none tracking-tight [--hit-edge:1px] hover:bg-ui disabled:pointer-events-none disabled:opacity-50 aria-invalid:ring-red [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-sm control control-toggle glass-item:concentric-at font-medium type-body text-tx leading-none tracking-tight [--hit-edge:1px] [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
-      /* The press, by size (./press.ts, The Press Rule): a compact button
-         scales; one stretched full width, as a list row or a card's body,
-         tints instead. `pressable` is the house's own compact press. */
-      press: {
-        scale: pressVariants({ press: "scale" }),
-        tint: pressVariants({ press: "tint" }),
-        pressable: pressVariants({ press: "pressable" }),
-      },
+      /* Its look on the control surface (theme.css `control`): every
+         edge, fill and state is the surface's, set by these names. */
       variant: {
-        /* Its fill reaches its border box (`bg-clip-border`), as wide and
-           tall as an edged variant's edge, so a primary beside an outline
-           draws the same 36 (30, 24, 44). Its top highlight (DESIGN.md,
-           Buttons: "the coral `action-surface` gradient over
-           `action-solid`") is the base's one gradient layer, its stops
-           `action-surface`'s own colours: they are registered colours, so
-           a switch to or from this variant, and its hover, cross the
-           highlight with the fill on one clock (`--transition-control`). */
-        default:
-          "ring-transparent bg-accent accent-stops bg-clip-border text-on-accent hover:bg-accent hover:accent-stops-hover",
-        outline: "shadow-sm aria-expanded:not-aria-current-page:bg-ui",
-        secondary: "shadow-sm ring-ui bg-bg-2 hover:bg-ui",
-        ghost:
-          "ring-transparent bg-transparent aria-expanded:not-aria-current-page:bg-ui",
-        destructive: "ring-red bg-transparent text-red hover:bg-bg-2",
+        default: "control-primary text-on-accent",
+        outline: "",
+        secondary: "",
+        ghost: "control-quiet",
+        destructive: "control-danger text-red",
         /* A grant wider than what was asked (DESIGN.md, The Consequential
-           Grant Rule): warning tint, warning ink and a real edge, the same at
-           rest and under the pointer, so it is never made more inviting. */
-        grant: "ring-orange bg-bg-2 text-orange hover:bg-bg-2",
-        link: "ring-transparent bg-transparent text-accent underline-offset-4 hover:bg-transparent hover:underline",
+           Grant Rule): the caution intent, the same at rest and under the
+           pointer, so it is never made more inviting. */
+        grant: "control-caution control-steady text-orange",
+        link: "control-quiet control-steady text-accent underline-offset-4 hover:underline",
       },
       size: {
         default:
@@ -68,7 +51,7 @@
       /** The ink: muted, muted until the pointer is on it, or destructive. */
       tone: {
         muted: "text-tx-2",
-        quiet: "text-tx-2 hover:text-tx",
+        quiet: "text-tx-2 not-aria-current-page:hover:text-tx",
         /** A bare symbol that removes (a list's minus in edit mode, as
             Reminders' is): the destructive ink, at rest and under the pointer. */
         destructive: "text-red",
@@ -83,23 +66,18 @@
           under it (the callers' `background` shorthand put the clip back
           at the border box). */
       answer: {
-        deny: "ring-transparent bg-bg-2 bg-clip-border text-red not-aria-expanded:hover:bg-bg-2 hover:text-red aria-expanded:hover:bg-bg-2 aria-invalid:ring-transparent",
-        approve:
-          "ring-transparent bg-bg-2 bg-clip-border text-green not-aria-expanded:hover:bg-bg-2 hover:text-green aria-expanded:hover:bg-bg-2 aria-invalid:ring-transparent",
-        "deny-edge":
-          "ring-red bg-bg-2 text-tx not-aria-invalid:hover:ring-red not-aria-expanded:hover:bg-bg-2 hover:text-tx aria-expanded:hover:bg-bg-2 aria-invalid:ring-red aria-invalid:hover:ring-red",
-        "approve-edge":
-          "ring-green bg-bg-2 text-tx not-aria-invalid:hover:ring-green not-aria-expanded:hover:bg-bg-2 hover:text-tx aria-expanded:hover:bg-bg-2 aria-invalid:ring-green aria-invalid:hover:ring-green",
-        "deny-strong":
-          "ring-red bg-bg-2 text-tx not-aria-expanded:hover:bg-bg-2 hover:text-tx aria-expanded:hover:bg-bg-2 aria-invalid:ring-red",
-        "approve-strong":
-          "ring-green bg-bg-2 text-tx not-aria-expanded:hover:bg-bg-2 hover:text-tx aria-expanded:hover:bg-bg-2 aria-invalid:ring-green",
+        deny: "control-soft text-red",
+        approve: "control-soft text-green",
+        "deny-edge": "control-soft control-danger",
+        "approve-edge": "control-soft control-success",
+        "deny-strong": "control-soft control-danger",
+        "approve-strong": "control-soft control-success",
       },
       /** Its 44×44 area on every pointer, not only a finger's (DESIGN.md,
           The Peer Rule: Approve and Deny). */
       hit: { always: "touch-hit-always" },
       /** No edge of its own. */
-      edge: { none: "ring-transparent" },
+      edge: { none: "control-quiet" },
       /** Its box: a prompt's answer (the label size at medium weight, the
           small corner), or 24px square. */
       fit: {
@@ -174,8 +152,8 @@
           chevron say it is open), or the pressed step (`surface-pressed`, the
           kit Toggle's on step) while what it opens stands. */
       expanded: {
-        unfilled: "aria-expanded:unhovered:bg-transparent",
-        pressed: "aria-expanded:not-aria-current-page:bg-ui-2",
+        unfilled: "control-open-clear",
+        pressed: "",
       },
       /** Set back while what it acts on is elsewhere (a page's Comment or
           Draw mode): half strength, still pressable. */
@@ -198,24 +176,21 @@
           crossing over --duration-fast; its press scales at once, and the
           press tint still darkens it (The Press Rule). */
       current: {
-        selected:
-          "[transition:background-color_var(--duration-fast)_var(--ease-out),color_var(--duration-fast)_var(--ease-out)] aria-current-page:bg-ui aria-current-page:bg-clip-border aria-current-page:text-accent aria-current-page:hover:bg-ui aria-current-page:hover:text-accent",
+        selected: "aria-current-page:text-accent",
       },
     },
     defaultVariants: {
       variant: "default",
       size: "default",
-      press: "scale",
     },
   });
 
   export type ButtonVariant = VariantProps<typeof buttonVariants>["variant"];
   export type ButtonSize = VariantProps<typeof buttonVariants>["size"];
-  type ButtonPress = VariantProps<typeof buttonVariants>["press"];
   /** The looks a caller draws over its variant and size. */
   type ButtonLooks = Omit<
     VariantProps<typeof buttonVariants>,
-    "variant" | "size" | "press"
+    "variant" | "size"
   >;
 
   export type ButtonProps = WithElementRef<HTMLButtonAttributes> &
@@ -223,7 +198,6 @@
     ButtonLooks & {
       variant?: ButtonVariant;
       size?: ButtonSize;
-      press?: ButtonPress;
       /**
        * The button's words, for a button that runs something: with `label`
        * the button draws its own icon slot and label, and `pending` can
@@ -270,7 +244,6 @@
     class: className,
     variant = "default",
     size = "default",
-    press: pressKind = "scale",
     tone,
     answer,
     hit,
@@ -315,7 +288,6 @@
       buttonVariants({
         variant,
         size,
-        press: pressKind,
         tone,
         answer,
         hit,

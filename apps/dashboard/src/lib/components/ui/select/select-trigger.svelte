@@ -23,7 +23,7 @@
         "in-bar":
           "group-data-bar:min-w-0 group-data-bar:overflow-clip group-data-bar:concentric-xs",
         /** A plain field: the small corner, the control's edge, field pads. */
-        field: "rounded-sm ring ring-ui-3 px-space-3 py-space-2",
+        field: "rounded-sm px-space-3 py-space-2",
       },
       /** `end`: its value at its end, before its mark, as a number field
           writes its figure (the design graph's Controls: a select whose
@@ -33,7 +33,7 @@
           its ink held over the placeholder's. */
       chosen: {
         selected:
-          "data-on:data-placeholder:text-accent data-on:ring-transparent data-on:bg-ui data-on:text-accent",
+          "data-on:control-soft data-on:data-placeholder:text-accent data-on:text-accent",
       },
     },
   });
@@ -68,21 +68,19 @@
 
 <SelectPrimitive.Trigger
   class={cn(
-    "touch-hit rounded-sm shadow-sm",
-    // It opens a list, so it tints under a press and never moves (The Press Rule).
-    "press-tint transition-control",
+    // Its fill, edge and states are the control surface's (theme.css
+    // `control`): it opens a list, so it steps under a press and never moves.
+    "control touch-hit rounded-sm",
     "mark-line flex w-fit",
     "items-center justify-between gap-1.5 whitespace-nowrap",
-    "ring ring-ui-3 [--hit-edge:1px]",
-    "bg-bg px-3 text-tx",
+    "[--hit-edge:1px]",
+    "px-3 text-tx",
     "type-body disabled:cursor-not-allowed",
-    "disabled:opacity-50 aria-invalid:ring-red",
     "data-placeholder:text-tx-2",
     "[&>[data-slot=select-value]]:line-clamp-1",
     "[&>[data-slot=select-value]]:flex",
     "[&>[data-slot=select-value]]:items-center",
     "[&>[data-slot=select-value]]:gap-1.5",
-    "dark:aria-invalid:ring-red/50",
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
     selectTriggerVariants({ size, measure, tone, look, chosen, align }),

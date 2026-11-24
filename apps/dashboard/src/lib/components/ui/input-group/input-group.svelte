@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
   import { cn, type WithElementRef } from "#lib/utils.js";
-  import { type GroupLook, provideLook } from "./look.js";
 
   let {
     ref = $bindable(null),
@@ -25,9 +24,9 @@
      * a capsule as tall as the glass beside it, on the glass's material
      * and hairline, so it reads as one of the bar's capsules.
      */
-    look?: GroupLook;
+    /** A field, or a capsule on a bar's glass. */
+    look?: "field" | "bar";
   } = $props();
-  provideLook(() => look);
 
   /**
    * A press on the frame's touch area beside its field: the field's own
@@ -48,7 +47,7 @@
 
 <!-- The frame is the field (DESIGN.md, Inputs and fields, Field frame), so
      it carries the field's touch area (The 44 Touch Rule), and its edge
-     steps up while its text has focus (`field-edge`): its own field draws
+     steps up while its text has focus (theme.css `control-field`): its own field draws
      none. -->
 <!-- biome-ignore lint/a11y/useSemanticElements: <fieldset> carries browser-default border/padding this design resets everywhere it's used; keeping the div avoids a visual regression -->
 <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a press on the frame's touch area focuses its field; a keyboard reaches the field itself. -->
@@ -57,9 +56,9 @@
   class={cn(
     "touch-hit hit-under [--hit-edge:1px]",
     "relative flex h-9 w-full min-w-0 items-center rounded-sm",
-    "ring",
-    "field-edge bg-bg shadow-sm",
-    "transition-control",
+    // Its fill, edge and states are the control surface's (theme.css
+    // `control-field`), drawn on the frame; its own input draws none.
+    "control control-field",
     "has-[>[data-align=block-end]]:h-auto",
     "has-[>[data-align=block-start]]:h-auto",
     "has-[>textarea]:h-auto",
@@ -68,7 +67,6 @@
     "has-[textarea]:rounded-sm",
     "has-data-[align=block-end]:rounded-sm",
     "has-data-[align=block-start]:rounded-sm",
-    "has-[[data-slot][aria-invalid=true]]:ring-red",
     // The field's own input steps clear of an addon beside it, asked of the
     // input by its siblings: asked of the frame (`has-[…]:[&>input]:`), the
     // `:has()` stood outside the rule's subject, where Blink's one shared
@@ -86,7 +84,7 @@
     share !== undefined &&
       "isolate cursor-ew-resize touch-pan-y not-focus-within:[&_*]:cursor-ew-resize can-hover:hover:not-has-[[data-slot][aria-invalid=true]]:before:opacity-100 data-dragging:not-has-[[data-slot][aria-invalid=true]]:before:opacity-100",
     look === "bar" &&
-      "h-control-md rounded-pill ring-ui bg-bg/72 shadow-sm glass-backdrop contrast-more:ring-tx-2 contrast-more:bg-bg contrast-more:backdrop-filter-none reduced-transparency:ring-tx-2 reduced-transparency:bg-bg reduced-transparency:backdrop-filter-none",
+      "control-glass h-control-md rounded-pill glass-backdrop contrast-more:backdrop-filter-none reduced-transparency:backdrop-filter-none",
     // The group's own Clear stands for the engine's: its search cancel glyph is not drawn.
     "[&>input::-webkit-search-cancel-button]:appearance-none",
     className

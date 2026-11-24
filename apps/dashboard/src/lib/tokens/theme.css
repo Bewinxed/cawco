@@ -1136,14 +1136,247 @@
       light-dark(oklch(0% 0 0 / 0.08), oklch(0% 0 0 / 0.45));
 }
 
-/* A filled control's edge (a coral, red or orange button): a darker
-   translucent ring on its fill, a light line along its top inside, and a
-   contact shadow, so the fill reads as one raised piece on any ground. */
-@utility fill-edge {
+/* The control surface: the one recipe every control (a button, a field, a
+   select, a chip, a toggle) draws its fill, edge, lift and states with.
+   A control writes none of these itself; it takes `control` and a look,
+   and the look only sets the variables below.
+
+   The fill is one colour, and every state is a translucent layer over it
+   (`--control-layer`), so a hover or a press never changes the fill's own
+   colour and never paints twice. The edge is an inset 1px ring, drawn
+   inside the box over the fill, so the fill and the edge share one rounded
+   shape and nothing overlaps at the corners. A transparent border stays
+   under it, so forced colours, which drop shadows, still draw an edge.
+   Nothing scales: a press is the next layer step. Only the layer, the edge
+   and the shadow transition.
+
+   Its variables, each with the default `control` alone draws (the
+   secondary look):
+   --control-fill          the fill at rest              bg
+   --control-intent        an intent's ink (danger...)   none
+   --control-default-edge  the edge with no intent       ui-3
+   --control-rest-edge     the edge, over any intent     (intent, else default)
+   --control-lift          the shadow outside it         a contact shadow
+   --control-hover         the layer under the pointer   ui
+   --control-press         the layer while pressed       ui-2
+   --control-open          the layer while it is open    (press)
+   --control-current       the layer on the current page ui
+   --control-on-edge       the edge while chosen or on   accent
+   --control-on-layer      the layer while chosen or on  ui
+   --control-focus-width   its focus outline's width     2px */
+@property --control-layer {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: transparent;
+}
+
+@property --control-edge {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: transparent;
+}
+
+@utility control {
+  --control-edge: var(
+    --control-rest-edge,
+    var(--control-intent, var(--control-default-edge, var(--color-ui-3)))
+  );
+  --control-layer: transparent;
+  border: 1px solid transparent;
+  background-color: var(--control-fill, var(--color-bg));
+  background-image: linear-gradient(var(--control-layer), var(--control-layer));
   box-shadow:
-    inset 0 1px 0 oklch(100% 0 0 / 0.16),
-    0 0 0 1px oklch(0% 0 0 / 0.14),
-    0 1px 2px oklch(0% 0 0 / 0.14);
+    inset 0 0 0 1px var(--control-edge),
+    var(
+      --control-lift,
+      0 1px 2px light-dark(oklch(0% 0 0 / 0.06), oklch(0% 0 0 / 0.4))
+    );
+  transition-property: --control-layer, --control-edge, box-shadow;
+  transition-duration: var(--duration-fast);
+  transition-timing-function: var(--ease-out);
+
+  &:is([aria-expanded="true"], [data-state="open"]) {
+    --control-layer: var(
+      --control-open,
+      var(--control-press, var(--color-ui-2))
+    );
+  }
+  &[aria-current="page"] {
+    --control-layer: var(--control-current, var(--color-ui));
+  }
+  &:is(
+    [aria-checked="true"],
+    [aria-pressed="true"],
+    [data-chosen],
+    [data-state="on"]
+  ) {
+    --control-edge: var(--control-on-edge, var(--color-accent));
+    --control-layer: var(--control-on-layer, var(--color-ui));
+  }
+  @media (hover: hover) {
+    &:hover:not(:disabled, [aria-disabled="true"], :active, [data-pressed]) {
+      --control-layer: var(--control-hover, var(--color-ui));
+    }
+  }
+  &:is(:active, [data-pressed]):not(:disabled, [aria-disabled="true"]) {
+    --control-layer: var(--control-press, var(--color-ui-2));
+  }
+  &:focus-visible {
+    outline: var(--control-focus-width, 2px) solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  &:is(:disabled, [aria-disabled="true"]) {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  &:is([aria-invalid="true"], :has([aria-invalid="true"])) {
+    --control-edge: var(--color-red);
+  }
+}
+
+/* The looks: each only sets the control's variables. */
+/* Filled in the intent's colour (coral with none), its edge a darker ring
+   on the fill and a light line inside its top; the layers darken it. */
+@utility control-primary {
+  --control-fill: var(--control-intent, var(--color-accent));
+  --control-rest-edge: oklch(0% 0 0 / 0.14);
+  --control-lift:
+    inset 0 1px 0 oklch(100% 0 0 / 0.16), 0 1px 2px oklch(0% 0 0 / 0.14);
+  --control-hover: oklch(0% 0 0 / 0.08);
+  --control-press: oklch(0% 0 0 / 0.16);
+  --control-current: oklch(0% 0 0 / 0.08);
+}
+
+/* No fill, no edge and no lift until the pointer is on it. */
+@utility control-quiet {
+  --control-fill: transparent;
+  --control-default-edge: transparent;
+  --control-lift: 0 0 #0000;
+}
+
+/* A toggle: on is its own pressed step held, its edge its own (no accent).
+   A button is one whenever it carries `aria-pressed`. */
+@utility control-toggle {
+  --control-on-edge: var(
+    --control-rest-edge,
+    var(--control-default-edge, var(--color-ui-3))
+  );
+  --control-on-layer: var(--control-press, var(--color-ui-2));
+}
+
+/* A setting that cannot change where it is shown: sunk, steady. */
+@utility control-static {
+  --control-fill: var(--color-bg-2);
+  --control-default-edge: var(--color-ui);
+  --control-hover: transparent;
+  --control-press: transparent;
+}
+
+/* Edged on no fill of its own and no lift: a card or toggle in a set. */
+@utility control-outline {
+  --control-fill: transparent;
+  --control-lift: 0 0 #0000;
+}
+
+/* An option a gliding pill marks: chosen, it draws neither edge nor layer,
+   the pill under it does. */
+@utility control-glide {
+  --control-fill: transparent;
+  --control-on-edge: transparent;
+  --control-on-layer: transparent;
+}
+
+/* Off, a dashed edge in place of the ring: a tile that cannot be picked. */
+@utility control-dashed-off {
+  &:is(:disabled, [aria-disabled="true"]) {
+    --control-edge: transparent;
+    border-style: dashed;
+    border-color: var(--color-ui-2);
+  }
+}
+
+/* A tinted ground and no edge (an answer's), an intent still edged. */
+@utility control-soft {
+  --control-fill: var(--color-bg-2);
+  --control-default-edge: transparent;
+  --control-lift: 0 0 #0000;
+}
+
+/* A field: it takes typing, so its focus is its caret and its edge
+   stepping to muted ink, with no outline and no hover fill. */
+@utility control-field {
+  --control-hover: var(--control-field-hover, transparent);
+  --control-press: var(--control-field-hover, transparent);
+  --control-focus-width: 0px;
+
+  &:is(:focus-visible, :focus-within):not(
+      [aria-invalid="true"],
+      :has([aria-invalid="true"])
+    ) {
+    --control-edge: var(--color-tx-2);
+  }
+}
+
+/* A field set as words where it stands (a name edited in its row): no
+   fill, edge or lift at rest, a fill under the pointer, the page's ground
+   and the field's edge while it has the caret. Taken with control-field. */
+@utility control-inline {
+  --control-fill: transparent;
+  --control-default-edge: transparent;
+  --control-lift: 0 0 #0000;
+  --control-field-hover: var(--color-ui);
+
+  &:focus-within {
+    --control-fill: var(--color-bg);
+  }
+}
+
+/* A field whose frame is dragged across (a value's): its edge steps to
+   muted ink under the pointer and through a drag. */
+@utility control-drag-edge {
+  &:is(:hover, [data-dragging]):not(
+      [aria-invalid="true"],
+      :has([aria-invalid="true"])
+    ) {
+    --control-edge: var(--color-tx-2);
+  }
+}
+
+/* On a bar's glass: the glass's translucent ground and the plain edge,
+   solid with its edge stepped up where the reader asks for more contrast
+   or less transparency. */
+@utility control-glass {
+  --control-fill: color-mix(in oklab, var(--color-bg) 72%, transparent);
+  --control-default-edge: var(--color-ui);
+
+  @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+    --control-fill: var(--color-bg);
+    --control-default-edge: var(--color-tx-2);
+  }
+}
+
+/* The same at rest and under the pointer: a grant wider than what was
+   asked is never made more inviting (The Consequential Grant Rule). */
+@utility control-steady {
+  --control-hover: transparent;
+}
+
+/* Open, it draws no layer: its words and chevron say it is open. */
+@utility control-open-clear {
+  --control-open: transparent;
+}
+
+/* The intents, on any look. */
+@utility control-danger {
+  --control-intent: var(--color-red);
+}
+
+@utility control-caution {
+  --control-intent: var(--color-orange);
+}
+
+@utility control-success {
+  --control-intent: var(--color-green);
 }
 
 /* Primary coral fill sheen and hover state derived from --color-accent. */

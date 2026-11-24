@@ -10,6 +10,7 @@ import { detachedBarMenus } from "./bar-menu.mjs";
 import { barSymbols } from "./bar-symbol.mjs";
 import { classJoins } from "./class-join.mjs";
 import { clipWithMove } from "./clip-move.mjs";
+import { controlSurface } from "./control-surface.mjs";
 import { countBadges } from "./count-badge.mjs";
 import { fixtureMounts } from "./fixture-mounts.mjs";
 import { followsProps } from "./follows-props.mjs";
@@ -342,6 +343,7 @@ const FIND = {
   "house/no-detached-bar-menu": detachedBarMenus,
   "house/tooltip-provider-at-root": tooltipProviderAtRoot,
   "house/no-not-hover": notHover,
+  "house/control-owns-surface": controlSurface,
   "house/no-style-underscore-spaces": styleSpaces,
   "house/typed-property-read": typedPropertyReads,
   "design/no-unknown-classes": unknownClasses,
