@@ -1388,6 +1388,8 @@
   --duration-morph: 180ms;
   /* Fades that carry a state change in place. */
   --duration-fade: 200ms;
+  /* A scene turning from day to night or back (Caw's settings hero): the new light sweeping down from the sky over the old, on --ease-crossfade, slow enough to read as dusk or dawn falling rather than a swap. */
+  --duration-dusk: 900ms;
   /* How long a wait runs before its loading state (Caw at loading or reconnecting) appears; a shorter wait shows its plain surface. NN/g, Response Times: no special feedback is needed for delays under 1.0 second. */
   --duration-wait-grace: 1000ms;
   --duration-pop: 260ms;

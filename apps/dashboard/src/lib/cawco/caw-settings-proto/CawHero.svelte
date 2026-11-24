@@ -16,10 +16,10 @@
    * it (the stops parked there once put away, a refusal) stands under the
    * hero.
    *
-   * Flipping him crossfades the hero between the awake and the asleep
-   * scene once the hub says he turned: both stand in
-   * one cell, so nothing around them moves, and only their opacity changes,
-   * over the house's fade on its ease-out. The scenes are one composition at
+   * Flipping him turns the hero between the awake and the asleep scene
+   * once the hub says he turned, the new light falling over the old from
+   * the sky down (`turn`): both stand in one cell, so nothing around them
+   * moves. The scenes are one composition at
    * 16:10, day and night (Caw at work in his attic, then curled asleep
    * with the lamp out), the night an edit of the day so they cross in
    * register. The hero is a short 5:2 band of them, framed 62% down the
@@ -27,11 +27,13 @@
    * the fade. Served from static/caw at twice the desk panel's width.
    */
   import { cawSettingsWords as words } from "@cawco/core/words/caw-settings";
+  import { untrack } from "svelte";
   import CawLeadSwitch, {
     type SwitchedLead,
   } from "#lib/cawco/project/CawLeadSwitch.svelte";
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { stopWork } from "../stop-work.svelte";
 
   let {
@@ -59,6 +61,65 @@
     { asleep: false, scene: "/caw/hero-awake.webp" },
     { asleep: true, scene: "/caw/hero-asleep.webp" },
   ] as const;
+
+  /** Each scene's picture, by whether it is the asleep one. */
+  const pictures: Partial<Record<"awake" | "asleep", HTMLImageElement>> = {};
+  /** The scene drawn first; every later turn is `turn`'s. */
+  const first = untrack(() => asleep);
+  /** The scene shown last: the first one stands at once, every later turn sweeps. */
+  let shown: boolean | null = null;
+  let sweep: Animation | null = null;
+
+  /**
+   * Turning day to night (or back), the new scene's light falls over the
+   * old one from the sky down: the new picture, laid over the old, is
+   * revealed by a soft-edged mask sweeping from its top to its foot over
+   * --duration-dusk on --ease-crossfade (the mask a gradient twice the
+   * picture's height, black over clear, slid from showing its clear half to
+   * its black one). Only the mask's position moves. Reduced motion, it
+   * cross-fades over --duration-fade.
+   */
+  function turn(next: boolean): void {
+    const incoming = pictures[next ? "asleep" : "awake"];
+    const outgoing = pictures[next ? "awake" : "asleep"];
+    if (!(incoming && outgoing)) {
+      return;
+    }
+    sweep?.cancel();
+    outgoing.style.zIndex = "0";
+    incoming.style.zIndex = "1";
+    incoming.style.opacity = "1";
+    const settle = () => {
+      outgoing.style.opacity = "0";
+      incoming.style.maskImage = "";
+    };
+    if (shown === null) {
+      settle();
+      return;
+    }
+    if (motionOk.current) {
+      incoming.style.maskImage =
+        "linear-gradient(to bottom, #000 0% 40%, transparent 60% 100%)";
+      incoming.style.maskSize = "100% 250%";
+      incoming.style.maskRepeat = "no-repeat";
+      sweep = incoming.animate(
+        [{ maskPosition: "0 100%" }, { maskPosition: "0 0" }],
+        { duration: dur("--duration-dusk"), easing: ease("--ease-crossfade") }
+      );
+    } else {
+      sweep = incoming.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: dur("--duration-fade"),
+        easing: ease("--ease-crossfade"),
+      });
+    }
+    sweep.addEventListener("finish", settle, { once: true });
+  }
+
+  $effect(() => {
+    const next = asleep;
+    turn(next);
+    shown = next;
+  });
 </script>
 
 <section
@@ -80,9 +141,12 @@
       <img
         alt=""
         class={[
-          "absolute inset-0 size-full object-cover object-(--focus) transition-opacity duration-(--duration-fade) ease-out data-hidden:opacity-0",
+          "absolute inset-0 size-full object-cover object-(--focus)",
+          one.asleep !== first && "opacity-0",
         ]}
-        data-hidden={one.asleep !== asleep || undefined}
+        {@attach (node) => {
+          pictures[one.asleep ? "asleep" : "awake"] = node;
+        }}
         decoding="async"
         style:--focus="50% 62%"
         src={one.scene}
