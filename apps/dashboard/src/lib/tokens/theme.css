@@ -1164,7 +1164,11 @@
    --control-current       the layer on the current page ui
    --control-on-edge       the edge while chosen or on   accent
    --control-on-layer      the layer while chosen or on  ui
-   --control-focus-width   its focus outline's width     2px */
+   --control-focus-ink     its focus edge and halo's ink accent (red when invalid)
+
+   Focus (owner's pick, 2026-11-24): the edge turns the focus ink and a
+   3px halo of it at 35% hugs the box, no gap. A transparent outline stays
+   under it, so forced colours, which drop shadows, still draw focus. */
 @property --control-layer {
   syntax: "<color>";
   inherits: false;
@@ -1187,10 +1191,19 @@
   background-clip: border-box;
   background-color: var(--control-fill, var(--color-bg));
   background-image: linear-gradient(var(--control-layer), var(--control-layer));
-  box-shadow: var(
-    --control-lift,
-    0 1px 2px light-dark(oklch(0% 0 0 / 0.06), oklch(0% 0 0 / 0.4))
-  );
+  --control-halo: 0 0 #0000;
+  --control-focus-halo: 0 0 0 3px
+    color-mix(
+      in oklab,
+      var(--control-focus-ink, var(--color-accent)) 35%,
+      transparent
+    );
+  box-shadow:
+    var(--control-halo),
+    var(
+      --control-lift,
+      0 1px 2px light-dark(oklch(0% 0 0 / 0.06), oklch(0% 0 0 / 0.4))
+    );
   transition-property: --control-layer, --control-edge, box-shadow;
   transition-duration: var(--duration-fast);
   transition-timing-function: var(--ease-out);
@@ -1222,7 +1235,9 @@
     --control-layer: var(--control-press, var(--color-ui-2));
   }
   &:focus-visible {
-    outline: var(--control-focus-width, 2px) solid var(--color-accent);
+    --control-edge: var(--control-focus-ink, var(--color-accent));
+    --control-halo: var(--control-focus-halo);
+    outline: 2px solid transparent;
     outline-offset: 2px;
   }
   &:is(:disabled, [aria-disabled="true"]) {
@@ -1231,6 +1246,7 @@
   }
   &:is([aria-invalid="true"], :has([aria-invalid="true"])) {
     --control-edge: var(--color-red);
+    --control-focus-ink: var(--color-red);
   }
 }
 
@@ -1302,11 +1318,12 @@
 }
 
 /* A field: it takes typing, so its focus is its caret and its edge
-   stepping to muted ink, with no outline and no hover fill. */
+   stepping to muted ink (DESIGN.md, The Caret Rule), with no halo and no
+   hover fill. */
 @utility control-field {
   --control-hover: var(--control-field-hover, transparent);
   --control-press: var(--control-field-hover, transparent);
-  --control-focus-width: 0px;
+  --control-focus-halo: 0 0 #0000;
 
   &:is(:focus-visible, :focus-within):not(
       [aria-invalid="true"],
