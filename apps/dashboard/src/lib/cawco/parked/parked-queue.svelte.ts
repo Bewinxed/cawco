@@ -5,8 +5,9 @@
  * pick, a note, a new ask, a withdrawal), the same moments its list of what
  * waits is read (waiting/session-waiting.svelte.ts).
  *
- * The first still open parks in the composer (SessionPane `firstAsk`), and
- * the pane holds its artifact's doc while it does (preview/artifact-doc.ts
+ * Each still open parks in the composer, after the asks that hold an
+ * agent's turn (SessionPane `composerAsks`), and the pane holds the doc of
+ * the one the composer stands at while it does (preview/artifact-doc.ts
  * `joinArtifact`), as the panel holds it: a pick or a note made on the
  * graph or the page shows in the composer at once, and the composer's pick
  * is written there exactly as the graph's head or the page's option writes
@@ -61,6 +62,8 @@ export interface ParkedQueueInput {
   instanceId: () => string;
   /** The pane is on screen and the hub holds the session's row: only then is the list read. */
   onScreen: () => boolean;
+  /** The item the composer stands at, by its id (core `parkedId`); null while it stands at none of these. */
+  standing: () => string | null;
 }
 
 export class ParkedQueue {
@@ -96,33 +99,36 @@ export class ParkedQueue {
     })
   );
 
-  /** The artifact of the item the composer parks: its doc is held while it does. */
-  readonly #heldArtifact = $derived.by(() => {
-    const [first] = this.open;
-    return first?.artifact.id ?? null;
+  /** The item the composer stands at; null while it stands at none of these. */
+  readonly #standing = $derived.by(() => {
+    const id = this.#input.standing();
+    return this.open.find((item) => parkedId(item) === id) ?? null;
   });
 
-  /** The item the composer parks, by its id, and what it was answered with where it lives; null while it wasn't. */
-  readonly #firstAnswered = $derived.by(() => {
-    const [first] = this.open;
-    if (!first) {
+  /** The artifact of the item the composer stands at: its doc is held while it does. */
+  readonly #heldArtifact = $derived(this.#standing?.artifact.id ?? null);
+
+  /** The item the composer stands at, by its id, and what it was answered with where it lives; null while it wasn't. */
+  readonly #standingAnswered = $derived.by(() => {
+    const item = this.#standing;
+    if (!item) {
       return null;
     }
-    const said = answeredIn(first, this.choicesOf(first));
+    const said = answeredIn(item, this.choicesOf(item));
     return said === null
       ? null
       : {
-          id: parkedId(first),
+          id: parkedId(item),
           said: parkedWords.pickedThere(
-            first.kind === "directions" ? "graph" : "page",
+            item.kind === "directions" ? "graph" : "page",
             said
           ),
         };
   });
   /** Its words, one string, so the beat starts once per answer and not on every change of the doc. */
-  readonly #firstAnsweredKey = $derived(
-    this.#firstAnswered
-      ? `${this.#firstAnswered.id}\n${this.#firstAnswered.said}`
+  readonly #standingAnsweredKey = $derived(
+    this.#standingAnswered
+      ? `${this.#standingAnswered.id}\n${this.#standingAnswered.said}`
       : null
   );
 
@@ -143,7 +149,7 @@ export class ParkedQueue {
       needsStore.questionsMoved();
       this.#read(input.instanceId());
     });
-    // The doc of the item the composer parks, held while it does.
+    // The doc of the item the composer stands at, held while it does.
     $effect(() => {
       const artifactId = this.#heldArtifact;
       const instanceId = input.instanceId();
@@ -172,10 +178,10 @@ export class ParkedQueue {
     });
     // Answered where it lives while it stands here: said for a beat, then gone.
     $effect(() => {
-      if (this.#firstAnsweredKey === null) {
+      if (this.#standingAnsweredKey === null) {
         return;
       }
-      const answered = untrack(() => this.#firstAnswered);
+      const answered = untrack(() => this.#standingAnswered);
       if (!answered || untrack(() => this.#touched.has(answered.id))) {
         return;
       }
@@ -195,7 +201,7 @@ export class ParkedQueue {
   /** A direction of `item` picked here: its graph's `picked`, as the head's Pick writes it; a sentence when it was not kept. */
   pick = (item: ParkedItem, file: string): string | null => {
     this.#touched.add(parkedId(item));
-    return this.#doc?.keep("picked", file) ?? parkedWords.joining;
+    return this.#docOf(item)?.keep("picked", file) ?? parkedWords.joining;
   };
 
   /** A card of `item` picked or noted here, as its page's option and note write it; a sentence when it was not kept. */
@@ -205,8 +211,12 @@ export class ParkedQueue {
     change: { options: string[] } | { note: string }
   ): string | null => {
     this.#touched.add(parkedId(item));
-    return this.#doc?.choose(card, change) ?? parkedWords.joining;
+    return this.#docOf(item)?.choose(card, change) ?? parkedWords.joining;
   };
+
+  /** The doc held here when it is `item`'s artifact's; null while none is. */
+  readonly #docOf = (item: ParkedItem): ArtifactDoc | null =>
+    this.held?.artifactId === item.artifact.id ? this.#doc : null;
 
   /** `item` answered here: it leaves the queue now. */
   answered = (item: ParkedItem): void => {

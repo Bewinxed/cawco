@@ -3,7 +3,7 @@
  * artifacts/service.ts `parkedOf`): each design graph it opened with
  * directions, and each card of its decision pages that Who decides gives the
  * person. The dashboard parks each still open in the session's composer,
- * queued with the session's parked questions, oldest first, and answered there
+ * queued after the asks that hold its turn, oldest first, and answered there
  * as it is where it lives (`picked` on the graph, the card's pick and note on
  * its page); once answered, the transcript keeps it at the call that opened
  * it. `GET /api/instances/:id/parked` answers it; the dashboard reads it again
