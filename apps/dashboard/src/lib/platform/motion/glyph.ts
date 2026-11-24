@@ -6,20 +6,29 @@
  * state with it.
  */
 import type { TransitionConfig } from "svelte/transition";
-import { dur, easeOut, motionOk, popScale } from "./curves.svelte";
+import { dur, easeOut, motionOk } from "./curves.svelte";
+
+/** The scale a glyph grows from and shrinks to. */
+const SWAP_SCALE = 0.25;
+/** The blur it comes out of and goes into, px. */
+const SWAP_BLUR = 4;
+
+const swap = (duration: number): TransitionConfig => {
+  const moving = motionOk.current;
+  const blur = SWAP_BLUR;
+  return {
+    duration,
+    easing: easeOut,
+    css: (t) =>
+      moving
+        ? `opacity: ${t}; scale: ${SWAP_SCALE + (1 - SWAP_SCALE) * t}; filter: blur(${((1 - t) * blur).toFixed(3)}px)`
+        : `opacity: ${t}`,
+  };
+};
 
 export function glyphIn(_node: Element): TransitionConfig {
-  const scale = motionOk.current ? popScale() : 1;
-  return {
-    duration: dur("--duration-fast"),
-    easing: easeOut,
-    css: (t) => `opacity: ${t}; scale: ${scale + (1 - scale) * t}`,
-  };
+  return swap(dur("--duration-slow"));
 }
 export function glyphOut(_node: Element): TransitionConfig {
-  return {
-    duration: dur("--duration-fast"),
-    easing: easeOut,
-    css: (t) => `opacity: ${t}`,
-  };
+  return swap(dur("--duration-base"));
 }

@@ -254,6 +254,10 @@
        * fades in its slot.
        */
       holdsIcon?: boolean;
+      /** What the label says while the work's good end is shown ("Sent"). */
+      doneLabel?: string;
+      /** What the label says while the work's failure is shown ("Not sent"). */
+      failedLabel?: string;
     };
 </script>
 
@@ -302,6 +306,8 @@
     arrivals,
     confirm,
     holdsIcon = false,
+    doneLabel,
+    failedLabel,
     onclick,
     onkeydown,
     onfocusout,
@@ -402,7 +408,9 @@
       {armed}
       {arrivals}
       {confirm}
+      {doneLabel}
       {failed}
+      {failedLabel}
       {holdsIcon}
       {icon}
       {label}

@@ -21,6 +21,8 @@
     label,
     pendingLabel,
     confirm,
+    doneLabel,
+    failedLabel,
     icon,
     variant,
     work = 1400,
@@ -29,6 +31,8 @@
     label: string;
     pendingLabel?: string;
     confirm?: string;
+    doneLabel?: string;
+    failedLabel?: string;
     icon?: Component<SVGAttributes<SVGSVGElement>>;
     variant?: ButtonVariant;
     /** How long the mock work runs, ms. */
@@ -57,7 +61,9 @@
 
 <Button
   {confirm}
+  {doneLabel}
   {failed}
+  {failedLabel}
   holdsIcon={flow === "icon"}
   icon={flow === "icon" && !iconOn ? undefined : icon}
   {label}

@@ -103,6 +103,7 @@ export const PressSucceeds = {
     icon: IconSend,
     label: "Send",
     pendingLabel: "Sending",
+    doneLabel: "Sent",
   },
 };
 
@@ -114,6 +115,7 @@ export const PressFails = {
     variant: "outline",
     label: "Push the branch",
     pendingLabel: "Pushing",
+    failedLabel: "Push failed",
   },
 };
 
@@ -126,6 +128,7 @@ export const PressConfirms = {
     icon: IconTrash,
     label: "Delete the project",
     pendingLabel: "Deleting",
+    doneLabel: "Deleted",
     confirm: "Press again to delete",
   },
 };

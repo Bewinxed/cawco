@@ -178,7 +178,7 @@
     inset 0 0 0 1px light-dark(transparent, oklch(93.4% 0 0 / 0.07));
 
   /* =========================================================================
-     Motion — 5 durations, 3 curves
+     Motion — 6 durations, 3 curves
      ========================================================================= */
 
   --duration-fast: 120ms;
@@ -188,6 +188,9 @@
   /* How long a button that asks before it acts stays armed for its second
      press, its countdown run along its rim. */
   --duration-arm: 4000ms;
+  /* How long the end of a piece of work stays shown (a button's check or
+     cross, and its words for it) before it settles back. */
+  --duration-hold: 2000ms;
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
@@ -1289,9 +1292,14 @@
     );
     --control-halo: 0 0 #0000;
   }
+  /* A control whose work is running (`aria-busy`) takes no press either,
+     but keeps its full ink: it is working, not unavailable. */
   &:is(:disabled, [aria-disabled="true"]) {
-    opacity: 0.5;
     pointer-events: none;
+
+    &:not([aria-busy="true"]) {
+      opacity: 0.5;
+    }
   }
   &:is([aria-invalid="true"], :has([aria-invalid="true"])) {
     --control-edge: var(--color-red);

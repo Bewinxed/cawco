@@ -57,6 +57,7 @@
     crossIn,
     dur,
     motionOk,
+    reveal,
   } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { glyphIn, glyphOut } from "#lib/platform/motion/glyph.js";
@@ -100,7 +101,7 @@
   const failed = $derived(failedFlag || Boolean(reason));
 
   /**
-   * How the work that just ended went, held for --duration-loop: a drawn
+   * How the work that just ended went, held for --duration-hold: a drawn
    * check when it went well, a cross when it failed (unless the ring holds
    * where it got to), then the slot's icon again.
    */
@@ -127,7 +128,7 @@
     }
     const held = setTimeout(() => {
       ended = null;
-    }, dur("--duration-loop"));
+    }, dur("--duration-hold"));
     return () => clearTimeout(held);
   });
 
@@ -148,6 +149,21 @@
   const swapsLabel = $derived(
     pendingLabel !== undefined && pendingLabel !== label
   );
+  /**
+   * The slot keeps its room while it is empty: its icon comes and goes
+   * (`holdsIcon`), or a button with no icon says its work in words of its
+   * own, so the spinner and the end's glyph have room beside the words.
+   * At rest the words slide over that room to stay centred.
+   */
+  const roomy = $derived(
+    holdsIcon ||
+      (Icon === undefined &&
+        (pendingLabel !== undefined ||
+          doneLabel !== undefined ||
+          failedLabel !== undefined))
+  );
+  /** A slot beside the words: an icon in it, or room kept for one. */
+  const beside = $derived(Icon !== undefined || roomy);
   /** It asks before it acts, in words of its own while armed. */
   const asks = $derived(confirm !== undefined && confirm !== label);
   /**
@@ -158,23 +174,25 @@
    */
   const wordings = $derived([
     { key: "rest", text: label ?? "" },
-    ...(swapsLabel && Icon
+    ...(swapsLabel && beside
       ? [{ key: "pending", text: pendingLabel ?? "" }]
       : []),
     ...(asks ? [{ key: "armed", text: confirm ?? "" }] : []),
+    ...(doneLabel ? [{ key: "done", text: doneLabel }] : []),
+    ...(failedLabel ? [{ key: "failed", text: failedLabel }] : []),
   ]);
   const drawnText = $derived(
     wordings.find((one) => one.key === drawn)?.text ?? label ?? ""
   );
-  /** A wording's swap: a fade on the slot's clock, opacity only. */
-  const words = (_node: Element) => ({
-    duration: dur("--duration-slow"),
-    easing: easeInOut,
-    css: (t: number) => `opacity: ${t}`,
-  });
   const drawn = $derived.by(() => {
-    if (pending && swapsLabel && Icon) {
+    if (pending && swapsLabel && beside) {
       return "pending";
+    }
+    if (ended === "done" && doneLabel) {
+      return "done";
+    }
+    if (ended === "failed" && failedLabel) {
+      return "failed";
     }
     return armed && asks && !pending ? "armed" : "rest";
   });
@@ -243,12 +261,10 @@
    * check stands over its label's start while the words fade, so the button
    * never changes width.
    */
-  const covered = $derived(
-    Icon === undefined && !holdsIcon && (phase !== "idle" || ringShown)
-  );
+  const covered = $derived(!beside && (phase !== "idle" || ringShown));
   /** A held slot with nothing in it: the words slide over its room. */
   const roomEmpty = $derived(
-    holdsIcon && Icon === undefined && phase === "idle" && !ringShown
+    roomy && Icon === undefined && phase === "idle" && !ringShown
   );
   /**
    * What the slot shows: one glyph at a time, keyed, so Svelte's own
@@ -329,8 +345,8 @@
 <span
   style:--btn-words-slack={holds && Icon ? `${slack}px` : undefined}
   data-slot="btn-slot"
-  class="icon-swap w-(--btn-icon) flex-none translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) duration-(--duration-slow) ease-in-out data-placed:transition-[translate] motion-reduce:transition-off data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
-  data-over={(Icon === undefined && !holdsIcon) || undefined}
+  class="icon-swap w-(--btn-icon) flex-none translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) duration-(--duration-slow) ease-in-out data-placed:transition-[translate] motion-reduce:transition-off data-over:absolute data-over:inset-0 data-over:w-auto data-over:translate-x-0"
+  data-over={!beside || undefined}
   data-placed={placed || undefined}
 >
   <!-- The key block is the span's own block, so its local transitions play
@@ -458,7 +474,7 @@
         >
       {:else}
         <MorphText text={label} />
-      {/if}{#if swapsLabel && Icon === undefined}
+      {/if}{#if swapsLabel && !beside}
         <!-- No rest icon: its pending wording is never drawn (the spinner
              stands over the label's start instead), so it never stands in
              the label's cell to widen it; a reader is still told it. -->
