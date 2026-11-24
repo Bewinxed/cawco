@@ -41,7 +41,13 @@
  * shell's box (its SVG overflows), so nothing else moves. The wheel never
  * widens, so `inset` reads the pill's width.
  */
-import { easeDrawer, motionOk } from "#lib/platform/motion/curves.svelte.js";
+import {
+  easeDrawer,
+  easingOf,
+  motionOk,
+} from "#lib/platform/motion/curves.svelte.js";
+import { FRAME } from "#lib/platform/motion/edge-cut.js";
+import type { GrowChange } from "#lib/platform/motion/grow-cut.js";
 
 /** How far the shoulders curve in for each row of height, as a share of the width. */
 const TAPER = 0.022;
@@ -99,6 +105,8 @@ function shadowOf(value: string): Shadow | null {
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+/** How far a glide's cuts leave the outline open on their other sides: past its stroke and its wide top. */
+const OPEN = "-4096px";
 const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
 
 /**
@@ -148,6 +156,17 @@ export class GrownShape {
   #done: (() => void) | null = null;
   /** What the drop waits on after the next morph lands, besides it. */
   #after: Promise<void> | null = null;
+  /**
+   * The outline's foot, drawn still at the pill's foot while the rest of
+   * it glides on a change of the pill's height ({@link glideBase}): shown
+   * only for the glide, its round corners and the straight sides' last
+   * pixel.
+   */
+  readonly #foot: HTMLDivElement;
+  readonly #footSvg: SVGSVGElement;
+  readonly #footPath: SVGPathElement;
+  /** A glide in flight: its animations. */
+  #glide: { runs: Animation[] } | null = null;
   /** The shell's laid-out width, followed: the shape is always as wide as it. */
   // biome-ignore lint/style/noRestrictedGlobals: the observer exempted where it is made (the constructor), which answers in its delivery
   readonly #follow: ResizeObserver;
@@ -239,6 +258,19 @@ export class GrownShape {
     this.#svg.append(this.#path);
     this.#halo.append(this.#svg);
     host.append(this.#halo);
+    this.#foot = document.createElement("div");
+    this.#foot.className = LAYER;
+    this.#foot.hidden = true;
+    this.#foot.setAttribute("data-slot", "grown-foot");
+    this.#foot.setAttribute("aria-hidden", "true");
+    this.#footSvg = document.createElementNS(SVG_NS, "svg");
+    this.#footPath = document.createElementNS(SVG_NS, "path");
+    this.#footPath.setAttribute("fill", `url(#${fill})`);
+    this.#footPath.setAttribute("stroke", `url(#${edge})`);
+    this.#footPath.setAttribute("stroke-width", "1");
+    this.#footSvg.append(this.#footPath);
+    this.#foot.append(this.#footSvg);
+    host.append(this.#foot);
     const stops = this.#svg.querySelectorAll("stop");
     this.#mid = stops[1];
     this.#edge = stops[4];
@@ -264,10 +296,137 @@ export class GrownShape {
     return this.#size.base;
   }
 
-  /** The pill grew or shrank under it (a field growing as it is edited). */
+  /** The pill grew or shrank under it, laid out as it lands (a change no one watches). */
   set base(base: number) {
+    this.#endGlide();
     this.#size.base = base;
     this.paint();
+  }
+
+  /**
+   * The pill grew or shrank under it on a run of its own (motion/grow-cut,
+   * a line the field gains or gives up as it is edited): the shape takes
+   * the change on the same frames, by transform and clip, laying nothing
+   * out frame by frame. A change only lengthens or shortens the straight
+   * sides between the outline's top and its foot, so the shape is laid out
+   * once at the taller of the two heights, and all of it above the foot
+   * glides by `translateY` from the height it was drawn at to the one it
+   * lands at, cut at the foot's round corners; the foot itself is drawn
+   * still under it. The rows it clips glide with it. A shorter shape is
+   * laid out at its height once the glide has run, `beforeLand` first (the
+   * rows' own place). Resolves to whether it ran to its end.
+   */
+  glideBase(
+    { at, easing, from, ms, to }: GrowChange,
+    beforeLand?: () => void
+  ): Promise<boolean> {
+    this.#endGlide();
+    if (!motionOk.current || ms <= 0 || Math.abs(from - to) <= 0.5) {
+      beforeLand?.();
+      this.#size.base = to;
+      this.paint();
+      return Promise.resolve(false);
+    }
+    const laid = Math.max(from, to);
+    this.#size.base = laid;
+    const height = this.paint();
+    const { r } = this.#size;
+    this.#draw(
+      this.#foot,
+      this.#footSvg,
+      this.#footPath,
+      this.outline(this.open).d,
+      height
+    );
+    this.#foot.style.clipPath = `inset(calc(100% - ${r + 1}px) ${OPEN} ${OPEN} ${OPEN})`;
+    this.#foot.hidden = false;
+    const curve = easingOf(easing);
+    /** How far below where it is laid out the shape is drawn, `t` ms in. */
+    const shiftAt = (t: number) => laid - lerp(from, to, curve(t / ms));
+    const times: number[] = [];
+    for (let t = 0; t < ms; t += FRAME) {
+      times.push(t);
+    }
+    times.push(ms);
+    const timing: KeyframeAnimationOptions = {
+      duration: ms,
+      easing: "linear",
+      fill: "forwards",
+    };
+    const play = (el: HTMLElement, frames: Keyframe[]) => {
+      const run = el.animate(frames, timing);
+      run.startTime = at;
+      return run;
+    };
+    // The outline's move and its cut at the foot, each an effect of its own
+    // on the same timing (house/no-clip-with-move).
+    const runs = [
+      play(
+        this.#halo,
+        times.map((t) => ({
+          offset: t / ms,
+          transform: `translateY(${shiftAt(t).toFixed(2)}px)`,
+        }))
+      ),
+      play(
+        this.#halo,
+        times.map((t) => ({
+          offset: t / ms,
+          clipPath: `inset(${OPEN} ${OPEN} ${(shiftAt(t) + r).toFixed(2)}px ${OPEN})`,
+        }))
+      ),
+      ...[...this.#clips.keys()].map((row) =>
+        play(
+          row,
+          times.map((t) => ({
+            offset: t / ms,
+            transform: `translateY(${shiftAt(t).toFixed(2)}px)`,
+          }))
+        )
+      ),
+    ];
+    // The drop under it stretches to the shape's height at each moment, its
+    // foot on the pill's: a blur's stretch never shows.
+    if (this.#drop.hasAttribute("data-settled") && this.open === 1) {
+      this.#settle();
+      runs.push(
+        play(
+          this.#drop,
+          times.map((t) => ({
+            offset: t / ms,
+            transform: `scaleY(${((height - shiftAt(t)) / height).toFixed(4)})`,
+          }))
+        )
+      );
+    }
+    const glide = { runs };
+    this.#glide = glide;
+    return Promise.all(runs.map((run) => run.finished)).then(
+      () => {
+        if (this.#glide !== glide) {
+          return false;
+        }
+        beforeLand?.();
+        this.#endGlide();
+        this.#size.base = to;
+        this.paint();
+        return true;
+      },
+      () => false
+    );
+  }
+
+  /** A glide let go: its motion off the layers, the foot put away. */
+  #endGlide(): void {
+    const glide = this.#glide;
+    if (!glide) {
+      return;
+    }
+    this.#glide = null;
+    for (const run of glide.runs) {
+      run.cancel();
+    }
+    this.#foot.hidden = true;
   }
 
   /** How far the shoulders curve in, grown. */
@@ -612,6 +771,7 @@ export class GrownShape {
     cue?: { ms: number; run: () => void }
   ): Promise<void> {
     cancelAnimationFrame(this.#frame);
+    this.#endGlide();
     this.#done?.();
     if (this.#drop.hasAttribute("data-settled") && open <= this.open) {
       this.#followDrop(open, ext, ms, base, open < this.open);
@@ -682,8 +842,10 @@ export class GrownShape {
   remove(): void {
     this.#follow.disconnect();
     cancelAnimationFrame(this.#frame);
+    this.#endGlide();
     this.#done?.();
     this.#halo.remove();
+    this.#foot.remove();
     this.#drop.remove();
     for (const el of this.#clips.keys()) {
       el.style.clipPath = "";

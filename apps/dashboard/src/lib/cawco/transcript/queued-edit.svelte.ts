@@ -11,6 +11,7 @@ import { tick, untrack } from "svelte";
 import { felt } from "#lib/platform/feel.svelte.js";
 import { failureWords } from "#lib/platform/hub-read.js";
 import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+import type { GrowChange } from "#lib/platform/motion/grow-cut.js";
 import type MentionField from "../find/MentionField.svelte";
 import type { Message } from "../types";
 import type { ComposerDraft } from "./composer-draft.svelte";
@@ -118,7 +119,9 @@ export class QueuedEdit {
     });
 
     // The field grows and shrinks as the words are edited: the grown shape and
-    // its row stay on the pill's top edge.
+    // its row stay on the pill's top edge. A change the pill's cut draws
+    // reaches them as it starts (`followPill`), and they glide with it; one
+    // no one watches (the window narrowing, less motion) lands here.
     $effect(() => {
       const node = parts.pill();
       if (!(node && this.edit)) {
@@ -154,6 +157,25 @@ export class QueuedEdit {
     $effect(() => () => {
       this.#editShape?.remove();
       this.#editShape = null;
+    });
+  }
+
+  /**
+   * A change of the pill's height its cut draws (motion/grow-cut, the
+   * composer's `follow`): the grown shape and its row take it on the same
+   * frames (GrownShape `glideBase`). The row is laid out with the shape, at
+   * the taller of the two heights while it glides, then at the pill's.
+   */
+  followPill(change: GrowChange): void {
+    const shape = this.#editShape;
+    if (!(shape && this.edit)) {
+      return;
+    }
+    this.edit.base = Math.max(change.from, change.to);
+    shape.glideBase(change, () => {
+      if (this.edit && this.#editShape === shape) {
+        this.edit.base = change.to;
+      }
     });
   }
 

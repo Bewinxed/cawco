@@ -610,24 +610,36 @@
    * What each line the field grows or gives up is drawn on (motion/
    * grow-cut): the pill, standing on its foot, so its head moves; cut flush,
    * its fill being the dock shell's glass; on the field's clock (a line, a
-   * fold, the recall wheel settling). While grown or recalling the pill
-   * draws no surface of its own (`data-grown`, `data-recalling`) and the
-   * grown shape that does is an outline drawn behind it (grown.ts), which a
-   * slice cannot wear: the pill stays the look, its slice clear, and the cut
-   * still carries the field's lines in on the clock while the shape follows
-   * the pill as it does.
+   * fold, the recall wheel settling). What stands in the pill over its foot
+   * (the find line, the lead row, the field's box, the `/` menu) is carried
+   * up with the head from where it was drawn, the field's box cut at its
+   * foot so a line it gained there rises into sight. While grown or
+   * recalling the pill draws no surface of its own (`data-grown`,
+   * `data-recalling`) and the grown shape that does is an outline drawn
+   * behind it (grown.ts), which a slice cannot wear: the pill stays the
+   * look, its slice clear, and the queued edit's shape takes each change on
+   * the cut's own frames (`followPill`).
    */
   function grows(): GrowTarget | null {
     const node = field;
-    if (!(pill && node)) {
+    const box = pill;
+    if (!(box && node)) {
       return null;
     }
     return {
-      box: pill,
-      look: pill,
+      box,
+      look: box,
       side: "head",
       flush: true,
       clock: () => fieldClock(node),
+      carry: () =>
+        [...box.children]
+          .filter((child): child is HTMLElement => child instanceof HTMLElement)
+          .map((element) => ({
+            element,
+            clip: element === recalling.fieldWrap,
+          })),
+      follow: (change) => queued.followPill(change),
     };
   }
 

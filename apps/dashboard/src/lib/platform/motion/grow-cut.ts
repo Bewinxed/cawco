@@ -16,7 +16,12 @@
  *   by `transform` to where it was drawn, then slides home on the cut's
  *   clock: read at each depth from the box up to the first container that
  *   scrolls or stands out of the flow, so a group that moves carries what
- *   is inside it;
+ *   is inside it; and what the target names inside the box (`carry`: a
+ *   head-side box's rows over its field, and the field), carried the same
+ *   way, a field cut at its foot until it has risen to the line it gained;
+ * - what draws itself off the box (`follow`: the grown composer's outline)
+ *   is told the change and its clock as the run starts, and takes it on the
+ *   same frames;
  * - a change that leaves the box shorter than it is drawn holds it at the
  *   drawn height (a `min-height` on what draws it) while the cut closes, and
  *   what stands after it slides up by `transform` as far as the change
@@ -30,10 +35,41 @@
 import { dur, ease, easingOf, motionOk } from "./curves.svelte";
 import { EdgeCut, FRAME } from "./edge-cut";
 
+/** One change as its run starts: the box's height as drawn and as laid out, and the run's clock. */
+export interface GrowChange {
+  /** When the run started, on the document's timeline (ms). */
+  at: number;
+  easing: string;
+  /** The box's height as it was drawn when the change came. */
+  from: number;
+  ms: number;
+  /** The box's height as the change lays it out. */
+  to: number;
+}
+
+/** What stands inside the box that a change moves, carried as what stands around it is. */
+interface Carried {
+  /**
+   * Cut at its own foot by as far as it is drawn below where it stands, so
+   * what it gained there comes into sight as it rises (a field whose new
+   * line wrapped under its last one).
+   */
+  clip?: boolean;
+  element: HTMLElement;
+}
+
 /** The box a field's height changes are drawn on, what draws its look, and the edge that moves. */
 export interface GrowTarget {
   /** Holds the field and draws its edge: its clip cuts this. */
   box: HTMLElement;
+  /**
+   * What stands inside the box that a change moves (a box standing on its
+   * foot: the rows over its field, and the field itself), laid out at its
+   * new place and carried there from where it was drawn, as what stands
+   * around the box is. Without it, the head cut uncovers them where they
+   * now stand.
+   */
+  carry?: () => Iterable<Carried>;
   /**
    * The change's duration and easing, asked as each change starts (the
    * composer's: a line, a fold, the recall wheel settling). Without one,
@@ -46,6 +82,12 @@ export interface GrowTarget {
    * strip is drawn twice.
    */
   flush?: boolean;
+  /**
+   * Told of each change as its run starts: what draws itself off the box
+   * (the grown composer's outline, standing on the pill) takes the same
+   * change on the same clock.
+   */
+  follow?: (change: GrowChange) => void;
   /** Draws the box's fill, border, rounding and shadow: the slice wears its look, and a shrink holds it. */
   look: HTMLElement;
   side: "foot" | "head";
@@ -59,6 +101,8 @@ interface Place {
 
 /** Where an element is drawn as a change begins, where it is laid out, and whether it has a transform of its own. */
 interface Placed extends Place {
+  /** Carried inside the box, cut at its foot while it is drawn below where it stands. */
+  clip: boolean;
   laid: Place;
   own: boolean;
 }
@@ -68,6 +112,8 @@ interface Moved {
   animation: Animation;
   at: number;
   curve: (t: number) => number;
+  /** Its foot cut, while it is carried inside the box below where it stands. */
+  cut: Animation | null;
   from: Place;
   ms: number;
   /** It has a transform of its own, which the move adds to. */
@@ -160,6 +206,50 @@ function placesOf(elements: Iterable<HTMLElement>): Map<HTMLElement, Place> {
 }
 
 const translate = ({ x, y }: Place): string => `translate(${x}px, ${y}px)`;
+/** How far a carried element's foot cut leaves it open on its other sides: past anything it draws. */
+const OPEN = "-4096px";
+
+/** Where a move stands at each frame of `ms`, a frame apart (motion/edge-cut's sampling), and at its end. */
+function stepsOf(
+  from: Place,
+  end: Place,
+  curve: (t: number) => number,
+  ms: number
+): [offset: number, place: Place][] {
+  const steps: [offset: number, place: Place][] = [];
+  for (let t = 0; t < ms; t += FRAME) {
+    steps.push([t / ms, along(from, end, curve(t / ms))]);
+  }
+  steps.push([1, end]);
+  return steps;
+}
+
+/** Whether a move draws its element below where it stands at either end. */
+const below = (from: Place, end: Place): boolean => from.y > 0.5 || end.y > 0.5;
+
+/**
+ * A carried element's foot cut, `at` on the document's timeline over `ms`:
+ * cut by as far as it is drawn below where it stands at each step. An
+ * effect of its own on the move's timing: a cut and a move in one effect
+ * is one Chromium's renderer dies of once a later move displaces it
+ * (house/no-clip-with-move).
+ */
+function footCut(
+  element: HTMLElement,
+  steps: [offset: number, place: Place][],
+  at: number,
+  ms: number
+): Animation {
+  const cut = element.animate(
+    steps.map(([offset, place]) => ({
+      offset,
+      clipPath: `inset(${OPEN} ${OPEN} ${Math.max(0, place.y).toFixed(2)}px ${OPEN})`,
+    })),
+    { duration: ms, easing: "linear" }
+  );
+  cut.startTime = at;
+  return cut;
+}
 /** The place `p` of the way from `from` to `to`. */
 const along = (from: Place, to: Place, p: number): Place => ({
   x: from.x + (to.x - from.x) * p,
@@ -240,6 +330,7 @@ export function growCut(target: () => GrowTarget | null) {
   const letGo = () => {
     for (const move of moved.values()) {
       move.animation.cancel();
+      move.cut?.cancel();
     }
     moved.clear();
     release();
@@ -262,10 +353,17 @@ export function growCut(target: () => GrowTarget | null) {
     }
     const height = aim.box.offsetHeight;
     const places = new Map<HTMLElement, Placed>();
-    for (const element of aroundOf(aim.box, drawn?.slice ?? null)) {
+    const moving: Carried[] = [
+      ...aroundOf(aim.box, drawn?.slice ?? null).map((element) => ({
+        element,
+      })),
+      ...(aim.carry?.() ?? []),
+    ];
+    for (const { element, clip = false } of moving) {
       const off = offsetNow(element);
       const laid = laidAt(element);
       places.set(element, {
+        clip,
         laid,
         x: laid.x + off.x,
         y: laid.y + off.y,
@@ -301,6 +399,7 @@ export function growCut(target: () => GrowTarget | null) {
       const landing = settled.get(element);
       const prior = moved.get(element);
       prior?.animation.cancel();
+      prior?.cut?.cancel();
       moved.delete(element);
       if (!(standing && landing)) {
         continue;
@@ -310,23 +409,32 @@ export function growCut(target: () => GrowTarget | null) {
       if (still(from) && still(end)) {
         continue;
       }
-      const frames: Keyframe[] = [];
-      for (let t = 0; t < ms; t += FRAME) {
-        const p = curve(t / ms);
-        frames.push({
-          offset: t / ms,
-          transform: translate(along(from, end, p)),
-        });
-      }
-      frames.push({ offset: 1, transform: translate(end) });
       const own = drawnAt.own || (prior?.own ?? false);
-      const animation = element.animate(frames, {
-        duration: ms,
-        easing: "linear",
-        composite: own ? "add" : "replace",
-      });
+      const steps = stepsOf(from, end, curve, ms);
+      const animation = element.animate(
+        steps.map(([offset, place]) => ({
+          offset,
+          transform: translate(place),
+        })),
+        { duration: ms, easing: "linear", composite: own ? "add" : "replace" }
+      );
       animation.startTime = at;
-      const move: Moved = { animation, at, curve, from, ms, own, to: end };
+      // Carried inside the box while drawn below where it stands: what it
+      // gained at its foot stays out of sight until it rises to it.
+      const cut =
+        drawnAt.clip && !own && below(from, end)
+          ? footCut(element, steps, at, ms)
+          : null;
+      const move: Moved = {
+        animation,
+        at,
+        curve,
+        cut,
+        from,
+        ms,
+        own,
+        to: end,
+      };
       moved.set(element, move);
       animation.finished.then(
         () => {
@@ -417,6 +525,7 @@ export function growCut(target: () => GrowTarget | null) {
       () => undefined
     );
     moveAround(start.places, { settled, stand }, { at, ms, easing });
+    start.target.follow?.({ at, easing, from: start.shown, ms, to });
     return clock;
   }
 
