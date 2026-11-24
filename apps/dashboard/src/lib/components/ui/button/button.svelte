@@ -18,8 +18,11 @@
         outline: "",
         secondary: "",
         ghost: "control-quiet",
-        destructive: "control-primary control-danger text-on-accent",
-        /* An intent is the primary look filled in its ink (owner's pick,
+        /* Destructive is the neutral button in red ink, never filled
+           (owner's pick, 2026-11-24; HIG Buttons: a destructive button uses
+           red and never takes the primary role). */
+        destructive: "text-red",
+        /* A grant is the primary look filled in its ink (owner's pick,
            2026-11-24). A grant wider than what was asked (DESIGN.md, The
            Consequential Grant Rule) is the caution intent, the same at rest
            and under the pointer, so it is never made more inviting. */
