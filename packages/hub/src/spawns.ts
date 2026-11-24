@@ -1498,7 +1498,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     if (!traitsOf(row?.harness).accountDir) {
       return;
     }
-    const owed = ctx.owedOn(row);
+    const owed = ctx.owedOn(row, "ask");
     return launchedOn(
       ctx.launchAccount(machineId, owed, ctx.sessionName(owed), "ask")
     );

@@ -91,8 +91,6 @@ export type AskRoutingContext = Pick<
   | "lead"
   | "machineName"
   | "movedFrom"
-  | "oweMoveOff"
-  | "owedMoves"
   | "pending"
   | "publishDelegateEvent"
   | "publishUsage"
@@ -106,7 +104,6 @@ export type AskRoutingContext = Pick<
   | "transcripts"
   | "triggers"
   | "usageCounter"
-  | "wakesForSend"
   | "watch"
   | "workItems"
 > &
@@ -228,9 +225,10 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
    * account is signed out where the refusal reaches ({@link signOutRefused}),
    * the session's machine or every machine it is signed in on, with the
    * refusal's words, so no new session is placed on it there and Configure →
-   * Accounts offers to sign it in again; the sessions resting on it there
-   * owe a move to the account placement carries each to
-   * ({@link moveRestingOff}). Any other error changes nothing.
+   * Accounts offers to sign it in again. The sessions resting on it there
+   * are not touched: each moves as it next launches, its leave read from
+   * the sign-in (limit-moves.ts `signedOutLeave`). Any other error changes
+   * nothing.
    * Only the row's live launch speaks for its account, and only one
    * reading the account's own credential: not one on the machine's own login
    * while it moves into CawCo, nor one still running from a credential that
@@ -264,43 +262,13 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
     const named = ctx.accountWords(accountId);
     console.warn(
       word.reach === "account"
-        ? `[accounts] ${named} is signed out on ${out.map(ctx.machineName).join(", ")}: ${ctx.sessionName(row)}'s Claude Code on ${ctx.machineName(machineId)} was refused the account itself, whatever credential asks (${word.reason}). Nothing new is placed on ${named} until it is signed in again in ${configurePage("accounts")}; the session it stopped, and every session resting on it, moves to another account.`
-        : `[accounts] ${named} on ${ctx.machineName(machineId)} is signed out: ${ctx.sessionName(row)}'s Claude Code refused its credential (${word.reason}). Nothing new is placed on ${named} there until it is signed in again on ${ctx.machineName(machineId)} in ${configurePage("accounts")}; the session it stopped, and every session resting on it there, moves to another account.`
+        ? `[accounts] ${named} is signed out on ${out.map(ctx.machineName).join(", ")}: ${ctx.sessionName(row)}'s Claude Code on ${ctx.machineName(machineId)} was refused the account itself, whatever credential asks (${word.reason}). Nothing new is placed on ${named} until it is signed in again in ${configurePage("accounts")}; the session it stopped moves to another account, and every session resting on it moves as it next starts.`
+        : `[accounts] ${named} on ${ctx.machineName(machineId)} is signed out: ${ctx.sessionName(row)}'s Claude Code refused its credential (${word.reason}). Nothing new is placed on ${named} there until it is signed in again on ${ctx.machineName(machineId)} in ${configurePage("accounts")}; the session it stopped moves to another account, and every session resting on it there moves as it next starts.`
     );
     for (const one of out) {
       ctx.publishUsage(one);
     }
-    moveRestingOff(accountId, out, row.id);
     return word;
-  };
-  /**
-   * The sessions on `accountId` on `machines`, its sign-in just refused
-   * there ({@link settleRefusal}), other than `refused` (whose own turn's
-   * end moves it, `takeCredentialTurn`): each whose process is gone
-   * owes a move to the account placement carries it to now
-   * ({@link oweMoveOff}), so its next wake launches there and what it
-   * is sent goes to it (`wakeOf` reads the owed account). One with a
-   * process moves when its next turn meets the same refusal. One no account
-   * can take stays, and a send to it is refused with the way back
-   * (`account-signed-out`).
-   */
-  const moveRestingOff = (
-    accountId: string,
-    machines: readonly string[],
-    refused: string
-  ): void => {
-    for (const row of ctx.db.listInstances()) {
-      if (
-        row.id !== refused &&
-        row.accountId === accountId &&
-        traitsOf(row.harness).accountDir &&
-        machines.includes(row.machineId) &&
-        ctx.wakesForSend(row) &&
-        !ctx.owedMoves.has(row.id)
-      ) {
-        ctx.oweMoveOff(row.id, accountId, "refused");
-      }
-    }
   };
   /** Why an ask arriving from a machine is not this row's live process's; none when it is. */
   const askRefusal = (

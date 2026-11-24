@@ -947,7 +947,7 @@ export interface ClosureContext {
     set: (instanceId: string, owed: OwedMove) => void;
     delete: (instanceId: string) => void;
   };
-  owedOn: (row: StoredRow) => StoredRow;
+  owedOn: (row: StoredRow, use?: AccountUse) => StoredRow;
   owedTargets: () => Map<string, string>;
   /** This hub's own machine id, once read; undefined before. */
   oweMoveOff: (

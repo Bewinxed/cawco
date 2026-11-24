@@ -979,10 +979,12 @@ export const createLaunches = (ctx: LaunchesContext) => {
       } => {
     // On the account a move owed to it names, as its launch takes it
     // ({@link grantLaunch}): a session owed a move off a refused account
-    // wakes there, never refused for the account it leaves.
+    // wakes there, never refused for the account it leaves. Asked, where it
+    // goes is not decided: a question never decides a move (limit-moves.ts
+    // `owedNow`), as deciding one asks this gate of the same session.
     const launch = ctx.launchAccount(
       machineId,
-      ctx.owedOn(row),
+      ctx.owedOn(row, use),
       ctx.sessionName(row),
       use
     );

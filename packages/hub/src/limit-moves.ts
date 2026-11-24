@@ -49,7 +49,7 @@ import {
   decide,
   staleChoice,
 } from "./decide";
-import type { MoveOffWhy, StoredRow } from "./hub-shapes";
+import type { AccountUse, MoveOffWhy, StoredRow } from "./hub-shapes";
 import { type CacheState, cacheState } from "./keep-alive";
 import {
   type AccountsRead,
@@ -98,6 +98,7 @@ export type LimitMovesContext = Pick<
   | "credentialTurns"
   | "db"
   | "followupState"
+  | "homeLoginMoveOf"
   | "forgetPendingOf"
   | "inFlightFor"
   | "inputRefusal"
@@ -191,10 +192,18 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   /**
    * `row` as the launch a move owed to it lands runs it ({@link owedMoves}):
    * on the account the move names, and on the model a person picked while it
-   * waited ({@link pickWithMove}). As it is when it owes none.
+   * waited ({@link pickWithMove}). As it is when it owes none. `use`: only a
+   * launch (`claim`) decides where a session leaving its account goes; a
+   * question (`ask`) reads what is decided already ({@link owedNow}).
    */
-  const owedOn = (row: StoredRow): StoredRow => {
-    const owed = owedNow(row);
+  const owedOn = (row: StoredRow, use: AccountUse = "claim"): StoredRow => {
+    // Asked, a leave not yet decided reads as no account: the gate asks
+    // placement whether any account takes it, as a row a removal left on
+    // none is asked, and decides nothing (launch-accounts.ts `accountLaunch`).
+    if (use === "ask" && leavesAtWake(row)) {
+      return { ...row, accountId: null };
+    }
+    const owed = owedNow(row, use);
     return owed
       ? {
           ...row,
@@ -1045,19 +1054,32 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    * kept only for the launch that carries it (a wake's), dropped once older
    * than the decision allows (decide.ts `CHOICE_FRESH_MS`). Undefined when
    * it owes none, or nothing can take it now.
+   *
+   * A session at rest on an account signed out on its machine owes its
+   * leave without a record ({@link signedOutLeave}). Asked (`ask`), nothing
+   * is decided or written: a leave not yet decided reads as none
+   * ({@link owedOn} reads its session as on no account).
+   * Deciding asks the send gate whether the session takes the compaction's
+   * words (`factsFor` `compactable`), and that gate asks this: a question
+   * that decided would ask itself again without end (obelisk, 2026-11-24:
+   * every reader of 593 sessions' gates recursed to the stack's limit, and
+   * the hub grew to 80 GB until its watch ended it, at every start).
    */
-  const owedNow = (row: StoredRow): OwedMove | undefined => {
-    const owed = ctx.owedMoves.get(row.id);
+  const owedNow = (
+    row: StoredRow,
+    use: AccountUse = "claim"
+  ): OwedMove | undefined => {
+    const owed = ctx.owedMoves.get(row.id) ?? signedOutLeave(row);
     if (!owed) {
       return;
     }
     const now = Date.now();
-    const stale =
-      owed.to !== undefined &&
-      !owed.byHand &&
-      owed.carry === undefined &&
-      owed.at !== undefined &&
-      now - owed.at > CHOICE_FRESH_MS;
+    const stale = staleOwed(owed, now);
+    if (use === "ask") {
+      return (owed.leave !== undefined && owed.to === undefined) || stale
+        ? undefined
+        : owed;
+    }
     // A marker to leave is decided as it is carried, and again once the
     // target it was carried towards is older than the decision allows.
     if (owed.leave !== undefined && (owed.to === undefined || stale)) {
@@ -1072,6 +1094,69 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     }
     return owed;
   };
+
+  /**
+   * The leave `row` owes with no record of it: its account is not signed in
+   * for its harness on its machine (a refused credential, a person's
+   * sign-out there, Codex signed out of it there), so it can't run there and
+   * goes, as it next launches, where the decision carries it. Read from the
+   * sign-ins, never written per session: a session at rest is not moved
+   * before something wakes it, and an account signed out under a thousand
+   * resting sessions costs nothing until one of them does (obelisk,
+   * 2026-11-24: a refusal wrote 593 such moves, and every machine's
+   * register carried them all at once). Not one that runs on its machine's
+   * own login while that moves into its account (`homeLoginMoveOf`): it
+   * runs there until the move lands.
+   */
+  const signedOutLeave = (row: StoredRow): OwedMove | undefined => {
+    const account = row.accountId
+      ? ctx.db.accounts.get(row.accountId)
+      : undefined;
+    // Placed there by CawCo, in any state: on an account never placed on its
+    // machine it ran on the machine's own login (launch-accounts.ts
+    // `placedOn`), which this does not judge.
+    const placed = ctx.db.accounts
+      .signins()
+      .some(
+        (one) =>
+          one.accountId === account?.id && one.machineId === row.machineId
+      );
+    if (!(account && placed) || ctx.homeLoginMoveOf(row.machineId, row)) {
+      return;
+    }
+    const signins = ctx
+      .signinsFor(row.harness)
+      .filter(
+        (one) => one.accountId === account.id && one.machineId === row.machineId
+      );
+    if (signins.some((one) => one.state === "signed-in")) {
+      return;
+    }
+    return {
+      move: null,
+      waits: "turn",
+      leave: signins.some((one) => one.reason !== null)
+        ? "refused"
+        : "signed-out",
+    };
+  };
+
+  /** Whether `row`'s next launch leaves its account, where to not decided yet (or decided too long ago): its launch decides it ({@link owedNow}). */
+  const leavesAtWake = (row: StoredRow): boolean => {
+    const owed = ctx.owedMoves.get(row.id) ?? signedOutLeave(row);
+    return (
+      owed?.leave !== undefined &&
+      (owed.to === undefined || staleOwed(owed, Date.now()))
+    );
+  };
+
+  /** Whether the hub's own target of `owed` is older by `now` than its decision allows (decide.ts `CHOICE_FRESH_MS`). */
+  const staleOwed = (owed: OwedMove, now: number): boolean =>
+    owed.to !== undefined &&
+    !owed.byHand &&
+    owed.carry === undefined &&
+    owed.at !== undefined &&
+    now - owed.at > CHOICE_FRESH_MS;
 
   /**
    * Where `row`, which must leave its account (`why`), goes now: the one
@@ -1173,6 +1258,11 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    * takes it up. Only one whose session is at rest on its machine's word
    * goes now ({@link relaunchOnAccount}), its end having passed while
    * the link or the hub was down, as a relaunch alone (`to` absent) goes.
+   * A leave not yet decided is never one: it waits for its session's next
+   * launch, which decides it ({@link owedNow}). They are taken up one at a
+   * time, each carry landed before the next begins: a register never starts
+   * a carry per owed move at once (obelisk, 2026-11-24: 593 at once, each
+   * reading its session, held the hub past its watch at every start).
    * This is also how a hub restart carries out what {@link owedMoves}
    * holds: every machine registers again. A link that dropped and came
    * back takes up nothing that did not wait on it.
@@ -1202,29 +1292,60 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
       );
     }
     const heldIds = new Set(heldHere.map((one) => one.instanceId));
+    const takenUp: { id: string; waited: boolean }[] = [];
     for (const [id, move] of onMachine) {
-      if (move.to !== undefined && heldIds.has(id)) {
+      if (
+        (move.to !== undefined && heldIds.has(id)) ||
+        (move.leave !== undefined && move.to === undefined)
+      ) {
         continue;
       }
       if (move.waits !== "machine" || move.to === undefined) {
-        detach(
-          (async () => {
-            const [row] = ctx.db.getInstancesByIds([id]);
-            if (row && ctx.owedMoves.has(id) && (await ctx.sessionIdle(row))) {
-              relaunchOnAccount(id);
-            }
-          })(),
-          "owed move at rest"
-        );
+        takenUp.push({ id, waited: false });
         continue;
       }
       const [row] = ctx.db.getInstancesByIds([id]);
       console.info(
         `[accounts] ${row ? ctx.sessionName(row) : id}'s move to ${ctx.accountWords(move.to)} waited for ${ctx.machineName(machineId)}, which was away; it is connected again, so the move is carried out now.`
       );
-      const going = takeUpOwedMove(id);
-      if (going !== undefined) {
-        detach(going, "owed move");
+      takenUp.push({ id, waited: true });
+    }
+    if (takenUp.length > 0) {
+      detach(takeUpInTurn(takenUp), "owed moves on register");
+    }
+  };
+
+  /**
+   * The moves a register takes up ({@link takeUpMovesOn}), one after
+   * another: one that waited on the machine is carried; any other only once
+   * its session is at rest on its machine's word. One that fails is said in
+   * the log, and the next goes on.
+   */
+  const takeUpInTurn = async (
+    moves: readonly { id: string; waited: boolean }[]
+  ): Promise<void> => {
+    for (const { id, waited } of moves) {
+      try {
+        if (waited) {
+          await takeUpOwedMove(id);
+          continue;
+        }
+        const [row] = ctx.db.getInstancesByIds([id]);
+        if (!(row && ctx.owedMoves.has(id) && (await ctx.sessionIdle(row)))) {
+          continue;
+        }
+        // A carry lands before the next begins, and relaunches it itself;
+        // a move with none to carry (a relaunch alone) goes as one.
+        const going = takeUpOwedMove(id);
+        if (going === undefined) {
+          relaunchOnAccount(id);
+        } else {
+          await going;
+        }
+      } catch (error) {
+        console.warn(
+          `[accounts] ${id.slice(0, 8)}'s owed move was not taken up: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     }
   };
@@ -2203,11 +2324,31 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
   };
 
   /**
+   * Whether `row`, which leaves `accountId` (`why`, {@link moveOff}), has an
+   * account to go to: one a person (or rebalance) already moves elsewhere
+   * goes there; one whose process may run owes its move
+   * ({@link oweMoveOff}); one at rest has nothing written, only asked.
+   */
+  const goesOff = (
+    row: PublicInstanceRow,
+    accountId: string,
+    why: MoveOffWhy
+  ): boolean =>
+    ctx.owedMoves.get(row.id)?.to !== undefined ||
+    (ctx.processMayRun(row)
+      ? oweMoveOff(row.id, accountId, why)
+      : ctx.atLimit.credentialMoveTo(row.id) !== undefined);
+
+  /**
    * Every session on `account` (on `machineId` alone, when a person signs it
    * out there; on every machine, when he removes it; of the harnesses
-   * `scope.of` keeps, when one sign-in alone goes and another stays) owes a
-   * move to the account placement carries it to ({@link oweMoveOff}): one
-   * at rest is never woken for it, one in a turn moves at its end. A move
+   * `scope.of` keeps, when one sign-in alone goes and another stays) moves
+   * to the account placement carries it to: one whose process may run owes
+   * it ({@link oweMoveOff}), and moves at its turn's end; one at rest owes
+   * nothing written, and moves as it next launches, read from the sign-in
+   * ({@link signedOutLeave}) or from its row naming no account (a removal,
+   * `rowsLeave`), so a sign-out writes nothing for the sessions it never
+   * wakes. A move
    * owed to `account` there is dropped. One left on no account is stranded
    * as `scope.strand` (else `why`) says. Answers how many move and how many
    * have no account to go to, and the rows whose process may still run
@@ -2241,11 +2382,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
     let moving = 0;
     const strandedIds: string[] = [];
     for (const row of rows) {
-      // One a person (or rebalance) already moves elsewhere goes there.
-      if (
-        ctx.owedMoves.get(row.id)?.to !== undefined ||
-        oweMoveOff(row.id, account.id, why)
-      ) {
+      if (goesOff(row, account.id, why)) {
         moving += 1;
       } else if (traitsOf(row.harness).accountDir || isChatgptPlan(account)) {
         // Its next send is refused for want of an account (placement's
