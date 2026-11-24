@@ -12,10 +12,11 @@
    * its 1px edge), a box of its own (`data-box`) so the mark line's trim
    * pads none of it, holds one rect as large as itself, its corner the
    * button's own (`--rim-radius`, the small radius unless the shape sets
-   * its own). Its 8px stroke straddles the rect's outline and the SVG is
-   * clipped to that same rounded box, so only its inner 4px are drawn: over
-   * the edge and 3px in, on the edge's own curve, with no gap between the
-   * band and the button's outer line (owner, 2026-11-24). `pathLength` 1 runs the
+   * its own). Its 6px stroke straddles the rect's outline and the SVG is
+   * clipped to that same rounded box, so only its inner 3px are drawn, the
+   * focus halo's width: from the outer edge in, over the edge, on its own
+   * curve, with no gap between the band and the button's outer line
+   * (owner, 2026-11-24). `pathLength` 1 runs the
    * line out at one speed along every side and round every corner, and the
    * run is a CSS animation (`animate-run-out`) that starts each time the
    * button arms (`data-armed`).
@@ -37,6 +38,6 @@
     stroke="currentColor"
     stroke-dasharray="1 1"
     stroke-opacity="0.35"
-    stroke-width="8"
+    stroke-width="6"
   />
 </svg>
