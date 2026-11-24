@@ -1851,14 +1851,14 @@
     min-width: 0;
   }
 }
-/* ModelSection's picker in the details card's model popover: no surface of
-   its own, the search as wide as what is typed in it (autowidth, a character
-   at a time), and the list scrolled in whole rows (c-model-list-max). */
+/* ModelSection's picker in a model popover (the details card's, Caw's
+   settings'): its own edge kept, so its harness rail's recess reads as a
+   panel inside the popover rather than a grey block floating in it; the
+   search as wide as what is typed in it (autowidth, a character at a time),
+   and the list scrolled in whole rows (c-model-list-max). */
 @utility session-details-model-pop {
   & [data-slot="picker"] {
-    border: 0;
     box-shadow: none;
-    background: transparent;
   }
   & [data-slot="search"] input {
     --autowidth: 1;
