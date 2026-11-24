@@ -2877,7 +2877,7 @@
     grid-area: 1 / 1;
     transition-property: opacity, scale;
     transition-duration: var(--icon-swap-dur, var(--duration-slow));
-    transition-timing-function: var(--icon-swap-ease, var(--ease-out));
+    transition-timing-function: var(--icon-swap-ease, var(--ease-spring));
   }
   :where(&) > :where([data-active="false"]) {
     opacity: 0;
