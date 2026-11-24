@@ -6264,25 +6264,6 @@ export const artifactDocuments = sqliteTable("artifact_documents", {
 });
 
 /**
- * When a brief last carried each of a project's knowledge lessons
- * (memory.ts `contextFor`), by its lesson id: what the nightly run's upkeep
- * reads to archive one no brief carried for long (memory-run.ts). A brief
- * commits nothing.
- */
-export const factUses = sqliteTable(
-  "fact_uses",
-  {
-    projectId: projectKey(),
-    /** Empty: a lesson's id names it across the files it moves between. Kept from when lines were keyed by file. */
-    path: text("path").notNull(),
-    /** The lesson's id (`L-` and six hex characters). */
-    key: text("key").notNull(),
-    usedAt: timestamp("used_at").notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.projectId, table.path, table.key] })]
-);
-
-/**
  * Each session the person purged (its transcript deleted, from the
  * dashboard), by its machine and harness session id: what every find and
  * Recent's stored transcripts leave out (find.ts `purgedOut`), since the

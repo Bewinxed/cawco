@@ -2117,8 +2117,8 @@ const FILE_HEADER = /^(?:---|\+\+\+) (?:[ab]\/|\/dev\/null)/u;
 
 /**
  * Each commit of a project's folder since `since` that changed one of
- * `paths`, newest first: when it was made, its subject, and the lines it
- * took out and put in (`git log -p --unified=0`, the files' own lines, no
+ * `paths`, newest first: when it was made, and the lines it took out and
+ * put in (`git log -p --unified=0`, the files' own lines, no
  * headers).
  */
 export const folderLineChanges = async (
@@ -2131,7 +2131,7 @@ export const folderLineChanges = async (
     "--patch",
     "--unified=0",
     "--no-renames",
-    "--format=%x1e%H%x1f%ct%x1f%s",
+    "--format=%x1e%H%x1f%ct",
     "--",
     ...paths,
   ]);
@@ -2140,7 +2140,7 @@ export const folderLineChanges = async (
   }
   return records.map((record) => {
     const [first = "", ...lines] = record.split("\n");
-    const [sha = "", seconds = "0", subject = ""] = first.split("\x1f");
+    const [sha = "", seconds = "0"] = first.split("\x1f");
     const removed: string[] = [];
     const added: string[] = [];
     for (const line of lines) {
@@ -2153,13 +2153,7 @@ export const folderLineChanges = async (
         added.push(line.slice(1));
       }
     }
-    return {
-      sha,
-      at: new Date(Number(seconds) * 1000),
-      subject,
-      removed,
-      added,
-    };
+    return { sha, at: new Date(Number(seconds) * 1000), removed, added };
   });
 };
 

@@ -17,13 +17,13 @@
  *   a skill's lessons, `lessons/<skill>.md` (read when that skill runs: the
  *   index's `## Skills` points to each, a line this module writes); a
  *   knowledge topic, `knowledge/<topic>.md` (carried into an attempt's
- *   brief by the task's words). `knowledge/archive/` is history, read by no
- *   session.
+ *   brief by the task's words). `knowledge/archive/`, where the archive by
+ *   disuse put lines before 2026-11-24, is history, read by no session.
  * - **The person's own lines**: the index's `## Notes` and every section of
  *   it this module does not keep (a setup's) are his, and no change here
  *   edits them.
- * - **Changes**: add, reword, remove and move a line, and archive a
- *   knowledge line ({@link applyLineChange}); a change that would take a file
+ * - **Changes**: add, reword, remove and move a line
+ *   ({@link applyLineChange}); a change that would take a file
  *   past its character budget is refused ({@link CAPS}), and nothing moves
  *   out on its own.
  */
@@ -33,7 +33,7 @@ import { memoryRunWords } from "@cawco/core/words/memory-run";
 import { MEMORY_FILE_CHARS } from "./config";
 
 export const KNOWLEDGE_DIR = "knowledge";
-/** Where a knowledge lesson goes once archived: `knowledge/archive/<topic>.md`, kept as history. */
+/** Where knowledge lessons were archived for disuse before 2026-11-24: `knowledge/archive/<topic>.md`, history no brief carries. */
 export const KNOWLEDGE_ARCHIVE = "knowledge/archive";
 export const NOTE_ID = /^n-\d{8}-\d{6}-[0-9a-f]{6}$/u;
 /** The brand kit: `knowledge/brand/…` and `knowledge/brand*.md`; images and voice, not lessons. */
@@ -101,9 +101,9 @@ const SKILL_NAME = /^[a-z0-9][\w.:-]*$/iu;
 const TOPIC_NAME = /^[a-z0-9][a-z0-9-]*$/u;
 
 /**
- * Every limit on the project's memory, each with its reason. A change that
- * would take a file past its character budget is refused, naming the
- * budget: nothing moves out on its own.
+ * The project's memory's one limit, with its reason: a change that would
+ * take a file past its character budget is refused, naming the budget, and
+ * nothing moves out on its own.
  */
 export const CAPS = {
   /**
@@ -113,20 +113,6 @@ export const CAPS = {
    * the run may keep.
    */
   indexChars: 8000,
-  /** A rule line: one sentence. A rule that needs more is a method, and goes to a skill's lessons or knowledge. */
-  rule: 200,
-  /** A knowledge line: a fact carries a command or a path (the length a note could stand as a fact line before, `FACT_WORDS`). */
-  fact: 300,
-  /** A `Why:` line, one per lesson: one line of why. */
-  why: 160,
-  /**
-   * A night's added lessons, and its replaces and removals: at 80 to 240
-   * messages a day, about a tenth of them instructions, most repeating a
-   * lesson kept already, a night changes a handful; a run asking for more
-   * is broken or steered.
-   */
-  nightAdds: 10,
-  nightChanges: 10,
 } as const;
 
 /**
@@ -474,12 +460,6 @@ const fileHead = (path: string): string => {
   if (home?.at === "skill") {
     return memoryRunWords.skillFileHead(home.skill);
   }
-  const archive = new RegExp(`^${KNOWLEDGE_ARCHIVE}/([^/]+)\\.md$`, "u").exec(
-    path
-  );
-  if (archive?.[1]) {
-    return memoryRunWords.archiveFileHead(archive[1]);
-  }
   return memoryRunWords.knowledgeFileHead(
     home?.at === "knowledge" ? home.topic : path
   );
@@ -596,9 +576,7 @@ export type Change =
   /** A lesson's line taken out. */
   | { id: string; kind: "remove" }
   /** A lesson's line to another home. */
-  | { home: LessonHome; id: string; kind: "move" }
-  /** A knowledge lesson's line to its topic's archive, `knowledge/archive/<topic>.md`: kept as history. */
-  | { id: string; kind: "archive" };
+  | { home: LessonHome; id: string; kind: "move" };
 
 /** What {@link applyLineChange} made: the files after it; or the budget the file it grew would pass, the files as they were; or the lesson it names held by no home. */
 export type Applied =
@@ -648,19 +626,6 @@ const made = (
           [into]: withLine(into, without[into] ?? "", line),
         },
         grew: into,
-      };
-    }
-    case "archive": {
-      const home = homeOf(path);
-      if (home?.at !== "knowledge") {
-        return { files };
-      }
-      const into = `${KNOWLEDGE_ARCHIVE}/${home.topic}.md`;
-      return {
-        files: {
-          ...without,
-          [into]: withLine(into, without[into] ?? "", line),
-        },
       };
     }
     default:

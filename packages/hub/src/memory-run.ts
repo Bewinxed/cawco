@@ -6,9 +6,7 @@
  *
  * - **Upkeep, no model** ({@link upkeep}): the index in its shape and every
  *   bullet of a home given an id; inbox notes no run reached in a week
- *   archived unread; a knowledge line no brief carried and no commit
- *   touched for the archive's days (config.ts `MEMORY_ARCHIVE_DAYS`)
- *   archived; a line whose anchor's file no longer holds its match taken
+ *   archived unread; a line whose anchor's file no longer holds its match taken
  *   out (its file read on a machine of the project, memory-sources.ts
  *   `anchorRead`); a rule whose check's task is done taken out. One commit.
  * - **What it reads**: what the person typed to the project's sessions since
@@ -22,14 +20,12 @@
  *   ({@link apply}). It cites each source by a handle the hub gave it, and
  *   the hub checks each operation: the handle is this run's; a message
  *   states the lesson (Jev, at {@link SUPPORTS}); the lesson quotes no one
- *   (memory-sources.ts `quoteProblem`), holds no secret and is one line
- *   within its length; a new lesson says what no line of its home or the
- *   index says (word for word, and Jev at {@link SAME}: {@link jevOnNew});
- *   an agent's lesson goes to knowledge and lands as the person's does, a
- *   file it names read for its match first ({@link anchored}); a rule of
- *   the index or a skill is reworded or removed only on a message of the
- *   person's that Jev confirms; with Jev off a new or changed lesson is
- *   refused; a file's character budget and the night's limits hold. Each
+ *   (memory-sources.ts `quoteProblem`), holds no secret and is one line;
+ *   a new lesson says what no line of its home or the index says (word for
+ *   word, and, Jev on, Jev at {@link SAME}: {@link jevOnNew}); an agent's
+ *   lesson goes to knowledge and lands as the person's does, a file it
+ *   names read for its match first ({@link anchored}); a file's character
+ *   budget holds. Each
  *   operation is one commit by the Memory curator, its message naming its
  *   sources by reference, with the notes it consumed archived in it.
  * - **Lines taken out stay out** ({@link removedOf}): the lines git shows
@@ -69,7 +65,7 @@ import { memoryJevWords, memoryRunWords } from "@cawco/core/words/memory-run";
 import type { Experimental_DecisionQuestion } from "ai";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
-import { MEMORY_ARCHIVE_DAYS, MEMORY_FILE_CHARS } from "./config";
+import { MEMORY_FILE_CHARS } from "./config";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
 import type { PersonSaid } from "./db/sends";
@@ -140,7 +136,6 @@ import {
 } from "./project-folder";
 import { type AnyProblem, isProblem } from "./refusal";
 import { redactSecrets } from "./secret-filter";
-import { outsideUrls } from "./web-reads";
 
 /** Why a memory write was not made: a sentence for the curator, or the folder's refusal. */
 type Refusal = string | AnyProblem;
@@ -245,10 +240,8 @@ interface Given {
 
 /** A run under way: what its brief gave it, by handle, and what its operations used. */
 interface Run {
-  adds: number;
   /** Messages it was given, by uuid, carried from the night before. */
   carried: ReadonlySet<string>;
-  changes: number;
   consumed: Set<string>;
   counts: Counts;
   jev: boolean;
@@ -272,13 +265,10 @@ export interface MemoryRunDeps {
     | "getJevSettings"
     | "getOpenRouterConnection"
     | "markDataMigrated"
-    | "memoryFacts"
     | "personSaidIn"
     | "project"
     | "sendRecord"
   >;
-  /** The fleet's machines, by hostname and id, lower case: a URL to one of them is no outside page. */
-  readonly fleetHosts: () => ReadonlySet<string>;
   /** The project's folder changed under its tasks (a commit landed). */
   readonly folderChanged: (projectId: string) => void;
   /**
@@ -361,7 +351,6 @@ const cut = (text: string): string =>
 
 const SPACES = /\s+/u;
 const HEADING_MARKS = /^#+\s*/u;
-const LESSON_ID = /L-[0-9a-f]{6}/gu;
 
 const wordCount = (text: string): number =>
   text.split(SPACES).filter(Boolean).length;
@@ -510,30 +499,18 @@ const newRun = (jev: boolean, notes: Note[], counts: Partial<Counts>): Run => ({
   said: [],
   consumed: new Set(),
   counts: { ...emptyCounts(), ...counts },
-  adds: 0,
-  changes: 0,
   through: null,
   carried: new Set(),
 });
 
-/** Why a lesson's words are not one line within its home's length, with a `Why:` within its own; nothing when they are. */
+/** Why a lesson's words are not one line, with a one-line `Why:`; nothing when they are. */
 const shapeProblem = (
   text: string,
-  why: string | undefined,
-  home: LessonHome
-): string | undefined => {
-  if (text.includes("\n") || why?.includes("\n")) {
-    return memoryRunWords.oneLine;
-  }
-  const fact = home.at === "knowledge";
-  const cap = fact ? CAPS.fact : CAPS.rule;
-  if (text.length > cap) {
-    return memoryRunWords.tooLong(text.length, cap, fact ? "fact" : "rule");
-  }
-  if (why && why.length > CAPS.why) {
-    return memoryRunWords.tooLong(why.length, CAPS.why, "Why: line");
-  }
-};
+  why: string | undefined
+): string | undefined =>
+  text.includes("\n") || why?.includes("\n")
+    ? memoryRunWords.oneLine
+    : undefined;
 
 /** Why `words` quote the person (memory-sources.ts `quoteProblem`), said by where; nothing when they do not. */
 const wordsProblem = (
@@ -727,7 +704,6 @@ const oldSource = (source: Record<string, unknown>): string | undefined => {
 
 export const createMemoryRun = ({
   db,
-  fleetHosts,
   folderChanged,
   machine,
   skillsFor,
@@ -866,10 +842,6 @@ export const createMemoryRun = ({
       : { writes, deletes, author, message };
   };
 
-  /** Each knowledge lesson's last carry into a brief (db `fact_uses`), by its id. */
-  const usesOf = (projectId: string): ReadonlyMap<string, Date> =>
-    db.memoryFacts.lessonUses(projectId);
-
   /** `files` with `change` made, or as they were when it cannot be (its lesson gone, a file past its budget): upkeep's own changes. */
   const changedBy = (files: MemoryFiles, change: Change): MemoryFiles => {
     const done = applyLineChange(files, change);
@@ -881,8 +853,7 @@ export const createMemoryRun = ({
   /**
    * The project's memory made whole before a run reads it (§2 A): the index
    * in its shape and every bullet of a home given an id; inbox notes no run
-   * reached in a week let go; a knowledge line no brief carried and no
-   * commit touched for the archive's days archived; a line whose anchor's
+   * reached in a week let go; a line whose anchor's
    * file no longer holds its match taken out; a rule whose check's task is
    * done taken out. The machines, the tasks and git are read first; what
    * they found is made on the memory as it stands, in one commit,
@@ -894,22 +865,13 @@ export const createMemoryRun = ({
       return first;
     }
     const today = dayOf(new Date());
-    const since = new Date(Date.now() - MEMORY_ARCHIVE_DAYS * DAY_MS);
-    const touched = await touchedSince(project.id, since);
-    if (isProblem(touched)) {
-      return touched;
-    }
     const out = [
       ...(await anchorsGone(project.id, first)),
       ...(await checksDone(project.id, first)),
     ];
     return await written(project.id, async (files) => {
       const why: string[] = [];
-      let after = unusedArchived(
-        shaped(project.name, files),
-        { touched, uses: usesOf(project.id), today },
-        why
-      );
+      let after = shaped(project.name, files);
       for (const { id, said } of out) {
         if (lessonOf(after, id)) {
           after = changedBy(after, { kind: "remove", id });
@@ -935,34 +897,6 @@ export const createMemoryRun = ({
     });
   };
 
-  /** `files` with each knowledge line no brief carried and no commit touched for the archive's days archived, why said into `why`. */
-  const unusedArchived = (
-    files: MemoryFiles,
-    read: {
-      today: string;
-      touched: ReadonlySet<string>;
-      uses: ReadonlyMap<string, Date>;
-    },
-    why: string[]
-  ): MemoryFiles => {
-    let after = files;
-    for (const { line, path } of allLessons(files)) {
-      const used = read.uses.get(line.id);
-      const carried =
-        used !== undefined &&
-        !olderThan(dayOf(used), read.today, MEMORY_ARCHIVE_DAYS);
-      if (
-        homeOf(path)?.at === "knowledge" &&
-        !read.touched.has(line.id) &&
-        !carried
-      ) {
-        after = changedBy(after, { kind: "archive", id: line.id });
-        why.push(memoryRunWords.upkeepArchived(line.id, MEMORY_ARCHIVE_DAYS));
-      }
-    }
-    return after;
-  };
-
   /** `files` with the index in its shape and every bullet of a home given an id. */
   const shaped = (projectName: string, files: MemoryFiles): MemoryFiles => {
     const taken = new Set(keptLessons(files).map((each) => each.id));
@@ -978,27 +912,6 @@ export const createMemoryRun = ({
         path === INDEX_FILE ? indexShape(projectName, marked) : marked;
     }
     return after;
-  };
-
-  /** The lessons git shows a commit put in or named since `since` (a line added, or its id in a subject): those a disuse archive leaves. */
-  const touchedSince = async (projectId: string, since: Date) => {
-    const changes = await folderLineChanges(projectId, [KNOWLEDGE_DIR], since);
-    if (isProblem(changes)) {
-      return changes;
-    }
-    const touched = new Set<string>();
-    for (const change of changes) {
-      for (const line of change.added) {
-        const id = lessonLineOf(line)?.id;
-        if (id) {
-          touched.add(id);
-        }
-      }
-      for (const id of change.subject.match(LESSON_ID) ?? []) {
-        touched.add(id);
-      }
-    }
-    return touched;
   };
 
   /**
@@ -1145,7 +1058,7 @@ export const createMemoryRun = ({
   };
 
   /** The skill lessons and knowledge files, each by name, first line, line count and size; the room each budget has left. */
-  const filesText = (files: MemoryFiles, run: Run): string => {
+  const filesText = (files: MemoryFiles): string => {
     const listed = Object.keys(files)
       .filter((path) => path !== INDEX_FILE && homeOf(path))
       .sort()
@@ -1166,9 +1079,7 @@ export const createMemoryRun = ({
       memoryRunWords.briefRoom(
         index.length,
         CAPS.indexChars,
-        MEMORY_FILE_CHARS,
-        Math.max(0, CAPS.nightAdds - run.adds),
-        Math.max(0, CAPS.nightChanges - run.changes)
+        MEMORY_FILE_CHARS
       ),
     ].join("\n\n");
   };
@@ -1219,7 +1130,7 @@ export const createMemoryRun = ({
             ].join("\n"),
           ]
         : []),
-      filesText(files, run),
+      filesText(files),
       `${memoryRunWords.briefSkills}\n\n${
         skills.length > 0
           ? skills
@@ -1427,15 +1338,13 @@ export const createMemoryRun = ({
       : memoryRunWords.noTopic(home.knowledge);
   };
 
-  /** Why a lesson's words may not stand, or nothing: one line, its length, no quote, no secret, not said already, and an agent's with no outside page. */
+  /** Why a lesson's words may not stand, or nothing: one line, no quote, no secret, not said already. */
   const textProblem = async (
     run: Run,
     files: MemoryFiles,
-    lesson: { home: LessonHome; text: string; why: string | undefined },
-    byAgent: boolean
+    { text, why }: { text: string; why: string | undefined }
   ): Promise<string | undefined> => {
-    const { home, text, why } = lesson;
-    const unshaped = shapeProblem(text, why, home);
+    const unshaped = shapeProblem(text, why);
     if (unshaped) {
       return unshaped;
     }
@@ -1453,9 +1362,6 @@ export const createMemoryRun = ({
     );
     if (kept) {
       return memoryRunWords.saysAlready(kept[0]);
-    }
-    if (byAgent && outsideUrls(text, fleetHosts()).length > 0) {
-      return memoryRunWords.outsideUrl;
     }
   };
 
@@ -1543,9 +1449,6 @@ export const createMemoryRun = ({
     if (typeof home === "string") {
       return home;
     }
-    if (run.adds >= CAPS.nightAdds) {
-      return memoryRunWords.nightAdds(CAPS.nightAdds);
-    }
     const anchor = op.anchor ? await anchored(projectId, op.anchor) : null;
     if (typeof anchor === "string") {
       return anchor;
@@ -1571,9 +1474,8 @@ export const createMemoryRun = ({
    * corroborate, of every live lesson in its home and the index, this
    * run's earlier adds among them (each is in `files`); one that says what
    * a line of `removed` said is refused as taken out since the last run.
-   * With Jev off the lesson is refused: Jev reads whether a kept lesson
-   * says it and what its sources state, and the night's messages named in
-   * no operation are carried to the next. Jev failing, its words.
+   * With Jev off nothing is asked, and the word-for-word checks alone
+   * stand. Jev failing, its words.
    */
   const jevOnNew = async (
     projectId: string,
@@ -1583,9 +1485,7 @@ export const createMemoryRun = ({
     removed: readonly Removed[]
   ): Promise<string | undefined> => {
     if (!run.jev) {
-      return memoryRunWords.jevFailed(
-        "Jev is off, and a new lesson waits for it"
-      );
+      return;
     }
     const beside = [...besideOf(files, lesson.home), ...removed];
     try {
@@ -1676,12 +1576,7 @@ export const createMemoryRun = ({
     if (lesson.byAgent && home.at !== "knowledge") {
       return memoryRunWords.agentHome;
     }
-    const bad = await textProblem(
-      run,
-      files,
-      { home, text: lesson.text, why: lesson.why },
-      lesson.byAgent
-    );
+    const bad = await textProblem(run, files, lesson);
     if (bad) {
       return bad;
     }
@@ -1724,38 +1619,14 @@ export const createMemoryRun = ({
   };
 
   /**
-   * Why `kept` may not change a line of `path` (§4.4), or nothing: a rule
-   * of the index or a skill's lessons changes only on a message of the
-   * person's, which Jev reads (a fact of knowledge, on a note too).
-   */
-  const changeAuthority = (
-    run: Run,
-    path: string,
-    kept: { messages: Given[] }
-  ): string | undefined => {
-    if (kept.messages.length > 0) {
-      return run.jev
-        ? undefined
-        : memoryRunWords.jevFailed(
-            "Jev is off, and a change to a kept lesson waits for it"
-          );
-    }
-    return homeOf(path)?.at === "knowledge"
-      ? undefined
-      : memoryRunWords.ruleNeedsMessage;
-  };
-
-  /**
    * The live lesson an operation names and its sources, the messages Jev
-   * bears out kept; with `change`, only what may change it
-   * ({@link changeAuthority}). Why not otherwise.
+   * bears out kept; why not otherwise.
    */
   const keptFor = (
     run: Run,
     files: MemoryFiles,
     op: { id: string; sources: string[] },
-    at: { answers: Map<string, number> | undefined; index: number },
-    change: boolean
+    at: { answers: Map<string, number> | undefined; index: number }
   ) => {
     const held = lessonOf(files, op.id);
     if (!held) {
@@ -1765,13 +1636,10 @@ export const createMemoryRun = ({
     if (typeof kept === "string") {
       return kept;
     }
-    const authority = change
-      ? changeAuthority(run, held.path, kept)
-      : undefined;
-    return authority ?? { held, kept };
+    return { held, kept };
   };
 
-  /** A `reword`, checked: a live lesson's words changed in place, a rule's only by the person's message. */
+  /** A `reword`, checked: a live lesson's words changed in place. */
   const plannedReword = async (
     run: Run,
     files: MemoryFiles,
@@ -1779,24 +1647,16 @@ export const createMemoryRun = ({
     index: number,
     answers: Map<string, number> | undefined
   ): Promise<Planned> => {
-    const found = keptFor(run, files, op, { index, answers }, true);
+    const found = keptFor(run, files, op, { index, answers });
     if (typeof found === "string") {
       return found;
     }
     const { held, kept } = found;
     const text = op.text.trim();
     const why = op.why.trim();
-    const bad = await textProblem(
-      run,
-      files,
-      { home: homeOf(held.path) ?? { at: "index" }, text, why },
-      kept.messages.length === 0
-    );
+    const bad = await textProblem(run, files, { text, why });
     if (bad) {
       return bad;
-    }
-    if (run.changes >= CAPS.nightChanges) {
-      return memoryRunWords.nightChanges(CAPS.nightChanges);
     }
     return {
       change: { kind: "reword", id: op.id, text, why: why || null },
@@ -1807,30 +1667,47 @@ export const createMemoryRun = ({
     };
   };
 
-  /** A `remove`, checked: a live lesson's line taken out, a rule's only by the person's message asking it gone. */
+  /** An operation on a kept lesson that changes no words: its sources checked ({@link keptFor}), its notes archived with `outcome`, its change and what it says. */
+  const plannedOnKept = (
+    run: Run,
+    files: MemoryFiles,
+    op: { id: string; sources: string[] },
+    at: { answers: Map<string, number> | undefined; index: number },
+    made: { change?: Change; outcome: string; said: (path: string) => string }
+  ): Planned => {
+    const found = keptFor(run, files, op, at);
+    if (typeof found === "string") {
+      return found;
+    }
+    const { held, kept } = found;
+    return {
+      ...(made.change ? { change: made.change } : {}),
+      consumed: op.sources,
+      notes: kept.notes.map((note) => ({ note, outcome: made.outcome })),
+      said: made.said(held.path),
+      sources: sourcesOf(kept),
+    };
+  };
+
+  /** A `remove`, checked: a live lesson's line taken out. */
   const plannedRemove = (
     run: Run,
     files: MemoryFiles,
     op: Extract<MemoryOp, { op: "remove" }>,
     index: number,
     answers: Map<string, number> | undefined
-  ): Planned => {
-    const found = keptFor(run, files, op, { index, answers }, true);
-    if (typeof found === "string") {
-      return found;
-    }
-    const { held, kept } = found;
-    if (run.changes >= CAPS.nightChanges) {
-      return memoryRunWords.nightChanges(CAPS.nightChanges);
-    }
-    return {
-      change: { kind: "remove", id: op.id },
-      consumed: op.sources,
-      notes: kept.notes.map((note) => ({ note, outcome: `removes ${op.id}` })),
-      said: memoryRunWords.removed(op.id, held.path),
-      sources: sourcesOf(kept),
-    };
-  };
+  ): Planned =>
+    plannedOnKept(
+      run,
+      files,
+      op,
+      { index, answers },
+      {
+        change: { kind: "remove", id: op.id },
+        outcome: `removes ${op.id}`,
+        said: (path) => memoryRunWords.removed(op.id, path),
+      }
+    );
 
   /** A `corroborate`, checked: a source stated a live lesson again; its notes are archived as corroborating it, no line changes. */
   const plannedCorroborate = (
@@ -1839,27 +1716,21 @@ export const createMemoryRun = ({
     op: Extract<MemoryOp, { op: "corroborate" }>,
     index: number,
     answers: Map<string, number> | undefined
-  ): Planned => {
-    const found = keptFor(run, files, op, { index, answers }, false);
-    if (typeof found === "string") {
-      return found;
-    }
-    const { kept } = found;
-    return {
-      consumed: op.sources,
-      notes: kept.notes.map((note) => ({
-        note,
+  ): Planned =>
+    plannedOnKept(
+      run,
+      files,
+      op,
+      { index, answers },
+      {
         outcome: `corroborates ${op.id}`,
-      })),
-      said: memoryRunWords.corroborated(op.id),
-      sources: sourcesOf(kept),
-    };
-  };
+        said: () => memoryRunWords.corroborated(op.id),
+      }
+    );
 
   /** A `move`, checked: a live lesson to another home. */
   const plannedMove = (
     projectId: string,
-    run: Run,
     files: MemoryFiles,
     op: Extract<MemoryOp, { op: "move" }>
   ): Planned => {
@@ -1869,9 +1740,6 @@ export const createMemoryRun = ({
     const home = homeAsked(projectId, op.home);
     if (typeof home === "string") {
       return home;
-    }
-    if (run.changes >= CAPS.nightChanges) {
-      return memoryRunWords.nightChanges(CAPS.nightChanges);
     }
     return {
       change: { kind: "move", id: op.id, home },
@@ -1944,16 +1812,12 @@ export const createMemoryRun = ({
         run,
         files,
         { id: op.id, sources: op.sources },
-        { index, answers },
-        false
+        { index, answers }
       );
       if (typeof found === "string") {
         return found;
       }
       const { held, kept } = found;
-      if (run.changes >= CAPS.nightChanges) {
-        return memoryRunWords.nightChanges(CAPS.nightChanges);
-      }
       return {
         consumed: op.sources,
         notes: kept.notes.map((note) => ({
@@ -1994,9 +1858,6 @@ export const createMemoryRun = ({
     if (method === "" || method.includes("\n")) {
       return memoryRunWords.oneLine;
     }
-    if (method.length > CAPS.fact) {
-      return memoryRunWords.tooLong(method.length, CAPS.fact, "method");
-    }
     const said = wordsProblem(method, run.said);
     if (said) {
       return said;
@@ -2025,7 +1886,7 @@ export const createMemoryRun = ({
       case "corroborate":
         return plannedCorroborate(run, files, op, index, answers);
       case "move":
-        return plannedMove(projectId, run, files, op);
+        return plannedMove(projectId, files, op);
       case "check":
         return plannedCheck(projectId, run, files, op, index, answers);
       case "drop":
@@ -2268,7 +2129,7 @@ export const createMemoryRun = ({
       : { said: memoryRunWords.checkFiled(ask.id, task.id), task: task.id };
   };
 
-  /** The run's counts and limits moved by one committed operation. */
+  /** The run's counts moved by one committed operation. */
   const count = (
     run: Run,
     plan: Exclude<Planned, string>,
@@ -2278,26 +2139,19 @@ export const createMemoryRun = ({
     const { change } = plan;
     if (!change) {
       counts.dropped += op.op === "drop" ? op.sources.length : 0;
-      // A kept lesson made a check.
-      run.changes += plan.check ? 1 : 0;
       return;
     }
     switch (change.kind) {
       case "add":
         counts.added += 1;
-        run.adds += 1;
         return;
       case "reword":
         counts.replaced += 1;
-        run.changes += 1;
         return;
       case "remove":
         counts.retired += 1;
-        run.changes += 1;
         return;
       case "move":
-      case "archive":
-        run.changes += 1;
         return;
       default:
         unhandled("memory change", change);
@@ -2573,10 +2427,9 @@ export const createMemoryRun = ({
   const ruleWordsProblem = async (
     files: MemoryFiles,
     words: { text: string; why: string | undefined },
-    home: LessonHome,
     except: string | undefined
   ) => {
-    const unshaped = shapeProblem(words.text, words.why, home);
+    const unshaped = shapeProblem(words.text, words.why);
     if (unshaped) {
       return problem(400, { code: "memory-rule-unfit", detail: unshaped });
     }
@@ -2632,8 +2485,7 @@ export const createMemoryRun = ({
       text: ask.text,
       why: ask.why ?? held.line.why ?? undefined,
     };
-    const home = homeOf(held.path) ?? { at: "index" };
-    const unfit = await ruleWordsProblem(files, words, home, ask.rule);
+    const unfit = await ruleWordsProblem(files, words, ask.rule);
     if (unfit) {
       return unfit;
     }
@@ -2659,7 +2511,6 @@ export const createMemoryRun = ({
     const unfit = await ruleWordsProblem(
       files,
       { text: ask.text, why: ask.why },
-      home,
       undefined
     );
     if (unfit) {

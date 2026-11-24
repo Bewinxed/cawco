@@ -79,7 +79,6 @@ export const CAWCO_ENV = {
    * corroborated it) before the curator's run proposes moving it to
    * `knowledge/archive/` (hub memory.ts). Default in hub config.ts.
    */
-  memoryArchiveDays: "CAWCO_MEMORY_ARCHIVE_DAYS",
   /**
    * A knowledge file's budget in characters: what one brief carries of it,
    * and the size at which the curator's run is asked to fold it (hub

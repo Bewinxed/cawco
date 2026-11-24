@@ -11,7 +11,11 @@
  * note labels' `sessionTaints` and `countsTogether`, the reverts'
  * `revertCorrected`, the recovery's `recoveryBrief`, the CawCo tasks'
  * `productTask`, the re-test's `retestIfNew`, and the rebase layer's
- * `againOnConflict` and `readAtHead`). The one line in {@link C1_KEPT}
+ * `againOnConflict` and `readAtHead`), and the limits and gates the owner
+ * took off the same day (`changeAuthority`, a rule changed only on his
+ * message; `nightAdds`, the night's limits; `unusedArchived` and
+ * `MEMORY_ARCHIVE_DAYS`, the archive for disuse; `outsideUrls`, the refusal
+ * of an agent's lesson linking an outside page). The one line in {@link C1_KEPT}
  * stays while a shipped build draws the asks parked under it before the
  * cutover.
  *
@@ -65,6 +69,11 @@ const C1_GONE: readonly string[] = [
   "retestIfNew",
   "againOnConflict",
   "readAtHead",
+  "changeAuthority",
+  "nightAdds",
+  "unusedArchived",
+  "MEMORY_ARCHIVE_DAYS",
+  "outsideUrls",
 ];
 
 /** Lines that keep one of {@link C1_GONE}, each with why. */

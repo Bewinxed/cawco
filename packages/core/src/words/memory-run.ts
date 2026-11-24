@@ -18,9 +18,6 @@ export const memoryRunWords = {
   /** A knowledge file's first lines, when the run makes it. */
   knowledgeFileHead: (topic: string) =>
     `# ${topic}\n\nWhat earlier sessions found about this project. Kept by CawCo's nightly memory run.\n`,
-  /** An archive file's first lines. */
-  archiveFileHead: (topic: string) =>
-    `# ${topic}, archived\n\nLessons no brief carried for a long time, kept as history. No session reads this file.\n`,
   /** The index's pointer to a skill's lessons. */
   skillPointer: (skill: string, path: string) =>
     `- Before \`${skill}\`: read ${path} with folder_read.`,
@@ -132,9 +129,6 @@ export const memoryRunWords = {
   sourceFile: (path: string, match: string) => `${path} holds \`${match}\``,
   sourceCommit: (kind: string, commit: string) =>
     `${kind === "hand" ? "written by hand" : "approved"} at ${commit}`,
-  /** Why upkeep took a line out, said in its commit. */
-  upkeepArchived: (id: string, days: number) =>
-    `${id} archived: no brief carried it and no commit touched it in ${days} days`,
   upkeepAnchorGone: (id: string, path: string, match: string) =>
     `${id} taken out: ${path} no longer holds \`${match}\``,
   upkeepChecked: (id: string, task: string) =>
@@ -172,18 +166,10 @@ export const memoryRunWords = {
   quotes:
     "The lesson holds a quoted phrase. State the rule without quoting anyone.",
   agentHome: "An agent's lesson goes to knowledge, not the index or a skill.",
-  ruleNeedsMessage:
-    "A note does not change or remove a rule of AGENTS.md or a skill's lessons: only a message of the person's does. Drop the note, or name the message.",
   noSkill: (skill: string) =>
     `The fleet lists no skill named ${skill}: name one from the list in your brief.`,
   noTopic: (topic: string) =>
     `${topic} is not a topic name: lower case words joined by -, like build-tools.`,
-  nightAdds: (cap: number) =>
-    `Tonight's limit of ${cap} added lessons is reached. The rest are read again tomorrow.`,
-  nightChanges: (cap: number) =>
-    `Tonight's limit of ${cap} changed or removed lessons is reached. The rest are read again tomorrow.`,
-  tooLong: (length: number, cap: number, what: string) =>
-    `The ${what} is ${length} characters; ${what === "rule" ? "a rule is one sentence" : `a ${what} is one line`} under ${cap}.`,
   oneLine: "A lesson is one line: say it in one sentence.",
   saysAlready: (path: string) =>
     `${path} already says this word for word: corroborate its lesson instead.`,
@@ -198,8 +184,6 @@ export const memoryRunWords = {
     `${path} does not hold \`${match}\`: name a file and a match that are there.`,
   checkHas: (id: string, task: string) =>
     `${id} has a check already: task ${task}.`,
-  outsideUrl:
-    "An agent's lesson names a page outside the fleet: keep what the project's own work showed, without the link.",
   noLesson: (id: string) =>
     `${id} is no lesson of this project's memory: name one from your brief.`,
   jevFailed: (words: string) => `Jev did not answer: ${words}`,
@@ -218,14 +202,8 @@ export const memoryRunWords = {
   briefIndex: "## AGENTS.md as it stands",
   briefFiles: "## Skill lessons and knowledge files",
   briefNoFiles: "None yet.",
-  briefRoom: (
-    chars: number,
-    charsCap: number,
-    fileCap: number,
-    adds: number,
-    changes: number
-  ) =>
-    `AGENTS.md holds ${chars} of its ${charsCap} characters; a knowledge file holds at most ${fileCap}. A change past either is refused: move or merge a line first. Tonight you may add ${adds} lessons and change or remove ${changes}.`,
+  briefRoom: (chars: number, charsCap: number, fileCap: number) =>
+    `AGENTS.md holds ${chars} of its ${charsCap} characters; a knowledge file holds at most ${fileCap}. A change past either is refused: move or merge a line first.`,
   /** The lines taken out since the last run, after the index. */
   briefRemoved: (count: number) =>
     `## Taken out since the last run\n\n${count} line${count === 1 ? "" : "s"} taken out since the last run, each with the day. An add that says one again is refused unless a source of it is newer than its removal.`,
@@ -325,7 +303,7 @@ For each message and each note, pick one:
 2. A rule about how one workflow is run: find the skill that runs that workflow (read its SKILL.md) and add it with home {skill}. If no skill does, home "index".
 3. A rule for all work here: home "index".
 4. A fact about the project (a command, a place, what fails): home {knowledge}. When it is about the code, name the file and a literal string in it that bears the fact out, as anchor: the hub reads that file in the project's checkout, writes it under the fact's line, and takes the fact out once the file no longer holds the string. An agent's note lands as the person's does.
-5. Already kept: "corroborate" the lesson. Changed by the person: "reword" it, and say in why what the rule was until today. Asked gone by the person: "remove" it. A rule of AGENTS.md or a skill changes only on the person's message; a fact, on a note too. Under a message, the lessons that share its words are listed. A line under "Taken out since the last run" stays out unless a source newer than its removal says it.
+5. Already kept: "corroborate" the lesson. Changed by the person: "reword" it, and say in why what the rule was until today. Asked gone by the person: "remove" it. Under a message, the lessons that share its words are listed. A line under "Taken out since the last run" stays out unless a source newer than its removal says it.
 6. About one task or one moment, or already said by the repository's CLAUDE.md or a skill: "drop", with the reason. A note that says what a kept lesson says is "corroborate" of it, or a "drop" with reason "duplicate" and that lesson's id in of.
 
 Name every message and note of your brief in some operation's sources, a drop included: a note that says what a message says goes in the sources of that message's operation. memory_apply's answer lists what is not named yet.

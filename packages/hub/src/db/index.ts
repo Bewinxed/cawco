@@ -53,7 +53,6 @@ import { type InstancesDb, instancesDb } from "./instances";
 import { type LfsRefusalsDb, lfsRefusalsDb } from "./lfs-refusals";
 import { type MachinesDb, machinesDb } from "./machines";
 import { type McpServersDb, mcpServersDb } from "./mcp-servers";
-import { type MemoryFactsDb, memoryFactsDb } from "./memory-facts";
 import {
   applyMigrations,
   type DataMigrationsDb,
@@ -162,7 +161,6 @@ interface HubStore {
   /** LFS servers a checkout named that the project never declared (routes/lfs.ts). */
   readonly lfsRefusals: LfsRefusalsDb;
   /** When briefs last carried a project's knowledge lessons (memory.ts). */
-  readonly memoryFacts: MemoryFactsDb;
   /** What each session's move ended, until it is told (move-endings.ts). */
   readonly moveEndings: MoveEndingsDb;
   /**
@@ -413,7 +411,6 @@ const make = async (path: string): Promise<DbShape> => {
     relays: relaysDb(db),
     asks: asksDb(db),
     sshMachines: sshMachinesDb(db, hubId),
-    memoryFacts: memoryFactsDb(db),
     trackers: trackersDb(db),
     taskLinks: core.taskLinksOf,
     taskWaitFlags: taskWaitFlagsDb(db),

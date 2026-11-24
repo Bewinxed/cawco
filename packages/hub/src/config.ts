@@ -143,24 +143,6 @@ const wholeFrom = (
 };
 
 /**
- * Days a project's knowledge lesson may go unused (no brief carried it, no
- * source stated it again) before the nightly memory run's upkeep moves it
- * to `knowledge/archive/` (memory-run.ts). A lesson is archived only after
- * long disuse, and never one the person stated again (`held`). The default
- * is the replay's pick (the memory-replay probe, 2026-10-18, cut on
- * 2026-10-26): over the 974 bullet lines this repository's curated docs
- * held since 2025-12-31, a use being a commit that shares three words with
- * a line, 30 days archives 54 lines of which 16 were needed again, 45 days
- * 38 (6), 60 days 29 (3), and 60, 90 and 180 days the same 29 (3): the cost
- * is at its floor from 60 on, and the default sits on that floor with room.
- */
-export const MEMORY_ARCHIVE_DAYS = wholeFrom(
-  CAWCO_ENV.memoryArchiveDays,
-  90,
-  1
-);
-
-/**
  * A knowledge file's budget, in characters: what one brief carries of it
  * (memory.ts `contextFor`).
  * The default is the replay's pick (the memory-replay probe, cut on 2026-10-26,

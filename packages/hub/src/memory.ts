@@ -33,7 +33,6 @@
  *   (and takes every line of the files its `context:` names); Jev on, one
  *   yes/no per line on whether it bears on the task orders them, Jev failing
  *   refuses the start with its words; off, the grep's score orders them.
- *   Each line a brief carries is a use (db `fact_uses`, by lesson id).
  * - **What past sessions said** is `find` (find-tool.ts), the dashboard's
  *   Find, over every machine's transcripts: no store of its own here.
  */
@@ -608,7 +607,6 @@ export interface MemoryDeps {
     | "getJevSettings"
     | "getOpenRouterConnection"
     | "listProjects"
-    | "memoryFacts"
     | "personSaidIn"
     | "project"
     | "workItem"
@@ -1011,11 +1009,6 @@ export const createMemory = ({
       )
     );
     const { admitted, left } = admitFacts(ordered, whole.room);
-    db.memoryFacts.useLessons(
-      projectId,
-      [...admitted.values()].flat().map((fact) => fact.line.id),
-      new Date()
-    );
     const facts_ = [...admitted]
       .map(([path, kept]) => `From ${path}:\n${kept.map(factLine).join("\n")}`)
       .join("\n\n");

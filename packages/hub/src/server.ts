@@ -9054,15 +9054,6 @@ export const createServer = (
   // Its nightly run (memory-run.ts) is the one writer of its lessons.
   const memoryRun = createMemoryRun({
     db,
-    fleetHosts: () =>
-      new Set(
-        [
-          osHostname(),
-          ...db
-            .machineFacts()
-            .flatMap((agent) => [agent.hostname, agent.machineId]),
-        ].map((host) => host.toLowerCase())
-      ),
     folderChanged: (projectId) => tasks.touched(projectId),
     machine: {
       read: async (machineId, path) => {
