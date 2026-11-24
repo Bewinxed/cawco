@@ -32,7 +32,7 @@ import { PLACES_WINDOW } from "@cawco/core/find";
 import { unhandled } from "@cawco/core/unhandled";
 import { findInWords } from "@cawco/core/words/find-in";
 import type { Component } from "svelte";
-import { SvelteMap } from "svelte/reactivity";
+import { createSubscriber, SvelteMap } from "svelte/reactivity";
 import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
 import {
   IconAgent,
@@ -559,6 +559,38 @@ export class ConversationFind {
   /** The hub is still being asked: nothing is claimed absent yet. */
   readonly asking = $derived(this.hub.kind === "asking");
 
+  /**
+   * What the find holds that the person set, for the find made again when a
+   * pane next shows the conversation ({@link findIn}); every read under way
+   * is let go.
+   */
+  release(): FindKept {
+    this.#abort?.abort();
+    this.#windows.abort();
+    return {
+      index: this.#index,
+      landed: this.landed,
+      listOpen: this.listOpen,
+      open: this.open,
+      reading: this.reading,
+      whose: this.whose,
+      words: this.words,
+    };
+  }
+
+  /** Stands as `left` (a released find) left it: its words found again, at the place stepped to. */
+  restore(left: FindKept): void {
+    this.whose = left.whose;
+    this.landed = left.landed;
+    this.listOpen = left.listOpen;
+    this.reading = left.reading;
+    this.open = left.open;
+    if (left.words) {
+      this.type(left.words);
+    }
+    this.#index = left.index;
+  }
+
   /** Open find (Command-F, Attach's Find): the field takes the focus. */
   show(): void {
     if (!this.open) {
@@ -986,8 +1018,21 @@ export const placesId = (viewId: string): string => `places-${viewId}`;
 export const placeId = (viewId: string, index: number): string =>
   `place-${viewId}-${index}`;
 
-/** Each conversation's find, by its view id. */
-const finds = new Map<string, ConversationFind>();
+/** What a conversation's find keeps while no pane shows it ({@link ConversationFind.release}). */
+interface FindKept {
+  index: number | null;
+  landed: boolean;
+  listOpen: boolean;
+  open: boolean;
+  reading: { tail: true } | { tail: false; docId: string } | null;
+  whose: WhoseFilter;
+  words: string;
+}
+
+/** Each conversation's find while something reads it, by its view id, with its hold. */
+const finds = new Map<string, { find: ConversationFind; hold: () => void }>();
+/** What each conversation's find held when its last reader went, by view id. */
+const keptFinds = new Map<string, FindKept>();
 
 /** How the hub is asked: the engine's places read, or a bench's fixture. */
 let asker: AskPlaces = async (viewId, words, window, signal) => {
@@ -1006,8 +1051,16 @@ export function askPlacesWith(ask: AskPlaces): void {
  * places, counts and filter would otherwise belong to that component's
  * effect, and once that one unmounted (a tab switched, the composer handed
  * to another pane) they would answer their last value for good, a filter
- * pressed and the list unchanged. It stands as long as the page does, as
- * each pane's composer layer does (composer-layer.svelte.ts).
+ * pressed and the list unchanged.
+ *
+ * It stands while an effect reads it (`createSubscriber`): a reactive read
+ * holds it. Its deriveds keep the component context they were made under
+ * (Svelte's `ctx`, for `getContext` inside them), and with it that
+ * component's props and DOM, so a find held for the page's life kept the
+ * first pane that showed each conversation alive after it unmounted. Once
+ * the last reader has gone its root is destroyed and what the person set
+ * (its words, filter, place) is kept, so a pane that shows the
+ * conversation again finds it standing as it was left.
  *
  * A server render makes one for that render alone and holds none: no
  * effect root runs there (`$effect.root` compiles to nothing), nothing
@@ -1015,10 +1068,6 @@ export function askPlacesWith(ask: AskPlaces): void {
  * the next person's page.
  */
 export function findIn(viewId: string): ConversationFind {
-  const held = finds.get(viewId);
-  if (held) {
-    return held;
-  }
   const make = (): ConversationFind =>
     new ConversationFind(
       viewId,
@@ -1031,10 +1080,30 @@ export function findIn(viewId: string): ConversationFind {
   if (!browser) {
     return make();
   }
-  let find!: ConversationFind;
-  $effect.root(() => {
-    find = make();
-  });
-  finds.set(viewId, find);
-  return find;
+  let held = finds.get(viewId);
+  if (!held) {
+    let find!: ConversationFind;
+    const destroy = $effect.root(() => {
+      find = make();
+      const left = keptFinds.get(viewId);
+      if (left) {
+        keptFinds.delete(viewId);
+        find.restore(left);
+      }
+    });
+    const made = {
+      find,
+      hold: createSubscriber(() => () => {
+        if (finds.get(viewId) === made) {
+          finds.delete(viewId);
+          keptFinds.set(viewId, find.release());
+          destroy();
+        }
+      }),
+    };
+    finds.set(viewId, made);
+    held = made;
+  }
+  held.hold();
+  return held.find;
 }

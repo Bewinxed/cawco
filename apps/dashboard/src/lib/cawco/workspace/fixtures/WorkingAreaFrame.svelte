@@ -269,7 +269,7 @@
   import type { PreviewMode } from "@cawco/core/comments/model";
   import type { InstanceRow, WorkItemSummary } from "@cawco/core/protocol";
   import { canvasPath } from "@cawco/core/stage";
-  import { untrack } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import { adoptInstances } from "#lib/cawco/client.svelte.js";
   import { fleetPane } from "#lib/cawco/preview/fleet-pane.svelte.js";
   import {
@@ -466,6 +466,17 @@
     `cawco-preview-mode:${ID}`,
     untrack(() => mode)
   );
+
+  // What this drawing seeded goes with it: a states file draws it again and
+  // again, each time under a new id, and the client's stores outlive it.
+  onDestroy(() => {
+    delete sessionsState.sessions[ID];
+    delete previewsState.previews[ID];
+    WORK.forEach((_, i) => {
+      delete workItemsState.workItems[`wi-area-${i}`];
+      entered.delete(`ds-area-${i}`);
+    });
+  });
 
   setPaneFleet(fleetPane);
   const layerId = $props.id();

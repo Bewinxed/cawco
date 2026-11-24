@@ -55,14 +55,18 @@
   const drawnOnce = new WeakSet<Element>();
   /** The drawings a delivery's reads answered, made in the next frame. */
   const resized: (() => void)[] = [];
-  const watchFold = (el: Element, tab: Folded): (() => void) => {
-    folded.set(el, tab);
-    // A first report's drawing is answered to the shared delivery, which
-    // runs it once every site there has read (frameObserver). A resize
-    // after it is read there too, on the layout the frame has just done,
-    // and drawn in the next frame: read in the next frame's callbacks
-    // instead, every frame of a rail drag laid the page out for it.
-    foldSizes ??= frameObserver(
+  /**
+   * The folder tabs' one observer, made by the first tab to watch. A first
+   * report's drawing is answered to the shared delivery, which runs it once
+   * every site there has read (frameObserver). A resize after it is read
+   * there too, on the layout the frame has just done, and drawn in the next
+   * frame: read in the next frame's callbacks instead, every frame of a rail
+   * drag laid the page out for it. Made here, not in `watchFold`: its
+   * callbacks, made there, shared the scope that held the first tab's
+   * element, and the page's one observer kept that tab for good.
+   */
+  const foldObserver = (): FrameObserver =>
+    frameObserver(
       () => {
         for (const draw of resized.splice(0)) {
           draw();
@@ -86,6 +90,9 @@
         },
       }
     );
+  const watchFold = (el: Element, tab: Folded): (() => void) => {
+    folded.set(el, tab);
+    foldSizes ??= foldObserver();
     foldSizes.observe(el);
     return () => {
       folded.delete(el);
