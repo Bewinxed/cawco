@@ -1,0 +1,5 @@
+{
+  "out": "./src/lib/components/ui/skeleton/bones",
+  "breakpoints": [375, 768, 1280],
+  "wait": 400
+}

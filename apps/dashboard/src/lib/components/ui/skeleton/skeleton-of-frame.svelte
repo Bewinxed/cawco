@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
    * The kit's SkeletonOf in the shapes the product waits in: a list of rows
-   * and a session's card, each waiting, its bones taken from the real piece
-   * drawn with mock data.
+   * and a session's card, each waiting, its bones captured from the real
+   * piece drawn with mock data (`bun run bones`, which draws this frame on
+   * /dev/bones).
    */
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";

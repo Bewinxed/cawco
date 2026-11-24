@@ -27,13 +27,13 @@ export const Card = {
   args: { height: "card", width: "title", radius: "card" },
 };
 
-/** A list of rows waiting, its bones taken from the real rows. */
+/** A list of rows waiting, its bones captured from the real rows. */
 export const RowsWaiting = {
   component: SkeletonOfFrame,
   args: { piece: "rows" },
 };
 
-/** A session's card waiting, its bones taken from the real card. */
+/** A session's card waiting, its bones captured from the real card. */
 export const CardWaiting = {
   component: SkeletonOfFrame,
   args: { piece: "card" },

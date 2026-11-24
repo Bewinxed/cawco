@@ -6,6 +6,7 @@ design-previews/
 .mcp.json
 packages/jsonl-parser/
 packages/hub/drizzle/meta/
+apps/dashboard/src/lib/components/ui/skeleton/bones/
 packages/core/src/views-spec.json
 packages/core/src/decisions-spec.json
 packages/core/src/blocks-spec.json
