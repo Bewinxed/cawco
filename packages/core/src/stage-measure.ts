@@ -80,6 +80,30 @@ export const MEASURE_MARKS = {
   end: "cawco measure end",
 } as const;
 
+/**
+ * The function the daemon puts on a measuring page (Playwright's
+ * `page.exposeBinding`, agent stage-measure.ts) for its `userEvent` (agent
+ * canvas real-input.ts): each step is delivered as real input through the
+ * DevTools Protocol's Input domain, as Playwright's own mouse, keyboard
+ * and touchscreen send it. The browser hit-tests, dispatches, focuses and
+ * clicks in its own input handling, as for a person's press, so the trace
+ * holds the component's work and none of a script's stand-in for it.
+ */
+export const MEASURE_INPUT = "__cawcoInput";
+
+/**
+ * One step of real input, at a point in the viewport's CSS pixels: the
+ * mouse moved there (off the page at a negative point), a press and
+ * release where it stands, a tap there, a key pressed by its
+ * `KeyboardEvent.key`, or words typed a key at a time.
+ */
+export type MeasureInput =
+  | { by: "move"; x: number; y: number }
+  | { by: "press" }
+  | { by: "tap"; x: number; y: number }
+  | { by: "key"; key: string }
+  | { by: "text"; text: string };
+
 /** One repeat as the daemon asks the page for it: the state it starts at (its picture key), the move, the pass, and how long it waits once the move is pressed, ms. */
 export interface MeasureRepeatAsk {
   key: string;

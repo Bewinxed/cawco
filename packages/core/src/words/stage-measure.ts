@@ -77,6 +77,15 @@ export const measureWords = {
   /** The play ran past its limit. */
   playTooLong: (seconds: number) =>
     `The move's play ran past ${seconds} s. A measurement reads one move: split it into stories of its own.`,
+  /** A press's element has no box to press: hidden, or drawn at no size. */
+  noBox: (element: string) =>
+    `${element} has no box to press: it is hidden or drawn at no size. Press the element a person sees, or open what shows it first in the story's play.`,
+  /** Another element stands over the middle of the one a press names, so a real press lands on it. */
+  covered: (element: string, over: string | null) =>
+    `A press on ${element} lands on ${over ?? "nothing in the page"}, which stands over its middle. Press the element on top, or close what covers it first in the story's play.`,
+  /** A measuring page without the daemon's real input: a daemon older than the stage it measures. */
+  noInput:
+    "The stage's page has no real input to press with: the daemon predates it. Update the daemon on the workspace's machine, then read again.",
   /** A save landed while it measured. */
   changed:
     "The states file or a file it draws from changed while this measured, so the numbers mix two versions. Read again.",

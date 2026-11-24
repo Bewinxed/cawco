@@ -17,6 +17,7 @@
 }
 
 /* The same reset, asked of each pseudo-element a rule makes (scripts/preflight.ts). */
+:where(:is(:is(.field-edge):not(input, textarea)))::before,
 :where(
   :is(
     :where(.group\/cin)[data-asking]

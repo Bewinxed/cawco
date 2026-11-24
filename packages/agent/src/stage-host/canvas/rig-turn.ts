@@ -118,6 +118,12 @@ export function rigOwns(layer: Node): boolean {
   return owned.has(layer);
 }
 
+/** The rig's layers on the body now: what its plays' `canvas` searches beside the rig's own body. */
+export const rigLayers = (): HTMLElement[] =>
+  [...document.body.children].filter(
+    (one): one is HTMLElement => one instanceof HTMLElement && rigOwns(one)
+  );
+
 /** Watches the body's children for the rig's layers, and ends a turn as the person acts. Once per page. */
 export function watchRigLayers(): void {
   watch = new MutationObserver(look);

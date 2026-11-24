@@ -83,7 +83,7 @@
     // frame's under a finger (a vertical one still scrolls), and its edge
     // steps up under the pointer and through a drag.
     share !== undefined &&
-      "isolate cursor-ew-resize touch-pan-y overflow-clip not-focus-within:[&_*]:cursor-ew-resize can-hover:hover:not-has-[[data-slot][aria-invalid=true]]:border-border-row-outline data-dragging:not-has-[[data-slot][aria-invalid=true]]:border-border-row-outline",
+      "isolate cursor-ew-resize touch-pan-y not-focus-within:[&_*]:cursor-ew-resize can-hover:hover:not-has-[[data-slot][aria-invalid=true]]:border-border-row-outline data-dragging:not-has-[[data-slot][aria-invalid=true]]:border-border-row-outline",
     look === "bar" &&
       "h-c-btn-h rounded-pill border-border-hairline bg-material-panel shadow-tile glass-backdrop contrast-more:border-border-contrast contrast-more:bg-surface-raised contrast-more:backdrop-filter-none reduced-transparency:border-border-contrast reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none",
     // The group's own Clear stands for the engine's: its search cancel glyph is not drawn.
@@ -98,12 +98,20 @@
   {...props}
 >
   {#if share !== undefined}
+    <!-- The share's fill, clipped to the frame's inside by a box laid over
+         the frame's border box with a clear border of the frame's width: its
+         inside is the frame's, on the frame's inner radius. The frame clips
+         nothing itself, or it would clip its focus edge (`field-edge`). -->
     <span
       aria-hidden="true"
-      class="pointer-events-none absolute inset-y-0 start-0 -z-1 w-(--share) bg-surface-fill transition-control"
-      data-slot="input-group-share"
-      style:--share="{Math.min(1, Math.max(0, share)) * 100}%"
-    ></span>
+      class="pointer-events-none absolute -inset-px -z-1 overflow-clip rounded-inherit border border-transparent"
+    >
+      <span
+        class="absolute inset-y-0 start-0 w-(--share) bg-surface-fill transition-control"
+        data-slot="input-group-share"
+        style:--share="{Math.min(1, Math.max(0, share)) * 100}%"
+      ></span>
+    </span>
   {/if}
   {@render children?.()}
 </div>

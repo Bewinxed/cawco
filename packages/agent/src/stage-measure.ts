@@ -12,7 +12,9 @@
  * three points only, the heap walk being the costly read.
  * Every repeat mounts its start afresh (canvas stage.ts `measure`): a
  * play has no inverse to undo it with, so each starts alike and what one
- * leaves behind shows.
+ * leaves behind shows. Every press, key and word of a move reaches the page
+ * as real input (`deliver`, canvas real-input.ts), so the read charges the
+ * component and its libraries alone.
  *
  * The read has one bound, the render's deadline (stage-render.ts), the
  * one the hub waits on: the traced plays must end inside it, and the
@@ -30,9 +32,11 @@ import {
   EVERY_FRAME_SHARE,
   type ForcedLayout,
   MEASURE_CPU_RATE,
+  MEASURE_INPUT,
   MEASURE_MARKS,
   MEASURE_REPEATS,
   type MeasureAsk,
+  type MeasureInput,
   type MeasureMove,
   type MeasurePass,
   type MeasureRead,
@@ -105,6 +109,30 @@ type TraceEvent = TraceEngine.Types.Events.Event;
 
 /** A refusal in words: the read answers it as its error. */
 class Refused extends Error {}
+
+/**
+ * One step of the page's real input (core `MEASURE_INPUT`), delivered by
+ * Playwright's own mouse, keyboard and touchscreen: CDP
+ * `Input.dispatchMouseEvent`, `dispatchKeyEvent` and `dispatchTouchEvent`,
+ * each answered once the page has handled it.
+ */
+async function deliver(page: Page, step: MeasureInput): Promise<void> {
+  switch (step.by) {
+    case "move":
+      return await page.mouse.move(step.x, step.y);
+    case "press":
+      await page.mouse.down();
+      return await page.mouse.up();
+    case "tap":
+      return await page.touchscreen.tap(step.x, step.y);
+    case "key":
+      return await page.keyboard.press(step.key);
+    case "text":
+      return await page.keyboard.type(step.text);
+    default:
+      throw new Error(`No input step ${JSON.stringify(step)}.`);
+  }
+}
 
 /** One repeat on the page: its answer, or the page's refusal thrown. */
 async function repeat(
@@ -194,6 +222,10 @@ export async function measureMove(
   const move = moveOf(ask);
   const tooLong = () => new Refused(words.tooLong(STAGE_RENDER_MS / 1000));
   const cdp = await page.context().newCDPSession(page);
+  // The page's plays and presses arrive as real input, so the trace holds none of a script's stand-in for them (canvas real-input.ts).
+  await page.exposeBinding(MEASURE_INPUT, (_source, step: MeasureInput) =>
+    deliver(page, step)
+  );
   try {
     await cdp.send("Emulation.setCPUThrottlingRate", {
       rate: MEASURE_CPU_RATE[speed],

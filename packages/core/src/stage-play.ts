@@ -2,10 +2,12 @@
  * What a story's `play` is handed on the canvas (CSF's play function,
  * storybook.js.org/docs/writing-stories/play-function): `update` changes the
  * live instance's props without a re-mount, so the component's own motion
- * plays; `userEvent` dispatches real pointer and key events (a hover also
- * puts the rewrite's `.cawco-hover` on the element, since no script can make
- * the browser's own `:hover` match); `canvas` finds elements in the frame
- * by their words and roles, a small kin of Testing Library's queries.
+ * plays; `userEvent` dispatches pointer and key events from script (a hover
+ * also puts the rewrite's `.cawco-hover` on the element, since no script can
+ * make the browser's own `:hover` match), and on a measuring page sends real
+ * input instead (agent canvas real-input.ts); `canvas` finds elements in the
+ * frame and the layers it opened by their words and roles, a small kin of
+ * Testing Library's queries.
  */
 
 const settle = () =>
@@ -55,7 +57,7 @@ export interface UserEvent {
   wait: (ms: number) => Promise<void>;
 }
 
-/** Real events into a frame, its focus kept inside it. */
+/** Events made in script into a frame, its focus kept inside it: the person's browser's plays, which no DevTools Protocol reaches. */
 export function userEventIn(frame: HTMLElement): UserEvent {
   const key = async (target: Element, name: string) => {
     for (const type of ["keydown", "keypress", "keyup"]) {
@@ -228,9 +230,32 @@ export interface CanvasQueries {
   querySelectorAll: (selector: string) => Element[];
 }
 
-/** The frame's elements by their words, roles and test ids; a `getBy` that finds none throws, as Testing Library's does, and takes the first of several. */
-export function queriesIn(frame: HTMLElement): CanvasQueries {
-  const all = () => [...frame.querySelectorAll("*")];
+/**
+ * Whether `el` is in the accessibility tree: not inside an inert or
+ * `aria-hidden` subtree, and rendered and visible. A role query skips the
+ * rest, as Testing Library's `*ByRole` does by default: a layer built
+ * ahead and kept shut (bits-ui's `forceMount`) holds options no one can
+ * reach.
+ */
+const accessible = (el: Element): boolean =>
+  el.closest('[inert], [aria-hidden="true"]') === null &&
+  el.checkVisibility({ visibilityProperty: true });
+
+const ARTICLED = /^[aeiou]/u;
+
+/**
+ * The frame's elements by their words, roles and test ids, with those of
+ * the `layers` it opened outside itself (a popover's content portalled to
+ * the body), searched after it: what a person sees of the drawing. A
+ * `getBy` that finds none throws, as Testing Library's does, and takes the
+ * first of several.
+ */
+export function queriesIn(
+  frame: HTMLElement,
+  layers: () => readonly HTMLElement[] = () => []
+): CanvasQueries {
+  const roots = () => [frame, ...layers()];
+  const all = () => roots().flatMap((root) => [...root.querySelectorAll("*")]);
   const allByText = (want: string | RegExp) =>
     all().filter(
       (el) =>
@@ -245,17 +270,21 @@ export function queriesIn(frame: HTMLElement): CanvasQueries {
     all().filter(
       (el) =>
         roleOf(el) === role &&
-        (options?.name === undefined || matches(nameOf(el), options.name))
+        (options?.name === undefined || matches(nameOf(el), options.name)) &&
+        accessible(el)
     );
-  const allByTestId = (id: string) => [
-    ...frame.querySelectorAll(`[data-testid="${CSS.escape(id)}"]`),
-  ];
+  const allByTestId = (id: string) =>
+    roots().flatMap((root) => [
+      ...root.querySelectorAll(`[data-testid="${CSS.escape(id)}"]`),
+    ]);
   const byText = (want: string | RegExp) => allByText(want)[0] ?? null;
   const byRole = (role: string, options?: { name?: string | RegExp }) =>
     allByRole(role, options)[0] ?? null;
   const found = <T>(value: T | null, what: string): T => {
     if (value === null) {
-      throw new Error(`Nothing in the frame is ${what}.`);
+      throw new Error(
+        `Nothing in the frame or the layers it opened is ${what}.`
+      );
     }
     return value;
   };
@@ -269,10 +298,14 @@ export function queriesIn(frame: HTMLElement): CanvasQueries {
     getByRole: (role, options) =>
       found(
         byRole(role, options),
-        `a ${role}${options?.name ? ` named ${String(options.name)}` : ""}`
+        `${ARTICLED.test(role) ? "an" : "a"} ${role}${options?.name ? ` named ${String(options.name)}` : ""}`
       ),
     getByTestId: (id) => found(allByTestId(id)[0] ?? null, `test id ${id}`),
-    querySelector: (selector) => frame.querySelector(selector),
-    querySelectorAll: (selector) => [...frame.querySelectorAll(selector)],
+    querySelector: (selector) =>
+      roots()
+        .map((root) => root.querySelector(selector))
+        .find((one) => one !== null) ?? null,
+    querySelectorAll: (selector) =>
+      roots().flatMap((root) => [...root.querySelectorAll(selector)]),
   };
 }

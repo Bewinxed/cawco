@@ -141,7 +141,7 @@ import {
   type Rewrite,
   rewriteSheet,
 } from "./pseudo";
-import { rigResumes, rigTurn } from "./rig-turn";
+import { rigLayers, rigResumes, rigTurn } from "./rig-turn";
 import { onPageScheme, pageScheme } from "./scheme";
 import { bootStage } from "./stage";
 import {
@@ -1363,7 +1363,7 @@ export function boot(options: BootOptions): void {
           play({
             args: current,
             canvasElement: body,
-            canvas: queriesIn(body),
+            canvas: queriesIn(body, rigLayers),
             userEvent: rigUser(userEventIn(body)),
             step: rigResumes(
               async (_name: string, run: () => Promise<void>) => await run()

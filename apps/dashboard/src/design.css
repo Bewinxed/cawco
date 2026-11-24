@@ -2030,15 +2030,41 @@
    chips or buttons, which keep their own ring. A field marked invalid keeps
    its error edge. This selector outweighs a border-colour utility on the field
    on purpose (scripts/specificity-trap.ts).
+   A frame's strong edge is a ring of its own laid over its 1px border
+   (`::before`, the frame its containing block unless it is positioned
+   already) that fades in by opacity, on the compositor: a border colour
+   animates by repainting on the main thread, as the popover that focuses
+   the frame's search opens on it (LimitPickerChecks ModelsOpen). So the
+   frame's own border never changes, and it never clips what it holds
+   (`overflow` other than visible), which would clip the ring. An `<input>`
+   or `<textarea>` draws no `::before`: its own border steps.
    A field that is the whole surface (Find's strip, the composer) carries
    none: its caret is the whole indicator. */
 @utility field-edge {
   border-color: var(--color-border-row-outline);
-  &:is(
-      :focus-visible,
-      :has(:is(input, textarea, [contenteditable]):focus-visible)
-    ):not([aria-invalid="true"], :has([aria-invalid="true"])) {
+  &:is(input, textarea):focus-visible:not([aria-invalid="true"]) {
     border-color: var(--color-border-contrast);
+  }
+  &:not(input, textarea) {
+    :where(&) {
+      position: relative;
+    }
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      border: 1px solid var(--color-border-contrast);
+      border-radius: inherit;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--duration-control) var(--ease-out);
+    }
+    &:is(
+        :focus-visible,
+        :has(:is(input, textarea, [contenteditable]):focus-visible)
+      ):not([aria-invalid="true"], :has([aria-invalid="true"]))::before {
+      opacity: 1;
+    }
   }
 }
 

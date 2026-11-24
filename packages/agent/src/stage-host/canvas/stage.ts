@@ -128,7 +128,12 @@ import {
   type MeasureRepeatAsk,
   type MeasureRun,
 } from "@cawco/core/stage-measure";
-import { elementSaid, queriesIn, userEventIn } from "@cawco/core/stage-play";
+import {
+  type CanvasQueries,
+  elementSaid,
+  queriesIn,
+  userEventIn,
+} from "@cawco/core/stage-play";
 import { graphWords as words } from "@cawco/core/words/graph";
 import { measureWords } from "@cawco/core/words/stage-measure";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
@@ -168,6 +173,7 @@ import {
   type SectionFailure,
 } from "./page";
 import { allClass } from "./pseudo";
+import { type RealUser, realUserEvent } from "./real-input";
 import {
   answerMoves,
   frameCurveOf,
@@ -178,7 +184,7 @@ import {
   Replays,
   valuesOf,
 } from "./replays";
-import { rigTurn } from "./rig-turn";
+import { rigOwns, rigTurn } from "./rig-turn";
 import {
   frameAsViewport,
   windowHeight,
@@ -227,6 +233,12 @@ const INKED =
 /** Solar's close glyph (bold duotone), the error formula's mark (DESIGN.md, Icons): the dashboard's `IconError`. */
 const ERROR_GLYPH =
   '<g fill="currentColor"><path d="M5.53717 19.5302C5.24427 19.8231 4.7694 19.8231 4.47651 19.5302C4.18361 19.2373 4.18361 18.7624 4.47651 18.4696L18.4764 4.46967C18.7693 4.17678 19.2442 4.17678 19.5371 4.46967C19.8299 4.76256 19.8299 5.23744 19.5371 5.53033L5.53717 19.5302Z" opacity=".5"/><path d="M4.46978 5.53033C4.17689 5.23744 4.17689 4.76256 4.46978 4.46967C4.76268 4.17678 5.23755 4.17678 5.53044 4.46967L19.5303 18.4696C19.8232 18.7624 19.8232 19.2373 19.5303 19.5302C19.2374 19.8231 18.7626 19.8231 18.4697 19.5302L4.46978 5.53033Z"/></g>';
+
+/** A measured move: `run` makes it, between the trace's marks; `ready` (a one-off press's) brings the hand to it before they open. */
+interface Pressing {
+  ready: (() => Promise<void>) | null;
+  run: () => Promise<void>;
+}
 
 /** A state resolved on the page: its section, the story drawn (a variant's own), and the args it is drawn with. */
 interface Target {
@@ -707,9 +719,8 @@ function drawingsAsViewport(drawings: () => HTMLElement[]): void {
   );
 }
 
-/** Every element in `root` that `on` names, by the query a play would make (core stage-play.ts). */
-function hitsIn(root: HTMLElement, on: MeasureOn): Element[] {
-  const queries = queriesIn(root);
+/** Every element `queries` find that `on` names, by the query a play would make (core stage-play.ts). */
+function hitsIn(queries: CanvasQueries, on: MeasureOn): Element[] {
   if ("role" in on) {
     return queries.queryAllByRole(
       on.role,
@@ -749,6 +760,28 @@ export function bootStage(page: Page): Mode {
   /** The one drawing: the live instance of the state the panel keeps. */
   const stage = newDrawing();
   const { frame, body: drawing } = stage;
+  /** The floating layers the drawing opened outside itself (a popover portalled to the body), the rig's left out: searched with it by a play's `canvas` and for a press's element. */
+  const layersOut = (): HTMLElement[] =>
+    [...document.body.children].filter(
+      (one): one is HTMLElement =>
+        one instanceof HTMLElement &&
+        one !== rig &&
+        !rigOwns(one) &&
+        !one.contains(drawing) &&
+        !one.matches("script, style, link, template")
+    );
+  /** A measuring page's plays and presses: real input the daemon sends (real-input.ts). */
+  const realUser = page.measuring
+    ? realUserEvent((el) =>
+        stageScroll(() =>
+          el.scrollIntoView({
+            block: "center",
+            inline: "center",
+            behavior: "instant",
+          })
+        )
+      )
+    : null;
   /**
    * The person has pressed or typed in the drawing, or in a layer it
    * opened, since it was last mounted: the component's own handlers may
@@ -1473,8 +1506,8 @@ export function bootStage(page: Page): Mode {
     await play({
       args: current,
       canvasElement: drawing,
-      canvas: queriesIn(drawing),
-      userEvent: userEventIn(drawing),
+      canvas: queriesIn(drawing, layersOut),
+      userEvent: realUser ?? userEventIn(drawing),
       step: async (_name: string, run: () => Promise<void>) => await run(),
       update: async (next: Record<string, unknown>) => {
         current = { ...current, ...next };
@@ -2623,34 +2656,17 @@ export function bootStage(page: Page): Mode {
   /** The sections a measuring page has loaded once: a load past the first is a save. */
   const shownOnce = new Set<Section>();
 
-  /** The floating layers the drawing opened outside itself (a popover portalled to the body): searched with it for a press's element. */
-  const layersOut = (): HTMLElement[] =>
-    [...document.body.children].filter(
-      (one): one is HTMLElement =>
-        one instanceof HTMLElement &&
-        one !== rig &&
-        !one.contains(drawing) &&
-        !one.matches("script, style, link, template")
-    );
-
-  /** The one element `on` names in the drawing or its layers, and the root it stands in; or why there is not exactly one. */
-  function measuredOn(
-    on: MeasureOn
-  ): { el: Element; root: HTMLElement } | { refused: string } {
-    const matched = new Map<Element, HTMLElement>();
-    for (const root of [drawing, ...layersOut()]) {
-      for (const hit of hitsIn(root, on)) {
-        matched.set(hit, root);
-      }
-    }
+  /** The one element `on` names in the drawing or its layers; or why there is not exactly one. */
+  function measuredOn(on: MeasureOn): { el: Element } | { refused: string } {
+    const matched = new Set(hitsIn(queriesIn(drawing, layersOut), on));
     const [only] = matched;
     if (matched.size === 1 && only) {
-      return { el: only[0], root: only[1] };
+      return { el: only };
     }
     if (matched.size === 0) {
       return { refused: measureWords.nothingMatches(on) };
     }
-    const listed = [...matched.keys()].slice(0, 5).map(elementSaid);
+    const listed = [...matched].slice(0, 5).map(elementSaid);
     return {
       refused: measureWords.severalMatch(
         on,
@@ -2660,25 +2676,31 @@ export function bootStage(page: Page): Mode {
     };
   }
 
-  /** One press on `el`, standing in `root`: the `userEvent` call a play would make. */
-  async function pressOnce(
+  /**
+   * One press on `el` by `user`: `run`, the `userEvent` call a play would
+   * make, and `ready`, the hand brought to it before the move's window
+   * opens, as a person's comes before they press: onto it for a click with
+   * a mouse, its focus in it for words or a key. What getting ready sets
+   * off is the start's, not the press's.
+   */
+  function pressOf(
+    user: RealUser,
     move: Exclude<MeasureMove, { by: "play" }>,
-    el: Element,
-    root: HTMLElement
-  ): Promise<void> {
-    const user = userEventIn(root);
-    const presses: Record<MeasurePress, () => Promise<void>> = {
-      click: () => user.click(el),
-      hover: () => user.hover(el),
-      type: () => user.type(el, move.text ?? ""),
-      key: async () => {
-        if (el instanceof HTMLElement || el instanceof SVGElement) {
-          el.focus({ preventScroll: true });
-        }
-        await user.keyboard(move.key ?? "");
-      },
+    el: Element
+  ): Pressing {
+    const focusIn = () => {
+      if (el instanceof HTMLElement || el instanceof SVGElement) {
+        el.focus({ preventScroll: true });
+      }
+      return Promise.resolve();
     };
-    await presses[move.by]();
+    const presses: Record<MeasurePress, Pressing> = {
+      click: { ready: () => user.approach(el), run: () => user.click(el) },
+      hover: { ready: null, run: () => user.hover(el) },
+      type: { ready: focusIn, run: () => user.type(el, move.text ?? "") },
+      key: { ready: focusIn, run: () => user.keyboard(move.key ?? "") },
+    };
+    return presses[move.by];
   }
 
   /**
@@ -2721,8 +2743,10 @@ export function bootStage(page: Page): Mode {
 
   /**
    * One repeat of a measured move from state `ask.key` (core
-   * `MeasureRepeatAsk`): the move's start mounted afresh and come to rest,
-   * then the move made on it. A `scan` reads its clips and length; every
+   * `MeasureRepeatAsk`): the pointer off the page, the move's start
+   * mounted afresh and come to rest, a one-off press's hand brought to its
+   * element and come to rest again, then the move made on it in real input
+   * (real-input.ts). A `scan` reads its clips and length; every
    * other pass touches no animation, so the trace charges the component
    * alone, and waits `ask.wait` ms and two frames once it has pressed. A
    * `traced` pass stands between the marks the trace is read in.
@@ -2732,6 +2756,9 @@ export function bootStage(page: Page): Mode {
   }
 
   async function measureTurn(ask: MeasureRepeatAsk): Promise<MeasureRun> {
+    if (!realUser) {
+      return { refused: measureWords.noInput };
+    }
     const [file, story] = ask.key.split("|");
     if (file === undefined || story === undefined) {
       return { refused: `No state ${ask.key} on this page.` };
@@ -2745,17 +2772,19 @@ export function bootStage(page: Page): Mode {
     if ("refused" in played) {
       return played;
     }
+    // The pointer off the page, so the start mounts unhovered and a hover moves onto it.
+    await realUser.away();
     await open(played.start);
     if (fault) {
       return { refused: fault.textContent ?? "" };
     }
     const ready = played.run
-      ? { run: played.run, on: null }
-      : pressReady(ask.move);
+      ? { run: played.run, ready: null, on: null }
+      : pressReady(realUser, ask.move);
     if ("refused" in ready) {
       return ready;
     }
-    return await measuredRun(ready.run, ask, {
+    return await measuredRun(ready, ask, {
       edits,
       from: played.start.ref.story,
       to: ask.move.by === "play" ? story : null,
@@ -2788,8 +2817,9 @@ export function bootStage(page: Page): Mode {
 
   /** A one-off press made ready on the drawing as it stands: its element found, exactly one. */
   function pressReady(
+    user: RealUser,
     move: MeasureMove
-  ): { on: string; run: () => Promise<void> } | { refused: string } {
+  ): (Pressing & { on: string }) | { refused: string } {
     if (move.by === "play") {
       return { refused: measureWords.noMove };
     }
@@ -2803,17 +2833,21 @@ export function bootStage(page: Page): Mode {
     if ("refused" in pressed) {
       return pressed;
     }
-    const { el, root } = pressed;
-    return { on: elementSaid(el), run: () => pressOnce(move, el, root) };
+    const { el } = pressed;
+    return { on: elementSaid(el), ...pressOf(user, move, el) };
   }
 
-  /** The move made for `ask`'s pass, answered with `said`; a throw or a play past its limit refused in words. */
+  /** The move made for `ask`'s pass once it is ready and at rest, answered with `said`; a throw or a play past its limit refused in words. */
   async function measuredRun(
-    run: () => Promise<void>,
+    { ready, run }: Pressing,
     ask: MeasureRepeatAsk,
     said: Omit<Exclude<MeasureRun, { refused: string }>, "length" | "unsettled">
   ): Promise<MeasureRun> {
     try {
+      if (ready) {
+        await stillPage(ready);
+        await restOf(drawing);
+      }
       if (ask.pass === "scan") {
         return { ...said, ...(await scanned(run)) };
       }

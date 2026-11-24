@@ -470,215 +470,230 @@
     <span class="type-label text-ink-muted" id={`${uid}-path`}
       ><MorphText text={pathLabel} /></span
     >
-    <!-- It clips its corners and is no scroller (the browser's foot sticks
-         past it to the popover's), so as its grid's item it takes no width
-         of its own content's: `min-w-0`, or the folder rows widened the
-         popover past a phone's edge. -->
+    <!-- What it holds is clipped to its corners and is no scroller (the
+         browser's foot sticks past it to the popover's), so as its grid's
+         item it takes no width of its own content's: `min-w-0`, or the
+         folder rows widened the popover past a phone's edge. The frame
+         clips nothing itself, or it would clip its focus edge
+         (`field-edge`): its inside does, a box laid over the frame's border
+         box with a clear border of the frame's width, so it clips on the
+         frame's inner radius. -->
     <div
       data-slot="location-section-field"
-      class="field-edge min-w-0 overflow-clip rounded-md border bg-surface-raised shadow-xs transition-control data-locked:bg-surface-recess"
+      class="field-edge min-w-0 rounded-md border bg-surface-raised shadow-xs transition-control data-locked:bg-surface-recess"
       data-locked={locked || undefined}
     >
       <div
-        data-slot="row"
-        class="flex h-c-row-h items-center gap-space-3 pe-space-2"
+        class="-m-px min-w-0 overflow-clip rounded-inherit border border-transparent"
       >
-        <span class={LEAD}
-          ><FolderOpen
-            data-location-section-lead
-            class="size-icon-md text-mark-3"
-          /></span
+        <div
+          data-slot="row"
+          class="flex h-c-row-h items-center gap-space-3 pe-space-2"
         >
-        <input
-          aria-invalid={reading && !informational ? true : undefined}
-          aria-labelledby={`${uid}-path`}
-          autocapitalize="off"
-          class="min-h-c-btn-h-sm max-phone:min-h-c-row-h min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-strong placeholder:text-ink-muted"
-          id="session-dir"
-          oninput={(event) => ondir(event.currentTarget.value)}
-          onkeydown={commitOnEnter}
-          placeholder={spawnWords.location.directoryPlaceholder}
-          readonly={locked}
-          spellcheck="false"
-          value={dir}
-        />
-        {#if locked}
-          <span
-            class="ns-in mark-line inline-flex h-c-pill-h items-center gap-space-1 rounded-sm bg-status-live-bg px-space-2 font-sans text-size-label leading-none font-medium whitespace-nowrap text-status-live-ink"
-            ><span>{spawnWords.location.fromProject}</span></span
+          <span class={LEAD}
+            ><FolderOpen
+              data-location-section-lead
+              class="size-icon-md text-mark-3"
+            /></span
           >
-          <span class="ns-in flex flex-none" style:--delay={staggered(1)}>
-            <Button onclick={onoverride} size="sm" tone="quiet" variant="ghost">
-              {spawnWords.location.override}
-            </Button>
-          </span>
-        {:else}
-          <span class="ns-in flex flex-none">
-            <Button
-              aria-expanded={browsing}
-              disabled={!machineId}
-              id="session-browse"
-              onclick={toggleBrowse}
-              size="sm"
-              variant="secondary"
+          <input
+            aria-invalid={reading && !informational ? true : undefined}
+            aria-labelledby={`${uid}-path`}
+            autocapitalize="off"
+            class="min-h-c-btn-h-sm max-phone:min-h-c-row-h min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-strong placeholder:text-ink-muted"
+            id="session-dir"
+            oninput={(event) => ondir(event.currentTarget.value)}
+            onkeydown={commitOnEnter}
+            placeholder={spawnWords.location.directoryPlaceholder}
+            readonly={locked}
+            spellcheck="false"
+            value={dir}
+          />
+          {#if locked}
+            <span
+              class="ns-in mark-line inline-flex h-c-pill-h items-center gap-space-1 rounded-sm bg-status-live-bg px-space-2 font-sans text-size-label leading-none font-medium whitespace-nowrap text-status-live-ink"
+              ><span>{spawnWords.location.fromProject}</span></span
             >
-              {#if browsing}
-                <Up class="size-icon-md flex-none text-ink-muted" /><span
-                  >{spawnWords.location.close}</span
-                >
-              {:else}
-                <Search class="size-icon-md flex-none text-ink-muted" />
-                <span>{spawnWords.location.browse}</span>
-              {/if}
-            </Button>
-          </span>
-        {/if}
-      </div>
-      <div inert={!browsing} {@attach folds(() => browsing, PANEL)}>
-        <div class="min-h-0">
-          <div class="border-t border-t-border-hairline bg-surface-recess">
-            <!-- The machine and the crumb on one line at every width. The
-                 folder you are in stands whole at the crumb's end (its name
-                 ending in an ellipsis only past the whole row); the folders
-                 above it scroll sideways in the room left, opening at their
-                 end, the one above yours: a right-to-left scroller starts at
-                 its right, round a left-to-right run of crumbs. -->
-            <div
-              class="flex items-center gap-space-2 border-b border-b-border-hairline bg-surface-recess p-space-2 ps-space-3"
-            >
-              <span
-                data-slot="machine"
-                class="mark-line inline-flex h-c-pill-h flex-none items-center gap-space-2 rounded-sm bg-surface-lift px-space-2 font-sans text-size-label leading-none font-medium whitespace-nowrap text-ink-strong"
-                ><span
-                  data-slot="dot"
-                  class="size-space-2 rounded-pill bg-mark-4"
-                  data-box
-                ></span><span>{machineName}</span></span
+            <span class="ns-in flex flex-none" style:--delay={staggered(1)}>
+              <Button
+                onclick={onoverride}
+                size="sm"
+                tone="quiet"
+                variant="ghost"
               >
-              <div
-                data-slot="crumbs"
-                class="flex min-w-0 flex-1 items-center gap-space-row whitespace-nowrap font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-muted"
+                {spawnWords.location.override}
+              </Button>
+            </span>
+          {:else}
+            <span class="ns-in flex flex-none">
+              <Button
+                aria-expanded={browsing}
+                disabled={!machineId}
+                id="session-browse"
+                onclick={toggleBrowse}
+                size="sm"
+                variant="secondary"
               >
-                {#if crumbs.length > 1}
-                  <div
-                    data-slot="above"
-                    class="fai-scroll dir-rtl min-w-0 overflow-x-auto overscroll-x-contain"
+                {#if browsing}
+                  <Up class="size-icon-md flex-none text-ink-muted" /><span
+                    >{spawnWords.location.close}</span
                   >
-                    <div
-                      class="inline-flex items-center gap-space-row align-middle"
-                      dir="ltr"
-                    >
-                      {#each crumbs.slice(0, -1) as crumb (crumb.to)}
-                        <button
-                          data-slot="crumb"
-                          class="select-none press-tint transition-control min-h-c-row-h min-w-c-row-h flex-none rounded-xs border-none border-current bg-transparent px-space-2 text-inherit hover:bg-surface-hover"
-                          onclick={() => list(crumb.to)}
-                          type="button"
-                        >
-                          {crumb.label}
-                        </button>
-                        <span aria-hidden="true" class="text-neutral-8">/</span>
-                      {/each}
-                    </div>
-                  </div>
+                {:else}
+                  <Search class="size-icon-md flex-none text-ink-muted" />
+                  <span>{spawnWords.location.browse}</span>
                 {/if}
-                <button
-                  data-slot="crumb"
-                  aria-current="location"
-                  class="select-none press-tint transition-control min-h-c-row-h min-w-c-row-h max-w-full shrink-0 rounded-xs border-none border-current bg-surface-lift px-space-2 text-start font-medium text-ink-strong"
-                  onclick={() => list(path)}
-                  type="button"
+              </Button>
+            </span>
+          {/if}
+        </div>
+        <div inert={!browsing} {@attach folds(() => browsing, PANEL)}>
+          <div class="min-h-0">
+            <div class="border-t border-t-border-hairline bg-surface-recess">
+              <!-- The machine and the crumb on one line at every width. The
+                   folder you are in stands whole at the crumb's end (its name
+                   ending in an ellipsis only past the whole row); the folders
+                   above it scroll sideways in the room left, opening at their
+                   end, the one above yours: a right-to-left scroller starts at
+                   its right, round a left-to-right run of crumbs. -->
+              <div
+                class="flex items-center gap-space-2 border-b border-b-border-hairline bg-surface-recess p-space-2 ps-space-3"
+              >
+                <span
+                  data-slot="machine"
+                  class="mark-line inline-flex h-c-pill-h flex-none items-center gap-space-2 rounded-sm bg-surface-lift px-space-2 font-sans text-size-label leading-none font-medium whitespace-nowrap text-ink-strong"
+                  ><span
+                    data-slot="dot"
+                    class="size-space-2 rounded-pill bg-mark-4"
+                    data-box
+                  ></span><span>{machineName}</span></span
                 >
-                  <span class="block truncate">{crumbs.at(-1)?.label}</span>
-                </button>
-              </div>
-            </div>
-            <div
-              class="fai-scroll grid max-h-49 content-box-start gap-space-row overflow-auto overscroll-contain p-space-2"
-            >
-              {#if canGoUp}
-                <button
-                  class="select-none press-tint transition-control flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-muted hover:bg-surface-hover"
-                  onclick={goUp}
-                  type="button"
-                >
-                  <Left class="size-icon-md flex-none" /><span
-                    >{spawnWords.location.parentFolder}</span
-                  >
-                </button>
-              {/if}
-              {#if listingFolders}
                 <div
-                  data-slot="location-section-empty"
-                  class="type-meta px-space-2 py-space-7 text-center wrap-anywhere text-ink-subtle"
-                  role="status"
+                  data-slot="crumbs"
+                  class="flex min-w-0 flex-1 items-center gap-space-row whitespace-nowrap font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-muted"
                 >
-                  {spawnWords.location.loadingFolders}
-                </div>
-              {:else if listError}
-                <div
-                  data-slot="location-section-empty"
-                  class="type-meta px-space-2 py-space-7 text-center wrap-anywhere text-status-fail-ink"
-                  role="alert"
-                >
-                  {listError}
-                </div>
-              {:else}
-                {#each folders as folder (`${path}/${folder.name}`)}
+                  {#if crumbs.length > 1}
+                    <div
+                      data-slot="above"
+                      class="fai-scroll dir-rtl min-w-0 overflow-x-auto overscroll-x-contain"
+                    >
+                      <div
+                        class="inline-flex items-center gap-space-row align-middle"
+                        dir="ltr"
+                      >
+                        {#each crumbs.slice(0, -1) as crumb (crumb.to)}
+                          <button
+                            data-slot="crumb"
+                            class="select-none press-tint transition-control min-h-c-row-h min-w-c-row-h flex-none rounded-xs border-none border-current bg-transparent px-space-2 text-inherit hover:bg-surface-hover"
+                            onclick={() => list(crumb.to)}
+                            type="button"
+                          >
+                            {crumb.label}
+                          </button>
+                          <span aria-hidden="true" class="text-neutral-8"
+                            >/</span
+                          >
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
                   <button
-                    class="select-none press-tint transition-control flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-strong hover:bg-surface-hover"
-                    onclick={() => enter(folder.name)}
-                    title={folder.name}
+                    data-slot="crumb"
+                    aria-current="location"
+                    class="select-none press-tint transition-control min-h-c-row-h min-w-c-row-h max-w-full shrink-0 rounded-xs border-none border-current bg-surface-lift px-space-2 text-start font-medium text-ink-strong"
+                    onclick={() => list(path)}
                     type="button"
                   >
-                    <Folder
-                      class="size-icon-md flex-none"
-                      style={`color:${folder.name.startsWith(".") ? "var(--color-neutral-8)" : "var(--color-mark-3)"}`}
-                    />
-                    <span data-slot="name" class="min-w-0 flex-1 truncate"
-                      >{folder.name}</span
-                    >
-                    {#if folder.git}
-                      <span
-                        data-slot="git"
-                        class="flex-none font-sans type-meta text-ink-muted"
-                        >{spawnWords.location.gitRepository}</span
-                      >
-                    {/if}
-                    <Right class="size-icon-md flex-none text-neutral-8" />
+                    <span class="block truncate">{crumbs.at(-1)?.label}</span>
                   </button>
-                {/each}
-                {#if !folders.length}
+                </div>
+              </div>
+              <div
+                class="fai-scroll grid max-h-49 content-box-start gap-space-row overflow-auto overscroll-contain p-space-2"
+              >
+                {#if canGoUp}
+                  <button
+                    class="select-none press-tint transition-control flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-muted hover:bg-surface-hover"
+                    onclick={goUp}
+                    type="button"
+                  >
+                    <Left class="size-icon-md flex-none" /><span
+                      >{spawnWords.location.parentFolder}</span
+                    >
+                  </button>
+                {/if}
+                {#if listingFolders}
                   <div
                     data-slot="location-section-empty"
                     class="type-meta px-space-2 py-space-7 text-center wrap-anywhere text-ink-subtle"
                     role="status"
                   >
-                    {spawnWords.location.noSubfolders}
+                    {spawnWords.location.loadingFolders}
                   </div>
+                {:else if listError}
+                  <div
+                    data-slot="location-section-empty"
+                    class="type-meta px-space-2 py-space-7 text-center wrap-anywhere text-status-fail-ink"
+                    role="alert"
+                  >
+                    {listError}
+                  </div>
+                {:else}
+                  {#each folders as folder (`${path}/${folder.name}`)}
+                    <button
+                      class="select-none press-tint transition-control flex h-c-btn-h max-phone:h-c-row-h min-w-0 items-center justify-start gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start font-(family-name:--font-mono) text-size-label leading-none font-normal text-ink-strong hover:bg-surface-hover"
+                      onclick={() => enter(folder.name)}
+                      title={folder.name}
+                      type="button"
+                    >
+                      <Folder
+                        class="size-icon-md flex-none"
+                        style={`color:${folder.name.startsWith(".") ? "var(--color-neutral-8)" : "var(--color-mark-3)"}`}
+                      />
+                      <span data-slot="name" class="min-w-0 flex-1 truncate"
+                        >{folder.name}</span
+                      >
+                      {#if folder.git}
+                        <span
+                          data-slot="git"
+                          class="flex-none font-sans type-meta text-ink-muted"
+                          >{spawnWords.location.gitRepository}</span
+                        >
+                      {/if}
+                      <Right class="size-icon-md flex-none text-neutral-8" />
+                    </button>
+                  {/each}
+                  {#if !folders.length}
+                    <div
+                      data-slot="location-section-empty"
+                      class="type-meta px-space-2 py-space-7 text-center wrap-anywhere text-ink-subtle"
+                      role="status"
+                    >
+                      {spawnWords.location.noSubfolders}
+                    </div>
+                  {/if}
                 {/if}
-              {/if}
-            </div>
-            <!-- The foot stands whole on the popover's floor while what is
-                 above it scrolls (the popover is held to the room it has, a
-                 phone's above all): it sticks to the surface's foot, the one
-                 scroller round it (the field clips, it does not scroll). -->
-            <div
-              data-slot="browse-foot"
-              class="sticky bottom-0 flex max-phone:flex-wrap items-center justify-between gap-space-2 border-t border-t-border-hairline bg-surface-lift p-space-2"
-            >
-              <span
-                data-slot="path"
-                class="max-phone:basis-full min-w-0 truncate font-(family-name:--font-mono) type-meta text-ink-muted"
-                title={path}>{path}</span
+              </div>
+              <!-- The foot stands whole on the popover's floor while what is
+                   above it scrolls (the popover is held to the room it has, a
+                   phone's above all): it sticks to the surface's foot, the one
+                   scroller round it (the field clips, it does not scroll). -->
+              <div
+                data-slot="browse-foot"
+                class="sticky bottom-0 flex max-phone:flex-wrap items-center justify-between gap-space-2 border-t border-t-border-hairline bg-surface-lift p-space-2"
               >
-              <Button
-                class="flex-none max-phone:w-full"
-                onclick={useFolder}
-                size="sm"
-              >
-                {spawnWords.location.useFolder}
-              </Button>
+                <span
+                  data-slot="path"
+                  class="max-phone:basis-full min-w-0 truncate font-(family-name:--font-mono) type-meta text-ink-muted"
+                  title={path}>{path}</span
+                >
+                <Button
+                  class="flex-none max-phone:w-full"
+                  onclick={useFolder}
+                  size="sm"
+                >
+                  {spawnWords.location.useFolder}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
