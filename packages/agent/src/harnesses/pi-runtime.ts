@@ -50,7 +50,7 @@ import type {
   SlashCommand,
 } from "@cawco/core/session-messages";
 import { MESSAGES_READ, usageByModel } from "@cawco/core/session-messages";
-import { skillsNamed } from "@cawco/core/skill-words";
+import { withSkillMarkers } from "@cawco/core/skill-words";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import { unhandled } from "@cawco/core/unhandled";
 import { pricedRequest } from "@cawco/core/usage/pricing";
@@ -1196,8 +1196,6 @@ class PiSession implements HarnessSession {
   /** Its shell commands, which a send moves to the background. */
   readonly #shells: PiShells;
   readonly #unread: string[] = [];
-  /** The last send handed to pi, its skills first: the next send waits for it ({@link send}). */
-  #handed: Promise<void> = Promise.resolve();
   #reading: string | undefined;
   /** What the turn's requests spent so far: its answers' and any compaction's. */
   #turnUsage: ModelTurnUsage[] = [];
@@ -1691,41 +1689,28 @@ class PiSession implements HarnessSession {
       data: image.data,
       mimeType: image.mediaType,
     }));
-    // Each skill it names loads first, as pi's own `/skill:name` would load
-    // it ({@link loadSkills}); pi runs none of a `/name` itself, its opening
-    // one included. Every send waits for the one before it to be handed to
-    // pi, so a send's skills never land after a later send's words.
-    const { skills } = this.#session.resourceLoader.getSkills();
-    const named = skillsNamed(
-      text,
-      skills.map((skill) => skill.name)
-    ).map((skill) => skill.name);
     this.#unread.push(message.uuid);
     this.#setBusy(true);
-    const handed = this.#handed.then(async () => {
-      await loadSkills(this.#session, named, this.#ctx.cwd);
-      this.#prompt(
-        message.uuid,
-        withPastedText(text, extras.attachments ?? []),
-        images
-      );
-    });
-    this.#handed = handed.catch(() => undefined);
-    handed.catch((error: unknown) => this.#refused(message.uuid, error));
-  }
-
-  /** The words of send `uuid` to pi: a turn at rest, steered into a running one. */
-  #prompt(
-    uuid: string,
-    text: string,
-    images: { type: "image"; data: string; mimeType: string }[]
-  ): void {
     const streaming = this.#session.isStreaming;
+    // Each skill it names, marked for the agent to load ({@link
+    // withSkillMarkers}): pi runs none of a `/name` itself, its opening one
+    // included.
+    const skills = new Map(
+      this.#session.resourceLoader
+        .getSkills()
+        .skills.map((skill) => [skill.name, skill.filePath] as const)
+    );
     this.#session
-      .prompt(text, {
-        images,
-        ...(streaming ? { streamingBehavior: "steer" as const } : {}),
-      })
+      .prompt(
+        withPastedText(
+          withSkillMarkers(text, skills, false),
+          extras.attachments ?? []
+        ),
+        {
+          images,
+          ...(streaming ? { streamingBehavior: "steer" as const } : {}),
+        }
+      )
       .then(() => {
         // Any send — the person's, a hand-off, a report, a
         // rule's reply — is steered into a running turn, which reads it once
@@ -1737,7 +1722,7 @@ class PiSession implements HarnessSession {
           this.#moveShells();
         }
       })
-      .catch((error: unknown) => this.#refused(uuid, error));
+      .catch((error: unknown) => this.#refused(message.uuid, error));
   }
 
   #moveShells(): void {
@@ -2075,16 +2060,12 @@ const registerExtensionProviders = (
 };
 
 /**
- * Skills put in a session's context, each in the block pi's own
- * `/skill:name` expands to (`_expandSkillCommand`), which expands only at
- * the start of one prompt: a launch's before its first prompt, and those a
- * send names before its words ({@link PiSession.send}). A custom message
- * with no `triggerTurn` is appended at rest, read with the words that follow
- * it in one request, and steered into a running turn (agent-session.js
- * `sendCustomMessage`), which reads one steered message a step, each skill
- * a step ahead of the words (pi's default `steeringMode`,
- * `one-at-a-time`); pi hands the model each as a user message (messages.js
- * `case "custom"`). An unknown name is refused as OpenCode's is.
+ * A session's skills, in its context before its first prompt and none a turn:
+ * a custom message with no `triggerTurn` is appended at rest (agent-session.js
+ * `sendCustomMessage`), and pi hands the model each as a user message
+ * (messages.js `case "custom"`). pi's own `/skill:name` expands only at the
+ * start of one prompt (`_expandSkillCommand`), so several go in its block's
+ * words, and an unknown name is refused as OpenCode's is.
  */
 const loadSkills = async (
   session: AgentSession,

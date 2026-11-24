@@ -11,7 +11,7 @@
  */
 
 import type { UUID } from "node:crypto";
-import type { Dirent } from "node:fs";
+import { type Dirent, existsSync } from "node:fs";
 import {
   access,
   appendFile,
@@ -73,7 +73,7 @@ import { Backoff, type BackoffPolicy } from "@cawco/core/backoff";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
-import { projectClaudeRelative } from "@cawco/core/claude-dirs";
+import { PROJECT_SKILLS, projectClaudeRelative } from "@cawco/core/claude-dirs";
 import {
   type CommandLifecycle,
   claudeLineOf,
@@ -130,6 +130,7 @@ import {
   accountIds,
   claudeConfigDirs,
   claudeHome,
+  claudeSkillsDir,
   fleetClaudeRoot,
   projectSlug,
   sessionConfigDir,
@@ -187,7 +188,7 @@ import {
   MESSAGES_HELD,
   MESSAGES_READ,
 } from "@cawco/core/session-messages";
-import { opensWith, skillsNamed } from "@cawco/core/skill-words";
+import { withoutSkillMarkers, withSkillMarkers } from "@cawco/core/skill-words";
 import { isDamagedRecord } from "@cawco/core/state-file";
 import { TaskOutputSchema } from "@cawco/core/stored-shapes";
 import { resumeCursor } from "@cawco/core/stream";
@@ -1270,8 +1271,12 @@ class InputStream implements AsyncIterable<SDKUserMessage> {
  */
 const SEND_NOW = { priority: "now", origin: { kind: "human" } } as const;
 
-/** When the CLI reads a skill's command a send runs into a running turn: at its end, or now ({@link SEND_NOW}). */
-type SkillTiming = Partial<typeof SEND_NOW>;
+/** Whether the CLI's skill list `next` names just the skills `known` holds. */
+const sameNames = (
+  known: ReadonlySet<string> | undefined,
+  next: readonly string[]
+): boolean =>
+  known?.size === next.length && next.every((name) => known.has(name));
 
 /** The tools whose running call Claude Code moves aside for a send-now ({@link SEND_NOW}). */
 const MOVES_ASIDE: ReadonlySet<string> = new Set([
@@ -2736,17 +2741,24 @@ class ClaudeSession implements HarnessSession {
    */
   readonly #notes = new Set<string>();
   /**
-   * The skills the CLI lists, which a send may name ({@link #skillsAhead}):
-   * the last `system/init`'s `skills`, the CLI's own list, as its turns
-   * start. Undefined before its first turn.
+   * The skills the CLI lists, which a send may name ({@link #marked}): the
+   * last `system/init`'s `skills`, as its turns start. Undefined before its
+   * first turn.
    */
   #skills: ReadonlySet<string> | undefined;
   /**
    * The skills a send may name before the CLI's first turn: the commands its
    * initialize answered that are neither its own nor an MCP server's prompt
-   * ({@link #readAccount}), the skills it was launched with among them.
+   * ({@link #readAccount}).
    */
   #initialized: ReadonlySet<string> = new Set();
+  /**
+   * Each skill's SKILL.md the CLI names, by name: those in the model's
+   * listing (`getContextUsage`'s `skillFrontmatter`), read as its skills
+   * change ({@link #readSkillFiles}). A skill the listing leaves out is
+   * looked for beside them ({@link #skillFile}).
+   */
+  #skillFiles: ReadonlyMap<string, string> = new Map();
   /**
    * The wake-ups the session has scheduled for itself (a cron, a loop's next
    * tick), as the CLI listed them when its last turn ended: its `Stop` hook
@@ -3109,13 +3121,27 @@ class ClaudeSession implements HarnessSession {
     this.#startFleetMcp(fleetMcp);
 
     // Its skills, in its context before its brief does anything: each `/skill`
-    // goes as a quiet note ({@link #pushSkill}). Sent as plain prompts, the
-    // brief overtook the rest: a queued prompt folds into the running turn at
-    // its first tool call, and a queued command waits for that turn's end. A
-    // launch's alone: a child taken back loaded them when it started.
+    // goes as a quiet note. "When false, the message is appended to the
+    // transcript without triggering an assistant turn. It will be merged into
+    // the next user message that does query" (sdk.d.ts `shouldQuery`). The CLI
+    // expands it all the same, and no request goes to the model (measured,
+    // Claude Code 2.1.311 against a mock API: three skills and a brief make one
+    // request, holding all four). Sent as plain prompts, each was a model turn
+    // of its own, and the brief overtook the rest: a queued prompt folds into
+    // the running turn at its first tool call, and a queued command waits for
+    // that turn's end. A launch's alone: a child taken back loaded them when it
+    // started.
     if (skills?.length && !sessiond.attach) {
       for (const skill of skills) {
-        this.#pushSkill(skill, {});
+        const uuid = crypto.randomUUID();
+        this.#notes.add(uuid);
+        input.push({
+          type: "user",
+          uuid,
+          message: { role: "user", content: `/${skill}` },
+          parent_tool_use_id: null,
+          shouldQuery: false,
+        });
       }
     }
 
@@ -3167,6 +3193,7 @@ class ClaudeSession implements HarnessSession {
           )
           .map((command) => command.name)
       );
+      detach(this.#readSkillFiles(), "readSkillFiles");
       // Its organization's id is its dir's login's, as `auth status` read it:
       // initialize names none (accounts.ts `dirIdentity`).
       const identity = dirIdentity(this.#configDir, identityOf(init.account));
@@ -3389,7 +3416,10 @@ class ClaudeSession implements HarnessSession {
         }
         if (message.type === "system" && message.subtype === "init") {
           this.sessionId = message.session_id;
-          this.#skills = new Set(message.skills);
+          if (!sameNames(this.#skills, message.skills)) {
+            this.#skills = new Set(message.skills);
+            detach(this.#readSkillFiles(), "readSkillFiles");
+          }
           this.#startedOn = message.model;
           ctx.session(message.session_id);
         }
@@ -4063,70 +4093,6 @@ class ClaudeSession implements HarnessSession {
     return { tasks, wakeups: this.#crons?.once ?? 0 };
   }
 
-  /**
-   * Skill `name` run as the person's own `/name`, a quiet note: "When false,
-   * the message is appended to the transcript without triggering an
-   * assistant turn. It will be merged into the next user message that does
-   * query" (sdk.d.ts `shouldQuery`). The CLI expands it as a command, never
-   * through the model's Skill tool, so a skill the model cannot load itself
-   * (`disable-model-invocation`) loads all the same, and no request goes to
-   * the model (measured, Claude Code 2.1.311 against a mock API: three
-   * skills and a brief make one request, holding all four). Sent as plain
-   * prompts, each was a model turn of its own. `timing`: when the CLI reads
-   * it into a running turn ({@link send}).
-   */
-  #pushSkill(name: string, timing: SkillTiming): void {
-    const uuid = crypto.randomUUID();
-    this.#notes.add(uuid);
-    this.#input.push({
-      type: "user",
-      uuid,
-      message: { role: "user", content: `/${name}` },
-      parent_tool_use_id: null,
-      shouldQuery: false,
-      ...timing,
-    });
-  }
-
-  /**
-   * The skills `message` names past its opening command, which the CLI runs
-   * itself: each is run as a command of its own just before it
-   * ({@link #pushSkill}), and when. At rest the CLI reads them with the
-   * words in one request. Into a running turn a command is read at the
-   * turn's end unless it is sent now, so they are: read with the words
-   * after them at the running call's end, or at once while the model is
-   * writing, where the CLI cuts the turn and goes on from them (measured,
-   * Claude Code 2.1.326 against a mock API). While an ask is open nothing
-   * cuts the turn: the skills and the words (`words`) wait for its end.
-   */
-  #skillsAhead(message: SentMessage): {
-    names: string[];
-    timing: SkillTiming;
-    words?: { priority: "later" };
-  } {
-    const { content } = message.message;
-    const text =
-      typeof content === "string"
-        ? content
-        : content
-            .flatMap((block) => (block.type === "text" ? [block.text] : []))
-            .join("\n");
-    const names = skillsNamed(text, this.#skills ?? this.#initialized)
-      .filter((skill) => !opensWith(text, skill))
-      .map((skill) => skill.name);
-    if (names.length === 0) {
-      return { names, timing: {} };
-    }
-    const holds = this.#turn.busy && this.#permissions.size > 0;
-    console.info(
-      `[claude] ${this.instanceId}: send ${message.uuid} names ${names.map((name) => `/${name}`).join(", ")}: each runs first${holds ? ", all at the turn's end (an ask is open)" : ""}`
-    );
-    if (holds) {
-      return { names, timing: {}, words: { priority: "later" } };
-    }
-    return { names, timing: this.#turn.busy ? SEND_NOW : {} };
-  }
-
   send(message: SentMessage, extras: TurnExtras): void {
     // A session whose boundary hook can no longer run takes no turn.
     const refused = this.#hookGone();
@@ -4161,7 +4127,7 @@ class ClaudeSession implements HarnessSession {
     let wire: ClaudeWireUserMessage;
     let images: { data: string; mediaType: ClaudeImageMediaType }[];
     try {
-      wire = wireMessage(message);
+      wire = this.#marked(wireMessage(message));
       images = claudeImages(extras.images ?? []);
     } catch (error) {
       this.#ctx.rejected(
@@ -4170,19 +4136,15 @@ class ClaudeSession implements HarnessSession {
       );
       return;
     }
-    const ahead = this.#skillsAhead(message);
     const outgoing = withExtras(
       {
         ...wire,
         shouldQuery: note ? false : undefined,
-        ...(ahead.words ?? (note || waits ? {} : SEND_NOW)),
+        ...(note || waits ? {} : SEND_NOW),
       },
       extras.attachments,
       images
     );
-    for (const name of ahead.names) {
-      this.#pushSkill(name, ahead.timing);
-    }
     this.#delivery.set(message.uuid, Promise.withResolvers<void>());
     if (note) {
       this.#notes.add(message.uuid);
@@ -4195,6 +4157,74 @@ class ClaudeSession implements HarnessSession {
     this.#ctx.busy(true);
     this.#turn.start();
     this.#input.push(outgoing);
+  }
+
+  /**
+   * `wire` with each skill its words name marked for the agent to load
+   * ({@link withSkillMarkers}), past an opening `/name` the CLI runs itself.
+   */
+  #marked(wire: ClaudeWireUserMessage): ClaudeWireUserMessage {
+    const names = this.#skills ?? this.#initialized;
+    const { content } = wire.message;
+    const texts =
+      typeof content === "string"
+        ? [content]
+        : content.flatMap((block) =>
+            block.type === "text" ? [block.text] : []
+          );
+    if (names.size === 0 || !texts.some((text) => text.includes("/"))) {
+      return wire;
+    }
+    const files = new Map(
+      [...names].map((name) => [name, this.#skillFile(name)] as const)
+    );
+    const mark = (text: string): string => withSkillMarkers(text, files, true);
+    return {
+      ...wire,
+      message: {
+        ...wire.message,
+        content:
+          typeof content === "string"
+            ? mark(content)
+            : content.map((block) =>
+                block.type === "text"
+                  ? { ...block, text: mark(block.text) }
+                  : block
+              ),
+      },
+    };
+  }
+
+  /**
+   * Skill `name`'s SKILL.md on this machine: the one the CLI named, else one
+   * in a skills dir beside those it named, the fleet's, the project's or
+   * the user layer's (a skill the model may not load, which its listing
+   * leaves out). Undefined when none holds it.
+   */
+  #skillFile(name: string): string | undefined {
+    const named = this.#skillFiles.get(name);
+    if (named || name.includes(":")) {
+      return named;
+    }
+    const dirs = new Set([
+      ...[...this.#skillFiles.values()].map((file) => dirname(dirname(file))),
+      claudeSkillsDir(),
+      join(this.#ctx.cwd, PROJECT_SKILLS),
+      join(this.#configDir ?? claudeHome(), "skills"),
+    ]);
+    return [...dirs]
+      .map((dir) => join(dir, name, "SKILL.md"))
+      .find((file) => existsSync(file));
+  }
+
+  /** The SKILL.md of each skill in the model's listing, as the CLI names them ({@link #skillFiles}). */
+  async #readSkillFiles(): Promise<void> {
+    const usage = await this.#handle.getContextUsage({ detail: "summary" });
+    this.#skillFiles = new Map(
+      (usage.skills?.skillFrontmatter ?? []).flatMap((skill) =>
+        skill.path ? [[skill.name, skill.path] as const] : []
+      )
+    );
   }
 
   /** Moves the CLI into `asked`, one CawCo offers; the session takes it once the CLI is in it. */
@@ -5094,7 +5124,9 @@ const toInfo = (
   lastModified: info.lastModified,
   ...(info.fileSize === undefined ? {} : { fileSize: info.fileSize }),
   ...(info.customTitle === undefined ? {} : { customTitle: info.customTitle }),
-  ...(info.firstPrompt === undefined ? {} : { firstPrompt: info.firstPrompt }),
+  ...(info.firstPrompt === undefined
+    ? {}
+    : { firstPrompt: withoutSkillMarkers(info.firstPrompt) }),
   ...(info.gitBranch === undefined ? {} : { gitBranch: info.gitBranch }),
   ...(info.cwd === undefined ? {} : { cwd: info.cwd }),
   ...(info.tag === undefined ? {} : { tag: info.tag }),

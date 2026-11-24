@@ -4,7 +4,7 @@
  * is sent (the markdown's code spans).
  *
  * A skill is named by `/name`, a whole word, as core skill-words.ts reads
- * it: the rule each harness's delivery invokes the named skills by.
+ * it: the rule each harness's delivery marks the named skills by.
  */
 import type { AvailableCommand } from "@cawco/core/fleet";
 import { getContext, setContext } from "svelte";

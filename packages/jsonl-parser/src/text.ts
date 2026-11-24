@@ -112,6 +112,18 @@ const SYSTEM_REMINDER = /<system-reminder>[\s\S]*?<\/system-reminder>/g;
  */
 const CAWCO_TAG = /^\[cawco:([a-z-]+)[ \]]/;
 
+/**
+ * The marker a harness writes after each skill a message names (core
+ * skill-words.ts `withSkillMarkers`): `/name [load skill name now with your
+ * skill tool; if the tool refuses it, read <path>]`, after the name's
+ * closing punctuation. Dropped from a user turn, its `/name` kept, so the
+ * turn is indexed as it was written. Kept
+ * here, not imported, as {@link CAWCO_TAG} is: keep it in step with core's
+ * `MARKED`.
+ */
+const SKILL_MARKER =
+  /(\/(\S+?)[,.;:!?)\]}"'’”»›]*) \[load skill \2 now with your skill tool(?:; if the tool refuses it, read [^\]\n]+)?\]/gu;
+
 /** Who wrote a message CawCo tagged, by its kind: a report, another agent's words, or CawCo's own notice. */
 const TAGGED: Readonly<Record<string, DocAuthor>> = {
   report: "report",
@@ -162,12 +174,13 @@ const COPIED = "Below is the transcript of a coding-agent session, up to its las
 export const AUTHOR_RULES = 3;
 
 /**
- * Who wrote a user turn's `text`, and the words to index for it; null for
- * a turn whose words are a copy of another session's ({@link COPIED}),
- * which is not indexed.
+ * Who wrote a user turn's `text`, and the words to index for it, as they
+ * were written (its skill markers dropped, {@link SKILL_MARKER}); null for a turn
+ * whose words are a copy of another session's ({@link COPIED}), which is
+ * not indexed.
  */
 export function userAuthor(text: string): { author: DocAuthor; text: string } | null {
-  const said = text.replace(SYSTEM_REMINDER, "").trim();
+  const said = text.replace(SYSTEM_REMINDER, "").replace(SKILL_MARKER, "$1").trim();
   if (said.startsWith(COPIED)) {
     return null;
   }

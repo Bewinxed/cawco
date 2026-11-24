@@ -1,4 +1,5 @@
 /** Pi metadata, history and fleet profile. Shared with the host; no turn factory. */
+
 import type { Dirent } from "node:fs";
 import { readdir, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -44,6 +45,7 @@ import type {
   SessionMessage,
   StoredRun,
 } from "@cawco/core/session-messages";
+import { withoutSkillMarkers } from "@cawco/core/skill-words";
 import { type ToolSpec, toolSpec } from "@cawco/core/tools";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
@@ -1163,7 +1165,9 @@ export class PiProfile {
         lastModified: info.modified.getTime(),
         ...(wroteAt === undefined ? {} : { wroteAt }),
         ...(info.cwd || dir ? { cwd: info.cwd || dir } : {}),
-        ...(info.firstMessage ? { firstPrompt: info.firstMessage } : {}),
+        ...(info.firstMessage
+          ? { firstPrompt: withoutSkillMarkers(info.firstMessage) }
+          : {}),
         ...(info.name ? { customTitle: info.name } : {}),
       });
     }

@@ -99,7 +99,7 @@ import {
   REPEATED_FAILURE_LIMIT,
   usageByModel,
 } from "@cawco/core/session-messages";
-import { opensWith, skillsNamed } from "@cawco/core/skill-words";
+import { withSkillMarkers } from "@cawco/core/skill-words";
 import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import { unhandled } from "@cawco/core/unhandled";
@@ -117,7 +117,6 @@ import type {
   PermissionRequest,
   SessionMessageAssistant,
   SessionMessageInfo,
-  SessionPromptInput,
   V2Event,
 } from "@opencode/client";
 import { z } from "zod";
@@ -512,6 +511,15 @@ const mcpOutside = async (
   }
 };
 
+/** What a session's location has to run by name: its commands, and its skills by id and by file. */
+interface KnownCommands {
+  commands: Set<string>;
+  /** Each skill's SKILL.md, by name. */
+  files: Map<string, string>;
+  /** Each skill's id, by name. */
+  skills: Map<string, string>;
+}
+
 /**
  * The skill rule every session runs under, the static policy's
  * (opencode.ts `STATIC_POLICY`) and again after a starting set's allowances
@@ -522,9 +530,6 @@ export const NO_WORKFLOW_SKILLS: OpencodeRule = {
   resource: "wf-*",
   effect: "deny",
 };
-
-/** A skill a prompt carries, where the words name it ({@link OpencodeSession.#skillsNamed}). */
-type OpencodeSkillMention = NonNullable<SessionPromptInput["skills"]>[number];
 
 /**
  * A starting set's skills as session rules: every skill denied, then each
@@ -1191,10 +1196,7 @@ export class OpencodeSession implements HarnessSession {
   readonly #sendsNow = new Set<string>();
   /** The held send being admitted, until its POST returns. */
   #draining: string | undefined;
-  #commands: Promise<{
-    commands: Set<string>;
-    skills: Map<string, string>;
-  }> | null = null;
+  #commands: Promise<KnownCommands> | null = null;
   readonly #questions = new Map<
     string,
     { form: FormInfo; keys: Map<string, FormInfo["fields"][number]> }
@@ -3245,9 +3247,9 @@ export class OpencodeSession implements HarnessSession {
       this.#drained(messageID);
       return;
     }
-    let skills: OpencodeSkillMention[];
+    let marked: string;
     try {
-      skills = await this.#skillsNamed(text);
+      marked = await this.#withSkillMarkers(text);
     } catch (error) {
       this.#ctx.rejected(uuid, error);
       this.#drained(messageID);
@@ -3267,9 +3269,8 @@ export class OpencodeSession implements HarnessSession {
       await this.#client.session.prompt({
         sessionID: this.#opencodeSessionId(),
         id: messageID,
-        text,
+        text: marked,
         ...(files.length > 0 ? { files } : {}),
-        ...(skills.length > 0 ? { skills } : {}),
         ...(now ? { metadata: { [SEND_NOW_METADATA]: true } } : {}),
       });
     } catch (error) {
@@ -3353,10 +3354,7 @@ export class OpencodeSession implements HarnessSession {
   }
 
   /** The commands and skills this session's location has, read once. */
-  #commandsOf(): Promise<{
-    commands: Set<string>;
-    skills: Map<string, string>;
-  }> {
+  #commandsOf(): Promise<KnownCommands> {
     this.#commands ??= Promise.all([
       this.#client.command.list(at(this.#directory)),
       this.#client.skill.list(at(this.#directory)),
@@ -3364,6 +3362,9 @@ export class OpencodeSession implements HarnessSession {
       commands: new Set(commands.data.map((command) => command.name)),
       skills: new Map(
         skills.data.map((skill) => [skill.name, skill.id] as const)
+      ),
+      files: new Map(
+        skills.data.map((skill) => [skill.name, skill.path] as const)
       ),
     }));
     this.#commands.catch(() => {
@@ -3373,37 +3374,17 @@ export class OpencodeSession implements HarnessSession {
   }
 
   /**
-   * The skills `text` names past its opening command, which OpenCode runs
-   * itself ({@link #commandOrPrompt}), as its prompt carries a skill the
-   * person picked: by id, with where it stands in the text. OpenCode loads
-   * each into the message it becomes ("The user may also invoke a skill
-   * directly. When that happens, its instructions appear in the
-   * conversation as a <skill_content> block", its system prompt, 2.3.0),
-   * whether or not the model may load it itself. Offsets count the text's
-   * UTF-16 code units.
+   * `text` with each skill it names marked for the agent to load ({@link
+   * withSkillMarkers}). The words of a prompt or of a command's arguments:
+   * an opening `/name` OpenCode runs itself never reaches it
+   * ({@link #commandOrPrompt}).
    */
-  async #skillsNamed(text: string): Promise<OpencodeSkillMention[]> {
+  async #withSkillMarkers(text: string): Promise<string> {
     if (!text.includes("/")) {
-      return [];
+      return text;
     }
-    const { skills } = await this.#commandsOf();
-    return skillsNamed(text, skills.keys())
-      .filter((named) => !opensWith(text, named))
-      .flatMap((named) => {
-        const id = skills.get(named.name);
-        return id
-          ? [
-              {
-                id,
-                mention: {
-                  start: named.start,
-                  end: named.end,
-                  text: text.slice(named.start, named.end),
-                },
-              },
-            ]
-          : [];
-      });
+    const { files } = await this.#commandsOf();
+    return withSkillMarkers(text, files, false);
   }
 
   /** A `/name` send: OpenCode's command, a skill, `/compact`, `/mcp`, or else a plain prompt. */
@@ -3414,7 +3395,7 @@ export class OpencodeSession implements HarnessSession {
     messageID: string,
     uuid: string
   ): Promise<void> {
-    let known: { commands: Set<string>; skills: Map<string, string> };
+    let known: KnownCommands;
     try {
       known = await this.#commandsOf();
     } catch (error) {
@@ -3474,20 +3455,18 @@ export class OpencodeSession implements HarnessSession {
             session_id: this.sessionId ?? undefined,
           });
         } else {
-          const skills = await this.#skillsNamed(command.args);
           await this.#client.session.prompt({
             sessionID,
             id: messageID,
-            text: command.args,
+            text: await this.#withSkillMarkers(command.args),
             ...(files.length > 0 ? { files } : {}),
-            ...(skills.length > 0 ? { skills } : {}),
           });
         }
       } else {
         await this.#client.session.command({
           sessionID,
           name: command.name,
-          text: command.args,
+          text: await this.#withSkillMarkers(command.args),
           ...(files.length > 0 ? { files } : {}),
         });
         this.#ctx.frame({

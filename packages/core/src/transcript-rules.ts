@@ -73,6 +73,7 @@ import {
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
 } from "./session-messages";
+import { withoutSkillMarkers } from "./skill-words";
 import {
   ContextLineSchema,
   ProjectNoteSchema,
@@ -1488,7 +1489,9 @@ export function interruptLine(text: string | null): boolean {
 }
 
 /**
- * The words of a user-role message: a send's body, or a stored user entry.
+ * The words of a user-role message: a send's body, or a stored user entry,
+ * as they were written: the skill markers its harness handed the model
+ * after each `/name` dropped (core skill-words.ts `withSkillMarkers`).
  */
 export function transcriptUserText(message: unknown): string | null {
   if (!isRecord(message)) {
@@ -1496,7 +1499,7 @@ export function transcriptUserText(message: unknown): string | null {
   }
   const { content } = message;
   if (typeof content === "string") {
-    return content;
+    return withoutSkillMarkers(content);
   }
   if (!Array.isArray(content)) {
     return null;
@@ -1506,7 +1509,7 @@ export function transcriptUserText(message: unknown): string | null {
       isRecord(block) && block.type === "text" ? [String(block.text ?? "")] : []
     )
     .join("\n");
-  return text || null;
+  return withoutSkillMarkers(text) || null;
 }
 
 /**

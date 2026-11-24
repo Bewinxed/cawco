@@ -6,6 +6,7 @@
  * shares one thread store (codex-home.ts), so a read runs in a home of its
  * own that holds no sign-in: reading needs none.
  */
+
 import { lstat, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { makeFolder } from "@cawco/core/folders";
@@ -17,6 +18,7 @@ import type {
   NeutralSessionInfo,
   SessionMessage,
 } from "@cawco/core/session-messages";
+import { withoutSkillMarkers } from "@cawco/core/skill-words";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { nativeEnv } from "../codex-native";
@@ -70,7 +72,9 @@ const sessionInfoOf = (thread: V2.Thread): NeutralSessionInfo => ({
   cwd: thread.cwd,
   createdAt: thread.createdAt * 1000,
   lastModified: thread.updatedAt * 1000,
-  ...(thread.preview ? { firstPrompt: thread.preview } : {}),
+  ...(thread.preview
+    ? { firstPrompt: withoutSkillMarkers(thread.preview) }
+    : {}),
   ...(thread.name ? { customTitle: thread.name } : {}),
   ...(thread.gitInfo?.branch ? { gitBranch: thread.gitInfo.branch } : {}),
 });
