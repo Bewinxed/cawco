@@ -132,7 +132,14 @@ import {
 import { hold, isHeld } from "./hold";
 import { heardFromHost, toHost } from "./host-origin";
 import { contentNearIn, keepFoot, OVERLAY_OWN, ownNode, startInk } from "./ink";
-import { frameScheme, frameWidth, judges, pageView } from "./made-view";
+import {
+  frameScheme,
+  frameWidth,
+  judges,
+  madeAway,
+  pageView,
+  showsStory,
+} from "./made-view";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
 import { choiceOf, listenForPicks, optionOf } from "./pick";
 import { cropPicture } from "./picture";
@@ -536,7 +543,8 @@ const pins: Pins = startPins({
   locate,
   outline,
   post,
-  judges: (anchor) => judges(anchor, documentOf(anchor)),
+  madeAway: (anchor) => madeAway(anchor, documentOf(anchor)),
+  showsStory: (anchor) => showsStory(anchor, documentOf(anchor)),
   redraft: () => (draftEl() ? draftTarget() : null),
   reopenDraft: () => reopenDraft(),
   waiting,
@@ -621,6 +629,7 @@ const ink = startInk({
   textOf,
   locate,
   judges: (anchor) => judges(anchor, documentOf(anchor)),
+  showsStory: (anchor) => showsStory(anchor, documentOf(anchor)),
   pins: () => pins,
   waiting,
 });

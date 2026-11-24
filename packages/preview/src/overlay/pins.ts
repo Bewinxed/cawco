@@ -67,7 +67,7 @@ import {
   type PinnedElement,
   wholePage,
 } from "@cawco/core/comments/anchor";
-import { madeViewOf, type Unplaced } from "@cawco/core/comments/made-view";
+import type { MadeAway, Unplaced } from "@cawco/core/comments/made-view";
 import {
   newId,
   type Pin,
@@ -153,14 +153,15 @@ export interface PinsDeps {
   describe: (el: Element) => PinnedElement;
   /** A placed ink group's box in the page, px; null when it is not on the page. */
   groupBox: (id: string) => Box | null;
-  /**
-   * Whether this view draws the page as the mark on `anchor` was made (its
-   * width and scheme; a sheet's story shown here: made-view.ts `judges`):
-   * only then may it move the mark aside or anchor it again.
-   */
-  judges: (anchor: PageAnchor) => boolean;
   /** Where a page's anchor stands now, and by what; null when nothing on the page matches it. */
   locate: (anchor: PageAnchor) => AnchorFound<Element> | null;
+  /**
+   * Why this view can't judge the mark on `anchor` (made-view.ts
+   * `madeAway`): it shows another story of the sheet, or draws the page
+   * otherwise than the mark was made in; null where it draws the page as
+   * made, and only then may it move the mark aside or anchor it again.
+   */
+  madeAway: (anchor: PageAnchor) => MadeAway | null;
   /**
    * Pin `el`'s element chosen in the overlay (The One Target Rule), or none;
    * `lead`, whether it leads the pointer's in Comment mode (a pill rested
@@ -176,6 +177,8 @@ export interface PinsDeps {
   redraft: () => DraftTarget | null;
   /** The parked draft's pill pressed: its composer opens again. */
   reopenDraft: () => void;
+  /** Whether this view shows the sheet's story the mark on `anchor` was made on (made-view.ts `showsStory`): a mark on another story stands nowhere here. */
+  showsStory: (anchor: PageAnchor) => boolean;
   /** Whether an anchor's frames lead to one still loading: not found yet, and not gone. */
   waiting: (anchor: PageAnchor) => boolean;
 }
@@ -518,6 +521,8 @@ export function startPins(deps: PinsDeps): Pins {
    * deletion.
    */
   const settled = () => placing() && artifact.places() && artifact.stored();
+  /** Whether this view draws the page as the mark on `anchor` was made (`deps.madeAway`). */
+  const judges = (anchor: PageAnchor) => deps.madeAway(anchor) === null;
   /**
    * Whether this page's marks stand on its elements as the agent wrote
    * them: a page the agent wrote or a sheet of its components, laid out.
@@ -643,7 +648,7 @@ export function startPins(deps: PinsDeps): Pins {
     if (pin.ink) {
       return inkSpotOf(pin, pin.ink);
     }
-    if (!("selector" in pin.anchor)) {
+    if (!("selector" in pin.anchor && deps.showsStory(pin.anchor))) {
       return null;
     }
     if (wholePage(pin.anchor)) {
@@ -785,7 +790,7 @@ export function startPins(deps: PinsDeps): Pins {
       if (
         !("selector" in pin.anchor) ||
         (pin.movedAt && pin.ink && !deps.groupBox(pin.ink)) ||
-        !deps.judges(pin.anchor)
+        !judges(pin.anchor)
       ) {
         continue;
       }
@@ -1179,14 +1184,14 @@ export function startPins(deps: PinsDeps): Pins {
   /**
    * Whether a pin no anchor finds is missing, not waiting on a frame still
    * loading, in a view that draws the page as the pin was made
-   * (`deps.judges`): one that draws it otherwise (another width, another
+   * (`judges`): one that draws it otherwise (another width, another
    * scheme, another story) can't tell the page losing the element from its
    * own layout leaving it out, and the pin stands where it was put.
    */
   const goneFrom = (pin: Pin) =>
     !(
       "selector" in pin.anchor &&
-      (deps.waiting(pin.anchor) || !deps.judges(pin.anchor))
+      (deps.waiting(pin.anchor) || !judges(pin.anchor))
     );
   /** How long each pin has stood missing: one is gone only after a while, the page drawn again then. */
   const absent = absences(() => draw());
@@ -1310,11 +1315,12 @@ export function startPins(deps: PinsDeps): Pins {
 
   /**
    * The pins this view doesn't draw on their element, and why, as this view
-   * alone reads them (core comments made-view.ts `Unplaced`): gone from the
-   * page as this view draws it ({@link goneOf}), found but drawn in no box
-   * here ({@link drawnHere}), or made in a view this one doesn't draw the
-   * page as (`deps.judges`), with that view. None outside a page the agent
-   * wrote or a sheet ({@link placing}), and none waiting on a frame.
+   * alone reads them (core comments made-view.ts `Unplaced`), in its order:
+   * made where this view can't judge it (another story, or another width
+   * or scheme: `deps.madeAway`), with where, whether or not it finds the
+   * element; else found but drawn in no box here ({@link drawnHere}); else
+   * gone from the page ({@link goneOf}). None outside a page the agent wrote
+   * or a sheet ({@link placing}), and none waiting on a frame.
    */
   const unplacedOf = (
     gone: Pin[],
@@ -1325,20 +1331,34 @@ export function startPins(deps: PinsDeps): Pins {
     if (!placing()) {
       return read;
     }
+    const goneIds = new Set(gone.map((pin) => pin.id));
     for (const pin of hidden) {
-      read[pin.id] = { why: "hidden" };
+      read[pin.id] = whyOff(pin, "hidden") ?? { why: "hidden" };
     }
     for (const pin of missing) {
-      const anchor = "selector" in pin.anchor ? pin.anchor : null;
-      const made = anchor ? madeViewOf(anchor) : undefined;
-      if (anchor && made && !deps.waiting(anchor) && !deps.judges(anchor)) {
-        read[pin.id] = { why: "elsewhere", made };
+      const why = whyOff(pin, goneIds.has(pin.id) ? "gone" : null);
+      if (why) {
+        read[pin.id] = why;
       }
     }
-    for (const pin of gone) {
-      read[pin.id] = { why: "gone" };
-    }
     return read;
+  };
+
+  /**
+   * Why `pin` stands off the page in this view: where it was made, asked
+   * first, when this view can't judge it, found or not (`deps.madeAway`);
+   * else `found`, what this view read of it; null while its frame loads.
+   */
+  const whyOff = (
+    pin: Pin,
+    found: "gone" | "hidden" | null
+  ): Unplaced | null => {
+    const anchor = "selector" in pin.anchor ? pin.anchor : null;
+    if (anchor && deps.waiting(anchor)) {
+      return null;
+    }
+    const away = anchor ? deps.madeAway(anchor) : null;
+    return away ?? (found ? { why: found } : null);
   };
 
   /** What this view last said of the pins it doesn't draw; null before its first draw said anything. */

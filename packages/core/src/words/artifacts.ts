@@ -101,7 +101,7 @@ export const artifactWords = {
   /** The pins couldn't be read; `why` is its own sentence (the hub's reason). */
   commentsNotRead: (why: string) => `The comments couldn't be read. ${why}`,
   /** A gone pin's notice, a sentence of its own: what it stood on is gone. */
-  pinElementGone: "Its element is gone from the page.",
+  pinElementGone: "Nothing on the page matches it now.",
   /** No open pins yet, how to pin one, by the pointer that will: a mouse clicks… */
   pinsNoneOpenClick: "Choose Comment, then click the page to pin one.",
   /** …and a finger taps. */

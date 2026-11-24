@@ -79,7 +79,7 @@ import {
   rectOf,
   sizesIn,
 } from "./frames";
-import { drawnHere } from "./made-view";
+import { drawnHere, SHOWN_BY } from "./made-view";
 import type { Pins } from "./pins-types";
 import type { InkChrome, Pick } from "./radial";
 import { scrollerRound, scrollsContent } from "./scrollers";
@@ -209,6 +209,8 @@ export interface InkDeps {
   pins: () => Pins;
   /** The count of the page's changes of more than words: an element put in, taken out or renamed, or the window's width (page.ts `shapesNow`). */
   shapes: () => number;
+  /** Whether this view shows the sheet's story the mark on `anchor` was made on (made-view.ts `showsStory`): a group on another story stands nowhere here. */
+  showsStory: (anchor: PageAnchor) => boolean;
   /** `el`'s words as an anchor reads them (page.ts `textOf`). */
   textOf: (el: Element) => string;
   /** Whether an anchor's frames lead to one still loading: not found yet, and not gone. */
@@ -627,14 +629,17 @@ export function startInk(deps: InkDeps): Ink {
     }
     watchingMoves = true;
   };
-  // A transition or an animation ended: what it moved stands where it ends.
-  const settledMotion = (event: Event) => {
+  // A transition or an animation ended: what it moved stands where it ends; and below, a section opened or shut.
+  const placeAgainSoon = (event: Event) => {
     if (holding.size > 0 && !ownNode(event.target as Node | null)) {
       later();
     }
   };
-  document.addEventListener("transitionend", settledMotion, { capture: true });
-  document.addEventListener("animationend", settledMotion, { capture: true });
+  document.addEventListener("transitionend", placeAgainSoon, { capture: true });
+  document.addEventListener("animationend", placeAgainSoon, { capture: true });
+  for (const type of SHOWN_BY) {
+    document.addEventListener(type, placeAgainSoon, { capture: true });
+  }
 
   // --- drawing --------------------------------------------------------------
 
@@ -1234,9 +1239,12 @@ export function startInk(deps: InkDeps): Ink {
 
   /**
    * What a draw reads for `anchor` now, the mark standing on `on`: whether
-   * it finds that element still, by what, and the words of what it finds
-   * (a mark follows its words, and a pin stands past its line's end); null
-   * where it finds nothing. The page as a whole has no words of its own.
+   * it finds that element still, by what, the words of what it finds (a
+   * mark follows its words, and a pin stands past its line's end), and
+   * whether it is drawn here ({@link drawnHere}: a closed section opened, a
+   * menu shown, puts its marks back on it, and one closed takes them off);
+   * null where it finds nothing. The page as a whole has no words of its
+   * own.
    */
   const foundNow = (anchor: PageAnchor, on: Element | null) => {
     const found = deps.locate(anchor);
@@ -1246,7 +1254,7 @@ export function startInk(deps: InkDeps): Ink {
     const { by, el } = found;
     const doc = el.ownerDocument;
     const whole = el === doc.body || el === doc.documentElement;
-    return [el === on, by, whole ? "" : deps.textOf(el)];
+    return [el === on, by, whole ? "" : deps.textOf(el), drawnHere(el)];
   };
 
   /**
@@ -1416,7 +1424,7 @@ export function startInk(deps: InkDeps): Ink {
     const brand = groups.length > 0 ? chrome.token("--color-brand-solid") : "";
     const located = groups.map((group) => {
       const found =
-        "selector" in group.anchor
+        "selector" in group.anchor && deps.showsStory(group.anchor)
           ? deps.locate(deps.anchorToday(group.anchor, group.at))
           : null;
       return { group, el: found?.el ?? null, by: found?.by ?? "selector" };

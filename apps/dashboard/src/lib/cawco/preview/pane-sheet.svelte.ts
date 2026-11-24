@@ -3,7 +3,7 @@
  */
 
 import { canvasOf } from "@cawco/core/stage";
-import { stageDialsOf, stageLeftOut } from "@cawco/core/stage-graph";
+import { shownName, stageDialsOf, stageLeftOut } from "@cawco/core/stage-graph";
 import { graphWords } from "@cawco/core/words/graph";
 import { untrack } from "svelte";
 import { writeSheet } from "../artifact-api";
@@ -112,6 +112,13 @@ export class PaneSheet {
         )
       : null;
   });
+
+  /** The name sheet `file`'s state `story` is shown by, as the design graph's States menu says it (core `shownName`); null where the stage page hasn't said that sheet. */
+  readonly stateName = (file: string, story: string): string | null => {
+    const sheet = this.link?.sheets[file];
+    const one = sheet?.stories.find((each) => each.name === story);
+    return sheet && one ? shownName(one, sheet.stories) : null;
+  };
 
   /** The component artifact's states files and the agent's spec, as its address carries them (core `canvasPath`). */
   readonly sheetCanvas = $derived.by(() =>

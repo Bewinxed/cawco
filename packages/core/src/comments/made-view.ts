@@ -35,16 +35,29 @@ export const madeViewOf = (anchor: PageAnchor): MadeView | undefined => {
 
 /**
  * A mark a view doesn't draw on its element, and why, as that view alone
- * reads it: its element is gone from the page as this view draws it as
- * made (`gone`); its element is found but drawn in no box here, under a
- * `display: none`, a `content-visibility: hidden` or a closed `<details>`
- * (`hidden`); or this view draws the page otherwise than the mark was made
- * in (`elsewhere`, with that view). Read off the page each draw and said
- * to its host (overlay pins.ts, `cawco:pins-unplaced`), which lists it
- * with the moved marks; nothing of it is written to the doc.
+ * reads it, asked in this order:
+ * - this view can't judge it: on a sheet it shows another story than the
+ *   mark's (`story`, with the mark's story by its states file and export,
+ *   and the state's name as the graph shows it: the export in plain words
+ *   until the host, which holds the sheet's stories, names it as its
+ *   States menu does), or it draws the page otherwise
+ *   than the mark was made in (`elsewhere`, with that view), whether or not
+ *   it finds the element;
+ * - in a view that draws the page as made: its element found but drawn in
+ *   no box, under a `display: none`, a `content-visibility: hidden` or a
+ *   closed `<details>` (`hidden`), or gone from the page (`gone`).
+ * Read off the page each draw and said to its host (overlay pins.ts,
+ * `cawco:pins-unplaced`), which lists it with the moved marks; nothing of
+ * it is written to the doc.
  */
 export type Unplaced =
-  { why: "gone" } | { why: "hidden" } | { made: MadeView; why: "elsewhere" };
+  | { why: "gone" }
+  | { why: "hidden" }
+  | { made: MadeView; why: "elsewhere" }
+  | { file: string; state: string; story: string; why: "story" };
+
+/** Why a view can't judge a mark ({@link Unplaced}): it shows another story, or draws the page otherwise than made. */
+export type MadeAway = Extract<Unplaced, { why: "elsewhere" | "story" }>;
 
 /** One {@link Unplaced} as a message carried it, or null when it reads as none. */
 const unplacedOne = (value: unknown): Unplaced | null => {
@@ -53,6 +66,21 @@ const unplacedOne = (value: unknown): Unplaced | null => {
   }
   if (value.why === "gone" || value.why === "hidden") {
     return { why: value.why };
+  }
+  if (value.why === "story") {
+    return "story" in value &&
+      typeof value.story === "string" &&
+      "file" in value &&
+      typeof value.file === "string" &&
+      "state" in value &&
+      typeof value.state === "string"
+      ? {
+          why: "story",
+          file: value.file,
+          state: value.state,
+          story: value.story,
+        }
+      : null;
   }
   const made = "made" in value ? value.made : null;
   if (

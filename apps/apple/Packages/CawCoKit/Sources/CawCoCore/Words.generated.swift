@@ -2448,7 +2448,7 @@ public enum Words {
         }
 
         /// A gone pin's notice, a sentence of its own: what it stood on is gone.
-        public static let pinElementGone = "Its element is gone from the page."
+        public static let pinElementGone = "Nothing on the page matches it now."
 
         /// No open pins yet, how to pin one, by the pointer that will: a mouse clicks…
         public static let pinsNoneOpenClick = "Choose Comment, then click the page to pin one."

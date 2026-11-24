@@ -192,6 +192,8 @@
     previewReach,
     previewFrame,
     writeLooks: () => changeTour.writeLooks(),
+    // The sheet's line is made below; its states are read only once a pin is listed.
+    stateName: (file, story) => paneSheet.stateName(file, story),
   });
   const paneSend = new PaneSend({
     instanceId: () => instanceId,
@@ -914,7 +916,7 @@
       link={pinThread.pinLink(pin.number)}
       live={pinThread.live.has(pin.id)}
       name={pin.movedAt
-        ? commentWords.offPage[paneDoc.awayOf(pin.id)?.why ?? "gone"]
+        ? commentWords.offPage(paneDoc.awayOf(pin.id))
         : pinName(pin)}
       away={paneDoc.awayOf(pin.id)}
       back={pushed

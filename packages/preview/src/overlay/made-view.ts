@@ -10,12 +10,14 @@
  */
 import type { PageAnchor } from "@cawco/core/comments/anchor";
 import {
+  type MadeAway,
   type MadeView,
   madeViewOf,
   showsAsMade,
   widthThresholds,
 } from "@cawco/core/comments/made-view";
 import { eachRule } from "@cawco/core/scheme-media";
+import { storyWords } from "@cawco/core/stage-graph";
 import { markOf } from "./boot";
 
 /**
@@ -27,6 +29,16 @@ import { markOf } from "./boot";
  */
 export const drawnHere = (el: Element): boolean =>
   el.getClientRects().length > 0 && el.checkVisibility();
+
+/**
+ * The events after which an element may be drawn, or no longer, with no
+ * attribute of the page's written (which a mutation observer hears): a
+ * `<details>` toggled or a popover shown or hidden (each its `toggle`,
+ * heard on capture, as it bubbles from neither), and a menu a focus or a
+ * checked box opens by CSS alone. The marks are placed again after each
+ * (ink.ts), so a pin hidden with its section stands on it once it shows.
+ */
+export const SHOWN_BY = ["toggle", "focusin", "focusout", "change"] as const;
 
 /**
  * A drawing's width on a sheet: its own (`data-cawco-width`), else its body
@@ -167,25 +179,57 @@ const thresholdsOf = (doc: Document): number[] | null => {
 };
 
 /**
- * Whether this view draws the page `anchor` was made on as it was made
- * (core `showsAsMade`), in `doc`, the document its frames lead to: on a
- * sheet, its story drawn here with the frame's width and scheme; off one,
- * the window's. Never where this view shows another story of the sheet. A
- * document not here (a frame of another origin's, which its own overlay
- * reads, or one still loading, whose marks wait) holds nothing to judge it
- * by, and its marks stand as before.
+ * Why this view can't judge the mark on `anchor` (core `MadeAway`), in
+ * `doc`, the document its frames lead to; null where it draws the page as
+ * the mark was made (core `showsAsMade`): on a sheet, its story drawn here
+ * with the frame's width and scheme; off one, the window's. On a sheet
+ * whose drawing of the mark's story isn't here, that story. A document not
+ * here (a frame of another origin's, which its own overlay reads, or one
+ * still loading, whose marks wait) holds nothing to judge it by, and its
+ * marks stand as before.
  */
-export const judges = (anchor: PageAnchor, doc: Document | null): boolean => {
+export const madeAway = (
+  anchor: PageAnchor,
+  doc: Document | null
+): MadeAway | null => {
   if (doc === null) {
-    return true;
+    return null;
   }
   const drawing = anchor.sheet ? drawingOf(doc, anchor.sheet) : null;
   if (anchor.sheet && drawing === null) {
-    return false;
+    return storyAway(anchor.sheet);
+  }
+  const made = madeViewOf(anchor);
+  if (made === undefined) {
+    return null;
   }
   const now: MadeView = drawing
     ? { scheme: frameScheme(drawing), width: frameWidth(drawing) }
     : pageView(doc);
-  const made = madeViewOf(anchor);
-  return made === undefined || showsAsMade(made, now, thresholdsOf(doc));
+  return showsAsMade(made, now, thresholdsOf(doc))
+    ? null
+    : { why: "elsewhere", made };
 };
+
+/** A mark made on story `sheet.story` of a sheet this view shows another story of: that story, named in plain words until the host names it as its States menu does. */
+const storyAway = (
+  sheet: NonNullable<PageAnchor["sheet"]>
+): Extract<MadeAway, { why: "story" }> => ({
+  why: "story",
+  file: sheet.file,
+  state: storyWords(sheet.story),
+  story: sheet.story,
+});
+
+/**
+ * Whether this view shows the story the mark on `anchor` was made on: a
+ * mark off a sheet, or one whose document isn't here, always. A mark on
+ * another story stands nowhere in this view, even where its element's
+ * source line draws in the story shown: that is another state of it.
+ */
+export const showsStory = (anchor: PageAnchor, doc: Document | null): boolean =>
+  !(anchor.sheet && doc) || drawingOf(doc, anchor.sheet) !== null;
+
+/** Whether this view draws the page `anchor` was made on as it was made ({@link madeAway}): only then does it write where the mark stands. */
+export const judges = (anchor: PageAnchor, doc: Document | null): boolean =>
+  madeAway(anchor, doc) === null;

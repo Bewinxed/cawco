@@ -79,6 +79,8 @@ export interface PaneDocDeps {
   readonly paneSubject: PaneSubject;
   readonly previewFrame: PreviewFrame;
   readonly previewReach: PreviewReach;
+  /** The name a sheet's state is shown by, as the design graph's States menu says it (core `shownName`); null where the graph hasn't said that sheet. */
+  readonly stateName: (file: string, story: string) => string | null;
   readonly writeLooks: () => void;
 }
 export class PaneDoc {
@@ -167,10 +169,18 @@ export class PaneDoc {
   });
 
   /** Why the page doesn't draw pin `id` on its element in its own view ({@link pageUnplaced}); undefined where it does, or the doc holds it moved. */
-  readonly awayOf = (id: string): Unplaced | undefined =>
-    this.view?.pins.some((pin) => pin.id === id && pin.movedAt)
+  readonly awayOf = (id: string): Unplaced | undefined => {
+    const away = this.view?.pins.some((pin) => pin.id === id && pin.movedAt)
       ? undefined
       : this.pageUnplaced[id];
+    // A state named as the graph's States menu names it, which the page can't read.
+    return away?.why === "story"
+      ? {
+          ...away,
+          state: this.#deps.stateName(away.file, away.story) ?? away.state,
+        }
+      : away;
+  };
 
   /** Whether pin `id` stands only in the page's doc yet: written through the page's own messages, as the app's are. */
   readonly onlyOnPage = (id: string) =>

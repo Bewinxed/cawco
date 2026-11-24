@@ -377,7 +377,9 @@
       case "hidden":
         return said.hiddenHere;
       case "elsewhere":
-        return said.madeElsewhere(away.made.width, away.made.scheme);
+        return said.madeElsewhere;
+      case "story":
+        return said.madeOnStory;
       case "gone":
       case undefined:
         return words.pinElementGone;

@@ -689,7 +689,7 @@
               "min-w-0 truncate type-body font-medium",
               gone ? "text-ink-subtle" : "text-ink-strong",
             ]}
-            >{#each segments(gone ? said.offPage[awayOf(pin.id)?.why ?? "gone"] : pinName(pin)) as part, at (at)}{#if part.hit}<mark
+            >{#each segments(gone ? said.offPage(awayOf(pin.id)) : pinName(pin)) as part, at (at)}{#if part.hit}<mark
                   class="bg-selection text-inherit rounded-xs">{part.text}</mark
                 >{:else}{part.text}{/if}{/each}</span
           >
