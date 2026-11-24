@@ -101,11 +101,22 @@
     });
   }
 
+  /**
+   * The artifact's id and its stage page's address, as values: the parked
+   * list is read again on every move of what waits on the person, each read
+   * a new `artifact` with the same id, and the frame loads again only when
+   * the id or the address itself moved. Read through the object, every
+   * read framed the page afresh, so a whole screen that loads longer than
+   * the gap between two reads was never drawn (nightly 8623).
+   */
+  const artifactId = $derived(artifact.id);
+  const stagePath = $derived(path);
+
   // Where the artifact is served, asked once per direction and again on
   // Draw again; the page loads at the graph's own canvas address there.
   $effect(() => {
-    const { id } = artifact;
-    const at = path;
+    const id = artifactId;
+    const at = stagePath;
     track(tries);
     let live = true;
     untrack(() => {

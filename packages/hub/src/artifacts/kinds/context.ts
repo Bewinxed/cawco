@@ -4,7 +4,7 @@
  * when called. Each kind picks what it reads.
  */
 
-import type { ArtifactDoes } from "@cawco/core/artifact-kinds";
+import type { ArtifactDoes, ArtifactPick } from "@cawco/core/artifact-kinds";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import type { DecisionCard } from "@cawco/core/decisions";
 import type { ChangedItem, MetaMap } from "@cawco/core/doc-meta";
@@ -41,10 +41,13 @@ export interface KindContext {
         typeof problem<409, { code: "artifact-answers-stand"; detail: string }>
       >
     | undefined;
-  askedOf: (
-    input: Pick<ArtifactInput, "does" | "ask" | "title">
-  ) =>
-    | { ask: string; does: ArtifactDoes; title: string }
+  askedOf: (input: Pick<ArtifactInput, "does" | "ask" | "title" | "pick">) =>
+    | {
+        ask: string;
+        does: ArtifactDoes;
+        pick: ArtifactPick | null;
+        title: string;
+      }
     | ReturnType<
         typeof problem<422, { code: "artifact-create-shape"; detail: string }>
       >;

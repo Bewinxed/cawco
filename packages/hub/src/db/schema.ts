@@ -11,7 +11,11 @@ import {
   PLACEMENT_STRATEGIES,
 } from "@cawco/core/accounts/kinds";
 import { ACTION_STATES } from "@cawco/core/actions";
-import { ARTIFACT_DOES, ARTIFACT_KINDS } from "@cawco/core/artifact-kinds";
+import {
+  ARTIFACT_DOES,
+  ARTIFACT_KINDS,
+  ARTIFACT_PICKS,
+} from "@cawco/core/artifact-kinds";
 import { ASK_KEPT, ASK_KINDS } from "@cawco/core/asks";
 import { BLOCK_PAGES, BLOCK_WIDTHS } from "@cawco/core/blocks";
 import {
@@ -5769,6 +5773,14 @@ export const artifacts = sqliteTable(
     name: text("name").notNull(),
     /** What the person does on it (core `ARTIFACT_DOES`): pick, judge, try or draw. Every create names it; rows made before it were set to judge. */
     does: storedEnum(z.enum(ARTIFACT_DOES))("does").notNull().default("judge"),
+    /**
+     * Where the person makes the pick it puts to them (core `ARTIFACT_PICKS`),
+     * as its agent judged it: `quick` parks it in the session's composer
+     * (artifacts/service.ts `parkedOf`), `enlarged` keeps it in the panel.
+     * Null where it opens no pick, and on a row made before 2026-11-24,
+     * which parks nowhere.
+     */
+    pick: storedEnum(z.enum(ARTIFACT_PICKS))("pick"),
     /** The panel head's one line under its name: what the person does here, in their words. Empty on a row made before it, and on the person's own composer canvas. */
     ask: text("ask").notNull().default(""),
     /** What every surface names it by to the person: the panel head, the artifacts menu, Needs you, chips, push text. Written by its agent in plain words (core `ARTIFACT_TITLE_LIMIT`); empty on a row made before titles were kept. `name` stays its slug for agents and URLs. */

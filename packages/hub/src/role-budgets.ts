@@ -292,10 +292,16 @@ import {
  * the owner's go on perf-read that day, with `speed` the agent's pick per
  * call (his pick on its `speed` card) (worker 32,839, delegate 13,370
  * measured); both budgets are raised to it.
+ * 2026-11-24: artifact_create and artifact_update take `pick`, quick or
+ * enlarged, where the person makes a pick a design graph's directions or a
+ * decision page's cards put to them, its description saying how the agent
+ * judges it (the owner that day: the agent knows which picks suit a quick
+ * version in the composer and which an enlarged one in the panel) (worker
+ * 32,980, delegate 13,511 measured); both budgets are raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 32_839,
-  delegate: 13_370,
+  worker: 32_980,
+  delegate: 13_511,
   overseer: 770,
   "web-facing": 3400,
   curator: 1550,

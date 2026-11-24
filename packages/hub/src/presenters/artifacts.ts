@@ -8,6 +8,7 @@
  * hash and time, a decision page's program) is the detailed form.
  */
 
+import type { ArtifactPick } from "@cawco/core/artifact-kinds";
 import { pinStandsOn } from "@cawco/core/comments/deliver";
 import type { Pin, ThreadEntry } from "@cawco/core/comments/model";
 import { artifactLink } from "@cawco/core/references";
@@ -64,6 +65,7 @@ import {
 export interface HeadChanged {
   ask?: string;
   id: string;
+  pick?: ArtifactPick;
   title?: string;
 }
 
@@ -719,6 +721,9 @@ export const artifactUpdatedWords = (updated: Updated): Presented => {
         updated.answer.ask === undefined
           ? null
           : `Its head now asks ${quote(updated.answer.ask, 200)}.`,
+        updated.answer.pick === undefined
+          ? null
+          : `Its pick is ${updated.answer.pick} now.`,
       ]
         .filter((line) => line !== null)
         .join(" ");

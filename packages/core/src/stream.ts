@@ -546,12 +546,18 @@ import type { TailnetServing } from "./tailnet-https";
  *    as it read it (`read`: that sha256, or null for none) and answers 409
  *    `folder-file-changed` when it changed since, never writing over it. A
  *    page built for 107 sends no `read`, so it reloads first.
+ * 109: an artifact's create and a decision page's statements may answer a
+ *    400 `artifact-pick-unsaid`: a pick waiting on the person (a design
+ *    graph's directions, a decision page's cards) names where it is made,
+ *    `pick` quick or enlarged (hub artifacts/service.ts `pickUnsaid`). A
+ *    page built for 108 reads each route's 400 codes closed, so it reloads
+ *    first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 108;
+export const WIRE_PROTOCOL = 109;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

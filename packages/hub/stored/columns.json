@@ -2025,6 +2025,13 @@
       "browser"
     ]
   },
+  "artifacts.pick": {
+    "type": "string",
+    "enum": [
+      "quick",
+      "enlarged"
+    ]
+  },
   "asks.answer_behavior": {
     "type": "string",
     "enum": [

@@ -43,6 +43,14 @@ export const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 /** What the person does on an artifact: the reason it is in their panel. */
 export const ARTIFACT_DOES = ["pick", "judge", "try", "draw"] as const;
 export type ArtifactDoes = (typeof ARTIFACT_DOES)[number];
+/**
+ * Where the person makes a pick an artifact puts to them (a design graph's
+ * directions, a decision page's cards), as the agent that opened it judged:
+ * `quick` in the session's composer (hub artifacts/service.ts `parkedOf`),
+ * `enlarged` in the panel alone. The owner's words, 2026-11-24.
+ */
+export const ARTIFACT_PICKS = ["quick", "enlarged"] as const;
+export type ArtifactPick = (typeof ARTIFACT_PICKS)[number];
 /** The ask's length: one line in the panel's head. */
 export const ASK_LIMIT = 160;
 /** A title's length: the panel head's name, a menu row, a chip. */

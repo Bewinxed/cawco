@@ -8,6 +8,7 @@
 import {
   ARTIFACT_DOES,
   ARTIFACT_NAME,
+  ARTIFACT_PICKS,
   ARTIFACT_TITLE_LIMIT,
   ASK_LIMIT,
   MADE_ARTIFACT_KINDS,
@@ -89,6 +90,8 @@ const storyRef = t.String({ minLength: 1, maxLength: 1100 });
 /** What the person does on an artifact, and its one line in the panel's head. */
 const doesField = t.UnionEnum(ARTIFACT_DOES);
 const askField = t.String({ minLength: 1, maxLength: ASK_LIMIT });
+/** Where the person makes the pick it opens (core `ARTIFACT_PICKS`). */
+const pickField = t.UnionEnum(ARTIFACT_PICKS);
 const titleField = t.String({
   minLength: 1,
   maxLength: ARTIFACT_TITLE_LIMIT,
@@ -184,7 +187,7 @@ const canvasFields = {
 export const SHAPES = {
   create: CREATE_SHAPE,
   update:
-    'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); dir (a folder preview, its files read again); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a design graph\'s states file); or edges, group, dials, directions (the canvas itself); or ask or title (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
+    "artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); dir (a folder preview, its files read again); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a design graph's states file); or edges, group, dials, directions (the canvas itself); or ask or title (any kind's head), and pick (where a design graph's or decision page's pick is made). Example: { id, args: { story: \"Waiting\", values: { status: \"waiting\" } } }.",
   read: 'artifact_read takes id?, since?, png?, width?, save?: a .png path, detail ("summary" | "story"), story, state: a component\'s { story: "Story" or, where two states files export it, "file:Story", interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? } or a preview\'s or page\'s "?query" or "#hash", render, layout (a component frame\'s alignment guides; needs state), measure (one move on a component\'s state.story: { play: true }, or { press: "click" | "hover" | "type" | "key", on: { role, name? } | { text } | { testId } | { selector }, text?, key? }, with repeats?: 7 to 40 and speed?: "slowed" | "machine"). Example: { id, state: { story: "Waiting", interaction: "hover" } }; { id, state: "?__state=pairing:asking", save: "$TMPDIR/outputs/asking.png" }; { id, state: { story: "Approved" }, measure: { play: true } }.',
   map: `design_map takes dir?, query?, component?, limit? (1 to ${DESIGN_MAP_LIMITS.max}), cursor?, response_format? ("concise" | "detailed"). Example: { dir: "src/lib", query: "card" }.`,
 };
@@ -220,6 +223,7 @@ export const createBody = t.Object({
   does: t.Optional(doesField),
   ask: t.Optional(askField),
   title: t.Optional(titleField),
+  pick: t.Optional(pickField),
   ...canvasFields,
   directions: designDirections,
   elements: t.Optional(skeletons),
@@ -287,6 +291,9 @@ export const askBody = t.Object({ ask: askField });
 
 /** Any kind's title. */
 export const titleBody = t.Object({ title: titleField });
+
+/** Where a design graph's or a decision page's pick is made. */
+export const pickBody = t.Object({ pick: pickField });
 
 /** A card settled for the person. */
 export const settleBody = t.Object({

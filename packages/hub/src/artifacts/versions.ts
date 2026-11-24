@@ -415,13 +415,15 @@ export const createVersions = (ctx: VersionsContext) => {
       ctx.folderStamped(row.id);
     }
     // What the maker named it with the version: its title, what the person
-    // does there and the head's ask, as a create in place would write them.
+    // does there, the head's ask and where its pick is made, as a create in
+    // place would write them.
     db.update(row.id, {
       madeBy: next.madeBy,
       revision: next.revision,
       title: next.title,
       does: next.does,
       ask: next.ask,
+      pick: next.pick,
       updatedAt: new Date(),
     });
     // Its preview origin, where its address was handed out, is the

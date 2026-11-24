@@ -1,4 +1,8 @@
-import type { ArtifactDoes, ArtifactKind } from "@cawco/core/artifact-kinds";
+import type {
+  ArtifactDoes,
+  ArtifactKind,
+  ArtifactPick,
+} from "@cawco/core/artifact-kinds";
 import type { PictureCut } from "@cawco/core/artifact-picture";
 import type { SendAttachment, TurnImage } from "@cawco/core/attachments";
 import type { excalidrawFile } from "@cawco/core/canvas";
@@ -108,6 +112,8 @@ export interface ArtifactInput {
   mermaid?: string | undefined;
   name: string;
   path?: string | undefined;
+  /** Where the person makes the pick it opens (core `ARTIFACT_PICKS`): named with directions, or a decision page's cards (service `pickUnsaid`). */
+  pick?: ArtifactPick | undefined;
   port?: number | undefined;
   /** A decision page's OpenUI Lang program over the decision library (decision-program.ts). */
   program?: string | undefined;

@@ -1,3 +1,4 @@
+import type { ArtifactPick } from "@cawco/core/artifact-kinds";
 import { DECIDES_RULE, type Kind } from "@cawco/core/decides";
 import {
   type MayStart,
@@ -399,14 +400,18 @@ export const listDelegateTypesTool = catalogTool(
   delegateTypesWords
 );
 
-/** `artifact_update`'s `ask` then `title`, each through its own route; undefined when it names neither. */
+/** `artifact_update`'s `ask`, `title` then `pick`, each through its own route; undefined when it names none. */
 const headWritten = async (
   actions: HandoffActions,
   id: string,
-  ask: string | undefined,
-  title: string | undefined
+  head: {
+    ask: string | undefined;
+    pick: ArtifactPick | undefined;
+    title: string | undefined;
+  }
 ) => {
-  if (ask === undefined && title === undefined) {
+  const { ask, title, pick } = head;
+  if (ask === undefined && title === undefined && pick === undefined) {
     return;
   }
   const asked =
@@ -421,10 +426,18 @@ const headWritten = async (
   if (titled instanceof ElysiaStatus) {
     return titled;
   }
+  const picked =
+    pick === undefined
+      ? undefined
+      : await actions.artifacts.pickUpdate(id, pick);
+  if (picked instanceof ElysiaStatus) {
+    return picked;
+  }
   return {
     id,
     ...(asked ? { ask: asked.ask } : {}),
     ...(titled ? { title: titled.title } : {}),
+    ...(picked ? { pick: picked.pick } : {}),
   };
 };
 
@@ -1197,7 +1210,7 @@ export function handoffTools(view: ToolView) {
       artifactUpdate.description,
       artifactUpdate.input,
       async (
-        { id, statements, ask, title, ...change },
+        { id, statements, ask, title, pick, ...change },
         _format,
         bound
       ): Promise<Updated | AnyProblem> => {
@@ -1209,8 +1222,8 @@ export function handoffTools(view: ToolView) {
             "statements revises a decision page alone: pass it without html, patch, elements, delete, mermaid, args or story."
           );
         }
-        // A new ask and title are checked and written first, so a refused one changes nothing.
-        const head = await headWritten(bound.actions, id, ask, title);
+        // A new ask, title and pick are checked and written first, so a refused one changes nothing, and a change that opens a pick finds it named.
+        const head = await headWritten(bound.actions, id, { ask, title, pick });
         if (head instanceof ElysiaStatus) {
           return head;
         }

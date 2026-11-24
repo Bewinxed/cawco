@@ -3326,6 +3326,13 @@
       "when": 1795511960500,
       "tag": "0482_fact_uses_gone",
       "breakpoints": true
+    },
+    {
+      "idx": 483,
+      "version": "6",
+      "when": 1795529898114,
+      "tag": "0483_artifact_pick",
+      "breakpoints": true
     }
   ]
 }

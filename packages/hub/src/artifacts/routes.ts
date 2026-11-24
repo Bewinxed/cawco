@@ -18,6 +18,7 @@ import {
   commentsFields,
   componentBody,
   createBody,
+  pickBody,
   readFields,
   replyBody,
   resolveBody,
@@ -222,6 +223,13 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       { body: titleBody, detail: { hide: true } },
       ({ params, body }) =>
         artifacts.titleUpdate(params.id, params.artifact, body.title)
+    )
+    // Where a design graph's or a decision page's pick is made (artifact_update's pick): the composer's list reads it again.
+    .post(
+      "/api/instances/:id/artifacts/:artifact/pick",
+      { body: pickBody, detail: { hide: true } },
+      ({ params, body }) =>
+        artifacts.pickUpdate(params.id, params.artifact, body.pick)
     )
     // A card settled for the person (settle, Who decides): written as the person's pick is, with who settled it.
     .post(

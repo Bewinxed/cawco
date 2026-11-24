@@ -13614,6 +13614,13 @@
                     "pattern": "^\\/(?!\\/)\\S*$",
                     "type": "string"
                   },
+                  "pick": {
+                    "enum": [
+                      "enlarged",
+                      "quick"
+                    ],
+                    "type": "string"
+                  },
                   "port": {
                     "minimum": 1,
                     "maximum": 65535,
@@ -144007,6 +144014,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "artifact-pick-unsaid"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "artifact-preview-fields"
                 ]
               },
@@ -154870,6 +154913,42 @@
       },
       "postApiInstancesByIdArtifactsByArtifactStatements400": {
         "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "artifact-pick-unsaid"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  400
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
           {
             "type": "object",
             "properties": {

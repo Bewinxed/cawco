@@ -18,6 +18,7 @@ import {
   commentsFields,
   componentBody,
   createBody,
+  pickBody,
   readFields,
   replyBody,
   resolveBody,
@@ -372,6 +373,14 @@ export const artifactTools = (artifacts: Artifacts, instanceId: string) => {
         body instanceof ElysiaStatus
           ? body
           : artifacts.titleUpdate(instanceId, id, body.title)
+      );
+    },
+    pickUpdate: (id: string, pick: unknown) => {
+      const body = shaped(pickBody, SHAPES.update, { pick });
+      return Promise.resolve(
+        body instanceof ElysiaStatus
+          ? body
+          : artifacts.pickUpdate(instanceId, id, body.pick)
       );
     },
     revise: async (id: string, statements: string) => {

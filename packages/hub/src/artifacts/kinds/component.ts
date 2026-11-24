@@ -634,7 +634,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
   const placeSheet = (
     { owner, maker }: Making,
     name: string,
-    said: Pick<ArtifactRow, "ask" | "does" | "title">,
+    said: Pick<ArtifactRow, "ask" | "does" | "pick" | "title">,
     at: { machineId: string | null; source: PreviewSource },
     /** A new one's id, where its folder was made before it (a design's). */
     id: string = crypto.randomUUID()

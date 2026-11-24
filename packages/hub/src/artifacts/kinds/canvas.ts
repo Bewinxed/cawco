@@ -365,6 +365,7 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
       kind: "canvas",
       name: free,
       composer: true,
+      pick: null,
       // The person's own canvas: nothing is asked of them on it.
       does: "draw",
       ask: "",

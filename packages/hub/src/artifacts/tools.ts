@@ -8,6 +8,7 @@
 import {
   ARTIFACT_DOES,
   ARTIFACT_NAME,
+  ARTIFACT_PICKS,
   ARTIFACT_TITLE_LIMIT,
   ASK_LIMIT,
   MADE_ARTIFACT_KINDS,
@@ -110,6 +111,9 @@ const ask = z
   .describe(
     'The line that heads the panel until they act: the act and its object in their words, like "Pick the head for the phone project page".'
   );
+
+/** Where the person makes the pick an artifact opens (core `ARTIFACT_PICKS`), judged by its agent as `pickJudged` says. */
+const pick = z.enum(ARTIFACT_PICKS).optional();
 
 /** What names it to the person on every surface; a create without one is told how to write it. */
 const title = z
@@ -242,6 +246,9 @@ export const artifactCreate = {
     directions: designDirections.describe(
       "Two or more directions of one design, a states file or page each: one graph switching between them; their pick is artifact_read's `picked`."
     ),
+    pick: pick.describe(
+      `Required with directions or a decision page's cards. ${artifactToolWords.pickJudged}`
+    ),
     dir: z.string().startsWith("/").max(4096).optional().describe("Absolute."),
     content: designMark,
     port: z
@@ -345,6 +352,7 @@ export const artifactUpdate = {
       .describe("Replaces a page's or a design folder's document, picks kept."),
     ask: ask.optional().describe("A new ask, as artifact_create's."),
     title: title.optional().describe("A new title."),
+    pick: pick.describe("Where its pick is made, as artifact_create's."),
     ...canvasFields,
     dir: z
       .string()

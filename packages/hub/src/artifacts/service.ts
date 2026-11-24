@@ -20,6 +20,7 @@ import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import {
   ARTIFACT_NAME,
   type ArtifactDoes,
+  type ArtifactPick,
   ASK_BANNED,
   ASK_PATHLIKE,
   DESK_CAPTURE_WIDTH,
@@ -261,15 +262,19 @@ const merging = (existing: string, statements: string) => {
 };
 /** The fields each kind takes, and what its refusal says it takes. */
 const KIND_FIELDS = {
-  page: { fields: ["program", "html", "dir"], takes: "program, html or dir" },
+  page: {
+    fields: ["program", "html", "dir", "pick"],
+    takes: "program, html or dir, and pick with cards",
+  },
   preview: {
     fields: ["port", "dir", "path", "machine", "workspace", "serve"],
     takes: "port or dir",
   },
   canvas: { fields: ["elements", "mermaid"], takes: "elements or mermaid" },
   component: {
-    fields: ["file", "html", "dir"],
-    takes: "file (live stories), or html or dir (an HTML design)",
+    fields: ["file", "html", "dir", "pick"],
+    takes:
+      "file (live stories), or html or dir (an HTML design), and pick with directions",
   },
 } as const;
 
@@ -285,6 +290,7 @@ const INPUT_FIELDS = [
   "serve",
   "elements",
   "mermaid",
+  "pick",
 ] as const;
 
 const strayFields = (input: ArtifactInput): string | null => {
@@ -297,6 +303,63 @@ const strayFields = (input: ArtifactInput): string | null => {
   }
   return `A ${input.kind} takes ${KIND_FIELDS[input.kind].takes}; ${stray.join(", ")} ${stray.length === 1 ? "is" : "are"} not for a ${input.kind}.`;
 };
+/**
+ * What pick an artifact puts to the person, by what it holds: a design
+ * graph's two or more directions, or a decision page's cards; null for
+ * none. Its agent names where it is made (`pick`), and only a quick one
+ * parks in the composer ({@link Artifacts.parked}).
+ */
+const pickOpened = (
+  directions: number,
+  cards: number
+): "cards" | "directions" | null => {
+  if (directions >= 2) {
+    return "directions";
+  }
+  return cards > 0 ? "cards" : null;
+};
+
+/**
+ * A create or change that leaves pick `opens` waiting on the person with no
+ * `pick` named or kept, refused in words before anything is written
+ * (`made` for a create); undefined when it opens none or names one.
+ */
+const pickUnsaid = (
+  opens: "cards" | "directions" | null,
+  pick: ArtifactPick | null | undefined,
+  made: boolean
+) =>
+  opens === null || pick
+    ? undefined
+    : problem(400, {
+        code: "artifact-pick-unsaid",
+        detail: artifactToolWords.pickUnsaid(
+          opens === "directions" ? "Its directions" : "Its cards",
+          made
+        ),
+      });
+
+/**
+ * A create's {@link pickUnsaid}: a design graph's directions, or the cards
+ * of a page's built `program`. Its maker's own reading puts nothing to the
+ * person, so it opens no pick.
+ */
+const createPickUnsaid = (
+  input: ArtifactInput,
+  program: BuiltProgram | undefined
+) => {
+  if (input.reading) {
+    return;
+  }
+  const directions =
+    input.kind === "component" ? (input.directions?.length ?? 0) : 0;
+  return pickUnsaid(
+    pickOpened(directions, program?.read.cards.length ?? 0),
+    input.pick,
+    true
+  );
+};
+
 /** Why an ask can't head the panel (checks 1 and 2): words the person never uses, or a file or path; null when it can. */
 const askProblem = (ask: string): string | null => {
   if (ASK_BANNED.test(ask)) {
@@ -2460,10 +2523,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (misfit) {
       return problem(400, { code: "artifact-ask-unfit", detail: misfit });
     }
+    // A design graph's directions are counted here; a page's cards once its program is built (createdFrom).
+    return createPickUnsaid(input, undefined);
   };
 
   /** What a create names the person does there, its ask and its title, as its row keeps them; refused with the tool's shape when it names any not. */
-  const askedOf = (input: Pick<ArtifactInput, "does" | "ask" | "title">) => {
+  const askedOf = (
+    input: Pick<ArtifactInput, "does" | "ask" | "title" | "pick">
+  ) => {
     if (
       input.does === undefined ||
       input.ask === undefined ||
@@ -2474,9 +2541,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         detail: CREATE_SHAPE,
       });
     }
-    const asked: { ask: string; does: ArtifactDoes; title: string } = {
+    const asked: {
+      ask: string;
+      does: ArtifactDoes;
+      pick: ArtifactPick | null;
+      title: string;
+    } = {
       does: input.does,
       ask: input.ask,
+      pick: input.pick ?? null,
       title: input.title.trim(),
     };
     return asked;
@@ -2531,7 +2604,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const placed = (
     { lands, owner, maker }: Making,
-    input: Pick<ArtifactInput, "kind" | "name" | "does" | "ask" | "title">,
+    input: Pick<
+      ArtifactInput,
+      "kind" | "name" | "does" | "ask" | "title" | "pick"
+    >,
     at: { machineId: string | null; source: PreviewSource }
   ) => {
     const asked = askedOf(input);
@@ -3570,6 +3646,38 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * Artifact `id` as session `instance` may revise it
+   * ({@link revisable}), or, made by another session of its project, that
+   * project's page (`peer`), which any session of the project revises:
+   * `statements` and `pick` reach the same artifacts.
+   */
+  const pageRevisable = (instance: InstanceRow, id: string) => {
+    const wholeId = whole(instance, id);
+    if (wholeId instanceof ElysiaStatus) {
+      return wholeId;
+    }
+    const asked = db.get(wholeId);
+    const peer =
+      asked && asked.instanceId !== instance.id && asked.madeBy !== instance.id
+        ? projectPage(instance, wholeId)
+        : undefined;
+    const found = peer ?? revisable(instance, wholeId);
+    return found instanceof ElysiaStatus ? found : { found, peer };
+  };
+
+  /**
+   * Whether what a page's or a preview's create built holds what it asks
+   * ({@link deliversItsAsk}) and names where the pick its cards open is
+   * made ({@link createPickUnsaid}): its refusal, or undefined.
+   */
+  const createdFits = async (
+    input: ArtifactInput,
+    made: Parameters<typeof deliversItsAsk>[1]
+  ) =>
+    (await deliversItsAsk(input, made)) ??
+    createPickUnsaid(input, made.program);
+
+  /**
    * What a page's or a preview's create is made from: its page built
    * ({@link createdPage}) or its source named ({@link previewSource}), a
    * folder's files read off its machine and weighed ({@link folderRead}),
@@ -3605,7 +3713,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return folder;
     }
     const weight = folder?.weight;
-    const undelivered = await deliversItsAsk(input, { html, program, weight });
+    const undelivered = await createdFits(input, { html, program, weight });
     if (undelivered) {
       return undelivered;
     }
@@ -3796,7 +3904,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * What session `instance` put to the person outside a tool call (core
    * parked.ts), its own artifacts alone, oldest first: each design graph it
    * opened with two or more directions to judge, and each card of its
-   * decision pages that Who decides gives the person (a card the hub sent to
+   * decision pages that Who decides gives the person, where its agent
+   * judged the pick quick (`pick`) (a card the hub sent to
    * another member is that member's: settling.ts). Each is read whatever its
    * state, so the transcript can keep an answered one where it was opened;
    * one not put to the person (a draft, handed up or held, an option's
@@ -3835,7 +3944,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const cards = choicesAsked(row).flatMap((one) =>
       one.card ? [one.card] : []
     );
-    if ((directions.length < 2 && cards.length === 0) || !putToPerson(row)) {
+    if (
+      pickOpened(directions.length, cards.length) === null ||
+      row.pick !== "quick" ||
+      !putToPerson(row)
+    ) {
       return [];
     }
     const doc = docs.doc(row.id);
@@ -4189,6 +4302,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return asked;
     }
     const { instance, row } = asked;
+    const unpicked = pickUnsaid(
+      pickOpened(input.directions?.length ?? 0, 0),
+      row.pick,
+      false
+    );
+    if (unpicked) {
+      return unpicked;
+    }
     const answer = await changedBy(instance, row, async (target) => {
       const changed = await updateDesign(instance, target, input);
       if (changed instanceof ElysiaStatus) {
@@ -5361,21 +5482,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (instance instanceof ElysiaStatus) {
         return instance;
       }
-      const wholeId = whole(instance, id);
-      if (wholeId instanceof ElysiaStatus) {
-        return wholeId;
+      const target = pageRevisable(instance, id);
+      if (target instanceof ElysiaStatus) {
+        return target;
       }
-      const asked = db.get(wholeId);
-      const peer =
-        asked &&
-        asked.instanceId !== instance.id &&
-        asked.madeBy !== instance.id
-          ? projectPage(instance, wholeId)
-          : undefined;
-      const found = peer ?? revisable(instance, wholeId);
-      if (found instanceof ElysiaStatus) {
-        return found;
-      }
+      const { found, peer } = target;
       if (programOf(found) === undefined) {
         return found.kind === "page"
           ? problem(409, {
@@ -5397,6 +5508,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         // A program's refusal passes up as the revision's.
         if (merged instanceof ElysiaStatus) {
           return merged;
+        }
+        const unpicked = pickUnsaid(
+          pickOpened(0, readKept(merged.merged).cards.length),
+          row.pick,
+          false
+        );
+        if (unpicked) {
+          return unpicked;
         }
         return await programRevised(instance, row, existing, merged);
       };
@@ -5697,6 +5816,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return revising;
       }
       const { instance, row } = revising;
+      const unpicked = pickUnsaid(
+        pickOpened(input.directions?.length ?? 0, 0),
+        row.pick,
+        false
+      );
+      if (unpicked) {
+        return unpicked;
+      }
       const asked = canvasAsked(row, input);
       if (asked instanceof ElysiaStatus) {
         return asked;
@@ -5791,6 +5918,43 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       relistOf(row);
       const titled: { id: string; title: string } = { id: row.id, title: kept };
       return titled;
+    },
+
+    /**
+     * `artifact_update` with `pick`, by whoever may revise it
+     * ({@link pageRevisable}): where the person makes the pick a design
+     * graph or a decision page puts to them, written on it and on
+     * a next version held for it, so opening that version keeps it
+     * (versions.ts `promote`); the composer's list ({@link parkedOf}) is
+     * read again.
+     */
+    pickUpdate: (instanceId: string, id: string, pick: ArtifactPick) => {
+      const instance = sessionOf(instanceId);
+      if (instance instanceof ElysiaStatus) {
+        return instance;
+      }
+      const target = pageRevisable(instance, id);
+      if (target instanceof ElysiaStatus) {
+        return target;
+      }
+      const row = target.found;
+      if (!(row.kind === "page" || row.kind === "component")) {
+        return problem(409, {
+          code: "artifact-pick-none",
+          detail: artifactToolWords.pickNoPick(row.name, row.kind),
+        });
+      }
+      const now = new Date();
+      db.update(row.id, { pick, updatedAt: now });
+      const next = db.heldOf(row.id);
+      if (next) {
+        db.update(next.id, { pick, updatedAt: now });
+      }
+      // Whether it parks moved: the composer reads its list again.
+      deps.needsMoved();
+      wroteNow(instance, row.id);
+      const picked: { id: string; pick: ArtifactPick } = { id: row.id, pick };
+      return picked;
     },
 
     /**

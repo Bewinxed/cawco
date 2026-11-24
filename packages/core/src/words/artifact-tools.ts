@@ -220,6 +220,19 @@ export const artifactToolWords = {
     `The server on port ${port} ${where}`,
   notListening: (subject: string) =>
     `${subject} did not answer: nothing is listening on that port.`,
+  /**
+   * How an agent judges where the person makes a pick it opens (core
+   * `ARTIFACT_PICKS`): the one place it is said, in artifact_create's
+   * `pick` and in {@link artifactToolWords.pickUnsaid}.
+   */
+  pickJudged:
+    "quick: made in the composer, for a value or a control judged in a few real components (a colour, a font, a radius), or a few short plain questions. enlarged: made in the panel, for whole screens, layouts and flows, or a difference that needs room to see.",
+  /** A create or update that leaves a pick waiting on the person with no `pick` named, `what` the pick ("Its directions"). */
+  pickUnsaid: (what: string, made: boolean) =>
+    `${what} wait on the person's pick: name where it is made with pick. ${artifactToolWords.pickJudged} Nothing was ${made ? "made" : "changed"}.`,
+  /** A pick named on an artifact that opens none: a preview or a canvas. */
+  pickNoPick: (name: string, kind: string) =>
+    `${name} is a ${kind}, which puts no pick to the person: pick is for a design graph's directions or a decision page's cards. Nothing was changed.`,
   /** A create with no title, or an empty one: the tool's refusal and the hub's. */
   titleMissing:
     'title is required: a few plain words, sentence case, that name it to the person, like "Title bars close". The panel head, the artifacts menu, Needs you and every chip show it.',

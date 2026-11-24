@@ -2,7 +2,8 @@
  * What a session put to the person outside a tool call and waits on (hub
  * artifacts/service.ts `parkedOf`): each design graph it opened with
  * directions, and each card of its decision pages that Who decides gives the
- * person. The dashboard parks each still open in the session's composer,
+ * person, of those its agent judged quick (core `ARTIFACT_PICKS`); an
+ * enlarged pick is made in the panel alone. The dashboard parks each still open in the session's composer,
  * queued after the asks that hold its turn, oldest first, and answered there
  * as it is where it lives (`picked` on the graph, the card's pick and note on
  * its page), or dismissed there with his own words or none (core choices.ts
