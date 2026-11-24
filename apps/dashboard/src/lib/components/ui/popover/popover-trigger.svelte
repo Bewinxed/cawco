@@ -51,7 +51,7 @@
           "press-tint flex h-14 items-center rounded-sm px-space-4 text-start text-tx transition-[background-color] duration-(--duration-fast) ease-out hover:bg-ui hover:ring-ground-ui aria-expanded:bg-ui aria-expanded:ring-ground-ui",
         mark: "pressable inline-flex rounded-xs",
         swatch:
-          "pointer-hit grid place-items-center rounded-xs border border-transparent focus-halo",
+          "hitbox pointer-fine:hitbox:pointer-area grid place-items-center rounded-xs border border-transparent focus-halo",
         segment: `${segmentedVariants().segment()} num press-tint focus-fill shrink-0 aria-expanded:bg-ui-2`,
         "segment-compact": `${segmentedVariants({ compact: true }).segment()} num press-tint focus-fill shrink-0 aria-expanded:bg-ui-2`,
         meter:
@@ -83,7 +83,7 @@
 
 <PopoverPrimitive.Trigger
   class={cn(
-    "touch-hit",
+    "hitbox pointer-coarse:hitbox:touch-area",
     badge && badgeVariants(),
     popoverTriggerVariants({ look }),
     className

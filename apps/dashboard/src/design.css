@@ -13,6 +13,12 @@
 @import "./lib/tokens/selection.css";
 /* The house's variants and one per attribute state (`bun run variants`). */
 @import "./lib/tokens/variants.css";
+/* A control's tap area, past its drawn box (@regular-ppl/hitbox, owner's
+   pick 2026-11-24, kept on his answer of the same day, "Package, sized by
+   our rule"): `hitbox` on the control draws it on its ::after, which
+   `touch-area` / `pointer-area` size (Behaviours below); the control
+   surface's state layer is its ::before (theme.css `control`). */
+@import "@regular-ppl/hitbox";
 /* Concentric corners (tailwind-super-corners, owner's pick 2026-11-24: "use
    this for all"): `rounded-*`, `p-*` and `border` publish a level's radius,
    padding and edge, and a part inside takes the corner left at its level
@@ -2641,25 +2647,26 @@
    weight (`:where(&)`) where the element's own utilities must still win, as
    they did when these were component rules. */
 
-/* Tap area (DESIGN.md, The 44 Touch Rule and The 24 Pointer Rule; the
-   owner's pick 2026-11-24, "Our rule alone"). A small control's tappable
-   area grows past its drawn box to 44×44 under a finger (`touch-hit`,
-   WCAG 2.5.8) and to 24×24 under a mouse (`pointer-hit`), on a transparent
-   ::after centred on it; the drawn box and the layout do not change, and a
-   control already that size keeps its own box. A cluster whose controls sit
-   closer than that sets --hit-gap-x / --hit-gap-y to the gap between them,
-   and each area stops at the midpoint, so neighbours never overlap. The
-   host is the area's containing block (positioned at no weight, so its own
-   position stands) and isolates, and the area stands at -1 inside it: over
-   the host's own ground and under its content, so a field inside takes its
-   own presses (its caret, its selection) and the area the room round it.
-   That block is the host's padding box, so the 50% term already measures
-   from inside the border; a bordered host sets --hit-edge to its border
-   width so the gap stop does too. A disabled host has no area.
-   --hit-scale is the zoom of a scaled canvas (a graph), so the area keeps
-   its size on screen there. --hit-pointer sets the mouse's size where a
-   control asks more than 24px (DESIGN.md, The Peer Rule: Approve and Deny
-   take 44px on every pointer).
+/* Tap area (DESIGN.md, The 44 Touch Rule and The 24 Pointer Rule). The kit
+   draws a small control's area with @regular-ppl/hitbox as published (the
+   owner's pick, 2026-11-24, "Package, sized by our rule"): `hitbox` on the
+   control gives it a transparent ::after under its content, in its own
+   stacking context, gone while the control is disabled; and our rule sizes
+   that surface through the package's `hitbox:` variant. A kit control
+   writes `hitbox pointer-coarse:hitbox:touch-area`, with
+   `pointer-fine:hitbox:pointer-area` where a mouse needs 24px too, and
+   `hitbox hitbox:touch-area` for The Peer Rule's pair (44px on every
+   pointer).
+   The rule, written once (`touch-area`; `pointer-area` is it at 24px):
+   the area is 44×44 (WCAG 2.5.8) about the control's centre whatever its
+   size, a control already that size keeping its own box, and the drawn box
+   and the layout do not change. A cluster whose controls sit closer than
+   that sets --hit-gap-x / --hit-gap-y to the gap between them, and each
+   area stops at the midpoint, so neighbours never overlap. The area's
+   containing block is the host's padding box, so the 50% term already
+   measures from inside the border; a bordered host sets --hit-edge to its
+   border width so the gap stop does too. --hit-scale is the zoom of a
+   scaled canvas (a graph), so the area keeps its size on screen there.
    The area stands half a pixel down and to the right of its layout box:
    Blink hit-tests a press half a pixel up and to the left of where the
    box is laid out (a touch rounds to the nearest pixel, so a box laid at
@@ -2673,55 +2680,63 @@
    takes a press at its point, the box half-open ([100, 144) takes 143.5
    and not 144), so there the half pixel took the area's top half pixel
    away. Gecko alone reads `-moz-orient`, so it is the one the nudge
-   leaves. The area's shape is written once, here; each utility gives it
-   its size under its own pointer. */
-@layer utilities {
-  :where(.touch-hit),
-  :where(.pointer-hit) {
+   leaves. */
+@layer base {
+  :where(.hitbox) {
     position: relative;
-    isolation: isolate;
-  }
-  :where(.touch-hit)::after,
-  :where(.pointer-hit)::after {
-    position: absolute;
-    z-index: -1;
-    translate: calc(1px / 2) calc(1px / 2);
-    @supports (-moz-orient: inline) {
-      translate: none;
-    }
-    inset-inline: max(
-      min(0px, calc(50% - var(--hit-size) / 2 / var(--hit-scale, 1))),
-      calc(
-        var(--hit-gap-x, var(--hit-size) / var(--hit-scale, 1)) / -2 -
-          var(--hit-edge, 0px)
-      )
-    );
-    inset-block: max(
-      min(0px, calc(50% - var(--hit-size) / 2 / var(--hit-scale, 1))),
-      calc(
-        var(--hit-gap-y, var(--hit-size) / var(--hit-scale, 1)) / -2 -
-          var(--hit-edge, 0px)
-      )
-    );
-  }
-  .touch-hit:is(:disabled, [aria-disabled="true"], [data-disabled])::after,
-  .pointer-hit:is(:disabled, [aria-disabled="true"], [data-disabled])::after {
-    content: none;
   }
 }
+@utility touch-area {
+  --hit-size: var(--spacing-control-lg);
+  translate: calc(1px / 2) calc(1px / 2);
+  @supports (-moz-orient: inline) {
+    translate: none;
+  }
+  inset-inline: max(
+    min(0px, calc(50% - var(--hit-size) / 2 / var(--hit-scale, 1))),
+    calc(
+      var(--hit-gap-x, var(--hit-size) / var(--hit-scale, 1)) / -2 -
+        var(--hit-edge, 0px)
+    )
+  );
+  inset-block: max(
+    min(0px, calc(50% - var(--hit-size) / 2 / var(--hit-scale, 1))),
+    calc(
+      var(--hit-gap-y, var(--hit-size) / var(--hit-scale, 1)) / -2 -
+        var(--hit-edge, 0px)
+    )
+  );
+}
+@utility pointer-area {
+  @apply touch-area;
+  --hit-size: var(--spacing-space-6);
+}
+
+/* The app screens' own tap area, the same rule on their own ::after:
+   `touch-hit` under a finger, `pointer-hit` under a mouse. Kept only until
+   the app pass moves the app screens onto the package's `hitbox`, where
+   they are deleted; the kit uses neither. */
 @utility touch-hit {
   @media (pointer: coarse) {
-    &::after {
+    :where(&) {
+      position: relative;
+    }
+    :where(&)::after {
       content: "";
-      --hit-size: var(--spacing-control-lg);
+      position: absolute;
+      @apply touch-area;
     }
   }
 }
 @utility pointer-hit {
   @media (pointer: fine) {
-    &::after {
+    :where(&) {
+      position: relative;
+    }
+    :where(&)::after {
       content: "";
-      --hit-size: var(--hit-pointer, var(--spacing-space-6));
+      position: absolute;
+      @apply pointer-area;
     }
   }
 }

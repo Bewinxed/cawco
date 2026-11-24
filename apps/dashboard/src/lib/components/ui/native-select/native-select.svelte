@@ -38,8 +38,8 @@
      list. Under a finger it stands 44px tall, its overhang taken back by
      equal negative margins (stopping at the midpoint to a neighbour that
      sets `--hit-gap-y`), so the drawn field and the layout stay as they
-     are. Its top stands half a pixel lower than that, as a touch-hit area
-     does (app.css, touch-hit): Blink takes a press half a pixel above where
+     are. Its top stands half a pixel lower than that, as a kit tap area
+     does (design.css, touch-area): Blink takes a press half a pixel above where
      a box is laid out. A choice longer than the field is cut with an
      ellipsis, never mid-letter at its edge. -->
 <div

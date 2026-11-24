@@ -25,7 +25,8 @@
       row: {
         nav: "gap-2.5 px-2.5 type-body",
         list: "h-row-compact gap-space-2 py-0 pr-space-2 pl-space-2",
-        avatar: "touch-hit size-control-sm justify-center overflow-visible p-0",
+        avatar:
+          "hitbox pointer-coarse:hitbox:touch-area size-control-sm justify-center overflow-visible p-0",
       },
     },
     defaultVariants: {

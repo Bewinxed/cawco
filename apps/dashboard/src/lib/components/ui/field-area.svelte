@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * A field's touch area round it (the input's, the textarea's `area`),
-   * under the field (`touch-hit`, whose area stands under its content: the field takes its own presses, its caret
+   * under the field (`hitbox`, whose area stands under its content: the field takes its own presses, its caret
    * and its words' selection): a finger landing on it beside the field
    * focuses the field, which is the control and takes the focus itself.
    * Its own size and radius, it draws the field's focus edge when its

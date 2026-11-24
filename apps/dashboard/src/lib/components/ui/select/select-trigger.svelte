@@ -70,7 +70,7 @@
   class={cn(
     // Its fill, edge and states are the control surface's (theme.css
     // `control`): it opens a list, so it steps under a press and never moves.
-    "control touch-hit rounded-sm",
+    "control hitbox pointer-coarse:hitbox:touch-area rounded-sm",
     "mark-line flex w-fit",
     "items-center justify-between gap-1.5 whitespace-nowrap",
     "[--hit-edge:1px]",
