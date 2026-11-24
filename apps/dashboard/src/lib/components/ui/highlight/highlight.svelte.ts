@@ -21,9 +21,10 @@
  *
  * All three layers are drawn under the rows (the container isolates, they
  * sit at z-index -1), measured from the rows' own rects and radii, and each
- * is drawn in parts (`BANDS`, `EDGES`, `CORNERS`) that move by `transform` alone and show by
- * the layer's `opacity`: a glide and a fade run on the compositor, however
- * busy the page's main thread is. They stand in the
+ * is one rounded box with its row's own corners, so a fill never has a seam
+ * to show. It moves by `translate` and shows by its `opacity`: a glide
+ * between rows of one size and a fade run on the compositor, however busy
+ * the page's main thread is (`draw`). They stand in the
  * container's shadow root, beside a `<slot>` that draws its own children as
  * they were: the list's children are its own still, so no child walk of a
  * consumer's (`firstElementChild`, `children`, a `> *` rule) ever meets them,
@@ -48,43 +49,23 @@ import { dur, ease } from "#lib/platform/motion/curves.svelte.js";
 import { watchRendered } from "#lib/platform/rendered.js";
 
 /**
- * A layer's parts, in the order they are drawn: four bands that fill it,
- * the card's four edges (`look: "card"` only) and its four corners over
- * them. A band is never rounded, so no scale stretches what it draws; an
- * edge is scaled along its length only; a corner holds the one rounded
- * corner of the layer at its own size, and only ever moves. So a glide's
- * every frame is the row's contour at that frame's size, its corners as
- * round as the row's. At rest every part is laid out at the size it is
- * drawn, unscaled (`draw`).
- */
-const BANDS = ["band-top", "band-bottom", "band-start", "band-end"] as const;
-const EDGES = ["edge-top", "edge-bottom", "edge-left", "edge-right"] as const;
-const CORNERS = ["corner-tl", "corner-tr", "corner-br", "corner-bl"] as const;
-/**
- * How far (px) a part reaches past the line it meets another along, under
- * that one's own fill: two parts that met edge to edge on a fractional
- * pixel mid-glide each covered part of it, and the seam drew lighter.
- */
-const OVERLAP = 1;
-
-/**
  * The layers' recipe, the sheet every container's shadow root adopts (one
  * sheet, shared). Every layer is drawn under the rows (the list isolates, the
  * layers sit at -1, so a row's text and icons are always above them) and
  * placed from measured client rects, which are physical: each anchors to the
- * physical top-left corner the measurements are taken from. A layer is drawn
- * by its parts (`BANDS`, `EDGES`, `CORNERS`, placed by `draw`), each moved by its `transform`
- * only, and shown by its own `opacity`. Written as CSS over the
- * tokens: the page's utilities do not reach into a shadow root, and the
- * tokens' custom properties do.
+ * physical top-left corner the measurements are taken from. A layer is one
+ * box, placed by its `translate`, sized by its `width` and `height`, rounded
+ * by its `border-radius` (`draw`), and shown by its `opacity`. Its fill is
+ * the layer's own colour, translucent as the tokens are, with nothing under
+ * it but what is under the list. Written as CSS over the tokens: the page's
+ * utilities do not reach into a shadow root, and the tokens' custom
+ * properties do.
  *
- * Each layer is on the compositor from the moment it mounts
- * (`will-change`), and so is every part that glides: an element lifted onto
- * a layer of its own as its transition or animation starts is drawn once
- * before that layer is painted, and the rows over it went missing for that
- * frame (6ecede8b5). Held there, the page's layers are the same at rest,
- * mid-glide and after: the parts each on their own, the list's rows on one
- * layer over them.
+ * The ghost and the pill are on the compositor from the moment they mount
+ * (`will-change`): an element lifted onto a layer of its own as its
+ * transition or animation starts is drawn once before that layer is painted,
+ * and the rows over it went missing for that frame (6ecede8b5). Held there,
+ * the page's layers are the same at rest, mid-glide and after.
  *
  * - The ghost is the one hover fill: `surface-hover`, or the container's
  *   `--ghost` where its ground is that colour (a segmented groove). Where nothing hovers (a touch screen:
@@ -112,14 +93,17 @@ const LAYERS = `
   top: 0;
   left: 0;
   z-index: -1;
+  box-sizing: border-box;
   opacity: 0;
   will-change: opacity;
-  --ghost-fill: var(--color-ui);
-  --part-ground: var(--ghost-ground, var(--color-bg));
+  background-color: var(--color-ui);
+}
+:is([data-slot="highlight-ghost"], [data-slot="highlight-pill"]) {
+  will-change: opacity, translate;
 }
 [data-slot="highlight-ghost"] {
   display: none;
-  --ghost-fill: var(--ghost, var(--color-ui));
+  background-color: var(--ghost, var(--color-ui));
   transition: opacity var(--duration-fast) var(--ease-out);
 }
 @media (hover: hover) {
@@ -141,34 +125,6 @@ const LAYERS = `
 }
 [data-slot="highlight-trail"][data-fade][data-swap] {
   transition: opacity var(--duration-base) var(--ease-out);
-}
-[data-part] {
-  position: absolute;
-  top: 0;
-  left: 0;
-  box-sizing: border-box;
-  transform-origin: 0 0;
-  background-color: var(--part-ground);
-  background-image: linear-gradient(var(--ghost-fill), var(--ghost-fill));
-}
-:is([data-slot="highlight-ghost"], [data-slot="highlight-pill"]) [data-part] {
-  will-change: transform;
-}
-[data-part^="edge-"] {
-  background-color: var(--color-accent);
-  background-image: none;
-}
-:is([data-part="edge-top"], [data-part="edge-bottom"]) {
-  height: 1px;
-}
-:is([data-part="edge-left"], [data-part="edge-right"]) {
-  width: 1px;
-}
-[data-part="edge-bottom"] {
-  top: calc(-1 * 1px);
-}
-[data-part="edge-right"] {
-  left: calc(-1 * 1px);
 }
 [data-highlight-frame] {
   pointer-events: none;
@@ -227,8 +183,6 @@ type Axis = "x" | "y" | "xy";
 const REACH = 8;
 /** How far a row is drawn from where it lands before it counts as on its way. */
 const CARRIED = 0.5;
-/** How near (device pixels) an edge is to a grid line to count as on it. */
-const ON_GRID = 0.01;
 /** Frames the rows stand still before a pointer that never moved is aimed again. */
 const STILL = 3;
 /** A scroll this soon (ms) after a wheel, a key or a touch is the reader's own. */
@@ -345,15 +299,17 @@ const cornersOf = (style: CSSStyleDeclaration, w: number, h: number): Radii => {
   return [scaled(tl), scaled(tr), scaled(br), scaled(bl)];
 };
 
-/** A layer and its parts, and the glide it is on (`draw`). */
+/** A layer, and the glide it is on (`draw`). */
 interface Layer {
-  /** Where its parts stand now: the box last drawn. */
+  /** Where it stands now: the box last drawn. */
   drawn: Box | null;
   el: HTMLElement;
-  parts: HTMLElement[];
   run: Run | null;
 }
-/** A glide under way: its animations, one a part, on one clock. */
+/**
+ * A glide under way: its move, first, and its change of size and corners
+ * where it has one, on one clock.
+ */
 interface Run {
   anims: Animation[];
   /** The reversing shortening factor this run began with (CSS Transitions 1 §3.1). */
@@ -374,124 +330,11 @@ const GLIDES = {
   pill: { duration: "--duration-fast", easing: "--ease-drawer" },
 } as const satisfies Record<string, Glide>;
 
-const layerOf = (slot: string, card: boolean): Layer => {
+const layerOf = (slot: string): Layer => {
   const span = document.createElement("span");
   span.dataset.slot = slot;
   span.setAttribute("aria-hidden", "true");
-  const parts = [...BANDS, ...(card ? EDGES : []), ...CORNERS].map((name) => {
-    const part = document.createElement("span");
-    part.dataset.part = name;
-    return part;
-  });
-  span.append(...parts);
-  return { el: span, parts, drawn: null, run: null };
-};
-
-const SIDES = {
-  "corner-tl": "borderTopLeftRadius",
-  "corner-tr": "borderTopRightRadius",
-  "corner-br": "borderBottomRightRadius",
-  "corner-bl": "borderBottomLeftRadius",
-} as const;
-
-/**
- * One part of a layer at a box: its top-left corner and its size along
- * each axis it is sized on (null: the sheet's own, an edge's thickness). A
- * part that is `scaled` takes a glide's change of size by its scale; a
- * corner never does. Every part is laid out at its own origin and placed by
- * its `transform` alone: an element held on the compositor
- * (`will-change: transform`) has its laid-out offset rounded to a whole
- * pixel, and a band laid out at `right: 0`, 106.5px wide, was drawn half a
- * pixel past its row's end.
- */
-interface Part {
-  h: number | null;
-  scaled: boolean;
-  w: number | null;
-  x: number;
-  y: number;
-}
-
-/**
- * Each part of a layer at `box`, in the parts' order. The box's middle is
- * split (`midX`, `midY`) where no corner reaches across it, on the
- * device-pixel grid as the box's own edges are (`placeOf`), and each band
- * covers one side of a split and `OVERLAP` past it: every point of the box
- * that is no corner's is some band's, and no band enters a corner.
- */
-const partsAt = (box: Box, card: boolean): Part[] => {
-  const { x, y, w, h } = box;
-  const [tl, tr, br, bl] = box.r;
-  const ratio = window.devicePixelRatio;
-  const between = (v: number, lo: number, hi: number) =>
-    Math.round((lo > hi ? v : Math.min(hi, Math.max(lo, v))) * ratio) / ratio;
-  const midX = between(
-    w / 2,
-    Math.max(tl[0], bl[0]),
-    w - Math.max(tr[0], br[0])
-  );
-  const midY = between(
-    h / 2,
-    Math.max(tl[1], tr[1]),
-    h - Math.max(bl[1], br[1])
-  );
-  const part = (
-    left: number,
-    top: number,
-    pw: number | null,
-    ph: number | null,
-    scaled = true
-  ): Part => ({
-    x: x + left,
-    y: y + top,
-    w: pw === null ? null : Math.max(0, pw),
-    h: ph === null ? null : Math.max(0, ph),
-    scaled,
-  });
-  const lower = Math.max(0, midY - OVERLAP);
-  const after = Math.max(0, midX - OVERLAP);
-  const bands = [
-    part(tl[0], 0, w - tl[0] - tr[0], Math.min(h, midY + OVERLAP)),
-    part(bl[0], lower, w - bl[0] - br[0], h - lower),
-    part(0, tl[1], Math.min(w, midX + OVERLAP), h - tl[1] - bl[1]),
-    part(after, tr[1], w - after, h - tr[1] - br[1]),
-  ];
-  // The bottom and right edges are laid out a border's width up and left
-  // of their origin (the sheet's), so each is placed by the box's edge.
-  const edges = card
-    ? [
-        part(tl[0], 0, w - tl[0] - tr[0], null),
-        part(bl[0], h, w - bl[0] - br[0], null),
-        part(0, tl[1], null, h - tl[1] - bl[1]),
-        part(w, tr[1], null, h - tr[1] - br[1]),
-      ]
-    : [];
-  // Each corner reaches OVERLAP past its curve along both edges, under
-  // the bands' and edges' own ends.
-  // Laid out at whole pixels, as every part is (`draw`).
-  const corner = (right: boolean, bottom: boolean, [rx, ry]: Radius) => {
-    const cw = Math.ceil(Math.min(w, rx + OVERLAP));
-    const ch = Math.ceil(Math.min(h, ry + OVERLAP));
-    return part(right ? w - cw : 0, bottom ? h - ch : 0, cw, ch, false);
-  };
-  return [
-    ...bands,
-    ...edges,
-    corner(false, false, tl),
-    corner(true, false, tr),
-    corner(true, true, br),
-    corner(false, true, bl),
-  ];
-};
-
-/**
- * A part's `transform` at `at`, laid out at `laid`: its place, and its
- * scale from the size it is laid out at to the size it is drawn.
- */
-const transformOf = (at: Part, laid: Part) => {
-  const scale = (drawn: number | null, size: number | null) =>
-    at.scaled && drawn !== null && size !== null && size > 0 ? drawn / size : 1;
-  return `translate(${at.x}px, ${at.y}px) scale(${scale(at.w, laid.w)}, ${scale(at.h, laid.h)})`;
+  return { el: span, drawn: null, run: null };
 };
 
 /** A box `p` of the way from `a` to `b`, its corners too. */
@@ -509,30 +352,7 @@ const between = (a: Box, b: Box, p: number): Box => {
   };
 };
 
-/**
- * A corner's `transform`, its piece laid out for the radius `laid` and
- * drawn at `radius` on `box`: placed at the box's corner and scaled about
- * that corner, so its curve is `radius` there. Each piece's origin is its
- * own top left (`transform-origin: 0 0`), so a right or bottom corner is
- * moved by what its scale takes off.
- */
-const cornerTransform = (
-  box: Box,
-  i: number,
-  laid: Radius,
-  radius: Radius,
-  size: readonly [number, number]
-) => {
-  const right = i === 1 || i === 2;
-  const bottom = i === 2 || i === 3;
-  const sx = laid[0] > 0 ? radius[0] / laid[0] : 1;
-  const sy = laid[1] > 0 ? radius[1] / laid[1] : 1;
-  const x = right ? box.x + box.w - size[0] * sx : box.x;
-  const y = bottom ? box.y + box.h - size[1] * sy : box.y;
-  return `translate(${x}px, ${y}px) scale(${sx}, ${sy})`;
-};
-
-/** Where a glide's parts stand now: its eased progress on the box it moves (no style is read). */
+/** Where a glide stands now: its eased progress on the box it moves (no style is read). */
 const nowOf = (run: Run): { box: Box; p: number } => {
   const p = run.anims[0]?.effect?.getComputedTiming().progress;
   return p === null || p === undefined
@@ -540,27 +360,41 @@ const nowOf = (run: Run): { box: Box; p: number } => {
     : { box: between(run.from, run.to, p), p };
 };
 
+/** A box's place, the one thing the compositor moves. */
+const placeStyle = (box: Box) => ({ translate: `${box.x}px ${box.y}px` });
+/** A box's size and its four corners, each its own across and down. */
+const shapeStyle = ({ w, h, r: [tl, tr, br, bl] }: Box) => ({
+  width: `${w}px`,
+  height: `${h}px`,
+  borderRadius: `${tl[0]}px ${tr[0]}px ${br[0]}px ${bl[0]}px / ${tl[1]}px ${tr[1]}px ${br[1]}px ${bl[1]}px`,
+});
+/** Whether two boxes differ in size or in any corner. */
+const reshaped = (a: Box, b: Box) =>
+  Math.abs(a.w - b.w) > 0.001 ||
+  Math.abs(a.h - b.h) > 0.001 ||
+  a.r.some(
+    ([x, y], i) =>
+      Math.abs(x - b.r[i][0]) > 0.001 || Math.abs(y - b.r[i][1]) > 0.001
+  );
+
 /**
  * A layer onto `box`: at once, or gliding there on `glide` from wherever it
- * stands now (mid-glide, where that glide has taken it). Every part is laid
- * out at once at the size it is drawn at `box`, so at rest nothing is
- * scaled; its corners take the new box's radii, as a row's `border-radius`
- * changes. A glide then moves each part by its `transform` alone, from the
- * box it leaves, drawn with those corners, to identity: its bands scaled
- * from the size they leave at (FLIP), its corners only moved. One Web
- * Animation a part, on one clock, run on the compositor; the final place is
- * the inline style, so nothing holds once the glide ends. A glide back to
- * where a glide caught mid-way began is as much shorter as that glide had
- * gone (CSS Transitions 1 §3.1, the reversing shortening factor), as the
- * CSS transitions it replaced were. It reads nothing from the page: the
- * motion tokens are read with each box (`boxOf`), before any write.
+ * stands now (mid-glide, where that glide has taken it). The box's place,
+ * size and corners are written at once, as its inline style, so nothing
+ * holds once a glide ends. A glide is one Web Animation of `translate`
+ * alone, which the compositor runs, and, only where the size or a corner
+ * changes, a second of `width`, `height` and `border-radius` on the same
+ * clock: an animation runs on the main thread when any property it animates
+ * cannot be composited, so one of all five held every glide there, rows of
+ * one size too. Its corners turn from the box it leaves to the box it
+ * reaches over the glide (owner, 2026-11-24: the highlight "lose[s] its
+ * rounded top immediately before moving"). A glide back to where a glide
+ * caught mid-way began is as much shorter as that glide had gone (CSS
+ * Transitions 1 §3.1, the reversing shortening factor), as the CSS
+ * transitions it replaced were. It reads nothing from the page: the motion
+ * tokens are read with each box (`boxOf`), before any write.
  */
-const draw = (
-  layer: Layer,
-  box: Box,
-  card: boolean,
-  glide: Glide | null = null
-) => {
+const draw = (layer: Layer, box: Box, glide: Glide | null = null) => {
   const was = layer.run;
   const now = was ? nowOf(was) : null;
   const from = now?.box ?? layer.drawn;
@@ -568,63 +402,15 @@ const draw = (
     run.cancel();
   }
   layer.run = null;
-  const drawn = partsAt(box, card);
-  // A part is laid out at whole pixels and scaled to its size: the engine
-  // draws a box's own size snapped to whole pixels before its transform,
-  // and a band laid out 106.5px wide was drawn 107px, half a pixel past its
-  // row's end. One drawn at no size (a capsule's straight side, between its
-  // round ends) is laid out a pixel long and scaled to nothing, so a glide
-  // from a box where it has a size scales it from there.
-  const whole = (size: number | null) =>
-    size === null ? null : Math.max(1, Math.ceil(size - ON_GRID));
-  const laid = drawn.map((at) =>
-    at.scaled ? { ...at, w: whole(at.w), h: whole(at.h) } : at
-  );
-  for (const [i, el] of layer.parts.entries()) {
-    const at = laid[i];
-    if (at.w !== null) {
-      el.style.width = `${at.w}px`;
-    }
-    if (at.h !== null) {
-      el.style.height = `${at.h}px`;
-    }
-    el.style.transform = transformOf(drawn[i], at);
-  }
-  // A glide's corners turn from the box it leaves to the box it reaches
-  // (owner, 2026-11-24: the highlight "lose[s] its rounded top immediately
-  // before moving"): each piece is laid out at the rounder of the two and
-  // scaled to each, on the glide's own clock, so a corner keeps its curve
-  // until the glide carries it to the next. At rest each is laid out at its
-  // own radius, unscaled.
-  const gliding = Boolean(glide && from && moved(from, box));
-  const first = layer.parts.length - CORNERS.length;
-  const laidCorners = box.r.map((r, i): Radius => {
-    const leaving = gliding && from ? from.r[i] : r;
-    return [Math.max(r[0], leaving[0]), Math.max(r[1], leaving[1])];
-  });
-  const cornerSizes = laidCorners.map(
-    ([rx, ry]) =>
-      [
-        Math.ceil(Math.min(box.w, rx + OVERLAP)),
-        Math.ceil(Math.min(box.h, ry + OVERLAP)),
-      ] as const
-  );
-  for (const [i, name] of CORNERS.entries()) {
-    const [rx, ry] = laidCorners[i];
-    const el = layer.parts[first + i];
-    el.style[SIDES[name]] = `${rx}px ${ry}px`;
-    el.style.width = `${cornerSizes[i][0]}px`;
-    el.style.height = `${cornerSizes[i][1]}px`;
-    el.style.transform = cornerTransform(
-      box,
-      i,
-      laidCorners[i],
-      box.r[i],
-      cornerSizes[i]
-    );
-  }
+  const place = placeStyle(box);
+  const shape = shapeStyle(box);
+  const { style } = layer.el;
+  style.translate = place.translate;
+  style.width = shape.width;
+  style.height = shape.height;
+  style.borderRadius = shape.borderRadius;
   layer.drawn = box;
-  if (!(gliding && glide && from)) {
+  if (!(glide && from && moved(from, box))) {
     return;
   }
   // Back to where the glide it cuts short set out from: as much shorter
@@ -633,53 +419,20 @@ const draw = (
   const factor = back
     ? Math.min(1, Math.max(0, now.p * was.factor + (1 - was.factor)))
     : 1;
-  const leaving = partsAt(from, card);
   const timing = {
     duration: dur(glide.duration) * factor,
     easing: ease(glide.easing),
   };
-  const keyframesOf = (i: number) => {
-    if (i < first) {
-      return [
-        { transform: transformOf(leaving[i], laid[i]) },
-        { transform: transformOf(drawn[i], laid[i]) },
-      ];
-    }
-    const c = i - first;
-    return [
-      {
-        transform: cornerTransform(
-          from,
-          c,
-          laidCorners[c],
-          from.r[c],
-          cornerSizes[c]
-        ),
-      },
-      {
-        transform: cornerTransform(
-          box,
-          c,
-          laidCorners[c],
-          box.r[c],
-          cornerSizes[c]
-        ),
-      },
-    ];
-  };
-  const anims = layer.parts.map((el, i) => el.animate(keyframesOf(i), timing));
-  // Once it lands, each corner is laid out again at its own radius,
-  // unscaled, as at rest.
-  const [landing] = anims;
-  if (landing) {
-    // `finish` fires on landing alone, never on a glide cut short.
-    landing.onfinish = () => {
-      if (layer.run?.anims === anims) {
-        layer.run = null;
-        draw(layer, box, card);
-      }
-    };
+  const anims = [layer.el.animate([placeStyle(from), place], timing)];
+  if (reshaped(from, box)) {
+    anims.push(layer.el.animate([shapeStyle(from), shape], timing));
   }
+  // `finish` fires on landing alone, never on a glide cut short.
+  anims[0].onfinish = () => {
+    if (layer.run?.anims === anims) {
+      layer.run = null;
+    }
+  };
   layer.run = {
     anims,
     factor,
@@ -689,42 +442,7 @@ const draw = (
   };
 };
 
-/**
- * The first opaque ground behind the list. The fills are translucent (an
- * interface grey is text at low opacity) and a layer is drawn in parts that
- * overlap at their seams, so each part paints its fill over this ground and
- * is opaque: the seams never draw twice.
- */
-let probe: CanvasRenderingContext2D | null = null;
-const groundOf = (from: Element): string | null => {
-  probe ??= document
-    .createElement("canvas")
-    .getContext("2d", { willReadFrequently: true });
-  if (!probe) {
-    return null;
-  }
-  for (let el: Element | null = from; el; el = el.parentElement) {
-    const colour = getComputedStyle(el).backgroundColor;
-    probe.clearRect(0, 0, 1, 1);
-    probe.fillStyle = "#0000";
-    probe.fillStyle = colour;
-    probe.fillRect(0, 0, 1, 1);
-    if (probe.getImageData(0, 0, 1, 1).data[3] === 255) {
-      return colour;
-    }
-  }
-  return null;
-};
-
 const show = (layer: Layer, on: boolean) => {
-  const root = layer.el.getRootNode();
-  if (on && root instanceof ShadowRoot && root.host instanceof HTMLElement) {
-    const { host } = root;
-    const ground = groundOf(host);
-    if (ground) {
-      host.style.setProperty("--ghost-ground", ground);
-    }
-  }
   layer.el.style.opacity = on ? "1" : "0";
 };
 
@@ -808,10 +526,9 @@ export function highlight(options: HighlightOptions) {
     container.dataset.highlight = look ?? "";
     const ownIsolate = !container.classList.contains("isolate");
     container.classList.add("isolate");
-    const card = look === "card";
-    const ghost = layerOf("highlight-ghost", card);
-    const trail = layerOf("highlight-trail", card);
-    const pill = layerOf("highlight-pill", card);
+    const ghost = layerOf("highlight-ghost");
+    const trail = layerOf("highlight-trail");
+    const pill = layerOf("highlight-pill");
     // A ghost the rows' own highlight drives (a menu's arrow keys) shows on
     // a touch screen too; a ghost the pointer drives does not.
     if (hovered) {
@@ -830,7 +547,6 @@ export function highlight(options: HighlightOptions) {
       draw(
         ghost,
         box,
-        card,
         glide && withGhost === true && !reduced.matches ? GLIDES.ghost : null
       );
     /**
@@ -1175,7 +891,7 @@ export function highlight(options: HighlightOptions) {
     const fadeTrail = (from: Box) => {
       trail.el.removeAttribute("data-fade");
       trail.el.removeAttribute("data-swap");
-      draw(trail, from, card);
+      draw(trail, from);
       show(trail, true);
       requestAnimationFrame(() => {
         // With less motion the fade is the whole move: --duration-base (`swap`).
@@ -1194,7 +910,7 @@ export function highlight(options: HighlightOptions) {
         return;
       }
       pill.el.removeAttribute("data-swap");
-      draw(pill, box, card, move ? GLIDES.pill : null);
+      draw(pill, box, move ? GLIDES.pill : null);
       show(pill, true);
     };
     /** A selection that moves under less motion: a cross-fade, never a glide. */
@@ -1203,10 +919,10 @@ export function highlight(options: HighlightOptions) {
       // was, the pill hidden where it is going.
       trail.el.removeAttribute("data-fade");
       trail.el.removeAttribute("data-swap");
-      draw(trail, from, card);
+      draw(trail, from);
       show(trail, true);
       pill.el.removeAttribute("data-swap");
-      draw(pill, to, card);
+      draw(pill, to);
       show(pill, false);
       // Then the fades, from the frame those were drawn in.
       requestAnimationFrame(() => {
@@ -1790,7 +1506,7 @@ export function highlight(options: HighlightOptions) {
           return;
         }
         if (pillRow === pillOn && pillAt && pillBox && moved(pillAt, pillBox)) {
-          draw(pill, pillAt, card);
+          draw(pill, pillAt);
           pillBox = pillAt;
         }
         if (
