@@ -6,19 +6,27 @@
  * could load it itself (agent harnesses/*: `skillsNamed`).
  *
  * A name is a whole word: at the start of the text or after whitespace, and
- * ending at whitespace or the text's end, so a path (`src/clean-copy`) or a
- * word glued to punctuation stays as written. Only a skill the session has
- * is one; any other `/word` is plain text.
+ * ending at whitespace, the text's end, or closing punctuation before either
+ * (`/clean-copy,` `(see /clean-copy).`), so a path
+ * (`src/clean-copy`, `/clean-copy/x`) or a longer name (`/clean-copy-old`)
+ * never reads as a shorter skill. Only a skill the session has is one; any
+ * other `/word` is plain text.
  */
 import { codeBlanked } from "./outside-code";
 
 const SPECIAL = /[.*+?^${}()|[\]\\/]/gu;
 
+/** What may close a name before the whitespace or end after it: a sentence's or a bracket's or a quote's end. */
+const CLOSING = "[,.;:!?)\\]}\"'’”»›]*";
+
+const WHITESPACE = /\s/u;
+
 /**
  * Every `/name` of these skills, whole, in a text: the name is the match's
- * first group. `ends` says what may follow it: whitespace or the text's end
- * (`"end"`), or whitespace alone (`"space"`, a word still being typed at the
- * end is not one yet). Null with no skills.
+ * first group, and the match is `/name` alone. `ends` says what may follow
+ * it, past any closing punctuation ({@link CLOSING}): whitespace or the
+ * text's end (`"end"`), or whitespace alone (`"space"`, a word still being
+ * typed at the end is not one yet). Null with no skills.
  */
 export function skillWords(
   names: Iterable<string>,
@@ -30,7 +38,8 @@ export function skillWords(
   if (list.length === 0) {
     return null;
   }
-  const after = ends === "end" ? "(?=\\s|$)" : "(?=\\s)";
+  const after =
+    ends === "end" ? `(?=${CLOSING}(?:\\s|$))` : `(?=${CLOSING}\\s)`;
   return new RegExp(`(?<=^|\\s)/(${list.join("|")})${after}`, "gu");
 }
 
@@ -72,6 +81,10 @@ export function skillsNamed(
 /**
  * Whether `named` is the command the text opens with: the one a harness
  * that runs a message's opening `/name` (Claude Code, OpenCode) runs itself.
+ * Those read the command's name up to the first whitespace, so a name with
+ * punctuation after it (`/clean-copy, then …`) is no command of theirs: its
+ * words go to the model as written and the skill loads as any other named.
  */
 export const opensWith = (text: string, named: SkillNamed): boolean =>
-  named.start === text.length - text.trimStart().length;
+  named.start === text.length - text.trimStart().length &&
+  (named.end === text.length || WHITESPACE.test(text.charAt(named.end)));

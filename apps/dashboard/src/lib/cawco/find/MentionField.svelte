@@ -299,7 +299,8 @@
 
   /**
    * Whether the field's own words (outside its chips) name a skill whole:
-   * followed by a space, or with `ends` "end" also at the text's end.
+   * followed by a space (past any closing punctuation), or with `ends` "end"
+   * also at the text's end.
    */
   function namesSkill(ends: "end" | "space"): boolean {
     const pattern = skills ? skillWords(skills.named.keys(), ends) : null;
