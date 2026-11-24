@@ -2,16 +2,19 @@
  * A pick parked in a session's composer (Component Story Format 3, live):
  * the agent put a design's directions or a decision card to the person,
  * and the composer grows into it as it does into a question, answered there
- * as where it lives. The composer, the card, the decision host's card and
- * options, the direction wells and the transcript's record are the
- * product's; the conversation round them is parked-prompt-live.svelte, the
- * picks shaped as the hub lists them (parked-fixtures.ts). A pick answers
- * the item: the composer folds back, the next comes in, and its record
- * joins the turns.
+ * as where it lives, or dismissed there as a question is, with words of his
+ * own on its Other line or none. The composer, the card, the decision
+ * host's card and options, the direction wells and the transcript's record
+ * are the product's; the conversation round them is
+ * parked-prompt-live.svelte, the picks shaped as the hub lists them
+ * (parked-fixtures.ts). A pick answers the item: the composer folds back,
+ * the next comes in, and its record joins the turns.
  */
 
 import {
   DECISION_CARD,
+  DISMISSED_CARD,
+  DISMISSED_WITH_WORDS,
   NOTE_ONLY,
   PICKED,
   THREE_DIRECTIONS,
@@ -62,4 +65,9 @@ export const Minimized = {
 /** The grey picked, its record in the turns, and the card answered with a note alone. */
 export const Answered = {
   args: { items: [], settled: [PICKED, NOTE_ONLY] },
+};
+
+/** The grey put down with his own words in place of a pick, and the card dismissed without a word. */
+export const Dismissed = {
+  args: { items: [], settled: [DISMISSED_WITH_WORDS, DISMISSED_CARD] },
 };

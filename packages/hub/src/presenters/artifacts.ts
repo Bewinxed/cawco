@@ -204,6 +204,8 @@ const answerLine = (answer: DecisionAnswer, now: number): string => {
       return `- ${asked}: picked ${listed(answer.options.map((option) => (option.label ? `${option.id} ${quote(option.label, 60)}` : option.id)))} ${ago(answer.at, now)}${earlier}${note}${answer.settled ? `. ${decidedByLine(answer.settled)}${answer.settled.sources.length > 0 ? `: ${answer.settled.sources.join(", ")}` : ""}` : ""}${answer.from ? `. ${recordedFromLead(answer.from)} ${verbatim(answer.from.quote)}` : ""}`;
     case "cleared":
       return `- ${asked}: picked, then cleared ${ago(answer.at, now)}${earlier}; nothing picked now${note}`;
+    case "dismissed":
+      return `- ${asked}: dismissed without a pick ${ago(answer.at, now)}${earlier}${answer.note ? `, saying ${verbatim(answer.note)}` : ", with no words"}`;
     case "gone":
       return `- ${asked}: picked ${listed(answer.options)} ${ago(answer.at, now)}, but the page no longer offers ${listed(answer.gone)}${earlier}${note}`;
     default:
@@ -309,10 +311,18 @@ const findingLines = (render: ReturnType<typeof renderSaid>): string[] => [
   ...(render.alike ?? []).map(stageRenderWords.alike),
 ];
 
-/** The direction the person picked, on a design with directions. */
-const pickedLines = (picked: ComponentRead["picked"]): string[] => {
+/** The direction the person picked, or his dismissal of the pick, on a design with directions. */
+const pickedLines = (
+  read: Pick<ComponentRead, "dismissed" | "picked">
+): string[] => {
+  const { dismissed, picked } = read;
   if (picked === undefined) {
     return [];
+  }
+  if (dismissed) {
+    return [
+      `The person dismissed the pick without picking a direction${dismissed.note ? `, saying ${verbatim(dismissed.note)}` : ", with no words"}.`,
+    ];
   }
   return [
     picked
@@ -382,7 +392,7 @@ const componentLines = (read: ComponentRead): string[] => {
     ...(read.tuned === undefined
       ? []
       : [`What they tuned: ${valueWords(read.tuned, 600)}`]),
-    ...pickedLines(read.picked),
+    ...pickedLines(read),
     ...(read.frame ? [`The frame asked: ${valueWords(read.frame, 2000)}`] : []),
     ...(read.layout ? layoutWords.lines(read.layout) : []),
     ...(read.measured ? measureWords.lines(read.measured) : []),

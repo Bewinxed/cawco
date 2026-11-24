@@ -53,8 +53,8 @@ interface AskCommon {
 /**
  * A pick the session put to the person outside a tool call (core
  * parked.ts): a design's directions or a decision card, answered in the
- * composer as where it lives (ParkedPrompt). It folds to its bar as a
- * question does.
+ * composer as where it lives (ParkedPrompt), or dismissed there as a
+ * question is. It folds to its bar as a question does.
  */
 export interface ParkedAsk extends AskCommon {
   /** Its artifact's choices as its doc holds them now. */
@@ -70,6 +70,8 @@ export interface ParkedAsk extends AskCommon {
     card: string,
     change: { options: string[] } | { note: string }
   ) => string | null;
+  /** Put down without a pick, with the words written in its place (empty for none); a sentence when it was not kept. */
+  ondismiss: (note: string) => string | null;
   onopen: () => void;
   onpick: (file: string) => string | null;
 }

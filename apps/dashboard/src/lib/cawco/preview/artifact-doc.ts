@@ -3,6 +3,7 @@ import {
   type ChoiceEntry,
   changedEntry,
   choiceEntryProblem,
+  dismissedEntry,
 } from "@cawco/core/choices";
 import {
   type ActivityLine,
@@ -129,6 +130,13 @@ export interface ArtifactDoc {
   /** The person deletes pin `pin`, and the ink it alone stands on; a sentence when it was not. */
   delete: (pin: string) => string | null;
   destroy: () => void;
+  /**
+   * The person puts question `key` down without a pick (core
+   * `dismissedEntry`): a card's id, or a design graph's `picked`, with the
+   * words he wrote in its place, empty for none; a sentence when it was not
+   * kept.
+   */
+  dismiss: (key: string, note: string) => string | null;
   /**
    * A value kept under `key` on a page, as its own `cawco.set` keeps one
    * (a setup's stages, drawn as the board in the project's page): the hub
@@ -532,6 +540,19 @@ export function joinArtifact(
         return problem;
       }
       state.set(key, entry);
+      return null;
+    },
+    dismiss: (key, note) => {
+      const pageHash = getMeta(doc, "pageHash");
+      if (typeof pageHash !== "string") {
+        return previewWords.notKeptYet;
+      }
+      const entry = dismissedEntry(note, pageHash, new Date().toISOString());
+      const problem = choiceEntryProblem(key, entry);
+      if (problem) {
+        return problem;
+      }
+      doc.getMap<ChoiceEntry>("state").set(key, entry);
       return null;
     },
     keepTuned: (records) => {

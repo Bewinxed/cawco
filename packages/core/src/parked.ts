@@ -5,8 +5,9 @@
  * person. The dashboard parks each still open in the session's composer,
  * queued after the asks that hold its turn, oldest first, and answered there
  * as it is where it lives (`picked` on the graph, the card's pick and note on
- * its page); once answered, the transcript keeps it at the call that opened
- * it. `GET /api/instances/:id/parked` answers it; the dashboard reads it again
+ * its page), or dismissed there with his own words or none (core choices.ts
+ * `dismissedEntry`, on the same key); once answered or dismissed, the
+ * transcript keeps it at the call that opened it. `GET /api/instances/:id/parked` answers it; the dashboard reads it again
  * on each `artifact.needs` frame, as it does the session's questions.
  */
 
@@ -34,15 +35,19 @@ export interface ParkedDirection {
 
 /**
  * How an item stands with the agent: `open` while it waits on the person;
- * `answered` once he did; `taken` once the agent acted on his answer or his
- * words elsewhere; `withdrawn` when the agent took it back unanswered.
+ * `answered` once he did; `dismissed` once he put it down without a pick
+ * (a pick of his after it answers it again); `taken` once the agent acted
+ * on his answer or his words elsewhere; `withdrawn` when the agent took it
+ * back unanswered.
  */
-export type ParkedState = AskState | "taken";
+export type ParkedState = AskState | "dismissed" | "taken";
 
 interface ParkedBase {
   artifact: ParkedArtifact;
   /** When it was put to the person, ISO: the queue's order. */
   askedAt: string;
+  /** Put down without a pick (its Dismiss, or his own words in its place): when, and those words, empty for none; null while it is not. */
+  dismissed: { at: string; note: string } | null;
   /** Its key on its artifact, as `question_close` names it: `judge`, `card:<id>`. */
   key: string;
   state: ParkedState;
@@ -64,7 +69,7 @@ export interface ParkedPick extends ParkedBase {
 
 /** One card of a decision page, the person's by Who decides. */
 export interface ParkedCard extends ParkedBase {
-  /** His answer as the page keeps it: the options picked (by id, those the card still offers) and his note; null before either. */
+  /** His answer as the page keeps it: the options picked (by id, those the card still offers) and his note; null before either, and once he dismissed it. */
   answer: { at: string; note: string; options: string[] } | null;
   card: DecisionCard;
   kind: "card";

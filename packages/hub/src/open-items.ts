@@ -174,6 +174,10 @@ const answerWords = (answer: QuestionAnswer, detailed: boolean): string => {
       return `replied ${quoted(answer.said, detailed)}`;
     case "resolve":
       return "resolved it";
+    case "dismiss":
+      return answer.said
+        ? `dismissed it without a pick, saying ${quoted(answer.said, detailed)}`
+        : "dismissed it without a pick or a word";
     default:
       return String(answer.by);
   }
@@ -186,15 +190,15 @@ const artifactHead = (of: AskedOf): string => {
   return `- ${of.artifact.link} (${of.artifact.kind}${whose})`;
 };
 
-/** A question's lines: answered with what he said and when, or open, by its link; detailed, what was asked of a pin and a card's why. */
+/** A question's lines: answered or dismissed with what he said and when, or open, by its link; detailed, what was asked of a pin and a card's why. */
 const questionLines = (
   question: AskedOf["questions"][number],
   detailed: boolean
 ): string[] => {
   const { answer } = question;
   const head =
-    question.state === "answered" && answer
-      ? `answered, ${answerWords(answer, detailed)} (${answer.at.slice(0, 16).replace("T", " ")})`
+    (question.state === "answered" || question.state === "dismissed") && answer
+      ? `${question.state}, ${answerWords(answer, detailed)} (${answer.at.slice(0, 16).replace("T", " ")})`
       : "open";
   return [
     `  - ${head}: ${question.link}`,
@@ -207,7 +211,7 @@ const questionLines = (
 
 /**
  * The questions part: each artifact by its link, whose it is when not the
- * session's, then each question open or answered, by its link (what
+ * session's, then each question open, answered or dismissed, by its link (what
  * `question_close` takes), a page of {@link QUESTIONS_PAGE} from the
  * cursor, its own first as the reader gave them.
  */
@@ -224,7 +228,7 @@ const questionsPart = (
   const shown = all.slice(page.cursor, page.cursor + QUESTIONS_PAGE);
   const lines: string[] = [
     "### Questions you and your delegates put to the person",
-    "An open one waits on him; an answered one waits on you: act on it, then close it with question_close (taken, or withdrawn when it no longer applies).",
+    "An open one waits on him; an answered or dismissed one waits on you: act on it, then close it with question_close (taken, or withdrawn when it no longer applies). A dismissed one he put down without a pick: don't ask it again in the same words.",
   ];
   shown.forEach(({ of, question }, n) => {
     if (shown[n - 1]?.of !== of) {

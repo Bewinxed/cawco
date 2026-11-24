@@ -146,6 +146,14 @@ const designDirections = (
     line: part.line ?? "",
   }));
 
+/** His dismissal of a design's pick between its directions, as a read says it, from its `picked` entry; nothing while it is none. */
+const dismissalOf = (
+  picked: ArtifactRead["state"][string] | undefined
+): Pick<ComponentRead, "dismissed"> =>
+  picked?.dismissed
+    ? { dismissed: { at: picked.at, note: picked.note || null } }
+    : {};
+
 /** A design graph: a states file's stories drawn live on its machine's stage, the draws and the sheet the hub keeps of them in the doc, and a read that waits for what a browser drew. */
 export const createComponentKind = (ctx: ComponentKindContext) => {
   const {
@@ -1215,6 +1223,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
             picked: pickedDirection
               ? { name: pickedDirection.name, file: pickedDirection.file }
               : null,
+            ...dismissalOf(picked),
           }
         : {}),
       ...(story && ask.detail === "story"
@@ -1285,6 +1294,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
             picked: pickedDirection
               ? { name: pickedDirection.name, file: pickedDirection.file }
               : null,
+            ...dismissalOf(picked),
           }
         : {}),
       hint: designHint(design?.spec.content),

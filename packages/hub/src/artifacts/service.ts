@@ -3342,13 +3342,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (pendingFor(row)) {
       waitingOn.push("person");
     }
-    // The session's move: what is handed to it, what the person sent or drew and it hasn't read, and every answer of his it hasn't taken (question_close).
+    // The session's move: what is handed to it, what the person sent or drew and it hasn't read, and every answer or dismissal of his it hasn't taken (question_close).
     if (
       !draft &&
       (handed ||
         picksAwaiting > 0 ||
         (row.kind === "canvas" && unread.length > 0) ||
-        questionsAsked(row).some((one) => one.state === "answered"))
+        questionsAsked(row).some(
+          (one) => one.state === "answered" || one.state === "dismissed"
+        ))
     ) {
       waitingOn.push("session");
     }
@@ -3864,6 +3866,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     stateOf: (key: string) => ParkedState;
   }
 
+  /** His dismissal of a pick, as `entry` keeps it (core choices.ts `dismissedEntry`); null while it is none. */
+  const dismissedOf = (
+    entry: ChoiceEntry | undefined
+  ): ParkedItem["dismissed"] =>
+    entry?.dismissed
+      ? { at: entry.at, note: noteText(entry.note) ?? "" }
+      : null;
+
   /** A design graph's pick between `directions` (core parked.ts `ParkedPick`). */
   const parkedPick = (
     row: ArtifactRow,
@@ -3884,6 +3894,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       key: "judge",
       artifact: on.artifact,
       askedAt: on.askedAt,
+      dismissed: dismissedOf(kept),
       ask: row.ask,
       path: "path" in row.source ? (row.source.path ?? "") : "",
       directions: directions.map((one) => ({
@@ -3915,9 +3926,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       key: `card:${card.id}`,
       artifact: on.artifact,
       askedAt: on.askedAt,
+      dismissed: dismissedOf(entry),
       card,
       answer:
-        entry && (pickMade(card, entry) || note !== "")
+        entry && !entry.dismissed && (pickMade(card, entry) || note !== "")
           ? { at: entry.at, options, note }
           : null,
       state: on.stateOf(`card:${card.id}`),

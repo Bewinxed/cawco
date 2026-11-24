@@ -31,6 +31,7 @@ const GREYS: ParkedPick = {
   },
   askedAt: "2026-11-24T09:12:00.000Z",
   state: "open",
+  dismissed: null,
   ask: "Which grey do hovered rows and buttons use on the dark side?",
   path: "/__cawco/canvas?file=apps/dashboard/src/lib/tokens/HoverOneStep.stories.ts",
   picked: null,
@@ -79,6 +80,7 @@ export const DECISION_CARD: ParkedCard = {
   },
   askedAt: "2026-11-24T09:20:00.000Z",
   state: "open",
+  dismissed: null,
   answer: null,
   card: {
     id: "minimized-bar",
@@ -128,6 +130,23 @@ export const PICKED: ParkedPick = {
   state: "answered",
   picked: "apps/dashboard/src/lib/tokens/HoverTwoSteps.stories.ts",
   pickedAt: "2026-11-24T09:15:00.000Z",
+};
+
+/** The two directions, put down with his own words in place of a pick. */
+export const DISMISSED_WITH_WORDS: ParkedPick = {
+  ...TWO_DIRECTIONS,
+  state: "dismissed",
+  dismissed: {
+    at: "2026-11-24T09:16:00.000Z",
+    note: "Neither: both greys vanish on the raised panel. Try one that also lifts the row's text a step.",
+  },
+};
+
+/** The card, dismissed without a word. */
+export const DISMISSED_CARD: ParkedCard = {
+  ...DECISION_CARD,
+  state: "dismissed",
+  dismissed: { at: "2026-11-24T09:25:00.000Z", note: "" },
 };
 
 /** The agent's question that waits behind a pick. */

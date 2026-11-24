@@ -40838,6 +40838,50 @@
                   "answer": {
                     "type": "string",
                     "enum": [
+                      "dismissed"
+                    ]
+                  },
+                  "at": {
+                    "type": "string"
+                  },
+                  "earlierRevision": {
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "answer",
+                  "at"
+                ]
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "question": {
+                    "description": "Its question; a choice an HTML page declares has none.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "answer": {
+                    "type": "string",
+                    "enum": [
                       "gone"
                     ]
                   },
@@ -54270,7 +54314,7 @@
         "type": "object",
         "properties": {
           "answer": {
-            "description": "His answer as the page keeps it: the options picked (by id, those the card still offers) and his note; null before either.",
+            "description": "His answer as the page keeps it: the options picked (by id, those the card still offers) and his note; null before either, and once he dismissed it.",
             "type": "object",
             "properties": {
               "at": {
@@ -54301,6 +54345,22 @@
           },
           "card": {
             "$ref": "#/components/schemas/DecisionCard"
+          },
+          "dismissed": {
+            "description": "Put down without a pick (its Dismiss, or his own words in its place): when, and those words, empty for none; null while it is not.",
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "note"
+            ]
           },
           "key": {
             "description": "Its key on its artifact, as `question_close` names it: `judge`, `card:<id>`.",
@@ -54381,6 +54441,22 @@
             "items": {
               "$ref": "#/components/schemas/ParkedDirection"
             }
+          },
+          "dismissed": {
+            "description": "Put down without a pick (its Dismiss, or his own words in its place): when, and those words, empty for none; null while it is not.",
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "note"
+            ]
           },
           "key": {
             "description": "Its key on its artifact, as `question_close` names it: `judge`, `card:<id>`.",
@@ -54556,10 +54632,11 @@
         ]
       },
       "ParkedState": {
-        "description": "How an item stands with the agent: `open` while it waits on the person;\n`answered` once he did; `taken` once the agent acted on his answer or his\nwords elsewhere; `withdrawn` when the agent took it back unanswered.",
+        "description": "How an item stands with the agent: `open` while it waits on the person;\n`answered` once he did; `dismissed` once he put it down without a pick\n(a pick of his after it answers it again); `taken` once the agent acted\non his answer or his words elsewhere; `withdrawn` when the agent took it\nback unanswered.",
         "type": "string",
         "enum": [
           "answered",
+          "dismissed",
           "open",
           "taken",
           "withdrawn"

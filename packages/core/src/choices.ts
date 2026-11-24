@@ -13,6 +13,12 @@
 export interface ChoiceEntry {
   at: string;
   /**
+   * The person put the question down without a pick (a parked pick's
+   * Dismiss, or words of his own in its place): `note` holds those words,
+   * null for none, and `options` is empty. A pick of his replaces it.
+   */
+  dismissed?: true;
+  /**
    * The person's own words an agent recorded this pick from (`record_pick`):
    * his pin on the page or a message he typed, quoted. Absent on a pick he
    * made himself. Only the hub writes it, and his own pick clears it.
@@ -186,18 +192,44 @@ export const choiceEntryProblem = (
   if (JSON.stringify(entry.value ?? null).length > CHOICE_LIMITS.value) {
     return `A set value stops at ${CHOICE_LIMITS.value} characters of JSON.`;
   }
-  if ("settled" in entry && entry.settled !== undefined) {
-    const settled = settledProblem(entry.settled);
-    if (settled) {
-      return settled;
+  return (
+    dismissedProblem(key, entry, entry.options) ?? recordsProblem(key, entry)
+  );
+};
+
+/** Why an entry's hub records (`settled`, `from`) are not a pick's, or null when they are or there are none. */
+const recordsProblem = (key: string, entry: object): string | null => {
+  const settled = "settled" in entry ? entry.settled : undefined;
+  if (settled !== undefined) {
+    const problem = settledProblem(settled);
+    if (problem) {
+      return problem;
     }
   }
   if ("from" in entry && entry.from !== undefined) {
-    return "settled" in entry && entry.settled !== undefined
-      ? `${key} holds both a settled record and the person's words: a pick is one or the other.`
-      : fromProblem(entry.from);
+    return settled === undefined
+      ? fromProblem(entry.from)
+      : `${key} holds both a settled record and the person's words: a pick is one or the other.`;
   }
   return null;
+};
+
+/** Why an entry's dismissal ({@link ChoiceEntry.dismissed}) is not one, or null when it is or there is none: true, on no options. */
+const dismissedProblem = (
+  key: string,
+  entry: object,
+  options: readonly unknown[]
+): string | null => {
+  const dismissed = "dismissed" in entry ? entry.dismissed : undefined;
+  if (dismissed === undefined) {
+    return null;
+  }
+  if (dismissed !== true) {
+    return `${key}'s dismissed is true or absent.`;
+  }
+  return options.length > 0
+    ? `${key} is dismissed: a dismissal holds no options.`
+    : null;
 };
 
 /** Why `given` is not a recorded pick's source ({@link PickFrom}), or null when it is. */
@@ -285,7 +317,8 @@ export const noteText = (note: string | null | undefined): string | null =>
  * The entry `change` makes of `before` (absent: nothing kept yet), stamped
  * `at`. A pick the hub settled, or recorded from the person's words, keeps
  * its record until the person picks otherwise: a note or a value beside it
- * leaves it as it is, and his own pick replaces it whole.
+ * leaves it as it is, and his own pick replaces it whole. A dismissal
+ * stands until he picks: a note beside it is its words.
  */
 export const changedEntry = (
   before: ChoiceEntry | undefined,
@@ -303,8 +336,28 @@ export const changedEntry = (
     at,
     ...(same && before.settled ? { settled: before.settled } : {}),
     ...(same && before.from ? { from: before.from } : {}),
+    ...(before?.dismissed && options.length === 0
+      ? { dismissed: true as const }
+      : {}),
   };
 };
+
+/**
+ * The entry the person's Dismiss makes, stamped `at` on page `pageHash`:
+ * no pick, and his words with it (`note`), none when he wrote none.
+ */
+export const dismissedEntry = (
+  note: string,
+  pageHash: string,
+  at: string
+): ChoiceEntry => ({
+  options: [],
+  note: noteText(note),
+  value: null,
+  pageHash,
+  at,
+  dismissed: true,
+});
 
 /** Whether two picks hold the same options, in any order. */
 const sameOptions = (a: readonly string[], b: readonly string[]): boolean =>

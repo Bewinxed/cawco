@@ -11,7 +11,8 @@
  * `joinArtifact`), as the panel holds it: a pick or a note made on the
  * graph or the page shows in the composer at once, and the composer's pick
  * is written there exactly as the graph's head or the page's option writes
- * it. Answered here, an item leaves the queue at once. Answered where it
+ * it; its Dismiss is written there too, on the same key (core choices.ts
+ * `dismissedEntry`). Answered here, an item leaves the queue at once. Answered where it
  * lives while it stands here, the composer says what was picked for a beat
  * ({@link ELSEWHERE_MS}) before it folds back.
  *
@@ -33,28 +34,37 @@ import { needsStore } from "../stores/needs.svelte";
 /** How long a pick made where it lives is said in the composer before it folds back, ms. Our call: long enough to read four words. */
 const ELSEWHERE_MS = 1600;
 
-/** What item `item` was answered with in `choices`, in words; null while it is not. */
+/** The key on its artifact that `item`'s answer or dismissal is kept under: its graph's `picked`, or its card's id. */
+const keyOf = (item: ParkedItem): string =>
+  item.kind === "directions" ? "picked" : item.card.id;
+
+/** What item `item` was answered with in `choices`, in words, its place's name for it apart; null while it is not. */
 const answeredIn = (
   item: ParkedItem,
   choices: Readonly<Record<string, ChoiceEntry>>
-): string | null => {
-  if (item.kind === "directions") {
-    const picking: ChoiceEntry | undefined = choices.picked;
-    const kept = picking?.value;
-    const picked = item.directions.find((one) => one.file === kept);
-    return picked ? picked.name : null;
-  }
-  const entry = choices[item.card.id];
+): { dismissed: true } | { picked: string } | null => {
+  const entry: ChoiceEntry | undefined = choices[keyOf(item)];
   if (!entry) {
     return null;
   }
-  if (pickMade(item.card, entry)) {
-    return entry.options
-      .map((id) => item.card.options.find((option) => option.id === id)?.label)
-      .filter((label) => label !== undefined)
-      .join(", ");
+  if (entry.dismissed) {
+    return { dismissed: true };
   }
-  return entry.note?.trim() ? parkedWords.yourNote : null;
+  if (item.kind === "directions") {
+    const picked = item.directions.find((one) => one.file === entry.value);
+    return picked ? { picked: picked.name } : null;
+  }
+  if (pickMade(item.card, entry)) {
+    return {
+      picked: entry.options
+        .map(
+          (id) => item.card.options.find((option) => option.id === id)?.label
+        )
+        .filter((label) => label !== undefined)
+        .join(", "),
+    };
+  }
+  return entry.note?.trim() ? { picked: parkedWords.yourNote } : null;
 };
 
 export interface ParkedQueueInput {
@@ -115,15 +125,19 @@ export class ParkedQueue {
       return null;
     }
     const said = answeredIn(item, this.choicesOf(item));
-    return said === null
-      ? null
-      : {
-          id: parkedId(item),
-          said: parkedWords.pickedThere(
-            item.kind === "directions" ? "graph" : "page",
-            said
-          ),
-        };
+    if (said === null) {
+      return null;
+    }
+    return {
+      id: parkedId(item),
+      said:
+        "dismissed" in said
+          ? parkedWords.dismissedThere
+          : parkedWords.pickedThere(
+              item.kind === "directions" ? "graph" : "page",
+              said.picked
+            ),
+    };
   });
   /** Its words, one string, so the beat starts once per answer and not on every change of the doc. */
   readonly #standingAnsweredKey = $derived(
@@ -215,6 +229,18 @@ export class ParkedQueue {
     this.#touched.add(parkedId(item));
     const doc = this.#docOf(item);
     return doc ? doc.choose(card, change) : parkedWords.joining;
+  };
+
+  /**
+   * `item` put down here without a pick, with the words written in its
+   * place (empty for none): kept on its artifact as its graph's head or its
+   * page's card would keep an answer, which tells its session as a pick
+   * does; a sentence when it was not kept.
+   */
+  dismiss = (item: ParkedItem, note: string): string | null => {
+    this.#touched.add(parkedId(item));
+    const doc = this.#docOf(item);
+    return doc ? doc.dismiss(keyOf(item), note) : parkedWords.joining;
   };
 
   /** The doc held here when it is `item`'s artifact's; null while none is. */

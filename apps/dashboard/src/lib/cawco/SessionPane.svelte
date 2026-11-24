@@ -1478,6 +1478,7 @@
     drawing: directionDrawing,
     onpick: (file) => parkedQueue.pick(item, file),
     onchoose: (card, change) => parkedQueue.choose(item, card, change),
+    ondismiss: (note) => parkedQueue.dismiss(item, note),
     onanswered: () => parkedQueue.answered(item),
     onopen: () => {
       detach(

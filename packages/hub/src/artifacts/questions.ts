@@ -12,11 +12,12 @@
  *
  * - **card**: each card of a decision page (each `data-cawco-choice` of an
  *   HTML page). Answered by a pick (core `pickMade`), a note on it, or a pin
- *   standing on it ({@link pinCard}) that the agent replied to and resolved.
+ *   standing on it ({@link pinCard}) that the agent replied to and resolved;
+ *   dismissed by his Dismiss on it (core choices.ts `dismissedEntry`).
  * - **judge**: a canvas or preview to judge, the artifact itself. Answered
  *   by any value, pick or note the person set on it (a direction picked,
  *   `cawco.set`), never by one he is only trying out (core `answersIn`:
- *   a dial, a tuned move).
+ *   a dial, a tuned move); dismissed by his Dismiss on its pick (`picked`).
  *
  * Any artifact of the person's (not a draft, not handed up or held, not an
  * option's media, not a working canvas: `draw`) also asks on each pin the agent's reply asked on
@@ -25,10 +26,12 @@
  * resolve closes it.
  *
  * Send counts for nothing here: what is written is an answer whether or not
- * it went. A question the agent closed is `taken` (it acted on his answer,
- * or on his words elsewhere) until a newer answer of his, or `withdrawn`
- * (superseded) for good; neither counts as asking him, and nothing is
- * deleted.
+ * it went. A question he dismissed is `dismissed` until he answers it after
+ * all (a pick replaces the dismissal); it asks him no more and waits on the
+ * agent as an answer does. A question the agent closed is `taken` (it acted
+ * on his answer, or on his words elsewhere) until a newer answer of his, or
+ * `withdrawn` (superseded) for good; neither counts as asking him, and
+ * nothing is deleted.
  */
 import type { ArtifactStop } from "@cawco/core/artifact-needs";
 import type { AskState } from "@cawco/core/asks";
@@ -52,12 +55,12 @@ export interface QuestionAnswer {
   by: SessionAnswerHow;
   /** The options he picked, by label; a pick only. */
   options?: string[];
-  /** His words: the note, the set keys, the pin's or reply's text; empty for a resolve. */
+  /** His words: the note, the set keys, the pin's or reply's text, what he said with a dismissal; empty for a resolve or a dismissal without words. */
   said: string;
 }
 
-/** A question's state: an ask's (core asks.ts), and `taken` once the agent acted on his answer. */
-export type QuestionState = AskState | "taken";
+/** A question's state: an ask's (core asks.ts), `dismissed` once he put it down without a pick, and `taken` once the agent acted on his answer. */
+export type QuestionState = AskState | "dismissed" | "taken";
 
 export interface Question {
   answer: QuestionAnswer | null;
@@ -137,12 +140,22 @@ const answeredPin = (pin: Pin): pin is Pin & { resolvedAt: string } =>
 const opening = (pin: Pin): string =>
   pin.thread.find((entry) => entry.by === "person")?.text ?? "";
 
-/** A card's answer: his pick, else his note, else a pin on it answered and resolved. */
+/** A dismissal of his, when `entry` is one: when, and what he said with it. */
+const dismissal = (entry: ChoiceEntry | undefined): QuestionAnswer | null =>
+  entry?.dismissed
+    ? { by: "dismiss", at: entry.at, said: noteText(entry.note) ?? "" }
+    : null;
+
+/** A card's answer: his dismissal, else his pick, else his note, else a pin on it answered and resolved. */
 const cardAnswer = (
   asked: { card?: DecisionCard; id: string },
   entry: ChoiceEntry | undefined,
   pins: readonly Pin[]
 ): QuestionAnswer | null => {
+  const dismissed = dismissal(entry);
+  if (dismissed) {
+    return dismissed;
+  }
   const note = noteText(entry?.note);
   if (entry && pickMade(asked.card, entry)) {
     return {
@@ -161,10 +174,14 @@ const cardAnswer = (
   return pin ? { by: "pin", at: pin.resolvedAt, said: opening(pin) } : null;
 };
 
-/** A judgement's answer: every value, pick or note he set on it, at the newest. */
+/** A judgement's answer: his dismissal of its pick, else every value, pick or note he set on it, at the newest. */
 const judgeAnswer = (
   state: Readonly<Record<string, ChoiceEntry>>
 ): QuestionAnswer | null => {
+  const dismissed = dismissal(state.picked);
+  if (dismissed) {
+    return dismissed;
+  }
   const set = Object.entries(state).filter(
     ([, entry]) =>
       (entry.value !== null && entry.value !== undefined) ||
@@ -192,7 +209,7 @@ const pinAnswer = (pin: Pin, asking: number): QuestionAnswer | null => {
   return reply ? { by: "reply", at: reply.at, said: reply.text } : null;
 };
 
-/** Its state: withdrawn for good; taken until a newer answer; answered; open. */
+/** Its state: withdrawn for good; taken until a newer answer; dismissed; answered; open. */
 const questionState = (
   answer: QuestionAnswer | null,
   close: QuestionClose | null
@@ -202,6 +219,9 @@ const questionState = (
   }
   if (close && (!answer || answer.at <= close.at)) {
     return "taken";
+  }
+  if (answer?.by === "dismiss") {
+    return "dismissed";
   }
   return answer ? "answered" : "open";
 };
@@ -305,6 +325,11 @@ export const noneOpen = (
 ): boolean =>
   questions.every((one) => one.kind !== kind || one.state !== "open");
 
-/** What the asking session still holds of `questions`: the open ones and those answered and not taken; one taken or withdrawn is done with. */
+/** What the asking session still holds of `questions`: the open ones and those answered or dismissed and not taken; one taken or withdrawn is done with. */
 export const stillAsked = (questions: readonly Question[]): Question[] =>
-  questions.filter((one) => one.state === "open" || one.state === "answered");
+  questions.filter(
+    (one) =>
+      one.state === "open" ||
+      one.state === "answered" ||
+      one.state === "dismissed"
+  );

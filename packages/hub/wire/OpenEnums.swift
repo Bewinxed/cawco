@@ -6602,6 +6602,7 @@ public enum OpenEnums {
     /// `#/components/schemas/ParkedState`.
     public enum ParkedState: OpenEnum {
         case answered
+        case dismissed
         case open
         case taken
         case withdrawn
@@ -6611,6 +6612,7 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "answered": self = .answered
+            case "dismissed": self = .dismissed
             case "open": self = .open
             case "taken": self = .taken
             case "withdrawn": self = .withdrawn
@@ -6621,6 +6623,7 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .answered: "answered"
+            case .dismissed: "dismissed"
             case .open: "open"
             case .taken: "taken"
             case .withdrawn: "withdrawn"
@@ -6632,7 +6635,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.answered, .open, .taken, .withdrawn]
+        public static let allCases: [Self] = [.answered, .dismissed, .open, .taken, .withdrawn]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

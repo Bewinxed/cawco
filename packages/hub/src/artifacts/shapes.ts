@@ -237,6 +237,8 @@ export type DecisionAnswer = {
       from?: PickFrom;
     }
   | { answer: "cleared"; at: string; earlierRevision?: true; note?: string }
+  /** He put it down without a pick: `note` is what he said with it, absent for nothing. */
+  | { answer: "dismissed"; at: string; earlierRevision?: true; note?: string }
   | {
       answer: "gone";
       at: string;
@@ -341,6 +343,8 @@ export interface ArtifactRead {
  */
 export interface ComponentRead extends ArtifactRead {
   dials?: unknown;
+  /** He dismissed the pick between its directions without picking one: when, and what he said with it, null for nothing. */
+  dismissed?: { at: string; note: string | null };
   errors: ReturnType<typeof errorsSaid>;
   frame?: ReturnType<typeof stateSaid>;
   hint: string;

@@ -5,7 +5,10 @@
    * under it, once he answered, each pick it put to him as it settled, in the
    * anatomy an answered question settles into (QuestionCard: its state's
    * mark and words on the rail, what it asked, what was picked as the kit's
-   * option chips, chosen, and his note under them), read-only. While a pick
+   * option chips, chosen, and his note under them), read-only. One he
+   * dismissed settles as a dismissed question does: the muted close mark,
+   * "dismissed", no option left, and the words he wrote in its place under
+   * what it asked. While a pick
    * still waits, the composer holds it (ParkedPrompt) and nothing stands
    * here but the call. The picks are the pane's (parked-queue.svelte.ts), as
    * the hub keeps them, by the artifact the call's answer names.
@@ -47,16 +50,20 @@
       typeof result === "string" ? result : JSON.stringify(result ?? "");
     return ARTIFACT_LINK.exec(text)?.[1] ?? null;
   });
-  /** Each pick it put that is settled: answered, or withdrawn. */
+  /** Each pick it put that is settled: answered, dismissed, or withdrawn. */
   const settled = $derived(
     (given ?? (artifactId ? (queue?.of(artifactId) ?? []) : [])).filter(
       (item) => item.state !== "open"
     )
   );
 
+  /** Put down without a pick, and not taken back: what it settled as. */
+  const dismissedOf = (item: ParkedItem): boolean =>
+    item.state !== "withdrawn" && item.dismissed !== null;
+
   /** What was picked, each with its place among the options (its keycap). */
   const pickedOf = (item: ParkedItem): { at: number; label: string }[] => {
-    if (item.state === "withdrawn") {
+    if (item.state === "withdrawn" || dismissedOf(item)) {
       return [];
     }
     if (item.kind === "directions") {
@@ -68,24 +75,36 @@
       return at < 0 ? [] : [{ at, label: item.card.options[at]?.label ?? id }];
     });
   };
-  /** Its state as its pill says it: a pick picked, a card answered, either withdrawn. */
+  /** Its state as its pill says it: a pick picked, a card answered, either dismissed or withdrawn. */
   const stateWord = (item: ParkedItem): string => {
     if (item.state === "withdrawn") {
       return words.withdrawn;
     }
+    if (dismissedOf(item)) {
+      return words.dismissed;
+    }
     return item.kind === "directions" ? words.picked : words.answered;
   };
-  const noteOf = (item: ParkedItem): string =>
-    item.kind === "card" && item.state !== "withdrawn"
-      ? (item.answer?.note ?? "")
-      : "";
+  /** What he wrote with it, and how its label names it: his note with a pick, or his own words in place of one. */
+  const noteOf = (item: ParkedItem): { label: string; text: string } | null => {
+    if (item.state === "withdrawn") {
+      return null;
+    }
+    if (item.dismissed) {
+      return item.dismissed.note
+        ? { label: words.yourWords, text: item.dismissed.note }
+        : null;
+    }
+    const text = item.kind === "card" ? (item.answer?.note ?? "") : "";
+    return text ? { label: words.yourNote, text } : null;
+  };
 </script>
 
 <ToolGroup messages={[message]} />
 {#each settled as item (`${item.artifact.id}/${item.key}`)}
   {@const picked = pickedOf(item)}
   {@const note = noteOf(item)}
-  {@const done = item.state !== "withdrawn"}
+  {@const done = item.state !== "withdrawn" && !dismissedOf(item)}
   {@const title =
     item.kind === "directions"
       ? words.pickFrom(asker)
@@ -157,8 +176,8 @@
       >
         <span
           class="flex-none text-size-label font-medium tracking-caps text-ink-muted uppercase"
-          >{words.yourNote}</span
-        >{note}
+          >{note.label}</span
+        >{note.text}
       </p>
     {/if}
   </section>

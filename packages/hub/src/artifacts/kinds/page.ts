@@ -82,6 +82,10 @@ const answerOf = (
       : {}),
     ...(note ? { note } : {}),
   };
+  // Put down without a pick: his words with it, if any, are its note.
+  if (entry.dismissed) {
+    return { id, ...question, answer: "dismissed", ...said };
+  }
   if (entry.options.length === 0) {
     // A note with no pick is still open; a pick taken back, cleared.
     return said.note

@@ -14,8 +14,9 @@
    * at night (`DIRECTION_GREYS`). The mock stands at the queue's data: a pick
    * is written to the artifact's choices here and answers the item, as the
    * pane's queue does (parked-queue.svelte.ts), the composer folding back
-   * and the next coming in, its record joining the turns. `picked`: the
-   * pick made on the graph meanwhile, said in the composer before it folds.
+   * and the next coming in, its record joining the turns; its Other line
+   * and Dismiss put it down the same way. `picked`: the pick made on the
+   * graph meanwhile, said in the composer before it folds.
    */
   import type { ChoiceEntry } from "@cawco/core/choices";
   import {
@@ -144,9 +145,21 @@
       : null;
   });
 
-  /** An item answered here: its record carries what was written. */
+  /** An item answered or dismissed here: its record carries what was written. */
   function answer(item: ParkedItem) {
     const kept = choices[item.artifact.id] ?? {};
+    const put = kept[item.kind === "directions" ? "picked" : item.card.id];
+    if (put?.dismissed) {
+      answered = [
+        ...answered,
+        {
+          ...item,
+          state: "dismissed",
+          dismissed: { at: put.at, note: put.note ?? "" },
+        },
+      ];
+      return;
+    }
     if (item.kind === "directions") {
       const value = kept.picked?.value;
       answered = [
@@ -204,6 +217,14 @@
           choices[first.artifact.id] = {
             ...kept,
             [card]: entry({ ...kept[card], ...change }),
+          };
+          return null;
+        },
+        ondismiss: (note) => {
+          const key = first.kind === "directions" ? "picked" : first.card.id;
+          choices[first.artifact.id] = {
+            ...kept,
+            [key]: entry({ dismissed: true, note: note || null }),
           };
           return null;
         },

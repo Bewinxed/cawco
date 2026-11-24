@@ -17,9 +17,17 @@
    * - **A decision card** (its page's): the page's own card (decisions/host
    *   Decision and Option), its question, its options with Recommended and
    *   its why, Add a note, each option's digit, drawn bare on the composer's
-   *   surface. A press picks; a several-pick card picks until Answer. A note
-   *   alone goes with Send note. Open page opens its page in the panel at
-   *   the card.
+   *   surface. A press picks; a several-pick card picks until Answer. Its
+   *   note goes with a pick, never alone. Open page opens its page in the
+   *   panel at the card.
+   *
+   * Either is put down as a question is (Prompt): its Other chip opens a
+   * line for an answer in the person's own words, which Answer or Enter
+   * sends, and Dismiss puts it down without a word. Both keep it on its
+   * artifact as dismissed, with those words or none (parked-queue
+   * `dismiss`), and its session hears it as it hears a pick. A pick made
+   * after the line opened is the answer, and the line goes back to
+   * waiting, its words unsent.
    *
    * Picked where it lives meanwhile, the chosen option is drawn chosen and
    * the line says where, before the composer folds back. Its title, body and
@@ -32,19 +40,21 @@
     ParkedItem,
     ParkedPick,
   } from "@cawco/core/parked";
+  import { askWords } from "@cawco/core/words/asks";
   import { parkedWords as words } from "@cawco/core/words/parked";
   import { type Snippet, setContext, tick, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import {
     OptionGroup,
     OptionGroupItem,
   } from "#lib/components/ui/option-group/index.js";
   import {
+    IconCheck,
     IconChevronDown,
     IconCompare,
     IconDecisions,
-    IconSend,
   } from "#lib/icons.js";
   import Decision from "../decisions/host/Decision.svelte";
   import Option from "../decisions/host/Option.svelte";
@@ -63,6 +73,7 @@
     drawing,
     onpick,
     onchoose,
+    ondismiss,
     onanswered,
     onopen,
     onminimize,
@@ -87,7 +98,9 @@
       card: string,
       change: { options: string[] } | { note: string }
     ) => string | null;
-    /** Answered here: the composer folds back and the next comes in. */
+    /** Put down here without a pick, with the words written in its place (empty for none): kept on its artifact; a sentence when it was not. */
+    ondismiss: (note: string) => string | null;
+    /** Answered or dismissed here: the composer folds back and the next comes in. */
     onanswered: () => void;
     /** Where it lives, opened in the panel. */
     onopen: () => void;
@@ -99,6 +112,8 @@
   let body = $state<HTMLElement>();
   /** Why the last write wasn't kept; null once one was. */
   let refused = $state<string | null>(null);
+  /** The last write was a dismissal, not a pick: what the refusal says. */
+  let dismissing = $state(false);
 
   /** A direction's pick, as its graph keeps it. */
   const pickedFile = $derived.by(() => {
@@ -113,15 +128,71 @@
   });
 
   function pick(file: string) {
+    otherOpen = false;
+    dismissing = false;
     refused = onpick(file);
     if (refused === null) {
       onanswered();
     }
   }
 
+  /* ---- an answer in his own words, or none --------------------------- */
+
+  /** The Other chip's value: no option of the pick's. */
+  const OTHER = "\u0000other";
+  /** The line for his own words stands open (Other pressed). */
+  let otherOpen = $state(false);
+  /** What is written on it, kept while it is closed: opened again, it is there. */
+  let own = $state("");
+  let otherField = $state<HTMLInputElement | null>(null);
+  /** What the pick asks, as the line's name says it. */
+  const asked = $derived(
+    item.kind === "directions" ? item.ask : item.card.question
+  );
+  /** His own words are the answer: the line is open and holds some. */
+  const ownAnswer = $derived(otherOpen && own.trim() !== "");
+
+  /** Other: the line opens for his own words, the keys on it. */
+  async function openOther(event: MouseEvent) {
+    event.preventDefault();
+    otherOpen = true;
+    await tick();
+    otherField?.focus();
+  }
+
+  /** Put down without a pick, with `text` as what he said (empty for nothing): the pick folds away and its session hears it. */
+  function dismissWith(text: string) {
+    dismissing = true;
+    refused = ondismiss(text.trim());
+    if (refused === null) {
+      onanswered();
+    }
+  }
+
+  /** Enter sends the line's words; Esc puts the line down, the keys back on Other. */
+  function otherKey(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      otherOpen = false;
+      card
+        ?.querySelector<HTMLElement>('[data-slot="other"] [data-slot="option"]')
+        ?.focus();
+      return;
+    }
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (ownAnswer) {
+      dismissWith(own);
+    }
+  }
+
   /* ---- a decision card --------------------------------------------- */
 
-  /** The note typed here, kept with the pick or sent alone; the page's own until then. */
+  /** The note typed here, kept with the pick; the page's own until then. Never sent alone: words without a pick are the Other line's. */
   let note = $state("");
   const cardId = $derived(item.kind === "card" ? item.card.id : "");
   /** The card's entry as its page keeps it, the note typed here over its own. */
@@ -150,6 +221,9 @@
       },
     }),
     pick: (choice, options) => {
+      // A pick is the answer: the line's words go back to waiting, unsent.
+      otherOpen = false;
+      dismissing = false;
       refused = onchoose(choice, { options });
       if (refused !== null) {
         return;
@@ -169,8 +243,13 @@
     },
   });
 
-  /** Answer on a several-pick card, or Send note on a card with a note and no pick. */
-  function answerCard() {
+  /** Answer: his own words when the line holds them; else a several-pick card's picks, its note with them. */
+  function answer() {
+    if (ownAnswer) {
+      dismissWith(own);
+      return;
+    }
+    dismissing = false;
     if (note.trim() !== "") {
       refused = onchoose(cardId, { note });
     }
@@ -401,6 +480,40 @@
     {:else if decisionProps}
       <Decision props={decisionProps} renderNode={option} />
     {/if}
+    <!-- His own words in place of a pick: the question card's Other, its
+         chip and its line side by side in one row of a fixed height, so
+         nothing under the thumb moves as the line opens (Prompt's browser
+         ask). -->
+    <div
+      class="mt-space-3 flex h-c-input-h min-w-0 items-center gap-space-2"
+      data-slot="other"
+    >
+      <OptionGroup
+        aria-label={askWords.yourAnswerTo(asked)}
+        class="flex-none"
+        value={otherOpen ? [OTHER] : []}
+      >
+        <OptionGroupItem onclick={openOther} value={OTHER}>
+          <span class="min-w-0 text-pretty wrap-anywhere" data-slot="opt-label"
+            >{words.other}</span
+          >
+        </OptionGroupItem>
+      </OptionGroup>
+      {#if otherOpen}
+        <Input
+          aria-label={askWords.yourAnswerTo(asked)}
+          class="flex-1"
+          data-other
+          oninput={(event) => {
+            own = event.currentTarget.value;
+          }}
+          onkeydown={otherKey}
+          placeholder={askWords.yourAnswer}
+          value={own}
+          bind:ref={otherField}
+        />
+      {/if}
+    </div>
   </div>
 
   <div
@@ -419,19 +532,27 @@
       </p>
     {:else if refused}
       <p class="mb-space-2 type-meta text-status-fail-ink" role="alert">
-        {words.notKept(refused)}
+        {dismissing ? words.dismissNotKept(refused) : words.notKept(refused)}
       </p>
     {/if}
     <div class="flex flex-wrap items-center gap-space-2">
-      {#if item.kind === "card" && (item.card.multiple ? chosen.length > 0 : chosen.length === 0 && note.trim() !== "")}
+      {#if ownAnswer || (item.kind === "card" && item.card.multiple && chosen.length > 0)}
         <Button
           fit="prompt"
-          icon={IconSend}
-          label={item.card.multiple ? words.answer : words.sendNote}
-          onclick={answerCard}
+          icon={IconCheck}
+          label={words.answer}
+          onclick={answer}
           size="sm"
         />
       {/if}
+      <!-- Puts it down without a word, as a question's Dismiss does. -->
+      <Button
+        fit="prompt"
+        label={words.dismiss}
+        onclick={() => dismissWith("")}
+        size="sm"
+        variant="outline"
+      />
       <Button
         fit="prompt"
         label={item.kind === "directions" ? words.openGraph : words.openPage}

@@ -299,13 +299,19 @@ export const artifactToolWords = {
     `[artifacts] ${id}: the person's marks went to session ${session} as message ${message} (${state})`,
   /**
    * One answer of the person's as an agent's refused change names it: its
-   * choice id and what he left there (his picks, his note, his value).
+   * choice id and what he left there (his dismissal, his picks, his note, his value).
    */
   answerSaid: (
     id: string,
-    entry: { note: string | null; options: string[]; value: unknown }
+    entry: {
+      dismissed?: true;
+      note: string | null;
+      options: string[];
+      value: unknown;
+    }
   ) => {
     const parts = [
+      entry.dismissed && "dismissed it",
       entry.options.length > 0 && `picked ${entry.options.join(", ")}`,
       entry.note?.trim() &&
         `noted ${JSON.stringify(cutShort(entry.note.trim(), 200))}`,
