@@ -127,9 +127,6 @@ export const memoryRunWords = {
   moved: (id: string, path: string) => `move ${id} to ${path}`,
   dropped: (count: number, reason: string) =>
     `drop ${count} source${count === 1 ? "" : "s"} (${reason})`,
-  /** Lessons that said the same made one by the recovery, as its commit says. */
-  merged: (pairs: readonly { id: string; into: string }[]) =>
-    `merge ${pairs.length} lesson${pairs.length === 1 ? "" : "s"} that said what another says: ${pairs.map(({ id, into }) => `${id} into ${into}`).join(", ")}`,
   evicted: (id: string, from: string, to: string) =>
     `${id} moved from ${from} to ${to}, past its cap`,
   redirected: (id: string) =>
@@ -263,15 +260,6 @@ export const memoryRunWords = {
     `AGENTS.md holds ${rules} of ${rulesCap} rules and ${chars} of ${charsCap} characters; knowledge/ holds ${topics} of ${topicsCap} files. Tonight you may add ${adds} lessons and change or remove ${changes}.`,
   briefSkills: "## The skills this project's sessions have",
   briefNoSkills: "None.",
-  briefLegacy: (count: number) =>
-    `## Lines from before the nightly run\n\n${count} line${count === 1 ? "" : "s"} of AGENTS.md and knowledge/ the person approved before. Each breaks a rule a lesson keeps (too long, or quoting someone): write what it says as lessons in your own words, sourced to it by its handle, or drop it.`,
-  /** One line, its handle and where it stood. */
-  briefLegacyLine: (handle: string, path: string, text: string) =>
-    `### ${handle}, from ${path}\n\n${text}`,
-  /** The recovery run's notes. */
-  briefRecovery:
-    "This is a recovery run: the notes below were archived unread before, because their session had read outside pages or no operation of an earlier run named them. Each comes with the person's messages from its session in the two days before it, as handles of their own.",
-
   /** The run's one line in the Routines list. */
   runLine: (
     day: string,

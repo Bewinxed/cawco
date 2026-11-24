@@ -50,7 +50,6 @@ import { frontMatterBlock } from "@cawco/core/fleet";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { isRecord } from "@cawco/core/is-record";
 import type { InstanceRow } from "@cawco/core/protocol";
-import type { RoutineRunView } from "@cawco/core/routine-kinds";
 import type {
   NeutralMessage,
   NeutralOrigin,
@@ -639,27 +638,9 @@ const keptLines = async (projectId: string) => {
 };
 
 const DUPLICATE = "dropped: duplicate";
-const DUPLICATE_OF = /^dropped: duplicate of (L-[0-9a-f]{6})$/u;
 
 /** An archived note's outcome when it says what live lesson `id` says. */
 export const duplicateOutcome = (id: string): string => `${DUPLICATE} of ${id}`;
-
-/**
- * Whether `note` was archived as a duplicate without a live lesson it
- * duplicates: one that names none (written before a duplicate named its
- * lesson), or names one that is no longer live. Such a note was never
- * judged, and the recovery reads it.
- */
-export const duplicateUnjudged = (
-  note: Note,
-  live: (id: string) => boolean
-): boolean => {
-  if (!note.outcome?.startsWith(DUPLICATE)) {
-    return false;
-  }
-  const named = DUPLICATE_OF.exec(note.outcome)?.[1];
-  return !(named && live(named));
-};
 
 /** The notes in one of memory/'s folders, oldest first. */
 export const notesIn = async (projectId: string, dir: string) => {
@@ -1496,14 +1477,11 @@ export const MEMORY_TOOLS: ReadonlySet<string> = new Set([
 /**
  * The person's own memory acts outside a conversation: "Make a note"
  * straight into AGENTS.md; withdrawing a note, which retires the lessons
- * resting on it alone in the same commit (memory-run.ts `withdraw`); and
- * the recovery run of the notes archived unread (routines.ts
- * `recover`).
+ * resting on it alone in the same commit (memory-run.ts `withdraw`).
  */
 export const memoryRoutes = (
   memory: Memory,
   acts: {
-    recover: (projectId: string) => Promise<RoutineRunView | AnyProblem>;
     withdraw: (
       projectId: string,
       note: string
@@ -1526,11 +1504,6 @@ export const memoryRoutes = (
       "/api/projects/:id/memory/notes/:note/withdraw",
       { detail: { hide: true } },
       ({ params }) => acts.withdraw(params.id, params.note)
-    )
-    .post(
-      "/api/projects/:id/memory/recover",
-      { detail: { hide: true } },
-      ({ params }) => acts.recover(params.id)
     );
 
 const MEMORY_NOTE_DEFINITION = defineTool(

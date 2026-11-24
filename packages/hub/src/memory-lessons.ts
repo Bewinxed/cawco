@@ -192,7 +192,7 @@ export const isTopic = (name: string): boolean => TOPIC_NAME.test(name);
 export const isSkillName = (name: string): boolean => SKILL_NAME.test(name);
 
 /** A lesson as its file says it. */
-export const renderLesson = (line: LessonLine): string =>
+const renderLesson = (line: LessonLine): string =>
   `- ${line.text} (${line.id})${line.why ? `\n  Why: ${line.why}` : ""}`;
 
 /** A fresh lesson id that `taken` does not hold. */
@@ -458,10 +458,6 @@ const withLine = (path: string, content: string, line: LessonLine): string => {
   const body = content.trim() === "" ? fileHead(path) : content.trimEnd();
   return `${body}\n${renderLesson(line)}\n`;
 };
-
-/** The index with `line` added at the end of its `## Rules`. */
-export const indexWithRule = (index: string, line: LessonLine): string =>
-  withLine(INDEX_FILE, index, line);
 
 // --- the ledger ----------------------------------------------------------------------
 

@@ -228,8 +228,6 @@ export interface MemoryRunState {
     reverted?: number;
     staged: number;
   } | null;
-  /** The day the one-time recovery run of the archived notes ran, once it has. */
-  recovered?: string;
   /** The newest of the person's messages a run has read (an ISO time). */
   through: string;
 }

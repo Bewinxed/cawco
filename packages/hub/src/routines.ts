@@ -142,7 +142,6 @@ import {
   cronOf,
   EVENT_SLOT,
   nextRunsOf,
-  RECOVERY_SLOT,
   slotLabel,
 } from "./routine-schedule";
 import { type RoutineTask, routineEnded, standingOf } from "./routine-standing";
@@ -222,8 +221,6 @@ const CURATOR_CRON = "0 6 * * *";
 const CURATOR_BUDGET = { turns: 40, minutes: 20, usd: 2 } as const;
 /** A day's cap on the nightly memory run: one run and its retry. */
 const CURATOR_DAILY_USD = 4;
-/** Each recovery run's budget, reading up to 60 notes. */
-const RECOVERY_BUDGET = { turns: 60, minutes: 30, usd: 3 } as const;
 
 /** What a routine is made of, as the task tools and the routes write it: a task's draft with its trigger. */
 export interface RoutineInput {
@@ -306,10 +303,7 @@ export interface RoutineDeps {
   /** Every machine the hub knows: a check's `check_on` names some of them. */
   readonly machines: () => PlacedMachine[];
   /** The nightly memory run (memory-run.ts). */
-  readonly memoryRun: Pick<
-    MemoryRun,
-    "brief" | "close" | "recoveryBrief" | "recoveryStart"
-  >;
+  readonly memoryRun: Pick<MemoryRun, "brief" | "close">;
   /** Why the project's spend cap holds its work back now, or nothing (project-caps.ts). */
   readonly pauses: (projectId: string) => string | undefined;
   readonly push: Pick<Push, "routine" | "routineMade" | "routineCheckChanged">;
@@ -678,10 +672,7 @@ export const createRoutines = ({
   const decide =
     (now: number, slot: string, attempt = 1): Decide =>
     (routine, live, waiting) => {
-      // A recovery run spends its own budget, not the nightly run's day.
-      const gate =
-        projectGate(routine) ??
-        (slot.startsWith(RECOVERY_SLOT) ? undefined : capGate(routine, now));
+      const gate = projectGate(routine) ?? capGate(routine, now);
       if (gate) {
         return { state: "skipped", reason: gate };
       }
@@ -825,7 +816,7 @@ export const createRoutines = ({
   const fireSession = async (
     routine: RoutineRow,
     run: RoutineRunRow,
-    as: Pick<RunStart, "budget" | "prompt" | "role"> & {
+    as: Pick<RunStart, "prompt" | "role"> & {
       input?: string;
     } = {}
   ) => {
@@ -845,7 +836,6 @@ export const createRoutines = ({
       parent: { id: routine.id, name: routine.name },
       ...(as.prompt ? { prompt: as.prompt } : {}),
       ...(as.role ? { role: as.role } : {}),
-      ...(as.budget ? { budget: as.budget } : {}),
       ...(since === undefined ? {} : { commentsSince: since }),
     });
     if (started instanceof ElysiaStatus) {
@@ -949,10 +939,7 @@ export const createRoutines = ({
   /** A nightly memory run: what it reads made ready first; nothing to read ends it silent. */
   const fireCurator = async (routine: RoutineRow, run: RoutineRunRow) => {
     const { projectId } = routine;
-    const recovery = run.slot.startsWith(RECOVERY_SLOT);
-    const brief = recovery
-      ? await memoryRun.recoveryBrief(projectId)
-      : await memoryRun.brief(projectId);
+    const brief = await memoryRun.brief(projectId);
     if (brief instanceof ElysiaStatus) {
       return brief;
     }
@@ -969,7 +956,6 @@ export const createRoutines = ({
       input: brief.text,
       role: "curator",
       prompt: curatorPrompt,
-      ...(recovery ? { budget: RECOVERY_BUDGET } : {}),
     });
   };
 
@@ -3296,44 +3282,6 @@ export const createRoutines = ({
     fileOwn(projectId, "curator");
   };
 
-  /** The project's nightly memory run, when it has one. */
-  const curatorOf = (projectId: string): RoutineRow | undefined =>
-    store
-      .list(projectId)
-      .find((row) => row.target === "curator" && row.taskId !== null);
-
-  /** The project's memory recovery: its next run, on a slot of its own. */
-  const recover = async (projectId: string, by: "ask" | "chain" = "ask") => {
-    const routine = curatorOf(projectId);
-    if (!routine) {
-      return problem(404, {
-        code: "memory-recovery-no-routine",
-        detail: `Project ${projectId} has no nightly memory run to recover with.`,
-      });
-    }
-    const waits = await memoryRun.recoveryStart(projectId, by);
-    if (waits instanceof ElysiaStatus) {
-      return waits;
-    }
-    if (!waits) {
-      return problem(409, {
-        code: "memory-recovery-done",
-        detail: "The memory recovery has nothing left to read.",
-      });
-    }
-    const run = fireExtra(
-      routine,
-      `${RECOVERY_SLOT}${new Date().toISOString()}`,
-      1
-    );
-    return run
-      ? runView(run)
-      : problem(409, {
-          code: "routine-run-asked",
-          detail: "That run was asked for already.",
-        });
-  };
-
   /** Whether Caw suggests the trim routine in `projectId`: never answered there and none made. */
   const trimOffered = (projectId: string) => {
     const project = projectOf(projectId);
@@ -3696,7 +3644,6 @@ export const createRoutines = ({
     ofTask,
     personWrote,
     recheck,
-    recover,
     runForEvent,
     runNow,
     runsPage,

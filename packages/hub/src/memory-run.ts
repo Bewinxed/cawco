@@ -58,8 +58,8 @@
  *   file). A rebase that meets a commit changing the same lines writes
  *   nothing, and the step reads again and works out its change again
  *   (project-folder.ts `againOnConflict`, three tries). What a step does
- *   outside the memory comes after its commit stands (a check filed, the
- *   next recovery run), or is safe to do again: a read (a machine's file,
+ *   outside the memory comes after its commit stands (a check filed), or
+ *   is safe to do again: a read (a machine's file,
  *   a task's state, Jev). No writer writes over a newer commit.
  * - **Checks** ({@link plannedCheck}): a rule a tool can test is filed as
  *   a task in the project (`Check: <rule>`, through the tasks module, in
@@ -71,23 +71,11 @@
  * - **Close** ({@link close}): where the run read up to is kept
  *   (`memory/state.json`), messages it was given and named in no operation
  *   carried to the next night once, and the run's one line said.
- * - **The cutover** ({@link cutover}), once per project as the hub starts on
- *   this: AGENTS.md and `knowledge/` converted to lessons, every line that
- *   breaks a text rule or a cap handed to the **recovery** run
- *   (`memory/recovery.json`), with the notes archived unread before because
- *   their session had read the web ({@link recoveryBrief}). The recovery
- *   archives nothing unread: a note its run names in no operation is the
- *   next run's first, and each run that judged something starts the next
- *   ({@link recoveryLeft}). Each time it is asked for, the live lessons
- *   that say the same are made one first ({@link mergedSame}), and it reads
- *   on, after what it holds, every note no run judged: those earlier
- *   recovery runs archived unread, and those archived as a duplicate of no
- *   live lesson ({@link recoveryStart}).
  */
 
 import type { InstanceRow } from "@cawco/core/protocol";
 import type { RoutineOutcome } from "@cawco/core/routine-kinds";
-import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { memoryJevWords, memoryRunWords } from "@cawco/core/words/memory-run";
 import type { Experimental_DecisionQuestion } from "ai";
@@ -111,7 +99,6 @@ import {
   ARCHIVE_DIR,
   archivedNote,
   duplicateOutcome,
-  duplicateUnjudged,
   fileOr,
   INBOX_DIR,
   type MemoryOp,
@@ -121,7 +108,6 @@ import {
   type RuleAsk,
   saysAlready,
 } from "./memory";
-import { convertFile, type OldFact } from "./memory-legacy";
 import {
   type Applied,
   applyOp,
@@ -133,7 +119,6 @@ import {
   homeOf,
   INDEX_FILE,
   indexShape,
-  indexWithRule,
   isSkillName,
   isTopic,
   KNOWLEDGE_DIR,
@@ -167,9 +152,7 @@ import {
   againOnConflict,
   changeFolderFiles,
   type FolderAuthor,
-  folderCommitsCarrying,
   folderCommitsChanging,
-  folderHistory,
   folderPath,
   REBASE_CONFLICT,
   readAtHead,
@@ -204,7 +187,7 @@ const JEV_QUESTIONS = 120;
 /**
  * A message's support for a lesson at or over this lands it. Our own call: a
  * wrong accept steers every session until the person notices; a wrong
- * refusal costs one repeat from him. The recovery run measures it.
+ * refusal costs one repeat from him.
  */
 const SUPPORTS = 0.7;
 /** Two notes say the same lesson at or over this: the likelier of two. */
@@ -213,10 +196,6 @@ const SAME = 0.5;
 const APPLY_OPS = 20;
 /** Lessons grep pairs with a message in the brief, at most. */
 const RELATED = 3;
-/** The recovery run's notes, and the messages before each it reads. */
-const RECOVERY_NOTES = 60;
-const RECOVERY_HOURS = 48;
-const RECOVERY_FILE = "memory/recovery.json";
 
 const CURATOR: FolderAuthor = { name: "Memory curator" };
 const HUB: FolderAuthor = { name: "CawCo hub" };
@@ -289,9 +268,7 @@ const LESSON_PATHS = [INDEX_FILE, LESSONS_DIR, KNOWLEDGE_DIR] as const;
 
 /** One message given to a run, under its handle. */
 interface Given {
-  /** A line of AGENTS.md or knowledge/ from before the nightly run (the recovery's), in place of a message. */
-  legacy?: { path: string; text: string };
-  said?: PersonSaid;
+  said: PersonSaid;
   /** Its session's handle (`s1`). */
   session: string;
   text: string;
@@ -308,8 +285,7 @@ interface Run {
   corrected: Map<string, string[]>;
   counts: Counts;
   jev: boolean;
-  kind: "nightly" | "recovery";
-  /** Messages and legacy lines it was given, by handle (`m1`, `l1`). */
+  /** Messages it was given, by handle (`m1`). */
   messages: Map<string, Given>;
   /** Notes it was given, by id, with where each is now. */
   notes: Map<string, Note>;
@@ -347,8 +323,6 @@ export interface MemoryRunDeps {
     listed: (machineId: string, path: string) => Promise<boolean | undefined>;
     read: (machineId: string, path: string) => Promise<MachineRead>;
   };
-  /** The project's next recovery run started (routines.ts `recover`), when the one that ended judged something and left something. */
-  readonly recoverNext: (projectId: string) => void;
   /** The skills the fleet lists for the project's sessions, each with its one-line description. */
   readonly skillsFor: (
     projectId: string
@@ -391,14 +365,6 @@ export interface MemoryRunDeps {
   };
 }
 
-/** `memory/recovery.json`: what the recovery's runs read, until an operation names each. */
-const RecoverySchema = z.object({
-  legacy: z.array(z.object({ path: z.string(), text: z.string() })),
-  notes: z.array(z.string()),
-  runs: z.number(),
-});
-type Recovery = z.infer<typeof RecoverySchema>;
-
 const RunStateSchema = z.object({
   carried: z.array(z.string()),
   lastRun: z
@@ -415,7 +381,6 @@ const RunStateSchema = z.object({
       staged: z.number(),
     })
     .nullable(),
-  recovered: z.string().optional(),
   through: z.string(),
 }) satisfies z.ZodType<MemoryRunState>;
 
@@ -623,13 +588,7 @@ const instructionsOf = (
         .slice(-AGENT_SAID);
 
 /** A run with nothing read yet but `notes`. */
-const newRun = (
-  kind: Run["kind"],
-  jev: boolean,
-  notes: Note[],
-  counts: Partial<Counts>
-): Run => ({
-  kind,
+const newRun = (jev: boolean, notes: Note[], counts: Partial<Counts>): Run => ({
   jev,
   messages: new Map(),
   corrected: new Map(),
@@ -690,30 +649,16 @@ const roomFor = (tree: MemoryTree, path: string): boolean => {
   return topics.includes(path) || topics.length < CAPS.knowledgeFiles;
 };
 
-/**
- * A run's closing commit (§2 D): its state's next mark, and the recovery's
- * inputs left, the file gone once none is.
- */
-const markOfRun = (
-  state: MemoryRunState,
-  run: Run,
-  outcome: RunOutcome,
-  recovery:
-    { done: boolean; file?: { content: string; path: string } } | undefined
-) => {
+/** A run's closing commit (§2 D): its state's next mark. */
+const markOfRun = (state: MemoryRunState, run: Run, outcome: RunOutcome) => {
   const at = new Date().toISOString();
   const next = nextState(state, run, outcome, at);
-  const kept = recovery?.done ? { ...next, recovered: dayOf(at) } : next;
   return {
     author: HUB,
-    message: `${markOf(run.kind)}, ${dayOf(at)}`,
-    extra: [
-      ...(Bun.deepEquals(kept, state)
-        ? []
-        : [{ path: RUN_STATE_FILE, content: jsonText(kept) }]),
-      ...(recovery?.file ? [recovery.file] : []),
-    ],
-    gone: recovery?.done ? [RECOVERY_FILE] : [],
+    message: `${RUN_MARK}, ${dayOf(at)}`,
+    extra: Bun.deepEquals(next, state)
+      ? []
+      : [{ path: RUN_STATE_FILE, content: jsonText(next) }],
   };
 };
 
@@ -787,10 +732,6 @@ const nextState = (
 ): MemoryRunState => {
   if (outcome === "failed") {
     return state;
-  }
-  // A recovery run reads old messages: the nightly's mark and carry are not its.
-  if (run.kind === "recovery") {
-    return { ...state, lastRun: { at, ...run.counts } };
   }
   const unnamed = [...run.messages].flatMap(([handle, given]) =>
     given.said &&
@@ -918,83 +859,6 @@ const stagedBeside = (
     ])
   );
 
-/** Whether a lesson id names a live lesson of `tree`. */
-const liveIn =
-  (tree: MemoryTree) =>
-  (id: string): boolean =>
-    tree.ledger.lessons[id]?.state === "live";
-
-/**
- * Each pair of live lessons that may say the same: in one home, or one of
- * them in the index, sharing two words or more (memory-lessons.ts
- * `grepScore`). Each pair once, the smaller id first.
- */
-const samePairs = (tree: MemoryTree): [Beside, Beside][] => {
-  const live = Object.entries(tree.ledger.lessons)
-    .flatMap(([id, lesson]) => {
-      const line = lesson.state === "live" ? lineOf(tree, id) : undefined;
-      const path = pathOf(lesson.home);
-      return line && path ? [{ id, text: line.text, path }] : [];
-    })
-    .sort((a, b) => a.id.localeCompare(b.id));
-  return live.flatMap((a, at) =>
-    live
-      .slice(at + 1)
-      .filter(
-        (b) =>
-          (a.path === b.path ||
-            a.path === INDEX_FILE ||
-            b.path === INDEX_FILE) &&
-          grepScore(wordsOf(a.text), b.text) >= 2
-      )
-      .map((b): [Beside, Beside] => [
-        { id: a.id, text: a.text },
-        { id: b.id, text: b.text },
-      ])
-  );
-};
-
-/** How early a session reads a lesson's home: the index at its start, a skill's lessons before the skill, knowledge in a brief. */
-const HOME_RANK: Record<LessonHome["at"], number> = {
-  index: 3,
-  skill: 2,
-  knowledge: 1,
-  none: 0,
-};
-
-/**
- * Of two lessons that say the same, the one kept first and the one merged
- * into it second: the one the person holds, then his, then the one in the
- * home sessions read first (the index, a skill, knowledge), then the one
- * stated again the most, then the older, then the smaller id.
- */
-const keptFirst = (
-  tree: MemoryTree,
-  a: string,
-  b: string
-): [string, string] => {
-  const rank = (id: string) => {
-    const lesson = tree.ledger.lessons[id];
-    return [
-      lesson?.held ? 1 : 0,
-      lesson?.by === "owner" ? 1 : 0,
-      HOME_RANK[lesson?.home.at ?? "none"],
-      lesson?.repeats ?? 0,
-    ] as const;
-  };
-  const [ra, rb] = [rank(a), rank(b)];
-  for (const at of [0, 1, 2, 3] as const) {
-    if (ra[at] !== rb[at]) {
-      return ra[at] > rb[at] ? [a, b] : [b, a];
-    }
-  }
-  const since = (id: string) => tree.ledger.lessons[id]?.since ?? "";
-  if (since(a) !== since(b)) {
-    return since(a) < since(b) ? [a, b] : [b, a];
-  }
-  return a < b ? [a, b] : [b, a];
-};
-
 /** `tree` with lesson `id`'s entry as `lesson`: a ledger edit, no line changes. */
 const withLesson = (
   tree: MemoryTree,
@@ -1008,112 +872,6 @@ const withLesson = (
   },
 });
 
-/** Whether a line's words stand as a lesson: within `cap`, one line, quoting no one. */
-const fits = (text: string, cap: number): boolean =>
-  text.length <= cap &&
-  !text.includes("\n") &&
-  quoteProblem(text, []) === undefined;
-
-/** A legacy line's words for the recovery run: its fact and its why. */
-const legacyText = (fact: OldFact): string =>
-  fact.why ? `${fact.text} Why: ${fact.why}` : fact.text;
-
-/** What the cutover made so far: the lessons by id, and the lines left for the recovery run. */
-interface Conversion {
-  legacy: { path: string; text: string }[];
-  lessons: Record<string, Lesson>;
-  today: string;
-}
-
-/** A converted fact's lesson line, its id new to the conversion, its `Why:` kept when it fits. */
-const lessonOf = (conversion: Conversion, fact: OldFact) => ({
-  id: newLessonId((taken) => taken in conversion.lessons),
-  text: fact.text,
-  why: fact.why && fits(fact.why, CAPS.why) ? fact.why : null,
-});
-
-/**
- * Knowledge file `path` in `files` converted in place (§11.2): each current
- * fact line a lesson (`by: agent`), each one that breaks a rule left for
- * the recovery run, its past lines appended to its topic's archive.
- */
-const convertKnowledge = (
-  conversion: Conversion,
-  files: Partial<Record<string, string>>,
-  path: string,
-  sourcesOf: (fact: OldFact) => LessonSource[]
-): void => {
-  const home = homeOf(path);
-  if (home?.at !== "knowledge") {
-    return;
-  }
-  const { today } = conversion;
-  const converted = convertFile(files[path] ?? "", (fact) => {
-    if (!fits(fact.text, CAPS.fact)) {
-      conversion.legacy.push({ path, text: legacyText(fact) });
-      return;
-    }
-    const line = lessonOf(conversion, fact);
-    conversion.lessons[line.id] = {
-      by: "agent",
-      home,
-      repeats: 0,
-      seen: today,
-      since: today,
-      sources: sourcesOf(fact),
-      state: "live",
-    };
-    return line;
-  });
-  files[path] = converted.content;
-  if (converted.past.length > 0) {
-    const into = `${KNOWLEDGE_DIR}/archive/${home.topic}.md`;
-    const before = files[into] ?? "";
-    files[into] =
-      `${before.trimEnd()}${before.trim() ? "\n\n" : ""}${converted.past.join("\n")}\n`;
-  }
-};
-
-/**
- * AGENTS.md converted (§11.3): each fact line of its curated sections a
- * rule of its `## Rules`, which the person approved, one that breaks a rule
- * left for the recovery run; then in the index's shape, his `## Notes` as
- * they stand.
- */
-const convertIndex = (
-  conversion: Conversion,
-  projectName: string,
-  content: string,
-  head: string
-): string => {
-  const { today } = conversion;
-  const rules: LessonLineOf[] = [];
-  const stripped = convertFile(content, (fact) => {
-    if (!fits(fact.text, CAPS.rule)) {
-      conversion.legacy.push({ path: INDEX_FILE, text: legacyText(fact) });
-      return;
-    }
-    const line = lessonOf(conversion, fact);
-    conversion.lessons[line.id] = {
-      by: "owner",
-      home: { at: "index" },
-      repeats: 0,
-      seen: today,
-      since: today,
-      sources: [{ kind: "approved", commit: head }],
-      state: "live",
-    };
-    rules.push(line);
-    return null;
-  });
-  return rules.reduce(
-    (index, rule) => indexWithRule(index, rule),
-    indexShape(projectName, stripped.content)
-  );
-};
-
-type LessonLineOf = ReturnType<typeof lessonOf>;
-
 /** What a staged lesson's `add` answers: one note, or Jev off. */
 const stagedWords = (id: string, staged: { waits: boolean }): string =>
   staged.waits ? memoryRunWords.stagedForJev(id) : memoryRunWords.stagedAs(id);
@@ -1123,7 +881,6 @@ export const createMemoryRun = ({
   fleetHosts,
   folderChanged,
   machine,
-  recoverNext,
   skillsFor,
   tasks,
 }: MemoryRunDeps) => {
@@ -1223,7 +980,7 @@ export const createMemoryRun = ({
     after: MemoryTree,
     change: {
       author: FolderAuthor;
-      /** Files of `memory/` beside the tree: the run's state, the recovery's inputs. */
+      /** Files of `memory/` beside the tree: the run's state. */
       extra?: { content: string; path: string }[];
       /** Files of `memory/` taken out. */
       gone?: string[];
@@ -1333,15 +1090,8 @@ export const createMemoryRun = ({
     if (inbox instanceof ElysiaStatus) {
       return inbox;
     }
-    const recovery = await recoveryOf(project.id);
-    if (recovery instanceof ElysiaStatus) {
-      return recovery;
-    }
-    // A note the recovery still holds waits for it, however old.
-    const held = new Set(recovery?.notes ?? []);
-    const unread = inbox.filter(
-      (note) =>
-        !held.has(note.id) && olderThan(dayOf(note.time), today, NOTE_DAYS)
+    const unread = inbox.filter((note) =>
+      olderThan(dayOf(note.time), today, NOTE_DAYS)
     );
     return await commit(project.id, read, tree, {
       author: HUB,
@@ -1596,20 +1346,15 @@ export const createMemoryRun = ({
         CAPS.indexChars,
         topics,
         CAPS.knowledgeFiles,
-        Math.max(0, adds(run) - run.adds),
+        Math.max(0, CAPS.nightAdds - run.adds),
         Math.max(0, CAPS.nightChanges - run.changes)
       ),
     ].join("\n\n");
   };
 
-  /** The night's limit on added lessons: the recovery's is its own. */
-  const adds = (run: Run): number =>
-    run.kind === "recovery" ? RECOVERY_ADDS : CAPS.nightAdds;
-
   /** The brief's text: the messages, the notes, the staged lessons, the index, the files and the skills. */
   const briefText = (project: ProjectRow, tree: MemoryTree, run: Run) => {
     const messages = [...run.messages].filter(([, given]) => given.said);
-    const legacy = [...run.messages].filter(([, given]) => given.legacy);
     const live = keptLessons(tree).filter((lesson) => lesson.live);
     const listed = messages.map(([handle, given]) => {
       const corrected = run.corrected.get(handle) ?? [];
@@ -1638,26 +1383,11 @@ export const createMemoryRun = ({
     );
     const skills = skillsFor(project.id);
     return [
-      ...(run.kind === "recovery" ? [memoryRunWords.briefRecovery] : []),
       messages.length > 0
         ? [memoryRunWords.briefMessages(messages.length), ...listed].join(
             "\n\n"
           )
         : memoryRunWords.briefNoMessages,
-      ...(legacy.length > 0
-        ? [
-            [
-              memoryRunWords.briefLegacy(legacy.length),
-              ...legacy.map(([handle, given]) =>
-                memoryRunWords.briefLegacyLine(
-                  handle,
-                  given.legacy?.path ?? "",
-                  given.text
-                )
-              ),
-            ].join("\n\n"),
-          ]
-        : []),
       notes.length > 0
         ? [memoryRunWords.briefNotes(notes.length), ...notes].join("\n\n")
         : memoryRunWords.briefNoNotes,
@@ -1718,7 +1448,7 @@ export const createMemoryRun = ({
     const { state, said, waiting, jev, sorted } = night;
     const instructions = instructionsOf(said, jev);
     const carriedNow = new Set(state.carried);
-    const run = newRun("nightly", jev !== undefined, sorted, {
+    const run = newRun(jev !== undefined, sorted, {
       read: said.length,
       notes: waiting.length,
     });
@@ -2177,7 +1907,7 @@ export const createMemoryRun = ({
   /** Brands a change the checks passed: the one place a {@link CheckedOp} is made (scripts/memory-cutover-check.ts, C6). */
   const checked = (change: Change): CheckedOp => new CheckedOp(change);
 
-  /** A source handle or note id resolved against the run: a message, a legacy line, a note, or why not. */
+  /** A source handle or note id resolved against the run: a message, a note, or why not. */
   const sourceOf = (run: Run, handle: string) => {
     const given = run.messages.get(handle);
     if (given) {
@@ -2344,14 +2074,8 @@ export const createMemoryRun = ({
   };
 
   /** The ledger's sources for what an operation rests on. */
-  const sourcesFor = (
-    messages: Given[],
-    notes: Note[],
-    head: string
-  ): LessonSource[] => [
-    ...messages.map((given): LessonSource =>
-      given.said ? saidSource(given.said) : { kind: "approved", commit: head }
-    ),
+  const sourcesFor = (messages: Given[], notes: Note[]): LessonSource[] => [
+    ...messages.map((given) => saidSource(given.said)),
     ...notes.map(noteSource),
   ];
 
@@ -2382,7 +2106,6 @@ export const createMemoryRun = ({
     projectId: string,
     run: Run,
     tree: MemoryTree,
-    head: string,
     op: Extract<MemoryOp, { op: "add" }>,
     index: number,
     answers: Map<string, number> | undefined
@@ -2402,8 +2125,8 @@ export const createMemoryRun = ({
     if (typeof home === "string") {
       return home;
     }
-    if (run.adds >= adds(run)) {
-      return memoryRunWords.nightAdds(adds(run));
+    if (run.adds >= CAPS.nightAdds) {
+      return memoryRunWords.nightAdds(CAPS.nightAdds);
     }
     const file = op.anchor ? await anchored(projectId, op.anchor) : undefined;
     if (typeof file === "string") {
@@ -2415,7 +2138,7 @@ export const createMemoryRun = ({
     if (staged && stagedCount(tree) >= CAPS.staged) {
       return memoryRunWords.stagedFull(CAPS.staged);
     }
-    return addPlanned(tree, head, op.sources, kept, {
+    return addPlanned(tree, op.sources, kept, {
       by,
       file,
       home,
@@ -2536,7 +2259,6 @@ export const createMemoryRun = ({
   /** A checked `add` as one operation commits it: the change, the notes it consumes, and what it says. */
   const addPlanned = (
     tree: MemoryTree,
-    head: string,
     consumed: string[],
     kept: { messages: Given[]; notes: Note[] },
     lesson: {
@@ -2558,7 +2280,7 @@ export const createMemoryRun = ({
         by,
         home,
         sources: [
-          ...sourcesFor(kept.messages, kept.notes, head),
+          ...sourcesFor(kept.messages, kept.notes),
           ...(file ? [file] : []),
         ],
         text,
@@ -2651,7 +2373,6 @@ export const createMemoryRun = ({
   const plannedReplace = async (
     run: Run,
     tree: MemoryTree,
-    head: string,
     op: Extract<MemoryOp, { op: "replace" }>,
     index: number,
     answers: Map<string, number> | undefined
@@ -2689,7 +2410,7 @@ export const createMemoryRun = ({
         id: op.id,
         newId,
         by,
-        sources: sourcesFor(kept.messages, kept.notes, head),
+        sources: sourcesFor(kept.messages, kept.notes),
         text,
         why,
       },
@@ -2732,7 +2453,6 @@ export const createMemoryRun = ({
   const plannedCorroborate = (
     run: Run,
     tree: MemoryTree,
-    head: string,
     op: Extract<MemoryOp, { op: "corroborate" }>,
     index: number,
     answers: Map<string, number> | undefined
@@ -2760,7 +2480,7 @@ export const createMemoryRun = ({
       return memoryRunWords.topicsFull(CAPS.knowledgeFiles);
     }
     return {
-      ...corroboration(op.id, lands, kept, head, op.sources),
+      ...corroboration(op.id, lands, kept, op.sources),
       said: lands
         ? memoryRunWords.landed(op.id, path)
         : memoryRunWords.corroborated(op.id),
@@ -2772,14 +2492,13 @@ export const createMemoryRun = ({
     id: string,
     lands: boolean,
     kept: { messages: Given[]; notes: Note[] },
-    head: string,
     consumed: string[]
   ) => ({
     change: {
       kind: "corroborate" as const,
       id,
       lands,
-      sources: sourcesFor(kept.messages, kept.notes, head),
+      sources: sourcesFor(kept.messages, kept.notes),
     },
     consumed,
     notes: kept.notes.map((note) => ({
@@ -2865,22 +2584,21 @@ export const createMemoryRun = ({
     projectId: string,
     run: Run,
     tree: MemoryTree,
-    head: string,
     op: MemoryOp,
     index: number,
     answers: Map<string, number> | undefined
   ): Promise<Planned> | Planned => {
     switch (op.op) {
       case "add":
-        return plannedAdd(projectId, run, tree, head, op, index, answers);
+        return plannedAdd(projectId, run, tree, op, index, answers);
       case "replace":
-        return plannedReplace(run, tree, head, op, index, answers);
+        return plannedReplace(run, tree, op, index, answers);
       case "corroborate":
-        return plannedCorroborate(run, tree, head, op, index, answers);
+        return plannedCorroborate(run, tree, op, index, answers);
       case "move":
         return plannedMove(projectId, run, tree, op);
       case "check":
-        return plannedCheck(projectId, run, tree, head, op, index, answers);
+        return plannedCheck(projectId, run, tree, op, index, answers);
       case "drop":
         return plannedDrop(run, tree, op);
       default:
@@ -3017,15 +2735,7 @@ export const createMemoryRun = ({
         if (at instanceof ElysiaStatus) {
           return at;
         }
-        const plan = await planned(
-          projectId,
-          run,
-          at.tree,
-          at.head,
-          op,
-          index,
-          answers
-        );
+        const plan = await planned(projectId, run, at.tree, op, index, answers);
         if (typeof plan === "string") {
           return plan;
         }
@@ -3129,7 +2839,6 @@ export const createMemoryRun = ({
     projectId: string,
     run: Run,
     tree: MemoryTree,
-    head: string,
     op: Extract<MemoryOp, { op: "check" }>,
     index: number,
     answers: Map<string, number> | undefined
@@ -3143,7 +2852,6 @@ export const createMemoryRun = ({
       return plannedCheckOf(
         run,
         tree,
-        head,
         { ...op, id: op.id, method },
         {
           index,
@@ -3155,7 +2863,6 @@ export const createMemoryRun = ({
       projectId,
       run,
       tree,
-      head,
       { op: "add", text: op.text, home: op.home, sources: op.sources },
       index,
       answers
@@ -3176,7 +2883,6 @@ export const createMemoryRun = ({
   const plannedCheckOf = (
     run: Run,
     tree: MemoryTree,
-    head: string,
     op: { id: string; method: string; sources: string[] },
     at: { answers: Map<string, number> | undefined; index: number }
   ): Planned => {
@@ -3195,7 +2901,7 @@ export const createMemoryRun = ({
       return memoryRunWords.nightChanges(CAPS.nightChanges);
     }
     return {
-      ...corroboration(op.id, false, kept, head, op.sources),
+      ...corroboration(op.id, false, kept, op.sources),
       said: memoryRunWords.checkAsked(op.id),
       check: { id: op.id, text: line.text, method: op.method },
     };
@@ -3284,72 +2990,29 @@ export const createMemoryRun = ({
   /**
    * Where a run ended (§2 D): what it read is marked read (a failed run's
    * is read again the next night), messages it was given and named in no
-   * operation carried once, the run's counts kept; its one line, or nothing
-   * when it changed nothing. A recovery run's inputs left are kept for its
-   * next run, which starts at once when this one judged something, at most
-   * {@link RECOVERY_CHAIN} in a row.
+   * operation carried once, the run's counts kept.
    */
   const closed = (projectId: string, run: Run, outcome: RunOutcome) =>
-    stateTurn(projectId, () => closedInTurn(projectId, run, outcome));
-
-  /** {@link closed}, inside the project's turn on its run state. */
-  const closedInTurn = async (
-    projectId: string,
-    run: Run,
-    outcome: RunOutcome
-  ) => {
-    // Read, worked out and committed again on a clash; the next recovery run started after.
-    const done = await againOnConflict(async () => {
-      const state = await stateOf(projectId);
-      if (state instanceof ElysiaStatus) {
-        return state;
-      }
-      const recovery =
-        run.kind === "recovery" && outcome !== "failed"
-          ? await recoveryLeft(projectId, run)
-          : undefined;
-      if (recovery instanceof ElysiaStatus) {
-        return recovery;
-      }
-      const read = await treeOf(projectId);
-      if (read instanceof ElysiaStatus) {
-        return read;
-      }
-      const sha = await commit(
-        projectId,
-        read,
-        read.tree,
-        markOfRun(state, run, outcome, recovery)
-      );
-      return sha instanceof ElysiaStatus ? sha : { recovery };
-    });
-    if (done instanceof ElysiaStatus) {
-      return done;
-    }
-    if (run.kind === "recovery") {
-      chainOn(projectId, done.recovery);
-    }
-  };
-
-  /**
-   * A recovery run's end: the next one started when it judged something
-   * and left something, at most {@link RECOVERY_CHAIN} in a row; why not
-   * said in the log when inputs are left.
-   */
-  const chainOn = (
-    projectId: string,
-    left: { file?: unknown; next: boolean } | undefined
-  ): void => {
-    const chain = (chained.get(projectId) ?? 0) + 1;
-    chained.set(projectId, chain);
-    if (left?.next && chain < RECOVERY_CHAIN) {
-      recoverNext(projectId);
-    } else if (left?.file) {
-      console.log(
-        `[memory] ${projectId}: the recovery stops after ${chain} run${chain === 1 ? "" : "s"} in a row with inputs left: ${left.next ? "its chain is at its most" : "its last run judged none of them"}; asking for it again reads on`
-      );
-    }
-  };
+    stateTurn(projectId, () =>
+      // Read, worked out and committed again on a clash.
+      againOnConflict(async () => {
+        const state = await stateOf(projectId);
+        if (state instanceof ElysiaStatus) {
+          return state;
+        }
+        const read = await treeOf(projectId);
+        if (read instanceof ElysiaStatus) {
+          return read;
+        }
+        const sha = await commit(
+          projectId,
+          read,
+          read.tree,
+          markOfRun(state, run, outcome)
+        );
+        return sha instanceof ElysiaStatus ? sha : undefined;
+      })
+    );
 
   /**
    * A run's end, as its routine settles it (routines.ts): its mark kept and
@@ -3412,398 +3075,6 @@ export const createMemoryRun = ({
 
   /** Each project's read-modify-write of `memory/state.json`, one at a time. */
   const stateTurn = turnTaker();
-
-  // --- recovery ------------------------------------------------------------------------
-
-  /** The recovery's inputs as `memory/recovery.json` keeps them; none when the project has no recovery to run. */
-  const recoveryOf = (projectId: string) =>
-    readJson<Recovery | null>(
-      projectId,
-      RECOVERY_FILE,
-      RecoverySchema.nullable(),
-      null
-    );
-
-  /**
-   * The one-time recovery run's brief (§11): the notes archived unread
-   * before because their session had read the web, each with the person's
-   * messages in its session in the {@link RECOVERY_HOURS} before it, the
-   * inbox's notes, and the lines of AGENTS.md and `knowledge/` the cutover
-   * did not convert (each a source of its own, `approved`). At most
-   * {@link RECOVERY_NOTES} notes a run; a second run reads the rest.
-   */
-  const recoveryBrief = (projectId: string) =>
-    asReader(projectId, () => recoveryBriefOf(projectId));
-
-  const recoveryBriefOf = async (projectId: string) => {
-    const project = projectOf(projectId);
-    if (project instanceof ElysiaStatus) {
-      return project;
-    }
-    const recovery = await recoveryOf(projectId);
-    if (recovery instanceof ElysiaStatus) {
-      return recovery;
-    }
-    if (!recovery) {
-      return { kind: "none" as const, reason: memoryRunWords.nothingToRead };
-    }
-    const notes = await recoveryNotes(project, recovery);
-    if (notes instanceof ElysiaStatus) {
-      return notes;
-    }
-    const run = newRun("recovery", jevAccess(db) !== undefined, notes, {
-      notes: notes.length,
-    });
-    const seen = new Set<string>();
-    for (const note of notes) {
-      for (const said of saidBefore(projectId, note, seen)) {
-        seen.add(said.uuid);
-        run.messages.set(`m${run.messages.size + 1}`, {
-          said,
-          text: cut(said.text),
-          session: sessionHandle(run, said.instanceId),
-        });
-        run.said.push(said.text);
-      }
-    }
-    recovery.legacy.forEach((line, at) => {
-      run.messages.set(`l${at + 1}`, {
-        legacy: line,
-        text: line.text,
-        session: line.path,
-      });
-      run.said.push(line.text);
-    });
-    run.counts.read = run.messages.size;
-    return await ready(project, run);
-  };
-
-  /** The recovery's notes for its next run, after upkeep: those it holds that no run has judged, in its order, at most {@link RECOVERY_NOTES}. */
-  const recoveryNotes = async (project: ProjectRow, recovery: Recovery) => {
-    const kept = await upkeep(project);
-    if (kept instanceof ElysiaStatus) {
-      return kept;
-    }
-    const waiting = await unjudged(project.id, recovery.notes);
-    return waiting instanceof ElysiaStatus
-      ? waiting
-      : waiting.slice(0, RECOVERY_NOTES);
-  };
-
-  /**
-   * The notes of `ids` no run has judged yet, in the order of `ids`: in the
-   * inbox, archived unread before because their session had read the web
-   * (`tainted`), archived unread with no operation naming them
-   * (`dropped: unread`), or archived as a duplicate of no live lesson
-   * (memory.ts `duplicateUnjudged`). A note a run judged since is no longer
-   * the recovery's.
-   */
-  const unjudged = async (projectId: string, ids: readonly string[]) => {
-    const named = await notesNamed(projectId, new Set(ids));
-    if (named instanceof ElysiaStatus) {
-      return named;
-    }
-    const read = await treeOf(projectId);
-    if (read instanceof ElysiaStatus) {
-      return read;
-    }
-    const live = liveIn(read.tree);
-    const byId = new Map(
-      named
-        .filter(
-          (note) =>
-            note.outcome === null ||
-            note.outcome.startsWith("tainted") ||
-            note.outcome === UNREAD ||
-            duplicateUnjudged(note, live)
-        )
-        .map((note) => [note.id, note])
-    );
-    return ids.flatMap((id) => {
-      const note = byId.get(id);
-      return note ? [note] : [];
-    });
-  };
-
-  /** What the person typed in a note's session in the {@link RECOVERY_HOURS} before it, long enough to be a rule, none `seen` already. */
-  const saidBefore = (
-    projectId: string,
-    note: Note,
-    seen: ReadonlySet<string>
-  ): PersonSaid[] => {
-    const at = new Date(note.time);
-    return db
-      .personSaidIn(
-        projectId,
-        new Date(at.getTime() - RECOVERY_HOURS * HOUR_MS),
-        at,
-        RUN_SAID
-      )
-      .filter(
-        (said) =>
-          said.instanceId === note.session &&
-          !seen.has(said.uuid) &&
-          wordCount(said.text) >= SAID_WORDS
-      );
-  };
-
-  /**
-   * The recovery's inputs once a recovery run ends: the notes and legacy
-   * lines an operation named are gone from it; a note it was given and
-   * named in no operation stays, first, for the next run, so none is
-   * archived unread. `next` when something is left and this run judged
-   * something (a run that judged nothing ends the chain: what is left waits
-   * for the recovery to be asked again); `done`, with the file gone, when
-   * nothing is left.
-   */
-  const recoveryLeft = async (projectId: string, run: Run) => {
-    const recovery = await recoveryOf(projectId);
-    if (recovery instanceof ElysiaStatus) {
-      return recovery;
-    }
-    if (!recovery) {
-      return { done: false, next: false, file: undefined };
-    }
-    const unnamed = [...run.notes.keys()];
-    const waiting = await unjudged(projectId, [
-      ...unnamed,
-      ...recovery.notes.filter((id) => !run.notes.has(id)),
-    ]);
-    if (waiting instanceof ElysiaStatus) {
-      return waiting;
-    }
-    const left: Recovery = {
-      legacy: recovery.legacy.filter(
-        (_, at) => !run.consumed.has(`l${at + 1}`)
-      ),
-      notes: waiting.map((note) => note.id),
-      runs: recovery.runs + 1,
-    };
-    const judged =
-      left.notes.length < recovery.notes.length ||
-      left.legacy.length < recovery.legacy.length;
-    const done = left.notes.length + left.legacy.length === 0;
-    return {
-      done,
-      next: !done && judged,
-      file: done ? undefined : { path: RECOVERY_FILE, content: jsonText(left) },
-    };
-  };
-
-  /**
-   * The recovery's inputs as it is asked for (§11): those it holds, and
-   * after them the notes no run judged that it does not hold: each a
-   * recovery run archived `dropped: unread` (written by one of its marks'
-   * commits), and each archived as a duplicate of no live lesson (memory.ts
-   * `duplicateUnjudged`). The legacy lines are those it holds, or with none
-   * held, those the last `memory/recovery.json` held before it went.
-   * Undefined when there is nothing to read.
-   */
-  const recoveryAgain = async (projectId: string, held: Recovery | null) => {
-    const marks = await folderCommitsCarrying(projectId, RECOVERY_MARK);
-    if (marks instanceof ElysiaStatus) {
-      return marks;
-    }
-    const written = new Set(marks.flatMap((mark) => mark.paths));
-    const archive = await notesIn(projectId, ARCHIVE_DIR);
-    if (archive instanceof ElysiaStatus) {
-      return archive;
-    }
-    const read = await treeOf(projectId);
-    if (read instanceof ElysiaStatus) {
-      return read;
-    }
-    const live = liveIn(read.tree);
-    const notes = [
-      ...new Set([
-        ...(held?.notes ?? []),
-        ...archive
-          .filter(
-            (note) =>
-              (note.outcome === UNREAD && written.has(note.path)) ||
-              duplicateUnjudged(note, live)
-          )
-          .map((note) => note.id),
-      ]),
-    ];
-    const legacy = held ? held.legacy : await lastLegacy(projectId);
-    if (legacy instanceof ElysiaStatus) {
-      return legacy;
-    }
-    const again: Recovery = { legacy, notes, runs: held?.runs ?? 0 };
-    return notes.length + legacy.length > 0 ? again : undefined;
-  };
-
-  /** The legacy lines `memory/recovery.json` held when it was last written, before it went; none when it never was. */
-  const lastLegacy = async (projectId: string) => {
-    const history = await folderHistory(projectId, RECOVERY_FILE, 2);
-    if (history instanceof ElysiaStatus) {
-      return history;
-    }
-    // Newest first: the commit that took it out, then the last that wrote it.
-    const [, written] = history.commits;
-    if (!written) {
-      return [];
-    }
-    const text = await readFolderFileAt(projectId, written.sha, RECOVERY_FILE);
-    if (text instanceof ElysiaStatus || text === undefined) {
-      return [];
-    }
-    try {
-      return RecoverySchema.parse(JSON.parse(text)).legacy;
-    } catch {
-      return [];
-    }
-  };
-
-  /**
-   * The recovery asked for (routines.ts `recover`): whether it has inputs
-   * for a run. Asked by a person (`by: "ask"`), the lessons that say the
-   * same are made one first ({@link mergedSame}), its inputs are topped up
-   * with every note no run judged ({@link recoveryAgain}) in one commit, and
-   * its chain of runs counts again from here; by the run before
-   * (`by: "chain"`), it reads on what it holds.
-   */
-  const recoveryStart = async (projectId: string, by: "ask" | "chain") => {
-    const recovery = await recoveryOf(projectId);
-    if (recovery instanceof ElysiaStatus) {
-      return recovery;
-    }
-    if (by === "chain" && recovery) {
-      return true;
-    }
-    if (by === "ask") {
-      chained.delete(projectId);
-      const merged = await mergedSame(projectId);
-      if (merged instanceof ElysiaStatus) {
-        return merged;
-      }
-    }
-    return await toppedUp(projectId, recovery);
-  };
-
-  /** The recovery's inputs topped up ({@link recoveryAgain}) and written in one commit when it gained any; whether it has any. */
-  const toppedUp = (projectId: string, recovery: Recovery | null) =>
-    againOnConflict(() => toppedUpOnce(projectId, recovery));
-
-  /** {@link toppedUp} once, on the memory as it stands. */
-  const toppedUpOnce = async (projectId: string, recovery: Recovery | null) => {
-    const again = await recoveryAgain(projectId, recovery);
-    if (again instanceof ElysiaStatus) {
-      return again;
-    }
-    if (!again) {
-      return false;
-    }
-    const added = again.notes.length - (recovery?.notes.length ?? 0);
-    if (recovery && added === 0) {
-      return true;
-    }
-    const read = await treeOf(projectId);
-    if (read instanceof ElysiaStatus) {
-      return read;
-    }
-    const sha = await commit(projectId, read, read.tree, {
-      author: HUB,
-      message: `memory: the recovery asked again, ${added} notes no run judged and ${again.legacy.length} lines to read`,
-      extra: [{ path: RECOVERY_FILE, content: jsonText(again) }],
-    });
-    return sha instanceof ElysiaStatus ? sha : true;
-  };
-
-  /**
-   * The live lessons that say the same made one (the invariant an `add`
-   * keeps, {@link jevOnNew}, made true of what came before it): each pair
-   * of live lessons in one home, or one of them in the index, sharing two
-   * words or more, asked of Jev ({@link keptQuestions}); each pair at or
-   * over {@link SAME}, the likeliest first, merged, the lesson kept the one
-   * the person stated again or holds, then his, then the most repeated,
-   * then the oldest. One commit by the hub; nothing with Jev off (said in
-   * the log) or no pair.
-   */
-  const mergedSame = (projectId: string) =>
-    againOnConflict(() => mergedSameOnce(projectId));
-
-  /** {@link mergedSame} once, on the memory as it stands. */
-  const mergedSameOnce = async (projectId: string) => {
-    const read = await treeOf(projectId);
-    if (read instanceof ElysiaStatus) {
-      return read;
-    }
-    if (!jevAccess(db)) {
-      offLine(
-        "kept",
-        projectId,
-        "lessons that say the same wait for Jev to be merged"
-      );
-      return;
-    }
-    const pairs = samePairs(read.tree);
-    const answers = await answersOrRefusal(
-      projectId,
-      Object.fromEntries(
-        pairs.flatMap(([a, b]) => keptQuestions(a.id, a.text, [b]))
-      )
-    );
-    if (answers instanceof ElysiaStatus) {
-      return answers;
-    }
-    const today = dayOf(new Date());
-    const uses = usesOf(projectId);
-    const done: { id: string; into: string }[] = [];
-    const gone = new Set<string>();
-    const same = pairs
-      .map(([a, b]) => ({
-        a,
-        b,
-        score: answers?.get(`kept:${a.id}:${b.id}`) ?? 0,
-      }))
-      .filter(({ score }) => score >= SAME)
-      .sort((x, y) => y.score - x.score);
-    let { tree } = read;
-    for (const { a, b } of same) {
-      if (gone.has(a.id) || gone.has(b.id)) {
-        continue;
-      }
-      const [into, id] = keptFirst(tree, a.id, b.id);
-      ({ tree } = applyOp(
-        tree,
-        checked({ kind: "merge", id, into }),
-        today,
-        uses
-      ));
-      gone.add(id);
-      done.push({ id, into });
-    }
-    if (done.length === 0) {
-      return;
-    }
-    const said = memoryRunWords.merged(done);
-    const sha = await commit(projectId, read, tree, {
-      author: HUB,
-      message: `memory: ${said}`,
-    });
-    if (!(sha instanceof ElysiaStatus)) {
-      console.log(`[memory] ${projectId}: ${said}`);
-    }
-    return sha;
-  };
-
-  /** Each project's recovery runs chained since it was last asked for. */
-  const chained = new Map<string, number>();
-
-  /** The notes of `ids`, wherever each is now (the inbox or the archive). */
-  const notesNamed = async (projectId: string, ids: ReadonlySet<string>) => {
-    const inbox = await notesIn(projectId, INBOX_DIR);
-    if (inbox instanceof ElysiaStatus) {
-      return inbox;
-    }
-    const archive = await notesIn(projectId, ARCHIVE_DIR);
-    if (archive instanceof ElysiaStatus) {
-      return archive;
-    }
-    return [...inbox, ...archive].filter((note) => ids.has(note.id));
-  };
 
   // --- a note withdrawn -----------------------------------------------------------
 
@@ -4529,98 +3800,6 @@ export const createMemoryRun = ({
           .join("\n\n");
   };
 
-  // --- the cutover -----------------------------------------------------------------------
-
-  /**
-   * One project's memory moved to lessons (§11), once: each current fact
-   * line of `knowledge/` a lesson in place (`by: agent`, its notes as
-   * sources, a file's prose before facts as approved), its `## Formerly` and
-   * `## Conflict` lines to its archive; each fact line of AGENTS.md's
-   * curated sections a rule of its `## Rules` (approved by the person);
-   * AGENTS.md in its shape, his `## Notes` as they stand. A line that breaks
-   * a text rule or a cap (a quoted span, past its length) is not converted:
-   * it goes to `memory/recovery.json` for the recovery run, with every note
-   * archived unread before because its session had read the web. One
-   * commit. Nothing when the project's ledger is there already.
-   */
-  const cutover = (project: ProjectRow) =>
-    againOnConflict(() => cutoverOnce(project));
-
-  /** {@link cutover} once, on the memory as it stands. */
-  const cutoverOnce = async (project: ProjectRow) => {
-    const ledger = await fileOr(project.id, LEDGER_FILE);
-    if (ledger instanceof ElysiaStatus) {
-      return ledger;
-    }
-    if (ledger.trim() !== "") {
-      return;
-    }
-    const read = await treeOf(project.id);
-    if (read instanceof ElysiaStatus) {
-      return read;
-    }
-    const archive = await notesIn(project.id, ARCHIVE_DIR);
-    if (archive instanceof ElysiaStatus) {
-      return archive;
-    }
-    const noteNamed = new Map(archive.map((note) => [note.id, note]));
-    const today = dayOf(new Date());
-    const sourcesOf = (fact: OldFact): LessonSource[] => [
-      ...fact.notes.map((id): LessonSource => {
-        const note = noteNamed.get(id);
-        return note
-          ? noteSource(note)
-          : { kind: "note", id, session: "", root: id, labels: [] };
-      }),
-      ...(fact.approved || fact.notes.length === 0
-        ? [{ kind: "approved" as const, commit: read.head }]
-        : []),
-    ];
-    const conversion: Conversion = { lessons: {}, legacy: [], today };
-    const files: Partial<Record<string, string>> = { ...read.tree.files };
-    for (const path of Object.keys(read.tree.files)) {
-      convertKnowledge(conversion, files, path, sourcesOf);
-    }
-    const index = convertIndex(
-      conversion,
-      project.name,
-      files[INDEX_FILE] ?? "",
-      read.head
-    );
-    const { tree } = reconcile(
-      {
-        files: { ...files, [INDEX_FILE]: index },
-        ledger: { version: 1, lessons: conversion.lessons },
-      },
-      today,
-      read.head
-    );
-    const { lessons, legacy } = conversion;
-    const inbox = await notesIn(project.id, INBOX_DIR);
-    if (inbox instanceof ElysiaStatus) {
-      return inbox;
-    }
-    const tainted = [
-      ...archive.filter((note) => note.outcome?.startsWith("tainted")),
-      ...inbox,
-    ].map((note) => note.id);
-    const recovery: Recovery = { legacy, notes: tainted, runs: 0 };
-    const sha = await commit(project.id, read, tree, {
-      author: HUB,
-      message: `memory: lessons in place of fact lines, ${Object.keys(lessons).length} converted, ${legacy.length} left for the recovery run`,
-      extra:
-        legacy.length + tainted.length > 0
-          ? [{ path: RECOVERY_FILE, content: jsonText(recovery) }]
-          : [],
-    });
-    if (sha instanceof ElysiaStatus) {
-      return sha;
-    }
-    console.log(
-      `[memory] ${project.name}: cutover: ${Object.keys(lessons).length} lines converted, ${legacy.length} legacy, ${tainted.length} notes for the recovery run`
-    );
-  };
-
   /**
    * The tasks the memory run filed for its lessons (a field `lesson`: a
    * check's, or one building a lesson into CawCo), each still open moved to
@@ -4660,71 +3839,31 @@ export const createMemoryRun = ({
     }
   };
 
-  /**
-   * The cutover as the hub starts on it ({@link cutover}): each project's
-   * once, marked done when it went through; one that did not is said in the
-   * log and tried at the next start.
-   */
+  /** What the hub does once per project as it starts on this build ({@link lessonTasksDropped}). */
   const start = async (projects: readonly ProjectRow[]): Promise<void> => {
     for (const project of projects) {
       await lessonTasksDropped(project);
-    }
-    for (const project of projects) {
-      const name = `memory-lessons:${project.id}`;
-      if (db.dataMigrated(name)) {
-        continue;
-      }
-      try {
-        const refused = await cutover(project);
-        if (refused) {
-          console.warn(
-            `[memory] ${project.name}: its memory was not moved to lessons: ${refused.response.detail}`
-          );
-          continue;
-        }
-        db.markDataMigrated(name);
-      } catch (error) {
-        console.warn(
-          `[memory] ${project.name}: its memory was not moved to lessons: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
     }
   };
 
   return {
     start,
     brief,
-    recoveryBrief,
     withdraw,
     unnote,
     ruleAsked,
     purged,
-    cutover,
     recheckStaged,
     apply,
     close,
     upkeep,
-    recoveryStart,
   };
 };
 
 /** A lesson's id, as its line ends. */
 const RULE_ID = /^L-[0-9a-f]{6}$/u;
 
-/** The recovery run's limit on added lessons, for each of its two runs. */
-const RECOVERY_ADDS = 30;
-/**
- * The recovery runs that start one after another before it waits to be
- * asked again: each judges up to {@link RECOVERY_NOTES} notes on its own
- * budget (routines.ts `RECOVERY_BUDGET`), so six read 360, past the most
- * any project has needed (92), and cap one ask at six runs' budget.
- */
-const RECOVERY_CHAIN = 6;
-/** A note archived with no operation naming it. */
-const UNREAD = "dropped: unread";
 /** The subject a run's closing commit starts with ({@link closed}). */
-const markOf = (kind: Run["kind"]): string => `memory: the ${kind} run's mark`;
-/** A recovery run's closing commit, as its notes archived unread are found again. */
-const RECOVERY_MARK = markOf("recovery");
+const RUN_MARK = "memory: the nightly run's mark";
 
 export type MemoryRun = ReturnType<typeof createMemoryRun>;

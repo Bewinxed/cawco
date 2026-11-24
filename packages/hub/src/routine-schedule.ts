@@ -21,8 +21,8 @@ export const EVENT_SLOT = "event:";
 /** A run a full inbox started before the nightly memory run (slot `inbox:<time>`): no run takes it now, and the runs kept with it read so. */
 const INBOX_SLOT = "inbox:";
 
-/** A project's one-time memory recovery run (memory-run.ts `recoveryBrief`): slot `recovery:<n>`, each once. */
-export const RECOVERY_SLOT = "recovery:";
+/** A project's one-time memory recovery run (slot `recovery:<time>`): no run takes it now, and the runs kept with it read so. */
+const RECOVERY_SLOT = "recovery:";
 
 /**
  * Makes a project's nightly memory run when it has none (routines.ts

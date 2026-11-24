@@ -856,7 +856,7 @@ const runRequest = (
       role: run.role,
       outputs: limits.outputs,
       owns: limits.owns,
-      budget: run.budget ?? limits.budget,
+      budget: limits.budget,
     }),
     ...(run.orchestrator ? { mayStart: [ANY_TYPE], host: true } : {}),
     task: { id: task.id, projectId },

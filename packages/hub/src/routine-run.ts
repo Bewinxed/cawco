@@ -5,12 +5,9 @@
  */
 import type { SessionRole } from "@cawco/core/delegate-types";
 import type { WorkItemRow } from "./db/project-work";
-import type { WorkBudget } from "./db/stored-types";
 
 /** A run a session does, as the engine asks dispatch to start it (dispatch.ts `startRun`). */
 export interface RunStart {
-  /** In place of the task's own budget (a recovery run's). */
-  budget?: WorkBudget;
   /** Comments on the task since this time are carried (a question the person answered). */
   commentsSince?: number;
   /** The run's contract, after the task file and the input. */

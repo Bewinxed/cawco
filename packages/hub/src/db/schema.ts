@@ -6466,7 +6466,7 @@ export const taskTriggers = sqliteTable(
  * One run of a routine (§5.5, Runs): a scheduled slot's time (ISO),
  * `test:<made at>` for the run a new routine makes at once, `now:<when>`
  * for a run by hand, `event:<inbound event id>` for an event's run, or
- * `recovery:<when>` for a memory recovery. Unique on (trigger, slot,
+ * `recovery:<when>` for a memory recovery (none since it was removed). Unique on (trigger, slot,
  * attempt): the insert is the fire, so a slot fires once, and its one retry
  * (attempt 2) once. A run a delegate does is also an attempt at the task
  * (its work item names the task); a conversation run and a skipped or
