@@ -12,7 +12,7 @@
    * coarse gap, The 44 Touch Rule). The glass is the switch's one container
    * (HIG, Toolbars: "the section provides a visible container, and the
    * system defines hover and selection state appearances"), so no groove
-   * stands inside it: the kit's groove (fluid-tabs/thumb.ts) is the segmented
+   * stands inside it: the kit's track (ui/segmented) is the segmented
    * control on a page's ground. Tab reaches the chosen segment; the arrow
    * keys move the choice.
    *

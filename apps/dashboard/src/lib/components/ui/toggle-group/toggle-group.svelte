@@ -1,12 +1,12 @@
 <script lang="ts">
   import { ToggleGroup as ToggleGroupPrimitive } from "bits-ui";
   import {
+    segmentedLens,
     segmentedVariants,
-    slideThumb,
-  } from "#lib/components/ui/fluid-tabs/thumb.js";
+  } from "#lib/components/ui/segmented/index.js";
   import { cn } from "#lib/utils.js";
 
-  const { group, thumb: thumbLook } = segmentedVariants();
+  const { group, lens: lensLook } = segmentedVariants();
 
   let {
     ref = $bindable(null),
@@ -17,20 +17,20 @@
     ...restProps
   }: ToggleGroupPrimitive.RootProps & {
     /**
-     * The groove runs its row's width, its segments sharing the room (each
+     * The track runs its row's width, its segments sharing the room (each
      * site's segments grow); else it is as wide as its segments.
      */
     fill?: boolean;
   } = $props();
 
-  let thumb = $state<HTMLSpanElement>();
+  let lens = $state<HTMLSpanElement>();
   $effect(() => {
-    if (ref && thumb) {
-      return slideThumb(
-        ref,
-        thumb,
-        '[data-slot="toggle-group-item"][data-state="on"]'
-      );
+    if (ref && lens) {
+      return segmentedLens(ref, lens, {
+        picked: '[data-slot="toggle-group-item"][data-state="on"]',
+        segments:
+          '[data-slot="toggle-group-item"]:not(:disabled, [inert], [data-disabled])',
+      });
     }
   });
 </script>
@@ -38,9 +38,10 @@
 <!--
 Discriminated Unions + Destructing (required for bindable) do not
 get along, so we shut typescript up by casting `value` to `never`.
-One groove, one row (DESIGN.md, Segmented controls and tabs): it never
-wraps, its groove holds every segment (as wide as they are), and a group
-wider than its row stands in its caller's scroller.
+One track, one row: it never wraps, its track holds every segment (as wide
+as they are), and a group wider than its row stands in its caller's
+scroller. Its pick stays picked under a press (segmentedLens: bits-ui
+would clear it, and the lens with it).
 -->
 <ToggleGroupPrimitive.Root
   class={cn(group(), fill ? "flex w-full" : "w-max", className)}
@@ -49,6 +50,6 @@ wider than its row stands in its caller's scroller.
   bind:value={value as never}
   {...restProps}
 >
-  <span aria-hidden="true" class={thumbLook()} bind:this={thumb}></span>
+  <span aria-hidden="true" class={lensLook()} bind:this={lens}></span>
   {@render children?.()}
 </ToggleGroupPrimitive.Root>

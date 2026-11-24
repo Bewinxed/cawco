@@ -1,7 +1,7 @@
 <script lang="ts" module>
   import type { VariantProps } from "tailwind-variants";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
-  import { segmentedVariants } from "#lib/components/ui/fluid-tabs/thumb.js";
+  import { segmentedVariants } from "#lib/components/ui/segmented/index.js";
   import { tv } from "#lib/utils.js";
 
   /**
@@ -32,10 +32,10 @@
    *   focus ring hugging it.
    * - `segment`: a segment of a segmented group that opens what the group
    *   has no room for (the repository picker's "+N" owners): the kit's
-   *   segment (fluid-tabs/thumb), pressed with the tint as a toggle item is, its
-   *   groove hover held while it is open, its words numerals;
-   *   `segment-compact` on the compact segment, beside compact toggle
-   *   items.
+   *   segment (ui/segmented), pressed with the tint as an unpicked toggle
+   *   item is, standing under the lens while it is open (in place: nothing
+   *   slides to it), its words numerals; `segment-compact` on the compact
+   *   segment, beside compact toggle items.
    */
   export const popoverTriggerVariants = tv({
     variants: {
@@ -52,8 +52,8 @@
         mark: "pressable inline-flex rounded-xs",
         swatch:
           "hitbox pointer-fine:hitbox:pointer-area grid place-items-center rounded-xs border border-transparent focus-halo",
-        segment: `${segmentedVariants().segment()} num press-tint focus-fill shrink-0 aria-expanded:bg-ui-2`,
-        "segment-compact": `${segmentedVariants({ compact: true }).segment()} num press-tint focus-fill shrink-0 aria-expanded:bg-ui-2`,
+        segment: `${segmentedVariants().segment()} num focus-fill shrink-0 aria-expanded:lens aria-expanded:text-tx`,
+        "segment-compact": `${segmentedVariants({ compact: true }).segment()} num focus-fill shrink-0 aria-expanded:lens aria-expanded:text-tx`,
         meter:
           "mark-line flex h-row-compact items-center gap-space-2 rounded-sm px-space-2 text-tx-2 type-label tabular-nums transition-[background-color,color] duration-(--duration-fast) ease-out hover:bg-ui data-compacting:text-tx data-critical:not-data-compacting:text-danger data-warn:not-data-critical:not-data-compacting:text-caution",
       },

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ToggleGroup as ToggleGroupPrimitive } from "bits-ui";
-  import { segmentedVariants } from "#lib/components/ui/fluid-tabs/thumb.js";
+  import { segmentedVariants } from "#lib/components/ui/segmented/index.js";
   import { cn } from "#lib/utils.js";
 
   let {
@@ -43,7 +43,7 @@
 <ToggleGroupPrimitive.Item
   class={cn(
     segmentedVariants({ compact }).segment(),
-    "press-tint focus-fill hitbox pointer-coarse:hitbox:touch-area shrink-0 disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    "focus-fill hitbox pointer-coarse:hitbox:touch-area shrink-0 disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     fit &&
       "grid shrink grid-cols-[minmax(0,var(--spacing-space-3))_max-content_minmax(0,var(--spacing-space-3))] gap-0 px-0",
     className

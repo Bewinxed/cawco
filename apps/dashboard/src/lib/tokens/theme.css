@@ -282,6 +282,23 @@
     transparent,
     oklch(from var(--neutral-93) l c h / 0.07)
   );
+  /* The lens a segmented control lays over its picked segment (Liquid
+     Glass, the owner's pin of 2026-11-24): a see-through fill the track
+     shows through, the bright line along its top edge, and the solid fill
+     it takes where the reader asks for less transparency or more
+     contrast, a step above the track in either scheme. */
+  --color-lens: light-dark(
+    oklch(from var(--neutral-100) l c h / 0.72),
+    oklch(from var(--base-200) l c h / 0.16)
+  );
+  --color-lens-shine: light-dark(
+    var(--neutral-100),
+    oklch(from var(--neutral-100) l c h / 0.2)
+  );
+  --color-lens-solid: light-dark(
+    var(--neutral-100),
+    color-mix(in oklab, var(--base-200) 16%, var(--base-950))
+  );
   --color-shadow: light-dark(
     oklch(from var(--neutral-30) l c h / 0.09),
     oklch(from var(--neutral-18) l c h / 0.55)
@@ -1842,6 +1859,23 @@
   @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
     --control-fill: var(--color-bg);
     --control-default-edge: var(--color-tx-2);
+  }
+}
+
+/* A segmented control's lens (ui/segmented): a see-through fill over the
+   track, blurred and saturated so what is under it shows through softened,
+   a bright line along its top edge and the small shadow under it. Solid
+   where the reader asks for less transparency or more contrast. */
+@utility lens {
+  background-color: var(--color-lens);
+  backdrop-filter: blur(var(--blur-glass)) saturate(1.8);
+  box-shadow:
+    inset 0 1px 0 var(--color-lens-shine),
+    var(--shadow-sm);
+
+  @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+    background-color: var(--color-lens-solid);
+    backdrop-filter: none;
   }
 }
 
