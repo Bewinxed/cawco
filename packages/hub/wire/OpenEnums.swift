@@ -6599,6 +6599,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/ParkedState`.
+    public enum ParkedState: OpenEnum {
+        case answered
+        case open
+        case taken
+        case withdrawn
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "answered": self = .answered
+            case "open": self = .open
+            case "taken": self = .taken
+            case "withdrawn": self = .withdrawn
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .answered: "answered"
+            case .open: "open"
+            case .taken: "taken"
+            case .withdrawn: "withdrawn"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.answered, .open, .taken, .withdrawn]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/PasskeyRelayStatus`.
     public enum PasskeyRelayStatus: OpenEnum {
         case authenticated

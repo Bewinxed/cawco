@@ -173,6 +173,16 @@ export const graphWords = {
   pickNamed: (direction: string) => `Pick ${direction}`,
   /** Picked's tooltip: what a press does. */
   unpick: (direction: string) => `${direction} is picked. Take the pick back`,
+  /** A direction's live drawing outside its graph (a pick parked in the composer): its well, as a screen reader names it. */
+  directionWell: (direction: string) => `${direction}, drawn live`,
+  /** Its well's cover while the stage draws it. */
+  drawingDirection: (direction: string) => `Drawing ${direction}`,
+  /** A failed drawing's way back: the stage draws it afresh. */
+  drawAgain: "Draw again",
+  /** Why it isn't drawn: the stage's own words, else none came. */
+  notDrawn: (why: string) => `This direction couldn't be drawn: ${why}`,
+  notDrawnSilent:
+    "This direction couldn't be drawn: its stage didn't answer. The pick still works; Open graph draws it on the graph.",
   /** Compare across directions, when the state compared differs from the kept one ("Week beside, Failed save"). */
   directionAt: (direction: string, state: string) => `${direction}, ${state}`,
   /** A state the states file tags as a failure: its glyph's name and tooltip in the whole set. */

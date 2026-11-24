@@ -199,7 +199,7 @@
       {#each drawn as r (r.key)}
         {#if r.kind === "tools"}
           <ToolGroup messages={r.messages} />
-        {:else if r.kind === "question"}
+        {:else if r.kind === "question" || r.kind === "parked"}
           <ToolGroup messages={[r.message]} />
         {:else if r.kind === "delegate"}
           {@render delegate(r.message)}

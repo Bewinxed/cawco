@@ -99,6 +99,7 @@ import {
   faultsWith,
   type PageFaultReport,
 } from "@cawco/core/page-faults";
+import type { ParkedItem, ParkedRead, ParkedState } from "@cawco/core/parked";
 import { pinName } from "@cawco/core/pin-name";
 import type {
   FolderWeight,
@@ -125,6 +126,7 @@ import type {
   SessionQuestionsRead,
 } from "@cawco/core/session-questions";
 import {
+  type CanvasDirection,
   type CanvasSpec,
   canvasOf,
   canvasPath,
@@ -3788,6 +3790,140 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ),
   });
 
+  /**
+   * What session `instance` put to the person outside a tool call (core
+   * parked.ts), its own artifacts alone, oldest first: each design graph it
+   * opened with two or more directions to judge, and each card of its
+   * decision pages that Who decides gives the person (a card the hub sent to
+   * another member is that member's: settling.ts). Each is read whatever its
+   * state, so the transcript can keep an answered one where it was opened;
+   * one not put to the person (a draft, handed up or held, an option's
+   * media, its folder gone) is none.
+   */
+  const parkedOf = (instance: InstanceRow): ParkedRead => {
+    const seen = new Set<string>();
+    const rows = [...db.ofInstance(instance.id), ...db.ofMaker(instance.id)]
+      .filter((row) => {
+        const first = !seen.has(row.id);
+        seen.add(row.id);
+        return first && row.heldFor === null;
+      })
+      .sort((a, b) => -newestFirst(a, b));
+    return { items: rows.flatMap(parkedOn) };
+  };
+
+  /** Whether `row` is put to the person (needs.ts `asks`): not a draft, handed up or held, an option's media or gone, a pick or a judgement with its ask. */
+  const putToPerson = (row: ArtifactRow): boolean => {
+    const facts = withMedia(row, factsOf(row));
+    return (
+      !(facts.draft || facts.handed || facts.media) &&
+      facts.gone === null &&
+      (row.does === "pick" || row.does === "judge") &&
+      row.ask.trim() !== ""
+    );
+  };
+
+  /** The picks artifact `row` puts to the person ({@link parkedOf}): its graph's directions, or its cards he decides. */
+  const parkedOn = (row: ArtifactRow): ParkedItem[] => {
+    const spec =
+      row.kind === "component" && "path" in row.source
+        ? canvasOf(row.source.path ?? "").spec
+        : null;
+    const directions = spec?.directions ?? [];
+    const cards = choicesAsked(row).flatMap((one) =>
+      one.card ? [one.card] : []
+    );
+    if ((directions.length < 2 && cards.length === 0) || !putToPerson(row)) {
+      return [];
+    }
+    const doc = docs.doc(row.id);
+    const state = stateOf(doc);
+    const asked = questionsFrom(row, doc, [], {
+      asked: true,
+      pinsMayAsk: false,
+    });
+    const at = {
+      artifact: { id: row.id, name: row.name, title: row.title },
+      askedAt: row.createdAt.toISOString(),
+      stateOf: (key: string): ParkedState =>
+        asked.find((question) => question.key === key)?.state ?? "open",
+    };
+    if (directions.length >= 2) {
+      return [parkedPick(row, directions, spec?.named, state, at)];
+    }
+    const elsewhere = deps.decides.routedOff(row.id);
+    return cards
+      .filter((card) => !elsewhere.has(card.id))
+      .map((card) => parkedCard(card, state, at));
+  };
+
+  /** What every pick of one artifact shares: the artifact, when it was put, and each question's state by its key. */
+  interface ParkedOn {
+    artifact: ParkedItem["artifact"];
+    askedAt: string;
+    stateOf: (key: string) => ParkedState;
+  }
+
+  /** A design graph's pick between `directions` (core parked.ts `ParkedPick`). */
+  const parkedPick = (
+    row: ArtifactRow,
+    directions: CanvasDirection[],
+    stories: CanvasSpec["named"],
+    state: Readonly<Record<string, ChoiceEntry>>,
+    on: ParkedOn
+  ): ParkedItem => {
+    const kept: ChoiceEntry | undefined = state.picked;
+    const value = kept?.value;
+    const picked =
+      typeof value === "string" && directions.some((one) => one.file === value)
+        ? value
+        : null;
+    const judged = on.stateOf("judge");
+    return {
+      kind: "directions",
+      key: "judge",
+      artifact: on.artifact,
+      askedAt: on.askedAt,
+      ask: row.ask,
+      path: "path" in row.source ? (row.source.path ?? "") : "",
+      directions: directions.map((one) => ({
+        file: one.file,
+        name: one.name,
+        line: one.line,
+        story: stories?.[one.file]?.[0] ?? null,
+      })),
+      picked,
+      pickedAt: picked && kept ? kept.at : null,
+      // Open until a direction is picked: a note or a value alone answers his judgement, not the pick.
+      state: picked === null && judged === "answered" ? "open" : judged,
+    };
+  };
+
+  /** A decision card the person decides (core parked.ts `ParkedCard`). */
+  const parkedCard = (
+    card: DecisionCard,
+    state: Readonly<Record<string, ChoiceEntry>>,
+    on: ParkedOn
+  ): ParkedItem => {
+    const entry: ChoiceEntry | undefined = state[card.id];
+    const options = (entry?.options ?? []).filter((id) =>
+      card.options.some((option) => option.id === id)
+    );
+    const note = entry?.note?.trim() ?? "";
+    return {
+      kind: "card",
+      key: `card:${card.id}`,
+      artifact: on.artifact,
+      askedAt: on.askedAt,
+      card,
+      answer:
+        entry && (pickMade(card, entry) || note !== "")
+          ? { at: entry.at, options, note }
+          : null,
+      state: on.stateOf(`card:${card.id}`),
+    };
+  };
+
   /** What a hand of `row` carries of itself, by its kind ({@link Artifacts.handed}): its files, a sheet's drawn picture and its states files; refused as its read or its address refuses. */
   const handedOwn = async (
     instance: InstanceRow,
@@ -6379,6 +6515,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     questions: (instanceId: string) => {
       const instance = sessionOf(instanceId);
       return instance instanceof ElysiaStatus ? instance : askedBy(instance);
+    },
+
+    /** What session `instanceId` put to the person outside a tool call, its own artifacts' (core parked.ts, {@link parkedOf}). */
+    parked: (instanceId: string) => {
+      const instance = sessionOf(instanceId);
+      return instance instanceof ElysiaStatus ? instance : parkedOf(instance);
     },
 
     /** The same questions as session `instanceId`'s own screen lists them (core session-questions.ts). */

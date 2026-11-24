@@ -59,6 +59,7 @@
   import { MountedRows } from "./mounted-rows.svelte";
   import NoticeRun from "./NoticeRun.svelte";
   import { OlderPages } from "./older-pages.svelte";
+  import ParkedRecord from "./ParkedRecord.svelte";
   import QuestionCard from "./QuestionCard.svelte";
   import TranscriptRow from "./Row.svelte";
   import { RecordSeek } from "./record-seek.svelte";
@@ -453,6 +454,8 @@
     <ToolGroup messages={row.messages} />
   {:else if row.kind === "question"}
     <QuestionCard asker={agentName} message={row.message} />
+  {:else if row.kind === "parked"}
+    <ParkedRecord asker={agentName} message={row.message} />
   {:else if row.kind === "connect"}
     <ConnectCard
       answer={row.answer}

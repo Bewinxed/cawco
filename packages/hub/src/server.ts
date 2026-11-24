@@ -58,7 +58,7 @@ import type {
   ControlArgs,
   ControlName,
 } from "@cawco/core/control-table";
-import { decidesFileProblems, doneByYou } from "@cawco/core/decides";
+import { BUILT_IN, decidesFileProblems, doneByYou } from "@cawco/core/decides";
 import { type StartingSet, startsAny } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { docMeta } from "@cawco/core/doc-meta";
@@ -4836,6 +4836,13 @@ export const createServer = (
       settled: (row, card, member, answer) =>
         settling.settled(row, card, member, answer),
       cited: (row, card) => settling.personWrote(row.id, [card.id]),
+      routedOff: (artifactId) =>
+        new Set(
+          db.decides
+            .settlings(artifactId)
+            .filter((one) => one.route !== BUILT_IN.you.id)
+            .map((one) => one.card)
+        ),
     },
     personSaid: (id) => db.personSaidOf(id),
     // The panel closes at once; what it showed is still served on its own
