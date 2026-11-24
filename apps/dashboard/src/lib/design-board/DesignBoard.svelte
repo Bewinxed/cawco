@@ -10,15 +10,16 @@
    * via the stage's `cawco-<state>` classes.
    */
   import type { Snippet } from "svelte";
+  import InlineBlockConversation from "#lib/cawco/transcript/inline-block-conversation-frame.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Foundation from "./Foundation.svelte";
   import { type Family, framesOf, GROUPS, titleOf } from "./families.js";
   import { type Foundation as Group, ROLES, SCALES } from "./foundations.js";
   import "./type-pairs/type-pairs.css";
-  import { type Pair, pairFaces, TODAY } from "./type-pairs/pairs.js";
+  import { PAIRS, type Pair, slugOf, TODAY } from "./type-pairs/pairs.js";
 
   /** The Sans + Mono pair the whole board is set in (its switcher's). */
   let { pair = TODAY }: { pair?: Pair } = $props();
-  const faces = $derived(pairFaces(pair));
 
   const SCHEMES = [
     { scheme: "light", label: "Light" },
@@ -59,6 +60,31 @@
     wide: group.families.filter((one) => one.wide).map(cardOf),
   }));
 
+  /** A conversation as the transcript draws it: type in use, to judge a pair by. */
+  const TRANSCRIPT = "Transcript";
+  const REPLIES = [
+    [
+      "The deploy to **obelisk-of-light** finished, and all 14 checks passed. Two things changed since the last run:",
+      "",
+      "1. The hub now restarts `cawco-hub` only after its migrations land, so a session no longer sees a half-written database.",
+      "2. The board reads `--font-sans` and `--font-mono` from one place, so a pair changes every role at once.",
+      "",
+      "```ts",
+      'const machine = "obelisk-of-light";',
+      "await deploy(machine, { retries: 3, timeoutMs: 90_000 });",
+      "// 0O 1lI 5S 8B: every glyph apart",
+      "```",
+      "",
+      "| Check | Took | Result |",
+      "| --- | --- | --- |",
+      "| Type check | 41.2s | Passed |",
+      "| Lint | 18.7s | Passed |",
+      "| Migrations | 1.9s | Passed |",
+      "",
+      "Next I'll move the stop tray onto the kit's confirm. Say if you'd rather I start with the focus rings.",
+    ].join("\n"),
+  ];
+
   /**
    * The board's index, in its own order: the foundations, then each group
    * of components, every link an anchor to its section. The board scrolls
@@ -67,7 +93,7 @@
   const INDEX = [
     {
       title: "Foundations",
-      links: [...ROLES, ...SCALES].map((one) => one.title),
+      links: [TRANSCRIPT, ...[...ROLES, ...SCALES].map((one) => one.title)],
     },
     ...sections.map((section) => ({
       title: section.title,
@@ -165,6 +191,21 @@
   {/each}
 {/snippet}
 
+{#snippet holds()}
+  <div class="flex flex-col gap-space-1">
+    <p class="text-tx-2 type-meta">Hold to see the board in</p>
+    {#each PAIRS as { short, slug } (slug)}
+      <Button
+        align="row"
+        data-pair-hold={slug}
+        label={short}
+        size="sm"
+        variant="ghost"
+      />
+    {/each}
+  </div>
+{/snippet}
+
 {#snippet index()}
   <ul class="flex flex-col gap-space-4">
     {#each INDEX as group (group.title)}
@@ -185,16 +226,13 @@
   </ul>
 {/snippet}
 
-<div
-  class="flex h-dvh bg-bg text-tx"
-  style:--font-sans={faces?.sans}
-  style:--font-mono={faces?.mono}
->
+<div class="flex h-dvh bg-bg text-tx" data-board data-pair={slugOf(pair)}>
   <nav
     aria-label="Sections"
     class="h-dvh w-56 flex-none overflow-y-auto overscroll-contain border-e border-ui p-space-4 max-desk:hidden"
   >
-    {@render index()}
+    {@render holds()}
+    <div class="mt-space-6">{@render index()}</div>
   </nav>
   <div
     class="flex h-dvh min-w-0 flex-1 flex-col gap-space-8 overflow-y-auto overscroll-contain p-space-6 max-phone:p-space-3"
@@ -214,6 +252,16 @@
         light and dark side by side.
       </p>
     </header>
+
+    {#snippet transcript()}
+      <InlineBlockConversation replies={REPLIES} />
+    {/snippet}
+    {@render shell(
+      TRANSCRIPT,
+      transcript,
+      "A conversation as the transcript draws it: words, code, a list and a table in the pair the board is set in.",
+      true
+    )}
 
     {@render foundations(ROLES)}
 

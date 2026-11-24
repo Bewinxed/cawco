@@ -321,6 +321,17 @@
 @custom-variant pad-large (&[data-pad="large"]);
 @custom-variant pad-medium (&[data-pad="medium"]);
 @custom-variant pad-small (&[data-pad="small"]);
+@custom-variant pair-atkinson (&[data-pair="atkinson"]);
+@custom-variant pair-chivo (&[data-pair="chivo"]);
+@custom-variant pair-geist (&[data-pair="geist"]);
+@custom-variant pair-hold-atkinson (&[data-pair-hold="atkinson"]);
+@custom-variant pair-hold-chivo (&[data-pair-hold="chivo"]);
+@custom-variant pair-hold-geist (&[data-pair-hold="geist"]);
+@custom-variant pair-hold-reddit (&[data-pair-hold="reddit"]);
+@custom-variant pair-hold-spline (&[data-pair-hold="spline"]);
+@custom-variant pair-hold-today (&[data-pair-hold="today"]);
+@custom-variant pair-reddit (&[data-pair="reddit"]);
+@custom-variant pair-spline (&[data-pair="spline"]);
 @custom-variant pane-state-collapsing (&[data-pane-state="collapsing"]);
 @custom-variant pane-state-expanding (&[data-pane-state="expanding"]);
 @custom-variant phase-active (&[data-phase="active"]);
