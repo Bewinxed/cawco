@@ -115,6 +115,7 @@ export class StageLink {
       ask: this.#ask,
       to,
       from,
+      alone: false,
       play,
       still,
     });

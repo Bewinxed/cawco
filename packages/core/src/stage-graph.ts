@@ -178,9 +178,13 @@ interface MoveRead {
  * it runs, then holds it to a fresh drawing of `to` and mounts it anew where
  * they differ. `play`: the move into `to` runs its story's `play` on the
  * instance standing at `from`. `still`: each animation read, then landed.
+ * `alone`: the host shows `to`'s direction alone (the composer's well), so
+ * the page loads no other states file; the graph's panel flips between them
+ * and has the rest loaded once its first reach is answered.
  */
 export const STAGE_REACH = "cawco:stage-reach";
 export interface StageReach {
+  alone: boolean;
   ask: number;
   from: StateRef | null;
   play: boolean;
@@ -544,6 +548,7 @@ export function stageReachOf(value: unknown): StageReach | null {
     ask,
     to,
     from: stateRefOf(said.from),
+    alone: said.alone === true,
     play: said.play === true,
     still: said.still === true,
   };

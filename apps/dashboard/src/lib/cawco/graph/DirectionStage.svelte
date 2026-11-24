@@ -96,6 +96,7 @@
       ask,
       to: { file, story: to },
       from: null,
+      alone: true,
       play: false,
       still: true,
     });

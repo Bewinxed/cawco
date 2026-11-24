@@ -1267,14 +1267,17 @@ export function bootStage(page: Page): Mode {
     } else {
       answer(await actOn(asking, target, play));
     }
-    loadRest();
+    if (!asking.alone) {
+      loadRest();
+    }
   }
 
   /** The canvas's other states files loaded once its first reach is answered. */
   let restLoaded = false;
   /**
    * The canvas's other states files, once the first state a panel's page
-   * reached stands at rest: each loaded in turn as the page goes idle, so a
+   * reached stands at rest (a reach that shows its direction `alone`, the
+   * composer's well, loads none): each loaded in turn as the page goes idle, so a
    * flip to another direction finds it loaded and draws at once, where it
    * waited on its load and its sheet. Loaded to draw, never read: the page
    * reads nothing for the report. The first paint waits on the front one
