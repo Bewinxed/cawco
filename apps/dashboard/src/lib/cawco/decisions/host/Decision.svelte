@@ -58,13 +58,12 @@
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import DecidedBy from "./DecidedBy.svelte";
   import {
-    bridge,
+    decisionHost,
     hearWidths,
     MEDIA_WIDTHS,
     type MediaWidths,
     PIECE_NAME,
     type PieceNames,
-    picks,
   } from "./page.svelte.js";
   import Words from "./Words.svelte";
   import { plainOf } from "./words";
@@ -101,6 +100,11 @@
     multiple?: unknown;
     note?: unknown;
   }> = $props();
+
+  /** Where its picks are read and written: the page's bridge, or the composer that parks it. */
+  const host = decisionHost();
+  const bridge = () => host.bridge();
+  const picked = $derived(host.picks());
 
   /** Whether `value` holds an Image, in a Row or Column too. */
   const holdsImage = (node: Piece | Piece[]): boolean => {
@@ -261,7 +265,7 @@
 
   /** The options picked that the card still offers (core `pickOf`'s rule: one a revision took out is no pick). */
   const chosen = $derived(
-    (picks.now[id]?.options ?? []).filter((one) => order.includes(one))
+    (picked[id]?.options ?? []).filter((one) => order.includes(one))
   );
 
   /** The page's one polite live region (Decisions.svelte). */
@@ -353,9 +357,9 @@
     };
   });
 
-  const stored = $derived(picks.now[id]?.note ?? "");
+  const stored = $derived(picked[id]?.note ?? "");
   /** The person's own words an agent recorded this card's pick from (`record_pick`); his own press replaces the pick and drops them. */
-  const from = $derived(picks.now[id]?.from);
+  const from = $derived(picked[id]?.from);
   let note = $state("");
   let typing = false;
   $effect(() => {
@@ -437,9 +441,11 @@
   }
 </script>
 
+<!-- `data-bare`: it stands in a surface of its own (the composer's), which draws its edge, fill and padding. -->
 <article
   {@attach morph()}
-  class="group/card relative flex min-w-0 scroll-mt-space-4 flex-col gap-space-5 rounded-modal bg-surface-raised p-(--card-in) shadow-tile"
+  class="group/card relative flex min-w-0 scroll-mt-space-4 flex-col gap-space-5 rounded-modal bg-surface-raised p-(--card-in) shadow-tile data-bare:gap-space-4 data-bare:rounded-none data-bare:bg-transparent data-bare:p-0 data-bare:shadow-none"
+  data-bare={host.bare || undefined}
   data-cawco-choice={id}
   data-cawco-multiple={multiple ? "" : undefined}
   data-slot="decision"
@@ -447,7 +453,7 @@
 >
   <header class="flex min-w-0" data-slot="decision-head">
     <h2
-      class="type-title min-w-0 max-w-c-measure flex-1 text-balance text-ink-strong wrap-anywhere"
+      class="type-title min-w-0 max-w-c-measure flex-1 text-balance text-ink-strong wrap-anywhere group-data-bare/card:type-body group-data-bare/card:font-medium"
     >
       <Words text={question} />
     </h2>
@@ -459,7 +465,7 @@
   >
     <OptionGroup
       aria-label={plainOf(question)}
-      bind:value={() => chosen, () => undefined}
+      bind:value={() => chosen, (next) => host.pick?.(id, next)}
       class="w-full"
       disabled={!bridge()}
       {multiple}
@@ -480,8 +486,8 @@
         {@render renderNode(props.options)}
       </div>
     </OptionGroup>
-    {#if picks.now[id]?.settled}
-      <DecidedBy settled={picks.now[id].settled} />
+    {#if picked[id]?.settled}
+      <DecidedBy settled={picked[id].settled} />
     {/if}
     {#if from}
       <p

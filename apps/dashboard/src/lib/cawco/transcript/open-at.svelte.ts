@@ -71,6 +71,7 @@ function recordsOf(row: Row): Message[] {
     case "single":
     case "queued":
     case "question":
+    case "parked":
     case "delegate":
       return [row.message];
     case "connect":

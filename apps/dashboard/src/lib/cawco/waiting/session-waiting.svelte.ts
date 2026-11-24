@@ -34,6 +34,8 @@ export interface SessionWaitingInput {
   onScreen: () => boolean;
   /** A parked ask's row pressed: the ask comes into view where it is answered. */
   showAsk: (row: WaitingRow & { requestId: string }) => void;
+  /** A question's row pressed: whether the composer parks it and brought it up (core parked.ts), so it opens nowhere else. */
+  showParked?: (row: WaitingRow) => boolean;
 }
 
 export class SessionWaiting {
@@ -78,6 +80,10 @@ export class SessionWaiting {
     if (isAsk(row)) {
       this.shown = false;
       this.#input.showAsk(row);
+      return;
+    }
+    if (this.#input.showParked?.(row)) {
+      this.shown = false;
       return;
     }
     detach(

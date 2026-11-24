@@ -41,6 +41,12 @@ export type Row =
   | { kind: "tools"; key: string; messages: Message[] }
   | { kind: "question"; key: string; message: Message }
   /**
+   * An `artifact_create` call that put a pick to the person outside the call
+   * (core parked.ts: a design graph with directions, a decision page): its
+   * tool row, and under it each pick's record once answered (ParkedRecord).
+   */
+  | { kind: "parked"; key: string; message: Message }
+  /**
    * A `connect_ask` call: its card while the person is asked (ConnectCard),
    * the same row its record once answered (`answer`). Keyed by the call, so
    * the card that stood at the tail before the call's message landed
@@ -147,6 +153,7 @@ function idsOf(row: Row): string[] {
   switch (row.kind) {
     case "single":
     case "question":
+    case "parked":
     case "delegate":
     case "queued":
       return [row.message.id];
@@ -269,6 +276,7 @@ function voiceOf(row: Row): Voice {
     case "delegate":
     case "harness":
     case "livetool":
+    case "parked":
     case "question":
     case "stream":
     case "subagent":
@@ -463,6 +471,33 @@ const isToolMsg = (m: Message): boolean =>
 /** A question the agent asked, rendered as its own card rather than a tool row. */
 const isQuestionMsg = (m: Message): boolean =>
   isToolMsg(m) && m.metadata?.toolName === ASK_USER_QUESTION;
+
+/** An artifact's creating call, under any harness's naming of it. */
+const CREATE_CALL = /(^|_)artifact_create$/u;
+/** A decision page's card in its program (core decisions-library `Decision`). */
+const DECISION_IN_PROGRAM = /\bDecision\(/u;
+
+/**
+ * A call that put a pick to the person outside itself (core parked.ts): a
+ * design graph opened with two or more directions, or a page whose program
+ * holds a decision card. The pick parks in the composer; its record stands
+ * at this call once answered.
+ */
+const isParkedCall = (m: Message): boolean => {
+  if (
+    !(isToolMsg(m) && CREATE_CALL.test(m.metadata?.toolName ?? "")) ||
+    m.metadata?.toolStatus === "error"
+  ) {
+    return false;
+  }
+  const input = m.metadata?.toolInput ?? {};
+  return (
+    (Array.isArray(input.directions) && input.directions.length >= 2) ||
+    (input.kind === "page" &&
+      typeof input.program === "string" &&
+      DECISION_IN_PROGRAM.test(input.program))
+  );
+};
 
 /** The key a connect ask's row has from its first moment: its call's. */
 const connectKey = (call: string): string => `c:${call}`;
@@ -864,6 +899,9 @@ function ownRow(
   }
   if (isQuestionMsg(m)) {
     return { kind: "question", key: `q:${keyOf(m, i)}`, message: m };
+  }
+  if (isParkedCall(m)) {
+    return { kind: "parked", key: `pk:${keyOf(m, i)}`, message: m };
   }
   const connect = connectRowOf(m);
   if (connect) {

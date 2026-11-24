@@ -46,6 +46,7 @@ import {
   watchReplace,
   writesTo,
 } from "./lift.svelte";
+import ParkedPrompt from "./ParkedPrompt.svelte";
 import Prompt from "./Prompt.svelte";
 import RecallWheel from "./RecallWheel.svelte";
 import SuggestionChips from "./SuggestionChips.svelte";
@@ -56,6 +57,7 @@ export const composerFleet = {
   CawFace,
   DelegateTray,
   HarnessBlock,
+  ParkedPrompt,
   Prompt,
   RecallWheel,
   SkillChip,

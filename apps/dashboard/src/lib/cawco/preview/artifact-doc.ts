@@ -1,6 +1,7 @@
 import {
   type ArtifactChoices,
   type ChoiceEntry,
+  changedEntry,
   choiceEntryProblem,
 } from "@cawco/core/choices";
 import {
@@ -115,6 +116,16 @@ export type DocSync =
 export type ListHold = "quiet" | "reading" | "ready" | { failed: string };
 
 export interface ArtifactDoc {
+  /**
+   * The person's pick or note on choice `key` of a page, as the page's own
+   * option and note write it (core `changedEntry`: a pick replaces the
+   * options and keeps the note, a note keeps the options); a sentence when it
+   * was not kept.
+   */
+  choose: (
+    key: string,
+    change: { options: string[] } | { note: string }
+  ) => string | null;
   /** The person deletes pin `pin`, and the ink it alone stands on; a sentence when it was not. */
   delete: (pin: string) => string | null;
   destroy: () => void;
@@ -503,6 +514,24 @@ export function joinArtifact(
         return problem;
       }
       doc.getMap("state").set(key, entry);
+      return null;
+    },
+    choose: (key, change) => {
+      const pageHash = getMeta(doc, "pageHash");
+      if (typeof pageHash !== "string") {
+        return previewWords.notKeptYet;
+      }
+      const state = doc.getMap<ChoiceEntry>("state");
+      const entry = changedEntry(
+        state.get(key),
+        { choice: key, pageHash, ...change },
+        new Date().toISOString()
+      );
+      const problem = choiceEntryProblem(key, entry);
+      if (problem) {
+        return problem;
+      }
+      state.set(key, entry);
       return null;
     },
     keepTuned: (records) => {
