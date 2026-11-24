@@ -488,7 +488,8 @@ export function morph({
         still?.() ||
         from.h === 0 ||
         to.h === 0 ||
-        unfoldsInside()
+        unfoldsInside() ||
+        foldsInside()
       ) {
         endClip();
         cut.change(null);

@@ -89,13 +89,14 @@
   import { cn } from "#lib/utils.js";
   import {
     CURVE,
+    crossfades,
     crossIn,
     crossOut,
     dur,
     motionOk,
   } from "../platform/motion/curves.svelte";
   import { echoBeat } from "../platform/motion/echo.svelte";
-  import { fold, unfold } from "../platform/motion/fold.svelte";
+  import { fold, refolds, unfold } from "../platform/motion/fold.svelte";
   import { glyphIn, glyphOut } from "../platform/motion/glyph";
   import { morph } from "../platform/motion/morph.svelte";
   import { departBox, land } from "../platform/motion/share.svelte";
@@ -436,6 +437,14 @@
 
   /* ── What each part says ─────────────────────────────────────────── */
 
+  const heading = $derived(phase === "done" ? words.titleDone : words.title);
+  /** A line that changes height folds to it on the morph's clock. */
+  const LINE_FOLD = {
+    get ms() {
+      return dur("--duration-morph");
+    },
+    easing: CURVE.drawer,
+  };
   const description = $derived(
     words.line(
       phase,
@@ -701,6 +710,7 @@
       data-row={row.s.id}
       style:--line-depth={line.depth}
       {@attach item(row.s.id)}
+      {@attach refolds(() => row.state === "away", LINE_FOLD)}
       data-flown={row.departed || undefined}
       transition:rowFold
     >
@@ -715,10 +725,11 @@
              mark and title, then its status as wide as the widest status
              shown, then its trailing figure, so the title takes all the
              room the others leave; Caw off's box last. A nested list's
-             inset moves only the first. While his boxes can change, the
-             whole row is its box's label. -->
+             inset moves only the first. Caw off's whole row is its box's
+             label, its element one for the whole run: changed at the press,
+             the row was drawn anew and its words swapped with no fade. -->
         <svelte:element
-          this={picks && choosing ? "label" : "div"}
+          this={picks ? "label" : "div"}
           for={picks && choosing ? `${uid}-${row.s.id}` : undefined}
           data-slot="row"
           class={[
@@ -907,12 +918,14 @@
     >
       <div data-slot="head" class="flex min-w-0 gap-space-3">
         <div data-slot="words" class="grid min-w-0 flex-auto gap-space-1">
+          <!-- Its words cross-fade where they stand as he is off. -->
           <p
             data-slot="title"
             class="m-0 min-w-0 flex-auto overflow-clip type-label text-balance text-ellipsis whitespace-nowrap text-ink-strong"
             id="{uid}-title"
+            {@attach crossfades(() => heading)}
           >
-            {phase === "done" ? words.titleDone : words.title}
+            {heading}
           </p>
           <!-- As wide as the head, whatever its words: sized to them, it
                followed the morph's own box and narrowed mid-morph. Its
@@ -921,18 +934,16 @@
           <!-- No line where its words are empty (a delete with nothing
                stopped, once it runs). -->
           <!-- A new line cross-fades over the old one where it stands
-               (crossIn/crossOut, the leaving one pinned out of the flow),
-               so the body's morph follows one change of height. -->
+               (crossfades: the old one pinned out of the flow beside it). -->
+          <!-- A line of another height folds to it on the morph's clock. -->
           <p
             aria-live="polite"
-            class="relative m-0 type-meta text-pretty text-ink-muted data-empty:hidden"
+            class="m-0 type-meta text-pretty text-ink-muted data-empty:hidden"
             data-empty={description === "" || undefined}
+            {@attach crossfades(() => description)}
+            {@attach refolds(() => description, LINE_FOLD)}
           >
-            {#key description}
-              {#if description !== ""}
-                <span class="block" in:crossIn out:crossOut>{description}</span>
-              {/if}
-            {/key}
+            {description}
           </p>
         </div>
       </div>

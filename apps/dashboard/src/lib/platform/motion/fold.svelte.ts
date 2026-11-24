@@ -271,6 +271,35 @@ export function folds(open: () => boolean, options: FoldOptions) {
 }
 
 /**
+ * A box whose own content changes its height when `key` changes (a line
+ * whose words are replaced, a row whose status moves onto a line of its
+ * own): an attachment that folds it from the height it was drawn at to its
+ * new one, so what stands after it moves with it instead of stepping.
+ * The height is read before the change is drawn and the fold starts after
+ * it; the first value only lands.
+ */
+export function refolds(key: () => unknown, options: FoldOptions) {
+  return (node: HTMLElement) => {
+    let was: number | null = null;
+    let first = true;
+    $effect.pre(() => {
+      key();
+      was = first ? null : drawn(node);
+    });
+    $effect(() => {
+      key();
+      if (first) {
+        first = false;
+        return;
+      }
+      if (was !== null && Math.abs(node.offsetHeight - was) > 0.5) {
+        fold(node, true, options, was);
+      }
+    });
+  };
+}
+
+/**
  * A fold moves everything after it with no change to the DOM, and a
  * `reflow` around it places rows only when the DOM changes: its picture of
  * where each row stands would stay the one from before the fold, and its

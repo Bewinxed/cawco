@@ -594,6 +594,64 @@ export function crossOutWith(
 }
 
 /**
+ * A line whose words change, cross-faded where it stands: an attachment on
+ * its element, whose words are its own text. As `words` changes, a copy of
+ * the line as it was drawn is pinned beside it where it stood (its next
+ * sibling, on its offset parent), out of the flow and out of the pointer's
+ * way, read by no one, and fades out
+ * (--duration-control, ease-out) as the line, already holding its new
+ * words, fades in on the same clock: the {@link crossIn}/{@link crossOut}
+ * pair, on Web Animations of its own. A `{#key}` block's swap is the
+ * framework's to time: in a batch that defers its branches the new words
+ * stood offscreen until the old had faded, and then came in at once.
+ */
+export function crossfades(words: () => unknown) {
+  return (node: HTMLElement) => {
+    let copy: HTMLElement | null = null;
+    let first = true;
+    $effect.pre(() => {
+      words();
+      if (first || !node.checkVisibility()) {
+        copy = null;
+        return;
+      }
+      const was = node.cloneNode(true);
+      if (!(was instanceof HTMLElement)) {
+        return;
+      }
+      for (const name of ["id", "aria-live", "data-slot"]) {
+        was.removeAttribute(name);
+      }
+      was.setAttribute("aria-hidden", "true");
+      for (const [prop, value] of Object.entries(pinned(node)())) {
+        was.style.setProperty(prop, value);
+      }
+      was.style.setProperty("margin", "0px");
+      copy = was;
+    });
+    $effect(() => {
+      words();
+      if (first) {
+        first = false;
+        return;
+      }
+      const leaving = copy;
+      copy = null;
+      if (!leaving) {
+        return;
+      }
+      node.after(leaving);
+      const timing = { duration: dur("--duration-control"), easing: CURVE.out };
+      node.animate([{ opacity: 0 }, { opacity: 1 }], timing);
+      leaving
+        .animate([{ opacity: 1 }, { opacity: 0 }], timing)
+        .finished.finally(() => leaving.remove())
+        .catch(() => undefined);
+    });
+  };
+}
+
+/**
  * Where a leaving node stands, pinned there out of the flow and out of the
  * pointer's way (its offset parent is `position: relative`): {@link lifting}'s
  * lift for every view that hands its place to another.
