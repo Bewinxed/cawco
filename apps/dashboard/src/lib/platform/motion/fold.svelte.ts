@@ -4,9 +4,19 @@
  * the height the element is drawn at right now, so a toggle caught mid-flight
  * turns back from where it is; open, the element is left at its natural
  * height, so content that arrives later is never clipped to a measurement.
+ *
+ * Folding shut inside a box whose height changes are drawn by its clip (a
+ * hung card: motion/edge-cut), nothing is laid out until the fold ends: the
+ * element keeps its place, cut shut from its foot, while what stands after
+ * it moves up by `transform` and the box's foot rises with it, and in the
+ * frame it ends the element is laid out shut and they stand where they
+ * were drawn. Animated by height there, the card was laid out again on
+ * every frame of a stop tray's landings. Anywhere else nothing would carry
+ * the edge under what moved, so the height folds.
  */
 import type { TransitionConfig } from "svelte/transition";
 import { dur, ease, easeOut, motionOk } from "./curves.svelte";
+import { cutterOf, type EdgeCut } from "./edge-cut";
 import { reflowsFrom, reread } from "./rows.svelte";
 
 export interface FoldOptions {
@@ -36,6 +46,68 @@ const STACKS = /flex|grid/u;
 const drawn = (node: HTMLElement) => node.getBoundingClientRect().height;
 
 /**
+ * The end a fold settles on, written once it has run: open, the node at its
+ * natural height; shut, clipped at no height, giving its gap back.
+ */
+function settler(
+  node: HTMLElement,
+  open: boolean,
+  { fade, gap }: { fade: boolean; gap: number }
+): () => void {
+  return () => {
+    running.delete(node);
+    if (open) {
+      node.style.overflow = "";
+      return;
+    }
+    // Written again: the clip set at the start may have been dropped by a
+    // `style` rewrite, and a shut box that does not clip lets its first
+    // child's margin through.
+    node.style.overflow = "hidden";
+    node.style.height = "0px";
+    if (gap) {
+      node.style.marginBottom = `${-gap}px`;
+    }
+    if (fade) {
+      node.style.opacity = "0";
+    }
+  };
+}
+
+/**
+ * `animation` moves `node` until the next fold takes it: when it has run,
+ * the node `settle`s; either way `ended` hears that it is over.
+ */
+function owns(
+  node: HTMLElement,
+  animation: Animation,
+  settle: () => void,
+  ended?: () => void
+): void {
+  running.set(node, animation);
+  folding.add(node);
+  animation.finished.then(
+    () => {
+      if (running.get(node) === animation) {
+        folding.delete(node);
+        settle();
+        animation.cancel();
+      }
+      ended?.();
+    },
+    () => {
+      // Superseded by the next fold, which owns the node now; cancelled by
+      // anything else, nothing moves it any more.
+      if (running.get(node) === animation || !running.has(node)) {
+        running.delete(node);
+        folding.delete(node);
+      }
+      ended?.();
+    }
+  );
+}
+
+/**
  * Move `node` to `open`. `from` overrides the starting height (a node just
  * mounted opening from nothing). Resolves when the fold settles.
  */
@@ -59,25 +131,7 @@ export function fold(
   node.style.height = "";
   node.style.marginBottom = "";
   node.style.opacity = "";
-  const end = open ? node.offsetHeight : 0;
-  const settle = () => {
-    running.delete(node);
-    if (open) {
-      node.style.overflow = "";
-    } else {
-      // Written again: the clip set at the start may have been dropped by a
-      // `style` rewrite, and a shut box that does not clip lets its first
-      // child's margin through.
-      node.style.overflow = "hidden";
-      node.style.height = "0px";
-      if (gap) {
-        node.style.marginBottom = `${-gap}px`;
-      }
-      if (fade) {
-        node.style.opacity = "0";
-      }
-    }
-  };
+  const settle = settler(node, open, { fade, gap });
   // Reduced motion is stillness, not an instant swap: the height lands at
   // once and only a fade, where there is one, still runs.
   const still = !motionOk.current;
@@ -85,51 +139,88 @@ export function fold(
     settle();
     return;
   }
-  // The clip rides in the keyframes as well as the inline style: a component
-  // that rewrites its `style` attribute mid-fold (bits-ui's Collapsible, when
-  // it publishes its size) drops the inline one, and an unclipped fold paints
-  // its whole body over the rows below while its box is still growing.
-  const from_: Keyframe = { overflow: "hidden" };
-  const to: Keyframe = { overflow: "hidden" };
-  if (!still) {
-    from_.height = `${start}px`;
-    to.height = `${end}px`;
-    if (gap) {
-      from_.marginBottom = `${startGap}px`;
-      to.marginBottom = open ? "0px" : `${-gap}px`;
-    }
+  const cutter = open || still ? undefined : cutterOf(node);
+  if (cutter) {
+    return slideShut(node, cutter, settle, {
+      distance: start + startGap + gap,
+      height: start,
+      gap: startGap,
+      ms,
+      easing,
+      fade: fade ? startOpacity : null,
+    });
   }
-  if (fade) {
-    from_.opacity = startOpacity;
-    to.opacity = open ? 1 : 0;
-  }
+  const frames = heightFrames(still, {
+    height: [start, open ? node.offsetHeight : 0],
+    gap: gap ? [startGap, open ? 0 : -gap] : null,
+    opacity: fade ? [startOpacity, open ? 1 : 0] : null,
+  });
   for (const heard of foldStarts) {
     heard(node);
   }
-  const animation = node.animate([from_, to], {
+  const animation = node.animate(frames, {
     duration: ms,
     easing,
     fill: "forwards",
   });
-  running.set(node, animation);
-  folding.add(node);
-  animation.finished.then(
-    () => {
-      if (running.get(node) === animation) {
-        folding.delete(node);
-        settle();
-        animation.cancel();
-      }
-    },
-    () => {
-      // Superseded by the next fold, which owns the node now; cancelled by
-      // anything else, nothing moves it any more.
-      if (running.get(node) === animation || !running.has(node)) {
-        running.delete(node);
-        folding.delete(node);
+  owns(node, animation, settle);
+  return animation;
+}
+
+/**
+ * A height fold's two keyframes, each pair what it runs from and to: the
+ * height and the gap it gives back (none with reduced motion), and the
+ * fade. The clip rides in the keyframes as well as the inline style: a
+ * component that rewrites its `style` attribute mid-fold (bits-ui's
+ * Collapsible, when it publishes its size) drops the inline one, and an
+ * unclipped fold paints its whole body over the rows below while its box is
+ * still growing.
+ */
+function heightFrames(
+  still: boolean,
+  {
+    height,
+    gap,
+    opacity,
+  }: {
+    gap: [number, number] | null;
+    height: [number, number];
+    opacity: [number, number] | null;
+  }
+): Keyframe[] {
+  const frames: Keyframe[] = [{ overflow: "hidden" }, { overflow: "hidden" }];
+  frames.forEach((frame, at) => {
+    if (!still) {
+      frame.height = `${height[at]}px`;
+      if (gap) {
+        frame.marginBottom = `${gap[at]}px`;
       }
     }
-  );
+    if (opacity) {
+      frame.opacity = opacity[at];
+    }
+  });
+  return frames;
+}
+
+/**
+ * A fold shut inside a box cut by its clip (motion/edge-cut): laid out as
+ * it stood, with the margin it had, until it ends; the box draws the
+ * motion, and the node is laid out shut in the frame it ends.
+ */
+function slideShut(
+  node: HTMLElement,
+  cutter: EdgeCut,
+  settle: () => void,
+  { gap, ...slide }: Parameters<EdgeCut["slide"]>[1] & { gap: number }
+): Animation {
+  node.style.overflow = "";
+  node.style.marginBottom = gap ? `${gap}px` : "";
+  for (const heard of foldStarts) {
+    heard(node);
+  }
+  const animation = cutter.slide(node, slide);
+  owns(node, animation, settle, () => cutter.settled(animation));
   return animation;
 }
 

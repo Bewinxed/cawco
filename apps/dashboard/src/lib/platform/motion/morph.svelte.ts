@@ -76,6 +76,16 @@
  * follows the fold frame by frame, and a fold that starts cancels the tween
  * in flight, so the two never fight over the box's height.
  *
+ * `clip`: the box's layout takes each change at once and its clip draws it
+ * (motion/edge-cut): its foot is cut from where it was drawn to where it
+ * now stands on --duration-morph's --ease-drawer, the slice of its foot
+ * (`clip.foot`) drawn under the cut, and a change that leaves it shorter
+ * holds it at the height it was drawn at for that run. A fold shut inside
+ * it slides (motion/fold) and the cut follows the slide. No child is held
+ * and nothing is laid out frame by frame: a hung card. A morph inside such
+ * a box stands down, so the box's is the one resize. A row an `unfold`
+ * moves inside it is laid out frame by frame, the box following it.
+ *
  * `rows`: what changes inside is a `reflow`'s rows (a run's steps opening
  * a result under one, motion/branch), so the container's edge moves with
  * them: at their batch's pace (motion/rows `atTravel`), from the frame it
@@ -83,6 +93,7 @@
  * the rows inside are never cut by it.
  */
 import { CURVE, dur, ease, motionOk } from "./curves.svelte";
+import { cutterOf, cutters, EdgeCut } from "./edge-cut";
 import { folding, foldStarts, leaving, unfolding } from "./fold.svelte";
 import { keyed } from "./keyed.svelte";
 import { heldToTravel } from "./rows.svelte";
@@ -204,6 +215,12 @@ function measure() {
 }
 
 export interface Morph {
+  /**
+   * Its clip draws each change, its layout taking it at once (motion/
+   * edge-cut); `foot` is the slice of its foot drawn under the cut. Height
+   * only: not with `width`, `rows` or `placed`.
+   */
+  clip?: { foot?: () => HTMLElement | null };
   /** An `unfold` inside is followed frame by frame, never tweened beside. */
   followUnfolds?: boolean;
   ms?: number;
@@ -243,6 +260,7 @@ export function morph({
   followUnfolds = false,
   placed = false,
   still,
+  clip,
 }: Morph = {}) {
   return (node: HTMLElement) => {
     /**
@@ -335,7 +353,8 @@ export function morph({
     };
     /** A fold starting inside cancels the tween in flight. */
     const foldStarted = (el: HTMLElement) => {
-      if (el !== node && node.contains(el)) {
+      // A clip's slides run beside its change of content.
+      if (!clip && el !== node && node.contains(el)) {
         box.stop();
       }
     };
@@ -397,6 +416,7 @@ export function morph({
         (width && Math.abs(to.w - from.w) > 0.5);
       return (
         !(moved && motionOk.current) ||
+        cutterOf(node) !== undefined ||
         keyed.current ||
         Boolean(still?.()) ||
         from.h === 0 ||
@@ -406,11 +426,122 @@ export function morph({
       );
     };
 
+    /**
+     * `clip`: the cut that draws each change (motion/edge-cut), the clock of
+     * the run a change set off (holding the box at its drawn height when
+     * the change left it shorter), and the natural height that run is
+     * bound for.
+     */
+    const cut = clip
+      ? new EdgeCut(node, {
+          height: () => sizeNow().h,
+          foot: clip.foot,
+          // Laid out shut in this frame, before its observer hears of it:
+          // the next change starts from here.
+          settled: () => {
+            laid = sizeNow();
+          },
+        })
+      : null;
+    let clipClock: Animation | undefined;
+    let clipBound: number | undefined;
+    /** The height the run in flight holds the box at, if it holds it. */
+    let clipHeld: number | undefined;
+    /** The natural size with the clip's hold let go for the read. */
+    const unheld = (): Size => {
+      const effect = clipClock?.effect;
+      if (!(effect instanceof KeyframeEffect)) {
+        return sizeNow();
+      }
+      effect.target = null;
+      const size = sizeNow();
+      effect.target = node;
+      return size;
+    };
+    /** The change's run ends: the hold, if any, and the cut it drew both go. */
+    const endClip = () => {
+      clipClock?.cancel();
+      clipClock = undefined;
+      clipBound = undefined;
+      clipHeld = undefined;
+    };
+    /**
+     * A change of content, drawn by the clip: the box is laid out at its new
+     * height at once, or held at the height it was drawn at (`hold`) when
+     * that is the taller, and its foot is cut from where it was drawn to
+     * where it now stands, the slides under way kept as they run.
+     */
+    const clipTo = (from: Size, to: Size) => {
+      if (!cut) {
+        return;
+      }
+      const moved = Math.abs(to.h - from.h) > 0.5;
+      if (clipBound !== undefined && Math.abs(to.h - clipBound) <= 0.5) {
+        // Bound where it was: the run in flight carries on.
+        return;
+      }
+      const drawnCut = cut.cutNow();
+      const slides = cut.cutNow(true);
+      if (
+        !(moved && motionOk.current) ||
+        keyed.current ||
+        still?.() ||
+        from.h === 0 ||
+        to.h === 0 ||
+        unfoldsInside()
+      ) {
+        endClip();
+        cut.change(null);
+        return;
+      }
+      // What is drawn now, and the box's height past its slides once laid out.
+      const shown = from.h - drawnCut;
+      const hold = Math.max(0, shown + slides - to.h);
+      const at = cut.change({
+        from: Math.max(0, to.h - shown - slides),
+        to: hold,
+        ms: ms ?? dur("--duration-morph"),
+        easing: CURVE.drawer,
+      });
+      endClip();
+      const height = `${to.h + hold}px`;
+      const clock = node.animate(
+        hold > 0 ? [{ minHeight: height }, { minHeight: height }] : [],
+        { duration: ms ?? dur("--duration-morph") }
+      );
+      clock.startTime = at;
+      clipClock = clock;
+      clipBound = to.h;
+      clipHeld = hold > 0 ? to.h + hold : undefined;
+      clock.finished.then(
+        () => {
+          if (clipClock === clock) {
+            clipClock = undefined;
+            clipBound = undefined;
+            clipHeld = undefined;
+            cut.changed();
+          }
+        },
+        () => undefined
+      );
+    };
+
     const box: Box = {
       // In flight, where the tween has it right now; else where layout last
       // put it, since the content has already changed under it.
-      drawn: () => (running ? sizeNow() : laid),
+      // Cut by its clip: laid out where its run holds it, or as it was.
+      drawn: () => {
+        if (cut) {
+          return clipHeld !== undefined && laid
+            ? { w: laid.w, h: clipHeld }
+            : laid;
+        }
+        return running ? sizeNow() : laid;
+      },
       natural: () => {
+        if (cut) {
+          return { size: unheld(), children: [], clock: null };
+        }
         const set =
           followUnfolds && unfoldsInside()
             ? atFolds(node, false, sizeNow).value
@@ -435,6 +566,14 @@ export function morph({
         return { ...value, clock, set };
       },
       stop: (carry = false) => {
+        if (cut) {
+          // Carried, the run in flight stands until the change is drawn.
+          if (!carry) {
+            endClip();
+            cut.change(null);
+          }
+          return;
+        }
         lifted?.animation.cancel();
         lifted = undefined;
         const effect = running?.effect;
@@ -451,6 +590,10 @@ export function morph({
         release = undefined;
       },
       tween: (from, { size: to, children, clock, set }) => {
+        if (cut) {
+          clipTo(from, to);
+          return;
+        }
         const carried = takeLifted(to);
         if (lands(from, to, set)) {
           carried?.cancel();
@@ -571,7 +714,8 @@ export function morph({
           (one) => blank(one) || outOfFlow(one)
         ));
     const content = new MutationObserver((records) => {
-      if (!records.some(sizes)) {
+      // Inside a box its clip resizes, that box's change is the one.
+      if (cutterOf(node) || !records.some(sizes)) {
         return;
       }
       if (changed.size === 0) {
@@ -581,10 +725,17 @@ export function morph({
     });
     content.observe(node, sizingChanges(on));
     foldStarts.add(foldStarted);
+    if (cut) {
+      cutters.set(node, cut);
+    }
 
     return () => {
       foldStarts.delete(foldStarted);
       box.stop();
+      if (cut) {
+        cutters.delete(node);
+        cut.stop();
+      }
       changed.delete(box);
       laidOut.disconnect();
       content.disconnect();

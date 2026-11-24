@@ -195,8 +195,16 @@ const CUBIC_BEZIER = /cubic-bezier\(([^)]*)\)/u;
  *
  * @browser
  */
-export const curveOf = (name: `--ease-${string}`): ((t: number) => number) => {
-  const css = rootToken(name);
+export const curveOf = (name: `--ease-${string}`): ((t: number) => number) =>
+  easingOf(rootToken(name));
+
+/**
+ * An easing as `element.animate()` takes it (a `cubic-bezier()`, as the
+ * house's curves all are: `CURVE.inOut`, an `--ease-*` token) as a function
+ * of progress, anything else as linear: for keyframes sampled from several
+ * motions summed (motion/edge-cut), which one easing cannot say.
+ */
+export const easingOf = (css: string): ((t: number) => number) => {
   const held = curves.get(css);
   if (held) {
     return held;

@@ -278,7 +278,13 @@
     held?: () => boolean;
     /** A finger folded it into its anchor: it is shut, with nothing left to play. */
     folded?: () => boolean;
-    /** How the popover's box tweens to a new size (motion/morph): the popover's own `as` only. */
+    /**
+     * How the popover's box tweens to a new size (motion/morph): the
+     * popover's own `as` only. A card that hangs and keeps its width has
+     * its clip draw each change of height (`clip`), its foot's slice drawn
+     * under the cut (`hang-foot`); one that tweens its width (GlassCard's
+     * faces), a tab's and one that rises tween as a popover does.
+     */
     morphs?: Morph;
     /** A bar menu's width (BarMenu): the kit dropdown menu's own `width`. */
     menuWidth?: "compact" | "regular" | "wide" | "tiles" | "titles";
@@ -302,6 +308,7 @@
     folded,
     forceMount = false,
     menuWidth,
+    morphs,
     class: className,
     children,
     ...rest
@@ -310,6 +317,24 @@
   /** A bar menu's width, as the kit dropdown menu takes it; nothing for any other surface. */
   const menuLook = $derived<Record<string, unknown>>(
     menuWidth ? { width: menuWidth } : {}
+  );
+
+  /**
+   * The slice of the card's foot drawn under its clip while a change of
+   * height runs (motion/edge-cut): its hairline, round corners and shadow,
+   * which the cut hides with all else past its edge.
+   */
+  let foot = $state<HTMLElement | null>(null);
+  /** The card's resize, drawn by its clip where it can be (`morphs`). */
+  const resizes = $derived<Morph | undefined>(
+    Content === PopoverContent && !(tab || rises || morphs?.width)
+      ? { ...morphs, clip: { foot: () => foot } }
+      : morphs
+  );
+  const clipped = $derived(resizes?.clip !== undefined);
+  /** What only the popover's own surface takes: how it morphs. */
+  const morphLook = $derived<Record<string, unknown>>(
+    resizes ? { morphs: resizes } : {}
   );
 
   /** The kit's own surface (the popover's, the context menu's or the dropdown menu's), not bits-ui's bare one. */
@@ -721,6 +746,7 @@
   {...kitSurface ? { motion: "hang" as const } : {}}
   {...glass ? { portalProps: { disabled: true } } : {}}
   {...menuLook}
+  {...morphLook}
   {...rest}
   class={cn(
     floatingSurface({ motion: "hang", edge: "drawn", depth }),
@@ -739,6 +765,16 @@
         data-hang={rises ? "rises" : ""}
         style:pointer-events={pressable(open)}
       >
+        {#if clipped}
+          <!-- Under the card, so the card paints over all of it but what
+               stands past the cut. Placed and dressed by the cut. -->
+          <span
+            aria-hidden="true"
+            bind:this={foot}
+            class="pointer-events-none invisible absolute box-border data-cut:visible"
+            data-slot="hang-foot"
+          ></span>
+        {/if}
         <div
           {...own(props)}
           style:--frame-w={frame ? FRAME_SIZES[frame].w : undefined}

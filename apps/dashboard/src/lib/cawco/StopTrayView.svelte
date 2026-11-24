@@ -75,7 +75,6 @@
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
-  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     IconNeedsYou as Attention,
@@ -379,7 +378,10 @@
           easing: CURVE.out,
           fill: "forwards",
         });
-      after(dur("--duration-panel"), () => arrive(row));
+      after(dur("--duration-panel"), () => {
+        arrive(row);
+        pressConfirm();
+      });
     } else {
       // Less motion: no flight; the row fades shut with its tile.
       if (node) {
@@ -407,6 +409,28 @@
   function arrive(row: StopRow): void {
     arrivals = arrivals.filter((each) => each.id !== row.s.id);
     onarrive(row);
+  }
+
+  /**
+   * A tile has landed in the confirm: it takes the house press for one
+   * beat, scaled to --press-scale and back on its own press's clock
+   * (button/press.ts: transform over --duration-toggle on --ease-out each
+   * way). The transform alone, and none with reduced motion.
+   */
+  function pressConfirm(): void {
+    const button = tile?.querySelector<HTMLElement>("[data-stop-confirm]");
+    if (!(motionOk.current && button)) {
+      return;
+    }
+    // Its own --press-scale: 1 where the house holds a press still.
+    button.animate(
+      [
+        { scale: "1", easing: CURVE.out },
+        { scale: "var(--press-scale)", easing: CURVE.out },
+        { scale: "1" },
+      ],
+      { duration: dur("--duration-toggle") * 2 }
+    );
   }
 
   /* ── What each part says ─────────────────────────────────────────── */
@@ -626,6 +650,9 @@
     "caw-off": IconMoonSleep,
   } as const;
 
+  /** What a row's status says as it stops: its column is as wide as the widest. */
+  const STOP_WORDS = [STOPPING_LABEL, STOPPED_LABEL] as const;
+
   /** A landed tile fades into the ring, as an old glyph fades. */
   const intoRing = glyphOut;
 </script>
@@ -747,12 +774,31 @@
             </span>
             <!-- In the rail's room the glyph says it alone; the title's
                  hidden words say it to a reader. -->
+            <!-- A new word cross-fades over the old one where it stands
+                 (crossIn/crossOut, the leaving one pinned out of the flow),
+                 the cell as wide as the widest word the stop says (a line
+                 of no height each), so the column holds its width and
+                 nothing beside it moves as a row stops. The cell is a box
+                 on the mark line; its word is the run it trims. -->
             <span
               class={[
-                "@max-stop-tray-rail/stop-tray:hidden",
+                "relative inline-block @max-stop-tray-rail/stop-tray:hidden",
                 status.tone === "failed" && "text-status-fail-ink",
-              ]}><MorphText text={status.word} /></span
+              ]}
+              data-box
             >
+              {#key status.word}
+                <span class="mark-text block" in:crossIn out:crossOut
+                  >{status.word}</span
+                >
+              {/key}
+              {#each STOP_WORDS as word (word)}
+                <span
+                  aria-hidden="true"
+                  class="invisible block h-0 overflow-clip">{word}</span
+                >
+              {/each}
+            </span>
           </span>
           <span
             data-slot="num"
