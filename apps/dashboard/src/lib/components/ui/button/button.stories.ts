@@ -7,6 +7,7 @@
  */
 import { IconMore, IconPlus, IconSend, IconTrash } from "#lib/icons.js";
 import Button from "./button.svelte";
+import ButtonFixture from "./button-fixture.svelte";
 
 export default {
   title: "Kit/Button",
@@ -93,3 +94,44 @@ export const Failed = {
 
 /** An action that can't be taken yet. */
 export const Disabled = { args: { label: "Merge the change", disabled: true } };
+
+/** Press it: the work runs, the slot spins, then draws a check. */
+export const PressSucceeds = {
+  component: ButtonFixture,
+  args: {
+    flow: "succeeds",
+    icon: IconSend,
+    label: "Send",
+    pendingLabel: "Sending",
+  },
+};
+
+/** Press it: the work runs and fails, and the slot draws a cross. */
+export const PressFails = {
+  component: ButtonFixture,
+  args: {
+    flow: "fails",
+    variant: "outline",
+    label: "Push the branch",
+    pendingLabel: "Pushing",
+  },
+};
+
+/** Press it once to arm it, again before its rim runs out to delete. */
+export const PressConfirms = {
+  component: ButtonFixture,
+  args: {
+    flow: "confirms",
+    variant: "destructive",
+    icon: IconTrash,
+    label: "Delete the project",
+    pendingLabel: "Deleting",
+    confirm: "Press again to delete",
+  },
+};
+
+/** Press it: its icon arrives, press again and it leaves. */
+export const PressIcon = {
+  component: ButtonFixture,
+  args: { flow: "icon", icon: IconPlus, label: "New task" },
+};

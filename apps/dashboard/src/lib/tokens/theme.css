@@ -178,13 +178,16 @@
     inset 0 0 0 1px light-dark(transparent, oklch(93.4% 0 0 / 0.07));
 
   /* =========================================================================
-     Motion — 4 durations, 3 curves
+     Motion — 5 durations, 3 curves
      ========================================================================= */
 
   --duration-fast: 120ms;
   --duration-base: 200ms;
   --duration-slow: 320ms;
   --duration-loop: 1000ms;
+  /* How long a button that asks before it acts stays armed for its second
+     press, its countdown run along its rim. */
+  --duration-arm: 4000ms;
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);

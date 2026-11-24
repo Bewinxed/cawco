@@ -93,6 +93,7 @@ const TOKENS = [
   "--duration-base",
   "--duration-slow",
   "--duration-loop",
+  "--duration-arm",
   "--ease-out",
   "--ease-in-out",
   "--ease-drawer",

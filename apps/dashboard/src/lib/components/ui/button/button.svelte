@@ -238,11 +238,21 @@
       progress?: number;
       /** Drawn in the icon slot over its icon: what lands there. */
       arrivals?: Snippet;
+      /**
+       * The button asks before it acts: its first press arms it, its label
+       * turning to this ("Press again to delete") while a line along its
+       * rim runs out over --duration-arm; a second press in that time acts
+       * (`onclick`). It disarms when the time runs out, on Escape, or when
+       * focus leaves it (owner's pick, 2026-11-24: press again).
+       */
+      confirm?: string;
     };
 </script>
 
 <script lang="ts">
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
   import PendingContent, { whileIdle } from "./pending-content.svelte";
+  import RimCountdown from "./rim-countdown.svelte";
 
   let {
     class: className,
@@ -282,7 +292,10 @@
     failed = false,
     progress,
     arrivals,
+    confirm,
     onclick,
+    onkeydown,
+    onfocusout,
     children,
     ...restProps
   }: ButtonProps = $props();
@@ -315,6 +328,7 @@
         head,
         current,
       }),
+      confirm !== undefined && "relative",
       className
     )
   );
@@ -326,11 +340,47 @@
    */
   const iconOnly = $derived(label === undefined && icon !== undefined);
 
+  /** Armed by a first press, for --duration-arm, when it asks before it acts. */
+  let armed = $state(false);
+  let armTimer: ReturnType<typeof setTimeout> | undefined;
+  const disarm = () => {
+    clearTimeout(armTimer);
+    armed = false;
+  };
+  $effect(() => () => clearTimeout(armTimer));
+
   const press = whileIdle(
     () => pending,
-    (event: MouseEvent & { currentTarget: EventTarget & HTMLButtonElement }) =>
-      onclick?.(event)
+    (
+      event: MouseEvent & { currentTarget: EventTarget & HTMLButtonElement }
+    ) => {
+      if (confirm !== undefined && !armed) {
+        armed = true;
+        armTimer = setTimeout(disarm, dur("--duration-arm"));
+        return;
+      }
+      disarm();
+      onclick?.(event);
+    }
   );
+  /** Escape takes an arming back, and goes no further while it does. */
+  const keydown = (
+    event: KeyboardEvent & { currentTarget: EventTarget & HTMLButtonElement }
+  ) => {
+    if (armed && event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      disarm();
+      return;
+    }
+    onkeydown?.(event);
+  };
+  const focusout = (
+    event: FocusEvent & { currentTarget: EventTarget & HTMLButtonElement }
+  ) => {
+    disarm();
+    onfocusout?.(event);
+  };
 </script>
 
 {#snippet content()}
@@ -340,7 +390,9 @@
     {@render children?.()}
   {:else}
     <PendingContent
+      {armed}
       {arrivals}
+      {confirm}
       {failed}
       {icon}
       {label}
@@ -361,6 +413,8 @@
     data-variant={variant}
     href={disabled ? undefined : href}
     {onclick}
+    {onkeydown}
+    {onfocusout}
     role={disabled ? "link" : undefined}
     tabindex={disabled ? -1 : undefined}
     bind:this={ref}
@@ -373,15 +427,21 @@
     aria-busy={pending || undefined}
     aria-disabled={pending || undefined}
     class={classes}
+    data-armed={armed || undefined}
     data-box={iconOnly || undefined}
     data-slot="button"
     data-variant={variant}
     {disabled}
     onclick={press}
+    onfocusout={focusout}
+    onkeydown={keydown}
     {type}
     bind:this={ref}
     {...restProps}
   >
     {@render content()}
+    {#if confirm !== undefined}
+      <RimCountdown {armed} />
+    {/if}
   </button>
 {/if}

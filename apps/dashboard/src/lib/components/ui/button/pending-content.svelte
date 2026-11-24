@@ -50,7 +50,7 @@
   import { tickVariants } from "#lib/components/ui/checkbox/checkbox.svelte";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { IconTick } from "#lib/icons.js";
+  import { IconClose, IconTick } from "#lib/icons.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
   import {
     CURVE,
@@ -98,30 +98,34 @@
 
   const failed = $derived(failedFlag || Boolean(reason));
 
-  /** The work ended well a moment ago: the check is up for --duration-loop. */
-  let done = $state(false);
+  /**
+   * How the work that just ended went, held for --duration-loop: a drawn
+   * check when it went well, a cross when it failed (unless the ring holds
+   * where it got to), then the slot's icon again.
+   */
+  let ended = $state<"done" | "failed" | null>(null);
   let running = false;
-  let doneTimer: ReturnType<typeof setTimeout> | undefined;
+  let endTimer: ReturnType<typeof setTimeout> | undefined;
   $effect.pre(() => {
     const now = pending;
     if (now) {
-      clearTimeout(doneTimer);
-      done = false;
-    } else if (running && !failed) {
-      done = true;
-      doneTimer = setTimeout(() => {
-        done = false;
+      clearTimeout(endTimer);
+      ended = null;
+    } else if (running) {
+      ended = failed ? "failed" : "done";
+      endTimer = setTimeout(() => {
+        ended = null;
       }, dur("--duration-loop"));
     }
     running = now;
   });
-  $effect(() => () => clearTimeout(doneTimer));
+  $effect(() => () => clearTimeout(endTimer));
 
   const phase = $derived.by(() => {
     if (pending) {
       return "pending";
     }
-    return done ? "done" : "idle";
+    return ended ?? "idle";
   });
   /**
    * The label has a pending wording of its own. Beside a rest icon both
@@ -134,6 +138,27 @@
   const swapsLabel = $derived(
     pendingLabel !== undefined && pendingLabel !== label
   );
+  /** It asks before it acts, in words of its own while armed. */
+  const asks = $derived(confirm !== undefined && confirm !== label);
+  /**
+   * The wordings that share the label's cell, each centred in it and the
+   * cell as wide as the widest, so the button never changes width as one
+   * gives way to another: its own, its pending one beside a rest icon (with
+   * none, the spinner stands over its words instead), and its armed one.
+   */
+  const wordings = $derived([
+    { key: "rest", text: label ?? "" },
+    ...(swapsLabel && Icon
+      ? [{ key: "pending", text: pendingLabel ?? "" }]
+      : []),
+    ...(asks ? [{ key: "armed", text: confirm ?? "" }] : []),
+  ]);
+  const drawn = $derived.by(() => {
+    if (pending && swapsLabel && Icon) {
+      return "pending";
+    }
+    return armed && asks && !pending ? "armed" : "rest";
+  });
 
   /**
    * Beside a rest icon both wordings stand centred in their one cell, as
@@ -191,7 +216,7 @@
    * running, or it ended failed and holds where it got to.
    */
   const ringShown = $derived(
-    (progress ?? 0) > 0 && (phase === "pending" || (phase === "idle" && failed))
+    (progress ?? 0) > 0 && (phase === "pending" || (phase !== "done" && failed))
   );
   const share = $derived(Math.min(1, Math.max(0, progress ?? 0)));
   /**
@@ -202,6 +227,17 @@
   const covered = $derived(
     Icon === undefined && (phase !== "idle" || ringShown)
   );
+  /**
+   * The icon last given, kept drawn while it fades out as the slot folds
+   * away, so an icon taken off leaves as one put on arrives: the slot
+   * unfolding to its width and the icon fading in it.
+   */
+  let shownIcon = $state(Icon);
+  $effect.pre(() => {
+    if (Icon) {
+      shownIcon = Icon;
+    }
+  });
 
   let spinnerCell = $state<HTMLElement | null>(null);
   let arc = $state<SVGCircleElement | null>(null);
@@ -265,13 +301,14 @@
 <span
   style:--btn-words-slack={holds && Icon ? `${slack}px` : undefined}
   data-slot="btn-slot"
-  class="icon-swap w-(--btn-icon) flex-none [--icon-swap-dur:var(--duration-base)] translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) data-placed:transition-[translate] data-placed:duration-(--duration-base) data-placed:ease-out motion-reduce:transition-off data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
+  class="icon-swap w-(--btn-icon) flex-none [--icon-swap-dur:var(--duration-base)] translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) transition-[width,margin-inline-end] duration-(--duration-base) ease-out data-placed:transition-[translate,width,margin-inline-end] motion-reduce:transition-off data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
   data-over={Icon === undefined || undefined}
   data-placed={placed || undefined}
 >
-  {#if Icon}
-    <span data-active={phase === "idle" && !ringShown}
-      ><Icon class="size-(--btn-icon)" /></span
+  {#if shownIcon}
+    {@const Shown = shownIcon}
+    <span data-active={Icon !== undefined && phase === "idle" && !ringShown}
+      ><Shown class="size-(--btn-icon)" /></span
     >
   {/if}
   <span data-active={phase === "pending" && !ringShown} bind:this={spinnerCell}
@@ -312,6 +349,9 @@
       class={[tickVariants({ clock: "morph" }), "size-(--btn-icon)"]}
       data-on={phase === "done"}
     /></span
+  >
+  <span class="text-red" data-active={phase === "failed" && !ringShown}
+    ><IconClose class="size-(--btn-icon)" data-slot="cross" /></span
   >
   {#if arrivals}
     <span aria-hidden="true" class="relative size-full pointer-events-none"
@@ -383,6 +423,13 @@
         >
       {:else}
         <MorphText text={label} />
+      {/if}{#if swapsLabel && Icon === undefined}
+        <!-- No rest icon: its pending wording is never drawn (the spinner
+             stands over the label's start instead), so it never stands in
+             the label's cell to widen it; a reader is still told it. -->
+        <span class="sr-only" aria-hidden={!pending || undefined}
+          >{pendingLabel}</span
+        >
       {/if}</span
     >
     {#if reason}
