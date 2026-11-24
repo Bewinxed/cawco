@@ -140,17 +140,28 @@ function slotNameOf(el: Element, slot: string): string {
   }
   // A kit wrapper round one control (a native select's) is that control:
   // "Native select wrapper" named the box, not the menu.
+  // Only by a name the control has of its own: one it would borrow from
+  // the part it stands in comes back to this part (a pill holding one
+  // unlabelled file input named itself by its input, by itself, forever).
   const controls = el.querySelectorAll("input, select, textarea");
   const [only] = controls;
-  return controls.length === 1 && only ? nameOf(only) : slotWords(slot);
+  return (
+    (controls.length === 1 && only ? ownNameOf(only, el) : null) ??
+    slotWords(slot)
+  );
 }
 
-/** The element in words. */
-export function nameOf(el: Element): string {
+/**
+ * The element in words by what it is and says itself, or by the control it
+ * is part of: its part's name, its label, its words. Null when it has none
+ * of its own and would be named by the part it stands in, or when the
+ * control it is part of is `holder`, the part asking for its name.
+ */
+function ownNameOf(el: Element, holder?: Element): string | null {
   // A part of a control (a button's label, its slot) is the control.
   const control = el.parentElement?.closest("button, a[href], [role='button']");
   if (control) {
-    return nameOf(control);
+    return control === holder ? null : ownNameOf(control, holder);
   }
   const own = CONTROLS.has(el.localName) ? null : el.getAttribute("data-slot");
   const slot = own && !WORDS_ONLY.has(own) ? own : null;
@@ -168,10 +179,24 @@ export function nameOf(el: Element): string {
   if (text) {
     return kind ? `${kind} ${quoted(text)}` : quoted(text);
   }
+  return null;
+}
+
+/** The element in words. */
+export function nameOf(el: Element): string {
+  // A part of a control (a button's label, its slot) is the control.
+  const control = el.parentElement?.closest("button, a[href], [role='button']");
+  if (control) {
+    return nameOf(control);
+  }
+  const own = ownNameOf(el);
+  if (own) {
+    return own;
+  }
   // The part it stands in, inside the drawing: the stage's own parts
   // round the drawing (its frame, its page) are no part of the component.
   const holder = el.parentElement?.closest("[data-slot], [data-stage-drawing]");
   return holder && !holder.hasAttribute("data-stage-drawing")
     ? nameOf(holder)
-    : (kind ?? words.element);
+    : (KIND[el.localName] ?? words.element);
 }
