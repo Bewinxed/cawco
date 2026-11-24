@@ -108,8 +108,9 @@
           in:fade={{
             duration: dur("--duration-fade"),
             delay: dur("--duration-exit"),
+            easing: easeOut,
           }}
-          out:fade={{ duration: dur("--duration-exit") }}
+          out:fade={{ duration: dur("--duration-exit"), easing: easeOut }}
         ></span>
       {/key}
     {/if}
@@ -186,8 +187,9 @@
         in:fade={{
           duration: dur("--duration-fade"),
           delay: dur("--duration-exit"),
+          easing: easeOut,
         }}
-        out:fade={{ duration: dur("--duration-exit") }}
+        out:fade={{ duration: dur("--duration-exit"), easing: easeOut }}
         style:--caw-top="calc(var(--caw-peek-rise) * -1)"
         style:inset-inline-start={index === 0
           ? "calc((100% - var(--spacing-space-3)) / 4 - var(--caw-peek) / 2)"

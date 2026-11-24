@@ -17,6 +17,7 @@
    * words being read.
    */
   import { fade } from "svelte/transition";
+  import { dur, easeOut } from "#lib/platform/motion/curves.svelte.js";
 
   let { solid }: { solid?: string } = $props();
 </script>
@@ -32,5 +33,5 @@
     : `calc(${solid} + var(--spacing-space-8))`}
   style:--foot-fade-image={"linear-gradient(to top, var(--color-surface-recess) 22%, var(--color-surface-recess-clear))"}
   style:--foot-fade-standing-image={"linear-gradient(to top, var(--color-surface-recess) var(--fade-solid), var(--color-surface-recess-clear))"}
-  transition:fade
+  transition:fade={{ duration: dur("--duration-control"), easing: easeOut }}
 ></div>

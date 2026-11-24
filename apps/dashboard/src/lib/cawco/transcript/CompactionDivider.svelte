@@ -37,7 +37,7 @@
   // The chevron in Solar's linear cut, a glyph and not a mark (DESIGN.md,
   // The Solar Duotone Rule).
   import { IconChevronRight as IconChevron, IconError } from "#lib/icons.js";
-  import { dur } from "#lib/platform/motion/curves.svelte.js";
+  import { dur, easeOut } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import Caw from "../home/Caw.svelte";
@@ -246,7 +246,10 @@
       {#if !(live || failed)}
         <span
           class="absolute top-1/2 left-1/2 block leading-0 -translate-1/2"
-          in:fade={{ duration: watched ? dur("--duration-fade") : 0 }}
+          in:fade={{
+            duration: watched ? dur("--duration-fade") : 0,
+            easing: easeOut,
+          }}
           ><CawMark
             arrival={watched || lead !== null
               ? `${row.session}:${row.key}`
@@ -309,7 +312,7 @@
     <span
       style:--fail-pad="calc(var(--x-glyph) - var(--x-rail) - 2px)"
       class="block ms-(--x-rail) ps-(--fail-pad) border-s-2 border-status-fail-ink text-size-label font-medium leading-body"
-      in:fade={{ duration: dur("--duration-fade") }}
+      in:fade={{ duration: dur("--duration-fade"), easing: easeOut }}
     >
       <span class="rail-line"
         ><span data-slot="rail-cell" class="rail-cell"

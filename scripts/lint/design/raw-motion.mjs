@@ -22,6 +22,12 @@
 //   number before its unit (`${(1 - t) * 8}px`): `var(--pop-rise)` or its
 //   token. A template's number before `ms` or `s` is a time written out too.
 //   A stylesheet's `@keyframes` lengths are no-raw-css-values.grit's.
+// - Svelte's own transition (`fade`, `blur`, `fly`, `slide`, `scale`, `draw`
+//   imported from "svelte/transition") on a directive that leaves its duration
+//   or its curve to Svelte's default (`out:fade`, or an object with no
+//   `duration` or no `easing`): `{ duration: dur("--duration-…"), easing:
+//   ease… }`. A directive whose parameters are a call is the house's own
+//   helper and stands.
 //
 // The motion helpers that hold the curves as functions of t (curves, rows,
 // hang) are the one place a `cubic-bezier` is written (index.mjs). A literal
@@ -259,6 +265,38 @@ const cssAttribute = (node) =>
   (node?.type === "Attribute" &&
     (node.name === "style" || node.name === "class"));
 
+/** Svelte's own transitions, each with a default duration and curve of its own. */
+const SVELTE_TRANSITIONS = new Set([
+  "fade",
+  "blur",
+  "fly",
+  "slide",
+  "scale",
+  "draw",
+]);
+
+/**
+ * What a directive's parameters leave to Svelte's default: none given, or an
+ * object literal with no `duration` or no `easing`. A call, a variable or an
+ * object with a spread is read as the house's own, and stands.
+ */
+function transitionDefaults(name, expression) {
+  if (!expression) {
+    return `Svelte's own \`${name}\` with its default 400ms and curve: give it \`{ duration: dur("--duration-…"), easing: ease… }\``;
+  }
+  if (
+    expression.type !== "ObjectExpression" ||
+    expression.properties.some((p) => p.type !== "Property")
+  ) {
+    return;
+  }
+  const keys = new Set(expression.properties.map(keyName));
+  const left = ["duration", "easing"].filter((key) => !keys.has(key));
+  if (left.length > 0) {
+    return `Svelte's own \`${name}\` with its default ${left.join(" and ")}: give it \`${left.map((key) => (key === "duration" ? 'duration: dur("--duration-…")' : "easing: ease…")).join(", ")}\``;
+  }
+}
+
 /**
  * What each kind of node writes that the rule refuses: where to say it,
  * and what; undefined where it writes nothing refused.
@@ -312,6 +350,21 @@ const READERS = {
     ) {
       return keyframeTravel(model, node.value.body);
     }
+  },
+  // `in:fade`, `out:fly={{ duration }}`: a Svelte transition on its defaults.
+  TransitionDirective(model, node) {
+    const binding = bindingAt(model, node.name, node.start);
+    if (
+      binding?.kind !== "import" ||
+      binding.source !== "svelte/transition" ||
+      !SVELTE_TRANSITIONS.has(binding.imported)
+    ) {
+      return;
+    }
+    return {
+      at: node,
+      said: transitionDefaults(binding.imported, node.expression),
+    };
   },
   CallExpression(model, node) {
     const { callee, arguments: args } = node;

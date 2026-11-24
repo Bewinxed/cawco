@@ -1,3 +1,8 @@
+<script lang="ts" module>
+  import { fade } from "svelte/transition";
+  import { dur, easeOut } from "#lib/platform/motion/curves.svelte.js";
+</script>
+
 <!--
   Planted mistakes, one or more per design rule, each where the rule must
   report it (scripts/lint/fixtures/expected.txt), and beside each the
@@ -38,3 +43,6 @@
 <div style:--hang="calc(-1 * var(--icon-sm))" style:--far="-12px"></div>
 <div style:--delay="60ms" style:--curve="var(--dur-fade) ease-in"></div>
 <div class="duration-(--dur-control) ease-out" title="in 30s"></div>
+<p in:fade>Svelte's defaults</p>
+<p out:fade={{ duration: dur("--duration-exit") }}>Svelte's curve</p>
+<p in:fade={{ duration: dur("--duration-fade"), easing: easeOut }}>House</p>
