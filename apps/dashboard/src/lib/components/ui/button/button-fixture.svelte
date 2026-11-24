@@ -14,7 +14,7 @@
    */
   import type { Component } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
-  import type { GlyphSide } from "#lib/platform/motion/glyph.js";
+  import type { GlyphSide } from "#lib/components/ui/glyph-swap/index.js";
   import type { ButtonVariant } from "./button.svelte";
   import Button from "./button.svelte";
 

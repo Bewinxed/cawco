@@ -47,6 +47,7 @@
   } from "#lib/components/ui/button/pending-content.svelte";
   import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { GlyphSwap } from "#lib/components/ui/glyph-swap/index.js";
   import {
     IconAgent,
     IconChevronRight,
@@ -273,22 +274,10 @@
   const moving = (): boolean => motionOk.current && !!ledger?.watched;
 
   /**
-   * A call's status changing is a crossfade on its glyph: the outgoing glyph
-   * fades while the new one fades up out of a slight shrink, both on one
-   * cell, over --duration-fast. Svelte plays these only when the status
-   * changes under a mounted row — never on a row's first render.
+   * What a call measured out fades up as it arrives with its result, over
+   * --duration-fast: only a change the reader is watching is shown moving.
    */
-  function glyphIn(_node: Element) {
-    if (!moving()) {
-      return { duration: 0 };
-    }
-    return {
-      duration: dur("--duration-fast"),
-      easing: easeOut,
-      css: (t: number) => `opacity: ${t}; scale: ${0.8 + 0.2 * t}`,
-    };
-  }
-  function glyphOut(_node: Element) {
+  function factIn(_node: Element) {
     if (!moving()) {
       return { duration: 0 };
     }
@@ -298,24 +287,12 @@
       css: (t: number) => `opacity: ${t}`,
     };
   }
-  /**
-   * A favicon that fails to load gives way to the tool's glyph, the two
-   * cross-fading in one cell over --duration-fast. Opacity only, so it runs
-   * with reduced motion as well; never on a row's first render.
-   */
-  function iconSwap(_node: Element) {
-    return {
-      duration: dur("--duration-fast"),
-      easing: easeOut,
-      css: (t: number) => `opacity: ${t}`,
-    };
-  }
-  /** What a call measured out, arriving with its result. */
-  const factIn = glyphOut;
 
   const asString = (value: unknown): string | undefined =>
     typeof value === "string" ? value : undefined;
 
+  /** The tool's own glyph, in the rail cell's swap beside its favicon. */
+  const TOOL = "tool";
   /** Favicons that failed to load; their rows keep the tool's glyph. */
   const brokenIcons = new SvelteSet<string>();
   /**
@@ -464,41 +441,36 @@
     {@const exchange = exchangeOf(m)}
     {#snippet line()}
       <span data-slot="rail-cell" class="rail-cell">
-        {#key m.metadata?.toolStatus}
-          <!-- The glyph sits in the one rail cell, so a status change can
-               cross-fade two of them on the same spot; a favicon and the
-               glyph it gives way to share the cell. A failed call carries
-               its state on the glyph — the completed row's done/failed cue,
-               next to the running row's breathing glyph in the live tool. -->
-          <!-- The tool family's hue (DESIGN.md, Identity: "Tool families",
-               tinting the tool glyph); a failed call's crimson
-               over it. -->
-          <span
-            data-slot="glyph"
-            class="col-start-1 row-start-1 grid place-items-center {d.color} data-err:text-red"
-            data-err={failed || undefined}
-            in:glyphIn
-            out:glyphOut
-            >{#if d.favicon && !brokenIcons.has(d.favicon)}
-              {@const src = d.favicon}
-              <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: onerror is an image-load callback — a site with no icon keeps the tool's glyph -->
-              <img
-                alt=""
-                class="col-start-1 row-start-1 size-icon-md block rounded-xs"
-                onerror={() => brokenIcons.add(src)}
-                {src}
-                in:iconSwap
-                out:iconSwap
-              />
-            {:else}
-              <span
-                class="col-start-1 row-start-1 grid place-items-center"
-                in:iconSwap
-                out:iconSwap><Icon class="size-icon-md block" /></span
-              >
-            {/if}</span
+        <!-- The glyph sits in the one rail cell; a favicon and the glyph it
+             gives way to (one that fails to load) share it, on the house's
+             glyph swap. A failed call carries its state on the glyph — the
+             completed row's done/failed cue, next to the running row's
+             breathing glyph in the live tool. -->
+        <!-- The tool family's hue (DESIGN.md, Identity: "Tool families",
+             tinting the tool glyph); a failed call's crimson over it, its
+             ink crossing over --duration-fast. -->
+        <span
+          data-slot="glyph"
+          class="col-start-1 row-start-1 grid place-items-center {d.color} transition-[color] duration-(--duration-fast) ease-out data-err:text-red"
+          data-err={failed || undefined}
+          ><GlyphSwap
+            shows={d.favicon && !brokenIcons.has(d.favicon) ? d.favicon : TOOL}
           >
-        {/key}
+            {#snippet glyph(key)}
+              {#if key === TOOL}
+                <Icon class="size-icon-md block" />
+              {:else}
+                <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: onerror is an image-load callback — a site with no icon keeps the tool's glyph -->
+                <img
+                  alt=""
+                  class="size-icon-md block rounded-xs"
+                  onerror={() => brokenIcons.add(key)}
+                  src={key}
+                />
+              {/if}
+            {/snippet}
+          </GlyphSwap></span
+        >
       </span>
       <!-- The verb is what the row is named by: the argument after it gives
            way first, from no basis of its own (`flex-1`), so it takes only

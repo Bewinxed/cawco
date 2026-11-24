@@ -22,32 +22,38 @@
   /**
    * What a button that runs something draws inside itself: the icon slot (its
    * icon at rest, the spinner while the work runs, a drawn check when it
-   * ends well, cross-fading in one cell) and the label, which beside a rest
-   * icon cross-fades to `pendingLabel` and back in a cell as wide as the
-   * wider of the two, each centred in it, the slot beside the one drawn,
-   * all on one clock (--duration-base, ease-out), so the button keeps its width
-   * and its inset is even at both ends in every state. A button with no rest icon keeps no slot: what
-   * the slot shows stands over its label's start while the words fade out,
-   * and its pending wording is its name alone, never drawn, so its label's
-   * cell is the label's own and stands at the button's centre. The kit
-   * Button draws it; a button in another skin (the
-   * new-session dialog) draws it in its own element, sets
-   * --btn-gap and --btn-icon to its gap and icon size, and takes presses
-   * through `whileIdle`. An icon-only button passes no `label`: only its
-   * icon slot changes, and its name stays its aria-label.
+   * ends well, on the house's glyph swap in one cell, GlyphSwap) and the
+   * label, which beside a rest icon morphs to `pendingLabel` and back. Every
+   * wording the label can say stands unseen in one cell, holding it as wide
+   * as the widest with the slot's room beside it, so the button keeps its
+   * width in every state; the slot and the words drawn stand in that cell as
+   * one row, centred by the row's own layout, so they stay centred together
+   * as the words change. A button with no rest icon keeps no slot: what the
+   * slot shows stands over its label's start while the words fade out, and
+   * its pending wording is its name alone, never drawn, so its label's cell
+   * is the label's own and stands at the button's centre. The kit Button
+   * draws it; a button in another skin (the new-session dialog) draws it in
+   * its own element, sets --btn-gap and --btn-icon to its gap and icon
+   * size, and takes presses through `whileIdle`. An icon-only button passes
+   * no `label`: only its icon slot changes, and its name stays its
+   * aria-label.
    *
    * Work that counts (`progress`, the share done): once any of it is done the
-   * spinner gives way to a ring, the spinner's own track with its arc wound
-   * from the top to the share and easing to each new one over --duration-slow
-   * (DESIGN.md, the TaskRing recipe). The arc starts where the spinner's was,
-   * so the turning arc is seen to stop and fill. Whole, it gives way to the
-   * check when the work ends well; ended failed, it holds where it got to.
-   * `arrivals` is drawn in the slot over the ring: what lands in it (a
-   * forget's session tiles, each flying in from its row).
+   * spinner gives way to a ring, the spinner's own track with its arc filled
+   * from the top to the share and easing to each new one over
+   * --duration-slow (DESIGN.md, the TaskRing recipe), the two cross-fading
+   * where they stand. Whole, it gives way to the check when the work ends
+   * well; ended failed, it holds where it got to. `arrivals` is drawn in the
+   * slot over the ring: what lands in it (a forget's session tiles, each
+   * flying in from its row).
    */
   import type { Component, Snippet } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
   import { tickVariants } from "#lib/components/ui/checkbox/checkbox.svelte";
+  import {
+    type GlyphSide,
+    GlyphSwap,
+  } from "#lib/components/ui/glyph-swap/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconClose, IconTick } from "#lib/icons.js";
@@ -60,12 +66,6 @@
     reveal,
   } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
-  import {
-    type GlyphParams,
-    type GlyphSide,
-    glyphIn,
-    glyphOut,
-  } from "#lib/platform/motion/glyph.js";
 
   let {
     label,
@@ -147,7 +147,7 @@
    * The label has a pending wording of its own. Beside a rest icon both
    * stand in one cell, so the button is as wide as the wider of them from
    * the start and never changes width as the work starts or ends, and they
-   * cross-fade on one transition. With no rest icon the pending wording is
+   * morph on one transition. With no rest icon the pending wording is
    * never drawn (DESIGN.md, Pending), so only a reader is given it: the
    * label's cell is the label's own.
    */
@@ -158,7 +158,6 @@
    * The slot keeps its room while it is empty: its icon comes and goes
    * (`holdsIcon`), or a button with no icon says its work in words of its
    * own, so the spinner and the end's glyph have room beside the words.
-   * A twin of that room stands past the words, so they stay centred.
    */
   const roomy = $derived(
     holdsIcon ||
@@ -172,7 +171,7 @@
   /** It asks before it acts, in words of its own while armed. */
   const asks = $derived(confirm !== undefined && confirm !== label);
   /**
-   * The wordings that share the label's cell, each centred in it and the
+   * The wordings that share the label's cell, each unseen in it and the
    * cell as wide as the widest, so the button never changes width as one
    * gives way to another: its own, its pending one beside a rest icon (with
    * none, the spinner stands over its words instead), and its armed one.
@@ -190,9 +189,9 @@
     wordings.find((one) => one.key === drawn)?.text ?? label ?? ""
   );
   /**
-   * One clock for everything that moves when the words change (the morph,
-   * the slot's slide, the words' slide over an empty slot), so the glyph
-   * and the words move as one and never part or overlap on the way.
+   * The clock the words morph on, the slot's arrival's own
+   * (--duration-slow), so the row they stand in with the slot re-centres
+   * as one with them.
    */
   const clock = {
     duration: "--duration-slow",
@@ -276,90 +275,31 @@
    * never changes width.
    */
   const covered = $derived(!beside && (phase !== "idle" || ringShown));
-  /**
-   * What the slot shows: one glyph at a time, keyed, so Svelte's own
-   * transitions swap it (`glyphIn`/`glyphOut`, the house's glyph swap).
-   * The outgoing glyph stays in the DOM until its outro ends, so the slot
-   * stacks every child in one grid cell (`icon-swap`): the leaving and the
-   * arriving glyph share the cell and nothing beside them moves.
-   */
-  const showing = $derived.by(() => {
+  type Glyph = "icon" | "spinner" | "ring" | "done" | "failed";
+  /** What the slot shows: one glyph at a time, or none. */
+  const shows = $derived.by<Glyph | null>(() => {
     if (ringShown) {
       return "ring";
     }
     if (phase !== "idle") {
       return phase === "pending" ? "spinner" : phase;
     }
-    return Icon === undefined ? "none" : "icon";
+    return Icon === undefined ? null : "icon";
   });
   /**
-   * Each change of what the slot shows, with what it showed before, read as
-   * the swap's transitions start: a glyph coming into an empty slot, or
-   * leaving it empty, moves alone, from and to its side (glyph.ts).
+   * The rest icon the slot last held: an icon that goes away (`holdsIcon`)
+   * stays drawn in its slot while it leaves.
    */
-  let last = "none";
-  const turn = $derived.by(() => {
-    const to = showing;
-    const from = last;
-    last = to;
-    return { from, to };
+  let heldIcon: typeof Icon;
+  const restIcon = $derived.by(() => {
+    heldIcon = Icon ?? heldIcon;
+    return heldIcon;
   });
-  const shows = $derived(turn.to);
+  const sideOf = (glyph: Glyph): GlyphSide =>
+    glyph === "icon" ? iconFrom : "start";
   /** The spinner stopping to fill as a ring is one glyph changing, in place. */
-  const inPlace = $derived(turn.from === "spinner" && turn.to === "ring");
-  const arrival = $derived<GlyphParams>({
-    alone: turn.from === "none",
-    side: turn.to === "icon" ? iconFrom : "start",
-    inPlace,
-  });
-  const departure = $derived<GlyphParams>({
-    alone: turn.to === "none",
-    side: turn.from === "icon" ? iconFrom : "start",
-    inPlace,
-  });
-
-  let spinnerCell = $state<HTMLElement | null>(null);
-  let arc = $state<SVGCircleElement | null>(null);
-  /** Where the spinner's arc was when the ring took its place (degrees from 3 o'clock). */
-  let handover: number | null = null;
-  let ringWas = false;
-  $effect.pre(() => {
-    const now = ringShown;
-    if (now && !ringWas && phase === "pending") {
-      const turning = spinnerCell?.querySelector("svg")?.getAnimations()[0];
-      const loop = Number(turning?.effect?.getComputedTiming().duration);
-      handover =
-        turning && loop > 0
-          ? ((Number(turning.currentTime) % loop) / loop) * 360
-          : null;
-    }
-    ringWas = now;
-  });
-  /**
-   * The first fill runs from the spinner's arc: its angle and its quarter
-   * length, wound round to the top as it eases to the share.
-   */
-  $effect(() => {
-    if (!(ringShown && arc && handover !== null)) {
-      return;
-    }
-    const from = handover;
-    handover = null;
-    if (!motionOk.current) {
-      return;
-    }
-    let to = 270;
-    while (to < from) {
-      to += 360;
-    }
-    arc.animate(
-      [
-        { rotate: `${from}deg`, strokeDasharray: "25 100" },
-        { rotate: `${to}deg`, strokeDasharray: `${share * 100} 100` },
-      ],
-      { duration: dur("--duration-slow"), easing: CURVE.out }
-    );
-  });
+  const inPlace = (from: Glyph | null, to: Glyph | null) =>
+    from === "spinner" && to === "ring";
 </script>
 
 <!-- Each wording of the run, unseen in the label's cell: it is as wide as
@@ -419,38 +359,43 @@
             stroke-dasharray="{share * 100} 100"
             stroke-linecap="round"
             stroke-width="2.5"
-            bind:this={arc}
           />
         </svg>
-      {:else if shows === "done"}
-        <!-- Mounted drawn: @starting-style starts its stroke undrawn, so it draws in. -->
+      {:else if key === "done"}
+        <!-- Drawn while shown: mounted shown, @starting-style starts its
+             stroke undrawn, so it draws in either way. -->
         <IconTick
           data-slot="tick"
           class={[
             tickVariants({ clock: "morph" }),
             "size-(--btn-icon) motion-safe:starting:[&_path]:[stroke-dashoffset:22]",
           ]}
-          data-on="true"
+          data-on={shows === "done"}
         />
-      {:else if shows === "failed"}
+      {:else}
         <IconClose class="size-(--btn-icon) text-danger" data-slot="cross" />
       {/if}
-    </span>
-  {/key}
-  {#if arrivals}
-    <span aria-hidden="true" class="relative size-full pointer-events-none"
-      >{@render arrivals()}</span
-    >
-  {/if}
-</span>
+    {/snippet}
+    {#if arrivals}
+      <span aria-hidden="true" class="relative size-full pointer-events-none"
+        >{@render arrivals()}</span
+      >
+    {/if}
+  </GlyphSwap>
+{/snippet}
+
 {#if label === undefined}
   <!-- Icon only: nothing to morph. -->
+  {@render slot(false)}
 {:else}
+  {#if !beside}
+    {@render slot(false)}
+  {/if}
   <!-- The run the mark line trims: a block, the reason a block under the
        label, so the trim reaches its first and last lines (text-box-trim
        reaches no flex or grid container, which kept its whole line and the
        recipe's padding on top: a refused menu item stood 10px tall). -->
-  <span class="px-(--btn-word-pad,0px)"
+  <span
     ><span
       data-slot="label-text"
       class="transition-[opacity] duration-(--duration-base) ease-out covered-true:opacity-0"
@@ -506,7 +451,11 @@
             >{/key}</span
         >
       {:else}
-        <MorphText text={label} />
+        <span class="inline-flex items-baseline"
+          >{#if beside}{@render slot(true)}{/if}<span
+            class="px-(--btn-word-pad,0px)"><MorphText text={label} /></span
+          ></span
+        >
       {/if}{#if swapsLabel && !beside}
         <!-- No rest icon: its pending wording is never drawn (the spinner
              stands over the label's start instead), so it never stands in
@@ -518,18 +467,11 @@
     >
     {#if reason}
       <span
-        class="type-meta block max-w-ch-32 text-danger whitespace-normal wrap-anywhere"
+        class="type-meta block max-w-ch-32 px-(--btn-word-pad,0px) text-danger whitespace-normal wrap-anywhere"
         data-reason
         role="alert"
         transition:unfold>{reason}</span
       >
     {/if}</span
   >
-{/if}
-{#if roomy && label !== undefined}
-  <!-- The held room's twin past the words, so the words stand centred in
-       the button whether the slot is empty or not, with nothing moved by a
-       transform over the morph (a transform over torph mid-morph made it
-       jump, 2026-11-24). -->
-  <span aria-hidden="true" class="w-(--btn-icon) flex-none"></span>
 {/if}

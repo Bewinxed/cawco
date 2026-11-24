@@ -2432,12 +2432,6 @@
     infinite;
 }
 
-@utility animate-icon-swap {
-  animation: icon-swap var(--duration-fast) var(--ease-out) both;
-}
-@utility animate-icon-swap-still {
-  animation: icon-swap-still var(--duration-fast) var(--ease-out) both;
-}
 @utility animate-cell-swap {
   animation: cell-swap var(--duration-fast) var(--ease-out);
 }
@@ -2541,18 +2535,6 @@
     opacity: 0;
     scale: 0.25;
     filter: blur(var(--spacing-space-1));
-  }
-}
-@keyframes icon-swap {
-  from {
-    opacity: 0;
-    transform: scale(0.25);
-    filter: blur(var(--spacing-space-1));
-  }
-}
-@keyframes icon-swap-still {
-  from {
-    opacity: 0;
   }
 }
 @keyframes sheet-in {
@@ -3026,62 +3008,145 @@
   }
 }
 
-/* Glyphs that give way to one another in one cell, which one shows said by
-   `data-active` (the CSS twin of glyph.ts, the house's glyph swap). They
-   run through the cell one way as a strip: the one leaving slides its own
-   width toward the end side on --ease-in-out, and the one arriving slides
-   in from the start side, elastic, starting --duration-fast late so it
-   enters as the other clears (owner's pick, 2026-11-24: "Full slide").
-   Each fades on its slide (--ease-fade-arrive, --ease-fade-leave): seen
-   only while half of it stands in the cell, so it is gone before it can
-   reach what stands beside it, with no edge cutting it off (owner,
-   2026-11-24). Icons never scale and never blur.
+/* The house's one glyph swap: glyphs that give way to one another in one
+   cell. Every glyph a cell has shown stays mounted in it, and which one
+   shows is said by `data-active` (`icon-swap`'s children; the kit's
+   GlyphSwap draws them) or by a state of the glyph's own (`swap-gone`,
+   `swap-shown`: a tree mark's face and its chevron). They run through the
+   cell one way as a strip: the one leaving slides its own width toward the
+   end side over --duration-base on --ease-in-out, and the one arriving
+   slides in from the start side over --duration-slow, elastic, starting
+   --duration-fast late so it enters as the other clears (owner's pick,
+   2026-11-24: "Full slide"). Each fades on its slide (--ease-fade-arrive,
+   --ease-fade-leave): seen only while half of it stands in the cell, so it
+   is gone before it can reach what stands beside it, with no edge cutting
+   it off (owner, 2026-11-24). Icons never scale and never blur.
    The two ways run on two properties, so neither turns back: `transform`
    carries the exit (out to the end side, and back at once on arriving),
    `translate` the arrival (in from the start side, and stepping out to it
    only as the exit ends, unseen). Both are the compositor's alone. With
    less motion, only the fade, on the clock. A swap that runs with a motion
    of its own takes that motion's clock: `--icon-swap-dur` and
-   `--icon-swap-ease` (the sidebar toggle's glyph, on the sidebar's
-   slide). */
+   `--icon-swap-ease` (the sidebar toggle's glyph, on the sidebar's slide).
+   `swap-move` is the motion, read off one state, `--swap-shown` (1 shown,
+   0 gone), which `swap-gone` and `swap-shown` set and nothing else does, so
+   the motion is written once whatever says which glyph shows. */
+@property --swap-shown {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+@property --swap-fade {
+  syntax: "*";
+  inherits: false;
+}
+@property --swap-slide {
+  syntax: "*";
+  inherits: false;
+}
+@utility swap-move {
+  --swap-away: calc(1 - var(--swap-shown));
+  opacity: var(--swap-shown);
+  transition-property: opacity, translate, transform;
+  transition-duration:
+    calc(
+      var(--swap-shown) * var(--icon-swap-dur, var(--duration-slow)) +
+        var(--swap-away) * var(--duration-base)
+    ),
+    calc(
+      var(--swap-shown) *
+        var(--swap-travel, var(--icon-swap-dur, var(--duration-slow))) +
+        var(--swap-away) * var(--duration-base)
+    ),
+    calc(var(--swap-away) * var(--duration-base));
+  transition-delay: 0s;
+  transition-timing-function:
+    linear, var(--swap-slide, var(--icon-swap-ease, var(--ease-elastic))),
+    var(--ease-in-out);
+
+  @media (prefers-reduced-motion: no-preference) {
+    /* Gone, it waits at the side it arrives from (`translate`, stepped
+       there as its exit ends: `--swap-slide`) and stands at the side it
+       left to (`transform`). */
+    translate: calc(
+        var(--swap-away) * var(--swap-dir, 1) * var(--swap-park, -1) * 100%
+      )
+      0;
+    transform: translateX(
+      calc(var(--swap-away) * var(--swap-dir, 1) * var(--swap-exit, 1) * 100%)
+    );
+    transition-delay:
+      calc(var(--swap-shown) * var(--swap-delay, var(--duration-fast))),
+      calc(var(--swap-shown) * var(--swap-delay, var(--duration-fast))), 0s;
+    transition-timing-function:
+      var(--swap-fade, var(--ease-fade-arrive)),
+      var(--swap-slide, var(--icon-swap-ease, var(--ease-elastic))),
+      var(--ease-in-out);
+  }
+
+  &:dir(rtl) {
+    --swap-dir: -1;
+  }
+}
+@utility swap-gone {
+  --swap-shown: 0;
+  --swap-fade: var(--ease-fade-leave);
+  --swap-slide: step-end;
+  pointer-events: none;
+}
+@utility swap-shown {
+  --swap-shown: 1;
+  --swap-fade: var(--ease-fade-arrive);
+  --swap-slide: var(--icon-swap-ease, var(--ease-elastic));
+  pointer-events: auto;
+}
+
+/* A cell of glyphs on the swap, each a child of it, `data-active` saying
+   which shows (a child without it, drawn over the glyphs, stands still). A cell that can stand empty (a kit Button's slot) says how
+   each turn runs:
+   - `data-alone`: a glyph comes into the empty cell or leaves it empty. It
+     arrives from its side at once and leaves the way it came. Its side is
+     the start unless the glyph says `data-side="end"` (a Button's
+     `iconFrom`: the pin; owner, 2026-11-24: "configurable per icon, via a
+     prop ... same clock/paths as the others").
+   - `data-in-place`: the two are one glyph changing (a button's spinner
+     stopping and its arc filling as a ring): they cross-fade where they
+     stand.
+   - `data-turned`: it has turned once. A glyph shown for the first time is
+     mounted then and arrives as one that was waiting would; before that,
+     what the cell mounts with is simply there. */
 @utility icon-swap {
   /* biome-ignore lint/suspicious/noDuplicateSelectors: `&` here is this @utility's own class; the rule reads every utility's `&` as one selector. */
   :where(&) {
     display: inline-grid;
     place-items: center;
   }
-  :where(&:dir(rtl)) {
-    --swap-dir: -1;
-  }
   :where(&) > :where(*) {
     display: inline-flex;
     grid-area: 1 / 1;
-    transition-property: opacity, translate, transform;
-    transition-duration:
-      var(--icon-swap-dur, var(--duration-slow)),
-      var(--icon-swap-dur, var(--duration-slow)), 0s;
-    transition-timing-function:
-      linear, var(--icon-swap-ease, var(--ease-elastic)), linear;
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition-delay: var(--duration-fast), var(--duration-fast), 0s;
-      transition-timing-function:
-        var(--ease-fade-arrive), var(--icon-swap-ease, var(--ease-elastic)),
-        linear;
-    }
+  }
+  :where(&) > :where([data-active]) {
+    @apply swap-move;
   }
   :where(&) > :where([data-active="false"]) {
-    opacity: 0;
-    pointer-events: none;
-    transition-duration: var(--duration-base);
-    transition-timing-function: linear, step-end, var(--ease-in-out);
-    transition-delay: 0s;
-
-    @media (prefers-reduced-motion: no-preference) {
-      translate: calc(var(--swap-dir, 1) * -100%) 0;
-      transform: translateX(calc(var(--swap-dir, 1) * 100%));
-      transition-timing-function:
-        var(--ease-fade-leave), step-end, var(--ease-in-out);
+    @apply swap-gone;
+  }
+  :where(&) > :where([data-side="end"]) {
+    --swap-side: 1;
+  }
+  :where(&[data-alone]) > :where(*) {
+    --swap-park: var(--swap-side, -1);
+    --swap-exit: var(--swap-side, -1);
+    --swap-delay: 0s;
+  }
+  :where(&[data-in-place]) > :where(*) {
+    --swap-exit: 0;
+    --swap-travel: 0s;
+    --swap-delay: 0s;
+  }
+  :where(&[data-turned]) > :where([data-active="true"]) {
+    @starting-style {
+      --swap-shown: 0;
     }
   }
   /* Its baseline is a line of words at its centre, zero wide and zero tall:
@@ -3096,27 +3161,6 @@
     inline-size: 0;
     line-height: 0;
   }
-}
-
-/* The same swap for two things that say which of them shows by a state of
-   their own (a tree mark's face and its chevron): each moves on
-   `swap-move`, and the one that has given way is `swap-gone`; a variant
-   brings it back with `swap-shown`. */
-@utility swap-move {
-  transition-property: opacity, scale;
-  transition-duration: var(--icon-swap-dur, var(--duration-slow));
-  transition-timing-function: var(--icon-swap-ease, var(--ease-out));
-}
-@utility swap-gone {
-  opacity: 0;
-
-  @media (prefers-reduced-motion: no-preference) {
-    scale: 0.25;
-  }
-}
-@utility swap-shown {
-  opacity: 1;
-  scale: 1;
 }
 
 /* What stands behind a colour with an alpha: a checkerboard of the recess

@@ -6,7 +6,7 @@
     SVGAttributes,
   } from "svelte/elements";
   import type { VariantProps } from "tailwind-variants";
-  import type { GlyphSide } from "#lib/platform/motion/glyph.js";
+  import type { GlyphSide } from "#lib/components/ui/glyph-swap/index.js";
   import { cn, tv, type WithElementRef } from "#lib/utils.js";
 
   export const buttonVariants = tv({

@@ -34,6 +34,7 @@
   import * as Command from "#lib/components/ui/command/index.js";
   import { dockShellVariants } from "#lib/components/ui/dock-shell/index.js";
   import { rise as riseSurface } from "#lib/components/ui/elevated/index.js";
+  import { GlyphSwap } from "#lib/components/ui/glyph-swap/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -357,23 +358,13 @@
           : `opacity: ${t}; translate: 0 calc(var(--spacing-space-2) * ${u})`,
     };
   }
-  /**
-   * The send/stop glyph that is being replaced goes out as the new one comes
-   * in (`icon-swap`), the two sharing the button's one grid cell: it shrinks
-   * to 0.25 into a 4px blur as it fades. Reduced motion keeps the fade, with
-   * no scale and no blur (DESIGN.md's Reduced Motion Rule).
-   */
-  function glyphOut(_node: Element): TransitionConfig {
-    const still = !motionOk.current;
-    return {
-      duration: dur("--duration-fast"),
-      easing: easeOut,
-      css: (t, u) =>
-        still
-          ? `opacity: ${t}`
-          : `opacity: ${t}; scale: ${1 - u * 0.75}; filter: blur(calc(var(--spacing-space-1) * ${u}))`,
-    };
-  }
+  /** The send/stop button's glyph: the wait, Stop, or Send. */
+  const sendGlyph = $derived.by(() => {
+    if (sender.pending) {
+      return "wait";
+    }
+    return stops ? "stop" : "send";
+  });
   function fade(_node: Element): TransitionConfig {
     return {
       duration: dur("--duration-fast"),
@@ -1726,32 +1717,24 @@
             onclick={whileIdle(() => sender.pending, onaction)}
             type="button"
           >
-            <!-- The one control that changes meaning mid-turn. `{#key}` re-creates
-             the glyph on every flip, so BOTH directions of the swap animate in;
-             the box it sits in is untouched, so send↔stop never moves or
-             resizes under a thumb already travelling toward it. -->
-            {#key sender.pending ? "wait" : stops}
-              <!-- The glyph carrier, not the button: it is content-sized and
-                   centred, so scaling it in cannot change the control's box.
-                   The one cell of the button's grid: an outgoing glyph and
-                   its replacement overlap there while they cross-fade. -->
-              <!-- The glyph swapping in; reduced motion keeps the fade: no
-                   scale, no blur. The optical nudge is on the carrier's
-                   `translate`, which the swap's `transform` does not touch. -->
-              <span
-                data-slot="swap"
-                class="row-start-1 col-start-1 grid place-items-center motion-safe:animate-icon-swap motion-reduce:animate-icon-swap-still group-enabled/stop:translate-x-optical group-enabled/stop:-translate-y-optical"
-                out:glyphOut
-              >
-                {#if sender.pending}
-                  <Spinner aria-hidden="true" role="presentation" />
-                {:else if stops}
-                  <IconStop />
-                {:else}
-                  <IconSend />
-                {/if}
-              </span>
-            {/key}
+            <!-- The one control that changes meaning mid-turn: its glyphs
+                 give way to one another in the button's one cell, on the
+                 house's glyph swap, so send↔stop never moves or resizes the
+                 box under a thumb already travelling toward it. The optical
+                 nudge is a `translate` round each glyph, inside the swap's
+                 own child, which the swap moves. -->
+            <GlyphSwap data-slot="swap" shows={sendGlyph}>
+              {#snippet glyph(key)}
+                <span
+                  class="inline-flex group-enabled/stop:translate-x-optical group-enabled/stop:-translate-y-optical"
+                  >{#if key === "wait"}<Spinner
+                      aria-hidden="true"
+                      role="presentation"
+                    />{:else if key === "stop"}<IconStop />{:else}<IconSend
+                    />{/if}</span
+                >
+              {/snippet}
+            </GlyphSwap>
           </button>
         </div>
       </form>

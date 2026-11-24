@@ -105,6 +105,7 @@
   import { resolveSessionTitle } from "./links";
   import { sessionSprite } from "./mark";
   import RowFault from "./RowFault.svelte";
+  import StatusGlyph from "./StatusGlyph.svelte";
   import type { StopJob, StopRow } from "./stop-work.svelte";
   import TreeLine from "./TreeLine.svelte";
   import TreeMark from "./TreeMark.svelte";
@@ -683,8 +684,8 @@
   /** What a row's status says as it stops: its column is as wide as the widest. */
   const STOP_WORDS = [STOPPING_LABEL, STOPPED_LABEL] as const;
 
-  /** A landed tile fades into the ring, as an old glyph fades. */
-  const intoRing = glyphOut;
+  /** A landed tile fades into the ring where it stands. */
+  const intoRing = appear;
 </script>
 
 {#snippet branch()}
@@ -779,31 +780,10 @@
             style:--stat-away-indent={"calc(var(--mark-size, var(--spacing-space-4)) + var(--spacing-space-2))"}
           >
             <span
-              data-slot="glyph"
-              class={[
-                "inline-grid flex-none @min-xs/stop-tray:@max-sm/stop-tray:hidden",
-                status.tone === "working" && "text-cyan",
-                status.tone === "attention" && "text-orange",
-                status.tone === "failed" && "text-red",
-                status.tone === "quiet" && "text-tx-2",
-              ]}
+              class="contents @min-xs/stop-tray:@max-sm/stop-tray:hidden"
               data-box
+              ><StatusGlyph icon={status.icon} tone={status.tone} /></span
             >
-              {#key status.word}
-                <span
-                  data-slot="mark"
-                  class="col-start-1 row-start-1 inline-flex"
-                  in:glyphIn
-                  out:glyphOut
-                >
-                  {#if status.icon}
-                    <status.icon aria-hidden="true" class="size-icon-md" />
-                  {:else}
-                    <Spinner aria-hidden="true" role="presentation" />
-                  {/if}
-                </span>
-              {/key}
-            </span>
             <!-- In the rail's room the glyph says it alone; the title's
                  hidden words say it to a reader. -->
             <!-- A new word cross-fades over the old one where it stands

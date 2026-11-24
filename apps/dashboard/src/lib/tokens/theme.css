@@ -468,7 +468,7 @@
     0.9988,
     1
   );
-  /* A glyph's fade, tied to its slide (glyph.ts, `icon-swap`): it is
+  /* A glyph's fade, tied to its slide (design.css `swap-move`): it is
      seen only while at least half of it stands in its cell, so it fades
      out before it can reach what stands beside it and is never cut off
      (owner, 2026-11-24), and otherwise fades on the clock. Arriving: the
