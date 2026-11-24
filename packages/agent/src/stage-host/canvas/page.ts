@@ -15,6 +15,7 @@ import {
   type FrameRender,
   type Interaction,
   type MoveRender,
+  type PageBy,
   type PageError,
   type PageReport,
   type Scheme,
@@ -260,9 +261,6 @@ export interface Section {
   /** Its interactions, probes and moves read since it was last shown: one pass at a time in the rig. */
   settling?: Promise<void>;
 }
-
-/** Which page this is: a person's panel or the stage's render (the stage's one drawing), a decision page's Preview or the map's live card (its column of drawings). */
-export type PageBy = "panel" | "stage" | "embed" | "map";
 
 /** The callbacks waiting for {@link nextTask}'s message, in order. */
 const tasksDue: (() => void)[] = [];

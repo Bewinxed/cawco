@@ -114,6 +114,8 @@ export interface ArtifactClient {
   beat: () => void;
   /** Ends its socket: the artifact was removed ({@link ArtifactDocs.drop}). */
   close: () => void;
+  /** A page's main view, by the id its overlay joined with (the socket's `placer` query): one of them writes where the marks stand (core `DocMeta.placer`). */
+  placer?: string;
   /** A canvas's host page, which can convert the agent's writes (the socket's `screen` query). */
   screen: boolean;
   send: (update: Uint8Array) => void;
@@ -212,6 +214,8 @@ export interface ArtifactDocs {
    * Read it at once; it moves with the doc.
    */
   pins: (id: string) => ReadonlyMap<string, Pin>;
+  /** The main views joined to the artifact now, by their ids, in the order they joined ({@link ArtifactClient.placer}). */
+  placers: (id: string) => string[];
   /**
    * Why `update`, from a person's client, may not be applied to the
    * artifact's doc; null when it may, the caller applying it next (sync.ts
@@ -556,6 +560,10 @@ export const createArtifactDocs = (deps: {
       }
       return why;
     },
+    placers: (id) =>
+      [...(loaded.get(id)?.clients ?? [])].flatMap((client) =>
+        client.placer ? [client.placer] : []
+      ),
     screens: (id) =>
       [...(loaded.get(id)?.clients ?? [])].filter((client) => client.screen)
         .length,

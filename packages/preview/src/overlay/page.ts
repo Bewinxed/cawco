@@ -938,6 +938,17 @@ trackFields((key, holds, el) => {
   }
 });
 
+/** Whether the hub had named this page to place the marks (artifact.ts `places`) at the doc's last change to its meta. */
+let placesMarks = false;
+/** The hub named this page to place the marks: they are drawn, and what each stands on read again, now. */
+const placerNamed = () => {
+  const now = artifact.places();
+  if (now && !placesMarks) {
+    ink.changed();
+  }
+  placesMarks = now;
+};
+
 artifact.watch({
   state: (keys, remote) => {
     reflect();
@@ -949,6 +960,7 @@ artifact.watch({
   },
   meta: () => {
     aimFaults();
+    placerNamed();
     republished();
     mediaMoved();
     filesMoved();

@@ -50,6 +50,7 @@ import {
   isSendControl,
   keepAside,
   type MarkPictures,
+  newId,
   type Pin,
   type RefusedReplies,
   type RefusedWrites,
@@ -63,6 +64,7 @@ import type { MapDoc } from "@cawco/core/doc-maps";
 import { PIN_MAPS } from "@cawco/core/doc-maps";
 import { docMeta } from "@cawco/core/doc-meta";
 import { refusalWords } from "@cawco/core/hub-refusal";
+import { pageByOf } from "@cawco/core/stage";
 import { commentWords } from "@cawco/core/words/comments";
 import { here } from "./boot";
 import type { DeviceCopy, FromWorker, ToWorker } from "./doc-wire";
@@ -76,6 +78,20 @@ const SYNC_PATH =
   /^\/(?:preview\/[^/]+\/[^/]+\/)?__cawco\/artifact\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/u;
 
 export const NO_ARTIFACT = "This page has no artifact to keep its state in.";
+
+/** This page's id among the views of its artifact: the hub names one main view to place the marks (core `DocMeta.placer`). */
+const PLACER = newId();
+
+/**
+ * Whether this page is a main view of a `kind` artifact: a person's own
+ * page or panel, never a copy that only shows it (an artifact embedded in a
+ * decision page, a sheet's Preview, the map's live card, the stage's
+ * render: a canvas page's `by`, core `pageByOf`).
+ */
+const mainView = (kind: MadeArtifactKind): boolean =>
+  here.tag?.dataset.embed === undefined &&
+  (kind !== "component" ||
+    pageByOf(new URLSearchParams(location.search)) === "panel");
 
 export interface ArtifactRef {
   id: string;
@@ -703,10 +719,13 @@ export const artifact = {
       room: syncPath.slice(at + 1),
       // A canvas's page is a screen: it converts the agent's writes. One
       // embedded in a decision page only shows it.
-      params:
-        joined.kind === "canvas" && here.tag?.dataset.embed === undefined
+      params: {
+        ...(joined.kind === "canvas" && here.tag?.dataset.embed === undefined
           ? { screen: "1" }
-          : {},
+          : {}),
+        // A main view stands for placing the marks; the hub names one (core `DocMeta.placer`).
+        ...(mainView(joined.kind) ? { placer: PLACER } : {}),
+      },
       device: deviceCopy(joined.id),
     });
     handed();
@@ -780,6 +799,16 @@ export const artifact = {
     storeRefused();
     return true;
   },
+
+  /**
+   * Whether this page is the one view that writes where the marks stand
+   * (core `DocMeta.placer`): a pin or an ink group found again, one moved
+   * aside. Every other view of the artifact only shows them.
+   */
+  places: (): boolean =>
+    joined !== null &&
+    mainView(joined.kind) &&
+    docMeta(mirror).get("placer") === PLACER,
 
   /** Whether there is a doc to keep ink in: the host named the artifact, or the hub embedded it. */
   keeps: () => status === "joined" || seeded !== null,

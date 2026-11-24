@@ -48,10 +48,12 @@ import {
   FORMS,
   type Interaction,
   type MoveRender,
+  type PageBy,
   type PageError,
   type PageReport,
   type PageSection,
   type PostedReport,
+  pageByOf,
   RENDER_STATE_PARAM,
   type Scheme,
   SECTION_BROKEN,
@@ -116,7 +118,6 @@ import {
   nextTask,
   objectOf,
   type Page,
-  type PageBy,
   type Probe,
   paneAway,
   readCsf,
@@ -254,10 +255,6 @@ const specOf = (params: URLSearchParams): CanvasSpec => {
   }
 };
 
-const byOf = (params: URLSearchParams): PageBy => {
-  const by = params.get("by");
-  return by === "stage" || by === "embed" || by === "map" ? by : "panel";
-};
 export const bridge = (): Bridge | undefined => window.cawco;
 
 /**
@@ -361,7 +358,7 @@ export function boot(options: BootOptions): void {
   const params = new URLSearchParams(location.search);
   const files = params.getAll("file");
   const spec = specOf(params);
-  const by = byOf(params);
+  const by = pageByOf(params);
   const view = viewOf(params);
   const base = location.pathname.slice(
     0,

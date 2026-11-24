@@ -95,6 +95,8 @@ export interface ArtifactSocket {
   at?: string;
   /** The origin its updates are applied under, so they are not sent back to it. */
   origin?: { client: ArtifactClient };
+  /** A page's main view, by the id its overlay joined with (`?placer=<id>` on its socket): {@link electPlacer} names one of them. */
+  placer?: string;
   /**
    * The hub refused an update from it ({@link refusal}): nothing more it
    * sends is kept, as each would wait on the refused one; its writer goes
@@ -104,6 +106,14 @@ export interface ArtifactSocket {
   /** A canvas's host page, which converts the agent's writes (`?screen=1` on its socket). */
   screen: boolean;
 }
+
+/** A main view's id, as its overlay makes it (core comments model `newId`). */
+const PLACER_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+
+/** The main view a socket's query names (`placer`), when it names one well. */
+export const placerOf = (query: string | undefined): string | undefined =>
+  query && PLACER_ID.test(query) ? query : undefined;
 
 const syncMessage = (write: (encoder: Encoder) => void) => {
   const encoder = createEncoder();
@@ -278,6 +288,29 @@ const holdClaims = (docs: ArtifactDocs, artifactId: string) => {
 };
 
 /**
+ * The one main view of a page or a sheet that writes where its marks stand
+ * (core `DocMeta.placer`): the one named stays while its socket stays
+ * joined, and when it has left, the first main view joined of those joined
+ * now is named. Two views of one page read the page each at its own width,
+ * scheme and ids, and both writing what they read wrote the pins back and
+ * forth; the hub hears every join and leave in turn, so it names one
+ * without a race. Nothing is written while the one named stands, nor when
+ * no main view is joined: the next to join is named then.
+ */
+const electPlacer = (docs: ArtifactDocs, artifactId: string) => {
+  const joined = docs.placers(artifactId);
+  const [first] = joined;
+  if (first === undefined) {
+    return;
+  }
+  const named = getMeta(docs.doc(artifactId), "placer");
+  if (named !== undefined && joined.includes(named)) {
+    return;
+  }
+  docs.transact(artifactId, "hub", (doc) => setMeta(doc, "placer", first));
+};
+
+/**
  * One update from a person's client, applied to artifact `artifactId`'s
  * doc as `origin`'s within the bounds (see the top): from its socket, or
  * carried by its Send. Why it isn't, or null once it is.
@@ -384,11 +417,15 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
       // The artifact was removed: core ARTIFACT_GONE, on which a device lets its copy go.
       close: () => socket.close(ARTIFACT_GONE, "This artifact was removed."),
       screen: socket.data.screen,
+      ...(socket.data.placer ? { placer: socket.data.placer } : {}),
       send: (update) =>
         socket.send(syncMessage((encoder) => writeUpdate(encoder, update))),
     };
     socket.data.origin = { client };
     const doc = docs.join(socket.data.artifactId, client);
+    if (client.placer) {
+      electPlacer(docs, socket.data.artifactId);
+    }
     socket.send(syncMessage((encoder) => writeSyncStep1(encoder, doc)));
   },
   message(socket: ArtifactSocketEnd, message: string | Buffer) {
@@ -406,6 +443,9 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
       // A removed artifact's doc is let go with its sockets: nothing to elect.
       if (socket.data.screen && code !== ARTIFACT_GONE) {
         releaseClaims(docs, socket.data.artifactId, socket.data.origin.client);
+      }
+      if (socket.data.placer && code !== ARTIFACT_GONE) {
+        electPlacer(docs, socket.data.artifactId);
       }
     }
   },

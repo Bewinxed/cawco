@@ -61,11 +61,11 @@ import {
 } from "@cawco/core/bring-into-view";
 import {
   type AnchorFound,
-  changedAnchor,
+  anchorRereader,
+  madeAs,
   type PageAnchor,
   type PinnedElement,
   wholePage,
-  wordsFollow,
 } from "@cawco/core/comments/anchor";
 import {
   newId,
@@ -498,13 +498,17 @@ export function startPins(deps: PinsDeps): Pins {
   /**
    * A pin whose element is gone may be moved aside, and an anchor that reads
    * otherwise now is written again, only on a page the agent wrote or a sheet
-   * of its components (re-read after each HMR update), once it has laid out,
-   * and once what the device kept of the doc is in (artifact.ts `stored`):
-   * the hub's embedded copy may still hold a pin the device deleted, and a
-   * write of it would stand against that deletion.
+   * of its components (re-read after each HMR update), by the one view the
+   * hub named to place its marks (artifact.ts `places`: two views of one
+   * page each read it at their own width and wrote their own readings back
+   * and forth), once it has laid out, and once what the device kept of the
+   * doc is in (artifact.ts `stored`): the hub's embedded copy may still hold
+   * a pin the device deleted, and a write of it would stand against that
+   * deletion.
    */
   const settled = () =>
     (artifact.kind() === "page" || artifact.kind() === "component") &&
+    artifact.places() &&
     document.readyState !== "loading" &&
     artifact.stored();
 
@@ -738,15 +742,15 @@ export function startPins(deps: PinsDeps): Pins {
   };
 
   /**
-   * The anchors whose element is found under another selector or text now
-   * (a revision moved or reworded it), to be written back so the next look
-   * finds it by its selector; one that still reads as it was, or whose words
-   * alone changed where its selector still finds it, is left alone (core
-   * `changedAnchor`). A moved pin whose anchor finds its element again (the
-   * page drew it back, a revision restored it) stands on the page again,
-   * out of the moved tray. Each as it is to be written.
+   * The anchors whose element stands otherwise in the page now (a revision
+   * moved or reworded it), to be written back so the next look finds it by
+   * its selector; one that still stands as it was, read by this view or any
+   * other, is left alone (core `anchorRereader`). A moved pin whose anchor
+   * finds its element again (the page drew it back, a revision restored it)
+   * stands on the page again, out of the moved tray. Each as it is to be
+   * written.
    */
-  const liveWords = wordsFollow();
+  const reread = anchorRereader();
   const reanchor = (pins: Pin[]) => {
     const moves: Pin[] = [];
     for (const pin of pins) {
@@ -757,19 +761,14 @@ export function startPins(deps: PinsDeps): Pins {
         continue;
       }
       const found = deps.locate(deps.anchorToday(pin.anchor, pin.at));
-      // Where in a file it stands was read as it was made or placed again, and stands.
-      const now = found && {
-        ...deps.anchorOf(found.el),
-        ...(pin.anchor.file ? { file: pin.anchor.file } : {}),
-      };
-      if (
-        now &&
-        (pin.movedAt ||
-          changedAnchor(pin.anchor, now, found.by) ||
-          liveWords(pin.id, pin.anchor, now, found.by))
-      ) {
+      if (!found) {
+        continue;
+      }
+      const read = deps.anchorOf(found.el);
+      const now = reread(pin.id, pin.anchor, read, found.by);
+      if (now || pin.movedAt) {
         const { movedAt: _moved, ...rest } = pin;
-        moves.push({ ...rest, anchor: now });
+        moves.push({ ...rest, anchor: now ?? madeAs(pin.anchor, read) });
       }
     }
     return moves;

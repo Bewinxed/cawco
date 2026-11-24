@@ -178,6 +178,14 @@ export interface DocMeta {
   pictureAt: string | null;
   /** A decision page's: the machine each picture it shows was read on, by the name its Image gives. */
   pictureMachines: Record<string, string>;
+  /**
+   * The one view of a page or a sheet that writes where its marks stand (a
+   * pin found again, one moved aside), by the id its overlay joined with:
+   * the hub names the first main view joined of those joined now (hub
+   * artifacts sync.ts `electPlacer`). Every other view only shows its marks,
+   * so two views of one page never write them back and forth.
+   */
+  placer: string;
   /** A decision page's: the work folder its relative Images were last published from. */
   programDir: string;
   /** A decision page's: the machine that folder is on. */
@@ -257,6 +265,7 @@ export const META_WRITERS = {
   penMode: "canvas",
   pictureAt: "hub",
   pictureMachines: "hub",
+  placer: "hub",
   programDir: "hub",
   programMachine: "hub",
   promoted: "hub",

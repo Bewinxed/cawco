@@ -25,6 +25,7 @@ import {
   type ArtifactSocketEnd,
   type artifactPicture,
   type artifactSocket,
+  placerOf,
   type StoreSocketEnd,
   type storeSocket,
 } from "./artifacts/sync";
@@ -497,6 +498,7 @@ export const previewControlRoutes = (
             artifactId: artifact,
             at: key,
             screen: ws.query.screen === "1",
+            placer: placerOf(ws.query.placer),
           },
           send: (message) => ws.send(message),
           close: (code, reason) => ws.close(code, reason),

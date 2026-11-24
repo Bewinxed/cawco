@@ -353,6 +353,19 @@ export interface RenderAsk {
  */
 export const STAGE_RENDER_MS = 90_000;
 
+/**
+ * Which page a canvas page is, by its `by` query: a person's panel (the
+ * default), the stage's render (the stage's one drawing), a decision page's
+ * Preview or the map's live card (each its column of drawings).
+ */
+export type PageBy = "panel" | "stage" | "embed" | "map";
+
+/** The page a canvas page's query says it is ({@link PageBy}): a person's panel unless it names another. */
+export const pageByOf = (params: URLSearchParams): PageBy => {
+  const by = params.get("by");
+  return by === "stage" || by === "embed" || by === "map" ? by : "panel";
+};
+
 /** The canvas page's query naming the one state a stage's render is asked for (`Story`, or `file:Story`): the page sweeps that state's section alone ({@link sweptFiles}). */
 export const RENDER_STATE_PARAM = "state";
 

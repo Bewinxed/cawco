@@ -53,10 +53,9 @@
  */
 import {
   type AnchorFound,
-  changedAnchor,
+  anchorRereader,
   type PageAnchor,
   type PinnedElement,
-  wordsFollow,
 } from "@cawco/core/comments/anchor";
 import { buryPin, newId, readPins } from "@cawco/core/comments/model";
 import type { DocMap } from "@cawco/core/doc-maps";
@@ -1313,9 +1312,15 @@ export function startInk(deps: InkDeps): Ink {
     later();
   }
 
-  /** Whether a group whose element is gone may be moved aside now: a page the agent wrote, or a sheet of its components, laid out. */
+  /**
+   * Whether a group whose element is gone may be moved aside now, and one
+   * that stands otherwise written again: a page the agent wrote, or a sheet
+   * of its components, laid out, in the one view the hub named to place
+   * its marks (artifact.ts `places`).
+   */
   const settled = () =>
     (artifact.kind() === "page" || artifact.kind() === "component") &&
+    artifact.places() &&
     document.readyState !== "loading";
 
   /** Whether a group no anchor finds is missing, not waiting on a frame still loading. */
@@ -1404,28 +1409,22 @@ export function startInk(deps: InkDeps): Ink {
   }
 
   /**
-   * The group anchored again on `el` when `el` now reads otherwise than its
-   * anchor (moved, renamed, reworded); null when it reads as it was, since
-   * a write draws the ink again.
+   * The group anchored again on `el` when `el` now stands otherwise in the
+   * page than its anchor says (moved, renamed, reworded: core
+   * `anchorRereader`); null when it stands as it was, since a write draws
+   * the ink again.
    */
-  const liveWords = wordsFollow();
+  const reread = anchorRereader();
   function rereadOn(
     group: InkGroup,
     el: Element,
     by: AnchorFound<Element>["by"]
   ): InkGroup | null {
-    // Where in a file it stands was read as it was drawn, and stands.
-    const now = {
-      ...deps.anchorOf(el),
-      ...("selector" in group.anchor && group.anchor.file
-        ? { file: group.anchor.file }
-        : {}),
-    };
-    return "selector" in group.anchor &&
-      (changedAnchor(group.anchor, now, by) ||
-        liveWords(group.id, group.anchor, now, by))
-      ? { ...group, anchor: now }
-      : null;
+    if (!("selector" in group.anchor)) {
+      return null;
+    }
+    const now = reread(group.id, group.anchor, deps.anchorOf(el), by);
+    return now ? { ...group, anchor: now } : null;
   }
 
   /**
