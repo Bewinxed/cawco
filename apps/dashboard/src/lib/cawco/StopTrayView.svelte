@@ -88,7 +88,13 @@
     IconRenew as Working,
   } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
-  import { CURVE, dur, motionOk } from "../platform/motion/curves.svelte";
+  import {
+    CURVE,
+    crossIn,
+    crossOut,
+    dur,
+    motionOk,
+  } from "../platform/motion/curves.svelte";
   import { echoBeat } from "../platform/motion/echo.svelte";
   import { fold, unfold } from "../platform/motion/fold.svelte";
   import { glyphIn, glyphOut } from "../platform/motion/glyph";
@@ -844,14 +850,19 @@
                announced as they change. -->
           <!-- No line where its words are empty (a delete with nothing
                stopped, once it runs). -->
+          <!-- A new line cross-fades over the old one where it stands
+               (crossIn/crossOut, the leaving one pinned out of the flow),
+               so the body's morph follows one change of height. -->
           <p
             aria-live="polite"
-            class="m-0 type-meta text-ink-muted data-empty:hidden"
+            class="relative m-0 type-meta text-pretty text-ink-muted data-empty:hidden"
             data-empty={description === "" || undefined}
           >
-            {#if description !== ""}
-              <MorphText text={description} wrap />
-            {/if}
+            {#key description}
+              {#if description !== ""}
+                <span class="block" in:crossIn out:crossOut>{description}</span>
+              {/if}
+            {/key}
           </p>
         </div>
       </div>

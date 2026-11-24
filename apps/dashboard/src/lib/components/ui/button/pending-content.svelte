@@ -314,7 +314,12 @@
             {@attach measureRest}
             aria-hidden={pending || undefined}
             class="col-start-1 row-start-1 transition-[opacity] duration-(--duration-morph) ease-out active-false:opacity-0"
-            data-active={!pending}><MorphText text={label} /></span
+            data-active={!pending}
+            ><!-- Re-made as it is covered and uncovered: a label changed
+                 under the pending wording ("Stop 3 and turn off" to "Caw is
+                 off") cross-fades in with it, never retyping as it shows. -->{#key pending}<MorphText
+                text={label}
+              />{/key}</span
           ><!-- Its figures one width (num): a count winding down ("Stopping
                3…", "Stopping 2…") keeps its width, so the slot beside it
                stays put. --><span
