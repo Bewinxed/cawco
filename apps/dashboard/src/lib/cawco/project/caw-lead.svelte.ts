@@ -116,6 +116,13 @@ export class CawLead {
   view = $state<ProjectConversationView | null>(null);
   /** The last read or change the hub refused, in its words. */
   refused = $state<string | null>(null);
+  /**
+   * The place of the switch last flipped (CawLeadSwitch `flipCaw`, stop-work
+   * `cawOffAt` or `cawSeatAt`): what the hub says of the flip, a refusal, is
+   * said there alone. Null before any flip: a refusal of the page's own
+   * read is said in his settings, as it always was.
+   */
+  flippedAt = $state<string | null>(null);
   /** A switch or harness change is on its way to the hub. */
   moving = $state(false);
   /** The task that just landed, held for two breaths. */

@@ -279,6 +279,7 @@ export class FixtureCaw {
   on = $state<boolean | null>(true);
   moving = $state(false);
   refused = $state<string | null>(null);
+  flippedAt = $state<string | null>(null);
   #view = $state<ProjectConversationView | null>(null);
   readonly #running: boolean;
   readonly #refuses: boolean;

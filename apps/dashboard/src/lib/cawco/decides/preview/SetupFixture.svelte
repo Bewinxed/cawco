@@ -110,6 +110,7 @@
         model: null,
         sentence: conversationWords.status.ready,
         refused: null,
+        flippedAt: null,
         view: null,
         configure: () => Promise.resolve(),
         read: () => Promise.resolve(),

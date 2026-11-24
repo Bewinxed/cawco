@@ -5,7 +5,7 @@
   /** What the switch reads and asks of the page's Caw. */
   export type SwitchedLead = Pick<
     CawLead,
-    "configure" | "moving" | "on" | "read" | "refused" | "view"
+    "configure" | "flippedAt" | "moving" | "on" | "read" | "refused" | "view"
   >;
 
   /**
@@ -21,6 +21,8 @@
     /** The switch's place, where the confirm stands. */
     at: string = cawOffAt(project.id)
   ): Promise<void> {
+    // What the hub says of this flip is said here alone.
+    lead.flippedAt = at;
     const offJob = stopWork.of("caw-off", project.id);
     if (offJob?.open && ["none", "list", "armed"].includes(offJob.phase)) {
       stopWork.dismiss(offJob);
@@ -200,7 +202,9 @@
          open; closed, on the project's row (ProjectEndTray). -->
     <StopParked {at} job={offJob} />
   {/if}
-  {#if lead.refused}
+  <!-- A refusal is said under the switch it answers (the place last
+       flipped), so his seat and his settings, both drawn, say it once. -->
+  {#if lead.refused && (lead.flippedAt ?? cawOffAt(projectId)) === at}
     <p data-slot="refused" class="type-meta text-error-11" role="alert">
       {lead.refused}
     </p>

@@ -101,6 +101,7 @@ export interface Fault {
 export type CawSeat = Pick<
   CawLead,
   | "configure"
+  | "flippedAt"
   | "harness"
   | "model"
   | "moving"
