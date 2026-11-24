@@ -316,23 +316,28 @@ export class FleetDesired {
   }
 
   /**
-   * A converge came to `statuses` over `ids` and to `report`, and every
+   * A converge came to `statuses` over `pass.ids` and to `report`, and every
    * generation up to `generation` has converged: a force on any of them is
    * spent, each that came out ok is converged at its hash, each no longer
    * held is converged away, and the report is the one kept; `basis`, what
-   * a converge of every part ran as, when this one was. Kept on disk; a
-   * write that fails is said, and the next converge writes again.
+   * a converge of every part ran as, when this one was. A converge of every
+   * part (`pass.all`) took away whatever the machine no longer holds, so
+   * every item the record names that is not held is converged away, not
+   * only the ones in `pass.ids` (the held items). Kept on disk; a write
+   * that fails is said, and the next converge writes again.
    */
   converged(
-    ids: readonly string[],
+    pass: { all: boolean; ids: readonly string[] },
     statuses: readonly FleetItemStatus[],
     report: FleetSyncReport | undefined,
     generation: number,
     basis?: ConvergeBasis
   ): void {
     const items = { ...this.#converged.items };
-    for (const id of ids) {
+    for (const id of pass.ids) {
       this.#forced.delete(id);
+    }
+    for (const id of pass.all ? Object.keys(items) : pass.ids) {
       if (!this.#items.has(id)) {
         delete items[id];
       }

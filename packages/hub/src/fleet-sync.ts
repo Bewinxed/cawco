@@ -19,7 +19,8 @@
  * (a Sync, a Retry, an Overwrite).
  *
  * One delta is in flight per machine: a change while it is waits until it
- * is answered. Each is said `sent` once it is on the connection; one not
+ * is answered, a welcome among them, so a change that lands after the
+ * welcome was built goes once the machine answers it. Each is said `sent` once it is on the connection; one not
  * answered within {@link FLEET_ACK_MS} is said `unacked` and sent again,
  * the same generation and payload under the same request (the agent's
  * request record answers it once), until it is answered or the machine's
@@ -215,14 +216,14 @@ export class FleetSync {
   readonly #inFlight = new Map<string, InFlight>();
   /** Machines whose last delta was refused, with when: sent again on a heartbeat after {@link NACK_AGAIN_MS}. */
   readonly #owed = new Map<string, number>();
-  /** The items a person's Overwrite forces on each machine, until a delta carrying them is acknowledged. */
+  /** The items a person's Overwrite forces on each machine, until a delta carrying them forced (or taking them away) is acknowledged. */
   readonly #forced = new Map<string, Set<string>>();
   /** The changes gathered for the next build, by machine (`*`: every machine). */
   readonly #gathered = new Map<string, Ask[]>();
-  /** The changes that came for a machine while its delta was in flight: sent once it is answered. */
+  /** The changes that came for a machine while its delta (its welcome too) was in flight: sent once it is answered. */
   readonly #waiting = new Map<string, Ask[]>();
   #debounce: HubTimer | undefined;
-  /** The machines that answered their welcome on their current connection: the ones a fleet change goes to. */
+  /** The machines that answered their welcome on their current connection. */
   readonly #ready = new Set<string>();
 
   constructor(deps: FleetSyncDeps) {
@@ -271,8 +272,9 @@ export class FleetSync {
   }
 
   /**
-   * The fleet changed (`why`): 250 ms after the last change, every ready
-   * machine (or `machineId` alone) is sent the items that moved for it.
+   * The fleet changed (`why`): 250 ms after the last change, every machine
+   * it reaches ({@link #reached}), or `machineId` alone, is sent the items
+   * that moved for it.
    * `recheck`: its workspace boundaries are checked again; `reconverge`:
    * every item it holds is converged again (the person's Sync).
    */
@@ -301,12 +303,12 @@ export class FleetSync {
   }
 
   /**
-   * `ids` forced on every machine the next delta goes to (the ones online):
+   * `ids` forced on every machine the next delta goes to ({@link #reached}):
    * each converges them again though their hashes did not move, as a
    * refresh whose fetch came back the same asks.
    */
   forceReady(ids: readonly string[]): void {
-    for (const machineId of this.#ready) {
+    for (const machineId of this.#reached()) {
       this.force(machineId, ids);
     }
   }
@@ -435,7 +437,11 @@ export class FleetSync {
     this.#deps.keepItems(machineId, kept);
   }
 
-  /** What an acknowledged delta carried is what the machine holds now; its forces are spent. */
+  /**
+   * What an acknowledged delta carried is what the machine holds now; the
+   * forces it carried are spent. One forced after it was built (a welcome
+   * in flight, a delta that carried the item unforced) is still owed.
+   */
   #hold(machineId: string, sent: InFlight): void {
     const acked = sent.delta.full
       ? new Map<string, string>()
@@ -443,8 +449,12 @@ export class FleetSync {
     const forced = this.#forced.get(machineId);
     const statuses = { ...this.#deps.keptItems(machineId) };
     let dropped = false;
+    for (const item of sent.delta.items) {
+      if (item.force || item.value === null) {
+        forced?.delete(item.id);
+      }
+    }
     for (const [id, hash] of sent.items) {
-      forced?.delete(id);
       if (hash === null) {
         acked.delete(id);
         if (statuses[id]) {
@@ -464,12 +474,21 @@ export class FleetSync {
     }
   }
 
+  /**
+   * The machines a fleet change goes to: each that answered its welcome,
+   * and each whose welcome is in flight, which was built before the change
+   * and so is owed it once answered.
+   */
+  #reached(): Set<string> {
+    return new Set([...this.#ready, ...this.#inFlight.keys()]);
+  }
+
   #flush(): void {
     this.#debounce = undefined;
     const gathered = new Map(this.#gathered);
     this.#gathered.clear();
     const every = gathered.get("*") ?? [];
-    for (const machineId of this.#ready) {
+    for (const machineId of this.#reached()) {
       const asks = [...every, ...(gathered.get(machineId) ?? [])];
       if (asks.length === 0) {
         continue;

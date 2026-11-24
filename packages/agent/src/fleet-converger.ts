@@ -562,7 +562,7 @@ export class FleetConverger {
       const owedSince =
         this.#convergeOwed || this.#convergeIds.size > 0 || this.#reconverge;
       this.#desired.converged(
-        ids,
+        { all, ids },
         statuses,
         report,
         owedSince ? generation : (this.#desired.generation ?? generation),
