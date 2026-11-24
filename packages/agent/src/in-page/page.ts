@@ -36,11 +36,15 @@ declare global {
 
 /** What the stage page keeps on `__cawcoCanvas`, as far as the agent reads it. */
 interface PageCanvas extends Partial<StageMeasuring> {
+  /** The states files the page is reading now (canvas rig.ts); none on a page that reads nothing. */
+  drawing?: () => string[];
   drawn: string[];
   lacks?: (key: string) => { h: number; w: number } | null;
   layout?: (key: string) => LayoutRead | null;
   picture?: (key: string) => FramePictureRead | null;
   pose?: (key: string) => Promise<{ h: number; w: number } | null>;
+  /** Each of `files` read again for the report (canvas rig.ts). */
+  readAgain?: (files: string[]) => void;
   reports: number;
   settled?: (key: string) => boolean;
   stateNamed?: (
@@ -132,11 +136,12 @@ export const holdAnimations = (): void => {
   }
 };
 
-/** The stage's sweep as it stands now: null before its runtime has booted. */
+/** The stage's sweep as it stands now, and the files it is reading: null before its runtime has booted. */
 export const sweepNow = () => {
   const state = window.__cawcoCanvas;
   return state
     ? {
+        drawing: state.drawing?.() ?? [],
         drawn: [...state.drawn],
         reports: state.reports,
         swept: state.swept,
@@ -144,6 +149,13 @@ export const sweepNow = () => {
         sweeps: [...state.sweeps],
       }
     : null;
+};
+
+/** The stage's own page reads `files` again for the report; false where the page holds no reader. */
+export const readAgainNow = (files: string[]): boolean => {
+  const read = window.__cawcoCanvas?.readAgain;
+  read?.(files);
+  return !!read;
 };
 
 /** The page's host hears what the page says to it: its lock turned it away (`locked` names that message), or the proxy served its down page. */

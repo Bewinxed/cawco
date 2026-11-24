@@ -7,7 +7,6 @@ import type { PreviewUnavailable } from "@cawco/core/preview/protocol";
 import type { PreviewAddress } from "@cawco/core/preview/routes";
 import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
 import type {
-  CanvasSpec,
   DesignMap,
   DesignMoved,
   DesignOpened,
@@ -542,10 +541,10 @@ export interface ArtifactServiceDeps {
    * (preview.ts `waitingStages`).
    */
   stageLive: (key: string, port: number) => boolean;
-  /** A canvas drawn by its workspace's daemon in the machine's Chromium (agent stage-render.ts): within its limit, what it drew and what it did not. */
+  /** A canvas read by its workspace's daemon in the machine's Chromium (agent stage-render.ts): within its limit, what its page drew and what it did not. */
   stageRender: (
     at: StageAt,
-    ask: { files: string[]; png?: boolean; spec?: CanvasSpec; state?: StateAsk }
+    ask: { files: string[]; png?: boolean; state?: StateAsk }
   ) => Promise<StageRendered | StageRefused>;
   /**
    * A write to a sheet's story file in its workspace, made by its stage

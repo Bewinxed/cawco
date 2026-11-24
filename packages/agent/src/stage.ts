@@ -172,7 +172,13 @@ import { designsGone, dropDesign, keepDesign } from "./stage-design";
 import { HOST_RUNTIME_ENV, stageHost } from "./stage-host/build";
 import { installMoved, installProject, type ProjectAt } from "./stage-install";
 import { StageRefusal, WorkspaceNotHere } from "./stage-refusal";
-import { listenerFor, type Rendered, renderCanvas } from "./stage-render";
+import {
+  closeReaders,
+  idleReaders,
+  listenerFor,
+  type Rendered,
+  renderCanvas,
+} from "./stage-render";
 import { userBun } from "./user-bun";
 import { keepPlace, workspaceRefs } from "./workspace-records";
 
@@ -1106,6 +1112,8 @@ async function writeHost(stage: Stage): Promise<void> {
 function kill(stage: Stage): void {
   const leader = stage.child ? spawnedPid(stage.child) : undefined;
   stage.child = undefined;
+  // Its kept readers end with it: the next read opens another on the stage that runs then.
+  closeReaders(stage.key);
   clearInterval(stage.health);
   stage.health = undefined;
   stage.mirror?.();
@@ -1272,6 +1280,8 @@ function watch(stage: Stage): void {
       sleep(stage);
       return;
     }
+    // A canvas no read has asked for in the stage's idle time is no longer in use: its kept reader closes.
+    idleReaders(stage.key, IDLE_MS);
     if (await depsMoved(stage)) {
       if (stage.status === "live") {
         startAgain(stage, REINSTALLING);
@@ -2033,11 +2043,12 @@ export async function writeSheet(
 }
 
 /**
- * A canvas of `ask.files` (each from the clone's root) drawn by the daemon in
+ * A canvas of `ask.files` (each from the clone's root) read by the daemon in
  * the machine's own Chromium on its workspace's stage (stage-render.ts),
- * started or woken first: the stage's report once every section has drawn,
- * a picture when asked. A use of the stage. Every file must stand on one
- * toolchain root, the one stage a canvas page is served from.
+ * started or woken first: the stage's report once the canvas's kept reader
+ * has read the files as they stand, a picture when asked. A use of the
+ * stage. Every file must stand on one toolchain root, the one stage a
+ * canvas page is served from.
  */
 export async function renderStage(
   ports: StagePorts,
@@ -2063,11 +2074,14 @@ export async function renderStage(
     stage.boundary.id,
     stage.port
   );
-  // The render's own browser views the stage through its listener, never a preview: held awake as a viewer until it answers, or the idle sleep ends the stage under its sweep.
+  // The read's browser views the stage through its listener, never a preview: held awake as a viewer until it answers, or the idle sleep ends the stage under its sweep. Its kept reader between reads is no viewer: the stage sleeps when nobody uses it, and the reader closes with it.
   used(stage, "a render");
   const release = viewing(stage);
   try {
-    return await renderCanvas(reached, stage.port, { ...ask, files });
+    return await renderCanvas(stage.key, reached, stage.port, {
+      ...ask,
+      files,
+    });
   } finally {
     release();
   }

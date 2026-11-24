@@ -368,6 +368,59 @@
       },
     },
     {
+      // The canvas's reader (stage-host/canvas/rig.ts) mounts, probes and
+      // plays every story off screen for the render report. It runs only in
+      // the daemon's own headless page of a canvas (`by=stage`), whose entry
+      // is canvas/reader.ts: a page a person uses (the panel, a Preview, a
+      // map card) never runs it, so no read takes their focus, hears their
+      // keys or holds their main thread. reader.ts is the one importer.
+      "includes": [
+        "packages/agent/**",
+        "!packages/agent/src/stage-host/canvas/reader.ts",
+        "!**/*.jsonc",
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    // A member imports another member's file through its
+                    // manifest (@cawco/<name>/…), never by a path into its
+                    // folder, whatever the path's depth: the named-member
+                    // line reads `../../agent/src/x`, which never says packages/. The CLI's `dashboard` starts the dashboard's
+                    // own entry, which no manifest exports (its binary builds it).
+                    "group": [
+                      "**/packages/*/src/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "@cawco/*/src/**",
+                      "**/apps/*/**",
+                      "!**/apps/dashboard/serve.js",
+                    ],
+                    "message": "A member imports another's file through that member's manifest (@cawco/<name>/…), never by a path into its folder.",
+                  },
+                  {
+                    "group": [
+                      "./rig",
+                      "./rig.ts",
+                      "**/canvas/rig",
+                      "**/canvas/rig.ts",
+                    ],
+                    "message": "The canvas's reader runs only in the stage's own page: canvas/reader.ts (the `by=stage` entry) is its one importer, so no page a person uses reads.",
+                  },
+                ],
+                "paths": {
+                  "@cawco/core": "Core has no index: import the module that owns the name, like @cawco/core/stage.",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
       // Core stands under every other package, so it imports none of them.
       // jsonl-parser is a published leaf that imports no workspace package,
       // and the transcript index's author words are its own: core's wire

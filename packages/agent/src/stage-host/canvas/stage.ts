@@ -58,11 +58,8 @@
  * width ({@link bootColumn}). A Preview tells the page holding it its
  * column's shape (embed.ts).
  *
- * Every states file's report is read in the rig, a section at a time: each
- * story mounted off screen as the person's drawing would be, read, then
- * taken down, a few at a time; then its probes and its moves. The page
- * posts it as each section is read, so the hub answers an open canvas from
- * the panel's own draw.
+ * The render report is no drawing's: the stage's own page reads it in its
+ * rig (rig.ts, `Page.reader`), which no page a person uses holds.
  */
 
 import { readWithin } from "@cawco/core/bounded";
@@ -72,13 +69,11 @@ import {
   type AnimationRead,
   FORMS,
   type FramePictureRead,
-  type FrameRender,
   holdersOf,
   type Interaction,
   interactionOf,
   type PageError,
   type Story,
-  type SweepStep,
   storyRefOf,
 } from "@cawco/core/stage";
 import {
@@ -146,12 +141,8 @@ import { stageScroll, stillPage } from "./held-scroll";
 import {
   describe,
   drew,
-  elementsUnread,
-  firstWords,
   keyframeEffectOf,
-  lookOf,
   pageError,
-  partsOf,
   readAnimation,
   sourceOf,
 } from "./measure";
@@ -168,7 +159,6 @@ import {
   moduleOf,
   type Page,
   type PlayFn,
-  type Probe,
   type Section,
   type SectionFailure,
 } from "./page";
@@ -184,7 +174,6 @@ import {
   Replays,
   valuesOf,
 } from "./replays";
-import { rigOwns, rigTurn } from "./rig-turn";
 import {
   frameAsViewport,
   windowHeight,
@@ -206,10 +195,6 @@ const QUIET_MS = 250;
 const REST_MS = 600;
 /** The longest a sweep of the canvas's other states files waits for the page to go idle, ms: a page never idle still sweeps them. */
 const IDLE_MOST_MS = 2000;
-/** The quiet after the last edit or view change before the report's sections are read again. Ours. */
-const READ_AGAIN_MS = 300;
-/** The gap between two stories' boxes in a section's read, px: their places in the report, one under another. */
-const ROW_GAP = 24;
 /** The page's gutter round the drawing (the panel's stage head's inset). */
 const GUTTER = "--spacing-space-4";
 /** The gutter the page keeps beside the drawing now (page-style.ts): {@link GUTTER}'s, or less where the window lacks the room. */
@@ -276,9 +261,6 @@ interface Taken {
   read: AnimationRead;
   target: Element | null;
 }
-
-/** A section's stories as the rig read them, for the report. */
-type Reads = Map<Section, FrameRender[]>;
 
 /** Whether two state names name one state. */
 const sameRef = (a: StateRef | null, b: StateRef | null): boolean =>
@@ -528,58 +510,6 @@ function faultCard(
 }
 
 /**
- * A story drawn in `body`, in `column`, read for the render report at
- * `box`: drawn, empty, or failed with why (its mount threw, its own width
- * is one the stage can't read, it drew at its body's floor); its first
- * words, the parts it is made of and, at rest, its look (`lookOf`).
- */
-function drawingRender(
-  page: Page,
-  story: Story,
-  body: HTMLElement,
-  column: Column,
-  error: PageError | undefined,
-  box: FrameRender["box"]
-): FrameRender {
-  let drawnAs: FrameRender["state"] = "empty";
-  let said = error;
-  if (said) {
-    drawnAs = "failed";
-  } else if (story.formUnread && page.view.widths === null) {
-    // Its own width is one the stage can't read: drawn at none, it would pass for drawn at a width it never asked for.
-    said = {
-      message: story.formUnread,
-      file: null,
-      line: null,
-      column: null,
-    };
-    drawnAs = "failed";
-  } else if (drew(body)) {
-    said = page.atFloor(story, column.width, body) ?? undefined;
-    drawnAs = said ? "failed" : "drawn";
-  }
-  // Read at rest only: a forced state's frame is its rest's, the state put on.
-  const look =
-    drawnAs === "drawn" && column.interaction === "rest" ? lookOf(body) : null;
-  const unread = elementsUnread(body);
-  return {
-    story: story.name,
-    label: story.label,
-    form: page.formWords(story, column.width),
-    interaction: column.interaction,
-    scheme: page.schemeOf(column),
-    width: box.w,
-    state: drawnAs,
-    box,
-    text: firstWords(body),
-    parts: partsOf(body, page.root),
-    ...(unread ? { elements: unread } : {}),
-    ...(look ? { look } : {}),
-    ...(said ? { error: said } : {}),
-  };
-}
-
-/**
  * A story's own outermost element in its drawing's body: past every box-less
  * wrapper a decorator mounts it in (the Svelte adapter mounts a decorated
  * story in a `display: contents` child, host.ts `mountSvelte`, and the
@@ -739,7 +669,7 @@ export function bootStage(page: Page): Mode {
   if (page.by === "embed" || page.by === "map") {
     return bootColumn(page);
   }
-  const { rig, sections, state, view } = page;
+  const { sections, state, view } = page;
   /**
    * A panel frames the page and says what it stands at; a page on its own
    * (the stage's render, the canvas opened in its own tab) stands at its
@@ -760,13 +690,12 @@ export function bootStage(page: Page): Mode {
   /** The one drawing: the live instance of the state the panel keeps. */
   const stage = newDrawing();
   const { frame, body: drawing } = stage;
-  /** The floating layers the drawing opened outside itself (a popover portalled to the body), the rig's left out: searched with it by a play's `canvas` and for a press's element. */
+  /** The floating layers the drawing opened outside itself (a popover portalled to the body), the stage's own page's rig left out (rig.ts): searched with it by a play's `canvas` and for a press's element. */
   const layersOut = (): HTMLElement[] =>
     [...document.body.children].filter(
       (one): one is HTMLElement =>
         one instanceof HTMLElement &&
-        one !== rig &&
-        !rigOwns(one) &&
+        !one.classList.contains("cawco-rig") &&
         !one.contains(drawing) &&
         !one.matches("script, style, link, template")
     );
@@ -865,7 +794,6 @@ export function bootStage(page: Page): Mode {
   let laidSaid = "";
   /** The state a picture stands the drawing at, and its forced interaction. */
   let posed: { interaction: Interaction; key: string } | null = null;
-  const reads: Reads = new Map();
 
   /** Whether `el` is the drawing's root: its body, or the story's own outermost element. */
   const rootOf = (el: Element) => el === drawing || el === ownRoot(drawing);
@@ -1103,7 +1031,7 @@ export function bootStage(page: Page): Mode {
     const layers = new MutationObserver((records) => {
       for (const record of records) {
         for (const node of record.addedNodes) {
-          if (node instanceof HTMLElement && node !== rig) {
+          if (node instanceof HTMLElement) {
             node.style.visibility = "hidden";
           }
         }
@@ -1338,30 +1266,31 @@ export function bootStage(page: Page): Mode {
     } else {
       answer(await actOn(asking, target, play));
     }
-    sweepRest();
+    loadRest();
   }
 
-  /** The canvas's other states files swept once its first reach is answered. */
-  let restSwept = false;
+  /** The canvas's other states files loaded once its first reach is answered. */
+  let restLoaded = false;
   /**
    * The canvas's other states files, once the first state a panel's page
-   * reached stands at rest: each swept in turn (`sweepOne`) as the page
-   * goes idle, so a flip to another direction finds it loaded and draws at
-   * once, where it waited on its load and its sheet. The first paint waits
-   * on the front one alone (runtime.ts `sweepsOf`).
+   * reached stands at rest: each loaded in turn as the page goes idle, so a
+   * flip to another direction finds it loaded and draws at once, where it
+   * waited on its load and its sheet. Loaded to draw, never read: the page
+   * reads nothing for the report. The first paint waits on the front one
+   * alone (runtime.ts `sweepsOf`).
    */
-  function sweepRest(): void {
-    if (restSwept || page.by !== "panel") {
+  function loadRest(): void {
+    if (restLoaded || page.by !== "panel") {
       return;
     }
-    restSwept = true;
+    restLoaded = true;
     page.quietly(
       (async () => {
         for (const file of page.files) {
           const section = page.sectionOf(file);
           if (section && !section.loaded) {
             await idleTurn();
-            await sweepOne(file);
+            await page.loadSection(section);
           }
         }
       })()
@@ -1380,9 +1309,6 @@ export function bootStage(page: Page): Mode {
   ): Promise<Target | { refused: string }> {
     const section = page.sectionOf(ref.file);
     if (section && !section.loaded) {
-      // Its first reach sweeps it (loaded, read for the report, posted); the
-      // reach waits on its load alone, its read running after it lands.
-      page.quietly(sweepOne(ref.file));
       await page.loadSection(section);
     }
     return resolved(ref);
@@ -2276,11 +2202,12 @@ export function bootStage(page: Page): Mode {
       reveal(asking);
     }
   });
-  // The design graph's direction in front, its states not named yet: swept as a reach would.
+  // The design graph's direction in front, its states not named yet: loaded as a reach would.
   window.addEventListener(STAGE_LOAD, (event) => {
     const asking = stageLoadOf(event.detail);
-    if (asking && page.sectionOf(asking.file)) {
-      page.quietly(sweepOne(asking.file));
+    const section = asking && page.sectionOf(asking.file);
+    if (section) {
+      page.quietly(page.loadSection(section));
     }
   });
   window.addEventListener(STAGE_COMPARE, (event) => {
@@ -2295,223 +2222,6 @@ export function bootStage(page: Page): Mode {
       showGuides(asking.on);
     }
   });
-
-  /* --- The report: each section read in the rig --------------------------- */
-
-  /** Where the sweep stands, for the stage's render to name when it runs out of time (stage-render.ts). */
-  const sweepOn = (section: Section, step: SweepStep, story?: string) => {
-    state.sweepAt = { file: section.file, step, ...(story ? { story } : {}) };
-  };
-
-  /** A story read as the rig drew it, in `column`, its box at `y` in the section's column of reads. */
-  const rigRender = (
-    story: Story,
-    body: HTMLElement,
-    column: Column,
-    error: PageError | undefined,
-    y: number
-  ): FrameRender =>
-    drawingRender(page, story, body, column, error, {
-      x: 0,
-      y,
-      w: body.offsetWidth,
-      h: body.offsetHeight,
-    });
-
-  /** The column a section's stories are read in: the view's scheme, its width picked or each story's own. */
-  const rigColumn = (): Column => ({
-    interaction: "rest",
-    scheme: scheme(),
-    width: view.widths?.[0] ?? "own",
-  });
-
-  /** Stories mounted in the rig, each in a body of its own dressed as the drawing would be. */
-  function mountInRig(section: Section, stories: Story[]) {
-    return stories.map((story) => {
-      const body = document.createElement("div");
-      body.className = "cawco-frame-body";
-      page.dressBody(body, rigColumn(), story, page.fills(section, story.name));
-      rig.append(body);
-      const into: { error?: PageError } = {};
-      // A turn of the rig's: the layers its mount portals to the body are the rig's (rig-turn.ts).
-      const mounted = rigTurn(() =>
-        page.mountInto(
-          body,
-          section,
-          story.name,
-          page.argsOf(section, story.name),
-          into
-        )
-      );
-      return { story, body, mounted, into };
-    });
-  }
-
-  /**
-   * A section's stories read in the rig, one at a time, each its own
-   * tasks: mounted as the drawing would be (the view's scheme, its own
-   * width or the one picked), read at rest once its first frames are
-   * drawn, then probed in each interaction its CSS reaches (runtime.ts
-   * `probe`), each state's frame read as its values are; then taken down,
-   * its box under the one before, as a column. One mount serves its frames
-   * and its probe: the probe mounted every story a second time.
-   */
-  async function readInRig(section: Section): Promise<void> {
-    const stories = section.mod?.SHEET.stories ?? [];
-    const read: FrameRender[] = [];
-    const probes = new Map<string, Probe>();
-    let y = 0;
-    for (const story of stories) {
-      // Never while the person's act is still being answered.
-      await page.turn();
-      sweepOn(section, "draw");
-      // As it mounts and draws its first frames, the component's own scrolls of the page are stopped (held-scroll.ts).
-      const [one] = await stillPage(async () => {
-        const mounted = mountInRig(section, [story]);
-        await frameTick();
-        return mounted;
-      });
-      if (!one) {
-        continue;
-      }
-      try {
-        // Read in a task of its own, never inside the frame it waited for.
-        await page.turn();
-        page.rewriteAll();
-        if (page.fillsScreen(section, story, one.body)) {
-          page.dressBody(one.body, rigColumn(), story, true);
-        }
-        const reached = page.reachedIn(one.body);
-        section.interactions.set(story.name, reached);
-        const at = y;
-        const frameIn = (interaction: Interaction) =>
-          rigRender(
-            story,
-            one.body,
-            { ...rigColumn(), interaction },
-            one.into.error,
-            at
-          );
-        read.push(frameIn("rest"));
-        sweepOn(section, "probe");
-        const probed = await page.probe(
-          one.body,
-          reached.filter(
-            (interaction): interaction is Exclude<Interaction, "rest"> =>
-              interaction !== "rest"
-          ),
-          (interaction) => read.push(frameIn(interaction))
-        );
-        if (probed.delta.size > 0) {
-          probes.set(story.name, probed);
-        }
-        y += one.body.offsetHeight + ROW_GAP;
-      } finally {
-        rigTurn(() => one.mounted?.unmount());
-        one.body.remove();
-      }
-    }
-    reads.set(section, read);
-    section.probes = probes;
-  }
-
-  /** The sections whose read is under way: a report says them as drawing, never their half-read frames. */
-  const reading = new Set<Section>();
-  /** The sections the sweep has still to read, in its order. */
-  const unswept = new Set(state.sweeps);
-
-  /**
-   * A section read for the report: its stories in the rig, each with its
-   * probe, then its moves; one pass at a time. A report says it as drawing
-   * from the read's start to its end, then posts it.
-   */
-  function readSection(section: Section): Promise<void> {
-    const before = section.settling ?? Promise.resolve();
-    reading.add(section);
-    page.later();
-    const settling: Promise<void> = before
-      .catch(() => undefined)
-      .then(async () => {
-        sweepOn(section, "draw");
-        await readInRig(section);
-        await page.playAll(section, (to) => sweepOn(section, "move", to));
-      })
-      .finally(() => {
-        // A read asked since stands in this one's place: the section is drawing until that one ends.
-        if (section.settling === settling) {
-          reading.delete(section);
-          page.later();
-        }
-      });
-    section.settling = settling;
-    return settling;
-  }
-
-  /** Every section read again once the page has been quiet a moment: an edit, or another view, reached what the report says. */
-  let againTimer: ReturnType<typeof setTimeout> | undefined;
-  const readAgain = () => {
-    clearTimeout(againTimer);
-    againTimer = setTimeout(() => {
-      for (const section of sections) {
-        if (section.loaded) {
-          page.quietly(readSection(section).then(() => page.later()));
-        }
-      }
-    }, READ_AGAIN_MS);
-  };
-
-  /**
-   * Every section in turn, each read and reported before the next: the
-   * panel's page and the stage's render alike, so the hub answers an open
-   * canvas from the report the person's own page posts.
-   */
-  async function sweep(): Promise<void> {
-    for (const file of state.sweeps) {
-      await sweepOne(file);
-    }
-    // A sweep of no section (a state no states file holds) still reports: the render reads it, then the page's refusal.
-    if (state.sweeps.length === 0) {
-      await page.post();
-    }
-    state.sweepAt = null;
-    state.swept = true;
-  }
-
-  /** The states files a sweep has taken or is taking, once each. */
-  const sweeping = new Map<string, Promise<void>>();
-
-  /**
-   * One states file loaded, read for the report and posted: the sweep's
-   * step, and the panel's first reach, Compare or load naming a file its
-   * page has not loaded (it sweeps none up front, runtime.ts `sweepsOf`).
-   */
-  function sweepOne(file: string): Promise<void> {
-    const had = sweeping.get(file);
-    if (had) {
-      return had;
-    }
-    const swept = (async () => {
-      const section = page.sectionOf(file);
-      if (!section) {
-        unswept.delete(file);
-        return;
-      }
-      try {
-        sweepOn(section, "load");
-        await page.loadSection(section);
-        if (section.loaded) {
-          await section.settling;
-        }
-      } finally {
-        unswept.delete(file);
-      }
-      sweepOn(section, "post");
-      await page.post();
-      state.drawn.push(file);
-    })();
-    sweeping.set(file, swept);
-    return swept;
-  }
 
   /* --- Pictures: the stage at a state, posed and read for the daemon ------- */
 
@@ -2932,7 +2642,21 @@ export function bootStage(page: Page): Mode {
     }
   }
 
-  page.quietly(sweep());
+  // The stage's own page sweeps its files for the report (rig.ts); a page a person uses loads them to draw.
+  if (page.reader) {
+    page.quietly(page.reader.sweep());
+  } else {
+    page.quietly(
+      (async () => {
+        for (const file of state.sweeps) {
+          const section = page.sectionOf(file);
+          if (section) {
+            await page.loadSection(section);
+          }
+        }
+      })()
+    );
+  }
 
   return {
     // The state compared with too: a dial turned on the drawing turns on it, so only the states differ.
@@ -2956,14 +2680,6 @@ export function bootStage(page: Page): Mode {
           ]
         : []),
     ],
-    drawing: () => [
-      ...new Set([...unswept, ...[...reading].map((section) => section.file)]),
-    ],
-    framesOf: (section) =>
-      reads.get(section)?.map((one) => {
-        const delta = section.probes.get(one.story)?.delta.get(one.interaction);
-        return one.interaction === "rest" || !delta ? one : { ...one, delta };
-      }) ?? null,
     mediaWidth: () =>
       live && !frame.hidden ? Number.parseFloat(drawing.style.width) : null,
     overridden: (section, story) => {
@@ -2980,7 +2696,6 @@ export function bootStage(page: Page): Mode {
           })
         );
       }
-      readAgain();
     },
     shown: (section) => {
       failedCards.get(section.file)?.remove();
@@ -2993,7 +2708,7 @@ export function bootStage(page: Page): Mode {
         shownOnce.add(section);
         return;
       }
-      page.quietly(readSection(section));
+      page.reader?.read(section);
       const now = live;
       if (now?.section === section) {
         // Its states file edited: the drawing stands at its state, from the module as it reads now.
@@ -3012,13 +2727,13 @@ export function bootStage(page: Page): Mode {
       }
       standFirst(section);
     },
-    // Swapped in place by its framework: the drawing and the state compared with stay mounted; the report's read of it is taken again.
+    // Swapped in place by its framework: the drawing and the state compared with stay mounted; the stage's own page reads it again for the report.
     swapped: (section) => {
       if (page.measuring) {
         edits += 1;
         return;
       }
-      page.quietly(readSection(section));
+      page.reader?.read(section);
     },
     failed: (section, failure: SectionFailure) => {
       if (page.measuring) {
@@ -3043,7 +2758,6 @@ export function bootStage(page: Page): Mode {
         faulted(now, now.into.error);
       }
     },
-    reported: () => undefined,
     restyled: () => laid(),
     // An update reads nothing again: Vite sends every page each update the
     // stage's graph takes, whatever page holds its modules (its client
@@ -3061,10 +2775,7 @@ export function bootStage(page: Page): Mode {
         page.quietly(queue(() => open(now, false)));
       }
     },
-    redressed: () => {
-      relay();
-      readAgain();
-    },
+    redressed: () => relay(),
     selected: () => undefined,
   };
 }
@@ -3107,8 +2818,8 @@ const arriving = (run: Animation): boolean =>
  * one under another in a column, each at its own width (or the one the
  * view names), at rest, 1 CSS px per px. A Preview's column stands in the
  * page's own flow and tells the page holding it its shape (embed.ts); a
- * card's is fitted to the card by one transform. Neither posts a report,
- * nor reads anything in the rig: the report stays the panel's own page's.
+ * card's is fitted to the card by one transform. Neither reads anything
+ * for the report: that is the stage's own page's (rig.ts).
  */
 function bootColumn(page: Page): Mode {
   const { sections, view } = page;
@@ -3232,8 +2943,6 @@ function bootColumn(page: Page): Mode {
     one.body.dataset.cawcoState = drew(one.body) ? "drawn" : "empty";
     one.laid = true;
     changed();
-    // What the page's own report reads of it, read again once it has been quiet a moment.
-    page.later();
   }
 
   /**
@@ -3461,28 +3170,6 @@ function bootColumn(page: Page): Mode {
             ]
           : []
       ),
-    // A column posts no report: what it reads of its drawings is the page's own (`__cawcoCanvas.report`).
-    drawing: () => [],
-    framesOf: (section) =>
-      section.loaded
-        ? [...partOf(section).drawings.values()].map((one) => {
-            const at = column.getBoundingClientRect();
-            const box = one.body.getBoundingClientRect();
-            return drawingRender(
-              page,
-              one.target.story,
-              one.body,
-              columnOf(),
-              one.live?.into.error,
-              {
-                x: Math.round((box.left - at.left) / zoom),
-                y: Math.round((box.top - at.top) / zoom),
-                w: one.body.offsetWidth,
-                h: one.body.offsetHeight,
-              }
-            );
-          })
-        : null,
     mediaWidth: () => {
       // Asked between mounts: at the one width every drawing has.
       const widths = new Set(drawn().map(widthOf));
@@ -3510,7 +3197,6 @@ function bootColumn(page: Page): Mode {
         laidOut(one);
       }
     },
-    reported: () => undefined,
     restyled: () => undefined,
     // A drawing whose story threw is mounted again, as the stage's own is.
     updated: () => {

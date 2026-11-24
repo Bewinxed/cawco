@@ -764,7 +764,7 @@ export const stageSaid = ({
 export const READ_HINT =
   "artifact_read({ id, detail: 'story', story: 'Waiting' }) for its args; { state: { story, interaction: 'hover' } } for a state's delta; { render: true } draws it now; { png: true, state } a frame's picture; { layout: true, state } its alignment guides and their numbers.";
 
-/** Whether every frame a report lists for `story` (or all) is unseen: no browser drew it since its file changed. */
+/** Whether every frame a report lists for `story` (or all) is unseen: the stage's own page has not drawn it since its file changed. */
 export const unseen = (report: RenderReport, story?: string): boolean => {
   const frames = report.sections
     .flatMap((section) => section.frames)
@@ -781,9 +781,9 @@ export const unseen = (report: RenderReport, story?: string): boolean => {
  * `unseen`, 0×0, drawn at 1970. Each section the stage holds a draw of
  * (`drawn`) is kept in `had`'s place; each it holds none of, every frame
  * unseen, whose files hash as the kept draw's did, is that draw again: the
- * same content, already drawn. A file changed since stays unseen until a
- * browser draws it, and a stage's standing problem (`failed`) stands. The
- * report's time, drawer and page errors are its newest draw's. Answers the
+ * same content, already drawn. A file changed since stays unseen until the
+ * stage's own page reads it, and a stage's standing problem (`failed`)
+ * stands. The report's time and page errors are its newest draw's. Answers the
  * report and the record to keep, one entry per states file the canvas has.
  */
 export function drawsHeld(
@@ -812,8 +812,10 @@ export function drawsHeld(
     if (last) {
       kept[section.file] = last;
     }
+    // A draw kept before the stage's own page read every report (a person's panel's, `by: "panel"`, its stories maybe the named ones alone) is not held: the reader reads that content again.
     const restored =
       last &&
+      last.by === "stage" &&
       section.hash !== "" &&
       last.section.hash === section.hash &&
       section.frames.every((frame) => frame.state === "unseen");
@@ -830,7 +832,7 @@ export function drawsHeld(
     report: {
       ...report,
       at: newest.at,
-      by: newest.by,
+      by: "stage",
       page: { errors: newest.errors },
       sections,
     },

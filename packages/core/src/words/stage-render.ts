@@ -75,11 +75,11 @@ export const stageRenderWords = {
   stateUndrawn: (state: string, seconds: number, at: SweepAt | null) =>
     `State ${state}'s section did not finish drawing within ${seconds} s${at ? `: it was still ${stageRenderWords.step(at)} in ${at.file}` : ", and its page never began it"}. That section alone needs longer than one read has: split its states file in two (each a section of the design graph, with its own moves), then read the state again.`,
   /** The sections a browser was drawing as a read answered, past the read's wait for them (hub component.ts `drawingUnseen`). */
-  /** States files no browser drew as they stand and none is drawing: on a design with directions, ones the person never brought in front (the panel loads the one in front alone). */
+  /** States files the stage's own page has not read as they stand and is not reading: the read's reader did not reach them. */
   unopened: (files: readonly string[]) =>
-    `Not opened yet: ${files.join(", ")}. The person's panel loads only the direction in front, and no browser drew ${files.length === 1 ? "this one" : "these"} as ${files.length === 1 ? "it stands" : "they stand"}; read with render: true to draw ${files.length === 1 ? "it" : "them"} now.`,
+    `Not read as ${files.length === 1 ? "it stands" : "they stand"}: ${files.join(", ")}. The daemon's page of this canvas has not read ${files.length === 1 ? "it" : "them"} since ${files.length === 1 ? "it" : "they"} changed; read again to have it read ${files.length === 1 ? "it" : "them"}.`,
   drawing: (files: readonly string[]) =>
-    `A browser is drawing ${files.join(", ")} now and has not posted ${files.length === 1 ? "it" : "them"}: ${files.length === 1 ? "its" : "their"} frames read unseen until it does, within seconds. Read again.`,
+    `The daemon's page of this canvas is reading ${files.join(", ")} now and has not posted ${files.length === 1 ? "it" : "them"}: ${files.length === 1 ? "its" : "their"} frames read unseen until it does, within seconds. Read again.`,
   /** A move whose animations were still running when its wait for them ended (core `MoveRender.stillRunning`): what its report holds was read mid-motion. */
   moveUnsettled: (running: number) =>
     `${running} ${running === 1 ? "animation was" : "animations were"} still running when this move's wait for them ended: its read and its picture were taken mid-motion.`,
@@ -111,6 +111,9 @@ export const stageRenderWords = {
     `port ${port} in ${boundary}'s boundary, through the daemon's bridge into its network`,
   /** {@link stageRenderWords.unanswered}'s address where boundaries share the host's network (macOS). */
   loopback: (port: number) => `port ${port} on this machine's loopback`,
+  /** The daemon's kept page of a canvas closed under a read (its stage slept or started again, or its browser ended): the next read opens another. */
+  readerGone:
+    "The daemon's page reading this canvas closed while it read (its stage slept or started again, or its browser ended). Read again: the next read opens a new one.",
   /** The page itself never loaded. */
   notLoaded: (seconds: number) =>
     `The stage's page did not load within ${seconds} s: its stage is up but did not serve it. Read the design graph without render to see its stage's state and errors.`,

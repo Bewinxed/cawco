@@ -3946,7 +3946,6 @@ public enum OpenEnums {
         case empty
         case failed
         case unseen
-        case unshown
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -3956,7 +3955,6 @@ public enum OpenEnums {
             case "empty": self = .empty
             case "failed": self = .failed
             case "unseen": self = .unseen
-            case "unshown": self = .unshown
             default: self = .unrecognized(rawValue)
             }
         }
@@ -3967,7 +3965,6 @@ public enum OpenEnums {
             case .empty: "empty"
             case .failed: "failed"
             case .unseen: "unseen"
-            case .unshown: "unshown"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -3976,7 +3973,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.drawn, .empty, .failed, .unseen, .unshown]
+        public static let allCases: [Self] = [.drawn, .empty, .failed, .unseen]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -8027,44 +8024,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.elsewhere, .proxied, .unresolved]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/RenderedBy`.
-    public enum RenderedBy: OpenEnum {
-        case panel
-        case stage
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "panel": self = .panel
-            case "stage": self = .stage
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .panel: "panel"
-            case .stage: "stage"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.panel, .stage]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

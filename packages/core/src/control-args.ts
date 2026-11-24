@@ -33,7 +33,6 @@ import {
   strictObject,
   string,
   summarize,
-  transform,
   trim,
   tuple,
   union,
@@ -71,7 +70,7 @@ import {
   RAN_FROM,
   type StoredRun,
 } from "./session-messages";
-import { canvasSpecOf, INTERACTIONS } from "./stage";
+import { INTERACTIONS } from "./stage";
 import {
   MEASURE_PRESSES,
   MEASURE_REPEATS,
@@ -225,7 +224,6 @@ const RenderAsk = object({
   layout: optional(boolean()),
   measure: optional(MeasureAsk),
   png: optional(boolean()),
-  spec: optional(pipe(unknown(), transform(canvasSpecOf))),
   state: optional(
     object({
       interaction: optional(picklist(INTERACTIONS)),

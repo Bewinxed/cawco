@@ -4372,7 +4372,7 @@ export const PolicySchema = PolicyShape;
 export type PolicyOutput = z.output<typeof PolicyShape>;
 
 const RenderedByShape = declared(
-  z.enum(["panel", "stage"]),
+  z.literal("stage"),
   "RenderedBy",
   "packages/core/src/stage.ts"
 );
@@ -4431,7 +4431,7 @@ const SchemeShape = declared(
 export type SchemeOutput = z.output<typeof SchemeShape>;
 
 const FrameStateShape = declared(
-  z.enum(["drawn", "empty", "failed", "unseen", "unshown"]),
+  z.enum(["drawn", "empty", "failed", "unseen"]),
   "FrameState",
   "packages/core/src/stage.ts"
 );
@@ -4552,6 +4552,7 @@ export type SectionUnloadedOutput = z.output<typeof SectionUnloadedShape>;
 const PostedReportShape = declared(
   PageReportShape.extend({
     drawing: z.array(z.string()),
+    readFrom: z.record(z.string(), z.number()),
     threw: z.array(StoryThrewShape),
     unloaded: z.array(SectionUnloadedShape),
   }),

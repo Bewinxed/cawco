@@ -301,7 +301,7 @@ export const canvasEmbedUrl = (
 /** The id of the canvas page's `<script type="application/json">` holding each states file's {@link SectionPlan}, by file. */
 export const CANVAS_PLAN_ID = "cawco-plan";
 
-/** Where a canvas page posts its {@link RenderReport} (`POST`), beside the page so a panel's preview reaches it. */
+/** Where the stage's own page of a canvas posts its {@link RenderReport} (`POST`), beside the page. */
 export const RENDERED_PATH = "/@cawco/rendered";
 
 /**
@@ -323,7 +323,12 @@ export const OWN_PATH = "/@cawco/own";
 /** Where the daemon reads a canvas's newest {@link RenderReport} (`?file=…` per section), next to the stage. */
 export const REPORT_PATH = "/__cawco/report";
 
-/** The daemon's control method that draws a canvas in the machine's browser when no panel has (agent `stage-render.ts`). */
+/**
+ * The daemon's control method that reads a canvas in the machine's browser
+ * (agent `stage-render.ts`): its kept page of the canvas, which reads each
+ * save as it lands, answers the report once it holds a draw of the files
+ * as they stand; a picture or a measurement is drawn on a page of its own.
+ */
 export const STAGE_RENDER = "stageRender";
 
 /** One state a render is asked for: its story and interaction, for its picture. */
@@ -335,7 +340,7 @@ interface RenderState {
   width?: number;
 }
 
-/** What {@link STAGE_RENDER} is asked: the canvas's states files and spec, and a picture of one state, or of the stage in view. */
+/** What {@link STAGE_RENDER} is asked: the canvas's states files, and a picture of one state, or of the stage in view. The stage's page reads each file whole, whatever stories a person's graph names (the hub keeps those, {@link namedKept}). */
 export interface RenderAsk {
   files: string[];
   /** The alignment guides (core layout-guides.ts) laid over `state`'s picture, and their read answered. */
@@ -344,7 +349,6 @@ export interface RenderAsk {
   measure?: MeasureAsk;
   /** A picture: of `state` when it names one, else the stage in view. */
   png?: boolean;
-  spec?: CanvasSpec;
   state?: RenderState;
 }
 
@@ -531,12 +535,10 @@ export interface Form {
 }
 
 /**
- * What a browser drew of one frame: `unseen` until one drew it since its
- * file last changed; `unshown` when the page did not show it at its width (a
- * phone's canvas shows one frame at a time), so it is neither drawn nor
- * empty: `empty` is a frame shown that drew nothing.
+ * What the stage's own page drew of one frame: `unseen` until it drew it
+ * since its file last changed; `empty` a frame that drew nothing.
  */
-type FrameState = "drawn" | "empty" | "failed" | "unseen" | "unshown";
+type FrameState = "drawn" | "empty" | "failed" | "unseen";
 
 /** Where a page's code threw, 1-based, the file from the toolchain root when it is the project's. */
 export interface PageError {
@@ -642,15 +644,19 @@ export interface SectionRender {
   title: string;
 }
 
-/** Which browser drew a canvas: the person's panel, or the stage's own. */
-export type RenderedBy = "panel" | "stage";
+/**
+ * Which page drew a canvas's report: the stage's own (`by=stage`, the
+ * daemon's headless page of the canvas), the one page that reads and
+ * posts. No page a person uses posts a report.
+ */
+export type RenderedBy = "stage";
 
 /**
- * What a browser drew of a canvas: the page's own errors, each section
- * drawn, and the stories with no doc comment. Posted by the canvas page
- * itself to {@link RENDERED_PATH}; the stage keeps the newest per states
- * file and answers it at {@link REPORT_PATH}, every frame `unseen` once the
- * file or a component it mounts changed since.
+ * What the stage's own page drew of a canvas: the page's own errors, each
+ * section drawn, and the stories with no doc comment. Posted by that page
+ * to {@link RENDERED_PATH}; the stage keeps the newest per states file and
+ * answers it at {@link REPORT_PATH}, every frame `unseen` once the file or
+ * a component it mounts changed since.
  */
 export interface RenderReport {
   at: string;
@@ -683,6 +689,20 @@ export interface RenderReport {
    */
   widthOnly?: string[][];
 }
+
+/**
+ * The states files of `report` holding content the stage's own page has
+ * not read: a frame `unseen` (its files changed since that page last read
+ * them, or it never did). What the hub asks the daemon's reader for on any
+ * read of a design graph, and what that reader waits on (agent
+ * stage-render.ts): one rule on both sides.
+ */
+export const readerOwed = (report: RenderReport): string[] =>
+  report.sections
+    .filter((section) =>
+      section.frames.some((frame) => frame.state === "unseen")
+    )
+    .map((section) => section.file);
 
 /** Rest frames of one states file that draw the same picture at one width and scheme: {@link framesAlike}. */
 export interface FramesAlike {
@@ -758,6 +778,14 @@ export interface StoryThrew {
 export interface PostedReport extends PageReport {
   /** The states files the page is still drawing: their sections post once read. */
   drawing: string[];
+  /**
+   * When the code each posted section was read from was loaded into the
+   * page, by its states file (`Date.now()` on the stage's machine, the
+   * page's own): the stage keeps no section whose files changed after it,
+   * so a read of the code before a save never stands as a draw of the files
+   * after it. The page reads it again as the save reaches it.
+   */
+  readFrom: Record<string, number>;
   /** Each story of a posted section whose drawing threw. */
   threw: StoryThrew[];
   unloaded: SectionUnloaded[];

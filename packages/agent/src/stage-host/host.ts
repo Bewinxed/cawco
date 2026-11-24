@@ -75,7 +75,6 @@ import {
   type DesignMap,
   type DesignQuery,
   type Found,
-  type FrameRender,
   HEALTH_PATH,
   MODULES_PATH,
   OWN_PATH,
@@ -314,14 +313,20 @@ const VIRTUAL = "cawco:sheet/";
 /** The canvas's own modules: its entry, runtime, adapter, Svelte props holder and Vite's module runner. */
 const VIRTUAL_STAGE = "cawco:stage/";
 
-/** Bundled in by build.ts: the canvas's browser runtime (canvas/runtime.ts), CawCo's tokens and the house faces. */
+/**
+ * Bundled in by build.ts: the canvas's browser runtime (canvas/runtime.ts,
+ * every page a person uses), the stage's own page's runtime with its reader
+ * (canvas/reader.ts, `by=stage` alone), CawCo's tokens and the house faces.
+ */
 declare const __CANVAS_RUNTIME__: string;
+declare const __CANVAS_READER__: string;
 declare const __CANVAS_TOKENS__: string;
 declare const __CANVAS_FACES__: string;
 declare const __CANVAS_FACE_FILES__: Record<string, string>;
 /** Bundled in by build.ts: a design folder's canvas (canvas/pages.ts). */
 declare const __PAGES_STAGE__: string;
 const CANVAS_RUNTIME = __CANVAS_RUNTIME__;
+const CANVAS_READER = __CANVAS_READER__;
 const PAGES_STAGE = __PAGES_STAGE__;
 const CANVAS_TOKENS = __CANVAS_TOKENS__;
 const CANVAS_FACES = __CANVAS_FACES__;
@@ -1051,19 +1056,31 @@ async function heldReached(
  * bytes.
  */
 async function contentHash(file: string): Promise<string> {
+  return (await contentOf(file)).hash;
+}
+
+/** A states file's content hash ({@link contentHash}), and when the newest of its files last changed (its mtime, `Date.now()`'s clock). */
+async function contentOf(
+  file: string
+): Promise<{ changedAt: number; hash: string }> {
   const abs = resolve(root, file);
   const { files } = heldSections.has(file)
     ? await drawnSet(file)
     : await drawnFrom(abs, readFileSync(abs, "utf8"));
   const hash = createHash("sha256");
+  let changedAt = 0;
   for (const one of files) {
+    changedAt = Math.max(
+      changedAt,
+      statSync(one, { throwIfNoEntry: false })?.mtimeMs ?? 0
+    );
     hash
       .update(relative(root, one))
       .update("\0")
       .update(readFileSync(one))
       .update("\0");
   }
-  return hash.digest("hex").slice(0, 16);
+  return { changedAt, hash: hash.digest("hex").slice(0, 16) };
 }
 
 const ASTRO_FILE = /\.astro$/u;
@@ -1350,14 +1367,14 @@ function previewFile(): string | null {
  * {@link SECTION_BROKEN} with the sections that error breaks, and
  * {@link SECTION_MENDED} with those a save that compiles draws again.
  */
-function entryModule(): string {
+function entryModule(runtime: "runtime.js" | "reader.js"): string {
   // In order: a later sheet stands over an earlier one, as the app's own imports stack them.
   const styles = globalStyles()
     .map((style) => `  await import(${JSON.stringify(style)});`)
     .join("\n");
   const preview = previewFile();
   return `import { mountStory } from "${VIRTUAL_STAGE}adapter.js";
-import { boot } from "${VIRTUAL_STAGE}runtime.js";
+import { boot } from "${VIRTUAL_STAGE}${runtime}";
 const BASE = new URL(import.meta.url).pathname.replace(/\\/@id\\/.*$/, "");
 boot({
   adapter: { mountStory },
@@ -1438,8 +1455,7 @@ const COLLECTOR = `<script>window.__cawcoErrors=[];addEventListener("error",func
  * any of its pages; Vite's own puts the dev server's base before the entry
  * (Nuxt's is `/_nuxt/`), so it is written without it.
  */
-function canvasPage(): string {
-  const entry = CANVAS_ENTRY;
+function canvasPage(entry: string): string {
   const main = `<main id="cawco-canvas" class="cawco-canvas"></main>`;
   let html = existsSync(shellFile())
     ? readFileSync(shellFile(), "utf8")
@@ -1498,9 +1514,9 @@ function intoBody(html: string, markup: string): string {
 }
 
 /**
- * The newest report of each states file, kept by the stage from whichever
- * browser drew it (a person's panel or the daemon's), under the content
- * hash it was drawn from. Held by this process alone: it ends with the
+ * The newest report of each states file, kept by the stage as the daemon's
+ * own page of the canvas drew it (`by=stage`, the one page that reads and
+ * posts: canvas rig.ts), under the content hash it was drawn from. Held by this process alone: it ends with the
  * stage (asleep, restarted, its daemon or its clone made again), so each
  * section it answers says whether it holds a draw (`drawn`), and the hub
  * keeps a canvas's last draws past it (hub artifacts/component.ts
@@ -1545,37 +1561,14 @@ function keepDrawing(
 }
 
 /**
- * The frames and moves of states file `file`'s kept report, as it stood
- * before a post of the same content (`before`), of the stories that post
- * did not draw: a person's graph loads the stories its agent named and their
- * moves alone, and the agent's own graph reads the rest.
- */
-function keepUnposted(file: string, before: SectionRender | undefined): void {
-  const now = reports.get(file);
-  if (!(now && before)) {
-    return;
-  }
-  const posted = new Set(now.section.frames.map((frame) => frame.story));
-  now.section.frames.push(
-    ...before.frames.filter((frame) => !posted.has(frame.story))
-  );
-  now.section.moves.push(
-    ...before.moves.filter((move) => !posted.has(move.to))
-  );
-}
-
-/** A frame across draws of one states file: its story, its state, its scheme and its form. */
-const frameId = (frame: FrameRender): string =>
-  `${frame.story}|${frame.interaction}|${frame.scheme}|${frame.form}`;
-
-/**
- * Keeps what a canvas page posted (its body, unchecked until here): each
- * section under its file, stamped with its content hash as its files stand
- * now (`contentHash`, read here and never on the page's path: an edit
- * since the draw loaded the section again, which draws and posts again). A
- * frame the page did not show (`unshown`: a phone's canvas shows one frame
- * at a time) keeps the frame the last draw of the same content recorded, so
- * a phone looking never drops what a desk saw from the map's counts.
+ * Keeps what the stage's own page posted (its body, unchecked until here):
+ * each section under its file, stamped with its content hash as its files
+ * stand now (`contentOf`, read here and never on the page's path). A
+ * section read from code loaded before its files last changed (its
+ * `readFrom`) is not kept: it would stand as a draw of the files after a
+ * save it never saw. It stays drawing, and the page reads it again as the
+ * save reaches it. The page reads each file whole, so a post stands for
+ * its section entire.
  */
 async function keepReport(body: unknown): Promise<void> {
   const report: PostedReport = PostedReportSchema.parse(body);
@@ -1583,45 +1576,29 @@ async function keepReport(body: unknown): Promise<void> {
   keepThrew(report.threw, report.sections);
   keepDrawing(report.sections, report.drawing);
   for (const drawn of report.sections) {
-    if (storyFile(drawn.file)) {
-      const section: SectionRender = {
-        ...drawn,
-        hash: await contentHash(drawn.file),
-      };
-      // A frame this page did not show (a phone's, one at a time) keeps what an earlier draw of the same content saw.
-      const kept = reports.get(section.file);
-      const seen =
-        kept?.section.hash === section.hash
-          ? new Map(
-              kept.section.frames
-                .filter((frame) => frame.state !== "unshown")
-                .map((frame) => [frameId(frame), frame])
-            )
-          : null;
-      reports.set(section.file, {
-        at: report.at,
-        by: report.by,
-        errors: report.page.errors.map(sourced),
-        section: {
-          ...section,
-          frames: section.frames.map((frame) => {
-            if (frame.state === "unshown") {
-              return seen?.get(frameId(frame)) ?? frame;
-            }
-            return frame.error
-              ? { ...frame, error: sourced(frame.error) }
-              : frame;
-          }),
-          moves: section.moves.map((move) =>
-            move.error ? { ...move, error: sourced(move.error) } : move
-          ),
-        },
-      });
-      // A person's graph draws only the stories its agent named and their moves (core `namedKept`): what it did not post of the same content stays as the agent's whole read drew it.
-      if (seen) {
-        keepUnposted(section.file, kept?.section);
-      }
+    if (!storyFile(drawn.file)) {
+      continue;
     }
+    const content = await contentOf(drawn.file);
+    if (content.changedAt > (report.readFrom[drawn.file] ?? 0)) {
+      drawingSaid.set(drawn.file, Date.now());
+      continue;
+    }
+    reports.set(drawn.file, {
+      at: report.at,
+      by: report.by,
+      errors: report.page.errors.map(sourced),
+      section: {
+        ...drawn,
+        hash: content.hash,
+        frames: drawn.frames.map((frame) =>
+          frame.error ? { ...frame, error: sourced(frame.error) } : frame
+        ),
+        moves: drawn.moves.map((move) =>
+          move.error ? { ...move, error: sourced(move.error) } : move
+        ),
+      },
+    });
   }
 }
 
@@ -1796,7 +1773,7 @@ async function reportOf(files: string[]): Promise<RenderReport> {
   }
   return {
     at: newest?.at ?? new Date(0).toISOString(),
-    by: newest?.by ?? "panel",
+    by: "stage",
     page: { errors: newest?.errors ?? [] },
     sections,
     unnamed,
@@ -1911,7 +1888,9 @@ async function serveCanvas(
       loaded = sweptFiles(files, plans, asked.get(RENDER_STATE_PARAM));
     }
     freshen(dev);
-    const urls = await settledClosureOf(dev, loaded);
+    // The stage's own page reads the report: its entry is the reader's; every other page's draws alone.
+    const entry = by === "stage" ? CANVAS_READER_ENTRY : CANVAS_ENTRY;
+    const urls = await settledClosureOf(dev, loaded, entry);
     // One key for the page's tags and its graph's list, read once its graph has settled.
     const key = generationOf(dev);
     const preloads = graphPreloads(urls, embed, key);
@@ -1919,7 +1898,7 @@ async function serveCanvas(
       await dev.transformIndexHtml(
         req.url ?? CANVAS_PATH,
         intoHead(
-          canvasPage(),
+          canvasPage(entry),
           `<script id="${CANVAS_PLAN_ID}" type="application/json">${plan}</script>${preloads}`
         ),
         req.originalUrl
@@ -2402,7 +2381,11 @@ async function staticImportsOf(dev: DevServer, url: string): Promise<string[]> {
  * dependencies built before the page runs, so none a section finds while
  * the page draws builds them again and reloads it mid-sweep.
  */
-async function closureOf(dev: DevServer, files: string[]): Promise<string[]> {
+async function closureOf(
+  dev: DevServer,
+  files: string[],
+  entry: string
+): Promise<string[]> {
   const { base } = dev.config;
   const asPage = (address: string) => `${base}${address.slice(1)}`;
   const sections = files
@@ -2423,7 +2406,7 @@ async function closureOf(dev: DevServer, files: string[]): Promise<string[]> {
     await Promise.all(imports.map(visit));
   };
   await Promise.all(
-    [asPage(VITE_CLIENT), asPage(CANVAS_ENTRY), ...sections].map(visit)
+    [asPage(VITE_CLIENT), asPage(entry), ...sections].map(visit)
   );
   // A section's module is a dynamic import of an address the runtime builds, which Vite asks for with `?import` first.
   return order.map((url) =>
@@ -2446,13 +2429,14 @@ const DEPENDENCY_ROUNDS = 3;
  */
 async function settledClosureOf(
   dev: DevServer,
-  files: string[]
+  files: string[],
+  entry: string
 ): Promise<string[]> {
   const optimizer = () => dev.environments.client.depsOptimizer;
   let urls: string[] = [];
   for (let round = 0; round < DEPENDENCY_ROUNDS; round += 1) {
     const build = optimizer()?.metadata.browserHash;
-    urls = await closureOf(dev, files);
+    urls = await closureOf(dev, files, entry);
     const building = Object.values(optimizer()?.metadata.discovered ?? {})
       .map((one) => one.processing)
       .filter((one): one is Promise<void> => one !== undefined);
@@ -2470,8 +2454,9 @@ const withQuery = (url: string, query: string): string => {
   return search ? `${path}?${query}&${search}` : `${path}?${query}`;
 };
 
-/** The canvas page's entry, and Vite's client, by the addresses the page asks for them. */
+/** The canvas page's entry (the stage's own page's, the reader's), and Vite's client, by the addresses the page asks for them. */
 const CANVAS_ENTRY = `/@id/__x00__${VIRTUAL_STAGE}entry.js`;
+const CANVAS_READER_ENTRY = `/@id/__x00__${VIRTUAL_STAGE}reader-entry.js`;
 const VITE_CLIENT = "/@vite/client";
 
 /**
@@ -4010,9 +3995,13 @@ function watchStory(file: string): void {
 function stageModule(name: string): string | Promise<string> | null {
   switch (name) {
     case "entry.js":
-      return entryModule();
+      return entryModule("runtime.js");
+    case "reader-entry.js":
+      return entryModule("reader.js");
     case "runtime.js":
       return CANVAS_RUNTIME;
+    case "reader.js":
+      return CANVAS_READER;
     case "adapter.js":
       return framework ? ADAPTERS[framework] : null;
     case "svelte-props.js":
@@ -4046,7 +4035,10 @@ const sheetsOf = (file: string): string[] => {
       );
     }
     // The canvas's entry imports the app's global CSS: an error there is every canvas's.
-    if (mod.id === `\0${VIRTUAL_STAGE}entry.js`) {
+    if (
+      mod.id === `\0${VIRTUAL_STAGE}entry.js` ||
+      mod.id === `\0${VIRTUAL_STAGE}reader-entry.js`
+    ) {
       for (const kept of reports.keys()) {
         found.add(kept);
       }

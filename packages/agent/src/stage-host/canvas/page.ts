@@ -12,7 +12,6 @@ import {
   type CanvasGraph,
   type CanvasSpec,
   type FramePictureRead,
-  type FrameRender,
   type Interaction,
   type MoveRender,
   type PageBy,
@@ -28,6 +27,7 @@ import {
   type SheetOnPage,
   type StageErrorKind,
   type Story,
+  type StoryThrew,
   type SweepAt,
 } from "@cawco/core/stage";
 import type { StageMeasuring } from "@cawco/core/stage-measure";
@@ -252,6 +252,8 @@ export interface Section {
   /** The interactions each story reaches, by story. */
   interactions: Map<string, Interaction[]>;
   loaded: boolean;
+  /** When the code it draws was loaded into the page (`Date.now()`): its import began, a save loaded its module again, or its framework swapped a file of it in place. A read posts it (core `PostedReport.readFrom`). */
+  loadedFrom?: number;
   loading?: Promise<void>;
   mod?: SectionModule;
   moves: MoveRender[];
@@ -260,7 +262,7 @@ export interface Section {
   /** Its stories that hold modules of their own, each in its own runner; none while none does. */
   own?: OwnModules;
   probes: Map<string, Probe>;
-  /** Its interactions, probes and moves read since it was last shown: one pass at a time in the rig. */
+  /** Its interactions, probes and moves read since it was last shown: one pass at a time in the stage's own page's rig (rig.ts). */
   settling?: Promise<void>;
 }
 
@@ -330,6 +332,8 @@ export const frameTick = () =>
 
 /** The canvas's state, for the stage's daemon render and the probe kit. */
 export interface CanvasState extends Partial<StageMeasuring> {
+  /** The states files the stage's own page is drawing now (rig.ts); none on any other page. */
+  drawing?: () => string[];
   /** The sections the stage's sweep has read and posted, in order (a render answers the others as undrawn). */
   drawn: string[];
   files: string[]; /**
@@ -353,6 +357,8 @@ export interface CanvasState extends Partial<StageMeasuring> {
    * window still lacks for it (`lacks`). None on a column's page.
    */
   pose?: (key: string) => Promise<{ h: number; w: number } | null>;
+  /** Each of `files` read again for the report, on the stage's own page (rig.ts); none on any other page. */
+  readAgain?: (files: readonly string[]) => void;
   report: PageReport | null;
   reports: number;
   /** Whether state `key`'s drawing is settled: fonts loaded, no finite animation running in it. None on a column's page. */
@@ -422,9 +428,8 @@ export interface Bridge {
 
 /**
  * What a mode (the stage's one drawing, or its column of drawings)
- * answers the page's shared work with: the frames its report says, what it
- * does as a section is shown, fails, is restyled or overridden, and what it
- * holds mounted.
+ * answers the page's shared work with: what it does as a section is shown,
+ * fails, is restyled or overridden, and what it holds mounted.
  */
 export interface Mode {
   /** The bodies mounted where the person sees them, each with its story: the dials reach every one. */
@@ -434,46 +439,49 @@ export interface Mode {
     /** The args its story is written with, no dial's in them: what an `arg` dial goes back to. */
     written?: Record<string, unknown>;
   }>;
-  /** The states files this page is still drawing for its report: a report says them, never their half-read frames. */
-  drawing: () => string[];
   /** A section's module didn't load, or a save broke one it is drawn from: it says why in its own place, in place of its drawings. */
   failed: (section: Section, failure: SectionFailure) => void;
-  /** A section's frames as its report says them; null while it has not been read: a report leaves it out, so the stage keeps what an earlier draw saw of it. */
-  framesOf: (section: Section) => FrameRender[] | null;
   /** The width script asking `matchMedia` between mounts is answered at; null for the page's own. */
   mediaWidth: () => number | null;
   /** The inspector set or let go story `story`'s args in `section`. */
   overridden: (section: Section, story: string) => void;
   /** The page's scheme turned, or the view did: what draws in it is dressed again. */
   redressed: () => void;
-  /** A report was read: what the mode draws from it. */
-  reported: (report: PageReport) => void;
   /** The project's sheets changed: what reads them reads again. */
   restyled: () => void;
   /** The inspector's story, or none. */
   selected: (story: string | null) => void;
   /** A section's module loaded (or loaded again as it was edited): its stories are to be drawn. */
   shown: (section: Section) => void;
-  /** A file a section is drawn from was swapped in place by its framework's HMR: what it draws stays mounted, and what it reads off screen for the report is read again. */
+  /** A file a section is drawn from was swapped in place by its framework's HMR: what it draws stays mounted. */
   swapped: (section: Section) => void;
   /** A story drawn in `body` threw after it mounted (an edit its framework applied in place, an effect): it says why in its own place until it is drawn again. */
   threw: (body: HTMLElement) => void;
-  /** Vite sent an update (any page's, this page's or not): what the mode lays out is laid out again. A section an edit reaches is read again as it is shown or swapped. */
+  /** Vite sent an update (any page's, this page's or not): what the mode lays out is laid out again. */
   updated: () => void;
 }
 
-/** What the page shares with its mode: its sections, its rig, mounting, probing, playing, reporting. */
+/**
+ * The stage's own page's reader of the render report (rig.ts, which only
+ * the `by=stage` entry imports): what the page's shared work and its mode
+ * tell it. None on a page a person uses: such a page draws and reads
+ * nothing for the report.
+ */
+export interface Reader {
+  /** A report soon, once the page has been quiet a moment. */
+  later: () => void;
+  /** A section shown, or swapped in place by a save: read for the report. */
+  read: (section: Section) => void;
+  /** The page's sweep: each states file its address takes, loaded, read and posted in turn. */
+  sweep: () => Promise<void>;
+}
+
+/** What the page shares with its mode and its reader: its sections, mounting, dressing. */
 export interface Page {
   /** The agent's dials as the panel set them, by name (core `StageDials`): each on every body. */
   applyDials: (values: Record<string, unknown>) => void;
   /** The args a story mounts with: the meta's, its own, the pane's live ones, then the dials'. */
   argsOf: (section: Section, name: string) => Record<string, unknown>;
-  /** A frame of no width of its own that drew at its body's floor: its failure, in words. */
-  atFloor: (
-    story: Story,
-    slot: WidthSlot,
-    body: HTMLElement
-  ) => PageError | null;
   readonly base: string;
   readonly by: PageBy;
   /** A story's CSF object (a function story is its `render`). */
@@ -485,6 +493,8 @@ export interface Page {
     story: Story,
     fills: boolean
   ) => void;
+  /** The page's own errors, the newest 20, and a line saying how many more there were. */
+  errorsNow: () => PageError[];
   /** The card a section whose module didn't load says it in. */
   failedCard: (section: Section, failure: SectionFailure) => HTMLElement;
   readonly files: string[];
@@ -492,10 +502,8 @@ export interface Page {
   fills: (section: Section, story: string) => boolean;
   /** Story `rest` drawn in `body` has a width and no height of its own: from now on it is drawn as tall as its screen. */
   fillsScreen: (section: Section, story: Story, body: HTMLElement) => boolean;
-  /** A story's own width in a column: its form's, or the column's. */
-  formWords: (story: Story, slot: WidthSlot) => string;
   heard: (error: unknown) => void;
-  /** A report soon, once the page has been quiet a moment. */
+  /** A report soon, on the stage's own page (its {@link Reader}); nothing on any other. */
   later: () => void;
   loadSection: (section: Section) => Promise<void>;
   /** The stage's render opened the page to measure one move (core `MEASURE_PARAM`): it loads the state's section alone, reads nothing for the report and lays out nothing for a panel. */
@@ -511,22 +519,11 @@ export interface Page {
   /** The args a story is written with: as `argsOf`, no dial's in them. */
   ownArgsOf: (section: Section, name: string) => Record<string, unknown>;
   readonly plans: Record<string, SectionPlan>;
-  /** Every move of a section played in the rig: what each fires, for the report. */
-  playAll: (section: Section, sweep?: (to: string) => void) => Promise<void>;
-  post: () => Promise<void>;
-  /** A story mounted in the rig probed in each interaction it reaches (`atState`: the body read in each state, held), its reading. */
-  probe: (
-    body: HTMLElement,
-    reached: Exclude<Interaction, "rest">[],
-    atState: (interaction: Exclude<Interaction, "rest">) => void
-  ) => Promise<Probe>;
   quietly: (promise: Promise<unknown>) => void;
-  /** The interactions a story drawn in `body` reaches: each whose CSS rules match an element in it. */
-  reachedIn: (body: HTMLElement) => Interaction[];
+  /** The stage's own page's reader; null on every page a person uses. */
+  readonly reader: Reader | null;
   readonly rewrite: Rewrite;
   rewriteAll: () => void;
-  /** Off screen: where a story's states are probed and its moves played, never seen. */
-  readonly rig: HTMLElement;
   readonly root: string;
   /** The section's sheet told to the pane's inspector. */
   said: (section: Section) => Promise<void>;
@@ -538,14 +535,8 @@ export interface Page {
   readonly state: CanvasState;
   /** The page's own sheet: a mode's rules, its duration tokens. */
   readonly style: PageStyle;
-  /**
-   * The rig's next step's turn (the report's sweep): a task of its own,
-   * and none while the person acted in the last `PERSON_QUIET_MS` (runtime.ts), so
-   * a reveal heard is scrolled before the sweep takes the main thread again:
-   * a probe pass of a sheet's thirty forms held a reveal behind it for half
-   * a second on a loaded host, and its scroll for 700 ms more.
-   */
-  turn: () => Promise<void>;
+  /** Each story whose drawing threw, until it mounts again. */
+  threwNow: () => StoryThrew[];
   readonly view: View;
   widthOf: (story: Story, slot: WidthSlot) => number | null;
 }

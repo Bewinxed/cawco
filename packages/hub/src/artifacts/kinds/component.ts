@@ -13,6 +13,7 @@ import {
   designOf,
   GRAPH_WIDTHS_SAID,
   type RenderReport,
+  readerOwed,
   type SectionUndrawn,
   type SheetRead,
   type SheetWritten,
@@ -462,9 +463,9 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
   /**
    * The agent's write as `artifact_update` answers it (design graph
    * §4): the file, the lines written, the formatter that shaped them, the
-   * story with its args after, and its frames as its stage draws them now:
-   * the daemon's own draw of the workspace when no browser has drawn them
-   * since the write ({@link drawnReport}), else `unseen`.
+   * story with its args after, and its frames as the daemon's reader drew
+   * them once it read the write ({@link readerReport}); `unseen` where it
+   * could not within its limit.
    */
   const componentWritten = async (
     row: ArtifactRow,
@@ -484,17 +485,11 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       if (staged instanceof ElysiaStatus) {
         return staged;
       }
-      const drawn = await drawnReport(
-        at,
-        sheet.files,
-        sheet.spec,
-        staged.opened,
-        name
-      );
+      const drawn = await readerReport(row, at, sheet.files, staged.opened);
       if (drawn instanceof ElysiaStatus) {
         return drawn;
       }
-      const report = drawnHeld(row, drawn.report);
+      const { report } = drawn;
       if (!unseen(report, name)) {
         frames = renderSaid(
           report,
@@ -515,26 +510,36 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     return said;
   };
   /**
-   * The report of a canvas just written or handed up, as its workspace's
-   * stage has it: the daemon's own draw in the machine's Chromium when no
-   * browser has drawn it there (the person's panel draws it on the same
-   * stage). A canvas is never answered `unseen` when
-   * a browser could have drawn it.
+   * Design graph `row`'s report as the daemon's reader drew it: its stage's
+   * (`opened`), its last draws held ({@link drawnHeld}); where that holds
+   * content no reader drew (core `readerOwed`: a file changed since the reader
+   * last read it, or never read), the reader asked, which answers once it
+   * has read the files as they stand, within its limit. The one rule every
+   * read of a canvas's report goes by: a plain read, a create, an update.
    */
-  const drawnReport = async (
+  const readerReport = async (
+    row: ArtifactRow,
     at: StageAt,
     files: string[],
-    spec: CanvasSpec,
-    opened: StageOpened,
-    story?: string
+    opened: StageOpened
   ) => {
-    const drawn: Pick<StageRendered, "report" | "undrawn" | "plansUnread"> = {
-      report: opened.report,
-      undrawn: [],
+    const held = drawnHeld(row, opened.report);
+    if (readerOwed(held).length === 0) {
+      const read: Pick<StageRendered, "report" | "undrawn" | "plansUnread"> = {
+        report: held,
+        undrawn: [],
+      };
+      return read;
+    }
+    const read = await deps.stageRender(at, { files });
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    return {
+      report: drawnHeld(row, read.report),
+      undrawn: read.undrawn,
+      ...(read.plansUnread ? { plansUnread: read.plansUnread } : {}),
     };
-    return unseen(opened.report, story)
-      ? await deps.stageRender(at, { files, spec })
-      : drawn;
   };
   /** What a design graph's create names: its states files, and what the person does there; refused when it names no file or a canvas that does not hold. */
   const sheetAsked = (input: ArtifactInput) => {
@@ -745,17 +750,16 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       return openProblem(shown.stop, "artifact-sheet-unshown", shown.why);
     }
     const owned = sheetOf(row);
-    const drawn = await drawnReport(
+    const drawn = await readerReport(
+      row,
       { workspace },
       owned?.files ?? asked,
-      spec,
-      opened
+      staged.opened
     );
     if (drawn instanceof ElysiaStatus) {
       return drawn;
     }
-    const { undrawn, plansUnread } = drawn;
-    const report = drawnHeld(row, drawn.report);
+    const { report, undrawn, plansUnread } = drawn;
     const made: Created = {
       ...createdOf(row, shown),
       stage: stageSaid(sheetState(row, opened.state)),
@@ -1078,10 +1082,11 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
   };
   /**
    * A design graph as the session reads it (design graph §4): its
-   * picks and pins, its stage, what a browser drew (each frame's state), its
+   * picks and pins, its stage, what the daemon's reader drew (each frame's
+   * state, read again where the files changed since: `readerReport`), its
    * moves, its stories with the interactions they reach, the person's dials
    * and tuned motion; on asking, one story's args and code, one frame's
-   * computed-style delta, a fresh draw on the daemon, a picture. Read
+   * computed-style delta, a picture. Read
    * afresh on the workspace it was made in, as its author works on it now: a
    * use that keeps the stage awake. Its stage, each section's problem and
    * its stories are that read's; a stage the read can't reach is said as
@@ -1138,7 +1143,6 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       if (opened && (ask.render || ask.png || ask.layout || ask.measure)) {
         const rendered = await deps.stageRender(at, {
           files: sheet.files,
-          spec: sheet.spec,
           ...(ask.state ? { state: ask.state } : {}),
           ...(ask.measure
             ? { measure: ask.measure }
@@ -1150,10 +1154,15 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         if (rendered instanceof ElysiaStatus) {
           return rendered;
         }
-        ({ report, png, undrawn, plansUnread, layout, measured } = rendered);
-      }
-      if (report) {
-        report = drawnHeld(row, report);
+        ({ png, undrawn, plansUnread, layout, measured } = rendered);
+        report = drawnHeld(row, rendered.report);
+      } else if (opened) {
+        // A plain read: the report as the reader drew it, the reader asked where it owes one.
+        const read = await readerReport(row, at, sheet.files, opened);
+        if (read instanceof ElysiaStatus) {
+          return read;
+        }
+        ({ report, undrawn, plansUnread } = read);
       }
     }
     const stage = opened ? sheetState(row, opened.state) : undefined;

@@ -20,9 +20,8 @@
  * inside the component keep working, and the person's wheel, keys and
  * scrollbar never pass through these calls. A call made inside the
  * person's own press or key ({@link personActing}) is theirs and goes
- * through: a mount or a play in the rig runs for seconds after a save, and
- * a drawing's own "back to top" pressed then still scrolls. The stage's own
- * scrolls pass through {@link stageScroll}.
+ * through: a drawing's own "back to top" pressed while a mount runs still
+ * scrolls. The stage's own scrolls pass through {@link stageScroll}.
  */
 
 /** The person's own presses and keys: what a page does inside one is theirs. */
@@ -41,21 +40,6 @@ const PERSON_ACTS: ReadonlySet<string> = new Set([
   "keypress",
   "keyup",
 ]);
-
-/** `heard` called as each of the person's own presses and keys on this page is dispatched, before the page's own listeners. */
-export function onPersonAct(heard: () => void): void {
-  for (const type of PERSON_ACTS) {
-    addEventListener(
-      type,
-      (event) => {
-        if (event.isTrusted) {
-          heard();
-        }
-      },
-      { capture: true, passive: true }
-    );
-  }
-}
 
 /** Whether the event being handled now is the person's own press or key on this page. */
 export const personActing = (): boolean => {

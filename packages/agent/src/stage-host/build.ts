@@ -117,6 +117,7 @@ const svelteShims = async (): Promise<string> =>
   );
 
 const CANVAS = new URL("./canvas/runtime.ts", import.meta.url).pathname;
+const READER = new URL("./canvas/reader.ts", import.meta.url).pathname;
 const PAGES = new URL("./canvas/pages.ts", import.meta.url).pathname;
 
 /**
@@ -153,16 +154,22 @@ const outputText = (
   return built.text();
 };
 
-/** The canvas's browser runtime (canvas/runtime.ts), bundled: an ES module the stage serves as `cawco:stage/runtime.js`. */
-async function canvasRuntime(): Promise<string> {
-  const result = await bundled("The canvas runtime", {
-    entrypoints: [CANVAS],
+/**
+ * A canvas page's browser runtime, bundled: an ES module the stage serves
+ * as `cawco:stage/<served>`. `canvas/runtime.ts` for every page a person
+ * uses (`runtime.js`), `canvas/reader.ts` for the stage's own page, which
+ * reads the report (`reader.js`): each bundle carries only what its
+ * entry imports, so no page a person uses carries the reader.
+ */
+async function canvasRuntime(entry: string, what: string): Promise<string> {
+  const result = await bundled(what, {
+    entrypoints: [entry],
     target: "browser",
     format: "esm",
     minify: true,
   });
-  await refuseSchemeLowering("The stage's canvas runtime", result.outputs);
-  return await outputText("The canvas runtime", result.outputs);
+  await refuseSchemeLowering(what, result.outputs);
+  return await outputText(what, result.outputs);
 }
 
 /** A design folder's canvas (canvas/pages.ts), bundled: a browser IIFE its document carries inline (host.ts `servePages`). */
@@ -179,8 +186,9 @@ async function pagesStage(): Promise<string> {
 
 /** The host, bundled: its text. */
 export async function buildStageHost(): Promise<string> {
-  const [runtime, pages, tokens, faces] = await Promise.all([
-    canvasRuntime(),
+  const [runtime, reader, pages, tokens, faces] = await Promise.all([
+    canvasRuntime(CANVAS, "The canvas runtime"),
+    canvasRuntime(READER, "The stage's reading runtime"),
     pagesStage(),
     themeVariablesCss(),
     canvasFaces(),
@@ -196,6 +204,7 @@ export async function buildStageHost(): Promise<string> {
     define: {
       __SVELTE_SHIMS__: JSON.stringify(await svelteShims()),
       __CANVAS_RUNTIME__: JSON.stringify(runtime),
+      __CANVAS_READER__: JSON.stringify(reader),
       __PAGES_STAGE__: JSON.stringify(pages),
       __CANVAS_TOKENS__: JSON.stringify(tokens),
       __CANVAS_FACES__: JSON.stringify(faces.css),

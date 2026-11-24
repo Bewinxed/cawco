@@ -3,10 +3,11 @@
  * at `CANVAS_PATH`, in the project's own page and CSS. What every page of it
  * shares lives here: each states file's section and its module (loaded,
  * failed, loaded again as it is edited), the CSS rewritten so a forced
- * interaction and a frame's width reach the project's rules, the rig off
- * screen where each story's states are probed and its moves played, the
- * render report posted to the stage (the one source every tool answers
- * from) and the sheet told to the pane's inspector.
+ * interaction and a frame's width reach the project's rules, and the sheet
+ * told to the pane's inspector. The render report is read and posted by
+ * the stage's own page alone (`by=stage`, its entry reader.ts with rig.ts):
+ * {@link boot} is every other page's, which draws and reads nothing for
+ * the report, so no read runs in a page a person uses.
  *
  * What a page draws, the stage draws (stage.ts), every story as a
  * drawing: for a person's panel and the stage's own render (`by=panel`,
@@ -29,7 +30,7 @@
  * x.com/eminimnim/status/2121249063576228036) is no answer here: its
  * drawing would no longer be the browser's.
  *
- * The stage's entry module hands {@link boot} the framework's adapter
+ * The stage's entry module hands {@link boot} (or reader.ts's) the framework's adapter
  * (`mountStory`, answering `unmount` and `update`) and how to load each
  * section; everything else is read from the page's URL: `file` per
  * section, `spec` (core `CanvasSpec`), and `scheme`, `width`, `motion`,
@@ -38,23 +39,15 @@
  * itself before its module loads.
  */
 
-import { readWithin } from "@cawco/core/bounded";
 import { awaySaid } from "@cawco/core/page-wire";
 import {
-  type AnimationRead,
   CANVAS_PLAN_ID,
   type CanvasSpec,
   canvasSpecOf,
-  FORMS,
-  type Interaction,
   MEASURE_PARAM,
-  type MoveRender,
   namedKept,
   type PageBy,
   type PageError,
-  type PageReport,
-  type PageSection,
-  type PostedReport,
   pageByOf,
   RENDER_STATE_PARAM,
   type Scheme,
@@ -73,36 +66,12 @@ import {
   sectionPlansOf,
   sweptFiles,
 } from "@cawco/core/stage";
-import {
-  dialSetOf,
-  STAGE_COMPARE,
-  STAGE_GUIDES,
-  STAGE_LET_GO,
-  STAGE_PAUSE,
-  STAGE_PLAY,
-  STAGE_REACH,
-  STAGE_RETIME,
-  STAGE_REVEAL,
-  STAGE_RING,
-  STAGE_SEEK,
-} from "@cawco/core/stage-graph";
-import { queriesIn, type UserEvent, userEventIn } from "@cawco/core/stage-play";
+import { dialSetOf } from "@cawco/core/stage-graph";
 import { graphWords } from "@cawco/core/words/graph";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 import { holdFocus } from "./held-focus";
-import { holdPageScroll, stillPage } from "./held-scroll";
-import {
-  deltaOf,
-  firedBetween,
-  fromRoot,
-  type Motion,
-  motionOf,
-  namedOf,
-  pageError,
-  readAnimation,
-  snapshot,
-  valuesOf,
-} from "./measure";
+import { holdPageScroll } from "./held-scroll";
+import { fromRoot, pageError } from "./measure";
 import { ownModulesOf } from "./own";
 import {
   type BootOptions,
@@ -113,8 +82,6 @@ import {
   detailsOf,
   FORCED,
   fixingLine,
-  frameTick,
-  HELD,
   type Mode,
   type Mounted,
   type MountSpec,
@@ -122,8 +89,8 @@ import {
   nextTask,
   objectOf,
   type Page,
-  type Probe,
   paneAway,
+  type Reader,
   readCsf,
   type Section,
   type SectionFailure,
@@ -137,11 +104,9 @@ import {
   allClass,
   emptyReach,
   forceMotion,
-  type PseudoState,
   type Rewrite,
   rewriteSheet,
 } from "./pseudo";
-import { rigLayers, rigResumes, rigTurn } from "./rig-turn";
 import { onPageScheme, pageScheme } from "./scheme";
 import { bootStage } from "./stage";
 import {
@@ -155,21 +120,6 @@ import "./window-events";
 
 /** How long a section's failed import waits for the stage's words. Our call: Vite sends them before it answers the request. */
 const STAGE_SAYS_MS = 1000;
-/** The pseudo-class whose rules decide whether an interaction is reached. */
-const DECIDES: Record<Exclude<Interaction, "rest">, PseudoState[]> = {
-  hover: ["hover"],
-  focus: ["focus", "focus-visible", "focus-within"],
-  pressed: ["active"],
-};
-const FOCUSABLE =
-  'a[href],button,input,select,textarea,summary,[tabindex],[contenteditable="true"]';
-
-/** How long a move may play before it is read as stuck. Ours. */
-const PLAY_LIMIT_MS = 6000;
-/** How long a move's animations are waited on after its play ends. Ours. */
-const SETTLE_LIMIT_MS = 3000;
-/** The quiet after the last change before a report is posted. Ours. */
-const REPORT_QUIET_MS = 200;
 
 /** A section module's address as an HMR update names it: `/@id/__x00__cawco:sheet/<the states file, encoded>.js`. */
 const SECTION_PATH = /cawco:sheet\/([^?]+)\.js(?:\?|$)/u;
@@ -179,35 +129,6 @@ const sectionOfPath = (path: string): string | null => {
   const encoded = path.match(SECTION_PATH)?.[1];
   return encoded ? decodeURIComponent(encoded) : null;
 };
-
-/**
- * How long the rig's work stands aside after the person acts on the page
- * (a reach, a reveal, Compare, the move's play or scrub, a dial, the
- * view): his act is answered and its scroll or motion runs before the
- * report's next step takes the main thread. Ours: a second, past a smooth
- * scroll's run.
- */
-const PERSON_QUIET_MS = 1000;
-/**
- * The words the panel sends for the person's acts (core stage-graph.ts, the
- * inspector's). The view and the dials are acts only where they change
- * what the page draws ({@link boot}'s `setView`, `applyDials`): the design
- * graph says both again to every page it loads, and each held the first
- * read a second after the load.
- */
-const PERSON_ACTS = [
-  STAGE_REACH,
-  STAGE_REVEAL,
-  STAGE_COMPARE,
-  STAGE_GUIDES,
-  STAGE_PLAY,
-  STAGE_PAUSE,
-  STAGE_SEEK,
-  STAGE_LET_GO,
-  STAGE_RETIME,
-  STAGE_RING,
-  "cawco:story-args",
-];
 
 /** The view the page's URL asks for. */
 function viewOf(params: URLSearchParams): View {
@@ -239,17 +160,6 @@ const planOfPage = (): Record<string, SectionPlan> => {
   } catch {
     return {};
   }
-};
-
-/** What the canvas could not force, the first 20 and a notice of how many more there were. */
-const notForcedSaid = (refused: ReadonlySet<string>): string[] => {
-  const all = [...refused];
-  return all.length > 20
-    ? [
-        ...all.slice(0, 20),
-        stageRenderWords.andMore(all.length - 20, "not forced"),
-      ]
-    : all;
 };
 
 const specOf = (params: URLSearchParams): CanvasSpec => {
@@ -356,13 +266,21 @@ const sweepsOf = (
   return by === "panel" && window.top !== window ? [] : files;
 };
 
+/** A page a person uses (the panel, a Preview, a map's card): it draws, and reads nothing for the report. */
 export function boot(options: BootOptions): void {
-  /** Off screen: where a story's states are probed and its moves played, never seen. */
-  const rig = document.createElement("div");
-  rig.className = "cawco-rig";
-  rig.setAttribute("aria-hidden", "true");
-  document.body.append(rig);
-  holdFocus(rig);
+  bootPage(options, null);
+}
+
+/**
+ * The page: its sections, their drawing and the mode that draws them;
+ * `readerOf` the stage's own page's reader (reader.ts hands rig.ts's), none
+ * on any other page.
+ */
+export function bootPage(
+  options: BootOptions,
+  readerOf: ((page: Page) => Reader) | null
+): void {
+  holdFocus();
   holdPageScroll();
   holdWhileAway();
   const { adapter, root } = options;
@@ -381,12 +299,12 @@ export function boot(options: BootOptions): void {
   let errorsDropped = 0;
   const sections: Section[] = [];
   const overrides = new Map<string, Record<string, unknown>>();
-  let reportTimer: ReturnType<typeof setTimeout> | undefined;
   /** Each section's newest ask of its whole sheet, by its file (`said`). */
   const sheetAsks = new Map<string, number>();
-  let reports = 0;
   /** The mode, made once what it is handed stands. */
   let mode: Mode | null = null;
+  /** The stage's own page's reader, made once the page stands; none on any other page. */
+  let reader: Reader | null = null;
   const embed = by === "embed";
 
   /* --- The page's own errors, from before the module ran ---------------- */
@@ -779,15 +697,6 @@ export function boot(options: BootOptions): void {
   const widthOf = (story: Story, slot: WidthSlot): number | null =>
     slot === "own" ? (story.form?.width ?? null) : slot;
 
-  const formWords = (story: Story, slot: WidthSlot): string => {
-    const width = widthOf(story, slot);
-    if (width === null) {
-      return "fit";
-    }
-    const preset = Object.entries(FORMS).find(([, one]) => one === width)?.[0];
-    return `${preset ?? "width"} ${width}`;
-  };
-
   /** A column's scheme: its own, or the page's (scheme.ts: the host's theme, else the system's). */
   const schemeOf = (column: Column): Scheme =>
     column.scheme === "page" ? pageScheme() : column.scheme;
@@ -994,62 +903,6 @@ export function boot(options: BootOptions): void {
     }
   }
 
-  /** The interactions a story drawn in `body` reaches: each whose CSS rules match an element in it. */
-  function reachedIn(body: HTMLElement): Interaction[] {
-    const found: Interaction[] = ["rest"];
-    for (const interaction of ["hover", "focus", "pressed"] as const) {
-      const hit = DECIDES[interaction].some((pseudo) =>
-        [...rewrite.reach[pseudo]].some((selector) => {
-          let els: Element[];
-          try {
-            els = [...body.querySelectorAll(selector)];
-          } catch {
-            return false;
-          }
-          if (interaction !== "focus") {
-            return els.length > 0;
-          }
-          return els.some(
-            (el) =>
-              el.matches(FOCUSABLE) ||
-              (pseudo === "focus-within" && el.querySelector(FOCUSABLE))
-          );
-        })
-      );
-      if (hit) {
-        found.push(interaction);
-      }
-    }
-    return found;
-  }
-
-  /**
-   * A body that drew at its floor (its `min-inline-size`) with no width of
-   * its own: the story gave it none, and its content measures nothing (a
-   * size container), so it shrank to the floor and reads as a sliver. Said
-   * as its failure, in words; no width is put in its place. Null when it
-   * stands at a width of its own or past the floor.
-   */
-  function atFloor(
-    story: Story,
-    slot: WidthSlot,
-    body: HTMLElement
-  ): PageError | null {
-    if (widthOf(story, slot) !== null) {
-      return null;
-    }
-    const width = body.offsetWidth;
-    const floor = Number.parseFloat(getComputedStyle(body).minInlineSize) || 0;
-    return floor > 0 && width <= floor + 0.5
-      ? {
-          message: `drawn ${Math.round(width)}px wide: the story has no width of its own; give it a viewport or a width`,
-          file: null,
-          line: null,
-          column: null,
-        }
-      : null;
-  }
-
   /**
    * A section's module as this canvas loads it: on a person's graph (the
    * spec's `named`), the stories its agent named and their moves alone, so
@@ -1077,6 +930,7 @@ export function boot(options: BootOptions): void {
         return;
       }
       const since = performance.now();
+      section.loadedFrom = Date.now();
       let loaded: SectionModule;
       try {
         loaded = namedOnly(await options.load(section.file, !!section.failure));
@@ -1165,296 +1019,7 @@ export function boot(options: BootOptions): void {
     later();
   }
 
-  /* --- Probes: each story's states read off screen ----------------------- */
-
-  /** The person's last act on the page (performance.now()). */
-  let actedAt = Number.NEGATIVE_INFINITY;
-  /** The person acted on the page now: the rig's next step stands aside ({@link turn}). */
-  const acted = () => {
-    actedAt = performance.now();
-  };
-  for (const type of PERSON_ACTS) {
-    addEventListener(type, acted);
-  }
-  async function turn(): Promise<void> {
-    await nextTask();
-    for (
-      let left = PERSON_QUIET_MS - (performance.now() - actedAt);
-      left > 0;
-      left = PERSON_QUIET_MS - (performance.now() - actedAt)
-    ) {
-      await new Promise<void>((done) => setTimeout(done, left));
-    }
-  }
-
-  /** A probe step run as one task, named for the page's timeline (`cawco probe`, its interaction and phase in its detail). */
-  function probePhase<T>(
-    interaction: Interaction,
-    phase: string,
-    run: () => T
-  ): T {
-    const start = performance.now();
-    try {
-      return run();
-    } finally {
-      performance.measure("cawco probe", {
-        start,
-        end: performance.now(),
-        detail: { interaction, phase },
-      });
-    }
-  }
-
-  /** `interaction` forced on `body`, or let go. */
-  const forced = (
-    body: HTMLElement,
-    interaction: Exclude<Interaction, "rest">,
-    on: boolean
-  ) => {
-    for (const state of FORCED[interaction]) {
-      body.classList.toggle(allClass(state), on);
-    }
-  };
-
-  /**
-   * A story mounted in `body`, standing at rest, probed in each interaction
-   * it reaches, read from computed style alone (measure.ts `motionOf`,
-   * `firedBetween`): the delta each state makes, and the transitions and
-   * keyframes it fires. `atState` reads the body in each state as the
-   * state's values are read, its frame for the report. The engine's
-   * animation list is never asked: Chromium's `getAnimations` costs as
-   * many animations as the page holds, whatever it is asked on (a body,
-   * one element or the document took 1,038 ms each with 10,000 looping
-   * elsewhere on the page, 9 ms with 1,000), and a person's panel of the
-   * pairing canvas held 10,869, the heavy probe canvas 32,400. So a probe
-   * costs its own story's elements, whatever the page around it holds.
-   *
-   * Each style the body takes costs a restyle of every element in it,
-   * through the project's whole sheet (the dashboard's 5,455 rules: 6 ms
-   * for a 151-element body), so each is taken once and read whole, a task
-   * of its own: at rest, the keyframes it names; each state forced, the
-   * motion it declares (the hold let go only within the task, so what it
-   * would run never starts); then held still (`cawco-held`, PAGE_CSS: no
-   * keyframes, no transitions, so each read is the base style, never a
-   * frame of a loop or a transition on its way), its values at rest, then
-   * each state's values and frame. Of the values, a transition's
-   * properties are read only where it runs (a duration past 0): every
-   * element declares `all 0s`, and reading all it names read every
-   * watched property twice more on every element.
-   */
-  async function probe(
-    body: HTMLElement,
-    reached: Exclude<Interaction, "rest">[],
-    atState: (interaction: Exclude<Interaction, "rest">) => void
-  ): Promise<Probe> {
-    const read: Probe = { delta: new Map() };
-    if (reached.length === 0) {
-      return read;
-    }
-    const named = probePhase("rest", "motion at rest", () => namedOf(body));
-    body.classList.add(HELD);
-    try {
-      const motions = new Map<Exclude<Interaction, "rest">, Motion>();
-      for (const interaction of reached) {
-        await turn();
-        motions.set(
-          interaction,
-          probePhase(interaction, "motion forced", () => {
-            body.classList.remove(HELD);
-            forced(body, interaction, true);
-            const motion = motionOf(body);
-            forced(body, interaction, false);
-            body.classList.add(HELD);
-            return motion;
-          })
-        );
-      }
-      await turn();
-      const before = probePhase("rest", "values at rest", () => ({
-        watched: snapshot(body),
-        moved: valuesOf(...motions.values()),
-      }));
-      for (const [interaction, motion] of motions) {
-        await turn();
-        probePhase(interaction, "values forced", () => {
-          forced(body, interaction, true);
-          try {
-            read.delta.set(interaction, {
-              animations: firedBetween(
-                named,
-                motion,
-                before.moved,
-                valuesOf(motion)
-              ),
-              ...deltaOf(before.watched, snapshot(body), root),
-            });
-            atState(interaction);
-          } finally {
-            forced(body, interaction, false);
-          }
-        });
-      }
-    } finally {
-      body.classList.remove(HELD);
-    }
-    return read;
-  }
-
-  /* --- Moves: `from` + `play` ------------------------------------------ */
-
-  /** Stories of a section that declare a flow move: `from` and a `play`. */
-  const movesOf = (section: Section): { from: string; to: string }[] =>
-    (section.mod?.SHEET.stories ?? []).flatMap((one) =>
-      one.play && one.from ? [{ from: one.from, to: one.name }] : []
-    );
-
-  /** Plays move `to` (from its `from`) in `body`: mounted from the start story's args, then its `play`; every animation it fired, read as it started. */
-  async function playIn(
-    section: Section,
-    to: string,
-    body: HTMLElement
-  ): Promise<{ mounted: Mounted | undefined; move: MoveRender }> {
-    const csf = csfOf(moduleOf(section, to), to) ?? {};
-    const { play } = csf;
-    const from = String(
-      csf.from ??
-        section.mod?.SHEET.stories.find((one) => one.name === to)?.from ??
-        ""
-    );
-    const move: MoveRender = { from, to, animations: [] };
-    if (!(from && play)) {
-      move.error = {
-        message: `${to} has no from and play to move by.`,
-        file: null,
-        line: null,
-        column: null,
-      };
-      return { mounted: undefined, move };
-    }
-    const into: { error?: PageError } = {};
-    const args = argsOf(section, from);
-    // Each call into the story is a turn of the rig's, and its play resumes in one (rig-turn.ts).
-    const mounted = rigTurn(() => mountInto(body, section, from, args, into));
-    await frameTick();
-    const seen = new Set<Animation>();
-    const reads: AnimationRead[] = [];
-    const t0 = Number(document.timeline.currentTime);
-    let watching = true;
-    /** Every animation running in the body that was not seen yet, read as it started. */
-    const look = () => {
-      for (const one of body.getAnimations({ subtree: true })) {
-        if (!seen.has(one)) {
-          seen.add(one);
-          reads.push(readAnimation(one, t0));
-        }
-      }
-    };
-    const watch = () => {
-      look();
-      if (watching) {
-        requestAnimationFrame(watch);
-      }
-    };
-    requestAnimationFrame(watch);
-    let current = { ...args };
-    try {
-      const played = await readWithin(PLAY_LIMIT_MS, async () =>
-        rigTurn(() =>
-          play({
-            args: current,
-            canvasElement: body,
-            canvas: queriesIn(body, rigLayers),
-            userEvent: rigUser(userEventIn(body)),
-            step: rigResumes(
-              async (_name: string, run: () => Promise<void>) => await run()
-            ),
-            update: rigResumes(async (next: Record<string, unknown>) => {
-              current = { ...current, ...next };
-              mounted?.update(next);
-              await frameTick();
-            }),
-          })
-        )
-      );
-      if (played.kind === "unanswered") {
-        throw new Error(`${to}'s play ran past ${PLAY_LIMIT_MS / 1000} s.`);
-      }
-      // The motion it started, played out (or the wait's end): each run's
-      // end awaited, never a frame polled, so a page no frame comes to (a
-      // tab out of sight, where the timeline stands still) waits once to
-      // the end and does not spin; a run one of them starts as it ends is
-      // seen on the frame after.
-      look();
-      const end = performance.now() + SETTLE_LIMIT_MS;
-      let running = [...seen].filter((one) => one.playState === "running");
-      while (running.length > 0 && performance.now() < end) {
-        await readWithin(Math.max(0, end - performance.now()), () =>
-          Promise.all(running.map((one) => one.finished.catch(() => null)))
-        );
-        await frameTick();
-        look();
-        running = [...seen].filter((one) => one.playState === "running");
-      }
-      if (running.length > 0) {
-        move.stillRunning = running.length;
-      }
-    } catch (error) {
-      move.error = pageError(error, root, base);
-    } finally {
-      watching = false;
-    }
-    if (into.error && !move.error) {
-      move.error = into.error;
-    }
-    move.animations = reads;
-    return { mounted, move };
-  }
-
-  /** A play's `userEvent` whose every press is a turn of the rig's, the play going on in one as it settles. */
-  const rigUser = (user: UserEvent): UserEvent => ({
-    click: rigResumes(user.click.bind(user)),
-    hover: rigResumes(user.hover.bind(user)),
-    keyboard: rigResumes(user.keyboard.bind(user)),
-    tab: rigResumes(user.tab.bind(user)),
-    type: rigResumes(user.type.bind(user)),
-    unhover: rigResumes(user.unhover.bind(user)),
-    wait: rigResumes(user.wait.bind(user)),
-  });
-
-  /** Every move of a section played off screen: what each fires, for the report. `sweep` hears each as it starts. */
-  async function playAll(
-    section: Section,
-    sweep?: (to: string) => void
-  ): Promise<void> {
-    const moves: MoveRender[] = [];
-    for (const { to } of movesOf(section)) {
-      await turn();
-      const body = document.createElement("div");
-      body.className = "cawco-frame-body";
-      const story = section.mod?.SHEET.stories.find((one) => one.name === to);
-      sizeBody(
-        body,
-        story ? widthOf(story, "own") : null,
-        screenFilled.has(fillKey(section.file, to))
-      );
-      rig.append(body);
-      let mounted: Mounted | undefined;
-      try {
-        sweep?.(to);
-        // Its mount and play are the component's: its own scrolls of the page are stopped (held-scroll.ts).
-        const played = await stillPage(() => playIn(section, to, body));
-        ({ mounted } = played);
-        moves.push(played.move);
-      } finally {
-        rigTurn(() => mounted?.unmount());
-        body.remove();
-      }
-    }
-    section.moves = moves;
-    later();
-  }
-
-  /* --- What the page says: the sheet for the inspector, the report -------- */
+  /* --- What the page says: the sheet for the inspector ------------------- */
 
   /**
    * The section's whole sheet, its components' props too, read from the
@@ -1500,88 +1065,24 @@ export function boot(options: BootOptions): void {
     dispatchEvent(new CustomEvent("cawco:sheet", { detail: sheet }));
   }
 
+  /** A report soon: the stage's own page's reader posts one; no other page posts. */
   function later(): void {
-    clearTimeout(reportTimer);
-    reportTimer = setTimeout(() => quietly(post()), REPORT_QUIET_MS);
+    reader?.later();
   }
 
-  function reportNow(): PageReport & Pick<PostedReport, "drawing"> {
-    // A section loaded and not read yet, or read again now, posts nothing but its file under `drawing`: an empty or half-read one would stand over what an earlier draw saw of it.
-    const drawing = mode?.drawing() ?? [];
-    const drawn: PageSection[] = sections.flatMap((section) => {
-      const frames =
-        section.loaded && !drawing.includes(section.file)
-          ? mode?.framesOf(section)
-          : null;
-      return section.mod && frames
-        ? [
-            {
-              file: section.file,
-              title: section.mod.SHEET.meta.title ?? section.file,
-              frames,
-              moves: section.moves,
-              notForced: notForcedSaid(rewrite.refused),
-            },
-          ]
-        : [];
-    });
-    const unnamed = sections.flatMap((section) =>
-      (section.mod?.SHEET.stories ?? [])
-        .filter((story) => !story.label)
-        .map((story) => `${section.file}:${story.name}`)
-    );
-    return {
-      by: by === "stage" ? "stage" : "panel",
-      at: new Date().toISOString(),
-      page: {
-        errors:
-          errorsDropped > 0
-            ? [
-                ...pageErrors,
-                {
-                  message: stageRenderWords.andMore(errorsDropped, "errors"),
-                  file: null,
-                  line: null,
-                  column: null,
-                },
-              ]
-            : [...pageErrors],
-      },
-      sections: drawn,
-      unnamed,
-      drawing,
-    };
-  }
-
-  async function post(): Promise<void> {
-    const report = reportNow();
-    mode?.reported(report);
-    try {
-      // A Preview's embed and a map's card never post: the report stays the panel's own page's, or the stage's render's.
-      if (!(by === "map" || embed)) {
-        // A section whose module the page couldn't load posts no section: its error goes as the stage's, which knows only what it served.
-        const posted: PostedReport = {
-          ...report,
-          unloaded: sections.flatMap((section) =>
-            section.failure?.kind === "page"
-              ? [{ file: section.file, error: section.failure.error }]
-              : []
-          ),
-          threw: [...thrown.values()],
-        };
-        await fetch(new URL("rendered", location.href), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(posted),
-        });
-      }
-    } catch {
-      // The stage is away: the next draw posts again.
-    }
-    reports += 1;
-    state.report = report;
-    state.reports = reports;
-  }
+  /** The page's own errors, the newest 20, and a line saying how many more there were. */
+  const errorsNow = (): PageError[] =>
+    errorsDropped > 0
+      ? [
+          ...pageErrors,
+          {
+            message: stageRenderWords.andMore(errorsDropped, "errors"),
+            file: null,
+            line: null,
+            column: null,
+          },
+        ]
+      : [...pageErrors];
 
   /* --- Dials: CSS variables on every body, or args through update -------- */
 
@@ -1599,14 +1100,13 @@ export function boot(options: BootOptions): void {
     const unset = [...dialVars.keys()].filter((name) => !vars.has(name));
     const back = Object.keys(dialArgs).filter((name) => !(name in args));
     const argsChanged = JSON.stringify(args) !== JSON.stringify(dialArgs);
-    // The set the page draws already: nothing to set, and no act of the person's.
+    // The set the page draws already: nothing to set.
     if (
       !argsChanged &&
       JSON.stringify([...vars]) === JSON.stringify([...dialVars])
     ) {
       return;
     }
-    acted();
     dialVars = vars;
     dialArgs = args;
     for (const { body, mounted, written } of mode?.bodies() ?? []) {
@@ -1689,7 +1189,6 @@ export function boot(options: BootOptions): void {
     if (drawnView() === was) {
       return;
     }
-    acted();
     if (view.motion !== motionWas) {
       for (const sheet of sheetsNow()) {
         forceMotion(sheet, view.motion);
@@ -1737,6 +1236,8 @@ export function boot(options: BootOptions): void {
     await nextTask();
     for (const section of swapped) {
       if (!section.failure) {
+        // Its framework's update has applied: what it draws now is the save's.
+        section.loadedFrom = Date.now();
         mode?.swapped(section);
         quietly(said(section));
       }
@@ -1752,6 +1253,7 @@ export function boot(options: BootOptions): void {
     // Loaded again: it is read as it is shown, never as swapped too.
     swapPending.delete(section);
     section.mod = mod;
+    section.loadedFrom = Date.now();
     section.interactions.clear();
     section.probes.clear();
     const since = performance.now();
@@ -1894,9 +1396,9 @@ export function boot(options: BootOptions): void {
     swept: false,
     // The panel's page loads no states file up front: only the one its
     // design graph has in front, or reaches or compares into (stage.ts
-    // `sweepOne`). A whole screen is some 1,264 modules, so three directions
-    // swept as it opens tripled the first wait. The stage's own render
-    // sweeps the files it is asked for; an embed and a map card every one.
+    // `loadOne`). A whole screen is some 1,264 modules, so three directions
+    // loaded as it opens tripled the first wait. The stage's own page
+    // sweeps the files it is asked for; an embed and a map card load every one.
     sweeps: sweepsOf(by, files, plans, params.get(RENDER_STATE_PARAM)),
     sweepAt: null,
     drawn: [],
@@ -1911,7 +1413,6 @@ export function boot(options: BootOptions): void {
     options,
     plans,
     rewrite,
-    rig,
     root,
     sections,
     spec,
@@ -1919,33 +1420,32 @@ export function boot(options: BootOptions): void {
     style,
     view,
     argsOf,
-    atFloor,
     csfOf,
     dressBody,
+    errorsNow,
     failedCard,
     fills: (section, story) => screenFilled.has(fillKey(section.file, story)),
     fillsScreen,
-    formWords,
     heard,
     later,
     loadSection,
     measuring: by === "stage" && params.get(MEASURE_PARAM) === "1",
     mountInto,
     ownArgsOf,
-    playAll,
-    post,
-    probe,
     quietly,
-    reachedIn,
+    get reader() {
+      return reader;
+    },
     rewriteAll,
     said,
     schemeOf,
     sectionOf,
     sizeBody,
-    turn,
+    threwNow: () => [...thrown.values()],
     widthOf,
   };
   window.__cawcoCanvas = state;
+  reader = readerOf?.(page) ?? null;
   mode = bootStage(page);
 }
 

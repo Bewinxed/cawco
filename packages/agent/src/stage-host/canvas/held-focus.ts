@@ -6,45 +6,27 @@
  * that frame too (Chromium's focusing steps; the HTML standard's "focus
  * update steps" run across navigables): the field the person is in blurs,
  * and every key they type next lands elsewhere. The page focuses its own
- * elements in the background: the rig mounts each story and plays each
- * move off screen (runtime.ts `readSection`, `playAll`), a reach runs its
- * story's play on the drawing (stage.ts `act`), each through
- * `userEventIn`'s click and type (core stage-play.ts), and a component
- * focuses its field as it mounts. A person typing in the design graph's
- * room lost the keyboard to the stage mid-word, and one typing in a
- * drawing lost it to the rig's read of the next save.
+ * elements in the background: a reach runs its story's play on the drawing
+ * (stage.ts `act`) through `userEventIn`'s click and type (core
+ * stage-play.ts), and a component focuses its field as it mounts. A person
+ * typing in the design graph's room lost the keyboard to the stage
+ * mid-word.
  *
  * Taking the focus back afterwards is no answer: the element the story
- * focused then reads as unfocused, so a read or a play that focused a field
- * would no longer see it focused. So a focus is held in the page instead:
- * the element is its document's `activeElement`, it hears `blur`,
- * `focusout`, `focus` and `focusin` as a real focus moves, and it is drawn
- * focused by the classes the pseudo-state rewrite gives `:focus`,
- * `:focus-visible` and `:focus-within` (pseudo.ts), as a play's hover is
- * drawn by `.cawco-hover`. Two focuses are held, each its own:
+ * focused then reads as unfocused, so a play that focused a field would no
+ * longer see it focused. So, in a frame, a focus asked for while the frame
+ * lacks the window's focus, outside the person's own press or key in it,
+ * is held in the page instead: the element is its document's
+ * `activeElement`, it hears `blur`, `focusout`, `focus` and `focusin` as a
+ * real focus moves, and it is drawn focused by the classes the
+ * pseudo-state rewrite gives `:focus`, `:focus-visible` and
+ * `:focus-within` (pseudo.ts), as a play's hover is drawn by
+ * `.cawco-hover`. The page as the person's press or key focuses it (the
+ * frame then has the window's focus) is the browser's own, and that focus
+ * lets go. A held field takes no keys, which only the real focus brings.
  *
- * - **The rig's**, on every page: every focus asked for on an element of
- *   the rig (in it, or in a layer the rig added to the body in a turn of
- *   its own, as bits-ui portals a dialog's content: rig-turn.ts), whenever
- *   it is asked for. The rig is a world of its own the person never sees, so its focus never moves theirs, whatever page it is in.
- *   A focus the browser moves into the rig itself (a label's click, a
- *   modal dialog's `showModal()`) is held there and the person's own is
- *   put back.
- * - **The page's**, in a frame alone: a focus asked for while the frame
- *   lacks the window's focus, outside the person's own press or key in
- *   it. The page as the person's press or key focuses it (the frame then
- *   has the window's focus) is the browser's own, and that focus lets go.
- *
- * `document.activeElement` answers the rig's focus (the body when it
- * holds none) only to code that runs for the rig: an event on an element
- * of the rig, or script outside any event in a turn of the rig's, as a
- * play's `keyboard` or its own code after an `await userEvent…` reads it
- * (rig-turn.ts). The rest, the drawing's script in its own events, timers
- * and frames, reads the page's held focus or the browser's: the person's
- * field. The stage's own code asks {@link focusOfPage}.
- *
- * What it does not hold: a held field takes no keys, which only the real
- * focus brings. Where a turn falls short is rig-turn.ts's to say.
+ * The page reads nothing for the report in the background: that is the
+ * stage's own page's, in the daemon's headless browser (rig.ts).
  *
  * On every page, framed or not, a focus asked for while the stage mounts
  * or plays a story is taken with `preventScroll` (held-scroll.ts
@@ -52,7 +34,6 @@
  */
 import { pageStill, personActing } from "./held-scroll";
 import { stateClass } from "./pseudo";
-import { inRigTurn, rigOwns, watchRigLayers } from "./rig-turn";
 
 /** What a real `focus()` reaches: the elements that take the focus. */
 const FOCUSABLE =
@@ -64,26 +45,10 @@ const TEXT_FIELD =
 
 type Focusable = HTMLElement | SVGElement;
 
-const isFocusable = (node: unknown): node is Focusable =>
-  node instanceof HTMLElement || node instanceof SVGElement;
-
-/** The element in the light DOM standing for `node`: itself, or the host of each shadow root it is in. */
-const lightOf = (node: Node): Node => {
-  let at = node;
-  for (let root = at.getRootNode(); root instanceof ShadowRoot;) {
-    at = root.host;
-    root = at.getRootNode();
-  }
-  return at;
-};
-
-/** The person's own focus outside the rig: the page's held one, else the browser's. Set by {@link holdFocus}. */
+/** The person's own focus: the page's held one, else the browser's. Set by {@link holdFocus}. */
 let pageFocus: () => Element | null = () => document.activeElement;
 
-/**
- * The focus the person's page has, never the rig's: what the stage's own
- * code puts back after a play on the drawing (stage.ts `giveBack`).
- */
+/** The focus the person's page has: what the stage's own code puts back after a play on the drawing (stage.ts `giveBack`). */
 export const focusOfPage = (): Element | null => pageFocus();
 
 /** A focus held in the page: its element, its classes and its events. */
@@ -95,13 +60,11 @@ interface Hold {
 }
 
 /**
- * Every focus the page asks for: the rig's held on every page, the page's
- * held while its frame lacks the window's focus (in a frame alone), and
- * each taken with `preventScroll` while the stage mounts or plays a story.
- * Once per page, with the page's rig.
+ * Every focus the page asks for: held while its frame lacks the window's
+ * focus (in a frame alone), and taken with `preventScroll` while the stage
+ * mounts or plays a story. Once per page.
  */
-export function holdFocus(rig: HTMLElement): void {
-  watchRigLayers();
+export function holdFocus(): void {
   const framed = window.parent !== window;
   const html = HTMLElement.prototype;
   const svg = SVGElement.prototype;
@@ -138,19 +101,6 @@ export function holdFocus(rig: HTMLElement): void {
     },
     true
   );
-
-  /** Whether `node` is the rig's: in it, or in a layer the rig added to the body during a turn of its own (rig-turn.ts). */
-  const ofRig = (node: Node): boolean => {
-    const light = lightOf(node);
-    if (rig.contains(light)) {
-      return true;
-    }
-    let layer: Node = light;
-    while (layer.parentNode && layer.parentNode !== document.body) {
-      layer = layer.parentNode;
-    }
-    return layer.parentNode === document.body && rigOwns(layer);
-  };
 
   /** A focus held in the page, with its own focus classes. */
   const hold = (): Hold => {
@@ -208,7 +158,6 @@ export function holdFocus(rig: HTMLElement): void {
     };
     return { move, now };
   };
-  const rigHold = hold();
   const pageHold = hold();
   pageFocus = () => pageHold.now() ?? active?.call(document) ?? null;
 
@@ -223,12 +172,6 @@ export function holdFocus(rig: HTMLElement): void {
   const holdsPage = () => framed && !document.hasFocus() && !personActing();
 
   function focus(this: Focusable, options?: FocusOptions) {
-    if (ofRig(this)) {
-      if (rigHold.now() !== this && takes(this)) {
-        rigHold.move(this);
-      }
-      return;
-    }
     if (holdsPage()) {
       if (pageHold.now() !== this && takes(this)) {
         pageHold.move(this);
@@ -246,34 +189,21 @@ export function holdFocus(rig: HTMLElement): void {
   html.focus = focus;
   svg.focus = focus;
   function blur(this: Focusable) {
-    for (const one of [rigHold, pageHold]) {
-      if (one.now() === this) {
-        one.move(null);
-        return;
-      }
+    if (pageHold.now() === this) {
+      pageHold.move(null);
+      return;
     }
     realBlur(this);
   }
   html.blur = blur;
   svg.blur = blur;
-  /**
-   * The held focus code reading `activeElement` sees, as the event it runs
-   * in targets: an event of the rig's reads the rig's focus, the body when
-   * none; script outside any event reads the rig's in a turn of the rig's
-   * while one stands; the rest reads the page's. Null: the browser's own.
-   */
-  const heldFor = (target: unknown, doc: Document): Element | null => {
-    if (!(target instanceof Node)) {
-      return (inRigTurn() ? rigHold.now() : null) ?? pageHold.now();
-    }
-    return ofRig(target) ? (rigHold.now() ?? doc.body) : pageHold.now();
-  };
+  // Code reading `activeElement` sees the page's held focus while one is held, else the browser's.
   if (active) {
     Object.defineProperty(Document.prototype, "activeElement", {
       configurable: true,
       enumerable: true,
       get(this: Document) {
-        const held = heldFor(window.event?.composedPath()[0], this);
+        const held = pageHold.now();
         return held && held.ownerDocument === this ? held : active.call(this);
       },
     });
@@ -284,26 +214,6 @@ export function holdFocus(rig: HTMLElement): void {
     (event) => {
       if (event.target === window && pageHold.now()) {
         pageHold.move(null);
-      }
-    },
-    true
-  );
-  // A focus the browser moved into the rig on its own (a label's click, `showModal()`): held there, and the person's put back.
-  document.addEventListener(
-    "focusin",
-    (event) => {
-      const [into] = event.composedPath();
-      if (!(event.isTrusted && isFocusable(into) && ofRig(into))) {
-        return;
-      }
-      const had = event.relatedTarget;
-      if (isFocusable(had) && had.isConnected && !ofRig(had)) {
-        realFocus(had, { preventScroll: true });
-      } else {
-        realBlur(into);
-      }
-      if (rigHold.now() !== into) {
-        rigHold.move(into);
       }
     },
     true
