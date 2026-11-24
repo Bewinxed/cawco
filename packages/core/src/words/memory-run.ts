@@ -187,36 +187,6 @@ export const memoryRunWords = {
     `its check's task was not filed (${why}), so the rule stays as a line`,
   /** A check asked of a kept lesson, its sources corroborating it. */
   checkAsked: (id: string) => `check ${id}`,
-  /** A probe's brief: its situation alone, and how its answer comes back. */
-  probeBrief: (prompt: string) =>
-    `${prompt}\n\nAnswer as you would in this project's work, in a few sentences. Then call finish_item with your whole answer as its summary.`,
-  /** A probe's situation with the rule it tests given first, for the check of whether the probe tells anything. */
-  probeWithRule: (rule: string, prompt: string) =>
-    `This project's rule: ${rule}\n\n${prompt}`,
-  /** The `Why:` of a lesson a model does unprompted, moved to knowledge. */
-  retestWhy: (model: string, day: string) =>
-    `${model} did this unprompted in three of three probes on ${day}, so it moved here from where every session loads it.`,
-  /** A re-test's commit. */
-  retested: (model: string, moved: number, stayed: number, unprobed: number) =>
-    `re-test on ${model}: ${moved} moved to knowledge, ${stayed} stay, ${unprobed} with no probe`,
-  /** The probe check's commit: what it found, in its file. */
-  probeChecked: (lessons: number) =>
-    `probe check of ${lessons} lesson${lessons === 1 ? "" : "s"}, with and without each`,
-  probeCheckGoing: (file: string) =>
-    `A probe check of this project is under way: read ${file} once it has written it.`,
-  /** Why a probe check does not start. */
-  probeCheckUnfit: (jevOff: boolean, noModel: boolean, noLesson: boolean) =>
-    [
-      jevOff ? "Jev is off, and it judges each probe's answer." : "",
-      noModel
-        ? "No session of the project ran in the last 7 days, so there is no model to ask."
-        : "",
-      noLesson
-        ? "No lesson to check: name lessons of AGENTS.md by id with a probe each, or give the index's lessons probes first."
-        : "",
-    ]
-      .filter(Boolean)
-      .join(" "),
   /** A live lesson the person stated again, counted. */
   repeated: (id: string, times: number) =>
     `${id} stated again by the person (${times} time${times === 1 ? "" : "s"})`,
@@ -261,8 +231,6 @@ export const memoryRunWords = {
     `An anchor is a path inside the repository, from its root, and a literal string in that file on one line, at most ${cap} characters: name one that is.`,
   anchorGone: (path: string, match: string) =>
     `${path} does not hold \`${match}\`: name a file and a match that are there.`,
-  probeUnfit: (cap: number) =>
-    `A probe is a situation (prompt) and what a right answer does (pass), each one line under ${cap} characters, quoting no one.`,
   checkStaged:
     "A check needs a lesson that lands: add it as a lesson, staged, and write the check once a second session or a file bears it out.",
   checkHas: (id: string, task: string) =>
@@ -447,13 +415,6 @@ export const memoryJevWords = {
     unrelated:
       "The message is about something else, or touches the lesson's subject without asking for or against its rule.",
   },
-  /** Whether an answer to a probe passes it. */
-  probeQuestion:
-    "Does `reply`, an agent's answer to a situation, do what `pass` says a right answer does?",
-  probeCriteria: {
-    true: "The reply does what `pass` asks, plainly and without being told to.",
-    false: "The reply does not do it, does something else, or only hedges.",
-  },
   /** Whether a new lesson says what one kept says. */
   keptQuestion:
     "Does `lesson`, about to be added to the project's memory, say what `kept`, a lesson the memory keeps, says?",
@@ -506,7 +467,7 @@ For each message and each note, pick one:
 
 Name every message and note of your brief in some operation's sources, a drop included: a note that says what a message says goes in the sources of that message's operation. memory_apply's answer lists what is not named yet.
 
-Write each lesson as one plain sentence that says what to do. Never quote the person or reuse the person's phrasing: the lesson is the rule, and its source is the handle you cite. A message's rule goes as far as the message does and no further. With a rule about behaviour, give a probe: a short situation (prompt), and what a right answer does (pass). When the project's sessions move to a new model, the hub asks that model the probe with the rule left out, and moves a rule it follows unprompted out of AGENTS.md.
+Write each lesson as one plain sentence that says what to do. Never quote the person or reuse the person's phrasing: the lesson is the rule, and its source is the handle you cite. A message's rule goes as far as the message does and no further.
 
 An "add" whose lesson says what a kept one says, in any words, is refused with that lesson's id: corroborate it instead.
 

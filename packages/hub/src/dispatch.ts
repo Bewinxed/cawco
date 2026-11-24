@@ -3153,7 +3153,6 @@ export const createDispatcher = ({
         : await startAttempt(projectId, ref, parent, { origin: "you" });
     },
 
-    placeRun,
     startRun,
 
     /** Starts the safety net: a look at every dispatching project every few minutes. */

@@ -72,7 +72,6 @@ import type { CommandResult } from "@cawco/core/commands/controls";
 import type { DelegateType } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import { FLEET_PROJECT_ID, isFleetProject } from "@cawco/core/fleet-project";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { OfferedMode } from "@cawco/core/harness/modes";
 import { runsCommandsUnasked } from "@cawco/core/harness/traits";
 import type { LandsMode } from "@cawco/core/injected";
@@ -101,7 +100,7 @@ import { DAY_MS } from "@cawco/core/time";
 import type { StageKind } from "@cawco/core/views";
 import { withoutUndefined } from "@cawco/core/without-undefined";
 import { conditionWords } from "@cawco/core/words/conditions";
-import { curatorPrompt, memoryRunWords } from "@cawco/core/words/memory-run";
+import { curatorPrompt } from "@cawco/core/words/memory-run";
 import { checkWords } from "@cawco/core/words/routine-check";
 import { routineToolWords } from "@cawco/core/words/routines";
 import cronstrue from "cronstrue";
@@ -125,7 +124,7 @@ import { ROUTINE_ORIGIN } from "./hub-words";
 import { eventData } from "./inbound-event";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { type CommandOptions, WouldWait } from "./machine-pause";
-import type { MemoryRun, ProbeAnswer } from "./memory-run";
+import type { MemoryRun } from "./memory-run";
 import type { Push } from "./push";
 import { recordsProjectOf } from "./records-project";
 import type { CarryRoutines } from "./routine-carry";
@@ -165,7 +164,7 @@ import {
 import type { TriggerEvent } from "./trigger-event";
 import type { Routed } from "./triggers";
 import { TRIM_CRON, TRIM_NAME, TRIM_PROMPT } from "./unused-trim";
-import { isRoutineParent, routineParent } from "./work-item-state";
+import { isRoutineParent } from "./work-item-state";
 import { titleProblem, type WorkItems } from "./work-items";
 import { budgetProblem } from "./work-limits";
 
@@ -223,10 +222,6 @@ const CURATOR_CRON = "0 6 * * *";
 const CURATOR_BUDGET = { turns: 40, minutes: 20, usd: 2 } as const;
 /** A day's cap on the nightly memory run: one run and its retry. */
 const CURATOR_DAILY_USD = 4;
-/** A memory probe's work item, as the board names it. */
-const PROBE_TITLE = "Memory probe";
-/** How long a probe's answer is waited for: its budget's minutes and the start around them. */
-const PROBE_WAIT_MS = 20 * 60 * 1000;
 /** Each recovery run's budget, reading up to 60 notes. */
 const RECOVERY_BUDGET = { turns: 60, minutes: 30, usd: 3 } as const;
 
@@ -303,8 +298,8 @@ export interface RoutineDeps {
     | "workItem"
     | "workItemTexts"
   >;
-  /** Starts a run a session does, and places a probe (dispatch.ts `startRun`, `placeRun`). */
-  readonly dispatch: Pick<Dispatcher, "placeRun" | "startRun">;
+  /** Starts a run a session does (dispatch.ts `startRun`). */
+  readonly dispatch: Pick<Dispatcher, "startRun">;
   /** Whether a project is set up (tasks.ts `isSetUp`): the hub files its own tasks only there. */
   readonly isSetUp: (project: ProjectRow) => boolean;
   readonly lifetime: HubLifetimeShape;
@@ -345,7 +340,7 @@ export interface RoutineDeps {
   readonly types: (projectId?: string | null) => DelegateType[];
   /** A routine moved in a way waits on its task read (paused, held, on again): its project's waits are read again. */
   readonly waitsMoved: (projectId: string) => void;
-  readonly workItems: Pick<WorkItems, "archive" | "spentBy" | "startForHub">;
+  readonly workItems: Pick<WorkItems, "archive" | "spentBy">;
 }
 
 /**
@@ -2034,24 +2029,6 @@ export const createRoutines = ({
     if (!isRoutineParent(item.parentInstanceId)) {
       return;
     }
-    const probed = probes.get(item.id);
-    if (probed) {
-      probes.delete(item.id);
-      probed(
-        item.state === "done"
-          ? {
-              kind: "answered",
-              text: db.workItemTexts(item.id).summary ?? item.headline ?? "",
-            }
-          : {
-              kind: "failed",
-              why:
-                (item.error ?? "").split("\n").find((line) => line.trim()) ??
-                item.state,
-            }
-      );
-      return;
-    }
     const run = store.runOfItem(item.id);
     if (!run || run.state === "ended") {
       return;
@@ -3142,19 +3119,6 @@ export const createRoutines = ({
       : undefined;
   };
 
-  /** A routine's run's work item's parent: the routine, at the place it runs. */
-  const parentAt = (
-    routine: Pick<RoutineRow, "id" | "name" | "projectId">,
-    place: { cwd: string; machineId: string }
-  ) =>
-    routineParent({
-      id: routine.id,
-      name: routine.name,
-      projectId: routine.projectId,
-      cwd: place.cwd,
-      machineId: place.machineId,
-    });
-
   // --- task tools ------------------------------------------------------------------------
 
   /**
@@ -3368,67 +3332,6 @@ export const createRoutines = ({
           code: "routine-run-asked",
           detail: "That run was asked for already.",
         });
-  };
-
-  /** Probes waiting for their work item to end, by its id. */
-  const probes = new Map<string, (answer: ProbeAnswer) => void>();
-
-  /**
-   * One clean, one-turn answer of a model to a lesson's probe (memory-run.ts
-   * `retest`): a work item under the project's memory curator, at the place
-   * dispatch names for it, started clean, its answer its finish_item summary.
-   */
-  const probe = async (
-    projectId: string,
-    ask: {
-      budget: WorkBudget;
-      harness: HarnessKind;
-      model: string;
-      prompt: string;
-    }
-  ): Promise<ProbeAnswer> => {
-    const routine = curatorOf(projectId);
-    if (!routine?.taskId) {
-      return { kind: "failed", why: "the project has no memory curator" };
-    }
-    const place = await dispatch.placeRun(projectId, routine.taskId);
-    if (place instanceof ElysiaStatus) {
-      return { kind: "failed", why: place.response.detail };
-    }
-    if (typeof place === "string") {
-      return { kind: "failed", why: place };
-    }
-    const begun = await workItems.startForHub(
-      {
-        title: PROBE_TITLE,
-        prompt: memoryRunWords.probeBrief(ask.prompt),
-        clean: true,
-        host: true,
-        lands: "none",
-        mayStart: [],
-        harness: ask.harness,
-        model: ask.model,
-        budget: ask.budget,
-        cwd: place.cwd,
-        machineId: place.machineId,
-      },
-      parentAt(routine, place)
-    );
-    if (begun instanceof ElysiaStatus) {
-      return { kind: "failed", why: begun.response.detail };
-    }
-    const { id } = begun.item;
-    return await new Promise<ProbeAnswer>((land) => {
-      const late = lifetime.after("memory probe waited", PROBE_WAIT_MS, () => {
-        if (probes.delete(id)) {
-          land({ kind: "failed", why: "it did not end within its time" });
-        }
-      });
-      probes.set(id, (ended) => {
-        lifetime.cancel(late);
-        land(ended);
-      });
-    });
   };
 
   /** Whether Caw suggests the trim routine in `projectId`: never answered there and none made. */
@@ -3792,7 +3695,6 @@ export const createRoutines = ({
     ofProject,
     ofTask,
     personWrote,
-    probe,
     recheck,
     recover,
     runForEvent,

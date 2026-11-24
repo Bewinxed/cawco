@@ -53,8 +53,7 @@ const ROWS = {
   // whether a new lesson says what a kept one says, whether a lesson says
   // how CawCo behaves for every user, whether an open task builds such a lesson into
   // CawCo already,
-  // whether a message states a lesson kept again or the opposite, whether a
-  // model's answer passes a lesson's probe; and in
+  // whether a message states a lesson kept again or the opposite; and in
   // memory.ts, what an attempt's brief carries.
   said: "What the person said",
   inbox: "Memory inbox",
@@ -64,7 +63,6 @@ const ROWS = {
   product: "About CawCo",
   covers: "Product task open",
   corrects: "Corrected again",
-  probe: "Lesson probe",
   context: "Brief context",
   // Asked in project-starters.ts: what a project's board and Caw's panel offer.
   starters: "Starters",

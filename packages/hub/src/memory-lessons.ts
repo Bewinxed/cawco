@@ -537,7 +537,6 @@ export type Change =
       home: LessonHome;
       id: string;
       kind: "add";
-      probe?: Lesson["probe"];
       sources: Lesson["sources"];
       staged?: { waits?: "jev" };
       text: string;
@@ -606,14 +605,6 @@ export type Change =
   | { id: string; kind: "stale" }
   /** A lesson a check holds now (its task done): its line taken out; the ledger keeps it, enforced. */
   | { id: string; kind: "enforce" }
-  /**
-   * An index or skill lesson a model does unprompted, moved to the
-   * knowledge its eviction would take it to, its `Why:` saying which model
-   * and when; the ledger keeps the model it was tested on.
-   */
-  | { id: string; kind: "demote"; model: string; why: string }
-  /** A lesson re-tested on `model` that stays where it is. */
-  | { id: string; kind: "tested"; model: string }
   /**
    * The person stated a live lesson again: one more repeat, his message one
    * of its sources, his rule from now on; `held` from his second, and moved
@@ -947,7 +938,6 @@ const added = (now: MemoryTree, op: ChangeOf<"add">, today: string): Done => {
     by: op.by,
     ...(op.held ? { held: true as const } : {}),
     home: op.home,
-    ...(op.probe ? { probe: op.probe } : {}),
     repeats: 0,
     seen: today,
     since: today,
@@ -1089,7 +1079,6 @@ const merged = (
     since: into.since < gone.since ? into.since : gone.since,
     sources: withSourcesAdded(into.sources, gone.sources),
     ...(into.held || gone.held ? { held: true as const } : {}),
-    ...(into.probe || gone.probe ? { probe: into.probe ?? gone.probe } : {}),
   };
   return {
     tree: retireLine(
@@ -1190,34 +1179,6 @@ const entryPatched = (
     : tree;
 };
 
-/** An index or skill lesson moved to the knowledge its eviction would take it to, its `Why:` saying why, tested on the model. */
-const demoted = (now: MemoryTree, op: ChangeOf<"demote">): Done => {
-  const lesson = now.ledger.lessons[op.id];
-  const from = lesson ? pathOf(lesson.home) : undefined;
-  const to = from ? evictedTo(from) : undefined;
-  const line = lineOf(now, op.id);
-  if (!(lesson && from && to && line) || "archive" in to) {
-    return { tree: now };
-  }
-  const into = pathOf(to) ?? "";
-  const files = {
-    ...now.files,
-    [from]: withoutLine(now.files[from] ?? "", op.id),
-  };
-  files[into] = withLine(into, files[into] ?? "", { ...line, why: op.why });
-  return {
-    tree: {
-      files,
-      ledger: withEntry(now.ledger, op.id, {
-        ...lesson,
-        home: to,
-        tested: op.model,
-      }),
-    },
-    grew: into,
-  };
-};
-
 /** `now` with lesson `id`'s line taken out and the lesson enforced: a check holds it. */
 const enforced = (now: MemoryTree, id: string): MemoryTree => {
   const lesson = now.ledger.lessons[id];
@@ -1270,12 +1231,6 @@ const changed = (now: MemoryTree, op: Change, today: string): Done => {
         tree: entryPatched(retireLine(now, op.id, "reverted", today), op.id, {
           held: true,
         }),
-      };
-    case "demote":
-      return demoted(now, op);
-    case "tested":
-      return {
-        tree: entryPatched(now, op.id, { tested: op.model }),
       };
     case "enforce":
       return { tree: enforced(now, op.id) };

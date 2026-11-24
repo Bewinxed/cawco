@@ -800,7 +800,6 @@ const OpInput = z.discriminatedUnion("op", [
     why: z.string().optional(),
     home: HomeInput,
     sources: z.array(z.string()),
-    probe: z.object({ prompt: z.string(), pass: z.string() }).optional(),
     anchor: z
       .object({ path: z.string(), match: z.string() })
       .optional()
@@ -1497,21 +1496,13 @@ export const MEMORY_TOOLS: ReadonlySet<string> = new Set([
 /**
  * The person's own memory acts outside a conversation: "Make a note"
  * straight into AGENTS.md; withdrawing a note, which retires the lessons
- * resting on it alone in the same commit (memory-run.ts `withdraw`); the
- * recovery run of the notes archived unread (routines.ts `recover`); and
- * the check of whether lessons' probes tell anything (memory-run.ts
- * `probeCheck`), which runs on and writes `memory/probe-check.json`.
+ * resting on it alone in the same commit (memory-run.ts `withdraw`); and
+ * the recovery run of the notes archived unread (routines.ts
+ * `recover`).
  */
 export const memoryRoutes = (
   memory: Memory,
   acts: {
-    probeCheck: (
-      projectId: string,
-      lessons: { id: string; pass: string; prompt: string }[] | undefined
-    ) => Promise<
-      | { file: string; lessons: string[]; model: string; started: true }
-      | AnyProblem
-    >;
     recover: (projectId: string) => Promise<RoutineRunView | AnyProblem>;
     withdraw: (
       projectId: string,
@@ -1540,27 +1531,6 @@ export const memoryRoutes = (
       "/api/projects/:id/memory/recover",
       { detail: { hide: true } },
       ({ params }) => acts.recover(params.id)
-    )
-    .post(
-      "/api/projects/:id/memory/probe-check",
-      {
-        body: t.Optional(
-          t.Object({
-            lessons: t.Optional(
-              t.Array(
-                t.Object({
-                  id: t.String(),
-                  prompt: t.String({ maxLength: 300 }),
-                  pass: t.String({ maxLength: 300 }),
-                }),
-                { maxItems: 5 }
-              )
-            ),
-          })
-        ),
-        detail: { hide: true },
-      },
-      ({ params, body }) => acts.probeCheck(params.id, body?.lessons)
     );
 
 const MEMORY_NOTE_DEFINITION = defineTool(
