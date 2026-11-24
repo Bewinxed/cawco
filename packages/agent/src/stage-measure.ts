@@ -4,7 +4,9 @@
  * the DevTools Protocol slows the main thread as the agent asked, a scan
  * reads the move's length and warms the engine, three traced repeats are
  * recorded and read with DevTools' own trace engine
- * (`@paulirish/trace_engine`), then the move repeats at ten times the
+ * (`@paulirish/trace_engine`, stage-trace.ts), two untimed plays say who
+ * ran the costly frames and what caused each forced layout
+ * (stage-attribution.ts), then the move repeats at ten times the
  * animations' speed while the memory counters are read after garbage
  * collection, fuite's 7 times unless the agent asks more. A count is a
  * forced collection and DOM counters after every repeat (the steady line
@@ -17,7 +19,8 @@
  * component and its libraries alone.
  *
  * The read has one bound, the render's deadline (stage-render.ts), the
- * one the hub waits on: the traced plays must end inside it, and the
+ * one the hub waits on: the traced plays must end inside it, the
+ * attribution plays run while they fit before it, and the
  * memory pass runs the repeats that fit before it, each as long as its
  * first took, and says `cut` when that is fewer than asked.
  *
@@ -33,7 +36,6 @@ import {
   type ForcedLayout,
   MEASURE_CPU_RATE,
   MEASURE_INPUT,
-  MEASURE_MARKS,
   MEASURE_REPEATS,
   type MeasureAsk,
   type MeasureInput,
@@ -52,9 +54,25 @@ import {
 } from "@cawco/core/stage-measure";
 import { faultsOf } from "@cawco/core/stage-measure-faults";
 import { measureWords as words } from "@cawco/core/words/stage-measure";
-import type * as TraceEngine from "@paulirish/trace_engine";
 import type { Browser, CDPSession, Page } from "playwright-core";
 import { forcedAllNow, measureNow, namedNow } from "./in-page/page";
+import {
+  inputTasks,
+  recorded,
+  sampledWork,
+  writesBehind,
+} from "./stage-attribution";
+import {
+  droppedByHarness,
+  forcedIn,
+  harnessOf,
+  longestGap,
+  parsedTrace,
+  type TraceContext,
+  type TraceEvent,
+  US,
+  workIn,
+} from "./stage-trace";
 
 /** The trace categories read (design perf-read §2): the subset of DevTools' own recording list that answers frames, style, layout, compositing and the play windows, its profiler and source rundowns left out. */
 const TRACE_CATEGORIES = [
@@ -68,6 +86,8 @@ const TRACE_CATEGORIES = [
 const MEMORY_WARM = 1;
 /** Traced repeats: their figures are medians, a drop counts once it repeats in two, so one play the scan left cold moves neither. */
 const TRACED = 3;
+/** Untimed plays after the traced ones (stage-attribution.ts): one the CPU sampler watches, one with Chrome's invalidation tracking on. */
+const ATTRIBUTED = 2;
 /** The quiet that ends a move on the stage (canvas stage.ts `QUIET_MS`): frames are counted to the move's length past it. */
 const QUIET_MS = 250;
 /** How long the stage waits on a move's motion (canvas stage.ts `MOTION_MS`): an unsettled move is one still moving past it. */
@@ -80,12 +100,8 @@ const OBJECTS_GROUP = "cawco-measure-objects";
 const TREND_LEAST = 3;
 /** The fewest motion frames whose layouts say whether layout ran every frame: the press's own frame lays out once. */
 const EVERY_FRAME_LEAST = 3;
-/** The steps of a frame's paint DevTools colours as rendering: counted with its paint. */
-const PAINT_STEPS: ReadonlySet<string> = new Set(["PrePaint", "Layerize"]);
 /** What Chrome answers `DOM.resolveNode` for a node no longer in its document's tree. */
 const NODE_GONE = "No node with given id found";
-/** Trace times are µs. */
-const US = 1000;
 
 /** What the read is asked: the state's picture key and how it stands, the move. */
 export interface MeasureTask {
@@ -104,8 +120,6 @@ interface Counters {
   listeners: number;
   nodes: number;
 }
-
-type TraceEvent = TraceEngine.Types.Events.Event;
 
 /** A refusal in words: the read answers it as its error. */
 class Refused extends Error {}
@@ -233,16 +247,15 @@ export async function measureMove(
     const scan = await repeat(page, key, move, "scan", 0);
     const { length } = scan;
     const settledWait = length + QUIET_MS;
+    const tracedPlay = () => repeat(page, key, move, "traced", settledWait);
+    const tracing = Date.now();
     // Chrome writes a compositor verdict only for an animation that begins inside the recording.
-    await browser.startTracing(page, { categories: TRACE_CATEGORIES });
-    let trace: Buffer;
-    try {
+    const trace = await recorded(browser, page, TRACE_CATEGORIES, async () => {
       for (let at = 0; at < TRACED; at += 1) {
-        await repeat(page, key, move, "traced", settledWait);
+        await tracedPlay();
       }
-    } finally {
-      trace = await browser.stopTracing();
-    }
+    });
+    const tracedTook = Date.now() - tracing;
     if (Date.now() > task.until) {
       throw tooLong();
     }
@@ -251,9 +264,26 @@ export async function measureMove(
       throw tooLong();
     }
     const nonComposited = await namesOf(cdp, read.refused);
-    const forced = await forcedOf(page, read.forced);
+    // The attribution plays run while both fit before the deadline (a traced play's time each, and as long again to record), else the read answers without them: the sampled one at the traced plays' speed, the tracked one at the machine's own, as the memory pass after it.
+    const attributing = Date.now() + tracedTook < task.until;
+    const work = attributing
+      ? await sampledWork(
+          browser,
+          page,
+          TRACE_CATEGORIES,
+          tracedPlay,
+          length + QUIET_MS
+        )
+      : null;
     // What a repeat leaves behind does not hang on the main thread's speed: the memory pass runs at the machine's own.
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+    const causes = attributing
+      ? await writesBehind(browser, page, TRACE_CATEGORIES, tracedPlay)
+      : new Map<string, { at: string; what: string }>();
+    const forced = (await forcedOf(page, read.forced)).map((one) => {
+      const cause = causes.get(one.at);
+      return cause ? { ...one, cause } : one;
+    });
     // The Animation domain keeps a snapshot of every animation it saw (DevTools' Animations panel): each repeat's are let go after it, or the read's own bookkeeping grows the heap it reads.
     const seen: string[] = [];
     cdp.on("Animation.animationCreated", ({ id }) => seen.push(id));
@@ -326,10 +356,18 @@ export async function measureMove(
         ...(read.hz ? { hz: read.hz } : {}),
       },
       // The scan warms the engine for the traced plays, as the memory pass's first repeat does for its own.
-      runs: { warm: 1 + MEMORY_WARM, traced: TRACED, repeats: ran },
+      runs: {
+        warm: 1 + MEMORY_WARM,
+        traced: TRACED,
+        attributed: attributing ? ATTRIBUTED : 0,
+        repeats: ran,
+      },
       took: Date.now() - started,
       length,
-      frames: read.frames,
+      frames: {
+        ...read.frames,
+        ...(work ? { work } : {}),
+      },
       style: read.style,
       layout: { ...read.layout, forced },
       nonComposited,
@@ -371,6 +409,8 @@ interface PlayRead {
   dropped: number;
   elements: number;
   every: number;
+  /** The tasks its input arrived as. */
+  input: MeasureRead["frames"]["input"];
   layoutCount: number;
   layoutMs: number;
   longest: number;
@@ -378,160 +418,6 @@ interface PlayRead {
   motionFrames: number;
   styleCount: number;
   styleMs: number;
-}
-
-/** DevTools' trace engine, loaded when a move is first measured. */
-type Engine = typeof TraceEngine;
-/** What the engine read of a trace. */
-type TraceData = TraceEngine.Handlers.Types.HandlerData;
-/** The page's main thread, as the engine read it. */
-type MainThread = TraceEngine.Handlers.ModelHandlers.Renderer.RendererThread;
-/** A frame, as the engine pairs it from the compositor's events. */
-type Frame = TraceEngine.Types.Events.LegacyTimelineFrame;
-
-/** A stretch of the stage's own work on the main thread (core `MEASURE_MARKS.harness`), µs. */
-interface Span {
-  from: number;
-  to: number;
-}
-
-/** What one traced play's window is read with. */
-interface TraceContext {
-  data: TraceData;
-  engine: Engine;
-  /** The stage's own work, left out of what the read charges the component (canvas harness.ts), in time order. */
-  harness: readonly Span[];
-  /** Each event's kind of work, as DevTools' Performance panel colours it. */
-  kinds: Map<string, { category: { name: string } }>;
-  thread: MainThread;
-}
-
-/** The stage's own stretch that holds `event` whole, if one does. */
-const harnessOf = (
-  harness: readonly Span[],
-  event: TraceEvent
-): Span | undefined =>
-  harness.find(
-    (span) => event.ts >= span.from && event.ts + (event.dur ?? 0) <= span.to
-  );
-
-/** How much of `from`–`to` (µs) the stage's own work takes. */
-const harnessIn = (harness: readonly Span[], from: number, to: number) =>
-  harness.reduce(
-    (sum, span) =>
-      sum + Math.max(0, Math.min(to, span.to) - Math.max(from, span.from)),
-    0
-  );
-
-/** How much of `from`–`to` (µs) the main thread is busy: its tasks' time in it. */
-const busyIn = (thread: MainThread, from: number, to: number) =>
-  [...(thread.tree?.roots ?? [])].reduce((sum, { entry }) => {
-    const end = entry.ts + (entry.dur ?? 0);
-    return sum + Math.max(0, Math.min(to, end) - Math.max(from, entry.ts));
-  }, 0);
-
-/**
- * Whether a dropped frame was the stage's own: the main thread held the
- * whole frame, and without the stage's own work in it the frame would have
- * had time. A frame dropped with the main thread free (raster, the
- * compositor) stays the component's.
- */
-const droppedByHarness = (
-  { harness, thread }: TraceContext,
-  frame: Frame
-): boolean => {
-  const busy = busyIn(thread, frame.startTime, frame.endTime);
-  return (
-    busy >= frame.duration &&
-    busy - harnessIn(harness, frame.startTime, frame.endTime) < frame.duration
-  );
-};
-
-/** The kind of work an entry is, as the read sums it: style and layout by name, the rest by DevTools' colours; null for what it leaves out. */
-function kindOf(
-  { kinds }: TraceContext,
-  name: string
-): keyof MeasureRead["frames"]["longestWork"] | null {
-  if (name === "UpdateLayoutTree") {
-    return "style";
-  }
-  if (name === "Layout") {
-    return "layout";
-  }
-  const category = kinds.get(name)?.category.name;
-  if (category === "scripting") {
-    return "script";
-  }
-  return category === "painting" || PAINT_STEPS.has(name) ? "paint" : null;
-}
-
-/**
- * The main thread's own time between `from` and `to` (µs), by the kind of
- * work, ms, the stage's own left out: what runs inside one of its
- * stretches (a forced style or layout), and the stretch's own script, the
- * rest of its time.
- */
-function workIn(
-  context: TraceContext,
-  from: number,
-  to: number
-): MeasureRead["frames"]["longestWork"] {
-  const { data, harness, thread } = context;
-  const work = { script: 0, style: 0, layout: 0, paint: 0 };
-  /** Each stretch's time its own events took, µs. */
-  const heldIn = new Map<Span, number>();
-  for (const entry of thread.entries) {
-    if (entry.ts < from || entry.ts >= to) {
-      continue;
-    }
-    const self = data.Renderer.entryToNode.get(entry)?.selfTime ?? 0;
-    const span = harnessOf(harness, entry);
-    const kind = kindOf(context, entry.name);
-    if (span) {
-      heldIn.set(span, (heldIn.get(span) ?? 0) + self);
-    } else if (kind) {
-      work[kind] += self / US;
-    }
-  }
-  // A stretch's own script is its enclosing call's self time: the stretch's length less what ran inside it.
-  for (const span of harness) {
-    if (span.from >= from && span.from < to) {
-      work.script -= (span.to - span.from - (heldIn.get(span) ?? 0)) / US;
-    }
-  }
-  return {
-    script: tenths(Math.max(0, work.script)),
-    style: tenths(work.style),
-    layout: tenths(work.layout),
-    paint: tenths(work.paint),
-  };
-}
-
-/** The longest gap between two drawn frames, ms, the stage's own work in it left out, and where it stands (µs): the first frame's own length when only one was drawn. */
-function longestGap(
-  harness: readonly Span[],
-  drawn: readonly Frame[],
-  from: number
-) {
-  const own = (start: number, end: number) =>
-    (end - start - harnessIn(harness, start, end)) / US;
-  const [first] = drawn;
-  let gap = {
-    ms: first ? own(first.startTime, first.endTime) : 0,
-    from: first?.startTime ?? from,
-    to: first?.endTime ?? from,
-  };
-  for (const [index, one] of drawn.entries()) {
-    const before = drawn[index - 1];
-    if (before && own(before.startTime, one.startTime) > gap.ms) {
-      gap = {
-        ms: own(before.startTime, one.startTime),
-        from: before.startTime,
-        to: one.startTime,
-      };
-    }
-  }
-  return gap;
 }
 
 /** One traced play's figures, from `from` to the move's `length` and its quiet past it. */
@@ -546,7 +432,7 @@ function playRead(
     (one) => one.startTime >= from && one.startTime < to
   );
   const drawn = inWindow.filter((one) => !(one.dropped || one.idle));
-  const gap = longestGap(harness, drawn, from);
+  const gap = longestGap(context, inWindow, from);
   // A recalc or a layout the stage's own work forced (a query reading words) is not the component's.
   const ownOf = <Event extends TraceEvent>(events: readonly Event[]) =>
     events.filter(
@@ -567,6 +453,7 @@ function playRead(
     ).length,
     longest: gap.ms,
     longestWork: workIn(context, gap.from, gap.to),
+    input: inputTasks(context, from, to),
     styleCount: styles.length,
     styleMs: styles.reduce((sum, one) => sum + (one.dur ?? 0), 0) / US,
     elements: styles.reduce(
@@ -580,30 +467,6 @@ function playRead(
     styles,
     layouts,
   };
-}
-
-/** The style and layout `events` script forced before `end` (µs): each with its stack, numbered from 0 by the engine's own read (Chrome numbers them from 1). */
-function forcedIn(
-  { engine }: TraceContext,
-  events: readonly TraceEvent[],
-  end: number
-): { ms: number; stack: TraceFrame[] }[] {
-  return events.flatMap((one) => {
-    const stack =
-      engine.Helpers.Trace.getZeroIndexedStackTraceInEventPayload(one) ?? [];
-    return stack.length > 0 && one.ts < end
-      ? [
-          {
-            ms: (one.dur ?? 0) / US,
-            stack: stack.map((frame) => ({
-              url: frame.url,
-              line: frame.lineNumber,
-              column: frame.columnNumber,
-            })),
-          },
-        ]
-      : [];
-  });
 }
 
 /** Each animation begun between `from` and `end` (µs) that Chrome kept off the compositor, into `refused` by what it animates, its node and its reasons: the last play's node, still mounted, is the one named. */
@@ -643,36 +506,12 @@ function refusedIn(
 
 /** The trace of the traced plays, read: medians of their figures, the animations kept off the compositor, the stacks of forced layouts; null when it lacks their marks (the recording ended before they did). */
 async function traceRead(trace: Buffer, length: number) {
-  const engine = await import("@paulirish/trace_engine");
-  // Playwright's recording is Chrome's JSON trace: `{ traceEvents, metadata }`.
-  const { traceEvents }: { traceEvents: TraceEvent[] } = JSON.parse(
-    trace.toString("utf8")
-  );
-  const model = engine.TraceModel.Model.createWithAllHandlers();
-  await model.parse(traceEvents);
-  const data = model.parsedTrace()?.data;
-  const marks = [...(data?.UserTimings.performanceMarks ?? [])].sort(
-    (a, b) => a.ts - b.ts
-  );
-  const starts = marks.filter((one) => one.name === MEASURE_MARKS.start);
-  const ends = marks.filter((one) => one.name === MEASURE_MARKS.end);
-  const [first] = starts;
-  const thread = first
-    ? data?.Renderer.processes.get(first.pid)?.threads.get(first.tid)
-    : undefined;
-  if (!(data && thread && ends.length === starts.length)) {
+  const parsed = await parsedTrace(trace);
+  if (!parsed) {
     return null;
   }
-  const context: TraceContext = {
-    data,
-    engine,
-    harness: data.UserTimings.performanceMeasures
-      .filter((one) => one.name === MEASURE_MARKS.harness)
-      .map((one) => ({ from: one.ts, to: one.ts + (one.dur ?? 0) }))
-      .sort((a, b) => a.from - b.from),
-    kinds: new Map(Object.entries(engine.Styles.maybeInitSylesMap())),
-    thread,
-  };
+  const { context, starts, ends } = parsed;
+  const { data } = context;
   const plays: PlayRead[] = [];
   const refused = new Map<string, Refusal>();
   const forced: { ms: number; stack: TraceFrame[] }[] = [];
@@ -700,6 +539,7 @@ async function traceRead(trace: Buffer, length: number) {
       count: middle((one) => one.drawn),
       dropped: middle((one) => one.dropped),
       longest: tenths(longestPlay?.longest ?? 0),
+      input: longestPlay?.input ?? [],
       longestWork: longestPlay?.longestWork ?? {
         script: 0,
         style: 0,

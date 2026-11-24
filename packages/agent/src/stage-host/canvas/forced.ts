@@ -18,6 +18,12 @@ const STAGE_OWN = /(?:^|\/)(?:@id\/)?(?:__x00__)?cawco:|^\/@cawco\/(?!m\/)/u;
 /** Where a module names its source map: its last `sourceMappingURL` comment. */
 const MAP_COMMENT = /\/\/# sourceMappingURL=(\S+)\s*$/u;
 
+/** A library's file from its package's own `node_modules`, wherever the package manager links it (`node_modules/svelte/src/…`). */
+const libraryFile = (file: string): string => {
+  const at = file.lastIndexOf("node_modules/");
+  return at === -1 ? file : file.slice(at);
+};
+
 /** Each module's map, by its address, once read; null for one with none. */
 const maps = new Map<string, Promise<TraceMap | null>>();
 
@@ -31,8 +37,9 @@ function mapOf(url: string): Promise<TraceMap | null> {
       if (!named) {
         return null;
       }
-      const map = await (await fetch(new URL(named, url))).text();
-      return new TraceMap(map);
+      const at = new URL(named, url);
+      // Read against its own address, so each source it names is an address on the stage.
+      return new TraceMap(await (await fetch(at)).text(), at.href);
     })().catch(() => null);
     maps.set(url, kept);
   }
@@ -54,8 +61,10 @@ const pathOf = (frame: TraceFrame): string | null => {
 /**
  * Where `stack` forced layout, `file:line:column` from the toolchain root
  * (`root`, under the page's `base`): its first frame of the project's own
- * code, else its first frame, a library's (`library`); null when its top
- * frame is the stage's own code or none has an address.
+ * code, else its first frame, a library's (`library`), in the source file
+ * its module's map names, with the name the map gives the place where it
+ * has one; null when its top frame is the stage's own code or none has an
+ * address.
  */
 export async function forcedPlace(
   stack: readonly TraceFrame[],
@@ -84,8 +93,14 @@ export async function forcedPlace(
     mapped?.column === null || mapped?.column === undefined
       ? own.frame.column + 1
       : mapped.column + 1;
+  // A pre-bundled library maps back to its own source file, not the bundle's; a project module is served as its own file.
+  const source =
+    !project && mapped?.source
+      ? pathOf({ ...own.frame, url: mapped.source })
+      : null;
   return {
-    at: `${fileOfPath(own.path, root, base)}:${line}:${column}`,
+    at: `${libraryFile(fileOfPath(source ?? own.path, root, base))}:${line}:${column}`,
     library: !project,
+    ...(mapped?.name ? { name: mapped.name } : {}),
   };
 }

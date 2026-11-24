@@ -490,7 +490,7 @@ export const artifactRead = {
     measure: measureAsk
       .optional()
       .describe(
-        "With state.story: plays one move on the stage in a headless browser and answers measured: frames, style and layout work, each animation Chrome kept off the compositor and why, memory over repeats, and faults with what to fix. Takes about 15 s."
+        "With state.story: plays one move in a headless browser and answers measured: frames and who ran them, style and layout work and what forced it, animations Chrome kept off the compositor and why, memory over repeats, faults with what to fix. Takes about 25 s."
       ),
     verify: z.boolean().optional().describe("Asks the design verifier."),
   },

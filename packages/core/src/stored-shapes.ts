@@ -5616,9 +5616,71 @@ const MeasureFaultShape = declared(
 );
 export type MeasureFaultOutput = z.output<typeof MeasureFaultShape>;
 
+const FrameCallShape = declared(
+  z.object({
+    at: z.string(),
+    library: z.literal(true).optional(),
+    ms: z.number(),
+    name: z.string(),
+    path: z.array(z.string()).optional(),
+  }),
+  "FrameCall",
+  "packages/core/src/stage-measure.ts"
+);
+export type FrameCallOutput = z.output<typeof FrameCallShape>;
+
+const FrameTaskShape = declared(
+  z.object({
+    calls: z.array(FrameCallShape).optional(),
+    for: z.string(),
+    ms: z.number(),
+  }),
+  "FrameTask",
+  "packages/core/src/stage-measure.ts"
+);
+export type FrameTaskOutput = z.output<typeof FrameTaskShape>;
+
+const FrameRestyleShape = declared(
+  z.object({
+    elements: z.number(),
+    forcedAt: z.string().optional(),
+    ms: z.number(),
+  }),
+  "FrameRestyle",
+  "packages/core/src/stage-measure.ts"
+);
+export type FrameRestyleOutput = z.output<typeof FrameRestyleShape>;
+
+const FrameScriptShape = declared(
+  z.object({
+    at: z.string(),
+    library: z.literal(true).optional(),
+    ms: z.number(),
+    name: z.string(),
+  }),
+  "FrameScript",
+  "packages/core/src/stage-measure.ts"
+);
+export type FrameScriptOutput = z.output<typeof FrameScriptShape>;
+
+const FrameWorkShape = declared(
+  z.object({
+    at: z.number(),
+    frame: z.enum(["longest", "dropped"]),
+    ms: z.number(),
+    restyles: z.array(FrameRestyleShape),
+    script: z.array(FrameScriptShape),
+    tasks: z.array(FrameTaskShape),
+  }),
+  "FrameWork",
+  "packages/core/src/stage-measure.ts"
+);
+export type FrameWorkOutput = z.output<typeof FrameWorkShape>;
+
 const ForcedLayoutShape = declared(
   z.object({
     at: z.string(),
+    cause: z.object({ at: z.string(), what: z.string() }).optional(),
     count: z.number(),
     library: z.literal(true).optional(),
     ms: z.number(),
@@ -5674,6 +5736,7 @@ const MeasureReadShape = declared(
     frames: z.object({
       count: z.number(),
       dropped: z.number(),
+      input: z.array(FrameTaskShape.extend({ at: z.number() })),
       longest: z.number(),
       longestWork: z.object({
         layout: z.number(),
@@ -5681,6 +5744,7 @@ const MeasureReadShape = declared(
         script: z.number(),
         style: z.number(),
       }),
+      work: z.array(FrameWorkShape).optional(),
     }),
     layout: z.object({
       count: z.number(),
@@ -5706,6 +5770,7 @@ const MeasureReadShape = declared(
     }),
     nonComposited: z.array(NonCompositedShape),
     runs: z.object({
+      attributed: z.number(),
       repeats: z.number(),
       traced: z.number(),
       warm: z.number(),

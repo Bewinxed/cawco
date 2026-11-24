@@ -196,6 +196,8 @@ export interface NonComposited {
 export interface ForcedLayout {
   /** `file:line:column`, mapped back through its module's source map where it has one. */
   at: string;
+  /** The write that left layout stale before `at` read it, as Chrome's invalidation tracking saw it on the move's last attribution play (`runs.attributed`): where it is written, and what it changed. Absent when that play forced nothing here, or the write was the browser's own. */
+  cause?: { at: string; what: string };
   /** How many times a traced play. */
   count: number;
   /** True when no line of the project's own code is on its stack: a library forced it, and its fix is the library's. */
@@ -203,10 +205,72 @@ export interface ForcedLayout {
   ms: number;
 }
 
+/** A call a task's script began with: its time, ms, the functions it called included, told by where that time went. */
+export interface FrameCall {
+  /** Where the deepest function most of its time ran under is written (a framework's flush rather than the microtask that ran it), `file:line:column` mapped back through its module's source map; the call's own place without samples. */
+  at: string;
+  /** True when it is a library's, not the project's own code. */
+  library?: true;
+  ms: number;
+  /** Its name; `(anonymous)` for none. */
+  name: string;
+  /** How the call got there, one step a package or a file of the project's, outermost first: each step's named functions in call order, at where its outermost is written (`run_micro_tasks › flush › update_effect at node_modules/svelte/…`, then `autoUpdate at node_modules/@floating-ui/dom/…`). Absent when it stayed in one. */
+  path?: string[];
+}
+
+/** A task the main thread ran: what set it off and how long it ran, ms. */
+export interface FrameTask {
+  /** The calls its script began with, longest first: a handler, a timer's callback, a framework's flush. Absent for a task that ran no script. */
+  calls?: FrameCall[];
+  /** An input task's events by type in the order dispatched (`pointerup, mouseup, click`); else the kind of work most of its time went to: `timer`, `animation frame`, `rendering`, `script`, `message`, or `task`. */
+  for: string;
+  ms: number;
+}
+
+/** A function that took a frame's script time, where it is written. */
+export interface FrameScript {
+  /** `file:line:column`, mapped back through its module's source map: the line most of its samples fell on, else where the function begins. */
+  at: string;
+  /** True when it is a library's, not the project's own code. */
+  library?: true;
+  ms: number;
+  /** Its name; `(anonymous)` for none. */
+  name: string;
+}
+
+/** One style recalculation in a frame: how long it took and how many elements it restyled. */
+export interface FrameRestyle {
+  elements: number;
+  /** Where script forced it, when it did: `file:line:column`, as `layout.forced` places it. */
+  forcedAt?: string;
+  ms: number;
+}
+
+/**
+ * What one costly frame held, read on the move's first attribution play,
+ * which the CPU sampler watched (`runs.attributed`): it runs a little
+ * slower than the traced plays, so its frames and times are its own.
+ */
+export interface FrameWork {
+  /** When the frame began, ms from the move's start. */
+  at: number;
+  /** Why it is named: the play's longest frame, which took one frame's interval and a half at least, or one it dropped. */
+  frame: "longest" | "dropped";
+  ms: number;
+  /** Every style recalculation in it, in order. */
+  restyles: FrameRestyle[];
+  /** The functions that took its script time, most first. */
+  script: FrameScript[];
+  /** The main thread's tasks that ran in it, each with its time inside the frame, longest first. */
+  tasks: FrameTask[];
+}
+
 /** Where a forced layout was forced, as the page places it by its stack. */
 export interface ForcedAt {
   at: string;
   library: boolean;
+  /** The name its module's source map gives the place, where it gives one. */
+  name?: string;
 }
 
 /** What a measurement answers (`artifact_read`'s `measured`). Times in ms to a tenth, heap in bytes, the rest counts; frame, style and layout figures the median of the traced plays, `frames.longest` their largest. */
@@ -225,6 +289,8 @@ export interface MeasureRead {
   frames: {
     count: number;
     dropped: number;
+    /** The tasks the move's input arrived as, in order, on the traced play that drew `longest`: each event's own task, ms from the move's start. */
+    input: (FrameTask & { at: number })[];
     longest: number;
     longestWork: {
       layout: number;
@@ -232,6 +298,8 @@ export interface MeasureRead {
       script: number;
       style: number;
     };
+    /** What the longest frame and each dropped frame held: who ran the script, each restyle's elements, the tasks. Absent when the render's deadline left no time for the attribution plays. */
+    work?: FrameWork[];
   };
   layout: {
     count: number;
@@ -258,7 +326,8 @@ export interface MeasureRead {
     to?: string;
   };
   nonComposited: NonComposited[];
-  runs: { repeats: number; traced: number; warm: number };
+  /** The plays run: `warm` uncounted, `traced` timed, `attributed` untimed with the CPU sampler and Chrome's invalidation tracking on (0 when the deadline left no time), `repeats` for the memory counters. */
+  runs: { attributed: number; repeats: number; traced: number; warm: number };
   style: { count: number; elements: number; ms: number };
   took: number;
 }

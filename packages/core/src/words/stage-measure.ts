@@ -6,6 +6,8 @@
  */
 import type {
   ForcedLayout,
+  FrameCall,
+  FrameWork,
   MeasureOn,
   MeasureRead,
   MeasureTrend,
@@ -33,6 +35,27 @@ const plural = (count: number, one: string, many = `${one}s`): string =>
 /** A counter's course as a line says it. */
 const trendSaid = (name: string, trend: MeasureTrend, unit = ""): string =>
   `${name} ${trend.start}${unit} → ${trend.end}${unit}, ${trend.perRepeat}${unit} a repeat${trend.fit === undefined ? "" : ` (fit ${trend.fit})`}`;
+
+/** A call as a line says it: the way it went, package by package, to the function its time went to. */
+const callSaid = (call: FrameCall): string =>
+  call.path
+    ? `${call.path.map((step) => step.slice(0, step.lastIndexOf(" at "))).join(" → ")}, at ${call.at}`
+    : `${call.name} at ${call.at}`;
+
+/** What a costly frame held, as one line: its longest tasks with the call each began with, the functions that took its script time, its restyles. */
+const workSaid = (one: FrameWork): string => {
+  const tasks = one.tasks
+    .slice(0, 3)
+    .map(
+      (task) =>
+        `${task.for} ${task.ms} ms${task.calls?.[0] ? ` (${callSaid(task.calls[0])})` : ""}`
+    );
+  const script = one.script
+    .slice(0, 3)
+    .map((fn) => `${fn.name} at ${fn.at} ${fn.ms} ms`);
+  const elements = one.restyles.reduce((sum, r) => sum + r.elements, 0);
+  return `${one.frame === "longest" ? "The longest frame" : "A dropped frame"} on the sampled play, at ${one.at} ms, ${one.ms} ms: ${tasks.length > 0 ? `tasks ${tasks.join("; ")}` : "no task of the page's"}${script.length > 0 ? `; script in ${script.join(", ")}` : ""}${one.restyles.length > 0 ? `; ${plural(one.restyles.length, "restyle")} of ${elements} elements` : ""}.`;
+};
 
 export const measureWords = {
   /** A measurement with no story to start from. */
@@ -101,13 +124,13 @@ export const measureWords = {
   nonComposited: (one: NonComposited) =>
     `${one.animation} on ${one.element}${one.source ? ` (${one.source})` : ""} runs on the main thread (${one.reasons.join(", ")}): ${one.properties.length > 0 ? `Chrome can't composite ${one.properties.join(", ")}. Animate transform, opacity or a clip instead (the animation-performance skill).` : "Chrome kept it off the compositor. Animate transform or opacity on an element of its own (the animation-performance skill)."}`,
   droppedFrames: (plays: number, of: number, dropped: number) =>
-    `Frames were dropped in ${plays} of ${of} traced plays (${plural(dropped, "frame")} in the median play): the main thread could not keep up with the motion. frames.longestWork says what took the longest frame's time.`,
+    `Frames were dropped in ${plays} of ${of} traced plays (${plural(dropped, "frame")} in the median play): the main thread could not keep up with the motion. frames.work names what ran in each dropped frame: its tasks, the functions that took its script time, each restyle's elements.`,
   longFrame: (ms: number, work: MeasureRead["frames"]["longestWork"]) =>
-    `The longest frame took ${ms} ms, past Chrome's 50 ms long animation frame line: script ${work.script} ms, style ${work.style} ms, layout ${work.layout} ms, paint ${work.paint} ms.`,
+    `The longest frame took ${ms} ms, past Chrome's 50 ms long animation frame line: script ${work.script} ms, style ${work.style} ms, layout ${work.layout} ms, paint ${work.paint} ms. frames.work names who ran it: its tasks and the calls they began with, the functions that took its script time, each restyle's elements.`,
   layoutEveryFrame: (share: number) =>
     `Layout ran in ${Math.round(share * 100)}% of the frames while the motion ran, so the motion is driven from the main thread. Animate transform or opacity instead of a layout property, or hand a script-driven spring to a CSS transition or a Web Animation.`,
   forcedLayout: (one: ForcedLayout) =>
-    `Script forced layout during the move at ${one.at} (${plural(one.count, "time")}, ${one.ms} ms). Read layout before writing styles in that code, or move the read out of the frame.`,
+    `Script forced layout during the move at ${one.at} (${plural(one.count, "time")}, ${one.ms} ms)${one.cause ? `, reading what the write at ${one.cause.at} left stale (${one.cause.what})` : ""}. Read layout before writing styles in that code, or move the read out of the frame.`,
   leak: (
     left: {
       documents: number;
@@ -134,9 +157,15 @@ export const measureWords = {
   lines: (read: MeasureRead): string[] => {
     const { frames, style, layout, memory } = read;
     return [
-      `Measured ${read.move.from} → ${read.move.to ?? `${read.move.by}${read.move.on ? ` on ${read.move.on}` : ""}`} at ${read.at.width}px ${read.at.scheme}, main thread ${read.at.speed === "slowed" ? "slowed 4×" : "at the machine's speed"}${read.at.hz ? `, ${read.at.hz} Hz` : ""}: ${read.runs.traced} traced plays, ${read.runs.repeats} repeats, ${(read.took / 1000).toFixed(1)} s${read.cut ? " (cut at the render's deadline)" : ""}.`,
+      `Measured ${read.move.from} → ${read.move.to ?? `${read.move.by}${read.move.on ? ` on ${read.move.on}` : ""}`} at ${read.at.width}px ${read.at.scheme}, main thread ${read.at.speed === "slowed" ? "slowed 4×" : "at the machine's speed"}${read.at.hz ? `, ${read.at.hz} Hz` : ""}: ${read.runs.traced} traced plays, ${read.runs.attributed} attribution plays, ${read.runs.repeats} repeats, ${(read.took / 1000).toFixed(1)} s${read.cut ? " (cut at the render's deadline)" : ""}.`,
       `Motion ${read.length} ms. Frames: ${frames.count} drawn, ${frames.dropped} dropped, longest ${frames.longest} ms (script ${frames.longestWork.script}, style ${frames.longestWork.style}, layout ${frames.longestWork.layout}, paint ${frames.longestWork.paint} ms).`,
-      `Style: ${plural(style.count, "recalc")}, ${style.ms} ms, ${style.elements} elements. Layout: ${layout.count}, ${layout.ms} ms${layout.everyFrame ? ", every frame" : ""}${layout.forced.length > 0 ? `, forced at ${layout.forced.map((one) => `${one.at}${one.library ? " (a library's)" : ""}`).join(", ")}` : ""}.`,
+      ...(frames.input.length > 0
+        ? [
+            `Input arrived as ${plural(frames.input.length, "task")}: ${frames.input.map((one) => `${one.for} at ${one.at} ms, ${one.ms} ms`).join("; ")}.`,
+          ]
+        : []),
+      ...(frames.work ?? []).map(workSaid),
+      `Style: ${plural(style.count, "recalc")}, ${style.ms} ms, ${style.elements} elements. Layout: ${layout.count}, ${layout.ms} ms${layout.everyFrame ? ", every frame" : ""}${layout.forced.length > 0 ? `, forced at ${layout.forced.map((one) => `${one.at}${one.library ? " (a library's)" : ""}${one.cause ? ` after the write at ${one.cause.at}` : ""}`).join(", ")}` : ""}.`,
       read.nonComposited.length > 0
         ? `Off the compositor: ${read.nonComposited.map((one) => `${one.animation} on ${one.element} (${one.reasons.join(", ")})`).join("; ")}.`
         : "Every animation ran on the compositor.",

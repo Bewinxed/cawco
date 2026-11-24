@@ -31,7 +31,9 @@ The design graph's Map face draws each flow move as a solid arrow from its `from
 - One press, no story written: `measure: { press: "click", on: { role: "button", name: "Approve" } }`, made from `state.story`. `on` names exactly one element, as a play finds it.
 - Left out, `speed` runs the main thread at a quarter speed, as a phone would; `speed: "machine"` reads at the machine's own, for a screen only a desk shows.
 
-Measure when a move carries motion the person will watch, when a press may leave something behind (a listener, nodes, a growing heap), or when a move looks janky. A read takes about 15 s. Fix each fault in the component and measure again until `faults` is empty: a `non-composited` animation moves to `transform`, `opacity` or a clip (the `animation-performance` skill); a `forced-layout` is fixed at the line it names; a `leak` goes to a `browser` delegate with DevTools heap tools, to find what holds it.
+Measure when a move carries motion the person will watch, when a press may leave something behind (a listener, nodes, a growing heap), or when a move looks janky. A read takes about 25 s. Fix each fault in the component and measure again until `faults` is empty: a `non-composited` animation moves to `transform`, `opacity` or a clip (the `animation-performance` skill); a `forced-layout` is fixed at the line it names; a `leak` goes to a `browser` delegate with DevTools heap tools, to find what holds it.
+
+To find who made a frame long, read `frames.work`: the longest frame and each dropped one, from an extra play the CPU sampler watched. In each, `tasks` says what set the time off (`frames.input` lists the press's own tasks) and the call each began with, `script` names the functions that took the script time at their source lines, and `restyles` gives each style recalculation's elements, with `forcedAt` where script forced it. A `layout.forced` entry's `cause` is the write that left layout stale before that read: fix the read and the write together, reading layout before the write or moving the read out of the frame. An entry marked `library` is fixed by changing how your code calls the library.
 
 ## The Animation face
 
