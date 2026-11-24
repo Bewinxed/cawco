@@ -13,13 +13,40 @@
  * So while {@link stillPage} runs a mount or a play, the component's own
  * attempts on the page's scroller are stopped where they are made:
  * `scroll`, `scrollTo` and `scrollBy` on the window or the page's scroller,
- * setting its `scrollTop` or `scrollLeft`, and `scrollIntoView`, which
- * scrolls only the scrollers inside the page that hold the element. A
- * focus is taken with `preventScroll` (held-focus.ts reads
- * {@link pageStill}). The scrollers inside the component keep working, and
- * the person's wheel, keys and scrollbar never pass through these calls.
- * The stage's own scrolls pass through {@link stageScroll}.
+ * setting its `scrollTop` or `scrollLeft`, and `scrollIntoView` and
+ * Chromium's `scrollIntoViewIfNeeded`, which scroll only the scrollers
+ * inside the page that hold the element. A focus is taken with
+ * `preventScroll` (held-focus.ts reads {@link pageStill}). The scrollers
+ * inside the component keep working, and the person's wheel, keys and
+ * scrollbar never pass through these calls. A call made inside the
+ * person's own press or key ({@link personActing}) is theirs and goes
+ * through: a mount or a play in the rig runs for seconds after a save, and
+ * a drawing's own "back to top" pressed then still scrolls. The stage's own
+ * scrolls pass through {@link stageScroll}.
  */
+
+/** The person's own presses and keys: what a page does inside one is theirs. */
+const PERSON_ACTS = new Set([
+  "pointerdown",
+  "pointerup",
+  "mousedown",
+  "mouseup",
+  "click",
+  "auxclick",
+  "dblclick",
+  "contextmenu",
+  "touchstart",
+  "touchend",
+  "keydown",
+  "keypress",
+  "keyup",
+]);
+
+/** Whether the event being handled now is the person's own press or key on this page. */
+export const personActing = (): boolean => {
+  const now = window.event;
+  return !!now?.isTrusted && PERSON_ACTS.has(now.type);
+};
 
 /** How many mounts and plays run now. */
 let holds = 0;
@@ -27,7 +54,8 @@ let holds = 0;
 let stageOwn = false;
 
 /** Whether a component's attempt on the page's scroll is stopped now. */
-export const pageStill = (): boolean => holds > 0 && !stageOwn;
+export const pageStill = (): boolean =>
+  holds > 0 && !stageOwn && !personActing();
 
 /** `run` (a mount, a play) with the component's own attempts on the page's scroll stopped until it ends. */
 export async function stillPage<T>(run: () => Promise<T>): Promise<T> {
@@ -80,15 +108,31 @@ function scrollerOf(el: Element): Element | null {
   }
 }
 
+/**
+ * Where an element is brought to along one axis: CSSOM View's
+ * `ScrollLogicalPosition`, or `center-if-needed`, Chromium's
+ * `scrollIntoViewIfNeeded(true)` (Blink's `ScrollAlignment::CenterIfNeeded`:
+ * none when wholly in view, centred when wholly out, the nearest edge when
+ * partly in).
+ */
+type Align = ScrollLogicalPosition | "center-if-needed";
+
 /** How far to scroll a box `size` long so `start`–`end` (from its start) stands as `align` asks (CSSOM View's scroll-into-view steps). */
 function alignBy(
   start: number,
   end: number,
   size: number,
-  align: ScrollLogicalPosition
+  align: Align
 ): number {
   const length = end - start;
   switch (align) {
+    case "center-if-needed":
+      if (start >= 0 && end <= size) {
+        return 0;
+      }
+      return end <= 0 || start >= size
+        ? alignBy(start, end, size, "center")
+        : alignBy(start, end, size, "nearest");
     case "start":
       return start;
     case "end":
@@ -162,37 +206,51 @@ export function holdPageScroll(): void {
       typeof arg === "object" && arg !== null
         ? arg
         : { block: arg === false ? "end" : "start", inline: "nearest" };
-    // Each scroller holding it inside the page brings it into view, the innermost first; the page's own stays.
-    for (
-      let box = scrollerOf(this);
-      box && !isPage(box);
-      box = scrollerOf(box)
-    ) {
-      const at = this.getBoundingClientRect();
+    intoViewWithin(
+      this,
+      options.block ?? "start",
+      options.inline ?? "nearest",
+      options.behavior ?? "auto"
+    );
+  };
+  // Chromium's and WebKit's own: no engine without it gains one.
+  const ifNeeded = Reflect.get(proto, "scrollIntoViewIfNeeded");
+  if (typeof ifNeeded === "function") {
+    Object.defineProperty(proto, "scrollIntoViewIfNeeded", {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value(this: Element, centerIfNeeded?: boolean) {
+        if (!pageStill()) {
+          Reflect.apply(ifNeeded, this, [centerIfNeeded]);
+          return;
+        }
+        // Its argument defaults to true; false brings it to the nearest edge (Blink's `ToEdgeIfNeeded`).
+        const align = centerIfNeeded === false ? "nearest" : "center-if-needed";
+        intoViewWithin(this, align, align, "auto");
+      },
+    });
+  }
+
+  /** `el` brought into view by each scroller holding it inside the page, the innermost first; the page's own stays. */
+  function intoViewWithin(
+    el: Element,
+    block: Align,
+    inline: Align,
+    behavior: ScrollBehavior
+  ): void {
+    for (let box = scrollerOf(el); box && !isPage(box); box = scrollerOf(box)) {
+      const at = el.getBoundingClientRect();
       const port = box.getBoundingClientRect();
       const top = port.top + box.clientTop;
       const left = port.left + box.clientLeft;
       const by = {
-        top: alignBy(
-          at.top - top,
-          at.bottom - top,
-          box.clientHeight,
-          options.block ?? "start"
-        ),
-        left: alignBy(
-          at.left - left,
-          at.right - left,
-          box.clientWidth,
-          options.inline ?? "nearest"
-        ),
+        top: alignBy(at.top - top, at.bottom - top, box.clientHeight, block),
+        left: alignBy(at.left - left, at.right - left, box.clientWidth, inline),
       };
       if (by.top !== 0 || by.left !== 0) {
-        const step: ScrollToOptions = {
-          ...by,
-          behavior: options.behavior ?? "auto",
-        };
-        Reflect.apply(nativeBy, box, [step]);
+        Reflect.apply(nativeBy, box, [{ ...by, behavior }]);
       }
     }
-  };
+  }
 }

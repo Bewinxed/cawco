@@ -90,7 +90,7 @@ import { queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { graphWords } from "@cawco/core/words/graph";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 import { holdFocus } from "./held-focus";
-import { holdPageScroll } from "./held-scroll";
+import { holdPageScroll, stillPage } from "./held-scroll";
 import {
   deltaOf,
   firedBetween,
@@ -356,7 +356,12 @@ const sweepsOf = (
 };
 
 export function boot(options: BootOptions): void {
-  holdFocus();
+  /** Off screen: where a story's states are probed and its moves played, never seen. */
+  const rig = document.createElement("div");
+  rig.className = "cawco-rig";
+  rig.setAttribute("aria-hidden", "true");
+  document.body.append(rig);
+  holdFocus(rig);
   holdPageScroll();
   holdWhileAway();
   const { adapter, root } = options;
@@ -382,12 +387,6 @@ export function boot(options: BootOptions): void {
   /** The mode, made once what it is handed stands. */
   let mode: Mode | null = null;
   const embed = by === "embed";
-
-  /** Off screen: where a story's states are probed and its moves played, never seen. */
-  const rig = document.createElement("div");
-  rig.className = "cawco-rig";
-  rig.setAttribute("aria-hidden", "true");
-  document.body.append(rig);
 
   /* --- The page's own errors, from before the module ran ---------------- */
 
@@ -1425,7 +1424,8 @@ export function boot(options: BootOptions): void {
       let mounted: Mounted | undefined;
       try {
         sweep?.(to);
-        const played = await playIn(section, to, body);
+        // Its mount and play are the component's: its own scrolls of the page are stopped (held-scroll.ts).
+        const played = await stillPage(() => playIn(section, to, body));
         ({ mounted } = played);
         moves.push(played.move);
       } finally {

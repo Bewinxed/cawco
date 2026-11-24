@@ -136,6 +136,7 @@ import { differences } from "./diff";
 import { tellHolder } from "./embed";
 import { forcedPlace } from "./forced";
 import { drawGuides, readLayout } from "./guides";
+import { focusOfPage } from "./held-focus";
 import { stageScroll, stillPage } from "./held-scroll";
 import {
   describe,
@@ -1080,7 +1081,7 @@ export function bootStage(page: Page): Mode {
 
   /** The play pressed inside the drawing: the person's focus goes back where it was, or off the drawing. */
   function giveBack(had: Element | null): void {
-    if (!drawing.contains(document.activeElement)) {
+    if (!drawing.contains(focusOfPage())) {
       return;
     }
     if (
@@ -1090,7 +1091,7 @@ export function bootStage(page: Page): Mode {
     ) {
       had.focus({ preventScroll: true });
     } else {
-      const active = document.activeElement;
+      const active = focusOfPage();
       if (active instanceof HTMLElement || active instanceof SVGElement) {
         active.blur();
       }
@@ -1102,7 +1103,7 @@ export function bootStage(page: Page): Mode {
     run: () => Promise<void>,
     still: boolean
   ): Promise<{ clips: ClipRead[]; cut: number; held: Held[] }> {
-    const had = document.activeElement;
+    const had = focusOfPage();
     /** The animations still running when the wait for them ended, landed. */
     let cut = 0;
     const t0 = performance.now();
@@ -2327,12 +2328,16 @@ export function bootStage(page: Page): Mode {
       // Never while the person's act is still being answered.
       await page.turn();
       sweepOn(section, "draw");
-      const [one] = mountInRig(section, [story]);
+      // As it mounts and draws its first frames, the component's own scrolls of the page are stopped (held-scroll.ts).
+      const [one] = await stillPage(async () => {
+        const mounted = mountInRig(section, [story]);
+        await frameTick();
+        return mounted;
+      });
       if (!one) {
         continue;
       }
       try {
-        await frameTick();
         // Read in a task of its own, never inside the frame it waited for.
         await page.turn();
         page.rewriteAll();
@@ -2831,7 +2836,7 @@ export function bootStage(page: Page): Mode {
     run: () => Promise<void>,
     ask: MeasureRepeatAsk
   ): Promise<void> {
-    const had = document.activeElement;
+    const had = focusOfPage();
     if (ask.pass === "traced") {
       performance.mark(MEASURE_MARKS.start);
     }
