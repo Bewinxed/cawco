@@ -17,15 +17,17 @@
  *   session.
  * - **The person's own lines**: the index's `## Notes` (Make a note) and
  *   every section of it this module does not keep (a setup's) are his, and
- *   no change here edits or evicts them.
+ *   no change here edits them.
  * - **The ledger**, `memory/lessons.json`: each lesson's home, state, whose
  *   it is, its dates and its sources, by reference.
- * - **Caps**, each with its reason ({@link CAPS}); past a file's line cap
- *   the hub moves a line out ({@link evict}), never a model.
+ * - **Budgets**, each with its reason ({@link CAPS}): a change that would
+ *   take a file past its character budget is refused ({@link applyOp}),
+ *   and nothing moves out on its own.
  */
 import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { memoryRunWords } from "@cawco/core/words/memory-run";
+import { MEMORY_FILE_CHARS } from "./config";
 import { MemoryLedgerSchema } from "./db/stored-shapes";
 import type {
   MemoryLedger as Ledger,
@@ -93,9 +95,6 @@ export const LESSONS_DIR = "lessons";
 export const LEDGER_FILE = "memory/lessons.json";
 export const RUN_STATE_FILE = "memory/state.json";
 
-/** Where an index or skill lesson evicted from its home goes: still live, carried by a brief's words. */
-const RULES_TOPIC = "rules";
-
 const LESSON_LINE = /^- (.*\S) \((L-[0-9a-f]{6})\)\s*$/u;
 const WHY_LINE = /^ {2}Why: (.*\S)\s*$/u;
 const BULLET = /^- (.*\S)\s*$/u;
@@ -105,19 +104,17 @@ const SKILL_NAME = /^[a-z0-9][\w.:-]*$/iu;
 const TOPIC_NAME = /^[a-z0-9][a-z0-9-]*$/u;
 
 /**
- * Every cap of the project's memory, each with its reason.
+ * Every limit on the project's memory, each with its reason. A change that
+ * would take a file past its character budget is refused, naming the
+ * budget: nothing moves out on its own.
  */
 export const CAPS = {
   /**
-   * The index's rule lines. With {@link CAPS.rule} this is 8,000
-   * characters, the share of AGENTS.md a brief carried before
-   * (`MEMORY_FILE_CHARS`, config.ts): every session now pays what an
-   * attempt paid, and no more. Files people cut by hand and kept sit
-   * between 20 and 80 lines; this one loads on top of the fleet's own
-   * memory, so it takes the low half.
+   * The whole index, its Notes counted: the share of AGENTS.md a brief
+   * carried before (`MEMORY_FILE_CHARS`, config.ts), so every session pays
+   * what an attempt paid, and no more. His notes count, so they shrink what
+   * the run may keep.
    */
-  indexRules: 40,
-  /** The whole index, its Notes counted: the same budget. His notes are never evicted, so they shrink what the run may keep. */
   indexChars: 8000,
   /** A rule line: one sentence. A rule that needs more is a method, and goes to a skill's lessons or knowledge. */
   rule: 200,
@@ -125,13 +122,7 @@ export const CAPS = {
   fact: 300,
   /** A `Why:` line, one per lesson: one line of why. */
   why: 160,
-  /** A skill's lessons: read on top of the skill's own text every time it runs; twelve lines is under a tenth of a typical skill. */
-  skillLines: 12,
-  /** A knowledge file: 8,000 characters at 200 a line, what one brief carried of one file. */
-  knowledgeLines: 40,
-  /** Knowledge files: past this a new topic is refused and the lesson goes into one that is there (the reshape mark before, `RESHAPE_ABOVE`). */
-  knowledgeFiles: 25,
-  /** A retired lesson's days in the ledger, its words kept so it can be put back. */
+  /** A retired lesson's days in the ledger, its words kept. */
   retiredDays: 30,
   /**
    * A night's added lessons, and its replaces and removals: at 80 to 240
@@ -142,6 +133,19 @@ export const CAPS = {
   nightAdds: 10,
   nightChanges: 10,
 } as const;
+
+/**
+ * The character budget of `path`'s file: the index's ({@link CAPS}
+ * `indexChars`), and a knowledge file's, what one brief carries of one
+ * file (config.ts `MEMORY_FILE_CHARS`). A skill's lessons have none.
+ */
+const budgetOf = (path: string): number | undefined => {
+  const home = homeOf(path);
+  if (home?.at === "index") {
+    return CAPS.indexChars;
+  }
+  return home?.at === "knowledge" ? MEMORY_FILE_CHARS : undefined;
+};
 
 /** One lesson line as its file says it. */
 export interface LessonLine {
@@ -406,6 +410,14 @@ export const parseLessons = (
   return { lessons, unmarked };
 };
 
+/** One line of a memory file read as a lesson's line: its id and words; undefined for any other line. */
+export const lessonLineOf = (
+  line: string
+): { id: string; text: string } | undefined => {
+  const read = LESSON_LINE.exec(line);
+  return read?.[1] && read[2] ? { id: read[2], text: read[1] } : undefined;
+};
+
 /** `content` with lesson `id`'s line (and its `Why:`) put in place by `put`'s lines; as it was when it holds no such line. */
 const spliced = (content: string, id: string, put: string[]): string => {
   const lines = linesOf(content);
@@ -522,10 +534,9 @@ export class CheckedOp {
 
 /** What one checked operation does to the files and the ledger. */
 export type Change =
-  /** A new lesson: a line in its home; `held` when added through memory_rule (memory-run.ts `ruleAsked`). */
+  /** A new lesson: a line in its home. */
   | {
       by: Lesson["by"];
-      held?: true;
       home: LessonHome;
       id: string;
       kind: "add";
@@ -533,10 +544,9 @@ export type Change =
       text: string;
       why: string | null;
     }
-  /** A live lesson's words changed: its line rewritten under a new id, with its `Why:` (none when `why` is null); `held` when reworded through memory_rule. */
+  /** A live lesson's words changed: its line rewritten under a new id, with its `Why:` (none when `why` is null). */
   | {
       by: Lesson["by"];
-      held?: true;
       id: string;
       kind: "replace";
       newId: string;
@@ -548,67 +558,25 @@ export type Change =
   | { id: string; kind: "corroborate"; sources: Lesson["sources"] }
   /** A live lesson to another home. */
   | { home: LessonHome; id: string; kind: "move" }
-  /** Lesson `id` says what live lesson `into` says: `into` keeps both's sources and repeats, `id` is retired as merged into it. */
-  | { id: string; into: string; kind: "merge" }
   /** A lesson removed, with why. */
   | {
       id: string;
       kind: "retire";
       why: NonNullable<Lesson["retired"]>["why"];
     }
-  /**
-   * A lesson removed through memory_rule (memory-run.ts `ruleAsked`): its
-   * line taken out, retired `hand` with its words kept, held so no run puts
-   * it back, the person's message (`source`), when there is one, among its
-   * sources.
-   */
-  | { id: string; kind: "remove"; source?: LessonSource }
+  /** A lesson removed through memory_rule (memory-run.ts `ruleAsked`): its line taken out, retired `hand` with its words kept. */
+  | { id: string; kind: "remove" }
   /** A knowledge lesson no brief carried for the archive's days, to `knowledge/archive/<topic>.md`. */
   | { id: string; kind: "archive" }
-  /**
-   * A lesson the run took out, put back in its home as `line` (its words as
-   * the folder held them before), live again; `held` when the person stated
-   * it again, his message (`source`) one of its sources.
-   */
-  | {
-      held: boolean;
-      id: string;
-      kind: "restore";
-      line: LessonLine;
-      source?: LessonSource;
-    }
-  /** A lesson the run made, taken back because the person stated the opposite: retired, and held, so no run touches it again. */
-  | { id: string; kind: "revert" }
   /** A lesson whose file, or the match in it, is gone: its line taken out, its words kept for the ledger's days. */
   | { id: string; kind: "stale" }
   /** A lesson a check holds now (its task done): its line taken out; the ledger keeps it, enforced. */
-  | { id: string; kind: "enforce" }
-  /**
-   * The person stated a live lesson again: one more repeat, his message one
-   * of its sources, his rule from now on; `held` from his second, and moved
-   * `up` a home when it has one to go to.
-   */
-  | {
-      held: boolean;
-      id: string;
-      kind: "repeat";
-      source: LessonSource;
-      up?: LessonHome;
-    };
+  | { id: string; kind: "enforce" };
 
-/** A line moved out of a file past its cap, and where to. */
-export interface Eviction {
-  from: string;
-  id: string;
-  to: string;
-}
-
-/** What {@link applyOp} did: the tree after it, the lines eviction moved, and whether a new index lesson went to knowledge because every index line is held. */
-export interface Applied {
-  evicted: Eviction[];
-  redirected: boolean;
-  tree: MemoryTree;
-}
+/** What {@link applyOp} did: the tree after it, or the budget the file it grew would pass, the tree as it was. */
+export type Applied =
+  | { tree: MemoryTree }
+  | { over: { budget: number; chars: number; path: string } };
 
 /** A lesson line's words as its file says them now; undefined when it has none. */
 export const lineOf = (
@@ -637,70 +605,6 @@ const withEntry = (
     delete lessons[id];
   }
   return { ...ledger, lessons };
-};
-
-/** The cap on `path`'s lesson lines, and on its words when it has one. */
-const capOf = (path: string): { chars?: number; lines: number } => {
-  const home = homeOf(path);
-  if (home?.at === "index") {
-    return { lines: CAPS.indexRules, chars: CAPS.indexChars };
-  }
-  return home?.at === "skill"
-    ? { lines: CAPS.skillLines }
-    : { lines: CAPS.knowledgeLines };
-};
-
-/** Where a line evicted from `path` goes: an index or skill line to knowledge, still live; a knowledge line to its topic's archive. */
-const evictedTo = (path: string): LessonHome | { archive: string } => {
-  const home = homeOf(path);
-  if (home?.at === "index") {
-    return { at: "knowledge", topic: RULES_TOPIC };
-  }
-  if (home?.at === "skill") {
-    return { at: "knowledge", topic: home.skill.toLowerCase() };
-  }
-  return { archive: home?.at === "knowledge" ? home.topic : RULES_TOPIC };
-};
-
-/** Whether `path`'s file is past its cap. */
-const overCap = (tree: MemoryTree, path: string): boolean => {
-  const cap = capOf(path);
-  const content = tree.files[path] ?? "";
-  return (
-    parseLessons(path, content).lessons.length > cap.lines ||
-    (cap.chars !== undefined && content.length > cap.chars)
-  );
-};
-
-/**
- * The line of `path`'s file that leaves first when it is past its cap: the
- * one he stated again the fewest times, then the one a source stated
- * longest ago, then the smallest id; for a knowledge file, the one a brief
- * last carried longest ago (never, first) before those. A `held` lesson
- * never leaves, nor his own lines (the index's Notes, which hold no
- * lessons). Undefined when every line is held.
- */
-const evict = (
-  path: string,
-  content: string,
-  ledger: Ledger,
-  uses: ReadonlyMap<string, Date>
-): string | undefined => {
-  const knowledge = homeOf(path)?.at === "knowledge";
-  const candidates = parseLessons(path, content)
-    .lessons.map((line) => ({ line, lesson: ledger.lessons[line.id] }))
-    .filter(({ lesson }) => !lesson?.held);
-  candidates.sort((a, b) => {
-    const usedA = uses.get(a.line.id)?.getTime() ?? 0;
-    const usedB = uses.get(b.line.id)?.getTime() ?? 0;
-    return (
-      (knowledge ? usedA - usedB : 0) ||
-      (a.lesson?.repeats ?? 0) - (b.lesson?.repeats ?? 0) ||
-      (a.lesson?.seen ?? "").localeCompare(b.lesson?.seen ?? "") ||
-      a.line.id.localeCompare(b.line.id)
-    );
-  });
-  return candidates[0]?.line.id;
 };
 
 /** `tree` with lesson `id`'s line moved from its home to `to`, its ledger entry's home with it. */
@@ -779,58 +683,6 @@ const archiveLine = (
   };
 };
 
-/**
- * Moves lines out of every file past its cap ({@link evict}), each to the
- * home {@link evictedTo} names, until none is past it; a move that leaves
- * its new home past its own cap evicts there in turn.
- */
-const evictOver = (
-  tree: MemoryTree,
-  uses: ReadonlyMap<string, Date>,
-  today: string,
-  from: string
-): { evicted: Eviction[]; tree: MemoryTree } => {
-  const evicted: Eviction[] = [];
-  let now = tree;
-  const queue = [from];
-  for (let guard = 0; queue.length > 0 && guard < 200; guard += 1) {
-    const path = queue[0] ?? "";
-    if (!overCap(now, path)) {
-      queue.shift();
-      continue;
-    }
-    const id = evict(path, now.files[path] ?? "", now.ledger, uses);
-    if (!id) {
-      queue.shift();
-      continue;
-    }
-    const to = evictedTo(path);
-    if ("archive" in to) {
-      now = archiveLine(now, id, to.archive, today);
-      evicted.push({
-        id,
-        from: path,
-        to: `${KNOWLEDGE_ARCHIVE}/${to.archive}.md`,
-      });
-    } else {
-      now = moveLine(now, id, to);
-      const into = pathOf(to) ?? "";
-      evicted.push({ id, from: path, to: into });
-      queue.push(into);
-    }
-  }
-  return { evicted, tree: now };
-};
-
-/** Whether every lesson line of the index is held: a new index lesson then goes to knowledge. */
-const indexAllHeld = (tree: MemoryTree): boolean => {
-  const { lessons } = parseLessons(INDEX_FILE, tree.files[INDEX_FILE] ?? "");
-  return (
-    lessons.length >= CAPS.indexRules &&
-    lessons.every((line) => tree.ledger.lessons[line.id]?.held)
-  );
-};
-
 /** The index with its `## Skills` pointers as the `lessons/` files that hold a lesson say, a pointer each. */
 const withPointers = (tree: MemoryTree): MemoryTree => {
   const index = tree.files[INDEX_FILE];
@@ -880,10 +732,9 @@ const pointerLines = (tree: MemoryTree): string[] =>
       memoryRunWords.skillPointer(skill, `${LESSONS_DIR}/${skill}.md`)
     );
 
-/** What one change did to the tree: the tree, the file it grew (for eviction), and whether an index lesson went to knowledge instead. */
+/** What one change did to the tree: the tree, and the file it grew (for its budget). */
 interface Done {
   grew?: string;
-  redirected?: true;
   tree: MemoryTree;
 }
 
@@ -909,35 +760,21 @@ const placed = (
   };
 };
 
-/** A new lesson: a line in its home (knowledge when every index line is held). */
-const added = (now: MemoryTree, op: ChangeOf<"add">, today: string): Done => {
-  const base: Lesson = {
-    by: op.by,
-    ...(op.held ? { held: true as const } : {}),
-    home: op.home,
-    repeats: 0,
-    seen: today,
-    since: today,
-    sources: op.sources,
-    state: "live",
-  };
-  const redirected = op.home.at === "index" && indexAllHeld(now);
-  const home: LessonHome = redirected
-    ? { at: "knowledge", topic: RULES_TOPIC }
-    : op.home;
-  return {
-    ...placed(
-      now,
-      home,
-      { id: op.id, text: op.text, why: op.why },
-      {
-        ...base,
-        home,
-      }
-    ),
-    ...(redirected ? { redirected: true as const } : {}),
-  };
-};
+/** A new lesson: a line in its home. */
+const added = (now: MemoryTree, op: ChangeOf<"add">, today: string): Done =>
+  placed(
+    now,
+    op.home,
+    { id: op.id, text: op.text, why: op.why },
+    {
+      by: op.by,
+      home: op.home,
+      seen: today,
+      since: today,
+      sources: op.sources,
+      state: "live",
+    }
+  );
 
 /** A live lesson's line rewritten under its new id; the old one retired as replaced, its words kept. */
 const replaced = (
@@ -969,12 +806,10 @@ const replaced = (
       ledger: withEntry(retired, op.newId, {
         by: op.by,
         home: lesson.home,
-        repeats: 0,
         seen: today,
         since: today,
         sources: op.sources,
         state: "live",
-        ...(lesson.held || op.held ? { held: true as const } : {}),
       }),
     },
     grew: path,
@@ -1013,100 +848,6 @@ const withSourcesAdded = (
     (source) => !sources.some((had) => Bun.deepEquals(had, source))
   ),
 ];
-
-/** Two lessons that say the same made one: `op.into` keeps the sources, repeats and hold of both, `op.id` leaves its home, retired as merged into it. */
-const merged = (
-  now: MemoryTree,
-  op: ChangeOf<"merge">,
-  today: string
-): Done => {
-  const gone = now.ledger.lessons[op.id];
-  const into = now.ledger.lessons[op.into];
-  if (!(gone && into?.state === "live") || op.id === op.into) {
-    return { tree: now };
-  }
-  const kept: Lesson = {
-    ...into,
-    by: into.by === "owner" || gone.by === "owner" ? "owner" : "agent",
-    repeats: into.repeats + gone.repeats,
-    seen: into.seen > gone.seen ? into.seen : gone.seen,
-    since: into.since < gone.since ? into.since : gone.since,
-    sources: withSourcesAdded(into.sources, gone.sources),
-    ...(into.held || gone.held ? { held: true as const } : {}),
-  };
-  return {
-    tree: retireLine(
-      { ...now, ledger: withEntry(now.ledger, op.into, kept) },
-      op.id,
-      "merged",
-      today,
-      { by: op.into }
-    ),
-  };
-};
-
-/** A lesson put back in its home as `op.line`, live again, its retirement gone. */
-const restored = (
-  now: MemoryTree,
-  op: ChangeOf<"restore">,
-  today: string
-): Done => {
-  const lesson = now.ledger.lessons[op.id];
-  if (!lesson || lineOf(now, op.id)) {
-    return { tree: now };
-  }
-  const { retired: _retired, staged: _staged, ...rest } = lesson;
-  return placed(now, lesson.home, op.line, {
-    ...rest,
-    ...(op.source ? { by: "owner" as const } : {}),
-    state: "live",
-    seen: today,
-    sources: withSourcesAdded(rest.sources, op.source ? [op.source] : []),
-    ...(op.held || rest.held ? { held: true as const } : {}),
-  });
-};
-
-/** A lesson stated again: counted, its source kept, his from now on; moved up a home when asked. */
-const repeated = (
-  now: MemoryTree,
-  op: ChangeOf<"repeat">,
-  today: string
-): Done => {
-  const lesson = now.ledger.lessons[op.id];
-  if (lesson?.state !== "live") {
-    return { tree: now };
-  }
-  const counted: MemoryTree = {
-    ...now,
-    ledger: withEntry(now.ledger, op.id, {
-      ...lesson,
-      by: "owner",
-      repeats: lesson.repeats + 1,
-      seen: today,
-      sources: withSourcesAdded(lesson.sources, [op.source]),
-      ...(op.held || lesson.held ? { held: true as const } : {}),
-    }),
-  };
-  const grew = op.up ? pathOf(op.up) : undefined;
-  return op.up && grew
-    ? { tree: moveLine(counted, op.id, op.up), grew }
-    : { tree: counted };
-};
-
-/** A lesson removed through memory_rule ({@link Change} `remove`): retired `hand`, its words kept, held, the person's message, when there is one, among its sources. */
-const removed = (
-  now: MemoryTree,
-  op: ChangeOf<"remove">,
-  today: string
-): MemoryTree => {
-  const lesson = now.ledger.lessons[op.id];
-  return lesson
-    ? entryPatched(retireLine(now, op.id, "hand", today), op.id, {
-        held: true,
-        sources: withSourcesAdded(lesson.sources, op.source ? [op.source] : []),
-      })
-    : now;
-};
 
 /** `tree` with lesson `id`'s entry patched by `patch`: a ledger edit, no line changes. */
 const entryPatched = (
@@ -1151,22 +892,10 @@ const changed = (now: MemoryTree, op: Change, today: string): Done => {
         ...(grew ? { grew } : {}),
       };
     }
-    case "merge":
-      return merged(now, op, today);
     case "retire":
       return { tree: retireLine(now, op.id, op.why, today) };
     case "remove":
-      return { tree: removed(now, op, today) };
-    case "restore":
-      return restored(now, op, today);
-    case "repeat":
-      return repeated(now, op, today);
-    case "revert":
-      return {
-        tree: entryPatched(retireLine(now, op.id, "reverted", today), op.id, {
-          held: true,
-        }),
-      };
+      return { tree: retireLine(now, op.id, "hand", today) };
     case "enforce":
       return { tree: enforced(now, op.id) };
     case "stale":
@@ -1191,25 +920,23 @@ const changed = (now: MemoryTree, op: Change, today: string): Done => {
 
 /**
  * One checked change applied to the files and the ledger (§5.2 step 5):
- * one line and one entry, then eviction from any file it took past its cap,
- * then the index's skill pointers. His lines (the index's Notes and his own
- * sections) are never touched.
+ * one line and one entry, then the index's skill pointers; refused, the
+ * tree as it was, when the file it grew would pass its character budget
+ * ({@link budgetOf}). His lines (the index's Notes and his own sections)
+ * are never touched.
  */
 export const applyOp = (
   tree: MemoryTree,
   checked: CheckedOp,
-  today: string,
-  uses: ReadonlyMap<string, Date>
+  today: string
 ): Applied => {
   const done = changed(tree, checked.change, today);
-  const evicted = done.grew
-    ? evictOver(done.tree, uses, today, done.grew)
-    : { tree: done.tree, evicted: [] };
-  return {
-    tree: withPointers(evicted.tree),
-    evicted: evicted.evicted,
-    redirected: done.redirected === true,
-  };
+  const budget = done.grew ? budgetOf(done.grew) : undefined;
+  const chars = done.grew ? (done.tree.files[done.grew] ?? "").length : 0;
+  if (done.grew && budget !== undefined && chars > budget) {
+    return { over: { path: done.grew, chars, budget } };
+  }
+  return { tree: withPointers(done.tree) };
 };
 
 /** `path`'s lessons, each bullet with no id given one: the file's words then, and its lessons. */
@@ -1272,7 +999,6 @@ export const reconcile = (
       lessons[line.id] = {
         by: "owner",
         home,
-        repeats: 0,
         seen: today,
         since: today,
         sources: [{ kind: "hand", commit }],

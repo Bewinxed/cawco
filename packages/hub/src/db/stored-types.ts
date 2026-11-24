@@ -158,11 +158,7 @@ export type LessonSource =
 export interface Lesson {
   /** Whose rule it is: the person's (a message, a line he approved or wrote), or agents' (notes). */
   by: "owner" | "agent";
-  /** He stated it again after the run changed or removed it, or a session changed it through memory_rule: never evicted or retired by the run, and, retired, kept in the ledger past its days. */
-  held?: true;
   home: LessonHome;
-  /** Times he stated it again while it was live. */
-  repeats: number;
   /** Removed, why and when, with its words kept for 30 days. */
   retired?: {
     /** The lesson that replaced it. */

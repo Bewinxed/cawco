@@ -2228,29 +2228,48 @@ const logRecords = async (projectId: string, args: string[]) => {
     .filter(Boolean);
 };
 
+/** A patch's file header (`--- a/AGENTS.md`, `+++ /dev/null`): no line of the file. */
+const FILE_HEADER = /^(?:---|\+\+\+) (?:[ab]\/|\/dev\/null)/u;
+
 /**
- * Every commit of a project's folder that changed how many times `text`
- * stands in one of `paths` (git's pickaxe, `-S`, the text literal), newest
- * first, each with its first parent: the commits that put a line holding it
- * in, took it out or moved it. None for text no commit changed.
+ * Each commit of a project's folder since `since` that changed one of
+ * `paths`, newest first: when it was made, and the lines it took out and
+ * put in (`git log -p --unified=0`, the files' own lines, no headers).
  */
-export const folderCommitsChanging = async (
+export const folderLineChanges = async (
   projectId: string,
-  text: string,
-  paths: readonly string[]
+  paths: readonly string[],
+  since: Date
 ) => {
   const records = await logRecords(projectId, [
-    `-S${text}`,
-    "--format=%H%x1f%P%x1e",
+    `--since=${since.toISOString()}`,
+    "--patch",
+    "--unified=0",
+    "--no-renames",
+    "--format=%x1e%H%x1f%ct",
     "--",
     ...paths,
   ]);
-  return records instanceof ElysiaStatus
-    ? records
-    : records.map((record) => {
-        const [sha = "", parents = ""] = record.split("\x1f");
-        return { sha, parent: parents.split(" ")[0] || null };
-      });
+  if (records instanceof ElysiaStatus) {
+    return records;
+  }
+  return records.map((record) => {
+    const [first = "", ...lines] = record.split("\n");
+    const [sha = "", seconds = "0"] = first.split("\x1f");
+    const removed: string[] = [];
+    const added: string[] = [];
+    for (const line of lines) {
+      if (FILE_HEADER.test(line)) {
+        continue;
+      }
+      if (line.startsWith("-")) {
+        removed.push(line.slice(1));
+      } else if (line.startsWith("+")) {
+        added.push(line.slice(1));
+      }
+    }
+    return { sha, at: new Date(Number(seconds) * 1000), removed, added };
+  });
 };
 
 /**

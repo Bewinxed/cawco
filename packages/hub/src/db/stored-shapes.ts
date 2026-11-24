@@ -580,9 +580,7 @@ export type LessonSourceOutput = z.output<typeof LessonSourceShape>;
 const LessonShape = declared(
   z.object({
     by: z.enum(["owner", "agent"]),
-    held: z.literal(true).optional(),
     home: LessonHomeShape,
-    repeats: z.number(),
     retired: z
       .object({
         by: z.string().optional(),
