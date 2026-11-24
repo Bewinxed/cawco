@@ -29,7 +29,12 @@
  * What it does not hold: a focus the browser moves without `focus()` (a
  * label's click, a modal `<dialog>`'s `showModal()`), and a held field
  * takes no keys, which only the window's focus brings.
+ *
+ * On every page, framed or not, a focus asked for while the stage mounts
+ * or plays a story is taken with `preventScroll` (held-scroll.ts
+ * `pageStill`): it never scrolls the page under the person.
  */
+import { pageStill } from "./held-scroll";
 import { stateClass } from "./pseudo";
 
 /** What a real `focus()` reaches: the elements that take the focus. */
@@ -59,11 +64,13 @@ const PERSON_ACTS = new Set([
 
 type Focusable = HTMLElement | SVGElement;
 
-/** Holds every focus the page asks for while its frame lacks the window's focus. Once per page, in a frame alone. */
-export function holdFocusInFrame(): void {
-  if (window.parent === window) {
-    return;
-  }
+/**
+ * Every focus the page asks for: held while its frame lacks the window's
+ * focus (in a frame alone), and taken with `preventScroll` while the stage
+ * mounts or plays a story. Once per page.
+ */
+export function holdFocus(): void {
+  const framed = window.parent !== window;
   const html = HTMLElement.prototype;
   const svg = SVGElement.prototype;
   const nativeFocus = { html: html.focus, svg: svg.focus };
@@ -72,9 +79,6 @@ export function holdFocusInFrame(): void {
     Document.prototype,
     "activeElement"
   )?.get;
-  if (!active) {
-    return;
-  }
   /** The element the page focused while the frame lacked the window's focus; null for none. */
   let held: Focusable | null = null;
   /** The elements carrying a focus class of the held focus. */
@@ -169,19 +173,28 @@ export function holdFocusInFrame(): void {
     !el.closest("[inert]") &&
     el.checkVisibility();
 
+  const holding = framed && !!active;
   function focus(this: Focusable, options?: FocusOptions) {
     const own =
       this instanceof HTMLElement ? nativeFocus.html : nativeFocus.svg;
-    if (real()) {
+    if (!holding || real()) {
       if (held) {
         move(null);
       }
-      own.call(this, options);
+      own.call(
+        this,
+        pageStill() ? { ...options, preventScroll: true } : options
+      );
       return;
     }
     if (held !== this && takes(this)) {
       move(this);
     }
+  }
+  html.focus = focus;
+  svg.focus = focus;
+  if (!(holding && active)) {
+    return;
   }
   function blur(this: Focusable) {
     if (this === held) {
@@ -190,8 +203,6 @@ export function holdFocusInFrame(): void {
     }
     (this instanceof HTMLElement ? nativeBlur.html : nativeBlur.svg).call(this);
   }
-  html.focus = focus;
-  svg.focus = focus;
   html.blur = blur;
   svg.blur = blur;
   Object.defineProperty(Document.prototype, "activeElement", {

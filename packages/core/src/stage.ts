@@ -1330,6 +1330,17 @@ export const SECTION_BROKEN = "cawco:section-broken";
  */
 export const SECTION_MENDED = "cawco:section-mended";
 
+/**
+ * The stage's word to its pages that a file sections are drawn from was
+ * saved and its framework's HMR swaps it in place (a component a states
+ * file mounts, or a file it imports), with those states files from the
+ * toolchain root. The drawing stays mounted; each such section a page holds
+ * is read again off screen for its report, and its sheet asked for again.
+ * Sent just ahead of Vite's update, so the page reads it once the update
+ * has applied.
+ */
+export const SECTION_SWAPPED = "cawco:section-swapped";
+
 /** A CSF story file: `Who.stories.ts`, `Card.stories.tsx`, `Page.stories.js`. */
 export const STORY_FILE = /\.stories\.[cm]?[jt]sx?$/u;
 

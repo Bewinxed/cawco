@@ -93,6 +93,7 @@ import {
   SECTION_BROKEN,
   SECTION_MENDED,
   SECTION_MISSING,
+  SECTION_SWAPPED,
   SECTION_WRITTEN,
   type SectionPlan,
   type SectionRender,
@@ -809,14 +810,26 @@ const ownFile = (file: string): boolean =>
   !file.includes(`${sep}node_modules${sep}`);
 
 /**
- * Every file a states file's frames are drawn from (absolute, sorted): the
- * states file, the components it mounts, the project's own files those
- * import, all the way down ({@link importedFiles}), and its stories' private
- * modules ({@link ownSet}). Its section's hash is of these files, and an
- * edit to any of them loads its section again (the plugin's `hotUpdate`),
- * which makes each story's runner anew.
+ * What a states file's frames are drawn from (absolute paths).
+ *
+ * `files`, sorted: the states file, the components it mounts, the project's
+ * own files those import, all the way down ({@link importedFiles}), and its
+ * stories' private modules ({@link ownSet}). Its section's hash is of these
+ * files, and a save of any of them reaches the section (the plugin's
+ * `hotUpdate`).
+ *
+ * `reloads`: the states file and its stories' private modules, whose save
+ * loads the section's module again and redraws it. Every other file of
+ * `files` (a component, a file it imports) is swapped in place by its
+ * framework's own HMR.
  */
-async function drawnFrom(abs: string, text: string): Promise<string[]> {
+interface Drawn {
+  files: string[];
+  reloads: Set<string>;
+}
+
+/** What states file `abs` (its text `text`) is drawn from ({@link Drawn}). */
+async function drawnFrom(abs: string, text: string): Promise<Drawn> {
   const files = new Set<string>([abs]);
   let level = await mountedFiles(abs, text).catch(() => []);
   while (level.length > 0) {
@@ -833,7 +846,10 @@ async function drawnFrom(abs: string, text: string): Promise<string[]> {
     level = (await Promise.all(fresh.map(importedFiles))).flat();
   }
   const own = await ownSetOf(relative(root, abs)).catch(() => null);
-  return [...new Set([...files, ...(own?.files ?? [])])].sort();
+  return {
+    files: [...new Set([...files, ...(own?.files ?? [])])].sort(),
+    reloads: new Set([abs, ...(own?.files ?? [])]),
+  };
 }
 
 /** The event a canvas page sends the stage over Vite's HMR channel as it loads a section: `{ file }`, its states file from the root. */
@@ -846,6 +862,7 @@ declare module "vite/types/customEvent.d.ts" {
     [SECTION_WRITTEN]: { file: string };
     [SECTION_BROKEN]: { files: string[] };
     [SECTION_MENDED]: { files: string[] };
+    [SECTION_SWAPPED]: { files: string[] };
   }
 }
 
@@ -926,17 +943,23 @@ function releasePage(page: object): void {
  * with the dashboard's 52 states files loaded spent 2 to 9 s in Vite's
  * resolver. Sorted, as {@link drawnFrom} answers them.
  */
-const drawnKept = new Map<string, Promise<Set<string>>>();
+const drawnKept = new Map<string, Promise<DrawnSet>>();
 
-/** Held section `sheet`'s files, kept ({@link drawnKept}). */
-function drawnSet(sheet: string): Promise<Set<string>> {
+/** A held section's {@link Drawn}, its files as a set. */
+interface DrawnSet {
+  files: Set<string>;
+  reloads: Set<string>;
+}
+
+/** What held section `sheet` is drawn from, kept ({@link drawnKept}). */
+function drawnSet(sheet: string): Promise<DrawnSet> {
   const kept = drawnKept.get(sheet);
   if (kept) {
     return kept;
   }
   const abs = resolve(root, sheet);
   const read = drawnFrom(abs, readFileSync(abs, "utf8")).then(
-    (files) => new Set(files)
+    ({ files, reloads }) => ({ files: new Set(files), reloads })
   );
   drawnKept.set(sheet, read);
   read.catch(() => {
@@ -945,6 +968,78 @@ function drawnSet(sheet: string): Promise<Set<string>> {
     }
   });
   return read;
+}
+
+/**
+ * Each module a page was handed an import of and that has no code served
+ * ({@link failedServe}), invalidated as Vite's HMR invalidates a changed
+ * module; answers their served importers, the update that loads each
+ * failed section's module again (the plugin's `hotUpdate`, on a manifest
+ * taken as created).
+ */
+function failedImporters(
+  graph: {
+    idToModuleMap: Map<string, ModuleNode>;
+    invalidateModule: (
+      mod: ModuleNode,
+      seen: Set<ModuleNode>,
+      timestamp: number,
+      isHmr?: boolean
+    ) => void;
+  },
+  timestamp: number
+): ModuleNode[] {
+  const failed = [...graph.idToModuleMap.values()].filter(failedServe);
+  // Read before the invalidation, which invalidates each importer too.
+  const importers = failed.flatMap((mod) =>
+    [...mod.importers].filter((one) => one.transformResult !== null)
+  );
+  for (const mod of failed) {
+    // Hard first: the HMR call moves only `lastHMRTimestamp`, and Vite's race guards in transformRequest.ts compare `lastInvalidationTimestamp`, so a transform in flight across it would store its result on a module still soft-invalidated (https://github.com/vitejs/vite/issues/23941). Drop this line once a Vite release ships https://github.com/vitejs/vite/pull/23950.
+    graph.invalidateModule(mod, new Set(), timestamp);
+    graph.invalidateModule(mod, new Set(), timestamp, true);
+  }
+  return importers;
+}
+
+/**
+ * The held sections a save of `file` reaches (the plugin's `hotUpdate`):
+ * `reloaded`, the section modules to load again (its states file or a
+ * private module of its stories, or any file when `inGraph` is false: no
+ * module of the page's graph holds it); `swapped`, the states files whose
+ * component or one of its imports it is, which its framework swaps in place.
+ * Each reached section's files are walked again on its next save: this one
+ * may have added or dropped an import.
+ */
+async function heldReached(
+  graph: { getModuleById: (id: string) => ModuleNode | undefined },
+  file: string,
+  inGraph: boolean
+): Promise<{ reloaded: ModuleNode[]; swapped: string[] }> {
+  const reloaded: ModuleNode[] = [];
+  const swapped: string[] = [];
+  await Promise.all(
+    [...heldSections.keys()].map(async (sheet) => {
+      const mod = graph.getModuleById(sectionIdOf(sheet));
+      if (!(mod && existsSync(resolve(root, sheet)))) {
+        return;
+      }
+      const set = drawnSet(sheet);
+      const { files, reloads } = await set;
+      if (!files.has(file)) {
+        return;
+      }
+      if (drawnKept.get(sheet) === set) {
+        drawnKept.delete(sheet);
+      }
+      if (reloads.has(file) || !inGraph) {
+        reloaded.push(mod);
+      } else {
+        swapped.push(sheet);
+      }
+    })
+  );
+  return { reloaded, swapped: swapped.sort() };
 }
 
 /**
@@ -957,7 +1052,7 @@ function drawnSet(sheet: string): Promise<Set<string>> {
  */
 async function contentHash(file: string): Promise<string> {
   const abs = resolve(root, file);
-  const files = heldSections.has(file)
+  const { files } = heldSections.has(file)
     ? await drawnSet(file)
     : await drawnFrom(abs, readFileSync(abs, "utf8"));
   const hash = createHash("sha256");
@@ -1245,10 +1340,11 @@ function previewFile(): string | null {
  * reach the runtime as window events: `cawco:updates` with the modules an
  * update names, before it applies (a section that failed to load, among
  * them, loads again), `cawco:after-update` after any
- * update, this page's or not (a component's own edit redraws through its
- * framework's HMR and loads again each section drawn from it, which reads
- * its frames again; the canvas lays its drawing out), `cawco:stage-error` with Vite's error for a module it couldn't
- * serve, which a section that didn't load says, {@link SECTION_WRITTEN}
+ * update, this page's or not (the canvas lays its drawing out),
+ * `cawco:stage-error` with Vite's error for a module it couldn't
+ * serve, which a section that didn't load says, {@link SECTION_SWAPPED}
+ * with the sections a component's save reaches, which its framework swaps
+ * in place and the page reads again off screen, {@link SECTION_WRITTEN}
  * with a states file found missing that is written now, whose section loads
  * again, fresh (`?t=`: its failed import is never the browser's to reuse),
  * {@link SECTION_BROKEN} with the sections that error breaks, and
@@ -1290,6 +1386,7 @@ if (import.meta.hot) {
   import.meta.hot.on(${JSON.stringify(SECTION_WRITTEN)}, (data) => dispatchEvent(new CustomEvent(${JSON.stringify(SECTION_WRITTEN)}, { detail: data.file })));
   import.meta.hot.on(${JSON.stringify(SECTION_BROKEN)}, (data) => dispatchEvent(new CustomEvent(${JSON.stringify(SECTION_BROKEN)}, { detail: data.files })));
   import.meta.hot.on(${JSON.stringify(SECTION_MENDED)}, (data) => dispatchEvent(new CustomEvent(${JSON.stringify(SECTION_MENDED)}, { detail: data.files })));
+  import.meta.hot.on(${JSON.stringify(SECTION_SWAPPED)}, (data) => dispatchEvent(new CustomEvent(${JSON.stringify(SECTION_SWAPPED)}, { detail: data.files })));
 }
 `;
 }
@@ -1302,10 +1399,11 @@ if (import.meta.hot) {
  * hash's walk of every import 0.5 s), and nothing drawn needs them: the
  * page reads the props at {@link SHEET_PATH} once it has drawn, for the
  * inspector, and the stage stamps the hash on each report it keeps
- * ({@link keepReport}). It accepts itself: an edit to any file its frames
- * are drawn from (the plugin's `hotUpdate`) loads it again, with its sheet
- * read anew, and the runtime remounts that section alone (`cawco:section`)
- * and hands the inspector the new sheet. A story that names a module in
+ * ({@link keepReport}). It accepts itself: a save of its states file, of
+ * a private module of its stories, or of a file no component accepts (the
+ * plugin's `hotUpdate`) loads it again, with its sheet read anew, and the
+ * runtime remounts that section alone (`cawco:section`) and hands the
+ * inspector the new sheet. A story that names a module in
  * its `beforeEach` mounts from its own runner's copy of the states file
  * (canvas own.ts), whose private modules ({@link ownSet}) are walked here,
  * ahead of the page's ask for them.
@@ -4018,13 +4116,26 @@ function cawcoStage() {
       return file === null ? null : sectionLoad(file);
     },
     /**
-     * An edit to a file a loaded section is drawn from ({@link drawnFrom}:
-     * its states file, a component it mounts, a file those import) loads
-     * that section's module again, with its sheet and hash read anew. Vite's
-     * own propagation stops at a component that accepts itself (Svelte's,
-     * React's, Vue's), so the section's module is added to the update here;
-     * Vite invalidates it and sends it once (`updateModules` skips a module
-     * its propagation already reached, as through a states file).
+     * A save of a file a held section is drawn from ({@link drawnFrom}).
+     *
+     * Its states file, or a private module of its stories: the section's
+     * module is added to the update, so Vite invalidates it hard and sends
+     * it once (`updateModules` skips a module its propagation already
+     * reached), and it loads again with its sheet read anew. Vite's own
+     * propagation from the states file reaches the section's module, but
+     * invalidates an importer through a static import softly (its
+     * `invalidateModule`): the old transform, and the old sheet in it, would
+     * be served again. A private module runs in a runner that takes no hot
+     * update (canvas own.ts): only the section loading again makes it anew.
+     *
+     * A component it mounts, or a file those import: Vite's own propagation
+     * stands. A component that accepts itself (Svelte's, React's, Vue's) is
+     * swapped in place by its framework, and the drawing stays mounted with
+     * its state; a file nothing accepts propagates up to the section's
+     * module, which loads again. Each page is told the sections such a save
+     * reaches ({@link SECTION_SWAPPED}), sent ahead of Vite's update in the
+     * one queue its client handles messages in, and reads them again off
+     * screen once the update has applied.
      *
      * A manifest taken as created ({@link relinkOnManifestChange}) may make
      * an import resolve that failed. Vite's own HMR, on a file created,
@@ -4068,39 +4179,22 @@ function cawcoStage() {
         if (type !== "create") {
           return;
         }
-        const failed = [...graph.idToModuleMap.values()].filter(failedServe);
-        // Read before the invalidation, which invalidates each importer too.
-        const importers = failed.flatMap((mod) =>
-          [...mod.importers].filter((one) => one.transformResult !== null)
-        );
-        for (const mod of failed) {
-          // Hard first: the HMR call moves only `lastHMRTimestamp`, and Vite's race guards in transformRequest.ts compare `lastInvalidationTimestamp`, so a transform in flight across it would store its result on a module still soft-invalidated (https://github.com/vitejs/vite/issues/23941). Drop this line once a Vite release ships https://github.com/vitejs/vite/pull/23950.
-          graph.invalidateModule(mod, new Set(), timestamp);
-          graph.invalidateModule(mod, new Set(), timestamp, true);
-        }
+        const importers = failedImporters(graph, timestamp);
         return importers.length > 0 ? [...modules, ...importers] : undefined;
       }
       forgetUnheldSheet(graph, file, timestamp);
-      const reached = await Promise.all(
-        [...heldSections.keys()].map(async (sheet) => {
-          const mod = graph.getModuleById(sectionIdOf(sheet));
-          const abs = resolve(root, sheet);
-          if (!(mod && existsSync(abs))) {
-            return null;
-          }
-          const set = drawnSet(sheet);
-          if (!(await set).has(file)) {
-            return null;
-          }
-          // Its imports may have changed with this edit: read again on the next.
-          if (drawnKept.get(sheet) === set) {
-            drawnKept.delete(sheet);
-          }
-          return mod;
-        })
+      // A file no module of the page's graph holds takes no framework's update: only its section loading again brings it.
+      const { reloaded, swapped } = await heldReached(
+        graph,
+        file,
+        modules.length > 0
       );
-      const redrawn = reached.filter((mod): mod is ModuleNode => !!mod);
-      return redrawn.length > 0 ? [...modules, ...redrawn] : undefined;
+      if (swapped.length > 0) {
+        server?.environments.client.hot.send(SECTION_SWAPPED, {
+          files: swapped,
+        });
+      }
+      return reloaded.length > 0 ? [...modules, ...reloaded] : undefined;
     },
     // A good compile of a module clears the error it had, and is a move the daemon's reads wait on ({@link moved}); the sections it broke, and nothing else breaks now, are drawn again ({@link SECTION_MENDED}).
     transform: {

@@ -59,6 +59,7 @@ import {
   SECTION_BROKEN,
   SECTION_MENDED,
   SECTION_MISSING,
+  SECTION_SWAPPED,
   SECTION_WRITTEN,
   type SectionPlan,
   type SheetOnPage,
@@ -86,7 +87,8 @@ import {
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { graphWords } from "@cawco/core/words/graph";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
-import { holdFocusInFrame } from "./held-focus";
+import { holdFocus } from "./held-focus";
+import { holdPageScroll } from "./held-scroll";
 import {
   deltaOf,
   firedBetween,
@@ -352,7 +354,8 @@ const sweepsOf = (
 };
 
 export function boot(options: BootOptions): void {
-  holdFocusInFrame();
+  holdFocus();
+  holdPageScroll();
   holdWhileAway();
   const { adapter, root } = options;
   const params = new URLSearchParams(location.search);
@@ -1672,12 +1675,44 @@ export function boot(options: BootOptions): void {
     }
   });
 
+  /*
+   * A component a drawn section mounts, or a file it imports, was saved
+   * (the stage's SECTION_SWAPPED, sent just ahead of Vite's update): its
+   * framework swaps it in place, and the drawing stays mounted with its
+   * state. What the page reads of the section off screen is read again
+   * once the update has applied: its states for the report, and its sheet,
+   * whose props the save may have changed. A section the same update loads
+   * again (`cawco:section`: a file nothing accepts) is read as it is shown;
+   * one the save broke waits for the save that mends it.
+   */
+  const swapPending = new Set<Section>();
+  window.addEventListener(SECTION_SWAPPED, (event) => {
+    for (const file of event.detail ?? []) {
+      const section = sectionOf(file);
+      if (section?.loaded) {
+        swapPending.add(section);
+      }
+    }
+  });
+  /** The sections a save swapped in place, read again off screen; a task after the update, when the words of a save that broke one, queued behind it in Vite's client, are heard. */
+  const readSwapped = async (swapped: Section[]) => {
+    await nextTask();
+    for (const section of swapped) {
+      if (!section.failure) {
+        mode?.swapped(section);
+        quietly(said(section));
+      }
+    }
+  };
+
   window.addEventListener("cawco:section", (event) => {
     const mod = event.detail;
     const section = sectionOf(mod?.SHEET.file ?? "");
     if (!section) {
       return;
     }
+    // Loaded again: it is read as it is shown, never as swapped too.
+    swapPending.delete(section);
     section.mod = mod;
     section.interactions.clear();
     section.probes.clear();
@@ -1711,8 +1746,8 @@ export function boot(options: BootOptions): void {
    * applies none of an update a module of which failed (its client calls
    * each accept with nothing), so what stood is no longer what the files
    * say. Its next save that compiles draws it again: the stage says so
-   * ({@link SECTION_MENDED}), and an edit inside the toolchain root also
-   * updates its own module (host.ts `hotUpdate`, `cawco:section`). A
+   * ({@link SECTION_MENDED}), and a save of its states file also loads
+   * its own module again (host.ts `hotUpdate`, `cawco:section`). A
    * section not yet drawn says its own load's failure.
    */
   const brokenAt = new Map<string, number>();
@@ -1791,6 +1826,11 @@ export function boot(options: BootOptions): void {
   });
   window.addEventListener("cawco:after-update", () => {
     mode?.updated();
+    if (swapPending.size > 0) {
+      const swapped = [...swapPending];
+      swapPending.clear();
+      quietly(readSwapped(swapped));
+    }
     dispatchEvent(new CustomEvent("cawco:hmr"));
     later();
   });

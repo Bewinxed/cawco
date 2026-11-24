@@ -21,6 +21,7 @@ import {
   type Scheme,
   SECTION_BROKEN,
   SECTION_MENDED,
+  SECTION_SWAPPED,
   SECTION_WRITTEN,
   type SectionPlan,
   type SectionSheet,
@@ -406,6 +407,7 @@ declare global {
     [SECTION_WRITTEN]: CustomEvent<string>;
     [SECTION_BROKEN]: CustomEvent<string[]>;
     [SECTION_MENDED]: CustomEvent<string[]>;
+    [SECTION_SWAPPED]: CustomEvent<string[]>;
   }
 }
 
@@ -452,9 +454,11 @@ export interface Mode {
   selected: (story: string | null) => void;
   /** A section's module loaded (or loaded again as it was edited): its stories are to be drawn. */
   shown: (section: Section) => void;
+  /** A file a section is drawn from was swapped in place by its framework's HMR: what it draws stays mounted, and what it reads off screen for the report is read again. */
+  swapped: (section: Section) => void;
   /** A story drawn in `body` threw after it mounted (an edit its framework applied in place, an effect): it says why in its own place until it is drawn again. */
   threw: (body: HTMLElement) => void;
-  /** Vite sent an update (any page's, this page's or not): what the mode lays out is laid out again. A section an edit reaches is read again as it is shown. */
+  /** Vite sent an update (any page's, this page's or not): what the mode lays out is laid out again. A section an edit reaches is read again as it is shown or swapped. */
   updated: () => void;
 }
 

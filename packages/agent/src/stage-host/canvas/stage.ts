@@ -126,6 +126,7 @@ import { stageRenderWords } from "@cawco/core/words/stage-render";
 import { differences } from "./diff";
 import { tellHolder } from "./embed";
 import { drawGuides, readLayout } from "./guides";
+import { stageScroll, stillPage } from "./held-scroll";
 import {
   drew,
   elementsUnread,
@@ -940,43 +941,25 @@ export function bootStage(page: Page): Mode {
     );
 
   /**
-   * The page's scroll held at `at` while `run` runs, and put there once it
-   * is done: a component that focuses a field or brings a row into view
-   * as it mounts scrolls the page under the stage (RoutineForm's Name
-   * label, the Long list's head stood above the stage's top).
-   */
-  async function holdScroll<T>(
-    at: { left: number; top: number },
-    run: () => Promise<T>
-  ): Promise<T> {
-    const scroller = document.scrollingElement ?? document.documentElement;
-    const pin = () => scroller.scrollTo({ ...at, behavior: "instant" });
-    addEventListener("scroll", pin);
-    try {
-      return await run();
-    } finally {
-      removeEventListener("scroll", pin);
-      pin();
-    }
-  }
-
-  /** Where the page's scroll stands now. */
-  const scrolled = () => {
-    const scroller = document.scrollingElement ?? document.documentElement;
-    return { left: scroller.scrollLeft, top: scroller.scrollTop };
-  };
-
-  /**
    * The component mounted afresh at `target`, at rest: its own arrivals
-   * landed. A drawing opened afresh stands at its top (`top`); one
-   * mounted anew in place of the state it was (a state set in place that
-   * differed, its states file edited) keeps the page's scroll.
+   * landed. A drawing opened afresh stands at its top (`top`), scrolled
+   * there once as it opens; one mounted anew in place of the state it was
+   * (a state set in place that differed, its states file edited) leaves
+   * the page's scroll to the person. While it mounts, the component's own
+   * attempts to scroll the page are stopped (held-scroll.ts): one that
+   * focuses a field or brings a row into view as it mounts would scroll
+   * the page under the stage.
    */
   async function open(target: Target, top = true): Promise<void> {
-    await holdScroll(
-      { left: scrolled().left, top: top ? 0 : scrolled().top },
-      () => mount(target)
-    );
+    if (top) {
+      stageScroll(() =>
+        (document.scrollingElement ?? document.documentElement).scrollTo({
+          top: 0,
+          behavior: "instant",
+        })
+      );
+    }
+    await stillPage(() => mount(target));
     inkInView();
   }
 
@@ -1086,12 +1069,6 @@ export function bootStage(page: Page): Mode {
     still: boolean
   ): Promise<{ clips: ClipRead[]; held: Held[] }> {
     const had = document.activeElement;
-    // Where he left the page's scroll: a play's press focuses a control,
-    // which scrolls it into view; the scroll is held there while it runs.
-    const scroller = document.scrollingElement ?? document.documentElement;
-    const left = { top: scroller.scrollTop, left: scroller.scrollLeft };
-    const pin = () => scroller.scrollTo({ ...left, behavior: "instant" });
-    addEventListener("scroll", pin);
     const t0 = performance.now();
     const seen = new Map<Animation, number>();
     const taken: Taken[] = [];
@@ -1144,7 +1121,8 @@ export function bootStage(page: Page): Mode {
     }
     requestAnimationFrame(watch);
     const starts = new Map<Animation, number>();
-    try {
+    // A play's press focuses a control, which would scroll it into view: the component's own scrolls of the page are stopped while it plays (held-scroll.ts).
+    const play = async () => {
       const ran = await readWithin(PLAY_MS, run);
       if (ran.kind === "unanswered") {
         throw new Error(`The play ran past ${PLAY_MS / 1000} s.`);
@@ -1166,11 +1144,12 @@ export function bootStage(page: Page): Mode {
           land(animation);
         }
       }
+    };
+    try {
+      await stillPage(play);
     } finally {
-      removeEventListener("scroll", pin);
       watching = false;
       giveBack(had);
-      scroller.scrollTo({ ...left, behavior: "instant" });
     }
     const clips = clipsOf(taken, starts);
     return {
@@ -1625,11 +1604,13 @@ export function bootStage(page: Page): Mode {
     const scroller = document.scrollingElement ?? document.documentElement;
     const width = ink.right - ink.left;
     const margin = Math.max(tokenPx(GUTTER), (across - width) / 2);
-    scroller.scrollTo({
-      left: Math.max(0, scroller.scrollLeft + ink.left - margin),
-      top: scroller.scrollTop,
-      behavior: "instant",
-    });
+    stageScroll(() =>
+      scroller.scrollTo({
+        left: Math.max(0, scroller.scrollLeft + ink.left - margin),
+        top: scroller.scrollTop,
+        behavior: "instant",
+      })
+    );
   }
 
   /** Motion plays: the panel's Reduce motion is off and the person's system asks for none less. */
@@ -1716,11 +1697,13 @@ export function bootStage(page: Page): Mode {
         )
       : 0;
     if (Math.abs(top) >= 1 || Math.abs(left) >= 1) {
-      (document.scrollingElement ?? document.documentElement).scrollBy({
-        top,
-        left,
-        behavior: scrolling(),
-      });
+      stageScroll(() =>
+        (document.scrollingElement ?? document.documentElement).scrollBy({
+          top,
+          left,
+          behavior: scrolling(),
+        })
+      );
     }
   }
 
@@ -2525,7 +2508,7 @@ export function bootStage(page: Page): Mode {
     // picture answers its resize a frame later, and a drawing still scaled
     // to the old window's room was refused as scaled.
     relay();
-    scrollTo({ top: 0, left: 0, behavior: "instant" });
+    stageScroll(() => scrollTo({ top: 0, left: 0, behavior: "instant" }));
     return lacks(key);
   }
 
@@ -2671,6 +2654,10 @@ export function bootStage(page: Page): Mode {
       }
       standFirst(section);
     },
+    // Swapped in place by its framework: the drawing and the state compared with stay mounted; the report's read of it is taken again.
+    swapped: (section) => {
+      page.quietly(readSection(section));
+    },
     failed: (section, failure: SectionFailure) => {
       failedCards.get(section.file)?.remove();
       const card = page.failedCard(section, failure);
@@ -2696,9 +2683,9 @@ export function bootStage(page: Page): Mode {
     // An update reads nothing again: Vite sends every page each update the
     // stage's graph takes, whatever page holds its modules (its client
     // fires `vite:afterUpdate` though it applied none), so an edit to any
-    // file of the project read every open canvas again. One a section's
-    // frames are drawn from updates that section's own module (host.ts
-    // `hotUpdate`), and it is read again as it is shown (`cawco:section`).
+    // file of the project read every open canvas again. A save of a file a
+    // section's frames are drawn from is read again as the section is shown
+    // (`cawco:section`) or swapped (host.ts `hotUpdate`, SECTION_SWAPPED).
     // A drawing whose story threw is mounted again: the save that broke it
     // may be fixed by this one, which its framework could not apply to a
     // story its boundary had taken down. One that throws again says so again.
@@ -3149,6 +3136,8 @@ function bootColumn(page: Page): Mode {
       }
     },
     shown,
+    // Each drawing is swapped in place by its framework, and its frames are read off the drawings as they stand.
+    swapped: () => undefined,
     failed,
     threw: (body) => {
       const one = drawn().find((each) => each.body === body);
