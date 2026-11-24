@@ -21,7 +21,7 @@
         /** In a view's bar: it shrinks, takes the bar's control corner, and
             clips the name it morphs while its width follows. */
         "in-bar":
-          "group-data-bar:min-w-0 group-data-bar:overflow-clip group-data-bar:concentric-xs",
+          "group-data-bar:min-w-0 group-data-bar:overflow-clip group-data-bar:sc-concentric-xs",
         /** A plain field: the small corner, the control's edge, field pads. */
         field: "rounded-sm px-space-3 py-space-2",
       },
@@ -70,7 +70,7 @@
   class={cn(
     // Its fill, edge and states are the control surface's (theme.css
     // `control`): it opens a list, so it steps under a press and never moves.
-    "control touch-hit rounded-sm",
+    "control hitbox pointer-coarse:hitbox:touch-area rounded-sm",
     "mark-line flex w-fit",
     "items-center justify-between gap-1.5 whitespace-nowrap",
     "[--hit-edge:1px]",

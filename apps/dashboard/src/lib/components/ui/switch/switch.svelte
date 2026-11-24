@@ -30,21 +30,21 @@
 <SwitchPrimitive.Root
   class={cn(
     "peer group/switch relative inline-flex shrink-0 items-center",
-    "rounded-pill border border-transparent",
+    "rounded-pill border border-transparent focus-halo",
     /* Its track's colour turns over --duration-base, and it takes the press
        every compact control takes (DESIGN.md, The Press Rule) where motion
-       is welcome. Its hit area is .pointer-hit's 24px on a pointer device
-       and .touch-hit's 44px on a touch screen; the drawn track and the
+       is welcome. Its hit area (`hitbox`) is `pointer-area`'s 24px on a pointer device
+       and `touch-area`'s 44px on a touch screen; the drawn track and the
        layout do not change. */
-    "touch-hit pointer-hit",
+    "hitbox pointer-coarse:hitbox:touch-area pointer-fine:hitbox:pointer-area",
     "[transition:background-color_var(--duration-base)_var(--ease-out),transform_var(--duration-base)_var(--ease-out)]",
     "motion-safe:active:not-data-[disabled]:[transform:scale(var(--press-scale))]",
-    "aria-invalid:border-red",
+    "aria-invalid:border-danger",
     "data-[size=default]:h-[calc(var(--spacing-icon-md)+2px)] data-[size=sm]:h-[calc(var(--spacing-icon-sm)+2px)]",
     "data-[size=default]:w-[calc(2*var(--spacing-icon-md))] data-[size=sm]:w-[calc(2*var(--spacing-icon-sm))]",
     "data-disabled:cursor-not-allowed data-checked:bg-accent",
     "data-unchecked:bg-tx-2 data-disabled:opacity-50",
-    "dark:aria-invalid:border-red/50",
+    "dark:aria-invalid:border-danger",
     switchVariants({ align }),
     className
   )}

@@ -17,7 +17,7 @@
 
 <CommandPrimitive.Root
   class={cn(
-    "flex size-full flex-col overflow-hidden rounded-sm bg-bg p-space-1 text-tx",
+    "flex size-full flex-col overflow-hidden sc-concentric-sm concentric-rows bg-bg p-space-1 text-tx",
     className
   )}
   data-slot="command"

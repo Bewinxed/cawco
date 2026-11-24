@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { HTMLButtonAttributes } from "svelte/elements";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { IconTick } from "#lib/icons.js";
   import { cn, type WithElementRef } from "#lib/utils.js";
   import { useOptionGroup } from "./state.svelte.js";
 
@@ -17,6 +18,12 @@
    * chip's own radius (one radius for every form of the option: chip, row
    * and tile), or a picture on a square. A click runs the option's own `onclick` first; one that prevents
    * the default (an "Other" that opens its field instead) is not a pick.
+   *
+   * In a `chips` or `list` group it leads with the mark of its kind, so the
+   * set reads as a choice before anything is picked (fuck-dropdowns' peer
+   * options, "a mark each"; HIG, Toggles: radio buttons and checkboxes): a
+   * circle for one pick, a square for several, empty at rest, filled in
+   * coral when chosen, with a dot or a tick on it. A tile is its own mark.
    */
   let {
     ref = $bindable(null),
@@ -83,5 +90,25 @@
   bind:this={ref}
   {...restProps}
 >
+  {#if group.layout !== "tiles"}
+    <span
+      aria-hidden="true"
+      class={[
+        "grid size-icon-md flex-none place-items-center border transition-[border-color,background-color] duration-(--duration-fast) ease-out",
+        group.multiple ? "rounded-xs" : "rounded-pill",
+        chosen ? "border-accent bg-accent text-on-accent" : "border-ui-3 bg-bg",
+      ]}
+      data-box
+      data-slot="option-mark"
+    >
+      {#if chosen}
+        {#if group.multiple}
+          <IconTick class="size-icon-sm" />
+        {:else}
+          <span class="size-1.5 rounded-pill bg-on-accent"></span>
+        {/if}
+      {/if}
+    </span>
+  {/if}
   {@render children?.()}
 </button>

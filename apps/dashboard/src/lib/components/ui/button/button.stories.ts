@@ -146,6 +146,7 @@ export const PressToPin = {
     flow: "icon",
     variant: "outline",
     icon: IconPin,
+    iconFrom: "end",
     label: "Pin to the rail",
   },
 };

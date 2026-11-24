@@ -77,13 +77,13 @@ interface Pair {
 
 const IDENTITY_HUES = [55, 85, 115, 145, 175, 205, 235, 265, 295, 330];
 const ACCOUNT_MARK: Record<AccountHue, string> = {
-  orange: "orange",
-  amber: "yellow",
-  green: "green",
-  cyan: "cyan",
-  blue: "blue",
-  violet: "purple",
-  rose: "magenta",
+  orange: "label-orange",
+  amber: "label-yellow",
+  green: "label-green",
+  cyan: "label-cyan",
+  blue: "label-blue",
+  violet: "label-purple",
+  rose: "label-magenta",
 };
 const CODE_INKS = [
   "code-syntax-foreground",
@@ -123,6 +123,7 @@ const S = {
   selected: "DESIGN.md, Colour: coral marks what is selected",
   inkSolid: "the tx fill (theme.css)",
   chips: "DESIGN.md, Colour: status hues (each chip 4.5:1)",
+  badges: "the kit's Badge: a status's ink on its own wash (badge.svelte)",
   syntax: "syntax colours (libraries.css + design.css diff washes)",
   strongEdge: "token tx-2 (theme.css, non-text 3:1 WCAG 2.2 SC 1.4.11)",
   inks: "the text inks (theme.css)",
@@ -139,7 +140,7 @@ const S = {
   ring: "DESIGN.md, Colour: the focus ring (non-text 3:1, WCAG 2.2 SC 1.4.11)",
   glyphs: "status roles (theme.css)",
   breath: "DESIGN.md, Motion: live marks breathe; token breath-floor",
-  nest: "token nest-ink ('about 2.3:1 to 2.5:1')",
+  nest: "token nest ('about 2.3:1 to 2.5:1')",
 };
 
 /** A ground: an interface grey is translucent, so it is measured over the page. */
@@ -147,9 +148,35 @@ const groundOf = (name: string): string[] =>
   name.startsWith("ui") ? ["bg", name] : [name];
 
 /** The inks that carry a status: fail, needs you, done, live. */
-const STATUS_INKS = ["red", "orange", "green", "cyan"];
+const STATUS_INKS = ["danger", "caution", "success", "live"];
 
 const PAIRS: Pair[] = [
+  // A badge: each status's ink on its own wash, laid on either ground.
+  ...[
+    ["danger", "danger-wash"],
+    ["caution", "caution-wash"],
+    ["success", "success-wash"],
+    ["live", "live-wash"],
+    ["accent", "accent-wash"],
+    ["tx", "ui"],
+  ].flatMap(([ink, wash]) =>
+    ["bg", "bg-2"].map((under) => ({
+      label: `${ink} on ${wash} over ${under}`,
+      fg: ink,
+      bg: [under, wash],
+      floor: TEXT,
+      source: S.badges,
+    }))
+  ),
+  // A secondary badge's muted words on its grey: on the page (on a recess a
+  // badge takes the raised look, badge.svelte `raised`).
+  {
+    label: "tx-2 on ui over bg",
+    fg: "tx-2",
+    bg: ["bg", "ui"],
+    floor: TEXT,
+    source: S.badges,
+  },
   // Text inks on the surfaces they stand on.
   ...["ink-strong", "ink-row", "ink-muted"].flatMap((ink) =>
     [
@@ -278,14 +305,14 @@ const PAIRS: Pair[] = [
   // Every breather at its floor, on every surface it stands on.
   ...[
     "tx-2",
-    "red",
-    "orange",
-    "yellow",
-    "green",
-    "cyan",
-    "blue",
-    "purple",
-    "magenta",
+    "danger",
+    "caution",
+    "success",
+    "live",
+    "label-yellow",
+    "label-blue",
+    "label-purple",
+    "label-magenta",
   ].flatMap((ink) =>
     ["bg", "bg-2"].map((bg) => ({
       label: `${ink} at breath-floor on ${bg}`,
@@ -299,9 +326,9 @@ const PAIRS: Pair[] = [
   // The chosen session tab's rim over bg-2, read against sunk and neighbours.
   ...(
     [
-      ["cyan", { light: 0.97, dark: 0.78 }],
-      ["orange", { light: 0.97, dark: 0.78 }],
-      ["red", { light: 0.97, dark: 0.78 }],
+      ["live", { light: 0.97, dark: 0.78 }],
+      ["caution", { light: 0.97, dark: 0.78 }],
+      ["danger", { light: 0.97, dark: 0.78 }],
       ["tx-2", { light: 0.86, dark: 0.62 }],
     ] as const
   ).flatMap(([ink, mix]) =>
@@ -381,14 +408,14 @@ const PAIRS: Pair[] = [
     fg: "light-dark(oklch(80.5% 0.016 80), oklch(48.8% 0.012 74))",
     bg: [
       "bg",
-      "light-dark(color-mix(in oklch, {color.red} 6%, transparent), color-mix(in oklch, {color.red} 10%, transparent))",
+      "light-dark(color-mix(in oklch, {color.danger} 6%, transparent), color-mix(in oklch, {color.danger} 10%, transparent))",
     ],
     floor: { light: 1.6, dark: 2 },
     source: S.spent,
   },
   {
-    label: "nest-ink on bg",
-    fg: "nest-ink",
+    label: "nest on bg",
+    fg: "nest",
     bg: ["bg"],
     floor: 2.3,
     source: S.nest,

@@ -1,8 +1,9 @@
 /**
- * The dashboard's design tokens as plain CSS: the variables declared in
+ * The dashboard's design tokens as plain CSS, in the `theme` layer: the
+ * palette (the raw steps theme.css declares in its `@layer theme` block
+ * before `@theme`, which the roles point at), the variables declared in
  * `apps/dashboard/src/lib/tokens/theme.css`'s `@theme static` block on
- * `:root`, and its scheme and pointer override blocks after them, in the
- * `theme` layer. Tailwind's `@theme` is no CSS a browser reads, so a build
+ * `:root`, and its scheme and pointer override blocks after them. Tailwind's `@theme` is no CSS a browser reads, so a build
  * or a check that wants the values as a stylesheet takes them from here.
  */
 // A text import: the bundler embeds theme.css, so this works where the
@@ -33,13 +34,17 @@ function bodyAt(css: string, open: number): string {
 export function themeVariablesCss(): string {
   const css = theme;
   const tokens = css.indexOf(STATIC);
-  const overrides = css.indexOf(OVERRIDES);
-  if (tokens < 0 || overrides < 0) {
-    throw new Error("theme.css: no @theme static block or @layer theme block");
+  const palette = css.lastIndexOf(OVERRIDES, tokens);
+  const overrides = css.indexOf(OVERRIDES, tokens);
+  if (tokens < 0 || palette < 0 || overrides < 0) {
+    throw new Error(
+      "theme.css: no palette, @theme static block or override block"
+    );
   }
+  const steps = bodyAt(css, palette + OVERRIDES.length - 1);
   const variables = bodyAt(css, tokens + STATIC.length - 1).replace(RESET, "");
   const after = bodyAt(css, overrides + OVERRIDES.length - 1);
-  return `@layer theme {\n  :root {${variables}  }\n${after}}\n`;
+  return `@layer theme {\n${steps}\n  :root {${variables}  }\n${after}}\n`;
 }
 
 /**

@@ -43,7 +43,7 @@
 <ToggleGroupPrimitive.Item
   class={cn(
     segmentedVariants({ compact }).segment(),
-    "press-tint focus-inset touch-hit shrink-0 disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    "press-tint focus-fill hitbox pointer-coarse:hitbox:touch-area shrink-0 disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     fit &&
       "grid shrink grid-cols-[minmax(0,var(--spacing-space-3))_max-content_minmax(0,var(--spacing-space-3))] gap-0 px-0",
     className

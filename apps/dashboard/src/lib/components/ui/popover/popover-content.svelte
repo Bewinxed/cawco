@@ -33,7 +33,7 @@
     "transition-opacity duration-(--duration-slow) ease-drawer [--kit-rise:0_calc(-1*var(--spacing-space-2))] side-left:[--kit-rise:var(--spacing-space-2)_0] side-right:[--kit-rise:calc(-1*var(--spacing-space-2))_0] side-top:[--kit-rise:0_var(--spacing-space-2)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--duration-base) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)]";
 
   export const floatingSurface = tv({
-    base: "surface rounded-lg concentric-in r-outer-lg r-inset-space-2 p-space-2 text-tx",
+    base: "surface concentric-rows rounded-lg p-space-2 text-tx",
     variants: {
       motion: {
         pop: popMotion,
@@ -134,7 +134,7 @@
     child: callerChild,
     children,
     /* Off, as the sheet has it: while this layer is mounted, bits-ui's
-       text-accent/20 lock writes `user-select` on <body> at every
+       text-selection lock writes `user-select` on <body> at every
        pointerdown inside it and again at pointerup, and each write restyles
        the whole page (3,700 elements, 35-50 ms in Chromium on a session with
        a component canvas open). */

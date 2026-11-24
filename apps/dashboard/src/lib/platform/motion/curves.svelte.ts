@@ -72,17 +72,6 @@ function bezier(
 /** `--ease-out`: entrances and exits. */
 export const easeOut = bezier(0.23, 1, 0.32, 1);
 /**
- * --ease-spring as a function, for a Svelte transition: Apple's spring with
- * no bounce over 1.25 of its response, normalised to end at 1 (theme.css
- * writes the same curve as linear() stops).
- */
-const SPRING_SPAN = 1.25;
-const springAt = (tau: number) =>
-  1 - Math.exp(-2 * Math.PI * tau) * (1 + 2 * Math.PI * tau);
-const SPRING_END = springAt(SPRING_SPAN);
-export const easeSpring = (t: number): number =>
-  t >= 1 ? 1 : springAt(t * SPRING_SPAN) / SPRING_END;
-/**
  * --ease-elastic as a function: Apple's spring at damping 0.7 (.bouncy),
  * about 5% past its mark before it settles, over 1.5 of its response,
  * normalised to end at 1 (theme.css writes the same curve as stops).

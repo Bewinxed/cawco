@@ -26,7 +26,7 @@
    * buttons, MediaPlayer) takes this recipe on that element.
    */
   export const barItemVariants = tv({
-    base: "group/bar-item relative inline-flex group-data-joined/tools:data-open:after:absolute group-data-joined/tools:data-open:after:inset-x-0 group-data-joined/tools:data-open:after:top-full group-data-joined/tools:data-open:after:h-space-1 group-data-joined/tools:data-open:after:bg-inherit group-data-joined/tools:data-open:after:pointer-events-none h-row-compact min-w-row-compact flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-tx transition-control touch-hit press-tint hover:not-data-lit:not-data-open:bg-ui data-open:not-data-lit:unhovered:bg-ui data-open:not-data-lit:hover:bg-ui-2 data-lit:bg-ui data-lit:text-accent [&>[data-slot=bar-symbol]]:size-4.5 [&>[data-slot=bar-symbol]]:flex-none",
+    base: "group/bar-item relative inline-flex group-data-joined/tools:data-open:after:absolute group-data-joined/tools:data-open:after:inset-x-0 group-data-joined/tools:data-open:after:top-full group-data-joined/tools:data-open:after:h-space-1 group-data-joined/tools:data-open:after:bg-inherit group-data-joined/tools:data-open:after:pointer-events-none h-row-compact min-w-row-compact flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-tx transition-control hitbox pointer-coarse:hitbox:touch-area press-tint hover:not-data-lit:not-data-open:bg-ui data-open:not-data-lit:unhovered:bg-ui data-open:not-data-lit:hover:bg-ui-2 data-lit:bg-ui data-lit:text-accent [&>[data-slot=bar-symbol]]:size-4.5 [&>[data-slot=bar-symbol]]:flex-none",
     variants: {
       /** What it holds: a symbol, a title's words and chevron (a bar's title as a control), an action's words, or Caw's head. */
       form: {
@@ -58,8 +58,8 @@
       /** Its symbol's ink, said of what it stands for. */
       tone: {
         muted: "[&>[data-slot=bar-symbol]]:text-tx-2",
-        attn: "[&>[data-slot=bar-symbol]]:text-orange",
-        fail: "[&>[data-slot=bar-symbol]]:text-red",
+        attn: "[&>[data-slot=bar-symbol]]:text-caution",
+        fail: "[&>[data-slot=bar-symbol]]:text-danger",
       },
       /** Drawn only from the phone breakpoint up (`wide`), or only on the desk's glass, gone from the phone's (`desk`: the shell container's desk line). */
       layout: {

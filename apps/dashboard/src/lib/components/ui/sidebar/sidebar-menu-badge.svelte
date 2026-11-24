@@ -10,7 +10,7 @@
     variants: {
       tone: {
         row: "text-tx peer-data-active/menu-button:text-accent",
-        live: "bg-bg-2 text-cyan data-blocked:bg-bg-2 data-blocked:text-orange",
+        live: "bg-bg-2 text-live data-blocked:bg-bg-2 data-blocked:text-caution",
       },
     },
     defaultVariants: { tone: "row" },

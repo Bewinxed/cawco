@@ -65,19 +65,19 @@
 <CheckboxPrimitive.Root
   class={cn(
     "peer relative flex size-icon-md shrink-0 items-center",
-    "justify-center rounded-xs border",
+    "justify-center rounded-xs border focus-halo",
     /* Drawn at 16px: its hit area reaches 44px under a finger and 24px
        under a fine pointer (DESIGN.md, The 44 Touch Rule, The 24 Pointer
        Rule). */
-    "touch-hit pointer-hit border-tx-2 [--hit-edge:1px]",
+    "hitbox pointer-coarse:hitbox:touch-area pointer-fine:hitbox:pointer-area border-tx-2 [--hit-edge:1px]",
     "disabled:cursor-not-allowed disabled:opacity-50",
     "group-data-[disabled=true]/field:opacity-50",
-    "aria-invalid:border-red",
+    "aria-invalid:border-danger",
     "aria-invalid:aria-checked:border-accent",
     "data-checked:border-accent data-checked:bg-accent",
-    "data-checked:text-on-accent dark:not-data-checked:bg-ui-2/30",
+    "data-checked:text-on-accent dark:not-data-checked:bg-ui",
     "dark:data-checked:bg-accent",
-    "dark:aria-invalid:border-red/50",
+    "dark:aria-invalid:border-danger",
     checkboxVariants({ reveal }),
     className
   )}

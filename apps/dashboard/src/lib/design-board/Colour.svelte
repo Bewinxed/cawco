@@ -1,23 +1,36 @@
 <script lang="ts">
   /**
    * Colour in use: each base role doing its job (a ground under text, an
-   * edge round a box, text at its three strengths), then the inks as the
-   * product wears them (status badges, a line of code) and Caw coral on the
-   * one act. Every piece is a real kit part or the role's own utility.
+   * edge round a box, text at its three strengths), then the statuses as the
+   * product wears them, the labels a person picks, a line of code in the
+   * house code theme, and Caw coral on the one act. Every piece is a real kit
+   * part or the role's own utility; every colour is a role, pointing at the
+   * palette (theme.css).
    */
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
 
-  /** The eight inks, each with what it means where it means something. */
-  const INKS = [
-    { role: "red", class: "text-red", use: "Failed" },
-    { role: "orange", class: "text-orange", use: "Needs you" },
-    { role: "yellow", class: "text-yellow", use: "Constants" },
-    { role: "green", class: "text-green", use: "Done" },
-    { role: "cyan", class: "text-cyan", use: "Live" },
-    { role: "blue", class: "text-blue", use: "Names" },
-    { role: "purple", class: "text-purple", use: "Numbers" },
-    { role: "magenta", class: "text-magenta", use: "Keywords" },
+  /** The statuses: what a thing's state means. */
+  const STATUSES = [
+    {
+      role: "danger",
+      class: "text-danger",
+      use: "Failed, an error, a destructive act",
+    },
+    { role: "caution", class: "text-caution", use: "Needs you, asks, warns" },
+    { role: "success", class: "text-success", use: "Done" },
+    { role: "live", class: "text-live", use: "Working" },
+  ];
+  /** The labels: a hue picked to mark a thing (an account, a column, a project). */
+  const LABELS = [
+    { role: "label-red", class: "bg-label-red" },
+    { role: "label-orange", class: "bg-label-orange" },
+    { role: "label-yellow", class: "bg-label-yellow" },
+    { role: "label-green", class: "bg-label-green" },
+    { role: "label-cyan", class: "bg-label-cyan" },
+    { role: "label-blue", class: "bg-label-blue" },
+    { role: "label-purple", class: "bg-label-purple" },
+    { role: "label-magenta", class: "bg-label-magenta" },
   ];
 </script>
 
@@ -63,29 +76,45 @@
   </figure>
 
   <figure class="flex min-w-0 flex-col gap-space-2">
-    <figcaption class="text-tx-2 type-meta">Inks and Caw coral</figcaption>
+    <figcaption class="text-tx-2 type-meta">
+      Statuses, labels, code and Caw coral
+    </figcaption>
     <div class="flex flex-wrap items-center gap-space-2">
       <Badge variant="fail"><span>Failed</span></Badge>
       <Badge variant="attn"><span>Needs you</span></Badge>
       <Badge variant="done"><span>Done</span></Badge>
       <Badge variant="live"><span>Live</span></Badge>
     </div>
-    <pre class="overflow-x-auto rounded-lg bg-bg-2 p-space-3 type-code"><span
-        class="text-magenta">const</span
-      > <span class="text-blue">machine</span> = <span class="text-cyan"
-        >"obelisk-of-light"</span
-      >;
-<span class="text-magenta">await</span> <span class="text-blue">deploy</span
-      >(<span class="text-blue">machine</span>, {"{"} <span class="text-blue"
-        >retries</span
-      >: <span class="text-purple">3</span>, <span class="text-blue">dry</span
-      >: <span class="text-yellow">false</span> {"}"});
-<span class="text-tx-3">// Fails loudly in red, asks in orange.</span></pre>
-    <ul class="flex flex-wrap gap-x-space-4 gap-y-space-1">
-      {#each INKS as ink (ink.role)}
-        <li class={["type-meta", ink.class]}>{ink.role} · {ink.use}</li>
+    <ul class="flex flex-col gap-space-1">
+      {#each STATUSES as status (status.role)}
+        <li class={["type-meta", status.class]}>
+          {status.role} · {status.use}
+        </li>
       {/each}
     </ul>
+    <ul class="flex flex-wrap gap-space-2" aria-label="Labels">
+      {#each LABELS as label (label.role)}
+        <li class="flex items-center gap-space-1 text-tx-2 type-meta">
+          <span class={["size-space-3 rounded-xs", label.class]}></span>
+          {label.role}
+        </li>
+      {/each}
+    </ul>
+    <pre
+      class="overflow-x-auto rounded-lg bg-(--code-syntax-background) p-space-3 text-(--code-syntax-foreground) type-code"><span
+        class="text-(--code-syntax-token-keyword)">const</span
+      > machine = <span class="text-(--code-syntax-token-string)"
+        >"obelisk-of-light"</span
+      >;
+<span class="text-(--code-syntax-token-keyword)">await</span> <span
+        class="text-(--code-syntax-token-function)">deploy</span
+      >(machine, {"{"} retries: <span
+        class="text-(--code-syntax-token-constant)">3</span
+      >, dry: <span class="text-(--code-syntax-token-constant)">false</span
+      > {"}"});
+<span class="text-(--code-syntax-token-comment)"
+        >// The house code theme, as every code block draws it.</span
+      ></pre>
     <div class="flex items-center gap-space-3">
       <Button>Deploy</Button>
       <span class="text-tx-2 type-meta">accent · the one act on a view</span>

@@ -60,7 +60,12 @@
     reveal,
   } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
-  import { glyphIn, glyphOut } from "#lib/platform/motion/glyph.js";
+  import {
+    type GlyphParams,
+    type GlyphSide,
+    glyphIn,
+    glyphOut,
+  } from "#lib/platform/motion/glyph.js";
 
   let {
     label,
@@ -278,7 +283,7 @@
    * stacks every child in one grid cell (`icon-swap`): the leaving and the
    * arriving glyph share the cell and nothing beside them moves.
    */
-  const shows = $derived.by(() => {
+  const showing = $derived.by(() => {
     if (ringShown) {
       return "ring";
     }
@@ -286,6 +291,31 @@
       return phase === "pending" ? "spinner" : phase;
     }
     return Icon === undefined ? "none" : "icon";
+  });
+  /**
+   * Each change of what the slot shows, with what it showed before, read as
+   * the swap's transitions start: a glyph coming into an empty slot, or
+   * leaving it empty, moves alone, from and to its side (glyph.ts).
+   */
+  let last = "none";
+  const turn = $derived.by(() => {
+    const to = showing;
+    const from = last;
+    last = to;
+    return { from, to };
+  });
+  const shows = $derived(turn.to);
+  /** The spinner stopping to fill as a ring is one glyph changing, in place. */
+  const inPlace = $derived(turn.from === "spinner" && turn.to === "ring");
+  const arrival = $derived<GlyphParams>({
+    alone: turn.from === "none",
+    side: turn.to === "icon" ? iconFrom : "start",
+    inPlace,
+  });
+  const departure = $derived<GlyphParams>({
+    alone: turn.to === "none",
+    side: turn.from === "icon" ? iconFrom : "start",
+    inPlace,
   });
 
   let spinnerCell = $state<HTMLElement | null>(null);
@@ -359,7 +389,7 @@
        a parent block mounts), and an empty slot is an empty span that
        still fades the last glyph out. -->
   {#key shows}
-    <span in:glyphIn out:glyphOut>
+    <span in:glyphIn={arrival} out:glyphOut={departure}>
       {#if shows === "icon" && Icon}
         <Icon class="size-(--btn-icon)" />
       {:else if shows === "spinner"}
@@ -403,7 +433,7 @@
           data-on="true"
         />
       {:else if shows === "failed"}
-        <IconClose class="size-(--btn-icon) text-red" data-slot="cross" />
+        <IconClose class="size-(--btn-icon) text-danger" data-slot="cross" />
       {/if}
     </span>
   {/key}
@@ -488,7 +518,7 @@
     >
     {#if reason}
       <span
-        class="type-meta block max-w-ch-32 text-red whitespace-normal wrap-anywhere"
+        class="type-meta block max-w-ch-32 text-danger whitespace-normal wrap-anywhere"
         data-reason
         role="alert"
         transition:unfold>{reason}</span

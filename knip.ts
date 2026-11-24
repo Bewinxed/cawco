@@ -122,6 +122,7 @@ export default {
         "scripts/codemods/theme-prune.ts",
         "scripts/codemods/flexoki-roles.ts",
         "scripts/codemods/fields-to-control.ts",
+        "scripts/codemods/ink-roles.ts",
         "scripts/codemods/theme-unify.ts",
         "scripts/codemods/theme-audit.ts",
         "scripts/codemods/distill-design-system.ts",

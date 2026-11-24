@@ -148,7 +148,7 @@
   {...attributes}
   data-slot="tools"
   class={[
-    "group/tools relative isolate flex items-center gap-space-1 p-space-1 rounded-pill concentric-row r-inset-space-1 r-join-xs hit-gap-x-space-1 coarse:gap-space-4 coarse:hit-gap-x-space-4 before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:ring before:ring-ui before:bg-bg/72 before:shadow-sm before:glass-backdrop before:pointer-events-none contrast-more:before:ring-tx-2 contrast-more:before:bg-bg contrast-more:before:backdrop-filter-none reduced-transparency:before:ring-tx-2 reduced-transparency:before:bg-bg reduced-transparency:before:backdrop-filter-none",
+    "group/tools relative isolate flex items-center gap-space-1 p-space-1 rounded-pill concentric-row r-inset-space-1 r-join-xs hit-gap-x-space-1 coarse:gap-space-4 coarse:hit-gap-x-space-4 before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:ring before:ring-ui before:bg-veil before:shadow-sm before:glass-backdrop before:pointer-events-none contrast-more:before:ring-tx-2 contrast-more:before:bg-bg contrast-more:before:backdrop-filter-none reduced-transparency:before:ring-tx-2 reduced-transparency:before:bg-bg reduced-transparency:before:backdrop-filter-none",
     // A title's words may take two lines on a phone (ArtifactMenu): its
     // ground grows with them.
     form === "title" ? "before:hidden min-h-control-md" : "h-control-md",

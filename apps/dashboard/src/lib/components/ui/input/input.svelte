@@ -123,7 +123,7 @@
         /**
          * The field's own touch area (DESIGN.md, The 44 Touch Rule): an
          * `<input>` draws no `::after`, so the field stands in a box of its
-         * own size that carries it, under the field (`hit-under`: the field
+         * own size that carries it, under the field (`hitbox`, whose area stands under its content: the field
          * takes its own presses, its caret and its words' selection), and
          * a press on the area round it focuses the field. Off where a frame round the field is the control and
          * carries the area (InputGroup).

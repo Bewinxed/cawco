@@ -105,15 +105,41 @@
     /^--(?:color|font-weight|font|text|leading|tracking|spacing|radius|shadow|duration|ease|breakpoint|container|layer)-/u;
 
   const BEZIER = /cubic-bezier\(([^)]+)\)/u;
-  /** A cubic-bezier's curve as an SVG path in a 100 by 100 box, y up. */
+  const LINEAR = /linear\(([^)]+)\)/u;
+  const PERCENT = /%$/u;
+  const SPACES = /\s+/u;
+  /**
+   * A curve's graph as an SVG path in a 100 by 100 box, y up: a
+   * cubic-bezier's, or a linear()'s stops (a spring's, an elastic's, a
+   * fade's), each at its given place or spread evenly as CSS spreads them.
+   */
   function curve(value: string | undefined): string | null {
-    const match = value?.match(BEZIER);
-    if (!match) {
+    const bezier = value?.match(BEZIER);
+    if (bezier) {
+      const [x1, y1, x2, y2] = bezier[1].split(",").map(Number);
+      return `M0 100 C${x1 * 100} ${100 - y1 * 100} ${x2 * 100} ${100 - y2 * 100} 100 0`;
+    }
+    const stops = value?.match(LINEAR)?.[1].split(",");
+    if (!stops || stops.length < 2) {
       return null;
     }
-    const [x1, y1, x2, y2] = match[1].split(",").map(Number);
-    return `M0 100 C${x1 * 100} ${100 - y1 * 100} ${x2 * 100} ${100 - y2 * 100} 100 0`;
+    return stops
+      .map((stop, at) => {
+        const [output, place] = stop.trim().split(SPACES);
+        const x = place
+          ? Number(place.replace(PERCENT, ""))
+          : (at / (stops.length - 1)) * 100;
+        return `${at === 0 ? "M" : "L"}${x.toFixed(2)} ${(100 - Number(output) * 100).toFixed(2)}`;
+      })
+      .join(" ");
   }
+
+  /**
+   * A duration's run, as the timing of a bar that fills over the duration
+   * and holds for a loop: linear to 1 at the duration's share of the run.
+   */
+  const holdFor = (ms: number, loop: number) =>
+    `linear(0, 1 ${((ms / (ms + loop)) * 100).toFixed(2)}%, 1)`;
 
   /** The board's own names for a pair's faces (type-pairs.css). */
   const PAIR_PREFIX = /^Pair /u;
@@ -320,10 +346,14 @@
                   {short(name)}
                   <span class="text-tx-2 tabular-nums">{ms}ms</span>
                 </span>
-                <span class="min-w-0 flex-1 overflow-clip">
+                <span class="h-2 min-w-0 flex-1 overflow-clip rounded-xs bg-ui">
                   <span
-                    class="block h-2 w-(--bar) max-w-full rounded-xs bg-cyan"
-                    style:--bar={`${Math.min(100, (ms / 1000) * 100)}%`}
+                    class="block h-full w-full origin-left rounded-xs bg-live motion-safe:animate-demo-fill"
+                    style:--demo-d={`var(${name})`}
+                    style:--demo-hold={holdFor(
+                      ms,
+                      millis(readings.get("--duration-loop"))
+                    )}
                   ></span>
                 </span>
               </li>
@@ -339,22 +369,49 @@
                   data-box
                   {@attach probe(shelf.kind, name)}
                 >
-                  {#if path}
-                    <svg
-                      class="size-full overflow-visible text-accent"
+                  <span class="relative block size-full">
+                    {#if path}
+                      <svg
+                        class="size-full overflow-visible text-accent"
+                        aria-hidden="true"
+                        viewBox="0 0 100 100"
+                      >
+                        <path
+                          d={path}
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          vector-effect="non-scaling-stroke"
+                        />
+                      </svg>
+                    {/if}
+                    <!-- Its dot runs the graph: across on the clock, up on the curve. -->
+                    <span
                       aria-hidden="true"
-                      viewBox="0 0 100 100"
+                      class="pointer-events-none absolute inset-0 motion-safe:animate-demo-across"
+                      style:--demo-ease={`var(${name})`}
+                      ><span
+                        class="absolute inset-0 motion-safe:animate-demo-up"
+                        ><span
+                          class="absolute bottom-0 left-0 size-2 -translate-x-1/2 translate-y-1/2 rounded-pill bg-tx"
+                        ></span></span
+                      ></span
                     >
-                      <path
-                        d={path}
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        vector-effect="non-scaling-stroke"
-                      />
-                    </svg>
-                  {/if}
+                  </span>
                 </span>
+                <!-- And a thumb slides its track on the curve, as a control moves. -->
+                <span
+                  aria-hidden="true"
+                  class="relative block h-1 w-16 rounded-pill bg-ui"
+                  data-box
+                  style:--demo-ease={`var(${name})`}
+                  ><span
+                    class="absolute inset-y-0 left-0 w-full motion-safe:animate-demo-slide"
+                    ><span
+                      class="absolute top-1/2 left-0 size-2 -translate-x-1/2 -translate-y-1/2 rounded-pill bg-accent"
+                    ></span></span
+                  ></span
+                >
                 <span
                   class="overflow-clip text-ellipsis whitespace-nowrap type-meta"
                   >{short(name)}</span

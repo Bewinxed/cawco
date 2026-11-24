@@ -9,7 +9,7 @@
    * the head's own title (SideSurface's `title`; DESIGN.md, The Role, Not
    * Size Rule, The Mark Line Rule), its padding the title's inset there,
    * its corner concentric with the card whose head's corner it stands in
-   * (The Concentric Rule; `concentric-sm` where no card declares one).
+   * (The Concentric Rule; `sc-concentric-sm`, the small corner where no card sets one).
    * `count`: a glyph and the count it holds on one line (a pane head's
    * More: menu-dots, then the counted control's own glyph and its count),
    * at `space-2` in so the three stand where Send keeps its room. `look`: the trigger by its role.
@@ -22,12 +22,12 @@
     variants: {
       face: {
         title:
-          "mark-line type-label min-w-0 gap-space-1 px-space-2 text-tx concentric-sm",
+          "mark-line type-label min-w-0 gap-space-1 px-space-2 text-tx sc-concentric-sm",
         count: "mark-line px-space-2",
       },
       look: {
         attach:
-          "control hit-edge-hair grid size-control-md place-items-center concentric-xs text-tx-2 hover:text-tx",
+          "control hit-edge-hair grid size-control-md place-items-center sc-concentric-xs text-tx-2 hover:text-tx",
       },
     },
   });
@@ -106,7 +106,7 @@
 
 <DropdownMenuPrimitive.Trigger
   class={cn(
-    "touch-hit",
+    "hitbox pointer-coarse:hitbox:touch-area",
     (variant || size) && buttonVariants({ variant, size }),
     dropdownMenuTriggerVariants({ face, look }),
     className

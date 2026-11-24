@@ -8,8 +8,8 @@ import { tv } from "#lib/utils.js";
  * at the base blur) so the page shows faintly under it; the opaque raised
  * surface where transparency is reduced (DESIGN.md, Materials). Its inset
  * and its row are its caller's. Its controls are concentric with it
- * (design.css `concentric-in`): its 12px less their inset and its edge.
+ * (tailwind-super-corners' `sc-concentric-*`): its 12px less their inset.
  */
 export const dockShellVariants = tv({
-  base: "reduced-transparency:backdrop-filter-none rounded-lg bg-bg/72 shadow-sm ring ring-ui-2 backdrop-blur-glass backdrop-saturate-160 concentric-in r-inset-space-2 r-outer-lg reduced-transparency:bg-bg",
+  base: "reduced-transparency:backdrop-filter-none rounded-lg bg-veil shadow-sm ring ring-ui-2 backdrop-blur-glass backdrop-saturate-160 reduced-transparency:bg-bg",
 });

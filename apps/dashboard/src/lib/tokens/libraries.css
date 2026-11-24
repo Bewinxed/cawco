@@ -7,31 +7,32 @@
   :root {
     /* The house code theme (core code-theme.ts): each role its Highlights
        palette names (the --code-syntax- prefix), on the syntax token
-       DESIGN.md gives it. On the root because every code surface reads them:
+       DESIGN.md gives it, drawn from the palette's hues (theme.css) at the
+       lightness a syntax token takes. On the root because every code surface reads them:
        a transcript's well, and a diff, whose shadow root inherits them. */
     --code-syntax-foreground: var(--color-tx);
     --code-syntax-background: var(--color-bg-2);
     --code-syntax-token-keyword: light-dark(
-      oklch(from var(--color-blue) 44% c h),
-      oklch(from var(--color-blue) 75% c h)
+      oklch(from var(--blue-47) 44% c h),
+      oklch(from var(--blue-69) 75% c h)
     );
     --code-syntax-token-function: light-dark(
-      oklch(from var(--color-cyan) 44% c h),
-      oklch(from var(--color-cyan) 75% c h)
+      oklch(from var(--cyan-50) 44% c h),
+      oklch(from var(--cyan-70) 75% c h)
     );
     --code-syntax-token-link: var(--code-syntax-token-function);
     --code-syntax-token-string: light-dark(
-      oklch(from var(--color-yellow) 43% c h),
-      oklch(from var(--color-yellow) 75% c h)
+      oklch(from var(--yellow-50) 43% c h),
+      oklch(from var(--yellow-72) 75% c h)
     );
     --code-syntax-token-string-expression: var(--code-syntax-token-string);
     --code-syntax-token-constant: light-dark(
-      oklch(from var(--color-orange) 44% c h),
-      oklch(from var(--color-orange) 75% c h)
+      oklch(from var(--orange-52) 44% c h),
+      oklch(from var(--orange-70) 75% c h)
     );
     --code-syntax-token-comment: light-dark(
-      oklch(from var(--color-tx-2) 43% c h),
-      oklch(from var(--color-tx-2) 72% c h)
+      oklch(from var(--neutral-50) 43% c h),
+      oklch(from var(--neutral-69) 72% c h)
     );
     --code-syntax-token-parameter: var(--color-tx);
     --code-syntax-token-punctuation: var(--color-tx);
@@ -60,8 +61,8 @@
     --pele-surface-alt: var(--color-bg-2);
     --pele-border: var(--color-ui-2);
     --pele-accent: var(--color-tx);
-    --pele-critical: var(--color-red);
-    --pele-error: var(--color-red);
+    --pele-critical: var(--color-danger);
+    --pele-error: var(--color-danger);
     --pele-font: var(--font-sans);
     --pele-font-mono: var(--font-mono);
     --pele-title-weight: var(--font-weight-medium);
@@ -69,9 +70,9 @@
     --pele-bold-weight: var(--font-weight-medium);
     --pele-radius: var(--radius-sm);
     --pele-series-1: var(--color-tx);
-    --pele-series-2: var(--color-cyan);
-    --pele-series-3: var(--color-blue);
-    --pele-series-4: var(--color-orange);
+    --pele-series-2: var(--color-label-cyan);
+    --pele-series-3: var(--color-label-blue);
+    --pele-series-4: var(--color-label-orange);
     --pele-series-5: var(--color-tx-2);
     --pele-series-6: var(--color-accent);
     --pele-series-7: var(--color-tx-2);

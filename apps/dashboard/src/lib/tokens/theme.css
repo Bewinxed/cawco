@@ -2,6 +2,69 @@
    `static` emits every custom property so scheme and pointer overrides below
    reach every utility. */
 
+/* The palette: the raw colour steps, named by hue and by their OKLCH
+   lightness (red-47 is red at 47%), and meaning nothing. They stand outside
+   @theme, so Tailwind makes no utility of them and nothing in a component
+   can name one: a component names a role from @theme below, and each role
+   points at the steps it takes in light and in dark (two layers, owner's
+   pick 2026-11-24, after Emil Kowalski's post on primitives and semantic
+   tokens). By day the neutrals are Flexoki's lightness steps with its
+   paper's yellow taken out; by night they are Flexoki's dark base as it
+   ships (stephango.com/flexoki, MIT); the hues are Flexoki's, each moved just
+   past what 4.5:1 text needs on both grounds; coral is Caw's. */
+@layer theme {
+  :root,
+  :host {
+    --neutral-100: oklch(100% 0 0);
+    --neutral-93: oklch(93.4% 0 0);
+    --neutral-99: oklch(99% 0 0);
+    --neutral-95: oklch(95.4% 0 0);
+    --neutral-85: oklch(84.6% 0 0);
+    --neutral-77: oklch(77.2% 0 0);
+    --neutral-70: oklch(70.5% 0 0);
+    --neutral-69: oklch(69% 0 0);
+    --neutral-50: oklch(50% 0 0);
+    --neutral-45: oklch(45.3% 0 0);
+    --neutral-44: oklch(44.5% 0 0);
+    --neutral-22: oklch(22.3% 0 0);
+    --neutral-30: oklch(29.5% 0 0);
+    --neutral-18: oklch(18.4% 0 0);
+    --neutral-17: oklch(17% 0 0);
+    --neutral-0: oklch(0% 0 0);
+
+    /* Flexoki's dark base, as it ships (its slight warmth kept: owner,
+       2026-11-24, "the dark tone of flexoki shouldn't be changed"). */
+    --base-black: #100f0f;
+    --base-950: #1c1b1a;
+    --base-700: #575653;
+    --base-300: #b7b5ac;
+    --base-200: #cecdc3;
+
+    --red-47: oklch(47% 0.165 27.8);
+    --red-68: oklch(68% 0.169 28.4);
+    --orange-52: oklch(52% 0.152 45);
+    --orange-70: oklch(70% 0.154 49.3);
+    --yellow-50: oklch(50% 0.12 85.8);
+    --yellow-72: oklch(72% 0.146 87.5);
+    --green-48: oklch(48% 0.13 122.9);
+    --green-72: oklch(72% 0.124 119.4);
+    --cyan-50: oklch(50.5% 0.086 186.7);
+    --cyan-70: oklch(70% 0.1 186.6);
+    --blue-47: oklch(47% 0.131 254.8);
+    --blue-69: oklch(69% 0.11 247);
+    --purple-45: oklch(45% 0.145 294.8);
+    --purple-68: oklch(68% 0.11 291);
+    --magenta-48: oklch(48% 0.161 349.8);
+    --magenta-70: oklch(70% 0.156 350.5);
+    --coral-51: oklch(51% 0.17 33);
+    --coral-70: oklch(70% 0.15 36);
+
+    --pigment-spark: #f2d36b;
+    --pigment-paper: #f4f0e6;
+    --pigment-crow-ink: #171715;
+  }
+}
+
 @theme static {
   --*: initial;
 
@@ -89,41 +152,185 @@
   --spacing-measure: 72ch;
 
   /* =========================================================================
-     Colour — Flexoki's model on a neutral base (stephango.com/flexoki, MIT):
-     8 base roles, Flexoki's 8 inks, and Caw coral. Light, then dark.
+     Colour — the roles, each pointing at the palette's steps (above, outside
+     @theme) for light, then dark: Flexoki's model on a neutral base
+     (stephango.com/flexoki, MIT): 8 base roles, 4 statuses, 8 labels, and
+     Caw coral.
      ========================================================================= */
   /* Base (8): two grounds, three interface greys, three text greys. The
      interface greys are text at low opacity, so an edge or a hover reads
      the same on every ground under it: a surface's level, coral, a status
      (joshpuckett, 2022: "use opacity instead of a solid color").
-     Flexoki's lightness steps with the warmth taken out; muted text
-     moved to hold 4.5:1 on every ground. */
-  --color-bg: light-dark(oklch(99% 0 0), oklch(17% 0 0));
-  --color-bg-2: light-dark(oklch(95.4% 0 0), oklch(22.3% 0 0));
-  --color-ui: light-dark(oklch(17% 0 0 / 0.09), oklch(84.6% 0 0 / 0.15));
-  --color-ui-2: light-dark(oklch(17% 0 0 / 0.15), oklch(84.6% 0 0 / 0.21));
-  --color-ui-3: light-dark(oklch(17% 0 0 / 0.18), oklch(84.6% 0 0 / 0.29));
-  --color-tx-3: light-dark(oklch(77.2% 0 0), oklch(45.3% 0 0));
-  --color-tx-2: light-dark(oklch(50% 0 0), oklch(69% 0 0));
-  --color-tx: light-dark(oklch(17% 0 0), oklch(84.6% 0 0));
-  /* Inks (8): Flexoki's hues, their lightness moved just past what
-     4.5:1 text needs on both grounds. Red fails, orange asks,
-     green is done, cyan is live; all eight mark accounts, charts and code. */
-  --color-red: light-dark(oklch(47% 0.165 27.8), oklch(68% 0.169 28.4));
-  --color-orange: light-dark(oklch(52% 0.152 45), oklch(70% 0.154 49.3));
-  --color-yellow: light-dark(oklch(50% 0.12 85.8), oklch(72% 0.146 87.5));
-  --color-green: light-dark(oklch(48% 0.13 122.9), oklch(72% 0.124 119.4));
-  --color-cyan: light-dark(oklch(50.5% 0.086 186.7), oklch(70% 0.1 186.6));
-  --color-blue: light-dark(oklch(47% 0.131 254.8), oklch(69% 0.11 247));
-  --color-purple: light-dark(oklch(45% 0.145 294.8), oklch(68% 0.11 291));
-  --color-magenta: light-dark(oklch(48% 0.161 349.8), oklch(70% 0.156 350.5));
+     By day Flexoki's lightness steps with the warmth taken out, muted text
+     moved to hold 4.5:1 on every ground; by night Flexoki's dark base,
+     muted text on its 300 (9.3:1 on the page: owner's pick, 2026-11-24, as
+     its 500 read barely at 12px); the interface greys its warm text at the
+     share that lands on its 900, 850 and 800 over the page. */
+  --color-bg: light-dark(var(--neutral-99), var(--base-black));
+  --color-bg-2: light-dark(var(--neutral-95), var(--base-950));
+  --color-ui: light-dark(
+    oklch(from var(--neutral-17) l c h / 0.09),
+    oklch(from var(--base-200) l c h / 0.126)
+  );
+  --color-ui-2: light-dark(
+    oklch(from var(--neutral-17) l c h / 0.15),
+    oklch(from var(--base-200) l c h / 0.189)
+  );
+  --color-ui-3: light-dark(
+    oklch(from var(--neutral-17) l c h / 0.18),
+    oklch(from var(--base-200) l c h / 0.253)
+  );
+  --color-tx-3: light-dark(var(--neutral-77), var(--base-700));
+  --color-tx-2: light-dark(var(--neutral-50), var(--base-300));
+  --color-tx: light-dark(var(--neutral-17), var(--base-200));
+  /* Statuses (4): what a thing's state means, each one of Flexoki's hues
+     (the palette above): danger fails, errs or destroys; caution needs
+     you, asks or warns; success is done; live is working. */
+  --color-danger: light-dark(var(--red-47), var(--red-68));
+  --color-caution: light-dark(var(--orange-52), var(--orange-70));
+  --color-success: light-dark(var(--green-48), var(--green-72));
+  --color-live: light-dark(var(--cyan-50), var(--cyan-70));
+  /* Labels (8): a hue that marks a thing, picked for it and saved with it
+     (an account's, a project column's, a section tile's, a chart series', a
+     guide's). The only colour a component names by its hue, and never to
+     say a state. */
+  --color-label-red: light-dark(var(--red-47), var(--red-68));
+  --color-label-orange: light-dark(var(--orange-52), var(--orange-70));
+  --color-label-yellow: light-dark(var(--yellow-50), var(--yellow-72));
+  --color-label-green: light-dark(var(--green-48), var(--green-72));
+  --color-label-cyan: light-dark(var(--cyan-50), var(--cyan-70));
+  --color-label-blue: light-dark(var(--blue-47), var(--blue-69));
+  --color-label-purple: light-dark(var(--purple-45), var(--purple-68));
+  --color-label-magenta: light-dark(var(--magenta-48), var(--magenta-70));
+  /* Washes and edges (the few colours a surface lays at a share of a role,
+     each named once here so no component picks its own share): a label's
+     fill under its own ink; a status's fill under its own ink (a badge's,
+     owner, 2026-11-24: "colored badges with matching text color"), solid,
+     the ink mixed into the page's ground, so its words hold 4.5:1 whatever
+     ground the badge stands on; a needs-you card's edge. */
+  --color-label-red-wash: light-dark(
+    oklch(from var(--red-47) l c h / 0.22),
+    oklch(from var(--red-68) l c h / 0.22)
+  );
+  --color-label-orange-wash: light-dark(
+    oklch(from var(--orange-52) l c h / 0.22),
+    oklch(from var(--orange-70) l c h / 0.22)
+  );
+  --color-label-yellow-wash: light-dark(
+    oklch(from var(--yellow-50) l c h / 0.22),
+    oklch(from var(--yellow-72) l c h / 0.22)
+  );
+  --color-label-green-wash: light-dark(
+    oklch(from var(--green-48) l c h / 0.22),
+    oklch(from var(--green-72) l c h / 0.22)
+  );
+  --color-label-cyan-wash: light-dark(
+    oklch(from var(--cyan-50) l c h / 0.22),
+    oklch(from var(--cyan-70) l c h / 0.22)
+  );
+  --color-label-blue-wash: light-dark(
+    oklch(from var(--blue-47) l c h / 0.22),
+    oklch(from var(--blue-69) l c h / 0.22)
+  );
+  --color-label-purple-wash: light-dark(
+    oklch(from var(--purple-45) l c h / 0.22),
+    oklch(from var(--purple-68) l c h / 0.22)
+  );
+  --color-label-magenta-wash: light-dark(
+    oklch(from var(--magenta-48) l c h / 0.22),
+    oklch(from var(--magenta-70) l c h / 0.22)
+  );
+  --color-danger-wash: light-dark(
+    color-mix(in oklab, var(--red-47) 10%, var(--neutral-99)),
+    color-mix(in oklab, var(--red-68) 14%, var(--base-black))
+  );
+  --color-caution-wash: light-dark(
+    color-mix(in oklab, var(--orange-52) 10%, var(--neutral-99)),
+    color-mix(in oklab, var(--orange-70) 14%, var(--base-black))
+  );
+  --color-success-wash: light-dark(
+    color-mix(in oklab, var(--green-48) 10%, var(--neutral-99)),
+    color-mix(in oklab, var(--green-72) 14%, var(--base-black))
+  );
+  --color-live-wash: light-dark(
+    color-mix(in oklab, var(--cyan-50) 10%, var(--neutral-99)),
+    color-mix(in oklab, var(--cyan-70) 14%, var(--base-black))
+  );
+  --color-caution-edge: light-dark(
+    oklch(from var(--orange-52) l c h / 0.4),
+    oklch(from var(--orange-70) l c h / 0.4)
+  );
+  /* The page's own layers: a veil of the ground laid over what stands
+     behind a sheet, a dialog or a glass bar; a line (a rail, a scrollbar's
+     thumb); a nest line (a tree's, a task edge's); a 10% edge round an
+     image, pure black or white so no tint fringes it; the three shadow inks
+     the elevations cast, and the light rim a raised surface wears by night. */
+  --color-veil: light-dark(
+    oklch(from var(--neutral-99) l c h / 0.72),
+    oklch(from var(--base-black) l c h / 0.72)
+  );
+  --color-line: light-dark(
+    oklch(from var(--neutral-50) l c h / 0.4),
+    oklch(from var(--neutral-69) l c h / 0.4)
+  );
+  --color-nest: light-dark(var(--neutral-70), var(--neutral-44));
+  --color-image-edge: light-dark(
+    oklch(from var(--neutral-0) l c h / 0.1),
+    oklch(from var(--neutral-100) l c h / 0.1)
+  );
+  --color-rim: light-dark(
+    transparent,
+    oklch(from var(--neutral-93) l c h / 0.07)
+  );
+  --color-shadow: light-dark(
+    oklch(from var(--neutral-30) l c h / 0.09),
+    oklch(from var(--neutral-18) l c h / 0.55)
+  );
+  --color-shadow-strong: light-dark(
+    oklch(from var(--neutral-30) l c h / 0.14),
+    oklch(from var(--neutral-18) l c h / 0.66)
+  );
+  --color-shadow-far: light-dark(
+    oklch(from var(--neutral-30) l c h / 0.2),
+    oklch(from var(--neutral-18) l c h / 0.76)
+  );
+  /* The hue names the app still writes, kept until the app moves onto the
+     roles above (owner, 2026-11-24: the design system first, the app after):
+     each the label of its hue. Nothing in the kit or the board names one. */
+  --color-red: var(--color-label-red);
+  --color-orange: var(--color-label-orange);
+  --color-yellow: var(--color-label-yellow);
+  --color-green: var(--color-label-green);
+  --color-cyan: var(--color-label-cyan);
+  --color-blue: var(--color-label-blue);
+  --color-purple: var(--color-label-purple);
+  --color-magenta: var(--color-label-magenta);
   /* Caw coral (2): where you act and what you chose, and what stands on it. */
-  --color-accent: light-dark(oklch(51% 0.17 33), oklch(70% 0.15 36));
-  --color-on-accent: light-dark(oklch(100% 0 0), oklch(17% 0 0));
+  --color-accent: light-dark(var(--coral-51), var(--coral-70));
+  --color-on-accent: light-dark(var(--neutral-100), var(--base-black));
+  /* Coral at a share: a marked match (a find's, a search's, a comment's
+     anchor), the one tinted voice (what a session was asked), a halo round
+     a mode, and a keycap on a coral or inverse fill. */
+  --color-highlight: light-dark(
+    oklch(from var(--coral-51) l c h / 0.2),
+    oklch(from var(--coral-70) l c h / 0.2)
+  );
+  --color-accent-wash: light-dark(
+    oklch(from var(--coral-51) l c h / 0.1),
+    oklch(from var(--coral-70) l c h / 0.1)
+  );
+  --color-accent-halo: light-dark(
+    oklch(from var(--coral-51) l c h / 0.35),
+    oklch(from var(--coral-70) l c h / 0.35)
+  );
+  --color-on-accent-wash: light-dark(
+    oklch(from var(--neutral-100) l c h / 0.2),
+    oklch(from var(--base-black) l c h / 0.2)
+  );
   /* Brand art pigments (3): mascot, favicon, OG art. */
-  --color-spark: #f2d36b;
-  --color-paper: #f4f0e6;
-  --color-crow-ink: #171715;
+  --color-spark: var(--pigment-spark);
+  --color-paper: var(--pigment-paper);
+  --color-crow-ink: var(--pigment-crow-ink);
 
   /* =========================================================================
      Typography — 3 faces, 2 weights, 4 sizes, 3 4px-grid leadings, 2 trackings
@@ -165,17 +372,14 @@
   --radius-pill: 999px;
 
   --shadow-sm:
-    0 1px 3px light-dark(oklch(29.5% 0 0 / 0.09), oklch(18.4% 0 0 / 0.55)),
-    0 1px 1px light-dark(oklch(29.5% 0 0 / 0.09), oklch(18.4% 0 0 / 0.55)),
-    inset 0 0 0 1px light-dark(transparent, oklch(93.4% 0 0 / 0.07));
+    0 1px 3px var(--color-shadow), 0 1px 1px var(--color-shadow),
+    inset 0 0 0 1px var(--color-rim);
   --shadow-md:
-    0 3px 10px light-dark(oklch(29.5% 0 0 / 0.14), oklch(18.4% 0 0 / 0.66)),
-    0 1px 2px light-dark(oklch(29.5% 0 0 / 0.09), oklch(18.4% 0 0 / 0.55)),
-    inset 0 0 0 1px light-dark(transparent, oklch(93.4% 0 0 / 0.07));
+    0 3px 10px var(--color-shadow-strong), 0 1px 2px var(--color-shadow),
+    inset 0 0 0 1px var(--color-rim);
   --shadow-lg:
-    0 18px 48px light-dark(oklch(29.5% 0 0 / 0.2), oklch(18.4% 0 0 / 0.76)),
-    0 2px 6px light-dark(oklch(29.5% 0 0 / 0.09), oklch(18.4% 0 0 / 0.55)),
-    inset 0 0 0 1px light-dark(transparent, oklch(93.4% 0 0 / 0.07));
+    0 18px 48px var(--color-shadow-far), 0 2px 6px var(--color-shadow),
+    inset 0 0 0 1px var(--color-rim);
 
   /* =========================================================================
      Motion — 6 durations, 5 curves
@@ -262,6 +466,80 @@
     0.9953,
     0.9973,
     0.9988,
+    1
+  );
+  /* A glyph's fade, tied to its slide (glyph.ts, `icon-swap`): it is
+     seen only while at least half of it stands in its cell, so it fades
+     out before it can reach what stands beside it and is never cut off
+     (owner, 2026-11-24), and otherwise fades on the clock. Arriving: the
+     clock or 1 - 2 x its distance still to travel on --ease-elastic,
+     whichever is less. Leaving: the same on --ease-in-out, the curve it
+     leaves on. Each as linear() stops, of the progress from shown to
+     gone or back. */
+  --ease-fade-arrive: linear(
+    0,
+    0,
+    0,
+    0,
+    0,
+    0.1248,
+    0.2,
+    0.2333,
+    0.2667,
+    0.3,
+    0.3333,
+    0.3667,
+    0.4,
+    0.4333,
+    0.4667,
+    0.5,
+    0.5333,
+    0.5667,
+    0.6,
+    0.6333,
+    0.6667,
+    0.7,
+    0.7333,
+    0.7667,
+    0.8,
+    0.8333,
+    0.8667,
+    0.9,
+    0.9333,
+    0.9667,
+    1
+  );
+  --ease-fade-leave: linear(
+    0,
+    0.0333,
+    0.0667,
+    0.1,
+    0.1333,
+    0.1667,
+    0.2,
+    0.2333,
+    0.2667,
+    0.3,
+    0.3333,
+    0.3667,
+    0.4335,
+    0.6069,
+    0.8753,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
     1
   );
 
@@ -1206,9 +1484,16 @@
   background-color: var(--surface-ground);
   box-shadow:
     0 0 0 1px var(--color-ui-2),
-    0 1px 2px light-dark(oklch(0% 0 0 / 0.1), oklch(0% 0 0 / 0.5)),
+    0 1px 2px
+      light-dark(
+        oklch(from var(--neutral-0) l c h / 0.1),
+        oklch(from var(--neutral-0) l c h / 0.5)
+      ),
     0 calc(var(--surface-level) * 3px) calc(var(--surface-level) * 8px)
-      light-dark(oklch(0% 0 0 / 0.08), oklch(0% 0 0 / 0.45));
+      light-dark(
+        oklch(from var(--neutral-0) l c h / 0.08),
+        oklch(from var(--neutral-0) l c h / 0.45)
+      );
 }
 
 /* The control surface: the one recipe every control (a button, a field, a
@@ -1225,14 +1510,14 @@
    any border.
    Nothing scales: a press is the next layer step.
 
-   The state layer is a layer of its own (`::after`, under the content in
+   The state layer is a layer of its own (`::before`, under the content in
    the control's own stacking context, over its fill and inside its edge)
    whose opacity fades, so a hover or a press composites and never repaints
    the control (owner's pick, 2026-11-24, animation performance). A state
    sets the layer's colour and shows it (`--control-layer-shown`); at rest
    it keeps the hover's colour, so it fades out in the colour it faded in.
    Only the layer's opacity, the edge and the shadow transition. A field
-   (`control-field`: an input or a textarea, which draw no `::after`)
+   (`control-field`: an input or a textarea, which draw no `::before`)
    paints its layer on its background instead, at once.
 
    Its variables, each with the default `control` alone draws (the
@@ -1277,13 +1562,23 @@
     isolation: isolate;
   }
   /* Drawn unless a look keeps its layer on its background
-     (`--control-layer-after: none`, a field's): a variable, so no look's
-     rule has to outrank this one in Tailwind's order of utilities. */
-  &::after {
-    content: var(--control-layer-after, "");
+     (`--control-layer-before: none`, a field's): a variable, so no look's
+     rule has to outrank this one in Tailwind's order of utilities. On
+     ::before: a control's ::after is its tap area (`hitbox`). */
+  /* The layer fills the control's padding box on the edge's own inner
+     curve: it stands over the border box with a transparent border of the
+     edge's width and paints inside it (`background-clip: padding-box`), so
+     the browser rounds it by the outer radius less the edge, as it rounds
+     the edge's inside. Laid at `inset: 0` with the outer radius, its
+     corners stood a pixel in from the edge's curve and showed a sliver of
+     fill at each corner (owner, 2026-11-24). */
+  &::before {
+    content: var(--control-layer-before, "");
     position: absolute;
-    inset: 0;
+    inset: -1px;
     z-index: -1;
+    border: 1px solid transparent;
+    background-clip: padding-box;
     border-radius: inherit;
     background-color: var(--control-layer);
     opacity: var(--control-layer-shown);
@@ -1301,7 +1596,11 @@
     var(--control-halo),
     var(
       --control-lift,
-      0 1px 2px light-dark(oklch(0% 0 0 / 0.06), oklch(0% 0 0 / 0.4))
+      0 1px 2px
+        light-dark(
+          oklch(from var(--neutral-0) l c h / 0.06),
+          oklch(from var(--neutral-0) l c h / 0.4)
+        )
     );
   /* A look adds to what transitions through a variable, never by setting
      the property, so no look's rule has to outrank this one in Tailwind's
@@ -1337,7 +1636,12 @@
     --control-layer-shown: 1;
   }
   @media (hover: hover) {
-    &:hover:not(:disabled, [aria-disabled="true"], :active, [data-pressed]) {
+    &:hover:not(
+        :disabled,
+        [aria-disabled="true"]:not([aria-busy="true"]),
+        :active,
+        [data-pressed]
+      ) {
       --control-layer: var(--control-hover, var(--color-ui));
       --control-layer-shown: 1;
     }
@@ -1366,18 +1670,19 @@
     );
     --control-halo: 0 0 #0000;
   }
-  /* A control whose work is running (`aria-busy`) takes no press either,
-     but keeps its full ink: it is working, not unavailable. */
-  &:is(:disabled, [aria-disabled="true"]) {
+  /* A control whose work is running (`aria-busy`) is working, not
+     unavailable: it keeps its full ink and its hover, and its own press
+     handler swallows a press (the Button's `whileIdle`). Taking the pointer
+     from it, it dropped its hover under a pointer still on it, and a
+     destructive button turned from its red fill to white as its work
+     started (owner, 2026-11-24). */
+  &:is(:disabled, [aria-disabled="true"]):not([aria-busy="true"]) {
     pointer-events: none;
-
-    &:not([aria-busy="true"]) {
-      opacity: 0.5;
-    }
+    opacity: 0.5;
   }
   &:is([aria-invalid="true"], :has([aria-invalid="true"])) {
-    --control-edge: var(--color-red);
-    --control-focus-ink: var(--color-red);
+    --control-edge: var(--color-danger);
+    --control-focus-ink: var(--color-danger);
   }
 }
 
@@ -1386,12 +1691,13 @@
    on the fill and a light line inside its top; the layers darken it. */
 @utility control-primary {
   --control-fill: var(--control-intent, var(--color-accent));
-  --control-rest-edge: oklch(0% 0 0 / 0.14);
+  --control-rest-edge: oklch(from var(--neutral-0) l c h / 0.14);
   --control-lift:
-    inset 0 1px 0 oklch(100% 0 0 / 0.16), 0 1px 2px oklch(0% 0 0 / 0.14);
-  --control-hover: oklch(0% 0 0 / 0.08);
-  --control-press: oklch(0% 0 0 / 0.16);
-  --control-current: oklch(0% 0 0 / 0.08);
+    inset 0 1px 0 oklch(from var(--neutral-100) l c h / 0.16),
+    0 1px 2px oklch(from var(--neutral-0) l c h / 0.14);
+  --control-hover: oklch(from var(--neutral-0) l c h / 0.08);
+  --control-press: oklch(from var(--neutral-0) l c h / 0.16);
+  --control-current: oklch(from var(--neutral-0) l c h / 0.08);
 }
 
 /* No fill, no edge and no lift until the pointer is on it. */
@@ -1433,6 +1739,28 @@
   --control-on-layer: transparent;
 }
 
+/* Keyboard focus for what is no control surface (owner's picks, 2026-11-24):
+   a widget (a checkbox, a switch, a slider's thumb, an icon button with no
+   edge, a link) shows it as a control does, its edge in coral and the
+   3px coral halo round it (`focus-halo`); a row, a segment or a menu item
+   shows it as its highlight fill, with no ring (`focus-fill`). Each keeps a
+   transparent outline, so forced colours still draw focus. */
+@utility focus-halo {
+  &:focus-visible {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-accent-halo);
+  }
+}
+@utility focus-fill {
+  &:focus-visible {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    background-color: var(--color-ui);
+  }
+}
+
 /* Off, a dashed edge in place of the ring: a tile that cannot be picked. */
 @utility control-dashed-off {
   &:is(:disabled, [aria-disabled="true"]) {
@@ -1463,7 +1791,7 @@
       from var(--control-layer) l c h / calc(alpha* var(--control-layer-shown))
     )
   );
-  --control-layer-after: none;
+  --control-layer-before: none;
 
   &:is(:focus-visible, :focus-within, :has(:focus-visible)):not(
       [aria-invalid="true"],
@@ -1530,31 +1858,32 @@
 
 /* The intents, on any look. */
 /* Neutral at rest, filled in its intent's ink while the pointer is on it,
-   while pressed and while armed for its second press (`data-armed`), its
-   words in the ink on a fill: a destructive action (owner, 2026-11-24:
-   "when hovered, need to show a red fill"). Taken with an intent. */
+   while pressed, while armed for its second press (`data-armed`) and while
+   the work it started runs (`aria-busy`), its words in the ink on a fill:
+   a destructive action (owner, 2026-11-24: "when hovered, need to show a
+   red fill"; it stays filled once pressed). Taken with an intent. */
 @utility control-reveal {
   --control-rest-edge: var(--control-default-edge, var(--color-ui-3));
   --control-transitions: --control-edge, box-shadow, background-color, color;
   --control-duration: var(--duration-base);
 
   @media (hover: hover) {
-    &:hover:not(:disabled, [aria-disabled="true"]) {
+    &:hover:not(:disabled, [aria-disabled="true"]:not([aria-busy="true"])) {
       --control-fill: var(--control-intent, var(--color-accent));
-      --control-rest-edge: oklch(0% 0 0 / 0.14);
+      --control-rest-edge: oklch(from var(--neutral-0) l c h / 0.14);
       --control-hover: transparent;
-      --control-press: oklch(0% 0 0 / 0.16);
+      --control-press: oklch(from var(--neutral-0) l c h / 0.16);
       color: var(--color-on-accent);
     }
   }
-  &:is(:active, [data-pressed], [data-armed]):not(
+  &:is(:active, [data-pressed], [data-armed], [aria-busy="true"]):not(
       :disabled,
-      [aria-disabled="true"]
+      [aria-disabled="true"]:not([aria-busy="true"])
     ) {
     --control-fill: var(--control-intent, var(--color-accent));
-    --control-rest-edge: oklch(0% 0 0 / 0.14);
+    --control-rest-edge: oklch(from var(--neutral-0) l c h / 0.14);
     --control-hover: transparent;
-    --control-press: oklch(0% 0 0 / 0.16);
+    --control-press: oklch(from var(--neutral-0) l c h / 0.16);
     color: var(--color-on-accent);
   }
 }
@@ -1620,15 +1949,15 @@
 }
 
 @utility control-danger {
-  --control-intent: var(--color-red);
+  --control-intent: var(--color-danger);
 }
 
 @utility control-caution {
-  --control-intent: var(--color-orange);
+  --control-intent: var(--color-caution);
 }
 
 @utility control-success {
-  --control-intent: var(--color-green);
+  --control-intent: var(--color-success);
 }
 
 /* Primary coral fill sheen and hover state derived from --color-accent. */

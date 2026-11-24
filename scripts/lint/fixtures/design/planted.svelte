@@ -25,7 +25,7 @@
 <div class:rounded-huge-too={picked !== ""}></div>
 <Button class="p-space-4 {steady}">Restyled</Button>
 <Button class={picked}>Unreadable</Button>
-<div style="color: var(--ink); --tint: var(--orange)"></div>
+<div style="color: var(--ink); --tint: var(--caution)"></div>
 <div style:--tint="#ff0000"></div>
 <div bind:clientWidth={width}></div>
 <div class="hover:opacity-50 focus-visible:opacity-75"></div>

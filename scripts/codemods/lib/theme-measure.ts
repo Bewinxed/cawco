@@ -1,6 +1,6 @@
 /**
  * What a theme text measures, as scripts/token-contrast-check.ts measures it
- * (the hub's CssEvaluator over the theme's `@theme static` block and its
+ * (the hub's CssEvaluator over the theme's palette, its `@theme static` block and its
  * dark-scheme overrides), and a colour's OKLCH hue angle. Shared by
  * theme-unify.ts and theme-audit.ts.
  */
@@ -26,9 +26,11 @@ export const evaluatorOver = (
       return;
     }
     if (
-      rule?.type === "atrule" &&
-      rule.name === "theme" &&
-      rule.params === "static"
+      (rule?.type === "atrule" &&
+        rule.name === "theme" &&
+        rule.params === "static") ||
+      // The palette, the raw steps the roles point at (`:root, :host`).
+      (rule?.type === "rule" && rule.selectors.includes(":root"))
     ) {
       light.set(decl.prop.slice(2), refs(decl.value));
     } else if (

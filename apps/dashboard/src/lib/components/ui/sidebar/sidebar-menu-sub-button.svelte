@@ -46,7 +46,7 @@
 
   const mergedProps = $derived({
     class: cn(
-      "mark-line focus-inset flex h-7 min-w-0 items-center gap-2 overflow-hidden rounded-sm px-2 text-tx hover:text-tx active:text-tx disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:type-label data-[size=sm]:type-meta data-active:text-accent [&>span:last-child]:min-w-0 [&>span:last-child]:overflow-clip [&>span:last-child]:text-ellipsis [&>span:last-child]:whitespace-nowrap [&>svg]:size-icon-md [&>svg]:shrink-0 [&>svg]:text-tx",
+      "mark-line focus-fill flex h-7 min-w-0 items-center gap-2 overflow-hidden rounded-sm px-2 text-tx hover:text-tx active:text-tx disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:type-label data-[size=sm]:type-meta data-active:text-accent [&>span:last-child]:min-w-0 [&>span:last-child]:overflow-clip [&>span:last-child]:text-ellipsis [&>span:last-child]:whitespace-nowrap [&>svg]:size-icon-md [&>svg]:shrink-0 [&>svg]:text-tx",
       sidebarMenuSubButtonVariants({ row, tone }),
       className
     ),

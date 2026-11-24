@@ -11,4 +11,6 @@ export default {
 };
 
 /** Every live kit component in its states, light beside dark, in the pair its switcher names. */
-export const Board = { args: { pair: "Figtree + JetBrains Mono (today)" } };
+export const Board = {
+  args: { pair: "Figtree + JetBrains Mono (today)" },
+};

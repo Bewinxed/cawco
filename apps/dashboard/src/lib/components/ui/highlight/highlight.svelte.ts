@@ -316,7 +316,7 @@ const lengthOf = (value: string, of: number): number =>
 
 /**
  * A row's four corners, each its own (The Concentric Rule): a row
- * concentric in its container (design.css `concentric-in`) takes the
+ * concentric in its container (tailwind-super-corners' `sc-concentric-*`) takes the
  * container's radius less its inset at each corner, and a row opened at an
  * edge is square there, so the ghost and the pill drawn from it take the
  * row's contour. Read corner by corner, never from the shorthand, which an
@@ -494,14 +494,43 @@ const transformOf = (at: Part, laid: Part) => {
   return `translate(${at.x}px, ${at.y}px) scale(${scale(at.w, laid.w)}, ${scale(at.h, laid.h)})`;
 };
 
-/** A box `p` of the way from `a` to `b`, `b`'s corners kept. */
-const between = (a: Box, b: Box, p: number): Box => ({
-  x: a.x + (b.x - a.x) * p,
-  y: a.y + (b.y - a.y) * p,
-  w: a.w + (b.w - a.w) * p,
-  h: a.h + (b.h - a.h) * p,
-  r: b.r,
-});
+/** A box `p` of the way from `a` to `b`, its corners too. */
+const between = (a: Box, b: Box, p: number): Box => {
+  const radius = (i: number): Radius => [
+    a.r[i][0] + (b.r[i][0] - a.r[i][0]) * p,
+    a.r[i][1] + (b.r[i][1] - a.r[i][1]) * p,
+  ];
+  return {
+    x: a.x + (b.x - a.x) * p,
+    y: a.y + (b.y - a.y) * p,
+    w: a.w + (b.w - a.w) * p,
+    h: a.h + (b.h - a.h) * p,
+    r: [radius(0), radius(1), radius(2), radius(3)],
+  };
+};
+
+/**
+ * A corner's `transform`, its piece laid out for the radius `laid` and
+ * drawn at `radius` on `box`: placed at the box's corner and scaled about
+ * that corner, so its curve is `radius` there. Each piece's origin is its
+ * own top left (`transform-origin: 0 0`), so a right or bottom corner is
+ * moved by what its scale takes off.
+ */
+const cornerTransform = (
+  box: Box,
+  i: number,
+  laid: Radius,
+  radius: Radius,
+  size: readonly [number, number]
+) => {
+  const right = i === 1 || i === 2;
+  const bottom = i === 2 || i === 3;
+  const sx = laid[0] > 0 ? radius[0] / laid[0] : 1;
+  const sy = laid[1] > 0 ? radius[1] / laid[1] : 1;
+  const x = right ? box.x + box.w - size[0] * sx : box.x;
+  const y = bottom ? box.y + box.h - size[1] * sy : box.y;
+  return `translate(${x}px, ${y}px) scale(${sx}, ${sy})`;
+};
 
 /** Where a glide's parts stand now: its eased progress on the box it moves (no style is read). */
 const nowOf = (run: Run): { box: Box; p: number } => {
@@ -561,13 +590,41 @@ const draw = (
     }
     el.style.transform = transformOf(drawn[i], at);
   }
+  // A glide's corners turn from the box it leaves to the box it reaches
+  // (owner, 2026-11-24: the highlight "lose[s] its rounded top immediately
+  // before moving"): each piece is laid out at the rounder of the two and
+  // scaled to each, on the glide's own clock, so a corner keeps its curve
+  // until the glide carries it to the next. At rest each is laid out at its
+  // own radius, unscaled.
+  const gliding = Boolean(glide && from && moved(from, box));
+  const first = layer.parts.length - CORNERS.length;
+  const laidCorners = box.r.map((r, i): Radius => {
+    const leaving = gliding && from ? from.r[i] : r;
+    return [Math.max(r[0], leaving[0]), Math.max(r[1], leaving[1])];
+  });
+  const cornerSizes = laidCorners.map(
+    ([rx, ry]) =>
+      [
+        Math.ceil(Math.min(box.w, rx + OVERLAP)),
+        Math.ceil(Math.min(box.h, ry + OVERLAP)),
+      ] as const
+  );
   for (const [i, name] of CORNERS.entries()) {
-    const [rx, ry] = box.r[i];
-    const el = layer.parts[layer.parts.length - CORNERS.length + i];
+    const [rx, ry] = laidCorners[i];
+    const el = layer.parts[first + i];
     el.style[SIDES[name]] = `${rx}px ${ry}px`;
+    el.style.width = `${cornerSizes[i][0]}px`;
+    el.style.height = `${cornerSizes[i][1]}px`;
+    el.style.transform = cornerTransform(
+      box,
+      i,
+      laidCorners[i],
+      box.r[i],
+      cornerSizes[i]
+    );
   }
   layer.drawn = box;
-  if (!(glide && from && moved(from, box))) {
+  if (!(gliding && glide && from)) {
     return;
   }
   // Back to where the glide it cuts short set out from: as much shorter
@@ -576,21 +633,55 @@ const draw = (
   const factor = back
     ? Math.min(1, Math.max(0, now.p * was.factor + (1 - was.factor)))
     : 1;
-  const leaving = partsAt({ ...from, r: box.r }, card);
+  const leaving = partsAt(from, card);
   const timing = {
     duration: dur(glide.duration) * factor,
     easing: ease(glide.easing),
   };
+  const keyframesOf = (i: number) => {
+    if (i < first) {
+      return [
+        { transform: transformOf(leaving[i], laid[i]) },
+        { transform: transformOf(drawn[i], laid[i]) },
+      ];
+    }
+    const c = i - first;
+    return [
+      {
+        transform: cornerTransform(
+          from,
+          c,
+          laidCorners[c],
+          from.r[c],
+          cornerSizes[c]
+        ),
+      },
+      {
+        transform: cornerTransform(
+          box,
+          c,
+          laidCorners[c],
+          box.r[c],
+          cornerSizes[c]
+        ),
+      },
+    ];
+  };
+  const anims = layer.parts.map((el, i) => el.animate(keyframesOf(i), timing));
+  // Once it lands, each corner is laid out again at its own radius,
+  // unscaled, as at rest.
+  const [landing] = anims;
+  if (landing) {
+    // `finish` fires on landing alone, never on a glide cut short.
+    landing.onfinish = () => {
+      if (layer.run?.anims === anims) {
+        layer.run = null;
+        draw(layer, box, card);
+      }
+    };
+  }
   layer.run = {
-    anims: layer.parts.map((el, i) =>
-      el.animate(
-        [
-          { transform: transformOf(leaving[i], laid[i]) },
-          { transform: transformOf(drawn[i], laid[i]) },
-        ],
-        timing
-      )
-    ),
+    anims,
     factor,
     from,
     start: back ? was.to : from,

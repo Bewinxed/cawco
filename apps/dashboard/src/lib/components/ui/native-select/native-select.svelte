@@ -47,7 +47,6 @@
     // Its fill, edge and states are the control surface's (theme.css
     // `control`), drawn on this frame round the select.
     "control group/native-select relative w-fit rounded-sm has-[select:disabled]:opacity-50",
-    "has-[select:focus-visible]:outline-2 has-[select:focus-visible]:outline-accent has-[select:focus-visible]:outline-solid has-[select:focus-visible]:-outline-offset-2",
     nativeSelectVariants({ measure }),
     className
   )}

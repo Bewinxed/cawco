@@ -8,7 +8,7 @@ import { tv } from "#lib/utils.js";
  * item, a record's span), so the part is its recipe, applied as a class.
  *
  * - `option`: a choice, 30px tall including its edge under every pointer (a
- *   finger's 44px is `touch-hit` on the chip, never a taller chip), wrapping
+ *   finger's 44px is the chip's `hitbox` (`touch-area`), never a taller chip), wrapping
  *   its label line by line. A pick is the element's own state: a toggle
  *   pressed (`aria-pressed`), a radio checked (`aria-checked`), or a record
  *   of what was picked (`data-chosen`). Picked, it takes the coral edge and
@@ -46,7 +46,7 @@ import { tv } from "#lib/utils.js";
  *   2.5.8, its Inline exception).
  *
  * Every other chip is a control, so each look carries a finger's 44px area
- * (`touch-hit`, DESIGN.md, The 44 Touch Rule), the drawn chip unchanged; a
+ * (`hitbox` sized by `touch-area`, DESIGN.md, The 44 Touch Rule), the drawn chip unchanged; a
  * row of chips sets its gaps for it (`chipsVariants`).
  * - `setting`: a setting shown as a small trigger that opens its picker
  *   (DESIGN.md, Setting chip: "30px, 8px
@@ -63,7 +63,7 @@ import { tv } from "#lib/utils.js";
  * settings group (the session tabs' surface brief, Session card: "the four settings (model,
  * effort, permission, account) as one group of equal chips `--spacing-space-1`
  * apart"): a compact row's height at every width. Under a finger its 44px
- * is the `touch-hit` area every setting chip carries, never a taller chip
+ * is the `hitbox` area every setting chip carries, never a taller chip
  * (the row sets its gaps for it); on a phone its chevron is gone (an
  * account chip, `data-account-chip`, keeps its own, the only hint it opens
  * anything).
@@ -82,7 +82,7 @@ export const chipVariants = tv({
       inline:
         "-my-space-1 max-w-full gap-space-1 rounded-[calc(var(--radius-xs)+var(--spacing-space-1))] bg-bg-2 py-space-1 ps-space-1 pe-space-2 align-baseline leading-4.5 whitespace-nowrap inset-ring inset-ring-ui motion-safe:transition-[background-color,transform] motion-safe:duration-(--duration-fast) motion-safe:ease-out motion-safe:enabled:active:[transform:scale(var(--press-scale))] can-hover:enabled:hover:bg-ui [&>[data-slot=label]]:max-w-ch-32 [&>[data-slot=label]]:min-w-0 [&>[data-slot=label]]:self-baseline [&>[data-slot=label]]:overflow-clip [&>[data-slot=label]]:text-ellipsis [&>svg]:size-icon-md [&>svg]:flex-none",
       setting:
-        "control touch-hit h-control-sm max-w-full gap-space-2 px-space-2 leading-none whitespace-nowrap hit-edge-hair aria-disabled:opacity-50 variant-static:control-static [&_[data-slot=chip-label]]:min-w-0 [&_[data-slot=chip-label]]:overflow-hidden [&_[data-slot=chip-label]]:text-ellipsis [&>[data-slot=chevron]]:size-icon-sm [&>[data-slot=chevron]]:text-tx-2 [&>svg]:flex-none [&>svg:not([data-slot=chevron])]:size-icon-md",
+        "control hitbox h-control-sm max-w-full gap-space-2 px-space-2 leading-none whitespace-nowrap hit-edge-hair aria-disabled:opacity-50 variant-static:control-static pointer-coarse:hitbox:touch-area [&_[data-slot=chip-label]]:min-w-0 [&_[data-slot=chip-label]]:overflow-hidden [&_[data-slot=chip-label]]:text-ellipsis [&>[data-slot=chevron]]:size-icon-sm [&>[data-slot=chevron]]:text-tx-2 [&>svg]:flex-none [&>svg:not([data-slot=chevron])]:size-icon-md",
     },
     size: {
       regular: "",
@@ -97,13 +97,13 @@ export const chipVariants = tv({
     {
       variant: "setting",
       tone: "fail",
-      class: "text-red control-danger",
+      class: "text-danger control-danger",
     },
     {
       variant: "setting",
       tone: "grant",
       class:
-        "text-orange control-soft control-caution control-steady [&>[data-slot=chevron]]:text-orange",
+        "text-caution control-soft control-caution control-steady [&>[data-slot=chevron]]:text-caution",
     },
   ],
   defaultVariants: { variant: "option" },
@@ -111,7 +111,7 @@ export const chipVariants = tv({
 
 /**
  * A row of option chips, wrapping whole chips onto the next line. Under a
- * finger the rows stand 14px apart, so each chip's 44px `touch-hit` area
+ * finger the rows stand 14px apart, so each chip's 44px `hitbox` area
  * (30 drawn + 7 above + 7 below) meets its neighbour's at the midpoint
  * instead of overlapping it.
  */

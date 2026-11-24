@@ -124,6 +124,7 @@
         "@iconify-json/logos": "^1.2.15",
         "@iconify-json/solar": "^1.2.13",
         "@iconify-json/thesvg-color": "^1.2.15",
+        "@regular-ppl/hitbox": "0.1.0",
         "@sveltejs/adapter-node": "^6.0.0",
         "@sveltejs/kit": "^3.1.0",
         "@sveltejs/vite-plugin-svelte": "^7.3.1",
@@ -140,6 +141,7 @@
         "postcss-selector-parser": "^7.2.1",
         "svelte": "5.57.2",
         "svelte-sonner": "^1.2.3",
+        "tailwind-super-corners": "0.3.1",
         "tailwindcss": "^4.3.5",
         "typescript": "npm:@typescript/typescript6@^6.0.2",
         "unplugin-icons": "^24.0.0",
@@ -1501,6 +1503,8 @@
     "@redis/search": ["@redis/search@6.3.1", "", { "peerDependencies": { "@redis/client": "^6.3.1" } }, "sha512-T67pvPUpW82VrZLvihO8O2DFMC7eY2oMAzMzapCbiPZn7mdWqHMEIlohYim12gIawT5kn6qT/Cvmm4WulKB+kQ=="],
 
     "@redis/time-series": ["@redis/time-series@6.3.1", "", { "peerDependencies": { "@redis/client": "^6.3.1" } }, "sha512-MNDgrm+i63M/1a+XA+HcDsScwt4uBh/fGGJ84swTQZTFK5K5wMmxdlTRa4ZgmNJzjxMaszW/ipPScMUGV3aAMg=="],
+
+    "@regular-ppl/hitbox": ["@regular-ppl/hitbox@0.1.0", "", { "peerDependencies": { "tailwindcss": "^4.1.0" } }, "sha512-mb8yclFW/bTPNLP0MU+Dj+DtyeXq7pEn5f4mT7noyg0cUNCjAGd3lNxS4SJuFsdDGgix5nTyBbJhWteDLqkNEw=="],
 
     "@rgrove/parse-xml": ["@rgrove/parse-xml@4.2.3", "", {}, "sha512-Jhlb+0zYez1T1yXUQs3F1qAtFuJljBVNdy9TKmLDauAXkxsOXopKYOyQ5Wm6SvP3fycav0GviX4Y15WWhGetMw=="],
 
@@ -3609,6 +3613,8 @@
     "tagged-tag": ["tagged-tag@1.0.0", "", {}, "sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng=="],
 
     "tailwind-merge": ["tailwind-merge@3.7.0", "", {}, "sha512-XPPUyAc+cvspz3lHTcR/QgPfW2A0lv/xQNIjX3HGhLR+Nq2lHaLq5MtTesHn8GUr3W3DguT2KT5x3NVgRtYwmA=="],
+
+    "tailwind-super-corners": ["tailwind-super-corners@0.3.1", "", { "peerDependencies": { "tailwind-merge": "^3.0.0", "tailwindcss": "^4.0.3" }, "optionalPeers": ["tailwind-merge"] }, "sha512-dgAyeX+EWOYv0HRwl5lCeqEykV2JU1UtP4Fion6cvSX5xMtGM9DZ+m9HGNLppghuV3BIMWUGeA8NtuIqTt2Wfg=="],
 
     "tailwind-variants": ["tailwind-variants@3.3.1", "", { "peerDependencies": { "tailwind-merge": ">=3.0.0", "tailwindcss": "*" }, "optionalPeers": ["tailwind-merge", "tailwindcss"] }, "sha512-4pAvwUtM4HKBiRZftncAbpn6V9Hhwoa5Fl7O2u5zbp7Z5Cvu+/o/6+176WY3WCEES209543quG8zFIcXCsc5Jw=="],
 

@@ -14,6 +14,7 @@
    */
   import type { Component } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
+  import type { GlyphSide } from "#lib/platform/motion/glyph.js";
   import type { ButtonVariant } from "./button.svelte";
   import Button from "./button.svelte";
 
@@ -25,6 +26,7 @@
     doneLabel,
     failedLabel,
     icon,
+    iconFrom,
     variant,
     work = 1400,
   }: {
@@ -35,6 +37,7 @@
     doneLabel?: string;
     failedLabel?: string;
     icon?: Component<SVGAttributes<SVGSVGElement>>;
+    iconFrom?: GlyphSide;
     variant?: ButtonVariant;
     /** How long the mock work runs, ms. */
     work?: number;
@@ -68,6 +71,7 @@
   {failedLabel}
   holdsIcon={flow === "icon"}
   icon={flow === "icon" && !iconOn ? undefined : icon}
+  {iconFrom}
   {label}
   onclick={run}
   {pending}

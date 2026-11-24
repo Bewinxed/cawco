@@ -70,6 +70,7 @@
       .group-data-asking\/dock\:data-mention-field-empty\:before\:text-transparent
   )[data-mention-field-empty]
 )::before,
+:where(:is(.control))::before,
 :where(:is(.ec-now-indicator))::before,
 :where(:is(.field-edge-wrap))::before,
 :where(:is(.field-edge))::before,
@@ -143,7 +144,6 @@
 :where(.before\:bg-accent)::before,
 :where(.before\:bg-bg)::before,
 :where(.before\:bg-bg-2)::before,
-:where(.before\:bg-bg\/72)::before,
 :where(.before\:bg-linear-to-b)::before,
 :where(.before\:bg-linear-to-b\/srgb)::before,
 :where(.before\:bg-status-attn-bg)::before,
@@ -429,10 +429,12 @@
   ):where([data-state="open"], [data-open]:not([data-open="false"]))
 )::after,
 :where(:is(.canvas-empty-action))::after,
-:where(:is(.control))::after,
 :where(:is(.ec-disabled))::after,
 :where(:is(.ec-icon).ec-next)::after,
 :where(:is(.ec-icon).ec-prev)::after,
+:where(
+  :is(.hitbox):is(:disabled, [aria-disabled="true"], [data-disabled])
+)::after,
 :where(
   :is(.prose)
     :where(blockquote p:last-of-type):not(
@@ -448,8 +450,8 @@
     :where(pre code):not(:where([class~="not-prose"], [class~="not-prose"] *))
 )::after,
 :where(:root[data-theme-flip] .theme-flip\:after\:transition-none)::after,
+:where(:where(:is(.hitbox)))::after,
 :where(:where(.pointer-hit))::after,
-:where(:where(.touch-hit-always))::after,
 :where(:where(.touch-hit))::after,
 :where(.\@max-desk\/shell\:coarse\:after\:bottom-auto)::after,
 :where(.\@max-desk\/shell\:coarse\:after\:end-auto)::after,

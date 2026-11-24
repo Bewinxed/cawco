@@ -27,7 +27,7 @@
        * (the decision host's options, as its Send).
        */
       look: {
-        key: "in-data-[slot=tooltip-content]:bg-on-accent/20 in-data-[slot=tooltip-content]:text-on-accent group-data-[variant=default]/button:bg-transparent group-data-[variant=default]/button:text-on-accent group-data-[variant=default]/button:inset-ring group-data-[variant=default]/button:inset-ring-on-accent/20 dark:in-data-[slot=tooltip-content]:bg-bg/10",
+        key: "in-data-[slot=tooltip-content]:bg-on-accent-wash in-data-[slot=tooltip-content]:text-on-accent group-data-[variant=default]/button:bg-transparent group-data-[variant=default]/button:text-on-accent group-data-[variant=default]/button:inset-ring group-data-[variant=default]/button:inset-ring-on-accent-wash dark:in-data-[slot=tooltip-content]:bg-on-accent-wash",
         keycap:
           "inline-grid h-space-4 min-w-space-4 flex-none place-items-center font-mono text-tx leading-none group-aria-checked/option:bg-accent group-aria-checked/option:text-on-accent group-aria-pressed/option:bg-accent group-aria-pressed/option:text-on-accent group-data-chosen/option:bg-accent group-data-chosen/option:text-on-accent motion-safe:[transition:background-color_var(--duration-fast)_var(--ease-out),color_var(--duration-fast)_var(--ease-out)]",
       },

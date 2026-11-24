@@ -7,10 +7,10 @@
     variants: {
       variant: {
         default: "bg-bg-2 text-tx",
-        destructive: "bg-bg-2 text-red",
-        warning: "bg-bg-2 text-orange",
-        success: "bg-bg-2 text-green",
-        info: "bg-bg-2 text-cyan",
+        destructive: "bg-bg-2 text-danger",
+        warning: "bg-bg-2 text-caution",
+        success: "bg-bg-2 text-success",
+        info: "bg-bg-2 text-live",
       },
       /** A notice on a card: the raised surface, the control's edge, the
           card's corner and its tile shadow. */

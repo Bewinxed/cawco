@@ -20,8 +20,8 @@
        * the breath dims it to the floor and back like every breather.
        */
       tone: {
-        live: "bg-cyan",
-        "live-ink": "bg-cyan",
+        live: "bg-live",
+        "live-ink": "bg-live",
         muted: "bg-tx-2",
       },
       /** `status-dot-size` by default; `row`, a row's 7px dot beside its words (a task card's, a connection's). */

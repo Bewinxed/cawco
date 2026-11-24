@@ -13,7 +13,7 @@
       /** The muted ink; or the live glyph while its run is running. */
       tone: {
         muted: "text-tx-2",
-        "live-running": "group-status-running/time:text-cyan",
+        "live-running": "group-status-running/time:text-live",
       },
       /** Its box by where it stands (DESIGN.md Icons, Sizes): 16px in a
           control or a row by default; `small`, 12px beside meta text and

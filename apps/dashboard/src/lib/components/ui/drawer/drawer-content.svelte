@@ -316,7 +316,7 @@
       type="button"
       aria-label={grabber.label}
       data-slot="drawer-grabber"
-      class="touch-hit mx-auto mt-space-2 mb-space-1 coarse:mb-space-4 hidden h-space-4 w-25 shrink-0 place-items-center rounded-pill group-data-[vaul-drawer-direction=bottom]/drawer-content:grid"
+      class="hitbox pointer-coarse:hitbox:touch-area mx-auto mt-space-2 mb-space-1 coarse:mb-space-4 hidden h-space-4 w-25 shrink-0 place-items-center rounded-pill group-data-[vaul-drawer-direction=bottom]/drawer-content:grid"
       onclick={() => {
         setTimeout(grabber.onpress);
       }}

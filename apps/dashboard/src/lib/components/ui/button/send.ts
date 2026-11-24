@@ -12,5 +12,5 @@ import { tv } from "#lib/utils.js";
  * (`pressable`, The Press Rule).
  */
 export const sendVariants = tv({
-  base: "relative grid size-control-md flex-none pressable place-items-center concentric-xs border-0 bg-accent bg-accent-surface text-on-accent disabled:bg-none disabled:opacity-50 disabled:shadow-none can-hover:enabled:hover:bg-accent can-hover:enabled:hover:bg-accent-surface-hover [&_svg]:size-icon-md",
+  base: "sc-concentric-xs relative grid size-control-md flex-none pressable place-items-center border-0 bg-accent bg-accent-surface text-on-accent disabled:bg-none disabled:opacity-50 disabled:shadow-none can-hover:enabled:hover:bg-accent can-hover:enabled:hover:bg-accent-surface-hover [&_svg]:size-icon-md",
 });

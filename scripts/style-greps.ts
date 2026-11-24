@@ -44,6 +44,21 @@
  *    transcript's last line under the composer's chips). A name the
  *    component's script declares from the inset counts as reading it
  *    where a tag draws with it (a style directive, `style`, `class`).
+ *  These four colour rules hold in the design system's own files (the kit,
+ *  the board, the motion helpers) until the app moves onto the roles:
+ *  - a colour named by its hue (`text-red`, `--color-orange`): a component
+ *    names a role (theme.css: `danger`, `caution`, `success`, `live`, the
+ *    base roles, coral), or a `label-<hue>` for a hue picked to mark a
+ *    thing, so the name says what the colour is for (two layers, owner's
+ *    pick 2026-11-24).
+ *  - a palette step (`--red-47`, `--neutral-17`, `--pigment-*`) outside the
+ *    token sheets (lib/tokens/): the palette means nothing; only the roles
+ *    in theme.css point at it.
+ *  - a colour role at a share of its own (`bg-accent/20`, `oklch(from
+ *    var(--color-tx) l c h / 0.4)`, `color-mix(… var(--color-…) …)`) outside
+ *    the token sheets and design.css's recipes: a colour a surface lays at
+ *    a share is a role of its own in theme.css (`highlight`, `veil`,
+ *    `label-<hue>-wash`, `caution-edge`), so no component picks a share.
  * Prints `file:line: text` under the rule each match breaks; exits 1 on any.
  */
 import { resolve } from "node:path";
@@ -57,7 +72,9 @@ const RULES: {
   name: string;
   pattern: string;
   fixed?: boolean;
-  exclude?: string;
+  exclude?: string | string[];
+  /** Where it holds, when not the whole dashboard. */
+  only?: string[];
 }[] = [
   {
     name: "transition-all is banned: name the properties (transition-[a,b])",
@@ -84,6 +101,46 @@ const RULES: {
     pattern: "(^|[^-[:alnum:]])dur-[a-z]",
   },
   {
+    name: "a colour is named by its role, never its hue (theme.css: danger, caution, success, live, a label-<hue> for a hue that marks a thing)",
+    pattern:
+      "(^|[^-[:alnum:]])(text|bg|border(-[xytrblse])?|fill|stroke|ring|outline|decoration|inset-ring|divide|caret|shadow|from|to|via|placeholder)-(red|orange|yellow|green|cyan|blue|purple|magenta)([^-[:alnum:]]|$)|--color-(red|orange|yellow|green|cyan|blue|purple|magenta)([^-[:alnum:]]|$)",
+    only: [
+      "apps/dashboard/src/lib/components/ui",
+      "apps/dashboard/src/lib/design-board",
+      "apps/dashboard/src/lib/platform",
+    ],
+  },
+  {
+    name: "a palette step is named only in the token sheets (lib/tokens/): a component names a role",
+    pattern:
+      "var\\(--(neutral|base|red|orange|yellow|green|cyan|blue|purple|magenta|coral)-[0-9a-z]+\\)|var\\(--pigment-",
+    only: [
+      "apps/dashboard/src/lib/components/ui",
+      "apps/dashboard/src/lib/design-board",
+      "apps/dashboard/src/lib/platform",
+    ],
+  },
+  {
+    name: "a colour role takes no share of its own (bg-accent/20): name the role theme.css gives that share (highlight, veil, label-<hue>-wash, caution-edge), or add it there",
+    pattern:
+      "(^|[^-[:alnum:]])(text|bg|border(-[xytrblse])?|fill|stroke|ring|outline|decoration|inset-ring|divide|caret|shadow|from|to|via|placeholder)-(tx|tx-2|tx-3|bg|bg-2|ui|ui-2|ui-3|accent|on-accent|danger|caution|success|live|label-[a-z]+)/[0-9]+",
+    only: [
+      "apps/dashboard/src/lib/components/ui",
+      "apps/dashboard/src/lib/design-board",
+      "apps/dashboard/src/lib/platform",
+    ],
+  },
+  {
+    name: "a colour is never derived from a role outside the token sheets and design.css's recipes: name the role theme.css gives it, or add it there",
+    pattern:
+      "oklch\\(from var\\(--color-|color-mix\\(in [a-z]+, ?var\\(--color-",
+    only: [
+      "apps/dashboard/src/lib/components/ui",
+      "apps/dashboard/src/lib/design-board",
+      "apps/dashboard/src/lib/platform",
+    ],
+  },
+  {
     name: "a failure is never a toast (DESIGN.md, Flow: a failure leaves the person where they were): say it where it happened, in the error formula, with its way out (RowFault, the pane's line, the composer's)",
     pattern: "(^|[^[:alnum:]_$])toast\\.(error|warning)([^[:alnum:]_$]|$)",
   },
@@ -91,7 +148,7 @@ const RULES: {
 
 const outs = await Promise.all(
   RULES.map((rule) =>
-    Bun.$`git grep --untracked -n ${rule.fixed ? "-F" : "-E"} -e ${rule.pattern} -- apps/dashboard/src ${rule.exclude ? [rule.exclude] : []}`
+    Bun.$`git grep --untracked -n ${rule.fixed ? "-F" : "-E"} -e ${rule.pattern} -- ${rule.only ?? ["apps/dashboard/src"]} ${rule.exclude ? [rule.exclude].flat() : []}`
       .cwd(ROOT)
       .nothrow()
       .quiet()
@@ -333,7 +390,7 @@ for (const [i, rule] of RULES.entries()) {
 }
 console.log(
   found === 0
-    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no per-element pointer cursor, no dur-* class, no failure toast, no @keyframes that cuts and moves, no kit-tree-row without its depth, no bottom inset read off a box without data-safe-bottom"
+    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no per-element pointer cursor, no dur-* class, no failure toast, no colour named by its hue, no palette step outside the token sheets, no colour role at a share of its own, no colour derived from a role outside the system sheets, no @keyframes that cuts and moves, no kit-tree-row without its depth, no bottom inset read off a box without data-safe-bottom"
     : `style greps: ${found} match${found === 1 ? "" : "es"}`
 );
 process.exit(found === 0 ? 0 : 1);

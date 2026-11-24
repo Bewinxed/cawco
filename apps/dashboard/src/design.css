@@ -13,6 +13,16 @@
 @import "./lib/tokens/selection.css";
 /* The house's variants and one per attribute state (`bun run variants`). */
 @import "./lib/tokens/variants.css";
+/* A control's tap area, past its drawn box (@regular-ppl/hitbox, owner's
+   pick 2026-11-24): `hitbox` on the control, `hitbox-x-*` / `hitbox-y-*`
+   to grow it, on its ::after; the control surface's state layer is its
+   ::before (theme.css `control`). */
+@import "@regular-ppl/hitbox";
+/* Concentric corners (tailwind-super-corners, owner's pick 2026-11-24: "use
+   this for all"): `rounded-*`, `p-*` and `border` publish a level's radius,
+   padding and edge, and a part inside takes the corner left at its level
+   (`sc-concentric-<fallback>`, a side alone with `sc-t-`/`sc-b-`). */
+@import "tailwind-super-corners";
 /* The house edge fade, its one definition: the component canvas reads the
    same sheet into its pages (packages/agent stage-host build.ts). */
 @import "./edge-fade.css";
@@ -323,7 +333,7 @@
 
     /* Inherited, so it is set once here rather than worked out on every
        element. */
-    scrollbar-color: oklch(from var(--color-tx-2) l c h / 0.35) transparent;
+    scrollbar-color: var(--color-line) transparent;
 
     /* One device pixel as a CSS length, from the screen's resolution: a
        hairline drawn outside a box (a session mark's rim) is sized in whole
@@ -347,36 +357,28 @@
     --tree-line: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
 
     /* A diff's added, removed and changed lines (@pierre/diffs). */
-    --diffs-addition-color-override: var(--color-green);
-    --diffs-deletion-color-override: var(--color-red);
+    --diffs-addition-color-override: var(--color-success);
+    --diffs-deletion-color-override: var(--color-danger);
     --diffs-modified-color-override: var(--code-syntax-token-function);
-    --diffs-bg-addition-override: oklch(from var(--color-green) l c h / 0.11);
-    --diffs-bg-deletion-override: oklch(from var(--color-red) l c h / 0.11);
+    --diffs-bg-addition-override: oklch(from var(--color-success) l c h / 0.11);
+    --diffs-bg-deletion-override: oklch(from var(--color-danger) l c h / 0.11);
     --diffs-bg-addition-emphasis-override: oklch(
-      from var(--color-green) l c h / 0.08
+      from var(--color-success) l c h / 0.08
     );
     --diffs-bg-deletion-emphasis-override: oklch(
-      from var(--color-red) l c h / 0.08
+      from var(--color-danger) l c h / 0.08
     );
-    --diffs-fg-number-addition-override: var(--color-green);
-    --diffs-fg-number-deletion-override: var(--color-red);
+    --diffs-fg-number-addition-override: var(--color-success);
+    --diffs-fg-number-deletion-override: var(--color-danger);
 
     /* Cross-component paints & shared contracts derived from system tokens. */
-    --nest-ink: light-dark(
-      oklch(from var(--color-tx-2) 70.5% c h),
-      oklch(from var(--color-tx-2) 44.5% c h)
-    );
+    /* The nest line's old name, which the app still reads (theme.css
+       `--color-nest`), until the app moves onto the roles. */
+    --nest-ink: var(--color-nest);
     --shadow-overlay-hung:
       0 calc(var(--spacing) * 4.5) calc(var(--spacing) * 12)
-        light-dark(
-          oklch(from var(--color-tx) l c h / 0.2),
-          oklch(from var(--color-bg) l c h / 0.76)
-        ),
-      0 2px calc(var(--spacing) * 1.5)
-        light-dark(
-          oklch(from var(--color-tx) l c h / 0.09),
-          oklch(from var(--color-bg) l c h / 0.55)
-        );
+        var(--color-shadow-far),
+      0 2px calc(var(--spacing) * 1.5) var(--color-shadow);
     --well-x: calc(var(--spacing) * 0.125);
     --composer-panel: calc(
       var(--spacing) * 8.5 + var(--spacing-space-2) * 2 + 2px
@@ -808,6 +810,80 @@
    corners itself. */
 @utility concentric-in {
   --r-inner: max(0px, calc(var(--r-outer) - var(--r-inset)));
+}
+/* A stack of rows (a menu's, a select's, a command list's: every
+   `data-menu-item`) is concentric at its ends only (owner, 2026-11-24:
+   "account for first/n/last in the roundness"). Each row takes the corner
+   left at its level from the rounded box it stands in
+   (tailwind-super-corners' `sc-concentric-*`); the container of the stack
+   (`concentric-rows`) turns every corner a row shows a neighbour to the
+   join (--r-join, the small radius unless it names one). Something stands
+   above a row when the row, or anything holding it inside the container (a
+   wrapper, a group), has an earlier sibling that is drawn; below it,
+   likewise. A separator, drawn between rows, and what takes no room (a
+   hidden element, a command's input label) are no such thing. A holder
+   with a drawn sibling after it says so to all it holds (`--r-tail`), its
+   `:has()` asked of itself (has-subject-check), and a row reads it from
+   what holds it (a style query). */
+@utility concentric-rows {
+  --r-tail: initial;
+  & [data-menu-item] {
+    @container style(--r-tail: join) {
+      border-end-start-radius: var(--r-join, var(--radius-xs));
+      border-end-end-radius: var(--r-join, var(--radius-xs));
+    }
+  }
+  &
+    :not(
+      [role="separator"],
+      [hidden],
+      [data-command-input-label],
+      script,
+      style,
+      template
+    )
+    ~ [data-menu-item],
+  &
+    :not(
+      [role="separator"],
+      [hidden],
+      [data-command-input-label],
+      script,
+      style,
+      template
+    )
+    ~ *
+    [data-menu-item] {
+    border-start-start-radius: var(--r-join, var(--radius-xs));
+    border-start-end-radius: var(--r-join, var(--radius-xs));
+  }
+  &
+    [data-menu-item]:has(
+      ~ :not(
+        [role="separator"],
+        [hidden],
+        [data-command-input-label],
+        script,
+        style,
+        template
+      )
+    ) {
+    border-end-start-radius: var(--r-join, var(--radius-xs));
+    border-end-end-radius: var(--r-join, var(--radius-xs));
+  }
+  &
+    :has(
+      ~ :not(
+        [role="separator"],
+        [hidden],
+        [data-command-input-label],
+        script,
+        style,
+        template
+      )
+    ) {
+    --r-tail: join;
+  }
 }
 @utility r-outer-* {
   --r-outer: --value(--radius-*);
@@ -1614,10 +1690,7 @@
   padding-inline-start: calc(var(--x-glyph) - var(--x-rail));
   background: var(
       --rail-head,
-      linear-gradient(
-        oklch(from var(--color-tx-2) l c h / 0.4),
-        oklch(from var(--color-tx-2) l c h / 0.4)
-      )
+      linear-gradient(var(--color-line), var(--color-line))
     )
     left top / 2px 100% no-repeat;
 }
@@ -2067,12 +2140,6 @@
     oklch(from var(--color-tx) l c h / 0.06)
   );
 }
-@utility bg-rail {
-  background-image: linear-gradient(
-    oklch(from var(--color-tx-2) l c h / 0.4),
-    oklch(from var(--color-tx-2) l c h / 0.4)
-  );
-}
 @utility mask-head-tint {
   mask-image: linear-gradient(
     oklch(from var(--color-tx) l c h / 1),
@@ -2088,48 +2155,25 @@
     oklch(from var(--color-tx) l c h / 0)
   );
 }
-@utility accent-stops {
-  --tw-gradient-from: oklch(from var(--color-accent) calc(l + 0.025) c h);
-  --tw-gradient-to: oklch(from var(--color-accent) calc(l - 0.025) c h);
-}
-@utility accent-stops-hover {
-  --tw-gradient-from: oklch(from var(--color-accent) calc(l - 0.02) c h);
-  --tw-gradient-to: oklch(from var(--color-accent) calc(l - 0.07) c h);
-}
-
 @utility shadow-overlay-hung {
   box-shadow: var(--shadow-overlay-hung);
 }
 @utility shadow-tab-start {
-  box-shadow: -2px 0 calc(var(--spacing) * 1.25) -1px
-    light-dark(
-      oklch(from var(--color-tx) l c h / 0.24),
-      oklch(from var(--color-tx) l c h / 0.14)
-    );
+  box-shadow: -2px 0 calc(var(--spacing) * 1.25) -1px var(--color-shadow-far);
 }
 @utility shadow-tab-end {
-  box-shadow: 2px 0 calc(var(--spacing) * 1.25) -1px
-    light-dark(
-      oklch(from var(--color-tx) l c h / 0.24),
-      oklch(from var(--color-tx) l c h / 0.14)
-    );
+  box-shadow: 2px 0 calc(var(--spacing) * 1.25) -1px var(--color-shadow-far);
 }
 @utility shadow-tab-start-chosen {
   box-shadow: -2px 0 calc(var(--spacing) * 1.25) -1px
-    light-dark(oklch(from var(--color-tx) l c h / 0.24), transparent);
+    light-dark(var(--color-shadow-far), transparent);
 }
 @utility shadow-tab-end-chosen {
   box-shadow: 2px 0 calc(var(--spacing) * 1.25) -1px
-    light-dark(oklch(from var(--color-tx) l c h / 0.24), transparent);
+    light-dark(var(--color-shadow-far), transparent);
 }
 @utility drop-shadow-near {
-  filter: drop-shadow(
-    0 2px var(--spacing-space-1)
-      light-dark(
-        oklch(from var(--color-tx) l c h / 0.09),
-        oklch(from var(--color-bg) l c h / 0.55)
-      )
-  );
+  filter: drop-shadow(0 2px var(--spacing-space-1) var(--color-shadow));
 }
 
 /* Component transitions composed from the seven durations and four curves. */
@@ -2341,6 +2385,53 @@
     wave-breath-fade calc(calc(var(--duration-loop) * 2) * 2) var(--ease-in-out)
       infinite;
 }
+/* The design board's motion specimens, each playing its token (Foundation,
+   the Motion shelf): a duration's bar fills over its time and holds for a
+   loop's length (`--demo-d`, its hold folded into `--demo-hold` as a
+   linear() that reaches 1 when the time is up); a curve's dot runs the
+   curve's graph, across on the clock and up on the curve, then rests; a
+   thumb slides its track on the curve. Scale and translate only. */
+@keyframes demo-fill {
+  from {
+    scale: 0 1;
+  }
+  to {
+    scale: 1 1;
+  }
+}
+@keyframes demo-across {
+  0% {
+    translate: 0 0;
+  }
+  70%,
+  100% {
+    translate: 100% 0;
+  }
+}
+@keyframes demo-up {
+  0% {
+    translate: 0 0;
+  }
+  70%,
+  100% {
+    translate: 0 -100%;
+  }
+}
+@utility animate-demo-fill {
+  animation: demo-fill calc(var(--demo-d) + var(--duration-loop))
+    var(--demo-hold) infinite;
+}
+@utility animate-demo-across {
+  animation: demo-across calc(var(--duration-loop) * 1.6) linear infinite;
+}
+@utility animate-demo-up {
+  animation: demo-up calc(var(--duration-loop) * 1.6) var(--demo-ease) infinite;
+}
+@utility animate-demo-slide {
+  animation: demo-across calc(var(--duration-loop) * 1.6) var(--demo-ease)
+    infinite;
+}
+
 @utility animate-icon-swap {
   animation: icon-swap var(--duration-fast) var(--ease-out) both;
 }
@@ -2639,6 +2730,15 @@
   }
 }
 
+/* A control with a tap area (`hitbox`) is its area's containing block:
+   hitbox asks a positioned host, and touch-hit made its host relative at
+   no weight, so a host's own position (a utility, a recipe) still stands. */
+@layer base {
+  :where(.hitbox) {
+    position: relative;
+  }
+}
+
 /* ---- Behaviours --------------------------------------------------------
    The behaviours the whole app names, one custom utility each
    (tailwindcss.com/docs/adding-custom-styles#adding-custom-utilities), so a
@@ -2707,6 +2807,53 @@
       );
     }
   }
+}
+
+/* The kit's tap area as hitbox's surface takes it (@regular-ppl/hitbox,
+   owner's pick 2026-11-24): `hitbox` draws the area (its ::after, under the
+   control's content in its own stacking context, gone while the control is
+   disabled), and these size it through hitbox's own `hitbox:` variant, by
+   touch-hit's rule above: 44px about the control's centre whatever its
+   size (`touch-area`, under `pointer-coarse:`, or on every pointer for The
+   Peer Rule's pair), 24px under a fine pointer (`pointer-area`), each
+   stopping at the midpoint to a neighbour (--hit-gap-x / --hit-gap-y) and
+   standing the half pixel Blink's hit test asks. A kit control writes
+   `hitbox pointer-coarse:hitbox:touch-area`. */
+@utility touch-area {
+  translate: calc(1px / 2) calc(1px / 2);
+  @supports (-moz-orient: inline) {
+    translate: none;
+  }
+  inset-inline: max(
+    min(0px, calc(50% - var(--spacing-control-lg) / 2 / var(--hit-scale, 1))),
+    calc(
+      var(--hit-gap-x, var(--spacing-control-lg) / var(--hit-scale, 1)) / -2 -
+        var(--hit-edge, 0px)
+    )
+  );
+  inset-block: max(
+    min(0px, calc(50% - var(--spacing-control-lg) / 2 / var(--hit-scale, 1))),
+    calc(
+      var(--hit-gap-y, var(--spacing-control-lg) / var(--hit-scale, 1)) / -2 -
+        var(--hit-edge, 0px)
+    )
+  );
+}
+@utility pointer-area {
+  inset-inline: max(
+    min(0px, calc(50% - var(--spacing-space-6) / 2 / var(--hit-scale, 1))),
+    calc(
+      var(--hit-gap-x, var(--spacing-space-6) / var(--hit-scale, 1)) / -2 -
+        var(--hit-edge, 0px)
+    )
+  );
+  inset-block: max(
+    min(0px, calc(50% - var(--spacing-space-6) / 2 / var(--hit-scale, 1))),
+    calc(
+      var(--hit-gap-y, var(--spacing-space-6) / var(--hit-scale, 1)) / -2 -
+        var(--hit-edge, 0px)
+    )
+  );
 }
 
 /* touch-hit on every pointer, not only a finger's (DESIGN.md, The Peer Rule):
@@ -2869,40 +3016,62 @@
   }
 }
 
-/* Two things sharing one slot; the outgoing one animates out too. Each
-   cross-fades on opacity and, where motion is welcome, shrinks to a quarter
-   on scale, the two the compositor runs off the main thread: a frame of the
-   page's own work never holds them. The one leaving is drawn over the whole
-   of its first frame (opacity 1 at 0ms) and the pair is never both near
-   gone (each at 0.5 where they cross). A swap that runs with a motion
+/* Glyphs that give way to one another in one cell, which one shows said by
+   `data-active` (the CSS twin of glyph.ts, the house's glyph swap). They
+   run through the cell one way as a strip: the one leaving slides its own
+   width toward the end side on --ease-in-out, and the one arriving slides
+   in from the start side, elastic, starting --duration-fast late so it
+   enters as the other clears (owner's pick, 2026-11-24: "Full slide").
+   Each fades on its slide (--ease-fade-arrive, --ease-fade-leave): seen
+   only while half of it stands in the cell, so it is gone before it can
+   reach what stands beside it, with no edge cutting it off (owner,
+   2026-11-24). Icons never scale and never blur.
+   The two ways run on two properties, so neither turns back: `transform`
+   carries the exit (out to the end side, and back at once on arriving),
+   `translate` the arrival (in from the start side, and stepping out to it
+   only as the exit ends, unseen). Both are the compositor's alone. With
+   less motion, only the fade, on the clock. A swap that runs with a motion
    of its own takes that motion's clock: `--icon-swap-dur` and
-   `--icon-swap-ease` (the sidebar toggle's glyph, on the sidebar's slide). */
+   `--icon-swap-ease` (the sidebar toggle's glyph, on the sidebar's
+   slide). */
 @utility icon-swap {
   /* biome-ignore lint/suspicious/noDuplicateSelectors: `&` here is this @utility's own class; the rule reads every utility's `&` as one selector. */
   :where(&) {
     display: inline-grid;
     place-items: center;
   }
+  :where(&:dir(rtl)) {
+    --swap-dir: -1;
+  }
   :where(&) > :where(*) {
     display: inline-flex;
     grid-area: 1 / 1;
-    transition-property: opacity, translate;
-    transition-duration: var(--icon-swap-dur, var(--duration-slow));
-    transition-timing-function: var(--icon-swap-ease, var(--ease-elastic));
+    transition-property: opacity, translate, transform;
+    transition-duration:
+      var(--icon-swap-dur, var(--duration-slow)),
+      var(--icon-swap-dur, var(--duration-slow)), 0s;
+    transition-timing-function:
+      linear, var(--icon-swap-ease, var(--ease-elastic)), linear;
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition-delay: var(--duration-fast), var(--duration-fast), 0s;
+      transition-timing-function:
+        var(--ease-fade-arrive), var(--icon-swap-ease, var(--ease-elastic)),
+        linear;
+    }
   }
-  /* The glyph stepping out slides aside and fades, and the one stepping in
-     slides back elastic (owner, 2026-11-24: "horizontal elastic slide fly
-     in with fade"), as the house's glyph swap (glyph.ts); icons never
-     scale and never blur. It leaves settling, on the shorter clock. With
-     less motion, only the fade. */
   :where(&) > :where([data-active="false"]) {
     opacity: 0;
     pointer-events: none;
     transition-duration: var(--duration-base);
-    transition-timing-function: var(--ease-spring);
+    transition-timing-function: linear, step-end, var(--ease-in-out);
+    transition-delay: 0s;
 
     @media (prefers-reduced-motion: no-preference) {
-      translate: calc(var(--spacing-space-2) * -1) 0;
+      translate: calc(var(--swap-dir, 1) * -100%) 0;
+      transform: translateX(calc(var(--swap-dir, 1) * 100%));
+      transition-timing-function:
+        var(--ease-fade-leave), step-end, var(--ease-in-out);
     }
   }
   /* Its baseline is a line of words at its centre, zero wide and zero tall:
@@ -3231,7 +3400,7 @@
       ),
       var(--dpx, 1px)
     );
-    border-color: var(--nest-ink);
+    border-color: var(--color-nest);
     border-style: solid;
     border-width: 0;
     border-inline-start-width: var(--tree-line);

@@ -118,7 +118,7 @@ export const SCALES: Foundation[] = [
 
   {
     title: "Motion",
-    note: "4 durations (120, 200, 320, 1000ms) and 3 easing curves.",
+    note: "Six durations: fast, base and slow for a move, loop for a cycle, hold for an outcome shown, arm for a confirm's window. Seven curves: out, in-out and drawer, the spring (Apple's, no bounce, as Family moves), the elastic (a 5% overshoot, an arrival), and the two fades a glyph's slide takes. Each plays.",
     shelves: [
       shelf("Durations", "duration", named(starts("--duration-"))),
       shelf("Curves", "ease", named(starts("--ease-"))),

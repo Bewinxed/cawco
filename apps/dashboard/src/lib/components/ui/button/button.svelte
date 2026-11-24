@@ -6,10 +6,11 @@
     SVGAttributes,
   } from "svelte/elements";
   import type { VariantProps } from "tailwind-variants";
+  import type { GlyphSide } from "#lib/platform/motion/glyph.js";
   import { cn, tv, type WithElementRef } from "#lib/utils.js";
 
   export const buttonVariants = tv({
-    base: "group/button mark-line mark-cap touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-sm control control-toggle glass-item:concentric-at font-medium type-body text-tx leading-none tracking-tight [--hit-edge:1px] [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/button mark-line mark-cap hitbox pointer-coarse:hitbox:touch-area inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-sm control control-toggle glass-item:concentric-at font-medium type-body text-tx leading-none tracking-tight [--hit-edge:1px] [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       /* Its look on the control surface (theme.css `control`): every
          edge, fill and state is the surface's, set by these names. */
@@ -23,7 +24,7 @@
            destructive button uses red and never takes the primary role),
            and fills red under the pointer, pressed and armed (owner,
            2026-11-24). */
-        destructive: "control-danger control-reveal text-red",
+        destructive: "control-danger control-reveal text-danger",
         /* A grant is the primary look filled in its ink (owner's pick,
            2026-11-24). A grant wider than what was asked (DESIGN.md, The
            Consequential Grant Rule) is the caution intent, the same at rest
@@ -60,7 +61,7 @@
         quiet: "text-tx-2 not-aria-current-page:hover:text-tx",
         /** A bare symbol that removes (a list's minus in edit mode, as
             Reminders' is): the destructive ink, at rest and under the pointer. */
-        destructive: "text-red",
+        destructive: "text-danger",
         /** A changed value's own mark (the design graph's restore glyph, where his pick marks a change by its glyph alone): the edit's ink. */
         edited: "text-accent",
       },
@@ -72,8 +73,8 @@
           under it (the callers' `background` shorthand put the clip back
           at the border box). */
       answer: {
-        deny: "control-soft text-red",
-        approve: "control-soft text-green",
+        deny: "control-soft text-danger",
+        approve: "control-soft text-success",
         "deny-edge": "control-soft control-danger",
         "approve-edge": "control-soft control-success",
         "deny-strong": "control-soft control-danger",
@@ -81,7 +82,7 @@
       },
       /** Its 44×44 area on every pointer, not only a finger's (DESIGN.md,
           The Peer Rule: Approve and Deny). */
-      hit: { always: "touch-hit-always" },
+      hit: { always: "hitbox hitbox:touch-area" },
       /** No edge of its own. */
       edge: { none: "control-quiet" },
       /** Its box: a prompt's answer (the label size at medium weight, the
@@ -95,7 +96,7 @@
           the shell's radius less its inset and its edge; the prominent
           action beside a bar's glass, a capsule. */
       shape: {
-        inset: "concentric-xs",
+        inset: "sc-concentric-xs",
         /* The one prominent action standing beside a bar's glass (HIG,
            Toolbars: the `.prominent` style, trailing): a capsule at the
            glass's height, so it is concentric with the corner it stands in,
@@ -107,7 +108,7 @@
           shrinking, at the bar's control corner. */
       look: {
         "in-bar":
-          "group-data-bar:h-control-md group-data-bar:w-auto group-data-bar:min-w-control-md group-data-bar:flex-none group-data-bar:concentric-xs",
+          "group-data-bar:h-control-md group-data-bar:w-auto group-data-bar:min-w-control-md group-data-bar:flex-none group-data-bar:sc-concentric-xs",
       },
       /** It may shrink below its words, or up to a field's cap. */
       width: { shrink: "min-w-0", capped: "min-w-0 max-w-112" },
@@ -253,6 +254,11 @@
        * away, so its width never changes; the icon fades in its slot.
        */
       holdsIcon?: boolean;
+      /**
+       * The side its icon slides in from when it comes into an empty slot,
+       * and leaves to: the start (default) or the end (a pin).
+       */
+      iconFrom?: GlyphSide;
       /** What the label says while the work's good end is shown ("Sent"). */
       doneLabel?: string;
       /** What the label says while the work's failure is shown ("Not sent"). */
@@ -305,6 +311,7 @@
     arrivals,
     confirm,
     holdsIcon = false,
+    iconFrom,
     doneLabel,
     failedLabel,
     onclick,
@@ -411,6 +418,7 @@
       {failed}
       {failedLabel}
       {holdsIcon}
+      {iconFrom}
       {icon}
       {label}
       {pending}

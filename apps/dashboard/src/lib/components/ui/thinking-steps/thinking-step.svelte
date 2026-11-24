@@ -17,10 +17,10 @@
     base: "grid h-lh min-h-icon-md w-icon-md place-items-center status-ahead:text-tx-2",
     variants: {
       ink: {
-        done: "text-green",
+        done: "text-success",
         active: "text-tx",
-        fail: "text-red",
-        attn: "text-orange",
+        fail: "text-danger",
+        attn: "text-caution",
         muted: "text-tx-2",
       },
     },
