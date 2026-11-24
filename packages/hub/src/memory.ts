@@ -10,7 +10,7 @@
  *   index points to; knowledge, `knowledge/<topic>.md`, which an attempt's
  *   brief carries by the task's words (`contextFor`); the inbox,
  *   `memory/inbox/` (one file per agent's note) and its archive. The line
- *   format, the ledger and the caps are memory-lessons.ts's. No agent writes
+ *   format, the changes and the budgets are memory-lessons.ts's. No agent writes
  *   any of them with `folder_write` ({@link personsTier}).
  * - **Writers**: memory-run.ts, the one writer of the index's rules, skills'
  *   lessons and knowledge: the nightly memory run, through `memory_apply`
@@ -65,6 +65,7 @@ import {
   type LessonLine,
   NOTE_ID,
   parseLessons,
+  renderLesson,
   withNote,
   wordsOf,
 } from "./memory-lessons";
@@ -163,8 +164,9 @@ export interface Note {
   by: string | null;
   id: string;
   /**
-   * Archived only: what came of it (`landed L-…`, `staged L-…`,
-   * `corroborates L-…`, `dropped: <reason>`, `withdrawn`).
+   * Archived only: what came of it (`landed L-…`, `corroborates L-…`,
+   * `removes L-…`, `dropped: <reason>`, `withdrawn`; `staged L-…` before
+   * 2026-11-24).
    */
   outcome: string | null;
   path: string;
@@ -416,9 +418,8 @@ interface Fact {
   path: string;
 }
 
-/** A lesson as its file says it: the line, and its `Why:` under it. */
-const factLine = ({ line }: Fact): string =>
-  `- ${line.text} (${line.id})${line.why ? `\n  Why: ${line.why}` : ""}`;
+/** A lesson as its file says it: the line, its `Why:` and its anchor under it. */
+const factLine = ({ line }: Fact): string => renderLesson(line);
 
 /**
  * Grep's shortlist for a brief: the lessons holding the task's words, and
@@ -516,10 +517,15 @@ const OpInput = z.discriminatedUnion("op", [
       ),
   }),
   z.object({
-    op: z.literal("replace"),
+    op: z.literal("reword"),
     id: z.string(),
     text: z.string(),
     why: z.string(),
+    sources: z.array(z.string()),
+  }),
+  z.object({
+    op: z.literal("remove"),
+    id: z.string(),
     sources: z.array(z.string()),
   }),
   z.object({
@@ -697,8 +703,8 @@ export const createMemory = ({
         });
 
   /**
-   * An agent's note into its project's inbox, one commit, its labels the
-   * hub's. `since`: the day its fact became true, when that is before today
+   * An agent's note into its project's inbox, one commit; refused when it
+   * quotes the person ({@link quotesPerson}). `since`: the day its fact became true, when that is before today
    * (a backfill); a day to come is refused. A secret or a duplicate goes
    * straight to the archive, and the run never reads it.
    */
@@ -1184,8 +1190,7 @@ export const MEMORY_TOOLS: ReadonlySet<string> = new Set([
 
 /**
  * The person's own memory acts outside a conversation: "Make a note"
- * straight into AGENTS.md; withdrawing a note, which retires the lessons
- * resting on it alone in the same commit (memory-run.ts `withdraw`).
+ * straight into AGENTS.md; withdrawing a note (memory-run.ts `withdraw`).
  */
 export const memoryRoutes = (
   memory: Memory,
@@ -1193,10 +1198,7 @@ export const memoryRoutes = (
     withdraw: (
       projectId: string,
       note: string
-    ) => Promise<
-      | { keeps: number; retires: number; sha: string; withdrawn: string }
-      | AnyProblem
-    >;
+    ) => Promise<{ sha: string; withdrawn: string } | AnyProblem>;
   }
 ) =>
   new Elysia()

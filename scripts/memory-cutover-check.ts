@@ -2,12 +2,18 @@
  * `bun scripts/memory-cutover-check.ts` (part of `bun run check`): the rules
  * the project's memory stands on, each read off the source.
  *
- * C1, no way back. No source under a package's or an app's src/ names
- * the approval path the nightly run replaced: `tainted:` (a note archived
- * unread for its session's web read), `memory_propose`, `memory_classify`,
- * `waitsForPerson`, or the old `memory_note` answer's last sentence. The
- * one line in {@link C1_KEPT} stays while a shipped build draws the asks
- * parked under it before the cutover.
+ * C1, no way back. No source under a package's or an app's src/ names a
+ * part the memory left behind: the approval path the nightly run replaced
+ * (`tainted:`, a note archived unread for its session's web read;
+ * `memory_propose`, `memory_classify`, `waitsForPerson`, the old
+ * `memory_note` answer's last sentence), or the parts the cut of
+ * 2026-11-24 deleted (the ledger's `MemoryLedger` and `parseLedger`, the
+ * note labels' `sessionTaints` and `countsTogether`, the reverts'
+ * `revertCorrected`, the recovery's `recoveryBrief`, the CawCo tasks'
+ * `productTask`, the re-test's `retestIfNew`, and the rebase layer's
+ * `againOnConflict` and `readAtHead`). The one line in {@link C1_KEPT}
+ * stays while a shipped build draws the asks parked under it before the
+ * cutover.
  *
  * C2, who may say `human`. The project's nightly memory run reads a send of
  * origin `human` as the person's own words (hub db/sends.ts
@@ -26,9 +32,9 @@
  * `changeFolderFiles` are never called with a path under those names (a
  * call's path arguments are read for them).
  *
- * C6, one checked change. `new CheckedOp(` (memory-lessons.ts), the only
- * change `applyOp` takes, is made only in memory-run.ts, where every rule of
- * an operation is checked first.
+ * C6, one checked change. `applyLineChange` (memory-lessons.ts), the one
+ * change to the memory's lines, is called only in memory-run.ts, where
+ * every rule of an operation is checked first.
  *
  * Exits 1 naming each place that breaks a rule.
  */
@@ -49,6 +55,16 @@ const C1_GONE: readonly string[] = [
   "memory_classify",
   "waitsForPerson",
   "The person decides what is kept.",
+  "MemoryLedger",
+  "parseLedger",
+  "sessionTaints",
+  "countsTogether",
+  "revertCorrected",
+  "recoveryBrief",
+  "productTask",
+  "retestIfNew",
+  "againOnConflict",
+  "readAtHead",
 ];
 
 /** Lines that keep one of {@link C1_GONE}, each with why. */
@@ -84,8 +100,9 @@ const C3_WRITERS: readonly { file: string; fn: string; who: string }[] = [
 const C3_PATH =
   /AGENTS\.md|\bINDEX_FILE\b|\bAGENTS_FILE\b|["'`]lessons\/|["'`]knowledge\/|\bKNOWLEDGE_DIR\b|\bKNOWLEDGE_ARCHIVE\b|\bLESSONS_DIR\b/u;
 
-/** Where a checked change may be made (C6). */
+/** Where the one change to the memory's lines may be made (C6). */
 const C6_MAKER = "packages/hub/src/memory-run.ts";
+const C6_CHANGE = "applyLineChange";
 
 /** Where a message is given the person's origin: the file, the function that does it ("" for any in the file), and who he is there. */
 const SPEAKS: readonly { file: string; fn: string; who: string }[] = [
@@ -239,7 +256,7 @@ const c1 = (): Found[] => {
       ) {
         found.push({
           at: `${file}:${at + 1}`,
-          why: `names ${gone}, of the memory approval path the nightly run replaced (memory-run.ts)`,
+          why: `names ${gone}, a part the memory left behind (scripts/memory-cutover-check.ts C1)`,
         });
       }
     });
@@ -299,13 +316,13 @@ const c3c6 = (): { c3: Found[]; c6: Found[] } => {
     const name = calledName(call.expression);
     const at = `${file}:${source.getLineAndCharacterOfPosition(call.getStart(source)).line + 1}`;
     if (ts.isNewExpression(call)) {
-      if (name === "CheckedOp" && file !== C6_MAKER) {
-        c6.push({
-          at,
-          why: "makes a CheckedOp outside memory-run.ts: a change reaches applyOp only through memory-run.ts `checked`",
-        });
-      }
       continue;
+    }
+    if (name === C6_CHANGE && file !== C6_MAKER) {
+      c6.push({
+        at,
+        why: "changes the memory's lines outside memory-run.ts: applyLineChange is called only where every rule of an operation is checked first",
+      });
     }
     if (C3_WRITES.has(name) && namesMemory(call, source)) {
       c3.push({
@@ -337,5 +354,5 @@ if (found.length > 0) {
   process.exit(1);
 }
 console.log(
-  `memory-cutover-check: C1, C2, C3 and C6 hold: the approval path is named nowhere (${C1_KEPT.length} line kept for shipped builds); the person's origin is given in ${SPEAKS.length} places, read in ${READS.length}; the memory files are written through changeFolderInTurn, from memory-run.ts and memory.ts alone; a checked change is made in memory-run.ts alone`
+  `memory-cutover-check: C1, C2, C3 and C6 hold: no part the memory left behind is named (${C1_KEPT.length} line kept for shipped builds); the person's origin is given in ${SPEAKS.length} places, read in ${READS.length}; the memory files are written through changeFolderInTurn, from memory-run.ts and memory.ts alone; the memory's lines change through applyLineChange in memory-run.ts alone`
 );

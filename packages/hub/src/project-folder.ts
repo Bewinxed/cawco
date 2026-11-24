@@ -1646,9 +1646,16 @@ export interface FolderChangeAsked {
   writes: { content: string | Uint8Array; path: string }[];
 }
 
-/** A change's writes and deletes checked, and its message: or why it cannot be made. */
-const changeAsked = (change: FolderChangeAsked) => {
-  const asked = askedMessage(change.message);
+/**
+ * A change's writes and deletes checked, and its message: or why it cannot
+ * be made. `ownMessage`: the hub wrote the message itself (a memory commit
+ * naming each source it rests on), so {@link MESSAGE_LIMIT}, the cap on a
+ * message a route was asked for, is not its.
+ */
+const changeAsked = (change: FolderChangeAsked, ownMessage = false) => {
+  const asked = ownMessage
+    ? change.message.trim() || undefined
+    : askedMessage(change.message);
   if (asked instanceof ElysiaStatus) {
     return asked;
   }
@@ -1799,7 +1806,7 @@ export const changeFolderInTurn = async <T>(
       if (!change) {
         return { value };
       }
-      const checked = changeAsked(change);
+      const checked = changeAsked(change, true);
       if (isProblem(checked)) {
         return checked;
       }
@@ -2110,8 +2117,9 @@ const FILE_HEADER = /^(?:---|\+\+\+) (?:[ab]\/|\/dev\/null)/u;
 
 /**
  * Each commit of a project's folder since `since` that changed one of
- * `paths`, newest first: when it was made, and the lines it took out and
- * put in (`git log -p --unified=0`, the files' own lines, no headers).
+ * `paths`, newest first: when it was made, its subject, and the lines it
+ * took out and put in (`git log -p --unified=0`, the files' own lines, no
+ * headers).
  */
 export const folderLineChanges = async (
   projectId: string,
@@ -2123,7 +2131,7 @@ export const folderLineChanges = async (
     "--patch",
     "--unified=0",
     "--no-renames",
-    "--format=%x1e%H%x1f%ct",
+    "--format=%x1e%H%x1f%ct%x1f%s",
     "--",
     ...paths,
   ]);
@@ -2132,7 +2140,7 @@ export const folderLineChanges = async (
   }
   return records.map((record) => {
     const [first = "", ...lines] = record.split("\n");
-    const [sha = "", seconds = "0"] = first.split("\x1f");
+    const [sha = "", seconds = "0", subject = ""] = first.split("\x1f");
     const removed: string[] = [];
     const added: string[] = [];
     for (const line of lines) {
@@ -2145,7 +2153,13 @@ export const folderLineChanges = async (
         added.push(line.slice(1));
       }
     }
-    return { sha, at: new Date(Number(seconds) * 1000), removed, added };
+    return {
+      sha,
+      at: new Date(Number(seconds) * 1000),
+      subject,
+      removed,
+      added,
+    };
   });
 };
 

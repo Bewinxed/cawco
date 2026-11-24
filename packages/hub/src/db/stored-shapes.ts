@@ -77,7 +77,6 @@ import type {
   LandingPhase as LandingPhaseType,
   LimitCompactionStage as LimitCompactionStageType,
   McpAuthMode as McpAuthModeType,
-  MemoryLedger as MemoryLedgerType,
   MoveAsker as MoveAskerType,
   Origin as OriginType,
   PreparedContinuation as PreparedContinuationType,
@@ -535,98 +534,6 @@ const McpAuthModeShape = declared(
 );
 export const McpAuthModeSchema: z.ZodType<McpAuthModeType> = McpAuthModeShape;
 export type McpAuthModeOutput = z.output<typeof McpAuthModeShape>;
-
-const LessonHomeShape = declared(
-  z.union([
-    z.object({ at: z.literal("index") }),
-    z.object({ at: z.literal("skill"), skill: z.string() }),
-    z.object({ at: z.literal("knowledge"), topic: z.string() }),
-    z.object({ at: z.literal("none") }),
-  ]),
-  "LessonHome",
-  "packages/hub/src/db/stored-types.ts"
-);
-export type LessonHomeOutput = z.output<typeof LessonHomeShape>;
-
-const LessonSourceShape = declared(
-  z.union([
-    z.object({
-      at: z.string(),
-      kind: z.literal("said"),
-      send: z.string(),
-      session: z.string(),
-    }),
-    z.object({
-      id: z.string(),
-      kind: z.literal("note"),
-      root: z.string(),
-      session: z.string(),
-    }),
-    z.object({
-      kind: z.literal("file"),
-      match: z.string(),
-      path: z.string(),
-      read: z.string(),
-      sha256: z.string(),
-    }),
-    z.object({ commit: z.string(), kind: z.literal("approved") }),
-    z.object({ commit: z.string(), kind: z.literal("hand") }),
-  ]),
-  "LessonSource",
-  "packages/hub/src/db/stored-types.ts"
-);
-export type LessonSourceOutput = z.output<typeof LessonSourceShape>;
-
-const LessonShape = declared(
-  z.object({
-    by: z.enum(["owner", "agent"]),
-    home: LessonHomeShape,
-    retired: z
-      .object({
-        by: z.string().optional(),
-        on: z.string(),
-        text: z.string(),
-        why: z.enum([
-          "merged",
-          "product",
-          "replaced",
-          "expired",
-          "reverted",
-          "unneeded",
-          "withdrawn",
-          "hand",
-          "stale",
-        ]),
-      })
-      .optional(),
-    seen: z.string(),
-    since: z.string(),
-    sources: z.array(LessonSourceShape),
-    staged: z
-      .object({
-        home: LessonHomeShape,
-        text: z.string(),
-        waits: z.literal("jev").optional(),
-      })
-      .optional(),
-    state: z.enum(["staged", "live", "enforced", "stale", "retired"]),
-  }),
-  "Lesson",
-  "packages/hub/src/db/stored-types.ts"
-);
-export type LessonOutput = z.output<typeof LessonShape>;
-
-const MemoryLedgerShape = declared(
-  z.object({
-    lessons: z.record(z.string(), LessonShape),
-    version: z.literal(1),
-  }),
-  "MemoryLedger",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const MemoryLedgerSchema: z.ZodType<MemoryLedgerType> =
-  MemoryLedgerShape;
-export type MemoryLedgerOutput = z.output<typeof MemoryLedgerShape>;
 
 const MoveAskerShape = declared(
   z.object({

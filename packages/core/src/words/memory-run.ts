@@ -51,12 +51,11 @@ export const memoryRunWords = {
 
   /** `memory_rule`'s description. */
   ruleTool:
-    "Removes, rewords or adds one of this project's rules at once, in AGENTS.md and the memory's ledger. Use it when one of the project's rules should change now rather than wait for the nightly run.",
+    "Removes, rewords or adds one of this project's rules at once, as your session's change. Use it when one of the project's rules should change now rather than wait for the nightly run.",
   /** `memory_rule`'s answers: what changed, and what it means for the nightly run. */
   ruleRemoved: (id: string, path: string, text: string) =>
     `Removed ${id} from ${path} (it said: ${text}). Sessions that start from now on no longer load it, and the nightly run brings it back only on a message newer than this.`,
-  ruleReworded: (id: string, newId: string, path: string) =>
-    `Reworded ${id} as ${newId} in ${path}.`,
+  ruleReworded: (id: string, path: string) => `Reworded ${id} in ${path}.`,
   ruleAdded: (id: string, path: string) => `Added ${id} to ${path}.`,
   /** What a rule change through memory_rule is committed as. */
   ruleCommit: (said: string) => `${said}, through memory_rule`,
@@ -73,8 +72,6 @@ export const memoryRunWords = {
     `${id} is not a rule id: L- and six hex characters, as AGENTS.md shows each rule, like L-28939a.`,
   ruleUnknown: (id: string) =>
     `${id} is no rule of this project's memory: the ids are at the end of each line in AGENTS.md and the lessons/ and knowledge/ files.`,
-  ruleNotLive: (id: string, state: string) =>
-    `${id} is ${state}, with no line in a memory file: only a live rule can be changed.`,
   ruleSame: (id: string) => `${id} says this already, word for word.`,
   /** A lesson that says what a line taken out since the last run said, its sources older than the removal. */
   removedSince: (id: string, day: string) =>
@@ -96,9 +93,6 @@ export const memoryRunWords = {
     path: string;
   }) =>
     `${path} would hold ${chars} characters, past its budget of ${budget}: move or merge one of its lines first.`,
-  /** A commit refused because what it changes moved under it. */
-  memoryChanged: (path: string) =>
-    `${path} changed while this change was being made: read the memory again and make it once more.`,
   /** `memory_note`'s answer: the run reads it. */
   notedForRun: (id: string) =>
     `Noted as ${id}. The nightly memory run reads it. If it is wrong, withdraw it with memory_withdraw.`,
@@ -116,7 +110,7 @@ export const memoryRunWords = {
 
   /** `memory_apply`'s description. */
   applyTool:
-    "Changes to this project's memory, one operation each: add, replace, corroborate, move, check or drop. Use it on the nightly memory run for every message and note in your brief.",
+    "Changes to this project's memory, one operation each. Use it on the nightly memory run for every message and note in your brief.",
   /** An operation committed. */
   applied: (what: string) =>
     `Committed: ${what.endsWith(".") ? what : `${what}.`}`,
@@ -127,8 +121,27 @@ export const memoryRunWords = {
   refused: (why: string) => `Refused: ${why}`,
   /** What a committed operation did, said in its answer and its commit. */
   added: (id: string, path: string) => `add ${id} to ${path}`,
-  replaced: (id: string, by: string, path: string) =>
-    `replace ${id} with ${by} in ${path}`,
+  reworded: (id: string, path: string) => `reword ${id} in ${path}`,
+  removed: (id: string, path: string) => `remove ${id} from ${path}`,
+  /** The sources under a memory commit's subject, each by reference. */
+  sourcesHead: "Sources:",
+  sourceSaid: (send: string, session: string, at: string) =>
+    `the person's message ${send} (session ${session}, ${at})`,
+  sourceNote: (id: string, session: string) =>
+    `note ${id} (session ${session})`,
+  sourceFile: (path: string, match: string) => `${path} holds \`${match}\``,
+  sourceCommit: (kind: string, commit: string) =>
+    `${kind === "hand" ? "written by hand" : "approved"} at ${commit}`,
+  /** Why upkeep took a line out, said in its commit. */
+  upkeepArchived: (id: string, days: number) =>
+    `${id} archived: no brief carried it and no commit touched it in ${days} days`,
+  upkeepAnchorGone: (id: string, path: string, match: string) =>
+    `${id} taken out: ${path} no longer holds \`${match}\``,
+  upkeepChecked: (id: string, task: string) =>
+    `${id} taken out: its check, task ${task}, is done`,
+  /** The one-time commit that ends the ledger. */
+  ledgerGone:
+    "memory: the ledger leaves; each lesson's sources are named here, its file in its line, and the rules the re-test moved out of AGENTS.md are back in it",
   corroborated: (id: string) => `corroborate ${id}`,
   moved: (id: string, path: string) => `move ${id} to ${path}`,
   dropped: (count: number, reason: string) =>
@@ -159,8 +172,8 @@ export const memoryRunWords = {
   quotes:
     "The lesson holds a quoted phrase. State the rule without quoting anyone.",
   agentHome: "An agent's lesson goes to knowledge, not the index or a skill.",
-  agentReplaces:
-    "An agent's note does not change the person's rule: drop it, or name the message that changes it.",
+  ruleNeedsMessage:
+    "A note does not change or remove a rule of AGENTS.md or a skill's lessons: only a message of the person's does. Drop the note, or name the message.",
   noSkill: (skill: string) =>
     `The fleet lists no skill named ${skill}: name one from the list in your brief.`,
   noTopic: (topic: string) =>
@@ -189,8 +202,6 @@ export const memoryRunWords = {
     "An agent's lesson names a page outside the fleet: keep what the project's own work showed, without the link.",
   noLesson: (id: string) =>
     `${id} is no lesson of this project's memory: name one from your brief.`,
-  notLive: (id: string) =>
-    `${id} is not a live lesson: name one with a line in a memory file.`,
   jevFailed: (words: string) => `Jev did not answer: ${words}`,
   notRun:
     "memory_apply is the nightly memory run's: it changes nothing outside one.",
@@ -254,9 +265,6 @@ export const memoryRunWords = {
   },
   /** The run with nothing to read. */
   nothingToRead: "no message or note to read",
-  /** A run that failed twice, said to the person. */
-  failedTwice: (reason: string) =>
-    `The memory run failed twice: ${reason}. Nothing was lost; it reads the same messages tomorrow.`,
   /** An open memory proposal closed at the cutover. */
   proposalClosed:
     "Memory no longer asks for approval: the nightly run decides. This change was not applied; its notes are read tonight.",
@@ -285,6 +293,14 @@ export const memoryJevWords = {
     false:
       "The message does not say this, or the lesson goes further than the message.",
   },
+  /** Whether a message asks that a rule kept be taken out. */
+  removeQuestion:
+    "Does `message` ask that agents stop following the rule in `lesson`, or say it no longer holds?",
+  removeCriteria: {
+    true: "The message asks for the rule to go, says the opposite from now on, or says it no longer applies.",
+    false:
+      "The message does not touch the rule, or only narrows or rewords it.",
+  },
   /** Whether a new lesson says what one kept says. */
   keptQuestion:
     "Does `lesson`, about to be added to the project's memory, say what `kept`, a lesson the memory keeps, says?",
@@ -308,8 +324,8 @@ For each message and each note, pick one:
 1. A rule a tool can test (a banned pattern, a required name, a file that must exist): op "check", with the method: what to do instead. The hub files a task that builds the check; the rule stands as a line in its home until that task is done. A kept lesson a tool can test: "check" it by its id.
 2. A rule about how one workflow is run: find the skill that runs that workflow (read its SKILL.md) and add it with home {skill}. If no skill does, home "index".
 3. A rule for all work here: home "index".
-4. A fact about the project (a command, a place, what fails): home {knowledge}. Name the file and a literal string in it that bears the fact out, as anchor: the hub reads that file in the project's checkout, and reads it again each night. An agent's note lands as the person's does; the file, when you name one, must bear it out.
-5. Already kept: "corroborate" the lesson. Changed by the person: "replace" it, and say in why what the rule was until today. Under a message, the lessons that share its words are listed. A line under "Taken out since the last run" stays out unless a source newer than its removal says it.
+4. A fact about the project (a command, a place, what fails): home {knowledge}. When it is about the code, name the file and a literal string in it that bears the fact out, as anchor: the hub reads that file in the project's checkout, writes it under the fact's line, and takes the fact out once the file no longer holds the string. An agent's note lands as the person's does.
+5. Already kept: "corroborate" the lesson. Changed by the person: "reword" it, and say in why what the rule was until today. Asked gone by the person: "remove" it. A rule of AGENTS.md or a skill changes only on the person's message; a fact, on a note too. Under a message, the lessons that share its words are listed. A line under "Taken out since the last run" stays out unless a source newer than its removal says it.
 6. About one task or one moment, or already said by the repository's CLAUDE.md or a skill: "drop", with the reason. A note that says what a kept lesson says is "corroborate" of it, or a "drop" with reason "duplicate" and that lesson's id in of.
 
 Name every message and note of your brief in some operation's sources, a drop included: a note that says what a message says goes in the sources of that message's operation. memory_apply's answer lists what is not named yet.

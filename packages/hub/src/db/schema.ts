@@ -6266,9 +6266,8 @@ export const artifactDocuments = sqliteTable("artifact_documents", {
 /**
  * When a brief last carried each of a project's knowledge lessons
  * (memory.ts `contextFor`), by its lesson id: what the nightly run's upkeep
- * reads to archive one no brief carried for long (memory-run.ts), and
- * eviction to pick a knowledge line to archive first. A brief commits
- * nothing.
+ * reads to archive one no brief carried for long (memory-run.ts). A brief
+ * commits nothing.
  */
 export const factUses = sqliteTable(
   "fact_uses",

@@ -1,13 +1,17 @@
 /**
- * A project's memory as lessons (memory-run.ts writes it, memory.ts reads
- * it): the line format, the files they live in, the ledger, and every
- * change to them, as pure functions over the files' words. Nothing here
- * reads or writes a file.
+ * A project's memory as lines in its files (memory-run.ts writes them,
+ * memory.ts reads them): the line format, the files they live in, and the
+ * four changes to them, as pure functions over the files' words. Nothing
+ * here reads or writes a file.
  *
  * - **A lesson** is one line, `- <rule or fact, one sentence> (L-7f3a2c)`,
- *   with at most one `  Why: <one line>` under it. Its id is `L-` and six
- *   hex characters; its dates and sources are in the ledger, so what every
- *   session loads is the rule and its id.
+ *   with at most one `  Why: <one line>` under it and, for a fact a file
+ *   bears out, one `  Anchor: <path> | <match>`: the file in the project's
+ *   checkout and the literal string in it, which the reading agent can use
+ *   and upkeep reads again. Its id is `L-` and six hex characters.
+ * - **Provenance is git's**: each change is one commit, whose author says
+ *   who made it, whose date says when, and whose message names its sources
+ *   by reference; `git log -S "(L-7f3a2c)"` finds every change of a line.
  * - **Homes**, by how a lesson reaches a session: the index, `AGENTS.md`
  *   (its `## Rules`, loaded into every session of the project at launch);
  *   a skill's lessons, `lessons/<skill>.md` (read when that skill runs: the
@@ -15,26 +19,18 @@
  *   knowledge topic, `knowledge/<topic>.md` (carried into an attempt's
  *   brief by the task's words). `knowledge/archive/` is history, read by no
  *   session.
- * - **The person's own lines**: the index's `## Notes` (Make a note) and
- *   every section of it this module does not keep (a setup's) are his, and
- *   no change here edits them.
- * - **The ledger**, `memory/lessons.json`: each lesson's home, state, whose
- *   it is, its dates and its sources, by reference.
- * - **Budgets**, each with its reason ({@link CAPS}): a change that would
- *   take a file past its character budget is refused ({@link applyOp}),
- *   and nothing moves out on its own.
+ * - **The person's own lines**: the index's `## Notes` and every section of
+ *   it this module does not keep (a setup's) are his, and no change here
+ *   edits them.
+ * - **Changes**: add, reword, remove and move a line, and archive a
+ *   knowledge line ({@link applyLineChange}); a change that would take a file
+ *   past its character budget is refused ({@link CAPS}), and nothing moves
+ *   out on its own.
  */
 import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { memoryRunWords } from "@cawco/core/words/memory-run";
 import { MEMORY_FILE_CHARS } from "./config";
-import { MemoryLedgerSchema } from "./db/stored-shapes";
-import type {
-  MemoryLedger as Ledger,
-  Lesson,
-  LessonHome,
-  LessonSource,
-} from "./db/stored-types";
 
 export const KNOWLEDGE_DIR = "knowledge";
 /** Where a knowledge lesson goes once archived: `knowledge/archive/<topic>.md`, kept as history. */
@@ -92,11 +88,12 @@ export const grepScore = (query: Set<string>, text: string): number => {
 
 export const INDEX_FILE = "AGENTS.md";
 export const LESSONS_DIR = "lessons";
-export const LEDGER_FILE = "memory/lessons.json";
 export const RUN_STATE_FILE = "memory/state.json";
 
 const LESSON_LINE = /^- (.*\S) \((L-[0-9a-f]{6})\)\s*$/u;
 const WHY_LINE = /^ {2}Why: (.*\S)\s*$/u;
+/** A fact's file and the literal string in it that bear it out: `  Anchor: <path> | <match>`. */
+const ANCHOR_LINE = /^ {2}Anchor: (.+?) \| (.+\S)\s*$/u;
 const BULLET = /^- (.*\S)\s*$/u;
 const SECTION = /^## (.*\S)\s*$/u;
 const TITLE = /^# (.*\S)\s*$/u;
@@ -122,8 +119,6 @@ export const CAPS = {
   fact: 300,
   /** A `Why:` line, one per lesson: one line of why. */
   why: 160,
-  /** A retired lesson's days in the ledger, its words kept. */
-  retiredDays: 30,
   /**
    * A night's added lessons, and its replaces and removals: at 80 to 240
    * messages a day, about a tenth of them instructions, most repeating a
@@ -147,15 +142,31 @@ const budgetOf = (path: string): number | undefined => {
   return home?.at === "knowledge" ? MEMORY_FILE_CHARS : undefined;
 };
 
+/** Where a lesson lives: the index, a skill's lessons, or a knowledge topic. */
+export type LessonHome =
+  | { at: "index" }
+  | { at: "skill"; skill: string }
+  | { at: "knowledge"; topic: string };
+
+/** A fact's file in the project's checkout, from its root, and the literal string in it that bears the fact out. */
+export interface Anchor {
+  match: string;
+  path: string;
+}
+
 /** One lesson line as its file says it. */
 export interface LessonLine {
+  anchor: Anchor | null;
   id: string;
   text: string;
   why: string | null;
 }
 
-/** The path a home's lessons are in; none for a lesson with no home. */
-export const pathOf = (home: LessonHome): string | undefined => {
+/** The project's memory files by path: the index, every `lessons/` and `knowledge/` file, the archive's. */
+export type MemoryFiles = Readonly<Partial<Record<string, string>>>;
+
+/** The path a home's lessons are in. */
+export const pathOf = (home: LessonHome): string => {
   switch (home.at) {
     case "index":
       return INDEX_FILE;
@@ -163,8 +174,6 @@ export const pathOf = (home: LessonHome): string | undefined => {
       return `${LESSONS_DIR}/${home.skill}.md`;
     case "knowledge":
       return `${KNOWLEDGE_DIR}/${home.topic}.md`;
-    case "none":
-      return;
     default:
       return unhandled("lesson home", home);
   }
@@ -191,9 +200,15 @@ export const isTopic = (name: string): boolean => TOPIC_NAME.test(name);
 /** Whether `name` reads as a skill's name, as the fleet lists one. */
 export const isSkillName = (name: string): boolean => SKILL_NAME.test(name);
 
-/** A lesson as its file says it. */
-const renderLesson = (line: LessonLine): string =>
-  `- ${line.text} (${line.id})${line.why ? `\n  Why: ${line.why}` : ""}`;
+/** A lesson as its file says it: its line, its `Why:`, its anchor. */
+export const renderLesson = (line: LessonLine): string =>
+  [
+    `- ${line.text} (${line.id})`,
+    ...(line.why ? [`  Why: ${line.why}`] : []),
+    ...(line.anchor
+      ? [`  Anchor: ${line.anchor.path} | ${line.anchor.match}`]
+      : []),
+  ].join("\n");
 
 /** A fresh lesson id that `taken` does not hold. */
 export const newLessonId = (taken: (id: string) => boolean): string => {
@@ -387,7 +402,27 @@ const lessonRegion = (
   return { lines, region: (index) => inRules[index] === true };
 };
 
-/** A memory file's lessons, in order; a bullet in its lesson region with no id is `unmarked`, for {@link reconcile} to adopt. */
+/** The lines under a lesson's line that belong to it (`Why:`, `Anchor:`), from `at`: how many, and what they say. */
+const tailOf = (lines: readonly string[], at: number) => {
+  let why: string | null = null;
+  let anchor: Anchor | null = null;
+  let span = 0;
+  for (;;) {
+    const line = lines[at + span] ?? "";
+    const [, saidWhy] = WHY_LINE.exec(line) ?? [];
+    const [, path, match] = ANCHOR_LINE.exec(line) ?? [];
+    if (saidWhy && why === null) {
+      why = saidWhy;
+    } else if (path && match && anchor === null) {
+      anchor = { path, match };
+    } else {
+      return { anchor, span, why };
+    }
+    span += 1;
+  }
+};
+
+/** A memory file's lessons, in order; a bullet in its lesson region with no id is `unmarked`, for {@link withIds} to give one. */
 export const parseLessons = (
   path: string,
   content: string
@@ -401,8 +436,8 @@ export const parseLessons = (
     }
     const lesson = LESSON_LINE.exec(line);
     if (lesson?.[1] && lesson[2]) {
-      const why = WHY_LINE.exec(lines[index + 1] ?? "");
-      lessons.push({ id: lesson[2], text: lesson[1], why: why?.[1] ?? null });
+      const { anchor, why } = tailOf(lines, index + 1);
+      lessons.push({ id: lesson[2], text: lesson[1], why, anchor });
     } else if (BULLET.test(line)) {
       unmarked.push(line);
     }
@@ -418,24 +453,35 @@ export const lessonLineOf = (
   return read?.[1] && read[2] ? { id: read[2], text: read[1] } : undefined;
 };
 
-/** `content` with lesson `id`'s line (and its `Why:`) put in place by `put`'s lines; as it was when it holds no such line. */
+/** Every lesson line of `files`' homes, with the file it is in (an archive's aside). */
+export const allLessons = (files: MemoryFiles) =>
+  Object.keys(files)
+    .sort()
+    .flatMap((path) =>
+      homeOf(path)
+        ? parseLessons(path, files[path] ?? "").lessons.map((line) => ({
+            line,
+            path,
+          }))
+        : []
+    );
+
+/** Lesson `id`'s line and the file it is in; undefined when no home holds it. */
+export const lessonOf = (files: MemoryFiles, id: string) =>
+  allLessons(files).find(({ line }) => line.id === id);
+
+/** `content` with lesson `id`'s line (and the lines under it) put in place by `put`'s lines; as it was when it holds no such line. */
 const spliced = (content: string, id: string, put: string[]): string => {
-  const lines = linesOf(content);
+  const lines = content.split("\n");
   const at = lines.findIndex((each) => LESSON_LINE.exec(each)?.[2] === id);
   if (at < 0) {
     return content;
   }
-  const span = WHY_LINE.test(lines[at + 1] ?? "") ? 2 : 1;
-  return [...lines.slice(0, at), ...put, ...lines.slice(at + span)].join("\n");
+  const { span } = tailOf(lines, at + 1);
+  return [...lines.slice(0, at), ...put, ...lines.slice(at + 1 + span)].join(
+    "\n"
+  );
 };
-
-/** `content` with lesson `id`'s line (and its `Why:`) gone. */
-const withoutLine = (content: string, id: string): string =>
-  spliced(content, id, []);
-
-/** `content` with lesson `id`'s line (and its `Why:`) put in place by `line`. */
-const swappedLine = (content: string, id: string, line: LessonLine): string =>
-  spliced(content, id, [renderLesson(line)]);
 
 /** A new knowledge or skill lessons file's first lines: what it holds. */
 const fileHead = (path: string): string => {
@@ -467,238 +513,24 @@ const withLine = (path: string, content: string, line: LessonLine): string => {
   return `${body}\n${renderLesson(line)}\n`;
 };
 
-// --- the ledger ----------------------------------------------------------------------
-
-/** A ledger that holds nothing yet. */
-const emptyLedger = (): Ledger => ({ version: 1, lessons: {} });
-
-/** `memory/lessons.json` read; an empty ledger for none; the words of why it does not read otherwise. */
-export const parseLedger = (text: string): Ledger | string => {
-  if (text.trim() === "") {
-    return emptyLedger();
+/** `content` of `path` with every bullet in its lesson region that has no id given one (a line the person wrote by hand); as it was when none lacks one. */
+export const withIds = (
+  path: string,
+  content: string,
+  taken: (id: string) => boolean
+): string => {
+  let text = content;
+  const made = new Set<string>();
+  for (const raw of parseLessons(path, content).unmarked) {
+    const id = newLessonId((one) => taken(one) || made.has(one));
+    made.add(id);
+    const words = BULLET.exec(raw)?.[1] ?? raw;
+    text = text.replace(
+      raw,
+      renderLesson({ id, text: words, why: null, anchor: null })
+    );
   }
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch (error) {
-    return `${LEDGER_FILE} is not JSON: ${error instanceof Error ? error.message : String(error)}`;
-  }
-  const read = MemoryLedgerSchema.safeParse(json);
-  return read.success
-    ? read.data
-    : `${LEDGER_FILE} does not read as a ledger: ${read.error.issues
-        .slice(0, 3)
-        .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
-        .join("; ")}`;
-};
-
-/** The ledger as its file keeps it, its lessons by id. */
-export const renderLedger = (ledger: Ledger): string =>
-  `${JSON.stringify(
-    {
-      version: ledger.version,
-      lessons: Object.fromEntries(
-        Object.entries(ledger.lessons).sort(([a], [b]) => a.localeCompare(b))
-      ),
-    },
-    null,
-    2
-  )}\n`;
-
-// --- the tree, and the one way it changes ---------------------------------------------
-
-/** The project's memory files by path (the index, every `lessons/` and `knowledge/` file, the archive's), and its ledger. */
-export interface MemoryTree {
-  files: Readonly<Partial<Record<string, string>>>;
-  ledger: Ledger;
-}
-
-/**
- * A change memory-run.ts has checked against every rule of the sources,
- * the text and the caps (memory-run.ts `checked`): the only change
- * {@link applyOp} takes, and made only there (scripts/memory-cutover-check.ts,
- * C6). Its private field makes it nominal: no object of the same shape
- * passes for one.
- */
-export class CheckedOp {
-  readonly #checked = true;
-  readonly change: Change;
-  constructor(change: Change) {
-    this.change = change;
-  }
-  /** Whether it was made as a checked change (always, for an instance). */
-  get checked(): boolean {
-    return this.#checked;
-  }
-}
-
-/** What one checked operation does to the files and the ledger. */
-export type Change =
-  /** A new lesson: a line in its home. */
-  | {
-      by: Lesson["by"];
-      home: LessonHome;
-      id: string;
-      kind: "add";
-      sources: Lesson["sources"];
-      text: string;
-      why: string | null;
-    }
-  /** A live lesson's words changed: its line rewritten under a new id, with its `Why:` (none when `why` is null). */
-  | {
-      by: Lesson["by"];
-      id: string;
-      kind: "replace";
-      newId: string;
-      sources: Lesson["sources"];
-      text: string;
-      why: string | null;
-    }
-  /** A source stated a live lesson again. */
-  | { id: string; kind: "corroborate"; sources: Lesson["sources"] }
-  /** A live lesson to another home. */
-  | { home: LessonHome; id: string; kind: "move" }
-  /** A lesson removed, with why. */
-  | {
-      id: string;
-      kind: "retire";
-      why: NonNullable<Lesson["retired"]>["why"];
-    }
-  /** A lesson removed through memory_rule (memory-run.ts `ruleAsked`): its line taken out, retired `hand` with its words kept. */
-  | { id: string; kind: "remove" }
-  /** A knowledge lesson no brief carried for the archive's days, to `knowledge/archive/<topic>.md`. */
-  | { id: string; kind: "archive" }
-  /** A lesson whose file, or the match in it, is gone: its line taken out, its words kept for the ledger's days. */
-  | { id: string; kind: "stale" }
-  /** A lesson a check holds now (its task done): its line taken out; the ledger keeps it, enforced. */
-  | { id: string; kind: "enforce" };
-
-/** What {@link applyOp} did: the tree after it, or the budget the file it grew would pass, the tree as it was. */
-export type Applied =
-  | { tree: MemoryTree }
-  | { over: { budget: number; chars: number; path: string } };
-
-/** A lesson line's words as its file says them now; undefined when it has none. */
-export const lineOf = (
-  tree: MemoryTree,
-  id: string
-): LessonLine | undefined => {
-  const lesson = tree.ledger.lessons[id];
-  const path = lesson ? pathOf(lesson.home) : undefined;
-  return path
-    ? parseLessons(path, tree.files[path] ?? "").lessons.find(
-        (line) => line.id === id
-      )
-    : undefined;
-};
-
-/** The ledger with `id`'s entry changed by `patch` (or made, when `patch` is whole). */
-const withEntry = (
-  ledger: Ledger,
-  id: string,
-  entry: Lesson | undefined
-): Ledger => {
-  const lessons = { ...ledger.lessons };
-  if (entry) {
-    lessons[id] = entry;
-  } else {
-    delete lessons[id];
-  }
-  return { ...ledger, lessons };
-};
-
-/** `tree` with lesson `id`'s line moved from its home to `to`, its ledger entry's home with it. */
-const moveLine = (tree: MemoryTree, id: string, to: LessonHome): MemoryTree => {
-  const lesson = tree.ledger.lessons[id];
-  const line = lineOf(tree, id);
-  const from = lesson ? pathOf(lesson.home) : undefined;
-  const into = pathOf(to);
-  if (!(lesson && line && from && into)) {
-    return tree;
-  }
-  const files = {
-    ...tree.files,
-    [from]: withoutLine(tree.files[from] ?? "", id),
-  };
-  files[into] = withLine(into, files[into] ?? "", line);
-  return {
-    files,
-    ledger: withEntry(tree.ledger, id, { ...lesson, home: to }),
-  };
-};
-
-/** `tree` with lesson `id`'s line taken out of its home and the ledger saying why; the words kept in the ledger. */
-const retireLine = (
-  tree: MemoryTree,
-  id: string,
-  why: NonNullable<Lesson["retired"]>["why"],
-  today: string,
-  { by }: { by?: string } = {}
-): MemoryTree => {
-  const lesson = tree.ledger.lessons[id];
-  if (!lesson) {
-    return tree;
-  }
-  const line = lineOf(tree, id);
-  const from = pathOf(lesson.home);
-  const files =
-    from && line
-      ? { ...tree.files, [from]: withoutLine(tree.files[from] ?? "", id) }
-      : tree.files;
-  const { staged, ...rest } = lesson;
-  return {
-    files,
-    ledger: withEntry(tree.ledger, id, {
-      ...rest,
-      state: "retired",
-      retired: {
-        on: today,
-        why,
-        text: line?.text ?? staged?.text ?? "",
-        ...(by ? { by } : {}),
-      },
-    }),
-  };
-};
-
-/** `tree` with knowledge lesson `id`'s line moved to its topic's archive, the lesson retired as no longer needed. */
-const archiveLine = (
-  tree: MemoryTree,
-  id: string,
-  topic: string,
-  today: string
-): MemoryTree => {
-  const line = lineOf(tree, id);
-  if (!line) {
-    return tree;
-  }
-  const into = `${KNOWLEDGE_ARCHIVE}/${topic}.md`;
-  const retired = retireLine(tree, id, "unneeded", today);
-  return {
-    ...retired,
-    files: {
-      ...retired.files,
-      [into]: withLine(into, retired.files[into] ?? "", line),
-    },
-  };
-};
-
-/** The index with its `## Skills` pointers as the `lessons/` files that hold a lesson say, a pointer each. */
-const withPointers = (tree: MemoryTree): MemoryTree => {
-  const index = tree.files[INDEX_FILE];
-  if (index === undefined) {
-    return tree;
-  }
-  const pointers = pointerLines(tree);
-  const before = indexSections(index).skills;
-  if (before.join("\n") === pointers.join("\n")) {
-    return tree;
-  }
-  const without =
-    pointers.length > 0
-      ? replaceSection(index, SKILLS, pointers)
-      : dropSection(index, SKILLS);
-  return { ...tree, files: { ...tree.files, [INDEX_FILE]: without } };
+  return text;
 };
 
 /** `content` with section `name` gone. */
@@ -718,12 +550,12 @@ const dropSection = (content: string, name: string): string => {
 };
 
 /** The index's `## Skills` lines: one pointer per `lessons/<skill>.md` that holds a lesson, by the skill's name. */
-const pointerLines = (tree: MemoryTree): string[] =>
-  Object.keys(tree.files)
+const pointerLines = (files: MemoryFiles): string[] =>
+  Object.keys(files)
     .flatMap((path) => {
       const home = homeOf(path);
       return home?.at === "skill" &&
-        parseLessons(path, tree.files[path] ?? "").lessons.length > 0
+        parseLessons(path, files[path] ?? "").lessons.length > 0
         ? [home.skill]
         : [];
     })
@@ -732,298 +564,145 @@ const pointerLines = (tree: MemoryTree): string[] =>
       memoryRunWords.skillPointer(skill, `${LESSONS_DIR}/${skill}.md`)
     );
 
-/** What one change did to the tree: the tree, and the file it grew (for its budget). */
-interface Done {
-  grew?: string;
-  tree: MemoryTree;
-}
-
-type ChangeOf<K extends Change["kind"]> = Extract<Change, { kind: K }>;
-
-/** `now` with `line` added in `home`'s file and its entry as `entry`; the file it grew. */
-const placed = (
-  now: MemoryTree,
-  home: LessonHome,
-  line: LessonLine,
-  entry: Lesson
-): Done => {
-  const path = pathOf(home) ?? INDEX_FILE;
-  return {
-    tree: {
-      files: {
-        ...now.files,
-        [path]: withLine(path, now.files[path] ?? "", line),
-      },
-      ledger: withEntry(now.ledger, line.id, entry),
-    },
-    grew: path,
-  };
-};
-
-/** A new lesson: a line in its home. */
-const added = (now: MemoryTree, op: ChangeOf<"add">, today: string): Done =>
-  placed(
-    now,
-    op.home,
-    { id: op.id, text: op.text, why: op.why },
-    {
-      by: op.by,
-      home: op.home,
-      seen: today,
-      since: today,
-      sources: op.sources,
-      state: "live",
-    }
-  );
-
-/** A live lesson's line rewritten under its new id; the old one retired as replaced, its words kept. */
-const replaced = (
-  now: MemoryTree,
-  op: ChangeOf<"replace">,
-  today: string
-): Done => {
-  const lesson = now.ledger.lessons[op.id];
-  const path = lesson ? pathOf(lesson.home) : undefined;
-  const old = lineOf(now, op.id);
-  if (!(lesson && path && old)) {
-    return { tree: now };
+/** `files` with the index's `## Skills` pointers as the `lessons/` files that hold a lesson say, a pointer each. */
+const withPointers = (files: MemoryFiles): MemoryFiles => {
+  const index = files[INDEX_FILE];
+  if (index === undefined) {
+    return files;
   }
-  const retired = withEntry(now.ledger, op.id, {
-    ...lesson,
-    state: "retired",
-    retired: { on: today, why: "replaced", by: op.newId, text: old.text },
-  });
-  return {
-    tree: {
-      files: {
-        ...now.files,
-        [path]: swappedLine(now.files[path] ?? "", op.id, {
-          id: op.newId,
-          text: op.text,
-          why: op.why,
-        }),
-      },
-      ledger: withEntry(retired, op.newId, {
-        by: op.by,
-        home: lesson.home,
-        seen: today,
-        since: today,
-        sources: op.sources,
-        state: "live",
-      }),
-    },
-    grew: path,
-  };
-};
-
-/** A lesson stated again: its new sources kept and the day seen. */
-const corroborated = (
-  now: MemoryTree,
-  op: ChangeOf<"corroborate">,
-  today: string
-): Done => {
-  const lesson = now.ledger.lessons[op.id];
-  if (!lesson) {
-    return { tree: now };
+  const pointers = pointerLines(files);
+  if (indexSections(index).skills.join("\n") === pointers.join("\n")) {
+    return files;
   }
   return {
-    tree: {
-      ...now,
-      ledger: withEntry(now.ledger, op.id, {
-        ...lesson,
-        seen: today,
-        sources: withSourcesAdded(lesson.sources, op.sources),
-      }),
-    },
+    ...files,
+    [INDEX_FILE]:
+      pointers.length > 0
+        ? replaceSection(index, SKILLS, pointers)
+        : dropSection(index, SKILLS),
   };
 };
 
-/** `sources` with `more` added, none twice. */
-const withSourcesAdded = (
-  sources: readonly LessonSource[],
-  more: readonly LessonSource[]
-): LessonSource[] => [
-  ...sources,
-  ...more.filter(
-    (source) => !sources.some((had) => Bun.deepEquals(had, source))
-  ),
-];
-
-/** `tree` with lesson `id`'s entry patched by `patch`: a ledger edit, no line changes. */
-const entryPatched = (
-  tree: MemoryTree,
+/** `files` with lesson `id`'s line given `anchor` (the one-time commit of the ledger's end writes each fact's file into its line); as they were when no home holds it. */
+export const withAnchor = (
+  files: MemoryFiles,
   id: string,
-  patch: Partial<Lesson>
-): MemoryTree => {
-  const lesson = tree.ledger.lessons[id];
-  return lesson
-    ? { ...tree, ledger: withEntry(tree.ledger, id, { ...lesson, ...patch }) }
-    : tree;
-};
-
-/** `now` with lesson `id`'s line taken out and the lesson enforced: a check holds it. */
-const enforced = (now: MemoryTree, id: string): MemoryTree => {
-  const lesson = now.ledger.lessons[id];
-  const from = lesson ? pathOf(lesson.home) : undefined;
-  return lesson && from
+  anchor: Anchor
+): MemoryFiles => {
+  const held = lessonOf(files, id);
+  return held
     ? {
-        files: {
-          ...now.files,
-          [from]: withoutLine(now.files[from] ?? "", id),
-        },
-        ledger: withEntry(now.ledger, id, { ...lesson, state: "enforced" }),
+        ...files,
+        [held.path]: spliced(files[held.path] ?? "", id, [
+          renderLesson({ ...held.line, anchor }),
+        ]),
       }
-    : now;
+    : files;
 };
 
-/** One change, by its kind. */
-const changed = (now: MemoryTree, op: Change, today: string): Done => {
-  switch (op.kind) {
-    case "add":
-      return added(now, op, today);
-    case "replace":
-      return replaced(now, op, today);
-    case "corroborate":
-      return corroborated(now, op, today);
-    case "move": {
-      const grew = pathOf(op.home);
+// --- the changes ---------------------------------------------------------------------
+
+/** One change to the memory's lines. */
+export type Change =
+  /** A new lesson: a line at the end of its home's lessons. */
+  | { home: LessonHome; kind: "add"; line: LessonLine }
+  /** A lesson's words changed in place, its id kept: its `Why:` as given (none when null), its anchor as it was. */
+  | { id: string; kind: "reword"; text: string; why: string | null }
+  /** A lesson's line taken out. */
+  | { id: string; kind: "remove" }
+  /** A lesson's line to another home. */
+  | { home: LessonHome; id: string; kind: "move" }
+  /** A knowledge lesson's line to its topic's archive, `knowledge/archive/<topic>.md`: kept as history. */
+  | { id: string; kind: "archive" };
+
+/** What {@link applyLineChange} made: the files after it; or the budget the file it grew would pass, the files as they were; or the lesson it names held by no home. */
+export type Applied =
+  | { files: MemoryFiles }
+  | { over: { budget: number; chars: number; path: string } }
+  | { gone: string };
+
+/** `files` with one change made, and the file it grew (for its budget). */
+const made = (
+  files: MemoryFiles,
+  change: Change
+): { files: MemoryFiles; grew?: string } | { gone: string } => {
+  if (change.kind === "add") {
+    const path = pathOf(change.home);
+    return {
+      files: {
+        ...files,
+        [path]: withLine(path, files[path] ?? "", change.line),
+      },
+      grew: path,
+    };
+  }
+  const held = lessonOf(files, change.id);
+  if (!held) {
+    return { gone: change.id };
+  }
+  const { line, path } = held;
+  const without = { ...files, [path]: spliced(files[path] ?? "", line.id, []) };
+  switch (change.kind) {
+    case "reword":
       return {
-        tree: moveLine(now, op.id, op.home),
-        ...(grew ? { grew } : {}),
+        files: {
+          ...files,
+          [path]: spliced(files[path] ?? "", line.id, [
+            renderLesson({ ...line, text: change.text, why: change.why }),
+          ]),
+        },
+        grew: path,
+      };
+    case "remove":
+      return { files: without };
+    case "move": {
+      const into = pathOf(change.home);
+      return {
+        files: {
+          ...without,
+          [into]: withLine(into, without[into] ?? "", line),
+        },
+        grew: into,
       };
     }
-    case "retire":
-      return { tree: retireLine(now, op.id, op.why, today) };
-    case "remove":
-      return { tree: retireLine(now, op.id, "hand", today) };
-    case "enforce":
-      return { tree: enforced(now, op.id) };
-    case "stale":
-      return {
-        tree: entryPatched(retireLine(now, op.id, "stale", today), op.id, {
-          state: "stale",
-        }),
-      };
     case "archive": {
-      const { home } = now.ledger.lessons[op.id] ?? {};
+      const home = homeOf(path);
+      if (home?.at !== "knowledge") {
+        return { files };
+      }
+      const into = `${KNOWLEDGE_ARCHIVE}/${home.topic}.md`;
       return {
-        tree:
-          home?.at === "knowledge"
-            ? archiveLine(now, op.id, home.topic, today)
-            : now,
+        files: {
+          ...without,
+          [into]: withLine(into, without[into] ?? "", line),
+        },
       };
     }
     default:
-      return unhandled("memory change", op);
+      return unhandled("memory change", change);
   }
 };
 
 /**
- * One checked change applied to the files and the ledger (§5.2 step 5):
- * one line and one entry, then the index's skill pointers; refused, the
- * tree as it was, when the file it grew would pass its character budget
- * ({@link budgetOf}). His lines (the index's Notes and his own sections)
- * are never touched.
+ * One change made to the files (§5.1): one line, then the index's skill
+ * pointers; refused, the files as they were, when the file it grew would
+ * pass its character budget, or when no home holds the lesson it names.
+ * His lines (the index's Notes and his own sections) are never touched.
  */
-export const applyOp = (
-  tree: MemoryTree,
-  checked: CheckedOp,
-  today: string
+export const applyLineChange = (
+  files: MemoryFiles,
+  change: Change
 ): Applied => {
-  const done = changed(tree, checked.change, today);
+  const done = made(files, change);
+  if ("gone" in done) {
+    return done;
+  }
   const budget = done.grew ? budgetOf(done.grew) : undefined;
-  const chars = done.grew ? (done.tree.files[done.grew] ?? "").length : 0;
+  const chars = done.grew ? (done.files[done.grew] ?? "").length : 0;
   if (done.grew && budget !== undefined && chars > budget) {
     return { over: { path: done.grew, chars, budget } };
   }
-  return { tree: withPointers(done.tree) };
-};
-
-/** `path`'s lessons, each bullet with no id given one: the file's words then, and its lessons. */
-const marked = (
-  path: string,
-  content: string,
-  taken: (id: string) => boolean
-): { lessons: LessonLine[]; text: string } => {
-  const { lessons, unmarked } = parseLessons(path, content);
-  let text = content;
-  const made = new Set<string>();
-  for (const raw of unmarked) {
-    const id = newLessonId((one) => taken(one) || made.has(one));
-    made.add(id);
-    const words = BULLET.exec(raw)?.[1] ?? raw;
-    text = text.replace(raw, renderLesson({ id, text: words, why: null }));
-    lessons.push({ id, text: words, why: null });
-  }
-  return { lessons, text };
-};
-
-/**
- * The files and the ledger agreed (§2 A.1): every lesson line has an entry,
- * and every live entry a line. A line with no entry, or a bullet with no id
- * in a lesson region, is a hand edit of the person's: it is given an id
- * (`adopted`) and an entry resting on that edit (`commit`, the folder's head
- * it was read at). A live entry whose line moved to another file lives
- * there. A live entry whose line is gone is retired as removed by hand
- * (`orphaned`). Staged and retired entries have no line, and an archive's
- * lines are history: neither is read here.
- */
-export const reconcile = (
-  tree: MemoryTree,
-  today: string,
-  commit: string
-): { adopted: string[]; orphaned: string[]; tree: MemoryTree } => {
-  const files: Partial<Record<string, string>> = { ...tree.files };
-  const lessons = { ...tree.ledger.lessons };
-  const adopted: string[] = [];
-  const seen = new Set<string>();
-  for (const path of Object.keys(tree.files).sort()) {
-    const home = homeOf(path);
-    if (!home) {
-      continue;
-    }
-    const read = marked(
-      path,
-      files[path] ?? "",
-      (id) => id in lessons || seen.has(id)
-    );
-    files[path] = read.text;
-    for (const line of read.lessons) {
-      seen.add(line.id);
-      const entry = lessons[line.id];
-      if (entry?.state === "live") {
-        lessons[line.id] = { ...entry, home };
-        continue;
-      }
-      adopted.push(line.id);
-      lessons[line.id] = {
-        by: "owner",
-        home,
-        seen: today,
-        since: today,
-        sources: [{ kind: "hand", commit }],
-        state: "live",
-      };
-    }
-  }
-  const orphaned = Object.keys(lessons).filter(
-    (id) => lessons[id]?.state === "live" && !seen.has(id)
-  );
-  for (const id of orphaned) {
-    const lesson = lessons[id];
-    if (lesson) {
-      lessons[id] = {
-        ...lesson,
-        state: "retired",
-        retired: { on: today, why: "hand", text: "" },
-      };
-    }
-  }
-  return {
-    tree: withPointers({ files, ledger: { ...tree.ledger, lessons } }),
-    adopted,
-    orphaned,
-  };
+  return { files: withPointers(done.files) };
 };
 
 /** Whether `day` (YYYY-MM-DD) is `days` or more before `today`. */
