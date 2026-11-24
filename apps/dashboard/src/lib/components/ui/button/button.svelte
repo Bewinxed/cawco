@@ -29,7 +29,7 @@
            Consequential Grant Rule) is the caution intent, the same at rest
            and under the pointer, so it is never made more inviting. */
         grant: "control-primary control-caution control-steady text-on-accent",
-        link: "control-quiet control-steady text-accent underline-offset-4 hover:underline",
+        link: "control-quiet control-steady text-accent underline-draw",
       },
       size: {
         default:

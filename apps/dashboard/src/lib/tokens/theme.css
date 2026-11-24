@@ -1484,6 +1484,44 @@
   }
 }
 
+/* A link's underline, drawn from the start of its words to their end under
+   the pointer or the keyboard's focus and taken back the same way (owner,
+   2026-11-24: "line should animate from left to right"): a 1px line under
+   the label (`data-slot="label-text"`, trimmed to its baseline by the mark
+   line), scaled along the line from its start, so it composites. With less
+   motion it is drawn at once. */
+@utility underline-draw {
+  & [data-slot="label-text"] {
+    position: relative;
+  }
+  & [data-slot="label-text"]::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: calc(var(--spacing-space-1) * -1);
+    block-size: 1px;
+    background-color: currentColor;
+    scale: 0 1;
+    transform-origin: left;
+
+    &:dir(rtl) {
+      transform-origin: right;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition: scale var(--duration-base) var(--ease-out);
+    }
+  }
+  @media (hover: hover) {
+    &:hover [data-slot="label-text"]::after {
+      scale: 1 1;
+    }
+  }
+  &:focus-visible [data-slot="label-text"]::after {
+    scale: 1 1;
+  }
+}
+
 @utility control-danger {
   --control-intent: var(--color-red);
 }

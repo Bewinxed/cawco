@@ -5,7 +5,13 @@
  * disabled dimming. The meta's args are every story's; a story's own args
  * are what it changes.
  */
-import { IconMore, IconPlus, IconSend, IconTrash } from "#lib/icons.js";
+import {
+  IconMore,
+  IconPin,
+  IconPlus,
+  IconSend,
+  IconTrash,
+} from "#lib/icons.js";
 import Button from "./button.svelte";
 import ButtonFixture from "./button-fixture.svelte";
 
@@ -133,8 +139,13 @@ export const PressConfirms = {
   },
 };
 
-/** Press it: its icon arrives, press again and it leaves. */
-export const PressIcon = {
+/** A toggle whose pin shows it is on: press it to pin, again to unpin. */
+export const PressToPin = {
   component: ButtonFixture,
-  args: { flow: "icon", icon: IconPlus, label: "New task" },
+  args: {
+    flow: "icon",
+    variant: "outline",
+    icon: IconPin,
+    label: "Pin to the rail",
+  },
 };

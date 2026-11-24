@@ -8,8 +8,9 @@
    * - `fails`: a press runs the work; the slot spins, then draws a cross.
    * - `confirms`: a first press arms it (its words turn, a line runs out
    *   along its rim); a second press in time runs the work.
-   * - `icon`: each press puts its icon on or takes it off; the button holds
-   *   its width (`holdsIcon`).
+   * - `icon`: a toggle whose icon shows it is on (a pin while pinned): each
+   *   press turns it on or off, the icon arriving or leaving; the button
+   *   holds its width (`holdsIcon`).
    */
   import type { Component } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
@@ -41,7 +42,7 @@
 
   let pending = $state(false);
   let failed = $state(false);
-  let iconOn = $state(true);
+  let iconOn = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => () => clearTimeout(timer));
 
@@ -60,6 +61,7 @@
 </script>
 
 <Button
+  aria-pressed={flow === "icon" ? iconOn : undefined}
   {confirm}
   {doneLabel}
   {failed}

@@ -550,6 +550,7 @@
 :where(.side-right\:after\:end-full[data-side="right"])::after,
 :where(.side-right\:after\:inset-y-0[data-side="right"])::after,
 :where(.side-right\:after\:w-space-1[data-side="right"])::after,
+:where(.underline-draw [data-slot="label-text"])::after,
 :where([data-slot="peer-label"] [data-slot="collapsible-trigger"])::after,
 :where([data-sonner-toast][data-expanded="true"])::after,
 :where([data-vaul-drawer]:not([data-vaul-custom-container="true"]))::after,
