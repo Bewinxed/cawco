@@ -10,6 +10,12 @@
  * Testing Library's queries.
  */
 
+import {
+  computeAccessibleName,
+  getRole,
+  isInaccessible,
+} from "dom-accessibility-api";
+
 const settle = () =>
   new Promise<void>((done) => requestAnimationFrame(() => done()));
 
@@ -43,7 +49,6 @@ function pointer(el: Element, type: string): void {
   }
 }
 
-const HEADING = /^h[1-6]$/u;
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"]),[contenteditable="true"]';
 
@@ -149,56 +154,11 @@ export function userEventIn(frame: HTMLElement): UserEvent {
   };
 }
 
-/** An input's `type` as the page reads it (lower-cased, `text` when unset); "" for an element with none. */
-const typeOf = (el: Element): string =>
-  "type" in el && typeof el.type === "string" ? el.type : "";
-
 /** An element's rendered text (`innerText`), when it is an HTML element; else undefined. */
 const renderedText = (el: Element): string | undefined =>
   "innerText" in el && typeof el.innerText === "string"
     ? el.innerText
     : undefined;
-
-/** The implicit ARIA role of the elements a story most often asks by. */
-function roleOf(el: Element): string | null {
-  const own = el.getAttribute("role");
-  if (own) {
-    return own;
-  }
-  const tag = el.localName;
-  if (
-    tag === "button" ||
-    (tag === "input" && ["button", "submit", "reset"].includes(typeOf(el)))
-  ) {
-    return "button";
-  }
-  if (tag === "a" && el.hasAttribute("href")) {
-    return "link";
-  }
-  if (tag === "input") {
-    const type = typeOf(el);
-    return type === "checkbox" || type === "radio" ? type : "textbox";
-  }
-  if (tag === "textarea") {
-    return "textbox";
-  }
-  if (HEADING.test(tag)) {
-    return "heading";
-  }
-  if (tag === "img") {
-    return "img";
-  }
-  return tag === "select" ? "combobox" : null;
-}
-
-const nameOf = (el: Element): string =>
-  (
-    el.getAttribute("aria-label") ??
-    el.getAttribute("alt") ??
-    renderedText(el) ??
-    el.textContent ??
-    ""
-  ).trim();
 
 const matches = (text: string, want: string | RegExp): boolean =>
   typeof want === "string" ? text.trim() === want.trim() : want.test(text);

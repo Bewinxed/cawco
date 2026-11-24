@@ -2403,17 +2403,17 @@
     transform: translateY(-80%);
   }
 }
+/* The thinking mark's circle and infinity cross-fade where they stand: a
+   glyph never scales (owner, 2026-11-24). */
 @keyframes thinking-circle {
   0%,
   50%,
   100% {
     opacity: 1;
-    transform: none;
   }
   25%,
   75% {
     opacity: 0;
-    transform: scale(1.15, 0.8);
   }
 }
 @keyframes thinking-lemniscate {
@@ -2421,12 +2421,10 @@
   50%,
   100% {
     opacity: 0;
-    transform: scale(0.7, 1.1);
   }
   25%,
   75% {
     opacity: 1;
-    transform: none;
   }
 }
 @keyframes thinking-sheen {
@@ -2458,11 +2456,11 @@
     scale: var(--press-scale);
   }
 }
+/* A mark that arrives alone fades in where it stands: a glyph never scales
+   and never blurs (owner, 2026-11-24). */
 @keyframes mark-in {
   from {
     opacity: 0;
-    scale: 0.25;
-    filter: blur(var(--spacing-space-1));
   }
 }
 @keyframes sheet-in {
@@ -2485,14 +2483,13 @@
     transform: none;
   }
 }
+/* A chosen row's check fades in where it stands: it never scales. */
 @keyframes ns-check {
   from {
     opacity: 0;
-    transform: scale(0.5);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 @keyframes ns-panel {
@@ -2971,9 +2968,12 @@
      one, and a button whose first item it is (a kit Button's slot) stood
      about 6px high in a row aligned on baselines (PinCard's notice). A
      line's baseline stands the same distance from its centre at any
-     line-height, so it meets the words beside it, centred as it is. */
+     line-height, so it meets the words beside it, centred as it is. Its
+     alternative text is none (`/ ""`), so it never enters the name of the
+     control it stands in: read as content, it put a zero-width space
+     before every kit button's name. */
   :where(&)::before {
-    content: "\200b";
+    content: "\200b" / "";
     grid-area: 1 / 1;
     inline-size: 0;
     line-height: 0;
