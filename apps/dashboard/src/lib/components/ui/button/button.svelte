@@ -18,10 +18,12 @@
         outline: "",
         secondary: "",
         ghost: "control-quiet",
-        /* Destructive is the neutral button in red ink, never filled
-           (owner's pick, 2026-11-24; HIG Buttons: a destructive button uses
-           red and never takes the primary role). */
-        destructive: "text-red",
+        /* Destructive rests as the neutral button in red ink, never the
+           filled primary (owner's pick, 2026-11-24; HIG Buttons: a
+           destructive button uses red and never takes the primary role),
+           and fills red under the pointer, pressed and armed (owner,
+           2026-11-24). */
+        destructive: "control-danger control-reveal text-red",
         /* A grant is the primary look filled in its ink (owner's pick,
            2026-11-24). A grant wider than what was asked (DESIGN.md, The
            Consequential Grant Rule) is the caution intent, the same at rest
@@ -98,7 +100,7 @@
            Toolbars: the `.prominent` style, trailing): a capsule at the
            glass's height, so it is concentric with the corner it stands in,
            as the glass beside it is. */
-        capsule: "rounded-pill",
+        capsule: "rounded-pill [--rim-radius:var(--radius-pill)]",
       },
       /** In a view's bar (ViewBar, `data-bar`): the composer field's height,
           at least as wide, as wide as its glyph and count make it, never

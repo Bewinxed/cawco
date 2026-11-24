@@ -301,7 +301,7 @@
 <span
   style:--btn-words-slack={holds && Icon ? `${slack}px` : undefined}
   data-slot="btn-slot"
-  class="icon-swap w-(--btn-icon) flex-none [--icon-swap-dur:var(--duration-base)] translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) transition-[width,margin-inline-end] duration-(--duration-base) ease-out data-placed:transition-[translate,width,margin-inline-end] motion-reduce:transition-off data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
+  class="icon-swap w-(--btn-icon) flex-none [--icon-swap-dur:var(--duration-base)] translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) transition-[width,margin-inline-end] duration-(--duration-slow) ease-in-out data-placed:transition-[translate,width,margin-inline-end] motion-reduce:transition-off data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
   data-over={Icon === undefined || undefined}
   data-placed={placed || undefined}
 >

@@ -1408,6 +1408,36 @@
 }
 
 /* The intents, on any look. */
+/* Neutral at rest, filled in its intent's ink while the pointer is on it,
+   while pressed and while armed for its second press (`data-armed`), its
+   words in the ink on a fill: a destructive action (owner, 2026-11-24:
+   "when hovered, need to show a red fill"). Taken with an intent. */
+@utility control-reveal {
+  --control-rest-edge: var(--control-default-edge, var(--color-ui-3));
+  transition-property:
+    --control-layer, --control-edge, box-shadow, background-color, color;
+
+  @media (hover: hover) {
+    &:hover:not(:disabled, [aria-disabled="true"]) {
+      --control-fill: var(--control-intent, var(--color-accent));
+      --control-rest-edge: oklch(0% 0 0 / 0.14);
+      --control-hover: transparent;
+      --control-press: oklch(0% 0 0 / 0.16);
+      color: var(--color-on-accent);
+    }
+  }
+  &:is(:active, [data-pressed], [data-armed]):not(
+      :disabled,
+      [aria-disabled="true"]
+    ) {
+    --control-fill: var(--control-intent, var(--color-accent));
+    --control-rest-edge: oklch(0% 0 0 / 0.14);
+    --control-hover: transparent;
+    --control-press: oklch(0% 0 0 / 0.16);
+    color: var(--color-on-accent);
+  }
+}
+
 @utility control-danger {
   --control-intent: var(--color-red);
 }
