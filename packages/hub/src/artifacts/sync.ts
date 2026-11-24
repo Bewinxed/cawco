@@ -3,8 +3,9 @@
  * preview listener at `/__cawco/artifact/<id>` (preview.ts), and for a
  * page's store at `/__cawco/store/<scope>` ({@link storeSocket}); and the
  * person's send of their picks beside it at `/__cawco/artifact/<id>/send`,
- * and the page's pictures of their marks at `…/pictures`. Sync only:
- * awareness, auth and awareness queries are read and ignored. A client
+ * and the page's pictures of their marks at `…/pictures`. Sync, and of
+ * awareness only whether a main view's page is shown ({@link readShown}):
+ * no awareness is relayed, and auth and awareness queries are ignored. A client
  * keeps its socket fresh with its own resync (`resyncInterval`), and the
  * hub with its {@link BEAT}, which a hidden tab's throttled timers can't
  * hold back (core doc-link.ts).
@@ -41,6 +42,7 @@ import {
   writeVarUint8Array,
 } from "lib0/encoding";
 import { writePermissionDenied } from "y-protocols/auth";
+import { modifyAwarenessUpdate } from "y-protocols/awareness";
 import {
   messageYjsSyncStep1,
   messageYjsSyncStep2,
@@ -289,25 +291,54 @@ const holdClaims = (docs: ArtifactDocs, artifactId: string) => {
 
 /**
  * The one main view of a page or a sheet that writes where its marks stand
- * (core `DocMeta.placer`): the one named stays while its socket stays
- * joined, and when it has left, the first main view joined of those joined
- * now is named. Two views of one page read the page each at its own width,
- * scheme and ids, and both writing what they read wrote the pins back and
- * forth; the hub hears every join and leave in turn, so it names one
- * without a race. Nothing is written while the one named stands, nor when
- * no main view is joined: the next to join is named then.
+ * (core `DocMeta.placer`): a view that can place them now, its page shown
+ * (Page Visibility: a hidden tab draws nothing until it is shown again). The
+ * one named stays while it stays joined and shown, or while no view is
+ * shown; else the first shown view joined of those joined now is named,
+ * and with none shown, the first joined. Two views of one page read the
+ * page each at its own width, scheme and ids, and both writing what they
+ * read wrote the pins back and forth; the hub hears every join, leave and
+ * change of shown in turn, so it names one without a race. Nothing is
+ * written while the one named stands, nor when no main view is joined: the
+ * next to join is named then.
  */
 const electPlacer = (docs: ArtifactDocs, artifactId: string) => {
   const joined = docs.placers(artifactId);
-  const [first] = joined;
-  if (first === undefined) {
-    return;
-  }
+  const shown = joined.filter((view) => view.shown);
   const named = getMeta(docs.doc(artifactId), "placer");
-  if (named !== undefined && joined.includes(named)) {
+  const among = shown.length > 0 ? shown : joined;
+  const [first] = among;
+  if (first === undefined || among.some((view) => view.id === named)) {
     return;
   }
-  docs.transact(artifactId, "hub", (doc) => setMeta(doc, "placer", first));
+  docs.transact(artifactId, "hub", (doc) => setMeta(doc, "placer", first.id));
+};
+
+/**
+ * Whether a main view's page is shown, as an awareness message from its
+ * socket says (y-websocket sends its own state on joining and on each
+ * change: overlay doc-worker.ts sets `shown` from the page's
+ * `visibilityState`); undefined when it says nothing of it. Read with
+ * y-protocols' own decoder of an awareness update.
+ */
+const readShown = (message: Buffer): boolean | undefined => {
+  const decoder = createDecoder(new Uint8Array(message));
+  if (readVarUint(decoder) !== MESSAGE_AWARENESS) {
+    return;
+  }
+  let shown: boolean | undefined;
+  modifyAwarenessUpdate(readVarUint8Array(decoder), (state: unknown) => {
+    if (
+      typeof state === "object" &&
+      state !== null &&
+      "shown" in state &&
+      typeof state.shown === "boolean"
+    ) {
+      ({ shown } = state);
+    }
+    return state;
+  });
+  return shown;
 };
 
 /**
@@ -417,7 +448,9 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
       // The artifact was removed: core ARTIFACT_GONE, on which a device lets its copy go.
       close: () => socket.close(ARTIFACT_GONE, "This artifact was removed."),
       screen: socket.data.screen,
-      ...(socket.data.placer ? { placer: socket.data.placer } : {}),
+      ...(socket.data.placer
+        ? { placer: { id: socket.data.placer, shown: true } }
+        : {}),
       send: (update) =>
         socket.send(syncMessage((encoder) => writeUpdate(encoder, update))),
     };
@@ -433,6 +466,15 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
       return;
     }
     const { artifactId, origin } = socket.data;
+    const view = origin?.client.placer;
+    const shown = view ? readShown(message) : undefined;
+    if (view && shown !== undefined) {
+      if (shown !== view.shown) {
+        view.shown = shown;
+        electPlacer(docs, artifactId);
+      }
+      return;
+    }
     readSync(message, docs.doc(artifactId), socket, (update) =>
       takeUpdate(docs, artifactId, update, origin)
     );

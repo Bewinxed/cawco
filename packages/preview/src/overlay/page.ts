@@ -132,6 +132,7 @@ import {
 import { hold, isHeld } from "./hold";
 import { heardFromHost, toHost } from "./host-origin";
 import { contentNearIn, keepFoot, OVERLAY_OWN, ownNode, startInk } from "./ink";
+import { frameScheme, frameWidth, judges, pageView } from "./made-view";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
 import { choiceOf, listenForPicks, optionOf } from "./pick";
 import { cropPicture } from "./picture";
@@ -535,6 +536,7 @@ const pins: Pins = startPins({
   locate,
   outline,
   post,
+  judges: (anchor) => judges(anchor, documentOf(anchor)),
   redraft: () => (draftEl() ? draftTarget() : null),
   reopenDraft: () => reopenDraft(),
   waiting,
@@ -618,6 +620,7 @@ const ink = startInk({
   shapes: () => shapesNow(document),
   textOf,
   locate,
+  judges: (anchor) => judges(anchor, documentOf(anchor)),
   pins: () => pins,
   waiting,
 });
@@ -1641,7 +1644,6 @@ const STORY_PLACE = /^(.*):(\d+):(\d+)$/u;
  * components; elsewhere, a stamped component root names its call site. Null
  * outside a sheet's frame.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the chain from either framework's marks, then the frame's story and state, in one walk
 function sheetChain(el: Element): Pick<PageAnchor, "chain" | "sheet"> | null {
   const frame = el.closest<HTMLElement>("[data-cawco-story]");
   const story = frame?.dataset.cawcoStory;
@@ -1686,25 +1688,17 @@ function sheetChain(el: Element): Pick<PageAnchor, "chain" | "sheet"> | null {
   });
   const file = frame.dataset.cawcoFile ?? place[1];
   const interaction = frame.dataset.cawcoInteraction;
-  const scheme = frame.dataset.cawcoScheme;
-  const width = Number(frame.dataset.cawcoWidth);
   return {
     chain,
     sheet: {
       file,
       story,
-      ...(interaction && scheme
+      ...(interaction && frame.dataset.cawcoScheme
         ? {
             state: {
               interaction: interactionOf(interaction) ?? "rest",
-              scheme: scheme === "light" || scheme === "dark" ? scheme : "page",
-              // A drawing of no width of its own is as wide as its body laid out (unscaled by a card's zoom): the marked element itself, or the body inside it.
-              width: Number.isFinite(width)
-                ? width
-                : (
-                    frame.querySelector<HTMLElement>(".cawco-frame-body") ??
-                    frame
-                  ).offsetWidth || null,
+              scheme: frameScheme(frame),
+              width: frameWidth(frame),
             },
           }
         : {}),
@@ -2138,6 +2132,8 @@ function anchorOf(el: Element, point?: { x: number; y: number }): PageAnchor {
   const whole = el === doc.body || el === doc.documentElement;
   const selector = whole ? el.localName : selectorOf(el);
   const hash = documentHash(doc);
+  // On a sheet its frame says the view it was made in; off one, the window does.
+  const onSheet = sheetChain(el);
   // The artifact the nearest frame showing one shows: the one it stands in, or the frame itself.
   const shown = [...framesOf(el), ...(isFrame(el) ? [el] : [])]
     .findLast((frame) => frame.hasAttribute(EMBED_ARTIFACT))
@@ -2147,7 +2143,7 @@ function anchorOf(el: Element, point?: { x: number; y: number }): PageAnchor {
     ...(shown ? { embed: { artifact: shown } } : {}),
     selector,
     source: sourceOf(el),
-    ...(sheetChain(el) ?? {}),
+    ...(onSheet ?? { view: pageView(doc) }),
     ...(whole ? {} : { text: textOf(el) }),
     ...(whole ? {} : nameOf(el)),
     ...(hash && !stableSelector(selector) ? { page: hash } : {}),

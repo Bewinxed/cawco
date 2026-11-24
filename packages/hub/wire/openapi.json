@@ -50180,6 +50180,14 @@
           "status"
         ]
       },
+      "MediaScheme": {
+        "description": "A scheme a page is drawn in.",
+        "type": "string",
+        "enum": [
+          "dark",
+          "light"
+        ]
+      },
       "Member": {
         "description": "One member of Who decides: built in, or one he added.",
         "anyOf": [
@@ -53821,6 +53829,22 @@
           "text": {
             "description": "The element's text, at most {@link COMMENT_LIMITS.anchorText} characters.",
             "type": "string"
+          },
+          "view": {
+            "description": "Off a sheet: the view the mark was made in, its window's width (px, as\n`@media` and `matchMedia` answer it) and the scheme the page was drawn\nin. A view that draws the page otherwise leaves the mark where it\nstands (made-view.ts `showsAsMade`). A sheet's frame says its own\n(`sheet.state`).",
+            "type": "object",
+            "properties": {
+              "scheme": {
+                "$ref": "#/components/schemas/MediaScheme"
+              },
+              "width": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "scheme",
+              "width"
+            ]
           }
         },
         "required": [

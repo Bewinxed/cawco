@@ -1,0 +1,181 @@
+/**
+ * Whether this view draws the page as a mark was made (core comments
+ * made-view.ts): only then does it write where the mark stands (pins.ts
+ * and ink.ts `settled`). The view a mark is made in is kept on its anchor
+ * (page.ts `anchorOf`): a sheet's frame state, or off a sheet the window's
+ * width and the scheme the page is drawn in. Its page's width thresholds
+ * are read off its document's style (each `@media` and `@container` rule,
+ * a sheet's own `media`) and off the queries its script asked `matchMedia`
+ * (boot.ts `watchMedia`).
+ */
+import type { PageAnchor } from "@cawco/core/comments/anchor";
+import {
+  type MadeView,
+  madeViewOf,
+  showsAsMade,
+  widthThresholds,
+} from "@cawco/core/comments/made-view";
+import { eachRule } from "@cawco/core/scheme-media";
+import { markOf } from "./boot";
+
+/**
+ * A drawing's width on a sheet: its own (`data-cawco-width`), else its body
+ * as laid out (unscaled by a card's zoom), null when it lays out none.
+ */
+export const frameWidth = (frame: HTMLElement): number | null => {
+  const width = Number(frame.dataset.cawcoWidth);
+  return Number.isFinite(width)
+    ? width
+    : (frame.querySelector<HTMLElement>(".cawco-frame-body") ?? frame)
+        .offsetWidth || null;
+};
+
+/** A drawing's scheme on a sheet (`data-cawco-scheme`): the page's own unless it names one. */
+export const frameScheme = (frame: HTMLElement): MadeView["scheme"] => {
+  const scheme = frame.dataset.cawcoScheme;
+  return scheme === "light" || scheme === "dark" ? scheme : "page";
+};
+
+/**
+ * The scheme `doc`'s page is drawn in: the one the overlay drew it in
+ * (page.ts `themeRoot`, the root's `data-theme`), else the one it prefers.
+ */
+const pageScheme = (doc: Document): "light" | "dark" => {
+  const drawn = doc.documentElement.dataset.theme;
+  if (drawn === "light" || drawn === "dark") {
+    return drawn;
+  }
+  return doc.defaultView?.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+};
+
+/** Off a sheet: the view `doc` draws its page in now, its window's width as `@media` and `matchMedia` answer it. */
+export const pageView = (
+  doc: Document
+): { scheme: "light" | "dark"; width: number } => ({
+  scheme: pageScheme(doc),
+  width: doc.defaultView?.innerWidth ?? 0,
+});
+
+/** The drawing of `sheet`'s story in `doc`, the first that shows it; null where this view shows another story. */
+const drawingOf = (
+  doc: Document,
+  sheet: NonNullable<PageAnchor["sheet"]>
+): HTMLElement | null =>
+  [
+    ...doc.querySelectorAll<HTMLElement>(
+      `[data-cawco-story="${CSS.escape(sheet.story)}"]`
+    ),
+  ].find((frame) => (frame.dataset.cawcoFile ?? sheet.file) === sheet.file) ??
+  null;
+
+/** The width conditions one sheet's rules hold, read once per count of its rules. */
+const readSheets = new WeakMap<
+  CSSStyleSheet,
+  { conditions: string[]; rules: number }
+>();
+/** A sheet of another origin's, fetched and read by its address: its conditions, or null where it could not be. */
+const fetched = new Map<string, string[] | null>();
+/** The addresses of the sheets being fetched now. */
+const loading = new Set<string>();
+
+/** The conditions of each `@media` and `@container` rule of `sheet` at any depth, and its own and each import's `media`. */
+const conditionsIn = (sheet: CSSStyleSheet): string[] => {
+  const conditions = [sheet.media.mediaText];
+  eachRule(sheet, (rule) => {
+    if (rule instanceof CSSMediaRule || rule instanceof CSSContainerRule) {
+      conditions.push(rule.conditionText);
+    } else if (rule instanceof CSSImportRule) {
+      conditions.push(rule.media.mediaText);
+    }
+  });
+  return conditions;
+};
+
+/**
+ * A sheet of another origin's, which keeps its rules from the page: fetched
+ * by its address (a CDN answers any origin) and read as a sheet of its own
+ * (`CSSStyleSheet.replaceSync`, never applied). Undefined while it loads,
+ * null where it can't be read.
+ */
+const foreignConditions = (href: string): string[] | null | undefined => {
+  if (!(fetched.has(href) || loading.has(href))) {
+    loading.add(href);
+    readForeign(href).then((read) => {
+      fetched.set(href, read);
+      loading.delete(href);
+    });
+  }
+  return fetched.get(href);
+};
+
+/** The conditions of a sheet of another origin's, fetched by its address; null where it can't be fetched or read. */
+const readForeign = async (href: string): Promise<string[] | null> => {
+  const [answer] = await Promise.allSettled([
+    fetch(href, { credentials: "omit", mode: "cors" }).then((got) =>
+      got.ok ? got.text() : null
+    ),
+  ]);
+  if (answer.status === "rejected" || answer.value === null) {
+    return null;
+  }
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(answer.value);
+  return conditionsIn(sheet);
+};
+
+/**
+ * `doc`'s page's width thresholds (core `widthThresholds`); null while a
+ * sheet of its keeps its rules, unread: then only the same width draws the
+ * page alike.
+ */
+const thresholdsOf = (doc: Document): number[] | null => {
+  const conditions: string[] = [
+    ...(markOf(doc.defaultView ?? window)?.media ?? []),
+  ];
+  for (const sheet of Array.from(doc.styleSheets)) {
+    let rules: number;
+    try {
+      rules = sheet.cssRules.length;
+    } catch {
+      const foreign = sheet.href ? foreignConditions(sheet.href) : null;
+      if (!foreign) {
+        return null;
+      }
+      conditions.push(...foreign);
+      continue;
+    }
+    let read = readSheets.get(sheet);
+    if (read?.rules !== rules) {
+      read = { conditions: conditionsIn(sheet), rules };
+      readSheets.set(sheet, read);
+    }
+    conditions.push(...read.conditions);
+  }
+  return widthThresholds(conditions);
+};
+
+/**
+ * Whether this view draws the page `anchor` was made on as it was made
+ * (core `showsAsMade`), in `doc`, the document its frames lead to: on a
+ * sheet, its story drawn here with the frame's width and scheme; off one,
+ * the window's. Never where this view shows another story of the sheet. A
+ * document not here (a frame of another origin's, which its own overlay
+ * reads, or one still loading, whose marks wait) holds nothing to judge it
+ * by, and its marks stand as before.
+ */
+export const judges = (anchor: PageAnchor, doc: Document | null): boolean => {
+  if (doc === null) {
+    return true;
+  }
+  const drawing = anchor.sheet ? drawingOf(doc, anchor.sheet) : null;
+  if (anchor.sheet && drawing === null) {
+    return false;
+  }
+  const now: MadeView = drawing
+    ? { scheme: frameScheme(drawing), width: frameWidth(drawing) }
+    : pageView(doc);
+  const made = madeViewOf(anchor);
+  return made === undefined || showsAsMade(made, now, thresholdsOf(doc));
+};

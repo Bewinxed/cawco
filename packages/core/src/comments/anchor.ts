@@ -2,6 +2,7 @@
 
 import type { FileSpot } from "../file-spot";
 import type { PreviewElement } from "../preview/protocol";
+import type { MediaScheme } from "../scheme-media";
 import type { Interaction } from "../stage";
 
 /**
@@ -75,6 +76,14 @@ export interface PageAnchor {
   source: PreviewElement["source"];
   /** The element's text, at most {@link COMMENT_LIMITS.anchorText} characters. */
   text?: string;
+  /**
+   * Off a sheet: the view the mark was made in, its window's width (px, as
+   * `@media` and `matchMedia` answer it) and the scheme the page was drawn
+   * in. A view that draws the page otherwise leaves the mark where it
+   * stands (made-view.ts `showsAsMade`). A sheet's frame says its own
+   * (`sheet.state`).
+   */
+  view?: { scheme: MediaScheme; width: number };
 }
 
 /**
@@ -176,30 +185,69 @@ export const wholePage = (anchor: Pick<PageAnchor, "selector">): boolean =>
   PAGE_ROOTS.has(anchor.selector);
 
 /**
- * The marks of an id a library or framework mints as the page runs: React's
- * `useId` (`:r3:` and `:ra:`, `«r3»`, `_r_3_`) and every id built on one
- * (Radix's `radix-:r1:`, Headless UI's `headlessui-menu-button-:r1:`, Ark's
- * `menu::r1::trigger`), and the libraries that prefix a counter or a random
- * run of their own (bits-ui's `bits-c695`, Melt's `melt-…`).
+ * The ids a framework or library mints as the page runs, each by the exact
+ * form its generator writes, alone or inside an id an author builds on one:
+ * - Svelte's `$props.id()`: `c` and a counter in the browser, `s` and one on
+ *   the server (svelte internal client `props_id`, server renderer `uid`),
+ *   standing as a whole word of the id (`c12`, `c12-label`, `field-s3`);
+ * - React's `useId`: `:r3:` and `:R1d6:` (18), `«r3»` (19.0), `_r_3_` (19.1
+ *   on), and every id built on one, so any colon or guillemet (Radix's
+ *   `radix-:r1:`, Headless UI's `headlessui-menu-button-:r1:`, Zag and
+ *   Ark's `menu::r1::trigger`);
+ * - Vue's `useId`: `v-` and its counters (`v-0`, `v-1-0`, runtime-core
+ *   helpers `useId`);
+ * - the libraries that prefix a counter or a random run of their own:
+ *   bits-ui's `bits-c695` (`createId` over `$props.id()`) and `bits-12`
+ *   (its `useId` counter), Melt's, Radix's, Headless UI's, React Aria's,
+ *   Reach's, MUI's and Downshift's.
  */
-const MINTED_MARKS =
-  /[:«»]|^_r_|_r_[0-9a-z]+_|^(?:bits|melt|radix|headlessui|react-aria|reach|mui|downshift)-/iu;
-/** A digit anywhere in an id: a counter's or a random run's. */
-const DIGIT = /\d/u;
+const MINTED_FORMS =
+  /(?:^|[-_:])[cs]\d+(?:$|[-_:])|[:«»]|_[rR]_[0-9a-z]+_|^v-\d+(?:-\d+)*$|^(?:bits|melt|radix|headlessui|react-aria|reach|mui|downshift)-/u;
 
 /**
- * Whether an element's id is one the page minted as it ran, never one its
- * author wrote: it carries a framework's mark ({@link MINTED_MARKS}) or a
- * digit, which every counter and random run does (Svelte's `$props.id()`,
- * `c12` in the browser and `s12` on the server, Vue's `v-0`, and each id an
- * author builds on one, `c12-label`). Such an id counts per page, so two
- * views of one page, or one view after a remount, name one element by two
- * ids, or another element by the same one; an element with one anchors by
- * its next rule. An id of its author's holding a digit (`step-2`) anchors
- * the same way: by its place and its words, which find it as well.
+ * Whether an id reads as a random run (a nanoid, a hash, a uuid, a
+ * timestamp mixed into letters): its run changes kind (lower, upper, digit,
+ * other) at least once every four characters, dashes and underscores
+ * skipped, a capital opening a lower word counted once. Playwright's
+ * selector generator `isGuidLike`, as written there: what keeps it from
+ * naming an element by an id no next draw writes again, where an author's
+ * `step-2` or `section-12` changes kind once.
+ */
+const randomRun = (id: string): boolean => {
+  let last: "lower" | "upper" | "digit" | "other" | undefined;
+  let changes = 0;
+  for (const c of id) {
+    if (c === "-" || c === "_") {
+      continue;
+    }
+    let kind: "lower" | "upper" | "digit" | "other" = "other";
+    if (c >= "a" && c <= "z") {
+      kind = "lower";
+    } else if (c >= "A" && c <= "Z") {
+      kind = "upper";
+    } else if (c >= "0" && c <= "9") {
+      kind = "digit";
+    }
+    if (!(kind === "lower" && last === "upper") && last && last !== kind) {
+      changes += 1;
+    }
+    last = kind;
+  }
+  return changes >= id.length / 4;
+};
+
+/**
+ * Whether an element's id is one the page mints as it runs, never one its
+ * author wrote: an id a framework or library generates, in the form its
+ * generator writes ({@link MINTED_FORMS}), or a random run ({@link
+ * randomRun}). Such an id is not the same every time the page draws: it
+ * counts per page, so two views of one page, or one view after a remount,
+ * name one element by two ids, or another element by the same one; an
+ * element with one anchors by its next rule. Every other id is its
+ * author's, digits and all (`step-2`), and names its element.
  */
 export const generatedId = (id: string): boolean =>
-  MINTED_MARKS.test(id) || DIGIT.test(id);
+  MINTED_FORMS.test(id) || randomRun(id);
 
 /** A selector's leading `#id`, its escapes as written. */
 const LEADING_ID = /^#((?:\\[0-9a-f]{1,6}\s?|\\.|[^\s>+~.#:[\\])+)/iu;
@@ -380,24 +428,31 @@ const changedAnchor = (was: PageAnchor, now: PageAnchor): boolean =>
 
 /**
  * An anchor read off its element now, with what was read as the mark was
- * made kept as it was: where in a file it stands (`file`), and the frame's
- * state on a sheet, which says the view the person commented in (its
- * width, its scheme), never the view reading it now.
+ * made kept as it was: where in a file it stands (`file`), and the view it
+ * was made in, the frame's state on a sheet and the window's `view` off
+ * one, which say the view the person commented in (its width, its scheme),
+ * never the view reading it now. A mark made before its view was kept
+ * takes the view that writes it.
  */
 export const madeAs = (was: PageAnchor, now: PageAnchor): PageAnchor => {
-  const state = was.sheet?.state ?? now.sheet?.state;
+  const { view: _read, ...read } = now;
+  if (now.sheet) {
+    const state = was.sheet?.state ?? now.sheet.state;
+    return {
+      ...read,
+      ...(was.file ? { file: was.file } : {}),
+      sheet: {
+        file: now.sheet.file,
+        story: now.sheet.story,
+        ...(state ? { state } : {}),
+      },
+    };
+  }
+  const view = was.view ?? now.view;
   return {
-    ...now,
+    ...read,
     ...(was.file ? { file: was.file } : {}),
-    ...(now.sheet
-      ? {
-          sheet: {
-            file: now.sheet.file,
-            story: now.sheet.story,
-            ...(state ? { state } : {}),
-          },
-        }
-      : {}),
+    ...(view ? { view } : {}),
   };
 };
 

@@ -75,6 +75,15 @@ const shown: ShownDocument = {
   removeEventListener: (_type, listener) => shownListeners.delete(listener),
 };
 
+/**
+ * The hub told whether the page is shown, as the socket's awareness state
+ * (`shown`): y-websocket sends it as the socket opens and again on each
+ * change, and the hub names a shown main view to place the marks (hub
+ * artifacts sync.ts `electPlacer`).
+ */
+const tellShown = (on: WebsocketProvider) =>
+  on.awareness.setLocalStateField("shown", shown.visibilityState === "visible");
+
 // ---- The page's sockets ----------------------------------------------------
 
 /** Each socket the page opened for the worker, by its number. */
@@ -331,6 +340,7 @@ const connect = () => {
     params,
   });
   provider = own;
+  tellShown(own);
   post({ type: "connecting" });
   // An open socket silent for core `SILENT_MS` is lost now; the watch opens it again.
   quiet?.stop();
@@ -477,6 +487,9 @@ worker.addEventListener("message", ({ data: message }) => {
       shown.visibilityState = message.visible ? "visible" : "hidden";
       for (const listener of shownListeners) {
         listener();
+      }
+      if (provider) {
+        tellShown(provider);
       }
       return;
     case "replicate":

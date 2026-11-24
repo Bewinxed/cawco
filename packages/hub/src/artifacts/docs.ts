@@ -114,11 +114,23 @@ export interface ArtifactClient {
   beat: () => void;
   /** Ends its socket: the artifact was removed ({@link ArtifactDocs.drop}). */
   close: () => void;
-  /** A page's main view, by the id its overlay joined with (the socket's `placer` query): one of them writes where the marks stand (core `DocMeta.placer`). */
-  placer?: string;
+  /**
+   * A page's main view: the id its overlay joined with (the socket's
+   * `placer` query), and whether its page is shown now (Page Visibility, as
+   * its awareness state says: sync.ts `readShown`). One shown view writes
+   * where the marks stand (core `DocMeta.placer`).
+   */
+  placer?: MainView;
   /** A canvas's host page, which can convert the agent's writes (the socket's `screen` query). */
   screen: boolean;
   send: (update: Uint8Array) => void;
+}
+
+/** A page's main view among an artifact's clients ({@link ArtifactClient.placer}). */
+export interface MainView {
+  id: string;
+  /** Its page is shown (`document.visibilityState`), until its awareness says otherwise. */
+  shown: boolean;
 }
 
 interface Loaded {
@@ -214,8 +226,8 @@ export interface ArtifactDocs {
    * Read it at once; it moves with the doc.
    */
   pins: (id: string) => ReadonlyMap<string, Pin>;
-  /** The main views joined to the artifact now, by their ids, in the order they joined ({@link ArtifactClient.placer}). */
-  placers: (id: string) => string[];
+  /** The main views joined to the artifact now, in the order they joined ({@link ArtifactClient.placer}). */
+  placers: (id: string) => MainView[];
   /**
    * Why `update`, from a person's client, may not be applied to the
    * artifact's doc; null when it may, the caller applying it next (sync.ts

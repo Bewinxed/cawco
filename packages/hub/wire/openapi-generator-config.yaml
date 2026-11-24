@@ -141,6 +141,7 @@ typeOverrides:
     MachineCapabilityId: OpenEnums.MachineCapabilityId
     MachineCapabilityMedia: OpenEnums.MachineCapabilityMedia
     MachineFactsAuth: OpenEnums.MachineFactsAuth
+    MediaScheme: OpenEnums.MediaScheme
     MemoryScopeRole: OpenEnums.MemoryScopeRole
     MomentAuthor: OpenEnums.MomentAuthor
     MovePriceOption: OpenEnums.MovePriceOption

@@ -21,16 +21,24 @@ export interface OverlayMark {
   held: () => boolean;
   /** This document held or let go (hold.ts), by the overlay that runs above it. */
   hold: (on: boolean) => void;
+  /** The media queries this document's script asked `matchMedia` ({@link watchMedia}). */
+  media: ReadonlySet<string>;
 }
 
 const MARK = "__cawcoOverlay";
 type Marked = Window & { [MARK]?: OverlayMark };
 
 /** This window's mark: an overlay runs here, or runs above and reaches here. */
+/** The queries {@link watchMedia} heard, the first {@link MEDIA_MOST}. */
+const asked = new Set<string>();
+/** The most queries kept: a page asks a few, each again and again. Our call. */
+const MEDIA_MOST = 200;
+
 export const mark: OverlayMark = {
   frameChanged: () => undefined,
   held: isHeld,
   hold,
+  media: asked,
 };
 Object.defineProperty(window, MARK, { value: mark });
 
@@ -52,6 +60,23 @@ export const here: {
 /** The same-origin parent's mark; null at the top, under another origin, or where no overlay was loaded. */
 export function parentMark(): OverlayMark | null {
   return window.parent === window ? null : markOf(window.parent);
+}
+
+/**
+ * Every query this document's script asks `matchMedia` is kept
+ * ({@link OverlayMark.media}), the answer the browser's own: a page that
+ * draws an element at one width only by script names that width nowhere
+ * in its style (core comments made-view.ts `widthThresholds`). Installed
+ * before any script of the page's runs (overlay.ts), so it hears them all.
+ */
+export function watchMedia(): void {
+  const original = window.matchMedia;
+  window.matchMedia = (query: string) => {
+    if (asked.size < MEDIA_MOST) {
+      asked.add(query);
+    }
+    return original.call(window, query);
+  };
 }
 
 /**

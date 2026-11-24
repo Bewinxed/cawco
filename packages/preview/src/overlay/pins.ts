@@ -148,6 +148,12 @@ export interface PinsDeps {
   describe: (el: Element) => PinnedElement;
   /** A placed ink group's box in the page, px; null when it is not on the page. */
   groupBox: (id: string) => Box | null;
+  /**
+   * Whether this view draws the page as the mark on `anchor` was made (its
+   * width and scheme; a sheet's story shown here: made-view.ts `judges`):
+   * only then may it move the mark aside or anchor it again.
+   */
+  judges: (anchor: PageAnchor) => boolean;
   /** Where a page's anchor stands now, and by what; null when nothing on the page matches it. */
   locate: (anchor: PageAnchor) => AnchorFound<Element> | null;
   /**
@@ -748,7 +754,9 @@ export function startPins(deps: PinsDeps): Pins {
    * other, is left alone (core `anchorRereader`). A moved pin whose anchor
    * finds its element again (the page drew it back, a revision restored it)
    * stands on the page again, out of the moved tray. Each as it is to be
-   * written.
+   * written; none but those this view draws the page for as they were made
+   * (`judges`): a phone's layout may lack a desk's element, and another
+   * element reading its words would take the pin.
    */
   const reread = anchorRereader();
   const reanchor = (pins: Pin[]) => {
@@ -756,7 +764,8 @@ export function startPins(deps: PinsDeps): Pins {
     for (const pin of pins) {
       if (
         !("selector" in pin.anchor) ||
-        (pin.movedAt && pin.ink && !deps.groupBox(pin.ink))
+        (pin.movedAt && pin.ink && !deps.groupBox(pin.ink)) ||
+        !deps.judges(pin.anchor)
       ) {
         continue;
       }
@@ -1147,9 +1156,18 @@ export function startPins(deps: PinsDeps): Pins {
     }, PLACED);
   };
 
-  /** Whether a pin no anchor finds is missing, not waiting on a frame still loading. */
+  /**
+   * Whether a pin no anchor finds is missing, not waiting on a frame still
+   * loading, in a view that draws the page as the pin was made
+   * (`deps.judges`): one that draws it otherwise (another width, another
+   * scheme, another story) can't tell the page losing the element from its
+   * own layout leaving it out, and the pin stands where it was put.
+   */
   const goneFrom = (pin: Pin) =>
-    !("selector" in pin.anchor && deps.waiting(pin.anchor));
+    !(
+      "selector" in pin.anchor &&
+      (deps.waiting(pin.anchor) || !deps.judges(pin.anchor))
+    );
   /** How long each pin has stood missing: one is gone only after a while, the page drawn again then. */
   const absent = absences(() => draw());
 

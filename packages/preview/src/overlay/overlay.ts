@@ -20,7 +20,7 @@
  * lazy, so a frame that stands down never evaluates it. Where it runs, it
  * starts in the microtask after this script, before the parser goes on.
  */
-import { here, mark, parentMark, watchHistory } from "./boot";
+import { here, mark, parentMark, watchHistory, watchMedia } from "./boot";
 import { watchFaults } from "./faults";
 import { hold, installHold } from "./hold";
 
@@ -28,6 +28,7 @@ import { hold, installHold } from "./hold";
 installHold();
 here.tag = document.currentScript as HTMLScriptElement | null;
 watchHistory();
+watchMedia();
 
 const above = here.tag?.dataset.embed === undefined ? parentMark() : null;
 if (above) {

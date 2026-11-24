@@ -660,7 +660,6 @@ suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/stages.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/stream.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/hub/src/transcript.ts	3
-suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/preview/src/overlay/page.ts	1
 suppression	biome-ignore lint/complexity/noVoid	apps/dashboard/src/lib/cawco/accounts/StrategyFigure.svelte	1
 suppression	biome-ignore lint/complexity/noVoid	apps/dashboard/src/lib/cawco/Shell.svelte	4
 suppression	biome-ignore lint/complexity/noVoid	apps/dashboard/src/routes/dev/artifact-panel/+page.svelte	1

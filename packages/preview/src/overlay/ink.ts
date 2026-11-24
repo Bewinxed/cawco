@@ -194,6 +194,12 @@ export interface InkDeps {
   freehand: (event: PointerEvent) => boolean;
   /** What holds a stand-in, innermost first, as its embed says, then its frame; none for any other element. */
   inEmbed: (el: Element) => Element[];
+  /**
+   * Whether this view draws the page as the mark on `anchor` was made (its
+   * width and scheme; a sheet's story shown here: made-view.ts `judges`):
+   * only then may it move the mark aside or anchor it again.
+   */
+  judges: (anchor: PageAnchor) => boolean;
   /** Where a page's anchor stands now, and by what; null when nothing on the page matches it. */
   locate: (anchor: PageAnchor) => AnchorFound<Element> | null;
   /** Whether `el` is the page's own box rather than content on it. */
@@ -1323,9 +1329,17 @@ export function startInk(deps: InkDeps): Ink {
     artifact.places() &&
     document.readyState !== "loading";
 
-  /** Whether a group no anchor finds is missing, not waiting on a frame still loading. */
+  /**
+   * Whether a group no anchor finds is missing, not waiting on a frame
+   * still loading, in a view that draws the page as the group was drawn
+   * (`deps.judges`): one that draws it otherwise can't tell the page losing
+   * the element from its own layout leaving it out.
+   */
   const goneFrom = (group: InkGroup) =>
-    !("selector" in group.anchor && deps.waiting(group.anchor));
+    !(
+      "selector" in group.anchor &&
+      (deps.waiting(group.anchor) || !deps.judges(group.anchor))
+    );
   /** How long each group has stood missing: one is gone only after a while, drawn again then. */
   const absent = absences(() => draw());
 
@@ -1420,7 +1434,7 @@ export function startInk(deps: InkDeps): Ink {
     el: Element,
     by: AnchorFound<Element>["by"]
   ): InkGroup | null {
-    if (!("selector" in group.anchor)) {
+    if (!("selector" in group.anchor && deps.judges(group.anchor))) {
       return null;
     }
     const now = reread(group.id, group.anchor, deps.anchorOf(el), by);
@@ -1588,6 +1602,7 @@ export function startInk(deps: InkDeps): Ink {
     const back = [...moved.values()].filter(
       (group) =>
         "selector" in group.anchor &&
+        deps.judges(group.anchor) &&
         deps.locate(deps.anchorToday(group.anchor, group.at))?.by === "place"
     );
     if (back.length === 0) {
