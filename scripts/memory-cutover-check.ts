@@ -23,10 +23,12 @@
  * (the nightly run, and `ruleAsked`, a rule a session changes at once
  * through `memory_rule`), and memory.ts's
  * `makeNote` (the person's own note, its write `notedInIndex`). A call's path arguments are read for
- * those names. Each of them reads the files at the folder's HEAD and passes
- * that commit as the write's `base`, so project-folder.ts rebases the change
+ * those names. Each of them reads the files from disk with the folder's
+ * HEAD, in its commit queue (project-folder.ts `readAtHead`), and passes
+ * that HEAD as the write's `base`, so project-folder.ts rebases the change
  * onto HEAD and refuses it, writing nothing, when another commit changed
- * the same lines: git keeps one writer from writing over another.
+ * the same lines; the writer then reads again and works out its change
+ * again (`againOnConflict`): git keeps one writer from writing over another.
  *
  * C6, one checked change. `new CheckedOp(` (memory-lessons.ts), the only
  * change `applyOp` takes, is made only in memory-run.ts, where every rule of

@@ -46,6 +46,7 @@ import { errnoCode } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
 import { freeBytes } from "@cawco/core/free-bytes";
+import { isRecord } from "@cawco/core/is-record";
 import { hubAreasDir, hubProjectsDir } from "@cawco/core/paths/hub";
 import { runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
@@ -1132,7 +1133,7 @@ export interface FolderWriteOptions {
   /** Who the commit is by; the operator when left out. */
   author?: FolderAuthor;
   /**
-   * The commit the caller read the files at ({@link folderHead}): when HEAD
+   * The commit the caller read the files at ({@link readAtHead}): when HEAD
    * has moved since, the change is rebased onto HEAD ({@link rebased}), and
    * refused {@link REBASE_CONFLICT} when another commit changed the same
    * lines, nothing written. Left out, the change is written over HEAD as it
@@ -1154,11 +1155,53 @@ export interface FolderWriteOptions {
 /** A change refused because a commit since its base changed the same lines: the caller reads the files again and makes its change once more. */
 export const REBASE_CONFLICT = "folder-rebase-conflict";
 
-/** The commit the folder's HEAD names, read with no git spawned; empty while it has none. What a writer passes as {@link FolderWriteOptions.base}. */
-export const folderHead = async (projectId: string) => {
-  const root = await forReading(projectId);
-  return root instanceof ElysiaStatus ? root : await headCommit(root);
+/**
+ * `read` given the folder's HEAD (empty while it has none), run in the
+ * folder's commit queue: the folder's files change only through that
+ * queue, so while `read` runs no commit lands and the files it reads from
+ * disk are HEAD's. What a writer reads before it commits with that HEAD as
+ * {@link FolderWriteOptions.base}. `read` only reads: a write of the folder
+ * inside it would wait on the queue it holds.
+ */
+export const readAtHead = async <T>(
+  projectId: string,
+  read: (head: string) => Promise<T>
+) => {
+  const root = projectRoot(projectId);
+  if (root instanceof ElysiaStatus) {
+    return root;
+  }
+  return await inFolderTurn(projectId, root, async () =>
+    read(await headCommit(root))
+  );
 };
+
+/** How many times a writer reads again and makes its change again when its commit is refused {@link REBASE_CONFLICT}. */
+const REBASE_TRIES = 3;
+
+/**
+ * `attempt`, a writer's read of the folder, the change it works out from
+ * what it read and its commit with that read's HEAD as base, made again
+ * while its commit is refused {@link REBASE_CONFLICT}, up to
+ * {@link REBASE_TRIES} times in all: each try reads the files as they stand.
+ * What `attempt` does outside the folder before its commit must be safe to
+ * do again (a read, or a write keyed so a second try finds the first's).
+ */
+export const againOnConflict = async <R>(
+  attempt: () => Promise<R>
+): Promise<R> => {
+  let done = await attempt();
+  for (let tries = 1; tries < REBASE_TRIES && clashed(done); tries += 1) {
+    done = await attempt();
+  }
+  return done;
+};
+
+/** Whether a writer's answer is the refusal of a rebase that met a commit changing the same lines. */
+const clashed = (done: unknown): boolean =>
+  done instanceof ElysiaStatus &&
+  isRecord(done.response) &&
+  done.response.code === REBASE_CONFLICT;
 
 /** A text file as commit `sha` holds it; undefined when it holds none. */
 const textAt = async (root: string, sha: string, rel: string) => {

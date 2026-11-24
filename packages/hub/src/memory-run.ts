@@ -51,14 +51,18 @@
  *   source. What it changes is held: a removed rule stays out (no repeat
  *   puts it back, an agent's lesson saying it again is refused, upkeep
  *   keeps its entry), and an inbox note naming it is archived as settled.
- * - **Saves through git** ({@link commit}): every write here is read at
- *   the project folder's HEAD ({@link treeOf}) and committed on HEAD,
- *   rebased onto it when it moved since (project-folder.ts `rebased`, a
- *   three-way merge of each file). A rebase that meets a commit changing
- *   the same lines writes nothing: the curator's operation is planned again
- *   and memory_rule's change made again on the files as they stand; a hub
- *   step refused so is read again on the next run. No writer writes over a
- *   newer commit.
+ * - **Saves through git** ({@link commit}): every step reads the files
+ *   from disk with the folder's HEAD, in its commit queue ({@link treeOf}),
+ *   works out its change, and commits it on HEAD, rebased onto it when it
+ *   moved since (project-folder.ts `rebased`, a three-way merge of each
+ *   file). A rebase that meets a commit changing the same lines writes
+ *   nothing, and the step reads again and works out its change again
+ *   (project-folder.ts `againOnConflict`, three tries). What a step does
+ *   outside the memory comes after its commit stands (a check filed for a
+ *   held lesson, the next recovery run, tasks dropped), or is safe to do
+ *   again: a read (a machine's file, a task's state, Jev), the probes run
+ *   once before, or a task filed once ({@link filedOnce}). No writer writes
+ *   over a newer commit.
  * - **Checks** ({@link plannedCheck}): a rule a tool can test is filed as
  *   a task in the project (`Check: <rule>`, through the tasks module, in
  *   the stage new tasks enter), its id kept on the lesson; the rule stays
@@ -190,14 +194,15 @@ import {
   rootOf,
 } from "./memory-sources";
 import {
+  againOnConflict,
   changeFolderFiles,
   type FolderAuthor,
   folderCommitsCarrying,
   folderCommitsChanging,
-  folderHead,
   folderHistory,
   folderPath,
   REBASE_CONFLICT,
+  readAtHead,
   readFolderFileAt,
   turnTaker,
   YOU,
@@ -1385,19 +1390,15 @@ export const createMemoryRun = ({
 
   // --- the tree ----------------------------------------------------------------
 
-  /** A file's words as commit `head` holds them (as the folder holds them, before its first commit); undefined when it holds none. */
-  const textAt = (projectId: string, head: string, path: string) =>
-    head ? readFolderFileAt(projectId, head, path) : fileOr(projectId, path);
-
-  /** The memory files as commit `head` holds them, by path. */
-  const filesAt = async (projectId: string, head: string) => {
+  /** The memory files as they stand on disk, by path. */
+  const filesOf = async (projectId: string) => {
     const paths = await memoryFiles(projectId);
     if (paths instanceof ElysiaStatus) {
       return paths;
     }
     const files: Record<string, string> = {};
     for (const path of paths.filter((each) => each.endsWith(".md"))) {
-      const text = await textAt(projectId, head, path);
+      const text = await fileOr(projectId, path);
       // A binary file of the brand kit is not read as words.
       if (text instanceof ElysiaStatus) {
         if (text.status === 413 || text.status === 415) {
@@ -1405,36 +1406,33 @@ export const createMemoryRun = ({
         }
         return text;
       }
-      // Written since HEAD was read: the next read takes it.
-      if (text !== undefined) {
-        files[path] = text;
-      }
+      files[path] = text;
     }
     return files;
   };
 
-  /** The project's memory files and ledger as they stand, and the folder's head they were read at. */
-  const treeOf = async (projectId: string) => {
-    // HEAD first, and every file as it holds them: what a commit is rebased from.
-    const head = await folderHead(projectId);
-    if (head instanceof ElysiaStatus) {
-      return head;
-    }
-    const files = await filesAt(projectId, head);
-    if (files instanceof ElysiaStatus) {
-      return files;
-    }
-    const ledgerText = await textAt(projectId, head, LEDGER_FILE);
-    if (ledgerText instanceof ElysiaStatus) {
-      return ledgerText;
-    }
-    const ledger = parseLedger(ledgerText ?? "");
-    if (typeof ledger === "string") {
-      return problem(500, { code: "memory-ledger-unread", detail: ledger });
-    }
-    const read: MemoryRead = { tree: { files, ledger }, head };
-    return read;
-  };
+  /**
+   * The project's memory files and ledger, read from disk with the folder's
+   * HEAD in its commit queue (project-folder.ts `readAtHead`), so they are
+   * HEAD's: the base a commit of them is rebased from.
+   */
+  const treeOf = (projectId: string) =>
+    readAtHead(projectId, async (head) => {
+      const files = await filesOf(projectId);
+      if (files instanceof ElysiaStatus) {
+        return files;
+      }
+      const ledgerText = await fileOr(projectId, LEDGER_FILE);
+      if (ledgerText instanceof ElysiaStatus) {
+        return ledgerText;
+      }
+      const ledger = parseLedger(ledgerText);
+      if (typeof ledger === "string") {
+        return problem(500, { code: "memory-ledger-unread", detail: ledger });
+      }
+      const read: MemoryRead = { tree: { files, ledger }, head };
+      return read;
+    });
 
   /**
    * One commit of `after` over `from`'s tree: every memory file it changed, the
@@ -1524,9 +1522,15 @@ export const createMemoryRun = ({
    * line and entry agreed, the index in its shape, staged lessons past their
    * days and inbox notes no run reached in a week let go, knowledge no brief
    * carried for the archive's days archived, and retired entries past their
-   * days taken out of the ledger. One commit, `memory: upkeep <day>`.
+   * days taken out of the ledger. One commit, `memory: upkeep <day>`. Its
+   * machine and task reads are reads, so a clash reads and works it all
+   * out again ({@link againOnConflict}).
    */
-  const upkeep = async (project: ProjectRow) => {
+  const upkeep = (project: ProjectRow) =>
+    againOnConflict(() => upkeepOnce(project));
+
+  /** {@link upkeep} once, on the memory as it stands. */
+  const upkeepOnce = async (project: ProjectRow) => {
     const read = await treeOf(project.id);
     if (read instanceof ElysiaStatus) {
       return read;
@@ -2074,15 +2078,24 @@ export const createMemoryRun = ({
     const newest = new Map(found.map((one) => [one.id, one]));
     const did = new Map<string, string>();
     for (const one of newest.values()) {
-      const read = await treeOf(project.id);
-      if (read instanceof ElysiaStatus) {
-        return read;
-      }
-      const done = await correctedOne(project.id, run, read, one);
+      // Read, worked out and committed again on a clash; its check filed after.
+      const done = await againOnConflict(async () => {
+        const read = await treeOf(project.id);
+        return read instanceof ElysiaStatus
+          ? read
+          : await correctedOne(project.id, run, read, one);
+      });
       if (done instanceof ElysiaStatus) {
         return done;
       }
-      did.set(one.id, done);
+      const said =
+        typeof done === "string"
+          ? done
+          : await checkedUp(project.id, run, done.checkUp, done.lesson);
+      if (said instanceof ElysiaStatus) {
+        return said;
+      }
+      did.set(one.id, said);
     }
     for (const one of found) {
       const lines = run.corrected.get(one.handle) ?? [];
@@ -2117,7 +2130,7 @@ export const createMemoryRun = ({
       return await putBack(projectId, run, read, one.id, lesson, source);
     }
     if (one.does === "repeats" && lesson.state === "live") {
-      return await repeatOf(projectId, run, read, one.id, lesson, source);
+      return await repeatOf(projectId, read, one.id, lesson, source);
     }
     if (
       one.does === "reverses" &&
@@ -2287,7 +2300,6 @@ export const createMemoryRun = ({
    */
   const repeatOf = async (
     projectId: string,
-    run: Run,
     read: MemoryRead,
     id: string,
     lesson: Lesson,
@@ -2318,8 +2330,9 @@ export const createMemoryRun = ({
     if (up) {
       return memoryRunWords.didHeld(INDEX_FILE);
     }
+    // Held: its check is filed once this commit stands ({@link checkedUp}).
     return held
-      ? await checkedUp(projectId, run, { id, text }, lesson)
+      ? { checkUp: { id, text }, lesson }
       : memoryRunWords.didCounted(times);
   };
 
@@ -2420,14 +2433,15 @@ export const createMemoryRun = ({
         : [];
     });
     if (out.length > 0) {
-      const read = await treeOf(project.id);
-      if (read instanceof ElysiaStatus) {
-        return read;
-      }
-      const done = await commit(project.id, read, read.tree, {
-        author: { name: "Jev" },
-        message: `memory: Jev sorts out ${out.length} note${out.length === 1 ? "" : "s"}`,
-        notes: out,
+      const done = await againOnConflict(async () => {
+        const read = await treeOf(project.id);
+        return read instanceof ElysiaStatus
+          ? read
+          : await commit(project.id, read, read.tree, {
+              author: { name: "Jev" },
+              message: `memory: Jev sorts out ${out.length} note${out.length === 1 ? "" : "s"}`,
+              notes: out,
+            });
       });
       if (done instanceof ElysiaStatus) {
         return done;
@@ -3353,44 +3367,60 @@ export const createMemoryRun = ({
   ): Promise<string[]> => {
     let read = first;
     const lines: string[] = [];
-    const once = async (
-      at: { head: string; tree: MemoryTree },
-      op: MemoryOp,
-      index: number
-    ) => {
-      const plan = await planned(
-        projectId,
-        run,
-        at.tree,
-        at.head,
-        op,
-        index,
-        answers
-      );
-      return typeof plan === "string"
-        ? plan
-        : await committed(projectId, run, at, plan, op);
-    };
     for (const [index, op] of ops.entries()) {
-      let done = await once(read, op, index);
-      // Another writer committed under this call: checked again on the memory as it stands now.
-      if (
-        done instanceof ElysiaStatus &&
-        done.response.code === REBASE_CONFLICT
-      ) {
-        const again = await treeOf(projectId);
-        if (!(again instanceof ElysiaStatus)) {
-          read = again;
-          done = await once(read, op, index);
+      // The first try on the memory as the last commit left it; on a clash,
+      // planned again on the memory as it stands now.
+      let tries = 0;
+      const committedOp = await againOnConflict(async () => {
+        tries += 1;
+        const at = tries === 1 ? read : await treeOf(projectId);
+        if (at instanceof ElysiaStatus) {
+          return at;
         }
-      }
-      if (typeof done === "string" || done instanceof ElysiaStatus) {
-        const why = typeof done === "string" ? done : done.response.detail;
+        const plan = await planned(
+          projectId,
+          run,
+          at.tree,
+          at.head,
+          op,
+          index,
+          answers
+        );
+        if (typeof plan === "string") {
+          return plan;
+        }
+        const made = await committed(projectId, run, at, plan, op);
+        return made instanceof ElysiaStatus ? made : { ...made, plan, at };
+      });
+      if (
+        typeof committedOp === "string" ||
+        committedOp instanceof ElysiaStatus
+      ) {
+        const why =
+          typeof committedOp === "string"
+            ? committedOp
+            : committedOp.response.detail;
         lines.push(`${index + 1}. ${memoryRunWords.refused(why)}`);
         continue;
       }
+      // Its check and its task for CawCo, once the operation stands.
+      const done = await followedUp(projectId, run, committedOp.plan, {
+        tree: committedOp.tree,
+        said: committedOp.said,
+        sha: committedOp.sha,
+      });
+      if (done instanceof ElysiaStatus) {
+        lines.push(
+          `${index + 1}. ${memoryRunWords.applied(committedOp.said)} ${memoryRunWords.refused(done.response.detail)}`
+        );
+        read = {
+          tree: committedOp.tree,
+          head: committedOp.sha ?? committedOp.at.head,
+        };
+        continue;
+      }
       lines.push(`${index + 1}. ${memoryRunWords.applied(done.said)}`);
-      read = { tree: done.tree, head: done.sha ?? read.head };
+      read = { tree: done.tree, head: done.sha ?? committedOp.at.head };
     }
     return lines;
   };
@@ -3429,11 +3459,7 @@ export const createMemoryRun = ({
     }
     consume(run, plan.consumed);
     count(run, plan.change, op);
-    return await followedUp(projectId, run, plan, {
-      tree: applied.tree,
-      said,
-      sha,
-    });
+    return { tree: applied.tree, said, sha };
   };
 
   /** A committed operation's tasks, each in a commit of its own: its check filed ({@link fileCheck}), and a lesson about CawCo given its task ({@link productGiven}); `first` as the last commit left it. */
@@ -3547,7 +3573,7 @@ export const createMemoryRun = ({
         said: memoryRunWords.productCovered(one.id, covering),
       };
     }
-    const filed = await tasks.file(projectId, {
+    const filed = await filedOnce(projectId, {
       title: memoryRunWords.productTitle(titleWords(one.text)),
       description: memoryRunWords.productDescription(one.text, one.id),
       acceptance: memoryRunWords.productAcceptance,
@@ -3594,22 +3620,37 @@ export const createMemoryRun = ({
     projectId: string,
     { earlier, ...one }: { earlier?: string; id: string; text: string }
   ) => {
-    const read = await treeOf(projectId);
-    if (read instanceof ElysiaStatus) {
-      return read;
+    // The task first, filed once ({@link filedOnce}); its mark on the lesson
+    // is read, worked out and committed again on a clash.
+    const given = await productTask(projectId, one, earlier);
+    if (typeof given === "string") {
+      const notGiven: Filed = { said: given };
+      return notGiven;
     }
-    const marked = await productMarked(projectId, read.tree, one, earlier);
-    if (!marked.task) {
-      return { said: marked.said };
-    }
-    const sha = await commit(projectId, read, marked.tree, {
-      author: CURATOR,
-      message: `memory: ${marked.said}`,
+    return await againOnConflict(async () => {
+      const read = await treeOf(projectId);
+      if (read instanceof ElysiaStatus) {
+        return read;
+      }
+      const lesson = read.tree.ledger.lessons[one.id];
+      if (!lesson) {
+        const gone: Filed = { said: "" };
+        return gone;
+      }
+      const tree = withLesson(read.tree, one.id, {
+        ...lesson,
+        product: { task: given.task },
+      });
+      const sha = await commit(projectId, read, tree, {
+        author: CURATOR,
+        message: `memory: ${given.said}`,
+      });
+      if (sha instanceof ElysiaStatus) {
+        return sha;
+      }
+      const filed: Filed = { said: given.said, task: given.task, tree, sha };
+      return filed;
     });
-    if (sha instanceof ElysiaStatus) {
-      return sha;
-    }
-    return { said: marked.said, task: marked.task, tree: marked.tree, sha };
   };
 
   /**
@@ -3749,7 +3790,7 @@ export const createMemoryRun = ({
     ask: CheckAsk,
     author: FolderAuthor
   ) => {
-    const task = await tasks.file(projectId, {
+    const task = await filedOnce(projectId, {
       title: memoryRunWords.checkTitle(ask.text),
       description: memoryRunWords.checkDescription(
         ask.id,
@@ -3760,29 +3801,67 @@ export const createMemoryRun = ({
       fields: { [LESSON_FIELD]: ask.id },
     });
     if ("refused" in task) {
-      return { said: memoryRunWords.checkNotFiled(task.refused) };
+      const notFiled: Filed = {
+        said: memoryRunWords.checkNotFiled(task.refused),
+      };
+      return notFiled;
     }
-    const read = await treeOf(projectId);
-    if (read instanceof ElysiaStatus) {
-      return read;
-    }
-    const lesson = read.tree.ledger.lessons[ask.id];
-    if (!lesson) {
-      return { said: memoryRunWords.checkNotFiled(ask.id), task: task.id };
-    }
-    const tree = withLesson(read.tree, ask.id, {
-      ...lesson,
-      check: { task: task.id },
-    });
     const said = memoryRunWords.checkFiled(ask.id, task.id);
-    const sha = await commit(projectId, read, tree, {
-      author,
-      message: `memory: ${said}`,
+    // The task stands; its mark on the lesson is read, worked out and committed again on a clash.
+    return await againOnConflict(async () => {
+      const read = await treeOf(projectId);
+      if (read instanceof ElysiaStatus) {
+        return read;
+      }
+      const lesson = read.tree.ledger.lessons[ask.id];
+      if (!lesson) {
+        const gone: Filed = {
+          said: memoryRunWords.checkNotFiled(ask.id),
+          task: task.id,
+        };
+        return gone;
+      }
+      const tree = withLesson(read.tree, ask.id, {
+        ...lesson,
+        check: { task: task.id },
+      });
+      const sha = await commit(projectId, read, tree, {
+        author,
+        message: `memory: ${said}`,
+      });
+      if (sha instanceof ElysiaStatus) {
+        return sha;
+      }
+      const filed: Filed = { said, task: task.id, tree, sha };
+      return filed;
     });
-    if (sha instanceof ElysiaStatus) {
-      return sha;
+  };
+
+  /** What filing a lesson's task said, and, once its mark on the lesson is committed, the task, the memory after it and the commit. */
+  interface Filed {
+    said: string;
+    sha?: string;
+    task?: string;
+    tree?: MemoryTree;
+  }
+
+  /**
+   * A task filed for a lesson, once: an open task of the same title, which
+   * is the lesson's (a check's or a task's for CawCo title says the
+   * lesson's words, and a lesson's words have one id), is answered in place
+   * of a second, so a step tried again, or run again the next night after
+   * its commit failed, files nothing twice.
+   */
+  const filedOnce = async (
+    projectId: string,
+    draft: Parameters<MemoryRunDeps["tasks"]["file"]>[1]
+  ) => {
+    const open = await tasks.open(projectId);
+    if ("refused" in open) {
+      return open;
     }
-    return { said, task: task.id, tree, sha };
+    const filed = open.find((task) => task.title === draft.title);
+    return filed ? { id: filed.id } : await tasks.file(projectId, draft);
   };
 
   /** The run's counts and limits moved by one committed operation. */
@@ -3828,32 +3907,36 @@ export const createMemoryRun = ({
     run: Run,
     outcome: RunOutcome
   ) => {
-    const state = await stateOf(projectId);
-    if (state instanceof ElysiaStatus) {
-      return state;
-    }
-    const recovery =
-      run.kind === "recovery" && outcome !== "failed"
-        ? await recoveryLeft(projectId, run)
-        : undefined;
-    if (recovery instanceof ElysiaStatus) {
-      return recovery;
-    }
-    const read = await treeOf(projectId);
-    if (read instanceof ElysiaStatus) {
-      return read;
-    }
-    const done = await commit(
-      projectId,
-      read,
-      read.tree,
-      markOfRun(state, run, outcome, recovery)
-    );
+    // Read, worked out and committed again on a clash; the next recovery run started after.
+    const done = await againOnConflict(async () => {
+      const state = await stateOf(projectId);
+      if (state instanceof ElysiaStatus) {
+        return state;
+      }
+      const recovery =
+        run.kind === "recovery" && outcome !== "failed"
+          ? await recoveryLeft(projectId, run)
+          : undefined;
+      if (recovery instanceof ElysiaStatus) {
+        return recovery;
+      }
+      const read = await treeOf(projectId);
+      if (read instanceof ElysiaStatus) {
+        return read;
+      }
+      const sha = await commit(
+        projectId,
+        read,
+        read.tree,
+        markOfRun(state, run, outcome, recovery)
+      );
+      return sha instanceof ElysiaStatus ? sha : { recovery };
+    });
     if (done instanceof ElysiaStatus) {
       return done;
     }
     if (run.kind === "recovery") {
-      chainOn(projectId, recovery);
+      chainOn(projectId, done.recovery);
     }
   };
 
@@ -4068,8 +4151,9 @@ export const createMemoryRun = ({
         key ? await probePasses(project.id, key, one.probe.pass, answers) : 0
       );
     }
+    // The probes ran once; what they found is committed, read and worked out again on a clash.
     return await stateTurn(project.id, () =>
-      retestCommitted(project, model, passes)
+      againOnConflict(() => retestCommitted(project, model, passes))
     );
   };
 
@@ -4183,12 +4267,15 @@ export const createMemoryRun = ({
       passes.size - moved,
       unprobed
     );
-    console.log(`[memory] ${project.name}: ${said}`);
-    return await commit(project.id, read, tree, {
+    const sha = await commit(project.id, read, tree, {
       author: HUB,
       message: `memory: ${said}`,
       extra: [{ path: RUN_STATE_FILE, content: jsonText(next) }],
     });
+    if (!(sha instanceof ElysiaStatus)) {
+      console.log(`[memory] ${project.name}: ${said}`);
+    }
+    return sha;
   };
 
   /** `tree` with each live lesson a line of another memory file says word for word (§6.3 step 1) merged into that line's lesson, or retired as no longer needed when the line is the person's own (the index's Notes). */
@@ -4322,25 +4409,34 @@ export const createMemoryRun = ({
         with: await probePasses(projectId, key, one.pass, withRule),
       });
     }
-    const read = await treeOf(projectId);
-    if (read instanceof ElysiaStatus) {
-      return read;
-    }
-    return await commit(projectId, read, read.tree, {
+    // The probes ran once; their file is committed, read again on a clash.
+    const at = new Date().toISOString();
+    return await againOnConflict(async () => {
+      const read = await treeOf(projectId);
+      return read instanceof ElysiaStatus
+        ? read
+        : await probeCheckCommit(projectId, read, on.model, at, found);
+    });
+  };
+
+  /** {@link probeChecked}'s commit: what the probes found, in its file. */
+  const probeCheckCommit = (
+    projectId: string,
+    read: MemoryRead,
+    model: string,
+    at: string,
+    found: { id: string; of: number; with: number; without: number }[]
+  ) =>
+    commit(projectId, read, read.tree, {
       author: HUB,
       message: `memory: ${memoryRunWords.probeChecked(found.length)}`,
       extra: [
         {
           path: PROBE_CHECK_FILE,
-          content: jsonText({
-            model: on.model,
-            at: new Date().toISOString(),
-            lessons: found,
-          }),
+          content: jsonText({ model, at, lessons: found }),
         },
       ],
     });
-  };
 
   // --- recovery ------------------------------------------------------------------------
 
@@ -4617,7 +4713,11 @@ export const createMemoryRun = ({
   };
 
   /** The recovery's inputs topped up ({@link recoveryAgain}) and written in one commit when it gained any; whether it has any. */
-  const toppedUp = async (projectId: string, recovery: Recovery | null) => {
+  const toppedUp = (projectId: string, recovery: Recovery | null) =>
+    againOnConflict(() => toppedUpOnce(projectId, recovery));
+
+  /** {@link toppedUp} once, on the memory as it stands. */
+  const toppedUpOnce = async (projectId: string, recovery: Recovery | null) => {
     const again = await recoveryAgain(projectId, recovery);
     if (again instanceof ElysiaStatus) {
       return again;
@@ -4651,7 +4751,11 @@ export const createMemoryRun = ({
    * then the oldest. One commit by the hub; nothing with Jev off (said in
    * the log) or no pair.
    */
-  const mergedSame = async (projectId: string) => {
+  const mergedSame = (projectId: string) =>
+    againOnConflict(() => mergedSameOnce(projectId));
+
+  /** {@link mergedSame} once, on the memory as it stands. */
+  const mergedSameOnce = async (projectId: string) => {
     const read = await treeOf(projectId);
     if (read instanceof ElysiaStatus) {
       return read;
@@ -4705,11 +4809,14 @@ export const createMemoryRun = ({
       return;
     }
     const said = memoryRunWords.merged(done);
-    console.log(`[memory] ${projectId}: ${said}`);
-    return await commit(projectId, read, tree, {
+    const sha = await commit(projectId, read, tree, {
       author: HUB,
       message: `memory: ${said}`,
     });
+    if (!(sha instanceof ElysiaStatus)) {
+      console.log(`[memory] ${projectId}: ${said}`);
+    }
+    return sha;
   };
 
   /**
@@ -4725,7 +4832,11 @@ export const createMemoryRun = ({
    * that develops CawCo with Jev off (said in the log): the next ask tries
    * again. A lesson given no task stays without one, said in the log.
    */
-  const productRepair = async (projectId: string) => {
+  const productRepair = (projectId: string) =>
+    againOnConflict(() => productRepairOnce(projectId));
+
+  /** {@link productRepair} once, on the memory as it stands. */
+  const productRepairOnce = async (projectId: string) => {
     const state = await stateOf(projectId);
     if (state instanceof ElysiaStatus || state.productTasked) {
       return state instanceof ElysiaStatus ? state : undefined;
@@ -4762,7 +4873,6 @@ export const createMemoryRun = ({
     }
     ({ tree } = marked);
     const said = memoryRunWords.productRepaired(back, marked.given);
-    console.log(`[memory] ${projectId}: ${said}`);
     const sha = await commit(projectId, read, tree, {
       author: HUB,
       message: `memory: ${said}`,
@@ -4776,6 +4886,8 @@ export const createMemoryRun = ({
     if (sha instanceof ElysiaStatus) {
       return sha;
     }
+    console.log(`[memory] ${projectId}: ${said}`);
+    // The tasks no lesson rests on now are dropped once the commit stands.
     await unrestedDropped(projectId, tree, before);
     return sha;
   };
@@ -4987,7 +5099,11 @@ export const createMemoryRun = ({
    * commit every lesson resting on it alone is retired as withdrawn; a
    * lesson with other sources keeps them.
    */
-  const withdraw = async (projectId: string, id: string) => {
+  const withdraw = (projectId: string, id: string) =>
+    againOnConflict(() => withdrawOnce(projectId, id));
+
+  /** {@link withdraw} once, on the memory as it stands. */
+  const withdrawOnce = async (projectId: string, id: string) => {
     const note = await withdrawable(projectId, id);
     if (note instanceof ElysiaStatus) {
       return note;
@@ -5126,17 +5242,19 @@ export const createMemoryRun = ({
         detail: `The memory run is reading ${id} now, so it can no longer be withdrawn.`,
       });
     }
-    const sha = await asUnnoting(projectId, async () => {
-      const read = await treeOf(projectId);
-      if (read instanceof ElysiaStatus) {
-        return read;
-      }
-      return await commit(projectId, read, read.tree, {
-        author: { name: note.author },
-        message: `memory: ${id} withdrawn by the session that left it`,
-        notes: [{ note, outcome: "withdrawn" }],
-      });
-    });
+    const sha = await asUnnoting(projectId, () =>
+      againOnConflict(async () => {
+        const read = await treeOf(projectId);
+        if (read instanceof ElysiaStatus) {
+          return read;
+        }
+        return await commit(projectId, read, read.tree, {
+          author: { name: note.author },
+          message: `memory: ${id} withdrawn by the session that left it`,
+          notes: [{ note, outcome: "withdrawn" }],
+        });
+      })
+    );
     return sha instanceof ElysiaStatus
       ? sha
       : { withdrawn: id, text: note.text };
@@ -5467,19 +5585,9 @@ export const createMemoryRun = ({
       return project;
     }
     const source = personsWord(actor);
-    return await asUnnoting(projectId, async () => {
-      let done = await ruleOnce(actor, ask, source);
-      for (
-        let tries = 1;
-        tries < RULE_TRIES &&
-        done instanceof ElysiaStatus &&
-        done.response.code === REBASE_CONFLICT;
-        tries += 1
-      ) {
-        done = await ruleOnce(actor, ask, source);
-      }
-      return done;
-    });
+    return await asUnnoting(projectId, () =>
+      againOnConflict(() => ruleOnce(actor, ask, source))
+    );
   };
 
   // --- staged lessons Jev did not check ------------------------------------------------
@@ -5494,7 +5602,11 @@ export const createMemoryRun = ({
    * staged. One that stays and is about CawCo, in a project that develops
    * CawCo, waits on its task ({@link productMarked}). One commit.
    */
-  const recheckStaged = async (project: ProjectRow) => {
+  const recheckStaged = (project: ProjectRow) =>
+    againOnConflict(() => recheckStagedOnce(project));
+
+  /** {@link recheckStaged} once, on the memory as it stands. */
+  const recheckStagedOnce = async (project: ProjectRow) => {
     if (!jevAccess(db)) {
       return;
     }
@@ -5694,7 +5806,11 @@ export const createMemoryRun = ({
    * archived unread before because its session had read the web. One
    * commit. Nothing when the project's ledger is there already.
    */
-  const cutover = async (project: ProjectRow) => {
+  const cutover = (project: ProjectRow) =>
+    againOnConflict(() => cutoverOnce(project));
+
+  /** {@link cutover} once, on the memory as it stands. */
+  const cutoverOnce = async (project: ProjectRow) => {
     const ledger = await fileOr(project.id, LEDGER_FILE);
     if (ledger instanceof ElysiaStatus) {
       return ledger;
@@ -5814,12 +5930,10 @@ export const createMemoryRun = ({
   };
 };
 
-/** The recovery run's limit on added lessons, for each of its two runs. */
-/** How many times a person's rule change is made on the memory as it stands, when other writers commit under it. */
-const RULE_TRIES = 3;
 /** A lesson's id, as its line ends. */
 const RULE_ID = /^L-[0-9a-f]{6}$/u;
 
+/** The recovery run's limit on added lessons, for each of its two runs. */
 const RECOVERY_ADDS = 30;
 /**
  * The recovery runs that start one after another before it waits to be
