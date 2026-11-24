@@ -78,7 +78,6 @@ import {
   mcpRunsOn,
   skillDescription,
 } from "@cawco/core/fleet";
-import { FLEET_PROJECT_ID } from "@cawco/core/fleet-project";
 import { maskMcpServer } from "@cawco/core/fleet-secrets";
 import { CONTROL_FORGE_POST } from "@cawco/core/forge-post";
 import type { ArrivingAsk, FramePayload } from "@cawco/core/frames";
@@ -655,6 +654,7 @@ import { createProjectStops } from "./project-stops";
 import { projectTrash } from "./project-trash";
 import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
+import { recordsProjectOf } from "./records-project";
 import type { AnyProblem } from "./refusal";
 import { type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
@@ -2747,7 +2747,7 @@ export const createServer = (
       if (asked instanceof ElysiaStatus) {
         return asked;
       }
-      const projectId = asker.projectId ?? FLEET_PROJECT_ID;
+      const projectId = recordsProjectOf(db, asker);
       const routine = made.byTask(
         projectId,
         normaliseTaskRef(asked.id) ?? asked.id
@@ -11579,6 +11579,7 @@ export const createServer = (
     connectTools: (actor, toolUseId) => connectAsks.tools(actor, toolUseId),
     askTools: (actor, toolUseId) => hubAsks.tools(actor, toolUseId),
     workItemTask: (id) => db.workItem(id)?.taskId,
+    recordsProject: (actor) => recordsProjectOf(db, actor),
     // Where a task a session files was found: its work item's task in the
     // same project, else the pin whose thread it heard a person's words
     // from in the last half hour (tasks.ts `found_in`).
@@ -11591,7 +11592,7 @@ export const createServer = (
       return pin ? `${pin.artifactId}/${pin.number}` : null;
     },
     stepWait: (actor, written) =>
-      tasks.keptWait(actor.projectId ?? null, sessionActor(actor), written),
+      tasks.keptWait(recordsProjectOf(db, actor), sessionActor(actor), written),
     // A host-scope item ends with its report alone (work-items.ts `startHost`).
     workItemLands: (id) => {
       const item = db.workItem(id);

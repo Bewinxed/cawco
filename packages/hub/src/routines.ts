@@ -127,6 +127,7 @@ import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { type CommandOptions, WouldWait } from "./machine-pause";
 import type { MemoryRun, ProbeAnswer } from "./memory-run";
 import type { Push } from "./push";
+import { recordsProjectOf } from "./records-project";
 import type { CarryRoutines } from "./routine-carry";
 import {
   answerOf,
@@ -1953,7 +1954,7 @@ export const createRoutines = ({
     const routine = run ? store.get(run.triggerId) : undefined;
     if (
       !(run && routine) ||
-      routine.projectId !== (actor.projectId ?? FLEET_PROJECT_ID)
+      routine.projectId !== recordsProjectOf(db, actor)
     ) {
       return problem(404, {
         code: "routine-run-unknown",
@@ -3095,7 +3096,7 @@ export const createRoutines = ({
     if (
       actor !== "owner" &&
       actor !== "hub" &&
-      (actor.projectId ?? FLEET_PROJECT_ID) !== row.projectId
+      recordsProjectOf(db, actor) !== row.projectId
     ) {
       return problem(403, {
         code: "routine-not-yours",
@@ -3157,8 +3158,8 @@ export const createRoutines = ({
   // --- task tools ------------------------------------------------------------------------
 
   /**
-   * `task_create` with a trigger, from `caller`: in its project, or the
-   * Fleet project outside any. A routine with a check from a session whose mode
+   * `task_create` with a trigger, from `caller`: where its records live
+   * (records-project.ts), the Fleet project outside any. A routine with a check from a session whose mode
    * would ask before a shell command is put to the person to approve, the
    * call shown whole ({@link createApproved} makes it once approved).
    */
@@ -3169,7 +3170,7 @@ export const createRoutines = ({
   ) => {
     const made: RoutineInput = {
       ...input,
-      projectId: caller.projectId ?? FLEET_PROJECT_ID,
+      projectId: recordsProjectOf(db, caller),
     };
     if (made.check && asksForCommands(caller)) {
       const unfit = deadlinePassed(made.deadline, Date.now()) ?? checked(made);
@@ -3189,11 +3190,9 @@ export const createRoutines = ({
     input: Omit<RoutineInput, "projectId">,
     asker: InstanceRow
   ) =>
-    create(
-      { ...input, projectId: asker.projectId ?? FLEET_PROJECT_ID },
-      asker,
-      { approved: true }
-    );
+    create({ ...input, projectId: recordsProjectOf(db, asker) }, asker, {
+      approved: true,
+    });
 
   /**
    * `task_update` of a routine from `caller`. A change that sets the command

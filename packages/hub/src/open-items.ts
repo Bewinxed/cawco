@@ -36,7 +36,6 @@ import type {
   FilingWrote,
 } from "@cawco/core/context-filing";
 import type { PlanStep, SessionPlan, TaskTodo } from "@cawco/core/plan";
-import type { InstanceRow } from "@cawco/core/protocol";
 import { taskLink, todoLink } from "@cawco/core/references";
 import { contextWords } from "@cawco/core/words/context";
 import { ElysiaStatus, problem } from "elysia";
@@ -46,6 +45,7 @@ import type { AskedOf } from "./artifacts/shapes";
 import type { DbShape } from "./db";
 import type { inboxNotes, Note } from "./memory";
 import type { Plans } from "./plans";
+import { recordsProjectOf } from "./records-project";
 
 import type { Tasks } from "./tasks";
 
@@ -97,8 +97,8 @@ export interface OpenItemRows {
   notes: Note[];
   /** Its plan: the tasks and to-dos it works on, and an attempt's task with its to-dos. */
   plan: SessionPlan | null;
-  /** The project its records live in; null for a session in none. */
-  projectId: string | null;
+  /** The project its records live in (records-project.ts). */
+  projectId: string;
   /** Every question its delegation tree put to the person, open or answered, its own first (artifacts/service.ts `questions`). */
   questions: AskedOf[];
   /** The open tasks it filed, each with its description and open to-dos. */
@@ -111,9 +111,9 @@ export interface OpenItemRows {
   }[];
 }
 
-/** A step's record by its link, its words the label, in a project; else its handle and words. */
-const stepRecordWords = (projectId: string | null, step: PlanStep): string => {
-  if (!projectId || step.gone) {
+/** A step's record by its link, its words the label; a gone one's handle and words. */
+const stepRecordWords = (projectId: string, step: PlanStep): string => {
+  if (step.gone) {
     return `${step.id} ${step.content}`;
   }
   return step.todo
@@ -123,16 +123,16 @@ const stepRecordWords = (projectId: string | null, step: PlanStep): string => {
 
 /** A step's line: its status, then its record ({@link stepRecordWords}). */
 const stepLine =
-  (projectId: string | null) =>
+  (projectId: string) =>
   (step: PlanStep): string =>
     `${"  ".repeat(step.depth)}- [${step.status}] ${stepRecordWords(projectId, step)}`;
 
-/** A to-do's line: its link, its words the label, when it has an id and a task in a project; else its marker or position and its words. */
+/** A to-do's line: its link, its words the label, when it has an id and a task; else its marker or position and its words. */
 const todoLine =
-  (projectId: string | null, task: string | undefined) =>
+  (projectId: string, task: string | undefined) =>
   (todo: TaskTodo): string =>
     `${"  ".repeat(todo.depth)}- ${
-      projectId && task && todo.id
+      task && todo.id
         ? todoLink(projectId, task, todo.id, todo.text)
         : `${todo.id ?? todo.path} ${todo.text}`
     }`;
@@ -268,7 +268,7 @@ function openItemsSection(rows: OpenItemRows, page: QuestionsPage): string {
     parts.push(
       "### Open tasks you filed",
       ...rows.tasks.flatMap((task) => [
-        `- ${rows.projectId ? taskLink(rows.projectId, task.id, task.title) : `${task.id} ${task.title}`} (${task.stage})`,
+        `- ${taskLink(rows.projectId, task.id, task.title)} (${task.stage})`,
         ...(task.description.trim() ? under(task.description) : []),
         ...task.todos
           .filter((todo) => !todo.done)
@@ -364,12 +364,6 @@ export interface OpenItemsDeps {
   tasks: Pick<Tasks, "get" | "list">;
 }
 
-/** The project a session's records live in: its own, else its work item's. */
-const projectOf = (deps: OpenItemsDeps, row: InstanceRow): string | null =>
-  row.projectId ??
-  (row.workItemId ? deps.db.workItem(row.workItemId)?.projectId : null) ??
-  null;
-
 /** The open tasks `instanceId` filed in `projectId`, each read whole; the first refused read. */
 const filedTasks = async (
   deps: OpenItemsDeps,
@@ -407,7 +401,7 @@ const filedTasks = async (
 };
 
 export const createOpenItems = (deps: OpenItemsDeps) => {
-  /** Every source's rows for `instanceId`; a session in no project has its plan alone; the first refused read. */
+  /** Every source's rows for `instanceId`, read in the project its records live in; the first refused read. */
   const rows = async (instanceId: string) => {
     const [row] = deps.db.getInstancesByIds([instanceId]);
     if (!row) {
@@ -416,7 +410,7 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
         detail: `No session ${instanceId} on this hub.`,
       });
     }
-    const projectId = projectOf(deps, row);
+    const projectId = recordsProjectOf(deps.db, row);
     const plan = await deps.plan(instanceId);
     if (plan instanceof ElysiaStatus) {
       return plan;
@@ -425,17 +419,6 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
     const questions = deps.questions(instanceId);
     if (questions instanceof ElysiaStatus) {
       return questions;
-    }
-    if (!projectId) {
-      const alone: OpenItemRows = {
-        projectId: null,
-        asks,
-        plan,
-        questions,
-        tasks: [],
-        notes: [],
-      };
-      return alone;
     }
     const [tasks, notes] = await Promise.all([
       filedTasks(deps, projectId, instanceId),

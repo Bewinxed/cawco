@@ -62,6 +62,7 @@ import { createPatch } from "rfc6902";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
 import type { PlanChangeRow } from "./db/session-plans";
+import { recordsProjectOf } from "./records-project";
 import {
   sessionActor,
   type TaskActor,
@@ -145,15 +146,6 @@ const keepComments = (
   };
 };
 
-/** The project a session's records live in: its own, else its work item's; null for a session in none. */
-const recordsProjectOf = (
-  db: Pick<DbShape, "workItem">,
-  row: Pick<InstanceRow, "projectId" | "workItemId">
-): string | null =>
-  row.projectId ??
-  (row.workItemId ? db.workItem(row.workItemId)?.projectId : null) ??
-  null;
-
 /** A task as a plan reads it: its view, or null once it is gone from the board. */
 type TaskRead = TaskView | null;
 
@@ -163,15 +155,11 @@ type TaskRead = TaskView | null;
  */
 const readTasks = async (
   tasks: Pick<Tasks, "get">,
-  projectId: string | null,
+  projectId: string,
   handles: readonly string[]
 ) => {
   const read = new Map<string, TaskRead>();
   for (const task of new Set(handles.map((one) => stepRecord(one).task))) {
-    if (!projectId) {
-      read.set(task, null);
-      continue;
-    }
     const view = await tasks.get(projectId, task);
     if (view instanceof ElysiaStatus) {
       if (view.status !== 404) {
@@ -225,7 +213,7 @@ const readStep = (
 /** A plan's kept steps read whole from their records ({@link readStep}), or the refusal of a read. */
 const readSteps = async (
   tasks: Pick<Tasks, "get">,
-  projectId: string | null,
+  projectId: string,
   steps: readonly KeptStep[]
 ) => {
   const read = await readTasks(
@@ -821,13 +809,7 @@ export const createPlans = (deps: PlansDeps) => {
    * A change to a record the person's edit makes (a to-do reworded or
    * ticked, a task retitled), as theirs; the refusal of one that did not go.
    */
-  const actOn = async (projectId: string | null, change: RecordChange) => {
-    if (!projectId) {
-      return problem(409, {
-        code: "plan-session-no-project",
-        detail: "This session is in no project, so its plan names no task.",
-      });
-    }
+  const actOn = async (projectId: string, change: RecordChange) => {
     const done =
       "todos" in change
         ? await deps.tasks.todos(
@@ -851,7 +833,7 @@ export const createPlans = (deps: PlansDeps) => {
    */
   const tickCompleted = async (
     row: InstanceRow,
-    projectId: string | null,
+    projectId: string,
     steps: readonly PlanStep[],
     written: readonly WrittenStep[],
     actor: TaskActor
@@ -872,7 +854,7 @@ export const createPlans = (deps: PlansDeps) => {
       }),
       (one) => one.task
     );
-    if (!projectId || ticks.size === 0) {
+    if (ticks.size === 0) {
       return;
     }
     for (const [task, todos] of ticks) {
@@ -912,7 +894,10 @@ export const createPlans = (deps: PlansDeps) => {
    */
   const dropSettled = async (row: InstanceRow) => {
     const handles = db.planWaits(row.id);
-    const states = await deps.tasks.waitStates(row.projectId ?? null, handles);
+    const states = await deps.tasks.waitStates(
+      recordsProjectOf(db, row),
+      handles
+    );
     if (states instanceof ElysiaStatus) {
       return states;
     }
@@ -1055,9 +1040,7 @@ export const createPlans = (deps: PlansDeps) => {
       if (unknown.length > 0) {
         return problem(400, {
           code: "todo-step-record-unknown",
-          detail: projectId
-            ? `${unknown.map((step) => step.id).join(", ")} ${unknown.length === 1 ? "names" : "name"} no task or to-do on your project's board. A step names a task or a to-do: file the task (task_create), or the to-do on its task (todo_write with task and add), first.`
-            : "You are in no project, so there is no task or to-do for a step to name: a plan's steps are a project's tasks and to-dos.",
+          detail: `${unknown.map((step) => step.id).join(", ")} ${unknown.length === 1 ? "names" : "name"} no task or to-do on your project's board. A step names a task or a to-do: file the task (task_create), or the to-do on its task (todo_write with task and add), first.`,
         });
       }
       const plan = db.sessionPlan(row.id);
@@ -1154,7 +1137,7 @@ export const createPlans = (deps: PlansDeps) => {
     /**
      * The clock passed from `from` to `to` (waits.ts's minute): each
      * followed plan with a step waiting on a date in between is read again,
-     * a session in no project's among them, since no task event reaches it.
+     * since a date's passing is no task event.
      */
     clockMoved(from: number, to: number): void {
       for (const [instanceId, { plan }] of held) {

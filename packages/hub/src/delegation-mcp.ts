@@ -453,6 +453,8 @@ export function createDelegationMcp(options: {
   adminCalls: AdminCalls;
   /** The task a work item is an attempt at, if any. */
   workItemTask?: (workItemId: string) => string | null | undefined;
+  /** The project a session's records live in (records-project.ts `recordsProjectOf`). */
+  recordsProject: (actor: InstanceRow) => string;
   /** Where a task a session files was found (tasks.ts `found_in`): its work item's task, else the pin thread its ask came from. */
   foundIn?: (actor: InstanceRow) => string | null;
   /** A plan step's wait as a session writes it, read as a task's wait is and kept as a file keeps it (task-waits.ts `readWait`). */
@@ -959,6 +961,7 @@ export function createDelegationMcp(options: {
             }
           : {}),
         writePlan: options.writePlan,
+        recordsProject: options.recordsProject(actor),
         workItemTask: actor.workItemId
           ? (options.workItemTask?.(actor.workItemId) ?? null)
           : null,

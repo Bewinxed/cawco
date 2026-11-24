@@ -28,7 +28,6 @@ import {
   type ResultArtifact,
   type ResultArtifactKind,
 } from "@cawco/core/deliverables";
-import { FLEET_PROJECT_ID } from "@cawco/core/fleet-project";
 import { SESSION_CHOSEN_MODES } from "@cawco/core/harness/modes";
 import { LANDS_MODES } from "@cawco/core/injected";
 import {
@@ -113,6 +112,12 @@ export interface TaskToolContext {
   makesRoutines?: boolean;
   /** The project's own `runs_on` (dispatch settings): a task filed under one is not told to set its own. */
   projectRunsOn?: (projectId: string) => string | null;
+  /**
+   * The project the caller's records live in (records-project.ts
+   * `recordsProjectOf`): where `task_create` files and its plan's steps are
+   * read, the Fleet project for a session in none.
+   */
+  recordsProject: string;
   /** Retries a task whose last attempt failed, reporting to `parent` (dispatch.ts); without it task_retry refuses. */
   retryAttempt?: (
     projectId: string,
@@ -628,10 +633,16 @@ const TASK_CREATE_SHAPE = {
  * definitions for discovery, whose handlers refuse.
  */
 export function taskTools(context: TaskToolContext | undefined) {
-  /** The calling session's project, its tasks and how it acts on them; refused in discovery, and for a session in no project. */
+  /**
+   * The calling session's project, its tasks and how it acts on them;
+   * refused in discovery, and for a session in no project unless `filing`.
+   */
   const scope = (
-    /** A session in no project files in the Fleet project (§5.1): task_create's. */
-    fleet = false
+    /**
+     * task_create's and todo_write's: they file and plan where the session's
+     * records live, the Fleet project for one in none (§5.1).
+     */
+    filing = false
   ) => {
     if (!context) {
       return problem(409, {
@@ -639,8 +650,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         detail: "Discovery cannot execute tools",
       });
     }
-    const projectId =
-      context.actor.projectId ?? (fleet ? FLEET_PROJECT_ID : null);
+    const projectId = filing ? context.recordsProject : context.actor.projectId;
     if (!projectId) {
       return problem(409, {
         code: "task-session-no-project",
@@ -657,7 +667,7 @@ export function taskTools(context: TaskToolContext | undefined) {
 
   /** The calling session's project and id: the links its answers carry (presenters/tasks.ts); none in discovery. */
   const linkScope = (): LinkScope => ({
-    project: context?.actor.projectId ?? null,
+    project: context?.recordsProject ?? null,
     session: context?.actor.id ?? null,
   });
 
@@ -766,7 +776,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     if (typeof done === "string" || done instanceof ElysiaStatus) {
       return done;
     }
-    const projectId = context.actor.projectId ?? FLEET_PROJECT_ID;
+    const projectId = context.recordsProject;
     const task = await context.tasks.get(projectId, done.task.id);
     return task instanceof ElysiaStatus
       ? task
@@ -1267,7 +1277,7 @@ export function taskTools(context: TaskToolContext | undefined) {
           }
           return await ownPlan(steps);
         }
-        const scoped = scope();
+        const scoped = scope(true);
         if (scoped instanceof ElysiaStatus) {
           return scoped;
         }
