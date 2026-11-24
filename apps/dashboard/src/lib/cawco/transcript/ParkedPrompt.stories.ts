@@ -34,7 +34,7 @@ export const ThreeDirections = { args: { items: [THREE_DIRECTIONS] } };
 /** A decision card from the agent's page, its recommended option and why. */
 export const DecisionCard = { args: { items: [DECISION_CARD] } };
 
-/** The grey pick, with the agent's question about the nightly waiting behind it. */
+/** The agent's question about the nightly comes up first, as it holds its turn; the grey pick waits behind it. */
 export const QuestionQueued = {
   args: { items: [TWO_DIRECTIONS], question: true },
 };

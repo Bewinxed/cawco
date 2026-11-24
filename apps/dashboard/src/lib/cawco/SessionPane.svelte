@@ -3,10 +3,11 @@
   import type { HarnessKind } from "@cawco/core/harness/kinds";
   import { descriptorOf } from "@cawco/core/harness/kinds";
   import { harnessSpec } from "@cawco/core/harness-refusal";
-  import type {
-    ParkedDirection,
-    ParkedItem,
-    ParkedPick,
+  import {
+    type ParkedDirection,
+    type ParkedItem,
+    type ParkedPick,
+    parkedId,
   } from "@cawco/core/parked";
   import { questionsOf } from "@cawco/core/question";
   import type { PermissionResult } from "@cawco/core/session-messages";
@@ -1433,8 +1434,9 @@
   /**
    * What waits on the person here, on the tray row's chip and the list it
    * opens (waiting/): the hub's list of what its tree asked him, after its
-   * parked asks. A permission's row brings the composer's ask back up; a
-   * sign-in's brings its card into view. The hub keeps that list by its
+   * parked asks. A permission's, a question's or a parked pick's row brings
+   * the composer's card up at that ask; a sign-in's brings its card into
+   * view. The hub keeps that list by its
    * row, so a conversation it holds no row for (a stored transcript, one
    * deleted) asks it for nothing: the read would only be refused.
    */
@@ -1445,21 +1447,13 @@
     showAsk: (row) => {
       if (row.kind === "connect") {
         connectReveal.add(viewId);
-      } else if (firstAsk) {
-        minimizedAsks.set(askIdOf(firstAsk), false);
+      } else {
+        bringUp(row.requestId);
       }
     },
-    // A row of the pick the composer parks first brings the composer's
-    // card back up; any other opens where it lives.
-    showParked: (row) => {
-      if (!(
-        firstAsk?.kind === "parked" && askIdOf(firstAsk) === `parked:${row.key}`
-      )) {
-        return false;
-      }
-      minimizedAsks.set(askIdOf(firstAsk), false);
-      return true;
-    },
+    // A row of a pick the composer parks brings the composer's card up at
+    // that pick; a question it doesn't park opens where it lives.
+    showParked: (row) => bringUp(`parked:${row.key}`),
   });
   /**
    * What the session put to the person outside a tool call (core
@@ -1471,6 +1465,7 @@
   const parkedQueue = new ParkedQueue({
     instanceId: () => viewId,
     onScreen: () => visible && isLive,
+    standing: () => composerAskId,
   });
   provideParked(parkedQueue);
   /** Each pick parked here, as the composer grows into it. */
@@ -1496,29 +1491,49 @@
     },
   });
   /**
-   * Every ask the composer grows into, oldest first: its parked permissions
-   * and questions, as the hub raised them, and its parked picks, as they
-   * were put to the person.
+   * Every ask the composer grows into, in the order it takes them: first
+   * its parked permissions and questions, each holding an agent's turn
+   * still, oldest raised first; then its parked picks, which hold no turn,
+   * oldest put to the person first.
    */
-  const composerAsks = $derived(
-    [
-      ...parked.map((row, at) => ({
-        at: row.request.raisedAt ?? 0,
-        order: at,
-        row,
-        item: null,
-      })),
-      ...parkedQueue.open.map((item, at) => ({
-        at: Date.parse(item.askedAt),
-        order: parked.length + at,
-        row: null,
-        item,
-      })),
-    ].sort((a, b) => a.at - b.at || a.order - b.order)
-  );
-  /** The first of them, which the composer grows into: one ask at a time. */
+  const composerAsks = $derived([
+    ...parked
+      .map((row, order) => ({ row, order, at: row.request.raisedAt ?? 0 }))
+      .sort((a, b) => a.at - b.at || a.order - b.order)
+      .map(({ row }) => ({ id: row.request.requestId, row, item: null })),
+    ...parkedQueue.open
+      .map((item, order) => ({ item, order, at: Date.parse(item.askedAt) }))
+      .sort((a, b) => a.at - b.at || a.order - b.order)
+      .map(({ item }) => ({ id: parkedId(item), row: null, item })),
+  ]);
+  /**
+   * The ask a waiting row's press brought up, by its id (`askIdOf`), in the
+   * conversation it was pressed in: the composer stands at it, ahead of the
+   * order, while it waits.
+   */
+  let broughtUp = $state<{ view: string; id: string } | null>(null);
+  /**
+   * Brings the ask `id` up in the composer, unminimized; false when the
+   * composer parks no ask of that id.
+   */
+  function bringUp(id: string): boolean {
+    if (!composerAsks.some((one) => one.id === id)) {
+      return false;
+    }
+    broughtUp = { view: viewId, id };
+    minimizedAsks.set(id, false);
+    return true;
+  }
+  /** The id of the ask the composer grows into, one at a time: the one brought up while it waits, else the first in order. */
+  const composerAskId = $derived.by((): string | null => {
+    const up = broughtUp?.view === viewId ? broughtUp.id : null;
+    return composerAsks.some((one) => one.id === up)
+      ? up
+      : (composerAsks[0]?.id ?? null);
+  });
+  /** That ask, as the composer grows into it. */
   const firstAsk = $derived.by((): ComposerAsk | null => {
-    const [next] = composerAsks;
+    const next = composerAsks.find((one) => one.id === composerAskId);
     const more = composerAsks.length - 1;
     if (next?.item) {
       return { ...parkedPick(next.item), more };
