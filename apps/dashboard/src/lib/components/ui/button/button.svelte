@@ -250,8 +250,7 @@
       confirm?: string;
       /**
        * Its icon comes and goes: the button keeps room for it while it is
-       * away, so its width never changes; the words slide over and the icon
-       * fades in its slot.
+       * away, so its width never changes; the icon fades in its slot.
        */
       holdsIcon?: boolean;
       /** What the label says while the work's good end is shown ("Sent"). */

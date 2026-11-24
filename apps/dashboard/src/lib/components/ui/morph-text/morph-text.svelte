@@ -23,7 +23,7 @@
    */
   import type { Attachment } from "svelte/attachments";
   import { TextMorph } from "torph/svelte";
-  import { CURVE, dur } from "#lib/platform/motion/curves.svelte.js";
+  import { CURVE, dur, ease } from "#lib/platform/motion/curves.svelte.js";
   import { skippedAt } from "#lib/platform/motion/rows.svelte.js";
   import { track } from "#lib/platform/track.js";
 
@@ -31,7 +31,21 @@
     text,
     wrap = false,
     still = false,
-  }: { text: string; wrap?: boolean; still?: boolean } = $props();
+    clock,
+  }: {
+    text: string;
+    wrap?: boolean;
+    still?: boolean;
+    /**
+     * The clock the morph runs on, when what moves beside it runs on
+     * another (a button's slot): its duration and easing tokens. Unset:
+     * --duration-base on --ease-out.
+     */
+    clock?: {
+      duration: `--duration-${string}`;
+      ease: `--ease-${string}`;
+    };
+  } = $props();
 
   /** The text's element, where it is mounted. */
   let host: Element | null = null;
@@ -48,8 +62,10 @@
   });
 
   let morphMs = $state(0);
+  let morphEase = $state<string>(CURVE.out);
   $effect(() => {
-    morphMs = dur("--duration-base");
+    morphMs = dur(clock?.duration ?? "--duration-base");
+    morphEase = clock ? ease(clock.ease) : CURVE.out;
   });
 </script>
 
@@ -59,7 +75,7 @@
   data-wrap={wrap || undefined}
   disabled={still || unseen}
   duration={morphMs}
-  ease={CURVE.out}
+  ease={morphEase}
   {text}
   {@attach hold}
 />

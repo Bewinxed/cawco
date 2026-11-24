@@ -2875,17 +2875,16 @@
   :where(&) > :where(*) {
     display: inline-flex;
     grid-area: 1 / 1;
-    transition-property: opacity, scale;
+    transition-property: opacity;
     transition-duration: var(--icon-swap-dur, var(--duration-slow));
     transition-timing-function: var(--icon-swap-ease, var(--ease-spring));
   }
+  /* The glyph stepping out fades, never shrinking: icons never scale
+     (owner, 2026-11-24). No blur either: a filter in a transition's list
+     hangs WebKit (style-greps), so the house's blur swap is glyph.ts's. */
   :where(&) > :where([data-active="false"]) {
     opacity: 0;
     pointer-events: none;
-
-    @media (prefers-reduced-motion: no-preference) {
-      scale: 0.25;
-    }
   }
   /* Its baseline is a line of words at its centre, zero wide and zero tall:
      its glyphs have none, so a box made of them took its bottom edge for

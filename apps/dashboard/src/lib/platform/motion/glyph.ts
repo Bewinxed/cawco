@@ -8,8 +8,6 @@
 import type { TransitionConfig } from "svelte/transition";
 import { dur, easeSpring, motionOk } from "./curves.svelte";
 
-/** The scale a glyph grows from and shrinks to. */
-const SWAP_SCALE = 0.25;
 /** The blur it comes out of and goes into, px. */
 const SWAP_BLUR = 4;
 
@@ -21,7 +19,7 @@ const swap = (duration: number): TransitionConfig => {
     easing: easeSpring,
     css: (t) =>
       moving
-        ? `opacity: ${t}; scale: ${SWAP_SCALE + (1 - SWAP_SCALE) * t}; filter: blur(${((1 - t) * blur).toFixed(3)}px)`
+        ? `opacity: ${t}; filter: blur(${((1 - t) * blur).toFixed(3)}px)`
         : `opacity: ${t}`,
   };
 };

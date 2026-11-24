@@ -153,7 +153,7 @@
    * The slot keeps its room while it is empty: its icon comes and goes
    * (`holdsIcon`), or a button with no icon says its work in words of its
    * own, so the spinner and the end's glyph have room beside the words.
-   * At rest the words slide over that room to stay centred.
+   * A twin of that room stands past the words, so they stay centred.
    */
   const roomy = $derived(
     holdsIcon ||
@@ -184,6 +184,15 @@
   const drawnText = $derived(
     wordings.find((one) => one.key === drawn)?.text ?? label ?? ""
   );
+  /**
+   * One clock for everything that moves when the words change (the morph,
+   * the slot's slide, the words' slide over an empty slot), so the glyph
+   * and the words move as one and never part or overlap on the way.
+   */
+  const clock = {
+    duration: "--duration-slow",
+    ease: "--ease-spring",
+  } as const;
   const drawn = $derived.by(() => {
     if (pending && swapsLabel && beside) {
       return "pending";
@@ -262,10 +271,6 @@
    * never changes width.
    */
   const covered = $derived(!beside && (phase !== "idle" || ringShown));
-  /** A held slot with nothing in it: the words slide over its room. */
-  const roomEmpty = $derived(
-    roomy && Icon === undefined && phase === "idle" && !ringShown
-  );
   /**
    * What the slot shows: one glyph at a time, keyed, so Svelte's own
    * transitions swap it (`glyphIn`/`glyphOut`, the house's glyph swap).
@@ -345,7 +350,7 @@
 <span
   style:--btn-words-slack={holds && Icon ? `${slack}px` : undefined}
   data-slot="btn-slot"
-  class="icon-swap w-(--btn-icon) flex-none translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) duration-(--duration-slow) ease-in-out data-placed:transition-[translate] motion-reduce:transition-off data-over:absolute data-over:inset-0 data-over:w-auto data-over:translate-x-0"
+  class="icon-swap w-(--btn-icon) flex-none translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) duration-(--duration-slow) ease-spring data-placed:transition-[translate] motion-reduce:transition-off data-over:absolute data-over:inset-0 data-over:w-auto data-over:translate-x-0"
   data-over={!beside || undefined}
   data-placed={placed || undefined}
 >
@@ -416,8 +421,6 @@
        reaches no flex or grid container, which kept its whole line and the
        recipe's padding on top: a refused menu item stood 10px tall). -->
   <span
-    class="transition-[translate] duration-(--duration-slow) ease-in-out motion-reduce:transition-off data-room-empty:-translate-x-[calc((var(--btn-icon)+var(--btn-gap))/2)] rtl:data-room-empty:translate-x-[calc((var(--btn-icon)+var(--btn-gap))/2)]"
-    data-room-empty={roomEmpty || undefined}
     ><span
       data-slot="label-text"
       class="transition-[opacity] duration-(--duration-base) ease-out covered-true:opacity-0"
@@ -492,4 +495,11 @@
       >
     {/if}</span
   >
+{/if}
+{#if roomy && label !== undefined}
+  <!-- The held room's twin past the words, so the words stand centred in
+       the button whether the slot is empty or not, with nothing moved by a
+       transform over the morph (a transform over torph mid-morph made it
+       jump, 2026-11-24). -->
+  <span aria-hidden="true" class="w-(--btn-icon) flex-none"></span>
 {/if}
