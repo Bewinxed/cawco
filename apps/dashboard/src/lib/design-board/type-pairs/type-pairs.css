@@ -1,0 +1,73 @@
+/* The shortlisted same-family Sans + Mono pairs, for the board's type
+   switcher only (pairs.ts): Latin cuts of their variable fonts
+   from Google Fonts. Nothing in the product reads these families. */
+@font-face {
+  font-family: "Pair Atkinson Hyperlegible Next";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./atkinson-sans.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Pair Atkinson Hyperlegible Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./atkinson-mono.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Pair Geist";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./geist-sans.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Pair Geist Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./geist-mono.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Pair Spline Sans";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./spline-sans.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Pair Spline Sans Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./spline-mono.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Pair Chivo";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./chivo-sans.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Pair Chivo Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./chivo-mono.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Pair Reddit Sans";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./reddit-sans.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Pair Reddit Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./reddit-mono.woff2") format("woff2");
+}

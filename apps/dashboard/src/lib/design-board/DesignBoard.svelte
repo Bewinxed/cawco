@@ -13,6 +13,12 @@
   import Foundation from "./Foundation.svelte";
   import { type Family, framesOf, GROUPS, titleOf } from "./families.js";
   import { type Foundation as Group, ROLES, SCALES } from "./foundations.js";
+  import "./type-pairs/type-pairs.css";
+  import { type Pair, pairFaces, TODAY } from "./type-pairs/pairs.js";
+
+  /** The Sans + Mono pair the whole board is set in (its switcher's). */
+  let { pair = TODAY }: { pair?: Pair } = $props();
+  const faces = $derived(pairFaces(pair));
 
   const SCHEMES = [
     { scheme: "light", label: "Light" },
@@ -127,7 +133,7 @@
 
 {#snippet foundationCard(one: Group)}
   {#snippet pane()}
-    <Foundation foundation={one} />
+    <Foundation foundation={one} {pair} />
   {/snippet}
   {@render shell(one.title, pane, one.note, true)}
 {/snippet}
@@ -140,6 +146,8 @@
 
 <div
   class="flex min-h-dvh flex-col gap-space-8 bg-bg p-space-6 text-tx max-phone:p-space-3"
+  style:--font-sans={faces?.sans}
+  style:--font-mono={faces?.mono}
 >
   <header class="flex flex-col gap-space-1">
     <h1 class="type-kpi">CawCo design system</h1>

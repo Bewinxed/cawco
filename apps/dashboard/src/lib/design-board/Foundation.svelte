@@ -10,7 +10,14 @@
   import Layout from "./Layout.svelte";
   import Spacing from "./Spacing.svelte";
 
-  let { foundation }: { foundation: Foundation } = $props();
+  let {
+    foundation,
+    pair,
+  }: {
+    foundation: Foundation;
+    /** The font pair the board is set in: a new one reads the faces again. */
+    pair?: string;
+  } = $props();
 
   /** What the page computed for each specimen, read once after layout. */
   let readings = $state.raw(new Map<string, string>());
@@ -55,7 +62,7 @@
   };
 
   /** Reads every probe in one animation frame to avoid interleaved reflows. */
-  const readAll = (node: HTMLElement) => {
+  const readAll = (_pair: string | undefined) => (node: HTMLElement) => {
     const frame = requestAnimationFrame(() => {
       const read = new Map<string, string>();
       for (const one of node.querySelectorAll<HTMLElement>("[data-token]")) {
@@ -108,9 +115,12 @@
     return `M0 100 C${x1 * 100} ${100 - y1 * 100} ${x2 * 100} ${100 - y2 * 100} 100 0`;
   }
 
+  /** The board's own names for a pair's faces (type-pairs.css). */
+  const PAIR_PREFIX = /^Pair /u;
   /** The first family a face names. */
   const firstFace = (value: string | undefined) =>
-    value?.split(",")[0]?.replaceAll('"', "").trim() ?? "";
+    value?.split(",")[0]?.replaceAll('"', "").replace(PAIR_PREFIX, "").trim() ??
+    "";
 
   /** Each type role: a line of what it sets in the product, and what it is for. */
   const ROLE: Record<string, { sample: string; use: string }> = {
@@ -149,7 +159,7 @@
 {:else}
   <div
     class={flowing ? "columns-2 gap-space-4" : "flex flex-col gap-space-4"}
-    {@attach readAll}
+    {@attach readAll(pair)}
   >
     {#each foundation.shelves.filter((one) => one.names.length > 0) as shelf (shelf.title)}
       <div

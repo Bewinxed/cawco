@@ -10,5 +10,5 @@ export default {
   component: DesignBoard,
 };
 
-/** Every live kit component in its states, light beside dark. */
-export const Board = {};
+/** Every live kit component in its states, light beside dark, in the pair its switcher names. */
+export const Board = { args: { pair: "Figtree + JetBrains Mono (today)" } };
