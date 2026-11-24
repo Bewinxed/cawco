@@ -37,6 +37,7 @@
    * Keys while the menu is open: ↑↓ move, ↵ or Tab inserts, Escape leaves
    * the text plain; a whole word that matches nothing closes it.
    */
+  import { skillWords } from "@cawco/core/skill-words";
   import { type Component, mount, unmount, untrack } from "svelte";
   import type { ClassValue, HTMLAttributes } from "svelte/elements";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
@@ -46,7 +47,7 @@
   import { cn } from "#lib/utils.js";
   import { copyChips } from "../chip-copy";
   import type SkillChip from "../SkillChip.svelte";
-  import { type Skill, skillWords } from "../skill-chips";
+  import type { Skill } from "../skill-chips";
   import { rowOf } from "./find-rows";
   import MentionMenu from "./MentionMenu.svelte";
   import {

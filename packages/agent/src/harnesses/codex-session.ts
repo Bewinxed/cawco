@@ -43,6 +43,7 @@ import {
   type SentMessage,
   type SlashCommand,
 } from "@cawco/core/session-messages";
+import { skillsNamed } from "@cawco/core/skill-words";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import { pricedRequest } from "@cawco/core/usage/pricing";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
@@ -211,6 +212,8 @@ class CodexSession implements HarnessSession {
   #effort: ReasoningEffort | undefined;
   /** The turn running, by Codex's id. */
   #turn: string | undefined;
+  /** Settled when the running turn ends, for a send that waits for it ({@link #hand}). */
+  #ended: PromiseWithResolvers<void> | undefined;
   #turnStartTokens: V2.TokenUsageBreakdown | undefined;
   #tokens: V2.ThreadTokenUsage | undefined;
   #turnError: V2.TurnError | undefined;
@@ -221,6 +224,10 @@ class CodexSession implements HarnessSession {
   readonly #changes = new Map<string, V2.FileUpdateChange[]>();
   /** Sends handed to Codex it has not taken up yet, by uuid. */
   readonly #unread = new Set<string>();
+  /** The last send handed to Codex, its skills read first: the next send waits for it ({@link send}). */
+  #handed: Promise<void> = Promise.resolve();
+  /** The skills Codex lists for the session's folder, by name, with their files: read once, again after a reload. */
+  #skills: Promise<Map<string, string>> | undefined;
   /** A subagent's thread, by its id: the call that started it. */
   readonly #children = new Map<string, string>();
   readonly #launchCredential: string | undefined;
@@ -702,6 +709,8 @@ class CodexSession implements HarnessSession {
 
   #turnEnded(turn: V2.Turn): void {
     this.#turn = undefined;
+    this.#ended?.resolve();
+    this.#ended = undefined;
     const error = turn.error ?? this.#turnError;
     const failed = turn.status === "failed";
     const turnUsage = this.#turnUsage();
@@ -879,6 +888,33 @@ class CodexSession implements HarnessSession {
         .catch((error: unknown) => this.#ctx.rejected(message.uuid, error));
       return;
     }
+    this.#unread.add(message.uuid);
+    this.#setBusy(true);
+    // Every send waits for the one before it to be handed to Codex: one
+    // whose skills are still being read is never overtaken by a later one.
+    const handed = this.#handed.then(() =>
+      this.#hand(thread, message.uuid, text, extras)
+    );
+    this.#handed = handed.catch(() => undefined);
+    handed.catch((error: unknown) => this.#refusedSend(message.uuid, error));
+  }
+
+  /** Send `uuid`'s words and the skills they name to Codex: a turn of its own, or steered into the one running. */
+  async #hand(
+    thread: string,
+    uuid: string,
+    text: string,
+    extras: TurnExtras
+  ): Promise<void> {
+    const skills = await this.#skillsNamed(text);
+    // Codex reads a skill only from the input that starts a turn: steered
+    // into a running one it is dropped (measured, Codex 0.169.0 against a
+    // mock API). Words that name one wait for the running turn's end and
+    // start the next, as the person's own skill would.
+    if (skills.length > 0 && this.#turn) {
+      this.#ended ??= Promise.withResolvers<void>();
+      await this.#ended.promise;
+    }
     const input: V2.UserInput[] = [
       ...(extras.images ?? []).map((image): V2.UserInput => ({
         type: "image",
@@ -889,21 +925,20 @@ class CodexSession implements HarnessSession {
         text: withPastedText(text, extras.attachments ?? []),
         text_elements: [],
       },
+      ...skills,
     ];
-    this.#unread.add(message.uuid);
-    this.#setBusy(true);
     const turn = this.#turn;
     const sent = turn
       ? this.#peer.request("turn/steer", {
           threadId: thread,
           expectedTurnId: turn,
           input,
-          clientUserMessageId: message.uuid,
+          clientUserMessageId: uuid,
         })
       : this.#peer.request("turn/start", {
           threadId: thread,
           input,
-          clientUserMessageId: message.uuid,
+          clientUserMessageId: uuid,
           approvalPolicy: CODEX_MODES[this.#mode].approval,
           ...(codexModelOf(this.#model)
             ? { model: codexModelOf(this.#model)?.id }
@@ -913,12 +948,56 @@ class CodexSession implements HarnessSession {
             ? { environments: this.#environments() }
             : {}),
         });
-    sent.catch((error: unknown) => {
-      this.#unread.delete(message.uuid);
-      if (!(error instanceof KeeperRefused)) {
-        this.#ctx.rejected(message.uuid, error);
-      }
+    sent.catch((error: unknown) => this.#refusedSend(uuid, error));
+  }
+
+  /** The skills Codex lists for the session's folder, by name, each with its file: the first of a name, of those switched on. */
+  async #listSkills(): Promise<Map<string, string>> {
+    const listed = await this.#peer.request("skills/list", {
+      cwds: [this.#ctx.cwd],
     });
+    const byName = new Map<string, string>();
+    for (const skill of listed.data.flatMap((entry) => entry.skills)) {
+      if (skill.enabled && !byName.has(skill.name)) {
+        byName.set(skill.name, skill.path);
+      }
+    }
+    return byName;
+  }
+
+  #refusedSend(uuid: string, error: unknown): void {
+    this.#unread.delete(uuid);
+    if (!(error instanceof KeeperRefused)) {
+      this.#ctx.rejected(uuid, error);
+    }
+  }
+
+  /**
+   * Each skill `text` names, as Codex's input names a skill the person
+   * picked (`UserInput` `skill`): Codex reads its file into the turn the
+   * input starts ({@link #hand}), whether or not the model may load it
+   * itself (codex-rs `collect_explicit_skill_mentions`). Codex runs no
+   * `/name` itself, its opening one included.
+   */
+  async #skillsNamed(text: string): Promise<V2.UserInput[]> {
+    if (!text.includes("/")) {
+      return [];
+    }
+    const listing = this.#skills ?? this.#listSkills();
+    this.#skills = listing;
+    let skills: Map<string, string>;
+    try {
+      skills = await listing;
+    } catch (error) {
+      // Read again by the next send that names one.
+      this.#skills = undefined;
+      throw error;
+    }
+    return skillsNamed(text, skills.keys()).map((named): V2.UserInput => ({
+      type: "skill",
+      name: named.name,
+      path: skills.get(named.name) ?? "",
+    }));
   }
 
   async interrupt(): Promise<void> {
@@ -1082,6 +1161,7 @@ class CodexSession implements HarnessSession {
       (await this.#peer.request("model/list", { limit: 100 })).data,
     [CONTROL_SUPPORTED_COMMANDS]: () => this.#commands(),
     [CONTROL_RELOAD_SKILLS]: async () => {
+      this.#skills = undefined;
       await this.#peer.request("skills/list", {
         cwds: [this.#ctx.cwd],
         forceReload: true,

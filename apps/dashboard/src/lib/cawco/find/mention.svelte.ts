@@ -123,7 +123,7 @@ export const readAs = (text: string): string =>
 const SESSION_HANDLE = /#[0-9a-f]{6,}$/iu;
 
 /**
- * Words of a message (outside code, outside-code.ts) with each mention in
+ * Words of a message (outside code, core outside-code.ts) with each mention in
  * them, `@<label> <handle>`, as the reference the markdown draws as the
  * session's chip, `[@<label>](cawco:session/<handle>)` (references.ts):
  * the hub's names say which session a handle is, wherever it lives, and

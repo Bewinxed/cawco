@@ -99,6 +99,7 @@ import {
   REPEATED_FAILURE_LIMIT,
   usageByModel,
 } from "@cawco/core/session-messages";
+import { opensWith, skillsNamed } from "@cawco/core/skill-words";
 import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import { unhandled } from "@cawco/core/unhandled";
@@ -116,6 +117,7 @@ import type {
   PermissionRequest,
   SessionMessageAssistant,
   SessionMessageInfo,
+  SessionPromptInput,
   V2Event,
 } from "@opencode/client";
 import { z } from "zod";
@@ -520,6 +522,9 @@ export const NO_WORKFLOW_SKILLS: OpencodeRule = {
   resource: "wf-*",
   effect: "deny",
 };
+
+/** A skill a prompt carries, where the words name it ({@link OpencodeSession.#skillsNamed}). */
+type OpencodeSkillMention = NonNullable<SessionPromptInput["skills"]>[number];
 
 /**
  * A starting set's skills as session rules: every skill denied, then each
@@ -3240,6 +3245,14 @@ export class OpencodeSession implements HarnessSession {
       this.#drained(messageID);
       return;
     }
+    let skills: OpencodeSkillMention[];
+    try {
+      skills = await this.#skillsNamed(text);
+    } catch (error) {
+      this.#ctx.rejected(uuid, error);
+      this.#drained(messageID);
+      return;
+    }
     // A send into a turn already under way joins it; one into a session at
     // rest opens the turn it starts.
     const joins = this.turnInFlight;
@@ -3256,6 +3269,7 @@ export class OpencodeSession implements HarnessSession {
         id: messageID,
         text,
         ...(files.length > 0 ? { files } : {}),
+        ...(skills.length > 0 ? { skills } : {}),
         ...(now ? { metadata: { [SEND_NOW_METADATA]: true } } : {}),
       });
     } catch (error) {
@@ -3358,6 +3372,40 @@ export class OpencodeSession implements HarnessSession {
     return this.#commands;
   }
 
+  /**
+   * The skills `text` names past its opening command, which OpenCode runs
+   * itself ({@link #commandOrPrompt}), as its prompt carries a skill the
+   * person picked: by id, with where it stands in the text. OpenCode loads
+   * each into the message it becomes ("The user may also invoke a skill
+   * directly. When that happens, its instructions appear in the
+   * conversation as a <skill_content> block", its system prompt, 2.3.0),
+   * whether or not the model may load it itself. Offsets count the text's
+   * UTF-16 code units.
+   */
+  async #skillsNamed(text: string): Promise<OpencodeSkillMention[]> {
+    if (!text.includes("/")) {
+      return [];
+    }
+    const { skills } = await this.#commandsOf();
+    return skillsNamed(text, skills.keys())
+      .filter((named) => !opensWith(text, named))
+      .flatMap((named) => {
+        const id = skills.get(named.name);
+        return id
+          ? [
+              {
+                id,
+                mention: {
+                  start: named.start,
+                  end: named.end,
+                  text: text.slice(named.start, named.end),
+                },
+              },
+            ]
+          : [];
+      });
+  }
+
   /** A `/name` send: OpenCode's command, a skill, `/compact`, `/mcp`, or else a plain prompt. */
   async #commandOrPrompt(
     command: { name: string; args: string },
@@ -3426,11 +3474,13 @@ export class OpencodeSession implements HarnessSession {
             session_id: this.sessionId ?? undefined,
           });
         } else {
+          const skills = await this.#skillsNamed(command.args);
           await this.#client.session.prompt({
             sessionID,
             id: messageID,
             text: command.args,
             ...(files.length > 0 ? { files } : {}),
+            ...(skills.length > 0 ? { skills } : {}),
           });
         }
       } else {

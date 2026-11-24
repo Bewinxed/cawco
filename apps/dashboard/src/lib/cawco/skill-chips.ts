@@ -3,10 +3,8 @@
  * composer while it is written (MentionField) and in the transcript once it
  * is sent (the markdown's code spans).
  *
- * A skill is named by `/name`, a whole word: at the start of the text or
- * after whitespace, and ending at whitespace or the text's end, so a path
- * (`src/clean-copy`) or a word glued to punctuation stays as written. Only a
- * skill the session has is one; any other `/word` is plain text.
+ * A skill is named by `/name`, a whole word, as core skill-words.ts reads
+ * it: the rule each harness's delivery invokes the named skills by.
  */
 import type { AvailableCommand } from "@cawco/core/fleet";
 import { getContext, setContext } from "svelte";
@@ -36,30 +34,8 @@ export const skillsOf = (
       ])
   );
 
-const SPECIAL = /[.*+?^${}()|[\]\\/]/gu;
-
 /**
- * Every `/name` of these skills, whole, in a text: the name is the match's
- * first group. `ends` says what may follow it: whitespace or the text's end
- * (`"end"`), or whitespace alone (`"space"`, a word still being typed at the
- * end is not one yet). Null with no skills.
- */
-export function skillWords(
-  names: Iterable<string>,
-  ends: "end" | "space" = "end"
-): RegExp | null {
-  const list = [...names]
-    .sort((a, b) => b.length - a.length)
-    .map((name) => name.replace(SPECIAL, "\\$&"));
-  if (list.length === 0) {
-    return null;
-  }
-  const after = ends === "end" ? "(?=\\s|$)" : "(?=\\s)";
-  return new RegExp(`(?<=^|\\s)/(${list.join("|")})${after}`, "gu");
-}
-
-/**
- * Words of the person's (outside code, outside-code.ts) with each `/name`
+ * Words of the person's (outside code, core outside-code.ts) with each `/name`
  * of a skill the session has set as a code span (`` `/name` ``), so the
  * markdown draws it as the skill's chip as it draws an agent's.
  */

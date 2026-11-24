@@ -7,6 +7,8 @@
    */
   import { inlineBlockName } from "@cawco/core/inline-blocks";
   import { renameFences } from "@cawco/core/markdown-code";
+  import { outsideCode } from "@cawco/core/outside-code";
+  import { skillWords } from "@cawco/core/skill-words";
   import type { ComponentProps } from "svelte";
   import type {
     CodeOptions,
@@ -22,13 +24,7 @@
     markdownFleetHere,
     plainReferenceOf,
   } from "./markdown-fleet";
-  import { outsideCode } from "./outside-code";
-  import {
-    markSkills,
-    skillNamed,
-    skillsHere,
-    skillWords,
-  } from "./skill-chips";
+  import { markSkills, skillNamed, skillsHere } from "./skill-chips";
 
   let {
     said = false,
