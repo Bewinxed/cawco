@@ -2266,6 +2266,68 @@ public enum Words {
         public static func gone(handle: String) -> String {
             "\(handle) is no longer on the board"
         }
+
+        /// The tray row's chip: how many of the plan's tasks are done, of all.
+        public static func chipFigure(done: Int, total: Int) -> String {
+            "\(done) of \(total)"
+        }
+
+        /// The chip, for a screen reader: the count, and how many are under way.
+        public static func chipLabel(done: Int, total: Int, moving: Int) -> String {
+            "Plan, \(done) of \(total) done\(moving > 0 ? ", \(moving) under way" : "")"
+        }
+
+        /// The open plan's count beside its title.
+        public static func doneOf(done: Int, total: Int) -> String {
+            "\(done) of \(total) done"
+        }
+
+        /// A task's to-dos folded to their count on its row.
+        public static func todosOf(done: Int, total: Int) -> String {
+            "\(done)/\(total)"
+        }
+
+        /// The same count, for a screen reader.
+        public static func todosLabel(done: Int, total: Int) -> String {
+            "\(done) of \(total) to-dos done"
+        }
+
+        /// Finished tasks at the plan's head, folded to one row that opens them.
+        public static func doneFold(count: Int) -> String {
+            "\(count) done"
+        }
+
+        /// Untouched tasks past the first few, folded to one row that opens them.
+        public static func laterFold(count: Int) -> String {
+            "\(count) more to do"
+        }
+
+        /// A step held on the person: its row's way to the list of what waits on them, by that list's name.
+        public static let needsYou = "Needs you"
+
+        /// A step waiting on something else, by what it waits on.
+        public static func waitsOn(what: String) -> String {
+            "Waits on \(what)"
+        }
+
+        /// A step waiting on a date, by the day it stops waiting.
+        public static func waitsUntil(when: String) -> String {
+            "Waits until \(when)"
+        }
+
+        /// A pull request named in a wait.
+        public static func pullRequest(n: Int) -> String {
+            "PR #\(n)"
+        }
+
+        /// An Actions run named in a wait.
+        public static let ciRun = "a CI run"
+
+        /// The session whose plan this is, where it works a step itself.
+        public static let thisSession = "This session"
+
+        /// By who: the tasks no session is on, held, waiting or untouched.
+        public static let noSession = "No session"
     }
 
     public enum Side {

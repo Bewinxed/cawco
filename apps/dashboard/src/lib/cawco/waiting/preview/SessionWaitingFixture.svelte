@@ -43,6 +43,7 @@
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import type { ComposerAsk } from "#lib/cawco/transcript/grown-ask.svelte.js";
+  import SessionShelfFrame from "#lib/cawco/transcript/session-shelf-frame.svelte";
   import Turn from "#lib/cawco/turn/Turn.svelte";
   import { setVoice } from "#lib/cawco/turn/voice.js";
   import Who from "#lib/cawco/turn/Who.svelte";
@@ -51,21 +52,12 @@
     BarGlass,
     BarItem,
   } from "#lib/components/ui/bar-glass/index.js";
-  import {
-    TabItem,
-    Tabs,
-    TabsList,
-  } from "#lib/components/ui/fluid-tabs/index.js";
   import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconClose,
-    IconFilesLinear,
     IconListRowsLinear,
     IconMoveTabLinear,
-    IconNeedsYou,
     IconPlus,
-    IconSearch,
-    IconServerLinear,
   } from "#lib/icons.js";
   import { hubThrough } from "#lib/platform/hub.js";
   import { isAsk, type WaitingRow } from "../rows";
@@ -374,40 +366,10 @@
     data-slot="session-fixture"
     style:--fixture-h="{height}px"
   >
-    <!-- The shelf: the session's tab, then the bar's trailing glass, a
-         step of room above it for the glass's corner counts. -->
-    <div
-      class="relative z-2 box-content flex h-c-top-bar-h flex-none items-end gap-space-3 pbs-space-3 ps-space-3 pe-space-2"
-    >
-      <div class="relative min-w-0 flex-auto">
-        <Tabs value="this" variant="folder">
-          <TabsList aria-label="Sessions">
-            <TabItem label="Continue CawCo open tasks" value="this">
-              {#snippet lead()}
-                {#if live.length > 0}
-                  <IconNeedsYou
-                    aria-hidden="true"
-                    class="size-icon-md text-status-attn-glyph"
-                  />
-                {/if}
-              {/snippet}
-            </TabItem>
-          </TabsList>
-        </Tabs>
-      </div>
-      <div class="relative flex-none self-center max-desk:hidden">
-        <BarGlass form="group">
-          <BarItem count={100} icon={IconFilesLinear} label="Files, 100" />
-          <BarItem label="Jump to session">
-            <IconSearch
-              aria-hidden="true"
-              class="size-icon-md text-ink-muted"
-            />
-          </BarItem>
-          <BarItem count={4} icon={IconServerLinear} label="4 machines" />
-        </BarGlass>
-      </div>
-    </div>
+    <SessionShelfFrame
+      needsYou={live.length > 0}
+      title="Continue CawCo open tasks"
+    />
     <!-- The conversation, and beside it on a desk the panel a pressed
          row opened; on a phone the panel is a sheet over it. -->
     <div class="relative flex min-h-0 flex-auto">

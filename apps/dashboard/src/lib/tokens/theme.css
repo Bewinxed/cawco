@@ -816,6 +816,12 @@
   --spacing-c-graph-stage-min: 600px;
   --spacing-c-mark: 26px;
   --spacing-c-row-mark: 18px;
+  /* A lead row's figure cell (ui/lead-row LeadCell `figure`): a short count in tabular figures, "12/12", at the cell's end, so counts stand one under another down a list. */
+  --spacing-c-lead-figure: 5ch;
+  /* Where a lead row's words start from its edge (ui/lead-row): its lead column, a session's tile wide, and the step after it. Whatever heads a lead-row list stands its words here too. */
+  --spacing-c-lead-text: calc(
+    var(--spacing-c-row-mark) + var(--spacing-space-3)
+  );
   --spacing-c-pill-h: 24px;
   --spacing-c-pill-gap: 6px;
   --spacing-c-badge-h: 20px;
@@ -2259,6 +2265,9 @@
     --row-tall-h: calc(2 * var(--spacing-space-5) + 2 * var(--spacing-space-1));
     --seam-inset: var(--spacing-space-3);
     --spacing-c-composer-inset: var(--spacing-space-2);
+    --spacing-c-lead-text: calc(
+      var(--spacing-c-row-mark) + var(--spacing-space-3)
+    );
     --spacing-c-composer-panel: calc(
       var(--spacing-c-composer-field) + var(--spacing-c-composer-inset) * 2 +
         2px
