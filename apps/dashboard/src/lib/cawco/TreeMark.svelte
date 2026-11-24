@@ -201,7 +201,8 @@
        transitions, so a pointer that turns back mid-way turns them with it
        (design.css `swap-move`, `swap-gone`): opacity and scale, on the
        compositor; the shrink is motion and only where motion is welcome.
-       The chevron's turn and the tile's press are registered numbers. Open, the chevron stands in the face's
+       The chevron's turn (`rotate`) and the tile's press
+       (`scale`) run on the compositor. Open, the chevron stands in the face's
        place, unless the count is the parent's own status (`countIsStatus`):
        then only a pointer brings it. With a dot the face is cut away round
        it: a hole in its mask, filled while a working mark's echo beats
@@ -212,7 +213,7 @@
     data-slot="tile"
     aria-hidden="true"
     class={[
-      "absolute inset-0 grid place-items-center rounded-xs bg-(--fill) group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none motion-safe:scale-(--press-by) motion-safe:transition-[--press-by] motion-safe:duration-(--duration-toggle) motion-safe:ease-out motion-safe:press-by-(--mark-press,1) group-data-dot/mark:mask-(--hole-mask)",
+      "absolute inset-0 grid place-items-center rounded-xs bg-(--fill) group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none motion-safe:scale-(--mark-press) motion-safe:transition-[scale] motion-safe:duration-(--duration-toggle) motion-safe:ease-out group-data-dot/mark:mask-(--hole-mask)",
       !(has && !faceAlways) && "bg-mark-overlay",
     ]}
     style:--hole={dot
@@ -245,8 +246,10 @@
         class="col-start-1 row-start-1 inline-grid place-items-center size-icon-sm swap-move swap-gone group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-shown group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-shown"
         ><!-- Open, the chevron points down at the rows. --><ChevronIcon
           aria-hidden="true"
-          class="size-full rotate-(--swap-turn) motion-safe:transition-[--swap-turn] motion-safe:duration-(--duration-toggle) motion-safe:ease-out"
-          style={open ? "--swap-turn: 90deg" : undefined}
+          class={[
+            "size-full motion-safe:transition-[rotate] motion-safe:duration-(--duration-toggle) motion-safe:ease-out",
+            open && "rotate-90",
+          ]}
         /></span
       >
     {/if}

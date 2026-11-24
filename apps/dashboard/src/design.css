@@ -108,20 +108,6 @@
   inherits: false;
   initial-value: 0;
 }
-/* A tree mark's chevron turn and its tile's press, each as one number the
-   transition moves, registered so it can be moved. What is drawn (rotate,
-   scale) is worked out from the number every frame, with the rest of the
-   page. */
-@property --swap-turn {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0deg;
-}
-@property --press-by {
-  syntax: "<number>";
-  inherits: false;
-  initial-value: 1;
-}
 /* How chosen a folder tab is (components/ui/fluid-tabs TabItem, `--pick`),
    typed so a choice interpolates the one number and everything drawn from
    it follows on its clock. Set on the tab and handed down only along the
@@ -1139,9 +1125,6 @@
    width container can't say). A states frame says its own height instead. */
 @utility hang-layer-screen {
   --shell-h: 100dvh;
-}
-@utility press-by-* {
-  --press-by: --value([*]);
 }
 @utility fade-inset-end-* {
   --fade-inset-end: --value([*]);
@@ -2939,6 +2922,9 @@
    - a transcript's dock (Transcript): lines over the pills stand the pills
      a step under them (`--pills-step`). */
 @layer components {
+  [data-tree-mark] {
+    --mark-press: 1;
+  }
   [data-tree-mark]:has([data-slot="hit"]:active) {
     --mark-press: var(--press-scale);
   }
