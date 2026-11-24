@@ -1,5 +1,5 @@
 /**
- * A change of a status glyph (SessionStatus, StopTray, StopTrayPick): the
+ * A change of a status glyph (SessionStatus, StopTray): the
  * new glyph cross-fades over the old one at the control tier, coming up from
  * the pop scale; the old one only fades. With less motion, only the fade.
  * Its own module, so a component that swaps a glyph imports no session

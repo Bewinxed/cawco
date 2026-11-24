@@ -6,6 +6,7 @@
  */
 
 import type { Activity } from "@cawco/core/activity";
+import { cawOffEndWords } from "@cawco/core/words/caw-off";
 import { type EndWords, projectEndWords } from "@cawco/core/words/project-ends";
 import type { StopJob, StopRow } from "./stop-work.svelte";
 
@@ -48,10 +49,29 @@ export const RUNNING: StopRow[] = [
   row("d3", "Extract HMC Inbox 2020-2022", { parentId: "d2" }),
 ];
 
-/** Caw mid-turn and one delegate working; the other two at rest. */
+/**
+ * What Caw started that still runs, as turning him off lists it: a task's
+ * attempt with its delegate, one on kestrel, which is away, and a
+ * delegate of his own.
+ */
+export const CAW_STARTED: StopRow[] = [
+  row("a41", "Fix the tray chip overflow on narrow screens"),
+  row("d41a", "Measure chip widths at 390, 680 and 1440", { parentId: "a41" }),
+  row(
+    "a47",
+    "Name machines by hostname in the rail",
+    { machineId: "m2", offline: true },
+    "away"
+  ),
+  row("d812", "Triage #812: the phone sheet jumps on rotate"),
+];
+
+/** Caw mid-turn and one delegate working, the other two at rest; of what Caw started, one working and one waiting on him. */
 export const ACTIVITY: Record<string, Activity> = {
   caw: "working",
   d2: "working",
+  a41: "working",
+  d812: "blocked",
 };
 
 const PLACES: StopJob["places"] = [
@@ -105,14 +125,14 @@ export const tray = (
   over: Partial<StopJob>
 ): { job: StopJob; words: EndWords } => {
   const one = job(over);
-  return {
-    job: one,
-    words:
-      one.kind === "delete"
-        ? projectEndWords.delete(
-            one.projectName,
-            one.fromDisk && one.places.length > 0
-          )
-        : projectEndWords.forget(one.projectName),
-  };
+  const words = {
+    "caw-off": () => cawOffEndWords(one.projectName),
+    delete: () =>
+      projectEndWords.delete(
+        one.projectName,
+        one.fromDisk && one.places.length > 0
+      ),
+    forget: () => projectEndWords.forget(one.projectName),
+  }[one.kind];
+  return { job: one, words: words() };
 };

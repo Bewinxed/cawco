@@ -5,7 +5,7 @@
   import { sessionPlace } from "./session-names.svelte";
   import { standing, trailOf, trayHere } from "./stop-tray-here.svelte";
   /**
-   * A forget's or a delete's tray (Caw off's is CawOffTray): a job of
+   * Every turn-off's tray (a forget, a delete for good, Caw turned off): a job of
    * stop-work.svelte.ts drawn as StopTrayView, which holds the look and the
    * rows' flights and takes everything as props, so its every state stands
    * in a story. This wires the view to the job: the board's activity and
@@ -27,10 +27,13 @@
     class: className,
     job,
     opener,
+    look = "section",
   }: {
     /** The host's indent for the tray (`--ask-indent`, `--ask-end`). */
     class?: string;
     job: StopJob;
+    /** A tile in the page, or the whole of the card hung from Caw's switch (StopTrayView `look`). */
+    look?: "section" | "card";
     /** What asked for the tray: the focus goes back to it as the tray is put away. */
     opener?: () => HTMLElement | null | undefined;
   } = $props();
@@ -60,6 +63,7 @@
   fillOf={(row: StopRow) =>
     `var(--color-mark-${markHue(sessionPlace(row.s.id))})`}
   {job}
+  {look}
   nameOf={machineName}
   onarrive={(row) => stopWork.arrive(job, row)}
   oncancel={cancel}
@@ -72,6 +76,7 @@
     row.departed = true;
   }}
   onfromdisk={(on) => stopWork.setFromDisk(job, on)}
+  onpick={(ids) => stopWork.pick(job, ids)}
   ongone={(row) => {
     row.gone = true;
   }}

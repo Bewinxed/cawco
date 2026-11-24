@@ -1,6 +1,6 @@
 /**
  * What every stop job's tray does while it stands in the page, a forget's
- * (StopTray) and Caw off's (CawOffTray) alike: it counts a slow stop's
+ * (StopTray) and Caw off's alike: it counts a slow stop's
  * seconds, parks its job when its place leaves the page, and keeps itself
  * in view and in hand as it unfolds and grows.
  */

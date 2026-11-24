@@ -4,13 +4,15 @@
  * "Forget project…" or "Delete project…" is pressed. StopTrayView draws it
  * from its job in stop-work.svelte.ts; these are its steps with the records the
  * hub held for "Private office" on 2026-11-04 (its Caw and three delegates
- * running on obelisk, its checkout and a second on kestrel).
+ * running on obelisk, its checkout and a second on kestrel). Turning its
+ * Caw off is the same tray, each row checked to stop.
  */
 
 import type { Activity } from "@cawco/core/activity";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import {
   ACTIVITY,
+  CAW_STARTED,
   MACHINES,
   NAME,
   partway,
@@ -32,6 +34,7 @@ export default {
     oncancel: () => undefined,
     onkeep: () => undefined,
     onfromdisk: () => undefined,
+    onpick: () => undefined,
     onstopone: () => undefined,
     onarrive: () => undefined,
     ondepart: () => undefined,
@@ -177,4 +180,84 @@ export const DeletePhone = {
 export const ForgetArmedPhone = {
   args: tray({ phase: "armed", rows: RUNNING }),
   parameters: { viewport: 390 },
+};
+
+/* ── Caw turned off with what he started still running ─────────────── */
+
+const STARTED = CAW_STARTED.map((each) => each.s.id);
+/** The kept one: Triage #812 runs on. */
+const KEPT = "d812";
+
+/** Turning Caw off: what he started, every box checked, one confirm. */
+export const CawOff = {
+  args: tray({
+    kind: "caw-off",
+    phase: "list",
+    rows: CAW_STARTED,
+    picked: STARTED,
+  }),
+};
+
+/** One unchecked: it runs on, and the confirm counts the other three. */
+export const CawOffSomeKept = {
+  args: tray({
+    kind: "caw-off",
+    phase: "list",
+    rows: CAW_STARTED,
+    picked: STARTED.filter((id) => id !== KEPT),
+  }),
+};
+
+/** The stops landing: the delegate in, kestrel's recorded for its return, the attempt still stopping; the kept one gone from the list. */
+export const CawOffStopping = {
+  args: tray({
+    kind: "caw-off",
+    phase: "stopping",
+    rows: CAW_STARTED.map((each): StopRow => {
+      switch (each.s.id) {
+        case "a41":
+          return { ...each, state: "stopping" };
+        case "d41a":
+          return {
+            ...each,
+            state: "stopped",
+            departed: true,
+            arrived: true,
+            gone: true,
+          };
+        case "a47":
+          return { ...each, owed: true, arrived: true };
+        default:
+          return { ...each, state: "kept", arrived: true };
+      }
+    }),
+    picked: STARTED.filter((id) => id !== KEPT),
+    total: 3,
+    pressedAt: Date.now(),
+  }),
+};
+
+/** He is off: what stopped, and what stops when kestrel is back. */
+export const CawOffDone = {
+  args: tray({
+    kind: "caw-off",
+    phase: "done",
+    off: true,
+    rows: CAW_STARTED.map((each): StopRow => {
+      if (each.s.id === "a47") {
+        return { ...each, owed: true, arrived: true };
+      }
+      return each.s.id === KEPT
+        ? { ...each, state: "kept", arrived: true }
+        : {
+            ...each,
+            state: "stopped",
+            departed: true,
+            arrived: true,
+            gone: true,
+          };
+    }),
+    picked: STARTED.filter((id) => id !== KEPT),
+    total: 3,
+  }),
 };

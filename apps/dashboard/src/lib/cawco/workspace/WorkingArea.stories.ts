@@ -26,9 +26,12 @@ export const AnswerWaiting = {};
 /** Comments put away, the drawing stands at a state a move leads into: ▶ plays the move. */
 export const MoveToPlay = {
   args: {
-    path: canvasPath(["src/lib/cawco/StopTrayPick.stories.ts"], {}),
-    artifactName: "Pick what stops",
-    ask: "Off title desk",
+    path: canvasPath(
+      ["src/lib/cawco/caw-settings-proto/CawSettings.stories.ts"],
+      {}
+    ),
+    artifactName: "Caw settings",
+    ask: "Stopped",
     comments: "shut",
   },
 };
