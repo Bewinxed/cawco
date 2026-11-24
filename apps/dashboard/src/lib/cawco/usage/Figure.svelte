@@ -10,4 +10,4 @@
   let { text }: { text: string } = $props();
 </script>
 
-<MorphText still={usage.cause === "clock"} {text} />
+<MorphText steady still={usage.cause === "clock"} {text} />

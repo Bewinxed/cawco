@@ -133,7 +133,7 @@
                       ? words.badgeWaiting(faults)
                       : words.badgeFailing(faults)}
                     variant="attn-count"
-                    ><MorphText text={String(faults)} />
+                    ><MorphText steady text={String(faults)} />
                     <span class="sr-only">
                       {waiting
                         ? words.badgeWaitingSaid

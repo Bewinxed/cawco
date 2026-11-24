@@ -354,7 +354,7 @@
         class:invisible={setupPage}
       >
         <span class="shrink-0"
-          ><MorphText text={String(count)} /> of {ids.length} picked</span
+          ><MorphText steady text={String(count)} /> of {ids.length} picked</span
         >
         <span
           class="h-space-1 w-0 max-w-30 grow overflow-hidden rounded-xs bg-bg-2"

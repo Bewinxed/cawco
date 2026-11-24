@@ -139,7 +139,7 @@
     </span>
     <!-- A machine catching up ticks the count over rather than swapping it. -->
     <span data-slot="count" class="num text-inherit"
-      ><MorphText text="{applied}/{machines.length}" /></span
+      ><MorphText steady text="{applied}/{machines.length}" /></span
     >
     <span>machines</span>
   </Popover.Trigger>

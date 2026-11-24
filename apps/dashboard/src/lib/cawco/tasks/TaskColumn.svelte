@@ -164,7 +164,7 @@
            section's name says the number whatever it is. -->
       {#if count > 0}
         <span data-num data-slot="count" class="num ms-auto type-meta text-tx-2"
-          ><MorphText text={String(count)} /></span
+          ><MorphText steady text={String(count)} /></span
         >
       {/if}
     </span>

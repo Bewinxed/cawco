@@ -52,7 +52,7 @@
         data-slot="num"
         data-stat-value
         class="num min-h-lh type-kpi text-tx group-tone-live:text-cyan group-tone-attn:text-orange group-tone-done:text-green group-tone-fail:text-red group-tone-caution:text-orange group-tone-bad:text-red max-desk:type-title"
-        ><MorphText text={String(value)} /></span
+        ><MorphText steady text={String(value)} /></span
       >
       {#if unit}
         {#key unit}

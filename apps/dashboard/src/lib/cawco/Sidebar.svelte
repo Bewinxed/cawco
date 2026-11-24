@@ -941,7 +941,7 @@
                   data-flip="pop box"
                   tone="live"
                 >
-                  <MorphText text={String(fleetCount)} />
+                  <MorphText steady text={String(fleetCount)} />
                 </Sidebar.MenuBadge>
               {/if}
             </Sidebar.MenuItem>
