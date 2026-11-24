@@ -225,7 +225,11 @@
    * never changes width.
    */
   const covered = $derived(
-    Icon === undefined && (phase !== "idle" || ringShown)
+    Icon === undefined && !holdsIcon && (phase !== "idle" || ringShown)
+  );
+  /** A held slot with nothing in it: the words slide over its room. */
+  const roomEmpty = $derived(
+    holdsIcon && Icon === undefined && phase === "idle" && !ringShown
   );
   /**
    * The icon last given, kept drawn while it fades out as the slot folds
@@ -301,8 +305,8 @@
 <span
   style:--btn-words-slack={holds && Icon ? `${slack}px` : undefined}
   data-slot="btn-slot"
-  class="icon-swap w-(--btn-icon) flex-none [--icon-swap-dur:var(--duration-base)] translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) transition-[width,margin-inline-end] duration-(--duration-slow) ease-in-out data-placed:transition-[translate,width,margin-inline-end] motion-reduce:transition-off data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
-  data-over={Icon === undefined || undefined}
+  class="icon-swap w-(--btn-icon) flex-none [--icon-swap-dur:var(--duration-base)] translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) duration-(--duration-slow) ease-in-out data-placed:transition-[translate] motion-reduce:transition-off data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
+  data-over={(Icon === undefined && !holdsIcon) || undefined}
   data-placed={placed || undefined}
 >
   {#if shownIcon}
@@ -367,6 +371,8 @@
        reaches no flex or grid container, which kept its whole line and the
        recipe's padding on top: a refused menu item stood 10px tall). -->
   <span
+    class="transition-[translate] duration-(--duration-slow) ease-in-out motion-reduce:transition-off data-room-empty:-translate-x-[calc((var(--btn-icon)+var(--btn-gap))/2)] rtl:data-room-empty:translate-x-[calc((var(--btn-icon)+var(--btn-gap))/2)]"
+    data-room-empty={roomEmpty || undefined}
     ><span
       data-slot="label-text"
       class="transition-[opacity] duration-(--duration-base) ease-out covered-true:opacity-0"

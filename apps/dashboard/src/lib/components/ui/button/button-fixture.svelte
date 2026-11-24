@@ -8,7 +8,8 @@
    * - `fails`: a press runs the work; the slot spins, then draws a cross.
    * - `confirms`: a first press arms it (its words turn, a line runs out
    *   along its rim); a second press in time runs the work.
-   * - `icon`: each press puts its icon on or takes it off.
+   * - `icon`: each press puts its icon on or takes it off; the button holds
+   *   its width (`holdsIcon`).
    */
   import type { Component } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
@@ -57,6 +58,7 @@
 <Button
   {confirm}
   {failed}
+  holdsIcon={flow === "icon"}
   icon={flow === "icon" && !iconOn ? undefined : icon}
   {label}
   onclick={run}

@@ -248,6 +248,12 @@
        * focus leaves it (owner's pick, 2026-11-24: press again).
        */
       confirm?: string;
+      /**
+       * Its icon comes and goes: the button keeps room for it while it is
+       * away, so its width never changes; the words slide over and the icon
+       * fades in its slot.
+       */
+      holdsIcon?: boolean;
     };
 </script>
 
@@ -295,6 +301,7 @@
     progress,
     arrivals,
     confirm,
+    holdsIcon = false,
     onclick,
     onkeydown,
     onfocusout,
@@ -396,6 +403,7 @@
       {arrivals}
       {confirm}
       {failed}
+      {holdsIcon}
       {icon}
       {label}
       {pending}
