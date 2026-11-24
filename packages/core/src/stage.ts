@@ -665,6 +665,13 @@ export interface RenderReport {
    */
   drawing?: string[];
   page: { errors: PageError[] };
+  /**
+   * The states files whose default export carries the {@link READING_TAG}
+   * tag: an agent's checklist of every state, for its own reading graph
+   * alone. The stage reads it off the files; optional on the wire, as
+   * `widthOnly`.
+   */
+  readings?: string[];
   sections: SectionRender[];
   /** `File:Story` of each story with no doc comment: drawn by its export name alone. */
   unnamed: string[];
@@ -676,6 +683,14 @@ export interface RenderReport {
    */
   widthOnly?: string[][];
 }
+
+/**
+ * The CSF tag a states file's default export carries when it is its
+ * agent's checklist of every state (`tags: ["reading"]`): it opens only on
+ * a graph made with `reading: true`, and the hub refuses it on a graph made
+ * for the person (hub artifacts/kinds/component.ts `createSheet`).
+ */
+export const READING_TAG = "reading";
 
 /** Rest frames of one states file that draw the same picture at one width and scheme: {@link framesAlike}. */
 export interface FramesAlike {
@@ -759,10 +774,10 @@ export interface PostedReport extends PageReport {
 /** A section as its page drew it: the stage stamps its content hash as it keeps it ({@link SectionRender} `hash`), and when it was drawn as it answers it (`drawn`). */
 export type PageSection = Omit<SectionRender, "drawn" | "hash">;
 
-/** A report as the canvas page reads it of itself, before the stage keeps it: its sections unstamped ({@link PageSection}), and none of what the stage reads off the states files (`widthOnly`, `codeNamed`). */
+/** A report as the canvas page reads it of itself, before the stage keeps it: its sections unstamped ({@link PageSection}), and none of what the stage reads off the states files (`widthOnly`, `codeNamed`, `readings`). */
 export interface PageReport extends Omit<
   RenderReport,
-  "sections" | "widthOnly" | "codeNamed"
+  "sections" | "widthOnly" | "codeNamed" | "readings"
 > {
   sections: PageSection[];
 }

@@ -85,6 +85,7 @@ import {
   type PageSection,
   type PagesLooked,
   type PostedReport,
+  READING_TAG,
   RENDER_STATE_PARAM,
   RENDERED_PATH,
   REPORT_PATH,
@@ -1665,11 +1666,11 @@ function unloadedState(file: string): {
     : { state: "unseen" };
 }
 
-/** What states file `file` says that the report names (core `RenderReport`): its stories that differ only by width, and its labels that say a word of code. */
+/** What states file `file` says that the report names (core `RenderReport`): its stories that differ only by width, its labels that say a word of code, and the file itself when it is a checklist of every state. */
 function sheetFindings(
   file: string,
   read: ReturnType<typeof readStoryFile>
-): Required<Pick<RenderReport, "codeNamed" | "widthOnly">> {
+): Required<Pick<RenderReport, "codeNamed" | "readings" | "widthOnly">> {
   const names = [
     ...read.stories.map((one) => one.name),
     ...read.imports.keys(),
@@ -1682,6 +1683,7 @@ function sheetFindings(
       const word = one.label ? codeWordOf(one.label, names) : null;
       return word ? [{ story: `${file}:${one.name}`, word }] : [];
     }),
+    readings: read.meta.tags.includes(READING_TAG) ? [file] : [],
   };
 }
 
@@ -1696,6 +1698,7 @@ async function reportOf(files: string[]): Promise<RenderReport> {
   const unnamed: string[] = [];
   const widthOnly: string[][] = [];
   const codeNamed: { story: string; word: string }[] = [];
+  const readings: string[] = [];
   let newest: {
     at: string;
     by: RenderReport["by"];
@@ -1724,6 +1727,7 @@ async function reportOf(files: string[]): Promise<RenderReport> {
     const said = sheetFindings(file, read);
     widthOnly.push(...said.widthOnly);
     codeNamed.push(...said.codeNamed);
+    readings.push(...said.readings);
     const hash = await contentHash(file);
     const kept = reports.get(file);
     if (kept && (!newest || kept.at > newest.at)) {
@@ -1773,6 +1777,7 @@ async function reportOf(files: string[]): Promise<RenderReport> {
     unnamed,
     widthOnly,
     codeNamed,
+    readings,
     ...drawingOf(files),
   };
 }

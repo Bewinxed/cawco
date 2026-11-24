@@ -4506,6 +4506,7 @@ const RenderReportShape = declared(
       .optional(),
     drawing: z.array(z.string()).optional(),
     page: z.object({ errors: z.array(PageErrorShape) }),
+    readings: z.array(z.string()).optional(),
     sections: z.array(SectionRenderShape),
     unnamed: z.array(z.string()),
     widthOnly: z.array(z.array(z.string())).optional(),
@@ -4527,6 +4528,7 @@ const PageReportShape = declared(
     sections: true,
     widthOnly: true,
     codeNamed: true,
+    readings: true,
   }).extend({ sections: z.array(PageSectionShape) }),
   "PageReport",
   "packages/core/src/stage.ts"

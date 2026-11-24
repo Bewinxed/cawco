@@ -10,6 +10,7 @@ import LocationLive from "./location-live.svelte";
 
 export default {
   title: "Spawn/Location picker states",
+  tags: ["reading"],
   component: LocationLive,
   args: {
     answer: "listed",

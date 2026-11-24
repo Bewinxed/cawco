@@ -49,6 +49,8 @@ export interface StaticSheet {
     args: Record<string, unknown>;
     code: Record<string, string>;
     component: string | null;
+    /** The default export's CSF `tags`, as the file writes them (`reading`: its agent's own checklist, core stage.ts `READING_TAG`). */
+    tags: string[];
     title: string | null;
   };
   /**
@@ -992,6 +994,13 @@ export function readStoryFile(file: string, text: string): StaticSheet {
   const title = literal(
     child(propertyOf(meta, "title") ?? { type: "" }, "value")
   )?.value;
+  // The meta's own `tags`, as it writes them beside its `title`: a spread the meta takes from another module (a shared frame) is read no further.
+  const metaTagsNode = child(propertyOf(meta, "tags") ?? { type: "" }, "value");
+  const metaTagsRead = metaTagsNode
+    ? constOf(reading, { node: metaTagsNode, env: NO_ENV })
+    : null;
+  const metaTags =
+    metaTagsRead && "value" in metaTagsRead ? metaTagsRead.value : undefined;
   /** A story's canvas fields: its label (doc comment), form, flow move, the name it is shown by, its record sets' list and its tags. */
   const canvasOf = (
     one: Export
@@ -1060,6 +1069,9 @@ export function readStoryFile(file: string, text: string): StaticSheet {
       component: identifier(
         child(propertyOf(meta, "component") ?? { type: "" }, "value")
       ),
+      tags: Array.isArray(metaTags)
+        ? metaTags.filter((one): one is string => typeof one === "string")
+        : [],
       title: typeof title === "string" ? title : null,
     },
     stories: exports.map((one): Story => ({

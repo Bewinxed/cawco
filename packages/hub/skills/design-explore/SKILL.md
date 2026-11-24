@@ -56,7 +56,7 @@ A direction that only works by breaking the floor is dropped, with the reason gi
 
 ## States
 
-The person judges a stateful component by using it: they are handed its live story, where a press takes them through the states a press reaches and a dial sets the rest. The states below are your reading of it, each in the states file of the part that draws it.
+The person judges a stateful component by using it: they are handed its live story, where a press takes them through the states a press reaches and a dial sets the rest. The states below are your reading of it, each in the states file of the part that draws it, tagged `reading` as the `design-graph` skill's step 3 says.
 
 The states are the branches the component has: data (loading, empty, error, one item, a typical set, a set long enough to scroll, partly resolved, stale and refetching), account (plan, role, permission), feature (flags, limits, locked). **A state the code cannot reach is not a state.** A state the design adds is reached by the branch you write for it in the real component, in your workspace; a state you are judging that the code lacks is listed as missing and left out. Each state is a situation the person meets, and its story draws a picture no other story draws: keep those that differ to the eye, and two that draw alike are one. Name each story the way the product talks about the state (`Empty`, `MemberNoAccess`), and label it with the sentence they would say about it (the `design-graph` skill's step 3). Combine kinds only where the code branches on the combination, never as a cross product. A width is no kind: the graph draws every state at the widths they pick, so a state is one story.
 
