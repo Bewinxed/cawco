@@ -8,6 +8,7 @@
     pressable,
   } from "#lib/components/ui/floating-presence.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { markMenuEnds } from "#lib/components/ui/menu-item/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import type { WithoutChildrenOrChild } from "#lib/utils.js";
   import { cn, type WithoutChild } from "#lib/utils.js";
@@ -44,6 +45,13 @@
 
   /** One step above the surface it opens in (theme.css `surface`). */
   const surfaceLevel = rise();
+
+  /* Its end rows follow its curve, the rows between join (menu-item/ends.ts). */
+  $effect(() => {
+    if (ref) {
+      return markMenuEnds(ref);
+    }
+  });
 </script>
 
 <!-- At most the room bits-ui measures between the trigger and the

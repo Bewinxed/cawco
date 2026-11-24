@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
-import { extendTailwindMerge, validators } from "tailwind-merge";
+import { extendTailwindMerge, mergeConfigs, validators } from "tailwind-merge";
+import { withSuperCorners } from "tailwind-super-corners/tw-merge";
 import { createTV } from "tailwind-variants";
 import theme from "./tokens/theme.css?raw";
 
@@ -165,6 +166,34 @@ const twMergeConfig = {
     },
   },
 };
+
+/**
+ * tailwind-super-corners' groups (its tailwind-merge plugin), so a later
+ * corner class replaces an earlier one (`rounded-sm` after
+ * `sc-concentric-xs`, `sc-t-concentric-xs` after `rounded-t-sm`). `tv` takes
+ * an extension and no plugin, so the plugin runs once over the extension's
+ * own groups and both `cn` and `tv` merge with what it returns.
+ */
+const merged = withSuperCorners(
+  mergeConfigs(
+    {
+      cacheSize: 0,
+      theme: {},
+      classGroups: {},
+      conflictingClassGroups: {},
+      conflictingClassGroupModifiers: {},
+      orderSensitiveModifiers: [],
+    },
+    twMergeConfig
+  )
+);
+const mergeExtension = {
+  extend: {
+    theme: merged.theme,
+    classGroups: merged.classGroups,
+    conflictingClassGroups: merged.conflictingClassGroups,
+  },
+};
 const twMerge = extendTailwindMerge<
   | "concentric-in"
   | "r-outer"
@@ -209,10 +238,10 @@ const twMerge = extendTailwindMerge<
   | "rail-step"
   | "prompt-fs"
   | "fade-inset-end"
->(twMergeConfig);
+>(mergeExtension);
 
 /** `tv` for kit recipes, merging with the same theme as `cn`. */
-export const tv = createTV({ twMergeConfig });
+export const tv = createTV({ twMergeConfig: mergeExtension });
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

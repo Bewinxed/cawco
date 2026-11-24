@@ -4,11 +4,12 @@ import { tv } from "#lib/utils.js";
  * A row inside a floating surface (DESIGN.md, Navigation, menus and floating
  * surfaces): the kit's menu, select and command items, and the app's own
  * rows in a popover. Its radius is concentric with the floating surface
- * that holds it (DESIGN.md, The Concentric Rule; tailwind-super-corners'
- * `sc-concentric-xs`, and design.css `concentric-rows` on its surface): the first row's top corners and the last row's bottom
- * corners take the surface's radius less its inset, every corner between
- * two rows the small radius; `radius-xs` all round where no rounded surface
- * holds it. The control transition, and a
+ * that holds it (DESIGN.md, The Concentric Rule): the list marks its end
+ * rows (`markMenuEnds`, ./ends.ts), the first row's top corners and the
+ * last row's bottom corners take the surface's radius less its inset
+ * (tailwind-super-corners' `sc-t-concentric-xs`, `sc-b-concentric-xs`), and
+ * every corner that faces a neighbour the small join radius (`radius-xs`),
+ * as every corner does where no list marks its ends. The control transition, and a
  * floor of `c-menu-item-h`: 32px under a fine pointer, 44px under a finger
  * (the token's coarse mode; The 44 Touch Rule: "Menu items and nav rows are
  * 44px tall on touch"). A mark line: its mark and words share one centre
@@ -27,6 +28,8 @@ import { tv } from "#lib/utils.js";
  * "read as a half-ink square"). A destructive row's red, and a chosen
  * row's tick or dot in the row's own ink, stand over it.
  */
+export { markMenuEnds } from "./ends.js";
+
 export const menuItemVariants = tv({
-  base: "sc-concentric-xs min-h-control-sm mark-line transition-control coarse:min-h-control-lg [&>:where(svg,.icon-swap):first-child]:text-tx-2",
+  base: "data-menu-first:sc-t-concentric-xs data-menu-last:sc-b-concentric-xs min-h-control-sm rounded-s-xs rounded-e-xs mark-line transition-control coarse:min-h-control-lg [&>:where(svg,.icon-swap):first-child]:text-tx-2",
 });

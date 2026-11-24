@@ -13,9 +13,16 @@ import { numberOf } from "#lib/platform/motion/curves.svelte.js";
 import { browser } from "$app/env";
 import { pressedAway } from "./floating-presence.js";
 import { highlight } from "./highlight/highlight.svelte.js";
+import { markMenuEnds } from "./menu-item/ends.js";
 import { submenuSide } from "./submenu-side.js";
 
 function ghost(content: () => HTMLElement | null): void {
+  $effect(() => {
+    const el = content();
+    if (el) {
+      return markMenuEnds(el);
+    }
+  });
   $effect(() => {
     const el = content();
     if (el) {

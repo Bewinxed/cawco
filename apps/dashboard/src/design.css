@@ -792,7 +792,8 @@
   }
 }
 
-/* The Concentric Rule as one mechanism. A rounded container a highlight
+/* The Concentric Rule for an app screen's own container (the kit's lists
+   use tailwind-super-corners, menu-item/ends.ts). A rounded container a highlight
    stands in declares its outer radius and the inset to the rows, controls or
    parts it holds (`concentric-in r-outer-lg r-inset-(--inset-floating)`), and
    works out the inner radius once: outer less inset, never under 0. Its
@@ -805,80 +806,6 @@
    corners itself. */
 @utility concentric-in {
   --r-inner: max(0px, calc(var(--r-outer) - var(--r-inset)));
-}
-/* A stack of rows (a menu's, a select's, a command list's: every
-   `data-menu-item`) is concentric at its ends only (owner, 2026-11-24:
-   "account for first/n/last in the roundness"). Each row takes the corner
-   left at its level from the rounded box it stands in
-   (tailwind-super-corners' `sc-concentric-*`); the container of the stack
-   (`concentric-rows`) turns every corner a row shows a neighbour to the
-   join (--r-join, the small radius unless it names one). Something stands
-   above a row when the row, or anything holding it inside the container (a
-   wrapper, a group), has an earlier sibling that is drawn; below it,
-   likewise. A separator, drawn between rows, and what takes no room (a
-   hidden element, a command's input label) are no such thing. A holder
-   with a drawn sibling after it says so to all it holds (`--r-tail`), its
-   `:has()` asked of itself (has-subject-check), and a row reads it from
-   what holds it (a style query). */
-@utility concentric-rows {
-  --r-tail: initial;
-  & [data-menu-item] {
-    @container style(--r-tail: join) {
-      border-end-start-radius: var(--r-join, var(--radius-xs));
-      border-end-end-radius: var(--r-join, var(--radius-xs));
-    }
-  }
-  &
-    :not(
-      [role="separator"],
-      [hidden],
-      [data-command-input-label],
-      script,
-      style,
-      template
-    )
-    ~ [data-menu-item],
-  &
-    :not(
-      [role="separator"],
-      [hidden],
-      [data-command-input-label],
-      script,
-      style,
-      template
-    )
-    ~ *
-    [data-menu-item] {
-    border-start-start-radius: var(--r-join, var(--radius-xs));
-    border-start-end-radius: var(--r-join, var(--radius-xs));
-  }
-  &
-    [data-menu-item]:has(
-      ~ :not(
-        [role="separator"],
-        [hidden],
-        [data-command-input-label],
-        script,
-        style,
-        template
-      )
-    ) {
-    border-end-start-radius: var(--r-join, var(--radius-xs));
-    border-end-end-radius: var(--r-join, var(--radius-xs));
-  }
-  &
-    :has(
-      ~ :not(
-        [role="separator"],
-        [hidden],
-        [data-command-input-label],
-        script,
-        style,
-        template
-      )
-    ) {
-    --r-tail: join;
-  }
 }
 @utility r-outer-* {
   --r-outer: --value(--radius-*);

@@ -33,7 +33,7 @@
     "transition-opacity duration-(--duration-slow) ease-drawer [--kit-rise:0_calc(-1*var(--spacing-space-2))] side-left:[--kit-rise:var(--spacing-space-2)_0] side-right:[--kit-rise:calc(-1*var(--spacing-space-2))_0] side-top:[--kit-rise:0_var(--spacing-space-2)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--duration-base) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)]";
 
   export const floatingSurface = tv({
-    base: "surface concentric-rows rounded-lg p-space-2 text-tx",
+    base: "surface rounded-lg p-space-2 text-tx",
     variants: {
       motion: {
         pop: popMotion,
@@ -102,6 +102,7 @@
   import { rise } from "#lib/components/ui/elevated/index.js";
   import FloatingBody from "#lib/components/ui/floating-body.svelte";
   import { pressedAway } from "#lib/components/ui/floating-presence.js";
+  import { markMenuEnds } from "#lib/components/ui/menu-item/index.js";
   import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { numberOf } from "#lib/platform/motion/curves.svelte.js";
   import { type Morph, morph } from "#lib/platform/motion/morph.svelte.js";
@@ -230,6 +231,13 @@
 
   /** One step above the surface it opens in (theme.css `surface`). */
   const surfaceLevel = rise();
+
+  /* Its end rows follow its curve, the rows between join (menu-item/ends.ts). */
+  $effect(() => {
+    if (ref) {
+      return markMenuEnds(ref);
+    }
+  });
 </script>
 
 <!-- Mounted by bits-ui's forceMount and drawn while its presence says so:
