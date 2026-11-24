@@ -429,6 +429,7 @@
   ):where([data-state="open"], [data-open]:not([data-open="false"]))
 )::after,
 :where(:is(.canvas-empty-action))::after,
+:where(:is(.control))::after,
 :where(:is(.ec-disabled))::after,
 :where(:is(.ec-icon).ec-next)::after,
 :where(:is(.ec-icon).ec-prev)::after,

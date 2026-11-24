@@ -1151,8 +1151,17 @@
    and the edge share one outer curve, so no rim of fill shows outside the
    edge and its corners keep the box's radius. Forced colours draw it as
    any border.
-   Nothing scales: a press is the next layer step. Only the layer, the edge
-   and the shadow transition.
+   Nothing scales: a press is the next layer step.
+
+   The state layer is a layer of its own (`::after`, under the content in
+   the control's own stacking context, over its fill and inside its edge)
+   whose opacity fades, so a hover or a press composites and never repaints
+   the control (owner's pick, 2026-11-24, animation performance). A state
+   sets the layer's colour and shows it (`--control-layer-shown`); at rest
+   it keeps the hover's colour, so it fades out in the colour it faded in.
+   Only the layer's opacity, the edge and the shadow transition. A field
+   (`control-field`: an input or a textarea, which draw no `::after`)
+   paints its layer on its background instead, at once.
 
    Its variables, each with the default `control` alone draws (the
    secondary look):
@@ -1173,12 +1182,6 @@
    Focus (owner's pick, 2026-11-24): the edge turns the focus ink and a
    3px halo of it at 35% hugs the box, no gap. A transparent outline stays
    under it, so forced colours, which drop shadows, still draw focus. */
-@property --control-layer {
-  syntax: "<color>";
-  inherits: false;
-  initial-value: transparent;
-}
-
 @property --control-edge {
   syntax: "<color>";
   inherits: false;
@@ -1190,11 +1193,31 @@
     --control-rest-edge,
     var(--control-intent, var(--control-default-edge, var(--color-ui-3)))
   );
-  --control-layer: transparent;
+  --control-layer: var(--control-hover, var(--color-ui));
+  --control-layer-shown: 0;
   border: 1px solid var(--control-edge);
   background-clip: border-box;
   background-color: var(--control-fill, var(--color-bg));
-  background-image: linear-gradient(var(--control-layer), var(--control-layer));
+  /* Positioned and isolated for its layer, at no weight, so a caller's
+     own position (`absolute`) stands. */
+  :where(&) {
+    position: relative;
+    isolation: isolate;
+  }
+  /* Drawn unless a look keeps its layer on its background
+     (`--control-layer-after: none`, a field's): a variable, so no look's
+     rule has to outrank this one in Tailwind's order of utilities. */
+  &::after {
+    content: var(--control-layer-after, "");
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background-color: var(--control-layer);
+    opacity: var(--control-layer-shown);
+    pointer-events: none;
+    transition: opacity var(--duration-fast) var(--ease-out);
+  }
   --control-halo: 0 0 #0000;
   --control-focus-glow: 0 0 0 3px
     color-mix(
@@ -1202,14 +1225,16 @@
       var(--control-focus-ink, var(--color-accent)) 35%,
       transparent
     );
-  --control-focus-halo: var(--control-focus-glow);
   box-shadow:
     var(--control-halo),
     var(
       --control-lift,
       0 1px 2px light-dark(oklch(0% 0 0 / 0.06), oklch(0% 0 0 / 0.4))
     );
-  transition-property: --control-layer, --control-edge, box-shadow;
+  /* A look adds to what transitions through a variable, never by setting
+     the property, so no look's rule has to outrank this one in Tailwind's
+     order of utilities. */
+  transition-property: var(--control-transitions, --control-edge, box-shadow);
   transition-duration: var(--duration-fast);
   transition-timing-function: var(--ease-out);
 
@@ -1218,9 +1243,11 @@
       --control-open,
       var(--control-press, var(--color-ui-2))
     );
+    --control-layer-shown: 1;
   }
   &[aria-current="page"] {
     --control-layer: var(--control-current, var(--color-ui));
+    --control-layer-shown: 1;
   }
   &:is(
     [aria-checked="true"],
@@ -1230,19 +1257,22 @@
   ) {
     --control-edge: var(--control-on-edge, var(--color-accent));
     --control-layer: var(--control-on-layer, var(--color-ui));
+    --control-layer-shown: 1;
   }
   @media (hover: hover) {
     &:hover:not(:disabled, [aria-disabled="true"], :active, [data-pressed]) {
       --control-layer: var(--control-hover, var(--color-ui));
+      --control-layer-shown: 1;
     }
   }
   &:is(:active, [data-pressed]):not(:disabled, [aria-disabled="true"]) {
     --control-layer: var(--control-press, var(--color-ui-2));
+    --control-layer-shown: 1;
   }
   &:focus-visible,
   &:has(:focus-visible) {
     --control-edge: var(--control-focus-ink, var(--color-accent));
-    --control-halo: var(--control-focus-halo);
+    --control-halo: var(--control-focus-halo, var(--control-focus-glow));
     outline: 2px solid transparent;
     outline-offset: 2px;
   }
@@ -1343,6 +1373,15 @@
   --control-hover: var(--control-field-hover, transparent);
   --control-press: var(--control-field-hover, transparent);
   --control-focus-halo: 0 0 #0000;
+  background-image: linear-gradient(
+    oklch(
+      from var(--control-layer) l c h / calc(alpha* var(--control-layer-shown))
+    ),
+    oklch(
+      from var(--control-layer) l c h / calc(alpha* var(--control-layer-shown))
+    )
+  );
+  --control-layer-after: none;
 
   &:is(:focus-visible, :focus-within, :has(:focus-visible)):not(
       [aria-invalid="true"],
@@ -1414,8 +1453,7 @@
    "when hovered, need to show a red fill"). Taken with an intent. */
 @utility control-reveal {
   --control-rest-edge: var(--control-default-edge, var(--color-ui-3));
-  transition-property:
-    --control-layer, --control-edge, box-shadow, background-color, color;
+  --control-transitions: --control-edge, box-shadow, background-color, color;
 
   @media (hover: hover) {
     &:hover:not(:disabled, [aria-disabled="true"]) {
