@@ -1,12 +1,12 @@
 /**
  * Stopping a project's running sessions before an end of the caller's (a
  * forget, a delete for good, Caw turned off), kept by the work, not by its
- * tray (DESIGN.md, The Work Outlives Its Surface Rule). A tray shows a job
- * from here: its rows, how far each stop has got, the end, a refusal. A
- * forget's and a delete's is StopTray, which stops every row (a delete's
- * also asks whether its files on disk go, `fromDisk`); Caw off's is CawOffTray, whose rows
- * are each checked to stop (`picked`), the unchecked ones kept running, and
- * whose one confirm turns him off and stops the checked ones in one request.
+ * tray (DESIGN.md, The Work Outlives Its Surface Rule). Every job's tray is
+ * StopTray, which shows a job from here: its rows, how far each stop has
+ * got, the end, a refusal. A forget's and a delete's stops every row (a
+ * delete's also asks whether its files on disk go, `fromDisk`); Caw off's
+ * rows are each checked to stop (`picked`), the unchecked ones kept running,
+ * and its one confirm turns him off and stops the checked ones in one request.
  *
  * Cancel, Esc or Stop waiting puts the tray away. Before the stop is pressed
  * that drops the ask, since nothing has started; after it, the job is
@@ -29,7 +29,7 @@ import type {
   CawRunning,
   ProjectConversationView,
 } from "@cawco/core/project-conversation";
-import { cawOffWords } from "@cawco/core/words/caw-off";
+import { cawOffEndWords, cawOffWords } from "@cawco/core/words/caw-off";
 import { type EndWords, projectEndWords } from "@cawco/core/words/project-ends";
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
@@ -119,28 +119,17 @@ export interface StopJob {
   total: number;
 }
 
-/** A forget's or a delete's words, for its project, its files box as it stands. */
+/** A job's words, for its project: a delete's by its files box as it stands. */
 export function endWordsOf(job: StopJob): EndWords {
+  if (job.kind === "caw-off") {
+    return cawOffEndWords(job.projectName);
+  }
   return job.kind === "delete"
     ? projectEndWords.delete(
         job.projectName,
         job.fromDisk && job.places.some((place) => place.made)
       )
     : projectEndWords.forget(job.projectName);
-}
-
-/** A parked job's line, by its kind: the stops landing, then what was left. */
-export function parkedWords(
-  job: StopJob
-): Pick<EndWords, "parked" | "partway"> {
-  if (job.kind === "caw-off") {
-    return {
-      parked: (stopped, total) =>
-        cawOffWords.parked(job.projectName, stopped, total),
-      partway: cawOffWords.partway,
-    };
-  }
-  return endWordsOf(job);
 }
 
 /** A Caw-off row as the tray names it: what it is, its session, an attempt by its task. */

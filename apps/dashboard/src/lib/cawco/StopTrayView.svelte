@@ -1,11 +1,12 @@
 <script lang="ts">
   import type { Activity } from "@cawco/core/activity";
+  import { cawOffWords } from "@cawco/core/words/caw-off";
   import { commonWords } from "@cawco/core/words/common";
   import type { EndWords } from "@cawco/core/words/project-ends";
   import { projectEndWords } from "@cawco/core/words/project-ends";
   /**
-   * A forget's or a delete's tray (Caw off's is CawOffTray, each row
-   * checked to stop): one tray that changes shape as a stop goes,
+   * Every turn-off's tray (a forget, a delete for good, Caw turned off):
+   * one tray that changes shape as a stop goes,
    * never a second dialog (Family, benji.org/family-values: trays that
    * "expand, contract, and adapt"). It stands in the page under whatever
    * asked for it, unfolding there (DESIGN.md, The Open Page Rule): no scrim,
@@ -51,11 +52,29 @@
    * it is recorded (`deferred`) the ring counts it, and it neither flies nor
    * folds. A session that keeps such a delegate stays with it.
    *
+   * Caw off (`caw-off`) asks which of what he started stops: each row has
+   * its box, all checked, and over them "All N running" checks or clears
+   * them all (checking a row checks everything under it; unchecking it
+   * unchecks everything under it and the leads above it, so a stopped lead
+   * never leaves its delegates running). Its confirm turns him off and
+   * stops the checked rows; the unchecked ones are kept, run on, fold out
+   * of the list as it is pressed and are not counted. The boxes stay
+   * through the stops, settled, so nothing under them moves. While it asks
+   * and stops, its line says what asleep means; once he is off, what
+   * stopped. Its Cancel while the stops land is Stop waiting, which parks
+   * them: nothing calls back a Caw already off.
+   *
+   * It stands in the page as a tile (`section`), or is the whole of a card
+   * hung from Caw's switch (`card`): the card is its surface, so it draws
+   * no tile of its own, its words and actions a row gap in from the rows'
+   * fills. Either way every fold, flight and morph plays.
+   *
    * Each state has its own height (the body's morph): the list, one line
    * shorter armed, a row shorter per landing, the short "Stopped 3
    * sessions." at the end, a line taller for a failure.
    */
   import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
@@ -64,6 +83,7 @@
     IconError as Failed,
     IconArchive,
     IconDeleteForGood,
+    IconMoonSleep,
     IconPause as Pause,
     IconRenew as Working,
   } from "#lib/icons.js";
@@ -72,6 +92,7 @@
   import { echoBeat } from "../platform/motion/echo.svelte";
   import { fold, unfold } from "../platform/motion/fold.svelte";
   import { glyphIn, glyphOut } from "../platform/motion/glyph";
+  import { morph } from "../platform/motion/morph.svelte";
   import { departBox, land } from "../platform/motion/share.svelte";
   import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
   import FromDiskBox from "./FromDiskBox.svelte";
@@ -96,10 +117,12 @@
     oncancel,
     onkeep,
     onfromdisk,
+    onpick,
     onstopone,
     onarrive,
     ondepart,
     ongone,
+    look = "section",
     ...rest
   }: {
     /** The host's indent for the tray (`--ask-indent`, `--ask-end`). */
@@ -126,6 +149,8 @@
     onkeep: () => void;
     /** Delete's files box, changed. */
     onfromdisk: (on: boolean) => void;
+    /** Caw off's boxes, changed: the ids now checked (none but his have them). */
+    onpick?: (ids: string[]) => void;
     /** A failed row's Try again. */
     onstopone: (id: string) => void;
     /** A stopped row's tile landed in the button (or, without its flight, was counted). */
@@ -134,6 +159,11 @@
     ondepart: (row: StopRow) => void;
     /** A stopped row folded shut. */
     ongone: (row: StopRow) => void;
+    /**
+     * Where it stands: a tile in the page (`section`), or the whole of a
+     * card hung from Caw's switch (`card`), whose surface it is.
+     */
+    look?: "section" | "card";
     /** Its attachments (where it stands, its place to park): on its section. */
     [key: symbol]: unknown;
   } = $props();
@@ -150,6 +180,12 @@
   const rows = $derived(job.rows);
   const phase = $derived(job.phase);
   const total = $derived(job.total);
+  /** Caw off: each row is checked to stop, the unchecked ones kept running. */
+  const picks = $derived(job.kind === "caw-off");
+  /** Before the press: a delete's box and Caw off's boxes can still change. */
+  const choosing = $derived(
+    phase === "none" || phase === "list" || phase === "armed"
+  );
   /** The rows a stop now would cut mid-turn (stop-work `midTurn`). */
   const cut = $derived(
     rows.filter(
@@ -188,7 +224,48 @@
     };
   };
 
-  const listed = $derived(rows.length);
+  /* ── Caw off's boxes ────────────────────────────────────────────── */
+
+  const on = $derived(new Set(job.picked));
+  const under = (id: string): string[] => [
+    id,
+    ...rows
+      .filter((row) => row.s.parentId === id)
+      .flatMap((row) => under(row.s.id)),
+  ];
+  const leadsOf = (id: string): string[] => {
+    const lead = rows.find((row) => row.s.id === id)?.s.parentId;
+    return lead ? [lead, ...leadsOf(lead)] : [];
+  };
+
+  /** A row's box: everything under it turns with it; unchecked, so do the leads above it. */
+  function toggle(id: string, next: boolean): void {
+    const set = new Set(job.picked);
+    for (const each of under(id)) {
+      if (next) {
+        set.add(each);
+      } else {
+        set.delete(each);
+      }
+    }
+    if (!next) {
+      for (const lead of leadsOf(id)) {
+        set.delete(lead);
+      }
+    }
+    onpick?.(rows.filter((row) => set.has(row.s.id)).map((row) => row.s.id));
+  }
+
+  const picked = $derived(rows.filter((row) => on.has(row.s.id)).length);
+  /** "All N running": while it asks and through the stops, over a list of more than one. */
+  const allShown = $derived(
+    picks &&
+      rows.length > 1 &&
+      (choosing || phase === "stopping" || phase === "ending")
+  );
+
+  /** What the confirm stops: every row, or Caw off's checked ones. */
+  const listed = $derived(picks ? picked : rows.length);
   const stopped = $derived(
     rows.filter((row) => row.state === "stopped").length
   );
@@ -198,7 +275,10 @@
       stopped -
       rows.filter((row) => row.owed && row.state === "away").length
   );
-  const arrivedCount = $derived(rows.filter((row) => row.arrived).length);
+  /** Landed in the button: a kept row is counted done for the job, never for the ring. */
+  const arrivedCount = $derived(
+    rows.filter((row) => row.arrived && row.state !== "kept").length
+  );
   const plural = (n: number, one: string, many: string) =>
     n === 1 ? one : many;
 
@@ -326,11 +406,6 @@
       done()
     )
   );
-  /** A delete's box can still change: its press has not gone. */
-  const choosing = $derived(
-    phase === "none" || phase === "list" || phase === "armed"
-  );
-
   /** What the stops did: "Stopped 2 sessions. 1 stops when obelisk is back."; nothing when none ran. */
   function done(): string {
     if (rows.length === 0) {
@@ -342,6 +417,13 @@
       return endedLine;
     }
     const machines = [...new Set(away.map((row) => nameOf(row.s.machineId)))];
+    if (picks) {
+      return cawOffWords.done(
+        stopped,
+        away.length,
+        machines.length === 1 ? (machines[0] ?? null) : null
+      );
+    }
     const back =
       machines.length === 1
         ? `when ${machines[0]} is back`
@@ -354,7 +436,8 @@
       case "none":
         return words.plain;
       case "list":
-        return words.stop(listed);
+        // Caw off with none checked just turns him off.
+        return listed === 0 ? words.plain : words.stop(listed);
       case "armed": {
         // A turn that ended while armed leaves nothing to warn of.
         return cut > 0 ? words.armed(listed, cut) : words.stop(listed);
@@ -385,8 +468,9 @@
   const cancelLabel = $derived.by(() => {
     switch (phase) {
       case "stopping":
-      case "fail":
         return words.keep;
+      case "fail":
+        return picks ? cawOffWords.close : words.keep;
       case "done":
         return projectEndWords.close;
       case "ending":
@@ -397,17 +481,41 @@
         return projectEndWords.cancel;
     }
   });
+  /** Stop waiting parks Caw off's stops: nothing calls back a Caw already off. */
   const cancelPress = () =>
-    phase === "stopping" || phase === "fail" ? onkeep() : leave();
+    (phase === "stopping" || phase === "fail") && !picks ? onkeep() : leave();
+  /** The confirm's look: Caw off's plain with nothing to stop, else destructive; a delete's destructive; plain once ended. */
+  const confirmLook = $derived.by(() => {
+    if (phase === "done") {
+      return "outline";
+    }
+    if (picks) {
+      return choosing && listed === 0 ? "default" : "destructive";
+    }
+    return job.kind === "delete" ? "destructive" : "outline";
+  });
 
-  /** A row's place in the tree: under its lead when its lead is listed, else a root of its own. */
-  const rootOf = (row: StopRow): string | null =>
-    row.s.parentId !== null && rows.some((each) => each.s.id === row.s.parentId)
-      ? row.s.parentId
-      : null;
+  /** Still listed: not folded shut; Caw off's, once pressed, only what he stops. */
+  const shown = (row: StopRow) =>
+    !row.gone && (!picks || choosing || on.has(row.s.id));
+  /** A row's place in the tree: under its nearest listed lead, else a root of its own. */
+  function rootOf(row: StopRow): string | null {
+    let lead = row.s.parentId;
+    while (lead !== null) {
+      const at = rows.find((each) => each.s.id === lead);
+      if (!at) {
+        return null;
+      }
+      if (shown(at)) {
+        return lead;
+      }
+      lead = at.s.parentId;
+    }
+    return null;
+  }
   /** The rows still listed under `parentId`: a lead's own, or the roots. */
   const shownUnder = (parentId: string | null) =>
-    rows.filter((row) => rootOf(row) === parentId && !row.gone);
+    rows.filter((row) => shown(row) && rootOf(row) === parentId);
   /** The rows as one flat tree on the nesting lines (tree-lines.ts). */
   const tree = $derived(
     flatTree(
@@ -438,8 +546,13 @@
       return { word: "Couldn't stop", icon: Failed, tone: "failed" } as const;
     }
     if (row.state === "away") {
+      const machine = nameOf(row.s.machineId);
       return {
-        word: `Stops when ${nameOf(row.s.machineId)} is back`,
+        // Caw off's unchecked row runs on: only its machine is away.
+        word:
+          picks && choosing && !on.has(row.s.id)
+            ? cawOffWords.away(machine)
+            : `Stops when ${machine} is back`,
         icon: Away,
         tone: "quiet",
       } as const;
@@ -469,8 +582,29 @@
     return activity === "working" ? ("live" as const) : undefined;
   }
 
-  /** The rows' columns: mark and title, status, trailing figure. */
-  const TRAY_COLS = "minmax(0, 1fr) max-content max-content";
+  /** The rows' columns: mark and title, status, trailing figure, and Caw off's box. */
+  const trayCols = $derived(
+    `minmax(0, 1fr) max-content max-content${picks ? " max-content" : ""}`
+  );
+
+  /**
+   * A row that leaves the list unflown (Caw off's kept rows as he is
+   * pressed off) or comes back to it (the press refused) folds; a stopped
+   * row has already folded shut behind its tile.
+   */
+  const rowFold = (
+    li: HTMLElement,
+    _: unknown,
+    options: Parameters<typeof unfold>[2]
+  ) =>
+    li.hasAttribute("data-flown") ? { duration: 0 } : unfold(li, {}, options);
+
+  /** The confirm's rest icon, what the end does: the slot the tiles land in. */
+  const CONFIRM_ICON = {
+    forget: IconArchive,
+    delete: IconDeleteForGood,
+    "caw-off": IconMoonSleep,
+  } as const;
 
   /** A landed tile fades into the ring, as an old glyph fades. */
   const intoRing = glyphOut;
@@ -480,9 +614,7 @@
   {#each tree as entry (entry.key)}
     {@const { line, node: row } = entry}
     {@const status = statusOf(row)}
-    {@const kids = rows.filter(
-      (each) => each.s.parentId === row.s.id && !each.gone
-    )}
+    {@const kids = shownUnder(row.s.id)}
     {@const Sprite = sessionSprite(row.s.id)}
     {@const shownAs = row.view}
     {@const title =
@@ -501,6 +633,8 @@
       data-row={row.s.id}
       style:--line-depth={line.depth}
       {@attach item(row.s.id)}
+      data-flown={row.departed || undefined}
+      transition:rowFold
     >
       <TreeLine {line} />
       <div
@@ -512,11 +646,18 @@
         <!-- The row's three cells stand on the list's columns (subgrid): its
              mark and title, then its status as wide as the widest status
              shown, then its trailing figure, so the title takes all the
-             room the others leave. A nested list's inset moves only the
-             first. -->
-        <div
+             room the others leave; Caw off's box last. A nested list's
+             inset moves only the first. While his boxes can change, the
+             whole row is its box's label. -->
+        <svelte:element
+          this={picks && choosing ? "label" : "div"}
+          for={picks && choosing ? `${uid}-${row.s.id}` : undefined}
           data-slot="row"
-          class="group col-span-full grid min-h-(--row-compact-h) grid-cols-subgrid items-center py-0 pr-(--row-compact-pad-end) pl-(--row-compact-gap) text-ink-strong"
+          class={[
+            "group col-span-full grid min-h-(--row-compact-h) grid-cols-subgrid items-center py-0 pr-(--row-compact-pad-end) pl-(--row-compact-gap) text-ink-strong",
+            picks && "rounded-sm",
+            picks && choosing && "hover:bg-surface-hover",
+          ]}
           data-away={row.state === "away" || undefined}
         >
           <span
@@ -539,7 +680,7 @@
               data-slot="title"
               class="m-0 min-w-0 flex-auto overflow-clip type-label text-balance text-ellipsis whitespace-nowrap text-ink-strong"
               ><span class="sr-only">{status.word}: </span>
-              {#if shownAs.href}
+              {#if shownAs.href && !(picks && choosing)}
                 <a
                   class="text-inherit no-underline hover:underline hover:underline-offset-3"
                   href={shownAs.href}>{title}</a
@@ -598,7 +739,23 @@
             class="num type-meta text-end whitespace-nowrap text-ink-muted @max-stop-tray/stop-tray:group-data-away:row-start-1 @max-stop-tray/stop-tray:group-data-away:col-start-3 @max-stop-tray-rail/stop-tray:hidden"
             >{trailOf(row)}</span
           >
-        </div>
+          {#if picks}
+            <!-- Settled through the stops: only checked rows stand then. -->
+            <span
+              data-slot="pick"
+              class="grid flex-none place-items-center @max-stop-tray/stop-tray:group-data-away:row-start-1 @max-stop-tray/stop-tray:group-data-away:col-start-4"
+              data-box
+            >
+              <Checkbox
+                id="{uid}-{row.s.id}"
+                aria-label={cawOffWords.stopOne(title)}
+                checked={on.has(row.s.id)}
+                disabled={!choosing}
+                onCheckedChange={(next) => toggle(row.s.id, next)}
+              />
+            </span>
+          {/if}
+        </svelte:element>
         <RowFault
           again={() => onstopone(row.s.id)}
           class="col-span-full"
@@ -624,26 +781,38 @@
 {/snippet}
 
 {#if job.open}
-  <!-- Unfolds under what asked for it, in the page's flow. -->
+  <!-- Unfolds under what asked for it, in the page's flow. In a card, its
+       words and actions stand one row gap in from the rows' fills, as a
+       menu's do, the fills one gap in from its edge (the card's
+       `c-floating-pad`). -->
   <section
     aria-labelledby="{uid}-title"
     class={cn(
-      "@container/stop-tray min-w-0 py-space-1 ps-(--ask-indent) pe-(--ask-end)",
+      "@container/stop-tray min-w-0 ps-(--ask-indent) pe-(--ask-end)",
+      look === "section" ? "py-space-1" : "py-(--row-compact-gap)",
       className
     )}
     data-stop-tray={job.projectId}
     data-stop-kind={job.kind}
     data-phase={phase}
+    style:--ask-indent={look === "card" ? "var(--row-compact-gap)" : undefined}
+    style:--ask-end={look === "card" ? "var(--row-compact-gap)" : undefined}
     transition:unfold
     {...rest}
   >
     <!-- One column as wide as the tile, never its rows' widest title: a
-         row truncates inside it rather than pushing the confirm out. -->
+         row truncates inside it rather than pushing the confirm out. In a
+         card the card is its surface. Its height tweens to each state's. -->
     <div
       bind:this={tile}
       data-slot="tile"
-      class="grid grid-cols-1 gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
+      class={[
+        "grid grid-cols-1 gap-space-3",
+        look === "section" &&
+          "rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised",
+      ]}
       {@attach land(() => share)}
+      {@attach morph()}
     >
       <div data-slot="head" class="flex min-w-0 gap-space-3">
         <div data-slot="words" class="grid min-w-0 flex-auto gap-space-1">
@@ -671,17 +840,61 @@
           </p>
         </div>
       </div>
-      {#if rows.some((row) => !row.gone)}
-        <ul
-          data-slot="sessions"
-          aria-label="Running sessions"
-          class="kit-tree grid grid-cols-(--tray-cols) gap-x-(--row-compact-gap) overflow-x-clip clip-margin-space-2"
-          data-roots="touch"
-          style:--tray-cols={TRAY_COLS}
-          {@attach echoBeat()}
+      {#if allShown || rows.some(shown)}
+        <div
+          data-slot="list"
+          class={[
+            "grid min-w-0 grid-cols-1 gap-space-1",
+            look === "card" && "-mx-(--row-compact-gap)",
+          ]}
         >
-          {@render branch()}
-        </ul>
+          {#if allShown}
+            <!-- Caw off's box over the rows, in their box column, checks or
+                 clears them all. It stays through the stops, settled, so the
+                 list under it holds its place. -->
+            <label
+              for="{uid}-all"
+              data-slot="all"
+              class={[
+                "mark-line flex min-h-(--row-compact-h) items-center gap-(--row-compact-gap) rounded-sm ps-(--row-compact-gap) pe-(--row-compact-pad-end)",
+                choosing && "hover:bg-surface-hover",
+              ]}
+              transition:unfold
+            >
+              <span
+                data-box
+                class="min-w-0 flex-auto type-label text-ink-strong"
+                >{cawOffWords.all(rows.length)}</span
+              >
+              <span
+                data-box
+                class="grid size-icon-md flex-none place-items-center"
+              >
+                <Checkbox
+                  id="{uid}-all"
+                  checked={picked === rows.length}
+                  disabled={!choosing}
+                  indeterminate={picked > 0 && picked < rows.length}
+                  onCheckedChange={(next) => {
+                    onpick?.(next ? rows.map((row) => row.s.id) : []);
+                  }}
+                />
+              </span>
+            </label>
+          {/if}
+          {#if rows.some(shown)}
+            <ul
+              data-slot="sessions"
+              aria-label={picks ? cawOffWords.list : "Running sessions"}
+              class="kit-tree grid grid-cols-(--tray-cols) gap-x-(--row-compact-gap) overflow-x-clip clip-margin-space-2"
+              data-roots="touch"
+              style:--tray-cols={trayCols}
+              {@attach echoBeat()}
+            >
+              {@render branch()}
+            </ul>
+          {/if}
+        </div>
       {/if}
       {#if job.kind === "delete"}
         <FromDiskBox
@@ -713,16 +926,14 @@
           arrivals={landed}
           data-stop-confirm
           failed={phase === "fail"}
-          icon={job.kind === "delete" ? IconDeleteForGood : IconArchive}
+          icon={CONFIRM_ICON[job.kind]}
           label={confirmLabel}
           onclick={press}
           {pending}
           {pendingLabel}
           {progress}
           size="sm"
-          variant={job.kind === "delete" && phase !== "done"
-            ? "destructive"
-            : "outline"}
+          variant={confirmLook}
         />
       </div>
     </div>

@@ -9,7 +9,7 @@
    * while that row is not drawn (a phone's closed sheet), under the head.
    * Caw turned off with what he started still stopping (CawLeadSwitch) is
    * the same kind of work on the same project, so it parks here too, and
-   * its section (CawOffTray) stands here when reopened here.
+   * its tray stands here when reopened here.
    *
    * With nothing running it is the plain question: its verb, the end,
    * "Forgotten" or "Deleted" held in place, then the project's page leaves
@@ -31,7 +31,6 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import { cn } from "#lib/utils.js";
-  import CawOffTray from "./CawOffTray.svelte";
   import { type EndKind, endAtRail, endHost } from "./project-end.svelte";
   import type { ProjectRow } from "./projects";
   import RowFault from "./RowFault.svelte";
@@ -150,11 +149,7 @@
 {/if}
 {#each jobs as job (job.kind)}
   {#if job.at === at}
-    {#if job.kind === "caw-off"}
-      <CawOffTray class={className} {job} />
-    {:else}
-      <StopTray class={className} {job} {opener} />
-    {/if}
+    <StopTray class={className} {job} {opener} />
   {/if}
   <!-- Caw's off tray put away in his settings is said there while they
        stand open (CawLeadSwitch); here once they close. Reopened here (his

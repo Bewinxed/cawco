@@ -15,7 +15,7 @@
   import { cn } from "#lib/utils.js";
   import RowFault from "./RowFault.svelte";
   import {
-    parkedWords,
+    endWordsOf,
     type StopJob,
     stopShare,
     stopWork,
@@ -38,7 +38,7 @@
         job.phase === "fail" ||
         job.phase === "ending")
   );
-  const words = $derived(parkedWords(job));
+  const words = $derived(endWordsOf(job));
   const stopped = $derived(
     job.rows.filter((row) => row.state === "stopped").length
   );

@@ -1,9 +1,11 @@
 /**
  * The words of turning Caw off while what his conversation started still
- * runs: the section under his switch (the dashboard's StopTrayPick, its job
+ * runs: the tray hung from his switch (the dashboard's StopTray, its job
  * in stop-work.svelte.ts), each row checked to stop, one confirm. Unchecked
  * rows say nothing of their own: the empty box says they keep running.
  */
+import type { EndWords } from "./project-ends";
+
 export const cawOffWords = {
   /** What still runs, unread after a reload, the hub refusing: what came of it (`hubRefusal`). */
   stillRunningUnreadThen:
@@ -34,11 +36,7 @@ export const cawOffWords = {
   turnOff: "Turn Caw off",
   /** The confirm while the stops land. */
   stopping: (count: number) => `Stopping ${count}…`,
-  /**
-   * The confirm's word once he is off, where the confirm ends on it as
-   * Forget's ends on "Forgotten" (StopTrayPick `endsOn: "confirm"`): the
-   * owner's open call on calls-1031-evening.
-   */
+  /** The confirm's word once he is off, as Forget's ends on "Forgotten". */
   isOff: "Caw is off",
   /** Puts the ask away; Caw stays on. */
   cancel: "Cancel",
@@ -66,3 +64,24 @@ export const cawOffWords = {
   partway: (stopped: number, total: number) =>
     `Stopped ${stopped} of ${total}; Caw is off.`,
 };
+
+/**
+ * Turning Caw off for `project` as the stop tray says every end: its
+ * question, then that he is off; while it asks and stops, what asleep
+ * means, and once he is off what stopped (`stopped`, said by the tray).
+ * He is never asked twice, so his armed press reads as his first.
+ */
+export const cawOffEndWords = (project: string): EndWords => ({
+  title: cawOffWords.ask(project),
+  titleDone: cawOffWords.off(project),
+  plain: cawOffWords.turnOff,
+  stop: cawOffWords.stop,
+  armed: cawOffWords.stop,
+  ending: cawOffWords.stopping(1),
+  keep: cawOffWords.stopWaiting,
+  ended: cawOffWords.isOff,
+  line: (step, _n, _cut, stopped) =>
+    step === "done" ? stopped : cawOffWords.waits,
+  parked: (stopped, total) => cawOffWords.parked(project, stopped, total),
+  partway: cawOffWords.partway,
+});

@@ -40,6 +40,7 @@
 
 <script lang="ts">
   import { cawOffWords } from "@cawco/core/words/caw-off";
+  import StopParked from "#lib/cawco/StopParked.svelte";
   /**
    * Whether the project's events reach a conversation, the project's own
    * switch (fable-lead-switch.md §1): one component wherever it stands,
@@ -49,7 +50,7 @@
    * Turning it off (The Stay In Context Rule): nothing the project's
    * conversation started runs, and it just flips. Sessions it started still
    * run: the confirm grows out of the switch in the house's anchored
-   * popover (CawOffTray, its Caw-off job in stop-work.svelte.ts) listing
+   * popover (StopTray, its Caw-off job in stop-work.svelte.ts) listing
    * each one, every row checked; you uncheck what should keep running, and
    * one confirm stops the checked ones and turns him off, the popover
    * closing as it is pressed. The stops go on, said under the switch while
@@ -59,8 +60,7 @@
    * now. The hub's answer is the switch's state: a refusal leaves it where
    * the hub says Caw is, its words under it.
    */
-  import CawOffTray from "#lib/cawco/CawOffTray.svelte";
-  import StopParked from "#lib/cawco/StopParked.svelte";
+  import StopTray from "#lib/cawco/StopTray.svelte";
   import NsPopover from "#lib/cawco/spawn/NsPopover.svelte";
   import { BarCard } from "#lib/components/ui/bar-glass/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
@@ -161,7 +161,7 @@
       >
         <!-- The card's own inset: the settings frame draws none. -->
         <div class="p-c-floating-pad">
-          <CawOffTray job={offJob} look="card" />
+          <StopTray job={offJob} look="card" />
         </div>
       </BarCard>
     </Popover.Root>
@@ -180,7 +180,7 @@
       open={standing}
       width={400}
     >
-      <CawOffTray job={offJob} look="card" />
+      <StopTray job={offJob} look="card" />
     </NsPopover>
   {/if}
 {/if}
