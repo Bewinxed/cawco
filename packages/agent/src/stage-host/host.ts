@@ -1547,8 +1547,8 @@ function keepDrawing(
 /**
  * The frames and moves of states file `file`'s kept report, as it stood
  * before a post of the same content (`before`), of the stories that post
- * did not draw: a person's graph loads its live story and the moves from it
- * alone, and the agent's own graph reads the rest.
+ * did not draw: a person's graph loads the stories its agent named and their
+ * moves alone, and the agent's own graph reads the rest.
  */
 function keepUnposted(file: string, before: SectionRender | undefined): void {
   const now = reports.get(file);
@@ -1617,7 +1617,7 @@ async function keepReport(body: unknown): Promise<void> {
           ),
         },
       });
-      // A person's graph draws only its live story and the moves from it (core `liveKept`): what it did not post of the same content stays as the agent's whole read drew it.
+      // A person's graph draws only the stories its agent named and their moves (core `namedKept`): what it did not post of the same content stays as the agent's whole read drew it.
       if (seen) {
         keepUnposted(section.file, kept?.section);
       }

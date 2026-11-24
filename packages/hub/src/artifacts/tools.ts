@@ -237,7 +237,7 @@ export const artifactCreate = {
           .max(CANVAS_SPEC_LIMITS.files),
       ])
       .optional()
-      .describe("Each file's live story, `path:Story`; whole with reading."),
+      .describe("Each story they judge, `path:Story`; whole with reading."),
     ...canvasFields,
     directions: designDirections.describe(
       "Two or more directions of one design, a states file or page each: one graph switching between them; their pick is artifact_read's `picked`."

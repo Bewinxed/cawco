@@ -65,8 +65,8 @@ interface GraphState {
   line: number;
   machine: string;
   /**
-   * On the person's graph (the spec's `live`), every state but the live
-   * story's: the end of a move from it, drawn on the Map and played on the
+   * On the person's graph (the spec's `named`), a state its agent did not
+   * name: a move's end or start, drawn on the Map and played on the
    * Animation face, never a step of the path or a row of the states menu.
    */
   moveOnly: boolean;
@@ -108,6 +108,8 @@ export interface Review {
   machines: Machine[];
   moves: Move[];
   name: string;
+  /** On the person's graph, the stories its agent named, in the order named: his steps. */
+  named: readonly string[] | undefined;
   /** The states in the file's order. */
   order: string[];
   states: Record<string, GraphState>;
@@ -169,10 +171,10 @@ function stateOf(
   machine: string,
   names: ReadonlySet<string>,
   stories: readonly Story[],
-  live: string | undefined
+  named: readonly string[] | undefined
 ): GraphState {
   return {
-    moveOnly: live !== undefined && story.name !== live,
+    moveOnly: named !== undefined && !named.includes(story.name),
     id: story.name,
     name: shownName(story, stories),
     note: story.label,
@@ -303,7 +305,7 @@ export function reviewOf(
       machine,
       names,
       sheet.stories,
-      spec.live?.[sheet.file]
+      spec.named?.[sheet.file]
     );
     machines.set(machine, [...(machines.get(machine) ?? []), story.name]);
   }
@@ -320,6 +322,7 @@ export function reviewOf(
   return {
     name,
     file: sheet.file,
+    named: spec.named?.[sheet.file],
     states,
     order,
     machines: [...machines].map(([machine, path]) => ({ name: machine, path })),
@@ -346,9 +349,14 @@ export function holesOf(review: Review, state: string): Holes {
 export const pathOf = (review: Review): string[] =>
   review.machines.flatMap((machine) => stepsOf(review, machine.path));
 
-/** The states of `path` the person steps to: on his graph, the live story's alone (`moveOnly`). */
-export const stepsOf = (review: Review, path: readonly string[]): string[] =>
-  path.filter((id) => !review.states[id]?.moveOnly);
+/** The states of `path` the person steps to: on his graph, those its agent named alone (`moveOnly`), in the order named. */
+export const stepsOf = (review: Review, path: readonly string[]): string[] => {
+  const steps = path.filter((id) => !review.states[id]?.moveOnly);
+  const { named } = review;
+  return named
+    ? steps.toSorted((a, b) => named.indexOf(a) - named.indexOf(b))
+    : steps;
+};
 
 /**
  * The state before `state`: where the move into it starts, when its states

@@ -47,9 +47,9 @@ import {
   canvasSpecOf,
   FORMS,
   type Interaction,
-  liveKept,
   MEASURE_PARAM,
   type MoveRender,
+  namedKept,
   type PageBy,
   type PageError,
   type PageReport,
@@ -1051,16 +1051,16 @@ export function boot(options: BootOptions): void {
 
   /**
    * A section's module as this canvas loads it: on a person's graph (the
-   * spec's `live`), its live story and the moves from it alone, so no other
-   * story of the file is drawn, listed or reported here.
+   * spec's `named`), the stories its agent named and their moves alone, so
+   * no other story of the file is drawn, listed or reported here.
    */
-  function liveOnly(mod: SectionModule): SectionModule {
-    const live = spec.live?.[mod.SHEET.file];
-    return live === undefined
+  function namedOnly(mod: SectionModule): SectionModule {
+    const named = spec.named?.[mod.SHEET.file];
+    return named === undefined
       ? mod
       : {
           ...mod,
-          SHEET: { ...mod.SHEET, stories: liveKept(mod.SHEET.stories, live) },
+          SHEET: { ...mod.SHEET, stories: namedKept(mod.SHEET.stories, named) },
         };
   }
 
@@ -1078,7 +1078,7 @@ export function boot(options: BootOptions): void {
       const since = performance.now();
       let loaded: SectionModule;
       try {
-        loaded = liveOnly(await options.load(section.file, !!section.failure));
+        loaded = namedOnly(await options.load(section.file, !!section.failure));
         section.mod = loaded;
         await seeded(section);
       } catch (error) {
@@ -1473,7 +1473,7 @@ export function boot(options: BootOptions): void {
     }
     const sheet: SheetOnPage = {
       ...read,
-      stories: liveKept(read.stories, spec.live?.[section.file]),
+      stories: namedKept(read.stories, spec.named?.[section.file]),
       file: section.file,
     };
     window.__cawcoSheetsOnPage = {
@@ -1727,7 +1727,7 @@ export function boot(options: BootOptions): void {
   };
 
   window.addEventListener("cawco:section", (event) => {
-    const mod = event.detail && liveOnly(event.detail);
+    const mod = event.detail && namedOnly(event.detail);
     const section = sectionOf(mod?.SHEET.file ?? "");
     if (!section) {
       return;

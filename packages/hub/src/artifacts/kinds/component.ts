@@ -47,10 +47,10 @@ import {
   directionsStaged,
   drawsHeld,
   errorsSaid,
-  liveAsked,
-  liveProblem,
-  liveReport,
   movesSaid,
+  namedAsked,
+  namedProblem,
+  namedReport,
   READ_HINT,
   renderSaid,
   specOf,
@@ -284,8 +284,8 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       });
     }
     drawnWritten(row, report);
-    // The person's graph loads each file's live story and the moves from it alone (core `liveKept`).
-    return liveReport(report, sheetOf(row)?.spec.live);
+    // The person's graph loads the stories its agent named and their moves alone (core `namedKept`).
+    return namedReport(report, sheetOf(row)?.spec.named);
   };
   /** The shapes a decision page's media carries of design graph `row` (core `CanvasShapes`). */
   const shapesOf = (row: ArtifactRow): CanvasShapes => {
@@ -553,15 +553,15 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     if (asked.length === 0) {
       return problem(400, {
         code: "artifact-sheet-file-none",
-        detail: `A design graph takes file: on the person's graph each component's live story, path:Story in the .stories.ts beside it (a list, one section each); on your reading (reading: true), whole states files. Example: ${COMPONENT_EXAMPLE}.`,
+        detail: `A design graph takes file: on the person's graph each story they judge, path:Story in the .stories.ts beside its component (a list, in the order they step through them); on your reading (reading: true), whole states files. Example: ${COMPONENT_EXAMPLE}.`,
       });
     }
     const misfit = canvasProblem({ ...input, directions }, asked);
     if (misfit) {
       return problem(400, { code: "artifact-sheet-unfit", detail: misfit });
     }
-    // The person's graph names each file's live story, path:Story; a reading loads whole files.
-    const entries = liveAsked(asked, input.reading === true);
+    // The person's graph names each story it loads, path:Story; a reading loads whole files.
+    const entries = namedAsked(asked, input.reading === true);
     if (typeof entries === "string") {
       return problem(400, { code: "artifact-sheet-unfit", detail: entries });
     }
@@ -576,7 +576,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       ? said
       : {
           asked: entries.files,
-          live: entries.live,
+          named: entries.named,
           directions: directions?.map((one) => ({
             ...one,
             file: statesEntryOf(one.file).file,
@@ -586,20 +586,20 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
   };
   /**
    * Why a design graph's states files, as the stage read them (`report`),
-   * can't open: a live story the person's graph names (`live`) that its
-   * file doesn't export or that is a move, or stories that differ only by
-   * their width among those it loads.
+   * can't open: a story the person's graph names (`named`) that its file
+   * doesn't export, or stories that differ only by their width among those
+   * it loads.
    */
   const reportUnfit = (
     report: RenderReport,
-    live: Readonly<Record<string, string>>
+    named: Readonly<Record<string, readonly string[]>>
   ) => {
-    const named = liveProblem(report, live);
-    if (named) {
-      return problem(400, { code: "artifact-sheet-unfit", detail: named });
+    const missing = namedProblem(report, named);
+    if (missing) {
+      return problem(400, { code: "artifact-sheet-unfit", detail: missing });
     }
     // One state is one story: the graph draws it at each width (show skill).
-    const widthOnly = liveReport(report, live).widthOnly ?? [];
+    const widthOnly = namedReport(report, named).widthOnly ?? [];
     if (widthOnly.length === 0) {
       return null;
     }
@@ -697,21 +697,21 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     }
     const { machineId, workspace } = staged;
     const files = staged.opened.report.sections.map((one) => one.file);
-    // Each live story by its file as the stage names it: the report's sections stand in the order the files were asked.
-    const live = Object.fromEntries(
+    // Each file's named stories by its file as the stage names it: the report's sections stand in the order the files were asked.
+    const named = Object.fromEntries(
       asked.flatMap((file, place) => {
-        const story = sheetAsk.live[file];
+        const stories = sheetAsk.named[file];
         const as = files[place];
-        return story === undefined || as === undefined ? [] : [[as, story]];
+        return stories === undefined || as === undefined ? [] : [[as, stories]];
       })
     );
-    const unfit = reportUnfit(staged.opened.report, live);
+    const unfit = reportUnfit(staged.opened.report, named);
     if (unfit) {
       return unfit;
     }
     const opened: StageOpened = {
       ...staged.opened,
-      report: liveReport(staged.opened.report, live),
+      report: namedReport(staged.opened.report, named),
     };
     // Each direction names its file as the stage does, from the toolchain root.
     const spec: CanvasSpec = {
@@ -719,7 +719,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         ...input,
         directions: directions && directionsStaged(directions, asked, files),
       }),
-      ...(Object.keys(live).length > 0 ? { live } : {}),
+      ...(Object.keys(named).length > 0 ? { named } : {}),
     };
     const source: PreviewSource = {
       port: opened.port,

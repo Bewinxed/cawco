@@ -668,7 +668,7 @@ export interface RenderReport {
    * Each story of the report's states files, as `File:Story`, to the story
    * its move starts from (`from`); null for a resting story. The stage
    * reads it off the files; optional on the wire, as `widthOnly`. The hub
-   * reads a person's graph's live stories against it ({@link liveKept}).
+   * reads a person's graph's named stories against it ({@link namedKept}).
    */
   froms?: Record<string, string | null>;
   page: { errors: PageError[] };
@@ -929,15 +929,16 @@ export interface CanvasSpec {
   edges?: CanvasEdge[];
   /** Story → the parent story or section heading it groups under. */
   group?: Record<string, string>;
-  /**
-   * A graph made for the person: each states file's live story, by its file
-   * from the toolchain root. The graph loads that story and each move from
-   * it (a story whose `from` names it) and no other story of the file
-   * ({@link liveKept}); a file it names none of loads whole, as an agent's
-   * own reading does.
-   */
-  live?: Record<string, string>;
   name?: string;
+  /**
+   * A graph made for the person: the stories its agent named, by their
+   * states file from the toolchain root, each file's in the order named.
+   * The graph loads those, the moves into and out of them, and no other
+   * story of the file ({@link namedKept}); its steps are the named stories
+   * alone. A file it names none of loads whole, as an agent's own reading
+   * does.
+   */
+  named?: Record<string, string[]>;
   /** A design folder's title ({@link designOf}): the name its one page shows by on the graph, where no direction names it. */
   title?: string;
 }
@@ -1041,11 +1042,12 @@ export const canvasSpecOf = (value: unknown): CanvasSpec => {
       ? value.edges.flatMap((one) => edgeOf(one) ?? [])
       : undefined,
     group,
-    live: isRecord(value.live)
+    named: isRecord(value.named)
       ? Object.fromEntries(
-          Object.entries(value.live).filter(
-            (entry): entry is [string, string] => typeof entry[1] === "string"
-          )
+          Object.entries(value.named).flatMap(([file, stories]) => {
+            const names = textsOf(stories);
+            return names ? [[file, names]] : [];
+          })
         )
       : undefined,
     name: textOf(value.name),
@@ -1054,17 +1056,33 @@ export const canvasSpecOf = (value: unknown): CanvasSpec => {
 };
 
 /**
- * The stories of a states file a graph loads: with `live` (the person's
- * graph, {@link CanvasSpec} `live`), that story and each move from it, a
- * story whose `from` names it; with none, every one.
+ * The stories of a states file a graph loads, in the file's order: with
+ * `named` (the person's graph, {@link CanvasSpec} `named`), those stories,
+ * each move from one of them (a story whose `from` names it), and the
+ * stories a named move plays from, back to where its chain starts; with
+ * none, every one.
  */
-export const liveKept = <T extends { from: string | null; name: string }>(
+export const namedKept = <T extends { from: string | null; name: string }>(
   stories: readonly T[],
-  live: string | undefined
-): T[] =>
-  live === undefined
-    ? [...stories]
-    : stories.filter((one) => one.name === live || one.from === live);
+  named: readonly string[] | undefined
+): T[] => {
+  if (named === undefined) {
+    return [...stories];
+  }
+  const fromOf = new Map(stories.map((one) => [one.name, one.from]));
+  const kept = new Set(named);
+  for (const story of named) {
+    let from = fromOf.get(story) ?? null;
+    while (from !== null && !kept.has(from)) {
+      kept.add(from);
+      from = fromOf.get(from) ?? null;
+    }
+  }
+  return stories.filter(
+    (one) =>
+      kept.has(one.name) || (one.from !== null && named.includes(one.from))
+  );
+};
 
 /** `value`, the JSON the stage wrote each states file's {@link SectionPlan} as, read back by file. */
 export const sectionPlansOf = (value: unknown): Record<string, SectionPlan> =>
@@ -1389,12 +1407,12 @@ export const STORY_FILE = /\.stories\.[cm]?[jt]sx?$/u;
 
 /**
  * A states file as a design graph's create names it: the file alone (an
- * agent's own reading, which loads it whole), or `file:Story` naming its
- * live story (the person's graph, {@link CanvasSpec} `live`).
+ * agent's own reading, which loads it whole), or `file:Story` naming one
+ * story the person judges (the person's graph, {@link CanvasSpec} `named`).
  */
 export const STATES_ENTRY = /\.stories\.[cm]?[jt]sx?(?::[A-Z][A-Za-z0-9_]*)?$/u;
 
-/** A design graph's states entry ({@link STATES_ENTRY}) read: its file, and the live story it names, if any. */
+/** A design graph's states entry ({@link STATES_ENTRY}) read: its file, and the story it names, if any. */
 export const statesEntryOf = (
   entry: string
 ): { file: string; story: string | undefined } => {

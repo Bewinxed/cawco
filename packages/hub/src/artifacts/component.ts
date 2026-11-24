@@ -21,6 +21,7 @@ import {
   framesAlike,
   GRAPH_WIDTHS_SAID,
   type Interaction,
+  namedKept,
   type RenderReport,
   type SectionRender,
   type SectionUndrawn,
@@ -52,91 +53,97 @@ export const COMPONENT_EXAMPLE =
 /** What `artifact_create` takes, said whole when a body is malformed or names no `title`, `does` or `ask`. */
 export const CREATE_SHAPE = `artifact_create takes kind, name (a slug, for tools and URLs), title (a few plain words that name it to the person), does (pick | judge | try | draw), ask (one line, what the person does here) and that kind's fields. A design graph: { kind: "component", name, title, does: "judge", ask, file, edges?, group?, dials?, directions? }; directions [{ file, name, line }], one per states file of one design, two or more (file may then be left out; a direction that differs only by a value is a dial); a design folder, for work with no project behind it, a stack with no stage or a throwaway idea: { kind: "component", name, title, does: "judge", ask, html (one page) or dir (a folder: index.html at its top and anything it loads, React, Svelte or TypeScript with a package.json for its npm imports), content? ("document" | "chart" | "deck", each shown at its own size; a screen where it names none), dials?, directions? }, each direction { html or dir, name, line }, its dials cssVar alone, artifact_update with html, dir or directions changing it in place; edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle" | "text" | "action", label?, group?, min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`;
 
-/** An example of the person's graph's live stories, quoted by their refusals. */
-const LIVE_EXAMPLE =
-  'file: ["src/lib/caw/CawSettings.stories.ts:Live", "src/lib/caw/FleetTriggers.stories.ts:Live"]';
+/** An example of the person's graph's named stories, quoted by their refusals. */
+const NAMED_EXAMPLE =
+  'file: ["src/lib/caw/CawSettings.stories.ts:Live", "src/lib/caw/RowQuiet.stories.ts:Before", "src/lib/caw/RowQuiet.stories.ts:After"]';
 
-/** What the person's graph mounts, said by each refusal of its live stories. */
-const LIVE_RULE = `The person's graph mounts one live story per states file, named path:Story (${LIVE_EXAMPLE}): each state they should reach is a press on it or a dial, and each flow they should watch is a move, a story with from: "<the live story>" and a play. A checklist of states stays on a graph of your own with reading: true, which loads whole files.`;
+/** What the person's graph loads, said by each refusal of its named stories. */
+const NAMED_RULE = `The person's graph loads the stories you name, each as path:Story (${NAMED_EXAMPLE}): the live story, a variant, a Before and an After, each direction's live story, in the order they step through them. A move from a named story (from: "<it>" and a play) comes with it. Your checklist of states stays on a graph of your own with reading: true, which loads whole files.`;
 
 /**
  * A design graph's states entries (core `STATES_ENTRY`) read: each states
  * file as the agent named it, once, and on the person's graph (not
- * `reading`) the live story each names; or why they can't be taken.
+ * `reading`) the stories each names, in the order named; or why they
+ * can't be taken.
  */
-export function liveAsked(
+export function namedAsked(
   entries: readonly string[],
   reading: boolean
-): { files: string[]; live: Record<string, string> } | string {
+): { files: string[]; named: Record<string, string[]> } | string {
   const files: string[] = [];
-  const live: Record<string, string> = {};
+  const named: Record<string, string[]> = {};
   for (const entry of entries) {
     const { file, story } = statesEntryOf(entry);
     if (reading && story) {
       return `Your reading (reading: true) loads each states file whole: name ${file} without :${story}.`;
     }
     if (!(reading || story)) {
-      return `${file} names no live story. ${LIVE_RULE}`;
-    }
-    const named = live[file];
-    if (story && named !== undefined && named !== story) {
-      return `${file} is named with two stories, ${named} and ${story}. ${LIVE_RULE}`;
+      return `${file} names no story. ${NAMED_RULE}`;
     }
     if (story) {
-      live[file] = story;
+      const stories = named[file] ?? [];
+      named[file] = stories.includes(story) ? stories : [...stories, story];
     }
     if (!files.includes(file)) {
       files.push(file);
     }
   }
-  return { files, live };
+  return { files, named };
 }
 
 /**
- * Why the person's graph's live stories (`live`, each by its states file as
+ * Why the person's graph's named stories (`named`, by their states file as
  * the stage names it) can't open, read against the stage's report: a story
- * its file doesn't export, or one that is a move; null when each is a
- * resting story of its file, or the stage reads no `froms` (one from before
- * them).
+ * its file doesn't export; null when each is one, or the stage reads no
+ * `froms` (one from before them).
  */
-export function liveProblem(
+export function namedProblem(
   report: RenderReport,
-  live: Readonly<Record<string, string>>
+  named: Readonly<Record<string, readonly string[]>>
 ): string | null {
   const { froms } = report;
   if (!froms) {
     return null;
   }
-  for (const [file, story] of Object.entries(live)) {
-    const ref = `${file}:${story}`;
-    if (!(ref in froms)) {
-      return `${file} exports no story ${story}. ${LIVE_RULE}`;
-    }
-    const from = froms[ref];
-    if (from) {
-      return `${file}'s ${story} is a move from ${from}: name the resting story it moves from. ${LIVE_RULE}`;
+  for (const [file, stories] of Object.entries(named)) {
+    const missing = stories.find((story) => !(`${file}:${story}` in froms));
+    if (missing) {
+      return `${file} exports no story ${missing}. ${NAMED_RULE}`;
     }
   }
   return null;
 }
 
 /**
- * `report` as the person's graph loads it (core `liveKept`): of each states
- * file `live` names, its live story and the moves from it alone; a file it
- * names none of, whole.
+ * `report` as the person's graph loads it (core `namedKept`): of each
+ * states file `named` names, its named stories and their moves alone; a
+ * file it names none of, whole.
  */
-export function liveReport(
+export function namedReport(
   report: RenderReport,
-  live: Readonly<Record<string, string>> | undefined
+  named: Readonly<Record<string, readonly string[]>> | undefined
 ): RenderReport {
-  if (!live || Object.keys(live).length === 0) {
+  if (!named || Object.keys(named).length === 0) {
     return report;
   }
   const froms = report.froms ?? {};
+  /** Each states file's stories it loads, by its file: those `named` names of it, with their moves; every one of a file it names none of. */
+  const keptOf = new Map(
+    Object.entries(named).map(([file, stories]) => {
+      const all = Object.entries(froms).flatMap(([ref, from]) => {
+        const one = storyRefOf(ref);
+        return one.file === file ? [{ name: one.story, from }] : [];
+      });
+      // A stage from before `froms` reads none: the named stories alone.
+      const read =
+        all.length > 0 ? all : stories.map((name) => ({ name, from: null }));
+      return [file, new Set(namedKept(read, stories).map((one) => one.name))];
+    })
+  );
   const kept = (ref: string): boolean => {
     const { file, story } = storyRefOf(ref);
-    const one = file === undefined ? undefined : live[file];
-    return one === undefined || story === one || froms[ref] === one;
+    const keep = file === undefined ? undefined : keptOf.get(file);
+    return keep === undefined || keep.has(story);
   };
   return {
     ...report,
