@@ -26,7 +26,7 @@
  */
 
 /** The person's own presses and keys: what a page does inside one is theirs. */
-const PERSON_ACTS = new Set([
+const PERSON_ACTS: ReadonlySet<string> = new Set([
   "pointerdown",
   "pointerup",
   "mousedown",
@@ -41,6 +41,21 @@ const PERSON_ACTS = new Set([
   "keypress",
   "keyup",
 ]);
+
+/** `heard` called as each of the person's own presses and keys on this page is dispatched, before the page's own listeners. */
+export function onPersonAct(heard: () => void): void {
+  for (const type of PERSON_ACTS) {
+    addEventListener(
+      type,
+      (event) => {
+        if (event.isTrusted) {
+          heard();
+        }
+      },
+      { capture: true, passive: true }
+    );
+  }
+}
 
 /** Whether the event being handled now is the person's own press or key on this page. */
 export const personActing = (): boolean => {

@@ -86,7 +86,7 @@ import {
   STAGE_RING,
   STAGE_SEEK,
 } from "@cawco/core/stage-graph";
-import { queriesIn, userEventIn } from "@cawco/core/stage-play";
+import { queriesIn, type UserEvent, userEventIn } from "@cawco/core/stage-play";
 import { graphWords } from "@cawco/core/words/graph";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 import { holdFocus } from "./held-focus";
@@ -141,6 +141,7 @@ import {
   type Rewrite,
   rewriteSheet,
 } from "./pseudo";
+import { rigResumes, rigTurn } from "./rig-turn";
 import { onPageScheme, pageScheme } from "./scheme";
 import { bootStage } from "./stage";
 import {
@@ -1332,7 +1333,8 @@ export function boot(options: BootOptions): void {
     }
     const into: { error?: PageError } = {};
     const args = argsOf(section, from);
-    const mounted = mountInto(body, section, from, args, into);
+    // Each call into the story is a turn of the rig's, and its play resumes in one (rig-turn.ts).
+    const mounted = rigTurn(() => mountInto(body, section, from, args, into));
     await frameTick();
     const seen = new Set<Animation>();
     const reads: AnimationRead[] = [];
@@ -1357,18 +1359,22 @@ export function boot(options: BootOptions): void {
     let current = { ...args };
     try {
       const played = await readWithin(PLAY_LIMIT_MS, async () =>
-        play({
-          args: current,
-          canvasElement: body,
-          canvas: queriesIn(body),
-          userEvent: userEventIn(body),
-          step: async (_name: string, run: () => Promise<void>) => await run(),
-          update: async (next: Record<string, unknown>) => {
-            current = { ...current, ...next };
-            mounted?.update(next);
-            await frameTick();
-          },
-        })
+        rigTurn(() =>
+          play({
+            args: current,
+            canvasElement: body,
+            canvas: queriesIn(body),
+            userEvent: rigUser(userEventIn(body)),
+            step: rigResumes(
+              async (_name: string, run: () => Promise<void>) => await run()
+            ),
+            update: rigResumes(async (next: Record<string, unknown>) => {
+              current = { ...current, ...next };
+              mounted?.update(next);
+              await frameTick();
+            }),
+          })
+        )
       );
       if (played.kind === "unanswered") {
         throw new Error(`${to}'s play ran past ${PLAY_LIMIT_MS / 1000} s.`);
@@ -1404,6 +1410,17 @@ export function boot(options: BootOptions): void {
     return { mounted, move };
   }
 
+  /** A play's `userEvent` whose every press is a turn of the rig's, the play going on in one as it settles. */
+  const rigUser = (user: UserEvent): UserEvent => ({
+    click: rigResumes(user.click.bind(user)),
+    hover: rigResumes(user.hover.bind(user)),
+    keyboard: rigResumes(user.keyboard.bind(user)),
+    tab: rigResumes(user.tab.bind(user)),
+    type: rigResumes(user.type.bind(user)),
+    unhover: rigResumes(user.unhover.bind(user)),
+    wait: rigResumes(user.wait.bind(user)),
+  });
+
   /** Every move of a section played off screen: what each fires, for the report. `sweep` hears each as it starts. */
   async function playAll(
     section: Section,
@@ -1429,7 +1446,7 @@ export function boot(options: BootOptions): void {
         ({ mounted } = played);
         moves.push(played.move);
       } finally {
-        mounted?.unmount();
+        rigTurn(() => mounted?.unmount());
         body.remove();
       }
     }

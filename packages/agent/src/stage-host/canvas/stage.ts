@@ -178,6 +178,7 @@ import {
   Replays,
   valuesOf,
 } from "./replays";
+import { rigTurn } from "./rig-turn";
 import {
   frameAsViewport,
   windowHeight,
@@ -2299,12 +2300,15 @@ export function bootStage(page: Page): Mode {
       page.dressBody(body, rigColumn(), story, page.fills(section, story.name));
       rig.append(body);
       const into: { error?: PageError } = {};
-      const mounted = page.mountInto(
-        body,
-        section,
-        story.name,
-        page.argsOf(section, story.name),
-        into
+      // A turn of the rig's: the layers its mount portals to the body are the rig's (rig-turn.ts).
+      const mounted = rigTurn(() =>
+        page.mountInto(
+          body,
+          section,
+          story.name,
+          page.argsOf(section, story.name),
+          into
+        )
       );
       return { story, body, mounted, into };
     });
@@ -2370,7 +2374,7 @@ export function bootStage(page: Page): Mode {
         }
         y += one.body.offsetHeight + ROW_GAP;
       } finally {
-        one.mounted?.unmount();
+        rigTurn(() => one.mounted?.unmount());
         one.body.remove();
       }
     }

@@ -24,9 +24,9 @@
  * drawn by `.cawco-hover`. Two focuses are held, each its own:
  *
  * - **The rig's**, on every page: every focus asked for on an element of
- *   the rig (in it, or in a layer portalled to the body, as bits-ui
- *   portals one, that triggers in the rig name and none outside it). The rig is a world of its own the person
- *   never sees, so its focus never moves theirs, whatever page it is in.
+ *   the rig (in it, or in a layer the rig added to the body in a turn of
+ *   its own, as bits-ui portals a dialog's content: rig-turn.ts), whenever
+ *   it is asked for. The rig is a world of its own the person never sees, so its focus never moves theirs, whatever page it is in.
  *   A focus the browser moves into the rig itself (a label's click, a
  *   modal dialog's `showModal()`) is held there and the person's own is
  *   put back.
@@ -35,15 +35,16 @@
  *   it. The page as the person's press or key focuses it (the frame then
  *   has the window's focus) is the browser's own, and that focus lets go.
  *
- * `document.activeElement` answers the rig's focus to what runs for the
- * rig (an event on an element of the rig, or script outside any event
- * while the rig holds one, as a play's `keyboard` reads it), and the
- * page's or the browser's to the rest: the person's key in a drawing
- * reads their own field. The stage's own code asks {@link focusOfPage}.
+ * `document.activeElement` answers the rig's focus (the body when it
+ * holds none) only to code that runs for the rig: an event on an element
+ * of the rig, or script outside any event in a turn of the rig's, as a
+ * play's `keyboard` or its own code after an `await userEvent…` reads it
+ * (rig-turn.ts). The rest, the drawing's script in its own events, timers
+ * and frames, reads the page's held focus or the browser's: the person's
+ * field. The stage's own code asks {@link focusOfPage}.
  *
  * What it does not hold: a held field takes no keys, which only the real
- * focus brings, and a layer of the rig's no trigger in the rig names is
- * the page's.
+ * focus brings. Where a turn falls short is rig-turn.ts's to say.
  *
  * On every page, framed or not, a focus asked for while the stage mounts
  * or plays a story is taken with `preventScroll` (held-scroll.ts
@@ -51,6 +52,7 @@
  */
 import { pageStill, personActing } from "./held-scroll";
 import { stateClass } from "./pseudo";
+import { inRigTurn, rigOwns, watchRigLayers } from "./rig-turn";
 
 /** What a real `focus()` reaches: the elements that take the focus. */
 const FOCUSABLE =
@@ -74,12 +76,6 @@ const lightOf = (node: Node): Node => {
   }
   return at;
 };
-
-/** The ids in `layer` a trigger names it by. */
-const idsIn = (layer: Element): string[] =>
-  [layer, ...layer.querySelectorAll("[id]")]
-    .map((one) => one.id)
-    .filter(Boolean);
 
 /** The person's own focus outside the rig: the page's held one, else the browser's. Set by {@link holdFocus}. */
 let pageFocus: () => Element | null = () => document.activeElement;
@@ -105,6 +101,7 @@ interface Hold {
  * Once per page, with the page's rig.
  */
 export function holdFocus(rig: HTMLElement): void {
+  watchRigLayers();
   const framed = window.parent !== window;
   const html = HTMLElement.prototype;
   const svg = SVGElement.prototype;
@@ -142,34 +139,17 @@ export function holdFocus(rig: HTMLElement): void {
     true
   );
 
-  /** Whether `node` is the rig's: in it, or in a layer portalled to the body that a trigger in the rig names. */
+  /** Whether `node` is the rig's: in it, or in a layer the rig added to the body during a turn of its own (rig-turn.ts). */
   const ofRig = (node: Node): boolean => {
     const light = lightOf(node);
     if (rig.contains(light)) {
       return true;
     }
-    if (!(rig.firstElementChild && light.isConnected)) {
-      return false;
-    }
-    let layer: Node | null = light;
-    while (layer?.parentNode && layer.parentNode !== document.body) {
+    let layer: Node = light;
+    while (layer.parentNode && layer.parentNode !== document.body) {
       layer = layer.parentNode;
     }
-    if (!(layer instanceof Element && layer.parentNode === document.body)) {
-      return false;
-    }
-    // Named by a trigger in the rig and by none outside it: a story drawn and read at once may name its layers by the same ids.
-    const triggers = idsIn(layer).flatMap((id) => {
-      const name = CSS.escape(id);
-      return [
-        ...document.querySelectorAll(
-          `[aria-controls~="${name}"],[aria-describedby~="${name}"]`
-        ),
-      ];
-    });
-    return (
-      triggers.length > 0 && triggers.every((one) => rig.contains(lightOf(one)))
-    );
+    return layer.parentNode === document.body && rigOwns(layer);
   };
 
   /** A focus held in the page, with its own focus classes. */
@@ -276,14 +256,24 @@ export function holdFocus(rig: HTMLElement): void {
   }
   html.blur = blur;
   svg.blur = blur;
+  /**
+   * The held focus code reading `activeElement` sees, as the event it runs
+   * in targets: an event of the rig's reads the rig's focus, the body when
+   * none; script outside any event reads the rig's in a turn of the rig's
+   * while one stands; the rest reads the page's. Null: the browser's own.
+   */
+  const heldFor = (target: unknown, doc: Document): Element | null => {
+    if (!(target instanceof Node)) {
+      return (inRigTurn() ? rigHold.now() : null) ?? pageHold.now();
+    }
+    return ofRig(target) ? (rigHold.now() ?? doc.body) : pageHold.now();
+  };
   if (active) {
     Object.defineProperty(Document.prototype, "activeElement", {
       configurable: true,
       enumerable: true,
       get(this: Document) {
-        const target = window.event?.composedPath()[0];
-        const forRig = target instanceof Node ? ofRig(target) : !!rigHold.now();
-        const held = forRig ? (rigHold.now() ?? this.body) : pageHold.now();
+        const held = heldFor(window.event?.composedPath()[0], this);
         return held && held.ownerDocument === this ? held : active.call(this);
       },
     });
