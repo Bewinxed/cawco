@@ -32,6 +32,7 @@
   } from "#lib/cawco/project/CawLeadSwitch.svelte";
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { stopWork } from "../stop-work.svelte";
 
   let {
     lead,
@@ -49,8 +50,11 @@
     disabled?: boolean;
   } = $props();
 
-  /** Asleep only once the hub says so; awake while it is read. */
-  const asleep = $derived(lead.on === false);
+  /**
+   * Asleep only once the hub says so, and his off tray with it (stop-work
+   * `awake`); awake while it is read.
+   */
+  const asleep = $derived(stopWork.awake(projectId, lead.on) === false);
   const SCENES = [
     { asleep: false, scene: "/caw/hero-awake.webp" },
     { asleep: true, scene: "/caw/hero-asleep.webp" },

@@ -350,12 +350,18 @@
       ':scope > [data-slot="rin"] [data-slot="tile"]'
     );
     const moving = motionOk.current && node && rowTile;
+    // The gap over the row (the tree's, over a delegate) folds with it, so
+    // its removal at the end of the fold moves nothing.
+    const gap = node
+      ? Number.parseFloat(getComputedStyle(node).marginBlockStart) || 0
+      : 0;
     if (moving) {
       departBox(`${uid}-stop:${row.s.id}`, rowTile, false);
       arrivals.push({ id: row.s.id, fill: fillOf(row) });
       fold(node, false, {
         ms: dur("--duration-panel"),
         easing: CURVE.inOut,
+        gap,
       })?.finished.then(
         () => gone(row),
         () => gone(row)
@@ -375,6 +381,7 @@
           ms: dur("--duration-exit"),
           easing: CURVE.out,
           fade: true,
+          gap,
         })?.finished.then(
           () => gone(row),
           () => gone(row)
@@ -498,6 +505,13 @@
   /** Still listed: not folded shut; Caw off's, once pressed, only what he stops. */
   const shown = (row: StopRow) =>
     !row.gone && (!picks || choosing || on.has(row.s.id));
+  /**
+   * The list stands while a row is listed, and through the stops once
+   * there were any (emptied as each row folds away) until the end is said.
+   */
+  const listing = $derived(
+    rows.some(shown) || (rows.length > 0 && phase !== "done")
+  );
   /** A row's place in the tree: under its nearest listed lead, else a root of its own. */
   function rootOf(row: StopRow): string | null {
     let lead = row.s.parentId;
@@ -797,7 +811,8 @@
     data-phase={phase}
     style:--ask-indent={look === "card" ? "var(--row-compact-gap)" : undefined}
     style:--ask-end={look === "card" ? "var(--row-compact-gap)" : undefined}
-    transition:unfold
+    in:unfold
+    out:unfold
     {...rest}
   >
     <!-- One column as wide as the tile, never its rows' widest title: a
@@ -840,13 +855,19 @@
           </p>
         </div>
       </div>
-      {#if allShown || rows.some(shown)}
+      {#if listing}
+        <!-- It stands, emptied as each row folds behind its tile, until the
+             end is said: its last row's fold is the last resize the
+             landings make, and it folds away whole at the end, the body's
+             morph on its clock. -->
         <div
           data-slot="list"
           class={[
             "grid min-w-0 grid-cols-1 gap-space-1",
             look === "card" && "-mx-(--row-compact-gap)",
           ]}
+          in:unfold
+          out:unfold
         >
           {#if allShown}
             <!-- Caw off's box over the rows, in their box column, checks or
@@ -859,7 +880,8 @@
                 "mark-line flex min-h-(--row-compact-h) items-center gap-(--row-compact-gap) rounded-sm ps-(--row-compact-gap) pe-(--row-compact-pad-end)",
                 choosing && "hover:bg-surface-hover",
               ]}
-              transition:unfold
+              in:unfold
+              out:unfold
             >
               <span
                 data-box
@@ -882,18 +904,16 @@
               </span>
             </label>
           {/if}
-          {#if rows.some(shown)}
-            <ul
-              data-slot="sessions"
-              aria-label={picks ? cawOffWords.list : "Running sessions"}
-              class="kit-tree grid grid-cols-(--tray-cols) gap-x-(--row-compact-gap) overflow-x-clip clip-margin-space-2"
-              data-roots="touch"
-              style:--tray-cols={trayCols}
-              {@attach echoBeat()}
-            >
-              {@render branch()}
-            </ul>
-          {/if}
+          <ul
+            data-slot="sessions"
+            aria-label={picks ? cawOffWords.list : "Running sessions"}
+            class="kit-tree grid grid-cols-(--tray-cols) gap-x-(--row-compact-gap) overflow-x-clip clip-margin-space-2"
+            data-roots="touch"
+            style:--tray-cols={trayCols}
+            {@attach echoBeat()}
+          >
+            {@render branch()}
+          </ul>
         </div>
       {/if}
       {#if job.kind === "delete"}

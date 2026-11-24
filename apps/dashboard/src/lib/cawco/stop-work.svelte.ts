@@ -533,6 +533,17 @@ class StopWork {
     this.close(job);
   }
 
+  /**
+   * Whether Caw reads as awake on `projectId`: the hub's word (`on`), held
+   * awake while his off tray stands and its stops still land. The hub turns
+   * him off at the press, but the tray says "Caw is off" only at its end, so
+   * his switch and his scene turn with it, never in the middle of the stops.
+   */
+  awake(projectId: string, on: boolean | null): boolean | null {
+    const job = this.of("caw-off", projectId);
+    return job?.open && job.off && job.phase !== "done" ? true : on;
+  }
+
   /** Whether the place `at` is drawn now. */
   drawn(at: string): boolean {
     return this.places.has(at);

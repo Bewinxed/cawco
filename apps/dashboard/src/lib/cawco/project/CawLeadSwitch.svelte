@@ -97,7 +97,8 @@
     hang?: boolean;
   } = $props();
 
-  const on = $derived(lead.on ?? false);
+  /** Where he stands as the switch shows it: off once his off tray says so (stop-work `awake`). */
+  const on = $derived(stopWork.awake(projectId, lead.on) ?? false);
   /** The switch, which the confirm grows out of. */
   let anchor = $state<HTMLElement | null>(null);
 

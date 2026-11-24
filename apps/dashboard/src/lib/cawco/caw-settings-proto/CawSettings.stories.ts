@@ -40,11 +40,12 @@ export const Stopped = {
   }) => {
     // The stand-in reads what runs and the card grows out of the switch
     // first, in this frame (the page holds every story's frame).
-    await userEvent.wait(1500);
+    await userEvent.wait(1200);
     const stop = canvasElement.querySelector("[data-stop-confirm]");
     if (stop instanceof HTMLElement) {
       stop.click();
     }
-    await userEvent.wait(3000);
+    // Each stop lands, Caw is off, and the card folds back into the switch.
+    await userEvent.wait(4200);
   },
 };

@@ -299,6 +299,27 @@ function moveFrames(rtl: boolean, from: DOMRect, to: DOMRect): Keyframe[] {
   ];
 }
 
+/**
+ * A box moved by `dx`, `dy` and scaled by `sx`, `sy` from its top-left
+ * corner, written about its own transform-origin, so a flight's keyframes
+ * hold `transform` alone. A keyframe that also set `transform-origin` (not
+ * a property the compositor runs) kept the whole flight on the main thread,
+ * where it ticked under whatever laid the page out beside it: a stopped
+ * row's tile flying into its button stuttered under the row's own fold.
+ */
+function fromCorner(
+  node: Element,
+  dx: number,
+  dy: number,
+  sx: number,
+  sy: number
+): string {
+  const [ox = 0, oy = 0] = getComputedStyle(node)
+    .transformOrigin.split(" ")
+    .map((value) => Number.parseFloat(value) || 0);
+  return `translate(${dx - (1 - sx) * ox}px, ${dy - (1 - sy) * oy}px) scale(${sx}, ${sy})`;
+}
+
 /** The box of a `grow` destination's anchor: the part of it the source is. */
 function anchorBox(node: HTMLElement, anchor: string): DOMRect {
   const part = node.querySelector(anchor);
@@ -379,10 +400,15 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
     const sx = uniform ? sy : from.rect.width / to.width;
     effects.push([
       {
-        transformOrigin: "0 0",
-        transform: `translate(${from.rect.left - to.left}px, ${from.rect.top - to.top}px) scale(${sx}, ${sy})`,
+        transform: fromCorner(
+          node,
+          from.rect.left - to.left,
+          from.rect.top - to.top,
+          sx,
+          sy
+        ),
       },
-      { transformOrigin: "0 0", transform: "none" },
+      { transform: "none" },
     ]);
     // Scaled by its height, a destination wider for its height than its
     // source would start out wider than the source; its inline end is cut
@@ -470,10 +496,15 @@ export function closeInto(
   const height = Math.max(to.height, target.scrollHeight);
   return surface.animate(
     [
-      { transformOrigin: "0 0", transform: "none", opacity: 1 },
+      { transform: "none", opacity: 1 },
       {
-        transformOrigin: "0 0",
-        transform: `translate(${to.left - from.left}px, ${to.top - from.top}px) scale(${to.width / from.width}, ${height / from.height})`,
+        transform: fromCorner(
+          surface,
+          to.left - from.left,
+          to.top - from.top,
+          to.width / from.width,
+          height / from.height
+        ),
         opacity: 0,
       },
     ],
