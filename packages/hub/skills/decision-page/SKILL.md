@@ -1,6 +1,6 @@
 ---
 name: decision-page
-description: Ask the person to choose in CawCo — decision cards, one question each, every option with what it gets and what it costs, one recommended — written as an OpenUI Lang program and read back with artifact_read. The one way a choice that is no design reaches the person, Caw's included. Use when the person must pick a name, a policy, a scope, an approach, a behaviour or one look value (a token's colour, a font, a radius) before work goes on, or when asked for options that are not designs.
+description: Ask the person to choose in CawCo — decision cards, one question each, every option with what it gets and what it costs, one recommended — written as an OpenUI Lang program and read back with artifact_read. The one way a choice that is no design reaches the person, Caw's included. Use when the person must pick a name, a policy, a scope, an approach or a behaviour before work goes on, or when asked for options that are not designs.
 ---
 
 # Decision page
@@ -29,13 +29,6 @@ A choice that is no design reaches the person only as a decision card on a page,
 - **Few options**: around five at most; split a bigger choice into two cards.
 
 **Media is words, a diagram or a picture that is no UI.** A design never stands on a page: the hub refuses a `Preview` in a program and names the design graph. A `Diagram` (a Mermaid `stateDiagram-v2`, each edge labelled by what the person does) goes in each option only when the options differ in a sequence of states that their words leave hard to follow. A picture that is no UI (a generated image, a logo, a photograph) is an `Image`: a file beside page.oui or a `generate_image` result by its absolute path. A drawing of what is not a screen is a `Canvas`. A choice that needs no picture needs no media.
-
-**A look value** (a token's colour, a font, a radius) is one card of kind `look`, its options the values:
-1. **Find the components.** Search where the value is used (the token's CSS variable or name across the components) and mount those real components in one states file, one story per option, each story setting that option's value.
-2. **Draw each option.** Capture each story with `artifact_read` `png` at the width the person sees those components at (the states file open as `reading: true`), and give each option its capture as its `Image`, so the options stand side by side.
-3. **Say where.** Each option's `line` names where the person sees the value in the product ("Hovered rows and buttons on the dark side.").
-4. **Tune after.** Once they pick, open the picked story on the design graph with a dial for the value, and they tune it there.
-A motion value (a duration, a curve) is judged moving: it is a dial on the live story, on the design graph.
 
 **Fixes from the person's pins** are shown where they pinned: a design graph's fix is the code change itself, which their open graph shows as you save; a page is revised with `artifact_update`. Answer each pin in its own thread with what changed (`comment_reply`). A page's revision, or a graph's new `ask`, waits for them in Needs you until they open it.
 
@@ -84,9 +77,9 @@ Each row refuses the page until it is fixed.
 
 | Refuse | Fix |
 | --- | --- |
-| A design of the product's UI: a `Preview`, a wireframe, a mockup, a screenshot of a design (a `look` card's captures of real components in each value stand) | The design graph (the `show` skill): directions as one states file each, the pick made on the graph (`picked`) |
+| A design of the product's UI: a `Preview`, a wireframe, a mockup, a screenshot of a design | The design graph (the `show` skill): directions as one states file each, the pick made on the graph (`picked`) |
 | One design under a yes or no | Judge it on its design graph (the `show` skill); a go-ahead is `ask` |
-| A `look` card with an option lacking a picture, or a look value's option whose line leaves out where the person sees it | Give every option an `Image` or `Canvas` in its media; media every option shares goes once in the Decision's media, drawn below them |
+| A `look` card with an option lacking a picture | Give every option an `Image` or `Canvas` in its media; media every option shares goes once in the Decision's media, drawn below them |
 | A card with no question | Ask the choice in the person's plain words, ending in "?" |
 | An option with no cost line | Give its `cost`: what picking it takes away or makes harder |
 | Two Recommended on one card, or none | Mark exactly one, and say why in the card's `why` |

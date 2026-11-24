@@ -41,7 +41,7 @@ Each variant is a different answer to the same brief. Pick **one primary axis**,
 | Type | Scale steps, weight contrast, measure |
 | Voice | Labels, tone, how much copy |
 
-Secondary choices follow from the axis: a dense variant may take a smaller type step, which is coherence, not a second axis. Positions along a scale (Density, Type, and Emphasis where it is how much of one colour) are the stops of one `select` dial on one live story: they turn it, and you read their value back (`design-graph` step 8), with no second states file. Positions that rearrange the parts (Structure, Voice, anything the props cannot express) are directions: three named directions by default, five only when asked; **Today**, the piece as it ships now, is one of them only when keeping it is a real answer. Each direction is its own states file beside the component (`RowQuiet.stories.ts`, `RowToday.stories.ts`: the name before `.stories` is one PascalCase or kebab-case word, never dotted), holding that direction's live story, named for it (`Quiet`, `Editorial`, `Dense`), never `OptionA`: its live story is that direction on the graph, named by its title. A variant that differs from another only in tint or copy takes a different position on the axis, or it is cut. A direction the component's props cannot express is a variant component of its own (`HomeQuiet.svelte` beside `Home.svelte`, its states file `HomeQuiet.stories.ts`), which mounts the real component's own parts and writes anew only what the direction changes; it is named in its story's `render` in the framework's own idiom.
+Secondary choices follow from the axis: a dense variant may take a smaller type step, which is coherence, not a second axis. Positions along a scale (Density, Type, and Emphasis where it is how much of one colour) are the stops of one `select` dial on one live story: they turn it, and you read their value back (`design-graph` step 8), with no second states file. Positions that rearrange the parts (Structure, Voice, anything the props cannot express) are directions: three named directions by default, five only when asked; **Today**, the piece as it ships now, is one of them only when keeping it is a real answer. Each direction is its own states file beside the component (`RowQuiet.stories.ts`, `RowToday.stories.ts`: the name before `.stories` is one PascalCase or kebab-case word, never dotted), holding that direction's live story, named for it (`Quiet`, `Editorial`, `Dense`), never `OptionA`: its live story is that direction on the graph, named by its title. A pick between values of one shared token is directions of its own (A look value, below). A variant that differs from another only in tint or copy takes a different position on the axis, or it is cut. A direction the component's props cannot express is a variant component of its own (`HomeQuiet.svelte` beside `Home.svelte`, its states file `HomeQuiet.stories.ts`), which mounts the real component's own parts and writes anew only what the direction changes; it is named in its story's `render` in the framework's own idiom.
 
 Every variant clears the same floor, and the floor never trades against the axis:
 
@@ -53,6 +53,14 @@ Every variant clears the same floor, and the floor never trades against the axis
 - Truncated content can reach its full value; nothing hides past a scroll edge with no cue.
 
 A direction that only works by breaking the floor is dropped, with the reason given.
+
+## A look value
+
+A pick between values of one look token, font or radius, or a motion value (a duration, a curve), is two or more directions: the value changes every component that uses it, so each direction shows those components in it.
+
+1. **Find the components.** Before writing a states file, search where the value is used: the token's CSS variable or name across the components. Each direction is a states file that mounts those real components with the token set to its value, a motion value moving in them live. Done when every component the value reaches by name is mounted, or named in your report as left out and why.
+2. **Say where.** Each direction's `line` says where in the product the person sees the value ("Hovered rows and buttons on the dark side"), and the `ask` says it in one line ("Pick the hover grey you see on rows and buttons on the dark side").
+3. **Tune after.** Once one direction is picked, a dial on its live story tunes the value (the `design-graph` skill's step 8).
 
 ## States
 
@@ -85,7 +93,7 @@ Feed each state through the component's props, as its story's `args`, with fixtu
 | A Today story beside directions it doesn't compete with | Today is a direction only when keeping it is a real answer |
 | A state the code cannot reach | Write its branch in the real component when the design adds it; else list it as missing and leave it out |
 | Stories that differ only by their width, or states that look alike | One story per situation; the graph draws the widths |
-| A position along a scale as a direction of its own | One `select` dial on the live story, its stops the positions |
+| A position along a scale of one piece as a direction of its own | One `select` dial on the live story, its stops the positions |
 | A label of field lists, prop names or a width | The sentence they would say about that frame |
 | Lorem ipsum, three rows, "Test user" | Product-shaped data in real quantities |
 | Directions as separate artifacts, or on a decision page | One design graph, one states file per direction, their pick read as `picked` |
