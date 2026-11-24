@@ -845,10 +845,13 @@ interface TasksChangedFrame {
 }
 
 /**
- * Hub-originated: a session closed one of its questions to the person
- * (`question_close`, taken or withdrawn): what a session's tree asked him
- * moved without anything in Needs you moving, so a screen listing a
- * session's questions (core session-questions.ts) reads them again.
+ * Hub-originated: what a session's tree asked the person moved without
+ * anything in Needs you moving: a session closed one of its questions
+ * (`question_close`, taken or withdrawn), or a pick it parks in its
+ * composer was answered where it lives (core parked.ts: a direction picked
+ * on its graph, a card picked or noted on its page). A screen listing a
+ * session's questions (core session-questions.ts) or its parked picks
+ * reads them again.
  */
 interface QuestionsMovedFrame {
   /** The artifact that asked it. */

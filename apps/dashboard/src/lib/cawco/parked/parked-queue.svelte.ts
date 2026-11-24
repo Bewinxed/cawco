@@ -201,7 +201,9 @@ export class ParkedQueue {
   /** A direction of `item` picked here: its graph's `picked`, as the head's Pick writes it; a sentence when it was not kept. */
   pick = (item: ParkedItem, file: string): string | null => {
     this.#touched.add(parkedId(item));
-    return this.#docOf(item)?.keep("picked", file) ?? parkedWords.joining;
+    // A write kept answers null: only a doc not held yet is "joining".
+    const doc = this.#docOf(item);
+    return doc ? doc.keep("picked", file) : parkedWords.joining;
   };
 
   /** A card of `item` picked or noted here, as its page's option and note write it; a sentence when it was not kept. */
@@ -211,7 +213,8 @@ export class ParkedQueue {
     change: { options: string[] } | { note: string }
   ): string | null => {
     this.#touched.add(parkedId(item));
-    return this.#docOf(item)?.choose(card, change) ?? parkedWords.joining;
+    const doc = this.#docOf(item);
+    return doc ? doc.choose(card, change) : parkedWords.joining;
   };
 
   /** The doc held here when it is `item`'s artifact's; null while none is. */

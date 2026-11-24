@@ -57387,7 +57387,7 @@
         ]
       },
       "QuestionsMovedFrame": {
-        "description": "Hub-originated: a session closed one of its questions to the person\n(`question_close`, taken or withdrawn): what a session's tree asked him\nmoved without anything in Needs you moving, so a screen listing a\nsession's questions (core session-questions.ts) reads them again.",
+        "description": "Hub-originated: what a session's tree asked the person moved without\nanything in Needs you moving: a session closed one of its questions\n(`question_close`, taken or withdrawn), or a pick it parks in its\ncomposer was answered where it lives (core parked.ts: a direction picked\non its graph, a card picked or noted on its page). A screen listing a\nsession's questions (core session-questions.ts) or its parked picks\nreads them again.",
         "type": "object",
         "properties": {
           "artifactId": {
