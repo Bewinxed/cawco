@@ -640,7 +640,9 @@ export class PreviewFrame {
         bareScroll: !this.#deps.inset(),
         // The head's room over the page's top, px: a document CawCo draws
         // takes it on its own scroller and says so (`cawco:head-room`).
-        headRoom: this.#deps.inset() ? 0 : this.#deps.paneLayout.headRoomPx(),
+        headRoom: this.#deps.inset()
+          ? 0
+          : (this.#deps.paneLayout.headRoom ?? 0),
         ...(this.#deps.paneSubject.artifact
           ? {
               artifact: {

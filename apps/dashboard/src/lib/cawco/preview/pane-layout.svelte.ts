@@ -3,7 +3,7 @@
  */
 import { MediaQuery } from "svelte/reactivity";
 import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
-import { frameObserver } from "#lib/platform/frame-observer.js";
+import { frameObserver, frameSize } from "#lib/platform/frame-observer.js";
 import { floor as visibleFloor } from "#lib/platform/visible-viewport.svelte.js";
 
 export interface PaneLayoutDeps {
@@ -65,8 +65,37 @@ export class PaneLayout {
    * sliding down is its one exit (SideSheet), so nothing flies.
    */
   section = $state<HTMLElement>();
+
+  /**
+   * The floating head's room over the well's top, px: its own height as laid
+   * out, read as it mounts and in each resize's delivery (frameSize); null
+   * with no head. Kept here so a message answered mid-frame (the page's
+   * greeting) reads a number, never the layout: read there, it laid the page
+   * out under whatever the frame had just written.
+   */
+  headRoom = $state<number | null>(null);
+
   constructor(deps: PaneLayoutDeps) {
     this.#deps = deps;
+    $effect(() => {
+      const head = this.section?.querySelector<HTMLElement>(
+        '[data-slot="side-head"]'
+      );
+      if (!head) {
+        this.headRoom = null;
+        return;
+      }
+      const stop = frameSize(
+        (node: HTMLElement) => node.offsetHeight,
+        (px) => {
+          this.headRoom = px;
+        }
+      )(head);
+      return () => {
+        stop?.();
+        this.headRoom = null;
+      };
+    });
     $effect(() => {
       const pane = this.section;
       if (!pane) {
@@ -119,13 +148,5 @@ export class PaneLayout {
         node.style.removeProperty("--keyboard-lift");
       };
     });
-  }
-
-  /** The floating head's room over the well's top, px: its own height as laid out; none without a head. */
-  headRoomPx(): number {
-    return (
-      this.section?.querySelector<HTMLElement>('[data-slot="side-head"]')
-        ?.offsetHeight ?? 0
-    );
   }
 }

@@ -1,6 +1,7 @@
 /**
  * What the host's chrome covers of the page, and the room it takes at the page's foot and top, told to the page.
  */
+import { untrack } from "svelte";
 import { frameObserver } from "#lib/platform/frame-observer.js";
 import { numberOf } from "#lib/platform/motion/curves.svelte.js";
 import type { ChangeTour } from "./change-tour.svelte";
@@ -124,30 +125,22 @@ export class PageCover {
     });
     /**
      * The head's room over the page's top as the head is laid out now
-     * (`cawco:head-room`, px), said again as it changes size (a finger's
-     * taller controls): a document CawCo draws pads its scroller by it.
+     * (`cawco:head-room`, px, the pane layout's `headRoom`), said again as it
+     * changes size (a finger's taller controls): a document CawCo draws pads
+     * its scroller by it.
      */
     $effect(() => {
-      const head = this.#deps.paneLayout.section?.querySelector<HTMLElement>(
-        '[data-slot="side-head"]'
-      );
-      if (!(
+      const px = this.#deps.paneLayout.headRoom;
+      if (
         this.#deps.previewFrame.iframe &&
         this.#deps.previewFrame.connected &&
-        head &&
+        px !== null &&
         !this.#deps.inset()
-      )) {
-        return;
+      ) {
+        untrack(() =>
+          this.#deps.previewFrame.post({ type: "cawco:head-room", px })
+        );
       }
-      const sized = frameObserver(() =>
-        this.#deps.previewFrame.post({
-          type: "cawco:head-room",
-          px: head.offsetHeight,
-        })
-      );
-      sized.observe(head);
-      sized.request();
-      return () => sized.disconnect();
     });
   }
 }
