@@ -131,10 +131,6 @@ export const CAPS = {
   knowledgeLines: 40,
   /** Knowledge files: past this a new topic is refused and the lesson goes into one that is there (the reshape mark before, `RESHAPE_ABOVE`). */
   knowledgeFiles: 25,
-  /** Staged lessons: one run's notes (`RUN_NOTES`). */
-  staged: 60,
-  /** A staged lesson's days: at 5 to 15 chats a day, 70 to 210 sessions met none that noted it again, so it is not recurring. */
-  stagedDays: 14,
   /** A retired lesson's days in the ledger, its words kept so it can be put back. */
   retiredDays: 30,
   /**
@@ -526,7 +522,7 @@ export class CheckedOp {
 
 /** What one checked operation does to the files and the ledger. */
 export type Change =
-  /** A new lesson: a line in its home, or, staged, the ledger alone; `held` when added through memory_rule (memory-run.ts `ruleAsked`). */
+  /** A new lesson: a line in its home; `held` when added through memory_rule (memory-run.ts `ruleAsked`). */
   | {
       by: Lesson["by"];
       held?: true;
@@ -534,7 +530,6 @@ export type Change =
       id: string;
       kind: "add";
       sources: Lesson["sources"];
-      staged?: { waits?: "jev" };
       text: string;
       why: string | null;
     }
@@ -549,13 +544,8 @@ export type Change =
       text: string;
       why: string | null;
     }
-  /** A source stated a lesson again; a staged one it bears out lands in its topic. */
-  | {
-      id: string;
-      kind: "corroborate";
-      lands: boolean;
-      sources: Lesson["sources"];
-    }
+  /** A source stated a live lesson again. */
+  | { id: string; kind: "corroborate"; sources: Lesson["sources"] }
   /** A live lesson to another home. */
   | { home: LessonHome; id: string; kind: "move" }
   /** Lesson `id` says what live lesson `into` says: `into` keeps both's sources and repeats, `id` is retired as merged into it. */
@@ -919,7 +909,7 @@ const placed = (
   };
 };
 
-/** A new lesson: staged in the ledger alone, or a line in its home (knowledge when every index line is held). */
+/** A new lesson: a line in its home (knowledge when every index line is held). */
 const added = (now: MemoryTree, op: ChangeOf<"add">, today: string): Done => {
   const base: Lesson = {
     by: op.by,
@@ -931,19 +921,6 @@ const added = (now: MemoryTree, op: ChangeOf<"add">, today: string): Done => {
     sources: op.sources,
     state: "live",
   };
-  if (op.staged) {
-    return {
-      tree: {
-        ...now,
-        ledger: withEntry(now.ledger, op.id, {
-          ...base,
-          home: { at: "none" },
-          state: "staged",
-          staged: { home: op.home, text: op.text, ...op.staged },
-        }),
-      },
-    };
-  }
   const redirected = op.home.at === "index" && indexAllHeld(now);
   const home: LessonHome = redirected
     ? { at: "knowledge", topic: RULES_TOPIC }
@@ -1004,7 +981,7 @@ const replaced = (
   };
 };
 
-/** A lesson stated again: its new sources kept and the day seen; a staged one that lands, a line in its topic. */
+/** A lesson stated again: its new sources kept and the day seen. */
 const corroborated = (
   now: MemoryTree,
   op: ChangeOf<"corroborate">,
@@ -1014,26 +991,16 @@ const corroborated = (
   if (!lesson) {
     return { tree: now };
   }
-  const sources = withSourcesAdded(lesson.sources, op.sources);
-  const { staged, ...rest } = lesson;
-  if (!(op.lands && staged)) {
-    return {
-      tree: {
-        ...now,
-        ledger: withEntry(now.ledger, op.id, {
-          ...lesson,
-          seen: today,
-          sources,
-        }),
-      },
-    };
-  }
-  return placed(
-    now,
-    staged.home,
-    { id: op.id, text: staged.text, why: null },
-    { ...rest, home: staged.home, state: "live", seen: today, sources }
-  );
+  return {
+    tree: {
+      ...now,
+      ledger: withEntry(now.ledger, op.id, {
+        ...lesson,
+        seen: today,
+        sources: withSourcesAdded(lesson.sources, op.sources),
+      }),
+    },
+  };
 };
 
 /** `sources` with `more` added, none twice. */

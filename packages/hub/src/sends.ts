@@ -437,7 +437,6 @@ export type SendsContext = Pick<
   | "machineName"
   | "machinePause"
   | "machinePresence"
-  | "memoryWatch"
   | "moveAtMessage"
   | "moveJobOf"
   | "movingAtMessage"
@@ -1511,8 +1510,6 @@ export const createSends = (ctx: SendsContext) => {
       if (!isKeepAlive(row.body)) {
         ctx.db.updateKeepAlive(instanceId, { keepAliveTurn: null });
       }
-      // A routine's wake of a conversation: the turn it joins is that run's (memory.ts).
-      ctx.memoryWatch.read(instanceId, row.body?.origin);
       readSend(row, true);
     }
     const latest = Math.max(...read.map((row) => row.acceptedAt.getTime()));

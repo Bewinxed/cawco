@@ -830,11 +830,6 @@ interface WorkItemDeps extends Pick<
         >
       >;
   /**
-   * An item's session was filed under its parent's turn (memory.ts
-   * `TurnWatch.spawned`): a routine run's turn makes its children the run's.
-   */
-  readonly spawnedUnder?: (instanceId: string, parentId: string) => void;
-  /**
    * "Stopped at A's limit; continues on B" while `instanceId` is stopped at
    * its account's limit (hub at-limit.ts `stall`); undefined while it runs.
    */
@@ -1410,7 +1405,6 @@ export const createWorkItems = ({
   stalled,
   send,
   spawn,
-  spawnedUnder,
   startHeld,
   tellYou,
   todos,
@@ -4317,7 +4311,6 @@ export const createWorkItems = ({
       state: "starting",
     });
     published(item);
-    spawnedUnder?.(instanceId, parent.id);
 
     // A fork opens with what it is.
     const fork = settings.forkOf ? forkLine(workspace) : "";

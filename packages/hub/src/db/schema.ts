@@ -6263,49 +6263,6 @@ export const artifactDocuments = sqliteTable("artifact_documents", {
   builtAt: timestamp("built_at").notNull(),
 });
 
-/** A harness subagent a session started and that has not ended: its task, and the call that started it. */
-export interface OpenSubagent {
-  call: string | null;
-  task: string;
-}
-
-/**
- * What a session has done that taints a memory note it writes (memory.ts
- * `TurnWatch`), one row per session that has done any, kept so a hub
- * restart mid-turn keeps it. `web` and `fromRoutine` hold for the session's
- * life; `delivered` and `routine` for its turn, until the turn's result;
- * `subagents` until each ends on its own.
- */
-export const sessionTaints = sqliteTable("session_taints", {
-  instanceId: sessionColumn("instance_id")
-    .primaryKey()
-    .references(() => instances.id, { onDelete: "cascade" }),
-  /** It read the web: every later note of the session is tainted `web`. */
-  web: integer("web", { mode: "boolean" }).notNull().default(false),
-  /** The routine whose run started it: a session a routine-woken turn spawned. */
-  fromRoutine: text("from_routine"),
-  /** Since its last turn's result it read a send the hub delivered: its turn is not self-started. */
-  delivered: integer("delivered", { mode: "boolean" }).notNull().default(false),
-  /** The routine whose wake its turn read (a conversation's). */
-  routine: text("routine"),
-  updatedAt: timestamp("updated_at").notNull(),
-});
-
-/** A session's harness subagents still running (`session_taints`), one row each. */
-export const sessionSubagents = sqliteTable(
-  "session_subagents",
-  {
-    instanceId: sessionColumn("instance_id")
-      .notNull()
-      .references(() => sessionTaints.instanceId, { onDelete: "cascade" }),
-    /** The harness's task id. */
-    task: text("task").notNull(),
-    /** The tool call that started it. */
-    call: text("call"),
-  },
-  (table) => [primaryKey({ columns: [table.instanceId, table.task] })]
-);
-
 /**
  * When a brief last carried each of a project's knowledge lessons
  * (memory.ts `contextFor`), by its lesson id: what the nightly run's upkeep

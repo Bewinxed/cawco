@@ -3312,6 +3312,13 @@
       "when": 1795496909008,
       "tag": "0480_caw_changes_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 481,
+      "version": "6",
+      "when": 1795507824218,
+      "tag": "0481_memory_labels_gone",
+      "breakpoints": true
     }
   ]
 }

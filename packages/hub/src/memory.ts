@@ -26,12 +26,7 @@
  *   change again (`againOnConflict`, three tries).
  * - **Notes** (`memory_note`, and `cawco tool memory_note`): an agent's
  *   words into the inbox, with who wrote them, in what role and kind of
- *   session, for which task and when. Their labels are the hub's word,
- *   never the caller's ({@link TurnWatch}, kept in the database): a
- *   routine's run, a heartbeat (a turn the hub did not deliver, a
- *   keep-alive's), a harness subagent still running, or a session that read
- *   the web. A label decides only whether a note counts toward the run's
- *   two-session rule (memory-sources.ts `countsTogether`).
+ *   session, for which task and when.
  * - **Rules first**: a note holding what reads as a credential is written
  *   with it redacted (secret-filter.ts) and archived at once; one a live
  *   lesson's line already says word for word is archived at once as a
@@ -47,13 +42,8 @@
  */
 
 import { frontMatterBlock } from "@cawco/core/fleet";
-import { traitsOf } from "@cawco/core/harness/traits";
-import { isRecord } from "@cawco/core/is-record";
 import type { InstanceRow } from "@cawco/core/protocol";
-import type {
-  NeutralMessage,
-  NeutralOrigin,
-} from "@cawco/core/session-messages";
+import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { memoryWords } from "@cawco/core/words/memory";
 import { memoryRunWords } from "@cawco/core/words/memory-run";
@@ -61,8 +51,6 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import { MEMORY_FILE_CHARS } from "./config";
 import type { DbShape } from "./db";
-import type { SessionTaintRow } from "./db/projects";
-import { ROUTINE_ORIGIN } from "./hub-words";
 import { type JevAccess, jevAccess } from "./jev";
 import { askRow, offLine } from "./jev-placement";
 import { boardTitle } from "./labels";
@@ -83,6 +71,7 @@ import {
   withNote,
   wordsOf,
 } from "./memory-lessons";
+import { quoteProblem } from "./memory-sources";
 import {
   memoryAppliedWords,
   memoryNotedWords,
@@ -105,9 +94,7 @@ import type { AnyProblem } from "./refusal";
 import { roleOf } from "./roles";
 import type { EnsureCurator } from "./routine-schedule";
 import { redactSecrets } from "./secret-filter";
-import { listOf, scalarOf } from "./task-file";
-import { readsWeb, type WebContext } from "./web-reads";
-import { isRoutineParent } from "./work-item-state";
+import { scalarOf } from "./task-file";
 
 const MEMORY_DIR = "memory";
 export const INBOX_DIR = "memory/inbox";
@@ -115,6 +102,10 @@ export const ARCHIVE_DIR = "memory/archive";
 
 /** The longest note an agent writes, and the longest "Make a note". */
 const NOTE_LIMIT = 4000;
+/** The most messages one night reads: the most the person said in a day (memory-run.ts); a note is checked against as many for his words. */
+export const RUN_SAID = 240;
+/** How far back a night reads, when it has no mark yet or its last mark is older (memory-run.ts); a note is checked against the same week. */
+export const SAID_DAYS = 7;
 /** What one brief carries of all its context together; each file's share is the file budget (config.ts). */
 const CONTEXT_CHARS = 24_000;
 /** The lines a brief's grep shortlists, the most words in common first, before Jev or the budget. */
@@ -125,16 +116,12 @@ const SHORTLIST = 60;
  * on", https://docs.typesafe.ai/primitives/noul). Our own call.
  */
 const BEARS = 0.5;
-/** How far up its delegation chain a session's routine run is looked for. */
-const ANCESTRY = 12;
 const LEADING_SLASHES = /^\/+/u;
 
-/** The hub's word on a session that labels a note it writes. */
-export type Taint = "routine" | "heartbeat" | "subagent" | "web";
 /** What the rules found a note to be as it was written. */
 type Verdict = "secret" | "duplicate";
 /** What kind of session wrote a note. */
-type Source = "session" | "delegate" | "attempt" | "routine";
+type Source = "session" | "delegate" | "attempt";
 
 /** The rules' word on a note as it is written: its words, and what they found it to be (a duplicate names the live lesson it says again). */
 type Ruled = { text: string } & (
@@ -172,257 +159,6 @@ export const personsTier = (rel: string): string | undefined => {
   return undefined;
 };
 
-// --- what a session has been doing ---------------------------------------------
-
-/** How long what the web test reads of the fleet (its hostnames, its MCP servers' URLs) is kept before it is read again. */
-const FLEET_READ_MS = 60_000;
-/** A keep-alive's send (keep-alive.ts): the hub's heartbeat, not a delivery. */
-const KEEPALIVE = "keepalive";
-/** Whether a subagent of `harness` ends with its call's result (its descriptor's `subagentEndsWithCall`). */
-const endsWithCall = (harness: string | undefined): boolean =>
-  traitsOf(harness).subagentEndsWithCall;
-
-/** Where the watch keeps each session's state (db `session_taints`), and what it reads of the fleet. */
-export interface TaintStore {
-  /** The fleet's machines, by hostname and id: hosts inside the fleet (web-reads.ts). */
-  fleetHosts: () => Iterable<string>;
-  get: (instanceId: string) => SessionTaintRow | undefined;
-  /** The URL the fleet's MCP server of that name is reached at; undefined for one run as a command, or none by that name. */
-  mcpUrl: (server: string) => string | undefined;
-  put: (row: SessionTaintRow) => void;
-}
-
-const blank = (instanceId: string): SessionTaintRow => ({
-  instanceId,
-  web: false,
-  fromRoutine: null,
-  delivered: false,
-  routine: null,
-  subagents: [],
-  updatedAt: new Date(0),
-});
-
-/**
- * What every session has done that labels a note it writes, from the frames
- * the hub admits and the sends its harness reads, kept in the database so a
- * hub restart mid-turn keeps it (db `session_taints`):
- * - **Delivered** (heartbeat by its absence): since its last turn's result
- *   the session read a send the hub delivered: a person's words, a hub or
- *   peer message, a routine's wake, a work item's brief. A turn nothing
- *   delivered started itself (a harness timer: ScheduleWakeup, CronCreate,
- *   /loop, a background task's end), and a keep-alive is no delivery. A
- *   note is written after its turn's input was read, so a delivery is
- *   always seen before the note it precedes.
- * - **Web**, sticky: once the session (or a subagent of it) called a tool
- *   that read content from outside the fleet (web-reads.ts: a search, a
- *   connection's tool, an outside service's MCP server, a URL or a fetcher's
- *   target that is not local), every later note of it is labelled `web`.
- * - **Subagents**, by their own start and end: Claude's `task_started` and
- *   `task_notification`, OpenCode's `task_started` and its call's result.
- *   A turn's end closes none of them.
- * - **Routine**: the wake a conversation's turn read, until its result; and a
- *   session a routine-run turn started, for its life.
- */
-export const createTurnWatch = (store: TaintStore) => {
-  const held = new Map<string, SessionTaintRow>();
-  let fleet:
-    | { at: number; context: WebContext; urls: Map<string, string | undefined> }
-    | undefined;
-
-  /** What the web test reads of the fleet: its hostnames and ids (lower case), its MCP servers' URLs; read again once a minute. */
-  const webContext = (): WebContext => {
-    const now = Date.now();
-    if (!fleet || now - fleet.at > FLEET_READ_MS) {
-      const urls = new Map<string, string | undefined>();
-      fleet = {
-        at: now,
-        urls,
-        context: {
-          fleet: new Set(
-            [...store.fleetHosts()].map((host) => host.toLowerCase())
-          ),
-          mcpUrl: (server) => {
-            if (!urls.has(server)) {
-              urls.set(server, store.mcpUrl(server));
-            }
-            return urls.get(server);
-          },
-        },
-      };
-    }
-    return fleet.context;
-  };
-
-  const stateOf = (instanceId: string): SessionTaintRow => {
-    const known = held.get(instanceId);
-    if (known) {
-      return known;
-    }
-    const read = store.get(instanceId) ?? blank(instanceId);
-    held.set(instanceId, read);
-    return read;
-  };
-
-  /** The session's state with `patch` over it, kept, and stored when it changed. */
-  const change = (
-    instanceId: string,
-    patch: Partial<Omit<SessionTaintRow, "instanceId" | "updatedAt">>
-  ): void => {
-    const before = stateOf(instanceId);
-    const after: SessionTaintRow = { ...before, ...patch };
-    if (
-      after.web === before.web &&
-      after.fromRoutine === before.fromRoutine &&
-      after.delivered === before.delivered &&
-      after.routine === before.routine &&
-      Bun.deepEquals(after.subagents, before.subagents)
-    ) {
-      return;
-    }
-    after.updatedAt = new Date();
-    held.set(instanceId, after);
-    try {
-      store.put(after);
-    } catch (error) {
-      // A frame from a process the hub keeps no row for: it has no
-      // credential, so it writes no note, and its state stays in memory.
-      console.warn(
-        `[memory] ${instanceId}: its taint was not stored: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  };
-
-  /** The tools a model's message calls (the session's or a subagent's): the web read makes the session's taint stick. */
-  const called = (
-    instanceId: string,
-    neutral: Extract<NeutralMessage, { type: "assistant" }>
-  ): void => {
-    const calls = neutral.message.content.filter(
-      (block) => block.type === "tool_use"
-    );
-    if (
-      calls.length > 0 &&
-      !stateOf(instanceId).web &&
-      calls.some((block) =>
-        readsWeb(
-          block.name,
-          isRecord(block.input) ? block.input : {},
-          webContext()
-        )
-      )
-    ) {
-      change(instanceId, { web: true });
-    }
-  };
-
-  /** A subagent's own start or end (system frames). */
-  const tasked = (
-    instanceId: string,
-    neutral: Extract<NeutralMessage, { type: "system" }>
-  ): void => {
-    const { subagents } = stateOf(instanceId);
-    const task = neutral.task_id;
-    if (!task) {
-      return;
-    }
-    // Only a real subagent's start names its type; a background command's does not.
-    if (neutral.subtype === "task_started" && neutral.subagent_type) {
-      if (!subagents.some((open) => open.task === task)) {
-        change(instanceId, {
-          subagents: [
-            ...subagents,
-            { task, call: neutral.tool_use_id ?? null },
-          ],
-        });
-      }
-    } else if (neutral.subtype === "task_notification" && neutral.status) {
-      change(instanceId, {
-        subagents: subagents.filter((open) => open.task !== task),
-      });
-    }
-  };
-
-  /** The session's own tool results: on a harness whose subagent ends with its call, that call's result ends it. */
-  const answered = (
-    instanceId: string,
-    neutral: Extract<NeutralMessage, { type: "user" }>,
-    harness: string | undefined
-  ): void => {
-    const { subagents } = stateOf(instanceId);
-    const { content } = neutral.message;
-    if (
-      subagents.length === 0 ||
-      neutral.parent_tool_use_id ||
-      !endsWithCall(harness) ||
-      !Array.isArray(content)
-    ) {
-      return;
-    }
-    const answers = new Set(
-      content.flatMap((block) =>
-        block.type === "tool_result" ? [block.tool_use_id] : []
-      )
-    );
-    change(instanceId, {
-      subagents: subagents.filter(
-        (open) => !(open.call && answers.has(open.call))
-      ),
-    });
-  };
-
-  return {
-    /** A frame the hub admitted from the session, on `harness`. */
-    frame(
-      instanceId: string,
-      neutral: NeutralMessage,
-      harness: string | undefined
-    ): void {
-      if (neutral.type === "result") {
-        change(instanceId, { delivered: false, routine: null });
-      } else if (neutral.type === "assistant") {
-        called(instanceId, neutral);
-      } else if (neutral.type === "system") {
-        tasked(instanceId, neutral);
-      } else if (neutral.type === "user") {
-        answered(instanceId, neutral, harness);
-      }
-    },
-
-    /** A send the hub delivered, read by the session's harness: its turn is delivered; a routine's wake of a conversation makes it the run's. */
-    read(instanceId: string, origin: NeutralOrigin | undefined): void {
-      if (origin?.kind === "system" && origin.name === KEEPALIVE) {
-        return;
-      }
-      const routine =
-        origin?.kind === "system" && origin.name?.startsWith(ROUTINE_ORIGIN)
-          ? origin.name.slice(ROUTINE_ORIGIN.length)
-          : undefined;
-      change(instanceId, {
-        delivered: true,
-        ...(routine ? { routine } : {}),
-      });
-    },
-
-    /** A session a parent's turn started (work-items.ts): a routine-run turn's child is the run's, for its life. */
-    spawned(instanceId: string, parentId: string): void {
-      const parent = stateOf(parentId);
-      const routine = parent.routine ?? parent.fromRoutine;
-      if (routine) {
-        change(instanceId, { fromRoutine: routine });
-      }
-    },
-
-    /** The session's process ended: its turn and its subagents with it; what it read and where it came from stay. */
-    ended(instanceId: string): void {
-      change(instanceId, { delivered: false, routine: null, subagents: [] });
-    },
-
-    state: (instanceId: string): SessionTaintRow => stateOf(instanceId),
-  };
-};
-
-type TurnWatch = ReturnType<typeof createTurnWatch>;
-
 // --- notes ----------------------------------------------------------------------
 
 export interface Note {
@@ -444,8 +180,6 @@ export interface Note {
    */
   since: string | null;
   source: string;
-  /** Its front matter's labels, word for word: the hub writes a session's {@link Taint}s there. */
-  taint: string[];
   task: string | null;
   text: string;
   time: string;
@@ -505,7 +239,6 @@ const renderNote = (note: Note): string =>
     ...(note.task ? [`task: ${note.task}`] : []),
     `time: ${note.time}`,
     ...(note.since ? [`since: ${note.since}`] : []),
-    ...(note.taint.length > 0 ? [`taint: [${note.taint.join(", ")}]`] : []),
     ...(note.verdict ? [`verdict: ${note.verdict}`] : []),
     ...(note.by ? [`by: ${note.by}`] : []),
     ...(note.outcome ? [`outcome: ${quoted(note.outcome)}`] : []),
@@ -527,7 +260,6 @@ const parseNote = (path: string, content: string): Note | undefined => {
   if (!(id && NOTE_ID.test(id))) {
     return;
   }
-  const taintLine = block.lines.find((each) => each.key === "taint");
   const verdict = field("verdict");
   const since = field("since");
   return {
@@ -540,7 +272,6 @@ const parseNote = (path: string, content: string): Note | undefined => {
     task: field("task"),
     time: field("time") ?? "",
     since: since && DAY.test(since) ? since : null,
-    taint: (taintLine ? listOf(taintLine) : undefined) ?? [],
     verdict: isVerdict(verdict) ? verdict : null,
     by: field("by"),
     outcome: field("outcome"),
@@ -879,6 +610,7 @@ export interface MemoryDeps {
     | "getOpenRouterConnection"
     | "listProjects"
     | "memoryFacts"
+    | "personSaidIn"
     | "project"
     | "workItem"
   >;
@@ -894,7 +626,6 @@ export interface MemoryDeps {
     actor: InstanceRow,
     id: string
   ) => Promise<{ text: string; withdrawn: string } | AnyProblem>;
-  readonly watch: TurnWatch;
 }
 
 export const createMemory = ({
@@ -904,7 +635,6 @@ export const createMemory = ({
   folderChanged,
   rule,
   unnote,
-  watch,
 }: MemoryDeps) => {
   /**
    * Each project's index as a session launches with it ({@link indexOf}):
@@ -924,65 +654,8 @@ export const createMemory = ({
     return project;
   };
 
-  const row = (id: string): InstanceRow | undefined =>
-    db.getInstancesByIds([id]).at(0);
-
-  // --- labels --------------------------------------------------------------------
-
-  /**
-   * Whether the session runs for a routine, as the hub stored it: its turn
-   * read a routine's wake, or it or a session above it is a routine run's
-   * (a parent `routine:<id>`) or was started by a routine-run turn.
-   */
-  const routineRun = (actor: InstanceRow): boolean => {
-    if (watch.state(actor.id).routine) {
-      return true;
-    }
-    let at: InstanceRow | undefined = actor;
-    for (let depth = 0; at && depth < ANCESTRY; depth += 1) {
-      if (
-        isRoutineParent(at.parentInstanceId) ||
-        watch.state(at.id).fromRoutine
-      ) {
-        return true;
-      }
-      const item = at.workItemId ? db.workItem(at.workItemId) : undefined;
-      if (isRoutineParent(item?.parentInstanceId)) {
-        return true;
-      }
-      at = at.parentInstanceId ? row(at.parentInstanceId) : undefined;
-    }
-    return false;
-  };
-
-  /** The hub's labels on a note `actor` writes now. */
-  const taintOf = (actor: InstanceRow): Taint[] => {
-    const state = watch.state(actor.id);
-    const taint: Taint[] = [];
-    if (routineRun(actor)) {
-      taint.push("routine");
-    }
-    // A turn the hub did not deliver started itself, and a keep-alive's turn
-    // is the hub's own heartbeat (its mark on the row).
-    if (
-      !state.delivered ||
-      db.getInstancesByIds([actor.id])[0]?.keepAliveTurn
-    ) {
-      taint.push("heartbeat");
-    }
-    if (state.subagents.length > 0) {
-      taint.push("subagent");
-    }
-    if (state.web) {
-      taint.push("web");
-    }
-    return taint;
-  };
-
+  /** What kind of session `actor` is: an attempt at a task, a delegate, or a session of its own. */
   const sourceOf = (actor: InstanceRow): Source => {
-    if (routineRun(actor)) {
-      return "routine";
-    }
     const item = actor.workItemId ? db.workItem(actor.workItemId) : undefined;
     if (item?.taskId) {
       return "attempt";
@@ -1055,6 +728,10 @@ export const createMemory = ({
     if (held instanceof ElysiaStatus) {
       return held;
     }
+    const quoting = quotesPerson(projectId, words, at);
+    if (quoting) {
+      return quoting;
+    }
     const ruled = await byRules(projectId, words);
     if (ruled instanceof ElysiaStatus) {
       return ruled;
@@ -1085,6 +762,35 @@ export const createMemory = ({
     }
   };
 
+  /**
+   * The refusal of a note that quotes the person (memory-sources.ts
+   * `quoteProblem`, the check a lesson passes): a double-quoted span of
+   * three words or more, or five of his words in a row from what he typed
+   * to the project's sessions in the week the nightly run reads. Nothing
+   * when it quotes no one.
+   */
+  const quotesPerson = (projectId: string, words: string, at: Date) => {
+    const said = db
+      .personSaidIn(
+        projectId,
+        new Date(at.getTime() - SAID_DAYS * DAY_MS),
+        at,
+        RUN_SAID
+      )
+      .map((one) => one.text);
+    const found = quoteProblem(words, said);
+    if (!found) {
+      return;
+    }
+    return problem(400, {
+      code: "memory-note-quotes",
+      detail:
+        found.kind === "echoes"
+          ? memoryRunWords.noteEchoes(found.word)
+          : memoryRunWords.noteQuotes,
+    });
+  };
+
   /** `actor`'s note made `at`, true since `since`, in the words and with the verdict the rules gave it: in the inbox, or archived at once when the rules sorted it out. */
   const noteOf = (
     actor: InstanceRow,
@@ -1109,7 +815,6 @@ export const createMemory = ({
       task: item?.taskId ?? null,
       time: at.toISOString(),
       since,
-      taint: taintOf(actor),
       verdict,
       by: verdict ? "rules" : null,
       outcome: outcome || null,
@@ -1119,14 +824,13 @@ export const createMemory = ({
 
   /** Note `made` from session `from`, one commit by its author; said in the log. */
   const writeNote = async (projectId: string, made: Note, from: string) => {
-    const labelled = made.taint.length > 0;
     const written = await writeFolderFile(
       projectId,
       made.path,
       renderNote(made),
       {
         author: { name: made.author },
-        message: `memory: a note from ${made.author}${labelled ? ` (${made.taint.join(", ")})` : ""}`,
+        message: `memory: a note from ${made.author}`,
       }
     );
     if (written instanceof ElysiaStatus) {
@@ -1134,7 +838,7 @@ export const createMemory = ({
     }
     folderChanged(projectId);
     console.log(
-      `[memory] ${projectId}: ${made.id} from ${from} (${made.source}${labelled ? `, labels ${made.taint.join("+")}` : ""}${made.verdict ? `, ${made.verdict}` : ""}) at ${written.sha.slice(0, 9)}`
+      `[memory] ${projectId}: ${made.id} from ${from} (${made.source}${made.verdict ? `, ${made.verdict}` : ""}) at ${written.sha.slice(0, 9)}`
     );
     return written;
   };
@@ -1411,7 +1115,6 @@ export const createMemory = ({
   };
 
   return {
-    watch,
     note,
     read,
     makeNote,

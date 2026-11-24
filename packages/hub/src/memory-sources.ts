@@ -7,11 +7,7 @@
  *   {@link ECHO_RUN} words with any message the run was given, and holds no
  *   double-quoted span of three or more words ({@link quoteProblem}). A
  *   name is two or three words; five in a row is his phrasing.
- * - **Two sessions.** An agent's lesson lands only when notes from two
- *   sessions say it, their roots differ (the top of each one's chain of
- *   parents), and at least one has no label: two sessions that read the same
- *   page would both carry it ({@link countsTogether}).
- * - **A file.** Or an agent's lesson lands when a file of the project bears
+ * - **A file.** An agent's lesson may name a file of the project that bears
  *   it out: a path in its checkout and a literal match, read by the hub on
  *   the first machine that answers for a checkout ({@link anchorRead}), and
  *   read again every night.
@@ -125,16 +121,6 @@ export const chainOf = (
   }
   return chain;
 };
-
-/** A note as the two-session gate reads it: its session's root and the hub's labels on it. */
-export interface NoteSource {
-  labels: readonly string[];
-  root: string;
-}
-
-/** Whether two notes count as two sessions: their roots differ, and at least one has no label. */
-export const countsTogether = (a: NoteSource, b: NoteSource): boolean =>
-  a.root !== b.root && (a.labels.length === 0 || b.labels.length === 0);
 
 /** The longest literal match an anchor may name: a symbol, a command or a config key, not a passage. */
 export const ANCHOR_MATCH = 120;

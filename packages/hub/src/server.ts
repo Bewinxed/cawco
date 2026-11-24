@@ -550,12 +550,7 @@ import { nameAwayMachine, reconnectingFor } from "./machine-reads";
 import { createMachineRuntime } from "./machine-runtime";
 import { MeaningJudge } from "./meaning";
 import { mediaBase64 } from "./media";
-import {
-  createMemory,
-  createTurnWatch,
-  inboxNotes,
-  memoryRoutes,
-} from "./memory";
+import { createMemory, inboxNotes, memoryRoutes } from "./memory";
 import { createMemoryRun } from "./memory-run";
 import { createMoves } from "./moves";
 import { uuidOf } from "./named-uuid";
@@ -1538,7 +1533,6 @@ export const createServer = (
     leadRuns: () => leadRunsPort.now(),
     limitRefused: () => limitRefused,
     machinePresence: () => machinePresence,
-    memoryWatch: () => memoryWatch,
     moveJobOf: () => moveJobOf,
     nameFromLiveTurn: () => nameFromLiveTurn,
     planChanges: () => planChangesPort.now(),
@@ -3155,26 +3149,6 @@ export const createServer = (
   );
   // The routines (routines.ts), likewise: a send record moves before they are made.
   const leadRunsPort = portOf<Routines | undefined>("leadRuns", undefined);
-  /**
-   * What each session's turn has done that taints a memory note written in
-   * it (memory.ts): the web read, a subagent running, a routine's wake.
-   */
-  const memoryWatch = createTurnWatch({
-    get: (instanceId) => db.sessionTaint(instanceId),
-    // The fleet's machines are inside it: a fetch from one of them is no web read.
-    fleetHosts: () => [
-      osHostname(),
-      ...db
-        .machineFacts()
-        .flatMap((agent) => [agent.hostname, agent.machineId]),
-    ],
-    // A fleet MCP server reached at a URL: an outside one's every tool reads the web.
-    mcpUrl: (server) => {
-      const config = db.getMcpServer(server)?.config;
-      return config && "url" in config ? config.url : undefined;
-    },
-    put: (row) => db.putSessionTaint(row),
-  });
   pending.onSettled((parked, outcome, said) => {
     if (!(parked.requestId && parked.instanceId)) {
       return;
@@ -8547,9 +8521,6 @@ export const createServer = (
     // What a session waits on the person for: an item's session resting on
     // it is neither told to finish nor failed for idling.
     personWait: restsOnPerson,
-    // A routine run's turn makes the sessions it starts the run's (memory.ts).
-    spawnedUnder: (instanceId, parentId) =>
-      memoryWatch.spawned(instanceId, parentId),
     pauses: (projectId) => caps.pauses(projectId),
     // A session already ended, or stopped with no process on its machine's
     // last custody reading, has nothing to confirm its stop: its stop is
@@ -9204,7 +9175,6 @@ export const createServer = (
   });
   const projectMemory = createMemory({
     db,
-    watch: memoryWatch,
     // The routines are made further down; a note reaches them only once the hub is up.
     curator: () => ({
       ensure: (projectId) => routines.ensureCurator(projectId),

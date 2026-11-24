@@ -12,7 +12,6 @@ export type IngestLedgerContext = Pick<
   HubContext,
   | "db"
   | "keepAliveScheduler"
-  | "memoryWatch"
   | "recordTurnUsage"
   | "routines"
   | "streams"
@@ -48,16 +47,8 @@ export const ingestLedgerStagesOf = (ctx: IngestLedgerContext) => {
   const admittedFrameRead = (run: FrameRun): FrameAnswer => {
     const { message } = run;
     const body = message.payload;
-    // What a memory note written now is tainted by (memory.ts): every
-    // admitted frame, before any path below leaves early, so a
-    // keep-alive's result ends its turn too.
     if (body.kind === "frame" && message.instanceId) {
       const admitted = body;
-      ctx.memoryWatch.frame(
-        message.instanceId,
-        admitted.message,
-        admitted.harness
-      );
       // A routine run's session's words, for a failure that gives
       // no reason (routines.ts `said`): a project conversation's
       // from before its wake's read receipt too. None of a stream's

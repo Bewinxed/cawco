@@ -141,14 +141,8 @@ export type LessonHome =
 export type LessonSource =
   /** A message the person typed, by its send's uuid. */
   | { at: string; kind: "said"; send: string; session: string }
-  /** An agent's note, its session, the top of that session's chain, and the hub's labels on it. */
-  | {
-      id: string;
-      kind: "note";
-      labels: string[];
-      root: string;
-      session: string;
-    }
+  /** An agent's note, its session, and the top of that session's chain. */
+  | { id: string; kind: "note"; root: string; session: string }
   /**
    * A file of the project's checkout the hub read, from the checkout's root,
    * and a literal match in it: the file's sha256 and the day it was last
@@ -226,7 +220,8 @@ export interface MemoryRunState {
     retired: number;
     /** Lessons taken back because the person stated the opposite; none before it was counted. */
     reverted?: number;
-    staged: number;
+    /** Lessons staged from one note; none since staging was removed. */
+    staged?: number;
   } | null;
   /** The newest of the person's messages a run has read (an ISO time). */
   through: string;

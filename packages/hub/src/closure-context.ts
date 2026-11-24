@@ -191,7 +191,7 @@ import type {
 import type { createMachineContact } from "./machine-contact";
 import type { createMachineCredentials } from "./machine-credentials";
 import type { CommandOptions, MachinePause } from "./machine-pause";
-import type { createMemory, createTurnWatch } from "./memory";
+import type { createMemory } from "./memory";
 import type { MemoryRun } from "./memory-run";
 import type { createMoves } from "./moves";
 import type { createNoticesSeen } from "./notices";
@@ -820,7 +820,6 @@ export interface ClosureContext {
   mcpReady: Promise<unknown>;
   /** A project's nightly memory run and every write to its memory files (memory-run.ts). */
   memoryRun: MemoryRun;
-  memoryWatch: ReturnType<typeof createTurnWatch>;
   merging: MergeDeps;
   /** What `harness` lists on `machineId` (core `modelListingOn`). */
   modelListing: (machineId: string, harness: HarnessKind) => ModelListing;

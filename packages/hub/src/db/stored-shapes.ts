@@ -559,7 +559,6 @@ const LessonSourceShape = declared(
     z.object({
       id: z.string(),
       kind: z.literal("note"),
-      labels: z.array(z.string()),
       root: z.string(),
       session: z.string(),
     }),

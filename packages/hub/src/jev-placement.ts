@@ -48,15 +48,12 @@ const ROWS = {
   judged: "Judged checks",
   phone: "Phone requests",
   order: "Dispatch order",
-  // Asked in memory-run.ts: what the person's messages are, what each note
-  // is, whether a message states a lesson, whether two notes say the same,
-  // whether a new lesson says what a kept one says, whether a message
-  // states a lesson kept again or the opposite; and in
-  // memory.ts, what an attempt's brief carries.
+  // Asked in memory-run.ts: what the person's messages are, whether a
+  // message states a lesson, whether a new lesson says what a kept one
+  // says, whether a message states a lesson kept again or the opposite;
+  // and in memory.ts, what an attempt's brief carries.
   said: "What the person said",
-  inbox: "Memory inbox",
   support: "Lesson source",
-  same: "Same lesson",
   kept: "Lesson kept already",
   corrects: "Corrected again",
   context: "Brief context",

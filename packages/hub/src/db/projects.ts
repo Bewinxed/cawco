@@ -39,7 +39,6 @@ import {
   githubPollers,
   type HubFolder,
   instances,
-  type OpenSubagent,
   passkeySettings,
   projectAccounts,
   projectLinks,
@@ -52,8 +51,6 @@ import {
   SESSION_LIMITS_ID,
   SPEND_SETTINGS_ID,
   sessionLimits,
-  sessionSubagents,
-  sessionTaints,
   spendSettings,
   taskCommentIds,
   taskTriggers,
@@ -87,11 +84,6 @@ export type ProjectRow = Omit<
 };
 
 export type ProjectOfferRow = typeof projectOffers.$inferSelect;
-
-/** What a session has done that taints its memory notes (memory.ts), its open subagents with it. */
-export type SessionTaintRow = typeof sessionTaints.$inferSelect & {
-  subagents: OpenSubagent[];
-};
 
 /** A folder's trailing slashes, which {@link DbShape.projectHolding} reads past. */
 const TRAILING_SLASHES = /\/+$/u;
@@ -408,8 +400,6 @@ export interface ProjectsDb {
    * (fleet-sources.ts `machineFleetItems`).
    */
   readonly projectsWorkedOn: (machineId: string) => string[];
-  /** Stores what a session has done that taints its memory notes (memory.ts), replacing what it had. */
-  readonly putSessionTaint: (row: SessionTaintRow) => void;
   /**
    * Removes one of a project's places. Its primary checkout and its hub
    * folder are never removed here: forgetting the project is.
@@ -420,8 +410,6 @@ export interface ProjectsDb {
   ) => "removed" | "primary" | "missing";
   /** The fleet's session limits; none set reads as `{}`. */
   readonly sessionLimits: () => SessionLimits;
-  /** What a session has done that taints its memory notes; undefined for one that has done nothing the hub keeps. */
-  readonly sessionTaint: (instanceId: string) => SessionTaintRow | undefined;
   /** Whether passkey relay is enabled fleet-wide. */
   readonly setPasskeyRelay: (enabled: boolean) => void;
   /**
@@ -848,43 +836,6 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
           )
         )
         .get()?.usd ?? 0,
-    sessionTaint: (instanceId) => {
-      const row = db
-        .select()
-        .from(sessionTaints)
-        .where(eq(sessionTaints.instanceId, instanceId))
-        .get();
-      return (
-        row && {
-          ...row,
-          subagents: db
-            .select({
-              task: sessionSubagents.task,
-              call: sessionSubagents.call,
-            })
-            .from(sessionSubagents)
-            .where(eq(sessionSubagents.instanceId, instanceId))
-            .all(),
-        }
-      );
-    },
-    putSessionTaint: ({ subagents, ...row }) => {
-      const { instanceId, ...rest } = row;
-      db.transaction((tx) => {
-        tx.insert(sessionTaints)
-          .values(row)
-          .onConflictDoUpdate({ target: sessionTaints.instanceId, set: rest })
-          .run();
-        tx.delete(sessionSubagents)
-          .where(eq(sessionSubagents.instanceId, instanceId))
-          .run();
-        if (subagents.length > 0) {
-          tx.insert(sessionSubagents)
-            .values(subagents.map((open) => ({ instanceId, ...open })))
-            .run();
-        }
-      });
-    },
     cawSpentSince: (projectId, since) => cawSince(projectId, since),
     cawThreads: (projectId) => {
       const conversations = and(

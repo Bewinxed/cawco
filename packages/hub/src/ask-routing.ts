@@ -90,7 +90,6 @@ export type AskRoutingContext = Pick<
   | "keepPrompt"
   | "lead"
   | "machineName"
-  | "memoryWatch"
   | "movedFrom"
   | "oweMoveOff"
   | "owedMoves"
@@ -176,8 +175,6 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
     }
     // A conversation's turn ends with its process.
     ctx.lead?.sessionEnded(instanceId);
-    // And whatever its turn had read or started with it (memory.ts).
-    ctx.memoryWatch.ended(instanceId);
     ctx.touched.delete(instanceId);
     // A session that died before it ever said anything is never going to name
     // itself; nothing should still be waiting to hear its first words.
