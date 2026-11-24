@@ -347,7 +347,7 @@
     ondepart(row);
     const node = items.get(row.s.id);
     const rowTile = node?.querySelector<HTMLElement>(
-      ':scope > [data-slot="rin"] .tile'
+      ':scope > [data-slot="rin"] [data-slot="tile"]'
     );
     const moving = motionOk.current && node && rowTile;
     if (moving) {

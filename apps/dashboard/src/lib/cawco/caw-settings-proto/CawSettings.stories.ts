@@ -29,16 +29,19 @@ export const TurningOff = {
 export const Stopped = {
   from: "TurningOff",
   play: async ({
+    canvasElement,
     userEvent,
   }: {
+    canvasElement: HTMLElement;
     userEvent: {
       click: (element: Element) => Promise<void>;
       wait: (ms: number) => Promise<void>;
     };
   }) => {
-    // The stand-in reads what runs and the card grows out of the switch first.
+    // The stand-in reads what runs and the card grows out of the switch
+    // first, in this frame (the page holds every story's frame).
     await userEvent.wait(1500);
-    const stop = document.querySelector("[data-stop-confirm]");
+    const stop = canvasElement.querySelector("[data-stop-confirm]");
     if (stop instanceof HTMLElement) {
       stop.click();
     }
