@@ -44,13 +44,13 @@
  *   then; the caps and the night's limits hold. Each
  *   operation is one commit, by the Memory curator, with the notes it
  *   consumed archived in it.
- * - **The person's word on a rule** ({@link ruleAsked}, `memory_rule`): a
- *   session removes, rewords or adds one of the project's rules at once
- *   when the person asks, through the same checked change, one commit by
- *   him, his newest message in the session's chain its source. What he
- *   changes is held: a removed rule stays out (no repeat puts it back, an
- *   agent's lesson saying it again is refused, upkeep keeps its entry), and
- *   an inbox note naming it is archived as settled. Every commit checks
+ * - **A rule changed at once** ({@link ruleAsked}, `memory_rule`): a
+ *   session removes, rewords or adds one of the project's rules at once,
+ *   through the same checked change, one commit by the session; the
+ *   person's newest message in the session's chain, when there is one, its
+ *   source. What it changes is held: a removed rule stays out (no repeat
+ *   puts it back, an agent's lesson saying it again is refused, upkeep
+ *   keeps its entry), and an inbox note naming it is archived as settled. Every commit checks
  *   that the files it writes still hold what it read ({@link movedUnder}),
  *   so no writer undoes another's change from an older read.
  * - **Checks** ({@link plannedCheck}): a rule a tool can test is filed as
@@ -126,6 +126,7 @@ import type {
 import { type JevAccess, jevAccess } from "./jev";
 import { askRow, offLine } from "./jev-placement";
 import type { JevResult } from "./jev-types";
+import { boardTitle } from "./labels";
 import {
   ARCHIVE_DIR,
   archivedNote,
@@ -866,11 +867,12 @@ const keptLessons = (tree: MemoryTree): Kept[] => [
 ];
 
 /**
- * The lessons the person removed through a session (memory-lessons.ts
- * Change `remove`): retired `hand`, held, their words kept. Only his own
- * message says one again; an agent's note never brings it back.
+ * The lessons removed through memory_rule (memory-lessons.ts Change
+ * `remove`): retired `hand`, held, their words kept. Only memory_rule or
+ * the person's own message says one again; an agent's note never brings
+ * it back.
  */
-const removedByPerson = (tree: MemoryTree): Beside[] =>
+const removedRules = (tree: MemoryTree): Beside[] =>
   Object.entries(tree.ledger.lessons).flatMap(([id, lesson]) =>
     lesson.state === "retired" &&
     lesson.held &&
@@ -2574,12 +2576,12 @@ export const createMemoryRun = ({
     }
     const gone =
       by === "agent"
-        ? removedByPerson(tree).find(
+        ? removedRules(tree).find(
             (one) => saysAlready(one.text, text) || saysAlready(text, one.text)
           )
         : undefined;
     if (gone) {
-      return memoryRunWords.removedByPerson(gone.id);
+      return memoryRunWords.removedRule(gone.id);
     }
     if (by === "agent" && outsideUrls(text, fleetHosts()).length > 0) {
       return memoryRunWords.outsideUrl;
@@ -2720,7 +2722,7 @@ export const createMemoryRun = ({
    * corroborate, of every live lesson in its home and the index, and every
    * staged one bound there, this run's earlier adds among them (each is in
    * `tree`); an agent's that says what the person removed
-   * ({@link removedByPerson}) is refused as his to bring back; else, in a
+   * ({@link removedRules}) is refused, as memory_rule's or the person's to bring back; else, in a
    * project that develops CawCo, whether it is about CawCo (row `product`,
    * {@link productTask}). Not about CawCo with Jev off: the lesson is
    * staged then, and Jev reads it the first night it is on
@@ -2738,7 +2740,7 @@ export const createMemoryRun = ({
     }
     const { text } = lesson;
     const beside = besideOf(tree, home, { staged: true });
-    const removed = lesson.by === "agent" ? removedByPerson(tree) : [];
+    const removed = lesson.by === "agent" ? removedRules(tree) : [];
     try {
       const answers = await answersOf(
         projectId,
@@ -2749,7 +2751,7 @@ export const createMemoryRun = ({
       );
       const id = likeliest("kept", "add", [...beside, ...removed], answers);
       if (id && removed.some((one) => one.id === id)) {
-        return memoryRunWords.removedByPerson(id);
+        return memoryRunWords.removedRule(id);
       }
       return id
         ? memoryRunWords.keptAlready(id)
@@ -5176,9 +5178,9 @@ export const createMemoryRun = ({
     return { withdrawn: done };
   };
 
-  // --- the person's word on a rule ------------------------------------------------------
+  // --- a rule changed at once ------------------------------------------------------------
 
-  /** The person's newest message in `actor`'s chain ({@link chainOf}) as a source: what a rule change through a session rests on. */
+  /** The person's newest message in `actor`'s chain ({@link chainOf}) as a source, when there is one: recorded on a rule change through memory_rule. */
   const personsWord = (
     actor: Pick<InstanceRow, "id" | "parentInstanceId">
   ): LessonSource | undefined => {
@@ -5187,7 +5189,7 @@ export const createMemoryRun = ({
     return said ? saidSource(said) : undefined;
   };
 
-  /** Why rule words the person gave may not stand: one line within its cap, no secret, said by no other live line. Nothing when they may. */
+  /** Why a rule's words through memory_rule may not stand: one line within its cap, no secret, said by no other live line. Nothing when they may. */
   const ruleWordsProblem = async (
     tree: MemoryTree,
     words: { text: string; why: string | undefined },
@@ -5224,7 +5226,7 @@ export const createMemoryRun = ({
       : undefined;
   };
 
-  /** The live or staged lesson `id` names, or why it names none a person's change may act on (`live` only: one with a line). */
+  /** The live or staged lesson `id` names, or why it names none memory_rule may act on (`live` only: one with a line). */
   const ruleOf = (tree: MemoryTree, id: string, liveOnly: boolean) => {
     if (!RULE_ID.test(id)) {
       return problem(400, {
@@ -5247,7 +5249,7 @@ export const createMemoryRun = ({
         });
   };
 
-  /** The inbox notes of `free` that name lesson `id`, each archived as settled by the person's change. */
+  /** The inbox notes of `free` that name lesson `id`, each archived as settled by the change through memory_rule. */
   const settledBy = (
     free: readonly Note[],
     verb: "removed" | "reworded",
@@ -5270,117 +5272,150 @@ export const createMemoryRun = ({
       .map((each) => ` ${memoryRunWords.evicted(each.id, each.from, each.to)}.`)
       .join("");
 
+  /** Who a change through memory_rule is by, and what it rests on: the person's message, when there is one. */
+  const whoseRule = (source: LessonSource | undefined) =>
+    source
+      ? { by: "owner" as const, sources: [source] }
+      : { by: "agent" as const, sources: [] };
+
+  /** A removal through memory_rule, checked ({@link ruleChange}). */
+  const ruleRemoval = (
+    tree: MemoryTree,
+    rule: string,
+    source: LessonSource | undefined,
+    free: readonly Note[]
+  ) => {
+    const lesson = ruleOf(tree, rule, false);
+    if (lesson instanceof ElysiaStatus) {
+      return lesson;
+    }
+    const text = lineOf(tree, rule)?.text ?? lesson.staged?.text ?? "";
+    const path = pathOf(lesson.home) ?? LEDGER_FILE;
+    const notes = settledBy(free, "removed", rule);
+    const change: Change = {
+      kind: "remove",
+      id: rule,
+      ...(source ? { source } : {}),
+    };
+    return {
+      change,
+      subject: memoryRunWords.ruleRemoveSaid(rule),
+      notes,
+      answer: () => memoryRunWords.ruleRemoved(rule, path, text, notes.length),
+    };
+  };
+
+  /** A rewording through memory_rule, checked ({@link ruleChange}). */
+  const ruleRewording = async (
+    tree: MemoryTree,
+    ask: Extract<RuleAsk, { action: "reword" }>,
+    source: LessonSource | undefined,
+    free: readonly Note[]
+  ) => {
+    const { by, sources } = whoseRule(source);
+    const lesson = ruleOf(tree, ask.rule, true);
+    if (lesson instanceof ElysiaStatus) {
+      return lesson;
+    }
+    const words = {
+      text: ask.text,
+      why: ask.why ?? lineOf(tree, ask.rule)?.why ?? undefined,
+    };
+    const unfit = await ruleWordsProblem(tree, words, lesson.home, ask.rule);
+    if (unfit) {
+      return unfit;
+    }
+    const newId = newLessonId((taken) => taken in tree.ledger.lessons);
+    const path = pathOf(lesson.home) ?? INDEX_FILE;
+    const notes = settledBy(free, "reworded", ask.rule);
+    const change: Change = {
+      kind: "replace",
+      by,
+      held: true,
+      id: ask.rule,
+      newId,
+      sources,
+      text: words.text,
+      why: words.why ?? null,
+    };
+    return {
+      change,
+      subject: memoryRunWords.replaced(ask.rule, newId, path),
+      notes,
+      answer: (applied: Applied) =>
+        `${memoryRunWords.ruleReworded(ask.rule, newId, path, notes.length)}${evictedWords(applied)}`,
+    };
+  };
+
+  /** A rule added through memory_rule, checked ({@link ruleChange}). */
+  const ruleAddition = async (
+    tree: MemoryTree,
+    ask: Extract<RuleAsk, { action: "add" }>,
+    source: LessonSource | undefined
+  ) => {
+    const { by, sources } = whoseRule(source);
+    const home: LessonHome = { at: "index" };
+    const unfit = await ruleWordsProblem(
+      tree,
+      { text: ask.text, why: ask.why },
+      home,
+      undefined
+    );
+    if (unfit) {
+      return unfit;
+    }
+    const id = newLessonId((taken) => taken in tree.ledger.lessons);
+    const change: Change = {
+      kind: "add",
+      by,
+      held: true,
+      home,
+      id,
+      sources,
+      text: ask.text,
+      why: ask.why ?? null,
+    };
+    return {
+      change,
+      subject: memoryRunWords.added(id, INDEX_FILE),
+      notes: [],
+      answer: (applied: Applied) => {
+        const landed = applied.tree.ledger.lessons[id]?.home;
+        return `${memoryRunWords.ruleAdded(id, (landed && pathOf(landed)) ?? INDEX_FILE)}${evictedWords(applied)}`;
+      },
+    };
+  };
+
   /**
-   * A rule change the person asked for, checked against the memory as
+   * A rule change through memory_rule, checked against the memory as
    * `tree` holds it: the change, its commit's subject, the inbox notes of
    * `free` it settles, and its answer once applied; or why not.
    */
-  const ruleChange = async (
+  const ruleChange = (
     tree: MemoryTree,
     ask: RuleAsk,
-    source: LessonSource,
+    source: LessonSource | undefined,
     free: readonly Note[]
   ) => {
     switch (ask.action) {
-      case "remove": {
-        const lesson = ruleOf(tree, ask.rule, false);
-        if (lesson instanceof ElysiaStatus) {
-          return lesson;
-        }
-        const text = lineOf(tree, ask.rule)?.text ?? lesson.staged?.text ?? "";
-        const path = pathOf(lesson.home) ?? LEDGER_FILE;
-        const notes = settledBy(free, "removed", ask.rule);
-        const change: Change = { kind: "remove", id: ask.rule, source };
-        return {
-          change,
-          subject: memoryRunWords.ruleRemoveSaid(ask.rule),
-          notes,
-          answer: () =>
-            memoryRunWords.ruleRemoved(ask.rule, path, text, notes.length),
-        };
-      }
-      case "reword": {
-        const lesson = ruleOf(tree, ask.rule, true);
-        if (lesson instanceof ElysiaStatus) {
-          return lesson;
-        }
-        const words = {
-          text: ask.text,
-          why: ask.why ?? lineOf(tree, ask.rule)?.why ?? undefined,
-        };
-        const unfit = await ruleWordsProblem(
-          tree,
-          words,
-          lesson.home,
-          ask.rule
-        );
-        if (unfit) {
-          return unfit;
-        }
-        const newId = newLessonId((taken) => taken in tree.ledger.lessons);
-        const path = pathOf(lesson.home) ?? INDEX_FILE;
-        const notes = settledBy(free, "reworded", ask.rule);
-        const change: Change = {
-          kind: "replace",
-          by: "owner",
-          held: true,
-          id: ask.rule,
-          newId,
-          sources: [source],
-          text: words.text,
-          why: words.why ?? null,
-        };
-        return {
-          change,
-          subject: memoryRunWords.replaced(ask.rule, newId, path),
-          notes,
-          answer: (applied: Applied) =>
-            `${memoryRunWords.ruleReworded(ask.rule, newId, path, notes.length)}${evictedWords(applied)}`,
-        };
-      }
-      case "add": {
-        const home: LessonHome = { at: "index" };
-        const unfit = await ruleWordsProblem(
-          tree,
-          { text: ask.text, why: ask.why },
-          home,
-          undefined
-        );
-        if (unfit) {
-          return unfit;
-        }
-        const id = newLessonId((taken) => taken in tree.ledger.lessons);
-        const change: Change = {
-          kind: "add",
-          by: "owner",
-          held: true,
-          home,
-          id,
-          sources: [source],
-          text: ask.text,
-          why: ask.why ?? null,
-        };
-        return {
-          change,
-          subject: memoryRunWords.added(id, INDEX_FILE),
-          notes: [],
-          answer: (applied: Applied) => {
-            const landed = applied.tree.ledger.lessons[id]?.home;
-            return `${memoryRunWords.ruleAdded(id, (landed && pathOf(landed)) ?? INDEX_FILE)}${evictedWords(applied)}`;
-          },
-        };
-      }
+      case "remove":
+        return ruleRemoval(tree, ask.rule, source, free);
+      case "reword":
+        return ruleRewording(tree, ask, source, free);
+      case "add":
+        return ruleAddition(tree, ask, source);
       default:
         return unhandled("memory rule ask", ask);
     }
   };
 
-  /** {@link ruleAsked} once, on the memory as it stands: the change checked, applied and committed by the person, with the inbox notes it settles. */
+  /** {@link ruleAsked} once, on the memory as it stands: the change checked, applied and committed by the session, with the inbox notes it settles. */
   const ruleOnce = async (
-    projectId: string,
+    actor: InstanceRow,
     ask: RuleAsk,
-    source: LessonSource
+    source: LessonSource | undefined
   ) => {
+    const projectId = actor.projectId ?? "";
     const read = await treeOf(projectId);
     if (read instanceof ElysiaStatus) {
       return read;
@@ -5405,7 +5440,7 @@ export const createMemoryRun = ({
       usesOf(projectId)
     );
     const sha = await commit(projectId, read.tree, applied.tree, {
-      author: YOU,
+      author: { name: boardTitle(actor) },
       message: `memory: ${memoryRunWords.ruleCommit(asked.subject)}`,
       notes: asked.notes,
     });
@@ -5413,22 +5448,19 @@ export const createMemoryRun = ({
   };
 
   /**
-   * A session acts on the person's word on one of the project's rules
-   * (`memory_rule`): removes it, rewords it or adds one, at once, through
-   * the change the run's own operations go through, one commit by the
-   * person. Refused for a session in no project, and for one no message of
-   * the person's reaches (its chain, {@link chainOf}): his newest there is
-   * the change's source. What he changes is held: a removed rule stays out
-   * ({@link removedByPerson}, `takenOut` never reads it, upkeep keeps its
-   * entry), and a reworded or added one is never changed by the run. An
-   * inbox note that names a rule he removed or reworded is archived as
-   * settled in the same commit, unless a run is reading it. Made again on
-   * the memory as it then stands when another writer committed under it.
+   * A session changes one of the project's rules at once (`memory_rule`):
+   * removes it, rewords it or adds one, through the change the run's own
+   * operations go through, one commit by the session. Refused for a session
+   * in no project. The person's newest message in its chain
+   * ({@link chainOf}), when there is one, is the change's source. What it
+   * changes is held: a removed rule stays out ({@link removedRules},
+   * `takenOut` never reads it, upkeep keeps its entry), and a reworded or
+   * added one is never changed by the run. An inbox note that names a rule
+   * it removed or reworded is archived as settled in the same commit,
+   * unless a run is reading it. Made again on the memory as it then stands
+   * when another writer committed under it.
    */
-  const ruleAsked = async (
-    actor: Pick<InstanceRow, "id" | "parentInstanceId" | "projectId">,
-    ask: RuleAsk
-  ) => {
+  const ruleAsked = async (actor: InstanceRow, ask: RuleAsk) => {
     const { projectId } = actor;
     if (!projectId) {
       return problem(409, {
@@ -5441,14 +5473,8 @@ export const createMemoryRun = ({
       return project;
     }
     const source = personsWord(actor);
-    if (!source) {
-      return problem(403, {
-        code: "memory-rule-no-word",
-        detail: memoryRunWords.ruleNoWord,
-      });
-    }
     return await asUnnoting(projectId, async () => {
-      let done = await ruleOnce(projectId, ask, source);
+      let done = await ruleOnce(actor, ask, source);
       for (
         let tries = 1;
         tries < RULE_TRIES &&
@@ -5456,7 +5482,7 @@ export const createMemoryRun = ({
         done.response.code === "memory-changed";
         tries += 1
       ) {
-        done = await ruleOnce(projectId, ask, source);
+        done = await ruleOnce(actor, ask, source);
       }
       return done;
     });

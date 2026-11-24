@@ -530,7 +530,7 @@ export class CheckedOp {
 
 /** What one checked operation does to the files and the ledger. */
 export type Change =
-  /** A new lesson: a line in its home, or, staged, the ledger alone; `held` when the person added it through a session (memory-run.ts `ruleAsked`). */
+  /** A new lesson: a line in its home, or, staged, the ledger alone; `held` when added through memory_rule (memory-run.ts `ruleAsked`). */
   | {
       by: Lesson["by"];
       held?: true;
@@ -543,7 +543,7 @@ export type Change =
       text: string;
       why: string | null;
     }
-  /** A live lesson's words changed: its line rewritten under a new id, with its `Why:` (none when `why` is null); `held` when the person reworded it through a session. */
+  /** A live lesson's words changed: its line rewritten under a new id, with its `Why:` (none when `why` is null); `held` when reworded through memory_rule. */
   | {
       by: Lesson["by"];
       held?: true;
@@ -572,11 +572,12 @@ export type Change =
       why: NonNullable<Lesson["retired"]>["why"];
     }
   /**
-   * The person removed a lesson through a session (memory-run.ts
-   * `ruleAsked`): its line taken out, retired `hand` with its words kept,
-   * held so no run puts it back, his message (`source`) one of its sources.
+   * A lesson removed through memory_rule (memory-run.ts `ruleAsked`): its
+   * line taken out, retired `hand` with its words kept, held so no run puts
+   * it back, the person's message (`source`), when there is one, among its
+   * sources.
    */
-  | { id: string; kind: "remove"; source: LessonSource }
+  | { id: string; kind: "remove"; source?: LessonSource }
   /** A knowledge lesson no brief carried for the archive's days, to `knowledge/archive/<topic>.md`. */
   | { id: string; kind: "archive" }
   /** A lesson CawCo carries now, the task that built it into CawCo (`task`) done: retired `product`, its line taken out. */
@@ -1162,7 +1163,7 @@ const repeated = (
     : { tree: counted };
 };
 
-/** A lesson the person removed ({@link Change} `remove`): retired `hand`, its words kept, held, his message among its sources. */
+/** A lesson removed through memory_rule ({@link Change} `remove`): retired `hand`, its words kept, held, the person's message, when there is one, among its sources. */
 const removed = (
   now: MemoryTree,
   op: ChangeOf<"remove">,
@@ -1172,7 +1173,7 @@ const removed = (
   return lesson
     ? entryPatched(retireLine(now, op.id, "hand", today), op.id, {
         held: true,
-        sources: withSourcesAdded(lesson.sources, [op.source]),
+        sources: withSourcesAdded(lesson.sources, op.source ? [op.source] : []),
       })
     : now;
 };

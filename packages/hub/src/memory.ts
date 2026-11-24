@@ -14,7 +14,7 @@
  *   any of them with `folder_write` ({@link personsTier}).
  * - **Writers**: memory-run.ts, the one writer of the index's rules, skills'
  *   lessons and knowledge: the nightly memory run, through `memory_apply`
- *   and checks of its own, and the person's word on a rule through a session
+ *   and checks of its own, and a session's change to a rule
  *   (`memory_rule`, memory-run.ts `ruleAsked`), which removes, rewords or
  *   adds one at once; the person's Make a note (`makeNote`), into the
  *   index's `## Notes`, which the run never changes; a session's note
@@ -839,7 +839,7 @@ const OpInput = z.discriminatedUnion("op", [
 /** One `memory_apply` operation, as the curator writes it. */
 export type MemoryOp = z.infer<typeof OpInput>;
 
-/** A change to one of the project's rules the person asked a session for (`memory_rule`, memory-run.ts `ruleAsked`). */
+/** A change to one of the project's rules a session makes at once (`memory_rule`, memory-run.ts `ruleAsked`). */
 export type RuleAsk =
   | { action: "remove"; rule: string }
   | { action: "reword"; rule: string; text: string; why?: string }
@@ -897,7 +897,7 @@ export interface MemoryDeps {
   >;
   /** The project's folder changed under its tasks (a commit landed). */
   readonly folderChanged: (projectId: string) => void;
-  /** A session acts on the person's word on one of the project's rules (memory-run.ts `ruleAsked`): what changed, in a sentence. */
+  /** A session changes one of the project's rules at once (memory-run.ts `ruleAsked`): what changed, in a sentence. */
   readonly rule: (
     actor: InstanceRow,
     ask: RuleAsk
@@ -1580,16 +1580,12 @@ const MEMORY_RULE_DEFINITION = defineTool(
       .string()
       .max(NOTE_LIMIT)
       .optional()
-      .describe(
-        "For reword and add: the rule in one sentence, as the person put it."
-      ),
+      .describe("For reword and add: the rule in one sentence."),
     why: z
       .string()
       .max(NOTE_LIMIT)
       .optional()
-      .describe(
-        "For reword and add: why it holds, in one line, when the person said."
-      ),
+      .describe("For reword and add: why it holds, in one line."),
   },
   sentence
 );

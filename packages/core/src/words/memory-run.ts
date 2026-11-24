@@ -53,29 +53,27 @@ export const memoryRunWords = {
     `Withdrew ${id}; the memory run will not read it. It said: ${text}`,
   /** The line every session that may note is told at its start. */
   noteLine:
-    "A lasting fact for this project's later sessions, or a correction the person gives about how to work, goes through memory_note as you learn it, in your own words. When the person asks to remove, reword or add one of the project's rules, make that change at once with memory_rule.",
+    "A lasting fact for this project's later sessions, or a correction the person gives about how to work, goes through memory_note as you learn it, in your own words. To remove, reword or add one of the project's rules at once, use memory_rule.",
 
   /** `memory_rule`'s description. */
   ruleTool:
-    "Removes, rewords or adds one of this project's rules at once, in AGENTS.md and the memory's ledger. Use it only when the person asks for that change, never on your own judgement.",
+    "Removes, rewords or adds one of this project's rules at once, in AGENTS.md and the memory's ledger. Use it when one of the project's rules should change now rather than wait for the nightly run.",
   /** `memory_rule`'s answers: what changed, and what it means for the nightly run. */
   ruleRemoved: (id: string, path: string, text: string, settled: number) =>
     `Removed ${id} from ${path} (it said: ${text}). Sessions that start from now on no longer load it, and the nightly run does not bring it back.${settledWords(settled)}`,
   ruleReworded: (id: string, newId: string, path: string, settled: number) =>
-    `Reworded ${id} as ${newId} in ${path}. The person's words are held: the nightly run does not change, move or retire them.${settledWords(settled)}`,
+    `Reworded ${id} as ${newId} in ${path}. It is held: the nightly run does not change, move or retire it.${settledWords(settled)}`,
   ruleAdded: (id: string, path: string) =>
-    `Added ${id} to ${path}. The person's words are held: the nightly run does not change, move or retire them.`,
-  /** What a person's rule change is committed as. */
-  ruleCommit: (said: string) => `${said}, as the person asked`,
+    `Added ${id} to ${path}. It is held: the nightly run does not change, move or retire it.`,
+  /** What a rule change through memory_rule is committed as. */
+  ruleCommit: (said: string) => `${said}, through memory_rule`,
   ruleRemoveSaid: (id: string) => `remove ${id}`,
-  /** An inbox note naming a rule the person removed or reworded, archived with what came of it. */
+  /** An inbox note naming a rule removed or reworded through memory_rule, archived with what came of it. */
   ruleSettled: (verb: "removed" | "reworded", id: string) =>
-    `settled: the person ${verb} ${id}`,
+    `settled: ${id} ${verb} through memory_rule`,
   /** `memory_rule`'s refusals. */
   ruleNoProject:
     "This session is in no project, so it has no rules to change: memory_rule changes the rules of the session's project.",
-  ruleNoWord:
-    "No message of the person's reaches this session or any session above it: memory_rule changes a rule only when the person asked for it.",
   ruleAskUnfit: (action: string, missing: string) =>
     `${action} needs ${missing}: remove takes rule; reword takes rule and text; add takes text, like {"action":"add","text":"Run the checks before finishing."}.`,
   ruleIdUnfit: (id: string) =>
@@ -85,9 +83,9 @@ export const memoryRunWords = {
   ruleNotLive: (id: string, state: string) =>
     `${id} is ${state}, with no line in a memory file: only a live rule can be changed.`,
   ruleSame: (id: string) => `${id} says this already, word for word.`,
-  /** A lesson an agent's notes would add that says what the person removed. */
-  removedByPerson: (id: string) =>
-    `The person removed ${id}, which says this: only his own message brings it back.`,
+  /** A lesson an agent's notes would add that says what a rule removed through memory_rule said. */
+  removedRule: (id: string) =>
+    `${id}, which says this, was removed through memory_rule: only memory_rule or the person's own message brings it back.`,
   /** A commit refused because what it changes moved under it. */
   memoryChanged: (path: string) =>
     `${path} changed while this change was being made: read the memory again and make it once more.`,

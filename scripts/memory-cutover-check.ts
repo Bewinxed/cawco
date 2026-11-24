@@ -20,8 +20,8 @@
  * C3, one writer. `writeFolderFile`, `writeFolderFiles` and
  * `changeFolderFiles` are called with a path under AGENTS.md, `lessons/` or
  * `knowledge/` only from the places in {@link C3_WRITERS}: memory-run.ts
- * (the nightly run, and `ruleAsked`, the person's word on a rule that a
- * session acts on at once through `memory_rule`), and memory.ts's
+ * (the nightly run, and `ruleAsked`, a rule a session changes at once
+ * through `memory_rule`), and memory.ts's
  * `makeNote` (the person's own note). A call's path arguments are read for
  * those names.
  *
@@ -69,7 +69,7 @@ const C3_WRITERS: readonly { file: string; fn: string; who: string }[] = [
   {
     file: "packages/hub/src/memory-run.ts",
     fn: "",
-    who: "the nightly run's checked operations, and ruleAsked: memory_rule, the person's word on one rule (remove, reword, add) acted on at once by a session, refused where no message of his reaches it",
+    who: "the nightly run's checked operations, and ruleAsked: memory_rule, one rule removed, reworded or added at once by a session",
   },
   {
     file: "packages/hub/src/memory.ts",
@@ -311,7 +311,7 @@ const c3c6 = (): { c3: Found[]; c6: Found[] } => {
     ) {
       c3.push({
         at: `${at}${fn ? ` (${fn})` : ""}`,
-        why: "writes a memory file outside memory-run.ts and makeNote: memory-run.ts is its one writer (the nightly run, and memory_rule's ruleAsked for the person's word), and its checks stand between any source and the file",
+        why: "writes a memory file outside memory-run.ts and makeNote: memory-run.ts is its one writer (the nightly run, and memory_rule's ruleAsked), and its checks stand between any source and the file",
       });
     }
   }
