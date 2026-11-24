@@ -30,8 +30,8 @@ import {
   storyRefOf,
 } from "@cawco/core/stage";
 import {
-  MEASURE_LIMITS,
   MEASURE_PRESSES,
+  MEASURE_REPEATS,
   MEASURE_SPEEDS,
 } from "@cawco/core/stage-measure";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
@@ -404,25 +404,19 @@ export const measureAsk = z.object({
     .describe(
       "The press's element, as a play finds it: { role, name? }, { text }, { testId }, or { selector } for one with none of those. Exactly one element matches."
     ),
-  text: z
-    .string()
-    .max(MEASURE_LIMITS.text)
-    .optional()
-    .describe("A type press's words."),
+  text: z.string().optional().describe("A type press's words."),
   key: z
     .string()
     .min(1)
-    .max(MEASURE_LIMITS.key)
     .optional()
     .describe("A key press's key, as KeyboardEvent.key names it: Enter."),
   repeats: z
     .number()
     .int()
-    .min(MEASURE_LIMITS.repeats.min)
-    .max(MEASURE_LIMITS.repeats.max)
+    .min(MEASURE_REPEATS)
     .optional()
     .describe(
-      `Repeats read for the memory counters; ${MEASURE_LIMITS.repeats.fallback} when left out.`
+      `Memory repeats; ${MEASURE_REPEATS} when left out, 13 when a counter grows with fit under 0.9.`
     ),
   speed: z
     .enum(MEASURE_SPEEDS)
@@ -496,7 +490,7 @@ export const artifactRead = {
     measure: measureAsk
       .optional()
       .describe(
-        "With state.story: plays one move on the stage in a headless browser and answers measured: frames, style and layout work, each animation Chrome kept off the compositor and why, memory over repeats, and faults with what to fix. Takes about 20 s."
+        "With state.story: plays one move on the stage in a headless browser and answers measured: frames, style and layout work, each animation Chrome kept off the compositor and why, memory over repeats, and faults with what to fix. Takes about 15 s."
       ),
     verify: z.boolean().optional().describe("Asks the design verifier."),
   },

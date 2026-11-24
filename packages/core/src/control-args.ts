@@ -73,8 +73,8 @@ import {
 } from "./session-messages";
 import { canvasSpecOf, INTERACTIONS } from "./stage";
 import {
-  MEASURE_LIMITS,
   MEASURE_PRESSES,
+  MEASURE_REPEATS,
   MEASURE_SPEEDS,
 } from "./stage-measure";
 import { storedAs } from "./stored-as";
@@ -205,7 +205,7 @@ const SheetWrite = union([
   object({ files: texts, story: StoryOp }),
 ]);
 const MeasureAsk = object({
-  key: optional(pipe(text, maxLength(MEASURE_LIMITS.key))),
+  key: optional(text),
   on: optional(
     union([
       object({ role: text, name: optional(text) }),
@@ -216,16 +216,9 @@ const MeasureAsk = object({
   ),
   play: optional(literal(true)),
   press: optional(picklist(MEASURE_PRESSES)),
-  repeats: optional(
-    pipe(
-      count,
-      integer(),
-      minValue(MEASURE_LIMITS.repeats.min),
-      maxValue(MEASURE_LIMITS.repeats.max)
-    )
-  ),
+  repeats: optional(pipe(count, integer(), minValue(MEASURE_REPEATS))),
   speed: optional(picklist(MEASURE_SPEEDS)),
-  text: optional(pipe(text, maxLength(MEASURE_LIMITS.text))),
+  text: optional(text),
 });
 const RenderAsk = object({
   files: texts,

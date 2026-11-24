@@ -1,27 +1,37 @@
 /**
  * A move measured on the stage's own drawing (design perf-read §2), on the
  * page a render opened to measure (stage-render.ts, core `MEASURE_PARAM`):
- * the DevTools Protocol slows the main thread as the agent asked, two
- * warm-up repeats read the move's length and warm the engine, three traced
- * repeats are recorded and read with DevTools' own trace engine
+ * the DevTools Protocol slows the main thread as the agent asked, a scan
+ * reads the move's length and warms the engine, three traced repeats are
+ * recorded and read with DevTools' own trace engine
  * (`@paulirish/trace_engine`), then the move repeats at ten times the
  * animations' speed while the memory counters are read after garbage
- * collection. Every repeat mounts its start afresh (canvas stage.ts
- * `measure`), so each starts alike and what one leaves behind shows.
+ * collection, fuite's 7 times unless the agent asks more. A count is a
+ * forced collection and DOM counters after every repeat (the steady line
+ * a leak needs is read through them all) and the page's objects counted at
+ * three points only, the heap walk being the costly read.
+ * Every repeat mounts its start afresh (canvas stage.ts `measure`): a
+ * play has no inverse to undo it with, so each starts alike and what one
+ * leaves behind shows.
+ *
+ * The read has one bound, the render's deadline (stage-render.ts), the
+ * one the hub waits on: the traced plays must end inside it, and the
+ * memory pass runs the repeats that fit before it, each as long as its
+ * first took, and says `cut` when that is fewer than asked.
  *
  * What the numbers say becomes faults by core stage-measure.ts's rules; a
  * move that can't be measured is refused in the page's or this file's
  * words (core words/stage-measure.ts).
  */
 
-import type { Scheme } from "@cawco/core/stage";
+import { type Scheme, STAGE_RENDER_MS } from "@cawco/core/stage";
 import {
   COMPOSITING_OFF,
   EVERY_FRAME_SHARE,
   type ForcedLayout,
   MEASURE_CPU_RATE,
-  MEASURE_LIMITS,
   MEASURE_MARKS,
+  MEASURE_REPEATS,
   type MeasureAsk,
   type MeasureMove,
   type MeasurePass,
@@ -40,7 +50,7 @@ import { faultsOf } from "@cawco/core/stage-measure-faults";
 import { measureWords as words } from "@cawco/core/words/stage-measure";
 import type * as TraceEngine from "@paulirish/trace_engine";
 import type { Browser, CDPSession, Page } from "playwright-core";
-import { forcedNow, measureNow, namedNow } from "./in-page/page";
+import { forcedAllNow, measureNow, namedNow } from "./in-page/page";
 
 /** The trace categories read (design perf-read §2): the subset of DevTools' own recording list that answers frames, style, layout, compositing and the play windows, its profiler and source rundowns left out. */
 const TRACE_CATEGORIES = [
@@ -50,11 +60,9 @@ const TRACE_CATEGORIES = [
   "disabled-by-default-devtools.timeline.stack",
   "blink.user_timing",
 ];
-/** Repeats before the trace: the first reads the move's clips and length, both warm the engine, neither is counted. */
-const WARM = 2;
 /** Repeats the memory pass makes before its baseline, uncounted: what its first repeat makes once. */
 const MEMORY_WARM = 1;
-/** Traced repeats: their figures are medians, a drop counts once it repeats in two. */
+/** Traced repeats: their figures are medians, a drop counts once it repeats in two, so one play the scan left cold moves neither. */
 const TRACED = 3;
 /** The quiet that ends a move on the stage (canvas stage.ts `QUIET_MS`): frames are counted to the move's length past it. */
 const QUIET_MS = 250;
@@ -80,7 +88,7 @@ export interface MeasureTask {
   ask: MeasureAsk;
   key: string;
   scheme: Scheme;
-  /** When the measurement must answer by (`Date.now()`): its own limit, inside the render's. */
+  /** When the measurement must answer by (`Date.now()`): the render's deadline, the one the hub waits on. */
   until: number;
   window: [number, number];
 }
@@ -118,7 +126,7 @@ async function repeat(
   return run;
 }
 
-/** The page's counters after two forced collections (Chrome's unified heap collects the DOM in the same pass). */
+/** The page's counters after two forced collections (Chrome's unified heap collects the DOM in the same pass): the one collection a counted point makes, which {@link objectsOf} reads after too. */
 async function countersOf(cdp: CDPSession): Promise<Counters> {
   await cdp.send("HeapProfiler.collectGarbage");
   await cdp.send("HeapProfiler.collectGarbage");
@@ -133,15 +141,14 @@ async function countersOf(cdp: CDPSession): Promise<Counters> {
 }
 
 /**
- * How many JavaScript objects the page holds after garbage collection:
- * every object whose prototype chain holds `Object.prototype`, as V8's
- * inspector counts them (CDP `Runtime.queryObjects`, DevTools' own
- * `queryObjects`). Machine code V8 compiles as a move turns hot is no
- * object, so a count that grows by one or more a repeat is the move's.
+ * How many JavaScript objects the page holds, read straight after
+ * {@link countersOf}'s collection: every object whose prototype chain
+ * holds `Object.prototype`, as V8's inspector counts them (CDP
+ * `Runtime.queryObjects`, DevTools' own `queryObjects`). Machine code V8
+ * compiles as a move turns hot is no object, so a count that grows by one
+ * or more a repeat is the move's.
  */
 async function objectsOf(cdp: CDPSession): Promise<number> {
-  await cdp.send("HeapProfiler.collectGarbage");
-  await cdp.send("HeapProfiler.collectGarbage");
   try {
     const { result: prototype } = await cdp.send("Runtime.evaluate", {
       expression: "Object.prototype",
@@ -183,8 +190,9 @@ export async function measureMove(
   const started = Date.now();
   const { ask, key } = task;
   const speed = ask.speed ?? "slowed";
-  const repeats = ask.repeats ?? MEASURE_LIMITS.repeats.fallback;
+  const asked = ask.repeats ?? MEASURE_REPEATS;
   const move = moveOf(ask);
+  const tooLong = () => new Refused(words.tooLong(STAGE_RENDER_MS / 1000));
   const cdp = await page.context().newCDPSession(page);
   try {
     await cdp.send("Emulation.setCPUThrottlingRate", {
@@ -193,7 +201,6 @@ export async function measureMove(
     const scan = await repeat(page, key, move, "scan", 0);
     const { length } = scan;
     const settledWait = length + QUIET_MS;
-    await repeat(page, key, move, "warm", settledWait);
     // Chrome writes a compositor verdict only for an animation that begins inside the recording.
     await browser.startTracing(page, { categories: TRACE_CATEGORIES });
     let trace: Buffer;
@@ -205,9 +212,12 @@ export async function measureMove(
       trace = await browser.stopTracing();
     }
     if (Date.now() > task.until) {
-      throw new Refused(words.tooLong(MEASURE_LIMITS.ms / 1000));
+      throw tooLong();
     }
     const read = await traceRead(trace, length);
+    if (!read) {
+      throw tooLong();
+    }
     const nonComposited = await namesOf(cdp, read.refused);
     const forced = await forcedOf(page, read.forced);
     // What a repeat leaves behind does not hang on the main thread's speed: the memory pass runs at the machine's own.
@@ -218,7 +228,12 @@ export async function measureMove(
     await cdp.send("Animation.enable");
     await cdp.send("Animation.setPlaybackRate", { playbackRate: MEMORY_RATE });
     const memoryWait = Math.round(length / MEMORY_RATE);
-    const countersAfter = async (): Promise<Counters> => {
+    /** One repeat and its counted point: a collection, then the counters. */
+    const counted = async (): Promise<Counters> => {
+      const run = await repeat(page, key, move, "repeat", memoryWait);
+      if (run.edits !== scan.edits) {
+        throw new Refused(words.changed);
+      }
       if (seen.length > 0) {
         await cdp.send("Animation.releaseAnimations", {
           animations: seen.splice(0),
@@ -226,32 +241,27 @@ export async function measureMove(
       }
       return await countersOf(cdp);
     };
-    // The memory pass's own first repeat makes what it makes once (its code paths at ten times the animations' speed): uncounted.
-    for (let at = 0; at < MEMORY_WARM; at += 1) {
-      await repeat(page, key, move, "repeat", memoryWait);
-    }
-    const readings = [await countersAfter()];
+    // The memory pass's own first repeat makes what it makes once (its code paths at ten times the animations' speed): its count is the baseline, and its time what each repeat after it takes.
+    const first = Date.now();
+    const readings = [await counted()];
+    const each = Date.now() - first;
     const counting = Date.now();
     const objects: [number, number][] = [[0, await objectsOf(cdp)]];
     const countTook = Date.now() - counting;
-    const halfway = Math.floor(repeats / 2);
-    let last = scan;
-    let took = 0;
-    for (let at = 0; at < repeats; at += 1) {
-      // One more repeat, as long as the last took, and the last count of objects must fit before the limit.
-      if (Date.now() + took + countTook > task.until) {
+    // The repeats that fit before the render's deadline, with the objects counted halfway and after the last.
+    const fits = Math.floor(
+      (task.until - Date.now() - 2 * countTook) / Math.max(1, each)
+    );
+    const planned = Math.max(0, Math.min(asked, fits));
+    const halfway = Math.floor(planned / 2);
+    for (let at = 0; at < planned; at += 1) {
+      if (Date.now() + each + countTook > task.until) {
         break;
       }
-      const from = Date.now();
-      last = await repeat(page, key, move, "repeat", memoryWait);
-      readings.push(await countersAfter());
+      readings.push(await counted());
       if (at + 1 === halfway) {
         objects.push([halfway, await objectsOf(cdp)]);
       }
-      took = Date.now() - from;
-    }
-    if (last.edits !== scan.edits) {
-      throw new Refused(words.changed);
     }
     const ran = readings.length - 1;
     const memory =
@@ -283,7 +293,8 @@ export async function measureMove(
         speed,
         ...(read.hz ? { hz: read.hz } : {}),
       },
-      runs: { warm: WARM + MEMORY_WARM, traced: TRACED, repeats: ran },
+      // The scan warms the engine for the traced plays, as the memory pass's first repeat does for its own.
+      runs: { warm: 1 + MEMORY_WARM, traced: TRACED, repeats: ran },
       took: Date.now() - started,
       length,
       frames: read.frames,
@@ -291,7 +302,7 @@ export async function measureMove(
       layout: { ...read.layout, forced },
       nonComposited,
       ...memory,
-      ...(ran < repeats ? { cut: true as const } : {}),
+      ...(ran < asked ? { cut: true as const } : {}),
     };
     return {
       ...measured,
@@ -511,7 +522,7 @@ function refusedIn(
   }
 }
 
-/** The trace of the traced plays, read: medians of their figures, the animations kept off the compositor, the stacks of forced layouts. */
+/** The trace of the traced plays, read: medians of their figures, the animations kept off the compositor, the stacks of forced layouts; null when it lacks their marks (the recording ended before they did). */
 async function traceRead(trace: Buffer, length: number) {
   const engine = await import("@paulirish/trace_engine");
   // Playwright's recording is Chrome's JSON trace: `{ traceEvents, metadata }`.
@@ -531,7 +542,7 @@ async function traceRead(trace: Buffer, length: number) {
     ? data?.Renderer.processes.get(first.pid)?.threads.get(first.tid)
     : undefined;
   if (!(data && thread && ends.length === starts.length)) {
-    throw new Refused(words.tooLong(MEASURE_LIMITS.ms / 1000));
+    return null;
   }
   const context: TraceContext = {
     data,
@@ -630,11 +641,19 @@ async function namesOf(
   return named;
 }
 
-/** Each forced layout placed in the project's code (canvas forced.ts), by its place: how often and how long a traced play, the stage's own left out. */
+/** Each forced layout placed in the project's code (canvas forced.ts), by its place: how often and how long a traced play, the stage's own left out. Each distinct stack is placed once, in one call to the page. */
 async function forcedOf(
   page: Page,
   forced: readonly { ms: number; plays: number; stack: TraceFrame[] }[]
 ): Promise<ForcedLayout[]> {
+  const stacks = new Map<string, TraceFrame[]>();
+  for (const one of forced) {
+    stacks.set(JSON.stringify(one.stack), one.stack);
+  }
+  const placedAll = await page.evaluate(forcedAllNow, [...stacks.values()]);
+  const placedBy = new Map(
+    [...stacks.keys()].map((stack, at) => [stack, placedAll[at] ?? null])
+  );
   const byPlace = new Map<
     string,
     { count: number; library: boolean; ms: number }
@@ -642,7 +661,7 @@ async function forcedOf(
   let plays = 1;
   for (const one of forced) {
     ({ plays } = one);
-    const placed = await page.evaluate(forcedNow, one.stack);
+    const placed = placedBy.get(JSON.stringify(one.stack));
     if (placed) {
       const had = byPlace.get(placed.at) ?? {
         count: 0,

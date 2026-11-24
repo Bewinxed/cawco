@@ -37,7 +37,7 @@ import {
   screenHeight,
   sectionPlansOf,
 } from "@cawco/core/stage";
-import { MEASURE_LIMITS, type MeasureRead } from "@cawco/core/stage-measure";
+import type { MeasureRead } from "@cawco/core/stage-measure";
 import { ReportAnswerSchema } from "@cawco/core/stored-shapes";
 import { measureWords } from "@cawco/core/words/stage-measure";
 import { stageRenderWords as words } from "@cawco/core/words/stage-render";
@@ -364,7 +364,8 @@ export async function renderCanvas(
         ...unread,
         measured: await measured(browser, page, ask, {
           firsts,
-          until: Math.min(Date.now() + MEASURE_LIMITS.ms, deadline - ANSWER_MS),
+          // The render's own deadline: a measurement answers with no picture, its report already read.
+          until: deadline,
           window: [opened.viewport.width, opened.viewport.height],
         }),
       };

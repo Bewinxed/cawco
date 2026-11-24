@@ -200,9 +200,11 @@ export const layoutNow = (key: string) =>
 export const measureNow = (ask: MeasureRepeatAsk) =>
   window.__cawcoCanvas?.measure?.(ask) ?? null;
 
-/** Where a trace's forced layout was forced, by its stack; null where the stage's own code forced it or the page holds no stage. */
-export const forcedNow = (stack: readonly TraceFrame[]) =>
-  window.__cawcoCanvas?.forcedAt?.(stack) ?? null;
+/** Where each of a trace's forced layouts was forced, by its stack, in order; null where the stage's own code forced it or the page holds no stage. */
+export const forcedAllNow = (stacks: readonly (readonly TraceFrame[])[]) =>
+  Promise.all(
+    stacks.map((stack) => window.__cawcoCanvas?.forcedAt?.(stack) ?? null)
+  );
 
 /**
  * The element a trace named, as the stage names it and where it is

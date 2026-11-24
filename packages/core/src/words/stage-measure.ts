@@ -83,9 +83,9 @@ export const measureWords = {
   /** Chromium's compositing is off on this machine. */
   compositingOff:
     "This machine's browser has its compositing switched off (ACCELERATED_ANIMATIONS_DISABLED on every animation), so it can't say which animations run on the compositor. That is a fault of the machine, not of the component: measure on another machine.",
-  /** The limit came before the traced plays were done. */
+  /** The render's deadline came before the traced plays were done. */
   tooLong: (seconds: number) =>
-    `The move's warm-up and traced plays did not finish within the measurement's ${seconds} s. Measure a shorter move, or split its play.`,
+    `The move's scan and traced plays did not finish within the render's ${seconds} s. Measure a shorter move, or split its play into stories of its own.`,
 
   /* --- Faults ---------------------------------------------------------- */
 
@@ -125,7 +125,7 @@ export const measureWords = {
   lines: (read: MeasureRead): string[] => {
     const { frames, style, layout, memory } = read;
     return [
-      `Measured ${read.move.from} → ${read.move.to ?? `${read.move.by}${read.move.on ? ` on ${read.move.on}` : ""}`} at ${read.at.width}px ${read.at.scheme}, main thread ${read.at.speed === "slowed" ? "slowed 4×" : "at the machine's speed"}${read.at.hz ? `, ${read.at.hz} Hz` : ""}: ${read.runs.traced} traced plays, ${read.runs.repeats} repeats, ${(read.took / 1000).toFixed(1)} s${read.cut ? " (cut at the limit)" : ""}.`,
+      `Measured ${read.move.from} → ${read.move.to ?? `${read.move.by}${read.move.on ? ` on ${read.move.on}` : ""}`} at ${read.at.width}px ${read.at.scheme}, main thread ${read.at.speed === "slowed" ? "slowed 4×" : "at the machine's speed"}${read.at.hz ? `, ${read.at.hz} Hz` : ""}: ${read.runs.traced} traced plays, ${read.runs.repeats} repeats, ${(read.took / 1000).toFixed(1)} s${read.cut ? " (cut at the render's deadline)" : ""}.`,
       `Motion ${read.length} ms. Frames: ${frames.count} drawn, ${frames.dropped} dropped, longest ${frames.longest} ms (script ${frames.longestWork.script}, style ${frames.longestWork.style}, layout ${frames.longestWork.layout}, paint ${frames.longestWork.paint} ms).`,
       `Style: ${plural(style.count, "recalc")}, ${style.ms} ms, ${style.elements} elements. Layout: ${layout.count}, ${layout.ms} ms${layout.everyFrame ? ", every frame" : ""}${layout.forced.length > 0 ? `, forced at ${layout.forced.map((one) => `${one.at}${one.library ? " (a library's)" : ""}`).join(", ")}` : ""}.`,
       read.nonComposited.length > 0
@@ -133,7 +133,7 @@ export const measureWords = {
         : "Every animation ran on the compositor.",
       memory
         ? `Memory after garbage collection: ${trendSaid("objects", memory.objects)}; ${trendSaid("nodes", memory.nodes)}; ${trendSaid("listeners", memory.listeners)}; ${trendSaid("documents", memory.documents)}; ${trendSaid("heap", memory.heap, " B")}, compiled code in it.`
-        : "Memory: too few repeats ran before the limit to read a trend.",
+        : "Memory: too few repeats ran before the render's deadline to read a trend.",
       ...(read.faults.length > 0
         ? [
             `Faults (${read.faults.length}):`,

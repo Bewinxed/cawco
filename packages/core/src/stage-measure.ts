@@ -44,21 +44,22 @@ export interface MeasureAsk {
   on?: MeasureOn;
   play?: true;
   press?: MeasurePress;
-  /** How many times the move repeats for the memory counters. */
+  /** How many times the move repeats for the memory counters: {@link MEASURE_REPEATS} at least, and when left out. */
   repeats?: number;
   speed?: MeasureSpeed;
-  /** `type` only: the words typed, a key at a time. */
+  /** `type` only: the words typed, a key at a time. Its length is bounded by the stage's limit on a play (canvas stage.ts `PLAY_MS`), which refuses a press that types past it, as is `key`'s. */
   text?: string;
 }
 
-/** A measurement's bounds: its repeats (fuite's 7 at least), the words a `type` press sends, and its own share of the render's limit. Ours, from the design's time table. */
-export const MEASURE_LIMITS = {
-  repeats: { min: 7, max: 40, fallback: 20 },
-  text: 200,
-  key: 40,
-  /** How long a measurement may take once its page stands, ms: inside the render's 90 s. */
-  ms: 45_000,
-} as const;
+/**
+ * How many times a move repeats for the memory counters, at least and when
+ * the ask leaves it out: fuite's iterations ("a nice, small, prime number.
+ * If you repeat an action 7 times and some object is leaking exactly 7
+ * times, it's pretty unlikely to be unrelated"). A noisy page asks more
+ * (fuite names 13, 17 or 19). No most: the render's own deadline bounds
+ * the read, which runs the repeats that fit before it and says `cut`.
+ */
+export const MEASURE_REPEATS = 7;
 
 /** The move one repeat makes on the page: the story's play, or one press. */
 export type MeasureMove =
@@ -66,12 +67,12 @@ export type MeasureMove =
   | { by: MeasurePress; key?: string; on: MeasureOn; text?: string };
 
 /**
- * What a repeat is for: `scan` reads the move's clips and length (the first
- * warm-up, the only pass that watches its animations); `warm` warms the
- * engine; `traced` is bracketed by {@link MEASURE_MARKS} for the trace;
- * `repeat` feeds the memory counters.
+ * What a repeat is for: `scan` reads the move's clips and length (the
+ * warm-up, the only pass that watches its animations); `traced` is
+ * bracketed by {@link MEASURE_MARKS} for the trace; `repeat` feeds the
+ * memory counters.
  */
-export type MeasurePass = "scan" | "warm" | "traced" | "repeat";
+export type MeasurePass = "scan" | "traced" | "repeat";
 
 /** The user-timing marks a traced play stands between: the windows the trace is read in. */
 export const MEASURE_MARKS = {
@@ -187,7 +188,7 @@ export interface MeasureRead {
     width: number;
     window: [number, number];
   };
-  /** The limit came before every repeat ran: `runs.repeats` says how many did. */
+  /** The render's deadline came before every repeat asked could run: `runs.repeats` says how many did. */
   cut?: true;
   faults: MeasureFault[];
   frames: {
@@ -208,7 +209,7 @@ export interface MeasureRead {
     ms: number;
   };
   length: number;
-  /** Absent when fewer than three repeats ran before the limit (`cut`). */
+  /** Absent when fewer than three repeats ran before the render's deadline (`cut`). */
   memory?: {
     documents: MeasureTrend;
     /** V8's used heap and Blink's, bytes: the machine code V8 compiles as the move turns hot is in it, so it is read, never judged. */

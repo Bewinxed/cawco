@@ -31,7 +31,7 @@ The design graph's Map face draws each flow move as a solid arrow from its `from
 - One press, no story written: `measure: { press: "click", on: { role: "button", name: "Approve" } }`, made from `state.story`. `on` names exactly one element, as a play finds it.
 - Left out, `speed` runs the main thread at a quarter speed, as a phone would; `speed: "machine"` reads at the machine's own, for a screen only a desk shows.
 
-Measure when a move carries motion the person will watch, when a press may leave something behind (a listener, nodes, a growing heap), or when a move looks janky. A read takes about 20 s. Fix each fault in the component and measure again until `faults` is empty: a `non-composited` animation moves to `transform`, `opacity` or a clip (the `animation-performance` skill); a `forced-layout` is fixed at the line it names; a `leak` goes to a `browser` delegate with DevTools heap tools, to find what holds it.
+Measure when a move carries motion the person will watch, when a press may leave something behind (a listener, nodes, a growing heap), or when a move looks janky. A read takes about 15 s. Fix each fault in the component and measure again until `faults` is empty: a `non-composited` animation moves to `transform`, `opacity` or a clip (the `animation-performance` skill); a `forced-layout` is fixed at the line it names; a `leak` goes to a `browser` delegate with DevTools heap tools, to find what holds it.
 
 ## The Animation face
 
