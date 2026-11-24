@@ -42,6 +42,7 @@
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { rise } from "#lib/components/ui/elevated/index.js";
+  import { GlyphSwap } from "#lib/components/ui/glyph-swap/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -1238,45 +1239,14 @@
   }
 
   /**
-   * The check or the triangle taking the dot's place: it grows from 0.6 over
-   * --duration-slow (`slotIn`, on the glyph) as it is drawn in from its leading
-   * edge (`slotCut`, on the glyph's inside), two effects on one timing: one
-   * effect that cuts and moves dies with its renderer once another move
-   * displaces it (house/no-clip-with-move).
+   * The glyph at the chip's end gives way to the next on the house's glyph
+   * swap (GlyphSwap, design.css `icon-swap`): the dot, the check or the
+   * triangle slide through its cell and fade, and no glyph scales or blurs
+   * (owner, 2026-11-24).
    */
-  function slotIn(_node: Element, ends: boolean): TransitionConfig {
-    if (!(ends && motionOk.current)) {
-      return {
-        duration: dur("--duration-fast"),
-        easing: easeOut,
-        css: (t) => `opacity: ${t}`,
-      };
-    }
-    return {
-      duration: dur("--duration-slow"),
-      easing: easeOut,
-      css: (t) => `transform: scale(${(0.6 + 0.4 * t).toFixed(3)})`,
-    };
-  }
-  function slotCut(_node: Element, ends: boolean): TransitionConfig {
-    if (!(ends && motionOk.current)) {
-      return { duration: 0 };
-    }
-    return {
-      duration: dur("--duration-slow"),
-      easing: easeOut,
-      css: (_t, u) => `clip-path: inset(0 ${(u * 100).toFixed(1)}% 0 0)`,
-    };
-  }
-  function slotOut(_node: Element): TransitionConfig {
-    return {
-      duration: dur("--duration-fast"),
-      easing: easeOut,
-      css: (t) => `opacity: ${t}`,
-    };
-  }
-
-  const slotOf = (tone: Tone) =>
+  /** What the chip's glyph cell shows: the ask's one glyph for both its tones. */
+  type Slot = Exclude<Tone, "asked" | "needs"> | "ask";
+  const slotOf = (tone: Tone): Slot =>
     tone === "asked" || tone === "needs" ? "ask" : tone;
   const openChip = $derived(
     chips.find((chip) => chip.item.id === openKey) ?? null
@@ -1343,7 +1313,7 @@
   {/if}
 {/snippet}
 
-{#snippet glyph(tone: Tone)}
+{#snippet glyphOf(tone: Tone)}
   {#if tone === "starting"}
     <Spinner aria-hidden="true" role="presentation" />
   {:else if tone === "running"}
@@ -1453,21 +1423,11 @@
       class="flex-none size-icon-md grid place-items-center group-status-running/chip:text-tx-2 group-status-done/chip:text-green group-status-starting/chip:text-tx-2 group-status-asked/chip:text-tx-2 group-status-cancelled/chip:text-tx-2 motion-safe:group-data-fly/chip:animate-fade-in motion-safe:group-data-fly/chip:anim-dur-fast motion-safe:group-data-fly/chip:anim-delay-fast"
       data-box
     >
-      {#key slotOf(tone)}
-        <span
-          data-slot="glyph"
-          class="col-start-1 row-start-1 grid place-items-center"
-          in:slotIn={tone === "done" || tone === "failed"}
-          out:slotOut
-        >
-          <span
-            class="grid place-items-center"
-            in:slotCut={tone === "done" || tone === "failed"}
-          >
-            {@render glyph(tone)}
-          </span>
-        </span>
-      {/key}
+      <GlyphSwap shows={slotOf(tone)}>
+        {#snippet glyph(key: Slot)}
+          {@render glyphOf(key === "ask" ? "asked" : key)}
+        {/snippet}
+      </GlyphSwap>
     </span>
   </button>
 {/snippet}
@@ -1649,7 +1609,7 @@
         data-box
         data-status={tone}
       >
-        {@render glyph(tone)}
+        {@render glyphOf(tone)}
       </span>
       {@render rowEnd(item)}
     </div>
@@ -1941,7 +1901,7 @@
                 data-status={tone}
                 role="img"
               >
-                {@render glyph(tone)}
+                {@render glyphOf(tone)}
               </span>
               {@render rowEnd(item)}
             </div>

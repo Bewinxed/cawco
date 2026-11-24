@@ -73,19 +73,18 @@
   <span class="sr-only">Thinking&#8230;</span>
   {#if showIcon}
     <!-- Two marks in one cell, the circle and the infinity, handing over to
-         each other on a 6s breath. Each is its own <svg> so its transform
-         and opacity run on the compositor; morphing the path itself
+         each other on a 6s breath. Each is its own <svg> so its opacity
+         runs on the compositor; morphing the path itself
          repainted the page every frame. -->
     <!-- The circle and the infinity trade places twice a three-breath loop,
-         each easing in and out: the circle widens and flattens as it fades,
-         the infinity settles out of a narrower, taller shape as it comes
-         up. The mark's box is the large icon (the medium one compact),
+         each easing in and out, cross-fading where they stand at their own
+         size: a glyph never scales. The mark's box is the large icon (the medium one compact),
          unless the caller sets --thinking-icon-size. -->
     <span data-slot="mark" aria-hidden="true" class="grid flex-none">
       {#each motion.current ? MORPHING : STILL as mark (mark.name)}
         <svg
           aria-hidden="true"
-          class="loops col-start-1 row-start-1 size-(--box) motion-safe:origin-center motion-safe:mark-circle:animate-thinking-circle motion-safe:mark-lemniscate:animate-thinking-lemniscate"
+          class="loops col-start-1 row-start-1 size-(--box) motion-safe:mark-circle:animate-thinking-circle motion-safe:mark-lemniscate:animate-thinking-lemniscate"
           data-mark={mark.name}
           fill="none"
           height={compact ? 18 : 20}

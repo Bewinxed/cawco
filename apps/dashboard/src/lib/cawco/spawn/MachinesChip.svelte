@@ -107,8 +107,8 @@
         presence={presenceOf(row)}
       />
       <Check
-        class="size-icon-md flex-none text-tx in-aria-pressed:text-accent transition-[opacity] duration-(--duration-base) ease-out motion-safe:transition-[opacity,transform]"
-        style={`opacity:${on ? 1 : 0};transform:scale(${on ? 1 : 0.94})`}
+        class="size-icon-md flex-none text-tx in-aria-pressed:text-accent transition-[opacity] duration-(--duration-base) ease-out"
+        style={`opacity:${on ? 1 : 0}`}
       />
     </button>
   {/each}

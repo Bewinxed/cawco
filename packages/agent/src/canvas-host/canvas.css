@@ -200,11 +200,16 @@ body {
   }
 }
 
-/* A box's glyph swapping (rail.tsx SwapGlyph), as the composer's Send and
-   Stop do (Composer.svelte, icon-swap): the glyph going out and the one
-   coming in share the box's one cell, trading places by opacity and scale
-   out of a 4px blur over --duration-fast on ease-out. With reduced motion
-   they only cross-fade. */
+/* A box's glyph swapping (rail.tsx SwapGlyph) on the house's glyph swap
+   (the dashboard's design.css `icon-swap`, whose path it keeps): the glyph
+   leaving slides its own width toward the end over --duration-base on
+   --ease-in-out, fading on --ease-fade-leave; the one arriving slides in
+   from the start over --duration-slow, elastic, fading on
+   --ease-fade-arrive, --duration-fast late so it enters as the other
+   clears. Seen only while half of it stands in the box, so it never
+   reaches what stands beside it. No glyph scales or blurs (owner,
+   2026-11-24). With reduced motion they only cross-fade. Each layer's two
+   animations share one clock, so either one's end lands the layer. */
 .rail-glyphs {
   display: grid;
   place-items: center;
@@ -216,44 +221,36 @@ body {
   place-items: center;
 
   &[data-swap="in"] {
-    animation: rail-glyph-in var(--duration-fast) var(--ease-out) both;
+    animation:
+      rail-glyph-slide-in var(--duration-slow) var(--ease-elastic)
+        var(--duration-fast) both,
+      rail-glyph-fade-in var(--duration-slow) var(--ease-fade-arrive)
+        var(--duration-fast) both;
   }
   &[data-swap="out"] {
-    animation: rail-glyph-out var(--duration-fast) var(--ease-out) both;
+    animation:
+      rail-glyph-slide-out var(--duration-base) var(--ease-in-out) both,
+      rail-glyph-fade-out var(--duration-base) var(--ease-fade-leave) both;
   }
   @media (prefers-reduced-motion: reduce) {
     &[data-swap="in"] {
-      animation-name: rail-glyph-fade-in;
+      animation: rail-glyph-fade-in var(--duration-slow) linear both;
     }
     &[data-swap="out"] {
-      animation-name: rail-glyph-fade-out;
+      animation: rail-glyph-fade-out var(--duration-base) linear both;
     }
   }
 }
 
-@keyframes rail-glyph-in {
+@keyframes rail-glyph-slide-in {
   from {
-    opacity: 0;
-    transform: scale(0.25);
-    filter: blur(4px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-    filter: blur(0);
+    transform: translateX(-100%);
   }
 }
 
-@keyframes rail-glyph-out {
-  from {
-    opacity: 1;
-    transform: scale(1);
-    filter: blur(0);
-  }
+@keyframes rail-glyph-slide-out {
   to {
-    opacity: 0;
-    transform: scale(0.25);
-    filter: blur(4px);
+    transform: translateX(100%);
   }
 }
 

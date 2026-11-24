@@ -25,11 +25,7 @@
   import { connectWords } from "@cawco/core/words/connect";
   import { Button } from "#lib/components/ui/button/index.js";
   import { failureWords } from "#lib/platform/hub-read.js";
-  import {
-    dur,
-    easeOut,
-    motionOk,
-  } from "#lib/platform/motion/curves.svelte.js";
+  import { dur, easeOut } from "#lib/platform/motion/curves.svelte.js";
   import { barGlass } from "../bar-glass.svelte";
 
   import HarnessBlock from "../HarnessBlock.svelte";
@@ -43,15 +39,12 @@
 
   let { install }: { install: Install } = $props();
 
+  /** The success check fades in where it stands: a glyph never scales. */
   function arrive(_node: Element) {
-    const travel = motionOk.current;
     return {
       duration: dur("--duration-base"),
       easing: easeOut,
-      css: (t: number) =>
-        travel
-          ? `opacity: ${t}; transform: scale(${0.6 + 0.4 * t})`
-          : `opacity: ${t}`,
+      css: (t: number) => `opacity: ${t}`,
     };
   }
 
@@ -110,8 +103,7 @@
 <div class="flex flex-col gap-space-3" data-outcome={install.state}>
   {#if install.state === "joined"}
     <div class="mark-line flex items-center gap-space-2">
-      <!-- The success check lands once, from 0.6 over 160ms (as the task
-           ring's does); with less motion it only fades. -->
+      <!-- The success check lands once, fading in where it stands. -->
       <span class="inline-grid" data-box in:arrive|global
         ><StepMark state="done" /></span
       >

@@ -3,8 +3,9 @@
    * One step's status glyph, each the glyph alone: check done, refresh
    * current (breathing, as live work does), the close X failed, stop stopped,
    * the dotted ring not reached yet (still). A change of state is an icon
-   * swap in its one cell (`icon-swap`, 120ms): the old glyph gives way
-   * as the new one arrives from 0.92, never a jump. Status is never the hue
+   * swap in its one cell (`icon-swap`, on --duration-fast): the old glyph
+   * slides out toward the end and fades as the new one slides in from the
+   * start, at its own size, never a jump. Status is never the hue
    * alone: the glyph's shape says it, and the row's words.
    */
   import {

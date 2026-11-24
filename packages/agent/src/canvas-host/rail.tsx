@@ -154,11 +154,12 @@ interface Layer {
 }
 
 /**
- * A box's glyph, which swaps as the composer's Send and Stop do
- * (Composer.svelte, `icon-swap`): when the box is `swapped` the glyph going
- * out and the one coming in share the box's one cell, trading places by
- * opacity and scale over `--duration-fast` (canvas.css, `rail-glyph-in` and
- * `rail-glyph-out`); any other change of glyph lands at once.
+ * A box's glyph, which swaps on the house's glyph swap (the dashboard's
+ * `icon-swap`): when the box is `swapped` the glyph going out and the one
+ * coming in share the box's one cell, the one leaving sliding out toward
+ * the end and the one arriving sliding in from the start, each fading on
+ * its slide (canvas.css, `.rail-glyph`); any other change of glyph lands at
+ * once.
  */
 function SwapGlyph({ glyph, swapped }: { glyph: Glyph; swapped: boolean }) {
   const [layers, setLayers] = useState<Layer[]>([{ glyph, key: 0 }]);

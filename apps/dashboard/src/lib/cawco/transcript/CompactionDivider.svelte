@@ -271,18 +271,16 @@
     ><!-- A zero-width box on the word's line, `middle` setting its mark on
           the word's x-height; the mark hangs out of it after the gap,
           sliding out from the word's edge as it comes in, and points down
-          while the brief is open. The mark sharpens as it comes in, and
-          turns on the spot (on-screen movement, not an entrance): the
+          while the brief is open. The mark fades as it slides, at its own
+          size and sharp (a glyph never scales or blurs), and turns on the
+          spot (on-screen movement, not an entrance): the
           chevron's clock, and the turn's. --><span
       data-slot="chev"
       style:--chev-x="calc(var(--chev) * var(--spacing-space-1))"
-      style:--chev-scale="calc(0.25 + 0.75 * var(--chev))"
-      style:--chev-blur="calc((1 - var(--chev)) * var(--spacing-space-1))"
-      style:--chev-filter="blur(var(--chev-blur))"
       class="inline-block align-middle w-0 h-icon-sm opacity-(--chev) transition-[opacity] duration-(--chev-dur) ease-(--chev-ease)"
       ><IconChevron
         aria-hidden="true"
-        class="block size-icon-sm translate-x-(--chev-x) scale-(--chev-scale) filter-(--chev-filter) group-aria-expanded/divider:rotate-90 motion-safe:divider-chevron-turn"
+        class="block size-icon-sm translate-x-(--chev-x) group-aria-expanded/divider:rotate-90 motion-safe:divider-chevron-turn"
       /></span
     ></span
   >
