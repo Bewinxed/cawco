@@ -1,8 +1,9 @@
 /**
  * A field's change of height, drawn on the compositor (the kit Textarea's
- * autosize: motion/autosize `cut`). The field is laid out at its new height
- * in the frame the change lands in, once, and what the eye sees moves on
- * `--duration-control` and `--ease-out`:
+ * and the composer's autosize: motion/autosize `cut`). The field is laid
+ * out at its new height in the frame the change lands in, once, and what
+ * the eye sees moves on the target's clock (`--duration-control` on
+ * `--ease-out` unless it names another):
  *
  * - its box is cut by its clip from where its edge was drawn to where it now
  *   stands (motion/edge-cut), at its foot, or at its head for a box that
@@ -33,6 +34,12 @@ import { EdgeCut, FRAME } from "./edge-cut";
 export interface GrowTarget {
   /** Holds the field and draws its edge: its clip cuts this. */
   box: HTMLElement;
+  /**
+   * The change's duration and easing, asked as each change starts (the
+   * composer's: a line, a fold, the recall wheel settling). Without one,
+   * `--duration-control` on `--ease-out`.
+   */
+  clock?: () => { easing: string; ms: number };
   /**
    * Its fill lets what stands behind it through (a material's glass): the
    * box is cut where its slice begins (motion/edge-cut `flush`), so no
@@ -346,8 +353,13 @@ export function growCut(target: () => GrowTarget | null) {
     return placesOf(start.places.keys());
   }
 
-  /** Read after the field's height is written: the run from where `before` found everything to where it now stands. */
-  function after(start: GrowBefore): void {
+  /**
+   * Read after the field's height is written: the run from where `before`
+   * found everything to where it now stands. Hands back the run's clock,
+   * which ends as the change is drawn whole (the one in flight when it
+   * carries on), or null when nothing moves.
+   */
+  function after(start: GrowBefore): Animation | null {
     const { look } = start.target;
     const { cut, slice } = cutFor(start.target);
     const hadHold = run?.hold ?? null;
@@ -361,15 +373,17 @@ export function growCut(target: () => GrowTarget | null) {
         run.hold = { ...hadHold, was: look.style.minHeight };
         look.style.minHeight = `${hadHold.held}px`;
       }
-      return;
+      return run.clock;
     }
     if (Math.abs(to - start.shown) <= 0.5 && !run) {
-      return;
+      return null;
     }
     const settled = placesOf(start.places.keys());
     const lookHeight = look.offsetHeight;
-    const ms = dur("--duration-control");
-    const easing = ease("--ease-out");
+    const { ms, easing } = start.target.clock?.() ?? {
+      ms: dur("--duration-control"),
+      easing: ease("--ease-out"),
+    };
     const hold = Math.max(0, start.shown - to);
     boxHeight = to + hold;
     // The cut reads the box on this layout, before the hold is written.
@@ -403,16 +417,20 @@ export function growCut(target: () => GrowTarget | null) {
       () => undefined
     );
     moveAround(start.places, { settled, stand }, { at, ms, easing });
+    return clock;
   }
 
   return {
-    /** Writes the field's new height with `write`, the change drawn from where everything stands now. */
-    draw(write: () => void): void {
+    /**
+     * Writes the field's new height with `write`, the change drawn from
+     * where everything stands now. Hands back the run's clock, which ends as
+     * the change is drawn whole, or null when nothing runs (less motion, no
+     * target, no change).
+     */
+    draw(write: () => void): Animation | null {
       const start = before();
       write();
-      if (start) {
-        after(start);
-      }
+      return start ? after(start) : null;
     },
     land: letGo,
     stop: unmake,

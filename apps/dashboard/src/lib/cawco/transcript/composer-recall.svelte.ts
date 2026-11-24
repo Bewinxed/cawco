@@ -18,7 +18,7 @@ import { track } from "#lib/platform/track.js";
 import type MentionField from "../find/MentionField.svelte";
 import type { ComposerDraft } from "./composer-draft.svelte";
 import type { ComposerFleet } from "./composer-fleet";
-import { heightMs } from "./field-flight.svelte";
+import { fieldClock } from "./field-flight.svelte";
 import { measureShape } from "./grown";
 import { sentByReader } from "./recall";
 
@@ -439,7 +439,7 @@ export class ComposerRecall {
         const drop = was - next;
         if (drop > 0.5 && motionOk.current) {
           node.animate([{ translate: `0 ${drop}px` }, { translate: "0 0" }], {
-            duration: heightMs(node),
+            duration: fieldClock(node).ms,
             easing: CURVE.drawer,
           });
         }

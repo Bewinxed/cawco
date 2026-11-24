@@ -51,6 +51,7 @@
     motionOk,
   } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import type { GrowTarget } from "#lib/platform/motion/grow-cut.js";
   import { popOut } from "#lib/platform/motion/pop.svelte.js";
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import type { ConversationFind } from "../find/conversation-find.svelte";
@@ -73,7 +74,7 @@
   import { ComposerRecall } from "./composer-recall.svelte";
   import { ComposerSend } from "./composer-send.svelte";
   import { type ComposerFoot, DockFoot } from "./dock-foot.svelte";
-  import { FieldFlight } from "./field-flight.svelte";
+  import { FieldFlight, fieldClock } from "./field-flight.svelte";
   import { landFocusRequests } from "./field-focus.svelte";
   import { FieldFold } from "./field-fold.svelte";
   import { FieldHint } from "./field-hint.svelte";
@@ -604,6 +605,31 @@
   /** The box the pill stands in, which the grown shape and its rows share. */
   let shell = $state<HTMLElement>();
   let pill = $state<HTMLFormElement>();
+
+  /**
+   * What each line the field grows or gives up is drawn on (motion/
+   * grow-cut): the pill, standing on its foot, so its head moves; cut flush,
+   * its fill being the dock shell's glass; on the field's clock (a line, a
+   * fold, the recall wheel settling). While grown or recalling the pill
+   * draws no surface of its own (`data-grown`, `data-recalling`) and the
+   * grown shape that does is an outline drawn behind it (grown.ts), which a
+   * slice cannot wear: the pill stays the look, its slice clear, and the cut
+   * still carries the field's lines in on the clock while the shape follows
+   * the pill as it does.
+   */
+  function grows(): GrowTarget | null {
+    const node = field;
+    if (!(pill && node)) {
+      return null;
+    }
+    return {
+      box: pill,
+      look: pill,
+      side: "head",
+      flush: true,
+      clock: () => fieldClock(node),
+    };
+  }
 
   /* ---- the canvas: the draft's drawing, standing over the field -------- */
 
@@ -1494,8 +1520,11 @@
                in it (motion/autosize.svelte.ts), a line at a time over 120ms,
                from one line's worth of the control height to a ceiling, and
                scrolls past that; folding and opening a long draft run over
-               --duration-morph. No scrollbar is drawn, so the text wraps at the
-               field's full width in every state. While another draft's words
+               --duration-morph, and a pick off the recall wheel over
+               --duration-panel-exit on the drawer curve. Each change is laid
+               out once and drawn by grow-cut on the pill's head (`grows`),
+               on the field's clock (`fieldClock`). No scrollbar is drawn, so
+               the text wraps at the field's full width in every state. While another draft's words
                fly in over it, or an ask's card stands over it, it draws none
                of its own text or caret; while the wheel is up, no caret. -->
           <MentionField
@@ -1510,7 +1539,7 @@
               : undefined}
             aria-expanded={menu.open || !!recalling.recall}
             aria-keyshortcuts={recallOf ? "ArrowUp" : undefined}
-            class="relative z-1 flex-auto border-none border-current bg-transparent font-sans font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-folded/field:clip-path-(--fold-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) motion-safe:transition-[height] motion-safe:duration-(--duration-control) motion-safe:ease-out motion-safe:data-folding:duration-(--duration-morph) motion-safe:group-data-settling/cin:duration-(--duration-panel-exit) motion-safe:group-data-settling/cin:data-folding:duration-(--duration-panel-exit) motion-safe:group-data-settling/cin:ease-drawer data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--duration-fade) group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
+            class="relative z-1 flex-auto border-none border-current bg-transparent font-sans font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-folded/field:clip-path-(--fold-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--duration-fade) group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
             data-cue-bottom={(swap.cueBottom && !fieldFold.folded) || undefined}
             data-cue-top={(swap.cueTop && !fieldFold.folded) || undefined}
             data-flying={swap.flight !== null ||
@@ -1542,6 +1571,7 @@
             bind:editor={field}
             bind:value={draft.text}
             {@attach autosize(() => draft.text, {
+              cut: grows,
               held: () => swap.holding,
               fold: fieldFold.folds,
               measured: (whole) => {

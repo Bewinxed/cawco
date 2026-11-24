@@ -4,7 +4,8 @@
  * incoming tab's side as they fade, and the new ones slide in from that
  * side and fade up, typed out so the last character lands as the field's
  * height glide ends: the field holds its height until the transcript has
- * landed ({@link FieldFlight.holdUntil}), then glides on its own transition.
+ * landed ({@link FieldFlight.holdUntil}), then glides on its own clock
+ * ({@link fieldClock}).
  * Both are drawn on an overlay laid over the field's text box, each laid out
  * as its full text with the part not yet typed clear, so every line already
  * stands where the field will put it and nothing moves vertically. The
@@ -14,12 +15,14 @@
  */
 import { untrack } from "svelte";
 import { frameObserver } from "#lib/platform/frame-observer.js";
+import { heightRunOf } from "#lib/platform/motion/autosize.svelte.js";
 import {
   CURVE,
+  dur,
+  ease,
   easeOut,
   motionOk,
 } from "#lib/platform/motion/curves.svelte.js";
-import { msOf } from "#lib/platform/motion/time.js";
 import { track } from "#lib/platform/track.js";
 import { readAs } from "../find/mention.svelte";
 import type { ComposerDraft } from "./composer-draft.svelte";
@@ -38,16 +41,21 @@ interface Flight {
   text: string;
 }
 
-/** The field's height transition, in the unit the stylesheet wrote it in. */
-export function heightMs(node: HTMLElement): number {
-  const style = getComputedStyle(node);
-  const props = style.transitionProperty.split(",").map((p) => p.trim());
-  const durations = style.transitionDuration.split(",").map((d) => d.trim());
-  const at = props.findIndex((p) => p === "height" || p === "all");
-  if (at < 0) {
-    return 0;
+/**
+ * The clock the composer's field changes height on (motion/grow-cut, asked
+ * as each change starts): while the recall wheel settles (the composer's
+ * `data-settling`), --duration-panel-exit on the drawer curve; folding or
+ * opening a long draft (`data-folding`, motion/autosize), --duration-morph;
+ * a line, --duration-control; both on --ease-out.
+ */
+export function fieldClock(node: HTMLElement): { easing: string; ms: number } {
+  if (node.closest('[data-slot="cin"][data-settling]')) {
+    return { ms: dur("--duration-panel-exit"), easing: ease("--ease-drawer") };
   }
-  return msOf(durations[at % durations.length]);
+  if (node.dataset.folding !== undefined) {
+    return { ms: dur("--duration-morph"), easing: ease("--ease-out") };
+  }
+  return { ms: dur("--duration-control"), easing: ease("--ease-out") };
 }
 
 /**
@@ -114,18 +122,16 @@ function inView(
 }
 
 /**
- * When the field's height glide ends, off the glide's own start (the
- * frame the fit landed in); null until it has started.
+ * When the field's height glide ends, off the run drawing it (motion/
+ * grow-cut, from the frame the fit landed in); null until it has started.
  */
-function glideEndOf(node: HTMLElement, ms: number): number | null {
-  const run = node
-    .getAnimations()
-    .find(
-      (animation) =>
-        animation instanceof CSSTransition &&
-        animation.transitionProperty === "height"
-    );
-  return typeof run?.startTime === "number" ? run.startTime + ms : null;
+function glideEndOf(node: HTMLElement): number | null {
+  const run = heightRunOf(node);
+  const start = run?.startTime;
+  if (!(run && typeof start === "number")) {
+    return null;
+  }
+  return start + Number(run.effect?.getComputedTiming().endTime ?? 0);
 }
 
 /**
@@ -388,7 +394,7 @@ export class FieldFlight {
       if (!(node && layer)) {
         return;
       }
-      const ms = heightMs(node);
+      const { ms } = fieldClock(node);
       // The words arriving wrap where the field, now in its new row, does;
       // set before the layer is measured.
       this.#inWrap = wrapOf(node);
@@ -438,7 +444,7 @@ export class FieldFlight {
         if (!glide) {
           return now;
         }
-        return glideEndOf(node, ms) ?? (now > letGoAt ? now : null);
+        return glideEndOf(node) ?? (now > letGoAt ? now : null);
       };
       let count = rest.from;
       const type = (now: number) => {

@@ -95,6 +95,21 @@ interface Seen {
   natural: number;
 }
 
+/** Each field's last height change drawn by its cut (motion/grow-cut), by field. */
+const runs = new WeakMap<HTMLElement, Animation>();
+
+/**
+ * The run drawing `field`'s height change, while it runs: its clock, which
+ * ends as the change is drawn whole. Null once it has ended, been cut short,
+ * or when the field's height changes with no cut.
+ */
+export function heightRunOf(field: HTMLElement): Animation | null {
+  const run = runs.get(field);
+  return run && run.playState !== "finished" && run.playState !== "idle"
+    ? run
+    : null;
+}
+
 /**
  * A text field that grows with what is in it, the same way on every engine:
  * a textarea, or an editable box (the composer's MentionField). Its height
@@ -140,8 +155,9 @@ interface Seen {
  * - `fold`: asked with the text's full height at each fit; when it says so
  *   the field stands at its stylesheet height (one line) instead, scrolled
  *   to its first line. A fit that folds the field or opens it marks it
- *   `data-folding` for as long as the height change that fit started runs,
- *   so the stylesheet can give folding and opening a clock of their own.
+ *   `data-folding` for as long as the height change that fit started runs
+ *   (with a cut, its run), so folding and opening can have a clock of
+ *   their own (the cut's `clock`, or the stylesheet's transition).
  * - `measured`: told the text's full height at each fit.
  * - `cut`: the box each change of height is drawn on (motion/grow-cut):
  *   laid out at once, its edge and what stands around it moving on the
@@ -209,15 +225,20 @@ export function autosize(
      * transition that never ran had ended, it stood for good, and every line
      * typed after it grew on the fold's clock.
      */
-    const markFold = () => {
+    const markFold = (drawn: Animation | null) => {
       turn += 1;
       const mine = turn;
-      const glide = node
-        .getAnimations()
-        .find(
-          (run) =>
-            run instanceof CSSTransition && run.transitionProperty === "height"
-        );
+      // With a cut, the change is the cut's run; without one, the field's
+      // own height transition.
+      const glide = grow
+        ? drawn
+        : node
+            .getAnimations()
+            .find(
+              (run) =>
+                run instanceof CSSTransition &&
+                run.transitionProperty === "height"
+            );
       const done = () => {
         if (turn === mine) {
           delete node.dataset.folding;
@@ -281,23 +302,28 @@ export function autosize(
     const grow = cut ? growCut(cut) : null;
     /**
      * Writes the field's height: with a cut, drawn by it where someone
-     * watches the change, and laid out as it lands where no one does.
+     * watches the change, and laid out as it lands where no one does. Hands
+     * back the cut's run, while it is drawn ({@link heightRunOf}).
      */
-    const heightTo = (next: string, shown: boolean) => {
+    const heightTo = (next: string, shown: boolean): Animation | null => {
       if (grow && !shown) {
         grow.land();
       }
       if (node.style.height === next) {
-        return;
+        return null;
       }
       const write = () => {
         node.style.height = next;
       };
-      if (grow && shown) {
-        grow.draw(write);
-      } else {
+      if (!(grow && shown)) {
         write();
+        return null;
       }
+      const drawn = grow.draw(write);
+      if (drawn) {
+        runs.set(node, drawn);
+      }
+      return drawn;
     };
     /** At the ceiling now, from below it: a caret at the end is scrolled to, as typing there would have. */
     const toCaret = () => {
@@ -340,9 +366,9 @@ export function autosize(
       const capped = !folded && natural > cap + 0.5;
       const capping = capped && node.dataset.capped === undefined;
       node.toggleAttribute("data-capped", capped);
-      heightTo(next, shown);
+      const drawn = heightTo(next, shown);
       if (turning) {
-        markFold();
+        markFold(drawn);
       }
       if (folded && turning) {
         node.scrollTop = 0;
