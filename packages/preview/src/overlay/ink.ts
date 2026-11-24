@@ -77,9 +77,10 @@ import {
   meets,
   pageBox,
   rectOf,
+  seenIn,
   sizesIn,
 } from "./frames";
-import { drawnHere, SHOWN_BY } from "./made-view";
+import { drawnHere } from "./made-view";
 import type { Pins } from "./pins-types";
 import type { InkChrome, Pick } from "./radial";
 import { scrollerRound, scrollsContent } from "./scrollers";
@@ -576,28 +577,43 @@ export function startInk(deps: InkDeps): Ink {
   /** Each clipped group's clip in the page, px: the part of it that is drawn. */
   const clips = new Map<string, Box>();
   /**
-   * The elements groups stand on, each watched for its size from the draw
-   * that first places a group on it until no group stands on it. Never
-   * watched again on each draw: a ResizeObserver reports once whenever
-   * `observe()` starts, and that report drawing again would draw every frame.
-   * An element in a same-origin frame is watched from its own window
-   * (frames.ts `sizesIn`).
+   * The boxes watched for their size, each from the draw that first asks
+   * for it until no draw does ({@link watchBoxes}): the elements marks
+   * stand on, and those around each mark's element drawn in no box here.
+   * Never watched again on each draw: a ResizeObserver reports once
+   * whenever `observe()` starts, and that report drawing again would draw
+   * every frame. An element in a same-origin frame is watched from its own
+   * window (frames.ts `sizesIn`).
    */
   const watched = new Set<Element>();
-  /** Watches the elements newly stood on, and lets go of those no group stands on now. */
-  const watchAnchors = (standing: Set<Element>) => {
-    for (const el of watched) {
-      if (!standing.has(el)) {
-        sizesIn(el.ownerDocument, later)?.unobserve(el);
-        watched.delete(el);
+  /** The elements marks stand on or find, each watched for coming into the viewport or leaving it ({@link watchBoxes}). */
+  const seen = new Set<Element>();
+  /**
+   * Watches with `observerOf` the elements newly asked for (`asked`), and
+   * lets go of those no draw asks for now, kept in `held`.
+   */
+  const watchSet = (
+    held: Set<Element>,
+    asked: Set<Element>,
+    observerOf: (doc: Document) => ResizeObserver | IntersectionObserver | null
+  ) => {
+    for (const el of held) {
+      if (!asked.has(el)) {
+        observerOf(el.ownerDocument)?.unobserve(el);
+        held.delete(el);
       }
     }
-    for (const el of standing) {
-      if (!watched.has(el)) {
-        sizesIn(el.ownerDocument, later)?.observe(el);
-        watched.add(el);
+    for (const el of asked) {
+      if (!held.has(el)) {
+        observerOf(el.ownerDocument)?.observe(el);
+        held.add(el);
       }
     }
+  };
+  /** Watches what {@link boxesToWatch} names: the boxes for their size, the marks' own elements for the viewport too. */
+  const watchBoxes = ({ boxes, marks }: ReturnType<typeof boxesToWatch>) => {
+    watchSet(watched, boxes, (doc) => sizesIn(doc, later));
+    watchSet(seen, marks, (doc) => seenIn(doc, later));
   };
 
   /**
@@ -629,7 +645,7 @@ export function startInk(deps: InkDeps): Ink {
     }
     watchingMoves = true;
   };
-  // A transition or an animation ended: what it moved stands where it ends; and below, a section opened or shut.
+  // A transition or an animation ended: what it moved stands where it ends.
   const placeAgainSoon = (event: Event) => {
     if (holding.size > 0 && !ownNode(event.target as Node | null)) {
       later();
@@ -637,9 +653,6 @@ export function startInk(deps: InkDeps): Ink {
   };
   document.addEventListener("transitionend", placeAgainSoon, { capture: true });
   document.addEventListener("animationend", placeAgainSoon, { capture: true });
-  for (const type of SHOWN_BY) {
-    document.addEventListener(type, placeAgainSoon, { capture: true });
-  }
 
   // --- drawing --------------------------------------------------------------
 
@@ -1254,7 +1267,67 @@ export function startInk(deps: InkDeps): Ink {
     const { by, el } = found;
     const doc = el.ownerDocument;
     const whole = el === doc.body || el === doc.documentElement;
-    return [el === on, by, whole ? "" : deps.textOf(el), drawnHere(el)];
+    const drawnNow = drawnHere(el);
+    if (!drawnNow) {
+      unshown.add(el);
+    }
+    return [el === on, by, whole ? "" : deps.textOf(el), drawnNow];
+  };
+
+  /** The elements marks' anchors find but drawn in no box here, as the last {@link whereNow} read them. */
+  let unshown = new Set<Element>();
+  /** The most boxes watched up from one mark's element. Our call: deeper than a page nests what a person pins. */
+  const BOXES_UP = 32;
+  /**
+   * What says whether the marks stand where the last draw put them, each
+   * heard however the page came to draw it otherwise (a `:hover` rule, a
+   * class, a script, a media query, a closed section opened) and asking
+   * for a draw ({@link later}); a pointer's events would hear a hover
+   * alone, and miss a scroll that moves the hover, a script's class or a
+   * media query. The boxes are watched for their size by a ResizeObserver,
+   * which hears a box laid out, resized or taken away after layout and
+   * before paint; the marks' own elements also for the viewport by an
+   * IntersectionObserver (frames.ts `seenIn`), which hears one drawn or
+   * skipped at a size it keeps (`content-visibility: hidden` toggled), as
+   * it shows or as it scrolls in. Watched:
+   * - each element a mark stands on (an ink group's, a pin's) and each of
+   *   its ancestors under the body: whichever of them the page stops
+   *   drawing goes from a size to none, and an inline element, which
+   *   reports no size of its own, is held by one that does;
+   * - each element a mark's anchor finds but that is drawn in no box here
+   *   ({@link unshown}) and its ancestors up to the nearest one drawn:
+   *   whatever draws it again lays out a box where there was none, and the
+   *   drawn ancestor that held it, its content skipped
+   *   (`content-visibility: hidden`, a closed `<details>`) or none, grows
+   *   to hold it.
+   */
+  const boxesToWatch = (standing: Set<Element>) => {
+    const boxes = new Set<Element>();
+    const marks = new Set<Element>();
+    const up = (el: Element, untilDrawn: boolean) => {
+      let at: Element | null = el;
+      for (let depth = 0; at && depth < BOXES_UP; depth += 1) {
+        if (at === at.ownerDocument.body) {
+          return;
+        }
+        boxes.add(at);
+        if (untilDrawn && at !== el && drawnHere(at)) {
+          return;
+        }
+        at = at.parentElement;
+      }
+    };
+    for (const el of [...standing, ...deps.pins().standingOn()]) {
+      if (el) {
+        up(el, false);
+        marks.add(el);
+      }
+    }
+    for (const el of unshown) {
+      up(el, true);
+      marks.add(el);
+    }
+    return { boxes, marks };
   };
 
   /**
@@ -1267,6 +1340,7 @@ export function startInk(deps: InkDeps): Ink {
    * frame) draw nothing again.
    */
   const whereNow = () => {
+    unshown = new Set();
     const { ink, moved } = maps();
     // A canvas places no mark by an anchor: its draw stands down.
     const found = onCanvas()
@@ -1406,7 +1480,7 @@ export function startInk(deps: InkDeps): Ink {
     clips.clear();
     if (onCanvas()) {
       forgetDrawn(new Set());
-      watchAnchors(new Set());
+      watchBoxes({ boxes: new Set(), marks: new Set() });
       watchMoves();
       return;
     }
@@ -1436,7 +1510,6 @@ export function startInk(deps: InkDeps): Ink {
       paintGroup(stand, brand);
       placeGroup(stand);
     }
-    watchAnchors(standing);
     if (settled()) {
       settleGroups(found, gone);
       bringBackMoved();
@@ -1446,6 +1519,7 @@ export function startInk(deps: InkDeps): Ink {
       .draw()
       .then(() => {
         drawnWhere = whereNow();
+        watchBoxes(boxesToWatch(standing));
       });
     watchMoves();
   }

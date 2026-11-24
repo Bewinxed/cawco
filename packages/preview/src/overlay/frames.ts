@@ -363,6 +363,10 @@ export const deepElementAt = (
   return el;
 };
 
+/** `doc`'s own window, its observers' constructors among its globals; null for a document with no window. */
+const windowOf = (doc: Document) =>
+  doc.defaultView as (Window & typeof globalThis) | null;
+
 /** Each document's ResizeObserver, by what it calls. */
 const sizeObservers = new WeakMap<Document, Map<() => void, ResizeObserver>>();
 
@@ -376,7 +380,7 @@ export function sizesIn(
   doc: Document,
   changed: () => void
 ): ResizeObserver | null {
-  const view = doc.defaultView as (Window & typeof globalThis) | null;
+  const view = windowOf(doc);
   if (!view) {
     return null;
   }
@@ -387,6 +391,41 @@ export function sizesIn(
     return known;
   }
   const made = new view.ResizeObserver(() => changed());
+  own.set(changed, made);
+  return made;
+}
+
+/** Each document's IntersectionObserver, by what it calls. */
+const seenObservers = new WeakMap<
+  Document,
+  Map<() => void, IntersectionObserver>
+>();
+
+/**
+ * An IntersectionObserver of `doc`'s own window calling `changed` whenever
+ * an element it watches comes into its viewport or leaves it, one per
+ * document and caller, as {@link sizesIn} is. An element its page stops or
+ * starts drawing with no box changing size (a `content-visibility: hidden`
+ * section shown or skipped at a size it keeps) changes whether it
+ * intersects, where a ResizeObserver hears nothing; one off screen is heard
+ * as it scrolls in. Null for a document with no window.
+ */
+export function seenIn(
+  doc: Document,
+  changed: () => void
+): IntersectionObserver | null {
+  const view = windowOf(doc);
+  if (!view) {
+    return null;
+  }
+  const own =
+    seenObservers.get(doc) ?? new Map<() => void, IntersectionObserver>();
+  seenObservers.set(doc, own);
+  const known = own.get(changed);
+  if (known) {
+    return known;
+  }
+  const made = new view.IntersectionObserver(() => changed());
   own.set(changed, made);
   return made;
 }

@@ -31,16 +31,6 @@ export const drawnHere = (el: Element): boolean =>
   el.getClientRects().length > 0 && el.checkVisibility();
 
 /**
- * The events after which an element may be drawn, or no longer, with no
- * attribute of the page's written (which a mutation observer hears): a
- * `<details>` toggled or a popover shown or hidden (each its `toggle`,
- * heard on capture, as it bubbles from neither), and a menu a focus or a
- * checked box opens by CSS alone. The marks are placed again after each
- * (ink.ts), so a pin hidden with its section stands on it once it shows.
- */
-export const SHOWN_BY = ["toggle", "focusin", "focusout", "change"] as const;
-
-/**
  * A drawing's width on a sheet: its own (`data-cawco-width`), else its body
  * as laid out (unscaled by a card's zoom), null when it lays out none.
  */
