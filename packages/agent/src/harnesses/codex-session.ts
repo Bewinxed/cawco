@@ -228,6 +228,8 @@ class CodexSession implements HarnessSession {
   #handed: Promise<void> = Promise.resolve();
   /** The skills Codex lists for the session's folder, by name, with their files: read once, again after a reload. */
   #skills: Promise<Map<string, string>> | undefined;
+  /** The skills it was launched with, until its first send takes them into the turn it starts ({@link #hand}). */
+  #launchSkills: readonly string[] = [];
   /** A subagent's thread, by its id: the call that started it. */
   readonly #children = new Map<string, string>();
   readonly #launchCredential: string | undefined;
@@ -393,6 +395,8 @@ class CodexSession implements HarnessSession {
     if (spec.effort) {
       this.#effort = spec.effort;
     }
+    // A launch's alone: a session taken back (`reopen`) loaded them when it started.
+    this.#launchSkills = spec.skills ?? [];
   }
 
   /** A thread this connection now follows. */
@@ -899,14 +903,20 @@ class CodexSession implements HarnessSession {
     handed.catch((error: unknown) => this.#refusedSend(message.uuid, error));
   }
 
-  /** Send `uuid`'s words and the skills they name to Codex: a turn of its own, or steered into the one running. */
+  /**
+   * Send `uuid`'s words and the skills they name to Codex: a turn of its
+   * own, or steered into the one running. The first send carries the
+   * skills the session was launched with ahead of its words' own.
+   */
   async #hand(
     thread: string,
     uuid: string,
     text: string,
     extras: TurnExtras
   ): Promise<void> {
-    const skills = await this.#skillsNamed(text);
+    const launched = this.#launchSkills;
+    this.#launchSkills = [];
+    const skills = await this.#skillInputs(launched, text);
     // Codex reads a skill only from the input that starts a turn: steered
     // into a running one it is dropped (measured, Codex 0.169.0 against a
     // mock API). Words that name one wait for the running turn's end and
@@ -973,14 +983,18 @@ class CodexSession implements HarnessSession {
   }
 
   /**
-   * Each skill `text` names, as Codex's input names a skill the person
-   * picked (`UserInput` `skill`): Codex reads its file into the turn the
-   * input starts ({@link #hand}), whether or not the model may load it
-   * itself (codex-rs `collect_explicit_skill_mentions`). Codex runs no
-   * `/name` itself, its opening one included.
+   * The `launched` skills, then each other skill `text` names, as Codex's
+   * input names a skill the person picked (`UserInput` `skill`): Codex reads
+   * its file into the turn the input starts ({@link #hand}), whether or not
+   * the model may load it itself (codex-rs `collect_explicit_skill_mentions`).
+   * Codex runs no `/name` itself, its opening one included. A launched skill
+   * Codex does not list refuses the send.
    */
-  async #skillsNamed(text: string): Promise<V2.UserInput[]> {
-    if (!text.includes("/")) {
+  async #skillInputs(
+    launched: readonly string[],
+    text: string
+  ): Promise<V2.UserInput[]> {
+    if (launched.length === 0 && !text.includes("/")) {
       return [];
     }
     const listing = this.#skills ?? this.#listSkills();
@@ -993,10 +1007,19 @@ class CodexSession implements HarnessSession {
       this.#skills = undefined;
       throw error;
     }
-    return skillsNamed(text, skills.keys()).map((named): V2.UserInput => ({
+    const missing = launched.filter((name) => !skills.has(name));
+    if (missing.length > 0) {
+      throw new Error(
+        `Codex has no skill ${missing.map((name) => `“${name}”`).join(", ")} at ${this.#ctx.cwd}.`
+      );
+    }
+    const named = skillsNamed(text, skills.keys())
+      .map((skill) => skill.name)
+      .filter((name) => !launched.includes(name));
+    return [...launched, ...named].map((name): V2.UserInput => ({
       type: "skill",
-      name: named.name,
-      path: skills.get(named.name) ?? "",
+      name,
+      path: skills.get(name) ?? "",
     }));
   }
 
