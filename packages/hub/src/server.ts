@@ -9255,6 +9255,7 @@ export const createServer = (
     }),
     apply: (actor, ops) => memoryRun.apply(actor, ops),
     unnote: (actor, id) => memoryRun.unnote(actor, id),
+    rule: (actor, ask) => memoryRun.ruleAsked(actor, ask),
     folderChanged: (projectId) => tasks.touched(projectId),
   });
   // A project's delegate type proposals (type-proposals.ts): Caw's

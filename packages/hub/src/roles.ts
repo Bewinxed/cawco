@@ -50,8 +50,10 @@
  * on its decision.
  *
  * Memory (§5.4): the worker and the delegate write notes into their
- * project's inbox (`memory_note`) and take back their own (`memory_withdraw`); only the nightly run's curator reads
- * and writes the memory files (`memory_read`, `memory_apply`).
+ * project's inbox (`memory_note`), take back their own (`memory_withdraw`),
+ * and act on the person's word on one of the project's rules at once
+ * (`memory_rule`: remove, reword, add); the nightly run's curator reads
+ * and writes the rest of the memory files (`memory_read`, `memory_apply`).
  */
 import {
   type SessionRole,
@@ -195,6 +197,8 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     ...ORCHESTRATOR_TASKS,
     "memory_note",
     "memory_withdraw",
+    // The person's word on one of the project's rules, acted on at once.
+    "memory_rule",
     // Anything said or made, as the dashboard's Find finds it (find-tool.ts).
     "find",
     // Its own project's folder, read only (caw.ts): what an earlier delegate

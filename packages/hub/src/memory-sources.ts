@@ -101,6 +101,31 @@ export const rootOf = (
   return at.id;
 };
 
+/**
+ * `row` and every session above it, nearest first, up to the top of its
+ * chain or a routine's run: where the person's words that steer `row` were
+ * typed (memory-run.ts `ruleAsked` reads his newest among them).
+ */
+export const chainOf = (
+  row: Pick<InstanceRow, "id" | "parentInstanceId">,
+  rowOf: (
+    id: string
+  ) => Pick<InstanceRow, "id" | "parentInstanceId"> | undefined
+): string[] => {
+  const chain = [row.id];
+  let at = row;
+  for (let depth = 0; depth < ANCESTRY; depth += 1) {
+    const parent = at.parentInstanceId;
+    const up = parent && !isRoutineParent(parent) ? rowOf(parent) : undefined;
+    if (!up || chain.includes(up.id)) {
+      break;
+    }
+    chain.push(up.id);
+    at = up;
+  }
+  return chain;
+};
+
 /** A note as the two-session gate reads it: its session's root and the hub's labels on it. */
 export interface NoteSource {
   labels: readonly string[];

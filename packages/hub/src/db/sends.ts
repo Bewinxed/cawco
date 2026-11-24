@@ -51,6 +51,9 @@ export interface PersonSaid {
   uuid: string;
 }
 
+/** The person's newest sends `personSaidLast` reads past slash commands, which ask the harness and not the session. */
+const SAID_LAST_LOOK = 20;
+
 /** A send's words: its text, or its text blocks joined; pictures and other blocks left out. */
 const wordsOf = ({ message }: NeutralUserMessage): string =>
   typeof message.content === "string"
@@ -217,6 +220,12 @@ export interface SendsDb {
     through: Date,
     limit: number
   ) => PersonSaid[];
+  /**
+   * The person's newest message to any of these sessions: a send of origin
+   * `human`, pending or read, not replaced by a retry, not a slash command.
+   * Undefined when he typed none to them.
+   */
+  readonly personSaidLast: (ids: readonly string[]) => PersonSaid | undefined;
   /**
    * One message the person typed, by the send's uuid or the id its harness
    * stored it under (a find hit's record): a send of origin `human`, pending
@@ -603,6 +612,35 @@ export const sendsDb = (core: DbCore): SendsDb => {
           }
         : undefined;
     },
+    personSaidLast: (ids) =>
+      ids.length === 0
+        ? undefined
+        : sends()
+            .where(
+              and(
+                inArray(sentMessages.instanceId, [...ids]),
+                eq(sentMessages.originKind, "human"),
+                inArray(sentMessages.state, ["pending", "read"]),
+                isNull(sentMessages.replacedBy)
+              )
+            )
+            .orderBy(desc(sentMessages.acceptedAt))
+            .limit(SAID_LAST_LOOK)
+            .all()
+            .flatMap((said) => {
+              const text = wordsOf(said.body).trim();
+              return text && !text.startsWith("/")
+                ? [
+                    {
+                      uuid: said.uuid,
+                      instanceId: said.instanceId,
+                      acceptedAt: said.acceptedAt,
+                      text,
+                    },
+                  ]
+                : [];
+            })
+            .at(0),
     latestSends: (id) => {
       const [read] = sends()
         .where(

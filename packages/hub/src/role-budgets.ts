@@ -281,10 +281,15 @@ import {
  * `decides` and `member` is gone: Who decides is the person's alone
  * (worker 32,119 measured; a delegate has no project_settings). The
  * worker's budget is raised to it.
+ * 2026-11-24: memory_rule, so a session removes, rewords or adds one of its
+ * project's rules at once when the person asks, where a note waited for
+ * the nightly run (the owner that day called rule L-28939a's overnight
+ * wait a CawCo gap) (worker 32,331, delegate 12,861 measured); both budgets
+ * are raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 32_119,
-  delegate: 12_649,
+  worker: 32_331,
+  delegate: 12_861,
   overseer: 770,
   "web-facing": 3400,
   curator: 1550,

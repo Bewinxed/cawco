@@ -530,9 +530,10 @@ export class CheckedOp {
 
 /** What one checked operation does to the files and the ledger. */
 export type Change =
-  /** A new lesson: a line in its home, or, staged, the ledger alone. */
+  /** A new lesson: a line in its home, or, staged, the ledger alone; `held` when the person added it through a session (memory-run.ts `ruleAsked`). */
   | {
       by: Lesson["by"];
+      held?: true;
       home: LessonHome;
       id: string;
       kind: "add";
@@ -542,15 +543,16 @@ export type Change =
       text: string;
       why: string | null;
     }
-  /** A live lesson's words changed: its line rewritten under a new id, its `Why:` saying what it was. */
+  /** A live lesson's words changed: its line rewritten under a new id, with its `Why:` (none when `why` is null); `held` when the person reworded it through a session. */
   | {
       by: Lesson["by"];
+      held?: true;
       id: string;
       kind: "replace";
       newId: string;
       sources: Lesson["sources"];
       text: string;
-      why: string;
+      why: string | null;
     }
   /** A source stated a lesson again; a staged one it bears out lands in its topic. */
   | {
@@ -569,6 +571,12 @@ export type Change =
       kind: "retire";
       why: NonNullable<Lesson["retired"]>["why"];
     }
+  /**
+   * The person removed a lesson through a session (memory-run.ts
+   * `ruleAsked`): its line taken out, retired `hand` with its words kept,
+   * held so no run puts it back, his message (`source`) one of its sources.
+   */
+  | { id: string; kind: "remove"; source: LessonSource }
   /** A knowledge lesson no brief carried for the archive's days, to `knowledge/archive/<topic>.md`. */
   | { id: string; kind: "archive" }
   /** A lesson CawCo carries now, the task that built it into CawCo (`task`) done: retired `product`, its line taken out. */
@@ -936,6 +944,7 @@ const placed = (
 const added = (now: MemoryTree, op: ChangeOf<"add">, today: string): Done => {
   const base: Lesson = {
     by: op.by,
+    ...(op.held ? { held: true as const } : {}),
     home: op.home,
     ...(op.probe ? { probe: op.probe } : {}),
     repeats: 0,
@@ -1010,7 +1019,7 @@ const replaced = (
         since: today,
         sources: op.sources,
         state: "live",
-        ...(lesson.held ? { held: true as const } : {}),
+        ...(lesson.held || op.held ? { held: true as const } : {}),
       }),
     },
     grew: path,
@@ -1153,6 +1162,21 @@ const repeated = (
     : { tree: counted };
 };
 
+/** A lesson the person removed ({@link Change} `remove`): retired `hand`, its words kept, held, his message among its sources. */
+const removed = (
+  now: MemoryTree,
+  op: ChangeOf<"remove">,
+  today: string
+): MemoryTree => {
+  const lesson = now.ledger.lessons[op.id];
+  return lesson
+    ? entryPatched(retireLine(now, op.id, "hand", today), op.id, {
+        held: true,
+        sources: withSourcesAdded(lesson.sources, [op.source]),
+      })
+    : now;
+};
+
 /** `tree` with lesson `id`'s entry patched by `patch`: a ledger edit, no line changes. */
 const entryPatched = (
   tree: MemoryTree,
@@ -1228,6 +1252,8 @@ const changed = (now: MemoryTree, op: Change, today: string): Done => {
       return merged(now, op, today);
     case "retire":
       return { tree: retireLine(now, op.id, op.why, today) };
+    case "remove":
+      return { tree: removed(now, op, today) };
     case "product":
       return {
         tree: retireLine(now, op.id, "product", today, { task: op.task }),

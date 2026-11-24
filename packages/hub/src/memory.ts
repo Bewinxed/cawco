@@ -12,9 +12,11 @@
  *   `memory/inbox/` (one file per agent's note) and its archive. The line
  *   format, the ledger and the caps are memory-lessons.ts's. No agent writes
  *   any of them with `folder_write` ({@link personsTier}).
- * - **Writers**: the nightly memory run (memory-run.ts), the one writer of
- *   the index's rules, skills' lessons and knowledge, through `memory_apply`
- *   and checks of its own; the person's Make a note (`makeNote`), into the
+ * - **Writers**: memory-run.ts, the one writer of the index's rules, skills'
+ *   lessons and knowledge: the nightly memory run, through `memory_apply`
+ *   and checks of its own, and the person's word on a rule through a session
+ *   (`memory_rule`, memory-run.ts `ruleAsked`), which removes, rewords or
+ *   adds one at once; the person's Make a note (`makeNote`), into the
  *   index's `## Notes`, which the run never changes; a session's note
  *   (`note`), into the inbox.
  * - **Notes** (`memory_note`, and `cawco tool memory_note`): an agent's
@@ -101,7 +103,7 @@ import { listOf, scalarOf } from "./task-file";
 import { readsWeb, type WebContext } from "./web-reads";
 import { isRoutineParent } from "./work-item-state";
 
-const MEMORY_DIR = "memory";
+export const MEMORY_DIR = "memory";
 export const INBOX_DIR = "memory/inbox";
 export const ARCHIVE_DIR = "memory/archive";
 
@@ -837,6 +839,40 @@ const OpInput = z.discriminatedUnion("op", [
 /** One `memory_apply` operation, as the curator writes it. */
 export type MemoryOp = z.infer<typeof OpInput>;
 
+/** A change to one of the project's rules the person asked a session for (`memory_rule`, memory-run.ts `ruleAsked`). */
+export type RuleAsk =
+  | { action: "remove"; rule: string }
+  | { action: "reword"; rule: string; text: string; why?: string }
+  | { action: "add"; text: string; why?: string };
+
+/** `memory_rule`'s flat input as the one change it asks for; the refusal's words when a field it needs is missing. */
+const ruleAskOf = (input: {
+  action: RuleAsk["action"];
+  rule?: string;
+  text?: string;
+  why?: string;
+}): RuleAsk | string => {
+  const rule = input.rule?.trim();
+  const text = input.text?.trim();
+  const why = input.why?.trim() || undefined;
+  switch (input.action) {
+    case "remove":
+      return rule
+        ? { action: "remove", rule }
+        : memoryRunWords.ruleAskUnfit("remove", "rule");
+    case "reword":
+      return rule && text
+        ? { action: "reword", rule, text, ...(why ? { why } : {}) }
+        : memoryRunWords.ruleAskUnfit("reword", rule ? "text" : "rule");
+    case "add":
+      return text
+        ? { action: "add", text, ...(why ? { why } : {}) }
+        : memoryRunWords.ruleAskUnfit("add", "text");
+    default:
+      return unhandled("memory_rule action", input.action);
+  }
+};
+
 export interface MemoryDeps {
   /** The nightly memory run's `memory_apply` (memory-run.ts `apply`). */
   readonly apply: (
@@ -861,6 +897,11 @@ export interface MemoryDeps {
   >;
   /** The project's folder changed under its tasks (a commit landed). */
   readonly folderChanged: (projectId: string) => void;
+  /** A session acts on the person's word on one of the project's rules (memory-run.ts `ruleAsked`): what changed, in a sentence. */
+  readonly rule: (
+    actor: InstanceRow,
+    ask: RuleAsk
+  ) => Promise<string | AnyProblem>;
   /** A session takes back a note it left (memory-run.ts `unnote`). */
   readonly unnote: (
     actor: InstanceRow,
@@ -874,6 +915,7 @@ export const createMemory = ({
   curator,
   db,
   folderChanged,
+  rule,
   unnote,
   watch,
 }: MemoryDeps) => {
@@ -1412,6 +1454,12 @@ export const createMemory = ({
           const gone = await unnote(me(), id);
           return isAnswer(gone) ? memoryWithdrawnWords(gone) : gone;
         }),
+        MEMORY_RULE_DEFINITION.run(async (input) => {
+          const ask = ruleAskOf(input);
+          return typeof ask === "string"
+            ? problem(400, { code: "memory-rule-ask-unfit", detail: ask })
+            : await rule(me(), ask);
+        }),
         MEMORY_READ_DEFINITION.run(({ path }) => read(me(), path)),
         MEMORY_APPLY_DEFINITION.run(({ ops }) => apply(me(), ops)),
       ];
@@ -1425,6 +1473,7 @@ export type Memory = ReturnType<typeof createMemory>;
 export const MEMORY_TOOLS: ReadonlySet<string> = new Set([
   "memory_note",
   "memory_withdraw",
+  "memory_rule",
   "memory_read",
   "memory_apply",
 ]);
@@ -1518,6 +1567,33 @@ const MEMORY_WITHDRAW_DEFINITION = defineTool(
   sentence
 );
 
+const MEMORY_RULE_DEFINITION = defineTool(
+  "memory_rule",
+  memoryRunWords.ruleTool,
+  {
+    action: z.enum(["remove", "reword", "add"]),
+    rule: z
+      .string()
+      .optional()
+      .describe("For remove and reword: its id, like L-28939a."),
+    text: z
+      .string()
+      .max(NOTE_LIMIT)
+      .optional()
+      .describe(
+        "For reword and add: the rule in one sentence, as the person put it."
+      ),
+    why: z
+      .string()
+      .max(NOTE_LIMIT)
+      .optional()
+      .describe(
+        "For reword and add: why it holds, in one line, when the person said."
+      ),
+  },
+  sentence
+);
+
 const MEMORY_READ_DEFINITION = defineTool(
   "memory_read",
   "The project's memory: AGENTS.md, its lessons/ and knowledge/ files, and its inbox notes. Use it to read what the project keeps before changing it.",
@@ -1551,6 +1627,7 @@ const MEMORY_APPLY_DEFINITION = defineTool(
 export const MEMORY_DEFINITIONS = [
   MEMORY_NOTE_DEFINITION.listed(),
   MEMORY_WITHDRAW_DEFINITION.listed(),
+  MEMORY_RULE_DEFINITION.listed(),
   MEMORY_READ_DEFINITION.listed(),
   MEMORY_APPLY_DEFINITION.listed(),
 ];

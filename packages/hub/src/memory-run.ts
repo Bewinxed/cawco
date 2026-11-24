@@ -44,6 +44,15 @@
  *   then; the caps and the night's limits hold. Each
  *   operation is one commit, by the Memory curator, with the notes it
  *   consumed archived in it.
+ * - **The person's word on a rule** ({@link ruleAsked}, `memory_rule`): a
+ *   session removes, rewords or adds one of the project's rules at once
+ *   when the person asks, through the same checked change, one commit by
+ *   him, his newest message in the session's chain its source. What he
+ *   changes is held: a removed rule stays out (no repeat puts it back, an
+ *   agent's lesson saying it again is refused, upkeep keeps its entry), and
+ *   an inbox note naming it is archived as settled. Every commit checks
+ *   that the files it writes still hold what it read ({@link movedUnder}),
+ *   so no writer undoes another's change from an older read.
  * - **Checks** ({@link plannedCheck}): a rule a tool can test is filed as
  *   a task in the project (`Check: <rule>`, through the tasks module, in
  *   the stage new tasks enter), its id kept on the lesson; the rule stays
@@ -94,8 +103,10 @@
 
 import { developsCawco } from "@cawco/core/binary-distribution";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { InstanceRow } from "@cawco/core/protocol";
 import type { RoutineOutcome } from "@cawco/core/routine-kinds";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+import { unhandled } from "@cawco/core/unhandled";
 import { memoryJevWords, memoryRunWords } from "@cawco/core/words/memory-run";
 import type { Experimental_DecisionQuestion } from "ai";
 import { ElysiaStatus, problem } from "elysia";
@@ -122,14 +133,17 @@ import {
   duplicateUnjudged,
   fileOr,
   INBOX_DIR,
+  MEMORY_DIR,
   type MemoryOp,
   memoryFiles,
   type Note,
   notesIn,
+  type RuleAsk,
   saysAlready,
 } from "./memory";
 import { convertFile, type OldFact } from "./memory-legacy";
 import {
+  type Applied,
   applyOp,
   CAPS,
   type Change,
@@ -163,6 +177,7 @@ import {
   ANCHOR_MATCH,
   type AnchorPlace,
   anchorRead,
+  chainOf,
   countsTogether,
   type MachineRead,
   quoteProblem,
@@ -365,6 +380,7 @@ export interface MemoryRunDeps {
     | "markDataMigrated"
     | "memoryFacts"
     | "personSaidIn"
+    | "personSaidLast"
     | "project"
     | "sendRecord"
   >;
@@ -848,6 +864,21 @@ const keptLessons = (tree: MemoryTree): Kept[] => [
       : []
   ),
 ];
+
+/**
+ * The lessons the person removed through a session (memory-lessons.ts
+ * Change `remove`): retired `hand`, held, their words kept. Only his own
+ * message says one again; an agent's note never brings it back.
+ */
+const removedByPerson = (tree: MemoryTree): Beside[] =>
+  Object.entries(tree.ledger.lessons).flatMap(([id, lesson]) =>
+    lesson.state === "retired" &&
+    lesson.held &&
+    lesson.retired?.why === "hand" &&
+    lesson.retired.text !== ""
+      ? [{ id, text: lesson.retired.text }]
+      : []
+  );
 
 /** A lesson the run made itself, in the last {@link CAPS.retiredDays} days: not adopted from a hand edit, not one he approved before the run. */
 const madeByRun = (lesson: Lesson, today: string): boolean =>
@@ -1373,10 +1404,48 @@ export const createMemoryRun = ({
     return { tree, head: history.commits[0]?.sha ?? "" };
   };
 
+  /** Each project's memory commits, one at a time: {@link commit}'s check of what it writes and its write. */
+  const memoryTurn = turnTaker();
+
+  /**
+   * Why a commit over `before` may not write `writes`: a memory file or the
+   * ledger it writes no longer holds what `before` read (another writer
+   * committed since: a session's {@link ruleAsked}, the run, the person's
+   * Make a note), so writing would undo that change. Nothing when each still
+   * holds it. Runs inside {@link memoryTurn}.
+   */
+  const movedUnder = async (
+    projectId: string,
+    before: MemoryTree,
+    writes: readonly { path: string }[]
+  ) => {
+    for (const { path } of writes) {
+      const ledger = path === LEDGER_FILE;
+      if (!ledger && path.startsWith(`${MEMORY_DIR}/`)) {
+        continue;
+      }
+      const now = await fileOr(projectId, path);
+      if (now instanceof ElysiaStatus) {
+        return now;
+      }
+      const read = ledger ? parseLedger(now) : now;
+      const same = ledger
+        ? typeof read !== "string" && Bun.deepEquals(read, before.ledger)
+        : read === (before.files[path] ?? "");
+      if (!same) {
+        return problem(409, {
+          code: "memory-changed",
+          detail: memoryRunWords.memoryChanged(path),
+        });
+      }
+    }
+  };
+
   /**
    * One commit of `after` over `before`: every memory file it changed, the
    * ledger when it changed, and each note it consumed archived with what
-   * came of it. Nothing when nothing changed.
+   * came of it. Nothing when nothing changed. Refused `memory-changed` when
+   * a file it writes moved since `before` was read ({@link movedUnder}).
    */
   const commit = async (
     projectId: string,
@@ -1418,11 +1487,17 @@ export const createMemoryRun = ({
     if (writes.length + deletes.length === 0) {
       return;
     }
-    const done = await changeFolderFiles(
-      projectId,
-      { writes, deletes },
-      { author: change.author, message: change.message }
-    );
+    const done = await memoryTurn(projectId, async () => {
+      const moved = await movedUnder(projectId, before, writes);
+      return (
+        moved ??
+        (await changeFolderFiles(
+          projectId,
+          { writes, deletes },
+          { author: change.author, message: change.message }
+        ))
+      );
+    });
     if (done instanceof ElysiaStatus) {
       return done;
     }
@@ -1633,6 +1708,7 @@ export const createMemoryRun = ({
       lessons: Object.fromEntries(
         Object.entries(tree.ledger.lessons).filter(
           ([, lesson]) =>
+            lesson.held === true ||
             !(
               lesson.retired &&
               olderThan(lesson.retired.on, today, CAPS.retiredDays)
@@ -2496,6 +2572,15 @@ export const createMemoryRun = ({
     if (kept) {
       return memoryRunWords.saysAlready(kept[0]);
     }
+    const gone =
+      by === "agent"
+        ? removedByPerson(tree).find(
+            (one) => saysAlready(one.text, text) || saysAlready(text, one.text)
+          )
+        : undefined;
+    if (gone) {
+      return memoryRunWords.removedByPerson(gone.id);
+    }
     if (by === "agent" && outsideUrls(text, fleetHosts()).length > 0) {
       return memoryRunWords.outsideUrl;
     }
@@ -2634,31 +2719,38 @@ export const createMemoryRun = ({
    * kept one says ({@link likeliest}) is refused, naming the one to
    * corroborate, of every live lesson in its home and the index, and every
    * staged one bound there, this run's earlier adds among them (each is in
-   * `tree`); else, in a project that develops CawCo, whether it is about
-   * CawCo (row `product`, {@link productTask}). Not about CawCo with Jev
-   * off: the lesson is staged then, and Jev reads it the first night it is
-   * on ({@link recheckStaged}). Jev failing, its words.
+   * `tree`); an agent's that says what the person removed
+   * ({@link removedByPerson}) is refused as his to bring back; else, in a
+   * project that develops CawCo, whether it is about CawCo (row `product`,
+   * {@link productTask}). Not about CawCo with Jev off: the lesson is
+   * staged then, and Jev reads it the first night it is on
+   * ({@link recheckStaged}). Jev failing, its words.
    */
   const jevOnNew = async (
     projectId: string,
     run: Run,
     tree: MemoryTree,
-    text: string,
+    lesson: { by: Lesson["by"]; text: string },
     home: LessonHome
   ): Promise<{ product: boolean } | string> => {
     if (!run.jev) {
       return { product: false };
     }
+    const { text } = lesson;
     const beside = besideOf(tree, home, { staged: true });
+    const removed = lesson.by === "agent" ? removedByPerson(tree) : [];
     try {
       const answers = await answersOf(
         projectId,
         Object.fromEntries([
           ...(buildsCawco(projectId) ? [productQuestion("add", text)] : []),
-          ...keptQuestions("add", text, beside),
+          ...keptQuestions("add", text, [...beside, ...removed]),
         ])
       );
-      const id = likeliest("kept", "add", beside, answers);
+      const id = likeliest("kept", "add", [...beside, ...removed], answers);
+      if (id && removed.some((one) => one.id === id)) {
+        return memoryRunWords.removedByPerson(id);
+      }
       return id
         ? memoryRunWords.keptAlready(id)
         : { product: aboutCawco("add", answers) };
@@ -2837,7 +2929,7 @@ export const createMemoryRun = ({
     if (bad) {
       return bad;
     }
-    const read = await jevOnNew(projectId, run, tree, lesson.text, home);
+    const read = await jevOnNew(projectId, run, tree, lesson, home);
     return typeof read === "string" ? read : { home, product: read.product };
   };
 
@@ -3265,20 +3357,37 @@ export const createMemoryRun = ({
   ): Promise<string[]> => {
     let read = first;
     const lines: string[] = [];
-    for (const [index, op] of ops.entries()) {
+    const once = async (
+      at: { head: string; tree: MemoryTree },
+      op: MemoryOp,
+      index: number
+    ) => {
       const plan = await planned(
         projectId,
         run,
-        read.tree,
-        read.head,
+        at.tree,
+        at.head,
         op,
         index,
         answers
       );
-      const done =
-        typeof plan === "string"
-          ? plan
-          : await committed(projectId, run, read, plan, op);
+      return typeof plan === "string"
+        ? plan
+        : await committed(projectId, run, at, plan, op);
+    };
+    for (const [index, op] of ops.entries()) {
+      let done = await once(read, op, index);
+      // Another writer committed under this call: checked again on the memory as it stands now.
+      if (
+        done instanceof ElysiaStatus &&
+        done.response.code === "memory-changed"
+      ) {
+        const again = await treeOf(projectId);
+        if (!(again instanceof ElysiaStatus)) {
+          read = again;
+          done = await once(read, op, index);
+        }
+      }
       if (typeof done === "string" || done instanceof ElysiaStatus) {
         const why = typeof done === "string" ? done : done.response.detail;
         lines.push(`${index + 1}. ${memoryRunWords.refused(why)}`);
@@ -5067,6 +5176,292 @@ export const createMemoryRun = ({
     return { withdrawn: done };
   };
 
+  // --- the person's word on a rule ------------------------------------------------------
+
+  /** The person's newest message in `actor`'s chain ({@link chainOf}) as a source: what a rule change through a session rests on. */
+  const personsWord = (
+    actor: Pick<InstanceRow, "id" | "parentInstanceId">
+  ): LessonSource | undefined => {
+    const row = (id: string) => db.getInstancesByIds([id]).at(0);
+    const said = db.personSaidLast(chainOf(actor, row));
+    return said ? saidSource(said) : undefined;
+  };
+
+  /** Why rule words the person gave may not stand: one line within its cap, no secret, said by no other live line. Nothing when they may. */
+  const ruleWordsProblem = async (
+    tree: MemoryTree,
+    words: { text: string; why: string | undefined },
+    home: LessonHome,
+    except: string | undefined
+  ) => {
+    const shaped = shapeProblem(words.text, words.why, home);
+    if (shaped) {
+      return problem(400, { code: "memory-rule-unfit", detail: shaped });
+    }
+    for (const each of [words.text, words.why ?? ""]) {
+      if ((await redactSecrets(each)) !== each) {
+        return problem(400, {
+          code: "memory-rule-secret",
+          detail: memoryRunWords.secret,
+        });
+      }
+    }
+    const same = Object.entries(tree.files)
+      .flatMap(([path, content]) =>
+        homeOf(path) ? parseLessons(path, content ?? "").lessons : []
+      )
+      .find(
+        (line) =>
+          line.id !== except &&
+          saysAlready(line.text, words.text) &&
+          saysAlready(words.text, line.text)
+      );
+    return same
+      ? problem(409, {
+          code: "memory-rule-same",
+          detail: memoryRunWords.ruleSame(same.id),
+        })
+      : undefined;
+  };
+
+  /** The live or staged lesson `id` names, or why it names none a person's change may act on (`live` only: one with a line). */
+  const ruleOf = (tree: MemoryTree, id: string, liveOnly: boolean) => {
+    if (!RULE_ID.test(id)) {
+      return problem(400, {
+        code: "memory-rule-id-unfit",
+        detail: memoryRunWords.ruleIdUnfit(id),
+      });
+    }
+    const lesson = tree.ledger.lessons[id];
+    if (!lesson) {
+      return problem(404, {
+        code: "memory-rule-unknown",
+        detail: memoryRunWords.ruleUnknown(id),
+      });
+    }
+    return lesson.state === "live" || (!liveOnly && lesson.state === "staged")
+      ? lesson
+      : problem(409, {
+          code: "memory-rule-not-live",
+          detail: memoryRunWords.ruleNotLive(id, lesson.state),
+        });
+  };
+
+  /** The inbox notes of `free` that name lesson `id`, each archived as settled by the person's change. */
+  const settledBy = (
+    free: readonly Note[],
+    verb: "removed" | "reworded",
+    id: string
+  ) => {
+    const names = new RegExp(`\\b${id}\\b`, "u");
+    return free
+      .filter((note) => names.test(note.text))
+      .map((note) => ({
+        note,
+        outcome: memoryRunWords.ruleSettled(verb, id),
+      }));
+  };
+
+  /** What eviction moved, said after a change. */
+  const evictedWords = (applied: {
+    evicted: { from: string; id: string; to: string }[];
+  }) =>
+    applied.evicted
+      .map((each) => ` ${memoryRunWords.evicted(each.id, each.from, each.to)}.`)
+      .join("");
+
+  /**
+   * A rule change the person asked for, checked against the memory as
+   * `tree` holds it: the change, its commit's subject, the inbox notes of
+   * `free` it settles, and its answer once applied; or why not.
+   */
+  const ruleChange = async (
+    tree: MemoryTree,
+    ask: RuleAsk,
+    source: LessonSource,
+    free: readonly Note[]
+  ) => {
+    switch (ask.action) {
+      case "remove": {
+        const lesson = ruleOf(tree, ask.rule, false);
+        if (lesson instanceof ElysiaStatus) {
+          return lesson;
+        }
+        const text = lineOf(tree, ask.rule)?.text ?? lesson.staged?.text ?? "";
+        const path = pathOf(lesson.home) ?? LEDGER_FILE;
+        const notes = settledBy(free, "removed", ask.rule);
+        const change: Change = { kind: "remove", id: ask.rule, source };
+        return {
+          change,
+          subject: memoryRunWords.ruleRemoveSaid(ask.rule),
+          notes,
+          answer: () =>
+            memoryRunWords.ruleRemoved(ask.rule, path, text, notes.length),
+        };
+      }
+      case "reword": {
+        const lesson = ruleOf(tree, ask.rule, true);
+        if (lesson instanceof ElysiaStatus) {
+          return lesson;
+        }
+        const words = {
+          text: ask.text,
+          why: ask.why ?? lineOf(tree, ask.rule)?.why ?? undefined,
+        };
+        const unfit = await ruleWordsProblem(
+          tree,
+          words,
+          lesson.home,
+          ask.rule
+        );
+        if (unfit) {
+          return unfit;
+        }
+        const newId = newLessonId((taken) => taken in tree.ledger.lessons);
+        const path = pathOf(lesson.home) ?? INDEX_FILE;
+        const notes = settledBy(free, "reworded", ask.rule);
+        const change: Change = {
+          kind: "replace",
+          by: "owner",
+          held: true,
+          id: ask.rule,
+          newId,
+          sources: [source],
+          text: words.text,
+          why: words.why ?? null,
+        };
+        return {
+          change,
+          subject: memoryRunWords.replaced(ask.rule, newId, path),
+          notes,
+          answer: (applied: Applied) =>
+            `${memoryRunWords.ruleReworded(ask.rule, newId, path, notes.length)}${evictedWords(applied)}`,
+        };
+      }
+      case "add": {
+        const home: LessonHome = { at: "index" };
+        const unfit = await ruleWordsProblem(
+          tree,
+          { text: ask.text, why: ask.why },
+          home,
+          undefined
+        );
+        if (unfit) {
+          return unfit;
+        }
+        const id = newLessonId((taken) => taken in tree.ledger.lessons);
+        const change: Change = {
+          kind: "add",
+          by: "owner",
+          held: true,
+          home,
+          id,
+          sources: [source],
+          text: ask.text,
+          why: ask.why ?? null,
+        };
+        return {
+          change,
+          subject: memoryRunWords.added(id, INDEX_FILE),
+          notes: [],
+          answer: (applied: Applied) => {
+            const landed = applied.tree.ledger.lessons[id]?.home;
+            return `${memoryRunWords.ruleAdded(id, (landed && pathOf(landed)) ?? INDEX_FILE)}${evictedWords(applied)}`;
+          },
+        };
+      }
+      default:
+        return unhandled("memory rule ask", ask);
+    }
+  };
+
+  /** {@link ruleAsked} once, on the memory as it stands: the change checked, applied and committed by the person, with the inbox notes it settles. */
+  const ruleOnce = async (
+    projectId: string,
+    ask: RuleAsk,
+    source: LessonSource
+  ) => {
+    const read = await treeOf(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const inbox = await notesIn(projectId, INBOX_DIR);
+    if (inbox instanceof ElysiaStatus) {
+      return inbox;
+    }
+    // A note a run is reading, or one a brief being made may read, stays for the run.
+    const reading = runs.get(projectId)?.notes;
+    const free = briefing.has(projectId)
+      ? []
+      : inbox.filter((note) => !reading?.has(note.id));
+    const asked = await ruleChange(read.tree, ask, source, free);
+    if (asked instanceof ElysiaStatus) {
+      return asked;
+    }
+    const applied = applyOp(
+      read.tree,
+      checked(asked.change),
+      dayOf(new Date()),
+      usesOf(projectId)
+    );
+    const sha = await commit(projectId, read.tree, applied.tree, {
+      author: YOU,
+      message: `memory: ${memoryRunWords.ruleCommit(asked.subject)}`,
+      notes: asked.notes,
+    });
+    return sha instanceof ElysiaStatus ? sha : asked.answer(applied);
+  };
+
+  /**
+   * A session acts on the person's word on one of the project's rules
+   * (`memory_rule`): removes it, rewords it or adds one, at once, through
+   * the change the run's own operations go through, one commit by the
+   * person. Refused for a session in no project, and for one no message of
+   * the person's reaches (its chain, {@link chainOf}): his newest there is
+   * the change's source. What he changes is held: a removed rule stays out
+   * ({@link removedByPerson}, `takenOut` never reads it, upkeep keeps its
+   * entry), and a reworded or added one is never changed by the run. An
+   * inbox note that names a rule he removed or reworded is archived as
+   * settled in the same commit, unless a run is reading it. Made again on
+   * the memory as it then stands when another writer committed under it.
+   */
+  const ruleAsked = async (
+    actor: Pick<InstanceRow, "id" | "parentInstanceId" | "projectId">,
+    ask: RuleAsk
+  ) => {
+    const { projectId } = actor;
+    if (!projectId) {
+      return problem(409, {
+        code: "memory-session-no-project",
+        detail: memoryRunWords.ruleNoProject,
+      });
+    }
+    const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
+    const source = personsWord(actor);
+    if (!source) {
+      return problem(403, {
+        code: "memory-rule-no-word",
+        detail: memoryRunWords.ruleNoWord,
+      });
+    }
+    return await asUnnoting(projectId, async () => {
+      let done = await ruleOnce(projectId, ask, source);
+      for (
+        let tries = 1;
+        tries < RULE_TRIES &&
+        done instanceof ElysiaStatus &&
+        done.response.code === "memory-changed";
+        tries += 1
+      ) {
+        done = await ruleOnce(projectId, ask, source);
+      }
+      return done;
+    });
+  };
+
   // --- staged lessons Jev did not check ------------------------------------------------
 
   /**
@@ -5387,6 +5782,7 @@ export const createMemoryRun = ({
     recoveryBrief,
     withdraw,
     unnote,
+    ruleAsked,
     purged,
     cutover,
     recheckStaged,
@@ -5399,6 +5795,11 @@ export const createMemoryRun = ({
 };
 
 /** The recovery run's limit on added lessons, for each of its two runs. */
+/** How many times a person's rule change is made on the memory as it stands, when other writers commit under it. */
+const RULE_TRIES = 3;
+/** A lesson's id, as its line ends. */
+const RULE_ID = /^L-[0-9a-f]{6}$/u;
+
 const RECOVERY_ADDS = 30;
 /**
  * The recovery runs that start one after another before it waits to be

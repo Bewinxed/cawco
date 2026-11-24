@@ -166,7 +166,7 @@ export interface Lesson {
   by: "owner" | "agent";
   /** The task that builds its check, a lint rule or a hub refusal: once it is done the check holds the rule, and its line goes. */
   check?: { task: string };
-  /** He stated it again after the run changed or removed it: never evicted, demoted or retired by the run. */
+  /** He stated it again after the run changed or removed it, or changed it himself through a session's memory_rule: never evicted, demoted or retired by the run, and, retired, kept in the ledger past its days. */
   held?: true;
   home: LessonHome;
   /**
@@ -187,7 +187,7 @@ export interface Lesson {
     /** The task that built it into CawCo (`product`). */
     task?: string;
     text: string;
-    /** `stale`: the file it rested on, or the match in it, is gone. `merged`: another lesson said the same, and holds its sources now (`by`). `product`: CawCo carries it now, its task (`task`) done. */
+    /** `stale`: the file it rested on, or the match in it, is gone. `merged`: another lesson said the same, and holds its sources now (`by`). `product`: CawCo carries it now, its task (`task`) done. `hand`: the person took it out, by hand from its file (its words not kept) or through a session's memory_rule (its words kept, held, his message among its sources). */
     why:
       | "merged"
       | "product"

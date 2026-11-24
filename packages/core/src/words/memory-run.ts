@@ -8,6 +8,12 @@
  * None of it quotes the person: a lesson is a rule in an agent's own words,
  * and its source is a reference the hub keeps.
  */
+/** How many inbox notes about a rule were archived as settled, said after the change. */
+const settledWords = (count: number): string =>
+  count === 0
+    ? ""
+    : ` ${count} inbox note${count === 1 ? "" : "s"} about it ${count === 1 ? "was" : "were"} archived as settled.`;
+
 export const memoryRunWords = {
   /** The index's line under its title, for the person who opens it. */
   indexIntro:
@@ -47,7 +53,44 @@ export const memoryRunWords = {
     `Withdrew ${id}; the memory run will not read it. It said: ${text}`,
   /** The line every session that may note is told at its start. */
   noteLine:
-    "A lasting fact for this project's later sessions, or a correction the person gives about how to work, goes through memory_note as you learn it, in your own words.",
+    "A lasting fact for this project's later sessions, or a correction the person gives about how to work, goes through memory_note as you learn it, in your own words. When the person asks to remove, reword or add one of the project's rules, make that change at once with memory_rule.",
+
+  /** `memory_rule`'s description. */
+  ruleTool:
+    "Removes, rewords or adds one of this project's rules at once, in AGENTS.md and the memory's ledger. Use it only when the person asks for that change, never on your own judgement.",
+  /** `memory_rule`'s answers: what changed, and what it means for the nightly run. */
+  ruleRemoved: (id: string, path: string, text: string, settled: number) =>
+    `Removed ${id} from ${path} (it said: ${text}). Sessions that start from now on no longer load it, and the nightly run does not bring it back.${settledWords(settled)}`,
+  ruleReworded: (id: string, newId: string, path: string, settled: number) =>
+    `Reworded ${id} as ${newId} in ${path}. The person's words are held: the nightly run does not change, move or retire them.${settledWords(settled)}`,
+  ruleAdded: (id: string, path: string) =>
+    `Added ${id} to ${path}. The person's words are held: the nightly run does not change, move or retire them.`,
+  /** What a person's rule change is committed as. */
+  ruleCommit: (said: string) => `${said}, as the person asked`,
+  ruleRemoveSaid: (id: string) => `remove ${id}`,
+  /** An inbox note naming a rule the person removed or reworded, archived with what came of it. */
+  ruleSettled: (verb: "removed" | "reworded", id: string) =>
+    `settled: the person ${verb} ${id}`,
+  /** `memory_rule`'s refusals. */
+  ruleNoProject:
+    "This session is in no project, so it has no rules to change: memory_rule changes the rules of the session's project.",
+  ruleNoWord:
+    "No message of the person's reaches this session or any session above it: memory_rule changes a rule only when the person asked for it.",
+  ruleAskUnfit: (action: string, missing: string) =>
+    `${action} needs ${missing}: remove takes rule; reword takes rule and text; add takes text, like {"action":"add","text":"Run the checks before finishing."}.`,
+  ruleIdUnfit: (id: string) =>
+    `${id} is not a rule id: L- and six hex characters, as AGENTS.md shows each rule, like L-28939a.`,
+  ruleUnknown: (id: string) =>
+    `${id} is no rule of this project's memory: the ids are at the end of each line in AGENTS.md and the lessons/ and knowledge/ files.`,
+  ruleNotLive: (id: string, state: string) =>
+    `${id} is ${state}, with no line in a memory file: only a live rule can be changed.`,
+  ruleSame: (id: string) => `${id} says this already, word for word.`,
+  /** A lesson an agent's notes would add that says what the person removed. */
+  removedByPerson: (id: string) =>
+    `The person removed ${id}, which says this: only his own message brings it back.`,
+  /** A commit refused because what it changes moved under it. */
+  memoryChanged: (path: string) =>
+    `${path} changed while this change was being made: read the memory again and make it once more.`,
   /** `memory_note`'s answer: the run reads it. */
   notedForRun: (id: string) =>
     `Noted as ${id}. The nightly memory run reads it. It is kept if it restates something the person said, if a second session notes the same, or if the file it names bears it out. If it is wrong, withdraw it with memory_withdraw.`,
