@@ -35,7 +35,11 @@
   import type { Component, Snippet } from "svelte";
   import { untrack } from "svelte";
   import { IconCheck, IconGlobe, IconSearch } from "#lib/icons.js";
-  import { dur, easeOut } from "#lib/platform/motion/curves.svelte.js";
+  import {
+    dur,
+    easeOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
   import { restOffscreen } from "#lib/platform/motion/rest.js";
   import { getSizeContext } from "../thinking-indicator/size-context";
 
@@ -111,6 +115,29 @@
   }
 </script>
 
+<!-- The light passing over an active step's words, as the thinking
+     indicator draws it: the words again in the strong ink, masked to a band
+     three times their width (`sheen-band`) that slides across them once a
+     breath, the copy inside it sliding back the same distance on the same
+     curve, so the letters stand still and only the light moves, all of it on
+     the compositor. The copy is a third of the band, the words' own width,
+     so it wraps on their lines; the overlay is the words' box, and clips the
+     band to it. -->
+{#snippet light(text: string)}
+  <span
+    aria-hidden="true"
+    class="pointer-events-none absolute inset-0 overflow-hidden"
+    ><span
+      class="loops absolute inset-y-0 start-0 text-ink-strong sheen-band animate-thinking-sheen"
+      data-slot="sheen"
+      ><span
+        class="loops block w-1/3 animate-thinking-sheen-hold"
+        data-slot="sheen-word">{text}</span
+      ></span
+    ></span
+  >
+{/snippet}
+
 {#if status !== "pending"}
   <!-- The icon column is the icon's own width (the transcript's 16px glyph
        cell); the icon's box is at least that square and a line tall. -->
@@ -154,7 +181,7 @@
     </div>
     <!-- A new step fades in; an active step's words carry the light: its
          muted ink, strong at the middle of a band three times the words'
-         width, sliding across them once a breath. -->
+         width, sliding across them once a breath (`light`). -->
     <div
       class="flex min-w-0 flex-1 flex-col gap-space-1 pb-space-2 motion-safe:data-enters:animate-thinking-step-in"
       data-enters={entering || undefined}
@@ -164,9 +191,12 @@
              breaks where it must, as the description does. -->
         <span
           data-slot="thinking-step-label"
-          class="loops font-normal wrap-anywhere text-ink-strong transition-control status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-transparent motion-safe:data-shimmer:step-shimmer motion-safe:data-shimmer:animate-step-shimmer"
+          class="relative font-normal wrap-anywhere text-ink-strong transition-control status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-ink-muted"
           data-shimmer={status === "active" || undefined}
-          data-status={status}>{label}</span
+          data-status={status}
+          >{label}{#if status === "active" && motionOk.current}{@render light(
+              label
+            )}{/if}</span
         >
       {/if}
       {#if description && Markdown}
@@ -184,9 +214,11 @@
         </div>
       {:else if description}
         <span
-          class="loops wrap-anywhere whitespace-pre-wrap motion-safe:data-shimmer:text-transparent motion-safe:data-shimmer:step-shimmer motion-safe:data-shimmer:animate-step-shimmer"
+          class="relative wrap-anywhere whitespace-pre-wrap motion-safe:data-shimmer:text-ink-muted"
           data-shimmer={(!label && status === "active") || undefined}
-          >{description}</span
+          >{description}{#if !label && status === "active" && motionOk.current}{@render light(
+              description
+            )}{/if}</span
         >
       {/if}
       {@render children?.()}

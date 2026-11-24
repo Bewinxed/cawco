@@ -1645,8 +1645,6 @@
     var(--ease-in-out) infinite;
   --animate-thinking-sheen-hold: thinking-sheen-hold var(--duration-breath)
     var(--ease-in-out) infinite;
-  --animate-step-shimmer: step-shimmer var(--duration-breath) var(--ease-in-out)
-    infinite;
   --animate-row-flash: row-flash calc(var(--duration-fade) * 3) var(--ease-out)
     both;
   --animate-mention-tip-in: mention-tip-in var(--duration-menu) var(--ease-out);
@@ -1760,14 +1758,6 @@
   @keyframes thinking-sheen-hold {
     to {
       transform: translateX(200%);
-    }
-  }
-  @keyframes step-shimmer {
-    from {
-      background-position: 0% 0;
-    }
-    to {
-      background-position: 100% 0;
     }
   }
   @keyframes row-flash {

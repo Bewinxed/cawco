@@ -1278,20 +1278,6 @@
     transparent 65%
   );
 }
-/* The light over an active thinking step's words: its muted ink, strong at
-   the middle of a band three times the words' width, clipped to the text.
-   The element sets its own ink transparent beside it. */
-@utility step-shimmer {
-  background-image: linear-gradient(
-    90deg,
-    var(--color-ink-muted) 0% 35%,
-    var(--color-ink-strong) 50%,
-    var(--color-ink-muted) 65% 100%
-  );
-  background-size: 300% 100%;
-  background-repeat: repeat;
-  background-clip: text;
-}
 
 /* Rendered markdown that keeps the type of the text it stands in: prose-sm
    restates its own size and colour on its root, so they are handed back;
