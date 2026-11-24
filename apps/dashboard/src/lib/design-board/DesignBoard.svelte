@@ -49,11 +49,31 @@
     frames: framesOf(family),
   });
 
+  /** A section's anchor, from its title: what the index's links name. */
+  const anchorOf = (title: string) =>
+    `section-${title.toLowerCase().replaceAll(/[^a-z0-9]+/gu, "-")}`;
+
   const sections = GROUPS.map((group) => ({
     title: group.title,
     flowing: group.families.filter((one) => !one.wide).map(cardOf),
     wide: group.families.filter((one) => one.wide).map(cardOf),
   }));
+
+  /**
+   * The board's index, in its own order: the foundations, then each group
+   * of components, every link an anchor to its section. The board scrolls
+   * in its own column beside it, so the index stays in view.
+   */
+  const INDEX = [
+    {
+      title: "Foundations",
+      links: [...ROLES, ...SCALES].map((one) => one.title),
+    },
+    ...sections.map((section) => ({
+      title: section.title,
+      links: [...section.flowing, ...section.wide].map((one) => one.title),
+    })),
+  ];
 </script>
 
 {#snippet shell(title: string, pane: Snippet, note?: string, major = false)}
@@ -63,6 +83,7 @@
       major ? "mb-space-8" : "mb-space-4",
     ]}
     aria-label={title}
+    id={anchorOf(title)}
   >
     <header class="flex flex-col gap-space-1">
       {#if major}
@@ -144,46 +165,84 @@
   {/each}
 {/snippet}
 
+{#snippet index()}
+  <ul class="flex flex-col gap-space-4">
+    {#each INDEX as group (group.title)}
+      <li class="flex flex-col gap-space-1">
+        <p class="text-tx-2 type-meta">{group.title}</p>
+        <ul class="flex flex-col">
+          {#each group.links as title (title)}
+            <li>
+              <a
+                class="block rounded-xs px-space-2 py-space-1 text-tx-2 type-label hover:bg-ui hover:text-tx"
+                href={`#${anchorOf(title)}`}>{title}</a
+              >
+            </li>
+          {/each}
+        </ul>
+      </li>
+    {/each}
+  </ul>
+{/snippet}
+
 <div
-  class="flex min-h-dvh flex-col gap-space-8 bg-bg p-space-6 text-tx max-phone:p-space-3"
+  class="flex h-dvh bg-bg text-tx"
   style:--font-sans={faces?.sans}
   style:--font-mono={faces?.mono}
 >
-  <header class="flex flex-col gap-space-1">
-    <h1 class="type-kpi">CawCo design system</h1>
-    <p class="text-tx-2 type-body">
-      Semantic roles, shared scales, and core kit components in their states,
-      light and dark side by side.
-    </p>
-  </header>
-
-  {@render foundations(ROLES)}
-
-  {@render foundations(SCALES)}
-
-  <section class="flex flex-col gap-space-4" aria-label="Core components">
+  <nav
+    aria-label="Sections"
+    class="h-dvh w-56 flex-none overflow-y-auto overscroll-contain border-e border-ui p-space-4 max-desk:hidden"
+  >
+    {@render index()}
+  </nav>
+  <div
+    class="flex h-dvh min-w-0 flex-1 flex-col gap-space-8 overflow-y-auto overscroll-contain p-space-6 max-phone:p-space-3 motion-safe:scroll-smooth"
+  >
+    <details
+      class="sticky top-0 z-1 -mx-space-6 -mt-space-6 border-b border-ui bg-bg px-space-6 py-space-2 desk:hidden max-phone:-mx-space-3 max-phone:-mt-space-3 max-phone:px-space-3"
+    >
+      <summary class="type-label">Sections</summary>
+      <div class="max-h-96 overflow-y-auto overscroll-contain pt-space-2">
+        {@render index()}
+      </div>
+    </details>
     <header class="flex flex-col gap-space-1">
-      <h2 class="type-title">Core components</h2>
-      <p class="text-tx-2 type-meta">
-        The canonical UI kit primitives in their states, including subgrid Row,
-        row-subgrid OptionTiles, Dialog, Fluid tabs, and Icon toggle.
+      <h1 class="type-kpi">CawCo design system</h1>
+      <p class="text-tx-2 type-body">
+        Semantic roles, shared scales, and core kit components in their states,
+        light and dark side by side.
       </p>
     </header>
 
-    {#each sections as section (section.title)}
-      <div class="flex flex-col gap-space-3">
-        <h3 class="text-tx-2 type-label">{section.title}</h3>
-        {#if section.flowing.length > 0}
-          <div class="-mb-space-4 columns-phone gap-space-4">
-            {#each section.flowing as one (one.family.file)}
-              {@render card(one)}
-            {/each}
-          </div>
-        {/if}
-        {#each section.wide as one (one.family.file)}
-          <div class="-mb-space-4">{@render card(one)}</div>
-        {/each}
-      </div>
-    {/each}
-  </section>
+    {@render foundations(ROLES)}
+
+    {@render foundations(SCALES)}
+
+    <section class="flex flex-col gap-space-4" aria-label="Core components">
+      <header class="flex flex-col gap-space-1">
+        <h2 class="type-title">Core components</h2>
+        <p class="text-tx-2 type-meta">
+          The canonical UI kit primitives in their states, including subgrid
+          Row, row-subgrid OptionTiles, Dialog, Fluid tabs, and Icon toggle.
+        </p>
+      </header>
+
+      {#each sections as section (section.title)}
+        <div class="flex flex-col gap-space-3">
+          <h3 class="text-tx-2 type-label">{section.title}</h3>
+          {#if section.flowing.length > 0}
+            <div class="-mb-space-4 columns-phone gap-space-4">
+              {#each section.flowing as one (one.family.file)}
+                {@render card(one)}
+              {/each}
+            </div>
+          {/if}
+          {#each section.wide as one (one.family.file)}
+            <div class="-mb-space-4">{@render card(one)}</div>
+          {/each}
+        </div>
+      {/each}
+    </section>
+  </div>
 </div>
