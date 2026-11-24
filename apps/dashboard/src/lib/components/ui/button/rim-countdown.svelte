@@ -2,18 +2,19 @@
   /**
    * The time an armed button has left before it disarms, drawn along its
    * rim (owner's pick, 2026-11-24: "a ring that draws alongside the rims
-   * that shows how much time left before acting"): a 1px line in the
-   * button's ink (`currentColor`) on the first pixel inside its edge, whole
-   * as it arms and running out over --duration-arm.
+   * that shows how much time left before acting"), drawn as the focus
+   * halo is but inside the edge (owner, 2026-11-24): a 3px band of the
+   * button's ink (`currentColor`) at 35%, hugging the edge from within,
+   * whole as it arms and running out over --duration-arm.
    *
    * CSS and markup alone (owner, 2026-11-24: no script for what CSS can
    * draw). An SVG laid over the button's padding box (inside its 1px
    * edge), a box of its own (`data-box`) so the mark line's trim pads none
    * of it, holds one rect as large as itself, its corner the padding box's
    * own (the button's radius less the edge, `--rim-radius` the small radius
-   * unless the shape sets its own). Its 2px stroke straddles the rect's
-   * outline and the SVG is clipped to that same rounded box, so only the
-   * inner pixel is drawn, on the edge's own curve. `pathLength` 1 runs the
+   * unless the shape sets its own). Its 6px stroke straddles the rect's
+   * outline and the SVG is clipped to that same rounded box, so only its
+   * inner 3px are drawn, on the edge's own curve. `pathLength` 1 runs the
    * line out at one speed along every side and round every corner, and the
    * run is a CSS animation (`animate-run-out`) that starts each time the
    * button arms (`data-armed`).
@@ -34,6 +35,7 @@
     pathLength="1"
     stroke="currentColor"
     stroke-dasharray="1 1"
-    stroke-width="2"
+    stroke-opacity="0.35"
+    stroke-width="6"
   />
 </svg>
