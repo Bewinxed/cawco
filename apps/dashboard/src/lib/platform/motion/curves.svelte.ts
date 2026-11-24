@@ -82,6 +82,25 @@ const springAt = (tau: number) =>
 const SPRING_END = springAt(SPRING_SPAN);
 export const easeSpring = (t: number): number =>
   t >= 1 ? 1 : springAt(t * SPRING_SPAN) / SPRING_END;
+/**
+ * --ease-elastic as a function: Apple's spring at damping 0.7 (.bouncy),
+ * about 5% past its mark before it settles, over 1.5 of its response,
+ * normalised to end at 1 (theme.css writes the same curve as stops).
+ */
+const ELASTIC_DAMPING = 0.7;
+const ELASTIC_SPAN = 1.5;
+const elasticAt = (tau: number) => {
+  const w = 2 * Math.PI;
+  const wd = w * Math.sqrt(1 - ELASTIC_DAMPING ** 2);
+  return (
+    1 -
+    Math.exp(-ELASTIC_DAMPING * w * tau) *
+      (Math.cos(wd * tau) + ((ELASTIC_DAMPING * w) / wd) * Math.sin(wd * tau))
+  );
+};
+const ELASTIC_END = elasticAt(ELASTIC_SPAN);
+export const easeElastic = (t: number): number =>
+  t >= 1 ? 1 : elasticAt(t * ELASTIC_SPAN) / ELASTIC_END;
 /** `--ease-in-out`: movement on screen. */
 export const easeInOut = bezier(0.77, 0, 0.175, 1);
 /** `--ease-drawer`: popovers, drawers, pages. */

@@ -2875,16 +2875,24 @@
   :where(&) > :where(*) {
     display: inline-flex;
     grid-area: 1 / 1;
-    transition-property: opacity;
+    transition-property: opacity, translate;
     transition-duration: var(--icon-swap-dur, var(--duration-slow));
-    transition-timing-function: var(--icon-swap-ease, var(--ease-spring));
+    transition-timing-function: var(--icon-swap-ease, var(--ease-elastic));
   }
-  /* The glyph stepping out fades, never shrinking: icons never scale
-     (owner, 2026-11-24). No blur either: a filter in a transition's list
-     hangs WebKit (style-greps), so the house's blur swap is glyph.ts's. */
+  /* The glyph stepping out slides aside and fades, and the one stepping in
+     slides back elastic (owner, 2026-11-24: "horizontal elastic slide fly
+     in with fade"), as the house's glyph swap (glyph.ts); icons never
+     scale and never blur. It leaves settling, on the shorter clock. With
+     less motion, only the fade. */
   :where(&) > :where([data-active="false"]) {
     opacity: 0;
     pointer-events: none;
+    transition-duration: var(--duration-base);
+    transition-timing-function: var(--ease-spring);
+
+    @media (prefers-reduced-motion: no-preference) {
+      translate: calc(var(--spacing-space-2) * -1) 0;
+    }
   }
   /* Its baseline is a line of words at its centre, zero wide and zero tall:
      its glyphs have none, so a box made of them took its bottom edge for

@@ -6,27 +6,28 @@
  * state with it.
  */
 import type { TransitionConfig } from "svelte/transition";
-import { dur, easeSpring, motionOk } from "./curves.svelte";
+import { dur, easeElastic, easeSpring, motionOk } from "./curves.svelte";
 
-/** The blur it comes out of and goes into, px. */
-const SWAP_BLUR = 4;
-
-const swap = (duration: number): TransitionConfig => {
+/** The arriving glyph comes from the start side, the leaving one goes to the end. */
+const slide = (
+  duration: number,
+  easing: (t: number) => number,
+  from: 1 | -1
+): TransitionConfig => {
   const moving = motionOk.current;
-  const blur = SWAP_BLUR;
   return {
     duration,
-    easing: easeSpring,
-    css: (t) =>
+    easing,
+    css: (t, u) =>
       moving
-        ? `opacity: ${t}; filter: blur(${((1 - t) * blur).toFixed(3)}px)`
+        ? `opacity: ${Math.min(1, t)}; translate: calc(var(--spacing-space-2) * ${(from * u).toFixed(4)}) 0`
         : `opacity: ${t}`,
   };
 };
 
 export function glyphIn(_node: Element): TransitionConfig {
-  return swap(dur("--duration-slow"));
+  return slide(dur("--duration-slow"), easeElastic, -1);
 }
 export function glyphOut(_node: Element): TransitionConfig {
-  return swap(dur("--duration-base"));
+  return slide(dur("--duration-base"), easeSpring, 1);
 }

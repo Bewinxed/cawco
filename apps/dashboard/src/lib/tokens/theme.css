@@ -178,7 +178,7 @@
     inset 0 0 0 1px light-dark(transparent, oklch(93.4% 0 0 / 0.07));
 
   /* =========================================================================
-     Motion — 6 durations, 4 curves
+     Motion — 6 durations, 5 curves
      ========================================================================= */
 
   --duration-fast: 120ms;
@@ -200,6 +200,43 @@
      1 - e^(-2πτ)(1 + 2πτ) over 1.25 of its response, as linear() stops.
      Its shape is the same at any duration, so it pairs with each of them:
      a colour, a glyph, a layer arrives fast and eases fully in. */
+  /* The spring with a little bounce (Apple's .bouncy, damping 0.7): it
+     carries about 5% past its mark and settles, over 1.5 of its response.
+     An icon arriving slides in on it (owner, 2026-11-24: "horizontal
+     elastic slide"). */
+  --ease-elastic: linear(
+    0,
+    0.0426,
+    0.146,
+    0.2804,
+    0.4241,
+    0.5624,
+    0.6863,
+    0.7911,
+    0.8753,
+    0.9395,
+    0.9859,
+    1.017,
+    1.0358,
+    1.0452,
+    1.0479,
+    1.0459,
+    1.0412,
+    1.035,
+    1.0284,
+    1.022,
+    1.0163,
+    1.0115,
+    1.0076,
+    1.0047,
+    1.0025,
+    1.0011,
+    1.0002,
+    0.9998,
+    0.9997,
+    0.9998,
+    1
+  );
   --ease-spring: linear(
     0,
     0.0433,
