@@ -262,20 +262,28 @@
    * The working area as a states file draws it: the real tab strip, the real
    * SessionPane (its transcript and, through SideSplit, the preview panel
    * beside it) and the group's composer, laid out as PaneLeaf lays them out.
-   * Only the client's state is seeded, as the /motion benches seed it (dev's
-   * `__cawcoDebug`); the app never mounts this.
+   * Only the client's stores are seeded, written as the client writes them
+   * (a snapshot's rows, a hub pulse): a states file never starts the app
+   * (start.ts), so nothing else writes them here; the app never mounts this.
    */
   import type { PreviewMode } from "@cawco/core/comments/model";
   import type { InstanceRow, WorkItemSummary } from "@cawco/core/protocol";
   import { canvasPath } from "@cawco/core/stage";
   import { untrack } from "svelte";
+  import { adoptInstances } from "#lib/cawco/client.svelte.js";
   import { fleetPane } from "#lib/cawco/preview/fleet-pane.svelte.js";
   import {
     type PanePreview,
     setPaneFleet,
   } from "#lib/cawco/preview/pane-fleet.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
-  import { blankSession } from "#lib/cawco/stores/sessions.svelte.js";
+  import { previewsState } from "#lib/cawco/stores/previews.svelte.js";
+  import {
+    blankSession,
+    sessionsState,
+    takePulseFrame,
+  } from "#lib/cawco/stores/sessions.svelte.js";
+  import { workItemsState } from "#lib/cawco/stores/work-items.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import { entered } from "#lib/cawco/transcript/tray.svelte.js";
@@ -353,20 +361,6 @@
     });
   }
 
-  const debug = (
-    globalThis as unknown as {
-      __cawcoDebug: {
-        frame: CawcoDebug["frame"];
-        sessionsState: {
-          sessions: Record<string, ReturnType<typeof blankSession>>;
-        };
-        workItemsState: { workItems: Record<string, WorkItemSummary> };
-        previewsState: { previews: Record<string, PanePreview> };
-        adoptInstances: (rows: InstanceRow[]) => void;
-      };
-    }
-  ).__cawcoDebug;
-
   const rowOf = (id: string, title: string): InstanceRow =>
     ({
       id,
@@ -381,7 +375,7 @@
       updatedAt: now,
     }) as InstanceRow;
 
-  debug.adoptInstances([
+  adoptInstances([
     rowOf(ID, "Delegate card, blind attempt"),
     ...OTHERS.map(([id, title]) => rowOf(id, title)),
   ]);
@@ -391,8 +385,8 @@
   session.cwd = "/home/you/cockpit";
   session.messages = history();
   session.initialized = true;
-  debug.sessionsState.sessions[ID] = session;
-  debug.frame({
+  sessionsState.sessions[ID] = session;
+  takePulseFrame({
     kind: "pulse",
     instanceId: ID,
     pulse: {
@@ -430,7 +424,7 @@
       waitReason: null,
       waitUntil: null,
     } as WorkItemSummary;
-    debug.workItemsState.workItems[item.id] = item;
+    workItemsState.workItems[item.id] = item;
     entered.set(item.instanceId, "none");
   });
 
@@ -439,7 +433,7 @@
   // instance and hands it each story's args in turn (component-canvas: a
   // story's args are inputs the live instance takes at any time).
   $effect.pre(() => {
-    debug.previewsState.previews[ID] = {
+    previewsState.previews[ID] = {
       kind: "preview",
       instanceId: ID,
       artifact: {

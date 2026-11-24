@@ -176,7 +176,7 @@ function standHub(
  * Views this browser opened for a session it did not spawn learn their machine
  * from it, so a snapshot is also how a bare `/session/[id]` fills itself in.
  */
-function adoptInstances(rows: InstanceRow[]): void {
+export function adoptInstances(rows: InstanceRow[]): void {
   const moved = adoptRows(rows);
   if (!moved) {
     return;
