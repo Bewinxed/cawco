@@ -22,24 +22,18 @@ export const cawOffWords = {
   list: "Sessions Caw started",
   /** A row's box, for a screen reader. */
   stopOne: (title: string) => `Stop ${title}`,
-  /** Before an attempt's status on its second line. */
-  task: "Task",
-  /** A row whose machine is away, checked: its stop waits for the machine. */
-  stopsWhenBack: (machine: string) => `Stops when ${machine} is back`,
   /** A row whose machine is away, unchecked. */
   away: (machine: string) => `${machine} is away`,
-  /** A row whose stop failed. */
-  couldntStop: "Couldn't stop",
   /** The confirm with rows checked. */
   stop: (count: number) => `Stop ${count} and turn off`,
   /** The confirm with none checked, or nothing listed. */
   turnOff: "Turn Caw off",
+  /** The confirm while he is turned off with nothing left to stop. */
+  turningOff: "Turning Caw off…",
   /** The confirm while the stops land. */
   stopping: (count: number) => `Stopping ${count}…`,
   /** The confirm's word once he is off, as Forget's ends on "Forgotten". */
   isOff: "Caw is off",
-  /** Puts the ask away; Caw stays on. */
-  cancel: "Cancel",
   /** Puts the section away while the stops land; they go on. */
   stopWaiting: "Stop waiting",
   /** Puts the section away after a failure. */
@@ -77,7 +71,7 @@ export const cawOffEndWords = (project: string): EndWords => ({
   plain: cawOffWords.turnOff,
   stop: cawOffWords.stop,
   armed: cawOffWords.stop,
-  ending: cawOffWords.stopping(1),
+  ending: cawOffWords.turningOff,
   keep: cawOffWords.stopWaiting,
   ended: cawOffWords.isOff,
   line: (step, _n, _cut, stopped) =>
