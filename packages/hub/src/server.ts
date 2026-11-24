@@ -4577,8 +4577,42 @@ export const createServer = (
         decisionsChanged(row.projectId);
         recordFollows(row.projectId, row.name);
       }
+      // A direction picked on a design graph, or a card picked or noted on
+      // a decision page, answers what its session parks in its composer
+      // (core parked.ts): every screen listing its questions and picks reads
+      // them again, so the composer folds and the transcript's record stands
+      // wherever it was picked.
+      if (
+        row &&
+        ((row.kind === "component" && keys.includes("picked")) ||
+          isDecisionPage(row))
+      ) {
+        questionsTold(id);
+      }
     },
   });
+  /**
+   * Every screen listing a session's questions and parked picks reads them
+   * again (core `QuestionsMovedFrame`) once artifact `artifactId`'s picks
+   * moved: a burst of writes (a note typed) is told once per
+   * {@link QUESTIONS_TOLD_MS}.
+   */
+  const QUESTIONS_TOLD_MS = 400;
+  const questionsTelling = new Set<string>();
+  function questionsTold(artifactId: string): void {
+    if (questionsTelling.has(artifactId)) {
+      return;
+    }
+    questionsTelling.add(artifactId);
+    lifetime.after("questions told", QUESTIONS_TOLD_MS, () => {
+      questionsTelling.delete(artifactId);
+      registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "questions.moved", artifactId },
+      });
+    });
+  }
   // Pages' own stores (artifacts/page-stores.ts), joined on their origins.
   const pageStores = createPageStores({ db: db.pageStores, lifetime });
 

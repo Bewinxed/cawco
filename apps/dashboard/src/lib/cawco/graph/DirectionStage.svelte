@@ -181,23 +181,52 @@
     });
   }
 
-  /** The page said it is ready: greeted first, as the panel greets it; once greeted, asked to stand at the story. */
+  /** Whether this load of the page was greeted: it is greeted once a load. */
+  let helloSent = false;
+
+  /**
+   * The host's first word, said as the frame loads, as the panel says it
+   * (PreviewPane's `announce` on the frame's load): the page's overlay holds
+   * everything it says, its ready among it, until its host's hello names
+   * the host's origin (preview overlay host-origin.ts `toHost`), so a hello
+   * that waited on the page's ready never went.
+   */
+  function hello() {
+    if (helloSent) {
+      return;
+    }
+    helloSent = true;
+    post({
+      type: "cawco:hello",
+      theme: theme.resolved,
+      artifact: {
+        id: artifact.id,
+        kind: "component",
+        name: artifact.name,
+        title: artifact.title,
+      },
+      sync: artifactSyncPath(artifact.id),
+      headed: false,
+      bareScroll: true,
+      headRoom: 0,
+    } satisfies FrameSays);
+  }
+
+  /** Each load of the frame (the first, or after the entry let it in) holds no greeting: it is greeted as it loads. */
+  function greetOnLoad(node: HTMLIFrameElement) {
+    const loaded = () => {
+      helloSent = false;
+      greeted = false;
+      hello();
+    };
+    node.addEventListener("load", loaded);
+    return () => node.removeEventListener("load", loaded);
+  }
+
+  /** The page said it is ready: greeted, if this load was not yet; once greeted, asked to stand at the story. */
   function ready(greetedAlready: boolean) {
     if (!greetedAlready) {
-      post({
-        type: "cawco:hello",
-        theme: theme.resolved,
-        artifact: {
-          id: artifact.id,
-          kind: "component",
-          name: artifact.name,
-          title: artifact.title,
-        },
-        sync: artifactSyncPath(artifact.id),
-        headed: false,
-        bareScroll: true,
-        headRoom: 0,
-      } satisfies FrameSays);
+      hello();
       return;
     }
     greeted = true;
@@ -286,6 +315,7 @@
         {src}
         title={graphWords.directionWell(name)}
         bind:this={frame}
+        {@attach greetOnLoad}
       ></iframe>
     {/key}
   {/if}
