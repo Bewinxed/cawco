@@ -795,8 +795,7 @@ suppression	biome-ignore-start lint/a11y/noRedundantRoles	apps/dashboard/src/lib
 suppression	biome-ignore-start lint/correctness/noInvalidPositionAtImportRule	apps/dashboard/src/design.css	1
 suppression	biome-ignore-start lint/plugin/no-raw-css-values	apps/dashboard/src/design.css	1
 suppression	biome-ignore-start lint/style/noDescendingSpecificity	apps/dashboard/src/app.css	1
-suppression	svelte-ignore a11y_autofocus	apps/dashboard/src/lib/cawco/project/ProjectHead.svelte	1
-suppression	svelte-ignore a11y_autofocus	apps/dashboard/src/lib/cawco/SessionRow.svelte	1
+suppression	svelte-ignore a11y_autofocus	apps/dashboard/src/lib/cawco/RenameField.svelte	1
 suppression	svelte-ignore a11y_click_events_have_key_events	apps/dashboard/src/lib/cawco/transcript/Composer.svelte	1
 suppression	svelte-ignore a11y_click_events_have_key_events	apps/dashboard/src/lib/cawco/transcript/RecallWheel.svelte	1
 suppression	svelte-ignore a11y_click_events_have_key_events	apps/dashboard/src/lib/components/ui/field-area.svelte	1

@@ -2020,52 +2020,59 @@
   line-clamp: --value(integer);
 }
 
-/* A text field with a frame of its own (DESIGN.md, The Caret Rule): the
-   frame rests on `border-row-outline` (3:1 on the surface it stands on,
-   WCAG 1.4.11) and while its text has focus the border steps up to the
-   strong control edge, on the frame's own radius, and nothing else is drawn. On the field
-   itself (the kit's Input and Textarea) or on a frame round a borderless
-   editor with its own controls beside it (a search with an icon, a path
-   with Browse): the frame steps for the text inside, not for one of its
-   chips or buttons, which keep their own ring. A field marked invalid keeps
-   its error edge. This selector outweighs a border-colour utility on the field
-   on purpose (scripts/specificity-trap.ts).
-   A frame's strong edge is a ring of its own laid over its 1px border
-   (`::before`, the frame its containing block unless it is positioned
-   already) that fades in by opacity, on the compositor: a border colour
-   animates by repainting on the main thread, as the popover that focuses
-   the frame's search opens on it (LimitPickerChecks ModelsOpen). So the
-   frame's own border never changes, and it never clips what it holds
-   (`overflow` other than visible), which would clip the ring. An `<input>`
-   or `<textarea>` draws no `::before`: its own border steps.
+/* A text field's frame (DESIGN.md, The Caret Rule): the frame rests on
+   `border-row-outline` (3:1 on the surface it stands on, WCAG 1.4.11) and
+   while its text has focus its edge steps up to the strong control edge,
+   on the frame's own radius, and nothing else is drawn. On a frame round a
+   borderless editor with its own controls beside it (a search with an
+   icon, a path with Browse): the frame steps for the text inside, not for
+   one of its chips or buttons, which keep their own ring. A field marked
+   invalid keeps its error edge. This selector outweighs a border-colour
+   utility on the frame on purpose (scripts/specificity-trap.ts).
+   The strong edge is a ring of its own laid over the frame's 1px border
+   (`::before`; the frame is its containing block unless it is positioned
+   already), faded in by opacity, on the compositor: a border colour
+   animates by repainting on the main thread, as a popover that focuses the
+   frame's search opens on it (LimitPickerChecks ModelsOpen). So the
+   frame's own border never changes, and the frame clips nothing
+   (`overflow` other than visible), which would clip the ring: what it
+   holds is clipped by a box of its own inside it.
    A field that is the whole surface (Find's strip, the composer) carries
    none: its caret is the whole indicator. */
 @utility field-edge {
   border-color: var(--color-border-row-outline);
-  &:is(input, textarea):focus-visible:not([aria-invalid="true"]) {
-    border-color: var(--color-border-contrast);
-  }
-  &:not(input, textarea) {
+  @media all {
     :where(&) {
       position: relative;
     }
-    &::before {
-      content: "";
-      position: absolute;
-      inset: -1px;
-      border: 1px solid var(--color-border-contrast);
-      border-radius: inherit;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity var(--duration-control) var(--ease-out);
-    }
-    &:is(
-        :focus-visible,
-        :has(:is(input, textarea, [contenteditable]):focus-visible)
-      ):not([aria-invalid="true"], :has([aria-invalid="true"]))::before {
-      opacity: 1;
-    }
   }
+  &::before {
+    content: "";
+    position: absolute;
+    inset: calc(-1 * var(--field-edge-out, 1px));
+    border: 1px solid var(--color-border-contrast);
+    border-radius: inherit;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--duration-control) var(--ease-out);
+  }
+  &:is(
+      :focus-visible,
+      :has(:is(input, textarea, [contenteditable]):focus-visible)
+    ):not([aria-invalid="true"], :has([aria-invalid="true"]))::before {
+    opacity: 1;
+  }
+}
+
+/* The same edge for a field that draws its own border, an `<input>` or a
+   `<textarea>` (the kit's Input and Textarea), which can hold no `::before`:
+   the box round it (its touch area, FieldArea), its own size and radius,
+   carries the ring on its own edge (`--field-edge-out`: how far past the
+   box the ring reaches, the frame's border width for a frame), over the
+   field's border. */
+@utility field-edge-wrap {
+  @apply field-edge;
+  --field-edge-out: 0px;
 }
 
 /* A changing figure: digits of one width, so a count or a price that

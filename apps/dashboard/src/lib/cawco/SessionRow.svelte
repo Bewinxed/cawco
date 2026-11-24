@@ -100,6 +100,7 @@
    */
   import type { NeutralSessionInfo } from "@cawco/core/session-messages";
   import type { Attachment } from "svelte/attachments";
+  import RenameField from "#lib/cawco/RenameField.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconArchive, IconMaximize } from "#lib/icons.js";
@@ -357,39 +358,24 @@
     class="mark-line flex flex-col min-w-0 flex-auto group-hover/session-row:group-data-archivable/session-row:me-(--words-room) group-hover/session-row:group-data-peek/session-row:me-(--words-room) can-hover:group-focus-within/session-row:group-data-archivable/session-row:me-(--words-room) can-hover:group-focus-within/session-row:group-data-peek/session-row:me-(--words-room) group-hover/session-row:group-data-archivable/session-row:group-data-peek/session-row:me-(--words-room-2) can-hover:group-focus-within/session-row:group-data-archivable/session-row:group-data-peek/session-row:me-(--words-room-2)"
     style:--words-room="calc(var(--action-size) + var(--spacing-space-1))"
     style:--words-room-2={"calc(2 * (var(--action-size) + var(--spacing-space-1)))"}
+    style:--title-w="calc(100% + var(--spacing-space-1) * 2)"
   >
     {#if draft !== null}
       <!-- The title as a field, in the title's own type and place: no box of
            its own beyond the input recipe's hairline, so the row keeps its
            height. -->
-      <!-- svelte-ignore a11y_autofocus: the field opens on the person's own Rename, and takes the focus they asked for -->
-      <input
-        data-slot="title"
-        data-field
-        aria-label="Session title"
-        autocomplete="off"
-        autofocus
-        class="block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label w-(--title-w) -mx-space-1 px-space-1 border rounded-xs bg-surface-raised text-ink-strong read-only:text-ink-muted group-data-context/session-row:group-not-data-current/session-row:text-ink-muted field-edge transition-control"
+      <RenameField
+        class="-mx-space-1 w-(--title-w)"
         data-box
-        onblur={() => {
-          // Left after a refusal, it stays as typed, said under the row; Try
-          // again or Enter sends it.
-          if (renameFault === null) {
-            commitTitle();
-          }
-        }}
-        onkeydown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            event.stopPropagation();
-            stopEditing();
-          }
-        }}
-        readonly={renaming !== null}
-        style:--title-w="calc(100% + var(--spacing-space-1) * 2)"
-        spellcheck="false"
+        data-slot="title"
+        label="Session title"
+        look="row-title"
+        oncancel={stopEditing}
+        onsend={commitTitle}
+        refused={renameFault !== null}
+        sending={renaming !== null}
+        tone={context && !active ? "quiet" : undefined}
         bind:value={draft}
-        {@attach (node) => node.select()}
       />
     {:else}
       <!-- Both lines stand at the count's height with or without one (a

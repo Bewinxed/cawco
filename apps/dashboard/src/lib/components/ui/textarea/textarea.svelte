@@ -86,12 +86,11 @@
 {#snippet control(placement?: ClassValue | null)}
   <textarea
     class={cn(
-      "rounded-md shadow-xs transition-control motion-safe:transition-control-grow",
+      // Its area holds its radius, which it takes; without one, its own.
+      area ? "rounded-inherit" : "rounded-md",
+      "shadow-xs transition-control motion-safe:transition-control-grow",
       "flex min-h-16 w-full resize-none py-2",
       "border border-border-row-outline",
-      // Typed in, its edge steps up: the caret is its focus. A note has no
-      // edge of its own (the composer's pill is its field).
-      look !== "note" && "field-edge",
       "bg-surface-raised px-3 text-ink-strong",
       "type-body placeholder:text-ink-muted",
       "disabled:cursor-not-allowed disabled:opacity-50",
@@ -108,7 +107,14 @@
 {/snippet}
 
 {#if area}
-  <FieldArea class={className} field={ref} slot="textarea-area">
+  <!-- Typed in, its edge steps up: the caret is its focus, and the area
+       draws the edge round it (`field-edge-wrap`). A note has no edge of its
+       own (the composer's pill is its field). -->
+  <FieldArea
+    class={[look !== "note" && "field-edge-wrap", "rounded-md", className]}
+    field={ref}
+    slot="textarea-area"
+  >
     {@render control(undefined)}
   </FieldArea>
 {:else}

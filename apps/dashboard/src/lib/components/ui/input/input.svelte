@@ -14,6 +14,7 @@
         meta: { field: "type-meta" },
         label: { field: "type-label" },
         title: { field: "type-title" },
+        code: { field: "type-code" },
       },
       /** A field for a short figure (a share, minutes, thousands of
           tokens): the number field's width, tight pads, and its figure
@@ -33,12 +34,15 @@
         shrink: { box: "min-w-0" },
         "cap-sm": { box: "max-w-64" },
         "cap-md": { box: "max-w-96" },
+        /** A key's width in a list of keys and values (a task's own
+            fields), its column's. */
+        key: { box: "basis-24" },
       },
       /** Its share of a row of code cells (`--code-flex`). */
       flex: { code: { box: "flex-(--code-flex)" } },
       /** A name edited where it stands in a list row (a setup's stage):
           the row's words at rest, with no edge, fill or shadow, and the
-          field's edge only while it has the caret (`field-edge`), as the
+          field's edge only while it has the caret (`field-edge-wrap`), as the
           prose textarea's (DESIGN.md, Inputs and fields, Field frame). Its
           hover fill and edge are its own box, never pulled past it by a
           margin into a neighbour or its row's padding (owner's pin,
@@ -49,10 +53,47 @@
           field:
             "h-c-btn-h-sm text-ellipsis border-transparent bg-transparent px-c-field-inline-inset text-ink-row shadow-none not-focus-visible:hover:bg-surface-hover focus-visible:bg-surface-raised",
         },
+        /** A field in a list of keys and values (a task's own fields): a
+            small button's height and its cell's tighter corner, flat, its
+            example in the words' own ink at half strength. */
+        cell: {
+          box: "rounded-sm",
+          field:
+            "h-c-btn-h-sm px-space-2 shadow-none placeholder:text-current/50",
+        },
+        /** A heading's words renamed where they stand (a project's name in
+            its page head): the heading's own type, size and ink in a
+            hairline box as tall as its line, flat; muted while the rename
+            is sent. */
+        heading: {
+          box: "flex rounded-xs",
+          field:
+            "block h-auto cursor-text overflow-hidden text-ellipsis px-space-1 text-start font-inherit text-inherit shadow-none read-only:text-ink-muted",
+        },
+        /** A row's title renamed where it stands (a session in the side
+            list): the title's own type and line, in a hairline box that
+            keeps the row's height, flat; muted while the rename is sent. */
+        "row-title": {
+          box: "flex rounded-xs",
+          field:
+            "block h-auto min-h-space-5 content-center overflow-clip text-ellipsis whitespace-nowrap px-space-1 type-label shadow-none read-only:text-ink-muted",
+        },
+        /** An address typed exactly (a machine reached over SSH): its words
+            a house step in, its error edge whole at night. */
+        address: {
+          field: "px-space-3 dark:aria-invalid:border-error-9",
+        },
       },
       /** A value the person changed from what it was: the edit's ink, as
-          the design graph marks a changed timing on itself. */
-      tone: { edited: { field: "text-selected-ink" } },
+          the design graph marks a changed timing on itself; `quiet`, a
+          row's words muted where the row stands back (a session in
+          context but not the one open). */
+      tone: {
+        edited: { field: "text-selected-ink" },
+        quiet: { field: "text-ink-muted" },
+      },
+      /** Its example (the placeholder) dimmer, under an exact address. */
+      hint: { subtle: { field: "placeholder:text-ink-subtle" } },
     },
   });
 
@@ -102,18 +143,22 @@
     flex,
     look,
     tone,
+    hint,
     area = true,
     "data-slot": dataSlot = "input",
     ...restProps
   }: Props = $props();
   const looks = $derived(
-    inputVariants({ face, text, field: kind, measure, flex, look, tone })
+    inputVariants({ face, text, field: kind, measure, flex, look, tone, hint })
   );
   /** The field's own look, the same for a file picker and a text field.
-      Typed in, its edge steps up (`field-edge`): the caret is its focus. */
-  const own = [
-    "field-edge rounded-md shadow-xs transition-control",
-    "h-c-input-h w-full min-w-0 border",
+      Typed in, its edge steps up: the caret is its focus. Its area draws
+      that edge (`field-edge-wrap`) and holds its radius, which the field
+      takes; without one, its frame draws it (InputGroup). */
+  const own = $derived([
+    area ? "rounded-inherit" : "rounded-md",
+    "shadow-xs transition-control",
+    "h-c-input-h w-full min-w-0 border border-border-row-outline",
     "bg-surface-raised px-3 text-ink-strong",
     "type-body file:inline-flex file:h-7",
     "file:border-0 file:bg-transparent file:font-medium",
@@ -122,7 +167,7 @@
     "disabled:pointer-events-none disabled:cursor-not-allowed",
     "disabled:opacity-50 aria-invalid:border-error-9",
     "dark:aria-invalid:border-error-9/50",
-  ];
+  ]);
   /**
    * A field with suggestions (a `list`, its datalist) shows the house's
    * sort-vertical glyph at its end, as a select does (DESIGN.md, Inputs and
@@ -136,7 +181,7 @@
   const suggests = $derived(!!restProps.list);
   /** Its classes: with an area, the caller's placement sizes the area and
       the field fills it; without one, they are the field's. */
-  const fieldClass = $derived(
+  const fieldClasses = $derived(
     area
       ? cn(
           own,
@@ -153,7 +198,7 @@
 {#snippet control()}
   {#if type === "file"}
     <input
-      class={fieldClass}
+      class={fieldClasses}
       data-slot={dataSlot}
       type="file"
       bind:this={ref}
@@ -163,7 +208,7 @@
     />
   {:else}
     <input
-      class={fieldClass}
+      class={fieldClasses}
       data-slot={dataSlot}
       {type}
       bind:this={ref}
@@ -175,7 +220,12 @@
 
 {#if area}
   <FieldArea
-    class={[suggests && "relative", looks.box(), className]}
+    class={[
+      "field-edge-wrap rounded-md",
+      suggests && "relative",
+      looks.box(),
+      className,
+    ]}
     field={ref}
     slot="input-area"
   >

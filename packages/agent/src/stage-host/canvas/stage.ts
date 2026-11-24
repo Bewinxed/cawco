@@ -136,6 +136,7 @@ import { differences } from "./diff";
 import { tellHolder } from "./embed";
 import { forcedPlace } from "./forced";
 import { drawGuides, readLayout } from "./guides";
+import { harnessMarked, harnessWork } from "./harness";
 import { focusOfPage } from "./held-focus";
 import { stageScroll, stillPage } from "./held-scroll";
 import {
@@ -1432,7 +1433,7 @@ export function bootStage(page: Page): Mode {
     await play({
       args: current,
       canvasElement: drawing,
-      canvas: queriesIn(drawing, layersOut),
+      canvas: queriesIn(drawing, layersOut, harnessWork),
       userEvent: realUser ?? userEventIn(drawing),
       step: async (_name: string, run: () => Promise<void>) => await run(),
       update: async (next: Record<string, unknown>) => {
@@ -2589,12 +2590,15 @@ export function bootStage(page: Page): Mode {
       performance.mark(MEASURE_MARKS.start);
     }
     try {
-      await stillPage(async () => {
+      const play = async () => {
         const ran = await readWithin(PLAY_MS, run);
         if (ran.kind === "unanswered") {
           throw new PlayTooLong();
         }
-      });
+      };
+      await stillPage(() =>
+        ask.pass === "traced" ? harnessMarked(play) : play()
+      );
       await new Promise((done) => setTimeout(done, ask.wait));
       await frameTick();
       await frameTick();

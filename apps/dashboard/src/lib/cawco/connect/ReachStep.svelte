@@ -31,6 +31,7 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
   import { IconChevronDown } from "#lib/icons.js";
   import {
@@ -368,8 +369,8 @@
                 class="flex-none type-body text-ink-strong"
                 >{connectWords.reachItAt}</label
               >
-              <input
-                bind:this={targetField}
+              <Input
+                bind:ref={targetField}
                 id="connect-target"
                 data-autofocus
                 autocapitalize="off"
@@ -377,7 +378,10 @@
                 spellcheck="false"
                 aria-describedby="connect-said"
                 aria-invalid={said ? "true" : undefined}
-                class="field-edge h-c-input-h min-w-0 flex-1 rounded-md border bg-surface-raised px-space-3 font-mono type-body text-ink-strong shadow-xs transition-control placeholder:text-ink-subtle aria-invalid:border-error-9"
+                class="min-w-0 flex-1"
+                face="mono"
+                hint="subtle"
+                look="address"
                 placeholder="deploy@build-01.example.net"
                 maxlength={DRAFT_LIMITS.target}
                 value={connect.fields.target}
@@ -392,13 +396,15 @@
                    the same cell, so nothing beside it moves. -->
               <span class="grid w-24 flex-none" data-box>
                 {#if portOpen || connect.fields.port}
-                  <input
-                    bind:this={portField}
+                  <Input
+                    bind:ref={portField}
                     id="connect-port"
                     aria-label="Port"
                     inputmode="numeric"
                     autocomplete="off"
-                    class="field-edge num col-start-1 row-start-1 h-c-input-h w-full min-w-0 rounded-md border bg-surface-raised px-space-2 text-center type-body text-ink-strong shadow-xs transition-control placeholder:text-ink-subtle"
+                    class="col-start-1 row-start-1 w-full"
+                    field="number"
+                    hint="subtle"
                     placeholder="22"
                     maxlength={DRAFT_LIMITS.port}
                     value={connect.fields.port}

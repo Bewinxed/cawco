@@ -50,6 +50,7 @@
   import { askEnd, endHost } from "#lib/cawco/project-end.svelte.js";
   import type { ProjectRow } from "#lib/cawco/projects.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
+  import RenameField from "#lib/cawco/RenameField.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { newSession, spawning } from "#lib/cawco/spawn/new-session.svelte.js";
   import { cawOffAt, stopWork } from "#lib/cawco/stop-work.svelte.js";
@@ -265,35 +266,15 @@
       class="-mx-space-1 min-w-0 shrink grow truncate type-title text-ink-strong"
     >
       {#if draft !== null}
-        <!-- svelte-ignore a11y_autofocus: the field opens on the person's own Rename, and takes the focus they asked for -->
-        <input
+        <RenameField
           data-slot="name"
-          data-field
-          aria-label="Project name"
-          autocomplete="off"
-          autofocus
-          class="field-edge block w-full overflow-hidden text-ellipsis cursor-text rounded-xs border bg-surface-raised px-space-1 font-inherit text-start text-inherit transition-control read-only:text-ink-muted"
-          onblur={() => {
-            // Left after a refusal, it stays as typed, the reason under
-            // the head; Enter or Try again sends it.
-            if (renameFault === null) {
-              commitName();
-            }
-          }}
-          onkeydown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commitName();
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              event.stopPropagation();
-              stopEditing();
-            }
-          }}
-          readonly={renaming !== null}
-          spellcheck="false"
+          label="Project name"
+          look="heading"
+          oncancel={stopEditing}
+          onsend={commitName}
+          refused={renameFault !== null}
+          sending={renaming !== null}
           bind:value={draft}
-          {@attach (node) => node.select()}
         />
       {:else}
         <button

@@ -19,12 +19,14 @@
  * read forces nothing, and a frame before the input goes; a pointer
  * already standing on the element presses where it stands. A page with a
  * coarse pointer (the render's touch emulation, at a phone's width) is
- * tapped, as a phone is. The person's browser has no DevTools Protocol:
+ * tapped, as a phone is. Each read and each call that sends a step is
+ * marked as the stage's own work (harness.ts). The person's browser has no DevTools Protocol:
  * its plays keep `userEventIn`.
  */
 import { MEASURE_INPUT, type MeasureInput } from "@cawco/core/stage-measure";
 import { elementSaid, type UserEvent } from "@cawco/core/stage-play";
 import { measureWords } from "@cawco/core/words/stage-measure";
+import { harnessWork } from "./harness";
 
 declare global {
   interface Window {
@@ -47,7 +49,8 @@ const send = async (step: MeasureInput): Promise<void> => {
   if (!deliver) {
     throw new Error(measureWords.noInput);
   }
-  await deliver(step);
+  // The call's own work, till the step is handed to the daemon, is the stage's.
+  await harnessWork(() => deliver(step));
 };
 
 /** A frame on, once it has rendered: layout is clean, so reading a box forces nothing. */
@@ -91,23 +94,24 @@ export function realUserEvent(reveal: (el: Element) => void): RealUser {
   /** The middle of `el`, in view, where a press on it lands: refused when it has no box or another element stands over it. */
   async function pointOn(el: Element): Promise<Point> {
     await afterFrame();
-    let box = el.getBoundingClientRect();
-    if (!inView(box)) {
-      reveal(el);
+    if (!harnessWork(() => inView(el.getBoundingClientRect()))) {
+      harnessWork(() => reveal(el));
       await afterFrame();
-      box = el.getBoundingClientRect();
     }
-    if (box.width === 0 || box.height === 0) {
-      throw new Error(measureWords.noBox(elementSaid(el)));
-    }
-    const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-    const hit = document.elementFromPoint(point.x, point.y);
-    if (!(hit && (hit === el || el.contains(hit)))) {
-      throw new Error(
-        measureWords.covered(elementSaid(el), hit ? elementSaid(hit) : null)
-      );
-    }
-    return point;
+    return harnessWork(() => {
+      const box = el.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0) {
+        throw new Error(measureWords.noBox(elementSaid(el)));
+      }
+      const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      const hit = document.elementFromPoint(point.x, point.y);
+      if (!(hit && (hit === el || el.contains(hit)))) {
+        throw new Error(
+          measureWords.covered(elementSaid(el), hit ? elementSaid(hit) : null)
+        );
+      }
+      return point;
+    });
   }
 
   const moveTo = async (point: Point) => {

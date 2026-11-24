@@ -17,7 +17,6 @@
 }
 
 /* The same reset, asked of each pseudo-element a rule makes (scripts/preflight.ts). */
-:where(:is(:is(.field-edge):not(input, textarea)))::before,
 :where(
   :is(
     :where(.group\/cin)[data-asking]
@@ -72,6 +71,8 @@
   )[data-mention-field-empty]
 )::before,
 :where(:is(.ec-now-indicator))::before,
+:where(:is(.field-edge-wrap))::before,
+:where(:is(.field-edge))::before,
 :where(
   :is(.prose)
     :where(blockquote p:first-of-type):not(
@@ -212,6 +213,11 @@
 :where(.before\:will-change-opacity)::before,
 :where(.before\:z-1)::before,
 :where(.before\:z-2)::before,
+:where(
+  .can-hover\:hover\:not-has-\[\[data-slot\]\[aria-invalid\=true\]\]\:before\:opacity-100:hover:not(
+      :has(:is([data-slot][aria-invalid="true"]))
+    )
+)::before,
 :where(.contrast-more\:before\:backdrop-filter-none)::before,
 :where(.contrast-more\:before\:bg-surface-raised)::before,
 :where(.contrast-more\:before\:border-border-contrast)::before,
@@ -260,6 +266,11 @@
   .data-\[vaul-drawer-direction\=bottom\]\:before\:rounded-b-none[data-vaul-drawer-direction="bottom"]
 )::before,
 :where(.data-band\:before\:opacity-100[data-band])::before,
+:where(
+  .data-dragging\:not-has-\[\[data-slot\]\[aria-invalid\=true\]\]\:before\:opacity-100[data-dragging]:not(
+      :has(:is([data-slot][aria-invalid="true"]))
+    )
+)::before,
 :where(.data-drop-before\:before\:-start-space-row[data-drop-before])::before,
 :where(.data-drop-before\:before\:absolute[data-drop-before])::before,
 :where(.data-drop-before\:before\:bg-ink-strong[data-drop-before])::before,

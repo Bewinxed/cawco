@@ -243,16 +243,20 @@ const accessible = (el: Element): boolean =>
 
 const ARTICLED = /^[aeiou]/u;
 
+/** Runs one query: as it stands, or marked as the stage's own work on a measuring page (agent canvas harness.ts). */
+type QueryRun = <T>(query: () => T) => T;
+
 /**
  * The frame's elements by their words, roles and test ids, with those of
  * the `layers` it opened outside itself (a popover's content portalled to
  * the body), searched after it: what a person sees of the drawing. A
  * `getBy` that finds none throws, as Testing Library's does, and takes the
- * first of several.
+ * first of several. Each query runs through `run`.
  */
 export function queriesIn(
   frame: HTMLElement,
-  layers: () => readonly HTMLElement[] = () => []
+  layers: () => readonly HTMLElement[] = () => [],
+  run: QueryRun = (query) => query()
 ): CanvasQueries {
   const roots = () => [frame, ...layers()];
   const all = () => roots().flatMap((root) => [...root.querySelectorAll("*")]);
@@ -289,23 +293,36 @@ export function queriesIn(
     return value;
   };
   return {
-    queryAllByText: allByText,
-    queryAllByRole: allByRole,
-    queryAllByTestId: allByTestId,
-    queryByText: byText,
-    getByText: (text) => found(byText(text), `the text ${String(text)}`),
-    queryByRole: byRole,
+    queryAllByText: (text) => run(() => allByText(text)),
+    queryAllByRole: (role, options) => run(() => allByRole(role, options)),
+    queryAllByTestId: (id) => run(() => allByTestId(id)),
+    queryByText: (text) => run(() => byText(text)),
+    getByText: (text) =>
+      found(
+        run(() => byText(text)),
+        `the text ${String(text)}`
+      ),
+    queryByRole: (role, options) => run(() => byRole(role, options)),
     getByRole: (role, options) =>
       found(
-        byRole(role, options),
+        run(() => byRole(role, options)),
         `${ARTICLED.test(role) ? "an" : "a"} ${role}${options?.name ? ` named ${String(options.name)}` : ""}`
       ),
-    getByTestId: (id) => found(allByTestId(id)[0] ?? null, `test id ${id}`),
+    getByTestId: (id) =>
+      found(
+        run(() => allByTestId(id)[0] ?? null),
+        `test id ${id}`
+      ),
     querySelector: (selector) =>
-      roots()
-        .map((root) => root.querySelector(selector))
-        .find((one) => one !== null) ?? null,
+      run(
+        () =>
+          roots()
+            .map((root) => root.querySelector(selector))
+            .find((one) => one !== null) ?? null
+      ),
     querySelectorAll: (selector) =>
-      roots().flatMap((root) => [...root.querySelectorAll(selector)]),
+      run(() =>
+        roots().flatMap((root) => [...root.querySelectorAll(selector)])
+      ),
   };
 }

@@ -81,9 +81,10 @@
     // A value's frame is dragged across: every part of it says so to the
     // pointer until its field holds the caret, a horizontal drag is the
     // frame's under a finger (a vertical one still scrolls), and its edge
-    // steps up under the pointer and through a drag.
+    // steps up under the pointer and through a drag: the focus edge's ring
+    // (`field-edge`), faded in on the compositor.
     share !== undefined &&
-      "isolate cursor-ew-resize touch-pan-y not-focus-within:[&_*]:cursor-ew-resize can-hover:hover:not-has-[[data-slot][aria-invalid=true]]:border-border-row-outline data-dragging:not-has-[[data-slot][aria-invalid=true]]:border-border-row-outline",
+      "isolate cursor-ew-resize touch-pan-y not-focus-within:[&_*]:cursor-ew-resize can-hover:hover:not-has-[[data-slot][aria-invalid=true]]:before:opacity-100 data-dragging:not-has-[[data-slot][aria-invalid=true]]:before:opacity-100",
     look === "bar" &&
       "h-c-btn-h rounded-pill border-border-hairline bg-material-panel shadow-tile glass-backdrop contrast-more:border-border-contrast contrast-more:bg-surface-raised contrast-more:backdrop-filter-none reduced-transparency:border-border-contrast reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none",
     // The group's own Clear stands for the engine's: its search cancel glyph is not drawn.

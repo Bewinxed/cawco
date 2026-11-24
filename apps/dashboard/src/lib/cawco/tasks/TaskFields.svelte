@@ -1,6 +1,7 @@
 <script lang="ts">
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { IconClose, IconPlus } from "#lib/icons.js";
   /**
@@ -84,10 +85,11 @@
           class="group/value m-0 flex min-w-0 items-center gap-space-1"
         >
           {#if editing === key}
-            <input
+            <Input
               data-slot="task-fields-field"
               aria-label={key}
-              class="field-edge transition-control h-c-btn-h-sm min-w-0 flex-auto rounded-sm border bg-surface-raised px-space-2 type-body text-ink-strong"
+              class="min-w-0 flex-auto"
+              look="cell"
               onblur={() => commit(key)}
               onkeydown={(event) => {
                 if (event.key === "Enter") {
@@ -137,18 +139,22 @@
         add();
       }}
     >
-      <input
+      <Input
         data-slot="task-fields-field"
         aria-label="Field name"
-        class="field-edge transition-control h-c-btn-h-sm min-w-0 shrink grow-0 basis-24 rounded-sm border bg-surface-raised px-space-2 type-code text-ink-strong"
+        class="min-w-0 shrink grow-0"
+        look="cell"
+        measure="key"
+        text="code"
         placeholder="name"
         bind:value={newKey}
         {@attach (node) => node.focus()}
       />
-      <input
+      <Input
         data-slot="task-fields-field"
         aria-label="Field value"
-        class="field-edge transition-control h-c-btn-h-sm min-w-0 flex-auto rounded-sm border bg-surface-raised px-space-2 type-body text-ink-strong"
+        class="w-auto min-w-0 flex-auto"
+        look="cell"
         placeholder="value"
         bind:value={newValue}
       />

@@ -74,10 +74,17 @@ export type MeasureMove =
  */
 export type MeasurePass = "scan" | "traced" | "repeat";
 
-/** The user-timing marks a traced play stands between: the windows the trace is read in. */
+/**
+ * The user timings of a traced play: the marks it stands between, the
+ * windows the trace is read in; and `harness`, a measure round each
+ * stretch of the stage's own work inside one (a play's `canvas` query, the
+ * box a real press is aimed by, the call that sends it), which the read
+ * leaves out of what it charges the component.
+ */
 export const MEASURE_MARKS = {
   start: "cawco measure start",
   end: "cawco measure end",
+  harness: "cawco harness",
 } as const;
 
 /**

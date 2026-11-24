@@ -389,59 +389,143 @@ type MainThread = TraceEngine.Handlers.ModelHandlers.Renderer.RendererThread;
 /** A frame, as the engine pairs it from the compositor's events. */
 type Frame = TraceEngine.Types.Events.LegacyTimelineFrame;
 
+/** A stretch of the stage's own work on the main thread (core `MEASURE_MARKS.harness`), µs. */
+interface Span {
+  from: number;
+  to: number;
+}
+
 /** What one traced play's window is read with. */
 interface TraceContext {
   data: TraceData;
   engine: Engine;
+  /** The stage's own work, left out of what the read charges the component (canvas harness.ts), in time order. */
+  harness: readonly Span[];
   /** Each event's kind of work, as DevTools' Performance panel colours it. */
   kinds: Map<string, { category: { name: string } }>;
   thread: MainThread;
 }
 
-/** The main thread's own time between `from` and `to` (µs), by the kind of work, ms. */
+/** The stage's own stretch that holds `event` whole, if one does. */
+const harnessOf = (
+  harness: readonly Span[],
+  event: TraceEvent
+): Span | undefined =>
+  harness.find(
+    (span) => event.ts >= span.from && event.ts + (event.dur ?? 0) <= span.to
+  );
+
+/** How much of `from`–`to` (µs) the stage's own work takes. */
+const harnessIn = (harness: readonly Span[], from: number, to: number) =>
+  harness.reduce(
+    (sum, span) =>
+      sum + Math.max(0, Math.min(to, span.to) - Math.max(from, span.from)),
+    0
+  );
+
+/** How much of `from`–`to` (µs) the main thread is busy: its tasks' time in it. */
+const busyIn = (thread: MainThread, from: number, to: number) =>
+  [...(thread.tree?.roots ?? [])].reduce((sum, { entry }) => {
+    const end = entry.ts + (entry.dur ?? 0);
+    return sum + Math.max(0, Math.min(to, end) - Math.max(from, entry.ts));
+  }, 0);
+
+/**
+ * Whether a dropped frame was the stage's own: the main thread held the
+ * whole frame, and without the stage's own work in it the frame would have
+ * had time. A frame dropped with the main thread free (raster, the
+ * compositor) stays the component's.
+ */
+const droppedByHarness = (
+  { harness, thread }: TraceContext,
+  frame: Frame
+): boolean => {
+  const busy = busyIn(thread, frame.startTime, frame.endTime);
+  return (
+    busy >= frame.duration &&
+    busy - harnessIn(harness, frame.startTime, frame.endTime) < frame.duration
+  );
+};
+
+/** The kind of work an entry is, as the read sums it: style and layout by name, the rest by DevTools' colours; null for what it leaves out. */
+function kindOf(
+  { kinds }: TraceContext,
+  name: string
+): keyof MeasureRead["frames"]["longestWork"] | null {
+  if (name === "UpdateLayoutTree") {
+    return "style";
+  }
+  if (name === "Layout") {
+    return "layout";
+  }
+  const category = kinds.get(name)?.category.name;
+  if (category === "scripting") {
+    return "script";
+  }
+  return category === "painting" || PAINT_STEPS.has(name) ? "paint" : null;
+}
+
+/**
+ * The main thread's own time between `from` and `to` (µs), by the kind of
+ * work, ms, the stage's own left out: what runs inside one of its
+ * stretches (a forced style or layout), and the stretch's own script, the
+ * rest of its time.
+ */
 function workIn(
-  { data, kinds, thread }: TraceContext,
+  context: TraceContext,
   from: number,
   to: number
 ): MeasureRead["frames"]["longestWork"] {
+  const { data, harness, thread } = context;
   const work = { script: 0, style: 0, layout: 0, paint: 0 };
+  /** Each stretch's time its own events took, µs. */
+  const heldIn = new Map<Span, number>();
   for (const entry of thread.entries) {
     if (entry.ts < from || entry.ts >= to) {
       continue;
     }
-    const self = (data.Renderer.entryToNode.get(entry)?.selfTime ?? 0) / US;
-    const category = kinds.get(entry.name)?.category.name;
-    if (entry.name === "UpdateLayoutTree") {
-      work.style += self;
-    } else if (entry.name === "Layout") {
-      work.layout += self;
-    } else if (category === "scripting") {
-      work.script += self;
-    } else if (category === "painting" || PAINT_STEPS.has(entry.name)) {
-      work.paint += self;
+    const self = data.Renderer.entryToNode.get(entry)?.selfTime ?? 0;
+    const span = harnessOf(harness, entry);
+    const kind = kindOf(context, entry.name);
+    if (span) {
+      heldIn.set(span, (heldIn.get(span) ?? 0) + self);
+    } else if (kind) {
+      work[kind] += self / US;
+    }
+  }
+  // A stretch's own script is its enclosing call's self time: the stretch's length less what ran inside it.
+  for (const span of harness) {
+    if (span.from >= from && span.from < to) {
+      work.script -= (span.to - span.from - (heldIn.get(span) ?? 0)) / US;
     }
   }
   return {
-    script: tenths(work.script),
+    script: tenths(Math.max(0, work.script)),
     style: tenths(work.style),
     layout: tenths(work.layout),
     paint: tenths(work.paint),
   };
 }
 
-/** The longest gap between two drawn frames, ms, and where it stands (µs): the first frame's own length when only one was drawn. */
-function longestGap(drawn: readonly Frame[], from: number) {
+/** The longest gap between two drawn frames, ms, the stage's own work in it left out, and where it stands (µs): the first frame's own length when only one was drawn. */
+function longestGap(
+  harness: readonly Span[],
+  drawn: readonly Frame[],
+  from: number
+) {
+  const own = (start: number, end: number) =>
+    (end - start - harnessIn(harness, start, end)) / US;
   const [first] = drawn;
   let gap = {
-    ms: first ? first.duration / US : 0,
+    ms: first ? own(first.startTime, first.endTime) : 0,
     from: first?.startTime ?? from,
     to: first?.endTime ?? from,
   };
   for (const [index, one] of drawn.entries()) {
     const before = drawn[index - 1];
-    if (before && (one.startTime - before.startTime) / US > gap.ms) {
+    if (before && own(before.startTime, one.startTime) > gap.ms) {
       gap = {
-        ms: (one.startTime - before.startTime) / US,
+        ms: own(before.startTime, one.startTime),
         from: before.startTime,
         to: one.startTime,
       };
@@ -456,19 +540,20 @@ function playRead(
   from: number,
   length: number
 ): PlayRead & { layouts: TraceEvent[]; styles: TraceEvent[] } {
-  const { data, thread } = context;
+  const { data, harness, thread } = context;
   const to = from + (length + QUIET_MS) * US;
   const inWindow = data.Frames.frames.filter(
     (one) => one.startTime >= from && one.startTime < to
   );
   const drawn = inWindow.filter((one) => !(one.dropped || one.idle));
-  const gap = longestGap(drawn, from);
-  const styles = thread.recalcStyleEvents.filter(
-    (one) => one.ts >= from && one.ts < to
-  );
-  const layouts = thread.layoutEvents.filter(
-    (one) => one.ts >= from && one.ts < to
-  );
+  const gap = longestGap(harness, drawn, from);
+  // A recalc or a layout the stage's own work forced (a query reading words) is not the component's.
+  const ownOf = <Event extends TraceEvent>(events: readonly Event[]) =>
+    events.filter(
+      (one) => one.ts >= from && one.ts < to && !harnessOf(harness, one)
+    );
+  const styles = ownOf(thread.recalcStyleEvents);
+  const layouts = ownOf(thread.layoutEvents);
   const motion = drawn.filter((one) => one.startTime < from + length * US);
   const laidOut = motion.filter((one) =>
     layouts.some(
@@ -477,7 +562,9 @@ function playRead(
   );
   return {
     drawn: drawn.length,
-    dropped: inWindow.filter((one) => one.dropped).length,
+    dropped: inWindow.filter(
+      (one) => one.dropped && !droppedByHarness(context, one)
+    ).length,
     longest: gap.ms,
     longestWork: workIn(context, gap.from, gap.to),
     styleCount: styles.length,
@@ -579,6 +666,10 @@ async function traceRead(trace: Buffer, length: number) {
   const context: TraceContext = {
     data,
     engine,
+    harness: data.UserTimings.performanceMeasures
+      .filter((one) => one.name === MEASURE_MARKS.harness)
+      .map((one) => ({ from: one.ts, to: one.ts + (one.dur ?? 0) }))
+      .sort((a, b) => a.from - b.from),
     kinds: new Map(Object.entries(engine.Styles.maybeInitSylesMap())),
     thread,
   };
