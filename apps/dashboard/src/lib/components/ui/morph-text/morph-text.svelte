@@ -1,17 +1,18 @@
 <script lang="ts">
   /**
-   * The one way the product swaps words in place: torph's TextMorph, the
-   * old words morphing into the new ones when `text` changes, plain text
-   * otherwise (torph draws its letters only for the length of a morph).
-   * torph (patches/torph@0.1.3.patch) holds the text's box at the larger of
-   * the old and new words at once and lets it take the new size once the
-   * morph settles, so nothing beside it slides; runs every letter's move and
-   * fade on one clock, --duration-base on --ease-out; reads no box outside a
-   * ResizeObserver delivery; and with less motion only fades, in the same box
-   * (DESIGN.md, The Steady Swap Rule and The Reduced Motion Rule). The first
-   * draw never morphs: the text is just the text.
+   * The one way the product swaps words in place: torph's TextMorph, as its
+   * maintainers publish it, the old words morphing into the new ones when
+   * `text` changes. It runs on the house's clock, --duration-base on
+   * --ease-out unless `clock` names another, and with less motion it lands
+   * without a morph (torph's own `respectReducedMotion`). The first draw
+   * never morphs: the text is just the text. torph eases its own box from
+   * the old words' size to the new ones', so what stands beside it in a
+   * line moves with it on the same clock.
    *
-   * `wrap`: the text is a paragraph that wraps, a block of its own.
+   * `wrap`: the text is a paragraph that wraps, a block of its own. torph
+   * 0.1.4 sets its words in one line that never breaks (each a box of its
+   * own, spaces no-break), so a paragraph lands without a morph and wraps
+   * as plain text.
    *
    * `still`: this change lands without a morph (a figure that changed because
    * the clock moved, not because something happened). So does a change in
@@ -47,10 +48,14 @@
     };
   } = $props();
 
-  /** The text's element, where it is mounted. */
+  /**
+   * The text's element, where it is mounted, named as the kit's part: torph
+   * types its element's attributes as its own options alone.
+   */
   let host: Element | null = null;
   const hold: Attachment = (node) => {
     host = node;
+    node.setAttribute("data-slot", "morph-text");
     return () => {
       host = null;
     };
@@ -71,9 +76,7 @@
 
 <TextMorph
   class={wrap ? "block" : undefined}
-  data-slot="morph-text"
-  data-wrap={wrap || undefined}
-  disabled={still || unseen}
+  disabled={still || wrap || unseen}
   duration={morphMs}
   ease={morphEase}
   {text}
