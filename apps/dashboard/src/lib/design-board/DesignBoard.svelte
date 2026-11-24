@@ -197,7 +197,7 @@
     {@render index()}
   </nav>
   <div
-    class="flex h-dvh min-w-0 flex-1 flex-col gap-space-8 overflow-y-auto overscroll-contain p-space-6 max-phone:p-space-3 motion-safe:scroll-smooth"
+    class="flex h-dvh min-w-0 flex-1 flex-col gap-space-8 overflow-y-auto overscroll-contain p-space-6 max-phone:p-space-3"
   >
     <details
       class="sticky top-0 z-1 -mx-space-6 -mt-space-6 border-b border-ui bg-bg px-space-6 py-space-2 desk:hidden max-phone:-mx-space-3 max-phone:-mt-space-3 max-phone:px-space-3"
