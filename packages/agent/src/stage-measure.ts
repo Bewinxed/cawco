@@ -284,10 +284,7 @@ export async function measureMove(
       const cause = causes.get(one.at);
       return cause ? { ...one, cause } : one;
     });
-    // The Animation domain keeps a snapshot of every animation it saw (DevTools' Animations panel): each repeat's are let go after it, or the read's own bookkeeping grows the heap it reads.
-    const seen: string[] = [];
-    cdp.on("Animation.animationCreated", ({ id }) => seen.push(id));
-    await cdp.send("Animation.enable");
+    // The rate is set with the Animation domain left off: enabled, it keeps a snapshot of every animation it sees, and its CSS agent every style sheet of every document the repeats made (a nested page's frame torn down mid-load), one document a repeat the read charged to the component.
     await cdp.send("Animation.setPlaybackRate", { playbackRate: MEMORY_RATE });
     const memoryWait = Math.round(length / MEMORY_RATE);
     /** One repeat and its counted point: a collection, then the counters. */
@@ -295,11 +292,6 @@ export async function measureMove(
       const run = await repeat(page, key, move, "repeat", memoryWait);
       if (run.edits !== scan.edits) {
         throw new Refused(words.changed);
-      }
-      if (seen.length > 0) {
-        await cdp.send("Animation.releaseAnimations", {
-          animations: seen.splice(0),
-        });
       }
       return await countersOf(cdp);
     };
