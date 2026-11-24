@@ -23,7 +23,7 @@
 <Collapsible.Trigger
   {...rest}
   class={cn(
-    "group/header mark-line press-tint hitbox pointer-coarse:hitbox:touch-area m-0 flex min-h-6.5 max-w-full items-center gap-space-2 rounded-xs border-none border-current bg-transparent p-0 font-inherit text-start text-inherit enabled:hover:text-tx disabled:after:content-none",
+    "group/header mark-line press-tint touch-hit m-0 flex min-h-6.5 max-w-full items-center gap-space-2 rounded-xs border-none border-current bg-transparent p-0 font-inherit text-start text-inherit enabled:hover:text-tx disabled:after:content-none",
     className
   )}
   data-slot="thinking-steps-header"

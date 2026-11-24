@@ -10,7 +10,7 @@
   import { cn, tv, type WithElementRef } from "#lib/utils.js";
 
   export const buttonVariants = tv({
-    base: "group/button mark-line mark-cap hitbox pointer-coarse:hitbox:touch-area inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-sm control control-toggle glass-item:concentric-at font-medium type-body text-tx leading-none tracking-tight [--hit-edge:1px] [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/button mark-line mark-cap touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-sm control control-toggle glass-item:concentric-at font-medium type-body text-tx leading-none tracking-tight [--hit-edge:1px] [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       /* Its look on the control surface (theme.css `control`): every
          edge, fill and state is the surface's, set by these names. */
@@ -82,7 +82,7 @@
       },
       /** Its 44×44 area on every pointer, not only a finger's (DESIGN.md,
           The Peer Rule: Approve and Deny). */
-      hit: { always: "hitbox hitbox:touch-area" },
+      hit: { always: "pointer-hit [--hit-pointer:var(--spacing-control-lg)]" },
       /** No edge of its own. */
       edge: { none: "control-quiet" },
       /** Its box: a prompt's answer (the label size at medium weight, the

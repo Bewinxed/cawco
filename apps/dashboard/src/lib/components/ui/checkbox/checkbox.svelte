@@ -69,7 +69,7 @@
     /* Drawn at 16px: its hit area reaches 44px under a finger and 24px
        under a fine pointer (DESIGN.md, The 44 Touch Rule, The 24 Pointer
        Rule). */
-    "hitbox pointer-coarse:hitbox:touch-area pointer-fine:hitbox:pointer-area border-tx-2 [--hit-edge:1px]",
+    "touch-hit pointer-hit border-tx-2 [--hit-edge:1px]",
     "disabled:cursor-not-allowed disabled:opacity-50",
     "group-data-[disabled=true]/field:opacity-50",
     "aria-invalid:border-danger",

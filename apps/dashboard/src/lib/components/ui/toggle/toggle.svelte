@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
 
   const toggleVariants = tv({
-    base: "control control-toggle group/toggle mark-line hitbox pointer-coarse:hitbox:touch-area inline-flex items-center justify-center gap-space-1 whitespace-nowrap rounded-sm glass-item:concentric-at text-tx type-label [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "control control-toggle group/toggle mark-line touch-hit inline-flex items-center justify-center gap-space-1 whitespace-nowrap rounded-sm glass-item:concentric-at text-tx type-label [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       variant: {
         default: "control-quiet",

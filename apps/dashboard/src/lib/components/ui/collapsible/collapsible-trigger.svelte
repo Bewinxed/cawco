@@ -4,11 +4,11 @@
 
   /**
    * Every trigger reaches 44 under a finger (DESIGN.md, The 44 Touch Rule:
-   * `hitbox` sized by `touch-area`, its drawn size unchanged); `opener`'s press is its row's
+   * `touch-hit`, its drawn size unchanged); `opener`'s press is its row's
    * already, so it stays unpositioned and its `::after` covers the row.
    */
   const collapsibleTriggerVariants = tv({
-    base: "hitbox pointer-coarse:hitbox:touch-area",
+    base: "touch-hit",
     variants: {
       /**
        * The trigger by its role (DESIGN.md, Components). Its words and ink

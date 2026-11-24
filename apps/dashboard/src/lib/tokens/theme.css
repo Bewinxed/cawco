@@ -1564,7 +1564,7 @@
   /* Drawn unless a look keeps its layer on its background
      (`--control-layer-before: none`, a field's): a variable, so no look's
      rule has to outrank this one in Tailwind's order of utilities. On
-     ::before: a control's ::after is its tap area (`hitbox`). */
+     ::before: a control's ::after is its tap area (`touch-hit`). */
   /* The layer fills the control's padding box on the edge's own inner
      curve: it stands over the border box with a transparent border of the
      edge's width and paints inside it (`background-clip: padding-box`), so

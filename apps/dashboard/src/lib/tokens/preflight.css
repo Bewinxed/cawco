@@ -433,9 +433,6 @@
 :where(:is(.ec-icon).ec-next)::after,
 :where(:is(.ec-icon).ec-prev)::after,
 :where(
-  :is(.hitbox):is(:disabled, [aria-disabled="true"], [data-disabled])
-)::after,
-:where(
   :is(.prose)
     :where(blockquote p:last-of-type):not(
       :where([class~="not-prose"], [class~="not-prose"] *)
@@ -450,9 +447,6 @@
     :where(pre code):not(:where([class~="not-prose"], [class~="not-prose"] *))
 )::after,
 :where(:root[data-theme-flip] .theme-flip\:after\:transition-none)::after,
-:where(:where(:is(.hitbox)))::after,
-:where(:where(.pointer-hit))::after,
-:where(:where(.touch-hit))::after,
 :where(.\@max-desk\/shell\:coarse\:after\:bottom-auto)::after,
 :where(.\@max-desk\/shell\:coarse\:after\:end-auto)::after,
 :where(.\@max-desk\/shell\:coarse\:after\:size-control-lg)::after,
@@ -538,6 +532,10 @@
       [data-lifted]
     )[data-grouped]
 )::after,
+:where(.pointer-hit)::after,
+:where(
+  .pointer-hit:is(:disabled, [aria-disabled="true"], [data-disabled])
+)::after,
 :where(
   .prose-code\:after\:content-none
     :is(:where(code):not(:where([class~="not-prose"], [class~="not-prose"] *)))
@@ -552,6 +550,10 @@
 :where(.side-right\:after\:end-full[data-side="right"])::after,
 :where(.side-right\:after\:inset-y-0[data-side="right"])::after,
 :where(.side-right\:after\:w-space-1[data-side="right"])::after,
+:where(.touch-hit)::after,
+:where(
+  .touch-hit:is(:disabled, [aria-disabled="true"], [data-disabled])
+)::after,
 :where(.underline-draw [data-slot="label-text"])::after,
 :where([data-slot="peer-label"] [data-slot="collapsible-trigger"])::after,
 :where([data-sonner-toast][data-expanded="true"])::after,

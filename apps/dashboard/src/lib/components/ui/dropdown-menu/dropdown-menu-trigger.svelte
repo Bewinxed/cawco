@@ -106,7 +106,7 @@
 
 <DropdownMenuPrimitive.Trigger
   class={cn(
-    "hitbox pointer-coarse:hitbox:touch-area",
+    "touch-hit",
     (variant || size) && buttonVariants({ variant, size }),
     dropdownMenuTriggerVariants({ face, look }),
     className

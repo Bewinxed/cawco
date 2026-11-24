@@ -161,11 +161,11 @@
       classes: {
         ...restProps.toastOptions?.classes,
         actionButton: cn(
-          "hitbox pointer-coarse:hitbox:touch-area",
+          "touch-hit",
           restProps.toastOptions?.classes?.actionButton
         ),
         cancelButton: cn(
-          "hitbox pointer-coarse:hitbox:touch-area",
+          "touch-hit",
           restProps.toastOptions?.classes?.cancelButton
         ),
       },

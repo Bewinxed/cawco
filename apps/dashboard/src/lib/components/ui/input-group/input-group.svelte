@@ -31,7 +31,7 @@
   /**
    * A press on the frame's touch area beside its field: the field's own
    * focus. Under a finger the area stands under the frame's field and
-   * controls (`hitbox`, under its content), so a tap on the field is the field's own (its
+   * controls (`touch-hit`, under its content), so a tap on the field is the field's own (its
    * caret, its words' selection) and only one beside it lands here. The
    * field is found by
    * `data-group-control`, which its kit part writes after the props it is
@@ -54,7 +54,7 @@
 <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a keyboard reaches the field itself; only a finger lands on the frame's area. -->
 <div
   class={cn(
-    "hitbox pointer-coarse:hitbox:touch-area [--hit-edge:1px]",
+    "touch-hit [--hit-edge:1px]",
     "relative flex h-9 w-full min-w-0 items-center rounded-sm",
     // Its fill, edge and states are the control surface's (theme.css
     // `control-field`), drawn on the frame; its own input draws none.

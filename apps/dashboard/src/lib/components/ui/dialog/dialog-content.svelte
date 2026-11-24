@@ -54,7 +54,7 @@
    * The raised body: a frame that holds Close where it stands, and the grid
    * of the caller's content that scrolls inside it, its first row (the
    * header) kept clear of Close. Under a finger a control's touch area
-   * reaches past its box (`hitbox` sized by `touch-area`, to the 44px floor: 10.5px under the
+   * reaches past its box (`touch-hit`, to the 44px floor: 10.5px under the
    * smallest), which the grid would count as content and scroll by: there
    * the grid keeps that reach (`--hit-foot`) inside its foot, and the body
    * gives it back from its own, so nothing moves and nothing scrolls.

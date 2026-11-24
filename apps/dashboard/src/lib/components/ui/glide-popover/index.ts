@@ -20,7 +20,7 @@ import { tv } from "#lib/utils.js";
  * Full Send's question under them wraps inside it, never widening it
  * (PermissionSection); a `fit` surface (`data-fit`) takes its content's. Its rows are menu items, 44px
  * tall on touch (The 44 Touch Rule); a kit Button keeps its drawn size and
- * reaches 44px through its own `hitbox`. Content never outgrows the
+ * reaches 44px through its own `touch-hit`. Content never outgrows the
  * surface: a wide row shrinks. The fit and the permission rows' width hold at
  * every width, a phone's included, so the phone's width stands only where
  * neither does. Its width is the caller's `--ns-pop-width` (a token's length
