@@ -28,7 +28,7 @@ export const cawSettingsWords = {
   /**
    * Whether Caw's sessions may change what his chat and each kind of
    * trigger run as (hub project-settings.ts `set_caw`, `set_trigger`,
-   * `set_account`): the switch's label.
+   * `set_account`, `set_account_at_limit`): the switch's label.
    */
   changes: "Allow Caw to change these settings",
   /** What stands when the switch's change was refused. */

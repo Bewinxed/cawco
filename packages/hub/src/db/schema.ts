@@ -665,7 +665,8 @@ export const projects = sqliteTable("projects", {
   /**
    * Whether the project's sessions, Caw among them, may change what his
    * chat and each kind of trigger run as (project-settings.ts `set_caw`,
-   * `set_trigger`, `set_account`), the settings of Caw's settings panel;
+   * `set_trigger`, `set_account`, `set_account_at_limit`), the settings of
+   * Caw's settings panel;
    * off, they read them only. Off until the person turns it on there.
    */
   cawChangesSettings: integer("caw_changes_settings", { mode: "boolean" })

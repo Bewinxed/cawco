@@ -56085,7 +56085,7 @@
             "type": "boolean"
           },
           "changesSettings": {
-            "description": "Whether the project's sessions, Caw among them, may change what his chat\nand each kind of trigger run as (account, harness and model, mode:\nhub project-settings.ts `set_caw`, `set_trigger`, `set_account`), the\nsettings Caw's settings panel holds; off, they read them only. The\npanel's \"Allow Caw to change these settings\".",
+            "description": "Whether the project's sessions, Caw among them, may change what his chat\nand each kind of trigger run as (account, harness and model, mode:\nhub project-settings.ts `set_caw`, `set_trigger`, `set_account`,\n`set_account_at_limit`), the\nsettings Caw's settings panel holds; off, they read them only. The\npanel's \"Allow Caw to change these settings\".",
             "type": "boolean"
           },
           "harness": {

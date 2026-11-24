@@ -70,6 +70,19 @@ const modeText = (mode: OfferedMode | null, orElse: string): string =>
 const modelText = (model: string | null): string =>
   model ?? "its harness's default model";
 
+/**
+ * A change's line: `head`, then the fields it names, each a phrase of its
+ * own; "on" leads them unless the first is the mode's ("in Auto"), which
+ * says its own preposition.
+ */
+const runsOnLine = (
+  head: string,
+  fields: { mode?: true; text: string }[]
+): string => {
+  const said = fields.map((field) => field.text).join(", ");
+  return fields[0]?.mode ? `${head} ${said}` : `${head} on ${said}`;
+};
+
 /** A change to what Caw's chat runs as, each field it names in words. */
 interface ChatChange {
   harness?: HarnessKind;
@@ -232,35 +245,59 @@ export const projectSettingsWords = {
 
   /** What Caw's chat runs as, changed: each field it names. */
   chat: (change: ChatChange): string =>
-    `Run your chat with Caw on ${[
-      ...(change.harness ? [harnessName(change.harness)] : []),
-      ...(change.model === undefined ? [] : [modelText(change.model)]),
+    runsOnLine("Run your chat with Caw", [
+      ...(change.harness ? [{ text: harnessName(change.harness) }] : []),
+      ...(change.model === undefined
+        ? []
+        : [{ text: modelText(change.model) }]),
       ...(change.mode === undefined
         ? []
-        : [`in ${modeText(change.mode, "the fleet's mode")}`]),
-    ].join(", ")}`,
+        : [
+            {
+              mode: true as const,
+              text: `in ${modeText(change.mode, "the fleet's mode")}`,
+            },
+          ]),
+    ]),
   /** What one kind of trigger runs as, changed: each field it names, null back to what it inherits. */
   trigger: (change: TriggerChange): string =>
-    `Start ${triggerKindWords[change.trigger].name.toLowerCase()} sessions on ${[
-      ...(change.harness === undefined
-        ? []
-        : [
-            change.harness
-              ? harnessName(change.harness)
-              : "the harness it inherits",
-          ]),
-      ...(change.model === undefined ? [] : [modelText(change.model)]),
-      ...(change.mode === undefined
-        ? []
-        : [`in ${modeText(change.mode, "the mode it inherits")}`]),
-      ...(change.accountName === undefined
-        ? []
-        : [
-            change.accountName === null
-              ? "the account it inherits"
-              : `account ${change.accountName}`,
-          ]),
-    ].join(", ")}`,
+    runsOnLine(
+      `Start ${triggerKindWords[change.trigger].name.toLowerCase()} sessions`,
+      [
+        ...(change.harness === undefined
+          ? []
+          : [
+              {
+                text: change.harness
+                  ? harnessName(change.harness)
+                  : "the harness it inherits",
+              },
+            ]),
+        // A kind's model set back is the one it inherits: its fleet's, or
+        // Caw's chat's, unless the kind names a harness of its own.
+        ...(change.model === undefined
+          ? []
+          : [{ text: change.model ?? "the model it inherits" }]),
+        ...(change.mode === undefined
+          ? []
+          : [
+              {
+                mode: true as const,
+                text: `in ${modeText(change.mode, "the mode it inherits")}`,
+              },
+            ]),
+        ...(change.accountName === undefined
+          ? []
+          : [
+              {
+                text:
+                  change.accountName === null
+                    ? "the account it inherits"
+                    : `account ${change.accountName}`,
+              },
+            ]),
+      ]
+    ),
 
   /** A starting set as the read says it. */
   startingSetRead: (
@@ -314,9 +351,9 @@ export const projectSettingsWords = {
     trigger:
       "set_trigger names trigger (comments, routine-results, task-moves or inbound-events) and harness, model, mode or account, each null to inherit it again.",
   },
-  /** A change to what Caw's chat or a kind of trigger runs as while the project's switch for it is off. */
+  /** A change to the project's account, its at-limit, or what Caw's chat or a kind of trigger runs as, while the project's switch for them is off. */
   changesOff:
-    "This project's sessions may not change what Caw's chat or its triggers run as: these are read only until the person turns on Allow Caw to change these settings in Caw's settings.",
+    "This project's sessions may not change its account, what its sessions do at that account's limit, or what Caw's chat and its triggers run as: these are read only until the person turns on Allow Caw to change these settings in Caw's settings.",
   /** A grant of a connection the hub has none of: what it can grant instead. */
   noConnection: (name: string, grantable: string[]): string =>
     grantable.length > 0

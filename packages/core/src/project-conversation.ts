@@ -44,7 +44,8 @@ export interface ProjectConversationView {
   /**
    * Whether the project's sessions, Caw among them, may change what his chat
    * and each kind of trigger run as (account, harness and model, mode:
-   * hub project-settings.ts `set_caw`, `set_trigger`, `set_account`), the
+   * hub project-settings.ts `set_caw`, `set_trigger`, `set_account`,
+   * `set_account_at_limit`), the
    * settings Caw's settings panel holds; off, they read them only. The
    * panel's "Allow Caw to change these settings".
    */

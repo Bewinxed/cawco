@@ -69,7 +69,7 @@
  *   through the same write as the panel's (trigger-settings.ts
  *   `setProject`, `PATCH /api/projects/:id/trigger-settings/:kind`).
  * The settings Caw's settings panel holds (`set_caw`, `set_trigger`,
- * `set_account`) change only while the project's switch lets its sessions
+ * `set_account`, and with the account `set_account_at_limit`) change only while the project's switch lets its sessions
  * change them (`cawChangesSettings`, Allow Caw to change these settings,
  * off until the person turns it on in that panel; the owner's pick of
  * 2026-11-23: this panel only); off, each is refused, asked or not, and the
@@ -907,8 +907,9 @@ export const createProjectSettings = ({
   };
 
   /**
-   * Caw's settings (what his chat and each kind of trigger run as) change
-   * only while the project lets its sessions change them: refused, asked or
+   * Caw's settings (what his chat and each kind of trigger run as, the
+   * project's account and what its sessions do at its limit) change only
+   * while the project lets its sessions change them: refused, asked or
    * not, while its switch is off.
    */
   const changesAllowed = (project: ProjectRow) =>
@@ -1063,7 +1064,7 @@ export const createProjectSettings = ({
       case "set_account":
         return changesAllowed(project) ?? accountSet(project, asked);
       case "set_account_at_limit":
-        return atLimitSet(project, asked);
+        return changesAllowed(project) ?? atLimitSet(project, asked);
       case "set_area":
         return areaSet(project, asked);
       case "set_starting_set":
