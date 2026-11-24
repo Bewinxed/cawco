@@ -533,12 +533,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    what his chat and each kind of trigger run as, and Who decides is the
  *    person's alone. A page built for 105 reads the old fields, so it
  *    reloads first.
+ * 107: every route that writes the project folder may answer a 409
+ *    `folder-rebase-conflict`: a write made on the files as an older commit
+ *    held them is rebased onto HEAD and refused when another commit changed
+ *    the same lines (hub project-folder.ts `rebased`). A page built for 106
+ *    reads each route's 409 codes closed, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 106;
+export const WIRE_PROTOCOL = 107;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

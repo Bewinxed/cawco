@@ -29,6 +29,7 @@
 import type { Stats } from "node:fs";
 import {
   lstat,
+  mkdtemp,
   readdir,
   readFile,
   realpath,
@@ -37,8 +38,9 @@ import {
   rmdir,
   stat,
   unlink,
+  writeFile,
 } from "node:fs/promises";
-import { devNull } from "node:os";
+import { devNull, tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { errnoCode } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
@@ -1130,6 +1132,14 @@ export interface FolderWriteOptions {
   /** Who the commit is by; the operator when left out. */
   author?: FolderAuthor;
   /**
+   * The commit the caller read the files at ({@link folderHead}): when HEAD
+   * has moved since, the change is rebased onto HEAD ({@link rebased}), and
+   * refused {@link REBASE_CONFLICT} when another commit changed the same
+   * lines, nothing written. Left out, the change is written over HEAD as it
+   * stands.
+   */
+  base?: string;
+  /**
    * New files only: whether `name`, an entry in the folder `rel` goes into,
    * already holds `rel`'s place (the path itself always does). Any file held
    * before or while it is placed refuses the write with {@link taken},
@@ -1140,6 +1150,168 @@ export interface FolderWriteOptions {
   /** The commit message; "Add <path>" or "Update <path>" when left out. */
   message?: string;
 }
+
+/** A change refused because a commit since its base changed the same lines: the caller reads the files again and makes its change once more. */
+export const REBASE_CONFLICT = "folder-rebase-conflict";
+
+/** The commit the folder's HEAD names, read with no git spawned; empty while it has none. What a writer passes as {@link FolderWriteOptions.base}. */
+export const folderHead = async (projectId: string) => {
+  const root = await forReading(projectId);
+  return root instanceof ElysiaStatus ? root : await headCommit(root);
+};
+
+/** A text file as commit `sha` holds it; undefined when it holds none. */
+const textAt = async (root: string, sha: string, rel: string) => {
+  const shown = await run(root, ["show", `${sha}:${rel}`]);
+  if (shown instanceof ElysiaStatus) {
+    return shown;
+  }
+  return shown.code === 0 ? shown.stdout : undefined;
+};
+
+/** `ours` and `theirs`, each a change of `base`, merged three ways (`git merge-file`); undefined when they change the same lines. */
+const mergedText = async (
+  root: string,
+  ours: string,
+  base: string,
+  theirs: string
+) => {
+  const dir = await mkdtemp(join(tmpdir(), "cawco-rebase-"));
+  try {
+    const paths = ["ours", "base", "theirs"].map((name) => join(dir, name));
+    await Promise.all(
+      [ours, base, theirs].map((text, at) => writeFile(paths[at] ?? "", text))
+    );
+    const ran = await run(root, ["merge-file", "-p", ...paths]);
+    if (ran instanceof ElysiaStatus) {
+      return ran;
+    }
+    if (ran.code === 0) {
+      return ran.stdout;
+    }
+    // A positive exit counts the conflicts; anything else is git failing.
+    return ran.code > 0 && ran.code < 128
+      ? undefined
+      : problem(500, {
+          code: "folder-git-failed",
+          detail: `git merge-file failed in the project folder: ${ran.stderr.trim() || `exit ${ran.code}`}.`,
+        });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+};
+
+/** The refusal of a rebase that met a commit changing the same lines of `rel`. */
+const rebaseConflict = (rel: string) =>
+  problem(409, {
+    code: REBASE_CONFLICT,
+    detail: `${rel} changed since this change read it, on lines it touches too: read it again and make the change once more.`,
+  });
+
+/** A file's words as commit `base` held them and as `now` holds them; git's refusal when it cannot say. */
+const bothAt = async (root: string, base: string, now: string, rel: string) => {
+  const was = await textAt(root, base, rel);
+  if (was instanceof ElysiaStatus) {
+    return was;
+  }
+  const theirs = await textAt(root, now, rel);
+  return theirs instanceof ElysiaStatus ? theirs : { was, theirs };
+};
+
+/** A file to write, as one change put it on `base` and {@link rebased} puts it on `now`. */
+interface Write {
+  bytes: Uint8Array;
+  rel: string;
+}
+
+/** One write rebased from `base` onto `now`: what to write, `kept` when `now` holds the change already, or the refusal. */
+const rebasedWrite = async (
+  root: string,
+  base: string,
+  now: string,
+  write: Write
+) => {
+  const at = await bothAt(root, base, now, write.rel);
+  if (at instanceof ElysiaStatus) {
+    return at;
+  }
+  const { was, theirs } = at;
+  const ours = Buffer.from(write.bytes).toString("utf8");
+  if (theirs === was) {
+    return write;
+  }
+  if (theirs === ours || ours === was) {
+    return "kept" as const;
+  }
+  const merged =
+    was === undefined || theirs === undefined
+      ? undefined
+      : await mergedText(root, ours, was, theirs);
+  if (merged instanceof ElysiaStatus) {
+    return merged;
+  }
+  return merged === undefined
+    ? rebaseConflict(write.rel)
+    : { rel: write.rel, bytes: Buffer.from(merged) };
+};
+
+/** One delete rebased from `base` onto `now`: the path, `kept` when `now` has no such file, or the refusal when `now` changed it. */
+const rebasedDelete = async (
+  root: string,
+  base: string,
+  now: string,
+  rel: string
+) => {
+  const at = await bothAt(root, base, now, rel);
+  if (at instanceof ElysiaStatus) {
+    return at;
+  }
+  if (at.theirs === undefined) {
+    return "kept" as const;
+  }
+  return at.theirs === at.was ? rel : rebaseConflict(rel);
+};
+
+/**
+ * A change made on the files as commit `base` held them, rebased onto HEAD,
+ * inside the folder's turn: unchanged when HEAD is still `base`; else each
+ * write is `git merge-file`'s three-way merge of its words, `base`'s and
+ * HEAD's (what HEAD changed and it did not, it keeps), and each delete
+ * stands only on a file HEAD left as `base` held it. Refused
+ * {@link REBASE_CONFLICT} when both changed the same lines, so no change is
+ * ever written over a newer commit.
+ */
+const rebased = async (
+  root: string,
+  base: string,
+  change: { deletes: string[]; writes: Write[] }
+) => {
+  const now = await headCommit(root);
+  if (now === base) {
+    return change;
+  }
+  const writes: Write[] = [];
+  for (const write of change.writes) {
+    const landed = await rebasedWrite(root, base, now, write);
+    if (landed instanceof ElysiaStatus) {
+      return landed;
+    }
+    if (landed !== "kept") {
+      writes.push(landed);
+    }
+  }
+  const deletes: string[] = [];
+  for (const rel of change.deletes) {
+    const landed = await rebasedDelete(root, base, now, rel);
+    if (landed instanceof ElysiaStatus) {
+      return landed;
+    }
+    if (landed !== "kept") {
+      deletes.push(landed);
+    }
+  }
+  return { writes, deletes };
+};
 
 /** {@link FolderWriteOptions.exclusive}. */
 export type Exclusive = (name: string, rel: string) => boolean;
@@ -1285,14 +1457,14 @@ export const writeFolderFile = async (
       detail: "Name a file to write, like tasks/T-1.md.",
     });
   }
-  const bytes = typeof content === "string" ? Buffer.from(content) : content;
-  if (bytes.byteLength > FOLDER_FILE_LIMIT) {
+  const asGiven = typeof content === "string" ? Buffer.from(content) : content;
+  if (asGiven.byteLength > FOLDER_FILE_LIMIT) {
     return problem(413, {
       code: "folder-write-too-large",
-      detail: `The file is ${size(bytes.byteLength)}; writes stop at ${size(FOLDER_FILE_LIMIT)}.`,
+      detail: `The file is ${size(asGiven.byteLength)}; writes stop at ${size(FOLDER_FILE_LIMIT)}.`,
     });
   }
-  const unfit = guarded(rel, bytes);
+  const unfit = guarded(rel, asGiven);
   if (unfit) {
     return unfit;
   }
@@ -1302,6 +1474,13 @@ export const writeFolderFile = async (
   }
   const { asked, root } = to;
   const written = await inFolderTurn(projectId, root, async () => {
+    const bytes = await bytesOnHead(root, options.base, rel, asGiven);
+    if (bytes === "kept") {
+      return await keptOnHead(root, rel);
+    }
+    if (bytes instanceof ElysiaStatus) {
+      return bytes;
+    }
     const target = await fileToWrite(root, rel);
     if (target instanceof ElysiaStatus) {
       return target;
@@ -1348,6 +1527,33 @@ export const writeFolderFile = async (
     deleted: [],
   });
   return written;
+};
+
+/** One file's `bytes`, written on the files as `base` held them, as they land on HEAD ({@link rebased}): `kept` when HEAD holds the change already. No base, as given. */
+const bytesOnHead = async (
+  root: string,
+  base: string | undefined,
+  rel: string,
+  bytes: Uint8Array
+) => {
+  if (!base) {
+    return bytes;
+  }
+  const onHead = await rebased(root, base, {
+    writes: [{ rel, bytes }],
+    deletes: [],
+  });
+  if (onHead instanceof ElysiaStatus) {
+    return onHead;
+  }
+  const landed: Write | undefined = onHead.writes[0];
+  return landed ? landed.bytes : ("kept" as const);
+};
+
+/** A write rebased onto HEAD that HEAD held already: no commit, HEAD answered. */
+const keptOnHead = async (root: string, rel: string) => {
+  const sha = await head(root);
+  return sha instanceof ElysiaStatus ? sha : { path: rel, sha, changed: false };
 };
 
 /** Several files written together, as {@link writeFolderFiles} landed them. */
@@ -1637,12 +1843,29 @@ export const changeFolderFiles = async (
       detail: `${both} is both written and deleted; name it once.`,
     });
   }
-  const rels = [...written, ...deletes];
   const root = projectRoot(projectId);
   if (root instanceof ElysiaStatus) {
     return root;
   }
-  const changed = await inFolderTurn(projectId, root, () => {
+  const { base } = options;
+  const changed = await inFolderTurn(projectId, root, async () => {
+    const onHead = base
+      ? await rebased(root, base, { writes, deletes })
+      : { writes, deletes };
+    if (onHead instanceof ElysiaStatus) {
+      return onHead;
+    }
+    const rels = [
+      ...onHead.writes.map((write) => write.rel),
+      ...onHead.deletes,
+    ];
+    if (rels.length === 0) {
+      // Rebased onto HEAD, the change was there already.
+      const sha = await head(root);
+      return sha instanceof ElysiaStatus
+        ? sha
+        : { onHead, commits: { sha, changed: false, paths: [] } };
+    }
     /** What each path held before, to put back if anything fails. */
     const before = new Map<string, Buffer | undefined>();
     return orPutBack(
@@ -1651,7 +1874,7 @@ export const changeFolderFiles = async (
       async () => {
         const placed = await placeChange(
           root,
-          { writes, deletes },
+          onHead,
           before,
           options.exclusive
         );
@@ -1668,22 +1891,23 @@ export const changeFolderFiles = async (
         if (done instanceof ElysiaStatus) {
           return done;
         }
-        for (const rel of deletes) {
+        for (const rel of onHead.deletes) {
           await pruneEmpty(root, dirname(join(root, rel)));
         }
         const commits: FolderCommits = { ...done, paths: rels };
-        return commits;
+        return { onHead, commits };
       }
     );
   });
   if (changed instanceof ElysiaStatus) {
     return changed;
   }
+  const { onHead, commits } = changed;
   tellCommitted(projectId, {
-    written: changed.changed ? [...written] : [],
-    deleted: deletes,
+    written: commits.changed ? onHead.writes.map((write) => write.rel) : [],
+    deleted: onHead.deletes,
   });
-  return changed;
+  return commits;
 };
 
 /** Removes the now-empty folders above a deleted file, up to the root. */

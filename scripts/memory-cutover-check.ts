@@ -22,8 +22,11 @@
  * `knowledge/` only from the places in {@link C3_WRITERS}: memory-run.ts
  * (the nightly run, and `ruleAsked`, a rule a session changes at once
  * through `memory_rule`), and memory.ts's
- * `makeNote` (the person's own note). A call's path arguments are read for
- * those names.
+ * `makeNote` (the person's own note, its write `notedInIndex`). A call's path arguments are read for
+ * those names. Each of them reads the files at the folder's HEAD and passes
+ * that commit as the write's `base`, so project-folder.ts rebases the change
+ * onto HEAD and refuses it, writing nothing, when another commit changed
+ * the same lines: git keeps one writer from writing over another.
  *
  * C6, one checked change. `new CheckedOp(` (memory-lessons.ts), the only
  * change `applyOp` takes, is made only in memory-run.ts, where every rule of
@@ -73,8 +76,8 @@ const C3_WRITERS: readonly { file: string; fn: string; who: string }[] = [
   },
   {
     file: "packages/hub/src/memory.ts",
-    fn: "makeNote",
-    who: "the person's own Make a note, into the index's Notes",
+    fn: "notedInIndex",
+    who: "makeNote's write: the person's own Make a note, into the index's Notes, read at HEAD and committed on it",
   },
 ];
 /** A path argument that names a memory file: by its words, or by the names the code gives them. */

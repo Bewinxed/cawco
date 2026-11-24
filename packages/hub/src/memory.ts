@@ -18,7 +18,11 @@
  *   (`memory_rule`, memory-run.ts `ruleAsked`), which removes, rewords or
  *   adds one at once; the person's Make a note (`makeNote`), into the
  *   index's `## Notes`, which the run never changes; a session's note
- *   (`note`), into the inbox.
+ *   (`note`), into the inbox. Each reads the files at the folder's HEAD
+ *   and commits on HEAD, rebased onto it when it moved since
+ *   (project-folder.ts `rebased`); a rebase that meets a commit changing
+ *   the same lines writes nothing, and the writer makes its change again
+ *   from the files as they stand.
  * - **Notes** (`memory_note`, and `cawco tool memory_note`): an agent's
  *   words into the inbox, with who wrote them, in what role and kind of
  *   session, for which task and when. Their labels are the hub's word,
@@ -89,9 +93,12 @@ import {
 import {
   folderFileNames,
   folderFilePaths,
+  folderHead,
   folderPath,
   listFolder,
+  REBASE_CONFLICT,
   readFolderFile,
+  readFolderFileAt,
   writeFolderFile,
   YOU,
 } from "./project-folder";
@@ -103,10 +110,12 @@ import { listOf, scalarOf } from "./task-file";
 import { readsWeb, type WebContext } from "./web-reads";
 import { isRoutineParent } from "./work-item-state";
 
-export const MEMORY_DIR = "memory";
+const MEMORY_DIR = "memory";
 export const INBOX_DIR = "memory/inbox";
 export const ARCHIVE_DIR = "memory/archive";
 
+/** How many times "Make a note" goes into AGENTS.md as it stands, when commits change the same lines under it. */
+const NOTE_TRIES = 3;
 /** The longest note an agent writes, and the longest "Make a note". */
 const NOTE_LIMIT = 4000;
 /** What one brief carries of all its context together; each file's share is the file budget (config.ts). */
@@ -1222,15 +1231,36 @@ export const createMemory = ({
         detail: `The note is ${words.length} characters long; a note stops at ${NOTE_LIMIT}.`,
       });
     }
-    const before = await fileOr(projectId, INDEX_FILE);
-    if (before instanceof ElysiaStatus) {
-      return before;
+    const notedInIndex = async () => {
+      // Read at HEAD and committed on it: rebased when HEAD moves first.
+      const base = await folderHead(projectId);
+      if (base instanceof ElysiaStatus) {
+        return base;
+      }
+      const before = base
+        ? ((await readFolderFileAt(projectId, base, INDEX_FILE)) ?? "")
+        : await fileOr(projectId, INDEX_FILE);
+      if (before instanceof ElysiaStatus) {
+        return before;
+      }
+      return await writeFolderFile(
+        projectId,
+        INDEX_FILE,
+        withNote(project.name, before, words),
+        { author: YOU, message: "AGENTS.md: a note from you", base }
+      );
+    };
+    let written = await notedInIndex();
+    // A commit since the read changed the same lines: the note goes into AGENTS.md as it stands.
+    for (
+      let tries = 1;
+      tries < NOTE_TRIES &&
+      written instanceof ElysiaStatus &&
+      written.response.code === REBASE_CONFLICT;
+      tries += 1
+    ) {
+      written = await notedInIndex();
     }
-    const after = withNote(project.name, before, words);
-    const written = await writeFolderFile(projectId, INDEX_FILE, after, {
-      author: YOU,
-      message: "AGENTS.md: a note from you",
-    });
     if (written instanceof ElysiaStatus) {
       return written;
     }

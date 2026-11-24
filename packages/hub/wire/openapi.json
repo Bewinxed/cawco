@@ -55626,6 +55626,7 @@
           "folder-place-taken",
           "folder-project-id-unfit",
           "folder-read-folder",
+          "folder-rebase-conflict",
           "folder-write-none",
           "folder-write-onto-folder",
           "folder-write-too-large",
@@ -70497,6 +70498,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "folder-rebase-conflict"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-write-onto-folder"
                 ]
               },
@@ -71643,6 +71680,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -74826,6 +74899,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -81514,6 +81623,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -100577,6 +100722,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "folder-rebase-conflict"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-write-onto-folder"
                 ]
               },
@@ -101966,6 +102147,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -119722,6 +119939,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "folder-rebase-conflict"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-write-onto-folder"
                 ]
               },
@@ -125760,6 +126013,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "folder-rebase-conflict"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-write-onto-folder"
                 ]
               },
@@ -127281,6 +127570,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -129553,6 +129878,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -144891,6 +145252,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "folder-rebase-conflict"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-write-onto-folder"
                 ]
               },
@@ -148461,6 +148858,7 @@
                   "folder-place-taken",
                   "folder-project-id-unfit",
                   "folder-read-folder",
+                  "folder-rebase-conflict",
                   "folder-write-none",
                   "folder-write-onto-folder",
                   "folder-write-too-large",
@@ -148649,6 +149047,7 @@
                   "folder-place-taken",
                   "folder-project-id-unfit",
                   "folder-read-folder",
+                  "folder-rebase-conflict",
                   "folder-write-none",
                   "folder-write-onto-folder",
                   "folder-write-too-large",
@@ -148837,6 +149236,7 @@
                   "folder-place-taken",
                   "folder-project-id-unfit",
                   "folder-read-folder",
+                  "folder-rebase-conflict",
                   "folder-write-none",
                   "folder-write-onto-folder",
                   "folder-write-too-large",
@@ -149121,6 +149521,7 @@
                   "folder-place-taken",
                   "folder-project-id-unfit",
                   "folder-read-folder",
+                  "folder-rebase-conflict",
                   "folder-write-none",
                   "folder-write-onto-folder",
                   "folder-write-too-large",
@@ -152663,6 +153064,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "folder-rebase-conflict"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-write-onto-folder"
                 ]
               },
@@ -155437,6 +155874,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -160622,6 +161095,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -168611,6 +169120,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "folder-rebase-conflict"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-write-onto-folder"
                 ]
               },
@@ -170276,6 +170821,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -172362,6 +172943,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -180982,6 +181599,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "folder-rebase-conflict"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-write-onto-folder"
                 ]
               },
@@ -184483,6 +185136,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "folder-rebase-conflict"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-write-onto-folder"
                 ]
               },
@@ -186709,6 +187398,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "folder-rebase-conflict"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-write-onto-folder"
                 ]
               },
@@ -188158,6 +188883,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -193970,6 +194731,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "folder-rebase-conflict"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-write-onto-folder"
                 ]
               },
@@ -196164,6 +196961,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -202304,6 +203137,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "folder-rebase-conflict"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-write-onto-folder"
                 ]
               },
@@ -203969,6 +204838,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -211243,6 +212148,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "folder-rebase-conflict"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-write-onto-folder"
                 ]
               },
@@ -213647,6 +214588,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "folder-rebase-conflict"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-write-onto-folder"
                 ]
               },
@@ -215392,6 +216369,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -217792,6 +218805,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -222655,6 +223704,42 @@
                 "type": "string",
                 "enum": [
                   "folder-place-taken"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -230963,6 +232048,42 @@
               "code": {
                 "type": "string",
                 "enum": [
+                  "folder-rebase-conflict"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
                   "folder-write-onto-folder"
                 ]
               },
@@ -231999,6 +233120,42 @@
                 "type": "string",
                 "enum": [
                   "folder-place-taken"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
@@ -233191,6 +234348,42 @@
                 "type": "string",
                 "enum": [
                   "folder-read-folder"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "status": {
+                "type": "number",
+                "enum": [
+                  409
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "detail",
+              "status",
+              "title",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "folder-rebase-conflict"
                 ]
               },
               "detail": {
