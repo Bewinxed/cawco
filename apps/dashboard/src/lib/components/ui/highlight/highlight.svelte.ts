@@ -916,15 +916,16 @@ export function highlight(options: HighlightOptions) {
       // On the device-pixel grid, as the row's own box is painted: a layer
       // placed by a fractional translate draws its 1px edge across two
       // pixels, a soft line beside the row's crisp one (a card at x 1026.3
-      // drew the frame's brand edge at 73%). Each edge goes outward, the
-      // start down and the end up, so the layer covers the whole row:
-      // rounded each to the nearest, a row on a half pixel (a message well,
-      // 0.5px in) had both edges taken inward and its ghost drew a pixel
-      // narrower. An edge already on the grid, give or take a float's
-      // residue (`ON_GRID`), stays where it is.
+      // drew the frame's brand edge at 73%). Each edge snaps to the nearest
+      // device pixel, half up, as the engine snaps a box it paints (its
+      // start rounded, its end rounded): so the layer stands on exactly the
+      // pixels the row does. Taken outward instead, a row at y 327.95 (a
+      // popover placed on a fraction) had its ghost start a whole pixel
+      // above it, over the row before, a hard line along its top (owner,
+      // pin 55); a row on a half pixel moves a pixel whole, width kept.
       const ratio = window.devicePixelRatio;
-      const start = (v: number) => Math.floor(v * ratio + ON_GRID) / ratio;
-      const end = (v: number) => Math.ceil(v * ratio - ON_GRID) / ratio;
+      const start = (v: number) => Math.round(v * ratio) / ratio;
+      const end = start;
       const left = start(rect.left - slid.x);
       const top = start(rect.top - slid.y);
       const at = toLocal(left, top);

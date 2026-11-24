@@ -3,8 +3,9 @@
  * itself in the shapes the product waits in. The meta's args are every
  * story's; a story's own args are what it changes.
  */
-import BoneyardFrame from "./boneyard-frame.svelte";
+
 import Skeleton from "./skeleton.svelte";
+import SkeletonOfFrame from "./skeleton-of-frame.svelte";
 
 export default {
   title: "Kit/Skeleton",
@@ -26,23 +27,14 @@ export const Card = {
   args: { height: "card", width: "title", radius: "card" },
 };
 
-/**
- * A trial of boneyard: a list of rows waiting, its bones taken from the
- * real rows.
- */
-export const BoneyardRows = {
-  component: BoneyardFrame,
+/** A list of rows waiting, its bones taken from the real rows. */
+export const RowsWaiting = {
+  component: SkeletonOfFrame,
   args: { piece: "rows" },
 };
 
-/** A trial of boneyard: a session's card waiting, its bones taken from the real card. */
-export const BoneyardCard = {
-  component: BoneyardFrame,
+/** A session's card waiting, its bones taken from the real card. */
+export const CardWaiting = {
+  component: SkeletonOfFrame,
   args: { piece: "card" },
-};
-
-/** The same card's bones under a shimmer instead of a pulse. */
-export const BoneyardCardShimmer = {
-  component: BoneyardFrame,
-  args: { piece: "card", animate: "shimmer" },
 };
