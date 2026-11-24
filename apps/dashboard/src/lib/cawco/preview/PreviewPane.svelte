@@ -913,7 +913,10 @@
       {draft}
       link={pinThread.pinLink(pin.number)}
       live={pinThread.live.has(pin.id)}
-      name={pin.movedAt ? commentWords.elementGone : pinName(pin)}
+      name={pin.movedAt
+        ? commentWords.offPage[paneDoc.awayOf(pin.id)?.why ?? "gone"]
+        : pinName(pin)}
+      away={paneDoc.awayOf(pin.id)}
       back={pushed
         ? { to: commentWords.comments, onback: pinThread.backToList }
         : undefined}
@@ -1085,6 +1088,7 @@
     }}
     open={pinThread.openPin}
     whyNotSent={paneSend.notSentWhy}
+    awayOf={paneDoc.awayOf}
     pins={paneDoc.pins}
     retrying={paneSend.pinsRetrying}
     unread={pinThread.unread}

@@ -4,6 +4,7 @@
  * The app keeps its own until its parity with the rail (words/artifacts.ts
  * holds the words both say). The dashboard renders them from here.
  */
+import type { MadeView } from "../comments/made-view";
 import { commonWords } from "./common";
 
 /** A reason's own full stop, which the line that quotes it puts back. */
@@ -20,7 +21,22 @@ export const commentWords = {
   composeHint: { full: "What should change?", short: "What should change?" },
   comment: "Comment",
   wholePage: "Whole page",
-  elementGone: "Element gone",
+  /**
+   * A pin off the page, named by why: its element gone (the doc's moved, or
+   * gone from this view's page), found but hidden in this view (a closed
+   * section, a `display: none`), or made in a view this one lays the page
+   * out otherwise than (another width, scheme or story).
+   */
+  offPage: {
+    gone: "Element gone",
+    hidden: "Element hidden",
+    elsewhere: "Not in this view",
+  },
+  /** The card's line for a pin whose element this view hides. */
+  hiddenHere: "Its element is hidden in this view.",
+  /** The card's line for a pin made in another view: that view's width and scheme. */
+  madeElsewhere: (width: number | null, scheme: MadeView["scheme"]) =>
+    `Pinned in a view ${width === null ? "of its own width" : `${width} px wide`}${scheme === "page" ? "" : `, ${scheme}`}. This one lays the page out otherwise.`,
   // The thread beside its pin.
   replyHint: { full: "Reply", short: "Reply" },
   reopenHint: { full: "Reply to reopen", short: "Reply to reopen" },

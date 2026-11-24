@@ -314,6 +314,9 @@ export class PageWire {
       case "cawco:page-pins":
         paneDoc.heardPagePins(message);
         break;
+      case "cawco:pins-unplaced":
+        paneDoc.heardUnplaced(message);
+        break;
       case "cawco:sync":
         paneDoc.heardSync(message);
         break;

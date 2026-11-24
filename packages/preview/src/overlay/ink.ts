@@ -79,6 +79,7 @@ import {
   rectOf,
   sizesIn,
 } from "./frames";
+import { drawnHere } from "./made-view";
 import type { Pins } from "./pins-types";
 import type { InkChrome, Pick } from "./radial";
 import { scrollerRound, scrollsContent } from "./scrollers";
@@ -1360,6 +1361,38 @@ export function startInk(deps: InkDeps): Ink {
     return gone;
   };
 
+  /**
+   * Of the groups as located, those whose element stands otherwise now,
+   * anchored again ({@link rereadOn}); and where each found group stands,
+   * on an element drawn here: one found but drawn in no box stands nowhere
+   * in this view, never at the page's origin ({@link drawnHere}).
+   */
+  function standsOf(
+    located: {
+      by: AnchorFound<Element>["by"];
+      el: Element | null;
+      group: InkGroup;
+    }[]
+  ) {
+    const found: InkGroup[] = [];
+    const standing = new Set<Element>();
+    const stands: Stand[] = [];
+    for (const { group, el, by } of located) {
+      if (!el) {
+        continue;
+      }
+      const reread = rereadOn(group, el, by);
+      if (reread) {
+        found.push(reread);
+      }
+      if (drawnHere(el)) {
+        stands.push(standOf(group, el));
+        standing.add(el);
+      }
+    }
+    return { found, standing, stands };
+  }
+
   function draw() {
     placed.clear();
     clips.clear();
@@ -1389,20 +1422,7 @@ export function startInk(deps: InkDeps): Ink {
       return { group, el: found?.el ?? null, by: found?.by ?? "selector" };
     });
     const gone = goneOf(located);
-    const found: InkGroup[] = [];
-    const standing = new Set<Element>();
-    const stands: Stand[] = [];
-    for (const { group, el, by } of located) {
-      if (!el) {
-        continue;
-      }
-      const reread = rereadOn(group, el, by);
-      if (reread) {
-        found.push(reread);
-      }
-      stands.push(standOf(group, el));
-      standing.add(el);
-    }
+    const { found, standing, stands } = standsOf(located);
     forgetDrawn(new Set(stands.map((stand) => stand.group.id)));
     for (const stand of stands) {
       paintGroup(stand, brand);

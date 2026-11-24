@@ -2,6 +2,7 @@
  * The artifact's live document as this pane holds it: its pins beside the page's own, the writes the hub refused, and the state of the links to the hub.
  */
 
+import { type Unplaced, unplacedOf } from "@cawco/core/comments/made-view";
 import {
   keepAside,
   type Pin,
@@ -134,13 +135,27 @@ export class PaneDoc {
    */
   pageReplies = $state.raw<RefusedReplies>({});
 
+  /**
+   * The pins the page doesn't draw on their element, and why, as the page
+   * read them in its own view (overlay pins.ts `cawco:pins-unplaced`): gone
+   * from the page as it draws it, hidden there, or made in a view it draws
+   * the page otherwise than. Each stands in the moved tray beside those the
+   * doc holds moved ({@link pins}); none of it is written to the doc, whose
+   * moved marks the one view the hub names writes.
+   */
+  pageUnplaced = $state.raw<Record<string, Unplaced & { at: string }>>({});
+
   readonly pins = $derived.by(() => {
     const held = (this.view?.pins ?? []).map((pin) => {
       const thread = withKeptReplies(pin.thread, [
         ...(this.refusedReplies[pin.id]?.entries ?? []),
         ...(this.pageReplies[pin.id]?.entries ?? []),
       ]);
-      return thread === pin.thread ? pin : { ...pin, thread };
+      // Not drawn on its element in the page's view: it stands with the moved, read here alone.
+      const away = pin.movedAt ? undefined : this.pageUnplaced[pin.id];
+      return thread === pin.thread && !away
+        ? pin
+        : { ...pin, thread, ...(away ? { movedAt: away.at } : {}) };
     });
     const known = new Set(held.map((pin) => pin.id));
     const more = Object.values(this.pagePins).filter(
@@ -150,6 +165,12 @@ export class PaneDoc {
       ? [...held, ...more].sort((a, b) => a.number - b.number)
       : held;
   });
+
+  /** Why the page doesn't draw pin `id` on its element in its own view ({@link pageUnplaced}); undefined where it does, or the doc holds it moved. */
+  readonly awayOf = (id: string): Unplaced | undefined =>
+    this.view?.pins.some((pin) => pin.id === id && pin.movedAt)
+      ? undefined
+      : this.pageUnplaced[id];
 
   /** Whether pin `id` stands only in the page's doc yet: written through the page's own messages, as the app's are. */
   readonly onlyOnPage = (id: string) =>
@@ -299,6 +320,7 @@ export class PaneDoc {
       this.pageSilent = false;
       this.pagePins = {};
       this.pageReplies = {};
+      this.pageUnplaced = {};
       this.pageWords.clear();
       this.refusedReplies = readJson(
         refusedKey(id),
@@ -458,6 +480,17 @@ export class PaneDoc {
         this.pageSays(pin.id, pin);
       }
     }
+  }
+
+  /** The pins the page said it doesn't draw, and why (`cawco:pins-unplaced`), every one each time: each keeps when it was first heard so. */
+  heardUnplaced(message: Record<string, unknown>) {
+    const at = new Date().toISOString();
+    this.pageUnplaced = Object.fromEntries(
+      Object.entries(unplacedOf(message.pins)).map(([id, one]) => [
+        id,
+        { ...one, at: this.pageUnplaced[id]?.at ?? at },
+      ])
+    );
   }
 
   /** The page's doc's link to the hub (overlay artifact.ts `Link`): a lost one is said once it has stood, or at once when lost to silence (`cawco:sync`). */

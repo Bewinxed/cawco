@@ -116,7 +116,7 @@ export const PREVIEW_SCHEMES = ["page", "light", "dark", "both"] as const;
 type PreviewScheme = (typeof PREVIEW_SCHEMES)[number];
 
 /** The schemes one story is drawn in: one at a time, never both. */
-const STORY_SCHEMES = [
+export const STORY_SCHEMES = [
   "page",
   "light",
   "dark",

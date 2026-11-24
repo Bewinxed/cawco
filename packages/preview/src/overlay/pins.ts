@@ -67,6 +67,7 @@ import {
   type PinnedElement,
   wholePage,
 } from "@cawco/core/comments/anchor";
+import { madeViewOf, type Unplaced } from "@cawco/core/comments/made-view";
 import {
   newId,
   type Pin,
@@ -96,6 +97,7 @@ import { absences } from "./absent";
 import { artifact, PLACED } from "./artifact";
 import { type Box, clipOf, grow, meets, pageBox, rectOf } from "./frames";
 import { fitToPage, footKept, insetFoot } from "./ink";
+import { drawnHere } from "./made-view";
 import { motionOk } from "./motion";
 import type { DraftTarget, Pins } from "./pins-types";
 import { durationMs, type InkChrome } from "./radial";
@@ -130,6 +132,9 @@ const BEHIND = 2;
 const FINGER = 44;
 /** The loops a needs-you dot echoes before it stands still (DESIGN.md, Status dot). */
 const ECHOES = 3;
+
+/** A pin's element found, but drawn in no box in this view (`drawnHere`): it stands nowhere here. */
+const HIDDEN = Symbol("hidden");
 
 /** The id a parked draft's pill answers to (`data-pin-id`): a press on it opens its composer again. */
 const DRAFT_PIN = "draft";
@@ -512,11 +517,16 @@ export function startPins(deps: PinsDeps): Pins {
    * a pin the device deleted, and a write of it would stand against that
    * deletion.
    */
-  const settled = () =>
+  const settled = () => placing() && artifact.places() && artifact.stored();
+  /**
+   * Whether this page's marks stand on its elements as the agent wrote
+   * them: a page the agent wrote or a sheet of its components, laid out.
+   * Every view of one reads which of its marks it doesn't draw, and why
+   * ({@link unplacedOf}); the one view the hub names writes ({@link settled}).
+   */
+  const placing = () =>
     (artifact.kind() === "page" || artifact.kind() === "component") &&
-    artifact.places() &&
-    document.readyState !== "loading" &&
-    artifact.stored();
+    document.readyState !== "loading";
 
   /** Each placed pin: where it stands, and its pill as drawn; drawn while its frames show it. */
   const placed = new Map<string, Standing & { pill?: Pill }>();
@@ -611,20 +621,27 @@ export function startPins(deps: PinsDeps): Pins {
     };
   };
 
-  /** Where pin `pin` stands in the page now, or null when it is not on it. */
-  const spotOf = (pin: Pin): Spot | null => {
+  /** Where a pin on ink stands: past its group's box; hidden where its ink stands nowhere here and its element is drawn in no box; null where neither is found. */
+  const inkSpotOf = (pin: Pin, ink: string): Spot | typeof HIDDEN | null => {
+    const box = deps.groupBox(ink);
+    const el = anchoredEl(pin);
+    if (!box) {
+      return el && !drawnHere(el) ? HIDDEN : null;
+    }
+    return {
+      box,
+      el,
+      ink: true,
+      line: null,
+      page: false,
+      point: [box.x + box.w, box.y],
+    };
+  };
+
+  /** Where pin `pin` stands in the page now; HIDDEN where its element is found but drawn in no box here ({@link drawnHere}); null when it is not on it. */
+  const spotOf = (pin: Pin): Spot | typeof HIDDEN | null => {
     if (pin.ink) {
-      const box = deps.groupBox(pin.ink);
-      return box
-        ? {
-            box,
-            el: anchoredEl(pin),
-            ink: true,
-            line: null,
-            page: false,
-            point: [box.x + box.w, box.y],
-          }
-        : null;
+      return inkSpotOf(pin, pin.ink);
     }
     if (!("selector" in pin.anchor)) {
       return null;
@@ -634,7 +651,10 @@ export function startPins(deps: PinsDeps): Pins {
       return el ? spotOn(el, undefined) : null;
     }
     const found = deps.locate(pin.anchor);
-    return found ? spotOn(found.el, pin.point) : null;
+    if (!found) {
+      return null;
+    }
+    return drawnHere(found.el) ? spotOn(found.el, pin.point) : HIDDEN;
   };
 
   /**
@@ -1212,11 +1232,14 @@ export function startPins(deps: PinsDeps): Pins {
    */
   const placeAll = async (all: Pin[], paint: Paint) => {
     const missing: Pin[] = [];
+    const hidden: Pin[] = [];
     const onIt = (pin: Pin) => !pin.resolvedAt || pin.id === tracked;
     const spots: { pin: Pin; spot: Spot }[] = [];
     for (const pin of all.filter((one) => !one.movedAt && onIt(one))) {
       const spot = spotOf(pin);
-      if (spot) {
+      if (spot === HIDDEN) {
+        hidden.push(pin);
+      } else if (spot) {
         spots.push({ pin, spot });
       } else {
         missing.push(pin);
@@ -1228,6 +1251,7 @@ export function startPins(deps: PinsDeps): Pins {
       )
     );
     return {
+      hidden,
       missing,
       standing: spots.map(({ pin }, i) => ({ pin, where: standings[i] })),
     };
@@ -1240,7 +1264,7 @@ export function startPins(deps: PinsDeps): Pins {
    * and they have stood so for a while ({@link absences}).
    */
   const paintAll = (
-    { missing, standing }: Awaited<ReturnType<typeof placeAll>>,
+    { hidden, missing, standing }: Awaited<ReturnType<typeof placeAll>>,
     paint: Paint
   ) => {
     const drawn: DrawnPill[] = [];
@@ -1257,27 +1281,79 @@ export function startPins(deps: PinsDeps): Pins {
         });
       }
     }
+    const gone = goneOf(missing);
     return {
       layer: stacked(drawn, paint),
       fixed: stacked(drawnFixed, paint),
-      gone: goneOf(missing),
+      gone,
+      unplaced: unplacedOf(gone, hidden, missing),
     };
   };
 
   /**
    * Of the pins no anchor finds now, those gone: no frame they stand in
-   * loading, and missing a while ({@link absences}). None where a pin is
-   * never moved aside ({@link settled}: a preview of a session's app): its
+   * loading, this view drawing the page as each was made, and missing a
+   * while ({@link absences}). Read in every view of the page ({@link
+   * placing}), and written by the one the hub names ({@link settled}). None
+   * where a pin is never moved aside (a preview of a session's app): its
    * absence is not timed, so no timer draws the page again for it.
    */
   const goneOf = (missing: Pin[]): Pin[] => {
-    if (!settled()) {
+    if (!placing()) {
       absent.keep([]);
       return [];
     }
     const waited = missing.filter(goneFrom);
     absent.keep(waited.map((pin) => pin.id));
     return waited.filter((pin) => absent.missed(pin.id));
+  };
+
+  /**
+   * The pins this view doesn't draw on their element, and why, as this view
+   * alone reads them (core comments made-view.ts `Unplaced`): gone from the
+   * page as this view draws it ({@link goneOf}), found but drawn in no box
+   * here ({@link drawnHere}), or made in a view this one doesn't draw the
+   * page as (`deps.judges`), with that view. None outside a page the agent
+   * wrote or a sheet ({@link placing}), and none waiting on a frame.
+   */
+  const unplacedOf = (
+    gone: Pin[],
+    hidden: Pin[],
+    missing: Pin[]
+  ): Record<string, Unplaced> => {
+    const read: Record<string, Unplaced> = {};
+    if (!placing()) {
+      return read;
+    }
+    for (const pin of hidden) {
+      read[pin.id] = { why: "hidden" };
+    }
+    for (const pin of missing) {
+      const anchor = "selector" in pin.anchor ? pin.anchor : null;
+      const made = anchor ? madeViewOf(anchor) : undefined;
+      if (anchor && made && !deps.waiting(anchor) && !deps.judges(anchor)) {
+        read[pin.id] = { why: "elsewhere", made };
+      }
+    }
+    for (const pin of gone) {
+      read[pin.id] = { why: "gone" };
+    }
+    return read;
+  };
+
+  /** What this view last said of the pins it doesn't draw; null before its first draw said anything. */
+  let saidUnplaced: string | null = null;
+  /**
+   * The pins this view doesn't draw, and why, said to the host when they
+   * change (`cawco:pins-unplaced`): its moved tray lists them beside those
+   * the doc holds moved. A reading of this view's, written nowhere.
+   */
+  const sayUnplaced = (unplaced: Record<string, Unplaced>) => {
+    const now = JSON.stringify(unplaced);
+    if (now !== saidUnplaced) {
+      saidUnplaced = now;
+      deps.post("cawco:pins-unplaced", { pins: unplaced });
+    }
   };
 
   /** Where the comment being written stands now: on its ink, or on its element (the one the page holds now); null where neither stands. */
@@ -1465,12 +1541,13 @@ export function startPins(deps: PinsDeps): Pins {
   ) {
     placed.clear();
     let gone: Pin[] = [];
+    let unplaced: Record<string, Unplaced> = {};
     const onLayer: SVGElement[] = [];
     const onFixed: SVGElement[] = [];
     if (drawn) {
       const { draftAt, paint, pinsAt } = drawn;
       const at = paintAll(pinsAt, paint);
-      ({ gone } = at);
+      ({ gone, unplaced } = at);
       onLayer.push(...at.layer);
       onFixed.push(...at.fixed);
       const draft = drawDraft(draftAt, paint);
@@ -1483,6 +1560,9 @@ export function startPins(deps: PinsDeps): Pins {
     forgetUnheld();
     if (settled()) {
       settle(moves, gone);
+    }
+    if (drawn) {
+      sayUnplaced(unplaced);
     }
     if (focused) {
       deps.outline(placed.get(focused)?.el ?? null);

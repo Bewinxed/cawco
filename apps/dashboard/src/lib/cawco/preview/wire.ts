@@ -580,6 +580,7 @@ const PAGE_MESSAGES = [
   "cawco:resolve-result",
   "cawco:delete-result",
   "cawco:page-pins",
+  "cawco:pins-unplaced",
   "cawco:sync",
   "cawco:press",
   "cawco:pin-at",

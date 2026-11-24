@@ -1,5 +1,6 @@
 <script lang="ts">
   import { fileHash } from "@cawco/core/attachments";
+  import type { Unplaced } from "@cawco/core/comments/made-view";
   /**
    * A comment's thread, as a card beside its pin (the owner's pick; the artifact panel's surface brief,
    * A thread beside its pin). It has no head band (The Title Bars Follow
@@ -121,6 +122,7 @@
     ondraft,
     changes,
     fromChip = false,
+    away,
   }: {
     /**
      * Opened from its chip in a conversation (the transcript's popover): its
@@ -131,6 +133,8 @@
     /** What changed on the page for this comment, as its change lines under the reply (ChangeLines). */
     changes?: Snippet<[Pin]>;
     pin: Pin;
+    /** Why the page doesn't draw it on its element in its own view (pane-doc `awayOf`); none where the doc's moved mark says it, or it stands on the page. */
+    away?: Unplaced;
     /** What it stands on, in words (core pin-name.ts). */
     name: string;
     /** Its element's nearest parent, in words; none for the whole page. */
@@ -367,6 +371,18 @@
     asked = id;
   });
 
+  /** Why it stands off the page, said once: its element gone, hidden in this view, or drawn only in the view it was made in. */
+  const goneLine = $derived.by(() => {
+    switch (away?.why) {
+      case "hidden":
+        return said.hiddenHere;
+      case "elsewhere":
+        return said.madeElsewhere(away.made.width, away.made.scheme);
+      case "gone":
+      case undefined:
+        return words.pinElementGone;
+    }
+  });
   /** ⋯'s actions: Copy link, and Pin it somewhere else while its element is gone; each with its glyph as a row (duotone) and as a bar's symbol (linear), where one stands alone in the bar. */
   const moreActions = $derived([
     {
@@ -666,7 +682,7 @@
       class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
     >
       <p class="m-0 min-w-0 text-ink-row" role="status">
-        {placing ? said.placeHere : words.pinElementGone}
+        {placing ? said.placeHere : goneLine}
       </p>
       <Button
         label={placing ? "Cancel" : said.placeElsewhere}

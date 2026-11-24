@@ -14,11 +14,12 @@
  * script asks `matchMedia`) holds a threshold between them: a condition
  * between them may answer each otherwise, one with none answers both
  * alike. The thresholds are read, never answered, so any length a width
- * condition names counts, the edges included. A view that reads the page
- * otherwise only waits: a view that draws it as made writes for the mark
- * once the hub names it to place the marks.
+ * condition names counts, the edges included. A view that draws the page
+ * otherwise writes nothing for the mark: it lists the mark as one made in
+ * another view ({@link Unplaced}), and a view that draws the page as made
+ * writes for it once the hub names it to place the marks.
  */
-import type { PageAnchor } from "./anchor";
+import { type PageAnchor, STORY_SCHEMES } from "./anchor";
 
 /** A view as a mark was made in it, or as a view draws the page now: its width (px; null when unknown) and its scheme. */
 export interface MadeView {
@@ -30,6 +31,58 @@ export interface MadeView {
 export const madeViewOf = (anchor: PageAnchor): MadeView | undefined => {
   const state = anchor.sheet?.state;
   return state ? { scheme: state.scheme, width: state.width } : anchor.view;
+};
+
+/**
+ * A mark a view doesn't draw on its element, and why, as that view alone
+ * reads it: its element is gone from the page as this view draws it as
+ * made (`gone`); its element is found but drawn in no box here, under a
+ * `display: none`, a `content-visibility: hidden` or a closed `<details>`
+ * (`hidden`); or this view draws the page otherwise than the mark was made
+ * in (`elsewhere`, with that view). Read off the page each draw and said
+ * to its host (overlay pins.ts, `cawco:pins-unplaced`), which lists it
+ * with the moved marks; nothing of it is written to the doc.
+ */
+export type Unplaced =
+  { why: "gone" } | { why: "hidden" } | { made: MadeView; why: "elsewhere" };
+
+/** One {@link Unplaced} as a message carried it, or null when it reads as none. */
+const unplacedOne = (value: unknown): Unplaced | null => {
+  if (typeof value !== "object" || value === null || !("why" in value)) {
+    return null;
+  }
+  if (value.why === "gone" || value.why === "hidden") {
+    return { why: value.why };
+  }
+  const made = "made" in value ? value.made : null;
+  if (
+    value.why !== "elsewhere" ||
+    typeof made !== "object" ||
+    made === null ||
+    !("scheme" in made && "width" in made) ||
+    !(made.width === null || typeof made.width === "number")
+  ) {
+    return null;
+  }
+  const scheme = STORY_SCHEMES.find((one) => one === made.scheme);
+  return scheme
+    ? { why: "elsewhere", made: { scheme, width: made.width } }
+    : null;
+};
+
+/** The marks a page said it doesn't draw (`cawco:pins-unplaced`), by id; each that reads as none left out. */
+export const unplacedOf = (value: unknown): Record<string, Unplaced> => {
+  const read: Record<string, Unplaced> = {};
+  if (typeof value !== "object" || value === null) {
+    return read;
+  }
+  for (const [id, one] of Object.entries(value)) {
+    const unplaced = unplacedOne(one);
+    if (unplaced) {
+      read[id] = unplaced;
+    }
+  }
+  return read;
 };
 
 /** A condition that asks a width: the viewport's (`width`, `min-width`, `max-width`, range syntax) or a container's (`inline-size` too); never `device-width`. */

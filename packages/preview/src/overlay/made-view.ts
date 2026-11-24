@@ -19,6 +19,16 @@ import { eachRule } from "@cawco/core/scheme-media";
 import { markOf } from "./boot";
 
 /**
+ * Whether `el` is drawn in a box of its own in this view: none under a
+ * `display: none`, or in what a `content-visibility: hidden` or a closed
+ * `<details>` skips (`checkVisibility`, CSSOM View), and none where it lays
+ * out no box (`getClientRects`). A mark stands only on what is drawn: a box
+ * of none is the page's origin.
+ */
+export const drawnHere = (el: Element): boolean =>
+  el.getClientRects().length > 0 && el.checkVisibility();
+
+/**
  * A drawing's width on a sheet: its own (`data-cawco-width`), else its body
  * as laid out (unscaled by a card's zoom), null when it lays out none.
  */

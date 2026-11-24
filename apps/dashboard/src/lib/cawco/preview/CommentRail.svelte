@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Unplaced } from "@cawco/core/comments/made-view";
   import { type Pin, pinHeld } from "@cawco/core/comments/model";
   import { parse } from "@cawco/core/find-match";
   import { pinName } from "@cawco/core/pin-name";
@@ -136,6 +137,7 @@
     onretrypin,
     onshown,
     whyNotSent = () => null,
+    awayOf = () => undefined,
     filter = $bindable("open"),
     sort = $bindable("newest"),
     scroll = $bindable(0),
@@ -189,6 +191,8 @@
     onshown?: (ids: string[]) => void;
     /** Why a comment hasn't reached the session, in words, when its delivery reached no one or it stands only on the page; null while it is on its way. */
     whyNotSent?: (pin: Pin) => string | null;
+    /** Why the page doesn't draw a pin on its element in its own view (pane-doc `awayOf`); undefined where the doc's moved mark says it. */
+    awayOf?: (id: string) => Unplaced | undefined;
     filter?: RailList;
     sort?: RailSort;
     scroll?: number;
@@ -685,7 +689,7 @@
               "min-w-0 truncate type-body font-medium",
               gone ? "text-ink-subtle" : "text-ink-strong",
             ]}
-            >{#each segments(gone ? said.elementGone : pinName(pin)) as part, at (at)}{#if part.hit}<mark
+            >{#each segments(gone ? said.offPage[awayOf(pin.id)?.why ?? "gone"] : pinName(pin)) as part, at (at)}{#if part.hit}<mark
                   class="bg-selection text-inherit rounded-xs">{part.text}</mark
                 >{:else}{part.text}{/if}{/each}</span
           >
