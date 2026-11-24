@@ -441,13 +441,13 @@
   }
 </script>
 
-<!-- `data-bare`: it stands in a surface of its own (the composer's), which draws its edge, fill and padding. -->
+<!-- `data-bare`: it stands in a surface of its own (the composer's), which draws its edge, fill and padding, and writes its picks through its host: it carries no `data-cawco-choice`, so a page's overlay round that surface (the design graph's stage) never stores a press on it as the page's own pick. -->
 <article
   {@attach morph()}
   class="group/card relative flex min-w-0 scroll-mt-space-4 flex-col gap-space-5 rounded-modal bg-surface-raised p-(--card-in) shadow-tile data-bare:gap-space-4 data-bare:rounded-none data-bare:bg-transparent data-bare:p-0 data-bare:shadow-none"
   data-bare={host.bare || undefined}
-  data-cawco-choice={id}
-  data-cawco-multiple={multiple ? "" : undefined}
+  data-cawco-choice={host.bare ? undefined : id}
+  data-cawco-multiple={multiple && !host.bare ? "" : undefined}
   data-slot="decision"
   id={`decision-${id}`}
 >
