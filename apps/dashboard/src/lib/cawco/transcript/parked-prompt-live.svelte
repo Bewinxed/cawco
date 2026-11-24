@@ -4,8 +4,8 @@
    * person meets it (ParkedPrompt.stories.ts): its turns, under them the
    * record of each pick already answered (ParkedRecord, at the call that
    * put it), and the real composer (Composer, the app's fleet) grown into
-   * the first pick waiting, the rest queued behind it, a question of the
-   * agent's among them.
+   * the first ask waiting: the agent's question, which holds its turn,
+   * ahead of the picks, then the oldest pick, the rest queued behind it.
    *
    * A direction's drawing is the well the composer draws it in
    * (DirectionWell); where the product frames the graph's stage page in it,
@@ -66,7 +66,7 @@
     items: ParkedItem[];
     /** Picks already answered: each record stands at its call in the turns. */
     settled?: ParkedItem[];
-    /** The agent's question waits behind the picks. */
+    /** The agent's question waits too: it holds its turn, so it comes up ahead of the picks. */
     question?: boolean;
     /** How the graph's stage draws each direction. */
     drawing?: "drawn" | "loading" | "failed";
@@ -175,10 +175,13 @@
     ];
   }
 
+  /** The agent's question still waits: it comes up first. */
+  const questionWaits = $derived(question && !asked.has("q"));
+
   const ask = $derived.by((): ComposerAsk | null => {
     const [first] = waiting;
-    const more = waiting.length - 1 + (question && !asked.has("q") ? 1 : 0);
-    if (first) {
+    const more = waiting.length - (questionWaits ? 0 : 1);
+    if (first && !questionWaits) {
       const kept = choices[first.artifact.id] ?? {};
       return {
         kind: "parked",
@@ -208,12 +211,12 @@
         onopen: nothing,
       };
     }
-    if (!question || asked.has("q")) {
+    if (!questionWaits) {
       return null;
     }
     return {
       asker: AGENT,
-      more: 0,
+      more,
       onanswer: () => {
         asked.add("q");
         return null;
