@@ -114,7 +114,7 @@ export const GROUPS: { title: string; families: Family[] }[] = [
       { file: "toggle/toggle.stories.ts", forced: true },
       { file: "toggle-group/toggle-group.stories.ts", forced: true },
       { file: "icon-toggle/icon-toggle.stories.ts", forced: true },
-      { file: "fluid-tabs/fluid-tabs.stories.ts" },
+      { file: "tabs/tabs.stories.ts", forced: true },
     ],
   },
   {
