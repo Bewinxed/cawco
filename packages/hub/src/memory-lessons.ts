@@ -337,21 +337,6 @@ export const indexSays = (content: string): boolean => {
   );
 };
 
-/** The index with `text` added as a line of his `## Notes` (Make a note). */
-export const withNote = (
-  projectName: string,
-  content: string,
-  text: string
-): string => {
-  const [first = "", ...rest] = text.trim().split("\n");
-  const shaped = indexShape(projectName, content);
-  return replaceSection(shaped, NOTES, [
-    ...indexSections(shaped).notes,
-    `- ${first.trim()}`,
-    ...rest.map((more) => `  ${more}`),
-  ]);
-};
-
 /** `content` (in the index's shape) with section `name`'s lines replaced by `lines`. */
 const replaceSection = (
   content: string,

@@ -28,7 +28,7 @@
  * commit queue (project-folder.ts `changeFolderInTurn`), so no writer
  * writes over another: `changeFolderInTurn` is called only from the places
  * in {@link C3_WRITERS} (memory-run.ts: the nightly run, its upkeep and
- * `memory_rule`; memory.ts), and `writeFolderFile`, `writeFolderFiles` and
+ * `memory_rule`), and `writeFolderFile`, `writeFolderFiles` and
  * `changeFolderFiles` are never called with a path under those names (a
  * call's path arguments are read for them).
  *
@@ -89,11 +89,6 @@ const C3_WRITERS: readonly { file: string; fn: string; who: string }[] = [
     file: "packages/hub/src/memory-run.ts",
     fn: "",
     who: "every memory change: the nightly run's checked operations, its upkeep and mark, memory_rule, a note withdrawn",
-  },
-  {
-    file: "packages/hub/src/memory.ts",
-    fn: "",
-    who: "the person's own Make a note, into the index's Notes",
   },
 ];
 /** A path argument that names a memory file: by its words, or by the names the code gives them. */
@@ -327,13 +322,13 @@ const c3c6 = (): { c3: Found[]; c6: Found[] } => {
     if (C3_WRITES.has(name) && namesMemory(call, source)) {
       c3.push({
         at: `${at}${fn ? ` (${fn})` : ""}`,
-        why: "writes a memory file around the one write path: a memory change is read, worked out and committed in one turn of the folder's queue (project-folder.ts changeFolderInTurn), from memory-run.ts or memory.ts",
+        why: "writes a memory file around the one write path: a memory change is read, worked out and committed in one turn of the folder's queue (project-folder.ts changeFolderInTurn), from memory-run.ts",
       });
     }
     if (name === C3_TURN && !mayWrite(file, fn)) {
       c3.push({
         at: `${at}${fn ? ` (${fn})` : ""}`,
-        why: "commits through changeFolderInTurn outside memory-run.ts and memory.ts: a new writer of the folder in one turn joins C3_WRITERS in scripts/memory-cutover-check.ts with what it writes",
+        why: "commits through changeFolderInTurn outside memory-run.ts: a new writer of the folder in one turn joins C3_WRITERS in scripts/memory-cutover-check.ts with what it writes",
       });
     }
   }
@@ -354,5 +349,5 @@ if (found.length > 0) {
   process.exit(1);
 }
 console.log(
-  `memory-cutover-check: C1, C2, C3 and C6 hold: no part the memory left behind is named (${C1_KEPT.length} line kept for shipped builds); the person's origin is given in ${SPEAKS.length} places, read in ${READS.length}; the memory files are written through changeFolderInTurn, from memory-run.ts and memory.ts alone; the memory's lines change through applyLineChange in memory-run.ts alone`
+  `memory-cutover-check: C1, C2, C3 and C6 hold: no part the memory left behind is named (${C1_KEPT.length} line kept for shipped builds); the person's origin is given in ${SPEAKS.length} places, read in ${READS.length}; the memory files are written through changeFolderInTurn, from memory-run.ts alone; the memory's lines change through applyLineChange in memory-run.ts alone`
 );

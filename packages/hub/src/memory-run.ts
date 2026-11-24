@@ -1,7 +1,7 @@
 /**
  * A project's nightly memory run (routines.ts, target `curator`), and every
- * write to its memory files but the person's own note (memory.ts
- * `makeNote`) and an agent's note into the inbox (memory.ts `note`):
+ * write to its memory files but an agent's note into the inbox (memory.ts
+ * `note`) and the person's own edits of the folder:
  * nothing here waits for the person, and nothing reaches memory unchecked.
  *
  * - **Upkeep, no model** ({@link upkeep}): the index in its shape and every
@@ -2430,10 +2430,9 @@ export const createMemoryRun = ({
   };
 
   /**
-   * The person withdraws a note (a hub route), or purges the session that
-   * wrote it: the note goes to the archive `withdrawn`, one commit. A
-   * lesson the curator wrote from it is in the curator's own words, checked,
-   * and stays.
+   * A note of a session the person purged goes to the archive `withdrawn`,
+   * one commit. A lesson the curator wrote from it is in the curator's own
+   * words, checked, and stays.
    */
   const withdraw = async (
     projectId: string,
@@ -3039,7 +3038,6 @@ export const createMemoryRun = ({
   return {
     start,
     brief,
-    withdraw,
     unnote,
     ruleAsked,
     purged,

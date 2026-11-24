@@ -16,11 +16,11 @@
  *   lessons and knowledge: the nightly memory run, through `memory_apply`
  *   and checks of its own, and a session's change to a rule
  *   (`memory_rule`, memory-run.ts `ruleAsked`), which removes, rewords or
- *   adds one at once; the person's Make a note (`makeNote`), into the
- *   index's `## Notes`, which the run never changes; a session's note
- *   (`note`), into the inbox. Each reads the files, works out its change
- *   and commits it in one turn of the folder's commit queue
- *   (project-folder.ts `changeFolderInTurn`), so none writes over another.
+ *   adds one at once, each reading the files, working out its change and
+ *   committing it in one turn of the folder's commit queue
+ *   (project-folder.ts `changeFolderInTurn`), so none writes over another;
+ *   a session's note (`note`), into the inbox. The index's `## Notes` is
+ *   the person's, edited in the folder, and no run changes it.
  * - **Notes** (`memory_note`, and `cawco tool memory_note`): an agent's
  *   words into the inbox, with who wrote them, in what role and kind of
  *   session, for which task and when.
@@ -44,7 +44,7 @@ import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { memoryWords } from "@cawco/core/words/memory";
 import { memoryRunWords } from "@cawco/core/words/memory-run";
-import { Elysia, ElysiaStatus, problem, t } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import { MEMORY_FILE_CHARS } from "./config";
 import type { DbShape } from "./db";
@@ -66,7 +66,6 @@ import {
   NOTE_ID,
   parseLessons,
   renderLesson,
-  withNote,
   wordsOf,
 } from "./memory-lessons";
 import { quoteProblem } from "./memory-sources";
@@ -78,16 +77,14 @@ import {
   type Noted,
 } from "./presenters/project";
 import {
-  changeFolderInTurn,
   folderFileNames,
   folderFilePaths,
   folderPath,
   listFolder,
   readFolderFile,
   writeFolderFile,
-  YOU,
 } from "./project-folder";
-import { type AnyProblem, isProblem } from "./refusal";
+import type { AnyProblem } from "./refusal";
 import { roleOf } from "./roles";
 import type { EnsureCurator } from "./routine-schedule";
 import { redactSecrets } from "./secret-filter";
@@ -97,7 +94,7 @@ const MEMORY_DIR = "memory";
 export const INBOX_DIR = "memory/inbox";
 export const ARCHIVE_DIR = "memory/archive";
 
-/** The longest note an agent writes, and the longest "Make a note". */
+/** The longest note an agent writes. */
 const NOTE_LIMIT = 4000;
 /** The most messages one night reads: the most the person said in a day (memory-run.ts); a note is checked against as many for his words. */
 export const RUN_SAID = 240;
@@ -896,62 +893,6 @@ export const createMemory = ({
 
   // --- the person's own note ----------------------------------------------------------
 
-  /** "Make a note": the person's words straight into the index's `## Notes`, as their commit; the nightly run never changes them. */
-  const makeNote = async (projectId: string, raw: string) => {
-    const project = projectOf(projectId);
-    if (project instanceof ElysiaStatus) {
-      return project;
-    }
-    const words = raw.trim();
-    if (!words) {
-      return problem(400, {
-        code: "memory-note-empty",
-        detail: "Say what to note.",
-      });
-    }
-    if (words.length > NOTE_LIMIT) {
-      return problem(400, {
-        code: "memory-note-too-long",
-        detail: `The note is ${words.length} characters long; a note stops at ${NOTE_LIMIT}.`,
-      });
-    }
-    // AGENTS.md read, changed and committed in one turn of the folder's commit queue.
-    const noted = await changeFolderInTurn(projectId, async () => {
-      const before = await fileOr(projectId, INDEX_FILE);
-      return before instanceof ElysiaStatus
-        ? before
-        : {
-            change: {
-              author: YOU,
-              message: "AGENTS.md: a note from you",
-              writes: [
-                {
-                  path: INDEX_FILE,
-                  content: withNote(project.name, before, words),
-                },
-              ],
-              deletes: [],
-            },
-            value: undefined,
-          };
-    });
-    if (isProblem(noted)) {
-      return noted;
-    }
-    const written = noted.commits;
-    if (!written) {
-      return problem(500, {
-        code: "memory-note-unwritten",
-        detail: "AGENTS.md was not written.",
-      });
-    }
-    folderChanged(projectId);
-    console.log(
-      `[memory] ${projectId}: you noted in AGENTS.md at ${written.sha.slice(0, 9)}`
-    );
-    return { path: INDEX_FILE, sha: written.sha, changed: written.changed };
-  };
-
   // --- what a brief carries --------------------------------------------------------------
 
   /**
@@ -1128,7 +1069,6 @@ export const createMemory = ({
   return {
     note,
     read,
-    makeNote,
     contextFor,
     start,
 
@@ -1187,34 +1127,6 @@ export const MEMORY_TOOLS: ReadonlySet<string> = new Set([
   "memory_read",
   "memory_apply",
 ]);
-
-/**
- * The person's own memory acts outside a conversation: "Make a note"
- * straight into AGENTS.md; withdrawing a note (memory-run.ts `withdraw`).
- */
-export const memoryRoutes = (
-  memory: Memory,
-  acts: {
-    withdraw: (
-      projectId: string,
-      note: string
-    ) => Promise<{ sha: string; withdrawn: string } | AnyProblem>;
-  }
-) =>
-  new Elysia()
-    .post(
-      "/api/projects/:id/memory/notes",
-      {
-        body: t.Object({ text: t.String({ maxLength: NOTE_LIMIT }) }),
-        detail: { hide: true },
-      },
-      ({ params, body }) => memory.makeNote(params.id, body.text)
-    )
-    .post(
-      "/api/projects/:id/memory/notes/:note/withdraw",
-      { detail: { hide: true } },
-      ({ params }) => acts.withdraw(params.id, params.note)
-    );
 
 const MEMORY_NOTE_DEFINITION = defineTool(
   "memory_note",

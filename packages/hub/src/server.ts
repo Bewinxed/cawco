@@ -550,7 +550,7 @@ import { nameAwayMachine, reconnectingFor } from "./machine-reads";
 import { createMachineRuntime } from "./machine-runtime";
 import { MeaningJudge } from "./meaning";
 import { mediaBase64 } from "./media";
-import { createMemory, inboxNotes, memoryRoutes } from "./memory";
+import { createMemory, inboxNotes } from "./memory";
 import { createMemoryRun } from "./memory-run";
 import { createMoves } from "./moves";
 import { uuidOf } from "./named-uuid";
@@ -9049,8 +9049,8 @@ export const createServer = (
       description,
     }));
   };
-  // A project's memory (memory.ts): the agents' inbox, Make a note into
-  // AGENTS.md, the index every session launches with and a brief's facts.
+  // A project's memory (memory.ts): the agents' inbox, the index every
+  // session launches with and a brief's facts.
   // Its nightly run (memory-run.ts) is the one writer of its lessons.
   const memoryRun = createMemoryRun({
     db,
@@ -14009,9 +14009,6 @@ export const createServer = (
         cawRoutes(caw),
         triggerSettingsRoutes(triggerSettings),
         phoneRequestRoutes(jevTasks),
-        memoryRoutes(projectMemory, {
-          withdraw: (projectId, note) => memoryRun.withdraw(projectId, note),
-        }),
         routineRoutes(routines),
         connectionRoutes(connections),
         trackerRoutes(trackers),
