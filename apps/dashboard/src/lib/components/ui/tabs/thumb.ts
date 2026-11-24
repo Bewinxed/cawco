@@ -1,5 +1,6 @@
 import { frameObserver } from "#lib/platform/frame-observer.js";
 import { dur, ease } from "#lib/platform/motion/curves.svelte.js";
+import { loopInStep } from "#lib/platform/motion/in-step.svelte.js";
 import { tv } from "#lib/utils.js";
 
 /**
@@ -40,7 +41,7 @@ export const segmentedVariants = tv({
   slots: {
     group: `group/segmented relative inline-flex items-center gap-space-row ${SEGMENTED_TRACK}`,
     thumb:
-      "pointer-events-none absolute start-0 top-0 origin-top-left rounded-(--shape) bg-surface-lift opacity-0 shadow-raised loops motion-safe:group-data-pending/segmented:animate-breath",
+      "pointer-events-none absolute start-0 top-0 origin-top-left rounded-(--shape) bg-surface-lift opacity-0 shadow-raised loops group-data-pending/segmented:breathe",
     segment:
       "relative inline-flex h-(--item) items-center justify-center gap-1.5 rounded-(--shape) px-c-segment-pad-x mark-line py-0 font-sans text-size-label leading-none font-medium whitespace-nowrap text-ink-muted transition-control hover:not-data-[state=active]:not-data-[state=on]:bg-groove-hover data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
   },
@@ -63,7 +64,9 @@ export const segmentedVariants = tv({
  * hover. A change caught mid-glide starts from where the thumb is on
  * screen, not from where it was headed (a resize of the group mid-glide
  * included), and width and height tween rather
- * than scale, so the thumb's corners never stretch.
+ * than scale, so the thumb's corners never stretch. The thumb's pending
+ * breath, which starts when the group turns pending, is placed in step with
+ * every other live mark (`loopInStep`).
  */
 export function slideThumb(
   group: HTMLElement,
@@ -142,6 +145,7 @@ export function slideThumb(
   };
 
   place(false);
+  const unstep = loopInStep(thumb);
   // The choice turning, or the segments put in another order (the owner
   // strip's pick from "+N" taking a place on its line): the thumb follows
   // the chosen one to wherever it now stands.
@@ -159,5 +163,6 @@ export function slideThumb(
   return () => {
     changes.disconnect();
     sizes.disconnect();
+    unstep();
   };
 }

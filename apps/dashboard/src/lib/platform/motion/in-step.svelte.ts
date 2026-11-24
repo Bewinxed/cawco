@@ -134,7 +134,7 @@ export function inStep(): {
  * attribute Svelte does not rewrite; one whose `style` is bound takes
  * `inStep()` and `style:--loop-at`.
  */
-export const loopInStep: Attachment<HTMLElement | SVGElement> = (node) => {
+export function loopInStep(node: HTMLElement | SVGElement): () => void {
   const step: Step = {
     get delay() {
       return node.style.getPropertyValue("--loop-at") || undefined;
@@ -164,4 +164,4 @@ export const loopInStep: Attachment<HTMLElement | SVGElement> = (node) => {
     due.delete(node);
     node.removeEventListener("animationstart", started);
   };
-};
+}
