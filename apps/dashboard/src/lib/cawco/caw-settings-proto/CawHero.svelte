@@ -17,8 +17,8 @@
    * hero.
    *
    * Flipping him turns the hero between the awake and the asleep scene
-   * once the hub says he turned, the new light falling over the old from
-   * the sky down (`turn`): both stand in one cell, so nothing around them
+   * once the hub says he turned, the two blending as the light shifts
+   * (`turn`): both stand in one cell, so nothing around them
    * moves. The scenes are one composition at
    * 16:10, day and night (Caw at work in his attic, then curled asleep
    * with the lamp out), the night an edit of the day so they cross in
@@ -68,16 +68,14 @@
   const first = untrack(() => asleep);
   /** The scene shown last: the first one stands at once, every later turn sweeps. */
   let shown: boolean | null = null;
-  let sweep: Animation | null = null;
+  let turning: Animation[] = [];
 
   /**
-   * Turning day to night (or back), the new scene's light falls over the
-   * old one from the sky down: the new picture, laid over the old, is
-   * revealed by a soft-edged mask sweeping from its top to its foot over
-   * --duration-dusk on --ease-crossfade (the mask a gradient twice the
-   * picture's height, black over clear, slid from showing its clear half to
-   * its black one). Only the mask's position moves. Reduced motion, it
-   * cross-fades over --duration-fade.
+   * Turning day to night (or back), the two scenes blend over
+   * --duration-dusk on --ease-crossfade: the new picture, laid over the
+   * old, fades in whole while the old one's light turns toward the new
+   * (dimming into night, brightening into day). The scrim's fade stays over
+   * both. Reduced motion, a plain cross-fade over --duration-fade.
    */
   function turn(next: boolean): void {
     const incoming = pictures[next ? "asleep" : "awake"];
@@ -85,34 +83,37 @@
     if (!(incoming && outgoing)) {
       return;
     }
-    sweep?.cancel();
+    for (const one of turning) {
+      one.cancel();
+    }
+    turning = [];
     outgoing.style.zIndex = "0";
     incoming.style.zIndex = "1";
     incoming.style.opacity = "1";
     const settle = () => {
       outgoing.style.opacity = "0";
-      incoming.style.maskImage = "";
     };
     if (shown === null) {
       settle();
       return;
     }
+    const timing = {
+      duration: dur(motionOk.current ? "--duration-dusk" : "--duration-fade"),
+      easing: ease("--ease-crossfade"),
+    };
+    // The new scene blends in over the whole picture at once; with motion,
+    // the old one's light turns toward the new as it goes (dimming into
+    // night, brightening into day), so the change reads as the light
+    // shifting rather than one picture swapped for another.
+    const fade = incoming.animate([{ opacity: 0 }, { opacity: 1 }], timing);
+    turning = [fade];
     if (motionOk.current) {
-      incoming.style.maskImage =
-        "linear-gradient(to bottom, #000 0% 40%, transparent 60% 100%)";
-      incoming.style.maskSize = "100% 250%";
-      incoming.style.maskRepeat = "no-repeat";
-      sweep = incoming.animate(
-        [{ maskPosition: "0 100%" }, { maskPosition: "0 0" }],
-        { duration: dur("--duration-dusk"), easing: ease("--ease-crossfade") }
+      const toward = next ? "brightness(0.7) saturate(0.8)" : "brightness(1.3)";
+      turning.push(
+        outgoing.animate([{ filter: "none" }, { filter: toward }], timing)
       );
-    } else {
-      sweep = incoming.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--duration-fade"),
-        easing: ease("--ease-crossfade"),
-      });
     }
-    sweep.addEventListener("finish", settle, { once: true });
+    fade.addEventListener("finish", settle, { once: true });
   }
 
   $effect(() => {
@@ -155,7 +156,7 @@
     <!-- The scrim: the scene's lower part fades into the panel's surface,
          solid by its foot; the line stands below it, clear of the scene. -->
     <span
-      class="absolute inset-x-0 bottom-0 h-1/4 bg-linear-to-b/srgb from-transparent to-surface-raised to-70%"
+      class="absolute inset-x-0 bottom-0 z-2 h-1/4 bg-linear-to-b/srgb from-transparent to-surface-raised to-70%"
     ></span>
   </div>
 
