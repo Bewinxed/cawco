@@ -85,7 +85,6 @@ import {
   type PageSection,
   type PagesLooked,
   type PostedReport,
-  READING_TAG,
   RENDER_STATE_PARAM,
   RENDERED_PATH,
   REPORT_PATH,
@@ -1545,6 +1544,26 @@ function keepDrawing(
   }
 }
 
+/**
+ * The frames and moves of states file `file`'s kept report, as it stood
+ * before a post of the same content (`before`), of the stories that post
+ * did not draw: a person's graph loads its live story and the moves from it
+ * alone, and the agent's own graph reads the rest.
+ */
+function keepUnposted(file: string, before: SectionRender | undefined): void {
+  const now = reports.get(file);
+  if (!(now && before)) {
+    return;
+  }
+  const posted = new Set(now.section.frames.map((frame) => frame.story));
+  now.section.frames.push(
+    ...before.frames.filter((frame) => !posted.has(frame.story))
+  );
+  now.section.moves.push(
+    ...before.moves.filter((move) => !posted.has(move.to))
+  );
+}
+
 /** A frame across draws of one states file: its story, its state, its scheme and its form. */
 const frameId = (frame: FrameRender): string =>
   `${frame.story}|${frame.interaction}|${frame.scheme}|${frame.form}`;
@@ -1598,6 +1617,10 @@ async function keepReport(body: unknown): Promise<void> {
           ),
         },
       });
+      // A person's graph draws only its live story and the moves from it (core `liveKept`): what it did not post of the same content stays as the agent's whole read drew it.
+      if (seen) {
+        keepUnposted(section.file, kept?.section);
+      }
     }
   }
 }
@@ -1666,11 +1689,11 @@ function unloadedState(file: string): {
     : { state: "unseen" };
 }
 
-/** What states file `file` says that the report names (core `RenderReport`): its stories that differ only by width, its labels that say a word of code, and the file itself when it is a checklist of every state. */
+/** What states file `file` says that the report names (core `RenderReport`): its stories that differ only by width, its labels that say a word of code, and the story each move starts from. */
 function sheetFindings(
   file: string,
   read: ReturnType<typeof readStoryFile>
-): Required<Pick<RenderReport, "codeNamed" | "readings" | "widthOnly">> {
+): Required<Pick<RenderReport, "codeNamed" | "froms" | "widthOnly">> {
   const names = [
     ...read.stories.map((one) => one.name),
     ...read.imports.keys(),
@@ -1683,7 +1706,9 @@ function sheetFindings(
       const word = one.label ? codeWordOf(one.label, names) : null;
       return word ? [{ story: `${file}:${one.name}`, word }] : [];
     }),
-    readings: read.meta.tags.includes(READING_TAG) ? [file] : [],
+    froms: Object.fromEntries(
+      read.stories.map((one) => [`${file}:${one.name}`, one.from])
+    ),
   };
 }
 
@@ -1698,7 +1723,7 @@ async function reportOf(files: string[]): Promise<RenderReport> {
   const unnamed: string[] = [];
   const widthOnly: string[][] = [];
   const codeNamed: { story: string; word: string }[] = [];
-  const readings: string[] = [];
+  const froms: Record<string, string | null> = {};
   let newest: {
     at: string;
     by: RenderReport["by"];
@@ -1727,7 +1752,7 @@ async function reportOf(files: string[]): Promise<RenderReport> {
     const said = sheetFindings(file, read);
     widthOnly.push(...said.widthOnly);
     codeNamed.push(...said.codeNamed);
-    readings.push(...said.readings);
+    Object.assign(froms, said.froms);
     const hash = await contentHash(file);
     const kept = reports.get(file);
     if (kept && (!newest || kept.at > newest.at)) {
@@ -1777,7 +1802,7 @@ async function reportOf(files: string[]): Promise<RenderReport> {
     unnamed,
     widthOnly,
     codeNamed,
-    readings,
+    froms,
     ...drawingOf(files),
   };
 }

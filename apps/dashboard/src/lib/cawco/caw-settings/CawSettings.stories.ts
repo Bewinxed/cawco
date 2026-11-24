@@ -7,7 +7,7 @@
  * feeds the machines and the accounts through their stores' own writers.
  */
 import CawSettingsFrame from "./caw-settings-frame.svelte";
-import { PANEL_ARGS, seedStores } from "./caw-settings-play";
+import { askOff, PANEL_ARGS, seedStores } from "./caw-settings-play";
 
 export default {
   title: "Caw/Caw settings",
@@ -20,6 +20,4 @@ export default {
 export const Live = { args: { overridden: true } };
 
 /** Turning him off from the hero's switch while what he started still runs: the confirm hangs from its glass. */
-export const TurningOff = {
-  args: { projectId: "cockpit-live-off", asked: "off" },
-};
+export const TurningOff = { from: "Live", play: askOff };

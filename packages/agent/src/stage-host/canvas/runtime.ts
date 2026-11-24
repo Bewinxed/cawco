@@ -47,6 +47,7 @@ import {
   canvasSpecOf,
   FORMS,
   type Interaction,
+  liveKept,
   MEASURE_PARAM,
   type MoveRender,
   type PageBy,
@@ -1049,6 +1050,21 @@ export function boot(options: BootOptions): void {
       : null;
   }
 
+  /**
+   * A section's module as this canvas loads it: on a person's graph (the
+   * spec's `live`), its live story and the moves from it alone, so no other
+   * story of the file is drawn, listed or reported here.
+   */
+  function liveOnly(mod: SectionModule): SectionModule {
+    const live = spec.live?.[mod.SHEET.file];
+    return live === undefined
+      ? mod
+      : {
+          ...mod,
+          SHEET: { ...mod.SHEET, stories: liveKept(mod.SHEET.stories, live) },
+        };
+  }
+
   /** Loads a section's states file; the mode draws its stories. */
   function loadSection(section: Section): Promise<void> {
     section.loading ??= (async () => {
@@ -1063,7 +1079,7 @@ export function boot(options: BootOptions): void {
       const since = performance.now();
       let loaded: SectionModule;
       try {
-        loaded = await options.load(section.file, !!section.failure);
+        loaded = liveOnly(await options.load(section.file, !!section.failure));
         section.mod = loaded;
         await seeded(section);
       } catch (error) {
@@ -1455,7 +1471,11 @@ export function boot(options: BootOptions): void {
     if (sheetAsks.get(section.file) !== asked) {
       return;
     }
-    const sheet: SheetOnPage = { ...read, file: section.file };
+    const sheet: SheetOnPage = {
+      ...read,
+      stories: liveKept(read.stories, spec.live?.[section.file]),
+      file: section.file,
+    };
     window.__cawcoSheetsOnPage = {
       ...window.__cawcoSheetsOnPage,
       [section.file]: sheet,
@@ -1707,7 +1727,7 @@ export function boot(options: BootOptions): void {
   };
 
   window.addEventListener("cawco:section", (event) => {
-    const mod = event.detail;
+    const mod = event.detail && liveOnly(event.detail);
     const section = sectionOf(mod?.SHEET.file ?? "");
     if (!section) {
       return;

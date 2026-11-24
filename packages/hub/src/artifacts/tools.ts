@@ -24,6 +24,7 @@ import {
   GRAPH_WIDTHS_SAID,
   INTERACTIONS,
   SERVE_COMMAND_LIMIT,
+  STATES_ENTRY,
   STORY_FILE,
   STORY_NAME,
   storyRefOf,
@@ -229,16 +230,14 @@ export const artifactCreate = {
       .describe("A page's whole document."),
     file: z
       .union([
-        z.string().min(1).max(1000).regex(STORY_FILE),
+        z.string().min(1).max(1000).regex(STATES_ENTRY),
         z
-          .array(z.string().min(1).max(1000).regex(STORY_FILE))
+          .array(z.string().min(1).max(1000).regex(STATES_ENTRY))
           .min(1)
           .max(CANVAS_SPEC_LIMITS.files),
       ])
       .optional()
-      .describe(
-        "CSF 3 states files from your workspace's root: one per direction, or your reading's."
-      ),
+      .describe("Each file's live story, `path:Story`; whole with reading."),
     ...canvasFields,
     directions: designDirections.describe(
       "Two or more directions of one design, a states file or page each: one graph switching between them; their pick is artifact_read's `picked`."

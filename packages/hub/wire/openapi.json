@@ -13446,7 +13446,7 @@
                         "file": {
                           "minLength": 1,
                           "maxLength": 1000,
-                          "pattern": "\\.stories\\.[cm]?[jt]sx?$",
+                          "pattern": "\\.stories\\.[cm]?[jt]sx?(?::[A-Z][A-Za-z0-9_]*)?$",
                           "type": "string"
                         },
                         "html": {
@@ -13550,14 +13550,14 @@
                         "items": {
                           "minLength": 1,
                           "maxLength": 1000,
-                          "pattern": "\\.stories\\.[cm]?[jt]sx?$",
+                          "pattern": "\\.stories\\.[cm]?[jt]sx?(?::[A-Z][A-Za-z0-9_]*)?$",
                           "type": "string"
                         }
                       },
                       {
                         "minLength": 1,
                         "maxLength": 1000,
-                        "pattern": "\\.stories\\.[cm]?[jt]sx?$",
+                        "pattern": "\\.stories\\.[cm]?[jt]sx?(?::[A-Z][A-Za-z0-9_]*)?$",
                         "type": "string"
                       }
                     ]

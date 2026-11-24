@@ -664,14 +664,14 @@ export interface RenderReport {
    * when none.
    */
   drawing?: string[];
-  page: { errors: PageError[] };
   /**
-   * The states files whose default export carries the {@link READING_TAG}
-   * tag: an agent's checklist of every state, for its own reading graph
-   * alone. The stage reads it off the files; optional on the wire, as
-   * `widthOnly`.
+   * Each story of the report's states files, as `File:Story`, to the story
+   * its move starts from (`from`); null for a resting story. The stage
+   * reads it off the files; optional on the wire, as `widthOnly`. The hub
+   * reads a person's graph's live stories against it ({@link liveKept}).
    */
-  readings?: string[];
+  froms?: Record<string, string | null>;
+  page: { errors: PageError[] };
   sections: SectionRender[];
   /** `File:Story` of each story with no doc comment: drawn by its export name alone. */
   unnamed: string[];
@@ -683,14 +683,6 @@ export interface RenderReport {
    */
   widthOnly?: string[][];
 }
-
-/**
- * The CSF tag a states file's default export carries when it is its
- * agent's checklist of every state (`tags: ["reading"]`): it opens only on
- * a graph made with `reading: true`, and the hub refuses it on a graph made
- * for the person (hub artifacts/kinds/component.ts `createSheet`).
- */
-export const READING_TAG = "reading";
 
 /** Rest frames of one states file that draw the same picture at one width and scheme: {@link framesAlike}. */
 export interface FramesAlike {
@@ -774,10 +766,10 @@ export interface PostedReport extends PageReport {
 /** A section as its page drew it: the stage stamps its content hash as it keeps it ({@link SectionRender} `hash`), and when it was drawn as it answers it (`drawn`). */
 export type PageSection = Omit<SectionRender, "drawn" | "hash">;
 
-/** A report as the canvas page reads it of itself, before the stage keeps it: its sections unstamped ({@link PageSection}), and none of what the stage reads off the states files (`widthOnly`, `codeNamed`, `readings`). */
+/** A report as the canvas page reads it of itself, before the stage keeps it: its sections unstamped ({@link PageSection}), and none of what the stage reads off the states files (`widthOnly`, `codeNamed`, `froms`). */
 export interface PageReport extends Omit<
   RenderReport,
-  "sections" | "widthOnly" | "codeNamed" | "readings"
+  "sections" | "widthOnly" | "codeNamed" | "froms"
 > {
   sections: PageSection[];
 }
@@ -937,6 +929,14 @@ export interface CanvasSpec {
   edges?: CanvasEdge[];
   /** Story → the parent story or section heading it groups under. */
   group?: Record<string, string>;
+  /**
+   * A graph made for the person: each states file's live story, by its file
+   * from the toolchain root. The graph loads that story and each move from
+   * it (a story whose `from` names it) and no other story of the file
+   * ({@link liveKept}); a file it names none of loads whole, as an agent's
+   * own reading does.
+   */
+  live?: Record<string, string>;
   name?: string;
   /** A design folder's title ({@link designOf}): the name its one page shows by on the graph, where no direction names it. */
   title?: string;
@@ -1041,10 +1041,30 @@ export const canvasSpecOf = (value: unknown): CanvasSpec => {
       ? value.edges.flatMap((one) => edgeOf(one) ?? [])
       : undefined,
     group,
+    live: isRecord(value.live)
+      ? Object.fromEntries(
+          Object.entries(value.live).filter(
+            (entry): entry is [string, string] => typeof entry[1] === "string"
+          )
+        )
+      : undefined,
     name: textOf(value.name),
     title: textOf(value.title),
   });
 };
+
+/**
+ * The stories of a states file a graph loads: with `live` (the person's
+ * graph, {@link CanvasSpec} `live`), that story and each move from it, a
+ * story whose `from` names it; with none, every one.
+ */
+export const liveKept = <T extends { from: string | null; name: string }>(
+  stories: readonly T[],
+  live: string | undefined
+): T[] =>
+  live === undefined
+    ? [...stories]
+    : stories.filter((one) => one.name === live || one.from === live);
 
 /** `value`, the JSON the stage wrote each states file's {@link SectionPlan} as, read back by file. */
 export const sectionPlansOf = (value: unknown): Record<string, SectionPlan> =>
@@ -1366,6 +1386,23 @@ export const SECTION_SWAPPED = "cawco:section-swapped";
 
 /** A CSF story file: `Who.stories.ts`, `Card.stories.tsx`, `Page.stories.js`. */
 export const STORY_FILE = /\.stories\.[cm]?[jt]sx?$/u;
+
+/**
+ * A states file as a design graph's create names it: the file alone (an
+ * agent's own reading, which loads it whole), or `file:Story` naming its
+ * live story (the person's graph, {@link CanvasSpec} `live`).
+ */
+export const STATES_ENTRY = /\.stories\.[cm]?[jt]sx?(?::[A-Z][A-Za-z0-9_]*)?$/u;
+
+/** A design graph's states entry ({@link STATES_ENTRY}) read: its file, and the live story it names, if any. */
+export const statesEntryOf = (
+  entry: string
+): { file: string; story: string | undefined } => {
+  const cut = entry.lastIndexOf(":");
+  return cut > 0 && STORY_FILE.test(entry.slice(0, cut))
+    ? { file: entry.slice(0, cut), story: entry.slice(cut + 1) }
+    : { file: entry, story: undefined };
+};
 
 /**
  * Where a stage is: `starting` its first start, `waking` a start after

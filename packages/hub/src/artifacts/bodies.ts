@@ -21,7 +21,7 @@ import {
   DESIGN_MAP_LIMITS,
   DESIGN_MARKS,
   SERVE_COMMAND_LIMIT,
-  STORY_FILE,
+  STATES_ENTRY,
   STORY_NAME,
   STORY_REF,
 } from "@cawco/core/stage";
@@ -76,11 +76,11 @@ const argValues = t.Record(
   }
 );
 
-/** A states file, from the clone's root or absolute. */
+/** A states file, from the clone's root or absolute; on the person's graph `file:Story`, naming its live story (core `STATES_ENTRY`). */
 const statesFile = t.String({
   minLength: 1,
   maxLength: 1000,
-  pattern: STORY_FILE.source,
+  pattern: STATES_ENTRY.source,
 });
 
 /** A story on a canvas: `Story`, or `file:Story` across sections. */

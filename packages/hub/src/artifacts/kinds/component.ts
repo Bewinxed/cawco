@@ -12,7 +12,6 @@ import {
   designContentOf,
   designOf,
   GRAPH_WIDTHS_SAID,
-  READING_TAG,
   type RenderReport,
   type SectionUndrawn,
   type SheetRead,
@@ -22,6 +21,7 @@ import {
   type StageState,
   type StageUnreached,
   type StoryOp,
+  statesEntryOf,
   storyRefOf,
 } from "@cawco/core/stage";
 import type { MeasureRead } from "@cawco/core/stage-measure";
@@ -47,6 +47,9 @@ import {
   directionsStaged,
   drawsHeld,
   errorsSaid,
+  liveAsked,
+  liveProblem,
+  liveReport,
   movesSaid,
   READ_HINT,
   renderSaid,
@@ -281,7 +284,8 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       });
     }
     drawnWritten(row, report);
-    return report;
+    // The person's graph loads each file's live story and the moves from it alone (core `liveKept`).
+    return liveReport(report, sheetOf(row)?.spec.live);
   };
   /** The shapes a decision page's media carries of design graph `row` (core `CanvasShapes`). */
   const shapesOf = (row: ArtifactRow): CanvasShapes => {
@@ -532,36 +536,6 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       ? await deps.stageRender(at, { files, spec })
       : drawn;
   };
-  /**
-   * Why a design graph's states files, as the stage read them (`report`),
-   * can't open: stories that differ only by their width, or, on a graph
-   * made for the person (not `reading`), a checklist of every state.
-   */
-  const reportUnfit = (report: RenderReport, reading: boolean) => {
-    // One state is one story: the graph draws it at each width (show skill).
-    const widthOnly = report.widthOnly ?? [];
-    if (widthOnly.length > 0) {
-      return problem(400, {
-        code: "artifact-sheet-unfit",
-        detail: widthOnly
-          .map(
-            (stories) =>
-              `${stories.join(" and ")} differ only by their width: keep one story. The design graph draws it at each width (${GRAPH_WIDTHS_SAID}).`
-          )
-          .join(" "),
-      });
-    }
-    // A checklist of every state is its agent's own reading, never the person's (design-graph skill, step 3).
-    const readings = reading ? [] : (report.readings ?? []);
-    if (readings.length === 0) {
-      return null;
-    }
-    const many = readings.length > 1;
-    return problem(400, {
-      code: "artifact-sheet-unfit",
-      detail: `${readings.join(" and ")} ${many ? "are checklists" : "is a checklist"} of every state (its default export's tags hold "${READING_TAG}"), which the person never steps through: they reach each state by using the live story. Give file only the live story's states file here, and open ${many ? "those files" : "that file"} on a graph of your own with reading: true.`,
-    });
-  };
   /** What a design graph's create names: its states files, and what the person does there; refused when it names no file or a canvas that does not hold. */
   const sheetAsked = (input: ArtifactInput) => {
     const directions = storyDirectionsOf(input.directions);
@@ -579,12 +553,17 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     if (asked.length === 0) {
       return problem(400, {
         code: "artifact-sheet-file-none",
-        detail: `A design graph takes file: its states file, the .stories.ts beside the component (or a list, one section each). Example: ${COMPONENT_EXAMPLE}.`,
+        detail: `A design graph takes file: on the person's graph each component's live story, path:Story in the .stories.ts beside it (a list, one section each); on your reading (reading: true), whole states files. Example: ${COMPONENT_EXAMPLE}.`,
       });
     }
     const misfit = canvasProblem({ ...input, directions }, asked);
     if (misfit) {
       return problem(400, { code: "artifact-sheet-unfit", detail: misfit });
+    }
+    // The person's graph names each file's live story, path:Story; a reading loads whole files.
+    const entries = liveAsked(asked, input.reading === true);
+    if (typeof entries === "string") {
+      return problem(400, { code: "artifact-sheet-unfit", detail: entries });
     }
     if (designContentOf(input.content)) {
       return problem(400, {
@@ -593,7 +572,46 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       });
     }
     const said = ctx.askedOf(input);
-    return said instanceof ElysiaStatus ? said : { asked, directions, said };
+    return said instanceof ElysiaStatus
+      ? said
+      : {
+          asked: entries.files,
+          live: entries.live,
+          directions: directions?.map((one) => ({
+            ...one,
+            file: statesEntryOf(one.file).file,
+          })),
+          said,
+        };
+  };
+  /**
+   * Why a design graph's states files, as the stage read them (`report`),
+   * can't open: a live story the person's graph names (`live`) that its
+   * file doesn't export or that is a move, or stories that differ only by
+   * their width among those it loads.
+   */
+  const reportUnfit = (
+    report: RenderReport,
+    live: Readonly<Record<string, string>>
+  ) => {
+    const named = liveProblem(report, live);
+    if (named) {
+      return problem(400, { code: "artifact-sheet-unfit", detail: named });
+    }
+    // One state is one story: the graph draws it at each width (show skill).
+    const widthOnly = liveReport(report, live).widthOnly ?? [];
+    if (widthOnly.length === 0) {
+      return null;
+    }
+    return problem(400, {
+      code: "artifact-sheet-unfit",
+      detail: widthOnly
+        .map(
+          (stories) =>
+            `${stories.join(" and ")} differ only by their width: keep one story. The design graph draws it at each width (${GRAPH_WIDTHS_SAID}).`
+        )
+        .join(" "),
+    });
   };
   /**
    * A design graph's row placed in its owner's panel on its workspace's
@@ -677,17 +695,32 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     if (staged instanceof ElysiaStatus) {
       return staged;
     }
-    const { machineId, opened, workspace } = staged;
-    const unfit = reportUnfit(opened.report, input.reading === true);
+    const { machineId, workspace } = staged;
+    const files = staged.opened.report.sections.map((one) => one.file);
+    // Each live story by its file as the stage names it: the report's sections stand in the order the files were asked.
+    const live = Object.fromEntries(
+      asked.flatMap((file, place) => {
+        const story = sheetAsk.live[file];
+        const as = files[place];
+        return story === undefined || as === undefined ? [] : [[as, story]];
+      })
+    );
+    const unfit = reportUnfit(staged.opened.report, live);
     if (unfit) {
       return unfit;
     }
-    const files = opened.report.sections.map((one) => one.file);
+    const opened: StageOpened = {
+      ...staged.opened,
+      report: liveReport(staged.opened.report, live),
+    };
     // Each direction names its file as the stage does, from the toolchain root.
-    const spec = specOf(input.name, {
-      ...input,
-      directions: directions && directionsStaged(directions, asked, files),
-    });
+    const spec: CanvasSpec = {
+      ...specOf(input.name, {
+        ...input,
+        directions: directions && directionsStaged(directions, asked, files),
+      }),
+      ...(Object.keys(live).length > 0 ? { live } : {}),
+    };
     const source: PreviewSource = {
       port: opened.port,
       path: canvasPath(files, spec),

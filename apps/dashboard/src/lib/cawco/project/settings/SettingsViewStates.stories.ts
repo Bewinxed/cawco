@@ -11,7 +11,6 @@ import { shellFrame } from "./shell-seed";
 export default {
   ...shellFrame,
   title: "Project settings, every situation",
-  tags: ["reading"],
   component: SettingsLive,
   args: { situation: "At rest" },
 };

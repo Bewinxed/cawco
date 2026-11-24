@@ -16,7 +16,6 @@ import {
 
 export default {
   title: "Caw/Caw settings, every state",
-  tags: ["reading"],
   component: CawSettingsFrame,
   args: { ...PANEL_ARGS, projectId: "cockpit-awake" },
   beforeEach: seedStores,

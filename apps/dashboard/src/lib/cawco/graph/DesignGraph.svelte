@@ -107,7 +107,7 @@
   import type { GraphHead } from "./graph-head";
   import { keepUnder, keptUnder } from "./kept";
   import MoveFace, { type MoveState } from "./MoveFace.svelte";
-  import { pathOf, previousOf, type Review, reviewOf } from "./model";
+  import { pathOf, previousOf, type Review, reviewOf, stepsOf } from "./model";
   import {
     type Clip,
     clipOf,
@@ -275,7 +275,7 @@
   /** Where a component opens: the state the ask names (a variant of it too; its longest name the ask holds), else its first. */
   const first = (one: Review): Pick => {
     const said = one.file === askedFile;
-    let best: Pick = { state: one.order[0] ?? "", variant: null };
+    let best: Pick = { state: pathOf(one)[0] ?? "", variant: null };
     let longest = 0;
     const consider = (named: string, pick: Pick) => {
       if (said && asks(named) && named.length > longest) {
@@ -492,7 +492,7 @@
       return null;
     }
     return againstReview && !againstReview.states[against.state]
-      ? (againstReview.order[0] ?? against.state)
+      ? (pathOf(againstReview)[0] ?? against.state)
       : against.state;
   });
   /** The state compared with while Compare is on and its states file has said it. */
@@ -1237,7 +1237,8 @@
   /** The journey's one order: the component's path, as the list shows it. */
   const path = $derived(review ? pathOf(review) : []);
   const at = $derived(kept ? path.indexOf(kept.state) : -1);
-  const single = $derived((review?.order.length ?? 0) <= 1);
+  /** One state to step to: on the person's graph a component is its live story, its moves played on the Animation face. */
+  const single = $derived(path.length <= 1);
   /** Compare has something to compare with: another state, or another direction of the design; a design folder's page is read by no Compare. */
   const canCompare = $derived(!page && (directed || !single));
   /** The states the stepper's menu lists: the direction in front's alone on a design with directions (the switch brings another in front); else every component's whose sheet has come. */
@@ -1706,7 +1707,7 @@
             {#if at > 0}
               <DropdownMenu.Separator />
             {/if}
-            {#each one.machines as machine (machine.name)}
+            {#each one.machines.filter((each) => stepsOf(one, each.path).length > 0) as machine (machine.name)}
               <DropdownMenu.Group>
                 <DropdownMenu.GroupHeading
                   >{one.machines.length > 1
@@ -1717,7 +1718,7 @@
                   onValueChange={(next: string) => stepIn(one.file, next)}
                   value={one.file === review.file ? kept.state : ""}
                 >
-                  {#each machine.path as id (id)}
+                  {#each stepsOf(one, machine.path) as id (id)}
                     {@const state = one.states[id]}
                     {#if state}
                       <DropdownMenu.RadioItem row="described" value={id}>

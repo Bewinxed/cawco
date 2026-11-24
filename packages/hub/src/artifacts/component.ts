@@ -30,6 +30,7 @@ import {
   type StageErrorKind,
   type StageState,
   stageErrorReason,
+  statesEntryOf,
   storyRefOf,
 } from "@cawco/core/stage";
 import { cutShort } from "@cawco/core/words/helpers";
@@ -46,14 +47,124 @@ export interface CanvasInput {
 
 /** An example call, quoted by every refusal of a design graph's shape: the live story the person operates, a dial for what no press reaches. */
 export const COMPONENT_EXAMPLE =
-  'artifact_create({ kind: "component", name: "pairing", title: "Pairing a phone", does: "judge", ask: "Judge pairing a phone: scan the code, approve it, and pin what reads wrong", file: "src/lib/Pairing.stories.ts", dials: [{ name: "answer", label: "What the phone answers", kind: "select", options: ["Approved", "Denied", "No answer"], target: { arg: "answer" } }] })';
+  'artifact_create({ kind: "component", name: "pairing", title: "Pairing a phone", does: "judge", ask: "Judge pairing a phone: scan the code, approve it, and pin what reads wrong", file: "src/lib/Pairing.stories.ts:Live", dials: [{ name: "answer", label: "What the phone answers", kind: "select", options: ["Approved", "Denied", "No answer"], target: { arg: "answer" } }] })';
 
 /** What `artifact_create` takes, said whole when a body is malformed or names no `title`, `does` or `ask`. */
 export const CREATE_SHAPE = `artifact_create takes kind, name (a slug, for tools and URLs), title (a few plain words that name it to the person), does (pick | judge | try | draw), ask (one line, what the person does here) and that kind's fields. A design graph: { kind: "component", name, title, does: "judge", ask, file, edges?, group?, dials?, directions? }; directions [{ file, name, line }], one per states file of one design, two or more (file may then be left out; a direction that differs only by a value is a dial); a design folder, for work with no project behind it, a stack with no stage or a throwaway idea: { kind: "component", name, title, does: "judge", ask, html (one page) or dir (a folder: index.html at its top and anything it loads, React, Svelte or TypeScript with a package.json for its npm imports), content? ("document" | "chart" | "deck", each shown at its own size; a screen where it names none), dials?, directions? }, each direction { html or dir, name, line }, its dials cssVar alone, artifact_update with html, dir or directions changing it in place; edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle" | "text" | "action", label?, group?, min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`;
 
+/** An example of the person's graph's live stories, quoted by their refusals. */
+const LIVE_EXAMPLE =
+  'file: ["src/lib/caw/CawSettings.stories.ts:Live", "src/lib/caw/FleetTriggers.stories.ts:Live"]';
+
+/** What the person's graph mounts, said by each refusal of its live stories. */
+const LIVE_RULE = `The person's graph mounts one live story per states file, named path:Story (${LIVE_EXAMPLE}): each state they should reach is a press on it or a dial, and each flow they should watch is a move, a story with from: "<the live story>" and a play. A checklist of states stays on a graph of your own with reading: true, which loads whole files.`;
+
+/**
+ * A design graph's states entries (core `STATES_ENTRY`) read: each states
+ * file as the agent named it, once, and on the person's graph (not
+ * `reading`) the live story each names; or why they can't be taken.
+ */
+export function liveAsked(
+  entries: readonly string[],
+  reading: boolean
+): { files: string[]; live: Record<string, string> } | string {
+  const files: string[] = [];
+  const live: Record<string, string> = {};
+  for (const entry of entries) {
+    const { file, story } = statesEntryOf(entry);
+    if (reading && story) {
+      return `Your reading (reading: true) loads each states file whole: name ${file} without :${story}.`;
+    }
+    if (!(reading || story)) {
+      return `${file} names no live story. ${LIVE_RULE}`;
+    }
+    const named = live[file];
+    if (story && named !== undefined && named !== story) {
+      return `${file} is named with two stories, ${named} and ${story}. ${LIVE_RULE}`;
+    }
+    if (story) {
+      live[file] = story;
+    }
+    if (!files.includes(file)) {
+      files.push(file);
+    }
+  }
+  return { files, live };
+}
+
+/**
+ * Why the person's graph's live stories (`live`, each by its states file as
+ * the stage names it) can't open, read against the stage's report: a story
+ * its file doesn't export, or one that is a move; null when each is a
+ * resting story of its file, or the stage reads no `froms` (one from before
+ * them).
+ */
+export function liveProblem(
+  report: RenderReport,
+  live: Readonly<Record<string, string>>
+): string | null {
+  const { froms } = report;
+  if (!froms) {
+    return null;
+  }
+  for (const [file, story] of Object.entries(live)) {
+    const ref = `${file}:${story}`;
+    if (!(ref in froms)) {
+      return `${file} exports no story ${story}. ${LIVE_RULE}`;
+    }
+    const from = froms[ref];
+    if (from) {
+      return `${file}'s ${story} is a move from ${from}: name the resting story it moves from. ${LIVE_RULE}`;
+    }
+  }
+  return null;
+}
+
+/**
+ * `report` as the person's graph loads it (core `liveKept`): of each states
+ * file `live` names, its live story and the moves from it alone; a file it
+ * names none of, whole.
+ */
+export function liveReport(
+  report: RenderReport,
+  live: Readonly<Record<string, string>> | undefined
+): RenderReport {
+  if (!live || Object.keys(live).length === 0) {
+    return report;
+  }
+  const froms = report.froms ?? {};
+  const kept = (ref: string): boolean => {
+    const { file, story } = storyRefOf(ref);
+    const one = file === undefined ? undefined : live[file];
+    return one === undefined || story === one || froms[ref] === one;
+  };
+  return {
+    ...report,
+    sections: report.sections.map((section) => {
+      const keep = (story: string) => kept(`${section.file}:${story}`);
+      return {
+        ...section,
+        frames: section.frames.filter((frame) => keep(frame.story)),
+        moves: section.moves.filter((move) => keep(move.from) && keep(move.to)),
+      };
+    }),
+    unnamed: report.unnamed.filter(kept),
+    ...(report.widthOnly
+      ? {
+          widthOnly: report.widthOnly
+            .map((group) => group.filter(kept))
+            .filter((group) => group.length > 1),
+        }
+      : {}),
+    ...(report.codeNamed
+      ? { codeNamed: report.codeNamed.filter((one) => kept(one.story)) }
+      : {}),
+  };
+}
+
 /** An example of a design's directions, quoted by their refusals. */
 const DIRECTIONS_EXAMPLE =
-  'directions: [{ file: "src/lib/TrayFamily.stories.ts", name: "Family tray", line: "One thing per tray, replaced in place" }, { file: "src/lib/TrayCard.stories.ts", name: "Status card", line: "One card whose words change" }]';
+  'directions: [{ file: "src/lib/TrayFamily.stories.ts:Live", name: "Family tray", line: "One thing per tray, replaced in place" }, { file: "src/lib/TrayCard.stories.ts:Live", name: "Status card", line: "One card whose words change" }]';
 
 /** Why a design's directions can't be taken, among the canvas's states files `files` (as the agent named them); null when they can. */
 function directionsProblem(

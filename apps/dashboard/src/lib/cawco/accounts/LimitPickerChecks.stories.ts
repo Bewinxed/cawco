@@ -8,7 +8,6 @@ import LimitPickerBench from "./limit-picker-bench.svelte";
 
 export default {
   title: "Accounts/Limit picker clicked",
-  tags: ["reading"],
   component: LimitPickerBench,
   args: { reading: "fresh", check: "still", pending: false, again: 0 },
   parameters: { viewport: 1440 },

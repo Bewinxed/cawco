@@ -64,6 +64,12 @@ interface GraphState {
   /** 1-based line of its export in the states file. */
   line: number;
   machine: string;
+  /**
+   * On the person's graph (the spec's `live`), every state but the live
+   * story's: the end of a move from it, drawn on the Map and played on the
+   * Animation face, never a step of the path or a row of the states menu.
+   */
+  moveOnly: boolean;
   name: string;
   note: string | null;
   /** Its story has a `play`: the move into it is acted, not only drawn. */
@@ -162,9 +168,11 @@ function stateOf(
   story: Story,
   machine: string,
   names: ReadonlySet<string>,
-  stories: readonly Story[]
+  stories: readonly Story[],
+  live: string | undefined
 ): GraphState {
   return {
+    moveOnly: live !== undefined && story.name !== live,
     id: story.name,
     name: shownName(story, stories),
     note: story.label,
@@ -290,7 +298,13 @@ export function reviewOf(
   const machines = new Map<string, string[]>();
   for (const story of sheet.stories.filter((one) => !parentOf(one.name))) {
     const machine = group[story.name] ?? name;
-    states[story.name] = stateOf(story, machine, names, sheet.stories);
+    states[story.name] = stateOf(
+      story,
+      machine,
+      names,
+      sheet.stories,
+      spec.live?.[sheet.file]
+    );
     machines.set(machine, [...(machines.get(machine) ?? []), story.name]);
   }
   const order = Object.keys(states);
@@ -330,7 +344,11 @@ export function holesOf(review: Review, state: string): Holes {
  * he stands on it ("8 of 11"), so the steps and the list count one thing.
  */
 export const pathOf = (review: Review): string[] =>
-  review.machines.flatMap((machine) => machine.path);
+  review.machines.flatMap((machine) => stepsOf(review, machine.path));
+
+/** The states of `path` the person steps to: on his graph, the live story's alone (`moveOnly`). */
+export const stepsOf = (review: Review, path: readonly string[]): string[] =>
+  path.filter((id) => !review.states[id]?.moveOnly);
 
 /**
  * The state before `state`: where the move into it starts, when its states
