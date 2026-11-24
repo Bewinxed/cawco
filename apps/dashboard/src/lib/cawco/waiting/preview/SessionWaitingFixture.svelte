@@ -42,7 +42,11 @@
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
-  import type { ComposerAsk } from "#lib/cawco/transcript/grown-ask.svelte.js";
+  import {
+    askIdOf,
+    type ComposerAsk,
+    type PermissionAsk,
+  } from "#lib/cawco/transcript/grown-ask.svelte.js";
   import Turn from "#lib/cawco/turn/Turn.svelte";
   import { setVoice } from "#lib/cawco/turn/voice.js";
   import Who from "#lib/cawco/turn/Who.svelte";
@@ -139,7 +143,7 @@
     if (isAsk(row)) {
       shown = false;
       if (row.kind !== "connect" && ask) {
-        minimizedAsks.set(ask.request.requestId, false);
+        minimizedAsks.set(askIdOf(ask), false);
       }
       return;
     }
@@ -158,7 +162,7 @@
     if (!asked || taken.has("r-question")) {
       return null;
     }
-    const request: ComposerAsk["request"] = {
+    const request: PermissionAsk["request"] = {
       heard: 0,
       instanceId: SESSION,
       requestId: "r-question",

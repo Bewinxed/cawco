@@ -2,6 +2,7 @@
   import { detach } from "@cawco/core/detach";
   import type { AvailableCommand } from "@cawco/core/fleet";
   import { commonWords } from "@cawco/core/words/common";
+  import { parkedWords } from "@cawco/core/words/parked";
   import { transcriptWords } from "@cawco/core/words/transcript";
   /**
    * The floating composer — a lifted shell holding the text input, the attach
@@ -77,7 +78,12 @@
   import { FieldFold } from "./field-fold.svelte";
   import { FieldHint } from "./field-hint.svelte";
   import { FindDock } from "./find-dock.svelte";
-  import { type ComposerAsk, GrownAsk } from "./grown-ask.svelte";
+  import {
+    askIdOf,
+    askSummaryOf,
+    type ComposerAsk,
+    GrownAsk,
+  } from "./grown-ask.svelte";
   import { HarnessStart } from "./harness-start.svelte";
   import { OfferStack, type TrayRow } from "./offer-stack.svelte";
   import { PressHold } from "./press-hold.svelte";
@@ -912,7 +918,7 @@
            a tray chip high, a tray gap off the pill. It stands under the
            grown shape (grown.ts's halo, z 1): brought back, the card grows over
            the bar as it fades. -->
-      {@const [first] = grown.askQuestions ?? []}
+      {@const summary = askSummaryOf(ask)}
       <div
         class="absolute inset-0 flex items-box-end pb-c-tray-gap pe-(--ring-room,0px) pointer-events-none opacity-(--waiting-shown,1)"
         data-minimized-bar
@@ -924,7 +930,9 @@
       >
         <button
           data-slot="asked-chip"
-          aria-label={`Show the question from ${ask.asker}: ${first?.question ?? ""}`}
+          aria-label={ask.kind === "parked"
+            ? parkedWords.minimizedLabel(ask.asker, summary)
+            : `Show the question from ${ask.asker}: ${summary}`}
           class={chipVariants({
             variant: "tray",
             class:
@@ -944,7 +952,7 @@
           </span>
           <span
             class="flex-auto min-w-0 overflow-clip text-start text-ellipsis whitespace-nowrap"
-            >{first?.question ?? first?.header}</span
+            >{summary}</span
           >
           {#if ask.more > 0}
             <span data-slot="num" class="num flex-none font-normal"
@@ -1242,18 +1250,36 @@
           bind:this={grown.askPanel}
           style:--ask-max="{grown.askBox.max}px"
         >
-          {#key grown.drawnAsk.request.requestId}
-            <fleet.Prompt
-              asker={grown.drawnAsk.asker}
-              onanswer={grown.drawnAsk.onanswer}
-              onminimize={grown.askParks
-                ? () => grown.minimizeAsk()
-                : undefined}
-              ontaken={grown.drawnAsk.ontaken}
-              place={grown.askPlace}
-              request={grown.drawnAsk.request}
-              shown={grown.askShown}
-            />
+          {#key askIdOf(grown.drawnAsk)}
+            {@const drawn = grown.drawnAsk}
+            {#if drawn.kind === "parked"}
+              <fleet.ParkedPrompt
+                asker={drawn.asker}
+                choices={drawn.choices}
+                drawing={drawn.drawing}
+                elsewhere={drawn.elsewhere}
+                item={drawn.item}
+                onanswered={drawn.onanswered}
+                onchoose={drawn.onchoose}
+                onminimize={() => grown.minimizeAsk()}
+                onopen={drawn.onopen}
+                onpick={drawn.onpick}
+                place={grown.askPlace}
+                shown={grown.askShown}
+              />
+            {:else}
+              <fleet.Prompt
+                asker={drawn.asker}
+                onanswer={drawn.onanswer}
+                onminimize={grown.askParks
+                  ? () => grown.minimizeAsk()
+                  : undefined}
+                ontaken={drawn.ontaken}
+                place={grown.askPlace}
+                request={drawn.request}
+                shown={grown.askShown}
+              />
+            {/if}
           {/key}
         </div>
       {/if}

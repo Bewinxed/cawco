@@ -194,7 +194,7 @@
           {#each rows as row (row.key)}
             {#if row.kind === "tools"}
               <ToolGroup messages={row.messages} />
-            {:else if row.kind === "question"}
+            {:else if row.kind === "question" || row.kind === "parked"}
               <ToolGroup messages={[row.message]} />
             {:else if row.kind === "compaction"}
               <CompactionDivider {row} />

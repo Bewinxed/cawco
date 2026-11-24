@@ -3,6 +3,11 @@
   import type { HarnessKind } from "@cawco/core/harness/kinds";
   import { descriptorOf } from "@cawco/core/harness/kinds";
   import { harnessSpec } from "@cawco/core/harness-refusal";
+  import type {
+    ParkedDirection,
+    ParkedItem,
+    ParkedPick,
+  } from "@cawco/core/parked";
   import { questionsOf } from "@cawco/core/question";
   import type { PermissionResult } from "@cawco/core/session-messages";
   import { askWords } from "@cawco/core/words/asks";
@@ -59,6 +64,7 @@
   import EmptyAsk from "./EmptyAsk.svelte";
   import { askFirst, firstAskLabel } from "./empty-asks";
   import { findIn } from "./find/conversation-find.svelte";
+  import DirectionStage from "./graph/DirectionStage.svelte";
   import HarnessBlock from "./HarnessBlock.svelte";
   import { harnessBlockOf } from "./harness-block.svelte";
   import CawFace from "./home/CawFace.svelte";
@@ -68,6 +74,7 @@
   import { minimizedAsks } from "./minimized-asks.svelte";
   import MoveWait from "./move/MoveWait.svelte";
   import { moveOf } from "./move.svelte";
+  import { ParkedQueue, provideParked } from "./parked/parked-queue.svelte";
   import { planProgress, planShows } from "./plan";
   import PlanPane from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
@@ -81,6 +88,7 @@
     type TaskView,
   } from "./project-tasks";
   import RegionBoundary from "./RegionBoundary.svelte";
+  import { openArtifactIn } from "./reference-open.svelte";
   import { planAsked } from "./reference-things.svelte";
   import type { SendExtras } from "./send-store";
   import { cawOf } from "./session-status";
@@ -150,7 +158,11 @@
   } from "./transcript/connect-sign-ins.svelte";
   import FootFade from "./transcript/FootFade.svelte";
   import { followSends } from "./transcript/follow-sends.svelte";
-  import type { ComposerAsk } from "./transcript/grown-ask.svelte";
+  import {
+    askIdOf,
+    type ComposerAsk,
+    type ParkedAsk,
+  } from "./transcript/grown-ask.svelte";
   import { keepDraft } from "./transcript/keep-draft.svelte";
   import ProjectOffer from "./transcript/ProjectOffer.svelte";
   import { parkedAsks } from "./transcript/present";
@@ -1434,13 +1446,84 @@
       if (row.kind === "connect") {
         connectReveal.add(viewId);
       } else if (firstAsk) {
-        minimizedAsks.set(firstAsk.request.requestId, false);
+        minimizedAsks.set(askIdOf(firstAsk), false);
       }
     },
+    // A row of the pick the composer parks first brings the composer's
+    // card back up; any other opens where it lives.
+    showParked: (row) => {
+      if (!(
+        firstAsk?.kind === "parked" && askIdOf(firstAsk) === `parked:${row.key}`
+      )) {
+        return false;
+      }
+      minimizedAsks.set(askIdOf(firstAsk), false);
+      return true;
+    },
   });
+  /**
+   * What the session put to the person outside a tool call (core
+   * parked.ts): its design graphs' picks between directions and its
+   * decision cards he decides, which park in the composer with its asks.
+   * Read as the list of what waits is, and the transcript under the pane
+   * keeps each answered one where its call opened it.
+   */
+  const parkedQueue = new ParkedQueue({
+    instanceId: () => viewId,
+    onScreen: () => visible && isLive,
+  });
+  provideParked(parkedQueue);
+  /** Each pick parked here, as the composer grows into it. */
+  const parkedPick = (item: ParkedItem): Omit<ParkedAsk, "more"> => ({
+    kind: "parked",
+    item,
+    asker: agentName,
+    choices: parkedQueue.choicesOf(item),
+    elsewhere: parkedQueue.elsewhereOf(item),
+    drawing: directionDrawing,
+    onpick: (file) => parkedQueue.pick(item, file),
+    onchoose: (card, change) => parkedQueue.choose(item, card, change),
+    onanswered: () => parkedQueue.answered(item),
+    onopen: () => {
+      detach(
+        openArtifactIn(
+          viewId,
+          item.artifact.id,
+          item.kind === "card" ? { card: item.card.id } : { top: true }
+        ),
+        "open parked pick"
+      );
+    },
+  });
+  /**
+   * Every ask the composer grows into, oldest first: its parked permissions
+   * and questions, as the hub raised them, and its parked picks, as they
+   * were put to the person.
+   */
+  const composerAsks = $derived(
+    [
+      ...parked.map((row, at) => ({
+        at: row.request.raisedAt ?? 0,
+        order: at,
+        row,
+        item: null,
+      })),
+      ...parkedQueue.open.map((item, at) => ({
+        at: Date.parse(item.askedAt),
+        order: parked.length + at,
+        row: null,
+        item,
+      })),
+    ].sort((a, b) => a.at - b.at || a.order - b.order)
+  );
   /** The first of them, which the composer grows into: one ask at a time. */
   const firstAsk = $derived.by((): ComposerAsk | null => {
-    const [first] = parked;
+    const [next] = composerAsks;
+    const more = composerAsks.length - 1;
+    if (next?.item) {
+      return { ...parkedPick(next.item), more };
+    }
+    const first = next?.row;
     const askedIn = first?.under?.instanceId ?? "";
     return first
       ? {
@@ -1452,7 +1535,7 @@
           ...(first.under
             ? { ontaken: () => detach(goto(rowHref(askedIn)), "goto asker") }
             : {}),
-          more: parked.length - 1,
+          more,
           onanswer: (result) => onanswer(first.request, first.machine, result),
         }
       : null;
@@ -1644,7 +1727,7 @@
     trayHasChips(viewId) ||
       !!planProgressNow ||
       waitList.rows.length > 0 ||
-      (!!firstAsk && minimizedAsks.has(firstAsk.request.requestId))
+      (!!firstAsk && minimizedAsks.has(askIdOf(firstAsk)))
   );
   /**
    * The room this pane's transcript keeps clear at its foot for the
@@ -1780,6 +1863,17 @@
 
 <!-- The composer's two slots, drawn by whichever composer is writing to this
      conversation: the one below on a desk, the deck's on a phone. -->
+<!-- A direction of a pick parked in the composer, drawn live on its graph's own stage. -->
+{#snippet directionDrawing(pick: ParkedPick, direction: ParkedDirection)}
+  <DirectionStage
+    artifact={pick.artifact}
+    file={direction.file}
+    name={direction.name}
+    path={pick.path}
+    story={direction.story}
+  />
+{/snippet}
+
 {#snippet rowsAfter()}
   {@render afterRows?.()}
   {#each connectsUnder as row (row.request.requestId)}

@@ -168,6 +168,8 @@ export interface ArtifactServiceDeps {
     ) => Promise<Settler>;
     /** A pick recorded on `card` from the person's own words: his, so the member it went to has it no more (settling.ts `personWrote`). */
     cited: (row: ArtifactRow, card: DecisionCard) => void;
+    /** The cards of page `artifactId` the hub sent to a member other than the person (the ledger's, settling.ts): theirs to settle, never parked in the person's composer. */
+    routedOff: (artifactId: string) => ReadonlySet<string>;
   };
   /**
    * Whether `workspaceId` holds a work item of the session's delegates: one it

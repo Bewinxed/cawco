@@ -159,6 +159,7 @@ typeOverrides:
     OwnToolsChosenStepLists: OpenEnums.OwnToolsChosenStepLists
     PageAnchorFramework: OpenEnums.PageAnchorFramework
     PageAnchorScheme: OpenEnums.PageAnchorScheme
+    ParkedState: OpenEnums.ParkedState
     PasskeyRelayStatus: OpenEnums.PasskeyRelayStatus
     PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome
     PersonReadState: OpenEnums.PersonReadState

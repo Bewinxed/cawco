@@ -185,6 +185,35 @@ export interface Bridge {
 
 export const bridge = (): Bridge | null => window.cawco ?? null;
 
+/**
+ * Where a card reads its picks and writes them: on a decision page, the
+ * overlay's bridge, which stores a press on an option itself (pick.ts); in
+ * the composer that parks the card (transcript/ParkedPrompt.svelte), the
+ * artifact's doc the composer holds, a press written through `pick`. `bare`:
+ * the card stands in a surface of its own (the composer's), so it draws none.
+ */
+export interface DecisionHost {
+  bare: boolean;
+  bridge: () => Pick<Bridge, "note"> | null;
+  /** A press on an option, where nothing else stores it: the options now chosen. */
+  pick?: (choice: string, options: string[]) => void;
+  picks: () => Record<string, ChoiceEntry>;
+}
+
+/** The context a card finds its host under; none on a decision page. */
+export const DECISION_HOST = "decision-host";
+
+/** The page's own host: the overlay's bridge and the picks it hears. */
+const PAGE_HOST: DecisionHost = {
+  bare: false,
+  bridge,
+  picks: () => picks.now,
+};
+
+/** The host a card stands in: the one its parent provides, else the page's. Call it in the card's script. */
+export const decisionHost = (): DecisionHost =>
+  getContext<DecisionHost | undefined>(DECISION_HOST) ?? PAGE_HOST;
+
 /** This page's artifact id and the overlay's served hash, from the overlay's tag. */
 export const overlayTag = (): { artifact: string | null; hash: string } => {
   const tag = document.querySelector<HTMLScriptElement>(

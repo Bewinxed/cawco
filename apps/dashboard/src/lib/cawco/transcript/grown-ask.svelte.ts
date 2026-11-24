@@ -25,9 +25,16 @@
  * writable under a parked card.
  */
 
+import type { ChoiceEntry } from "@cawco/core/choices";
+import {
+  type ParkedDirection,
+  type ParkedItem,
+  type ParkedPick,
+  parkedId,
+} from "@cawco/core/parked";
 import { questionsOf } from "@cawco/core/question";
 import type { PermissionResult } from "@cawco/core/session-messages";
-import { tick, untrack } from "svelte";
+import { type Snippet, tick, untrack } from "svelte";
 import { frameObserver } from "#lib/platform/frame-observer.js";
 import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
 import { minimizedAsks } from "../minimized-asks.svelte";
@@ -35,15 +42,44 @@ import type { PendingPermission } from "../stores/sessions.svelte";
 import type { ComposerDraft } from "./composer-draft.svelte";
 import { GrownShape, layoutScale, measureShape } from "./grown";
 
-/**
- * The ask a conversation has parked on its composer, the first of those
- * waiting: the composer grows into it until it is answered or withdrawn.
- */
-export interface ComposerAsk {
+/** What every ask parked on a composer carries. */
+interface AskCommon {
   /** Who asks, as the conversation names its agent ("Caw" in a project's conversation). */
   asker: string;
   /** How many more asks wait behind this one. */
   more: number;
+}
+
+/**
+ * A pick the session put to the person outside a tool call (core
+ * parked.ts): a design's directions or a decision card, answered in the
+ * composer as where it lives (ParkedPrompt). It folds to its bar as a
+ * question does.
+ */
+export interface ParkedAsk extends AskCommon {
+  /** Its artifact's choices as its doc holds them now. */
+  choices: Record<string, ChoiceEntry>;
+  /** A direction of a pick, drawn live (DirectionStage). */
+  drawing: Snippet<[ParkedPick, ParkedDirection]>;
+  /** Picked where it lives while it stood here: what, said before it folds. */
+  elsewhere: string | null;
+  item: ParkedItem;
+  kind: "parked";
+  onanswered: () => void;
+  onchoose: (
+    card: string,
+    change: { options: string[] } | { note: string }
+  ) => string | null;
+  onopen: () => void;
+  onpick: (file: string) => string | null;
+}
+
+/**
+ * A permission or a question the session's turn is parked on: the
+ * composer grows into it until it is answered or withdrawn.
+ */
+export interface PermissionAsk extends AskCommon {
+  kind?: "permission";
   /** Submits its answer; the id of the command it went out as (Prompt). */
   onanswer: (result: PermissionResult) => string | null;
   /**
@@ -54,6 +90,27 @@ export interface ComposerAsk {
   ontaken?: () => void;
   request: PendingPermission;
 }
+
+/**
+ * The ask a conversation has parked on its composer, the first of those
+ * waiting: the composer grows into it until it is answered or withdrawn.
+ */
+export type ComposerAsk = PermissionAsk | ParkedAsk;
+
+/** An ask's id, one per ask whatever its kind: what its minimize and its place in the run name it by. */
+export const askIdOf = (ask: ComposerAsk): string =>
+  ask.kind === "parked" ? parkedId(ask.item) : ask.request.requestId;
+
+/** What an ask asks, in one line: its bar's words while it is minimized. */
+export const askSummaryOf = (ask: ComposerAsk): string => {
+  if (ask.kind === "parked") {
+    return ask.item.kind === "directions"
+      ? ask.item.ask
+      : ask.item.card.question;
+  }
+  const [first] = questionsOf(ask.request.toolName, ask.request.input) ?? [];
+  return first?.question || first?.header || ask.request.presentation.summary;
+};
 
 export interface GrownAskParts {
   /** The ask parked on this conversation, which the composer grows into; none with none. */
@@ -92,14 +149,18 @@ export class GrownAsk {
   /** The questions the parked ask puts, if it is a question. */
   readonly askQuestions = $derived.by(() => {
     const ask = this.#parts.ask();
-    return ask ? questionsOf(ask.request.toolName, ask.request.input) : null;
+    return ask && ask.kind !== "parked"
+      ? questionsOf(ask.request.toolName, ask.request.input)
+      : null;
   });
-  /** The parked ask can fold to its bar: a question. */
-  readonly askParks = $derived(!!this.askQuestions);
+  /** The parked ask can fold to its bar: a question, or a pick parked here. */
+  readonly askParks = $derived.by(
+    () => !!this.askQuestions || this.#parts.ask()?.kind === "parked"
+  );
   /** The parked ask is one the reader minimized here. */
   readonly minimized = $derived.by(() => {
     const ask = this.#parts.ask();
-    return !!(ask && this.askParks && minimizedAsks.has(ask.request.requestId));
+    return !!(ask && this.askParks && minimizedAsks.has(askIdOf(ask)));
   });
   /** The ask the composer grows into: the parked one, unless it is minimized. */
   readonly grownAsk = $derived.by(() =>
@@ -107,11 +168,10 @@ export class GrownAsk {
   );
   /** The composer is an ask, from its growth until its fold has landed. */
   readonly askOpen = $derived(!!this.drawnAsk);
-  readonly askId = $derived(this.grownAsk?.request.requestId ?? null);
+  readonly askId = $derived(this.grownAsk ? askIdOf(this.grownAsk) : null);
   readonly askPlace = $derived.by(() => {
     const { grownAsk, drawnAsk } = this;
-    return grownAsk &&
-      drawnAsk?.request.requestId === grownAsk.request.requestId
+    return grownAsk && drawnAsk && askIdOf(drawnAsk) === askIdOf(grownAsk)
       ? {
           at: this.#parts.draft().askRun + 1,
           of: this.#parts.draft().askRun + 1 + grownAsk.more,
@@ -138,7 +198,7 @@ export class GrownAsk {
         return;
       }
       untrack(() => {
-        const drawn = this.drawnAsk?.request.requestId ?? null;
+        const drawn = this.drawnAsk ? askIdOf(this.drawnAsk) : null;
         if (id === drawn && (id === null || this.askRaised)) {
           return;
         }
@@ -200,7 +260,7 @@ export class GrownAsk {
     // Keys that were in the card follow it onto its bar; a finger's swipe
     // leaves focus where it was, so no ring is drawn under a touch.
     const keys = !!this.askPanel?.contains(document.activeElement);
-    minimizedAsks.set(ask.request.requestId, true);
+    minimizedAsks.set(askIdOf(ask), true);
     await tick();
     if (keys) {
       this.askedChip?.focus();
@@ -210,7 +270,7 @@ export class GrownAsk {
   restoreAsk(): void {
     const ask = this.#parts.ask();
     if (ask) {
-      minimizedAsks.set(ask.request.requestId, false);
+      minimizedAsks.set(askIdOf(ask), false);
     }
   }
 
@@ -299,7 +359,7 @@ export class GrownAsk {
 
   /** The next ask waiting takes the shape's place, grown: no fold between. */
   async #switchAsk(next: ComposerAsk, turn: number): Promise<void> {
-    const same = this.drawnAsk?.request.requestId === next.request.requestId;
+    const same = !!this.drawnAsk && askIdOf(this.drawnAsk) === askIdOf(next);
     this.askRaised = true;
     if (!same) {
       this.#parts.draft().askRun += 1;
