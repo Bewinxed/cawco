@@ -15,6 +15,7 @@
   import Foundation from "./Foundation.svelte";
   import { type Family, framesOf, GROUPS, titleOf } from "./families.js";
   import { type Foundation as Group, ROLES, SCALES } from "./foundations.js";
+  import NearView from "./NearView.svelte";
   import "./type-pairs/type-pairs.css";
   import { PAIRS, type Pair, slugOf, TODAY } from "./type-pairs/pairs.js";
 
@@ -121,20 +122,24 @@
         <p class="max-w-measure text-tx-2 type-body">{note}</p>
       {/if}
     </header>
-    <div class="grid overflow-clip rounded-lg ring ring-ui @phone:grid-cols-2">
-      {#each SCHEMES as scheme (scheme.scheme)}
-        <div
-          data-scheme={scheme.scheme}
-          class={[
-            "flex min-w-0 flex-col gap-space-3 bg-bg p-space-4 text-tx",
-            scheme.scheme === "dark" ? "scheme-dark" : "scheme-light",
-          ]}
-        >
-          <p class="text-tx-2 type-meta">{scheme.label}</p>
-          {@render pane()}
-        </div>
-      {/each}
-    </div>
+    <NearView>
+      <div
+        class="grid overflow-clip rounded-lg ring ring-ui @phone:grid-cols-2"
+      >
+        {#each SCHEMES as scheme (scheme.scheme)}
+          <div
+            data-scheme={scheme.scheme}
+            class={[
+              "flex min-w-0 flex-col gap-space-3 bg-bg p-space-4 text-tx",
+              scheme.scheme === "dark" ? "scheme-dark" : "scheme-light",
+            ]}
+          >
+            <p class="text-tx-2 type-meta">{scheme.label}</p>
+            {@render pane()}
+          </div>
+        {/each}
+      </div>
+    </NearView>
   </section>
 {/snippet}
 

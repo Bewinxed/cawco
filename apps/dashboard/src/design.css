@@ -2995,6 +2995,16 @@
    baseline, and a glyph beside it centres on the capitals' middle, as
    symbols do beside words (owner, 2026-11-24: equal padding round a
    button's words). */
+/* A chosen radio's mark: its edge in coral grown inward to leave a dot of
+   the ground on coral at its centre, one box drawn, so the dot is centred
+   in the ring at any pixel offset (a dot laid inside the ring as its own
+   box was rounded apart from it). */
+@utility radio-on {
+  border-style: solid;
+  border-color: var(--color-accent);
+  border-width: calc(var(--spacing) * 1.25);
+  background-color: var(--color-on-accent);
+}
 @utility mark-cap {
   --mark-edge: cap;
   --mark-band: 1cap;

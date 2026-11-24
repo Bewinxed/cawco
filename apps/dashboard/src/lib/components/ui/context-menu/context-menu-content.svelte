@@ -54,7 +54,7 @@
     {strategy}
     class={cn(
       floatingSurface({ motion }),
-      "relative z-(--layer-float) min-w-48 origin-(--bits-context-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
+      "relative z-(--layer-float) p-space-1 min-w-48 origin-(--bits-context-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
       className
     )}
     data-slot="context-menu-content"

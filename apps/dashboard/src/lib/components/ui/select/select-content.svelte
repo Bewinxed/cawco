@@ -60,7 +60,7 @@
     {strategy}
     class={cn(
       floatingSurface(),
-      "relative isolate z-(--layer-float) max-h-(--bits-select-content-available-height) min-w-36 origin-(--bits-select-content-transform-origin) overflow-y-auto overflow-x-hidden",
+      "relative isolate z-(--layer-float) p-space-1 max-h-(--bits-select-content-available-height) min-w-36 origin-(--bits-select-content-transform-origin) overflow-y-auto overflow-x-hidden",
       className
     )}
     data-slot="select-content"

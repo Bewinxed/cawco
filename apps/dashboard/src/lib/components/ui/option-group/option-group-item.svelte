@@ -62,7 +62,7 @@
     group.glide &&
       "relative z-2 bg-transparent aria-checked:ring-transparent aria-checked:bg-transparent",
     group.layout === "list" &&
-      "items-box-start grid min-w-0 grid-cols-auto-fluid",
+      "items-box-start grid min-w-0 grid-cols-auto-fluid content-center",
     group.layout === "tiles" &&
       (tile === "picture"
         ? "size-c-pose-tile min-h-0 place-items-center justify-center rounded-lg p-space-1"
@@ -91,23 +91,25 @@
   {...restProps}
 >
   {#if group.layout !== "tiles"}
-    <span
-      aria-hidden="true"
-      class={[
-        "grid size-icon-md flex-none place-items-center border transition-[border-color,background-color] duration-(--duration-fast) ease-out",
-        group.multiple ? "rounded-xs" : "rounded-pill",
-        chosen ? "border-accent bg-accent text-on-accent" : "border-ui-3 bg-bg",
-      ]}
-      data-box
-      data-slot="option-mark"
-    >
-      {#if chosen}
-        {#if group.multiple}
+    <!-- A cell one line box tall, so the mark stands centred on the label's
+         first line however many lines the option runs to (`mark-cell`). -->
+    <span aria-hidden="true" class="mark-cell" data-box>
+      <span
+        class={[
+          "grid size-icon-md flex-none place-items-center transition-[border-color,border-width,background-color] duration-(--duration-fast) ease-out",
+          group.multiple ? "rounded-xs" : "rounded-pill",
+          !chosen && "border border-ui-3 bg-bg",
+          chosen &&
+            (group.multiple
+              ? "border border-accent bg-accent text-on-accent"
+              : "radio-on"),
+        ]}
+        data-slot="option-mark"
+      >
+        {#if chosen && group.multiple}
           <IconTick class="size-icon-sm" />
-        {:else}
-          <span class="size-1.5 rounded-pill bg-on-accent"></span>
         {/if}
-      {/if}
+      </span>
     </span>
   {/if}
   {@render children?.()}
