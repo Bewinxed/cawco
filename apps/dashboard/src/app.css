@@ -1317,3 +1317,17 @@
     }
   }
 }
+
+@layer overrides {
+  /* While a split slides open or shut (Split.svelte `pageHold`), the page's
+     content stands at the width the slide lands it at, laid out once as the
+     slide starts, and the page pane (paneforge's, which clips) moves its
+     box over it: a long conversation is never laid out again frame by
+     frame. Over the content's own width utilities (a page held to the
+     pane's width by `max-w-full`), so in this layer. */
+  [data-main-pane][data-page-held] > * {
+    flex: none;
+    inline-size: var(--page-hold);
+    max-inline-size: none;
+  }
+}

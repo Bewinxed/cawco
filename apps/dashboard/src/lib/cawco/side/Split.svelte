@@ -273,6 +273,15 @@
   });
   /** The split is sliding: the reader is watching it open or close. */
   let sliding = $state(false);
+  /**
+   * While it slides, the page's width as the slide will land it, in px: its
+   * content is laid out at that width once, as the slide starts, and only
+   * the panes' boxes move under it (app.css `[data-page-held]`). Laid out at
+   * the page pane's width on every frame instead, a long conversation's
+   * lines rewrapped through the whole slide (SplitSlide.stories.ts at 4x: a
+   * frame dropped each way, layout in every frame). 0: held at nothing.
+   */
+  let pageHold = $state(0);
   /** The surface's share as its pane was last laid out, in percent. */
   let laidShare = $state(untrack(() => share));
   /**
@@ -314,6 +323,16 @@
     const seen =
       untrack(() => visible && !fromRow) && motionOk.current && !snapped;
     sliding = seen;
+    // The surface's share it slides to, and the page's width beside it then.
+    // Expanded, the page is nothing and out of sight: nothing is held.
+    let target = 0;
+    if (opening) {
+      target = full ? 100 : untrack(() => sideSize);
+    }
+    const landing = untrack(
+      () => ((laidWidth - DIVIDER) * (100 - target)) / 100
+    );
+    pageHold = seen && landing > 0 && target < 100 ? landing : 0;
     let settle = 0;
     let gone = false;
     // The size is this page's own, held to the floor (`sideSize`): paneforge
@@ -338,6 +357,7 @@
           Promise.allSettled(runs.map((run) => run.finished)).then(() => {
             if (!gone) {
               sliding = false;
+              pageHold = 0;
             }
           });
         }
@@ -353,6 +373,8 @@
         );
     return () => {
       gone = true;
+      // A slide cut short (a drag taking the handle) lets the page go.
+      pageHold = 0;
       cancelAnimationFrame(frame);
       cancelAnimationFrame(settle);
       clearTimeout(timer);
@@ -385,7 +407,9 @@
 <!-- Opening or closing in front of the reader grows one side into the
      other: the split's size change is the information. Opening decelerates
      into place on the drawer curve; closing is a morph on --ease-in-out.
-     Any other size — a drag, a pane sized off screen — is taken at once. -->
+     The page's words take their landing width as the slide starts
+     (`pageHold`), so the slide lays out only the panes' boxes. Any other
+     size — a drag, a pane sized off screen — is taken at once. -->
 <div
   data-slot="side-split"
   data-split-expanded={expanded || undefined}
@@ -407,7 +431,9 @@
     <Resizable.Pane
       data-main-pane
       data-opening={(sliding && open) || undefined}
+      data-page-held={pageHold > 0 || undefined}
       data-sliding={sliding || undefined}
+      style={pageHold > 0 ? `--page-hold: ${pageHold}px` : undefined}
       collapsedSize={0}
       collapsible
       defaultSize={100 - sideSize}
