@@ -142,47 +142,11 @@ export const memoryRunWords = {
     `The project's memory keeps this rule (${id}): ${rule}\n\nWhat to do instead, which the check's message says: ${method}\n\nMake it a check a tool runs, a lint rule or a refusal of the hub's, so no agent has to remember it. Once this task is done, the nightly memory run takes the rule's line out of the memory: the check holds it.`,
   checkAcceptance:
     "The project's check command fails on a file that breaks the rule, and its message says what to do instead.",
-  /** The task that builds a lesson about CawCo into CawCo, in a project that develops CawCo: its title, description and acceptance line. */
-  productTitle: (rule: string) => `Build into CawCo: ${rule}`,
-  productDescription: (rule: string, id: string) =>
-    `The project's memory keeps a lesson about how CawCo behaves, or should behave, for every user (${id}): ${rule}\n\nBuild it into CawCo, so every user's sessions get it from the product: a fixed defect, a tool's behaviour or description, a refusal, or the instructions every session starts with. The lesson stays in the project's memory until this task is done; then the nightly memory run retires it.`,
-  productAcceptance:
-    "Every session in every project gets this from CawCo itself, with no line in a project's memory.",
-  /** A lesson about CawCo given its task, as an answer and a commit say it. */
-  productFiled: (id: string, task: string) =>
-    `${id} is about CawCo: task ${task} builds it into CawCo, and the lesson stays until it is done`,
-  productCovered: (id: string, task: string) =>
-    `${id} is about CawCo: open task ${task} builds it into CawCo already, and the lesson stays until it is done`,
-  productReopened: (id: string, task: string) =>
-    `${id} is about CawCo: task ${task}, dropped before, is open again to build it into CawCo, and the lesson stays until it is done`,
-  productBuilt: (id: string, task: string) =>
-    `${id} is about CawCo, and task ${task} built it into CawCo: the next upkeep retires the lesson`,
-  productNotFiled: (id: string, why: string) =>
-    `${id} is about CawCo, and its task was not filed (${why}): the lesson stays without one`,
-  /** Why a task dropped before is open again: a lesson about CawCo rests on it. */
-  productTaskReopened: (id: string) =>
-    `${id} is about CawCo and stays in the project's memory until this task is done`,
-  /** Why a task filed for a lesson is dropped once no lesson rests on it. */
-  productTaskDropped: (id: string) =>
-    `${id} stays in the project's memory as the project's own, so CawCo builds nothing for it`,
-  /** The recovery's one commit putting back the lessons taken out as CawCo's and giving each lesson about CawCo its task. */
-  productRepaired: (
-    back: readonly string[],
-    given: readonly { id: string; task: string }[]
-  ) =>
-    [
-      back.length > 0
-        ? `put back ${back.join(", ")}, taken out as CawCo's before CawCo carried ${back.length === 1 ? "it" : "them"}`
-        : "",
-      given.length > 0
-        ? `${given.map(({ id, task }) => `${id} waits on ${task}`).join(", ")} to build ${given.length === 1 ? "it" : "them"} into CawCo`
-        : "",
-    ]
-      .filter(Boolean)
-      .join("; ") || "no lesson about CawCo to give a task",
   /** A check filed, as its commit and answer say it. */
   checkFiled: (id: string, task: string) =>
     `${id} is a check: task ${task} builds it, and the rule stays as a line until it is done`,
+  /** Why the memory run's open tasks for its lessons were dropped, once, as the hub moved them. */
+  lessonTaskDropped: "memory task loop removed, owner 2026-11-24",
   checkNotFiled: (why: string) =>
     `its check's task was not filed (${why}), so the rule stays as a line`,
   /** A check asked of a kept lesson, its sources corroborating it. */
@@ -280,8 +244,6 @@ export const memoryRunWords = {
     `counted: stated again ${times} time${times === 1 ? "" : "s"}`,
   didHeld: (path: string) => `stated again twice: held, and moved to ${path}`,
   didHeldStays: "stated again twice: held where it is",
-  didChecked: (task: string) =>
-    `stated again twice: held, and a check filed as task ${task}`,
   didNothing: "nothing: replace it if the message changes it",
   briefStaged: (count: number) =>
     `## Lessons waiting for a second session\n\n${count} lesson${count === 1 ? "" : "s"} staged from one note. A note from another session that says the same: corroborate the lesson with it.`,
@@ -324,7 +286,6 @@ export const memoryRunWords = {
       retired: number;
       reverted: number;
       staged: number;
-      product: number;
     }
   ) => {
     const parts = [
@@ -339,9 +300,6 @@ export const memoryRunWords = {
         : "",
       counts.reverted > 0
         ? `took ${counts.reverted} back that you said otherwise`
-        : "",
-      counts.product > 0
-        ? `gave ${counts.product} about CawCo a task to build ${counts.product === 1 ? "it" : "them"} into CawCo`
         : "",
     ].filter(Boolean);
     if (parts[0]) {
@@ -423,22 +381,6 @@ export const memoryJevWords = {
     false:
       "They are about different things, or one asks for something the other does not.",
   },
-  /** Whether a lesson is about how CawCo behaves for every user of the app. */
-  productQuestion:
-    "Does `lesson`, kept in one project's memory, say how CawCo behaves, or should behave, for every user of the app?",
-  productCriteria: {
-    true: "It works around something CawCo does wrong (a tool, a dispatch, a session, a unit), or says what CawCo's tools, artifacts, memory or sessions do or should do: every user's agents meet it, in any project.",
-    false:
-      "It is about this repository's code, build, tests or tools, CawCo's own source among them, or about how one person likes work done.",
-  },
-  /** Whether an open task builds a lesson about CawCo itself into CawCo already. */
-  coversQuestion:
-    "Does `task`, the title of an open task, ask for CawCo itself to do what `lesson` asks of agents?",
-  coversCriteria: {
-    true: "Once the task is done, CawCo does what the lesson asks, or tells every agent to.",
-    false:
-      "The task is about something else, or does only part of what the lesson asks.",
-  },
   /** Whether two notes state the same lesson. */
   sameQuestion: "Do notes `a` and `b` state the same lesson about the project?",
   sameCriteria: {
@@ -461,9 +403,8 @@ For each message and each note, pick one:
 2. A rule about how one workflow is run: find the skill that runs that workflow (read its SKILL.md) and add it with home {skill}. If no skill does, home "index".
 3. A rule for all work here: home "index".
 4. A fact about the project (a command, a place, what fails): home {knowledge}. Name the file and a literal string in it that bears the fact out, as anchor: the hub reads that file in the project's checkout, and reads it again each night. An agent's note lands once the file bears it out, or a note from a second session says the same; until then it waits, staged.
-5. How CawCo behaves, or should behave, for every user (a tool, a session, a dispatch, a defect to work around): "add" it as any lesson. Where this project develops CawCo, the hub also gives it a task to build it into CawCo, and its answer names the task.
-6. Already kept: "corroborate" the lesson. Changed by the person: "replace" it, and say in why what the rule was until today. Under a message, the hub says what it already did to a lesson the message states again or changes: one it put back or counted needs nothing more from you; one it took back needs what the message asks now, written as a lesson.
-7. About one task or one moment, or already said by the repository's CLAUDE.md or a skill: "drop", with the reason. A note that says what a kept lesson says is "corroborate" of it, or a "drop" with reason "duplicate" and that lesson's id in of.
+5. Already kept: "corroborate" the lesson. Changed by the person: "replace" it, and say in why what the rule was until today. Under a message, the hub says what it already did to a lesson the message states again or changes: one it put back or counted needs nothing more from you; one it took back needs what the message asks now, written as a lesson.
+6. About one task or one moment, or already said by the repository's CLAUDE.md or a skill: "drop", with the reason. A note that says what a kept lesson says is "corroborate" of it, or a "drop" with reason "duplicate" and that lesson's id in of.
 
 Name every message and note of your brief in some operation's sources, a drop included: a note that says what a message says goes in the sources of that message's operation. memory_apply's answer lists what is not named yet.
 

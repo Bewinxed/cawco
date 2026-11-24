@@ -164,13 +164,9 @@ export type LessonSource =
 export interface Lesson {
   /** Whose rule it is: the person's (a message, a line he approved or wrote), or agents' (notes). */
   by: "owner" | "agent";
-  /** The task that builds its check, a lint rule or a hub refusal: once it is done the check holds the rule, and its line goes. */
-  check?: { task: string };
   /** He stated it again after the run changed or removed it, or a session changed it through memory_rule: never evicted or retired by the run, and, retired, kept in the ledger past its days. */
   held?: true;
   home: LessonHome;
-  /** The task that builds it into CawCo: it says how CawCo behaves, or should behave, for every user. The lesson stays until the task is done, then retires `product`. */
-  product?: { task: string };
   /** Times he stated it again while it was live. */
   repeats: number;
   /** Removed, why and when, with its words kept for 30 days. */
@@ -178,10 +174,8 @@ export interface Lesson {
     /** The lesson that replaced it. */
     by?: string;
     on: string;
-    /** The task that built it into CawCo (`product`). */
-    task?: string;
     text: string;
-    /** `stale`: the file it rested on, or the match in it, is gone. `merged`: another lesson said the same, and holds its sources now (`by`). `product`: CawCo carries it now, its task (`task`) done. `hand`: the person took it out, by hand from its file (its words not kept) or through a session's memory_rule (its words kept, held, the person's message, when there is one, among its sources). */
+    /** `stale`: the file it rested on, or the match in it, is gone. `merged`: another lesson said the same, and holds its sources now (`by`). `product`: CawCo carried it (a retirement made before that lifecycle was removed). `hand`: the person took it out, by hand from its file (its words not kept) or through a session's memory_rule (its words kept, held, the person's message, when there is one, among its sources). */
     why:
       | "merged"
       | "product"
@@ -232,12 +226,8 @@ export interface MemoryRunState {
     retired: number;
     /** Lessons taken back because the person stated the opposite; none before it was counted. */
     reverted?: number;
-    /** Lessons about CawCo given a task to build them into CawCo; none before it was counted. */
-    product?: number;
     staged: number;
   } | null;
-  /** The day the recovery put back every lesson taken out as CawCo's before CawCo carried it, and gave each lesson about CawCo its task, once it has. */
-  productTasked?: string;
   /** The day the one-time recovery run of the archived notes ran, once it has. */
   recovered?: string;
   /** The newest of the person's messages a run has read (an ISO time). */

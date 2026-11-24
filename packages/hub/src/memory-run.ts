@@ -58,30 +58,16 @@
  *   file). A rebase that meets a commit changing the same lines writes
  *   nothing, and the step reads again and works out its change again
  *   (project-folder.ts `againOnConflict`, three tries). What a step does
- *   outside the memory comes after its commit stands (a check filed for a
- *   held lesson, the next recovery run, tasks dropped), or is safe to do
- *   again: a read (a machine's file, a task's state, Jev), or a task
- *   filed once ({@link filedOnce}). No writer writes over a newer commit.
+ *   outside the memory comes after its commit stands (a check filed, the
+ *   next recovery run), or is safe to do again: a read (a machine's file,
+ *   a task's state, Jev). No writer writes over a newer commit.
  * - **Checks** ({@link plannedCheck}): a rule a tool can test is filed as
  *   a task in the project (`Check: <rule>`, through the tasks module, in
- *   the stage new tasks enter), its id kept on the lesson; the rule stays
- *   a line until the task is done, when upkeep enforces it and takes the
- *   line out ({@link tasksEnded}). A lesson of the index or a skill the
- *   person states again twice is filed as one by the hub.
- * - **Lessons about CawCo** ({@link productTask}): a lesson that says how
- *   CawCo behaves, or should behave, for every user (a defect worked
- *   around, what a tool or a session does) has the lifecycle of a check.
- *   In a project that develops CawCo, Jev reads each new lesson and a
- *   replace's new words for it (row `product`, in the request that reads
- *   it as kept already, {@link jevOnNew}); one it reads yes of is written
- *   as any lesson, and a task to build it into CawCo is filed, unless an
- *   open task asks for it already, its id kept on the lesson (`product`).
- *   The lesson stays until the task is done, when upkeep retires it
- *   `product`; a dropped task clears the mark and the lesson stays
- *   ({@link tasksEnded}). Anywhere else the lesson is kept unmarked: that
- *   project cannot change CawCo, and its agents need the lesson until
- *   CawCo carries it. The recovery, asked for, does it once for what came
- *   before ({@link productRepair}).
+ *   the stage new tasks enter), its field `check` the lesson's id, the
+ *   key it is found by over every task of any state ({@link fileCheck}):
+ *   an open, done or dropped one is never filed again. The rule stays a
+ *   line until the task is done, when upkeep enforces it and takes the
+ *   line out ({@link tasksEnded}).
  * - **Close** ({@link close}): where the run read up to is kept
  *   (`memory/state.json`), messages it was given and named in no operation
  *   carried to the next night once, and the run's one line said.
@@ -93,14 +79,12 @@
  *   archives nothing unread: a note its run names in no operation is the
  *   next run's first, and each run that judged something starts the next
  *   ({@link recoveryLeft}). Each time it is asked for, the live lessons
- *   that say the same are made one first ({@link mergedSame}), lessons
- *   about CawCo get their task once ({@link productRepair}), and it reads
+ *   that say the same are made one first ({@link mergedSame}), and it reads
  *   on, after what it holds, every note no run judged: those earlier
  *   recovery runs archived unread, and those archived as a duplicate of no
  *   live lesson ({@link recoveryStart}).
  */
 
-import { developsCawco } from "@cawco/core/binary-distribution";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type { RoutineOutcome } from "@cawco/core/routine-kinds";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
@@ -117,7 +101,6 @@ import type {
   Lesson,
   LessonHome,
   LessonSource,
-  MemoryLedger,
   MemoryRunState,
 } from "./db/stored-types";
 import { type JevAccess, jevAccess } from "./jev";
@@ -249,8 +232,6 @@ interface Counts {
   checks: number;
   dropped: number;
   notes: number;
-  /** Lessons about CawCo given a task to build them into CawCo ({@link productTask}). */
-  product: number;
   read: number;
   replaced: number;
   /** Lessons put back because the person stated them again. */
@@ -277,7 +258,9 @@ interface CheckAsk {
   text: string;
 }
 
-/** The task field naming the lesson a check's task, or a task building one into CawCo, is for. */
+/** The task field naming the lesson a check's task is for: the check's key, looked up over every task of any state. */
+const CHECK_FIELD = "check";
+/** The field the memory run's tasks carried before (a check's, or one building a lesson into CawCo): each still open is dropped once ({@link MemoryRun} `start`). */
 const LESSON_FIELD = "lesson";
 
 /** A lesson a message may state again or change: a live one's line, or the words of one the run took out. */
@@ -371,11 +354,9 @@ export interface MemoryRunDeps {
     projectId: string
   ) => { description: string; name: string }[];
   /**
-   * The project's tasks, as a check's or a lesson's for CawCo is filed and
-   * read (tasks.ts): one filed by the hub in the stage new tasks enter,
-   * answering its id; how one has ended (`dropped` when there is no such
-   * task); those not done or dropped, each by its title; one dropped
-   * opened again; one filed for a lesson dropped.
+   * The project's tasks, as a check's is filed and found (tasks.ts): one
+   * filed by the hub in the stage new tasks enter, answering its id; every
+   * task carrying a field; one moved to dropped.
    */
   readonly tasks: {
     file: (
@@ -387,23 +368,17 @@ export interface MemoryRunDeps {
         title: string;
       }
     ) => Promise<{ id: string } | { refused: string }>;
-    open: (
-      projectId: string
-    ) => Promise<{ id: string; title: string }[] | { refused: string }>;
-    state: (
-      projectId: string,
-      id: string
-    ) => Promise<"open" | "done" | "dropped" | undefined>;
     /**
-     * Task `id` open again for `reason`: one dropped moved to the stage new
-     * tasks enter (`reopened`); one open or done left where it is, as it
-     * stands; `gone` when there is no such task.
+     * Every task whose field `field` is set, on the board or archived, with
+     * how it stands and the field's value: what a check's task is found by.
      */
-    reopen: (
+    withField: (
       projectId: string,
-      id: string,
-      reason: string
-    ) => Promise<"reopened" | "open" | "done" | "gone" | { refused: string }>;
+      field: string
+    ) => Promise<
+      | { id: string; kind: "open" | "done" | "dropped"; value: string }[]
+      | { refused: string }
+    >;
     /**
      * Task `id` moved to the project's dropped stage with `reason`, when its
      * field `field` holds `value` and it is open; `kept` otherwise.
@@ -432,7 +407,6 @@ const RunStateSchema = z.object({
       at: z.string(),
       checks: z.number().optional(),
       dropped: z.number(),
-      product: z.number().optional(),
       read: z.number(),
       replaced: z.number(),
       restored: z.number().optional(),
@@ -441,7 +415,6 @@ const RunStateSchema = z.object({
       staged: z.number(),
     })
     .nullable(),
-  productTasked: z.string().optional(),
   recovered: z.string().optional(),
   through: z.string(),
 }) satisfies z.ZodType<MemoryRunState>;
@@ -451,13 +424,6 @@ const SAID_CRITERIA: Record<SaidKind, string> = memoryJevWords.saidKinds;
 
 const isSaidKind = (choice: string): choice is SaidKind =>
   Object.hasOwn(SAID_CRITERIA, choice);
-
-/** A task title's room for a lesson's words after its lead (tasks.ts takes 200 characters). */
-const TITLE_WORDS = 170;
-
-/** A lesson's words as a task's title carries them. */
-const titleWords = (text: string): string =>
-  text.length > TITLE_WORDS ? `${text.slice(0, TITLE_WORDS)}…` : text;
 
 /** A message's words, cut to what one read takes. */
 const cut = (text: string): string =>
@@ -529,7 +495,6 @@ const emptyCounts = (): Counts => ({
   checks: 0,
   dropped: 0,
   notes: 0,
-  product: 0,
   read: 0,
   replaced: 0,
   restored: 0,
@@ -587,17 +552,13 @@ const readQuestions = (
 /** The Jev rows a batch of questions asks, by their names' prefixes. */
 const rowsOf = (
   names: string[]
-): (
-  "said" | "inbox" | "support" | "same" | "kept" | "product" | "covers"
-)[] => {
+): ("said" | "inbox" | "support" | "same" | "kept")[] => {
   const rows = {
     "said:": "said",
     "note:": "inbox",
     "support:": "support",
     "same:": "same",
     "kept:": "kept",
-    "product:": "product",
-    "covers:": "covers",
   } as const;
   return Object.entries(rows).flatMap(([prefix, row]) =>
     names.some((name) => name.startsWith(prefix)) ? [row] : []
@@ -727,48 +688,6 @@ const roomFor = (tree: MemoryTree, path: string): boolean => {
     (each) => homeOf(each)?.at === "knowledge"
   );
   return topics.includes(path) || topics.length < CAPS.knowledgeFiles;
-};
-
-/** Each live lesson of `tree` with its line's words, and each staged one with its staged words. */
-const keptOrStaged = (tree: MemoryTree) =>
-  Object.entries(tree.ledger.lessons).flatMap(([id, lesson]) => {
-    const live = lesson.state === "live";
-    const text = live ? lineOf(tree, id)?.text : lesson.staged?.text;
-    return text && (live || lesson.state === "staged") ? [{ id, text }] : [];
-  });
-
-/**
- * Every lesson the ledger's history retired `product`, by its id: of
- * `commits` (newest first), the first whose ledger holds it retired
- * `product` and whose parent's holds it live or staged; that parent's
- * entry, the parent, and the task kept on the retirement.
- */
-const productRetirements = async (
-  commits: readonly { parent: string | null; sha: string }[],
-  ledgerAt: (sha: string) => Promise<MemoryLedger | undefined>
-) => {
-  const found = new Map<
-    string,
-    { entry: Lesson; parent: string; task: string | undefined }
-  >();
-  for (const { sha, parent } of commits) {
-    if (!parent) {
-      continue;
-    }
-    const after = await ledgerAt(sha);
-    const before = await ledgerAt(parent);
-    for (const [id, lesson] of Object.entries(after?.lessons ?? {})) {
-      const entry = before?.lessons[id];
-      if (
-        !found.has(id) &&
-        lesson.retired?.why === "product" &&
-        (entry?.state === "live" || entry?.state === "staged")
-      ) {
-        found.set(id, { entry, parent, task: lesson.retired.task });
-      }
-    }
-  }
-  return found;
 };
 
 /**
@@ -969,54 +888,15 @@ const keptQuestions = (
     },
   ]);
 
-/** Jev's question whether lesson `text` is about how CawCo behaves for every user, named under `key`. */
-const productQuestion = (
-  key: string,
-  text: string
-): [string, Experimental_DecisionQuestion] => [
-  `product:${key}`,
-  {
-    type: "boolean",
-    instructions: { lesson: text, question: memoryJevWords.productQuestion },
-    criteria: memoryJevWords.productCriteria,
-  },
-];
-
-/** Whether Jev read the lesson asked under `key` as about CawCo, at or over {@link SAME}. */
-const aboutCawco = (
-  key: string,
-  answers: Map<string, number> | undefined
-): boolean => (answers?.get(`product:${key}`) ?? 0) >= SAME;
-
-/** Jev's question on each task of `open`, whether it builds lesson `text` into CawCo, named under `key`. */
-const coversQuestions = (
-  key: string,
-  text: string,
-  open: readonly { id: string; title: string }[]
-): [string, Experimental_DecisionQuestion][] =>
-  open.map((task): [string, Experimental_DecisionQuestion] => [
-    `covers:${key}:${task.id}`,
-    {
-      type: "boolean",
-      instructions: {
-        lesson: text,
-        task: task.title,
-        question: memoryJevWords.coversQuestion,
-      },
-      criteria: memoryJevWords.coversCriteria,
-    },
-  ]);
-
-/** The one of `beside` Jev read yes of in `row` under `key` (`kept`: it says what the lesson asked says; `covers`: the open task builds the lesson into CawCo): the likeliest at or over {@link SAME}. */
+/** The one of `beside` Jev read yes of under `key`, saying what the lesson asked says: the likeliest at or over {@link SAME}. */
 const likeliest = (
-  row: "kept" | "covers",
   key: string,
   beside: readonly { id: string }[],
   answers: Map<string, number> | undefined
 ): string | undefined => {
   let best: { id: string; score: number } | undefined;
   for (const kept of beside) {
-    const score = answers?.get(`${row}:${key}:${kept.id}`) ?? 0;
+    const score = answers?.get(`kept:${key}:${kept.id}`) ?? 0;
     if (score >= SAME && score > (best?.score ?? 0)) {
       best = { id: kept.id, score };
     }
@@ -1127,20 +1007,6 @@ const withLesson = (
     lessons: { ...tree.ledger.lessons, [id]: lesson },
   },
 });
-
-/** `tree` with lesson `id` waiting on no task of `mark`: its check's, or the one building it into CawCo. */
-const unmarked = (
-  tree: MemoryTree,
-  id: string,
-  mark: "check" | "product"
-): MemoryTree => {
-  const lesson = tree.ledger.lessons[id];
-  if (!lesson) {
-    return tree;
-  }
-  const { [mark]: _ended, ...rest } = lesson;
-  return withLesson(tree, id, rest);
-};
 
 /** Whether a line's words stand as a lesson: within `cap`, one line, quoting no one. */
 const fits = (text: string, cap: number): boolean =>
@@ -1555,53 +1421,37 @@ export const createMemoryRun = ({
   };
 
   /**
-   * Every lesson whose task has ended (§2 A.4): a live one's check, or the
-   * task building a live or staged one into CawCo. Done, the check holds
-   * the rule, so the lesson is enforced and its line taken out; or CawCo
-   * carries it, so the lesson retires `product`. Dropped or gone, the
-   * lesson stays as it is and waits on no task.
+   * Every lesson whose check's task is done (§2 A.4), found by the task's
+   * `check` field over every task of any state: the check holds the rule,
+   * so the lesson is enforced and its line taken out.
    */
   const tasksEnded = async (
     projectId: string,
     tree: MemoryTree,
     today: string
   ): Promise<MemoryTree> => {
+    const filed = await tasks.withField(projectId, CHECK_FIELD);
+    if ("refused" in filed) {
+      console.warn(
+        `[memory] ${projectId}: its checks' tasks were not read: ${filed.refused}`
+      );
+      return tree;
+    }
     let now = tree;
-    for (const id of Object.keys(tree.ledger.lessons)) {
-      now = await taskEnded(projectId, now, id, "check", today);
-      now = await taskEnded(projectId, now, id, "product", today);
+    for (const task of filed) {
+      if (
+        task.kind === "done" &&
+        now.ledger.lessons[task.value]?.state === "live"
+      ) {
+        now = applyOp(
+          now,
+          checked({ kind: "enforce", id: task.value }),
+          today,
+          usesOf(projectId)
+        ).tree;
+      }
     }
     return now;
-  };
-
-  /** {@link tasksEnded} for lesson `id`'s task of `mark`: its check's (a live lesson's), or the one building it into CawCo (a live or staged one's). */
-  const taskEnded = async (
-    projectId: string,
-    tree: MemoryTree,
-    id: string,
-    mark: "check" | "product",
-    today: string
-  ): Promise<MemoryTree> => {
-    const lesson = tree.ledger.lessons[id];
-    const task = lesson?.[mark]?.task;
-    const waits =
-      lesson?.state === "live" ||
-      (mark === "product" && lesson?.state === "staged");
-    if (!(task && waits)) {
-      return tree;
-    }
-    const ended = await tasks.state(projectId, task);
-    if (ended === "dropped") {
-      return unmarked(tree, id, mark);
-    }
-    if (ended !== "done") {
-      return tree;
-    }
-    const change: Change =
-      mark === "check"
-        ? { kind: "enforce", id }
-        : { kind: "product", id, task };
-    return applyOp(tree, checked(change), today, usesOf(projectId)).tree;
   };
 
   /** The ledger without retired, stale and expired entries past their days. */
@@ -1986,20 +1836,13 @@ export const createMemoryRun = ({
     const newest = new Map(found.map((one) => [one.id, one]));
     const did = new Map<string, string>();
     for (const one of newest.values()) {
-      // Read, worked out and committed again on a clash; its check filed after.
-      const done = await againOnConflict(async () => {
+      // Read, worked out and committed again on a clash.
+      const said = await againOnConflict(async () => {
         const read = await treeOf(project.id);
         return read instanceof ElysiaStatus
           ? read
           : await correctedOne(project.id, run, read, one);
       });
-      if (done instanceof ElysiaStatus) {
-        return done;
-      }
-      const said =
-        typeof done === "string"
-          ? done
-          : await checkedUp(project.id, run, done.checkUp, done.lesson);
       if (said instanceof ElysiaStatus) {
         return said;
       }
@@ -2238,38 +2081,9 @@ export const createMemoryRun = ({
     if (up) {
       return memoryRunWords.didHeld(INDEX_FILE);
     }
-    // Held: its check is filed once this commit stands ({@link checkedUp}).
     return held
-      ? { checkUp: { id, text }, lesson }
+      ? memoryRunWords.didHeldStays
       : memoryRunWords.didCounted(times);
-  };
-
-  /**
-   * A held lesson of the index or a skill's lessons moved up its last home
-   * (§6.2): a check, filed by the hub, its method the rule itself. One in
-   * knowledge that could not move, or one with a check already, stays.
-   */
-  const checkedUp = async (
-    projectId: string,
-    run: Run,
-    line: { id: string; text: string },
-    lesson: Lesson
-  ) => {
-    if (lesson.home.at === "knowledge" || lesson.check) {
-      return memoryRunWords.didHeldStays;
-    }
-    const filed = await fileCheck(
-      projectId,
-      { ...line, method: line.text },
-      HUB
-    );
-    if (filed instanceof ElysiaStatus) {
-      return filed;
-    }
-    run.counts.checks += filed.task ? 1 : 0;
-    return filed.task
-      ? memoryRunWords.didChecked(filed.task)
-      : memoryRunWords.didHeldStays;
   };
 
   /**
@@ -2560,8 +2374,6 @@ export const createMemoryRun = ({
         subject?: string;
         /** A check to file for a lesson once the commit stands. */
         check?: CheckAsk;
-        /** A lesson about CawCo to give its task once the commit stands ({@link productGiven}), and the task the lesson it replaces waited on. */
-        product?: { earlier?: string; id: string; text: string };
       }
     | string;
 
@@ -2582,15 +2394,14 @@ export const createMemoryRun = ({
     const by: Lesson["by"] = kept.messages.length > 0 ? "owner" : "agent";
     const text = op.text.trim();
     const why = op.why?.trim();
-    const checkedHome = await checkedLesson(projectId, run, tree, op.home, {
+    const home = await checkedLesson(projectId, run, tree, op.home, {
       text,
       why,
       by,
     });
-    if (typeof checkedHome === "string") {
-      return checkedHome;
+    if (typeof home === "string") {
+      return home;
     }
-    const { home, product } = checkedHome;
     if (run.adds >= adds(run)) {
       return memoryRunWords.nightAdds(adds(run));
     }
@@ -2611,7 +2422,6 @@ export const createMemoryRun = ({
       text,
       why,
       staged,
-      product,
     });
   };
 
@@ -2621,11 +2431,9 @@ export const createMemoryRun = ({
    * corroborate, of every live lesson in its home and the index, and every
    * staged one bound there, this run's earlier adds among them (each is in
    * `tree`); an agent's that says what the person removed
-   * ({@link removedRules}) is refused, as memory_rule's or the person's to bring back; else, in a
-   * project that develops CawCo, whether it is about CawCo (row `product`,
-   * {@link productTask}). Not about CawCo with Jev off: the lesson is
-   * staged then, and Jev reads it the first night it is on
-   * ({@link recheckStaged}). Jev failing, its words.
+   * ({@link removedRules}) is refused, as memory_rule's or the person's to
+   * bring back. With Jev off the lesson is staged, and Jev reads it the
+   * first night it is on ({@link recheckStaged}). Jev failing, its words.
    */
   const jevOnNew = async (
     projectId: string,
@@ -2633,9 +2441,9 @@ export const createMemoryRun = ({
     tree: MemoryTree,
     lesson: { by: Lesson["by"]; text: string },
     home: LessonHome
-  ): Promise<{ product: boolean } | string> => {
+  ): Promise<string | undefined> => {
     if (!run.jev) {
-      return { product: false };
+      return;
     }
     const { text } = lesson;
     const beside = besideOf(tree, home, { staged: true });
@@ -2643,18 +2451,13 @@ export const createMemoryRun = ({
     try {
       const answers = await answersOf(
         projectId,
-        Object.fromEntries([
-          ...(buildsCawco(projectId) ? [productQuestion("add", text)] : []),
-          ...keptQuestions("add", text, [...beside, ...removed]),
-        ])
+        Object.fromEntries(keptQuestions("add", text, [...beside, ...removed]))
       );
-      const id = likeliest("kept", "add", [...beside, ...removed], answers);
+      const id = likeliest("add", [...beside, ...removed], answers);
       if (id && removed.some((one) => one.id === id)) {
         return memoryRunWords.removedRule(id);
       }
-      return id
-        ? memoryRunWords.keptAlready(id)
-        : { product: aboutCawco("add", answers) };
+      return id ? memoryRunWords.keptAlready(id) : undefined;
     } catch (error) {
       return memoryRunWords.jevFailed(
         error instanceof Error ? error.message : String(error)
@@ -2741,15 +2544,13 @@ export const createMemoryRun = ({
       /** The file it names, read or to be read. */
       file: LessonSource | undefined;
       home: LessonHome;
-      /** Whether it is about CawCo, to give its task once it is written. */
-      product: boolean;
       staged: { waits: boolean } | undefined;
       text: string;
       why: string | undefined;
     }
   ): Planned => {
     const id = newLessonId((taken) => taken in tree.ledger.lessons);
-    const { by, file, home, product, staged, text, why } = lesson;
+    const { by, file, home, staged, text, why } = lesson;
     return {
       change: {
         kind: "add",
@@ -2775,7 +2576,6 @@ export const createMemoryRun = ({
         ? stagedWords(id, staged)
         : memoryRunWords.added(id, pathOf(home) ?? INDEX_FILE),
       ...(staged ? { subject: memoryRunWords.staged(id) } : {}),
-      ...(product ? { product: { id, text } } : {}),
     };
   };
 
@@ -2792,14 +2592,14 @@ export const createMemoryRun = ({
       : supported(run, index, resolved, answers);
   };
 
-  /** A new lesson's home as asked, and its words, checked: an agent's goes to knowledge, and no kept lesson says it already ({@link jevOnNew}); the home and whether it is about CawCo, or why not. */
+  /** A new lesson's home as asked, and its words, checked: an agent's goes to knowledge, and no kept lesson says it already ({@link jevOnNew}); the home, or why not. */
   const checkedLesson = async (
     projectId: string,
     run: Run,
     tree: MemoryTree,
     asked: Extract<MemoryOp, { op: "add" }>["home"],
     lesson: { by: Lesson["by"]; text: string; why: string | undefined }
-  ): Promise<{ home: LessonHome; product: boolean } | string> => {
+  ): Promise<LessonHome | string> => {
     const home = homeAsked(projectId, tree, asked);
     if (typeof home === "string") {
       return home;
@@ -2818,8 +2618,8 @@ export const createMemoryRun = ({
     if (bad) {
       return bad;
     }
-    const read = await jevOnNew(projectId, run, tree, lesson, home);
-    return typeof read === "string" ? read : { home, product: read.product };
+    const kept = await jevOnNew(projectId, run, tree, lesson, home);
+    return kept ?? home;
   };
 
   /** How many lessons wait staged. */
@@ -2847,38 +2647,8 @@ export const createMemoryRun = ({
     return resolved;
   };
 
-  /** A replaced lesson's new one (`id`, its words `text`) to give its task when Jev reads its words as about CawCo (row `product`), in a project that develops CawCo, with the task the lesson it replaces waited on (`earlier`); none with Jev off. Jev failing, its words. */
-  const replacedProduct = async (
-    projectId: string,
-    run: Run,
-    {
-      earlier,
-      ...one
-    }: { earlier: string | undefined; id: string; text: string }
-  ): Promise<
-    { product?: { earlier?: string; id: string; text: string } } | string
-  > => {
-    if (!(run.jev && buildsCawco(projectId))) {
-      return {};
-    }
-    try {
-      const answers = await answersOf(
-        projectId,
-        Object.fromEntries([productQuestion("replace", one.text)])
-      );
-      return aboutCawco("replace", answers)
-        ? { product: { ...one, ...(earlier ? { earlier } : {}) } }
-        : {};
-    } catch (error) {
-      return memoryRunWords.jevFailed(
-        error instanceof Error ? error.message : String(error)
-      );
-    }
-  };
-
-  /** A `replace`, checked: a live lesson's words changed, the person's own only by his message; new words about CawCo get their task once written. */
+  /** A `replace`, checked: a live lesson's words changed, the person's own only by his message. */
   const plannedReplace = async (
-    projectId: string,
     run: Run,
     tree: MemoryTree,
     head: string,
@@ -2910,14 +2680,6 @@ export const createMemoryRun = ({
       return bad;
     }
     const newId = newLessonId((taken) => taken in tree.ledger.lessons);
-    const product = await replacedProduct(projectId, run, {
-      id: newId,
-      text,
-      earlier: lesson.product?.task,
-    });
-    if (typeof product === "string") {
-      return product;
-    }
     if (run.changes >= CAPS.nightChanges) {
       return memoryRunWords.nightChanges(CAPS.nightChanges);
     }
@@ -2934,7 +2696,6 @@ export const createMemoryRun = ({
       consumed: op.sources,
       notes: kept.notes.map((note) => ({ note, outcome: `landed ${newId}` })),
       said: memoryRunWords.replaced(op.id, newId, pathOf(lesson.home) ?? ""),
-      ...product,
     };
   };
 
@@ -3113,7 +2874,7 @@ export const createMemoryRun = ({
       case "add":
         return plannedAdd(projectId, run, tree, head, op, index, answers);
       case "replace":
-        return plannedReplace(projectId, run, tree, head, op, index, answers);
+        return plannedReplace(run, tree, head, op, index, answers);
       case "corroborate":
         return plannedCorroborate(run, tree, head, op, index, answers);
       case "move":
@@ -3282,24 +3043,18 @@ export const createMemoryRun = ({
         lines.push(`${index + 1}. ${memoryRunWords.refused(why)}`);
         continue;
       }
-      // Its check and its task for CawCo, once the operation stands.
-      const done = await followedUp(projectId, run, committedOp.plan, {
+      // Its check, once the operation stands.
+      const said = await followedUp(
+        projectId,
+        run,
+        committedOp.plan,
+        committedOp.said
+      );
+      lines.push(`${index + 1}. ${memoryRunWords.applied(said)}`);
+      read = {
         tree: committedOp.tree,
-        said: committedOp.said,
-        sha: committedOp.sha,
-      });
-      if (done instanceof ElysiaStatus) {
-        lines.push(
-          `${index + 1}. ${memoryRunWords.applied(committedOp.said)} ${memoryRunWords.refused(done.response.detail)}`
-        );
-        read = {
-          tree: committedOp.tree,
-          head: committedOp.sha ?? committedOp.at.head,
-        };
-        continue;
-      }
-      lines.push(`${index + 1}. ${memoryRunWords.applied(done.said)}`);
-      read = { tree: done.tree, head: done.sha ?? committedOp.at.head };
+        head: committedOp.sha ?? committedOp.at.head,
+      };
     }
     return lines;
   };
@@ -3341,39 +3096,19 @@ export const createMemoryRun = ({
     return { tree: applied.tree, said, sha };
   };
 
-  /** A committed operation's tasks, each in a commit of its own: its check filed ({@link fileCheck}), and a lesson about CawCo given its task ({@link productGiven}); `first` as the last commit left it. */
+  /** A committed operation's check filed ({@link fileCheck}): what the operation said, and what filing it said. */
   const followedUp = async (
     projectId: string,
     run: Run,
     plan: Exclude<Planned, string>,
-    first: { said: string; sha: string | undefined; tree: MemoryTree }
-  ) => {
-    let done = first;
-    if (plan.check) {
-      const filed = await fileCheck(projectId, plan.check, CURATOR);
-      if (filed instanceof ElysiaStatus) {
-        return filed;
-      }
-      run.counts.checks += filed.task ? 1 : 0;
-      done = {
-        tree: filed.tree ?? done.tree,
-        said: `${done.said}; ${filed.said}`,
-        sha: filed.sha ?? done.sha,
-      };
+    said: string
+  ): Promise<string> => {
+    if (!plan.check) {
+      return said;
     }
-    if (plan.product) {
-      const given = await productGiven(projectId, plan.product);
-      if (given instanceof ElysiaStatus) {
-        return given;
-      }
-      run.counts.product += given.task ? 1 : 0;
-      done = {
-        tree: given.tree ?? done.tree,
-        said: `${done.said}; ${given.said}`,
-        sha: given.sha ?? done.sha,
-      };
-    }
-    return done;
+    const filed = await fileCheck(projectId, plan.check);
+    run.counts.checks += filed.task ? 1 : 0;
+    return `${said}; ${filed.said}`;
   };
 
   /** An operation's sources named, the run's notes among them gone from what it has left to name. */
@@ -3382,154 +3117,6 @@ export const createMemoryRun = ({
       run.consumed.add(handle);
       run.notes.delete(handle);
     }
-  };
-
-  /** Whether the project develops CawCo (core `developsCawco`: a checkout among its places whose root commit is CawCo's, the rule law-tasks.ts files CawCo's defects by): only there can a lesson about CawCo become a task. */
-  const buildsCawco = (projectId: string): boolean =>
-    developsCawco(db.project(projectId)?.places ?? []);
-
-  /**
-   * The task that builds lesson `one`, about CawCo, into CawCo: `earlier`,
-   * a task it rested on before, open again when it was dropped and kept as
-   * it stands when open or done; else an open task grep pairs with it (at
-   * most {@link RELATED}) that Jev reads as building it already (row
-   * `covers`); else one filed for it through the path a check's task takes.
-   * Its id and what came of it; why not when no task was filed or Jev
-   * failed.
-   */
-  const productTask = async (
-    projectId: string,
-    one: { id: string; text: string },
-    earlier?: string
-  ): Promise<{ said: string; task: string } | string> => {
-    if (earlier) {
-      const open = await tasks.reopen(
-        projectId,
-        earlier,
-        memoryRunWords.productTaskReopened(one.id)
-      );
-      if (typeof open !== "string") {
-        return memoryRunWords.productNotFiled(one.id, open.refused);
-      }
-      if (open !== "gone") {
-        return {
-          task: earlier,
-          said: {
-            reopened: memoryRunWords.productReopened,
-            open: memoryRunWords.productCovered,
-            done: memoryRunWords.productBuilt,
-          }[open](one.id, earlier),
-        };
-      }
-    }
-    const open = await tasks.open(projectId);
-    if ("refused" in open) {
-      return memoryRunWords.productNotFiled(one.id, open.refused);
-    }
-    const words = wordsOf(one.text);
-    const paired = open
-      .map((task) => ({ task, score: grepScore(words, task.title) }))
-      .filter(({ score }) => score >= 2)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, RELATED)
-      .map(({ task }) => task);
-    let answers: Map<string, number> | undefined;
-    try {
-      answers = await answersOf(
-        projectId,
-        Object.fromEntries(coversQuestions("lesson", one.text, paired))
-      );
-    } catch (error) {
-      return memoryRunWords.productNotFiled(
-        one.id,
-        error instanceof Error ? error.message : String(error)
-      );
-    }
-    const covering = likeliest("covers", "lesson", paired, answers);
-    if (covering) {
-      return {
-        task: covering,
-        said: memoryRunWords.productCovered(one.id, covering),
-      };
-    }
-    const filed = await filedOnce(projectId, {
-      title: memoryRunWords.productTitle(titleWords(one.text)),
-      description: memoryRunWords.productDescription(one.text, one.id),
-      acceptance: memoryRunWords.productAcceptance,
-      fields: { [LESSON_FIELD]: one.id },
-    });
-    if ("refused" in filed) {
-      return memoryRunWords.productNotFiled(one.id, filed.refused);
-    }
-    return {
-      task: filed.id,
-      said: memoryRunWords.productFiled(one.id, filed.id),
-    };
-  };
-
-  /** `tree` with lesson `one`, about CawCo, waiting on its task ({@link productTask}) as `product`; as it was when no task was given, and what came of it either way. */
-  const productMarked = async (
-    projectId: string,
-    tree: MemoryTree,
-    one: { id: string; text: string },
-    earlier?: string
-  ): Promise<{ said: string; task?: string; tree: MemoryTree }> => {
-    const given = await productTask(projectId, one, earlier);
-    const lesson = tree.ledger.lessons[one.id];
-    if (typeof given === "string" || !lesson) {
-      return { said: typeof given === "string" ? given : "", tree };
-    }
-    return {
-      said: given.said,
-      task: given.task,
-      tree: withLesson(tree, one.id, {
-        ...lesson,
-        product: { task: given.task },
-      }),
-    };
-  };
-
-  /**
-   * A lesson written as about CawCo given its task ({@link productMarked})
-   * once its commit stands, in a second commit by the Memory curator, as
-   * {@link fileCheck} does a check's. A lesson given no task stays without
-   * one, and the answer says why.
-   */
-  const productGiven = async (
-    projectId: string,
-    { earlier, ...one }: { earlier?: string; id: string; text: string }
-  ) => {
-    // The task first, filed once ({@link filedOnce}); its mark on the lesson
-    // is read, worked out and committed again on a clash.
-    const given = await productTask(projectId, one, earlier);
-    if (typeof given === "string") {
-      const notGiven: Filed = { said: given };
-      return notGiven;
-    }
-    return await againOnConflict(async () => {
-      const read = await treeOf(projectId);
-      if (read instanceof ElysiaStatus) {
-        return read;
-      }
-      const lesson = read.tree.ledger.lessons[one.id];
-      if (!lesson) {
-        const gone: Filed = { said: "" };
-        return gone;
-      }
-      const tree = withLesson(read.tree, one.id, {
-        ...lesson,
-        product: { task: given.task },
-      });
-      const sha = await commit(projectId, read, tree, {
-        author: CURATOR,
-        message: `memory: ${given.said}`,
-      });
-      if (sha instanceof ElysiaStatus) {
-        return sha;
-      }
-      const filed: Filed = { said: given.said, task: given.task, tree, sha };
-      return filed;
-    });
   };
 
   /**
@@ -3600,9 +3187,6 @@ export const createMemoryRun = ({
         ? memoryRunWords.notLive(op.id)
         : memoryRunWords.noLesson(op.id);
     }
-    if (lesson.check) {
-      return memoryRunWords.checkHas(op.id, lesson.check.task);
-    }
     const kept = checkedSources(run, op.sources, at.index, at.answers);
     if (typeof kept === "string") {
       return kept;
@@ -3640,16 +3224,23 @@ export const createMemoryRun = ({
   /**
    * A lesson's check filed (§5.2 `check`): a task in the project, in the
    * stage new tasks enter, through the tasks module (`checkTitle`, its
-   * method and lesson id in the description, one acceptance line); then a
-   * second commit writing the task into the lesson's ledger entry. A task
-   * that was not filed leaves the rule as a line, and says why.
+   * method and lesson id in the description, one acceptance line), its
+   * field `check` the lesson's id. The field is its key, looked up over
+   * every task of any state first: an open one is the check already; a
+   * done or dropped one is the answer, and nothing is filed again. The
+   * lesson needs no mark: upkeep finds the task by its field. A task that
+   * was not filed leaves the rule as a line, and says why.
    */
-  const fileCheck = async (
-    projectId: string,
-    ask: CheckAsk,
-    author: FolderAuthor
-  ) => {
-    const task = await filedOnce(projectId, {
+  const fileCheck = async (projectId: string, ask: CheckAsk) => {
+    const filed = await tasks.withField(projectId, CHECK_FIELD);
+    if ("refused" in filed) {
+      return { said: memoryRunWords.checkNotFiled(filed.refused) };
+    }
+    const found = filed.find((each) => each.value === ask.id);
+    if (found) {
+      return { said: memoryRunWords.checkHas(ask.id, found.id) };
+    }
+    const task = await tasks.file(projectId, {
       title: memoryRunWords.checkTitle(ask.text),
       description: memoryRunWords.checkDescription(
         ask.id,
@@ -3657,70 +3248,11 @@ export const createMemoryRun = ({
         ask.method
       ),
       acceptance: memoryRunWords.checkAcceptance,
-      fields: { [LESSON_FIELD]: ask.id },
+      fields: { [CHECK_FIELD]: ask.id },
     });
-    if ("refused" in task) {
-      const notFiled: Filed = {
-        said: memoryRunWords.checkNotFiled(task.refused),
-      };
-      return notFiled;
-    }
-    const said = memoryRunWords.checkFiled(ask.id, task.id);
-    // The task stands; its mark on the lesson is read, worked out and committed again on a clash.
-    return await againOnConflict(async () => {
-      const read = await treeOf(projectId);
-      if (read instanceof ElysiaStatus) {
-        return read;
-      }
-      const lesson = read.tree.ledger.lessons[ask.id];
-      if (!lesson) {
-        const gone: Filed = {
-          said: memoryRunWords.checkNotFiled(ask.id),
-          task: task.id,
-        };
-        return gone;
-      }
-      const tree = withLesson(read.tree, ask.id, {
-        ...lesson,
-        check: { task: task.id },
-      });
-      const sha = await commit(projectId, read, tree, {
-        author,
-        message: `memory: ${said}`,
-      });
-      if (sha instanceof ElysiaStatus) {
-        return sha;
-      }
-      const filed: Filed = { said, task: task.id, tree, sha };
-      return filed;
-    });
-  };
-
-  /** What filing a lesson's task said, and, once its mark on the lesson is committed, the task, the memory after it and the commit. */
-  interface Filed {
-    said: string;
-    sha?: string;
-    task?: string;
-    tree?: MemoryTree;
-  }
-
-  /**
-   * A task filed for a lesson, once: an open task of the same title, which
-   * is the lesson's (a check's or a task's for CawCo title says the
-   * lesson's words, and a lesson's words have one id), is answered in place
-   * of a second, so a step tried again, or run again the next night after
-   * its commit failed, files nothing twice.
-   */
-  const filedOnce = async (
-    projectId: string,
-    draft: Parameters<MemoryRunDeps["tasks"]["file"]>[1]
-  ) => {
-    const open = await tasks.open(projectId);
-    if ("refused" in open) {
-      return open;
-    }
-    const filed = open.find((task) => task.title === draft.title);
-    return filed ? { id: filed.id } : await tasks.file(projectId, draft);
+    return "refused" in task
+      ? { said: memoryRunWords.checkNotFiled(task.refused) }
+      : { said: memoryRunWords.checkFiled(ask.id, task.id), task: task.id };
   };
 
   /** The run's counts and limits moved by one committed operation. */
@@ -3840,25 +3372,10 @@ export const createMemoryRun = ({
       detachedClose(projectId, run, "failed");
       return;
     }
-    const {
-      added,
-      dropped,
-      product,
-      replaced,
-      restored,
-      retired,
-      reverted,
-      staged,
-    } = run.counts;
+    const { added, dropped, replaced, restored, retired, reverted, staged } =
+      run.counts;
     if (
-      added +
-        replaced +
-        retired +
-        staged +
-        dropped +
-        restored +
-        reverted +
-        product ===
+      added + replaced + retired + staged + dropped + restored + reverted ===
       0
     ) {
       detachedClose(projectId, run, "silent");
@@ -4142,8 +3659,7 @@ export const createMemoryRun = ({
   /**
    * The recovery asked for (routines.ts `recover`): whether it has inputs
    * for a run. Asked by a person (`by: "ask"`), the lessons that say the
-   * same are made one first ({@link mergedSame}), lessons about CawCo get
-   * their task once ({@link productRepair}), its inputs are topped up
+   * same are made one first ({@link mergedSame}), its inputs are topped up
    * with every note no run judged ({@link recoveryAgain}) in one commit, and
    * its chain of runs counts again from here; by the run before
    * (`by: "chain"`), it reads on what it holds.
@@ -4161,10 +3677,6 @@ export const createMemoryRun = ({
       const merged = await mergedSame(projectId);
       if (merged instanceof ElysiaStatus) {
         return merged;
-      }
-      const repaired = await productRepair(projectId);
-      if (repaired instanceof ElysiaStatus) {
-        return repaired;
       }
     }
     return await toppedUp(projectId, recovery);
@@ -4275,225 +3787,6 @@ export const createMemoryRun = ({
       console.log(`[memory] ${projectId}: ${said}`);
     }
     return sha;
-  };
-
-  /**
-   * Once per project (the run state's `productTasked`), what came before
-   * the lifecycle of lessons about CawCo ({@link productTask}) brought
-   * under it: each lesson retired `product` before CawCo carried it is put
-   * back as it stood ({@link productReturns}); in a project that develops
-   * CawCo, Jev reads every live and staged lesson (row `product`), and each
-   * it reads yes of waits on its task, the one it rested on before when
-   * there is one ({@link productMarked}). One commit by the hub, the run
-   * state marked in it; then each task filed for a lesson that no lesson
-   * waits on now is dropped ({@link unrestedDropped}). Nothing in a project
-   * that develops CawCo with Jev off (said in the log): the next ask tries
-   * again. A lesson given no task stays without one, said in the log.
-   */
-  const productRepair = (projectId: string) =>
-    againOnConflict(() => productRepairOnce(projectId));
-
-  /** {@link productRepair} once, on the memory as it stands. */
-  const productRepairOnce = async (projectId: string) => {
-    const state = await stateOf(projectId);
-    if (state instanceof ElysiaStatus || state.productTasked) {
-      return state instanceof ElysiaStatus ? state : undefined;
-    }
-    const ours = buildsCawco(projectId);
-    if (ours && !jevAccess(db)) {
-      offLine(
-        "product",
-        projectId,
-        "lessons about CawCo wait for Jev to get their tasks"
-      );
-      return;
-    }
-    const read = await treeOf(projectId);
-    if (read instanceof ElysiaStatus) {
-      return read;
-    }
-    const before = await productRetirementsOf(projectId);
-    if (before instanceof ElysiaStatus) {
-      return before;
-    }
-    const today = dayOf(new Date());
-    let tree = await productReturns(projectId, read.tree, before, today);
-    const back = Object.keys(read.tree.ledger.lessons).filter(
-      (id) =>
-        read.tree.ledger.lessons[id]?.retired?.why === "product" &&
-        tree.ledger.lessons[id]?.retired === undefined
-    );
-    const marked = ours
-      ? await productMarkedAll(projectId, tree, before)
-      : { given: [], tree };
-    if (marked instanceof ElysiaStatus) {
-      return marked;
-    }
-    ({ tree } = marked);
-    const said = memoryRunWords.productRepaired(back, marked.given);
-    const sha = await commit(projectId, read, tree, {
-      author: HUB,
-      message: `memory: ${said}`,
-      extra: [
-        {
-          path: RUN_STATE_FILE,
-          content: jsonText({ ...state, productTasked: today }),
-        },
-      ],
-    });
-    if (sha instanceof ElysiaStatus) {
-      return sha;
-    }
-    console.log(`[memory] ${projectId}: ${said}`);
-    // The tasks no lesson rests on now are dropped once the commit stands.
-    await unrestedDropped(projectId, tree, before);
-    return sha;
-  };
-
-  /** `tree` with each live and staged lesson Jev reads as about CawCo (row `product`) waiting on its task, the one the history shows it rested on before (`before`) when there is one ({@link productMarked}); those given one. */
-  const productMarkedAll = async (
-    projectId: string,
-    tree: MemoryTree,
-    before: Awaited<ReturnType<typeof productRetirements>>
-  ) => {
-    const kept = keptOrStaged(tree).filter(
-      ({ id }) => !tree.ledger.lessons[id]?.product
-    );
-    const answers = await answersOrRefusal(
-      projectId,
-      Object.fromEntries(kept.map((one) => productQuestion(one.id, one.text)))
-    );
-    if (answers instanceof ElysiaStatus) {
-      return answers;
-    }
-    const given: { id: string; task: string }[] = [];
-    let now = tree;
-    for (const one of kept.filter(({ id }) => aboutCawco(id, answers))) {
-      const marked = await productMarked(
-        projectId,
-        now,
-        one,
-        before.get(one.id)?.task
-      );
-      console.log(`[memory] ${projectId}: ${marked.said}`);
-      now = marked.tree;
-      if (marked.task) {
-        given.push({ id: one.id, task: marked.task });
-      }
-    }
-    return { given, tree: now };
-  };
-
-  /** Every lesson the memory folder's history retired `product` ({@link productRetirements}), from the commits git's pickaxe finds changing the ledger's count of `product` retirements. */
-  const productRetirementsOf = async (projectId: string) => {
-    const commits = await folderCommitsChanging(projectId, '"why": "product"', [
-      LEDGER_FILE,
-    ]);
-    if (commits instanceof ElysiaStatus) {
-      return commits;
-    }
-    const ledgers = new Map<string, MemoryLedger | undefined>();
-    const ledgerAt = async (sha: string) => {
-      if (!ledgers.has(sha)) {
-        const text = await readFolderFileAt(projectId, sha, LEDGER_FILE);
-        const ledger =
-          text instanceof ElysiaStatus || text === undefined
-            ? undefined
-            : parseLedger(text);
-        ledgers.set(sha, typeof ledger === "string" ? undefined : ledger);
-      }
-      return ledgers.get(sha);
-    };
-    return await productRetirements(commits, ledgerAt);
-  };
-
-  /**
-   * `tree` with each lesson retired `product` put back as it stood before
-   * the commit that retired it (`before`): its ledger entry from that
-   * commit's parent, and, when it was live, its line from its home there.
-   * One no commit shows is left as it is, said in the log.
-   */
-  const productReturns = async (
-    projectId: string,
-    tree: MemoryTree,
-    before: Awaited<ReturnType<typeof productRetirements>>,
-    today: string
-  ): Promise<MemoryTree> => {
-    const uses = usesOf(projectId);
-    let now = tree;
-    for (const [id, lesson] of Object.entries(tree.ledger.lessons)) {
-      if (lesson.retired?.why !== "product") {
-        continue;
-      }
-      const found = before.get(id);
-      if (!found) {
-        console.warn(
-          `[memory] ${projectId}: ${id} stays retired: no commit of the ledger shows it before it was taken out`
-        );
-        continue;
-      }
-      const change = await returnOf(projectId, id, lesson.retired.text, found);
-      now = applyOp(now, checked(change), today, uses).tree;
-    }
-    return now;
-  };
-
-  /** Lesson `id` put back as `found` holds it, its line read from its home at that parent when it was live (`text`, the words the ledger kept, when git has none). */
-  const returnOf = async (
-    projectId: string,
-    id: string,
-    text: string,
-    { entry, parent }: { entry: Lesson; parent: string }
-  ): Promise<Extract<Change, { kind: "return" }>> => {
-    const path = entry.state === "live" ? pathOf(entry.home) : undefined;
-    if (!path) {
-      return { kind: "return", id, entry };
-    }
-    const content = await readFolderFileAt(projectId, parent, path);
-    const line =
-      typeof content === "string"
-        ? parseLessons(path, content).lessons.find((one) => one.id === id)
-        : undefined;
-    return {
-      kind: "return",
-      id,
-      entry,
-      line: line ?? { id, text, why: null },
-    };
-  };
-
-  /**
-   * Each task the history shows a lesson retired `product` to (`before`)
-   * moved to dropped, its reason naming the lesson, when no lesson of
-   * `tree` waits on it and it was filed for that lesson (its field `lesson`
-   * holds the id): a task that was open before a lesson was routed to it
-   * stays. Said in the log; a refusal leaves the task where it is.
-   */
-  const unrestedDropped = async (
-    projectId: string,
-    tree: MemoryTree,
-    before: Awaited<ReturnType<typeof productRetirements>>
-  ) => {
-    const rested = new Set(
-      Object.values(tree.ledger.lessons).flatMap((lesson) =>
-        lesson.product ? [lesson.product.task] : []
-      )
-    );
-    for (const [id, { task }] of before) {
-      if (!task || rested.has(task)) {
-        continue;
-      }
-      const dropped = await tasks.drop(projectId, task, {
-        field: LESSON_FIELD,
-        value: id,
-        reason: memoryRunWords.productTaskDropped(id),
-      });
-      if (dropped === "dropped" || typeof dropped !== "string") {
-        console.log(
-          `[memory] ${projectId}: ${task} of ${id} ${dropped === "dropped" ? "dropped" : `not dropped: ${dropped.refused}`}`
-        );
-      }
-    }
   };
 
   /** Each project's recovery runs chained since it was last asked for. */
@@ -5057,8 +4350,7 @@ export const createMemoryRun = ({
    * person's message lands when Jev finds the message states it and is
    * retired when not; one resting on agents' notes lands when two of them
    * count as two sessions saying the same, and otherwise waits on as
-   * staged. One that stays and is about CawCo, in a project that develops
-   * CawCo, waits on its task ({@link productMarked}). One commit.
+   * staged. One commit.
    */
   const recheckStaged = (project: ProjectRow) =>
     againOnConflict(() => recheckStagedOnce(project));
@@ -5090,19 +4382,18 @@ export const createMemoryRun = ({
         return note ? [note] : [];
       });
     const beside = stagedBeside(read.tree, waiting);
-    const ours = buildsCawco(project.id);
     const answers = await answersOf(
       project.id,
       Object.fromEntries(
         waiting.flatMap(([id, lesson]) =>
-          stagedQuestions(id, lesson, notesOf, beside.get(id) ?? [], ours)
+          stagedQuestions(id, lesson, notesOf, beside.get(id) ?? [])
         )
       )
     );
     const today = dayOf(new Date());
     let { tree } = read;
     for (const [id, lesson] of waiting) {
-      tree = await rechecked(
+      tree = rechecked(
         project.id,
         tree,
         [id, lesson],
@@ -5116,8 +4407,8 @@ export const createMemoryRun = ({
     });
   };
 
-  /** `tree` with one lesson staged while Jev was off as Jev's answers make it ({@link recheckStaged}): changed ({@link recheckedChange}) or waiting on with Jev's check done, and, when it stays and is about CawCo, waiting on its task. */
-  const rechecked = async (
+  /** `tree` with one lesson staged while Jev was off as Jev's answers make it ({@link recheckStaged}): changed ({@link recheckedChange}) or waiting on with Jev's check done. */
+  const rechecked = (
     projectId: string,
     tree: MemoryTree,
     [id, lesson]: [string, Lesson],
@@ -5126,8 +4417,7 @@ export const createMemoryRun = ({
       answers,
       today,
     }: { answers: Map<string, number> | undefined; today: string }
-  ): Promise<MemoryTree> => {
-    const text = lesson.staged?.text ?? "";
+  ): MemoryTree => {
     const change = recheckedChange(id, lesson, read, answers);
     let now = tree;
     if (change) {
@@ -5136,25 +4426,15 @@ export const createMemoryRun = ({
       const { waits: _, ...staged } = lesson.staged;
       now = withLesson(tree, id, { ...lesson, staged });
     }
-    const after = now.ledger.lessons[id]?.state;
-    if (!(
-      aboutCawco(id, answers) &&
-      (after === "live" || after === "staged")
-    )) {
-      return now;
-    }
-    const marked = await productMarked(projectId, now, { id, text });
-    console.log(`[memory] ${projectId}: ${marked.said}`);
-    return marked.tree;
+    return now;
   };
 
-  /** Jev's questions on one lesson staged while it was off: whether it is about CawCo (only in a project that develops CawCo, `ours`), each message's support, each pair of notes' sameness, and whether it says what a lesson of `beside` says. */
+  /** Jev's questions on one lesson staged while it was off: each message's support, each pair of notes' sameness, and whether it says what a lesson of `beside` says. */
   const stagedQuestions = (
     id: string,
     lesson: Lesson,
     notesOf: (lesson: Lesson) => Note[],
-    beside: readonly Beside[],
-    ours: boolean
+    beside: readonly Beside[]
   ): [string, Experimental_DecisionQuestion][] => {
     const text = lesson.staged?.text ?? "";
     const support = lesson.sources.flatMap(
@@ -5179,7 +4459,6 @@ export const createMemoryRun = ({
       }
     );
     return [
-      ...(ours ? [productQuestion(id, text)] : []),
       ...support,
       ...pairQuestions(`${id}`, notesOf(lesson)),
       ...keptQuestions(id, text, beside),
@@ -5199,7 +4478,7 @@ export const createMemoryRun = ({
     { notes, beside }: { beside: readonly Beside[]; notes: Note[] },
     answers: Map<string, number> | undefined
   ): Change | undefined => {
-    const into = likeliest("kept", id, beside, answers);
+    const into = likeliest(id, beside, answers);
     if (into) {
       return { kind: "merge", id, into };
     }
@@ -5343,11 +4622,53 @@ export const createMemoryRun = ({
   };
 
   /**
+   * The tasks the memory run filed for its lessons (a field `lesson`: a
+   * check's, or one building a lesson into CawCo), each still open moved to
+   * the dropped stage, once per project as the hub starts on this: the
+   * memory task loop that filed and dropped them is gone, so dispatch never
+   * starts one. A project whose drops did not all go through is tried at
+   * the next start.
+   */
+  const lessonTasksDropped = async (project: ProjectRow): Promise<void> => {
+    const name = `memory-lesson-tasks-dropped:${project.id}`;
+    if (db.dataMigrated(name)) {
+      return;
+    }
+    const filed = await tasks.withField(project.id, LESSON_FIELD);
+    if ("refused" in filed) {
+      console.warn(
+        `[memory] ${project.name}: its lessons' tasks were not read: ${filed.refused}`
+      );
+      return;
+    }
+    let left = 0;
+    for (const task of filed.filter((each) => each.kind === "open")) {
+      const dropped = await tasks.drop(project.id, task.id, {
+        field: LESSON_FIELD,
+        value: task.value,
+        reason: memoryRunWords.lessonTaskDropped,
+      });
+      if (typeof dropped !== "string") {
+        left += 1;
+        console.warn(
+          `[memory] ${project.name}: ${task.id} was not dropped: ${dropped.refused}`
+        );
+      }
+    }
+    if (left === 0) {
+      db.markDataMigrated(name);
+    }
+  };
+
+  /**
    * The cutover as the hub starts on it ({@link cutover}): each project's
    * once, marked done when it went through; one that did not is said in the
    * log and tried at the next start.
    */
   const start = async (projects: readonly ProjectRow[]): Promise<void> => {
+    for (const project of projects) {
+      await lessonTasksDropped(project);
+    }
     for (const project of projects) {
       const name = `memory-lessons:${project.id}`;
       if (db.dataMigrated(name)) {

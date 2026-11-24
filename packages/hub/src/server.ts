@@ -9157,58 +9157,32 @@ export const createServer = (
           ? { refused: task.response.detail }
           : { id: task.id };
       },
-      open: async (projectId) => {
-        const listed = await tasks.list(projectId);
-        if (listed instanceof ElysiaStatus) {
-          return { refused: listed.response.detail };
+      withField: async (projectId, field) => {
+        const found: {
+          id: string;
+          kind: "open" | "done" | "dropped";
+          value: string;
+        }[] = [];
+        for (const archived of [false, true]) {
+          const listed = await tasks.list(projectId, { archived });
+          if (listed instanceof ElysiaStatus) {
+            return { refused: listed.response.detail };
+          }
+          for (const task of listed.tasks) {
+            const value = task.fields[field];
+            if (value !== undefined) {
+              found.push({
+                id: task.id,
+                kind:
+                  task.kind === "done" || task.kind === "dropped"
+                    ? task.kind
+                    : "open",
+                value,
+              });
+            }
+          }
         }
-        return listed.tasks.flatMap((task) =>
-          task.kind && isOneOf(CLOSED_STAGE_KINDS, task.kind)
-            ? []
-            : [{ id: task.id, title: task.title }]
-        );
-      },
-      state: async (projectId, id) => {
-        const task = await tasks.get(projectId, id);
-        if (task instanceof ElysiaStatus) {
-          // A task that is no more holds no check.
-          return task.status === 404 ? "dropped" : undefined;
-        }
-        return task.kind === "done" || task.kind === "dropped"
-          ? task.kind
-          : "open";
-      },
-      reopen: async (projectId, id, reason) => {
-        const task = await tasks.get(projectId, id);
-        if (task instanceof ElysiaStatus) {
-          return task.status === 404
-            ? "gone"
-            : { refused: task.response.detail };
-        }
-        if (task.kind === "done") {
-          return "done";
-        }
-        if (task.kind !== "dropped") {
-          return "open";
-        }
-        const stages = await tasks.stages(projectId);
-        if (stages instanceof ElysiaStatus) {
-          return { refused: stages.response.detail };
-        }
-        const ready = stages.stages.find((stage) => stage.kind === "todo");
-        if (!ready) {
-          return { refused: "the project has no stage of kind todo" };
-        }
-        const moved = await tasks.move(
-          projectId,
-          id,
-          ready.name,
-          hubActor("the project's memory run opens a task again"),
-          reason
-        );
-        return moved instanceof ElysiaStatus
-          ? { refused: moved.response.detail }
-          : "reopened";
+        return found;
       },
       drop: async (projectId, id, { field, value, reason }) => {
         const task = await tasks.get(projectId, id);

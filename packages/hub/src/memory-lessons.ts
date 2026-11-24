@@ -579,14 +579,6 @@ export type Change =
   | { id: string; kind: "remove"; source?: LessonSource }
   /** A knowledge lesson no brief carried for the archive's days, to `knowledge/archive/<topic>.md`. */
   | { id: string; kind: "archive" }
-  /** A lesson CawCo carries now, the task that built it into CawCo (`task`) done: retired `product`, its line taken out. */
-  | { id: string; kind: "product"; task: string }
-  /**
-   * A lesson retired `product` before CawCo carried it, put back: its
-   * ledger entry as `entry` (as it stood before it was taken out, its
-   * sources with it), and `line` in its home when it was live.
-   */
-  | { entry: Lesson; id: string; kind: "return"; line?: LessonLine }
   /**
    * A lesson the run took out, put back in its home as `line` (its words as
    * the folder held them before), live again; `held` when the person stated
@@ -751,7 +743,7 @@ const retireLine = (
   id: string,
   why: NonNullable<Lesson["retired"]>["why"],
   today: string,
-  { by, task }: { by?: string; task?: string } = {}
+  { by }: { by?: string } = {}
 ): MemoryTree => {
   const lesson = tree.ledger.lessons[id];
   if (!lesson) {
@@ -774,7 +766,6 @@ const retireLine = (
         why,
         text: line?.text ?? staged?.text ?? "",
         ...(by ? { by } : {}),
-        ...(task ? { task } : {}),
       },
     }),
   };
@@ -1112,19 +1103,6 @@ const restored = (
   });
 };
 
-/** A lesson retired `product` put back as it stood before ({@link Change} `return`); nothing when it is not retired `product` now. */
-const returned = (now: MemoryTree, op: ChangeOf<"return">): Done => {
-  if (
-    now.ledger.lessons[op.id]?.retired?.why !== "product" ||
-    lineOf(now, op.id)
-  ) {
-    return { tree: now };
-  }
-  return op.line
-    ? placed(now, op.entry.home, op.line, op.entry)
-    : { tree: { ...now, ledger: withEntry(now.ledger, op.id, op.entry) } };
-};
-
 /** A lesson stated again: counted, its source kept, his from now on; moved up a home when asked. */
 const repeated = (
   now: MemoryTree,
@@ -1216,14 +1194,8 @@ const changed = (now: MemoryTree, op: Change, today: string): Done => {
       return { tree: retireLine(now, op.id, op.why, today) };
     case "remove":
       return { tree: removed(now, op, today) };
-    case "product":
-      return {
-        tree: retireLine(now, op.id, "product", today, { task: op.task }),
-      };
     case "restore":
       return restored(now, op, today);
-    case "return":
-      return returned(now, op);
     case "repeat":
       return repeated(now, op, today);
     case "revert":

@@ -581,16 +581,13 @@ export type LessonSourceOutput = z.output<typeof LessonSourceShape>;
 const LessonShape = declared(
   z.object({
     by: z.enum(["owner", "agent"]),
-    check: z.object({ task: z.string() }).optional(),
     held: z.literal(true).optional(),
     home: LessonHomeShape,
-    product: z.object({ task: z.string() }).optional(),
     repeats: z.number(),
     retired: z
       .object({
         by: z.string().optional(),
         on: z.string(),
-        task: z.string().optional(),
         text: z.string(),
         why: z.enum([
           "merged",
