@@ -1,0 +1,171 @@
+/**
+ * A project's browser's pass to the dashboard (core `BROWSER_PASS_SCHEME`):
+ * what its machine's dashboard door puts on every request that browser makes
+ * to the dashboard (agent browser/dashboard-door.ts), so the hub reads it as
+ * that browser (hub-auth.ts `browserReads`) and never as the person.
+ *
+ * A pass is signed, not stored: its body names the machine, the browser's
+ * key and when it stops standing, under an HMAC of a key derived from the
+ * hub's own (secret-box.ts `derive`), so it holds across a restart of the
+ * hub and lapses by itself ({@link PASS_MS}); the door asks for a new one
+ * before then. Only the machine whose browser it is gets one: its agent
+ * asks with its key's proof, and the hub signs the machine it proved.
+ */
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { isBrowserKey } from "@cawco/core/browser";
+import { BROWSER_PASS_SCHEME, type BrowserPass } from "@cawco/core/hub-auth";
+import { HOUR_MS } from "@cawco/core/time";
+import { Elysia, problem, t } from "elysia";
+import { z } from "zod";
+import { hidden } from "./hidden";
+import { addressOf, type BrowserPassHolder, type Caller } from "./hub-auth";
+import { hubSecrets } from "./secret-box";
+
+/** How long a pass stands. Our call: a day, so a pass that leaves its machine soon stops opening anything. */
+const PASS_MS = 24 * HOUR_MS;
+const KEY_LABEL = "cawco browser pass v1";
+
+let macKey: Buffer | undefined;
+const mac = (body: string): string => {
+  macKey ??= hubSecrets().derive(KEY_LABEL);
+  return createHmac("sha256", macKey).update(body).digest("base64url");
+};
+
+const BodySchema = z.object({
+  /** When it stops standing, ms epoch. */
+  e: z.number(),
+  /** The browser's key. */
+  k: z.string(),
+  /** The machine that runs it. */
+  m: z.string(),
+});
+
+/** A pass for machine `machineId`'s browser `key`, and when it lapses. */
+const mint = (
+  machineId: string,
+  key: string
+): { expiresAt: number; pass: string } => {
+  const expiresAt = Date.now() + PASS_MS;
+  const body = Buffer.from(
+    JSON.stringify({ e: expiresAt, k: key, m: machineId })
+  ).toString("base64url");
+  return { pass: `${body}.${mac(body)}`, expiresAt };
+};
+
+/** Whose browser `pass` is, when the hub signed it and it still stands; undefined otherwise. */
+export const openBrowserPass = (
+  pass: string
+): BrowserPassHolder | undefined => {
+  const dot = pass.indexOf(".");
+  if (dot < 1) {
+    return;
+  }
+  const body = pass.slice(0, dot);
+  const want = Buffer.from(mac(body));
+  const got = Buffer.from(pass.slice(dot + 1));
+  if (want.length !== got.length || !timingSafeEqual(want, got)) {
+    return;
+  }
+  let read: z.infer<typeof BodySchema>;
+  try {
+    read = BodySchema.parse(
+      JSON.parse(Buffer.from(body, "base64url").toString("utf8"))
+    );
+  } catch {
+    return;
+  }
+  return read.e > Date.now() ? { machineId: read.m, key: read.k } : undefined;
+};
+
+/** What the routes read of the hub. */
+export interface BrowserPassDeps {
+  /** The request's caller, as the gate classified it (hub-auth.ts `callerOf`). */
+  readonly callerOf: (request: Request, address: string | null) => Caller;
+  /** Every origin the hub knows its dashboard at (dashboard-url.ts `dashboardOrigins`). */
+  readonly origins: () => string[];
+}
+
+export const browserPassRoutes = ({ callerOf, origins }: BrowserPassDeps) =>
+  new Elysia()
+    // A browser's pass and the dashboard's origins, for its machine's
+    // dashboard door (agent browser/dashboard-door.ts): the machine that
+    // proved its key, for a browser key of its own naming.
+    .get(
+      "/api/browser-passes/:key",
+      { ...hidden, params: t.Object({ key: t.String() }) },
+      ({ params, request, server }) => {
+        const caller = callerOf(request, addressOf(server, request));
+        if (caller.kind !== "machine") {
+          return problem(403, {
+            code: "browser-pass-machine-only",
+            detail: `A browser's pass (${BROWSER_PASS_SCHEME}) is its machine's agent's to ask for, with its key's proof.`,
+          });
+        }
+        if (!isBrowserKey(params.key)) {
+          return problem(400, {
+            code: "browser-key-unknown",
+            detail: `${params.key} is no browser's key: a project's (project:<id>) or a machine's (machine:<id>).`,
+          });
+        }
+        return {
+          ...mint(caller.machineId, params.key),
+          origins: origins(),
+        } satisfies BrowserPass;
+      }
+    );
+
+/**
+ * The frames a project's browser's dashboard socket is sent: the board and
+ * what moves on it, the projects and their tasks, decisions, blocks and
+ * stops, the moves and the person's waits, by each frame's kind. An
+ * allowlist, as the reads are (hub-auth.ts `BROWSER_READS`): the installs
+ * and their one-time codes, the pairings, the MCP servers, the passkeys,
+ * the browsers' take-overs, the permission asks and every transcript stay
+ * the person's. A message that is no frame is sent only as the stream's
+ * heartbeat.
+ */
+const BROWSER_FRAMES: ReadonlySet<string> = new Set([
+  "instances",
+  "board",
+  "pulse",
+  "usage",
+  "work_item",
+  "stopped",
+  "asleep",
+  "moves",
+  "move_progress",
+  "folder_move_progress",
+  "actions",
+  "artifact.needs",
+  "blocks.changed",
+  "decisions.changed",
+  "delegate_event",
+  "hub.restart",
+  "offers.waiting",
+  "project.cap",
+  "project_offer",
+  "projects.changed",
+  "project.stop",
+  "questions.moved",
+  "starters.changed",
+  "tasks.changed",
+  "fleet_watch.notices",
+]);
+
+/** Whether a project's browser's dashboard socket is sent `message` ({@link BROWSER_FRAMES}). */
+export const browserSees = (message: object): boolean => {
+  if ("type" in message) {
+    return message.type === "heartbeat";
+  }
+  if (!("verb" in message && message.verb === "frames")) {
+    return false;
+  }
+  const payload = "payload" in message ? message.payload : undefined;
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    "kind" in payload &&
+    typeof payload.kind === "string" &&
+    BROWSER_FRAMES.has(payload.kind)
+  );
+};

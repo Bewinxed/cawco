@@ -46,6 +46,8 @@
     "@modelcontextprotocol/sdk": "1.32.0",
     "@opencode/client": "2.3.0",
     "@paulirish/trace_engine": "0.0.69",
+    "@peculiar/asn1-schema": "3.1.0",
+    "@peculiar/asn1-x509": "3.1.0",
     "@vscode/ripgrep-universal": "1.18.0",
     "ai": "7.0.173",
     "bonjour-service": "^1.4.4",

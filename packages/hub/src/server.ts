@@ -367,6 +367,11 @@ import { createBoard } from "./board";
 import { bodyLimitRefusal } from "./body-limits";
 import { portOf, runBootSteps } from "./boot";
 import { answered as browserAnswered } from "./browser-answered";
+import {
+  browserPassRoutes,
+  browserSees,
+  openBrowserPass,
+} from "./browser-passes";
 import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
 import { BROWSER_CALL_MS, browserRoutes, createBrowsers } from "./browsers";
@@ -396,6 +401,7 @@ import { createCutTurns } from "./cut-turns";
 import { damagedRecordsOf } from "./damaged-rows";
 import { dashboardErrorsRoutes } from "./dashboard-errors";
 import {
+  dashboardOrigins,
   dashboardUrl,
   delegateDashboard,
   noteTailnetDashboard,
@@ -814,6 +820,7 @@ import {
   closeLine,
   drainLine,
   type HubSocket,
+  limitLine,
   type MachineSocket,
   machineSocket,
   openLine,
@@ -3972,6 +3979,12 @@ export const createServer = (
   // (hub-auth.ts). Its hooks are set once the sockets they reach exist.
   const recordHubEvent = createHubRecord(lifetime);
   const hubAuth = createHubAuth({
+    // A browser's pass names a machine the hub still knows: one removed
+    // takes its browsers' passes with it.
+    browserPass: (pass) => {
+      const held = openBrowserPass(pass);
+      return held && db.machineFactsOf(held.machineId) ? held : undefined;
+    },
     // Where a pairing's code and QR send the person: https once a dashboard reached the hub over it.
     dashboard: () => secureDashboardUrl(registry) ?? dashboardUrl(registry),
     db: db.hubAuth,
@@ -6925,6 +6938,12 @@ export const createServer = (
    */
   const gatedPages = new Map<string, string>();
   /**
+   * Each dashboard socket a project's browser an agent drives opened, by its
+   * id (hub-auth.ts, a `browser` caller): sent what the board draws, heard
+   * for its heartbeat alone.
+   */
+  const browserDashboards = new Set<string>();
+  /**
    * Each artifact tab's socket the hub admitted (`ARTIFACT_SESSION_PATH`),
    * by its id, and its paired device as {@link dashboardDevices} keeps a
    * dashboard's: a pairing removed, or pairing turned on, closes it too
@@ -8071,6 +8090,10 @@ export const createServer = (
         return `session:${caller.instanceId ?? "unknown"}`;
       case "machine":
         return `machine:${caller.machineId}`;
+      case "browser":
+        return caller.pass
+          ? `browser:${caller.pass.machineId}/${caller.pass.key}`
+          : "browser:unverified";
       case "anonymous":
         return caller.kind;
       default:
@@ -8481,13 +8504,7 @@ export const createServer = (
       )) {
         return;
       }
-      const reach = delegateDashboard(registry, hubOwnNames());
-      if (reach.kind === "none") {
-        return reach;
-      }
-      return hubAuth.mode() === "pairing"
-        ? { kind: "paired", url: reach.url }
-        : reach;
+      return delegateDashboard(registry, hubOwnNames());
     },
     // Undecided while the machine is away or has not read its custody since
     // it came back, and while it holds the session's process alive: neither
@@ -12848,6 +12865,15 @@ export const createServer = (
   // one list of them all run the checker past it (TS2589; see the list below),
   // as `.ws` does after them, so the sockets are registered first.
 
+  // What a machine's agent reads for its places and its browsers, a
+  // statement of its own for its depth allowance.
+  const machineReads = new Elysia().use([
+    lfsRoutes(ctx),
+    browserPassRoutes({
+      callerOf: (request, address) => hubAuth.callerOf(request, address),
+      origins: () => dashboardOrigins(registry),
+    }),
+  ]);
   // A project's moves, a statement of their own for its depth allowance.
   const moveFamilies = new Elysia().use([
     moveRoutes(ctx),
@@ -12857,7 +12883,7 @@ export const createServer = (
     mcpRoutes(ctx, delegationMcp),
     delegationRoutes(ctx, delegationMcp),
     sessionIdentityRoutes(ctx),
-    lfsRoutes(ctx),
+    machineReads,
     hubInfoRoutes(ctx, profiler),
     agentListRoutes(ctx),
     instanceMediaRoutes(ctx),
@@ -13753,6 +13779,19 @@ export const createServer = (
    * What any of it throws is answered by {@link dashboardThrew}.
    */
   const dashboardMessage = (ws: DashboardSocket, message: unknown): void => {
+    // A project's browser's socket is heard for its heartbeat alone: it
+    // follows no transcript and asks nothing of a session or machine.
+    if (browserDashboards.has(ws.id)) {
+      if (isRecord(message) && message.type === "heartbeat") {
+        streams.handleClientMessage(ws, message);
+        return;
+      }
+      const fault =
+        "an agent's browser reads the dashboard and changes nothing: its socket takes heartbeat alone";
+      console.warn(`[hub] ${fault}`);
+      sendToClient(ws, refusalFrame(message, fault));
+      return;
+    }
     if (streams.handleClientMessage(ws, message)) {
       return;
     }
@@ -14232,9 +14271,11 @@ export const createServer = (
           // Before anything is sent to it: every frame goes through its line.
           openLine(handed, "client");
           const ws = clientSocket(handed);
-          // The person's alone (the gate refused anyone else at the upgrade;
-          // read again here, so nothing but the person ever holds one). Its
-          // device is kept, so removing the device closes it.
+          // The person's (the gate refused anyone else at the upgrade; read
+          // again here, so nothing else ever holds one), or a project's
+          // browser an agent drives, which reads the board and sends
+          // nothing. The person's device is kept, so removing the device
+          // closes it.
           const caller = hubAuth.classify(
             (name) =>
               name === "authorization" &&
@@ -14246,6 +14287,22 @@ export const createServer = (
             "/ws/dashboard",
             ws.remoteAddress ?? null
           );
+          if (caller.kind === "browser" && caller.pass) {
+            // Sent only what the board draws (browser-passes.ts
+            // `browserSees`), from before its first frame; heard only for
+            // its heartbeat (`dashboardMessage`). Its page's origin is
+            // recorded nowhere: the hub's links and previews' framing are
+            // the person's dashboards' alone.
+            limitLine(ws, browserSees);
+            browserDashboards.add(ws.id);
+            greetDashboard(
+              ws,
+              false,
+              readBoardHeld(ws.query[BOARD_HELD_PARAM])
+            );
+            registry.addDashboard(ws, false);
+            return;
+          }
           if (caller.kind !== "owner") {
             ws.close(4401, PAIRING_REQUIRED);
             return;
@@ -14321,6 +14378,7 @@ export const createServer = (
           dashboardDevices.delete(ws);
           dashboardClients.delete(ws.id);
           gatedPages.delete(ws.id);
+          browserDashboards.delete(ws.id);
           registry.dropDashboard(ws);
           // Follows nothing, awaits nothing: a stream subscription and a command
           // ack both die with the socket that asked for them.

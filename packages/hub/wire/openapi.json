@@ -38211,10 +38211,13 @@
         ]
       },
       "BrowserPorts": {
-        "description": "One browser's ports; `http` and `media` are the container host's alone.",
+        "description": "One browser's ports; `http` and `media` are the container host's alone.\n`door`, its dashboard door's, is absent from a row a machine reported\nbefore browsers had one.",
         "type": "object",
         "properties": {
           "devtools": {
+            "type": "number"
+          },
+          "door": {
             "type": "number"
           },
           "http": {
@@ -38256,7 +38259,7 @@
           },
           "ports": {
             "$ref": "#/components/schemas/BrowserPorts",
-            "description": "One browser's ports; `http` and `media` are the container host's alone."
+            "description": "One browser's ports; `http` and `media` are the container host's alone.\n`door`, its dashboard door's, is absent from a row a machine reported\nbefore browsers had one."
           },
           "progress": {
             "description": "How far an image build is, while `state` is `pulling` or `building`.",
@@ -38447,10 +38450,11 @@
         ]
       },
       "CallerKind": {
-        "description": "What a request is to the hub.",
+        "description": "What a request is to the hub. `browser`: a page in a project's browser an\nagent drives, which reads the dashboard and changes nothing (hub\nhub-auth.ts `BROWSER_READS`).",
         "type": "string",
         "enum": [
           "anonymous",
+          "browser",
           "machine",
           "owner",
           "session"

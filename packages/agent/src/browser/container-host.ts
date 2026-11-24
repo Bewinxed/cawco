@@ -56,6 +56,13 @@ import { DAY_MS } from "@cawco/core/time";
 import type Docker from "dockerode";
 import { z } from "zod";
 import { type BluezBus, standBluezBus, stopBluezBus } from "./bluez-bus";
+import {
+  doorBind,
+  doorOrigins,
+  doorSpki,
+  doorTarget,
+  openDoor,
+} from "./dashboard-door";
 import { statusOf } from "./docker-status";
 import { machineNetwork, type Placement, placementOf } from "./egress";
 import { hubPacUrl } from "./hub-pac";
@@ -337,6 +344,8 @@ const keptAsAsked = (
     address: string | undefined;
     hostRules: string | undefined;
     pac: string;
+    /** Its dashboard door as its Chromium and socat are told it (dashboard-door.ts). */
+    door: { spki: string; target: string };
     /** The host path bound for BlueZ's bus (bluez-bus.ts); none when it has none. */
     bluez: string | undefined;
   },
@@ -359,6 +368,8 @@ const keptAsAsked = (
     kept.stun === stunServer() &&
     kept.hostRules === now.hostRules &&
     kept.pac === now.pac &&
+    kept.door?.spki === now.door.spki &&
+    kept.door?.target === now.door.target &&
     kept.bluez === now.bluez &&
     relayHolds
   );
@@ -590,6 +601,9 @@ export class ContainerHost implements BrowserHost {
     // Not known now (the hub didn't answer): the container's own stand.
     const wanted = await wantedHostRules(this.#runtime);
     const hostRules = wanted ? wanted.rules : kept?.hostRules;
+    // Its dashboard door, open before its Chromium is (dashboard-door.ts).
+    const door = await this.#door(record);
+    const { pac, pacOrigins } = door;
     let reuse =
       kept &&
       keptAsAsked(
@@ -599,7 +613,8 @@ export class ContainerHost implements BrowserHost {
           media,
           address,
           hostRules,
-          pac: hubPacUrl(),
+          pac,
+          door: { spki: door.spki, target: door.target },
           bluez: bluez?.source,
         },
         options.relay
@@ -635,6 +650,9 @@ export class ContainerHost implements BrowserHost {
           network,
           address,
           hostRules,
+          pac,
+          pacOrigins,
+          door: { spki: door.spki, target: door.target },
           bluez,
         });
       }
@@ -787,6 +805,35 @@ export class ContainerHost implements BrowserHost {
     return started;
   }
 
+  /**
+   * `record`'s dashboard door, open (dashboard-door.ts), as its container is
+   * told it: the key Chromium accepts, the target its socat carries to (the
+   * door's socket on a native engine, its port on the machine in a VM), and
+   * and its PAC (hub-pac.ts) with the dashboard's origins it is made from:
+   * the hub's now, else, while it doesn't answer, those its container was
+   * made with.
+   */
+  async #door(record: BrowserRecord): Promise<{
+    pac: string;
+    pacOrigins: string[];
+    spki: string;
+    target: string;
+  }> {
+    const { door } = portsOf(record);
+    await openDoor(record.key, door);
+    const target = this.#runtime.ownNetwork
+      ? doorTarget({ socket: true })
+      : doorTarget({ host: machineHostOf(this.#runtime).name, port: door });
+    const pacOrigins =
+      (await doorOrigins(record.key)) ?? record.container?.pacOrigins ?? [];
+    return {
+      pac: hubPacUrl(pacOrigins),
+      pacOrigins,
+      spki: await doorSpki(),
+      target,
+    };
+  }
+
   /** The volume `record` names (its sign-ins), or one made for it now, named and labelled for `owner`. */
   async #volumeFor(record: BrowserRecord, owner: string): Promise<string> {
     const volume = record.container?.volume ?? nameOf(owner, record.key);
@@ -819,6 +866,11 @@ export class ContainerHost implements BrowserHost {
       address: string | undefined;
       /** Chromium's resolver rules for the preview names (preview-names.ts); none to map. */
       hostRules: string | undefined;
+      /** The PAC its Chromium starts with (hub-pac.ts), and the dashboard's origins it was made from. */
+      pac: string;
+      pacOrigins: string[];
+      /** Its dashboard door as its Chromium and socat are told it (dashboard-door.ts). */
+      door: { spki: string; target: string };
       /** BlueZ's bus for Chromium (bluez-bus.ts); none without a virtual adapter. */
       bluez: BluezBus | undefined;
     }
@@ -832,6 +884,9 @@ export class ContainerHost implements BrowserHost {
       network,
       address,
       hostRules,
+      pac,
+      pacOrigins,
+      door,
       bluez,
     } = made;
     const { extraHosts } = machineHostOf(this.#runtime);
@@ -879,7 +934,11 @@ export class ContainerHost implements BrowserHost {
         // loopback is the container's own, which holds neither port. The
         // hub's address on any other name (host.containers.internal, the
         // LAN, the tailnet) is not loopback, so the PAC decides it.
-        `CAWCO_PAC_URL=${hubPacUrl()}`,
+        `CAWCO_PAC_URL=${pac}`,
+        // chromium.conf: Chromium's --ignore-certificate-errors-spki-list,
+        // and the door program's socat target (dashboard-door.ts).
+        `CAWCO_DOOR_SPKI=${door.spki}`,
+        `CAWCO_DOOR_TARGET=${door.target}`,
         // chromium.conf passes it to Chromium's --host-resolver-rules.
         ...(hostRules ? [`CAWCO_HOST_RULES=${hostRules}`] : []),
         // Chromium's Bluetooth is BlueZ on this bus (bluez-bus.ts).
@@ -918,7 +977,12 @@ export class ContainerHost implements BrowserHost {
               CapAdd: ["NET_ADMIN"],
             }
           : {}),
-        ...(bluez ? { Binds: [bluez.bind] } : {}),
+        // The door's folder, where its socket is, on a native engine; a VM's
+        // runtime reaches the door's port on the machine instead.
+        Binds: [
+          ...(bluez ? [bluez.bind] : []),
+          ...(this.#runtime.ownNetwork ? [doorBind(record.key)] : []),
+        ],
         NetworkMode: placed.NetworkMode,
         PortBindings: {
           "8080/tcp": [{ HostIp: "127.0.0.1", HostPort: String(http) }],
@@ -950,7 +1014,9 @@ export class ContainerHost implements BrowserHost {
       runtime: { kind: this.#runtime.kind, endpoint: this.#runtime.endpoint },
       stun,
       ...(hostRules ? { hostRules } : {}),
-      pac: hubPacUrl(),
+      pac,
+      pacOrigins,
+      door,
       ...(bluez ? { bluez: bluez.source } : {}),
       volume,
       adminPassword: passwords.admin,

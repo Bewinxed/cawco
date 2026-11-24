@@ -37,10 +37,19 @@
  * never the owner: it is refused on every route not listed for sessions,
  * however its other headers read. What decides is the credential presented,
  * not anything a session can change by leaving a header out.
+ *
+ * A request that presents a browser pass (core `BROWSER_PASS_SCHEME`) is a
+ * page in a project's browser an agent drives, in either mode: the agent's
+ * dashboard door puts the pass on every request that browser makes to the
+ * dashboard, in place of whatever the page sent (agent
+ * browser/dashboard-door.ts), so no request of that browser reaches the
+ * dashboard without it, whatever the agent has the page do. It reads what
+ * the dashboard shows ({@link BROWSER_READS}) and changes nothing.
  */
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import { pageOrigin } from "@cawco/core/browser-gate";
 import {
+  BROWSER_PASS_SCHEME,
   type CallerKind,
   type DeviceKind,
   type HubAuthFrame,
@@ -76,7 +85,19 @@ export type Caller =
   /** `instanceId` null: a Bearer that names no session. Still a session: never the owner. */
   | { kind: "session"; instanceId: string | null }
   | { kind: "machine"; machineId: string }
+  /**
+   * A project's browser an agent drives, by the pass its machine's dashboard
+   * door stamped; `pass` null: one the hub does not verify, refused
+   * everywhere. Still a browser: never the owner.
+   */
+  | { kind: "browser"; pass: BrowserPassHolder | null }
   | { kind: "anonymous" };
+
+/** Whose browser a verified pass is: the machine that runs it, and its key (core `BrowserKey`). */
+export interface BrowserPassHolder {
+  key: string;
+  machineId: string;
+}
 
 /**
  * Who a route is for, besides the hub, who reaches every route, and the
@@ -148,6 +169,9 @@ const RULES: readonly [string, RegExp, Access][] = [
   ["GET", /^\/api\/lfs\/projects\/[^/]+$/u, "machine"],
   ["POST", /^\/api\/lfs\/projects\/[^/]+\/refused$/u, "machine"],
   ["POST", /^\/api\/session-identities\/install$/u, "machine-proof"],
+  // A browser's pass for its dashboard door, and the dashboard's origins
+  // (browser-passes.ts): its machine's agent alone, for its own browsers.
+  ["GET", /^\/api\/browser-passes\/[^/]+$/u, "machine"],
   // A folder move's bytes between two machines (folder-move-relay.ts): each
   // side a machine's agent; the token names one copy's stream.
   ["PUT", /^\/api\/folder-moves\/relay\/[^/]+$/u, "machine"],
@@ -163,6 +187,54 @@ const REMOVE_REFUSED = "Only the person forgets a browser's sign-ins";
 
 /** A browser view's routes (browser-routes.ts), where the view's own client sends a Bearer that is no credential of the hub's. */
 const BROWSER_VIEW = /^\/ws\/browser\/[^/]+\/[^/]+\/(?:api(?:\/.*)?|cdp)$/u;
+
+/**
+ * What a project's browser an agent drives reads, `GET` or `HEAD` alone: the
+ * dashboard's socket and the reads its board, projects and sessions' plans
+ * and waits are drawn from. An allowlist, as every route starts closed: what
+ * is left out holds a credential, the person's sign-ins or their devices
+ * (`/api/installs`, `/api/pair/requests`, `/api/devices`, the connections
+ * and MCP servers, the accounts), acts though it is a `GET`
+ * (`/api/stream-relay/try` mints a relay credential, an OAuth callback
+ * completes a sign-in), or reads files and transcripts. No open route
+ * either: pairing, git and the cawco MCP are no reads of the dashboard.
+ */
+const BROWSER_READS: readonly RegExp[] = [
+  /^\/ws\/dashboard$/u,
+  /^\/api\/auth$/u,
+  /^\/api\/(?:instances|pulses|agents|areas|pending|artifact-needs|moves|decides|delegate-types|stage-templates|jev|rules|project-offers|model-windows|tool-updates|spend-settings|preview-settings|session-limits)$/u,
+  /^\/api\/(?:actions|offers|find)\/waiting$/u,
+  /^\/api\/fleet-watch(?:\/notices)?$/u,
+  /^\/api\/usage\/(?:limits|spend|summary)$/u,
+  /^\/api\/agents\/[^/]+(?:\/busy)?$/u,
+  /^\/api\/areas\/[^/]+$/u,
+  /^\/api\/projects(?:\/held|\/forgotten)?$/u,
+  /^\/api\/projects\/[^/]+\/(?:tasks(?:\/[^/]+(?:\/history)?)?|stages|views|running|decides|decisions(?:\/[^/]+)?|blocks|caw|delegate-types|spend|design-offer)$/u,
+  /^\/api\/decides\/(?:kinds\/[^/]+\/waiting|pages\/[^/]+)$/u,
+  /^\/api\/routines\/[^/]+$/u,
+  /^\/api\/rules\/[^/]+\/activity$/u,
+  /^\/api\/workspaces\/held$/u,
+  /^\/api\/workspaces\/[^/]+\/(?:held|waiting)$/u,
+  /^\/api\/instances\/[^/]+\/(?:plan|parked|open-items|questions)$/u,
+];
+
+/** Whether a project's browser may make `method path` ({@link BROWSER_READS}). */
+const browserReads = (method: string, path: string): boolean =>
+  (method === "GET" || method === "HEAD") &&
+  BROWSER_READS.some((pattern) => pattern.test(path));
+
+/** The refusal of a project's browser's request: a change it may not make, or a pass the hub did not give. */
+const browserRefusal = (verified: boolean, method: string, path: string) =>
+  verified
+    ? problem(403, {
+        code: "browser-reads-only",
+        detail: `An agent's browser reads the dashboard and changes nothing: ${method} ${path} is the person's.`,
+      })
+    : problem(403, {
+        code: "browser-pass-refused",
+        detail:
+          "This browser's pass is not one the hub gave, so it reaches nothing.",
+      });
 
 /** Machine routes that name a machine: a machine reaches them for itself alone. */
 const OWN_MACHINE: readonly RegExp[] = [
@@ -237,7 +309,11 @@ const accessOf = (method: string, path: string): Access | "owner" => {
   return "owner";
 };
 
-const ALLOWED: Record<Access | "owner", ReadonlySet<CallerKind>> = {
+/** Who reaches each access, a project's browser aside ({@link browserReads}). */
+const ALLOWED: Record<
+  Access | "owner",
+  ReadonlySet<Exclude<CallerKind, "browser">>
+> = {
   open: new Set(["owner", "session", "machine", "anonymous"]),
   tool: new Set(["owner", "session", "machine"]),
   session: new Set(["owner", "session"]),
@@ -356,6 +432,8 @@ export interface HubAuthHooks {
 }
 
 export interface HubAuthDeps {
+  /** Whose browser a pass is (browser-passes.ts), or undefined for one the hub does not verify. */
+  readonly browserPass: (pass: string) => BrowserPassHolder | undefined;
   /** The dashboard's address, https when one is known: where a pairing is approved. */
   readonly dashboard: () => string;
   readonly db: HubAuthDb;
@@ -389,6 +467,7 @@ export const addressOf = (
 ): string | null => server?.requestIP(request)?.address ?? null;
 
 export const createHubAuth = ({
+  browserPass,
   dashboard,
   db,
   hubId,
@@ -600,9 +679,10 @@ export const createHubAuth = ({
 
   /**
    * What a request is, by what it presents, in this order: the hub's own
-   * secret; a session's Bearer (whatever else it carries); a paired
-   * device's token; a machine's proof; nothing. In trusted mode, nothing
-   * (and a token no device holds) is the owner.
+   * secret; a browser's pass (whatever else it carries); a session's
+   * Bearer (whatever else it carries); a paired device's token; a machine's
+   * proof; nothing. In trusted mode, nothing (and a token no device holds)
+   * is the owner.
    */
   const classify = (
     header: Headers,
@@ -611,6 +691,13 @@ export const createHubAuth = ({
     address: string | null
   ): Caller => {
     const authorization = header("authorization");
+    const passScheme = `${BROWSER_PASS_SCHEME} `;
+    if (authorization?.startsWith(passScheme)) {
+      return {
+        kind: "browser",
+        pass: browserPass(authorization.slice(passScheme.length)) ?? null,
+      };
+    }
     if (authorization?.startsWith("Bearer ")) {
       const named = session(authorization)?.instanceId;
       // A browser view's neko client sends a Bearer of its own making, which
@@ -639,6 +726,9 @@ export const createHubAuth = ({
 
   /** Whether `caller` may reach `method path` in the hub's mode. */
   const allows = (caller: Caller, method: string, path: string): boolean => {
+    if (caller.kind === "browser") {
+      return caller.pass !== null && browserReads(method, path);
+    }
     const access = accessOf(method, path);
     if (caller.kind === "machine" && namesAnother(path, caller.machineId)) {
       return false;
@@ -662,6 +752,9 @@ export const createHubAuth = ({
     path: string,
     set: RouteSet
   ) => {
+    if (caller.kind === "browser") {
+      return browserRefusal(caller.pass !== null, method, path);
+    }
     if (caller.kind === "session" && TAKEOVER_ROUTE.test(path)) {
       return problem(403, {
         code: "takeover-refused",

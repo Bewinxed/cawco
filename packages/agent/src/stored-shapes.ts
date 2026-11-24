@@ -47,6 +47,8 @@ const BrowserRecordShape = declared(
         network: MachineNetworkShape.optional(),
         hostRules: z.string().optional(),
         pac: z.string().optional(),
+        pacOrigins: z.array(z.string()).optional(),
+        door: z.object({ spki: z.string(), target: z.string() }).optional(),
         bluez: z.string().optional(),
         ports: BrowserPortsShape.optional(),
         runtime: z
@@ -67,6 +69,7 @@ const BrowserRecordShape = declared(
         pid: z.number(),
         procStart: z.string(),
         proxy: z.string().optional(),
+        spki: z.string().optional(),
       })
       .optional(),
     name: z.string(),

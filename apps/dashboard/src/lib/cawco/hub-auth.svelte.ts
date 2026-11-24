@@ -67,9 +67,16 @@ export const hubAuth = $state<{
   waiting: [],
 });
 
-/** This browser must pair before the app opens. */
+/**
+ * This browser must pair before the app opens: neither the person's paired
+ * device nor a project's browser an agent drives, which its machine's
+ * dashboard door signs in (core `BROWSER_PASS_SCHEME`).
+ */
 export const mustPair = (): boolean =>
-  hubAuth.known && hubAuth.mode === "pairing" && hubAuth.caller !== "owner";
+  hubAuth.known &&
+  hubAuth.mode === "pairing" &&
+  hubAuth.caller !== "owner" &&
+  hubAuth.caller !== "browser";
 
 /**
  * What the hub said this request is, read when `mark` was heard: the mode

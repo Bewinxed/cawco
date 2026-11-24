@@ -38,7 +38,7 @@ import { until } from "@cawco/core/until";
 import { z } from "zod";
 import { browserExecutable, chromiumSandboxed } from "../capabilities";
 import { resolveBin, toolEnv } from "../tools";
-import { hubProxyUrl, startHubProxy } from "./hub-proxy";
+import { doorProxyUrl, doorSpki, openDoor } from "./dashboard-door";
 import {
   type BrowserHost,
   type BrowserRecord,
@@ -220,10 +220,18 @@ export class LocalHost implements BrowserHost {
     record: BrowserRecord,
     options: { relay?: BrowserRelay; progress: (row: Progress) => void }
   ): Promise<BrowserRecord> {
-    const { devtools } = portsOf(record);
+    const { devtools, door } = portsOf(record);
+    // Its dashboard door, open before its Chromium is (dashboard-door.ts).
+    await openDoor(record.key, door);
+    const proxy = doorProxyUrl(door);
+    const spki = await doorSpki();
     if (await this.running(record)) {
-      // One started without this proxy is started again: it could reach the hub.
-      if (record.local?.proxy === hubProxyUrl() && (await answers(devtools))) {
+      // One started without its door is started again: it could reach the hub.
+      if (
+        record.local?.proxy === proxy &&
+        record.local.spki === spki &&
+        (await answers(devtools))
+      ) {
         return { ...record, host: "local", state: "live" };
       }
       // Running, but not on its DevTools port (one an earlier range gave
@@ -237,7 +245,6 @@ export class LocalHost implements BrowserHost {
         "unavailable" in chromium ? chromium.unavailable : chromium.failure
       );
     }
-    await startHubProxy();
     const profile = profileDir(record);
     await makeFolder(profile, { mode: 0o700 });
     await writePreferences(profile);
@@ -266,11 +273,14 @@ export class LocalHost implements BrowserHost {
         "--password-store=basic",
         "--use-mock-keychain",
         "--disable-sync",
-        // Every request through the agent's proxy, loopback too: Chromium's
+        // Every request through its dashboard door, loopback too: Chromium's
         // implicit bypass rules send it direct unless `<-loopback>` removes
-        // them (net/docs/proxy.md), and the proxy refuses the hub's ports.
-        `--proxy-server=${hubProxyUrl()}`,
+        // them (net/docs/proxy.md), and the door signs the dashboard's in as
+        // this browser and refuses the hub's ports elsewhere. Its key is the
+        // one certificate the door ends the dashboard's TLS with.
+        `--proxy-server=${proxy}`,
         "--proxy-bypass-list=<-loopback>",
+        `--ignore-certificate-errors-spki-list=${spki}`,
         "--disable-background-networking",
         // The container host's screen (core `BROWSER_SCREEN`): Chromium's
         // headless screen is a virtual 800x600 one unless `--screen-info`
@@ -312,7 +322,8 @@ export class LocalHost implements BrowserHost {
       local: {
         pid,
         procStart,
-        proxy: hubProxyUrl(),
+        proxy,
+        spki,
         ...(boot ? { bootId: boot } : {}),
       },
     };

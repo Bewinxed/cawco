@@ -79,6 +79,8 @@ interface Line {
   raw: RawSocket;
   /** Frames the socket has handed the hub so far: what {@link caughtUp} watches go still. */
   received: number;
+  /** What a client's line may be sent, when it is limited ({@link limitLine}); everything else is not sent. */
+  sees?: (message: object) => boolean;
 }
 
 /**
@@ -187,9 +189,28 @@ export type SendToClient = <F extends ClientMessage>(
  * hidden by field): a frame whose type may carry one does not compile here.
  */
 export const sendToClient: SendToClient = (socket, frame) => {
-  lineFor(socket, "client")?.outbox.send(
-    frame instanceof AskCard ? frame.ask : frame
-  );
+  const line = lineFor(socket, "client");
+  const message = frame instanceof AskCard ? frame.ask : frame;
+  if (line?.sees && !line.sees(message)) {
+    return;
+  }
+  line?.outbox.send(message);
+};
+
+/**
+ * Limits a client's open line to what `sees` lets through, for the line's
+ * life: a project's browser an agent drives (server.ts `/ws/dashboard`) is
+ * sent what the dashboard draws, never the person's installs, pairings or
+ * sign-ins. One place, so no send to that socket can go round it.
+ */
+export const limitLine = (
+  socket: ClientSocket,
+  sees: (message: object) => boolean
+): void => {
+  const line = lineFor(socket, "client");
+  if (line) {
+    line.sees = sees;
+  }
 };
 
 /** The hub's command to a machine's socket, as it is: the machine runs it. */

@@ -87,9 +87,18 @@ export interface BrowserRecord {
     hostRules?: string;
     /**
      * The `--proxy-pac-url` it was made with (hub-pac.ts): the script that
-     * keeps its Chromium off the hub's ports. One made for another is made again.
+     * sends the hub's ports and the dashboard's origins to its dashboard
+     * door. One made for another is made again.
      */
     pac?: string;
+    /** The dashboard's origins its PAC was made from, kept for a start while the hub doesn't answer. */
+    pacOrigins?: string[];
+    /**
+     * Its dashboard door as it was made with it (dashboard-door.ts): the key
+     * its Chromium accepts, and where its socat carries the door's port. One
+     * made with another, or none, is made again.
+     */
+    door?: { spki: string; target: string };
     /**
      * The host path bound at its `/run/dbus` for BlueZ (bluez-bus.ts): its
      * proxy's folder, or the machine's system bus. One made with another, or
@@ -121,8 +130,10 @@ export interface BrowserRecord {
     bootId?: string;
     pid: number;
     procStart: string;
-    /** The `--proxy-server` it was started with (hub-proxy.ts): one started without it is started again. */
+    /** The `--proxy-server` it was started with (its dashboard door, dashboard-door.ts): one started without it is started again. */
     proxy?: string;
+    /** The door key its Chromium accepts (dashboard-door.ts `doorSpki`): one started with another is started again. */
+    spki?: string;
   };
   name: string;
   /**
@@ -411,7 +422,7 @@ export const slotted = async (
         }
       }
       throw new Error(
-        `Every browser port of this machine (${browserPorts(0).http}–${browserPorts(BROWSER_SLOTS - 1).media}) is taken by a browser that has run: stop and remove one first.`
+        `Every browser port of this machine (${browserPorts(0).http}–${browserPorts(BROWSER_SLOTS - 1).door}) is taken by a browser that has run: stop and remove one first.`
       );
     }
   );
@@ -427,17 +438,28 @@ export const portsTaken = async (record: BrowserRecord): Promise<boolean> => {
   if (record.slot === undefined) {
     return false;
   }
-  const free = await Promise.all(Object.values(portsOf(record)).map(portFree));
+  // Its door is this agent's own listener (dashboard-door.ts), held while
+  // the agent runs whether or not the browser does.
+  const { door: _door, ...run } = portsOf(record);
+  const free = await Promise.all(Object.values(run).map(portFree));
   return !free.every(Boolean);
 };
 
-/** The ports `record`'s host uses: DevTools on the local host, all three in a container. Only a browser that has started has any. */
-export const portsOf = (record: BrowserRecord): BrowserPorts => {
+/**
+ * The ports `record`'s host uses: DevTools and the dashboard door on the
+ * local host, all four in a container. Only a browser that has started has
+ * any.
+ */
+export const portsOf = (
+  record: BrowserRecord
+): BrowserPorts & { door: number } => {
   if (record.slot === undefined) {
     throw new Error(`${record.key} has not started yet, so it has no ports.`);
   }
   const all = browserPorts(record.slot);
-  return record.host === "container" ? all : { devtools: all.devtools };
+  return record.host === "container"
+    ? all
+    : { devtools: all.devtools, door: all.door };
 };
 
 /** Whether `url` answers 2xx within `ms` (a server that is starting, or one asked whether it is up). */

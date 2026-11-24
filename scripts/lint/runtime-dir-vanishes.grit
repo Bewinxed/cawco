@@ -20,7 +20,7 @@ language js
 //    stores moved out of it (runtime-dir-move.ts);
 //  - process.env.XDG_RUNTIME_DIR: sockets and the dirs around them (sessiond,
 //    workspace doors, the hub's git credential, previews, container doors,
-//    BlueZ proxies, ssh control sockets, srt's sandbox temp), the folder modes
+//    BlueZ proxies, browsers' dashboard doors, ssh control sockets, srt's sandbox temp), the folder modes
 //    (folders.ts), the runtime's own sockets looked for (activity.ts,
 //    browser/runtime.ts), and the env handed to systemctl (service-manager/).
 // A new one is added here only for something that may vanish.
@@ -32,7 +32,7 @@ or {
   },
   `process.env.XDG_RUNTIME_DIR` as $hit where {
     $filename <: r".*packages/[^/]+/src/.*",
-    $filename <: not r".*packages/(?:core/src/(?:folders|sessiond|paths/(?:hub|workspace))|hub/src/ssh-tunnels|agent/src/(?:session-containers|activity|preview-bridge|service-manager/(?:install|keeper-job)|browser/(?:bluez-bus|runtime)|boundary/(?:stop|runner)))\.ts$",
+    $filename <: not r".*packages/(?:core/src/(?:folders|sessiond|paths/(?:hub|workspace))|hub/src/ssh-tunnels|agent/src/(?:session-containers|activity|preview-bridge|service-manager/(?:install|keeper-job)|browser/(?:bluez-bus|dashboard-door|runtime)|boundary/(?:stop|runner)))\.ts$",
     register_diagnostic(span=$hit, message="$XDG_RUNTIME_DIR is a tmpfs every reboot empties: only a socket or a credential that is short-lived goes there, from the modules scripts/lint/runtime-dir-vanishes.grit names. A store that must last goes under harnessStoresDir() (core paths/harnesses.ts).")
   }
 }

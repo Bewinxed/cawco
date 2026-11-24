@@ -54,10 +54,10 @@ import {
   nekoSession,
   RELAY_RENEW_MS,
 } from "./container-host";
+import { closeDoor, openDoor } from "./dashboard-door";
 import { followsNetwork, machineNetwork, startAgainDue } from "./egress";
 import { frontOrigin, syncOrigins } from "./front-origin";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
-import { startHubProxy } from "./hub-proxy";
 import { LocalHost } from "./local-host";
 import { detectPasskeyRelay } from "./passkey-detect";
 import { relayKeyOf } from "./relay-urls";
@@ -406,11 +406,17 @@ const gatesNow = async (ports: BrowserPorts): Promise<void> => {
   for (const record of records) {
     gateFor(record, ports);
   }
-  // A running local browser has its pages through the proxy (hub-proxy.ts),
-  // whether or not a session starts one again after this agent did.
-  if (records.some((record) => record.local)) {
-    await startHubProxy();
-  }
+  // Every browser that has run keeps its dashboard door (dashboard-door.ts):
+  // a running one's pages reach the dashboard and the local host's reach
+  // everything through it, whether or not a session starts it again after
+  // this agent did.
+  await Promise.all(
+    records.flatMap((record) =>
+      record.slot === undefined
+        ? []
+        : [openDoor(record.key, portsOf(record).door)]
+    )
+  );
   const kept = new Set(records.map((record) => record.key));
   for (const key of servedGates()) {
     if (!kept.has(key)) {
@@ -791,6 +797,7 @@ export const removeBrowser = async (
     }
   });
   stopGate(key);
+  await closeDoor(key);
   await forgetBrowser(key);
   console.info(`[browser] ${key} removed`);
   told(ports);

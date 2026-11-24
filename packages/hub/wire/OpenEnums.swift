@@ -1706,6 +1706,7 @@ public enum OpenEnums {
     /// `#/components/schemas/CallerKind`.
     public enum CallerKind: OpenEnum {
         case anonymous
+        case browser
         case machine
         case owner
         case session
@@ -1715,6 +1716,7 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "anonymous": self = .anonymous
+            case "browser": self = .browser
             case "machine": self = .machine
             case "owner": self = .owner
             case "session": self = .session
@@ -1725,6 +1727,7 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .anonymous: "anonymous"
+            case .browser: "browser"
             case .machine: "machine"
             case .owner: "owner"
             case .session: "session"
@@ -1736,7 +1739,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.anonymous, .machine, .owner, .session]
+        public static let allCases: [Self] = [.anonymous, .browser, .machine, .owner, .session]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

@@ -413,18 +413,17 @@ export const withInputsLine = (
 /**
  * Where a delegate's browser opens the live dashboard (hub dashboard-url.ts
  * `delegateDashboard`): its browser runs in a container whose loopback is
- * its own and signs in to nothing, so it is told an address on the hub's own
+ * its own, and opens the dashboard signed in as its agent through its
+ * machine's dashboard door (agent browser/dashboard-door.ts), reading every
+ * screen and changing nothing, so it is told an address on the hub's own
  * names, which nothing stands in front of.
  * - `own`: at `url`, the hub's tailnet or LAN address;
- * - `paired`: at `url`, which lets in only the person's paired devices
- *   (hub-auth.ts, "Require paired devices");
  * - `elsewhere`: the hub knows only `url`, an address the person opens (a
  *   proxy, a tunnel), which may stop the browser at a sign-in;
  * - `none`: the hub knows no address of its dashboard.
  */
 export type DashboardReach =
   | { kind: "own"; url: string }
-  | { kind: "paired"; url: string }
   | { kind: "elsewhere"; url: string }
   | { kind: "none" };
 
@@ -441,17 +440,12 @@ export const withDashboardLine = (
     case "own":
       return afterMarker(
         text,
-        `Your browser tools open the live dashboard at ${reach.url}; 127.0.0.1 and localhost in your browser are the browser's own, never the hub.`
-      );
-    case "paired":
-      return afterMarker(
-        text,
-        `The live dashboard at ${reach.url} lets in only the person's paired devices, so your browser tools can't open it.`
+        `Your browser tools open the live dashboard at ${reach.url}, signed in as your agent: every screen reads, and nothing you press there changes anything. 127.0.0.1 and localhost in your browser are the browser's own, never the hub.`
       );
     case "elsewhere":
       return afterMarker(
         text,
-        `The hub knows its live dashboard only at ${reach.url}, an address the person opens that may stop your browser at a sign-in; 127.0.0.1 and localhost in your browser are the browser's own, never the hub.`
+        `The hub knows its live dashboard only at ${reach.url}, an address the person opens that may stop your browser at a sign-in; past it, your browser is signed in as your agent and changes nothing. 127.0.0.1 and localhost in your browser are the browser's own, never the hub.`
       );
     case "none":
       return afterMarker(

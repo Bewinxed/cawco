@@ -12,7 +12,8 @@
  *   it.
  *
  * In both, a request that presents a session credential is that session and
- * never the person.
+ * never the person, and one that presents a browser pass
+ * ({@link BROWSER_PASS_SCHEME}) is an agent's browser and never the person.
  *
  * A machine proves its key without sending it (machine-key.ts). Nothing here
  * reads a file or a key: the dashboard's pages import it.
@@ -21,8 +22,35 @@
 /** Which way the hub admits callers. */
 export type HubAuthMode = "trusted" | "pairing";
 
-/** What a request is to the hub. */
-export type CallerKind = "owner" | "session" | "machine" | "anonymous";
+/**
+ * What a request is to the hub. `browser`: a page in a project's browser an
+ * agent drives, which reads the dashboard and changes nothing (hub
+ * hub-auth.ts `BROWSER_READS`).
+ */
+export type CallerKind =
+  "owner" | "session" | "machine" | "browser" | "anonymous";
+
+/**
+ * The `Authorization` scheme of a browser pass: what the agent's dashboard
+ * door (agent browser/dashboard-door.ts) puts on every request a project's
+ * browser makes to the dashboard, in place of whatever the page sent. A
+ * request that carries it is that browser's, whatever else it carries, and
+ * one whose pass the hub does not verify is refused everywhere.
+ */
+export const BROWSER_PASS_SCHEME = "Browser";
+
+/**
+ * What a machine's agent is handed for one of its browsers
+ * (`GET /api/browser-passes/:key`): the pass its dashboard door stamps, and
+ * every origin the hub knows its dashboard at, each `scheme://host:port`
+ * with the port written out.
+ */
+export interface BrowserPass {
+  /** When the pass lapses (ms epoch): its door asks for another before then. */
+  expiresAt: number;
+  origins: string[];
+  pass: string;
+}
 
 /**
  * What `GET /api/auth` answers: the mode, what this request is, and, for a

@@ -756,6 +756,7 @@ export type BrowserKeyOutput = z.output<typeof BrowserKeyShape>;
 export const BrowserPortsShape = declared(
   z.object({
     devtools: z.number(),
+    door: z.number().optional(),
     http: z.number().optional(),
     media: z.number().optional(),
   }),

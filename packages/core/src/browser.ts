@@ -16,12 +16,12 @@ export type BrowserHostKind = "container" | "local";
 
 /**
  * The agent's ports for browsers: the machine's one DevTools gate first
- * ({@link BROWSER_GATE_PORT}), the local host's proxy last
- * ({@link BROWSER_PROXY_PORT}), and between them three per browser started, in this
- * order: neko's HTTP, Chromium's DevTools, and the media port (UDP and TCP,
- * the same number). The gate, HTTP and DevTools listen on 127.0.0.1 alone;
- * media on every address. The local host uses DevTools only. A browser
- * takes its three when it first starts, not before.
+ * ({@link BROWSER_GATE_PORT}), and after it four per browser started, in
+ * this order: neko's HTTP, Chromium's DevTools, the media port (UDP and TCP,
+ * the same number) and its dashboard door (agent browser/dashboard-door.ts).
+ * The gate, HTTP, DevTools and the door listen on 127.0.0.1 alone; media on
+ * every address. The local host uses DevTools and the door only. A browser
+ * takes its four when it first starts, not before.
  *
  * Below Linux's ephemeral range, 32768–60999 ("The default values are 32768
  * and 60999 respectively", kernel Documentation/networking/ip-sysctl.rst,
@@ -37,9 +37,6 @@ export const BROWSER_PORTS = { first: 14_070, last: 14_131 } as const;
 /** The machine's DevTools gate: every session's browser tool, every browser, by the path's gate id. */
 export const BROWSER_GATE_PORT = BROWSER_PORTS.first;
 
-/** The local host's forward proxy (agent `browser/hub-proxy.ts`): the last port of the range, on 127.0.0.1 alone. */
-export const BROWSER_PROXY_PORT = BROWSER_PORTS.last;
-
 /**
  * The screen of a project's browser on both hosts, and the size of the view
  * the person takes it over in: neko's desktop on the container host (its
@@ -50,11 +47,16 @@ export const BROWSER_PROXY_PORT = BROWSER_PORTS.last;
 export const BROWSER_SCREEN = { width: 1280, height: 800 } as const;
 
 /** How many ports one browser takes from {@link BROWSER_PORTS}. */
-const BROWSER_PORTS_EACH = 3;
+const BROWSER_PORTS_EACH = 4;
 
-/** One browser's ports; `http` and `media` are the container host's alone. */
+/**
+ * One browser's ports; `http` and `media` are the container host's alone.
+ * `door`, its dashboard door's, is absent from a row a machine reported
+ * before browsers had one.
+ */
 export interface BrowserPorts {
   devtools: number;
+  door?: number;
   http?: number;
   media?: number;
 }
@@ -66,12 +68,13 @@ export const browserPorts = (slot: number): Required<BrowserPorts> => {
     http: first,
     devtools: first + 1,
     media: first + 2,
+    door: first + 3,
   };
 };
 
 /** How many browsers {@link BROWSER_PORTS} holds on one machine. */
 export const BROWSER_SLOTS = Math.floor(
-  (BROWSER_PROXY_PORT - BROWSER_GATE_PORT) / BROWSER_PORTS_EACH
+  (BROWSER_PORTS.last - BROWSER_GATE_PORT) / BROWSER_PORTS_EACH
 );
 
 export type BrowserState =

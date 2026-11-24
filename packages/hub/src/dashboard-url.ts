@@ -130,3 +130,34 @@ export const secureDashboardUrl = (registry: RegistryShape): string | null =>
   tailnetDashboard ??
   registry.secureDashboardOrigin() ??
   null;
+
+/** `url`'s origin with its port written out (`https://name:443`), or undefined for one that is no http(s) URL. */
+const withPort = (url: string): string | undefined => {
+  if (!URL.canParse(url)) {
+    return;
+  }
+  const parsed = new URL(url);
+  const { protocol } = parsed;
+  if (protocol !== "http:" && protocol !== "https:") {
+    return;
+  }
+  const explicit = parsed.port || (protocol === "https:" ? "443" : "80");
+  return `${protocol}//${parsed.hostname}:${explicit}`;
+};
+
+/**
+ * Every origin the hub knows its dashboard at, each with its port written
+ * out: the operator's override, the tailnet name's https address while the
+ * hub serves it, and every origin a dashboard reached it from. What a
+ * project's browser sends through its dashboard door, wherever the person
+ * opens the dashboard (agent browser/dashboard-door.ts), and so what an
+ * agent's browser opens signed in as itself.
+ */
+export const dashboardOrigins = (registry: RegistryShape): string[] => [
+  ...new Set(
+    [DASHBOARD_URL_OVERRIDE, tailnetDashboard, ...registry.dashboardOrigins()]
+      .filter((one): one is string => typeof one === "string")
+      .map(withPort)
+      .filter((one): one is string => one !== undefined)
+  ),
+];
