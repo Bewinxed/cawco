@@ -277,7 +277,13 @@ function rewriteContainer(
       }
     }
     REWRITTEN.add(target);
-    if (target instanceof CSSGroupingRule && target.cssRules.length) {
+    // A style rule holds its nested rules (`&:hover` inside `.btn`) as a
+    // grouping rule does, but the engines don't make it one (Chrome's
+    // CSSStyleRule is no CSSGroupingRule), so it is descended by name.
+    if (
+      (target instanceof CSSGroupingRule || target instanceof CSSStyleRule) &&
+      target.cssRules.length
+    ) {
       count += rewriteContainer(target, into, left - count);
     }
     if (count >= left) {
