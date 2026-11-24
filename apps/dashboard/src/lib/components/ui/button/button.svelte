@@ -18,11 +18,12 @@
         outline: "",
         secondary: "",
         ghost: "control-quiet",
-        destructive: "control-danger text-red",
-        /* A grant wider than what was asked (DESIGN.md, The Consequential
-           Grant Rule): the caution intent, the same at rest and under the
-           pointer, so it is never made more inviting. */
-        grant: "control-caution control-steady text-orange",
+        destructive: "control-primary control-danger text-on-accent",
+        /* An intent is the primary look filled in its ink (owner's pick,
+           2026-11-24). A grant wider than what was asked (DESIGN.md, The
+           Consequential Grant Rule) is the caution intent, the same at rest
+           and under the pointer, so it is never made more inviting. */
+        grant: "control-primary control-caution control-steady text-on-accent",
         link: "control-quiet control-steady text-accent underline-offset-4 hover:underline",
       },
       size: {

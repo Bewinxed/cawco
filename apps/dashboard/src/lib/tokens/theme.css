@@ -1143,10 +1143,11 @@
 
    The fill is one colour, and every state is a translucent layer over it
    (`--control-layer`), so a hover or a press never changes the fill's own
-   colour and never paints twice. The edge is an inset 1px ring, drawn
-   inside the box over the fill, so the fill and the edge share one rounded
-   shape and nothing overlaps at the corners. A transparent border stays
-   under it, so forced colours, which drop shadows, still draw an edge.
+   colour and never paints twice. The edge is the 1px border, its outermost
+   pixel, painted over the fill, which runs under it (`border-box`): the fill
+   and the edge share one outer curve, so no rim of fill shows outside the
+   edge and its corners keep the box's radius. Forced colours draw it as
+   any border.
    Nothing scales: a press is the next layer step. Only the layer, the edge
    and the shadow transition.
 
@@ -1182,15 +1183,14 @@
     var(--control-intent, var(--control-default-edge, var(--color-ui-3)))
   );
   --control-layer: transparent;
-  border: 1px solid transparent;
+  border: 1px solid var(--control-edge);
+  background-clip: border-box;
   background-color: var(--control-fill, var(--color-bg));
   background-image: linear-gradient(var(--control-layer), var(--control-layer));
-  box-shadow:
-    inset 0 0 0 1px var(--control-edge),
-    var(
-      --control-lift,
-      0 1px 2px light-dark(oklch(0% 0 0 / 0.06), oklch(0% 0 0 / 0.4))
-    );
+  box-shadow: var(
+    --control-lift,
+    0 1px 2px light-dark(oklch(0% 0 0 / 0.06), oklch(0% 0 0 / 0.4))
+  );
   transition-property: --control-layer, --control-edge, box-shadow;
   transition-duration: var(--duration-fast);
   transition-timing-function: var(--ease-out);
@@ -1289,9 +1289,8 @@
 /* Off, a dashed edge in place of the ring: a tile that cannot be picked. */
 @utility control-dashed-off {
   &:is(:disabled, [aria-disabled="true"]) {
-    --control-edge: transparent;
+    --control-edge: var(--color-ui-2);
     border-style: dashed;
-    border-color: var(--color-ui-2);
   }
 }
 
