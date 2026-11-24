@@ -23,8 +23,10 @@ import {
   type StoryOp,
   storyRefOf,
 } from "@cawco/core/stage";
+import type { MeasureRead } from "@cawco/core/stage-measure";
 import { withoutUndefined } from "@cawco/core/without-undefined";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
+import { measureWords } from "@cawco/core/words/stage-measure";
 import { designTreeId } from "@cawco/core/workspace-id";
 import { pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus, problem } from "elysia";
@@ -1039,6 +1041,12 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: a canvas's read joins its stage, its report, the person's picks and each optional ask in one answer
   ) => {
     if (designOf(row)) {
+      if (ask.measure) {
+        return problem(400, {
+          code: "artifact-read-state-unfit",
+          detail: measureWords.designFolder(row.name),
+        });
+      }
       return await readDesign(row, since, ownersRead);
     }
     const sheet = sheetOf(row);
@@ -1049,6 +1057,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     let plansUnread: true | undefined;
     let png: string | undefined;
     let layout: LayoutRead | undefined;
+    let measured: MeasureRead | undefined;
     if (sheet) {
       const at: StageAt = { workspace: sheet.workspace };
       // A bare story name two states files export reads no one frame: refused, before any draw, with the `file:Story` names to send.
@@ -1061,18 +1070,32 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         });
       }
       // A draw asked of a stage that answered: refused in its own words when it can't be made.
-      if (opened && (ask.render || ask.png || ask.layout)) {
+      // A measurement starts from a story: refused without one, naming the live story (the person's states file's first) to send.
+      if (ask.measure && !ask.state) {
+        return problem(400, {
+          code: "artifact-read-state-unfit",
+          detail: measureWords.noStory(
+            report?.sections.find((one) => one.file === sheet.files[0])
+              ?.frames[0]?.story ?? null
+          ),
+        });
+      }
+      if (opened && (ask.render || ask.png || ask.layout || ask.measure)) {
         const rendered = await deps.stageRender(at, {
           files: sheet.files,
           spec: sheet.spec,
           ...(ask.state ? { state: ask.state } : {}),
-          ...(ask.png || ask.layout ? { png: true } : {}),
-          ...(ask.layout ? { layout: true } : {}),
+          ...(ask.measure
+            ? { measure: ask.measure }
+            : {
+                ...(ask.png || ask.layout ? { png: true } : {}),
+                ...(ask.layout ? { layout: true } : {}),
+              }),
         });
         if (rendered instanceof ElysiaStatus) {
           return rendered;
         }
-        ({ report, png, undrawn, plansUnread, layout } = rendered);
+        ({ report, png, undrawn, plansUnread, layout, measured } = rendered);
       }
       if (report) {
         report = drawnHeld(row, report);
@@ -1145,6 +1168,7 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
         : {}),
       ...(ask.png || ask.layout ? { png: png ?? null } : {}),
       ...(layout ? { layout } : {}),
+      ...(measured ? { measured } : {}),
       hint: READ_HINT,
     };
     return read;

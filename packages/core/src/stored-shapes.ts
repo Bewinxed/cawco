@@ -74,6 +74,11 @@ import { FLEET_MCP_CHANGE_KINDS } from "./session/controls";
 import type { SendMode as SendModeType } from "./session-messages";
 import { HARNESS_BLOCK_TYPES } from "./session-messages";
 import { INTERACTIONS, STAGE_TOOLCHAINS } from "./stage";
+import {
+  MEASURE_FAULTS,
+  MEASURE_PRESSES,
+  MEASURE_SPEEDS,
+} from "./stage-measure";
 import type { StarterOutcome as StarterOutcomeType } from "./starters";
 import { declared } from "./stored-types";
 import { COMMAND_ACK_STAGES } from "./stream";
@@ -5587,6 +5592,133 @@ const LayoutReadShape = declared(
 );
 export type LayoutReadOutput = z.output<typeof LayoutReadShape>;
 
+const MeasureSpeedShape = declared(
+  z.enum(MEASURE_SPEEDS),
+  "MeasureSpeed",
+  "packages/core/src/stage-measure.ts"
+);
+export type MeasureSpeedOutput = z.output<typeof MeasureSpeedShape>;
+
+const MeasureFaultKindShape = declared(
+  z.enum(MEASURE_FAULTS),
+  "MeasureFaultKind",
+  "packages/core/src/stage-measure.ts"
+);
+export type MeasureFaultKindOutput = z.output<typeof MeasureFaultKindShape>;
+
+const MeasureFaultShape = declared(
+  z.object({ kind: MeasureFaultKindShape, says: z.string() }),
+  "MeasureFault",
+  "packages/core/src/stage-measure.ts"
+);
+export type MeasureFaultOutput = z.output<typeof MeasureFaultShape>;
+
+const ForcedLayoutShape = declared(
+  z.object({
+    at: z.string(),
+    count: z.number(),
+    library: z.literal(true).optional(),
+    ms: z.number(),
+  }),
+  "ForcedLayout",
+  "packages/core/src/stage-measure.ts"
+);
+export type ForcedLayoutOutput = z.output<typeof ForcedLayoutShape>;
+
+const MeasureTrendShape = declared(
+  z.object({
+    end: z.number(),
+    fit: z.number().optional(),
+    perRepeat: z.number(),
+    start: z.number(),
+  }),
+  "MeasureTrend",
+  "packages/core/src/stage-measure.ts"
+);
+export type MeasureTrendOutput = z.output<typeof MeasureTrendShape>;
+
+const MeasurePressShape = declared(
+  z.enum(MEASURE_PRESSES),
+  "MeasurePress",
+  "packages/core/src/stage-measure.ts"
+);
+export type MeasurePressOutput = z.output<typeof MeasurePressShape>;
+
+const NonCompositedShape = declared(
+  z.object({
+    animation: z.string(),
+    element: z.string(),
+    properties: z.array(z.string()),
+    reasons: z.array(z.string()),
+    source: z.string().optional(),
+  }),
+  "NonComposited",
+  "packages/core/src/stage-measure.ts"
+);
+export type NonCompositedOutput = z.output<typeof NonCompositedShape>;
+
+const MeasureReadShape = declared(
+  z.object({
+    at: z.object({
+      hz: z.number().optional(),
+      scheme: z.enum(["light", "dark"]),
+      speed: MeasureSpeedShape,
+      width: z.number(),
+      window: z.tuple([z.number(), z.number()]),
+    }),
+    cut: z.literal(true).optional(),
+    faults: z.array(MeasureFaultShape),
+    frames: z.object({
+      count: z.number(),
+      dropped: z.number(),
+      longest: z.number(),
+      longestWork: z.object({
+        layout: z.number(),
+        paint: z.number(),
+        script: z.number(),
+        style: z.number(),
+      }),
+    }),
+    layout: z.object({
+      count: z.number(),
+      everyFrame: z.boolean(),
+      forced: z.array(ForcedLayoutShape),
+      ms: z.number(),
+    }),
+    length: z.number(),
+    memory: z
+      .object({
+        documents: MeasureTrendShape,
+        heap: MeasureTrendShape,
+        listeners: MeasureTrendShape,
+        nodes: MeasureTrendShape,
+        objects: MeasureTrendShape,
+      })
+      .optional(),
+    move: z.object({
+      by: z.union([z.literal("play"), MeasurePressShape]),
+      from: z.string(),
+      on: z.string().optional(),
+      to: z.string().optional(),
+    }),
+    nonComposited: z.array(NonCompositedShape),
+    runs: z.object({
+      repeats: z.number(),
+      traced: z.number(),
+      warm: z.number(),
+    }),
+    style: z.object({
+      count: z.number(),
+      elements: z.number(),
+      ms: z.number(),
+    }),
+    took: z.number(),
+  }),
+  "MeasureRead",
+  "packages/core/src/stage-measure.ts"
+);
+export type MeasureReadOutput = z.output<typeof MeasureReadShape>;
+
 const SweepStepShape = declared(
   z.enum(["load", "draw", "probe", "move", "post"]),
   "SweepStep",
@@ -5620,6 +5752,7 @@ export type SectionUndrawnOutput = z.output<typeof SectionUndrawnShape>;
 const StageRenderedShape = declared(
   z.object({
     layout: LayoutReadShape.optional(),
+    measured: MeasureReadShape.optional(),
     plansUnread: z.literal(true).optional(),
     png: z.string().optional(),
     report: RenderReportShape,

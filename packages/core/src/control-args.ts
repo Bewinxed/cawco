@@ -72,6 +72,11 @@ import {
   type StoredRun,
 } from "./session-messages";
 import { canvasSpecOf, INTERACTIONS } from "./stage";
+import {
+  MEASURE_LIMITS,
+  MEASURE_PRESSES,
+  MEASURE_SPEEDS,
+} from "./stage-measure";
 import { storedAs } from "./stored-as";
 import {
   BinaryUpdatePolicySchema,
@@ -199,9 +204,33 @@ const SheetWrite = union([
   }),
   object({ files: texts, story: StoryOp }),
 ]);
+const MeasureAsk = object({
+  key: optional(pipe(text, maxLength(MEASURE_LIMITS.key))),
+  on: optional(
+    union([
+      object({ role: text, name: optional(text) }),
+      object({ text }),
+      object({ testId: text }),
+      object({ selector: text }),
+    ])
+  ),
+  play: optional(literal(true)),
+  press: optional(picklist(MEASURE_PRESSES)),
+  repeats: optional(
+    pipe(
+      count,
+      integer(),
+      minValue(MEASURE_LIMITS.repeats.min),
+      maxValue(MEASURE_LIMITS.repeats.max)
+    )
+  ),
+  speed: optional(picklist(MEASURE_SPEEDS)),
+  text: optional(pipe(text, maxLength(MEASURE_LIMITS.text))),
+});
 const RenderAsk = object({
   files: texts,
   layout: optional(boolean()),
+  measure: optional(MeasureAsk),
   png: optional(boolean()),
   spec: optional(pipe(unknown(), transform(canvasSpecOf))),
   state: optional(

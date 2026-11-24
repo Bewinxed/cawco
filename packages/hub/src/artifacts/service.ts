@@ -135,6 +135,7 @@ import {
   type StageFrame,
   type StageState,
 } from "@cawco/core/stage";
+import { measureAskRefusal } from "@cawco/core/stage-measure-faults";
 import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
@@ -601,6 +602,19 @@ const pictureRefusal = (row: ArtifactRow, ask: PictureAsk, drawn: boolean) => {
         row.kind === "component"
           ? "layout lays the alignment guides over one frame: name it, { id, layout: true, state: { story, interaction?, scheme?, width? } }."
           : `${row.name} is a ${row.kind}: layout reads a design graph's frame.`,
+    });
+  }
+  if (ask.measure && row.kind !== "component") {
+    return problem(400, {
+      code: "artifact-read-state-unfit",
+      detail: `${row.name} is a ${row.kind}. A measurement plays a story on a design graph's stage: read a design graph with { state: { story }, measure }.`,
+    });
+  }
+  const unmeasurable = ask.measure ? measureAskRefusal(ask.measure) : null;
+  if (unmeasurable) {
+    return problem(400, {
+      code: "artifact-read-state-shape",
+      detail: unmeasurable,
     });
   }
   if (ask.state && row.kind !== "component") {

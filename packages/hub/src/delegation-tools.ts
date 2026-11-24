@@ -1276,7 +1276,7 @@ export function handoffTools(view: ToolView) {
       artifactRead.name,
       artifactRead.description,
       artifactRead.input,
-      async ({ id, state, ...asked }, _format, bound) => {
+      async ({ id, state, measure, ...asked }, _format, bound) => {
         let target = id;
         if (target === undefined) {
           const newest = bound.actions.artifacts.newest();
@@ -1291,10 +1291,11 @@ export function handoffTools(view: ToolView) {
           }
           target = newest;
         }
-        // A frame's `state` goes as its JSON, as the read takes it.
+        // A frame's `state` and a `measure` go as their JSON, as the read takes them.
         return await bound.actions.artifacts.read(target, {
           ...asked,
           ...(state ? { state: JSON.stringify(state) } : {}),
+          ...(measure ? { measure: JSON.stringify(measure) } : {}),
         });
       },
       artifactReadWords,

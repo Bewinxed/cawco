@@ -667,20 +667,25 @@ export function pageError(
     if (placed) {
       ({ path, line, column } = placed);
     }
-    if (
-      path.includes("/node_modules/") ||
-      path.includes("/@id/") ||
-      path.includes("/@vite/")
-    ) {
+    if (notProjects(path)) {
       continue;
     }
-    const file = path.startsWith("/@fs/")
-      ? fromRoot(path.slice("/@fs".length), root)
-      : path.slice(base.length).replace(LEADING_SLASH, "");
-    return { message, file, line, column };
+    return { message, file: fileOfPath(path, root, base), line, column };
   }
   return { message, file: null, line: null, column: null };
 }
+/** Whether a module's address on the stage is a library's or Vite's own: none of the project's code. The stage's Vite prebundles the project's dependencies under its own folder (`.cawco/stage/cache/deps/`). */
+export const notProjects = (path: string): boolean =>
+  path.includes("/node_modules/") ||
+  path.includes("/.cawco/") ||
+  path.includes("/@id/") ||
+  path.includes("/@vite/");
+
+/** A module's address on the stage (unkeyed, core `unkeyedPath`) as its file from the toolchain root. */
+export const fileOfPath = (path: string, root: string, base: string): string =>
+  path.startsWith("/@fs/")
+    ? fromRoot(path.slice("/@fs".length), root)
+    : path.slice(base.length).replace(LEADING_SLASH, "");
 const STACK_PLACE = /(https?:\/\/[^\s)]+?):(\d+):(\d+)\)?\s*$/u;
 /** A keyed module's prefix in a message: `/@cawco/m/<key>`, before the module's own address. */
 const KEYED_PREFIX = new RegExp(`${MODULES_PATH}[^/\\s'"]+`, "gu");

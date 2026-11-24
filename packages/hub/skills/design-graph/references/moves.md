@@ -23,6 +23,16 @@ From a live story (SKILL.md, step 3) the `play` makes the person's press in plac
 
 The design graph's Map face draws each flow move as a solid arrow from its `from` state to its destination, and each of your `edges` as a dashed one. The report's `moves` lists, per move, every animation it fired, read from `getAnimations()` as each started: `target`, `property`, `duration`, `delay`, `easing`. A move with no animations moved nothing the engine saw; a move with `error` threw.
 
+## Measure a move
+
+`artifact_read` with `measure` plays one move on the stage in a headless browser and answers `measured`: frames drawn and dropped, style and layout work, each animation Chrome kept off the compositor with its reason, the memory counters over repeats, and `faults`, each naming what, where and the fix.
+
+- A flow move: `artifact_read({ id, state: { story: "Approved" }, measure: { play: true } })` runs Approved's `play` from its `from`.
+- One press, no story written: `measure: { press: "click", on: { role: "button", name: "Approve" } }`, made from `state.story`. `on` names exactly one element, as a play finds it.
+- Left out, `speed` runs the main thread at a quarter speed, as a phone would; `speed: "machine"` reads at the machine's own, for a screen only a desk shows.
+
+Measure when a move carries motion the person will watch, when a press may leave something behind (a listener, nodes, a growing heap), or when a move looks janky. A read takes about 20 s. Fix each fault in the component and measure again until `faults` is empty: a `non-composited` animation moves to `transform`, `opacity` or a clip (the `animation-performance` skill); a `forced-layout` is fixed at the line it names; a `leak` goes to a `browser` delegate with DevTools heap tools, to find what holds it.
+
 ## The Animation face
 
 The person opens a move on the design graph's Animation face (its title's menu, or an arrow on the Map): the move plays on the live drawing, one row per thing that moves, a bar per run of its animations. They play, replay, repeat and scrub it, zooms the lanes, drags a bar's delay or its ends, picks a curve or a spring, types what a clip runs between, sets a clip to repeat, drags where its legs meet, and keeps versions to compare; every change replays on the drawing. `artifact_read` answers `tuned`, only what they changed, every move's:

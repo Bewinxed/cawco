@@ -286,10 +286,16 @@ import {
  * the nightly run (the owner that day called rule L-28939a's overnight
  * wait a CawCo gap) (worker 32,331, delegate 12,861 measured); both budgets
  * are raised to it.
+ * 2026-11-24: artifact_read takes `measure`, one move of a design graph
+ * measured on its stage through the DevTools Protocol (frames, style and
+ * layout work, animations kept off the compositor, memory over repeats),
+ * the owner's go on perf-read that day, with `speed` the agent's pick per
+ * call (his pick on its `speed` card) (worker 32,839, delegate 13,370
+ * measured); both budgets are raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 32_331,
-  delegate: 12_861,
+  worker: 32_839,
+  delegate: 13_370,
   overseer: 770,
   "web-facing": 3400,
   curator: 1550,

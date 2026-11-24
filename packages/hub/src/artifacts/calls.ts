@@ -5,6 +5,7 @@
  */
 
 import { INTERACTIONS, type StoryOp } from "@cawco/core/stage";
+import type { MeasureAsk } from "@cawco/core/stage-measure";
 import { ElysiaStatus, problem, t } from "elysia";
 import type { Operation } from "rfc6902";
 import type { Static, TSchema } from "typebox";
@@ -35,7 +36,7 @@ import type {
   SheetChange,
   SkeletonElement,
 } from "./shapes";
-import { isStateStory } from "./tools";
+import { isStateStory, measureAsk } from "./tools";
 
 /** A read's frame, from its JSON; refused with the shape when it is none. */
 const STATE_ASK = z.object({
@@ -133,6 +134,25 @@ const oneChange = (body: {
 };
 
 /** An artifact's read as its route asks it (`artifact_read`): its state's JSON read first, refused with the read's shape when it is none. */
+/** A read's `measure`, from its JSON; refused with the shape when it is none. */
+const measureOf = (text: string) => {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    value = null;
+  }
+  const read = measureAsk.safeParse(value);
+  if (!read.success) {
+    return problem(400, {
+      code: "artifact-read-state-shape",
+      detail: SHAPES.read,
+    });
+  }
+  const measure: MeasureAsk = read.data;
+  return measure;
+};
+
 export const readAsked = async (
   artifacts: Artifacts,
   instanceId: string,
@@ -140,6 +160,7 @@ export const readAsked = async (
   query: {
     detail?: "summary" | "story";
     layout?: boolean;
+    measure?: string;
     png?: boolean;
     render?: boolean;
     save?: string;
@@ -154,7 +175,12 @@ export const readAsked = async (
   if (state instanceof ElysiaStatus) {
     return state;
   }
+  const measure = query.measure ? measureOf(query.measure) : undefined;
+  if (measure instanceof ElysiaStatus) {
+    return measure;
+  }
   return await artifacts.read(instanceId, id, query.since, query.png === true, {
+    ...(measure ? { measure } : {}),
     ...(query.detail ? { detail: query.detail } : {}),
     ...(query.story ? { story: query.story } : {}),
     ...(state ?? {}),

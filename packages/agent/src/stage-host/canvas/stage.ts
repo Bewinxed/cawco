@@ -120,21 +120,34 @@ import {
   stageRoomOf,
   storyOf,
 } from "@cawco/core/stage-graph";
-import { queriesIn, userEventIn } from "@cawco/core/stage-play";
+import {
+  MEASURE_MARKS,
+  type MeasureMove,
+  type MeasureOn,
+  type MeasurePress,
+  type MeasureRepeatAsk,
+  type MeasureRun,
+} from "@cawco/core/stage-measure";
+import { elementSaid, queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { graphWords as words } from "@cawco/core/words/graph";
+import { measureWords } from "@cawco/core/words/stage-measure";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 import { differences } from "./diff";
 import { tellHolder } from "./embed";
+import { forcedPlace } from "./forced";
 import { drawGuides, readLayout } from "./guides";
 import { stageScroll, stillPage } from "./held-scroll";
 import {
+  describe,
   drew,
   elementsUnread,
   firstWords,
   keyframeEffectOf,
   lookOf,
+  pageError,
   partsOf,
   readAnimation,
+  sourceOf,
 } from "./measure";
 import { nameOf, thingOf } from "./names";
 import {
@@ -177,6 +190,8 @@ const EMBED_WHY_MAX = 200;
 /** How long a reach's play may run, then its motion (design-graph moves.md). */
 const PLAY_MS = 6000;
 const MOTION_MS = 3000;
+/** A measured move's play that ran past {@link PLAY_MS}. */
+class PlayTooLong extends Error {}
 /** The quiet that ends a move: no new animation and none running for this long. */
 const QUIET_MS = 250;
 /** The rest a drawing comes to as it mounts: its own arrivals (a read-back the hub answered) have played. */
@@ -690,6 +705,23 @@ function drawingsAsViewport(drawings: () => HTMLElement[]): void {
   );
 }
 
+/** Every element in `root` that `on` names, by the query a play would make (core stage-play.ts). */
+function hitsIn(root: HTMLElement, on: MeasureOn): Element[] {
+  const queries = queriesIn(root);
+  if ("role" in on) {
+    return queries.queryAllByRole(
+      on.role,
+      on.name === undefined ? undefined : { name: on.name }
+    );
+  }
+  if ("text" in on) {
+    return queries.queryAllByText(on.text);
+  }
+  return "testId" in on
+    ? queries.queryAllByTestId(on.testId)
+    : queries.querySelectorAll(on.selector);
+}
+
 export function bootStage(page: Page): Mode {
   if (page.by === "embed" || page.by === "map") {
     return bootColumn(page);
@@ -876,9 +908,11 @@ export function bootStage(page: Page): Mode {
     const end = performance.now() + MOTION_MS;
     const known = new Set<Animation>();
     let still = performance.now();
+    // A measured mount needs only to start at rest: no read-back unfolds for a person there.
+    const rest = page.measuring ? QUIET_MS : REST_MS;
     while (
       performance.now() < end &&
-      performance.now() - still < REST_MS &&
+      performance.now() - still < rest &&
       // A newer reach replaces this drawing: its rest is no one's to wait for.
       !(holder === drawing && latest !== serving)
     ) {
@@ -1067,8 +1101,10 @@ export function bootStage(page: Page): Mode {
   async function act(
     run: () => Promise<void>,
     still: boolean
-  ): Promise<{ clips: ClipRead[]; held: Held[] }> {
+  ): Promise<{ clips: ClipRead[]; cut: number; held: Held[] }> {
     const had = document.activeElement;
+    /** The animations still running when the wait for them ended, landed. */
+    let cut = 0;
     const t0 = performance.now();
     const seen = new Map<Animation, number>();
     const taken: Taken[] = [];
@@ -1141,6 +1177,7 @@ export function bootStage(page: Page): Mode {
           animation.playState === "running" &&
           !statesOwn(animation)
         ) {
+          cut += 1;
           land(animation);
         }
       }
@@ -1154,6 +1191,7 @@ export function bootStage(page: Page): Mode {
     const clips = clipsOf(taken, starts);
     return {
       clips,
+      cut,
       held: clips.map((read, at) => ({
         read,
         keyframes: taken[at]?.keyframes ?? [],
@@ -2183,7 +2221,10 @@ export function bootStage(page: Page): Mode {
     guidesNow();
   }
 
-  new ResizeObserver(() => laid()).observe(drawing);
+  // A measuring page lays out for no panel: the drawing's own resizes are its component's work alone.
+  if (!page.measuring) {
+    new ResizeObserver(() => laid()).observe(drawing);
+  }
   addEventListener("resize", () => relay());
   // Each layer the drawing opens collides with the drawing, as with the app's window at its width.
   drawingsAsViewport(() => (live && !frame.hidden ? [drawing] : []));
@@ -2566,7 +2607,273 @@ export function bootStage(page: Page): Mode {
     return guidesNow();
   }
 
-  Object.assign(state, { stateNamed, pose, lacks, picture, settled, layout });
+  /* --- Measuring: one move repeated for the daemon's trace (core stage-measure.ts) --- */
+
+  /** How many times a save loaded the measured section again, swapped or broke a file it draws from. */
+  let edits = 0;
+  /** The sections a measuring page has loaded once: a load past the first is a save. */
+  const shownOnce = new Set<Section>();
+
+  /** The floating layers the drawing opened outside itself (a popover portalled to the body): searched with it for a press's element. */
+  const layersOut = (): HTMLElement[] =>
+    [...document.body.children].filter(
+      (one): one is HTMLElement =>
+        one instanceof HTMLElement &&
+        one !== rig &&
+        !one.contains(drawing) &&
+        !one.matches("script, style, link, template")
+    );
+
+  /** The one element `on` names in the drawing or its layers, and the root it stands in; or why there is not exactly one. */
+  function measuredOn(
+    on: MeasureOn
+  ): { el: Element; root: HTMLElement } | { refused: string } {
+    const matched = new Map<Element, HTMLElement>();
+    for (const root of [drawing, ...layersOut()]) {
+      for (const hit of hitsIn(root, on)) {
+        matched.set(hit, root);
+      }
+    }
+    const [only] = matched;
+    if (matched.size === 1 && only) {
+      return { el: only[0], root: only[1] };
+    }
+    if (matched.size === 0) {
+      return { refused: measureWords.nothingMatches(on) };
+    }
+    const listed = [...matched.keys()].slice(0, 5).map(elementSaid);
+    return {
+      refused: measureWords.severalMatch(
+        on,
+        listed,
+        matched.size - listed.length
+      ),
+    };
+  }
+
+  /** One press on `el`, standing in `root`: the `userEvent` call a play would make. */
+  async function pressOnce(
+    move: Exclude<MeasureMove, { by: "play" }>,
+    el: Element,
+    root: HTMLElement
+  ): Promise<void> {
+    const user = userEventIn(root);
+    const presses: Record<MeasurePress, () => Promise<void>> = {
+      click: () => user.click(el),
+      hover: () => user.hover(el),
+      type: () => user.type(el, move.text ?? ""),
+      key: async () => {
+        if (el instanceof HTMLElement || el instanceof SVGElement) {
+          el.focus({ preventScroll: true });
+        }
+        await user.keyboard(move.key ?? "");
+      },
+    };
+    await presses[move.by]();
+  }
+
+  /**
+   * The move's motion read as it runs, for the passes that follow: every
+   * animation it sets off as a clip (`act`), and the drawing's own changes,
+   * which a spring written from script makes where no animation runs; its
+   * length is from the press to the later of the two ends. Unsettled when
+   * motion still ran as the wait for it ended.
+   */
+  async function scanned(
+    run: () => Promise<void>
+  ): Promise<{ length: number; unsettled: boolean }> {
+    let last = performance.now();
+    const changes = new MutationObserver(() => {
+      last = performance.now();
+    });
+    for (const root of [drawing, ...layersOut()]) {
+      changes.observe(root, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        characterData: true,
+      });
+    }
+    const t0 = performance.now();
+    try {
+      const read = await act(run, false);
+      const end = performance.now() + MOTION_MS;
+      while (performance.now() - last < QUIET_MS && performance.now() < end) {
+        await frameTick();
+      }
+      return {
+        length: Math.round(Math.max(0, ...read.clips.map(clipEnd), last - t0)),
+        unsettled: read.cut > 0 || performance.now() - last < QUIET_MS,
+      };
+    } finally {
+      changes.disconnect();
+    }
+  }
+
+  /**
+   * One repeat of a measured move from state `ask.key` (core
+   * `MeasureRepeatAsk`): the move's start mounted afresh and come to rest,
+   * then the move made on it. A `scan` reads its clips and length; every
+   * other pass touches no animation, so the trace charges the component
+   * alone, and waits `ask.wait` ms and two frames once it has pressed. A
+   * `traced` pass stands between the marks the trace is read in.
+   */
+  function measure(ask: MeasureRepeatAsk): Promise<MeasureRun> {
+    return queue(() => measureTurn(ask));
+  }
+
+  async function measureTurn(ask: MeasureRepeatAsk): Promise<MeasureRun> {
+    const [file, story] = ask.key.split("|");
+    if (file === undefined || story === undefined) {
+      return { refused: `No state ${ask.key} on this page.` };
+    }
+    const target = resolved({ file, story });
+    if ("refused" in target) {
+      return target;
+    }
+    const played =
+      ask.move.by === "play" ? movePlay(target) : { start: target, run: null };
+    if ("refused" in played) {
+      return played;
+    }
+    await open(played.start);
+    if (fault) {
+      return { refused: fault.textContent ?? "" };
+    }
+    const ready = played.run
+      ? { run: played.run, on: null }
+      : pressReady(ask.move);
+    if ("refused" in ready) {
+      return ready;
+    }
+    return await measuredRun(ready.run, ask, {
+      edits,
+      from: played.start.ref.story,
+      to: ask.move.by === "play" ? story : null,
+      on: ready.on,
+      width: roomWidth(played.start.story),
+    });
+  }
+
+  /** The story `target`'s own play, and the state it starts from: its `from`. */
+  function movePlay(
+    target: Target
+  ): { run: () => Promise<void>; start: Target } | { refused: string } {
+    const { story } = target.ref;
+    const csf = page.csfOf(moduleOf(target.section, story), story);
+    const from = String(
+      csf?.from ??
+        target.section.mod?.SHEET.stories.find((one) => one.name === story)
+          ?.from ??
+        ""
+    );
+    const play = csf?.play;
+    if (!(from && play)) {
+      return { refused: measureWords.noPlay(story) };
+    }
+    const start = resolved({ file: target.section.file, story: from });
+    return "refused" in start
+      ? start
+      : { start, run: () => runPlay(play, target) };
+  }
+
+  /** A one-off press made ready on the drawing as it stands: its element found, exactly one. */
+  function pressReady(
+    move: MeasureMove
+  ): { on: string; run: () => Promise<void> } | { refused: string } {
+    if (move.by === "play") {
+      return { refused: measureWords.noMove };
+    }
+    let pressed: ReturnType<typeof measuredOn>;
+    try {
+      pressed = measuredOn(move.on);
+    } catch (error) {
+      // A selector the browser can't parse: its own words.
+      return { refused: measureWords.threw(String(error), null) };
+    }
+    if ("refused" in pressed) {
+      return pressed;
+    }
+    const { el, root } = pressed;
+    return { on: elementSaid(el), run: () => pressOnce(move, el, root) };
+  }
+
+  /** The move made for `ask`'s pass, answered with `said`; a throw or a play past its limit refused in words. */
+  async function measuredRun(
+    run: () => Promise<void>,
+    ask: MeasureRepeatAsk,
+    said: Omit<Exclude<MeasureRun, { refused: string }>, "length" | "unsettled">
+  ): Promise<MeasureRun> {
+    try {
+      if (ask.pass === "scan") {
+        return { ...said, ...(await scanned(run)) };
+      }
+      await unwatched(run, ask);
+      return { ...said, length: 0, unsettled: false };
+    } catch (error) {
+      if (error instanceof PlayTooLong) {
+        return { refused: measureWords.playTooLong(PLAY_MS / 1000) };
+      }
+      const thrown = pageError(error, page.root, page.base);
+      return {
+        refused: measureWords.threw(
+          thrown.message,
+          thrown.file === null
+            ? null
+            : `${thrown.file}:${thrown.line}:${thrown.column}`
+        ),
+      };
+    }
+  }
+
+  /** The move made with nothing of the stage's watching it: between the trace's marks on a traced pass, its wait after. */
+  async function unwatched(
+    run: () => Promise<void>,
+    ask: MeasureRepeatAsk
+  ): Promise<void> {
+    const had = document.activeElement;
+    if (ask.pass === "traced") {
+      performance.mark(MEASURE_MARKS.start);
+    }
+    try {
+      await stillPage(async () => {
+        const ran = await readWithin(PLAY_MS, run);
+        if (ran.kind === "unanswered") {
+          throw new PlayTooLong();
+        }
+      });
+      await new Promise((done) => setTimeout(done, ask.wait));
+      await frameTick();
+      await frameTick();
+    } finally {
+      if (ask.pass === "traced") {
+        performance.mark(MEASURE_MARKS.end);
+      }
+      giveBack(had);
+    }
+  }
+
+  /** An element a trace named: as the report names an animation's element, and where it is written. */
+  const named = (el: Element) => ({
+    element: describe(el),
+    source: sourceOf(el, page.root),
+  });
+
+  /** Where script forced layout, by its stack (forced.ts). */
+  const forcedAt = (stack: Parameters<typeof forcedPlace>[0]) =>
+    forcedPlace(stack, page.root, page.base);
+
+  Object.assign(state, {
+    stateNamed,
+    pose,
+    lacks,
+    picture,
+    settled,
+    layout,
+    measure,
+    named,
+    forcedAt,
+  });
 
   /* --- The first drawing --------------------------------------------------- */
 
@@ -2635,6 +2942,14 @@ export function bootStage(page: Page): Mode {
     shown: (section) => {
       failedCards.get(section.file)?.remove();
       failedCards.delete(section.file);
+      // A measuring page reads nothing for the report and stands nowhere of its own: each load past the first is a save that landed while it measured.
+      if (page.measuring) {
+        if (shownOnce.has(section)) {
+          edits += 1;
+        }
+        shownOnce.add(section);
+        return;
+      }
       page.quietly(readSection(section));
       const now = live;
       if (now?.section === section) {
@@ -2656,9 +2971,16 @@ export function bootStage(page: Page): Mode {
     },
     // Swapped in place by its framework: the drawing and the state compared with stay mounted; the report's read of it is taken again.
     swapped: (section) => {
+      if (page.measuring) {
+        edits += 1;
+        return;
+      }
       page.quietly(readSection(section));
     },
     failed: (section, failure: SectionFailure) => {
+      if (page.measuring) {
+        edits += 1;
+      }
       failedCards.get(section.file)?.remove();
       const card = page.failedCard(section, failure);
       failedCards.set(section.file, card);

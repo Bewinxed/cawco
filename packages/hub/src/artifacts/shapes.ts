@@ -22,6 +22,7 @@ import type {
   StageUnreached,
   StoryOp,
 } from "@cawco/core/stage";
+import type { MeasureAsk, MeasureRead } from "@cawco/core/stage-measure";
 import type { Operation } from "rfc6902";
 import type { ArtifactRow } from "../db/artifacts";
 import type { StatementChange } from "../decision-program";
@@ -345,6 +346,8 @@ export interface ComponentRead extends ArtifactRead {
   hint: string;
   /** The frame's layout as its alignment guides read it, on a read with `layout`. */
   layout?: LayoutRead;
+  /** The move a read with `measure` measured (core stage-measure.ts). */
+  measured?: MeasureRead;
   moves?: ReturnType<typeof movesSaid>;
   /** The direction the person picked, on a design with directions; null while none is. */
   picked?: { file: string; name: string } | null;
@@ -685,6 +688,8 @@ export interface ComponentReadAsk {
   detail?: "summary" | "story";
   /** The alignment guides laid over `state`'s frame: its picture with them, and their read (core layout-guides.ts). */
   layout?: boolean;
+  /** One move measured on `state`'s story (core stage-measure.ts). */
+  measure?: MeasureAsk;
   /** A picture: of `state`'s frame, else the canvas, drawn by the daemon. */
   png?: boolean;
   /** Draw it now on the daemon's Chromium and answer that report. */

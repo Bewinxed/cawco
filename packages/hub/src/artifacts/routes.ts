@@ -181,6 +181,8 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           ...readFields.properties,
           render: t.Optional(t.BooleanString()),
           layout: t.Optional(t.BooleanString()),
+          // JSON: core stage-measure.ts `MeasureAsk`, one move to measure on state.story.
+          measure: t.Optional(t.String({ maxLength: 2000 })),
           verify: t.Optional(t.BooleanString()),
         }),
       },

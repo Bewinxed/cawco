@@ -19,6 +19,7 @@ import type {
   PreviewSource,
   PreviewUnavailable,
 } from "./preview/protocol";
+import type { MeasureAsk, MeasureRead } from "./stage-measure";
 import { withoutUndefined } from "./without-undefined";
 import { workspaceIdKindOf } from "./workspace-id";
 
@@ -339,6 +340,8 @@ export interface RenderAsk {
   files: string[];
   /** The alignment guides (core layout-guides.ts) laid over `state`'s picture, and their read answered. */
   layout?: boolean;
+  /** One move measured on `state`'s story (core stage-measure.ts): the page draws that state alone, reads nothing for the report, and the answer carries `measured`. */
+  measure?: MeasureAsk;
   /** A picture: of `state` when it names one, else the stage in view. */
   png?: boolean;
   spec?: CanvasSpec;
@@ -365,6 +368,9 @@ export const pageByOf = (params: URLSearchParams): PageBy => {
   const by = params.get("by");
   return by === "stage" || by === "embed" || by === "map" ? by : "panel";
 };
+
+/** The canvas page's query that opens it to measure a move (core stage-measure.ts): the state's section loaded alone, nothing read in the rig or played for the report. */
+export const MEASURE_PARAM = "measure";
 
 /** The canvas page's query naming the one state a stage's render is asked for (`Story`, or `file:Story`): the page sweeps that state's section alone ({@link sweptFiles}). */
 export const RENDER_STATE_PARAM = "state";
@@ -446,6 +452,8 @@ export interface SectionUndrawn {
 export interface StageRendered {
   /** The state's layout as its alignment guides read it, when `layout` was asked. */
   layout?: LayoutRead;
+  /** The move `measure` asked for, measured. */
+  measured?: MeasureRead;
   /** True when the page's plan (each states file's first story) could not be read: no section's `first` is known, which is not the same as none having one. */
   plansUnread?: true;
   png?: string;

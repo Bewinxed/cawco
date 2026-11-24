@@ -28,6 +28,11 @@ import {
   STORY_NAME,
   storyRefOf,
 } from "@cawco/core/stage";
+import {
+  MEASURE_LIMITS,
+  MEASURE_PRESSES,
+  MEASURE_SPEEDS,
+} from "@cawco/core/stage-measure";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { z } from "zod";
 import { PAGE_LIMIT } from "../decision-page";
@@ -376,6 +381,58 @@ export const artifactUpdate = {
   },
 };
 
+/** `artifact_read`'s `measure` (core stage-measure.ts `MeasureAsk`): one move measured on a design graph's stage. */
+export const measureAsk = z.object({
+  play: z
+    .literal(true)
+    .optional()
+    .describe("state.story's own play, run from its from story."),
+  press: z
+    .enum(MEASURE_PRESSES)
+    .optional()
+    .describe("One press on `on`, made from state.story."),
+  on: z
+    .union([
+      z.object({
+        role: z.string().min(1).max(100),
+        name: z.string().max(200).optional(),
+      }),
+      z.object({ text: z.string().min(1).max(200) }),
+      z.object({ testId: z.string().min(1).max(200) }),
+      z.object({ selector: z.string().min(1).max(500) }),
+    ])
+    .optional()
+    .describe(
+      "The press's element, as a play finds it: { role, name? }, { text }, { testId }, or { selector } for one with none of those. Exactly one element matches."
+    ),
+  text: z
+    .string()
+    .max(MEASURE_LIMITS.text)
+    .optional()
+    .describe("A type press's words."),
+  key: z
+    .string()
+    .min(1)
+    .max(MEASURE_LIMITS.key)
+    .optional()
+    .describe("A key press's key, as KeyboardEvent.key names it: Enter."),
+  repeats: z
+    .number()
+    .int()
+    .min(MEASURE_LIMITS.repeats.min)
+    .max(MEASURE_LIMITS.repeats.max)
+    .optional()
+    .describe(
+      `Repeats read for the memory counters; ${MEASURE_LIMITS.repeats.fallback} when left out.`
+    ),
+  speed: z
+    .enum(MEASURE_SPEEDS)
+    .optional()
+    .describe(
+      "slowed, when left out: the main thread at a quarter speed and the compositor at full, as on a phone. machine: the machine's own speed, for a screen only a desk shows."
+    ),
+});
+
 export const artifactRead = {
   name: "artifact_read" as const,
   description:
@@ -436,6 +493,11 @@ export const artifactRead = {
       .optional()
       .describe(
         "With a component state: the frame with its alignment guides drawn, and their numbers (text edges, near-misses, spacing against tokens)."
+      ),
+    measure: measureAsk
+      .optional()
+      .describe(
+        "With state.story: plays one move on the stage in a headless browser and answers measured: frames, style and layout work, each animation Chrome kept off the compositor and why, memory over repeats, and faults with what to fix. Takes about 20 s."
       ),
     verify: z.boolean().optional().describe("Asks the design verifier."),
   },

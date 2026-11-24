@@ -30,6 +30,7 @@ import {
   type Story,
   type SweepAt,
 } from "@cawco/core/stage";
+import type { StageMeasuring } from "@cawco/core/stage-measure";
 import { shellWords } from "@cawco/core/words/shell";
 import type { deltaOf } from "./measure";
 import type { OwnModules, RunnerModule } from "./own";
@@ -328,11 +329,10 @@ export const frameTick = () =>
   });
 
 /** The canvas's state, for the stage's daemon render and the probe kit. */
-export interface CanvasState {
+export interface CanvasState extends Partial<StageMeasuring> {
   /** The sections the stage's sweep has read and posted, in order (a render answers the others as undrawn). */
   drawn: string[];
-  files: string[];
-  /**
+  files: string[]; /**
    * The stage's room the window lacks to hold state `key`'s drawing whole
    * at 1:1, {0, 0} when it does; null when the stage doesn't stand at it.
    * None on a column's page.
@@ -498,6 +498,8 @@ export interface Page {
   /** A report soon, once the page has been quiet a moment. */
   later: () => void;
   loadSection: (section: Section) => Promise<void>;
+  /** The stage's render opened the page to measure one move (core `MEASURE_PARAM`): it loads the state's section alone, reads nothing for the report and lays out nothing for a panel. */
+  readonly measuring: boolean;
   mountInto: (
     body: HTMLElement,
     section: Section,

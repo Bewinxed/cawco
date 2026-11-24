@@ -26,6 +26,7 @@ import {
   CANVAS_PATH,
   CANVAS_PLAN_ID,
   FORMS,
+  MEASURE_PARAM,
   RENDER_STATE_PARAM,
   REPORT_PATH,
   type RenderAsk,
@@ -36,14 +37,17 @@ import {
   screenHeight,
   sectionPlansOf,
 } from "@cawco/core/stage";
+import { MEASURE_LIMITS, type MeasureRead } from "@cawco/core/stage-measure";
 import { ReportAnswerSchema } from "@cawco/core/stored-shapes";
+import { measureWords } from "@cawco/core/words/stage-measure";
 import { stageRenderWords as words } from "@cawco/core/words/stage-render";
 import type { Socket, TCPSocketListener } from "bun";
-import type { Page } from "playwright-core";
+import type { Browser, Page } from "playwright-core";
 import { chromiumSandboxed } from "./capabilities";
 import { launchChromium } from "./chromium";
 import { findState, poseState, statePicture } from "./frame-picture";
 import { layoutNow, sweepNow } from "./in-page/page";
+import { measureMove } from "./stage-measure";
 
 /** How long a render may take, Chromium's launch to its answer: one limit, which every wait of the render shares (the hub waits this long on it). */
 const RENDER_WAIT_MS = STAGE_RENDER_MS;
@@ -181,6 +185,9 @@ const pageUrl = (origin: string, ask: RenderAsk): string => {
   if (ask.state?.width) {
     query.set("width", String(ask.state.width));
   }
+  if (ask.measure) {
+    query.set(MEASURE_PARAM, "1");
+  }
   return `${origin}${CANVAS_PATH}?${query}`;
 };
 
@@ -247,6 +254,31 @@ async function sweepUntil(
     await Bun.sleep(Math.max(0, Math.min(POLL_MS, deadline - Date.now())));
   }
   return last;
+}
+
+/** `ask.measure`'s move measured on the page a render opened to measure it (stage-measure.ts), from `ask.state`'s story: refused without one, naming `first`, the first story of the canvas's first states file. */
+async function measured(
+  browser: Browser,
+  page: Page,
+  ask: RenderAsk,
+  at: {
+    firsts: Record<string, string | null> | null;
+    until: number;
+    window: [number, number];
+  }
+): Promise<MeasureRead> {
+  if (!(ask.state && ask.measure)) {
+    throw new Error(
+      measureWords.noStory(at.firsts?.[ask.files[0] ?? ""] ?? null)
+    );
+  }
+  return await measureMove(browser, page, {
+    ask: ask.measure,
+    key: await findState(page, ask.state.story),
+    scheme: ask.state.scheme ?? "light",
+    window: at.window,
+    until: at.until,
+  });
 }
 
 /**
@@ -325,6 +357,18 @@ export async function renderCanvas(
     const { errors: _errors, ...report } = ReportAnswerSchema.parse(
       await answer.json()
     );
+    if (ask.measure) {
+      return {
+        report,
+        undrawn,
+        ...unread,
+        measured: await measured(browser, page, ask, {
+          firsts,
+          until: Math.min(Date.now() + MEASURE_LIMITS.ms, deadline - ANSWER_MS),
+          window: [opened.viewport.width, opened.viewport.height],
+        }),
+      };
+    }
     if (!ask.png) {
       return { report, undrawn, ...unread };
     }

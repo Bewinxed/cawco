@@ -7,6 +7,11 @@
  */
 import type { LayoutRead } from "@cawco/core/layout-guides";
 import type { FramePictureRead, Interaction, SweepAt } from "@cawco/core/stage";
+import type {
+  MeasureRepeatAsk,
+  StageMeasuring,
+  TraceFrame,
+} from "@cawco/core/stage-measure";
 
 declare global {
   interface Window {
@@ -30,7 +35,7 @@ declare global {
 }
 
 /** What the stage page keeps on `__cawcoCanvas`, as far as the agent reads it. */
-interface PageCanvas {
+interface PageCanvas extends Partial<StageMeasuring> {
   drawn: string[];
   lacks?: (key: string) => { h: number; w: number } | null;
   layout?: (key: string) => LayoutRead | null;
@@ -190,3 +195,20 @@ export const pictureNow = (key: string) =>
 /** The alignment guides on over state `key`'s drawing, and what they read; null where the stage doesn't stand at it. */
 export const layoutNow = (key: string) =>
   window.__cawcoCanvas?.layout?.(key) ?? null;
+
+/** One repeat of a measured move (core `MeasureRepeatAsk`); null where the page holds no stage. */
+export const measureNow = (ask: MeasureRepeatAsk) =>
+  window.__cawcoCanvas?.measure?.(ask) ?? null;
+
+/** Where a trace's forced layout was forced, by its stack; null where the stage's own code forced it or the page holds no stage. */
+export const forcedNow = (stack: readonly TraceFrame[]) =>
+  window.__cawcoCanvas?.forcedAt?.(stack) ?? null;
+
+/**
+ * The element a trace named, as the stage names it and where it is
+ * written: called on the element itself (CDP `Runtime.callFunctionOn`,
+ * stage-measure.ts), its source text the function declaration.
+ */
+export function namedNow(this: Element) {
+  return window.__cawcoCanvas?.named?.(this) ?? null;
+}

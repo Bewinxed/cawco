@@ -201,10 +201,24 @@ const nameOf = (el: Element): string =>
 const matches = (text: string, want: string | RegExp): boolean =>
   typeof want === "string" ? text.trim() === want.trim() : want.test(text);
 
+const WHITESPACE = /\s+/gu;
+
+/** An element as a refusal lists it: its role, else its tag, and its name. */
+export const elementSaid = (el: Element): string => {
+  const name = nameOf(el).replace(WHITESPACE, " ");
+  return `${roleOf(el) ?? el.localName}${name ? ` “${name.length > 40 ? `${name.slice(0, 39)}…` : name}”` : ""}`;
+};
+
 export interface CanvasQueries {
   getByRole: (role: string, options?: { name?: string | RegExp }) => Element;
   getByTestId: (id: string) => Element;
   getByText: (text: string | RegExp) => Element;
+  queryAllByRole: (
+    role: string,
+    options?: { name?: string | RegExp }
+  ) => Element[];
+  queryAllByTestId: (id: string) => Element[];
+  queryAllByText: (text: string | RegExp) => Element[];
   queryByRole: (
     role: string,
     options?: { name?: string | RegExp }
@@ -214,11 +228,11 @@ export interface CanvasQueries {
   querySelectorAll: (selector: string) => Element[];
 }
 
-/** The frame's elements by their words, roles and test ids; a `getBy` that finds none throws, as Testing Library's does. */
+/** The frame's elements by their words, roles and test ids; a `getBy` that finds none throws, as Testing Library's does, and takes the first of several. */
 export function queriesIn(frame: HTMLElement): CanvasQueries {
   const all = () => [...frame.querySelectorAll("*")];
-  const byText = (want: string | RegExp) =>
-    all().find(
+  const allByText = (want: string | RegExp) =>
+    all().filter(
       (el) =>
         [...el.childNodes].some(
           (node) =>
@@ -226,13 +240,19 @@ export function queriesIn(frame: HTMLElement): CanvasQueries {
             matches(node.textContent ?? "", want)
         ) ||
         (matches(renderedText(el) ?? "", want) && el.children.length === 0)
-    ) ?? null;
-  const byRole = (role: string, options?: { name?: string | RegExp }) =>
-    all().find(
+    );
+  const allByRole = (role: string, options?: { name?: string | RegExp }) =>
+    all().filter(
       (el) =>
         roleOf(el) === role &&
         (options?.name === undefined || matches(nameOf(el), options.name))
-    ) ?? null;
+    );
+  const allByTestId = (id: string) => [
+    ...frame.querySelectorAll(`[data-testid="${CSS.escape(id)}"]`),
+  ];
+  const byText = (want: string | RegExp) => allByText(want)[0] ?? null;
+  const byRole = (role: string, options?: { name?: string | RegExp }) =>
+    allByRole(role, options)[0] ?? null;
   const found = <T>(value: T | null, what: string): T => {
     if (value === null) {
       throw new Error(`Nothing in the frame is ${what}.`);
@@ -240,6 +260,9 @@ export function queriesIn(frame: HTMLElement): CanvasQueries {
     return value;
   };
   return {
+    queryAllByText: allByText,
+    queryAllByRole: allByRole,
+    queryAllByTestId: allByTestId,
     queryByText: byText,
     getByText: (text) => found(byText(text), `the text ${String(text)}`),
     queryByRole: byRole,
@@ -248,11 +271,7 @@ export function queriesIn(frame: HTMLElement): CanvasQueries {
         byRole(role, options),
         `a ${role}${options?.name ? ` named ${String(options.name)}` : ""}`
       ),
-    getByTestId: (id) =>
-      found(
-        frame.querySelector(`[data-testid="${CSS.escape(id)}"]`),
-        `test id ${id}`
-      ),
+    getByTestId: (id) => found(allByTestId(id)[0] ?? null, `test id ${id}`),
     querySelector: (selector) => frame.querySelector(selector),
     querySelectorAll: (selector) => [...frame.querySelectorAll(selector)],
   };

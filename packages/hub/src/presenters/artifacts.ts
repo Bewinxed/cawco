@@ -23,6 +23,7 @@ import {
   recordedFromLead,
 } from "@cawco/core/words/decides-lines";
 import { layoutWords } from "@cawco/core/words/layout-guides";
+import { measureWords } from "@cawco/core/words/stage-measure";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 import type { renderSaid } from "../artifacts/component";
 import type {
@@ -384,6 +385,7 @@ const componentLines = (read: ComponentRead): string[] => {
     ...pickedLines(read.picked),
     ...(read.frame ? [`The frame asked: ${valueWords(read.frame, 2000)}`] : []),
     ...(read.layout ? layoutWords.lines(read.layout) : []),
+    ...(read.measured ? measureWords.lines(read.measured) : []),
     ...(read.story
       ? [
           `Story ${read.story.name}: args ${valueWords(read.story.args, 1500)}; code ${valueWords(read.story.code, 1500)}`,
