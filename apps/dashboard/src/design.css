@@ -2837,9 +2837,20 @@
      restyled tested the rule (universal-key-check.ts). */
   :where(&)
     > :where(:not(svg, img, .rail-cell, .icon-swap, .mark-cell, [data-box])) {
-    text-box: trim-both ex alphabetic;
-    padding-block: calc((1lh - 1ex) / 2);
+    text-box: trim-both var(--mark-edge, ex) alphabetic;
+    padding-block: calc((1lh - var(--mark-band, 1ex)) / 2);
   }
+}
+
+/* A mark line centred on its words' capitals instead of their x-height
+   (`mark-line`'s trim at the cap height): a control's label, which leads
+   with a capital, stands with even room above its capitals and below its
+   baseline, and a glyph beside it centres on the capitals' middle, as
+   symbols do beside words (owner, 2026-11-24: equal padding round a
+   button's words). */
+@utility mark-cap {
+  --mark-edge: cap;
+  --mark-band: 1cap;
 }
 /* A mark beside words that wrap stands on their first line: the row is set
    to its start, and the mark in a cell one line box tall centres it where

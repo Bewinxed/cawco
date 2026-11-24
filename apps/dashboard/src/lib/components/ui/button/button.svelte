@@ -9,7 +9,7 @@
   import { cn, tv, type WithElementRef } from "#lib/utils.js";
 
   export const buttonVariants = tv({
-    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-sm control control-toggle glass-item:concentric-at font-medium type-body text-tx leading-none tracking-tight [--hit-edge:1px] [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/button mark-line mark-cap touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-sm control control-toggle glass-item:concentric-at font-medium type-body text-tx leading-none tracking-tight [--hit-edge:1px] [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       /* Its look on the control surface (theme.css `control`): every
          edge, fill and state is the surface's, set by these names. */
