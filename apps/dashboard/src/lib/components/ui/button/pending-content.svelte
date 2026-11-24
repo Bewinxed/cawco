@@ -59,6 +59,7 @@
     motionOk,
   } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { glyphIn, glyphOut } from "#lib/platform/motion/glyph.js";
 
   let {
     label,
@@ -103,23 +104,32 @@
    * check when it went well, a cross when it failed (unless the ring holds
    * where it got to), then the slot's icon again.
    */
-  let ended = $state<"done" | "failed" | null>(null);
+  /**
+   * Derived as the work ends, in the same pass that sees `pending` turn
+   * false: set from an effect instead, the slot drew its rest icon for one
+   * pass in between and swapped a glyph in and straight out again.
+   */
   let running = false;
-  let endTimer: ReturnType<typeof setTimeout> | undefined;
-  $effect.pre(() => {
-    const now = pending;
-    if (now) {
-      clearTimeout(endTimer);
-      ended = null;
-    } else if (running) {
-      ended = failed ? "failed" : "done";
-      endTimer = setTimeout(() => {
-        ended = null;
-      }, dur("--duration-loop"));
+  let ended = $derived.by<"done" | "failed" | null>(() => {
+    if (pending) {
+      running = true;
+      return null;
     }
-    running = now;
+    if (!running) {
+      return null;
+    }
+    running = false;
+    return failed ? "failed" : "done";
   });
-  $effect(() => () => clearTimeout(endTimer));
+  $effect(() => {
+    if (ended === null) {
+      return;
+    }
+    const held = setTimeout(() => {
+      ended = null;
+    }, dur("--duration-loop"));
+    return () => clearTimeout(held);
+  });
 
   const phase = $derived.by(() => {
     if (pending) {
@@ -153,6 +163,15 @@
       : []),
     ...(asks ? [{ key: "armed", text: confirm ?? "" }] : []),
   ]);
+  const drawnText = $derived(
+    wordings.find((one) => one.key === drawn)?.text ?? label ?? ""
+  );
+  /** A wording's swap: a fade on the slot's clock, opacity only. */
+  const words = (_node: Element) => ({
+    duration: dur("--duration-slow"),
+    easing: easeInOut,
+    css: (t: number) => `opacity: ${t}`,
+  });
   const drawn = $derived.by(() => {
     if (pending && swapsLabel && Icon) {
       return "pending";
@@ -232,15 +251,20 @@
     holdsIcon && Icon === undefined && phase === "idle" && !ringShown
   );
   /**
-   * The icon last given, kept drawn while it fades out as the slot folds
-   * away, so an icon taken off leaves as one put on arrives: the slot
-   * unfolding to its width and the icon fading in it.
+   * What the slot shows: one glyph at a time, keyed, so Svelte's own
+   * transitions swap it (`glyphIn`/`glyphOut`, the house's glyph swap).
+   * The outgoing glyph stays in the DOM until its outro ends, so the slot
+   * stacks every child in one grid cell (`icon-swap`): the leaving and the
+   * arriving glyph share the cell and nothing beside them moves.
    */
-  let shownIcon = $state(Icon);
-  $effect.pre(() => {
-    if (Icon) {
-      shownIcon = Icon;
+  const shows = $derived.by(() => {
+    if (ringShown) {
+      return "ring";
     }
+    if (phase !== "idle") {
+      return phase === "pending" ? "spinner" : phase;
+    }
+    return Icon === undefined ? "none" : "icon";
   });
 
   let spinnerCell = $state<HTMLElement | null>(null);
@@ -298,65 +322,70 @@
 {/snippet}
 
 <!-- The icon slot: its icon at rest, the spinner while its work runs, the
-     check when it is done, cross-fading in one cell over --duration-base, the
-     clock its label crosses on. With no icon at rest it stays folded for
-     good (no width and no gap) and draws what it shows over its label's
-     start while the label fades, so its width never changes. -->
+     check or the cross when it ends, each swapped by Svelte's transitions in
+     one grid cell. With no icon at rest it stays folded for good (no width
+     and no gap) and draws what it shows over its label's start while the
+     label fades, so its width never changes. -->
 <span
   style:--btn-words-slack={holds && Icon ? `${slack}px` : undefined}
   data-slot="btn-slot"
-  class="icon-swap w-(--btn-icon) flex-none [--icon-swap-dur:var(--duration-base)] translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) duration-(--duration-slow) ease-in-out data-placed:transition-[translate] motion-reduce:transition-off data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
+  class="icon-swap w-(--btn-icon) flex-none translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) duration-(--duration-slow) ease-in-out data-placed:transition-[translate] motion-reduce:transition-off data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
   data-over={(Icon === undefined && !holdsIcon) || undefined}
   data-placed={placed || undefined}
 >
-  {#if shownIcon}
-    {@const Shown = shownIcon}
-    <span data-active={Icon !== undefined && phase === "idle" && !ringShown}
-      ><Shown class="size-(--btn-icon)" /></span
-    >
-  {/if}
-  <span data-active={phase === "pending" && !ringShown} bind:this={spinnerCell}
-    ><Spinner
-      aria-hidden="true"
-      class="size-(--btn-icon)"
-      role="presentation"
-    /></span
-  >
-  {#if progress !== undefined}
-    <span data-active={ringShown}
-      ><svg
-        aria-hidden="true"
-        class="size-(--btn-icon)"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <circle cx="12" cy="12" opacity="0.25" r="9" stroke-width="2.5" />
-        <circle
-          class="origin-center -rotate-90 transform-view transition-[stroke-dasharray] duration-(--duration-slow) ease-out motion-reduce:transition-off"
-          data-slot="ring-arc"
-          cx="12"
-          cy="12"
-          pathLength="100"
-          r="9"
-          stroke-dasharray="{share * 100} 100"
-          stroke-linecap="round"
-          stroke-width="2.5"
-          bind:this={arc}
+  <!-- The key block is the span's own block, so its local transitions play
+       on each swap (Svelte's transitions are local: they do not play when
+       a parent block mounts), and an empty slot is an empty span that
+       still fades the last glyph out. -->
+  {#key shows}
+    <span in:glyphIn out:glyphOut>
+      {#if shows === "icon" && Icon}
+        <Icon class="size-(--btn-icon)" />
+      {:else if shows === "spinner"}
+        <span class="contents" bind:this={spinnerCell}
+          ><Spinner
+            aria-hidden="true"
+            class="size-(--btn-icon)"
+            role="presentation"
+          /></span
+        >
+      {:else if shows === "ring"}
+        <svg
+          aria-hidden="true"
+          class="size-(--btn-icon)"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <circle cx="12" cy="12" opacity="0.25" r="9" stroke-width="2.5" />
+          <circle
+            class="origin-center -rotate-90 transform-view transition-[stroke-dasharray] duration-(--duration-slow) ease-out motion-reduce:transition-off"
+            data-slot="ring-arc"
+            cx="12"
+            cy="12"
+            pathLength="100"
+            r="9"
+            stroke-dasharray="{share * 100} 100"
+            stroke-linecap="round"
+            stroke-width="2.5"
+            bind:this={arc}
+          />
+        </svg>
+      {:else if shows === "done"}
+        <!-- Mounted drawn: @starting-style starts its stroke undrawn, so it draws in. -->
+        <IconTick
+          data-slot="tick"
+          class={[
+            tickVariants({ clock: "morph" }),
+            "size-(--btn-icon) motion-safe:starting:[&_path]:[stroke-dashoffset:22]",
+          ]}
+          data-on="true"
         />
-      </svg></span
-    >
-  {/if}
-  <span data-active={phase === "done"}
-    ><IconTick
-      data-slot="tick"
-      class={[tickVariants({ clock: "morph" }), "size-(--btn-icon)"]}
-      data-on={phase === "done"}
-    /></span
-  >
-  <span class="text-red" data-active={phase === "failed" && !ringShown}
-    ><IconClose class="size-(--btn-icon)" data-slot="cross" /></span
-  >
+      {:else if shows === "failed"}
+        <IconClose class="size-(--btn-icon) text-red" data-slot="cross" />
+      {/if}
+    </span>
+  {/key}
   {#if arrivals}
     <span aria-hidden="true" class="relative size-full pointer-events-none"
       >{@render arrivals()}</span
