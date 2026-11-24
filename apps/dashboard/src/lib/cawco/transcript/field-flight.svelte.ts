@@ -291,11 +291,6 @@ export class FieldFlight {
       };
     };
     const cue = () => take(read());
-    let frame = 0;
-    $effect(() => {
-      track(this.#parts.draft().text);
-      frame = requestAnimationFrame(cue);
-    });
     // A resize is read inside the delivery, on the layout the frame has
     // just done, and taken in the next frame (frameObserver `read`): the
     // cues are the field's edges, drawn on it. Read in the next frame's
@@ -316,9 +311,18 @@ export class FieldFlight {
       }
     );
     sizes.observe(node);
+    // The text moved: read on the layout of the frame it is drawn in. Read
+    // in that frame's callbacks instead, each typed frame laid the page out
+    // ahead of the frame's own layout, under the keystroke's words and the
+    // autosize twin's (ParkedPrompt:Minimized at 4x: 93 forced layouts).
+    $effect(() => {
+      track(this.#parts.draft().text);
+      if (!sizes.readInFrame()) {
+        sizes.readNext();
+      }
+    });
     node.addEventListener("scroll", cue, { passive: true });
     return () => {
-      cancelAnimationFrame(frame);
       sizes.disconnect();
       node.removeEventListener("scroll", cue);
     };

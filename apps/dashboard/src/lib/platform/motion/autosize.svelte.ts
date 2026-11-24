@@ -1,3 +1,4 @@
+import { frameObserver } from "../frame-observer";
 import { type GrowTarget, growCut } from "./grow-cut";
 
 /**
@@ -41,26 +42,101 @@ function nextFrame(node: HTMLElement, fit: (watched: boolean) => void) {
   };
 }
 
-/** Measuring twins made on this page so far: each twin's id is its count. */
-let twins = 0;
+/**
+ * What lays a textarea's words out, which its mirror takes from it: its
+ * face, its spacing, its wrapping and its border's widths (drawn clear).
+ */
+const FACE = [
+  "font-family",
+  "font-size",
+  "font-weight",
+  "font-style",
+  "font-stretch",
+  "font-variant",
+  "font-feature-settings",
+  "font-variation-settings",
+  "font-kerning",
+  "letter-spacing",
+  "word-spacing",
+  "text-transform",
+  "text-indent",
+  "tab-size",
+  "line-height",
+  "overflow-wrap",
+  "word-break",
+  "border-top-width",
+  "border-right-width",
+  "border-bottom-width",
+  "border-left-width",
+] as const;
+
+/**
+ * After the mirror's text: a zero-width space holds a last empty line open,
+ * which a trailing newline alone does not (the composer's flight layers do
+ * the same).
+ */
+const HOLD_LAST_LINE = "​";
+
+/** What a fit reads off the field itself: its width, padding, face and ceiling. */
+interface FieldRead {
+  cap: number;
+  /** A textarea's face, as its mirror takes it (none for an editable box, whose twin is its copy). */
+  face: [string, string][];
+  padding: string;
+  /** The reader can stretch it by its corner: it stays a scroll container. */
+  stretch: boolean;
+  width: number;
+}
+
+/** What a delivery read: the field, the twin's height, and the text write it was laid out from. */
+interface Seen {
+  at: number;
+  field: FieldRead;
+  natural: number;
+}
 
 /**
  * A text field that grows with what is in it, the same way on every engine:
  * a textarea, or an editable box (the composer's MentionField). Its height
- * is measured from the text (scrollHeight) and set in pixels, so a CSS
+ * is its text's, measured on a hidden twin and set in pixels, so a CSS
  * height transition carries each new line in instead of the field jumping,
  * or with `cut`, its box's clip on the compositor (motion/grow-cut).
  * `min-height` and `max-height` in CSS still bound it; past the ceiling it
  * scrolls. Attach with the value it shows:
  * `{@attach autosize(() => value)}`.
  *
- * A field handed a different text wholesale (a group's one composer, lent
- * to whichever conversation its swipe lands on) glides to the new text's
- * size as it does for a typed line. Only the first fit, on mount, lands
- * still.
+ * A keystroke writes and never reads. The field's text goes into the twin
+ * in the next frame's callbacks (once however many keys came before it): a
+ * textarea's into a `div` mirror wearing its face, whose own height follows
+ * its words (a textarea's never does), an editable box's as a copy of its
+ * nodes, so chips wrap as they do in it. The twin and the field are heard
+ * through the house's one ResizeObserver (frameObserver): the twin's height
+ * and the field's metrics are read inside the delivery, on the layout that
+ * frame has just done, which costs no layout of its own, and the field's
+ * new height is written in the next frame's callbacks, before that frame's
+ * layout. Read in the keystroke instead, each key laid the page out
+ * mid-task (ParkedPrompt:Minimized, 155 characters at 4×: 358 forced
+ * layouts, 2 dropped frames).
+ *
+ * For the frame between the words wrapping and the height following them,
+ * the field below its ceiling clips what overflows it (`data-autosize`
+ * without `data-capped`, design.css) rather than scrolling to the caret's
+ * new line and back: that frame looks like the grow's first. At its ceiling
+ * (`data-capped`) it scrolls; the fit that takes it there scrolls a caret
+ * at the end into view. A field the reader may stretch by its corner stays
+ * a scroll container, which its grip needs, and is not marked.
+ *
+ * A change no key made (a draft handed in wholesale, a fold turning, the
+ * field let go) is measured in the next frame's callbacks instead, its
+ * height written there: whoever reads the fitted field in that frame (a
+ * queued message lifted into it, flying to the height it grows to) finds
+ * it fitted. A field handed a different text wholesale (a group's one
+ * composer, lent to whichever conversation its swipe lands on) glides to
+ * the new text's size as it does for a typed line. Only the first fit, on
+ * mount, lands still, so the first frame painted is already the fitted one.
  *
  * - `held`: while it says so, a new value keeps the size the field has, and
- *   the field glides to the value's size once let go; typing fits at once.
+ *   the field glides to the value's size once let go; typing fits.
  * - `fold`: asked with the text's full height at each fit; when it says so
  *   the field stands at its stylesheet height (one line) instead, scrolled
  *   to its first line. A fit that folds the field or opens it marks it
@@ -90,18 +166,16 @@ export function autosize(
   return (node: HTMLElement) => {
     const area = node instanceof HTMLTextAreaElement ? node : null;
     // Measured on a hidden twin, never on the field: collapsing the field to
-    // measure it would cancel the height transition it is running.
-    const twin = node.cloneNode();
+    // measure it would cancel the height change it is running.
+    const twin = area ? document.createElement("div") : node.cloneNode();
     if (!(twin instanceof HTMLElement)) {
       return;
     }
     for (const name of [
       "id",
       "name",
-      // The field is sized from its value alone. A placeholder is one line
-      // by design, but a textarea counts a wrapped placeholder in
-      // scrollHeight, so an empty field measured with one would grow a line
-      // after load.
+      // The field is sized from its value alone: a placeholder is one line
+      // by design.
       "placeholder",
       "data-placeholder",
       // Not a field: nothing finds it as one, nor types in it.
@@ -113,25 +187,15 @@ export function autosize(
     ]) {
       twin.removeAttribute(name);
     }
-    if (twin instanceof HTMLTextAreaElement) {
-      // One row, so an empty field measures one line: without `rows` a
-      // textarea stands two rows tall, and scrollHeight never reads less
-      // than the box it scrolls in.
-      twin.rows = 1;
-      // Still a form field to the browser, which wants each to have an id
-      // or a name (Chrome's "A form field element should have an id or
-      // name attribute"): an id of its own, never a name, so no form sends
-      // it, and marked as no answer for the overlay (fields.ts `keyOf`).
-      twins += 1;
-      twin.id = `autosize-twin-${twins}`;
-      twin.setAttribute("data-cawco-unkept", "");
-    }
     twin.setAttribute("aria-hidden", "true");
     twin.tabIndex = -1;
-    twin.style.cssText =
-      "position:absolute;visibility:hidden;pointer-events:none;height:auto;min-height:0;max-height:none;overflow:hidden;inset-block-start:0;inset-inline-start:-9999px;transition:none";
+    twin.style.cssText = `position:absolute;visibility:hidden;pointer-events:none;height:auto;min-height:0;max-height:none;overflow:hidden;inset-block-start:0;inset-inline-start:-9999px;transition:none${
+      area
+        ? ";box-sizing:border-box;border-style:solid;border-color:transparent;white-space:pre-wrap"
+        : ""
+    }`;
     node.after(twin);
-    let width = 0;
+    /** The text's full height at the last fit. */
     let natural = 0;
     /** Whether the last fit left the field folded; unknown before the first. */
     let wasFolded: boolean | undefined;
@@ -165,8 +229,7 @@ export function autosize(
         done();
       }
     };
-    /** What a fit reads off the field itself: its width, padding, border and ceiling. */
-    const readField = () => {
+    const readField = (): FieldRead => {
       // Its padding as the field resolves it, in px. The twin stands out of
       // flow, so a padding the stylesheet gives in percent (or a calc with
       // one, as design.css `pe-measure`) resolves against another box there
@@ -175,17 +238,47 @@ export function autosize(
       return {
         width: node.offsetWidth,
         padding: `${style.paddingTop} ${style.paddingRight} ${style.paddingBottom} ${style.paddingLeft}`,
-        border: node.offsetHeight - node.clientHeight,
         cap: Number.parseFloat(style.maxHeight) || Number.POSITIVE_INFINITY,
+        face: area
+          ? FACE.map((name) => [name, style.getPropertyValue(name)])
+          : [],
+        stretch: style.resize !== "none" && style.resize !== "",
       };
     };
-    const mirrored =
-      area && twin instanceof HTMLTextAreaElement ? { area, twin } : null;
-    /** The field as a resize's delivery read it, for the refit it asked for. */
-    let readAtResize: ReturnType<typeof readField> | null = null;
+    /** The width, padding and face the twin was last given. */
+    let shapedFor = "";
+    /** Gives the twin the field's width, padding and face; true when any changed. */
+    const shape = (field: FieldRead): boolean => {
+      const key = `${field.width}|${field.padding}|${field.face.join(";")}`;
+      if (key === shapedFor) {
+        return false;
+      }
+      shapedFor = key;
+      twin.style.width = `${field.width}px`;
+      twin.style.padding = field.padding;
+      for (const [name, face] of field.face) {
+        twin.style.setProperty(name, face);
+      }
+      node.toggleAttribute("data-autosize", !field.stretch);
+      return true;
+    };
+    /** Text writes into the twin so far; a read knows which it was laid out from. */
+    let wrote = 0;
+    const writeText = () => {
+      if (area) {
+        twin.textContent = area.value + HOLD_LAST_LINE;
+      } else {
+        // An empty box measures one line, as an empty textarea of one row.
+        const copy = node.cloneNode(true);
+        twin.replaceChildren(
+          ...(copy.hasChildNodes()
+            ? copy.childNodes
+            : [document.createTextNode(" ")])
+        );
+      }
+      wrote += 1;
+    };
     const grow = cut ? growCut(cut) : null;
-    /** The next fit is a refit for a new width: no one watches it. */
-    let refitting = false;
     /**
      * Writes the field's height: with a cut, drawn by it where someone
      * watches the change, and laid out as it lands where no one does.
@@ -206,31 +299,37 @@ export function autosize(
         write();
       }
     };
-    const fit = (watched: boolean) => {
-      const field = readAtResize ?? readField();
-      readAtResize = null;
-      const shown = watched && !refitting;
-      refitting = false;
-      ({ width } = field);
-      twin.style.width = `${width}px`;
-      twin.style.padding = field.padding;
-      if (mirrored) {
-        mirrored.twin.value = mirrored.area.value;
-      } else {
-        // An empty box measures one line, as an empty textarea of one row.
-        const copy = node.cloneNode(true);
-        twin.replaceChildren(
-          ...(copy.hasChildNodes()
-            ? copy.childNodes
-            : [document.createTextNode(" ")])
-        );
+    /** At the ceiling now, from below it: a caret at the end is scrolled to, as typing there would have. */
+    const toCaret = () => {
+      const focus = document.activeElement;
+      if (!(focus && (focus === node || node.contains(focus)))) {
+        return;
       }
-      natural = twin.scrollHeight + field.border;
+      let atEnd = false;
+      if (area) {
+        atEnd = area.selectionEnd === area.value.length;
+      } else {
+        const selection = getSelection();
+        if (!(selection?.focusNode && node.contains(selection.focusNode))) {
+          return;
+        }
+        const after = document.createRange();
+        after.selectNodeContents(node);
+        after.setStart(selection.focusNode, selection.focusOffset);
+        atEnd = after.toString() === "";
+      }
+      if (atEnd) {
+        node.scrollTop = node.scrollHeight;
+      }
+    };
+    /** Sets the field's height for a text `whole` tall. */
+    const fit = (whole: number, cap: number, shown: boolean) => {
+      natural = whole;
       measured?.(natural);
       const folded = fold(natural);
       // Set no taller than the ceiling, so the glide runs over the height
       // the field shows rather than spending its start past the ceiling.
-      const next = folded ? "" : `${Math.min(natural, field.cap)}px`;
+      const next = folded ? "" : `${Math.min(natural, cap)}px`;
       // Marked before the height is written, so the style that starts the
       // change already has the fold's clock.
       const turning = wasFolded !== undefined && folded !== wasFolded;
@@ -238,59 +337,120 @@ export function autosize(
       if (turning) {
         node.dataset.folding = "";
       }
+      const capped = !folded && natural > cap + 0.5;
+      const capping = capped && node.dataset.capped === undefined;
+      node.toggleAttribute("data-capped", capped);
       heightTo(next, shown);
       if (turning) {
         markFold();
       }
-      if (folded) {
+      if (folded && turning) {
         node.scrollTop = 0;
+      } else if (capping) {
+        toCaret();
       }
     };
-    const later = nextFrame(node, fit);
-    let first = true;
+    /** The last delivery's read. */
+    let seen: Seen | null = null;
+    /** The text write the last fit was laid out from. */
+    let fitted = -1;
+    /** The next fit follows a new width or face: no one watches it. */
+    let refit = false;
+    /** A key has changed the text since the last fit: it fits even while held. */
+    let typed = false;
+    const sizes = frameObserver(
+      () => {
+        const now = seen;
+        if (!now) {
+          return;
+        }
+        // A new width or face: the twin takes it and is read again. An empty
+        // field is one line at any width, and takes it with its next text.
+        const empty = area ? area.value === "" : !node.textContent;
+        if (!(empty && shapedFor) && shape(now.field)) {
+          refit = true;
+          if (!sizes.readInFrame()) {
+            sizes.readNext();
+          }
+          return;
+        }
+        if (now.at === fitted || (held() && !typed)) {
+          return;
+        }
+        fitted = now.at;
+        const shown = !refit;
+        refit = false;
+        typed = false;
+        fit(now.natural, now.field.cap, shown);
+      },
+      {
+        read: () => {
+          seen = {
+            at: wrote,
+            field: readField(),
+            natural: twin.offsetHeight,
+          };
+        },
+      }
+    );
+    /** The text into the twin in the next frame's callbacks, read in that frame's delivery and fitted in the frame after. */
+    let frame = 0;
+    const soon = () => {
+      frame ||= requestAnimationFrame(() => {
+        frame = 0;
+        if (seen) {
+          shape(seen.field);
+        }
+        writeText();
+        if (!sizes.readInFrame()) {
+          sizes.readNext();
+        }
+      });
+    };
+    // A change no key made, measured in the next frame's callbacks, before
+    // that frame's layout. The first lands still, its first frame fitted.
+    const framed = nextFrame(node, (watched) => {
+      const field = readField();
+      shape(field);
+      writeText();
+      seen = { at: wrote, field, natural: twin.offsetHeight };
+      // It fits the field's whole text, a key's change in it too.
+      fitted = wrote;
+      typed = false;
+      fit(seen.natural, field.cap, watched);
+    });
+    let mounting = true;
     $effect(() => {
       value();
       fold(natural);
       if (held()) {
         return;
       }
-      later.request(first);
-      first = false;
-    });
-    // Typing fits at once: the keystroke that adds a line grows the field
-    // in the frame it paints.
-    const typed = () => fit(true);
-    node.addEventListener("input", typed);
-    // A narrower field wraps into more lines. Refit on the next frame:
-    // resizing the field inside its own observer's callback would report
-    // the resize back to that observer in the same frame. The field itself
-    // is read here, inside the delivery, on the layout the frame has just
-    // done, which costs no layout of its own; read in the next frame's
-    // callbacks instead, every frame of a rail drag laid the page out three
-    // times for it (nightly 7148: 7ms a frame). An empty field is one line
-    // at any width, and is not refit for one.
-    // biome-ignore lint/style/noRestrictedGlobals: writes nothing: a new width asks `later` (nextFrame) for the refit, in the next frame with the field's other requests
-    const sizes = new ResizeObserver(([entry]) => {
-      const inline = entry.borderBoxSize[0].inlineSize;
-      if (Math.abs(inline - width) <= 0.5) {
-        return;
+      // A keystroke's change is already on its way (`typing`).
+      if (!typed) {
+        framed.request(mounting);
       }
-      const empty = area ? area.value === "" : !node.textContent;
-      if (empty && width > 0) {
-        width = inline;
-        return;
-      }
-      readAtResize = readField();
-      refitting = true;
-      later.request(false);
+      mounting = false;
     });
-    sizes.observe(node);
+    // Heard before the field's own listeners (a capture on the target runs
+    // first): a value binding's write re-runs the effect above within its
+    // listener, which must already know a key made the change.
+    const typing = () => {
+      typed = true;
+      soon();
+    };
+    node.addEventListener("input", typing, { capture: true });
+    sizes.observe(twin);
+    sizes.observe(node, { box: "border-box" });
     return () => {
-      node.removeEventListener("input", typed);
+      node.removeEventListener("input", typing, { capture: true });
+      cancelAnimationFrame(frame);
       sizes.disconnect();
-      later.cancel();
+      framed.cancel();
       grow?.stop();
       twin.remove();
+      node.removeAttribute("data-autosize");
+      node.removeAttribute("data-capped");
     };
   };
 }

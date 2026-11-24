@@ -774,6 +774,18 @@
 }
 
 @layer overrides {
+  /* A field that grows with its words (motion/autosize) below its ceiling:
+     for the frame between a line wrapping and its height following, it
+     clips the new line rather than scrolling to it and back, so that frame
+     is the grow's first. Clipped on both axes: a textarea makes a visible
+     axis scroll, and a clip beside a scrolling axis computes to hidden,
+     which the caret still scrolls. Its words wrap, so nothing overflows
+     sideways. At its ceiling (`data-capped`) it scrolls as its own classes
+     say. In the last layer, over a field's own overflow utility. */
+  [data-autosize]:not([data-capped]) {
+    overflow: clip;
+  }
+
   /* iOS Safari zooms into any field whose text is under 16px, and a single
      missed field brings the zoom back, so this is a floor for every field
      rather than a per-component fix. In the last layer, so no utility or
