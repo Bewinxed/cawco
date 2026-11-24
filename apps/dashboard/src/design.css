@@ -1272,14 +1272,6 @@
 /* ---- What a converted component said that Tailwind has no utility for,
    named for what it does (tailwindcss.com/docs/adding-custom-styles). */
 
-/* A field's control transition and its height, which carries each new line
-   (DESIGN.md Inputs and fields, Textarea: "a 120ms height transition"). */
-@utility transition-control-grow {
-  transition:
-    var(--transition-control),
-    height var(--duration-control) var(--ease-out);
-}
-
 /* A kit sheet under reduced motion: it fades in and out over the control's
    beat instead of sliding (DESIGN.md Sheet: "with reduced motion it fades
    over 120ms"), the sheet's own fade animations. */

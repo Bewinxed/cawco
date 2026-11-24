@@ -67,9 +67,7 @@ const twMergeConfig = {
       "font-size": [{ "text-size": utilities("text-size") }],
       "bg-image": [{ bg: utilities("bg") }],
       // The theme's transition tokens, and app.css's `transition-off`.
-      transition: [
-        { transition: [...utilities("transition"), "off", "control-grow"] },
-      ],
+      transition: [{ transition: [...utilities("transition"), "off"] }],
       animate: ["sheet-fade"],
       content: [{ content: ["data-n", "placeholder"] }],
       "grid-rows": [{ "grid-rows": ["shut", "open"] }],

@@ -142,6 +142,8 @@
   let failed = $state(false);
   let refusal = $state<string | null>(null);
   let dock = $state<HTMLFormElement | null>(null);
+  /** The composer's shell round the note, which draws its edge. */
+  let shell = $state<HTMLElement | null>(null);
   let dockRoom = $state(0);
   /**
    * What the live page keeps clear at its foot: the dock, and the foot
@@ -386,8 +388,10 @@
          sizes stand on the shell, so the field and the twin its autosize
          measures on (motion/autosize.svelte.ts, which writes the twin's own
          style whole) inherit them alike. The phone's 16px floor is app.css's
-         for every field. -->
+         for every field. The shell is the note's field: each line the note
+         grows or gives up moves the shell's head (ui/textarea `shell`). -->
     <div
+      bind:this={shell}
       data-slot="cin"
       class={dockShellVariants({
         class: "flex items-end gap-space-2 p-c-composer-inset ps-space-3",
@@ -396,6 +400,7 @@
       style:--note-fs="var(--text-body)"
     >
       <Textarea
+        {shell}
         data-note
         aria-label={words.noteLabel}
         class="flex-auto"

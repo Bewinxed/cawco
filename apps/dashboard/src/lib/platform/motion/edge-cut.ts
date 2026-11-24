@@ -16,6 +16,12 @@
  *   its shadow) is drawn under it, moving with the cut by `transform`: a
  *   clip hides all past its edge, the shadow with it.
  *
+ * A box standing on its foot that grows upward (a docked composer's shell)
+ * is cut across its head instead (`side: "head"`), its slice the head's.
+ * A box with no clip of its own is left open on its other sides as far as
+ * its shadow reaches. A translucent box is cut `flush`: along the slice's
+ * inner edge, square there, so no strip of it is drawn twice.
+ *
  * Several runs at once (rows leaving a stagger apart, a change of content
  * under them) sum: every keyframe is sampled a frame apart from the runs'
  * own curves, so the cut, the foot and each moved element stand where the
@@ -35,8 +41,11 @@ interface Run {
   to: number;
 }
 
-/** The box's own clip, the cut composed into its bottom inset. */
+/** The box's own clip, the cut composed into the inset of its cut side. */
 interface Base {
+  bottom: string;
+  /** Its rounding by corner (px, from the top left round), where it has no clip of its own. */
+  corners: number[] | null;
   left: string;
   right: string;
   round: string;
@@ -44,13 +53,21 @@ interface Base {
 }
 
 /** The keyframes are sampled this far apart (ms): a frame at 60Hz. */
-const FRAME = 1000 / 60;
+export const FRAME = 1000 / 60;
 const INSET = /^inset\((.*)\)$/u;
+/** One shadow of a computed `box-shadow`: its offsets, blur and spread. */
+const SHADOW = /(-?[\d.]+)px (-?[\d.]+)px ([\d.]+)px (-?[\d.]+)px/gu;
 const SPACES = /\s+/u;
 /** Placed out of the flow: it does not move with what stands before it. */
 const OUT_OF_FLOW = /absolute|fixed/u;
 
 export interface EdgeCutOptions {
+  /**
+   * The box is cut along the slice's inner edge, square there, and the
+   * slice draws that strip alone: nothing is drawn twice where a
+   * translucent box would show both.
+   */
+  flush?: boolean;
   /**
    * The slice of its foot drawn under it while it is cut: an empty element
    * beside it (an earlier sibling, so the box paints over it), placed and
@@ -59,8 +76,16 @@ export interface EdgeCutOptions {
   foot?: () => HTMLElement | null;
   /** The box's height as laid out now (px). */
   height: () => number;
+  /**
+   * What draws the box's look, where the box only holds it (a field in
+   * the touch area round it, which also draws its focus edge): the slice
+   * wears its fill, border, rounding and shadow.
+   */
+  look?: () => HTMLElement;
   /** A slide has ended and the row stands laid out shut: the box's new height is its own. */
   settled?: () => void;
+  /** The edge the cut moves: its foot (by default), or its head for a box that stands on its foot. */
+  side?: "foot" | "head";
 }
 
 /** Every box cut by its clip, for a fold inside one to slide (motion/fold). */
@@ -87,25 +112,115 @@ const cutOf = (run: Run, t: number): number => {
   return run.from + (run.to - run.from) * run.curve(p);
 };
 
-/** An `inset()` as its four sides and its rounding; any other clip as none. */
-function baseOf(box: HTMLElement): Base {
+/** How far past its box a computed `box-shadow` draws, on its farthest side (px). */
+function shadowReach(shadow: string): number {
+  let reach = 0;
+  for (const [, x, y, blur, spread] of shadow.matchAll(SHADOW)) {
+    const out = Number(blur) + Number(spread);
+    reach = Math.max(
+      reach,
+      Math.abs(Number(x)) + out,
+      Math.abs(Number(y)) + out
+    );
+  }
+  return Math.ceil(reach);
+}
+
+/**
+ * The box's own `inset()` clip as its four sides and its rounding; with
+ * none, open on each side as far as its look's shadow reaches, rounded as
+ * its look is, grown by as much.
+ */
+function baseOf(box: HTMLElement, look: HTMLElement): Base {
   const style = getComputedStyle(box);
   const inset = INSET.exec(style.clipPath)?.[1];
-  const [sides = "0px", round] = inset?.split(" round ") ?? [];
-  const [top = "0px", right = top, , left = right] = sides.trim().split(SPACES);
+  if (inset) {
+    const [sides = "0px", round] = inset.split(" round ");
+    const [top = "0px", right = top, bottom = top, left = right] = sides
+      .trim()
+      .split(SPACES);
+    return {
+      top,
+      right,
+      bottom,
+      left,
+      corners: null,
+      round:
+        round ??
+        [
+          style.borderTopLeftRadius,
+          style.borderTopRightRadius,
+          style.borderBottomRightRadius,
+          style.borderBottomLeftRadius,
+        ].join(" "),
+    };
+  }
+  const drawn = look === box ? style : getComputedStyle(look);
+  const reach = shadowReach(drawn.boxShadow);
+  const open = `${-reach}px`;
+  const corners = [
+    drawn.borderTopLeftRadius,
+    drawn.borderTopRightRadius,
+    drawn.borderBottomRightRadius,
+    drawn.borderBottomLeftRadius,
+  ].map((radius) => (Number.parseFloat(radius) || 0) + reach);
   return {
-    top,
-    right,
-    left,
-    round:
-      round ??
-      [
-        style.borderTopLeftRadius,
-        style.borderTopRightRadius,
-        style.borderBottomRightRadius,
-        style.borderBottomLeftRadius,
-      ].join(" "),
+    top: open,
+    right: open,
+    bottom: open,
+    left: open,
+    corners,
+    round: corners.map((radius) => `${radius}px`).join(" "),
   };
+}
+
+/** A flush slice's clip: its shadow stops at the seam, so it never darkens the box. */
+const sliceClip = (head: boolean, reach: string): string =>
+  head
+    ? `inset(${reach} ${reach} 0px ${reach})`
+    : `inset(0px ${reach} ${reach} ${reach})`;
+
+/** The box's clip with `edge` px cut off its head or its foot. */
+const insetAt = (
+  base: Base,
+  edge: number,
+  head: boolean,
+  round: string
+): string =>
+  head
+    ? `inset(${edge}px ${base.right} ${base.bottom} ${base.left} round ${round})`
+    : `inset(${base.top} ${base.right} ${edge}px ${base.left} round ${round})`;
+
+/** The rounding of a flush cut: square on the side it cuts. */
+function flushRound(base: Base, head: boolean): string {
+  if (!base.corners) {
+    return base.round;
+  }
+  const [topLeft, topRight, bottomRight, bottomLeft] = base.corners;
+  const corners = head
+    ? [0, 0, bottomRight, bottomLeft]
+    : [topLeft, topRight, 0, 0];
+  return corners.map((radius) => `${radius}px`).join(" ");
+}
+
+/**
+ * An edge the box draws on a pseudo-element inside it, showing now: a hung
+ * card's on `::after`, a field's focus edge on its touch area's `::before`
+ * (design.css `field-edge`) while the field has focus.
+ */
+function drawnEdge(box: HTMLElement): CSSStyleDeclaration | null {
+  for (const pseudo of ["::after", "::before"]) {
+    const edge = getComputedStyle(box, pseudo);
+    if (
+      edge.content !== "none" &&
+      edge.content !== "normal" &&
+      (Number.parseFloat(edge.borderBottomWidth) || 0) > 0 &&
+      Number.parseFloat(edge.opacity) >= 0.5
+    ) {
+      return edge;
+    }
+  }
+  return null;
 }
 
 export class EdgeCut {
@@ -271,40 +386,94 @@ export class EdgeCut {
     return movers;
   }
 
-  /** Places and dresses the foot slice from the box's own look, for this cut. */
-  #placeFoot(): void {
+  /**
+   * Reads how the slice of the cut side is placed and dressed from the
+   * box's look, for this cut: read again at each draw, as a box standing on
+   * its foot has its head somewhere new after each change. Returns how to
+   * place it, so every read is made before anything is written.
+   */
+  #readFoot(): (() => { height: number; node: HTMLElement }) | null {
     const node = this.#options.foot?.() ?? null;
     if (!node) {
-      this.#foot = null;
-      return;
+      return null;
     }
     const box = this.#box;
-    const style = getComputedStyle(box);
-    // The hung card draws its edge on `::after`, inside its box.
-    const edge = getComputedStyle(box, "::after");
-    const drawsEdge = edge.content !== "none" && edge.content !== "normal";
-    const line = drawsEdge ? edge : style;
-    const bottomLeft = style.borderBottomLeftRadius;
-    const bottomRight = style.borderBottomRightRadius;
+    const style = getComputedStyle(this.#options.look?.() ?? box);
+    const line = drawnEdge(box) ?? style;
+    const head = this.#options.side === "head";
+    const [start, end] = head
+      ? [style.borderTopLeftRadius, style.borderTopRightRadius]
+      : [style.borderBottomLeftRadius, style.borderBottomRightRadius];
     const height =
-      Math.max(
-        Number.parseFloat(bottomLeft) || 0,
-        Number.parseFloat(bottomRight) || 0
-      ) + 1;
-    Object.assign(node.style, {
+      Math.max(Number.parseFloat(start) || 0, Number.parseFloat(end) || 0) + 1;
+    const reach = `${-shadowReach(style.boxShadow)}px`;
+    const dress = {
       left: `${box.offsetLeft}px`,
       top: `${box.offsetTop}px`,
       width: `${box.offsetWidth}px`,
       height: `${height}px`,
       backgroundColor: style.backgroundColor,
+      backdropFilter: style.backdropFilter,
       boxShadow: style.boxShadow,
       borderStyle: "solid",
-      borderColor: line.borderBottomColor,
-      borderWidth: `0 ${line.borderRightWidth} ${line.borderBottomWidth} ${line.borderLeftWidth}`,
-      borderRadius: `0 0 ${bottomRight} ${bottomLeft}`,
-    });
-    node.dataset.cut = "";
-    this.#foot = { node, height };
+      borderColor: head ? line.borderTopColor : line.borderBottomColor,
+      borderWidth: head
+        ? `${line.borderTopWidth} ${line.borderRightWidth} 0 ${line.borderLeftWidth}`
+        : `0 ${line.borderRightWidth} ${line.borderBottomWidth} ${line.borderLeftWidth}`,
+      borderRadius: head ? `${start} ${end} 0 0` : `0 0 ${end} ${start}`,
+      clipPath: this.#options.flush ? sliceClip(head, reach) : "",
+    };
+    return () => {
+      Object.assign(node.style, dress);
+      node.dataset.cut = "";
+      return { node, height };
+    };
+  }
+
+  /** What a draw reads, all before it writes: the box's clip, its height, and how to place the slice. */
+  #read(): {
+    base: Base;
+    boxHeight: number;
+    placeFoot: (() => { height: number; node: HTMLElement }) | null;
+  } {
+    const look = this.#options.look?.() ?? this.#box;
+    return {
+      base: this.#base ?? baseOf(this.#box, look),
+      placeFoot: this.#readFoot(),
+      boxHeight: this.#options.height(),
+    };
+  }
+
+  /** The box's clip and its slice's place at each of `times`, every run summed. */
+  #cutFrames(
+    runs: Run[],
+    times: number[],
+    offsetOf: (t: number) => number,
+    { base, boxHeight }: { base: Base; boxHeight: number }
+  ): { clip: Keyframe[]; slice: Keyframe[] } {
+    const head = this.#options.side === "head";
+    const flush = this.#options.flush === true;
+    const round = flush ? flushRound(base, head) : base.round;
+    const foot = this.#foot;
+    // With a slice the box's own last pixel row is cut too: the slice's
+    // hairline stands there, and its shadow past it. Flush, the box is cut
+    // where the slice begins.
+    const seam = flush ? (foot?.height ?? 0) : 1;
+    const clip: Keyframe[] = [];
+    const slice: Keyframe[] = [];
+    for (const t of times) {
+      const cut = runs.reduce((sum, run) => sum + cutOf(run, t), 0);
+      const offset = offsetOf(t);
+      clip.push({
+        offset,
+        clipPath: insetAt(base, foot ? cut + seam : cut, head, round),
+      });
+      if (foot) {
+        const at = head ? cut : boxHeight - cut - foot.height;
+        slice.push({ offset, transform: `translateY(${at}px)` });
+      }
+    }
+    return { clip, slice };
   }
 
   /**
@@ -312,11 +481,14 @@ export class EdgeCut {
    * foot slice and each moved element, one animation each.
    */
   #draw(): void {
+    // Everything read before anything is written: the cancels below leave
+    // the box's style stale.
+    const read = this.#runs.size > 0 ? this.#read() : null;
     for (const animation of this.#drawn) {
       animation.cancel();
     }
     this.#drawn = [];
-    if (this.#runs.size === 0) {
+    if (!read) {
       this.#base = null;
       if (this.#foot) {
         delete this.#foot.node.dataset.cut;
@@ -324,12 +496,9 @@ export class EdgeCut {
       }
       return;
     }
-    if (!this.#base) {
-      this.#base = baseOf(this.#box);
-      this.#placeFoot();
-    }
-    const base = this.#base;
-    const foot = this.#foot;
+    const { base, boxHeight, placeFoot } = read;
+    this.#base = base;
+    this.#foot = placeFoot?.() ?? null;
     const start = now();
     const runs = [...this.#runs];
     const end = Math.max(...runs.map((run) => run.at + run.ms));
@@ -339,27 +508,12 @@ export class EdgeCut {
       times.push(t);
     }
     times.push(end);
-    const boxHeight = this.#options.height();
     const offsetOf = (t: number) => (t - start) / span;
-    const clip: Keyframe[] = [];
-    const slice: Keyframe[] = [];
-    for (const t of times) {
-      const cut = runs.reduce((sum, run) => sum + cutOf(run, t), 0);
-      const offset = offsetOf(t);
-      // With a foot slice the box's own last pixel row is cut too: the
-      // slice's hairline stands there, and its shadow under it.
-      const bottom = foot ? cut + 1 : cut;
-      clip.push({
-        offset,
-        clipPath: `inset(${base.top} ${base.right} ${bottom}px ${base.left} round ${base.round})`,
-      });
-      if (foot) {
-        slice.push({
-          offset,
-          transform: `translateY(${boxHeight - cut - foot.height}px)`,
-        });
-      }
-    }
+    const foot = this.#foot;
+    const { clip, slice } = this.#cutFrames(runs, times, offsetOf, {
+      base,
+      boxHeight,
+    });
     const timing: KeyframeAnimationOptions = {
       duration: span,
       easing: "linear",

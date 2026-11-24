@@ -51,6 +51,7 @@
   import type { ClassValue, HTMLTextareaAttributes } from "svelte/elements";
   import FieldArea from "#lib/components/ui/field-area.svelte";
   import { autosize } from "#lib/platform/motion/autosize.svelte.js";
+  import type { GrowTarget } from "#lib/platform/motion/grow-cut.js";
   import { cn, type WithElementRef, type WithoutChildren } from "#lib/utils.js";
 
   let {
@@ -65,6 +66,7 @@
     look,
     measure,
     area = true,
+    shell = null,
     "data-slot": dataSlot = "textarea",
     ...restProps
   }: WithoutChildren<WithElementRef<HTMLTextareaAttributes>> &
@@ -78,9 +80,35 @@
        * Off where a frame round the field is the control (InputGroup).
        */
       area?: boolean;
+      /**
+       * A note's field (`look="note"`) draws no edge: the composer's shell
+       * round it is the field, standing on its foot, so its head is what
+       * moves as the note grows a line.
+       */
+      shell?: HTMLElement | null;
     } = $props();
 
-  /** A press on the area beside the field: the field's own focus. */
+  /**
+   * What each line the field grows or gives up is drawn on (motion/
+   * grow-cut): its area, which carries its focus edge, cut at its foot,
+   * the field drawing the look; a note's, its composer's shell, cut at its
+   * head.
+   */
+  function grows(): GrowTarget | null {
+    if (!ref) {
+      return null;
+    }
+    if (look === "note") {
+      // The shell's fill is a material's glass: cut flush.
+      return shell
+        ? { box: shell, look: shell, side: "head", flush: true }
+        : null;
+    }
+    // Without its area, a frame round it is the control and draws the
+    // edge (InputGroup): the frame's site draws what the frame does.
+    const box = area ? ref.parentElement : null;
+    return box ? { box, look: ref, side: "foot" } : null;
+  }
 </script>
 
 {#snippet control(placement?: ClassValue | null)}
@@ -88,7 +116,7 @@
     class={cn(
       // Its area holds its radius, which it takes; without one, its own.
       area ? "rounded-inherit" : "rounded-md",
-      "shadow-xs transition-control motion-safe:transition-control-grow",
+      "shadow-xs transition-control",
       "flex min-h-16 w-full resize-none py-2",
       "border border-border-row-outline",
       "bg-surface-raised px-3 text-ink-strong",
@@ -103,7 +131,7 @@
     bind:this={ref}
     bind:value
     {...restProps}
-    {@attach autosize(() => value)}></textarea>
+    {@attach autosize(() => value, { cut: grows })}></textarea>
 {/snippet}
 
 {#if area}

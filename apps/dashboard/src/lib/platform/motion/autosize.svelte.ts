@@ -1,3 +1,5 @@
+import { type GrowTarget, growCut } from "./grow-cut";
+
 /**
  * A fit that measures in the next frame's callbacks, once however often it
  * is asked for before then. A change of state — a mount, a value swapped
@@ -9,7 +11,7 @@
  * size is the text's, not a change to watch. The transition comes back a
  * frame later, once that frame's style has taken the new size.
  */
-function nextFrame(node: HTMLElement, fit: () => void) {
+function nextFrame(node: HTMLElement, fit: (watched: boolean) => void) {
   let frame = 0;
   let unstill = 0;
   let still = false;
@@ -21,6 +23,7 @@ function nextFrame(node: HTMLElement, fit: () => void) {
       }
       frame = requestAnimationFrame(() => {
         frame = 0;
+        const watched = !still;
         if (still) {
           still = false;
           node.style.transition = "none";
@@ -28,7 +31,7 @@ function nextFrame(node: HTMLElement, fit: () => void) {
             node.style.transition = "";
           });
         }
-        fit();
+        fit(watched);
       });
     },
     cancel() {
@@ -45,7 +48,8 @@ let twins = 0;
  * A text field that grows with what is in it, the same way on every engine:
  * a textarea, or an editable box (the composer's MentionField). Its height
  * is measured from the text (scrollHeight) and set in pixels, so a CSS
- * height transition carries each new line in instead of the field jumping.
+ * height transition carries each new line in instead of the field jumping,
+ * or with `cut`, its box's clip on the compositor (motion/grow-cut).
  * `min-height` and `max-height` in CSS still bound it; past the ceiling it
  * scrolls. Attach with the value it shows:
  * `{@attach autosize(() => value)}`.
@@ -63,6 +67,11 @@ let twins = 0;
  *   `data-folding` for as long as the height change that fit started runs,
  *   so the stylesheet can give folding and opening a clock of their own.
  * - `measured`: told the text's full height at each fit.
+ * - `cut`: the box each change of height is drawn on (motion/grow-cut):
+ *   laid out at once, its edge and what stands around it moving on the
+ *   compositor. A fit no one watches lands as laid out: the first, and a
+ *   refit for a new width (the field follows the page being laid out
+ *   around it, frame by frame, as everything else does).
  */
 export function autosize(
   value: () => unknown,
@@ -70,10 +79,12 @@ export function autosize(
     held = () => false,
     fold = () => false,
     measured,
+    cut,
   }: {
     held?: () => boolean;
     fold?: (natural: number) => boolean;
     measured?: (natural: number) => void;
+    cut?: () => GrowTarget | null;
   } = {}
 ) {
   return (node: HTMLElement) => {
@@ -172,9 +183,34 @@ export function autosize(
       area && twin instanceof HTMLTextAreaElement ? { area, twin } : null;
     /** The field as a resize's delivery read it, for the refit it asked for. */
     let readAtResize: ReturnType<typeof readField> | null = null;
-    const fit = () => {
+    const grow = cut ? growCut(cut) : null;
+    /** The next fit is a refit for a new width: no one watches it. */
+    let refitting = false;
+    /**
+     * Writes the field's height: with a cut, drawn by it where someone
+     * watches the change, and laid out as it lands where no one does.
+     */
+    const heightTo = (next: string, shown: boolean) => {
+      if (grow && !shown) {
+        grow.land();
+      }
+      if (node.style.height === next) {
+        return;
+      }
+      const write = () => {
+        node.style.height = next;
+      };
+      if (grow && shown) {
+        grow.draw(write);
+      } else {
+        write();
+      }
+    };
+    const fit = (watched: boolean) => {
       const field = readAtResize ?? readField();
       readAtResize = null;
+      const shown = watched && !refitting;
+      refitting = false;
       ({ width } = field);
       twin.style.width = `${width}px`;
       twin.style.padding = field.padding;
@@ -202,9 +238,7 @@ export function autosize(
       if (turning) {
         node.dataset.folding = "";
       }
-      if (node.style.height !== next) {
-        node.style.height = next;
-      }
+      heightTo(next, shown);
       if (turning) {
         markFold();
       }
@@ -225,7 +259,8 @@ export function autosize(
     });
     // Typing fits at once: the keystroke that adds a line grows the field
     // in the frame it paints.
-    node.addEventListener("input", fit);
+    const typed = () => fit(true);
+    node.addEventListener("input", typed);
     // A narrower field wraps into more lines. Refit on the next frame:
     // resizing the field inside its own observer's callback would report
     // the resize back to that observer in the same frame. The field itself
@@ -246,13 +281,15 @@ export function autosize(
         return;
       }
       readAtResize = readField();
+      refitting = true;
       later.request(false);
     });
     sizes.observe(node);
     return () => {
-      node.removeEventListener("input", fit);
+      node.removeEventListener("input", typed);
       sizes.disconnect();
       later.cancel();
+      grow?.stop();
       twin.remove();
     };
   };
