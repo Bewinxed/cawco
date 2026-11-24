@@ -180,6 +180,13 @@ const keyOf = (kind: StopKind, projectId: string) => `${kind}:${projectId}`;
 /** Caw's switch's place (CawLeadSwitch): his off tray stands there when asked there. */
 export const cawOffAt = (projectId: string): string => `caw:${projectId}`;
 
+/**
+ * His seat's switch's place on the project head (CawSeatSwitch), apart from
+ * his settings' while both are drawn: a tray asked from one stands at it
+ * alone.
+ */
+export const cawSeatAt = (projectId: string): string => `caw-seat:${projectId}`;
+
 /** The key a tray travels under, into its parked place and back out. */
 export const stopShare = (job: { kind: StopKind; projectId: string }): string =>
   `stop-tray:${keyOf(job.kind, job.projectId)}`;

@@ -21251,6 +21251,9 @@
                   "attemptsHearComments": {
                     "type": "boolean"
                   },
+                  "changesSettings": {
+                    "type": "boolean"
+                  },
                   "harness": {
                     "enum": [
                       "claude",
@@ -21298,9 +21301,6 @@
                     ]
                   },
                   "on": {
-                    "type": "boolean"
-                  },
-                  "proposesDecides": {
                     "type": "boolean"
                   }
                 }
@@ -38670,6 +38670,24 @@
               "source"
             ]
           }
+        ]
+      },
+      "CawFallback": {
+        "description": "The project's Caw settings, what a kind's harness, model and account fall back to when neither layer sets them.",
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "harness"
         ]
       },
       "CawRunning": {
@@ -56066,6 +56084,10 @@
             "description": "Whether the person's comment on a task reaches its attempt, live or ended (hub jev-tasks.ts).",
             "type": "boolean"
           },
+          "changesSettings": {
+            "description": "Whether the project's sessions, Caw among them, may change what his chat\nand each kind of trigger run as (account, harness and model, mode:\nhub project-settings.ts `set_caw`, `set_trigger`, `set_account`), the\nsettings Caw's settings panel holds; off, they read them only. The\npanel's \"Allow Caw to change these settings\".",
+            "type": "boolean"
+          },
           "harness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
@@ -56092,10 +56114,6 @@
             "description": "Why Caw could not start now, on or off, or why its last start failed; null when he could.",
             "type": "string"
           },
-          "proposesDecides": {
-            "description": "Whether the project's sessions, Caw among them, may propose a change to\nits Who decides, each one the person's to approve (hub\nproject-settings.ts `set_decides`); off, they read it only.",
-            "type": "boolean"
-          },
           "running": {
             "description": "What Caw started that still runs, as his off control lists it, each lead\nrow followed by its delegates: the sessions his work items run, and his\nown turn while an event started it. Turning him off with any of these\nrunning names which stop; the rest finish.",
             "type": "array",
@@ -56118,10 +56136,10 @@
         },
         "required": [
           "attemptsHearComments",
+          "changesSettings",
           "harness",
           "hearsTasks",
           "on",
-          "proposesDecides",
           "running",
           "spendUsd",
           "starting"
@@ -56463,15 +56481,21 @@
         ]
       },
       "ProjectTriggerSettings": {
-        "description": "A project's settings, kind by kind: its own and what is in effect (`GET /api/projects/:id/trigger-settings`).",
+        "description": "A project's settings, kind by kind (`GET /api/projects/:id/trigger-settings`):\nits own, the fleet's under it and what is in effect; and its Caw settings\nunder both, so a change can be resolved where it is made, by\n{@link triggerSettingInEffect}, as the hub resolves it.",
         "type": "object",
         "properties": {
+          "caw": {
+            "$ref": "#/components/schemas/CawFallback"
+          },
           "kinds": {
             "type": "object",
             "properties": {
               "comments": {
                 "type": "object",
                 "properties": {
+                  "fleet": {
+                    "$ref": "#/components/schemas/TriggerSetting"
+                  },
                   "inEffect": {
                     "$ref": "#/components/schemas/TriggerSettingInEffect"
                   },
@@ -56480,6 +56504,7 @@
                   }
                 },
                 "required": [
+                  "fleet",
                   "inEffect",
                   "own"
                 ]
@@ -56487,6 +56512,9 @@
               "inbound-events": {
                 "type": "object",
                 "properties": {
+                  "fleet": {
+                    "$ref": "#/components/schemas/TriggerSetting"
+                  },
                   "inEffect": {
                     "$ref": "#/components/schemas/TriggerSettingInEffect"
                   },
@@ -56495,6 +56523,7 @@
                   }
                 },
                 "required": [
+                  "fleet",
                   "inEffect",
                   "own"
                 ]
@@ -56502,6 +56531,9 @@
               "routine-results": {
                 "type": "object",
                 "properties": {
+                  "fleet": {
+                    "$ref": "#/components/schemas/TriggerSetting"
+                  },
                   "inEffect": {
                     "$ref": "#/components/schemas/TriggerSettingInEffect"
                   },
@@ -56510,6 +56542,7 @@
                   }
                 },
                 "required": [
+                  "fleet",
                   "inEffect",
                   "own"
                 ]
@@ -56517,6 +56550,9 @@
               "task-moves": {
                 "type": "object",
                 "properties": {
+                  "fleet": {
+                    "$ref": "#/components/schemas/TriggerSetting"
+                  },
                   "inEffect": {
                     "$ref": "#/components/schemas/TriggerSettingInEffect"
                   },
@@ -56525,6 +56561,7 @@
                   }
                 },
                 "required": [
+                  "fleet",
                   "inEffect",
                   "own"
                 ]
@@ -56539,6 +56576,7 @@
           }
         },
         "required": [
+          "caw",
           "kinds"
         ]
       },
@@ -76814,6 +76852,9 @@
           "capUsd": {
             "type": "number"
           },
+          "cawChangesSettings": {
+            "type": "boolean"
+          },
           "cawHarness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
@@ -76822,9 +76863,6 @@
           },
           "cawModel": {
             "type": "string"
-          },
-          "cawProposesDecides": {
-            "type": "boolean"
           },
           "conversationInstanceId": {
             "type": "string"
@@ -76977,8 +77015,8 @@
           "accountAtLimit",
           "appleGate",
           "attemptsHearComments",
+          "cawChangesSettings",
           "cawHarness",
-          "cawProposesDecides",
           "createdAt",
           "dispatch",
           "eventsOn",
@@ -98478,6 +98516,9 @@
             "capUsd": {
               "type": "number"
             },
+            "cawChangesSettings": {
+              "type": "boolean"
+            },
             "cawHarness": {
               "$ref": "#/components/schemas/HarnessKind"
             },
@@ -98486,9 +98527,6 @@
             },
             "cawModel": {
               "type": "string"
-            },
-            "cawProposesDecides": {
-              "type": "boolean"
             },
             "conversationInstanceId": {
               "type": "string"
@@ -98641,8 +98679,8 @@
             "accountAtLimit",
             "appleGate",
             "attemptsHearComments",
+            "cawChangesSettings",
             "cawHarness",
-            "cawProposesDecides",
             "createdAt",
             "dispatch",
             "eventsOn",
@@ -121333,6 +121371,9 @@
           "capUsd": {
             "type": "number"
           },
+          "cawChangesSettings": {
+            "type": "boolean"
+          },
           "cawHarness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
@@ -121341,9 +121382,6 @@
           },
           "cawModel": {
             "type": "string"
-          },
-          "cawProposesDecides": {
-            "type": "boolean"
           },
           "conversationInstanceId": {
             "type": "string"
@@ -121496,8 +121534,8 @@
           "accountAtLimit",
           "appleGate",
           "attemptsHearComments",
+          "cawChangesSettings",
           "cawHarness",
-          "cawProposesDecides",
           "createdAt",
           "dispatch",
           "eventsOn",
@@ -165268,6 +165306,9 @@
           "capUsd": {
             "type": "number"
           },
+          "cawChangesSettings": {
+            "type": "boolean"
+          },
           "cawHarness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
@@ -165276,9 +165317,6 @@
           },
           "cawModel": {
             "type": "string"
-          },
-          "cawProposesDecides": {
-            "type": "boolean"
           },
           "conversation": {
             "type": "string"
@@ -165499,8 +165537,8 @@
           "accountAtLimit",
           "appleGate",
           "attemptsHearComments",
+          "cawChangesSettings",
           "cawHarness",
-          "cawProposesDecides",
           "createdAt",
           "dispatch",
           "eventsOn",
@@ -174455,6 +174493,9 @@
           "capUsd": {
             "type": "number"
           },
+          "cawChangesSettings": {
+            "type": "boolean"
+          },
           "cawHarness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
@@ -174463,9 +174504,6 @@
           },
           "cawModel": {
             "type": "string"
-          },
-          "cawProposesDecides": {
-            "type": "boolean"
           },
           "conversationInstanceId": {
             "type": "string"
@@ -174683,8 +174721,8 @@
           "accountAtLimit",
           "appleGate",
           "attemptsHearComments",
+          "cawChangesSettings",
           "cawHarness",
-          "cawProposesDecides",
           "createdAt",
           "dispatch",
           "eventsOn",
@@ -175024,6 +175062,9 @@
           "capUsd": {
             "type": "number"
           },
+          "cawChangesSettings": {
+            "type": "boolean"
+          },
           "cawHarness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
@@ -175032,9 +175073,6 @@
           },
           "cawModel": {
             "type": "string"
-          },
-          "cawProposesDecides": {
-            "type": "boolean"
           },
           "conversationInstanceId": {
             "type": "string"
@@ -175187,8 +175225,8 @@
           "accountAtLimit",
           "appleGate",
           "attemptsHearComments",
+          "cawChangesSettings",
           "cawHarness",
-          "cawProposesDecides",
           "createdAt",
           "dispatch",
           "eventsOn",
@@ -228640,6 +228678,9 @@
           "capUsd": {
             "type": "number"
           },
+          "cawChangesSettings": {
+            "type": "boolean"
+          },
           "cawHarness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
@@ -228648,9 +228689,6 @@
           },
           "cawModel": {
             "type": "string"
-          },
-          "cawProposesDecides": {
-            "type": "boolean"
           },
           "conversationInstanceId": {
             "type": "string"
@@ -228803,8 +228841,8 @@
           "accountAtLimit",
           "appleGate",
           "attemptsHearComments",
+          "cawChangesSettings",
           "cawHarness",
-          "cawProposesDecides",
           "createdAt",
           "dispatch",
           "eventsOn",

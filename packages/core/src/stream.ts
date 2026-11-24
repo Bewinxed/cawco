@@ -527,12 +527,18 @@ import type { TailnetServing } from "./tailnet-https";
  *    "Create project" files no plan items (`AcceptResult` has no `tasks`
  *    or `unfiled`). A page built for 104 draws a spec and a ring mark
  *    that are gone, so it reloads first.
+ * 106: a project carries `cawChangesSettings` in place of
+ *    `cawProposesDecides`, and Caw's view `changesSettings` in place of
+ *    `proposesDecides`: Caw's settings' one switch lets his sessions change
+ *    what his chat and each kind of trigger run as, and Who decides is the
+ *    person's alone. A page built for 105 reads the old fields, so it
+ *    reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 105;
+export const WIRE_PROTOCOL = 106;
 
 /**
  * The dashboard socket's address parameter a page names the board it holds

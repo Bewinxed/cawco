@@ -663,11 +663,12 @@ export const projects = sqliteTable("projects", {
     .notNull()
     .default(true),
   /**
-   * Whether the project's sessions, Caw among them, may propose a change to
-   * its Who decides (project-settings.ts `set_decides`), each one the
-   * person's to approve; off, they read it only.
+   * Whether the project's sessions, Caw among them, may change what his
+   * chat and each kind of trigger run as (project-settings.ts `set_caw`,
+   * `set_trigger`, `set_account`), the settings of Caw's settings panel;
+   * off, they read them only. Off until the person turns it on there.
    */
-  cawProposesDecides: integer("caw_proposes_decides", { mode: "boolean" })
+  cawChangesSettings: integer("caw_changes_settings", { mode: "boolean" })
     .notNull()
     .default(false),
   /** The harness Caw runs on. */

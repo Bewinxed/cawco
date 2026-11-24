@@ -159,19 +159,29 @@ export interface FleetTriggerSettings {
   kinds: Record<TriggerKind, TriggerSetting>;
 }
 
-/** A project's settings, kind by kind: its own and what is in effect (`GET /api/projects/:id/trigger-settings`). */
-export interface ProjectTriggerSettings {
-  kinds: Record<
-    TriggerKind,
-    { inEffect: TriggerSettingInEffect; own: TriggerSetting }
-  >;
-}
-
 /** The project's Caw settings, what a kind's harness, model and account fall back to when neither layer sets them. */
 export interface CawFallback {
   account: string | null;
   harness: HarnessKind;
   model: string | null;
+}
+
+/**
+ * A project's settings, kind by kind (`GET /api/projects/:id/trigger-settings`):
+ * its own, the fleet's under it and what is in effect; and its Caw settings
+ * under both, so a change can be resolved where it is made, by
+ * {@link triggerSettingInEffect}, as the hub resolves it.
+ */
+export interface ProjectTriggerSettings {
+  caw: CawFallback;
+  kinds: Record<
+    TriggerKind,
+    {
+      fleet: TriggerSetting;
+      inEffect: TriggerSettingInEffect;
+      own: TriggerSetting;
+    }
+  >;
 }
 
 /**

@@ -15,6 +15,7 @@ import type {
 } from "@cawco/core/forgotten-project";
 import type { ProjectStopFrame } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
+import type { OfferedMode } from "@cawco/core/harness/modes";
 import type { LandsMode } from "@cawco/core/injected";
 import {
   type CawInitiated,
@@ -23,6 +24,7 @@ import {
   type ProjectSpend,
 } from "@cawco/core/project-conversation";
 import type { FindPlan } from "@cawco/core/project-folders";
+import type { TriggerKind, TriggerSetting } from "@cawco/core/triggers";
 import type { StagesTemplate } from "@cawco/core/views";
 import { projectWords } from "@cawco/core/words/project";
 import { projectEndWords } from "@cawco/core/words/project-ends";
@@ -215,13 +217,20 @@ export async function projectAtFolder(project: {
 export const cawOf = (projectId: string) =>
   hubData(hub.api.projects({ id: projectId }).caw.get(), refusedOrUnreached);
 
-/** Turns a project's Caw on or off, or moves it to another harness or model (null: the harness's default). */
+/**
+ * Turns a project's Caw on or off, moves it to another harness or model
+ * (null: the harness's default) or mode (null: the fleet's), or sets whether
+ * its sessions may change what his chat and its triggers run as.
+ */
 export const configureCaw = async (
   projectId: string,
   change: {
+    /** Whether its sessions may change what his chat and each kind of trigger run as (Caw's settings' switch). */
+    changesSettings?: boolean;
     harness?: HarnessKind;
     /** Turning him off with what he started still running: the ids that stop; the rest finish. */
     initiated?: CawInitiated;
+    mode?: OfferedMode | null;
     model?: string | null;
     on?: boolean;
   }
@@ -243,6 +252,41 @@ export const configureCaw = async (
   }
   return view;
 };
+
+/** Each kind of trigger in a project: its own setting, the fleet's under it, what is in effect, and its Caw settings under both. */
+export const projectTriggerSettings = (projectId: string) =>
+  hubData(
+    hub.api.projects({ id: projectId })["trigger-settings"].get(),
+    refusedOrUnreached
+  );
+
+/** One kind of trigger's own setting in a project: the fields named change, null back to what it inherits. Answers the project's settings. */
+export const setProjectTrigger = (
+  projectId: string,
+  kind: TriggerKind,
+  change: Partial<TriggerSetting>
+) =>
+  hubData(
+    hub.api
+      .projects({ id: projectId })
+      ["trigger-settings"]({ kind })
+      .patch(change),
+    refusedOrUnreached
+  );
+
+/** The fleet's default for each kind of trigger. */
+export const fleetTriggerSettings = () =>
+  hubData(hub.api.fleet["trigger-settings"].get(), refusedOrUnreached);
+
+/** One kind of trigger's fleet default: the fields named change, null back to each project's Caw. Answers the fleet's settings. */
+export const setFleetTrigger = (
+  kind: TriggerKind,
+  change: Partial<TriggerSetting>
+) =>
+  hubData(
+    hub.api.fleet["trigger-settings"]({ kind }).patch(change),
+    refusedOrUnreached
+  );
 
 /**
  * How the person's start of a project's conversation goes, as the hub says

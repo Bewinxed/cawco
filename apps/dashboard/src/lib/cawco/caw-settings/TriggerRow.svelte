@@ -11,16 +11,12 @@
    * edge.
    */
   import type { HarnessKind } from "@cawco/core/harness/kinds";
-  import type { TriggerKind } from "@cawco/core/triggers";
+  import type { TriggerKind, TriggerSetting } from "@cawco/core/triggers";
   import {
     cawSettingsWords,
     triggerKindWords,
   } from "@cawco/core/words/caw-settings";
-  import type {
-    TriggerField,
-    TriggerKindView,
-    TriggerLayer,
-  } from "./caw-settings";
+  import type { TriggerField, TriggerKindView } from "./caw-settings";
   import RunsAs from "./RunsAs.svelte";
 
   const words = cawSettingsWords;
@@ -53,7 +49,7 @@
     /** The hub refused this kind's last change, in its words. */
     refused?: string | null;
     /** A change to the row's own layer: only what it changes, null back to inherited. */
-    onchange: (patch: Partial<TriggerLayer>) => void;
+    onchange: (patch: Partial<TriggerSetting>) => void;
   } = $props();
 
   const named = $derived(triggerKindWords[kind]);

@@ -7,7 +7,8 @@
    * - A hero picture of Caw awake or asleep across the panel's top
    *   (CawHero), his one switch on its faded lower edge with the line of
    *   what that state means; it crossfades as he turns.
-   * - Whether Caw may change Who decides: one switch, under the hero.
+   * - Whether Caw may change these settings (what his chat and each kind
+   *   of trigger run as): one switch, under the hero.
    * - Your chat with Caw: what it runs as (RunsAs: account, harness and
    *   model, mode), the project's Caw.
    * - Triggers: each kind (TriggerRow) and what its short sessions start
@@ -19,18 +20,18 @@
    * what it last read, its controls sunk and its line saying so.
    */
   import type { HarnessKind } from "@cawco/core/harness/kinds";
-  import { TRIGGER_KINDS, type TriggerKind } from "@cawco/core/triggers";
+  import {
+    TRIGGER_KINDS,
+    type TriggerKind,
+    type TriggerSetting,
+  } from "@cawco/core/triggers";
   import { cawSettingsWords as words } from "@cawco/core/words/caw-settings";
   import type { SwitchedLead } from "#lib/cawco/project/CawLeadSwitch.svelte";
   import { sheetScroller } from "#lib/components/ui/drawer/sheet-head.js";
   import { IconCloudCross } from "#lib/icons.js";
   import SwitchField from "../config/SwitchField.svelte";
   import CawHero from "./CawHero.svelte";
-  import type {
-    CawRunsAs,
-    TriggerLayer,
-    TriggerSettingsView,
-  } from "./caw-settings";
+  import type { CawRunsAs, TriggerSettingsView } from "./caw-settings";
   import RunsAs from "./RunsAs.svelte";
   import TriggerRow from "./TriggerRow.svelte";
 
@@ -45,10 +46,11 @@
     hubAway = false,
     refusedKind = null,
     refusedChat = null,
-    refusedProposes = null,
-    proposesDecides,
+    unread = null,
+    refusedChanges = null,
+    changesSettings,
     onchat,
-    onproposes,
+    onchanges,
     onkind,
     sheet = false,
   }: {
@@ -70,16 +72,21 @@
     refusedKind?: { kind: TriggerKind; words: string } | null;
     /** His chat's last change, refused: the hub's words. */
     refusedChat?: string | null;
-    /** His proposing switch's last change, refused: the hub's words. */
-    refusedProposes?: string | null;
+    /** Why the kinds could not be read, in the hub's words: said where they stand. */
+    unread?: string | null;
+    /** His changing switch's last change, refused: the hub's words. */
+    refusedChanges?: string | null;
     /** A change to what his chat runs as. */
-    onchat: (patch: Partial<TriggerLayer>) => void;
-    /** Whether Caw may propose changes to Who decides (the project's `cawProposesDecides`). */
-    proposesDecides: boolean;
-    /** His proposing switch flipped. */
-    onproposes: (next: boolean) => void;
+    onchat: (patch: Partial<TriggerSetting>) => void;
+    /**
+     * Whether Caw may change these settings, what his chat and each kind of
+     * trigger run as (the project's `changesSettings`).
+     */
+    changesSettings: boolean;
+    /** His changing switch flipped. */
+    onchanges: (next: boolean) => void;
     /** A change to a kind's own settings. */
-    onkind: (kind: TriggerKind, patch: Partial<TriggerLayer>) => void;
+    onkind: (kind: TriggerKind, patch: Partial<TriggerSetting>) => void;
     /**
      * In the touch sheet: the sheet's own inset holds it, its width the
      * sheet's, and it scrolls beneath the sheet's floating head
@@ -122,15 +129,15 @@
     {/if}
     <div data-slot="changes" class="grid gap-space-2 pb-space-4">
       <SwitchField
-        checked={proposesDecides}
+        checked={changesSettings}
         disabled={hubAway}
-        id={`caw-proposes-${projectId}`}
-        label={words.proposes}
-        onchange={onproposes}
+        id={`caw-changes-${projectId}`}
+        label={words.changes}
+        onchange={onchanges}
       />
-      {#if refusedProposes}
+      {#if refusedChanges}
         <p data-slot="refused" class="m-0 type-meta text-error-11" role="alert">
-          {refusedProposes}
+          {refusedChanges}
         </p>
       {/if}
     </div>
@@ -141,6 +148,7 @@
       <h3 class="m-0 type-row text-ink-strong">{words.chat}</h3>
       <RunsAs
         account={chat.account}
+        from={chat.mode === null ? { mode: words.from.fleet } : {}}
         harness={chat.harness}
         id="caw-chat"
         {installed}
@@ -180,7 +188,12 @@
           {/each}
         </ul>
       {:else}
-        <p class="m-0 type-meta text-ink-muted">{words.reading}</p>
+        <p
+          class="m-0 type-meta text-ink-muted"
+          role={unread ? "alert" : undefined}
+        >
+          {unread ? words.unread(unread) : words.reading}
+        </p>
       {/if}
     </section>
   </div>

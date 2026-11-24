@@ -23,6 +23,7 @@
     permissionModeNamed,
   } from "@cawco/core/harness/modes";
   import { traitsOf } from "@cawco/core/harness/traits";
+  import type { TriggerSetting } from "@cawco/core/triggers";
   import { cawSettingsWords as words } from "@cawco/core/words/caw-settings";
   import { spawnWords } from "@cawco/core/words/spawn";
   import { MediaQuery } from "svelte/reactivity";
@@ -56,7 +57,7 @@
   import PermissionSection from "../spawn/PermissionSection.svelte";
   import { permissionLook } from "../spawn/permission-look";
   import { accountsStore } from "../stores/accounts.svelte";
-  import type { TriggerField, TriggerLayer } from "./caw-settings";
+  import type { TriggerField } from "./caw-settings";
 
   let {
     id,
@@ -96,7 +97,7 @@
     /** No change can be asked now (the hub is away). */
     readonly?: boolean;
     /** A pick: only the field it changes. */
-    onchange: (patch: Partial<TriggerLayer>) => void;
+    onchange: (patch: Partial<TriggerSetting>) => void;
     /** A field set back to what it inherits; absent where nothing is inherited. */
     onreset?: (fields: TriggerField[]) => void;
     /** A reset's name, for the field it sets back. */

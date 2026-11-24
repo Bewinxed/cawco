@@ -2,7 +2,7 @@
  * What the states files of Caw's settings, his seat and the fleet's
  * triggers share: the panel's start, and the stores fed for each story.
  */
-/** Every story's start for the panel: awake, the hub accepting, what he started running. */
+/** Every story's start for the panel: awake, the hub taking each change, what he started running. */
 export const PANEL_ARGS = {
   on: true,
   answer: "accepts",
@@ -10,12 +10,14 @@ export const PANEL_ARGS = {
   hub: "connected",
   overridden: false,
   asked: null,
-  again: 0,
+  changes: false,
+  triggers: "read",
+  refusedKind: null,
 } as const;
 
 /** Feeds the machines and the accounts through their stores' writers, the story's own. */
 export async function seedStores(): Promise<void> {
-  const { seedCawSettings } = await import("./caw-settings-seed");
+  const { seedCawSettings } = await import("./caw-settings.fixtures.svelte");
   seedCawSettings();
 }
 
@@ -29,7 +31,7 @@ interface Play {
   userEvent: PersonEvents;
 }
 
-/** Longer than the stand-in hub's read and a popover's grow. */
+/** Longer than a popover's grow. */
 const SETTLED_MS = 900;
 const CANCEL = /^cancel$/iu;
 

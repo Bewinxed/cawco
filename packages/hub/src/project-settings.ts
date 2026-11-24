@@ -47,7 +47,8 @@
  * - `set_account`: the account the project's sessions start on when a start
  *   names none (an account's id, nickname or email; null for the fleet's
  *   routing), checked and written as the person's own edit is
- *   (project-edit.ts), which moves its running conversation there too.
+ *   (project-edit.ts), which moves its running conversation there too. It
+ *   is the account Caw's chat runs on, so it is one of Caw's settings below.
  * - `set_account_at_limit`: what the project's sessions on that account do
  *   at its limit (core `ProjectAtLimit`): wait for the reset, or move to an
  *   account with room; through the same edit.
@@ -59,16 +60,23 @@
  *   start with when their delegate type names none, written to its
  *   `starting-set.md` (project-starting-set.ts); null deletes the file, and
  *   they start with everything. Sessions started after it take it.
- * - `set_decides`: who settles one kind of choice here (Who decides, core
- *   decides.ts), `done` among them: a kind, by its id or name, handed to a
- *   member, by its id or name, or back to its area's and the fleet's (null).
- *   Only while the project's switch lets its sessions propose one
- *   (`cawProposesDecides`, off until the person turns it on in Caw's
- *   settings); off, it is refused and Who decides is read only. Who decides
- *   is the person's to set, so it is always asked, `ask` or not: the ask
- *   stands in Needs you with the change in words, and Approve writes
- *   decides.md as the Settings view's hand-over does (decides.ts
- *   `projectRoutesWritten`), checked again then, the switch with it.
+ * - `set_caw`: what Caw's chat runs as, its harness, model and mode, through
+ *   the person's own change in Caw's settings (caw.ts `configure`,
+ *   `PATCH /api/projects/:id/caw`); a harness or model it moves to ends the
+ *   conversation it had, as the panel's own change does.
+ * - `set_trigger`: what one kind of trigger's sessions start as here, its
+ *   harness, model, mode and account, each null back to what it inherits,
+ *   through the same write as the panel's (trigger-settings.ts
+ *   `setProject`, `PATCH /api/projects/:id/trigger-settings/:kind`).
+ * The settings Caw's settings panel holds (`set_caw`, `set_trigger`,
+ * `set_account`) change only while the project's switch lets its sessions
+ * change them (`cawChangesSettings`, Allow Caw to change these settings,
+ * off until the person turns it on in that panel; the owner's pick of
+ * 2026-11-23: this panel only); off, each is refused, asked or not, and the
+ * read shows them read only. A mode it names is one a session may choose
+ * (core `SESSION_CHOSEN_MODES`): Full Send is the person's alone.
+ * Who decides is the person's alone: the read shows it, and nothing here
+ * changes it.
  * Called with no changes, it answers the project's settings as they stand,
  * each named by the change that sets it, every setting in effect with where
  * it came from (its own, its area's, the fleet's), and what dispatch would
@@ -84,11 +92,19 @@ import {
 } from "@cawco/core/accounts";
 import type { SettingSource } from "@cawco/core/areas";
 import { PROJECT_SETTINGS } from "@cawco/core/asks";
-import type { FleetDecides } from "@cawco/core/decides";
 import {
   type StartingSet,
   startingSetProblem,
 } from "@cawco/core/delegate-types";
+import {
+  HARNESSES,
+  type HarnessKind,
+  harnessName,
+} from "@cawco/core/harness/kinds";
+import {
+  SESSION_CHOSEN_MODES,
+  type SessionChosenMode,
+} from "@cawco/core/harness/modes";
 import { hubRepoSegment } from "@cawco/core/hub-repo";
 import {
   PROJECT_LANDS,
@@ -99,10 +115,12 @@ import {
 } from "@cawco/core/permission-presentation";
 import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { InstanceRow } from "@cawco/core/protocol";
+import { TRIGGER_KINDS } from "@cawco/core/triggers";
 import { unhandled } from "@cawco/core/unhandled";
 import { areaWords } from "@cawco/core/words/areas";
 import { projectAccountWords } from "@cawco/core/words/project-account";
 import { projectSettingsWords } from "@cawco/core/words/project-settings";
+import { spawnWords } from "@cawco/core/words/spawn";
 import { ElysiaStatus, problem } from "elysia";
 import {
   array,
@@ -123,19 +141,19 @@ import type { Areas } from "./areas";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
-import type { projectRoutesWritten } from "./decides";
 import type { decidesTable } from "./decides-file";
 import { type Dispatcher, dispatchProblem } from "./dispatch";
 import type { DispatchChange } from "./dispatch-shapes";
 import { boardTitle } from "./labels";
 import { defineTool, sentence } from "./mcp-tool";
 import type { createProjectEdits } from "./project-edit";
-import { accountChange, projectName } from "./project-edit";
+import { accountChange, oneAccountAsked, projectName } from "./project-edit";
 
 import { projectStartingSet } from "./project-starting-set";
 import type { RepoPublish } from "./repo-publish";
 import { runsOnValue } from "./runs-on";
 import { budgetParameter } from "./task-tools";
+import type { TriggerSettings } from "./trigger-settings";
 import { budgetOf } from "./work-limits";
 
 const GITHUB_REPO =
@@ -182,7 +200,7 @@ const ASKED_CHANGE = z.object({
     .string()
     .nullable()
     .optional()
-    .describe("set_account: id, nickname or email; null: routing"),
+    .describe("id, nickname or email; null: routing, or inherited"),
   at_limit: z.enum(PROJECT_AT_LIMIT).optional(),
   area: z
     .string()
@@ -196,12 +214,10 @@ const ASKED_CHANGE = z.object({
     .describe(
       "set_starting_set: all its sessions start with, besides CawCo's own; skills named as your listing names them. null: everything"
     ),
-  decides: z.string().optional().describe("set_decides: a kind, by id or name"),
-  member: z
-    .string()
-    .nullable()
-    .optional()
-    .describe("set_decides: who settles it, by id or name; null: the fleet's"),
+  trigger: z.enum(TRIGGER_KINDS).optional(),
+  harness: z.enum(HARNESSES).nullable().optional(),
+  model: z.string().nullable().optional(),
+  mode: z.enum(SESSION_CHOSEN_MODES).nullable().optional(),
 });
 type AskedChange = z.infer<typeof ASKED_CHANGE>;
 
@@ -218,14 +234,12 @@ const definition = z.object({
   ask: z
     .boolean()
     .optional()
-    .describe(
-      "true asks the person first; create_repo and set_decides always do."
-    ),
+    .describe("true asks the person first; create_repo always does."),
   project: z.string().optional(),
 });
 
 const DESCRIPTION =
-  "Your project's settings, read or changed. Use it to read them, or to change one, like linking a repository, granting a connection, proposing a starting set, or proposing who decides a kind of choice (set_decides, done among them), which the person approves.";
+  "Your project's settings, read or changed. Use it to read them, or to change one, like linking a repository, granting a connection, proposing a starting set, or what Caw's chat and each trigger kind run as, if the person allows it.";
 
 /** What a malformed call is told, after what it got wrong. */
 const INPUT_HELP = `changes is a list of ${PROJECT_SETTING_KINDS.join(", ")}, and reason one sentence; leave changes out to read the settings.`;
@@ -300,11 +314,19 @@ const ParkedChange: GenericSchema<unknown, ProjectSettingChange> = variant(
       ),
     }),
     object({
-      decides: string(),
-      kind: literal("set_decides"),
-      kindName: string(),
-      member: nullable(string()),
-      memberName: nullable(string()),
+      harness: optional(picklist(HARNESSES)),
+      kind: literal("set_caw"),
+      mode: optional(nullable(picklist(SESSION_CHOSEN_MODES))),
+      model: optional(nullable(string())),
+    }),
+    object({
+      account: optional(nullable(string())),
+      accountName: optional(nullable(string())),
+      harness: optional(nullable(picklist(HARNESSES))),
+      kind: literal("set_trigger"),
+      mode: optional(nullable(picklist(SESSION_CHOSEN_MODES))),
+      model: optional(nullable(string())),
+      trigger: picklist(TRIGGER_KINDS),
     }),
     object({
       account: optional(string()),
@@ -369,11 +391,21 @@ const askedOf = (change: ProjectSettingChange): AskedChange => {
       return { kind: change.kind, area: change.area };
     case "set_starting_set":
       return { kind: change.kind, starting_set: change.startingSet };
-    case "set_decides":
+    case "set_caw":
       return {
         kind: change.kind,
-        decides: change.decides,
-        member: change.member,
+        harness: change.harness,
+        model: change.model,
+        mode: change.mode,
+      };
+    case "set_trigger":
+      return {
+        kind: change.kind,
+        trigger: change.trigger,
+        harness: change.harness,
+        model: change.model,
+        mode: change.mode,
+        account: change.account,
       };
     default:
       return unhandled("project setting", change);
@@ -500,7 +532,8 @@ export interface ProjectSettingsDeps {
   ) => Promise<string | undefined>;
   /**
    * Turns the project's Caw on or off, or one switch of the person's writing
-   * on tasks, as his switches do (caw.ts `configure`).
+   * on tasks, or moves what his chat runs as, as his settings do (caw.ts
+   * `configure`): his view, or its refusal.
    */
   readonly caw: (
     projectId: string,
@@ -508,27 +541,17 @@ export interface ProjectSettingsDeps {
       | { on: boolean }
       | { hearsTasks: boolean }
       | { attemptsHearComments: boolean }
+      | {
+          harness?: HarnessKind;
+          mode?: SessionChosenMode | null;
+          model?: string | null;
+        }
   ) => unknown;
   readonly connections: Pick<Connections, "get" | "list" | "update">;
   readonly db: Pick<
     DbShape,
     "addProjectLink" | "machineFacts" | "project" | "projectByRemote"
   >;
-  /**
-   * Who decides (decides.ts): the fleet's kinds and members, the project's
-   * table in effect (decides-file.ts), and its decides.md written with
-   * routes set over its own, as the person's commit saying `message`
-   * (`projectRoutesWritten`, the Settings view's own hand-over).
-   */
-  readonly decides: {
-    readonly fleet: () => FleetDecides;
-    readonly table: (project: ProjectRow) => ReturnType<typeof decidesTable>;
-    readonly write: (
-      projectId: string,
-      routes: Record<string, string | null>,
-      message: string
-    ) => ReturnType<typeof projectRoutesWritten>;
-  };
   /**
    * Changes the project's dispatch settings, and reads them with what the
    * dispatcher would do now: the dashboard's own path (dispatch.ts
@@ -560,6 +583,11 @@ export interface ProjectSettingsDeps {
   /** A place published to a new GitHub repository (repo-publish.ts). */
   readonly publish: Pick<RepoPublish, "publish" | "read">;
   /**
+   * Each kind of trigger's settings in the project, read and written as
+   * Caw's settings panel does (trigger-settings.ts).
+   */
+  readonly triggers: Pick<TriggerSettings, "project" | "setProject">;
+  /**
    * Writes the project's `starting-set.md` with `set`, by `author`, or
    * deletes it for null (project-starting-set.ts).
    */
@@ -577,12 +605,12 @@ export const createProjectSettings = ({
   caw,
   connections,
   db,
-  decides,
   dispatch,
   edit,
   inEffect,
   note,
   publish,
+  triggers,
   writeStartingSet,
 }: ProjectSettingsDeps) => {
   /**
@@ -879,109 +907,88 @@ export const createProjectSettings = ({
   };
 
   /**
-   * The kind and member a Who decides change names, by id or name among
-   * the fleet's (null: back to its area's and the fleet's); refused naming
-   * what the fleet has when either is none of its.
+   * Caw's settings (what his chat and each kind of trigger run as) change
+   * only while the project lets its sessions change them: refused, asked or
+   * not, while its switch is off.
    */
-  const decidesNamed = (asked: AskedChange) => {
-    const words = projectSettingsWords;
-    const wanted = asked.decides?.trim();
-    if (!wanted || asked.member === undefined) {
+  const changesAllowed = (project: ProjectRow) =>
+    project.cawChangesSettings
+      ? undefined
+      : problem(403, {
+          code: "caw-settings-read-only",
+          detail: projectSettingsWords.changesOff,
+        });
+
+  /** What Caw's chat runs as: the harness, model and mode it names. */
+  const chatSet = (project: ProjectRow, asked: AskedChange) => {
+    const { harness, model, mode } = asked;
+    if (
+      harness === null ||
+      (harness === undefined && model === undefined && mode === undefined)
+    ) {
       return problem(400, {
-        code: "decides-needed",
-        detail: words.needs.decides,
+        code: "set-caw-names",
+        detail: projectSettingsWords.needs.chat,
       });
     }
-    const fleet = decides.fleet();
-    const names =
-      (name: string) =>
-      (one: { id: string; name: string }): boolean =>
-        one.id === name || one.name.trim().toLowerCase() === name.toLowerCase();
-    const kind = fleet.kinds.find(names(wanted));
-    if (!kind) {
-      return problem(400, {
-        code: "decides-kind-unknown",
-        detail: words.unknownDecides(
-          "kind",
-          wanted,
-          fleet.kinds.map((one) => `${one.id} (${one.name})`)
-        ),
-      });
-    }
-    const memberAsked = asked.member?.trim() || null;
-    const member =
-      memberAsked === null ? null : fleet.members.find(names(memberAsked));
-    if (member === undefined) {
-      return problem(400, {
-        code: "decides-member-unknown",
-        detail: words.unknownDecides(
-          "member",
-          memberAsked ?? "",
-          fleet.members.map((one) => `${one.id} (${one.name})`)
-        ),
-      });
-    }
-    return { kind, member };
+    return (
+      changesAllowed(project) ??
+      ({
+        kind: "set_caw",
+        ...(harness === undefined ? {} : { harness }),
+        ...(model === undefined ? {} : { model: model?.trim() || null }),
+        ...(mode === undefined ? {} : { mode }),
+      } satisfies ProjectSettingChange)
+    );
   };
 
-  /**
-   * One kind of choice handed to a member here, or back to its area's and
-   * the fleet's (null), while the project lets its sessions propose one;
-   * refused when it is so already, or while the project's decides.md does
-   * not read.
-   */
-  const decidesSet = async (project: ProjectRow, asked: AskedChange) => {
-    const words = projectSettingsWords;
-    if (!project.cawProposesDecides) {
-      return problem(403, {
-        code: "decides-proposals-off",
-        detail: words.decidesProposalsOff,
+  /** A trigger kind's account as asked, by id with its name; null hands it back; left out, nothing. */
+  const triggerAccount = (asked: string | null | undefined) => {
+    if (asked === undefined) {
+      return {};
+    }
+    const raw = asked?.trim() ?? "";
+    if (!raw) {
+      return { account: null, accountName: null };
+    }
+    const all = accounts();
+    const one = oneAccountAsked(all, raw);
+    return one instanceof ElysiaStatus
+      ? one
+      : { account: one.id, accountName: accountNameAmong(one, all) };
+  };
+
+  /** What one kind of trigger runs as: the fields it names, its account resolved among the fleet's. */
+  const triggerSet = (project: ProjectRow, asked: AskedChange) => {
+    const { trigger, harness, model, mode, account } = asked;
+    if (
+      trigger === undefined ||
+      (harness === undefined &&
+        model === undefined &&
+        mode === undefined &&
+        account === undefined)
+    ) {
+      return problem(400, {
+        code: "set-trigger-names",
+        detail: projectSettingsWords.needs.trigger,
       });
     }
-    const named = decidesNamed(asked);
+    const off = changesAllowed(project);
+    if (off) {
+      return off;
+    }
+    const named = triggerAccount(account);
     if (named instanceof ElysiaStatus) {
       return named;
     }
-    const { kind, member } = named;
-    const table = await decides.table(project);
-    if (table instanceof ElysiaStatus) {
-      return table;
-    }
-    if (table.problems.length > 0) {
-      return problem(409, {
-        code: "decides-file-unread",
-        detail: words.decidesUnread(table.problems),
-      });
-    }
-    const already =
-      member === null
-        ? table.from[kind.id] !== "project" &&
-          words.already.decidesFollows(kind.name)
-        : table.routes[kind.id] === member.id &&
-          words.already.decides(kind.name, member.name);
-    if (already) {
-      return problem(400, { code: "already", detail: already });
-    }
     return {
-      kind: "set_decides",
-      decides: kind.id,
-      kindName: kind.name,
-      member: member?.id ?? null,
-      memberName: member?.name ?? null,
+      kind: "set_trigger",
+      trigger,
+      ...(harness === undefined ? {} : { harness }),
+      ...(model === undefined ? {} : { model: model?.trim() || null }),
+      ...(mode === undefined ? {} : { mode }),
+      ...named,
     } satisfies ProjectSettingChange;
-  };
-
-  /** A Who decides change applied, as the person's (it is always asked): its decides.md written as the Settings view's hand-over writes it. */
-  const decidesWritten = async (
-    projectId: string,
-    change: Extract<ProjectSettingChange, { kind: "set_decides" }>
-  ) => {
-    const refused = await decides.write(
-      projectId,
-      { [change.decides]: change.member },
-      projectSettingWords(change)
-    );
-    return refused ?? [projectSettingWords(change)];
   };
 
   /** One asked change, checked against the project as it stands, as the hub stores it. */
@@ -1054,15 +1061,17 @@ export const createProjectSettings = ({
       case "set_attempts_hear_comments":
         return writingSet(project, { ...asked, kind: asked.kind });
       case "set_account":
-        return accountSet(project, asked);
+        return changesAllowed(project) ?? accountSet(project, asked);
       case "set_account_at_limit":
         return atLimitSet(project, asked);
       case "set_area":
         return areaSet(project, asked);
       case "set_starting_set":
         return startingSetChange(project, asked);
-      case "set_decides":
-        return await decidesSet(project, asked);
+      case "set_caw":
+        return chatSet(project, asked);
+      case "set_trigger":
+        return triggerSet(project, asked);
       case "set_lands":
         break;
       default:
@@ -1088,7 +1097,7 @@ export const createProjectSettings = ({
   const checkAll = async (project: ProjectRow, asked: AskedChange[]) => {
     const kinds = new Set(
       asked.map(
-        (one) => `${one.kind}:${one.connection ?? ""}:${one.decides ?? ""}`
+        (one) => `${one.kind}:${one.connection ?? ""}:${one.trigger ?? ""}`
       )
     );
     if (kinds.size !== asked.length) {
@@ -1147,6 +1156,31 @@ export const createProjectSettings = ({
         ? [projectSettingsWords.leftForSize(change.large)]
         : []),
     ] satisfies string[];
+  };
+
+  /** What Caw's chat or a kind of trigger runs as, changed through the panel's own writes: its note, or its refusal. */
+  const runsAsSet = (
+    projectId: string,
+    change: Extract<ProjectSettingChange, { kind: "set_caw" | "set_trigger" }>
+  ) => {
+    const { harness, mode, model } = change;
+    const fields = {
+      ...(mode === undefined ? {} : { mode }),
+      ...(model === undefined ? {} : { model }),
+    };
+    const answered =
+      change.kind === "set_caw"
+        ? caw(projectId, { ...fields, ...(harness ? { harness } : {}) })
+        : triggers.setProject(projectId, change.trigger, {
+            ...fields,
+            ...(harness === undefined ? {} : { harness }),
+            ...(change.account === undefined
+              ? {}
+              : { account: change.account }),
+          });
+    return answered instanceof ElysiaStatus
+      ? answered
+      : [projectSettingWords(change)];
   };
 
   const applyOne = async (
@@ -1221,8 +1255,9 @@ export const createProjectSettings = ({
       case "set_starting_set":
         await writeStartingSet(project.id, change.startingSet, author);
         break;
-      case "set_decides":
-        return await decidesWritten(project.id, change);
+      case "set_caw":
+      case "set_trigger":
+        return runsAsSet(project.id, change);
       case "set_lands":
         return await editSaid(change, project.id, { lands: change.lands });
       default:
@@ -1339,6 +1374,12 @@ export const createProjectSettings = ({
     if (folder instanceof ElysiaStatus) {
       return folder;
     }
+    const kinds = triggers.project(project.id);
+    if (kinds instanceof ElysiaStatus) {
+      return kinds;
+    }
+    const modelText = (model: string | null) =>
+      model ?? "its harness's default model";
     return projectSettingsWords.read({
       name: project.name,
       area,
@@ -1358,7 +1399,33 @@ export const createProjectSettings = ({
         (one) => `${one.kind}: ${one.member} (${from(one.from)})`
       ),
       types: folder.types.map((one) => `${one.name} (${from(one.from)})`),
-      proposesDecides: project.cawProposesDecides,
+      changesSettings: project.cawChangesSettings,
+      chat: {
+        harness: harnessName(project.cawHarness),
+        model: modelText(project.cawModel),
+        mode: cawMode.value
+          ? spawnWords.modes[cawMode.value]
+          : "the mode last chosen on its machine",
+      },
+      triggers: TRIGGER_KINDS.map((kind) => {
+        const set = kinds.kinds[kind].inEffect;
+        return {
+          kind,
+          harness: {
+            value: harnessName(set.harness.value),
+            from: set.harness.from,
+          },
+          model: { value: modelText(set.model.value), from: set.model.from },
+          mode: {
+            value: spawnWords.modes[set.mode.value],
+            from: set.mode.from,
+          },
+          account: {
+            value: accountName(set.account.value) ?? "the fleet's routing",
+            from: set.account.from,
+          },
+        };
+      }),
       events: project.eventsOn,
       hearsTasks: project.hearsTasks,
       attemptsHearComments: project.attemptsHearComments,
@@ -1408,13 +1475,9 @@ export const createProjectSettings = ({
     if (changes instanceof ElysiaStatus) {
       return changes;
     }
-    // Creating a remote and pushing reach outside, and who decides is
-    // theirs to set: always the person's.
+    // Creating a remote and pushing reach outside: always the person's.
     const asking =
-      input.ask === true ||
-      changes.some(
-        (one) => one.kind === "create_repo" || one.kind === "set_decides"
-      );
+      input.ask === true || changes.some((one) => one.kind === "create_repo");
     if (!asking) {
       const said = await apply(project, changes, boardTitle(actor));
       if (said instanceof ElysiaStatus) {

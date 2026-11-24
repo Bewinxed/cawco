@@ -453,7 +453,7 @@ export interface ProjectsDb {
         | "conversationInstanceId"
         | "hearsTasks"
         | "attemptsHearComments"
-        | "cawProposesDecides"
+        | "cawChangesSettings"
       >
     >
   ) => void;

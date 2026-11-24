@@ -1091,7 +1091,7 @@ export const createCaw = ({
       on: project.eventsOn,
       hearsTasks: project.hearsTasks,
       attemptsHearComments: project.attemptsHearComments,
-      proposesDecides: project.cawProposesDecides,
+      changesSettings: project.cawChangesSettings,
       harness: project.cawHarness,
       model: project.cawModel,
       mode: project.cawMode,
@@ -1353,7 +1353,7 @@ export const createCaw = ({
       hearsTasks: boolean;
       mode: OfferedMode | null;
       on: boolean;
-      proposesDecides: boolean;
+      changesSettings: boolean;
     },
     moves: {
       harness: HarnessKind | undefined;
@@ -1367,7 +1367,7 @@ export const createCaw = ({
       cawMode: next.mode,
       hearsTasks: next.hearsTasks,
       attemptsHearComments: next.attemptsHearComments,
-      cawProposesDecides: next.proposesDecides,
+      cawChangesSettings: next.changesSettings,
       ...(moves.harness ? { cawHarness: moves.harness } : {}),
     });
     // Every dashboard's switch says where it stands now, not only the one
@@ -1378,7 +1378,7 @@ export const createCaw = ({
       next.mode !== project.cawMode ||
       next.hearsTasks !== project.hearsTasks ||
       next.attemptsHearComments !== project.attemptsHearComments ||
-      next.proposesDecides !== project.cawProposesDecides
+      next.changesSettings !== project.cawChangesSettings
     ) {
       projectsChanged();
     }
@@ -1528,9 +1528,10 @@ export const createCaw = ({
      * `hearsTasks` and `attemptsHearComments` are the switches of the
      * person's writing on tasks: whether the conversation reads it
      * (task-input.ts), and whether a comment reaches the task's attempt
-     * (jev-tasks.ts). `proposesDecides`: whether its sessions may propose a
-     * Who decides change for the person to approve (project-settings.ts
-     * `set_decides`).
+     * (jev-tasks.ts). `changesSettings`: whether its sessions may change
+     * what his chat and each kind of trigger run as (project-settings.ts
+     * `set_caw`, `set_trigger`, `set_account`), Caw's settings panel's
+     * switch.
      */
     configure(
       projectId: string,
@@ -1542,7 +1543,7 @@ export const createCaw = ({
         mode?: OfferedMode | null;
         model?: string | null;
         on?: boolean;
-        proposesDecides?: boolean;
+        changesSettings?: boolean;
       }
     ) {
       const project = projectOf(projectId);
@@ -1574,7 +1575,7 @@ export const createCaw = ({
           hearsTasks: change.hearsTasks ?? project.hearsTasks,
           attemptsHearComments:
             change.attemptsHearComments ?? project.attemptsHearComments,
-          proposesDecides: change.proposesDecides ?? project.cawProposesDecides,
+          changesSettings: change.changesSettings ?? project.cawChangesSettings,
         },
         { model, harness, moved }
       );
@@ -1985,9 +1986,10 @@ export const cawRoutes = (caw: Caw) =>
           hearsTasks: t.Optional(t.Boolean()),
           // Whether the person's comment on a task reaches its attempt (jev-tasks.ts).
           attemptsHearComments: t.Optional(t.Boolean()),
-          // Whether its sessions may propose a Who decides change for the
-          // person to approve (project-settings.ts `set_decides`).
-          proposesDecides: t.Optional(t.Boolean()),
+          // Whether its sessions may change what his chat and each kind of
+          // trigger run as (project-settings.ts `set_caw`, `set_trigger`,
+          // `set_account`): Caw's settings panel's switch.
+          changesSettings: t.Optional(t.Boolean()),
         }),
       },
       ({ params, body }) => caw.configure(params.id, body)

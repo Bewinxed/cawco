@@ -28,14 +28,16 @@ import {
 } from "./delegate-types";
 import { MEMORY_ROLES, type MemoryScope } from "./fleet";
 import { cardOfMcpWrite } from "./fleet-secrets";
+import type { HarnessKind } from "./harness/kinds";
+import type { SessionChosenMode } from "./harness/modes";
 import type { LandsMode } from "./injected";
 import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
 import { isSecretName, looksSecret } from "./secret-shapes";
 import { DAY_MS } from "./time";
+import type { TriggerKind } from "./triggers";
 import { areaWords } from "./words/areas";
 import { askStanceLine } from "./words/ask-lines";
-import { decidesWords } from "./words/decides";
 import { scopeWords } from "./words/memory-scope";
 import { projectAccountWords } from "./words/project-account";
 import {
@@ -1483,7 +1485,8 @@ export const PROJECT_SETTING_KINDS = [
   "set_account_at_limit",
   "set_area",
   "set_starting_set",
-  "set_decides",
+  "set_caw",
+  "set_trigger",
 ] as const;
 
 /**
@@ -1535,17 +1538,30 @@ export type ProjectSettingChange =
    */
   | { kind: "set_starting_set"; startingSet: StartingSet | null }
   /**
-   * Who settles one kind of choice in the project (Who decides, core
-   * decides.ts): its decides.md line handing `decides` (a kind's id) to
-   * `member` (a member's id), or none (null) so it follows its area's and
-   * the fleet's again; each with its name as the change was checked.
+   * What Caw's chat runs as (hub caw.ts `configure`): its harness, its model
+   * (null: the harness's default), its mode (null: the fleet's). A field
+   * left out stays as it is.
    */
   | {
-      decides: string;
-      kind: "set_decides";
-      kindName: string;
-      member: string | null;
-      memberName: string | null;
+      harness?: HarnessKind;
+      kind: "set_caw";
+      mode?: SessionChosenMode | null;
+      model?: string | null;
+    }
+  /**
+   * What one kind of trigger's sessions start as in the project (hub
+   * trigger-settings.ts): each field named changes, null handing it back to
+   * the fleet's and then Caw's; its account by id, with its name as the
+   * change was checked. A field left out stays as it is.
+   */
+  | {
+      account?: string | null;
+      accountName?: string | null;
+      harness?: HarnessKind | null;
+      kind: "set_trigger";
+      mode?: SessionChosenMode | null;
+      model?: string | null;
+      trigger: TriggerKind;
     }
   | {
       /** The account the GitHub connection signs in as: the repository's owner. */
@@ -1627,10 +1643,10 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return areaWords.change(change.name);
     case "set_starting_set":
       return projectSettingsWords.startingSet(change.startingSet);
-    case "set_decides":
-      return change.member === null
-        ? decidesWords.backCommit([change.kindName])
-        : decidesWords.handCommit(change.kindName, change.memberName ?? "");
+    case "set_caw":
+      return projectSettingsWords.chat(change);
+    case "set_trigger":
+      return projectSettingsWords.trigger(change);
     case "set_lands":
       break;
   }

@@ -1,8 +1,9 @@
 /**
- * The words of Caw's settings panel (the dashboard's caw-settings-proto,
- * a prototype on the design graph): Caw awake or asleep and the switch
- * under him, what on and off mean, what his chat runs as, and what each
- * kind of trigger runs as.
+ * The words of Caw's settings panel (the dashboard's caw-settings/, opened
+ * from the project head's `⋯ › Caw settings…`) and of the fleet's
+ * Configure › Caw's triggers: Caw awake or asleep and the switch on him,
+ * whether Caw may change these settings, what his chat runs as, and what
+ * each kind of trigger runs as.
  */
 export const cawSettingsWords = {
   /** The panel's name, for a screen reader and the phone sheet's title. */
@@ -17,15 +18,21 @@ export const cawSettingsWords = {
   switchOff: "Caw is asleep",
   /** The hub has not said whether he is on yet. */
   reading: "Reading…",
+  /** The triggers could not be read: the hub's own sentence, with no closing stop. */
+  unread: (why: string) => `${why}. The triggers can't be shown yet.`,
   /** The hub is out of reach: what shows is what it said last, and the controls are sunk. */
   hubAway:
     "The hub isn't answering, so these are its last settings and can't be changed yet.",
   /** His chat's settings: the heading. */
   chat: "Your chat with Caw",
-  /** Whether Caw may propose changes to Who decides: the switch's label. */
-  proposes: "Allow Caw to change these settings",
+  /**
+   * Whether Caw's sessions may change what his chat and each kind of
+   * trigger run as (hub project-settings.ts `set_caw`, `set_trigger`,
+   * `set_account`): the switch's label.
+   */
+  changes: "Allow Caw to change these settings",
   /** What stands when the switch's change was refused. */
-  proposesUnchanged: (on: boolean) =>
+  changesUnchanged: (on: boolean) =>
     on
       ? "Caw can still change these settings"
       : "Caw still can't change these settings",
@@ -62,9 +69,6 @@ export const cawSettingsWords = {
   chatUnchanged: "Your chat with Caw kept its settings",
   /** What stands when a kind's change was refused; every kind's name is a plural. */
   kindUnchanged: (kind: string) => `${kind} kept their settings`,
-  /** The fleet's section: its title and its one line. */
-  fleetSection: "Caw's triggers",
-  fleetPurpose: "Projects use these unless they set their own in Caw settings.",
 } as const;
 
 /** Each kind of trigger: its name and what reaches it. */

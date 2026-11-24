@@ -431,12 +431,7 @@ import { tagStoredSend } from "./db/tag-markers";
 import { refOf as linkRefOf, viaOf as linkViaOf } from "./db/task-links";
 import { undoable } from "./db/trash";
 import { decide, type TurnChoice } from "./decide";
-import {
-  decidesFileWith,
-  decidesRoutes,
-  type HarnessOffer,
-  projectRoutesWritten,
-} from "./decides";
+import { decidesFileWith, decidesRoutes, type HarnessOffer } from "./decides";
 import { DECIDES_FILE, decidesTable } from "./decides-file";
 import { refiledStatements } from "./decision-program";
 import { createDecisions, decidedTasks, decisionRoutes } from "./decisions";
@@ -11125,18 +11120,6 @@ export const createServer = (
       ),
     connections,
     db,
-    decides: {
-      fleet: () => db.decides.fleet(),
-      table: decidesOf,
-      write: (projectId, routes, message) =>
-        projectRoutesWritten(
-          projectId,
-          db.decides.fleet(),
-          routes,
-          message,
-          decidesRulesChanged
-        ),
-    },
     dispatch: dispatcher,
     edit: (projectId, change) => projectEdits.edit(projectId, change),
     publish: createRepoPublish({
@@ -11146,6 +11129,7 @@ export const createServer = (
       db,
       places: placeRepos,
     }),
+    triggers: triggerSettings,
     // Only a change the person's chat with Caw made is a line in it: any
     // other session hears its own outcome as its call's or ask's answer,
     // and the change shows in Settings (the owner's "Where triggers go",

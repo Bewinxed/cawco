@@ -42,6 +42,7 @@ export type ConfigSlug =
   | "accounts"
   | "models"
   | "spend"
+  | "triggers"
   | "phone"
   | "devices"
   | "previews"
@@ -220,6 +221,16 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     badge: "fleet-faults",
     icon: "dollar-bold-duotone",
     hue: "mark-3",
+  },
+  {
+    slug: "triggers",
+    group: "Hub",
+    label: "Caw's triggers",
+    purpose: "Projects use these unless they set their own in Caw settings",
+    counted: false,
+    badge: "fleet-faults",
+    icon: "inbox-in-bold-duotone",
+    hue: "mark-4",
   },
   {
     slug: "phone",

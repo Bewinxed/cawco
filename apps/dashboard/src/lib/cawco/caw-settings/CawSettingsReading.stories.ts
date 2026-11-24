@@ -1,12 +1,12 @@
 /**
  * Every state of Caw's settings, one frame each (Component Story Format 3,
- * live components): the live panel (caw-settings-live) on what each
- * situation leaves it holding; a flip the person has just made is its
- * `asked` arg, made through the switch's own path as the frame opens.
- * Each story keeps a project of its own, so a Caw-off confirm asked in one
- * frame stands in no other.
+ * live components): the panel open from the head's More
+ * (caw-settings-frame) on what each situation leaves it holding; a flip
+ * the person has just made is its `asked` arg, made through the switch's
+ * own path as the frame opens. Each story keeps a project of its own, so a
+ * Caw-off confirm asked in one frame stands in no other.
  */
-import CawSettingsLive from "./caw-settings-live.svelte";
+import CawSettingsFrame from "./caw-settings-frame.svelte";
 import {
   askOff,
   askOffThenCancel,
@@ -16,7 +16,7 @@ import {
 
 export default {
   title: "Caw/Caw settings, every state",
-  component: CawSettingsLive,
+  component: CawSettingsFrame,
   args: { ...PANEL_ARGS, projectId: "cockpit-awake" },
   beforeEach: seedStores,
 };
@@ -39,8 +39,17 @@ export const Refused = {
     on: false,
     answer: "refuses",
     asked: "on",
-    hubWait: 0,
   },
+};
+
+/** Caw may change what his chat and each kind run as. */
+export const ChangesAllowed = {
+  args: { projectId: "cockpit-changes", changes: true },
+};
+
+/** A kind's change refused: it keeps its settings, and its row says why. */
+export const KindRefused = {
+  args: { projectId: "cockpit-kind-refused", refusedKind: "task-moves" },
 };
 
 /** The hub out of reach: what it said last, every control sunk. */
@@ -51,6 +60,16 @@ export const HubAway = {
 /** Routine results set to run on their own harness and model. */
 export const KindOverridden = {
   args: { projectId: "cockpit-overridden", overridden: true },
+};
+
+/** The kinds not read yet: the section says so where they stand. */
+export const Reading = {
+  args: { projectId: "cockpit-reading", triggers: "reading" },
+};
+
+/** The kinds' read refused: the hub's words where they stand. */
+export const Unread = {
+  args: { projectId: "cockpit-unread", triggers: "unread" },
 };
 
 /** Flipping him off with sessions running: the confirm comes down out of the switch's glass. */

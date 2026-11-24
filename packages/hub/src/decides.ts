@@ -195,12 +195,11 @@ export const decidesFileWith = async (
 /**
  * Project `projectId`'s decides.md with `routes` set over its own (null:
  * back to its area's and the fleet's), committed as the person's with
- * `message`, and the tables that read it told. The Settings view's
- * hand-over (`PUT /api/projects/:id/decides`) and a Who decides change Caw
- * asked and the person approved (project-settings.ts `set_decides`) both
- * write through it. Answers the refusal; undefined once written.
+ * `message`, and the tables that read it told: the Settings view's
+ * hand-over (`PUT /api/projects/:id/decides`), the person's alone. Answers
+ * the refusal; undefined once written.
  */
-export const projectRoutesWritten = async (
+const projectRoutesWritten = async (
   projectId: string,
   fleet: FleetDecides,
   routes: Record<string, string | null>,

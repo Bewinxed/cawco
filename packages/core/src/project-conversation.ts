@@ -41,6 +41,14 @@ export interface CawStart {
 export interface ProjectConversationView {
   /** Whether the person's comment on a task reaches its attempt, live or ended (hub jev-tasks.ts). */
   attemptsHearComments: boolean;
+  /**
+   * Whether the project's sessions, Caw among them, may change what his chat
+   * and each kind of trigger run as (account, harness and model, mode:
+   * hub project-settings.ts `set_caw`, `set_trigger`, `set_account`), the
+   * settings Caw's settings panel holds; off, they read them only. The
+   * panel's "Allow Caw to change these settings".
+   */
+  changesSettings: boolean;
   harness: HarnessKind;
   /**
    * Whether the conversation reads what the person writes on the project's
@@ -62,12 +70,6 @@ export interface ProjectConversationView {
   on: boolean;
   /** Why Caw could not start now, on or off, or why its last start failed; null when he could. */
   problem: string | null;
-  /**
-   * Whether the project's sessions, Caw among them, may propose a change to
-   * its Who decides, each one the person's to approve (hub
-   * project-settings.ts `set_decides`); off, they read it only.
-   */
-  proposesDecides: boolean;
   /**
    * What Caw started that still runs, as his off control lists it, each lead
    * row followed by its delegates: the sessions his work items run, and his

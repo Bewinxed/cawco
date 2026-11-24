@@ -15,15 +15,17 @@
    * (settings/, `onsettings`). Caw's words are not in the head:
    * his seat's face, his panel and Needs you carry them.
    *
-   * Trailing, Caw at 48px, at the head's end so the name's start edge stays
-   * where it is when he stands over the empty board instead; then one glass
+   * Trailing, Caw at 48px with his switch beside him (CawSeatSwitch: awake
+   * or asleep, a press on him still opening his conversation), at the
+   * head's end so the name's start edge stays where it is when he stands
+   * over the empty board instead; then one glass
    * capsule (the kit's BarGlass, `form="group"`) of bare symbols, each named
    * in its tooltip: Ask Caw (his panel on a new conversation, the caret in his
    * composer: work in a project starts by telling Caw, PRD §5.6), Spin off,
    * and More holding its setup (Finish setting it up while it is not set
    * up, Change how it runs once it is: the project-setup skill's one page,
-   * through Caw), Project settings (the Settings view), Caw's settings (CawPanel, off More: a popover on a desk, the
-   * bottom sheet on touch), Spend, then Forget and Delete
+   * through Caw), Project settings (the Settings view), Caw's settings (CawSettings, off More: a popover on a desk, the
+   * bottom sheet on a phone, CawSettingsLayer), Spend, then Forget and Delete
    * (and, under 640px, Spin off, New task, Filter tasks… and Ask Caw for a
    * view), each with its glyph. Nothing in the head is on the coral: no view
    * of a project is for asking Caw (One prominent action, trailing).
@@ -58,9 +60,7 @@
     BarItem,
     BarMenu,
   } from "#lib/components/ui/bar-glass/index.js";
-  import * as Drawer from "#lib/components/ui/drawer/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import * as Popover from "#lib/components/ui/popover/index.js";
   import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconArchive,
@@ -87,9 +87,10 @@
     motionOk,
   } from "#lib/platform/motion/curves.svelte.js";
   import { goto } from "$app/navigation";
+  import CawSeatSwitch from "../caw-settings/CawSeatSwitch.svelte";
+  import CawSettingsLayer from "../caw-settings/CawSettingsLayer.svelte";
+  import ProjectCawSettings from "../caw-settings/ProjectCawSettings.svelte";
   import { fullSize } from "../workspace/full-size.svelte";
-  import CawPanel from "./CawPanel.svelte";
-  import CawSeat from "./CawSeat.svelte";
   import type { CawLead } from "./caw-lead.svelte";
 
   let {
@@ -121,10 +122,6 @@
   } = $props();
 
   const narrow = new MediaQuery(PHONE_QUERY);
-  /** Caw's settings rise as the bottom sheet on touch, as the head's other sheets do. */
-  const touch = new MediaQuery(
-    "(hover: none), (pointer: coarse), (max-width: 640px)"
-  );
   /**
    * Caw's settings stand open: open again after a reload while his off
    * tray stands in them (stop-work.svelte.ts), so it comes back where it was.
@@ -338,7 +335,11 @@
          draws no one, so no empty seat stands by the capsule. -->
     {#if seated && !(lead.refused !== null && lead.project === null)}
       <div data-slot="seat" class="flex-none" transition:slot>
-        <CawSeat {lead} projectId={project.id} projectName={project.name} />
+        <CawSeatSwitch
+          {lead}
+          projectId={project.id}
+          projectName={project.name}
+        />
       </div>
     {/if}
     <!-- One capsule of the panel's glass, the top bar's trailing group its
@@ -491,35 +492,11 @@
   <RowFault again={commitName} reason={renameFault} />
 </div>
 <!-- Caw's settings, off More: the project's own, beside its other settings. -->
-{#if touch.current}
-  <Drawer.Root bind:open={cawOpen}>
-    <!-- The recipe's foot: 16px plus the safe area (DESIGN.md, Drawer). -->
-    <Drawer.Content title={`Caw, ${project.name}`}>
-      <CawPanel
-        {lead}
-        projectId={project.id}
-        projectName={project.name}
-        sheet
-      />
-    </Drawer.Content>
-  </Drawer.Root>
-{:else}
-  <Popover.Root bind:open={cawOpen}>
-    <Popover.Content
-      align="end"
-      aria-label="Caw, {project.name}"
-      class="w-(--settings-w) max-desk:w-(--settings-w-narrow)"
-      pad="inset"
-      style="--settings-w: min(var(--spacing-c-panel-w), calc(100vw - var(--spacing-space-7))); --settings-w-narrow: min(var(--spacing-c-panel-w), calc(100vw - var(--spacing-space-3) - env(safe-area-inset-right, 0px)))"
-      collisionPadding={12}
-      customAnchor={more}
-      side="bottom"
-      sideOffset={4}
-    >
-      <CawPanel {lead} projectId={project.id} projectName={project.name} />
-    </Popover.Content>
-  </Popover.Root>
-{/if}
+<CawSettingsLayer anchor={more} projectName={project.name} bind:open={cawOpen}>
+  {#snippet panel(sheet)}
+    <ProjectCawSettings {lead} {machine} {project} {sheet} />
+  {/snippet}
+</CawSettingsLayer>
 <!-- An end asked from More, under the head, from where its title starts. -->
 <!-- The tray on the page's gutters: 25px in at the start (18 under the desk
      line, DESIGN.md, Layout) and 18 at the end, so it never meets the screen. -->

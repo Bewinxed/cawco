@@ -16,6 +16,7 @@
   } from "#lib/cawco/project/CawLeadSwitch.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import type { SeatedLead } from "#lib/cawco/project/caw-lead.svelte.js";
+  import { cawSeatAt } from "#lib/cawco/stop-work.svelte.js";
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
 
   let {
@@ -32,6 +33,8 @@
   } = $props();
 
   const label = $derived(lead.on === false ? words.asleep : words.awake);
+  /** His seat's own place: a confirm asked here stands here, never in his settings. */
+  const place = $derived(cawSeatAt(projectId));
 </script>
 
 <!-- The seat and the switch's label share the first row; whatever the
@@ -51,10 +54,18 @@
         {label}
         {lead}
         part="switch"
+        {place}
         {projectId}
         {projectName}
       />
     </span>
   </BarGlass>
-  <CawLeadSwitch {label} {lead} part="after" {projectId} {projectName} />
+  <CawLeadSwitch
+    {label}
+    {lead}
+    part="after"
+    {place}
+    {projectId}
+    {projectName}
+  />
 </div>

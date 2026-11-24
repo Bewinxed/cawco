@@ -170,10 +170,7 @@ const lfsChange = (
 };
 
 /** The accounts `asked` names: the one of that id, else those of that nickname, else of that email. */
-export const accountsAsked = (
-  accounts: Account[],
-  asked: string
-): Account[] => {
+const accountsAsked = (accounts: Account[], asked: string): Account[] => {
   const byId = accounts.find((one) => one.id === asked);
   if (byId) {
     return [byId];
@@ -183,6 +180,35 @@ export const accountsAsked = (
   return byLabel.length > 0
     ? byLabel
     : accounts.filter((one) => one.email?.toLowerCase() === lower);
+};
+
+/**
+ * The one account `raw` names among `accounts`, by id, nickname or email
+ * ({@link accountsAsked}), else the refusal naming the fleet's accounts:
+ * it names none, or several.
+ */
+export const oneAccountAsked = (accounts: Account[], raw: string) => {
+  const matches = accountsAsked(accounts, raw);
+  const [account] = matches;
+  if (!account) {
+    return problem(400, {
+      code: "no-account",
+      detail: projectAccountWords.noAccount(
+        raw,
+        accounts.map((one) => accountNameAmong(one, accounts))
+      ),
+    });
+  }
+  if (matches.length > 1) {
+    return problem(400, {
+      code: "ambiguous",
+      detail: projectAccountWords.ambiguous(
+        raw,
+        matches.map((one) => one.id)
+      ),
+    });
+  }
+  return account;
 };
 
 /**
@@ -203,25 +229,9 @@ export const accountChange = (
   if (!raw) {
     return project.account === null ? undefined : { account: null };
   }
-  const matches = accountsAsked(accounts, raw);
-  const [account] = matches;
-  if (!account) {
-    return problem(400, {
-      code: "no-account",
-      detail: projectAccountWords.noAccount(
-        raw,
-        accounts.map((one) => accountNameAmong(one, accounts))
-      ),
-    });
-  }
-  if (matches.length > 1) {
-    return problem(400, {
-      code: "ambiguous",
-      detail: projectAccountWords.ambiguous(
-        raw,
-        matches.map((one) => one.id)
-      ),
-    });
+  const account = oneAccountAsked(accounts, raw);
+  if (account instanceof ElysiaStatus) {
+    return account;
   }
   // The project's list holds its providers' sessions alone (placement.ts `ofProvider`).
   const listed = project.accounts?.filter(

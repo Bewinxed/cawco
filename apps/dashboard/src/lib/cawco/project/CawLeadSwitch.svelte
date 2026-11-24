@@ -17,7 +17,9 @@
   export async function flipCaw(
     lead: SwitchedLead,
     project: { id: string; name: string },
-    next: boolean
+    next: boolean,
+    /** The switch's place, where the confirm stands. */
+    at: string = cawOffAt(project.id)
   ): Promise<void> {
     const offJob = stopWork.of("caw-off", project.id);
     if (offJob?.open && ["none", "list", "armed"].includes(offJob.phase)) {
@@ -33,7 +35,7 @@
     if (running.length === 0) {
       await lead.configure({ on: false });
     } else {
-      stopWork.askCawOff(project, cawOffAt(project.id), running);
+      stopWork.askCawOff(project, at, running);
     }
   }
 </script>
@@ -74,6 +76,7 @@
     part = "all",
     disabled = false,
     hang = false,
+    place,
   }: {
     lead: SwitchedLead;
     projectId: string;
@@ -95,6 +98,12 @@
      * the capsule and going back up into it, rather than a popover beside.
      */
     hang?: boolean;
+    /**
+     * Its place, where its confirm and the stops parked under it stand
+     * (stop-work `place`): his settings' (`cawOffAt`) unless named, his
+     * seat's on the head (`cawSeatAt`) apart from it while both are drawn.
+     */
+    place?: string;
   } = $props();
 
   /** Where he stands as the switch shows it: off once his off tray says so (stop-work `awake`). */
@@ -103,7 +112,7 @@
   let anchor = $state<HTMLElement | null>(null);
 
   /** The switch's place: the Caw-off tray stands here when asked here. */
-  const at = $derived(cawOffAt(projectId));
+  const at = $derived(place ?? cawOffAt(projectId));
   /** What he started still runs: the tray's job, asked or parked. */
   const offJob = $derived(stopWork.of("caw-off", projectId));
   /** The tray stands open here: asked, or reopened from where it parked. */
@@ -136,7 +145,7 @@
       disabled={disabled || lead.moving || lead.on === null}
       bind:checked={
         () => on,
-        (next) => flipCaw(lead, { id: projectId, name: projectName }, next)
+        (next) => flipCaw(lead, { id: projectId, name: projectName }, next, at)
       }
     />
     <span>{label}</span>

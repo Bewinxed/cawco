@@ -274,9 +274,16 @@ import {
  * start_session, continue_session and the routine and route tools (worker
  * 32,083 measured; the delegate's tools name no mode). The worker's budget
  * is raised to it.
+ * 2026-11-24: project_settings takes `set_caw` and `set_trigger` with
+ * `trigger`, `harness`, `model` and `mode`, what Caw's chat and each kind
+ * of trigger run as, behind Caw's settings panel's switch (the owner's
+ * pick of 2026-11-23, "this panel only"), and `set_decides` with
+ * `decides` and `member` is gone: Who decides is the person's alone
+ * (worker 32,119 measured; a delegate has no project_settings). The
+ * worker's budget is raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 32_083,
+  worker: 32_119,
   delegate: 12_649,
   overseer: 770,
   "web-facing": 3400,

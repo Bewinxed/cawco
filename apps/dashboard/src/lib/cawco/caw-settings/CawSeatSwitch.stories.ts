@@ -1,24 +1,23 @@
 /**
  * Caw's seat on the project head with his switch beside him (Component
- * Story Format 3, live components): the crow is the switch, on a stand-in
- * hub (caw-seat-live). Flip the switch and he wakes or falls asleep in his
- * seat; with what he started still running, turning him off asks through
- * the Caw-off confirm hung from the switch's glass. The meta's `beforeEach` feeds the
- * machines through the board's own writer, so the confirm names them.
+ * Story Format 3, live components): the crow is the switch, fed the
+ * fixtures (caw-seat-frame). Flip the switch and he wakes or falls asleep
+ * in his seat; with what he started still running, turning him off asks
+ * through the Caw-off confirm hung from the switch's glass. The meta's
+ * `beforeEach` feeds the machines through the board's own writer, so the
+ * confirm names them.
  */
-import CawSeatLive from "./caw-seat-live.svelte";
+import CawSeatFrame from "./caw-seat-frame.svelte";
 import { seedStores } from "./caw-settings-play";
 
 export default {
   title: "Caw/Caw's seat",
-  component: CawSeatLive,
+  component: CawSeatFrame,
   args: {
     projectId: "seat-awake",
     on: true,
-    answer: "accepts",
     running: true,
     asked: null,
-    again: 0,
   },
   beforeEach: seedStores,
 };

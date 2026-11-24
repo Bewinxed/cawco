@@ -19,7 +19,6 @@
  *   changes, null clearing one.
  */
 import type { Account } from "@cawco/core/accounts";
-import { accountNameAmong } from "@cawco/core/accounts";
 import { HARNESSES } from "@cawco/core/harness/kinds";
 import type { OfferedMode } from "@cawco/core/harness/modes";
 import {
@@ -33,11 +32,10 @@ import {
   triggerModeDefault,
   triggerSettingInEffect,
 } from "@cawco/core/triggers";
-import { projectAccountWords } from "@cawco/core/words/project-account";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
-import { accountsAsked } from "./project-edit";
+import { oneAccountAsked } from "./project-edit";
 import { MODE } from "./tasks";
 
 /** A write to one kind's setting: the fields it names change, null clearing one. */
@@ -96,14 +94,16 @@ export const createTriggerSettings = ({
       cawOf(project)
     );
 
-  /** The project's view: each kind's own setting and what is in effect. */
+  /** The project's view: each kind's own setting, the fleet's under it, what is in effect, and the Caw settings under both. */
   const projectView = (project: ProjectRow): ProjectTriggerSettings => {
     const own = db.triggers.projectSettings(project.id);
     const fleet = db.triggers.fleetSettings();
     const caw = cawOf(project);
     return {
+      caw,
       kinds: byTriggerKind((kind) => ({
         own: own[kind],
+        fleet: fleet[kind],
         inEffect: triggerSettingInEffect(own[kind], fleet[kind], caw),
       })),
     };
@@ -115,26 +115,9 @@ export const createTriggerSettings = ({
     if (change.account !== undefined) {
       const raw = change.account?.trim() ?? "";
       if (raw) {
-        const all = accounts();
-        const matches = accountsAsked(all, raw);
-        const [one] = matches;
-        if (!one) {
-          return problem(400, {
-            code: "no-account",
-            detail: projectAccountWords.noAccount(
-              raw,
-              all.map((each) => accountNameAmong(each, all))
-            ),
-          });
-        }
-        if (matches.length > 1) {
-          return problem(400, {
-            code: "ambiguous",
-            detail: projectAccountWords.ambiguous(
-              raw,
-              matches.map((each) => each.id)
-            ),
-          });
+        const one = oneAccountAsked(accounts(), raw);
+        if (one instanceof ElysiaStatus) {
+          return one;
         }
         account = one.id;
       } else {
