@@ -41,6 +41,7 @@
     dur,
     motionOk,
   } from "#lib/platform/motion/curves.svelte.js";
+  import { loopInStep } from "#lib/platform/motion/in-step.svelte.js";
   import { departBox } from "#lib/platform/motion/share.svelte.js";
   import Checklist, { departChecks } from "./Checklist.svelte";
   import Choice from "./Choice.svelte";
@@ -689,8 +690,9 @@
                     "col-start-1 row-start-1 transition-opacity duration-(--duration-morph) ease-out",
                     !copied && "opacity-0",
                   ]}
-                  >{connectWords.copiedListening}<span class="breathe loops"
-                    >…</span
+                  >{connectWords.copiedListening}<span
+                    class="breathe loops"
+                    {@attach loopInStep}>…</span
                   ></span
                 >
               </span>

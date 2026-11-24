@@ -1618,7 +1618,6 @@
   --default-transition-duration: var(--duration-control);
   --default-transition-timing-function: var(--ease-out);
   --animate-spin: spin var(--duration-loop) linear infinite;
-  --animate-pulse: pulse var(--duration-loop) var(--ease-in-out) infinite;
   --animate-breath: breath var(--duration-breath) var(--ease-in-out) infinite;
   --animate-kit-fade-out: kit-fade-out var(--duration-exit) var(--ease-out) both;
   --animate-kit-tip-fade: kit-tip-fade var(--duration-menu) var(--ease-out);
@@ -1701,11 +1700,6 @@
     100% {
       transform: scale(2);
       opacity: 0;
-    }
-  }
-  @keyframes pulse {
-    50% {
-      opacity: 0.5;
     }
   }
   @keyframes check-draw {

@@ -30,6 +30,7 @@
     ThinkingSteps,
   } from "#lib/components/ui/thinking-steps/index.js";
   import { IconSuccess } from "#lib/icons.js";
+  import { loopInStep } from "#lib/platform/motion/in-step.svelte.js";
   import CawAtWork from "./CawAtWork.svelte";
   import {
     handedOver,
@@ -78,7 +79,8 @@
         {@const drawn = look(step)}
         <div
           data-slot="setup-step"
-          class={["min-w-0", step.live && "breathe"]}
+          class={["min-w-0", step.live && "breathe loops"]}
+          {@attach loopInStep}
           data-done={step.done || undefined}
         >
           <ThinkingStep

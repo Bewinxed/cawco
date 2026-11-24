@@ -1,6 +1,8 @@
 /**
  * A CSS loop begun in step with every other, without restyling the page as
- * it mounts.
+ * it mounts. A mark whose loop turns on after it mounted (a class or an
+ * attribute that starts it later) takes `loopInStep`, placed again each time
+ * its loop starts.
  *
  * A loop that must beat as one with its kind (the live breath, a skeleton's
  * pulse: The One Loop Rule) stands where the wall clock stands in it, never
@@ -122,3 +124,44 @@ export function inStep(): {
     },
   };
 }
+
+/**
+ * A mark whose loop turns on after it mounted (a status glyph that starts to
+ * breathe as its session goes to work), in step as `inStep` puts one that
+ * mounts breathing: its `--loop-at` written on the element itself as it is
+ * attached and each time a loop starts on it, then read again from the
+ * loop's own start once the frame has painted. For an element whose `style`
+ * attribute Svelte does not rewrite; one whose `style` is bound takes
+ * `inStep()` and `style:--loop-at`.
+ */
+export const loopInStep: Attachment<HTMLElement | SVGElement> = (node) => {
+  const step: Step = {
+    get delay() {
+      return node.style.getPropertyValue("--loop-at") || undefined;
+    },
+    set delay(value) {
+      if (value) {
+        node.style.setProperty("--loop-at", value);
+      }
+    },
+  };
+  const place = () => {
+    step.delay = delayAt(now());
+    due.set(node, step);
+    if (!asked) {
+      asked = true;
+      requestAnimationFrame(() => setTimeout(align));
+    }
+  };
+  const started = (event: Event) => {
+    if (event.target === node) {
+      place();
+    }
+  };
+  place();
+  node.addEventListener("animationstart", started);
+  return () => {
+    due.delete(node);
+    node.removeEventListener("animationstart", started);
+  };
+};

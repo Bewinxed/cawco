@@ -34,6 +34,7 @@
     motionOk,
     revealOut,
   } from "#lib/platform/motion/curves.svelte.js";
+  import { loopInStep } from "#lib/platform/motion/in-step.svelte.js";
 
   import { entrance } from "../hover-entrance";
   import MessageBody from "../MessageBody.svelte";
@@ -389,8 +390,12 @@
           {#if row?.kind === "tool"}
             {@const Icon = row.icon}
             <span
-              class="flex-none size-icon-md grid place-items-center {row.color}"
-              data-breathe={row.live || undefined}
+              class={[
+                "flex-none size-icon-md grid place-items-center",
+                row.color,
+                row.live && "breathe loops",
+              ]}
+              {@attach loopInStep}
               data-box><Icon class="size-icon-md block" /></span
             >
             {#if row.verb}

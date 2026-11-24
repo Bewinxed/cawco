@@ -5,6 +5,7 @@
     IconSparkles as IconCompact,
     IconLayersMinimal as IconWindow,
   } from "#lib/icons.js";
+  import { loopInStep } from "#lib/platform/motion/in-step.svelte.js";
   /**
    * How full the session's context window is, on the dock where the user is
    * already looking. Quiet until it matters: a thin bar and a percentage at
@@ -103,7 +104,9 @@
     title={meterTitle}
   >
     {#if compacting}
-      <IconCompact class="loops size-space-4 animate-pulse" />
+      <span class="breathe loops inline-flex" data-box {@attach loopInStep}
+        ><IconCompact class="size-space-4" /></span
+      >
       <span>Compacting</span>
     {:else}
       <!-- Glyph and number, no rail. A 28px bar under a text field is too short
@@ -191,7 +194,9 @@
       <p
         class="mark-line flex items-center gap-2 border-t border-border px-3 py-2 type-label"
       >
-        <IconCompact class="loops size-space-4 animate-pulse" />
+        <span class="breathe loops inline-flex" data-box {@attach loopInStep}
+          ><IconCompact class="size-space-4" /></span
+        >
         <span>Compacting now — the session is rewriting its own context.</span>
       </p>
     {:else if compaction}

@@ -2,6 +2,7 @@
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { glyphIn, glyphOut } from "#lib/platform/motion/glyph.js";
+  import { loopInStep } from "#lib/platform/motion/in-step.svelte.js";
   import { sessionStatusOf } from "./session-status";
 
   let {
@@ -27,13 +28,13 @@
     data-slot="glyph"
     class={[
       "inline-grid flex-none",
-      status.tone === "working" &&
-        "loops text-status-live-glyph motion-safe:animate-breath",
+      status.tone === "working" && "breathe loops text-status-live-glyph",
       status.tone === "attention" && "text-status-attn-glyph",
       status.tone === "failed" && "text-status-fail-glyph",
       status.tone === "quiet" && "text-status-idle-glyph",
     ]}
     data-box
+    {@attach loopInStep}
   >
     {#key status.icon}
       <span

@@ -2597,6 +2597,7 @@
 @utility breathe {
   @media (prefers-reduced-motion: no-preference) {
     animation: --theme(--animate-breath);
+    animation-delay: var(--loop-at, 0s);
   }
 }
 

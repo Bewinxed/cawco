@@ -25,6 +25,7 @@
    * names this row as its active descendant.
    */
   import { IconChevronDown as ChevronDown } from "#lib/icons.js";
+  import { loopInStep } from "#lib/platform/motion/in-step.svelte.js";
   import { age, type Row } from "./find-rows";
   import { said } from "./said";
 
@@ -114,8 +115,9 @@
   >
     <span
       data-slot="glyph"
-      class="loops grid place-items-center row-start-1 col-start-1 w-icon-md h-icon-lg text-status-idle-glyph motion-safe:data-breathes:animate-breath tone-live:text-status-live-glyph tone-attn:text-status-attn-glyph tone-fail:text-status-fail-glyph group-data-phone/row:self-box-start"
+      class="loops grid place-items-center row-start-1 col-start-1 w-icon-md h-icon-lg text-status-idle-glyph data-breathes:breathe tone-live:text-status-live-glyph tone-attn:text-status-attn-glyph tone-fail:text-status-fail-glyph group-data-phone/row:self-box-start"
       data-breathes={row.breathes ? "" : undefined}
+      {@attach loopInStep}
       data-tone={row.state.tone}
       aria-hidden="true"
       data-box

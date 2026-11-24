@@ -6,6 +6,8 @@
 </script>
 
 <script lang="ts">
+  import { loopInStep } from "#lib/platform/motion/in-step.svelte.js";
+
   /**
    * A linked item's state as a glyph, drawn for CawCo on a 20px box with a
    * 1.75px stroke (design 03-requirements, State glyphs): a ring for open, a
@@ -26,7 +28,7 @@
     closed: "text-ink-muted",
     canceled: "text-ink-subtle",
     failed: "text-status-fail-glyph",
-    pending: "text-ink-subtle motion-safe:animate-breath",
+    pending: "text-ink-subtle breathe loops",
   };
 </script>
 
@@ -34,6 +36,7 @@
   aria-hidden="true"
   class="size-icon-lg flex-none {TONE[glyph]}"
   data-glyph={glyph}
+  {@attach loopInStep}
   fill="none"
   viewBox="0 0 20 20"
 >

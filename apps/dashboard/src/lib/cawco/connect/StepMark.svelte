@@ -14,6 +14,7 @@
     IconSuccess,
     IconWorking,
   } from "#lib/icons.js";
+  import { loopInStep } from "#lib/platform/motion/in-step.svelte.js";
   import type { MarkState } from "./steps";
 
   let {
@@ -43,13 +44,17 @@
   {#each MARKS as mark (mark.key)}
     {@const Icon = mark.icon}
     <span data-active={mark.key === state} class={mark.ink}>
-      <Icon
-        aria-hidden="true"
-        class={[
-          size === "sm" ? "size-icon-sm" : "size-icon-md",
-          mark.key === "current" && "breathe loops",
-        ]}
-      />
+      <!-- The breath runs on a span of its own round the glyph: on the swap's
+           cell its opacity would hold over the cell's own fade out. -->
+      <span
+        class={["inline-flex", mark.key === "current" && "breathe loops"]}
+        {@attach loopInStep}
+      >
+        <Icon
+          aria-hidden="true"
+          class={size === "sm" ? "size-icon-sm" : "size-icon-md"}
+        />
+      </span>
     </span>
   {/each}
 </span>
