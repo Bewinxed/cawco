@@ -36,7 +36,6 @@ import { contactWords, MACHINE_LOST_MS } from "@cawco/core/words/contact";
 import { lfsWords } from "@cawco/core/words/lfs";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { offerWords } from "@cawco/core/words/offers";
-import { presenceWords } from "@cawco/core/words/presence";
 import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
 import { tailnetWords } from "@cawco/core/words/tailnet";
 import { untrack } from "svelte";
@@ -59,7 +58,6 @@ import { askOpens, isDelegateOf, landingOf, movedAt } from "../landing";
 import { type BoardRow, conversationHref, resolveSessionTitle } from "../links";
 import { machineVerdict } from "../machine-verdict";
 import { type MarkHue, markHue } from "../mark";
-import { asksHere, onPhone, person, rowAsks } from "../person.svelte";
 import {
   listTasksWaiting,
   stageLabel,
@@ -466,32 +464,6 @@ interface TailnetItem {
 }
 
 /**
- * The consent step: this computer telling CawCo when the person is at it
- * (its CawCo agent's report, else Chromium's Idle Detection) and showing
- * what needs them as a desktop notification (presence.ts), while either is
- * still to ask (person.svelte.ts `rowAsks`: on a phone, notifications
- * alone) and the row wasn't put away
- * with Skip, which is a no, remembered. Its notice says why and what the
- * person gets, what is read and what never is; Allow is the yes: it turns
- * the agent's report on, or asks the browser. Nothing reports before it.
- * Once allowed the row ticks (`done`) for a moment, then leaves.
- */
-interface DeskItem {
-  /** This computer's CawCo agent, by its machine's name, whose report Allow turns on; null when the browser asks, or none can. */
-  agent: string | null;
-  done: boolean;
-  idle: boolean;
-  key: string;
-  kind: "desk";
-  notify: boolean;
-  place: string;
-  raisedAt: undefined;
-  title: string;
-  /** No agent here and no Idle Detection (Safari, Firefox, Brave): the row says this browser can't. */
-  unavailable: boolean;
-}
-
-/**
  * The stream relay's guided journey (hub relay-journey.ts), while it asks:
  * set up from Caw's setup card, Settings › Browsers or a take-over through a
  * domain, and not yet live and proven from outside, nor put away with Later
@@ -659,7 +631,6 @@ export type NeedsItem =
   | WatchItem
   | OfferItem
   | TailnetItem
-  | DeskItem
   | RelayItem
   | PairingItem
   | AdmissionItem
@@ -1275,33 +1246,6 @@ class Home {
             },
           ]
         : [];
-    // This browser's presence: its step while something is still to ask,
-    // its tick a moment after; a press's refusal stands on it until Skip.
-    // While a press stands, the row says what that press asked for.
-    const ask = person.asked ?? rowAsks();
-    const desk: NeedsItem[] =
-      person.permissions &&
-      (asksHere() ||
-        person.ticked ||
-        (!person.skipped && person.refusal?.blocked))
-        ? [
-            {
-              kind: "desk",
-              key: "desk:this-browser",
-              idle: ask.idle,
-              notify: ask.notify,
-              unavailable: ask.unavailable,
-              agent: ask.agent,
-              done: person.ticked,
-              title: presenceWords.title(
-                ask.agent !== null || ask.idle || ask.unavailable,
-                onPhone()
-              ),
-              place: "Onboarding",
-              raisedAt: undefined,
-            },
-          ]
-        : [];
     // The stream relay's journey: its row while it asks, its tick a moment after.
     const journey = relayStore.relayJourney;
     const relaying: NeedsItem[] =
@@ -1456,7 +1400,6 @@ class Home {
       ...watched,
       ...offered,
       ...secured,
-      ...desk,
       ...relaying,
       ...pairings,
       ...admissions,

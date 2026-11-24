@@ -26,6 +26,7 @@ import { startHarnessBlock } from "./harness-block.svelte";
 import { startAreas } from "./home/areas.svelte";
 import { startHome } from "./home/home-state.svelte";
 import { startSocket } from "./hub/socket.svelte";
+import { startNotifyAsk } from "./notify-ask.svelte";
 import { startReload } from "./reload.svelte";
 import { startNewSession } from "./spawn/new-session.svelte";
 import { startParked } from "./spawn/parked.svelte";
@@ -77,6 +78,8 @@ export function startApp(): () => void {
     startFlows(),
     // The tool sign-ins a reload kept, and their lapses.
     startToolSignins(),
+    // The notifications ask, up as soon as this browser's permissions are read.
+    startNotifyAsk(),
   ];
   return () => {
     for (const stop of stops.reverse()) {

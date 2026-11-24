@@ -18,8 +18,8 @@
  *   decides whether the person is here: a tab open and focused with nobody
  *   at it says no input, and they go away once the away clock passes.
  * - **The computer** (`machine`, `deskIdleMs`): Chromium's Idle Detection,
- *   once the person allowed it for this browser (Needs you's onboarding
- *   row, the presence menu) and left it on, says whether this computer is
+ *   once the person allowed it for this browser (the ask at load,
+ *   notify-ask.svelte.ts, or the presence menu) and left it on, says whether this computer is
  *   in use, idle or locked, its threshold the away clock. The hub reads it
  *   as an opted-in machine's desktop: input there keeps the person here
  *   with the tab hidden, a lock makes them away at once.
@@ -48,7 +48,7 @@ import { lastInputAt, onInput } from "./reload.svelte";
 const CLIENT_KEY = "cawco-presence-client";
 /**
  * This browser's word on reporting whether the person is at this computer,
- * kept in localStorage: `on` once they said yes (the consent step, the
+ * kept in localStorage: `on` once they said yes (the ask at load, the
  * presence menu), `off` once they said no or turned it off; unset, not
  * asked yet. Idle Detection runs only on `on`: nothing is read before the
  * yes, whatever the browser's permission.
@@ -418,8 +418,6 @@ export interface DeskAsk {
   readonly agent: string | null;
   readonly idle: boolean;
   readonly notify: boolean;
-  /** No Idle Detection here and no agent: the row says so; nothing is asked for it. */
-  readonly unavailable: boolean;
 }
 
 /**

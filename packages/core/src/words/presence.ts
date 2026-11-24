@@ -1,11 +1,12 @@
 /**
  * Whether the person is here: the presence dot on the rail's avatar and its
  * menu (Appear away, the away clock, this device's report, the machines
- * that count), and the consent step in Needs you that lets this computer
- * say when the person is at it (its CawCo agent, or Chromium's Idle
- * Detection, "Your device use" in its site settings) and show what needs
- * them as a desktop notification; on a phone that step asks for
- * notifications alone. Nothing reports before the person's yes.
+ * that count), and the ask a browser shows as the dashboard loads, until
+ * it is answered there: show what needs the person as a desktop
+ * notification, and let this computer say when they are at it (its CawCo
+ * agent, or Chromium's Idle Detection, "Your device use" in its site
+ * settings); on a phone it asks for notifications alone. Nothing reports
+ * before the person's yes.
  * State words only: nothing says what the person did.
  */
 /**
@@ -56,73 +57,76 @@ export const presenceWords = {
   /** The trigger's name, with the dot's word after it. */
   you: (state: string) => `You · ${state}`,
   /**
-   * The onboarding row's title, a noun true before and after: your presence
-   * while it is asked (never on a phone), else notifications alone.
+   * The ask's title, a noun true before and after: notifications while
+   * they are asked, else your presence at this computer.
    */
-  title: (activity: boolean, phone: boolean) => {
-    if (activity) {
+  title: (ask: { notify: boolean }, phone: boolean) => {
+    if (!ask.notify) {
       return "Your presence at this computer";
     }
     return phone
       ? "Notifications on this phone"
       : "Notifications in this browser";
   },
-  /** What the person gets, the presence ask's first sentence. */
+  /** What the person gets from presence alone, its ask's first sentence. */
   gets: "Agents stay quiet while you're away, and what needs you goes to your phone.",
   /** What is read, by what reads it; "only" says what never is. */
   reads: (reader: "agent" | "computer") =>
     reader === "agent"
       ? "only whether its keys or pointer moved and whether its screen is locked"
       : "only whether keys or the pointer moved and whether the screen is locked",
-  /** Notifications, while still to ask: the Allow sentence's last clause. */
+  /** What notifications give, by the device they show on. */
+  shows: (phone: boolean) =>
+    phone
+      ? "What needs you reaches you while CawCo isn't in front."
+      : "What needs you shows here while you're in another tab or app, instead of on your phone.",
+  /** Notifications: what Allow lets. */
   notifies: "this site show notifications",
   /**
-   * The consent step's notice: what the person gets, then what Allow turns
-   * on and what it reads (this computer's CawCo agent by the machine's
-   * name, or this browser's Idle Detection), then notifications while they
-   * are still to ask. A phone is asked for notifications alone. Nothing is
-   * on before Allow.
+   * The ask's words: notifications first, while they are still to ask, and
+   * what Allow lets; then what Allow turns on for presence and what it
+   * reads (this computer's CawCo agent by the machine's name, or this
+   * browser's Idle Detection). A phone is asked for notifications alone.
+   * Nothing is on before Allow.
    */
   lead: (
     ask: { agent: string | null; idle: boolean; notify: boolean },
     phone: boolean
   ) => {
-    const notify = ask.notify ? `, and ${presenceWords.notifies}` : "";
-    if (ask.agent) {
-      return `${presenceWords.gets} Allow lets the agent on ${ask.agent} read ${presenceWords.reads("agent")}${notify}.`;
+    const reader = ask.agent
+      ? `the agent on ${ask.agent} read ${presenceWords.reads("agent")}`
+      : `this browser read ${presenceWords.reads("computer")}`;
+    const presence = ask.agent !== null || ask.idle;
+    if (!ask.notify) {
+      return `${presenceWords.gets} Allow lets ${reader}.`;
     }
-    if (ask.idle) {
-      return `${presenceWords.gets} Allow lets this browser read ${presenceWords.reads("computer")}${notify}.`;
+    if (!presence) {
+      return `${presenceWords.shows(phone)} Allow lets ${presenceWords.notifies}.`;
     }
-    return phone
-      ? `What needs you reaches you while CawCo isn't in front. Allow lets ${presenceWords.notifies}.`
-      : `What needs you shows here while you're in another tab or app, instead of on your phone. Allow lets ${presenceWords.notifies}.`;
+    return `${presenceWords.shows(phone)} Allow lets ${presenceWords.notifies}, and lets ${reader}, so agents stay quiet while you're away.`;
   },
   /** What counts as being here when nothing here can read it: the presence menu's line under "not available here". */
   countsHere: (phone: boolean) =>
     phone
       ? "Only taps in CawCo count here."
       : "Only presses in the CawCo tab count here.",
-  /**
-   * A browser with no Idle Detection (Safari, Firefox, Brave) on a computer
-   * with no CawCo agent, asked only while notifications are still to ask:
-   * what counts here instead, then notifications.
-   */
-  unavailable:
-    "This browser can't read whether you're at this computer, so only presses in the CawCo tab count here. Allow lets this site show notifications.",
-  meta: "Onboarding · this browser",
-  /** Its tick, once allowed: what turned on. */
-  done: (activity: boolean, phone: boolean) => {
-    if (activity) {
+  /** Its tick, once allowed: what turned on, notifications first. */
+  done: (
+    ask: { agent: string | null; idle: boolean; notify: boolean },
+    phone: boolean
+  ) => {
+    const device = phone ? "This phone" : "This browser";
+    const presence = ask.agent !== null || ask.idle;
+    if (!ask.notify) {
       return "CawCo knows when you're at this computer now.";
     }
-    return phone
-      ? "This phone shows notifications now."
-      : "This browser shows notifications now.";
+    return presence
+      ? `${device} shows notifications now, and CawCo knows when you're at this computer.`
+      : `${device} shows notifications now.`;
   },
   allow: "Allow",
   allowing: "Allowing…",
-  skip: "Skip",
+  notNow: "Not now",
   /** Chromium's site-settings name for Idle Detection. */
   deviceUse: "Your device use",
   /** Each browser's site-settings name for notifications. */

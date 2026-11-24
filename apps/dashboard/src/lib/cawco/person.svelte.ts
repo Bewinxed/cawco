@@ -30,7 +30,7 @@ import {
   setDeskThreshold,
 } from "./presence";
 
-/** Per browser: the onboarding row put away with Skip (core presence-onboarding.ts). */
+/** Per browser: the ask put away with Not now (core presence-onboarding.ts). */
 const SKIPPED = PRESENCE_ONBOARDING_SKIPPED;
 
 /** A refusal's words; `blocked` when it is this browser's, naming the setting. */
@@ -43,7 +43,7 @@ interface Refusal {
 interface PersonState {
   /** This browser's report was answered here, yes or no (presence.ts `deskAnswered`). */
   answered: boolean;
-  /** What the last press asked this browser for: the row says it until the row leaves. */
+  /** What the ask's press asked this browser for: the ask says it until it leaves. */
   asked: DeskAsk | null;
   /** A press on its way: Appear away (`away`), the away clock (`clock`), this browser's report (`desk`), a machine by id, or this browser (`allow`). */
   pending: string | null;
@@ -53,11 +53,11 @@ interface PersonState {
   refusal: Refusal | null;
   /** This browser's report was turned on here (presence.ts `deskReportOn`). */
   reportOn: boolean;
-  /** The onboarding row was put away in this browser. */
+  /** The ask was put away in this browser with Not now. */
   skipped: boolean;
   /** The machine this browser is on, as the hub tied it; null when none is. */
   thisMachine: string | null;
-  /** This browser's permissions were just granted from the row: it ticks a moment, then leaves. */
+  /** This browser's permissions were just granted from the ask: it ticks a moment, then leaves. */
   ticked: boolean;
   /** The person as the hub last said; null until read. */
   view: PersonView | null;
@@ -112,8 +112,8 @@ export async function readPerson(): Promise<void> {
   state.reportOn = deskReportOn();
   state.answered = deskAnswered();
   // The permissions land with the hub's tie to this machine, never before
-  // it: read alone, a row would flash its ask on a computer whose agent
-  // already reads it.
+  // it: read alone, the ask would flash on a computer whose agent already
+  // reads it.
   const [permissions, read] = await Promise.all([
     deskPermissions(),
     hubData(hub.api.person.get(), refusedOrUnreached).catch(
@@ -175,7 +175,7 @@ export const setMachineCounts = (
     )
   );
 
-/** How long the row's tick stands before it leaves. */
+/** How long the ask's tick stands before it leaves. */
 const TICK_MS = 2400;
 
 /**
@@ -202,8 +202,7 @@ const deskSource = (): "agent" | "browser" | "none" => {
  * What the consent step is still to ask here, nothing on before the yes:
  * this computer's agent's report while it is off (its agent can read the
  * desktop); else this browser's Idle Detection while not yet answered here
- * and not blocked; else, with neither, that this browser can't (Safari,
- * Firefox, Brave with no agent); and notifications while still to answer.
+ * and not blocked; and notifications while still to answer.
  */
 export const deskAsks = (): DeskAsk => {
   const { permissions } = state;
@@ -214,21 +213,19 @@ export const deskAsks = (): DeskAsk => {
     idle:
       source === "browser" && permissions?.idle !== "denied" && !state.answered,
     notify: permissions?.notify === "default",
-    unavailable: source === "none",
   };
 };
 
 /**
- * What the onboarding row asks for: on a phone notifications alone, never
+ * What the ask at load asks for: on a phone notifications alone, never
  * whether the person is using it; elsewhere all {@link deskAsks} names.
  */
-export const rowAsks = (): DeskAsk =>
+export const askAtLoad = (): DeskAsk =>
   onPhone()
     ? {
         agent: null,
         idle: false,
         notify: state.permissions?.notify === "default",
-        unavailable: false,
       }
     : deskAsks();
 
@@ -266,6 +263,7 @@ export async function setAtComputer(on: boolean): Promise<void> {
   }
   state.pending = "desk";
   state.refusal = null;
+  state.asked = null;
   try {
     state.permissions = await setDeskReport(on);
     state.reportOn = deskReportOn();
@@ -287,7 +285,7 @@ export async function setAtComputer(on: boolean): Promise<void> {
 /**
  * Site settings this browser blocks for CawCo, by the names it shows them:
  * Idle Detection only where it counts ({@link deskAsks}' rule) and was
- * offered (`idle`: not the phone's row), notifications always.
+ * offered (`idle`: not the phone's ask), notifications always.
  */
 const blockedNames = (after: DeskPermissions, idle: boolean): string[] => [
   ...(idle && after.idle === "denied" && deskSource() === "browser"
@@ -300,7 +298,7 @@ const blockedNames = (after: DeskPermissions, idle: boolean): string[] => [
 
 /**
  * What this browser blocks and where to turn it on; null when nothing is.
- * `idle` false leaves Idle Detection out: the phone's row never offered it.
+ * `idle` false leaves Idle Detection out: the phone's ask never offered it.
  */
 export const blockedHere = (idle = true): Refusal | null => {
   const { permissions } = state;
@@ -317,18 +315,16 @@ export const blockedHere = (idle = true): Refusal | null => {
 
 /**
  * Asks this browser, on the person's press, for what its place offers: the
- * onboarding row's {@link rowAsks} (`row`), the presence menu's
+ * ask at load's {@link askAtLoad} (`ask`), the presence menu's
  * {@link deskAsks} (`menu`); the browser's own prompts. A refusal names
- * each setting it blocks and where to turn it on.
+ * each setting it blocks and where to turn it on: on the ask when it was
+ * pressed there, in the menu when it was pressed there.
  */
-export async function allowHere(from: "row" | "menu"): Promise<void> {
-  const ask = from === "row" ? rowAsks() : deskAsks();
-  // The row says what the press asked for and ticks it; on a phone it
-  // never says the menu's presence, so a menu press there leaves it be.
-  const inRow = from === "row" || !onPhone();
-  if (inRow) {
-    state.asked = ask;
-  }
+export async function allowHere(from: "ask" | "menu"): Promise<void> {
+  const ask = from === "ask" ? askAtLoad() : deskAsks();
+  // The ask says what its press asked for and ticks it; a menu press
+  // answers in the menu, and the ask leaves once nothing is left to ask.
+  state.asked = from === "ask" ? ask : null;
   state.pending = "allow";
   state.refusal = null;
   // The browser's prompts first, in the press itself (presence.ts).
@@ -350,7 +346,7 @@ export async function allowHere(from: "row" | "menu"): Promise<void> {
       state.refusal = blocked;
       return;
     }
-    if (!inRow) {
+    if (from === "menu") {
       return;
     }
     state.ticked = true;
@@ -369,7 +365,7 @@ export async function allowHere(from: "row" | "menu"): Promise<void> {
   }
 }
 
-/** Puts the onboarding row away in this browser; the presence menu still offers it. */
+/** Puts the ask away in this browser for good; the presence menu still offers Allow. */
 export function skipHere(): void {
   store("local", SKIPPED.key, SKIPPED.value);
   declineDesk();
@@ -381,18 +377,27 @@ export function skipHere(): void {
 }
 
 /**
- * The onboarding row stands: this browser is still to be asked for
- * something ({@link deskAsks}) and the row wasn't put away.
+ * This browser is still to be asked for something ({@link askAtLoad}) and
+ * the ask wasn't put away with Not now.
  */
-export const asksHere = (): boolean => {
+const asksHere = (): boolean => {
   if (state.skipped) {
     return false;
   }
-  const ask = rowAsks();
+  const ask = askAtLoad();
   // A browser that can't read presence, with notifications answered, has
   // nothing to allow: the presence menu says so ("not available here").
   return ask.agent !== null || ask.idle || ask.notify;
 };
+
+/**
+ * The ask at load stands: once this browser's permissions are read (never
+ * before, so it never flashes), while something is still to ask here, and
+ * after its own press until that press is answered: its tick for a moment
+ * once allowed, its refusal until Not now.
+ */
+export const askStands = (): boolean =>
+  state.permissions !== null && (asksHere() || state.asked !== null);
 
 const phoneQuery = new MediaQuery("(pointer: coarse) and (hover: none)");
 /**

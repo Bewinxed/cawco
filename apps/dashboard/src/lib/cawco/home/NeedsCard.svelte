@@ -40,12 +40,6 @@
    * hub finds it taken; once HTTPS is on, the row's tick with the https
    * dashboard to open.
    *
-   * This browser's presence is one more: its notice as its line (what
-   * Chrome shares, and that what needs you shows here instead of on your
-   * phone), then Skip and Allow as peers. Allow asks the browser for Idle
-   * Detection and notifications on one press; a refusal says what the
-   * browser blocked and where to change it; once allowed, the row's tick.
-   *
    * An artifact waiting on you (core artifact-needs.ts) is a session's row:
    * its session's mark, its ask and its wait, then why it waits ("3 of 9
    * picked · 2 unsent · 1 new answer"), then its project, its kind (Page,
@@ -77,7 +71,6 @@
   import { mcpWords } from "@cawco/core/words/mcp";
   import { offerWords } from "@cawco/core/words/offers";
   import { pairingWords } from "@cawco/core/words/pairing";
-  import { presenceWords } from "@cawco/core/words/presence";
   import { tailnetWords } from "@cawco/core/words/tailnet";
   import type { Component } from "svelte";
   import RelayJourney from "#lib/cawco/relay/RelayJourney.svelte";
@@ -103,9 +96,7 @@
     IconKey,
     IconLock,
     IconMaximize,
-    IconMonitor,
     IconNeedsYou,
-    IconPhone,
     IconSend,
     IconServer,
     IconSuccess,
@@ -124,7 +115,6 @@
   import { notices } from "../notices.svelte";
   import OriginText from "../OriginText.svelte";
   import OsMark from "../OsMark.svelte";
-  import { allowHere, onPhone, person, skipHere } from "../person.svelte";
   import { sendArtifact } from "../preview/artifact-doc";
   import RowFault from "../RowFault.svelte";
   import { artifactOpenKey, openArtifactIn } from "../reference-open.svelte";
@@ -180,7 +170,6 @@
   const href = $derived.by(() => {
     if (
       item.kind === "tailnet" ||
-      item.kind === "desk" ||
       item.kind === "relay" ||
       item.kind === "machine"
     ) {
@@ -211,16 +200,6 @@
         return item.done
           ? tailnetWords.done(item.tailnet.dashboard ?? "")
           : tailnetWords.lead;
-      case "desk":
-        if (item.done) {
-          return presenceWords.done(
-            item.agent !== null || item.idle,
-            onPhone()
-          );
-        }
-        return item.unavailable
-          ? presenceWords.unavailable
-          : presenceWords.lead(item, onPhone());
       case "relay":
         return "";
       case "artifact":
@@ -377,8 +356,6 @@
         return `Fleet watch · ${item.place}`;
       case "tailnet":
         return tailnetWords.meta(item.tailnet.host);
-      case "desk":
-        return presenceWords.meta;
       case "relay":
         return "";
       case "pairing":
@@ -790,18 +767,6 @@
           place={item.cwd || item.machineId}
           status="attn"
         />
-      {:else if item.kind === "desk"}
-        {#if item.done}
-          <IconSuccess
-            aria-hidden="true"
-            class="size-icon-md text-status-done-ink"
-          />
-        {:else if onPhone()}
-          <!-- The device asked about: this phone, or this computer. -->
-          <IconPhone aria-hidden="true" class="size-icon-md" />
-        {:else}
-          <IconMonitor aria-hidden="true" class="size-icon-md" />
-        {/if}
       {:else if item.kind === "tailnet"}
         {#if item.done}
           <IconSuccess
@@ -1160,57 +1125,6 @@
           {@render dot()}
           <span class="flex-none num">{item.taskId}</span>
         </span>
-      {:else if item.kind === "desk" && !item.done}
-        <!-- Where it comes from, then Skip and Allow as peers (The Peer
-           Rule) on the same line while the row has the room (a desk's
-           panel), under it where it hasn't (a phone's): the ask keeps the
-           height of a permission row. Skip puts the row away in this
-           browser, the presence menu still offers it; Allow calls the
-           browser's own prompts on the press. A refusal stands over the
-           peers, naming each blocked setting and where to turn it on. -->
-        <div
-          data-slot="peers"
-          class="relative col-start-2 col-end-4 row-3 flex flex-wrap items-center justify-end gap-x-space-2 gap-y-space-2 coarse:gap-x-space-4"
-        >
-          <span
-            data-slot="meta"
-            class="pointer-events-none me-auto min-w-0 flex-none overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
-            >{meta}</span
-          >
-          {#if person.refusal}
-            <!-- Wrapped, never cut to one line: the setting's name and where
-               to turn it on are the whole point of it. -->
-            <p
-              data-slot="desk-refusal"
-              class="type-meta m-0 w-full text-pretty wrap-anywhere text-status-fail-ink"
-              role="alert"
-            >
-              {person.refusal.title}. {person.refusal.message}
-            </p>
-          {/if}
-          <span class="flex flex-none gap-space-2 coarse:gap-space-4">
-            <Button
-              data-skip
-              disabled={person.pending === "allow"}
-              label={presenceWords.skip}
-              onclick={skipHere}
-              size="sm"
-              variant="secondary"
-            />
-            {#if item.agent !== null || item.idle || item.notify}
-              <Button
-                data-allow
-                disabled={person.pending === "allow"}
-                label={presenceWords.allow}
-                onclick={() => allowHere("row")}
-                pending={person.pending === "allow"}
-                pendingLabel={presenceWords.allowing}
-                size="sm"
-                variant="secondary"
-              />
-            {/if}
-          </span>
-        </div>
       {:else}
         <NeedsMeta text={meta} />
       {/if}
