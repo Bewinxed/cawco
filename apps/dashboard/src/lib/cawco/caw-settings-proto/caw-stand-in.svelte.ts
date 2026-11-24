@@ -9,7 +9,10 @@
  * Caw-off tray goes through stop-work.svelte.ts, which asks the hub's route
  * (`PATCH /api/projects/:id/caw`) itself: that route is answered here too,
  * the page's `fetch` proxied for it alone while a stand-in stands, as the
- * session card's bench answers its move (limit-picker-bench).
+ * session card's bench answers its move (limit-picker-bench). As the hub
+ * does, it answers with what it stopped still running, and each stop
+ * arrives after as its own `project.stop`, a beat apart: stopped, or, its
+ * machine away, deferred to its return.
  *
  * The trigger settings answer as tsk-310 fixes the API (caw-settings.ts):
  * each kind's own layer, and what is in effect resolved project, then
@@ -30,6 +33,7 @@ import { conversationWords } from "@cawco/core/words/project-conversation";
 import { untrack } from "svelte";
 import { z } from "zod";
 import { flipCaw } from "#lib/cawco/project/CawLeadSwitch.svelte";
+import { takeProjectStop } from "#lib/cawco/stores/projects.svelte.js";
 import {
   type CawRunsAs,
   resolveKind,
@@ -203,7 +207,10 @@ export class StandInCaw {
     }
   }
 
-  #viewOf(on: boolean, stopped: string[] = []): ProjectConversationView {
+  /** What its stops have ended so far, as each `project.stop` said. */
+  readonly #stopped = new Set<string>();
+
+  #viewOf(on: boolean): ProjectConversationView {
     return {
       attemptsHearComments: true,
       harness: this.chat.harness,
@@ -215,7 +222,7 @@ export class StandInCaw {
       problem: null,
       proposesDecides: this.proposesDecides,
       running: this.#running()
-        ? RUNNING.filter((one) => !stopped.includes(one.id))
+        ? RUNNING.filter((one) => !this.#stopped.has(one.id))
         : [],
       spendUsd: 41.2,
       starting: false,
@@ -246,7 +253,34 @@ export class StandInCaw {
     if (refusal) {
       throw new Error(refusal);
     }
-    return this.#viewOf(body.on ?? this.on ?? true, body.initiated?.stop);
+    this.#confirm(body.initiated?.stop ?? []);
+    return this.#viewOf(body.on ?? this.on ?? true);
+  }
+
+  /**
+   * Each stop's end, a beat apart after the answer, as each machine
+   * confirms it: a session on a machine that is away is deferred to its
+   * return and runs on meanwhile.
+   */
+  #confirm(ids: string[]): void {
+    const beat = this.#waitMs / 4;
+    for (const [at, id] of ids.entries()) {
+      const away = RUNNING.find((one) => one.id === id)?.offline ?? false;
+      setTimeout(
+        () => {
+          if (!away) {
+            this.#stopped.add(id);
+          }
+          takeProjectStop({
+            kind: "project.stop",
+            projectId: this.projectId,
+            instanceId: id,
+            outcome: away ? "deferred" : "stopped",
+          });
+        },
+        beat * (at + 1)
+      );
+    }
   }
 
   /** The switch's ask (CawLead `configure`). */
