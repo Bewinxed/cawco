@@ -308,6 +308,7 @@
     if (inert) {
       return;
     }
+    pressedLabel = confirmLabel;
     if (phase === "list" && cut > 0) {
       // A double-click never carries through the arming morph into the stop.
       inert = true;
@@ -496,6 +497,26 @@
     phase === "stopping" ? `Stopping ${Math.max(left, 1)}…` : words.ending
   );
   const pending = $derived(phase === "stopping" || phase === "ending");
+  /** The confirm's words as pressed (an armed warning among them). */
+  let pressedLabel = $state<string | null>(null);
+  /**
+   * Every wording the confirm takes from here to its end, held in its
+   * cell (Button `words`): as wide as the widest from the start, and as
+   * the one pressed once it is, so nothing in the row moves as its words
+   * change ("Stop 3 and turn off", "Stopping 3…", "Caw is off").
+   */
+  const confirmWords = $derived([
+    words.ended,
+    commonWords.tryAgain,
+    ...(pressedLabel !== null && !choosing ? [pressedLabel] : []),
+  ]);
+  /** Every wording in Cancel's place, held the same way. */
+  const cancelWords = $derived([
+    projectEndWords.cancel,
+    words.keep,
+    picks ? cawOffWords.close : words.keep,
+    projectEndWords.close,
+  ]);
   /**
    * The button in Cancel's place says what it does: before the press it
    * drops the ask; while the stops land or after a refusal it ends the
@@ -869,12 +890,15 @@
   >
     <!-- One column as wide as the tile, never its rows' widest title: a
          row truncates inside it rather than pushing the confirm out. In a
-         card the card is its surface. Its height tweens to each state's. -->
+         card the card is its surface. Its height tweens to each state's.
+         A flex column, as the list in it is: what folds out of one gives
+         its gap back with it (motion/fold `unfold`), which a grid's gap,
+         a track of its own, never lets go of. -->
     <div
       bind:this={tile}
       data-slot="tile"
       class={[
-        "grid grid-cols-1 gap-space-3",
+        "flex flex-col gap-space-3",
         look === "section" &&
           "rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised",
       ]}
@@ -920,7 +944,7 @@
         <div
           data-slot="list"
           class={[
-            "grid min-w-0 grid-cols-1 gap-space-1",
+            "flex min-w-0 flex-col gap-space-1",
             look === "card" && "-mx-(--row-compact-gap)",
           ]}
           in:unfold
@@ -990,15 +1014,24 @@
            from here, from the title's own start. -->
       <RowFault end="0" indent="0" reason={job.refusal} />
       <div data-slot="actions" class="flex flex-wrap justify-end gap-space-2">
-        {#if cancelLabel !== null}
+        <!-- While the end itself runs nothing can call it back: it fades
+             where it stands, holding its place, and Close fades in there. -->
+        <span
+          class={[
+            "inline-flex transition-[opacity] duration-(--duration-control) ease-out",
+            cancelLabel === null && "pointer-events-none opacity-0",
+          ]}
+          inert={cancelLabel === null}
+        >
           <Button
             data-stop-cancel
-            label={cancelLabel}
+            label={cancelLabel ?? words.keep}
             onclick={cancelPress}
             size="sm"
             variant="ghost"
+            words={cancelWords}
           />
-        {/if}
+        </span>
         <Button
           arrivals={landed}
           data-stop-confirm
@@ -1011,6 +1044,7 @@
           {progress}
           size="sm"
           variant={confirmLook}
+          words={confirmWords}
         />
       </div>
     </div>

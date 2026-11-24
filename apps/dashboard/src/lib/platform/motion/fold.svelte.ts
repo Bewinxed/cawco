@@ -39,8 +39,13 @@ const running = new WeakMap<HTMLElement, Animation>();
  */
 export const folding = new Set<HTMLElement>();
 export const foldStarts = new Set<(node: HTMLElement) => void>();
-/** Layouts whose gap an unfolding child brings with it. */
-const STACKS = /flex|grid/u;
+/**
+ * Layouts whose gap an unfolding child brings with it: a flex column's,
+ * which a negative margin takes back. A grid's gap stands between its
+ * tracks whatever its items' margins, so a child leaving a grid leaves the
+ * gap behind until it is gone; what folds in a stack stands in a flex one.
+ */
+const STACKS = /flex/u;
 
 /** The drawn height now, including a fold in flight. */
 const drawn = (node: HTMLElement) => node.getBoundingClientRect().height;
@@ -370,6 +375,9 @@ export function unfold(
     css: (t) =>
       [
         "overflow: hidden",
+        // A least height of its own (a row's) would hold it open to the
+        // end, and it would leave in one frame.
+        "min-height: 0px",
         `height: ${(t * height).toFixed(2)}px`,
         ...edges.map(
           ([edge, px]) => `${edge}: ${(t * Number(px)).toFixed(2)}px`

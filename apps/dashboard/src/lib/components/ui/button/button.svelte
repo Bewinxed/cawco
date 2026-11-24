@@ -247,6 +247,13 @@
       pending?: boolean;
       /** What the label says while pending ("Saving…"); unchanged if unset. */
       pendingLabel?: string;
+      /**
+       * Every wording `label` and `pendingLabel` take in the run this
+       * button starts (a stop tray's confirm: "Stop 3 and turn off",
+       * "Stopping 3…", "Caw is off"): it is as wide as the widest of them
+       * from the start, so its words change and nothing beside it moves.
+       */
+      words?: readonly string[];
       /** The work that just ended failed: no check. */
       failed?: boolean;
       /**
@@ -297,6 +304,7 @@
     icon,
     pending = false,
     pendingLabel,
+    words,
     failed = false,
     progress,
     arrivals,
@@ -366,6 +374,7 @@
       {pending}
       {pendingLabel}
       {progress}
+      {words}
     />
   {/if}
 {/snippet}

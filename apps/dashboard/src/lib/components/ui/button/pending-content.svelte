@@ -52,7 +52,12 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconTick } from "#lib/icons.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
-  import { CURVE, dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import {
+    CURVE,
+    crossIn,
+    dur,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
 
   let {
@@ -64,6 +69,7 @@
     reason = null,
     progress,
     arrivals,
+    words = [],
   }: {
     label?: string;
     /** The icon in the slot at rest. */
@@ -82,6 +88,12 @@
     progress?: number;
     /** Drawn in the slot over its icon: what lands there. */
     arrivals?: Snippet;
+    /**
+     * Every wording the label takes in the run (Button `words`): each
+     * stands unseen in the label's cell, so the cell is as wide as the
+     * widest of them and the button never changes width as its words do.
+     */
+    words?: readonly string[];
   } = $props();
 
   const failed = $derived(failedFlag || Boolean(reason));
@@ -132,6 +144,14 @@
    */
   let restWidth = $state(0);
   let pendingWidth = $state(0);
+  /** The label's cell: the widest of its wordings, `words` among them. */
+  let cellWidth = $state(0);
+  const measureCell = frameSize(
+    (node: HTMLElement) => node.getBoundingClientRect().width,
+    (value) => {
+      cellWidth = value;
+    }
+  );
   const measureRest = frameSize(
     (node: HTMLElement) => node.getBoundingClientRect().width,
     (value) => {
@@ -145,16 +165,19 @@
     }
   );
   const slack = $derived(
-    (Math.max(restWidth, pendingWidth) - (pending ? pendingWidth : restWidth)) /
+    (Math.max(cellWidth, restWidth, pendingWidth) -
+      (pending && swapsLabel ? pendingWidth : restWidth)) /
       2
   );
+  /** The cell holds more than the wording drawn: the slot stands beside that one. */
+  const holds = $derived(swapsLabel || words.length > 0);
   /**
    * The slot moves only once both wordings were measured: the first
    * measure places it, it does not slide there as the button mounts.
    */
   let placed = $state(false);
   $effect(() => {
-    if (placed || restWidth === 0 || pendingWidth === 0) {
+    if (placed || restWidth === 0 || (swapsLabel && pendingWidth === 0)) {
       return;
     }
     const frame = requestAnimationFrame(() => {
@@ -224,13 +247,23 @@
   });
 </script>
 
+<!-- Each wording of the run, unseen in the label's cell: it is as wide as
+     the widest. -->
+{#snippet held()}
+  {#each new Set(words) as word (word)}
+    <span aria-hidden="true" class="invisible col-start-1 row-start-1"
+      >{word}</span
+    >
+  {/each}
+{/snippet}
+
 <!-- The icon slot: its icon at rest, the spinner while its work runs, the
      check when it is done, cross-fading in one cell over --duration-morph, the
      clock its label crosses on. With no icon at rest it stays folded for
      good (no width and no gap) and draws what it shows over its label's
      start while the label fades, so its width never changes. -->
 <span
-  style:--btn-words-slack={swapsLabel && Icon ? `${slack}px` : undefined}
+  style:--btn-words-slack={holds && Icon ? `${slack}px` : undefined}
   data-slot="btn-slot"
   class="icon-swap w-(--btn-icon) flex-none [--icon-swap-dur:var(--duration-morph)] translate-x-(--btn-words-slack,0) rtl:-translate-x-(--btn-words-slack,0) data-placed:transition-[translate] data-placed:duration-(--duration-morph) data-placed:ease-out motion-reduce:transition-off data-over:-me-(--btn-gap) data-over:w-0 data-over:items-center data-over:justify-items-start"
   data-over={Icon === undefined || undefined}
@@ -309,8 +342,11 @@
         >
       {:else if swapsLabel}
         <!-- The wording that steps out fades as the other fades in, in one cell (DESIGN.md, Buttons: Pending). -->
-        <span class="inline-grid justify-items-center" data-slot="words"
-          ><span
+        <span
+          {@attach measureCell}
+          class="inline-grid justify-items-center"
+          data-slot="words"
+          >{@render held()}<span
             {@attach measureRest}
             aria-hidden={pending || undefined}
             class="col-start-1 row-start-1 transition-[opacity] duration-(--duration-morph) ease-out active-false:opacity-0"
@@ -328,6 +364,22 @@
             class="num col-start-1 row-start-1 transition-[opacity] duration-(--duration-morph) ease-out active-false:opacity-0"
             data-active={pending}>{pendingLabel}</span
           ></span
+        >
+      {:else if words.length > 0}
+        <!-- Its words change in a cell as wide as the widest it takes,
+             the new over the old where they stand (crossIn), centred in
+             it: morphed, the text's box took the wider words' size at once
+             and the old letters jumped half the difference. -->
+        <span
+          {@attach measureCell}
+          class="inline-grid justify-items-center"
+          data-slot="words"
+          >{@render held()}{#key label}<span
+              {@attach measureRest}
+              class="col-start-1 row-start-1"
+              in:crossIn
+              out:crossIn>{label}</span
+            >{/key}</span
         >
       {:else}
         <MorphText text={label} />
