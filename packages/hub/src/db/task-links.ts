@@ -153,7 +153,7 @@ export const viaOf = (row: ExternalCommentRow): ExternalComment => ({
   author: row.author,
   at: row.at,
   editedAt: row.editedAt,
-  direction: row.direction,
+  direction: "in",
 });
 
 /** The record first, then the order the rows were made in. */

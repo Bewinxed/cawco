@@ -30,6 +30,14 @@
  *      else on the item.
  *   So a new issue on a synced repository is one task before any route or
  *   trigger sees its event.
+ * - **CawCo's own.** Before an item's events and revisions run, every write
+ *   CawCo has under way to its container is recorded (writes.ts
+ *   `settled`), and each event is marked `ours` when the write ledger names
+ *   it CawCo's (db/writes.ts `originOf`): an item CawCo made for one of the
+ *   project's tasks is linked to that task first (links.ts `adopt`), so no
+ *   second task is filed for it; a comment CawCo posted is never filed as
+ *   someone else's; and an event CawCo's own write caused raises no
+ *   trigger, while routes still match it.
  * - **Run again after a stop.** Each event is marked `processed_at` once
  *   its subscribers ran to the end, and each mirror row `synced_version`
  *   once the sync took it in; what a stopped hub, or a step that stopped
@@ -53,7 +61,7 @@ import type {
 import type { DbShape } from "./db";
 import type { ItemRow } from "./db/external-items";
 import type { InboundEventRow } from "./db/ingress";
-import type { InboundVia } from "./db/stored-types";
+import type { InboundOrigin, InboundVia } from "./db/stored-types";
 import { type InboundEvent, storedEvent } from "./inbound-event";
 import { PAYLOAD_MAX } from "./ingress-views";
 import { type AnyProblem, isProblem } from "./refusal";
@@ -141,6 +149,8 @@ export interface Routing {
   held: boolean;
   /** A merged pull request moved its task: no trigger. */
   lifecycle: boolean;
+  /** CawCo's own write caused it (the write ledger says so, db/writes.ts): routes match it, and it raises no trigger. */
+  ours: boolean;
   /** The item is an issue on the project's syncing watch: the sync took its revision in. */
   synced: boolean;
   /** The task the event is about; null when none links its item. */
@@ -156,6 +166,8 @@ export interface Synced {
 
 /** The subscribers that run for what the door stored, in order (provider spec §2.5). */
 export interface IntakeSubscribers {
+  /** An item CawCo made for one of the project's tasks, linked to it before anything else reads it (links.ts `adopt`). */
+  readonly adopt: (projectId: string, item: ItemRow) => Promise<void>;
   /** A merged pull request an attempt opened moves its task: the task, when it is this project's. */
   readonly lifecycle: (arrived: Arrived) => Promise<string | undefined>;
   /** The thread task of the event's item, its comment filed there (links.ts `onEvent`); the task's refusal of the comment. */
@@ -190,10 +202,14 @@ export interface IntakeSubscribers {
 }
 
 export interface IntakeDeps {
-  readonly db: Pick<DbShape, "ingress" | "intake">;
+  readonly db: Pick<DbShape, "ingress" | "intake" | "writes">;
   /** An event landed for a project, stored once: its starters are asked again (project-starters.ts). */
   readonly eventLanded: (projectId: string) => void;
   readonly subscribers: IntakeSubscribers;
+  /** The write door: what CawCo writes to a container is recorded before the door reads that container's events (writes.ts `settled`). */
+  readonly writes: {
+    readonly settled: (host: string, container: string) => Promise<void>;
+  };
 }
 
 /** What one project's run of the subscribers takes: events, edited comments, revisions and rows to sync, moved items and board reads. */
@@ -211,7 +227,12 @@ interface Batch {
 const wordsOf = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
-export const createIntake = ({ db, eventLanded, subscribers }: IntakeDeps) => {
+export const createIntake = ({
+  db,
+  eventLanded,
+  subscribers,
+  writes,
+}: IntakeDeps) => {
   /** Each project's turn: what came through the door, and the sync's own work, run one at a time. */
   const turns = makeKeyedLock<string>();
   /** The projects whose queued batch carries what they left to run: one read's several takes carry it once. */
@@ -233,6 +254,7 @@ export const createIntake = ({ db, eventLanded, subscribers }: IntakeDeps) => {
     }
     batch.unsynced.delete(itemId);
     const said = `[intake] ${due.item.provider} ${due.item.ref}`;
+    await settledOwn(projectId, due.item);
     const synced = await subscribers.sync.revision(
       projectId,
       due.item,
@@ -248,6 +270,46 @@ export const createIntake = ({ db, eventLanded, subscribers }: IntakeDeps) => {
       );
     }
     return synced;
+  };
+
+  /**
+   * What CawCo writes to the item's container recorded first (a session's
+   * issue a webhook brings back at once), then an item it made for one of
+   * the project's tasks linked to that task: so nothing after reads CawCo's
+   * own as someone else's, and no second task is filed for it.
+   */
+  const settledOwn = async (
+    projectId: string,
+    item: ItemRow | undefined
+  ): Promise<void> => {
+    if (!item || item.provider === "connection") {
+      return;
+    }
+    await writes.settled(item.host, item.container);
+    await subscribers.adopt(projectId, item);
+  };
+
+  /**
+   * Who caused a stored event, as the write ledger says once CawCo's writes
+   * to its item's container are recorded: one recorded since the event was
+   * stored is CawCo's own all the same. Kept on the event.
+   */
+  const originNow = async (
+    row: InboundEventRow,
+    event: InboundEvent
+  ): Promise<InboundOrigin> => {
+    const item = row.itemId ? db.intake.item(row.itemId) : undefined;
+    await settledOwn(row.projectId, item);
+    const origin = db.writes.origin({
+      item: item ?? null,
+      kind: event.kind,
+      at: event.at,
+      ...(event.comment ? { comment: event.comment } : {}),
+    });
+    if (origin !== row.origin) {
+      db.ingress.setEvent(row.id, { origin });
+    }
+    return origin;
   };
 
   /** Steps 1 and 2 for one stored event: its thread task, and what the sync did with its item; undefined when either stopped short (the event stays unprocessed). */
@@ -290,7 +352,9 @@ export const createIntake = ({ db, eventLanded, subscribers }: IntakeDeps) => {
     }
     const said = `[intake] ${row.source} ${row.deliveryKey}`;
     const event = storedEvent(row);
-    const arrived: Arrived = { event, row };
+    const origin = await originNow(row, event);
+    const ours = origin === "ours";
+    const arrived: Arrived = { event, row: { ...row, origin } };
     const before = await linkAndSync(batch, arrived, said);
     if (before === undefined) {
       return;
@@ -308,14 +372,17 @@ export const createIntake = ({ db, eventLanded, subscribers }: IntakeDeps) => {
     if (taskId !== row.taskId) {
       db.ingress.setEvent(row.id, { taskId });
     }
-    const held = await subscribers.outsiders(arrived, taskId, syncs);
+    // CawCo's own write is no outsider's.
+    const held = ours
+      ? false
+      : await subscribers.outsiders(arrived, taskId, syncs);
     if (held) {
       console.log(`${said}: outsiders, held for the person`);
     }
     const fresh = db.ingress.event(row.id) ?? row;
     await subscribers.route(
       { event, row: { ...fresh, taskId } },
-      { taskId, lifecycle: moved !== undefined, synced: syncs, held }
+      { taskId, lifecycle: moved !== undefined, synced: syncs, held, ours }
     );
     console.log(`${said}: routing done`);
     db.ingress.setEvent(row.id, { processedAt: new Date() });

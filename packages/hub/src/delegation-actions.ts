@@ -13,7 +13,7 @@
 import { readWithin } from "@cawco/core/bounded";
 import type { AddressedControl } from "@cawco/core/control-table";
 import type { DelegateType, MayStart } from "@cawco/core/delegate-types";
-import type { ForgeWrite } from "@cawco/core/forge-post";
+import type { MachineWriteOp } from "@cawco/core/forge-post";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
   type PermissionMode,
@@ -936,12 +936,12 @@ export interface HandoffActions {
   ) => ReturnType<WorkItemCalls["finishItem"]>;
   /**
    * One write on a repository's forge, made on this session's machine with
-   * its own sign-in there (forge-posts.ts). Answers what came of it, in
-   * words.
+   * its own sign-in there, through the write door (writes.ts). Answers what
+   * came of it, in words.
    */
   readonly forgePost: (ask: {
+    op: MachineWriteOp;
     repo?: string;
-    write: ForgeWrite;
   }) => ReturnType<SessionCalls["forgePost"]>;
   readonly generateImage: (
     request: ImageGenerationRequest

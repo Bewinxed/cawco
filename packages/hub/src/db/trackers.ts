@@ -145,7 +145,7 @@ const syncingOf = (tx: Writer, projectId: string): WatchRow | undefined =>
  */
 export interface TrackerSynced {
   description: string;
-  /** A set, sorted as tracker-adapter.ts `labelSet` sorts it. */
+  /** A set, sorted as sync.ts `labelSet` sorts it. */
   labels: string[];
   /** The stage the task stood in when they agreed. */
   stage: string;

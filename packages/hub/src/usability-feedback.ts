@@ -6,7 +6,10 @@
  *
  * It is on while the person allowed it (`supervisor_config`, asked once in
  * the dashboard) and a machine of the fleet signs in to GitHub, whose
- * sign-in files it (agent forges/forge.ts, `forge_post`'s path). Off, no
+ * sign-in files it, through the write door (writes.ts `issueOnce`), which
+ * records it: the issue comes back on a synced repository as a task like
+ * any outsider's, and a later report's comment comes back as CawCo's own.
+ * Off, no
  * session is listed the tool, no refusal names it (delegation-mcp.ts), and
  * no machine's DevTools gate does (the `policy` item's `usabilityFeedback`).
  *
@@ -22,7 +25,6 @@
  * with, whatever lists, counts and ids the agent's copy of its words holds.
  */
 
-import type { ForgeAsk } from "@cawco/core/forge-post";
 import { makeKeyedLock } from "@cawco/core/keyed-lock";
 import type { InstanceRow } from "@cawco/core/protocol";
 import {
@@ -44,11 +46,12 @@ import {
   usabilityFeedbackWords as words,
 } from "@cawco/core/words/usability-feedback";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { Effect, Result } from "effect";
 import { problem } from "elysia";
 import { z } from "zod";
-import type { ForgeCall } from "./forge-posts";
 import { awayProblem } from "./machine-answers";
 import { defineTool, refusalCode, withoutRefusalCode } from "./mcp-tool";
+import type { Writes } from "./writes";
 
 /** What a report came to: a new issue, or a comment on the one already open. */
 interface Filed {
@@ -61,8 +64,6 @@ export interface UsabilityFeedbackDeps {
   readonly changed: (on: boolean) => void;
   /** The person's answer (`supervisor_config.usability_feedback`). */
   readonly consent: () => FeedbackConsent;
-  /** Has `machineId` make the write with its own sign-in (agent `CONTROL_FORGE_POST`). */
-  readonly forge: (machineId: string, ask: ForgeAsk) => Promise<ForgeCall>;
   /** The hosts `machineId`'s gh signs in to (agent `CONTROL_GH_ACCOUNTS`); undefined when it did not answer. */
   readonly ghHosts: (
     machineId: string
@@ -75,6 +76,8 @@ export interface UsabilityFeedbackDeps {
   readonly privateKnown: (actor: InstanceRow) => PrivateKnown;
   /** The repository issues go to, `host/owner/repo` (config.ts `FEEDBACK_REPO_AT`). */
   readonly repo: string;
+  /** The write door: a report is filed on a machine with its own sign-in (writes.ts `issueOnce`). */
+  readonly writes: Pick<Writes, "issueOnce">;
 }
 
 /** The tool's definition: its `tool` is one of `names`, CawCo's own tools. */
@@ -228,43 +231,48 @@ export const createUsabilityFeedback = (deps: UsabilityFeedbackDeps) => {
       report.tool,
       refusalIdentity(report.got, heard)
     );
-    const called = await byFingerprint.run(fingerprint, () =>
-      deps.forge(sender, {
-        repo: deps.repo,
-        write: {
-          op: "issue_once",
-          title: feedbackTitle(report),
-          body: feedbackBody(report, fingerprint),
-          marker: feedbackMarker(fingerprint),
-          search: fingerprint,
-        },
-      })
+    const outcome = await byFingerprint.run(fingerprint, () =>
+      Effect.runPromise(
+        Effect.result(
+          deps.writes.issueOnce({
+            by: "hub",
+            projectId: null,
+            target: { machine: sender, repo: deps.repo },
+            title: feedbackTitle(report),
+            body: feedbackBody(report, fingerprint),
+            marker: feedbackMarker(fingerprint),
+            search: fingerprint,
+          })
+        )
+      )
     );
-    if (called.kind === "failed") {
+    if (Result.isFailure(outcome)) {
+      const { failure } = outcome;
+      if (failure.reason === "machine") {
+        // A sign-in gone since it was read: read again, so the tool goes
+        // from the lists when no machine has one.
+        await readMachine(sender);
+        return problem(422, {
+          code: "feedback-not-filed",
+          detail: words.failed(failure.words),
+        });
+      }
       return problem(502, {
         code: "feedback-not-filed",
-        detail: words.failed(called.why),
+        detail: words.failed(failure.words),
       });
     }
-    const { verdict } = called;
-    if (verdict.kind === "refused") {
-      // A sign-in gone since it was read: read again, so the tool goes
-      // from the lists when no machine has one.
-      await readMachine(sender);
-      return problem(422, {
-        code: "feedback-not-filed",
-        detail: words.failed(verdict.why),
-      });
-    }
-    if (!(verdict.made.ok && verdict.made.url)) {
+    const made = outcome.success;
+    const url = made.comment?.url ?? made.item?.url;
+    if (!url) {
       return problem(502, {
         code: "feedback-not-filed",
-        detail: words.failed(verdict.made.said),
+        detail: words.failed("the forge named no issue it filed."),
       });
     }
     const filed: Filed = {
-      kind: verdict.made.existing ? "commented" : "opened",
-      url: verdict.made.url,
+      kind: made.existing ? "commented" : "opened",
+      url,
     };
     console.info(
       `[feedback] ${actor.id}'s report on ${report.tool} ${filed.kind === "opened" ? "opened" : "commented on"} ${filed.url}`

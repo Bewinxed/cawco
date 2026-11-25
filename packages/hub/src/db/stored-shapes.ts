@@ -65,7 +65,6 @@ import type {
   ArtifactChangeBy as ArtifactChangeByType,
   AttemptAsk as AttemptAskType,
   CacheTtl as CacheTtlType,
-  CommentDirection as CommentDirectionType,
   CompactionMoveBody as CompactionMoveBodyType,
   ContinueRequest as ContinueRequestType,
   DelegateRequestKind as DelegateRequestKindType,
@@ -73,6 +72,7 @@ import type {
   DesignFinding as DesignFindingType,
   DesignOfferAnswer as DesignOfferAnswerType,
   DesignProposalFile as DesignProposalFileType,
+  ExternalWriteKind as ExternalWriteKindType,
   FolderMoveState as FolderMoveStateType,
   InboundOrigin as InboundOriginType,
   InboundVia as InboundViaType,
@@ -261,15 +261,6 @@ const CacheTtlShape = declared(
 export const CacheTtlSchema: z.ZodType<CacheTtlType> = CacheTtlShape;
 export type CacheTtlOutput = z.output<typeof CacheTtlShape>;
 
-const CommentDirectionShape = declared(
-  z.enum(["in", "out"]),
-  "CommentDirection",
-  "packages/hub/src/db/stored-types.ts"
-);
-export const CommentDirectionSchema: z.ZodType<CommentDirectionType> =
-  CommentDirectionShape;
-export type CommentDirectionOutput = z.output<typeof CommentDirectionShape>;
-
 const CompactionMoveBodyShape = declared(
   AccountMoveSchema.options[0]
     .omit({
@@ -385,6 +376,15 @@ const DesignProposalFileShape = declared(
 export const DesignProposalFileSchema: z.ZodType<DesignProposalFileType> =
   DesignProposalFileShape;
 export type DesignProposalFileOutput = z.output<typeof DesignProposalFileShape>;
+
+const ExternalWriteKindShape = declared(
+  z.enum(["issue", "pr", "comment", "update", "repo"]),
+  "ExternalWriteKind",
+  "packages/hub/src/db/stored-types.ts"
+);
+export const ExternalWriteKindSchema: z.ZodType<ExternalWriteKindType> =
+  ExternalWriteKindShape;
+export type ExternalWriteKindOutput = z.output<typeof ExternalWriteKindShape>;
 
 const FolderMovePlaceShape = declared(
   z.object({

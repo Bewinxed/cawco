@@ -82,7 +82,6 @@ typeOverrides:
     ErrorSaidKind: OpenEnums.ErrorSaidKind
     Exclude: OpenEnums.Exclude
     ExternalActorKind: OpenEnums.ExternalActorKind
-    ExternalCommentDirection: OpenEnums.ExternalCommentDirection
     ExternalRefState: OpenEnums.ExternalRefState
     FindConversationOutcome: OpenEnums.FindConversationOutcome
     FindConversationRole: OpenEnums.FindConversationRole
@@ -102,7 +101,6 @@ typeOverrides:
     FsEntryKind: OpenEnums.FsEntryKind
     GetApiAccountsPlacement200Strategy: OpenEnums.GetApiAccountsPlacement200Strategy
     GetApiRulesByIdActivity200Status: OpenEnums.GetApiRulesByIdActivity200Status
-    GhRepoOwnerKind: OpenEnums.GhRepoOwnerKind
     HarnessBlockType: OpenEnums.HarnessBlockType
     HarnessConfigKind: OpenEnums.HarnessConfigKind
     HarnessKind: OpenEnums.HarnessKind
@@ -226,6 +224,7 @@ typeOverrides:
     StarterSourceKind: OpenEnums.StarterSourceKind
     StreamRelayState: OpenEnums.StreamRelayState
     SweepStep: OpenEnums.SweepStep
+    SyncTargetKind: OpenEnums.SyncTargetKind
     TailnetHttpsState: OpenEnums.TailnetHttpsState
     TailnetHttpsStep: OpenEnums.TailnetHttpsStep
     TaskCommentAuthorMover: OpenEnums.TaskCommentAuthorMover

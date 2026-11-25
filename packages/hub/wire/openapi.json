@@ -42912,8 +42912,11 @@
             "$ref": "#/components/schemas/ExternalActor"
           },
           "direction": {
-            "$ref": "#/components/schemas/ExternalCommentDirection",
-            "description": "`in`: written on the source, added to the task; `out`: written on the task, posted to the source."
+            "description": "Written on the source and carried onto the task: every one is. What\nCawCo posts is the write ledger's (hub writes.ts); the field stays for\nthe clients that read it.",
+            "type": "string",
+            "enum": [
+              "in"
+            ]
           },
           "editedAt": {
             "description": "The source's last edit of it, ms epoch; null when never edited.",
@@ -42938,13 +42941,6 @@
           "externalId",
           "source",
           "url"
-        ]
-      },
-      "ExternalCommentDirection": {
-        "type": "string",
-        "enum": [
-          "in",
-          "out"
         ]
       },
       "ExternalRef": {
@@ -46522,74 +46518,6 @@
         "enum": [
           "armed",
           "pending"
-        ]
-      },
-      "GhRepo": {
-        "description": "One GitHub repository a machine's gh sees, as GitHub's `GET /user/repos`\nlists it (`full_name`, `owner`, `clone_url`, `ssh_url`,\n`updated_at`, `description`, `private`), named as `gh repo list --json` names the same\nfields.",
-        "type": "object",
-        "properties": {
-          "description": {
-            "description": "None when the repository has no description.",
-            "type": "string"
-          },
-          "isPrivate": {
-            "type": "boolean"
-          },
-          "nameWithOwner": {
-            "description": "`owner/name`.",
-            "type": "string"
-          },
-          "owner": {
-            "$ref": "#/components/schemas/GhRepoOwner",
-            "description": "Who owns it: GitHub's `owner.login`, `owner.avatar_url`, and `owner.type` (\"Organization\" an `org`, any other a `user`)."
-          },
-          "sshUrl": {
-            "description": "`git@github.com:owner/name.git`.",
-            "type": "string"
-          },
-          "updatedAt": {
-            "description": "ISO 8601, when GitHub last updated the repository.",
-            "type": "string"
-          },
-          "url": {
-            "description": "`https://github.com/owner/name.git`: what the clone takes.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "isPrivate",
-          "nameWithOwner",
-          "owner",
-          "sshUrl",
-          "updatedAt",
-          "url"
-        ]
-      },
-      "GhRepoOwner": {
-        "description": "A {@link GhRepo}'s owner: a person's account or an organization.",
-        "type": "object",
-        "properties": {
-          "avatarUrl": {
-            "type": "string"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/GhRepoOwnerKind"
-          },
-          "login": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "avatarUrl",
-          "kind",
-          "login"
-        ]
-      },
-      "GhRepoOwnerKind": {
-        "type": "string",
-        "enum": [
-          "org",
-          "user"
         ]
       },
       "GhSignIn": {
@@ -63241,6 +63169,86 @@
           "probe"
         ]
       },
+      "SyncTarget": {
+        "description": "A container a tracker binds to, as its choice lists it.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "GitHub: `owner/repo`; Linear: the team's id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "`owner/repo`, or `ENG · Engineering`.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "GitHub: the repository as a repository picker draws it (hub core `GhRepo`).",
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "isPrivate": {
+                "type": "boolean"
+              },
+              "nameWithOwner": {
+                "type": "string"
+              },
+              "owner": {
+                "type": "object",
+                "properties": {
+                  "avatarUrl": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "$ref": "#/components/schemas/SyncTargetKind"
+                  },
+                  "login": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "avatarUrl",
+                  "kind",
+                  "login"
+                ]
+              },
+              "sshUrl": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "isPrivate",
+              "nameWithOwner",
+              "owner",
+              "sshUrl",
+              "updatedAt",
+              "url"
+            ]
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "url"
+        ]
+      },
+      "SyncTargetKind": {
+        "type": "string",
+        "enum": [
+          "org",
+          "user"
+        ]
+      },
       "T": {
         "type": "object"
       },
@@ -65513,32 +65521,6 @@
           "refused",
           "synced",
           "syncing"
-        ]
-      },
-      "TrackerTarget": {
-        "description": "A target a connection reaches, offered when a project is bound: a repository, or a team.",
-        "type": "object",
-        "properties": {
-          "id": {
-            "description": "GitHub: `owner/repo`; Linear: the team's id.",
-            "type": "string"
-          },
-          "name": {
-            "description": "`owner/repo`, or `ENG · Engineering`.",
-            "type": "string"
-          },
-          "repo": {
-            "$ref": "#/components/schemas/GhRepo",
-            "description": "GitHub: the repository as a repository picker draws it (its owner, description, when it was updated); absent for a Linear team."
-          },
-          "url": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "url"
         ]
       },
       "TrackerView": {
@@ -88823,223 +88805,7 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "tracker-github-issue-unknown"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "tracker-input"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-linear-comment-not-taken"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-linear-issue-not-changed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-linear-issue-not-made"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-linear-label-unknown"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-linear-no-data"
                 ]
               },
               "detail": {
@@ -89104,42 +88870,6 @@
               "code",
               "detail",
               "resumeAt",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-repo-unfit"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
               "status",
               "title",
               "type"
@@ -89364,7 +89094,7 @@
           "targets": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/TrackerTarget"
+              "$ref": "#/components/schemas/SyncTarget"
             }
           }
         },
@@ -89453,223 +89183,7 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "tracker-github-issue-unknown"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "tracker-input"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-linear-comment-not-taken"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-linear-issue-not-changed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-linear-issue-not-made"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-linear-label-unknown"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-linear-no-data"
                 ]
               },
               "detail": {
@@ -89734,42 +89248,6 @@
               "code",
               "detail",
               "resumeAt",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-repo-unfit"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
               "status",
               "title",
               "type"
@@ -236236,42 +235714,6 @@
               "code": {
                 "type": "string",
                 "enum": [
-                  "tracker-github-issue-unknown"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
                   "tracker-github-project-unknown"
                 ]
               },
@@ -236345,186 +235787,6 @@
                 "type": "string",
                 "enum": [
                   "tracker-input"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-linear-comment-not-taken"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-linear-issue-not-changed"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-linear-issue-not-made"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-linear-label-unknown"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-linear-no-data"
                 ]
               },
               "detail": {
@@ -236661,42 +235923,6 @@
               "code",
               "detail",
               "resumeAt",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "enum": [
-                  "tracker-repo-unfit"
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  400
-                ]
-              },
-              "title": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "detail",
               "status",
               "title",
               "type"

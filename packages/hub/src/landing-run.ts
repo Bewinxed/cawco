@@ -1,10 +1,5 @@
 import { humanSize } from "@cawco/core/attachments";
 import type { CommandResult } from "@cawco/core/commands/controls";
-import {
-  CONTROL_FORGE_POST,
-  type ForgeVerdict,
-  type ForgeWrite,
-} from "@cawco/core/forge-post";
 import type { CheckoutMove, LandsMode } from "@cawco/core/injected";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
@@ -19,6 +14,7 @@ import {
   OUTPUTS_DIR,
   type WorkspaceConflict,
 } from "@cawco/core/workspace/controls";
+import { Effect, Result } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
@@ -64,6 +60,7 @@ import {
   type ScratchOutput,
   scratchOutputsOf,
 } from "./workspaces";
+import type { Writes } from "./writes";
 
 /** The line a parent's report carries about the item behind it. */
 export const reportLine = (item: WorkItemRow): string =>
@@ -469,6 +466,8 @@ export interface LandingsHub {
     projectId: string,
     taskId: string
   ) => string | undefined;
+  /** The write door: a landing's pull or merge request goes through it (writes.ts). */
+  readonly writes: Pick<Writes, "post">;
 }
 
 interface LandingRunDeps
@@ -511,6 +510,7 @@ export const createLandingRun = ({
   taskTitle,
   update,
   workspaces,
+  writes,
 }: LandingRunDeps) => {
   /**
    * Each landing this hub process runs, by item: aborted as its item ends
@@ -885,10 +885,10 @@ export const createLandingRun = ({
   };
   /**
    * Opens the pull or merge request for an item's pushed branch, or finds
-   * the open one: the workspace's machine makes it through the forge adapter
-   * of its origin's host with its own sign-in there (agent forges/,
-   * `CONTROL_FORGE_POST`). A forge that turns it down refuses the landing in
-   * its words.
+   * the open one, through the write door (writes.ts): the workspace's
+   * machine makes it on its origin's forge with its own sign-in there, and
+   * the door records it for the item's task. A forge that turns it down
+   * refuses the landing in its words.
    */
   const pullRequestFor = async (
     workspace: WorkspaceRow,
@@ -907,39 +907,41 @@ export const createLandingRun = ({
     const origin = (
       await runIn(workspace, item)("git remote get-url origin", GIT_TIMEOUT_MS)
     ).stdout.trim();
-    const write: ForgeWrite = {
-      op: "pull_request",
-      base,
-      head: branch,
-      title,
-      body: pullRequestBody(item, summary),
-    };
-    let verdict: ForgeVerdict;
-    try {
-      verdict = await call(workspace.machineId, CONTROL_FORGE_POST, [
-        { repo: origin, write },
-      ]);
-    } catch (error) {
-      verdict = {
-        kind: "refused",
-        why: error instanceof Error ? error.message : String(error),
-      };
-    }
-    const made =
-      verdict.kind === "made" ? verdict.made : { ok: false, said: verdict.why };
-    if (!(made.ok && made.url)) {
+    const outcome = await Effect.runPromise(
+      Effect.result(
+        writes.post({
+          by: { work: item.id },
+          target: { machine: workspace.machineId, repo: origin },
+          op: {
+            op: "change-request.open",
+            base,
+            head: branch,
+            title,
+            body: pullRequestBody(item, summary),
+          },
+          projectId: item.projectId ?? null,
+          taskId: item.taskId ?? null,
+        })
+      )
+    );
+    const made = Result.isSuccess(outcome) ? outcome.success : undefined;
+    const url = made?.item?.url;
+    if (!(made && url)) {
+      const said = Result.isFailure(outcome)
+        ? outcome.failure.words
+        : "the forge named no pull or merge request.";
       return {
         kind: "refused",
-        line: `Pushed to branch ${at}, but ${machine} did not open the pull or merge request. It said:${fenced(made.said)}\nOpen it by hand from ${branch} into ${base}, or start the task again once ${machine} can.`,
+        line: `Pushed to branch ${at}, but ${machine} did not open the pull or merge request. It said:${fenced(said)}\nOpen it by hand from ${branch} into ${base}, or start the task again once ${machine} can.`,
       };
     }
     return {
       kind: "done",
       landed,
-      prUrl: made.url,
+      prUrl: url,
       line: made.existing
-        ? `Pushed to branch ${at}, which updates its open pull or merge request: ${made.url}`
-        : `Pushed to branch ${at} and opened a pull or merge request against ${base}: ${made.url}`,
+        ? `Pushed to branch ${at}, which updates its open pull or merge request: ${url}`
+        : `Pushed to branch ${at} and opened a pull or merge request against ${base}: ${url}`,
     };
   };
   /**

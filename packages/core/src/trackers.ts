@@ -115,7 +115,7 @@ const sameName = (a: string, b: string): boolean =>
 /**
  * The Status option a stage puts its issue's Project item in: the option
  * named as the stage, ignoring case (the hub adds one for each stage as it
- * binds, hub tracker-github-project.ts `statusOptionsAdded`); null when it
+ * binds, providers github/writes.ts `board.columns`); null when it
  * has none, and Status is left alone.
  */
 export const statusOptionFor = (

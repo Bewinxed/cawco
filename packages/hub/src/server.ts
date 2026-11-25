@@ -475,7 +475,6 @@ import {
 import { FleetSync, warmHashes } from "./fleet-sync";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { createFolderMoves } from "./folder-moves";
-import { createForgePosts, type ForgeCall } from "./forge-posts";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import { handMoveOf } from "./hand-move";
 import { createHandedInputs } from "./handed-inputs";
@@ -846,6 +845,7 @@ import {
 } from "./work-items";
 import { createWorkspaceRetire } from "./workspace-retire";
 import { isHostFolder, outputsFolder, type Unlanded } from "./workspaces";
+import { createWrites, type MachineWriteCall } from "./writes";
 
 /** What an artifact's name keeps of a Diagram's statement name: lowercase letters, digits and dashes. */
 /**
@@ -1823,7 +1823,7 @@ export const createServer = (
     undoRemovedSignin: () => undoRemovedSignin,
     homeCredentialOf: () => homeCredentialOf,
     startMove: () => startMove,
-    forgePosts: () => forgePosts,
+    writes: () => writeDoor,
     usabilityFeedback: () => usabilityFeedback,
     cancelContinuation: () => cancelContinuation,
     continuationJob: () => continuationJob,
@@ -3129,7 +3129,7 @@ export const createServer = (
   const forgeCall = async (
     machineId: string,
     ask: ForgeAsk
-  ): Promise<ForgeCall> => {
+  ): Promise<MachineWriteCall> => {
     const answer = await callAgent(
       machineId,
       CONTROL_FORGE_POST,
@@ -3152,12 +3152,17 @@ export const createServer = (
           why: answer.value.error ?? "The machine refused the post.",
         };
   };
-  // A session's forge_post (forge-posts.ts): made on its machine with the
-  // machine's own sign-in.
-  const forgePosts = createForgePosts({
-    linksOf: (projectId) =>
-      (projectId ? db.project(projectId)?.links : undefined) ?? [],
-    call: forgeCall,
+  // The write door (writes.ts): every write CawCo makes to an outside
+  // service, recorded, so its own come back known; a session's on its
+  // machine with the machine's own sign-in, the hub's with a connection.
+  const writeDoor = createWrites({
+    clients: {
+      github: (connection) => connections.githubClient(connection),
+      linear: (connection) => connections.linearClient(connection),
+    },
+    db,
+    machine: forgeCall,
+    watch: (id) => db.ingress.polledWatch(id),
   });
   // An agent's usability feedback on a CawCo tool (usability-feedback.ts),
   // filed through a machine's GitHub sign-in while the person allows it.
@@ -3170,7 +3175,7 @@ export const createServer = (
       toolInputsChangedPort.now()();
       fleetChanged(`usability feedback turned ${on ? "on" : "off"}`);
     },
-    forge: forgeCall,
+    writes: writeDoor,
     online: () => onlineMachines(),
     ghHosts: async (machineId) => {
       const answer = await readAgent(
@@ -8628,6 +8633,8 @@ export const createServer = (
     },
     // What a landing reads of the hub (landing-run.ts `LandingsHub`).
     forLandings: {
+      // A landing's pull request goes through the write door (writes.ts).
+      writes: writeDoor,
       // What a pull request an attempt opens links back to and is titled by.
       sessionUrl: (instanceId) =>
         `${dashboardUrl(registry)}/session/${instanceId}`,
@@ -10893,6 +10900,23 @@ export const createServer = (
   const connections = createConnections({
     db: db.connections,
     lifetime,
+    // A session's write through a connection's tool, recorded as its own
+    // (writes.ts): for its project and its attempt's task.
+    wrote: (actor, answer) => {
+      const projectId = actor.projectId ?? null;
+      const item = actor.workItemId ? db.workItem(actor.workItemId) : undefined;
+      const recorded = writeDoor.recordAnswer({
+        projectId,
+        sessionId: actor.id,
+        taskId: item?.projectId === projectId ? (item?.taskId ?? null) : null,
+        text: answer,
+      });
+      if (recorded > 0) {
+        console.info(
+          `[writes] ${actor.id}'s connection call wrote ${recorded} item${recorded === 1 ? "" : "s"} or comment${recorded === 1 ? "" : "s"}, recorded`
+        );
+      }
+    },
     hubOrigin: hubHttpUrl,
     projectExists: (id) => Boolean(db.project(id)),
     areaExists: (id) => db.areas.get(id) !== undefined,
@@ -10996,6 +11020,7 @@ export const createServer = (
     pollNow: (projectId) => clock.pollSyncNow(projectId),
     tasks,
     turn: (projectId, work) => intake.turn(projectId, work),
+    writes: writeDoor,
   });
   // Outsiders (outsiders.ts): the words of someone an outside service does
   // not vouch for, held for the person or let through by the project's rule.
@@ -11008,6 +11033,7 @@ export const createServer = (
         lifecycle: false,
         synced: false,
         held: false,
+        ours: arrived.row.origin === "ours",
       }),
     tasks,
     turn: (projectId, work) => intake.turn(projectId, work),
@@ -11020,7 +11046,9 @@ export const createServer = (
     // An event from outside changes what the project's routines could take
     // (project-starters.ts).
     eventLanded: (projectId) => projectStarters.eventLanded(projectId),
+    writes: writeDoor,
     subscribers: {
+      adopt: (projectId, item) => links.adopt(projectId, item),
       links: (arrived) => links.onEvent(arrived),
       linksMoved: (projectId, items) => links.moved(projectId, items),
       // The tracker sync takes in what its watch's read stored (sync.ts).
@@ -11219,6 +11247,7 @@ export const createServer = (
       connections,
       db,
       places: placeRepos,
+      writes: writeDoor,
     }),
     triggers: triggerSettings,
     // Only a change the person's chat with Caw made is a line in it: any

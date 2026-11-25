@@ -1,6 +1,6 @@
+import { GITHUB_API_VERSION } from "@cawco/providers/github/client";
 import { AGENT_BUNDLE, AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
 import { CAWCO_ENV } from "./cawco-env";
-import { GITHUB_API_VERSION } from "./github-api";
 import { INSTALL_CODE_ENV } from "./install";
 import { INSTALL_STEP_PREFIX } from "./join";
 import { CAWCO_HUB_PORT, CAWCO_LOCAL_DASHBOARD_PORT } from "./ports";

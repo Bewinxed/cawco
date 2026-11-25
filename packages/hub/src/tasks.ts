@@ -1421,7 +1421,7 @@ const viewOf = (
             ...comment.via,
             author: kept.author.login ? kept.author : comment.via.author,
             editedAt: kept.editedAt,
-            direction: kept.direction,
+            direction: "in",
           },
         }
       : comment;

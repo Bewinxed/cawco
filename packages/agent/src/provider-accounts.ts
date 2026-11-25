@@ -34,7 +34,6 @@ import {
 } from "@cawco/core/accounts";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { makeFolder } from "@cawco/core/folders";
-import { GITHUB_API_VERSION_HEADER } from "@cawco/core/github-api";
 import { descriptorOf } from "@cawco/core/harness/kinds";
 import { sessionIdentityDir } from "@cawco/core/paths/cawco";
 import {
@@ -50,6 +49,7 @@ import {
 import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { GITHUB_API_VERSION_HEADER } from "@cawco/providers/github/client";
 import type {
   AuthOperationOptions,
   Credential,

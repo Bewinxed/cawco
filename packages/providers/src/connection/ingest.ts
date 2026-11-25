@@ -8,12 +8,15 @@
  * longer lists goes and its return is new again. A first call is a
  * baseline: it only looks.
  */
+import { Effect } from "effect";
 import type {
   Ingest,
   ItemRevision,
   MirroredRef,
+  Polled,
   SourceEvent,
 } from "../provider";
+import { refusedWith } from "../read-stop";
 import {
   CONNECTOR_MIN_S,
   connectionSource,
@@ -98,68 +101,71 @@ export const connectionIngest: Ingest<ToolCaller, ConnectorCursor> = {
       call.versionPath,
     ];
   },
-  poll: async ({ client, cursor, now, watch }) => {
+  // The call is the connection's (hub connections.ts `callConnection`),
+  // bounded there: it takes no deadline of the poll's.
+  poll: ({ client, cursor, now, watch }) => {
     const call = connectorCallOf(watch.settings);
-    try {
-      const items = itemsIn(await client(call.tool, call.args), call.itemsPath);
-      const source = connectionSource(watch.connection, call.tool);
-      const byId = new Map<string, { item: unknown; version: string }>();
-      for (const item of items) {
-        const id = keyPart(valueAt(item, call.idPath));
-        const version = keyPart(valueAt(item, call.versionPath));
-        if (id !== undefined && version !== undefined) {
-          byId.set(id, { item, version });
-        }
-      }
-      const revisions: ItemRevision[] = [];
-      const events: SourceEvent[] = [];
-      for (const [id, { item, version }] of byId) {
-        const ref = recordOf(watch.id, id);
-        revisions.push({
-          item: ref,
-          version,
-          snapshot: {
-            externalId: "",
-            title: "",
-            state: null,
-            stateName: "",
-            author: null,
-            labels: [],
-            data: item,
-          },
-        });
-        events.push({
-          item: ref,
-          change: true,
-          source,
-          key: `${id}:${version}`,
-          kind: "item",
-          actor: null,
-          labels: [],
-          branch: null,
-          url: null,
-          title: null,
-          body: null,
-          at: now,
-          data: item,
-        });
-      }
-      return {
-        kind: "read",
-        baseline: cursor === null,
-        cursor: {},
-        ingested: { revisions, events, whole: { container: watch.id } },
-      };
-    } catch (error) {
+    const refused = (error: unknown) => {
       const said = `${watch.connection}/${call.tool}: ${error instanceof Error ? error.message : String(error)}`;
-      return {
-        kind: "stopped",
-        problem: {
-          words:
-            said.length > MOST_REASON ? `${said.slice(0, MOST_REASON)}…` : said,
-          resumeAt: null,
-        },
-      };
-    }
+      return refusedWith(
+        said.length > MOST_REASON ? `${said.slice(0, MOST_REASON)}…` : said
+      );
+    };
+    return Effect.tryPromise({
+      try: async () =>
+        itemsIn(await client(call.tool, call.args), call.itemsPath),
+      catch: refused,
+    }).pipe(
+      Effect.map((items): Polled<ConnectorCursor> => {
+        const source = connectionSource(watch.connection, call.tool);
+        const byId = new Map<string, { item: unknown; version: string }>();
+        for (const item of items) {
+          const id = keyPart(valueAt(item, call.idPath));
+          const version = keyPart(valueAt(item, call.versionPath));
+          if (id !== undefined && version !== undefined) {
+            byId.set(id, { item, version });
+          }
+        }
+        const revisions: ItemRevision[] = [];
+        const events: SourceEvent[] = [];
+        for (const [id, { item, version }] of byId) {
+          const ref = recordOf(watch.id, id);
+          revisions.push({
+            item: ref,
+            version,
+            snapshot: {
+              externalId: "",
+              title: "",
+              state: null,
+              stateName: "",
+              author: null,
+              labels: [],
+              data: item,
+            },
+          });
+          events.push({
+            item: ref,
+            change: true,
+            source,
+            key: `${id}:${version}`,
+            kind: "item",
+            actor: null,
+            labels: [],
+            branch: null,
+            url: null,
+            title: null,
+            body: null,
+            at: now,
+            data: item,
+          });
+        }
+        return {
+          kind: "read",
+          baseline: cursor === null,
+          cursor: {},
+          ingested: { revisions, events, whole: { container: watch.id } },
+        };
+      })
+    );
   },
 };

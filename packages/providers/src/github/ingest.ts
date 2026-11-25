@@ -59,27 +59,8 @@
  */
 
 import type { Octokit } from "@octokit/rest";
-import {
-  array,
-  boolean,
-  type GenericSchema,
-  type InferOutput,
-  integer,
-  looseObject,
-  nullable,
-  nullish,
-  number as numeric,
-  object,
-  optional,
-  pipe,
-  safeParse,
-  string,
-  summarize,
-  union,
-  unknown,
-} from "valibot";
+import { Effect, Result, Schema } from "effect";
 import type {
-  Asked,
   ExternalActor,
   ExternalState,
   Ingest,
@@ -91,9 +72,13 @@ import type {
   Polled,
   SourceEvent,
   WatchView,
-  Within,
 } from "../provider";
-import { answered as answeredBy, polledFailure, Stop } from "../read-stop";
+import {
+  type ProviderFailure,
+  type ProviderRefused,
+  refusedWith,
+  request,
+} from "../read-stop";
 import { itemOfUrl } from "../registry";
 import {
   githubActorOf,
@@ -154,142 +139,161 @@ const PER_PAGE = 100;
 
 const REPO_PATH = /\/repos\/([^/]+)\/([^/]+?)(?:\/|$)/u;
 
-const count = pipe(numeric(), integer());
-const user = nullish(RawUserSchema);
-const label = union([string(), object({ name: string() })]);
-type Label = InferOutput<typeof label>;
-const labelsOf = (labels: Label[] | null | undefined) =>
+const count = Schema.Int;
+const user = Schema.optional(Schema.NullOr(RawUserSchema));
+const label = Schema.Union([
+  Schema.String,
+  Schema.Struct({ name: Schema.String }),
+]);
+type Label = (typeof label)["Type"];
+const labelsOf = (labels: readonly Label[] | null | undefined) =>
   (labels ?? []).map((one) => (typeof one === "string" ? one : one.name));
 
 /** What a pull request, an issue and a discussion each carry as REST answers them. */
 const posted = {
-  author_association: optional(string()),
-  body: nullish(string()),
-  html_url: string(),
-  labels: nullish(array(label)),
-  node_id: optional(string()),
+  author_association: Schema.optional(Schema.String),
+  body: Schema.optional(Schema.NullOr(Schema.String)),
+  html_url: Schema.String,
+  labels: Schema.optional(Schema.NullOr(Schema.Array(label))),
+  node_id: Schema.optional(Schema.String),
   number: count,
-  title: string(),
+  title: Schema.String,
   user,
 };
 
-const pull = object({
+const pull = Schema.Struct({
   ...posted,
-  base: object({ repo: object({ full_name: string() }) }),
-  closed_at: nullish(string()),
-  created_at: string(),
-  draft: nullish(boolean()),
-  head: object({ ref: string() }),
-  merged_at: nullish(string()),
-  state: string(),
-  updated_at: string(),
+  base: Schema.Struct({ repo: Schema.Struct({ full_name: Schema.String }) }),
+  closed_at: Schema.optional(Schema.NullOr(Schema.String)),
+  created_at: Schema.String,
+  draft: Schema.optional(Schema.NullOr(Schema.Boolean)),
+  head: Schema.Struct({ ref: Schema.String }),
+  merged_at: Schema.optional(Schema.NullOr(Schema.String)),
+  state: Schema.String,
+  updated_at: Schema.String,
 });
-type Pull = InferOutput<typeof pull>;
+type Pull = (typeof pull)["Type"];
 
-const issue = object({
+const issue = Schema.Struct({
   ...posted,
-  closed_at: nullish(string()),
-  created_at: string(),
+  closed_at: Schema.optional(Schema.NullOr(Schema.String)),
+  created_at: Schema.String,
   /** Set when the issue is a pull request: the issues list carries those too. */
-  pull_request: optional(unknown()),
-  repository_url: string(),
-  state: string(),
-  state_reason: nullish(string()),
-  updated_at: string(),
+  pull_request: Schema.optional(Schema.Unknown),
+  repository_url: Schema.String,
+  state: Schema.String,
+  state_reason: Schema.optional(Schema.NullOr(Schema.String)),
+  updated_at: Schema.String,
 });
-type Issue = InferOutput<typeof issue>;
+type Issue = (typeof issue)["Type"];
 
-const comment = object({
-  author_association: optional(string()),
-  body: nullish(string()),
-  created_at: string(),
-  html_url: string(),
+const comment = Schema.Struct({
+  author_association: Schema.optional(Schema.String),
+  body: Schema.optional(Schema.NullOr(Schema.String)),
+  created_at: Schema.String,
+  html_url: Schema.String,
   id: count,
-  issue_url: string(),
-  updated_at: string(),
+  issue_url: Schema.String,
+  updated_at: Schema.String,
   user,
 });
-type Comment = InferOutput<typeof comment>;
+type Comment = (typeof comment)["Type"];
 
 /** One of a repository's issue events (`/issues/events`): a label added is `labeled`. */
-const issueEvent = object({
-  created_at: string(),
-  event: string(),
+const issueEvent = Schema.Struct({
+  created_at: Schema.String,
+  event: Schema.String,
   id: count,
   issue,
-  label: nullish(object({ name: string() })),
+  label: Schema.optional(Schema.NullOr(Schema.Struct({ name: Schema.String }))),
 });
 
-const repository = object({ full_name: string() });
+const repository = Schema.Struct({ full_name: Schema.String });
 
 /** A discussion's comment as GraphQL answers it (`DiscussionComment`): `id` is its node ID. */
-const discussionComment = object({
+const discussionComment = Schema.Struct({
   author: user,
-  body: nullish(string()),
-  createdAt: string(),
-  id: string(),
-  url: string(),
+  body: Schema.optional(Schema.NullOr(Schema.String)),
+  createdAt: Schema.String,
+  id: Schema.String,
+  url: Schema.String,
 });
 
 /**
  * A discussion as the poll's GraphQL query answers it (`Discussion`), with
  * its repository's name, which the query knows, and its comments.
  */
-const discussionNode = object({
+const discussionNode = Schema.Struct({
   author: user,
-  body: nullish(string()),
-  closed: nullish(boolean()),
-  comments: nullish(object({ nodes: array(nullable(discussionComment)) })),
-  createdAt: string(),
-  id: nullish(string()),
-  labels: nullish(
-    object({ nodes: array(nullable(object({ name: string() }))) })
+  body: Schema.optional(Schema.NullOr(Schema.String)),
+  closed: Schema.optional(Schema.NullOr(Schema.Boolean)),
+  comments: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({ nodes: Schema.Array(Schema.NullOr(discussionComment)) })
+    )
+  ),
+  createdAt: Schema.String,
+  id: Schema.optional(Schema.NullOr(Schema.String)),
+  labels: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        nodes: Schema.Array(
+          Schema.NullOr(Schema.Struct({ name: Schema.String }))
+        ),
+      })
+    )
   ),
   number: count,
-  repo: string(),
-  title: string(),
-  updatedAt: string(),
-  url: string(),
+  repo: Schema.String,
+  title: Schema.String,
+  updatedAt: Schema.String,
+  url: Schema.String,
 });
-type DiscussionNodeRead = InferOutput<typeof discussionNode>;
+type DiscussionNodeRead = (typeof discussionNode)["Type"];
 
 /** A discussion as a webhook carries it (REST's shape). */
-const discussionHook = object({
+const discussionHook = Schema.Struct({
   ...posted,
-  created_at: string(),
-  state: nullish(string()),
-  updated_at: nullish(string()),
+  created_at: Schema.String,
+  state: Schema.optional(Schema.NullOr(Schema.String)),
+  updated_at: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 const webhook = {
-  pull_request: object({ action: string(), pull_request: pull, repository }),
-  issues: object({
-    action: string(),
+  pull_request: Schema.Struct({
+    action: Schema.String,
+    pull_request: pull,
+    repository,
+  }),
+  issues: Schema.Struct({
+    action: Schema.String,
     issue,
-    label: nullish(object({ name: string() })),
+    label: Schema.optional(
+      Schema.NullOr(Schema.Struct({ name: Schema.String }))
+    ),
     repository,
   }),
-  issue_comment: object({
-    action: string(),
+  issue_comment: Schema.Struct({
+    action: Schema.String,
     comment,
-    issue: optional(issue),
+    issue: Schema.optional(issue),
     repository,
   }),
-  discussion: object({
-    action: string(),
+  discussion: Schema.Struct({
+    action: Schema.String,
     discussion: discussionHook,
     repository,
   }),
-  discussion_comment: object({
-    action: string(),
-    comment: object({
-      body: nullish(string()),
-      created_at: string(),
-      html_url: string(),
-      node_id: string(),
+  discussion_comment: Schema.Struct({
+    action: Schema.String,
+    comment: Schema.Struct({
+      body: Schema.optional(Schema.NullOr(Schema.String)),
+      created_at: Schema.String,
+      html_url: Schema.String,
+      node_id: Schema.String,
       user,
     }),
-    discussion: object({ number: count }),
+    discussion: Schema.Struct({ number: count }),
     repository,
   }),
 };
@@ -440,6 +444,20 @@ const issueRevision = (one: Issue, ref: MirroredRef): ItemRevision => {
       ),
     },
   };
+};
+
+/**
+ * One issue as GitHub's REST answers it, as its revision of `ref`: undefined
+ * for an answer that is no issue (a pull request is the pulls stream's).
+ */
+export const issueRevisionOf = (
+  raw: unknown,
+  ref: MirroredRef
+): ItemRevision | undefined => {
+  const read = Schema.decodeUnknownResult(issue)(raw);
+  return Result.isSuccess(read) && read.success.pull_request === undefined
+    ? issueRevision(read.success, ref)
+    : undefined;
 };
 
 /**
@@ -685,23 +703,23 @@ const discussionRead = (one: DiscussionNodeRead): Ingested => {
 /** Each kind's reader: the payload parsed, then its revisions and events; nothing for a shape it does not take. */
 const READERS: Record<GitHubKind, (payload: unknown) => Ingested> = {
   pull: (payload) => {
-    const parsed = safeParse(pull, payload);
-    return parsed.success ? pullRead(parsed.output) : NOTHING;
+    const parsed = Schema.decodeUnknownResult(pull)(payload);
+    return Result.isSuccess(parsed) ? pullRead(parsed.success) : NOTHING;
   },
   issue: (payload) => {
-    const parsed = safeParse(issue, payload);
-    return parsed.success ? issueRead(parsed.output) : NOTHING;
+    const parsed = Schema.decodeUnknownResult(issue)(payload);
+    return Result.isSuccess(parsed) ? issueRead(parsed.success) : NOTHING;
   },
   comment: (payload) => {
-    const parsed = safeParse(comment, payload);
-    return parsed.success ? commentRead(parsed.output) : NOTHING;
+    const parsed = Schema.decodeUnknownResult(comment)(payload);
+    return Result.isSuccess(parsed) ? commentRead(parsed.success) : NOTHING;
   },
   issue_event: (payload) => {
-    const parsed = safeParse(issueEvent, payload);
-    if (!parsed.success) {
+    const parsed = Schema.decodeUnknownResult(issueEvent)(payload);
+    if (!Result.isSuccess(parsed)) {
       return NOTHING;
     }
-    const { event, label: added, issue: one, created_at } = parsed.output;
+    const { event, label: added, issue: one, created_at } = parsed.success;
     return event === "labeled" && added
       ? issueRead(one, {
           action: "labeled",
@@ -711,11 +729,11 @@ const READERS: Record<GitHubKind, (payload: unknown) => Ingested> = {
       : issueRead(one, { action: "revised" });
   },
   pull_request: (payload) => {
-    const parsed = safeParse(webhook.pull_request, payload);
-    if (!parsed.success) {
+    const parsed = Schema.decodeUnknownResult(webhook.pull_request)(payload);
+    if (!Result.isSuccess(parsed)) {
       return NOTHING;
     }
-    const { action, pull_request: pr } = parsed.output;
+    const { action, pull_request: pr } = parsed.success;
     if (action === "opened" || action === "closed") {
       return pullRead(pr, action);
     }
@@ -723,11 +741,11 @@ const READERS: Record<GitHubKind, (payload: unknown) => Ingested> = {
     return { revisions: read.revisions, events: [] };
   },
   issues: (payload) => {
-    const parsed = safeParse(webhook.issues, payload);
-    if (!parsed.success) {
+    const parsed = Schema.decodeUnknownResult(webhook.issues)(payload);
+    if (!Result.isSuccess(parsed)) {
       return NOTHING;
     }
-    const { action, issue: one, label: added } = parsed.output;
+    const { action, issue: one, label: added } = parsed.success;
     if (action === "labeled" && added) {
       // A webhook comes as the label is added: the issue's update is that moment.
       return issueRead(one, {
@@ -741,11 +759,11 @@ const READERS: Record<GitHubKind, (payload: unknown) => Ingested> = {
     });
   },
   issue_comment: (payload) => {
-    const parsed = safeParse(webhook.issue_comment, payload);
-    if (!parsed.success) {
+    const parsed = Schema.decodeUnknownResult(webhook.issue_comment)(payload);
+    if (!Result.isSuccess(parsed)) {
       return NOTHING;
     }
-    const { action, comment: one, issue: on } = parsed.output;
+    const { action, comment: one, issue: on } = parsed.success;
     const revised = on ? issueRead(on, { action: "revised" }) : NOTHING;
     return {
       revisions: revised.revisions,
@@ -753,15 +771,15 @@ const READERS: Record<GitHubKind, (payload: unknown) => Ingested> = {
     };
   },
   discussion_node: (payload) => {
-    const parsed = safeParse(discussionNode, payload);
-    return parsed.success ? discussionRead(parsed.output) : NOTHING;
+    const parsed = Schema.decodeUnknownResult(discussionNode)(payload);
+    return Result.isSuccess(parsed) ? discussionRead(parsed.success) : NOTHING;
   },
   discussion: (payload) => {
-    const parsed = safeParse(webhook.discussion, payload);
-    if (!parsed.success) {
+    const parsed = Schema.decodeUnknownResult(webhook.discussion)(payload);
+    if (!Result.isSuccess(parsed)) {
       return NOTHING;
     }
-    const { action, discussion: one, repository: repo } = parsed.output;
+    const { action, discussion: one, repository: repo } = parsed.success;
     const ref = refOf(one.html_url);
     if (!ref) {
       return NOTHING;
@@ -796,11 +814,13 @@ const READERS: Record<GitHubKind, (payload: unknown) => Ingested> = {
     };
   },
   discussion_comment: (payload) => {
-    const parsed = safeParse(webhook.discussion_comment, payload);
-    if (!(parsed.success && parsed.output.action === "created")) {
+    const parsed = Schema.decodeUnknownResult(webhook.discussion_comment)(
+      payload
+    );
+    if (!(Result.isSuccess(parsed) && parsed.success.action === "created")) {
       return NOTHING;
     }
-    const { comment: one, discussion, repository: repo } = parsed.output;
+    const { comment: one, discussion, repository: repo } = parsed.success;
     return {
       revisions: [],
       events: discussionCommentEvent(repo.full_name, discussion.number, {
@@ -963,26 +983,26 @@ const DISCUSSION_MORE_QUERY = `query CawcoDiscussionMore($owner: String!, $name:
 }`;
 
 /** Where a GraphQL connection's next page begins. */
-const PageInfoSchema = object({
-  endCursor: nullable(string()),
-  hasNextPage: boolean(),
+const PageInfoSchema = Schema.Struct({
+  endCursor: Schema.NullOr(Schema.String),
+  hasNextPage: Schema.Boolean,
 });
 
 /** One connection of a discussion: a page of its nodes and where the next begins. */
-const ConnectionSchema = object({
-  nodes: optional(array(unknown())),
-  pageInfo: optional(PageInfoSchema),
+const ConnectionSchema = Schema.Struct({
+  nodes: Schema.optional(Schema.Array(Schema.Unknown)),
+  pageInfo: Schema.optional(PageInfoSchema),
 });
-type Connection = InferOutput<typeof ConnectionSchema>;
+type Connection = (typeof ConnectionSchema)["Type"];
 
 /** What {@link DISCUSSION_MORE_QUERY} answers. */
-const DiscussionMoreSchema = object({
-  repository: nullable(
-    object({
-      discussion: nullable(
-        object({
-          comments: optional(ConnectionSchema),
-          labels: optional(ConnectionSchema),
+const DiscussionMoreSchema = Schema.Struct({
+  repository: Schema.NullOr(
+    Schema.Struct({
+      discussion: Schema.NullOr(
+        Schema.Struct({
+          comments: Schema.optional(ConnectionSchema),
+          labels: Schema.optional(ConnectionSchema),
         })
       ),
     })
@@ -990,16 +1010,19 @@ const DiscussionMoreSchema = object({
 });
 
 /** What {@link DISCUSSIONS_QUERY} answers: each discussion kept whole, its labels and comments read as connections. */
-const DiscussionsPageSchema = object({
-  repository: nullable(
-    object({
-      discussions: object({
-        nodes: array(
-          nullable(
-            looseObject({
-              comments: nullish(ConnectionSchema),
-              labels: nullish(ConnectionSchema),
-            })
+const DiscussionsPageSchema = Schema.Struct({
+  repository: Schema.NullOr(
+    Schema.Struct({
+      discussions: Schema.Struct({
+        nodes: Schema.Array(
+          Schema.NullOr(
+            Schema.StructWithRest(
+              Schema.Struct({
+                comments: Schema.optional(Schema.NullOr(ConnectionSchema)),
+                labels: Schema.optional(Schema.NullOr(ConnectionSchema)),
+              }),
+              [Schema.Record(Schema.String, Schema.Unknown)]
+            )
           )
         ),
         pageInfo: PageInfoSchema,
@@ -1007,7 +1030,7 @@ const DiscussionsPageSchema = object({
     })
   ),
 });
-type DiscussionsPage = InferOutput<typeof DiscussionsPageSchema>;
+type DiscussionsPage = (typeof DiscussionsPageSchema)["Type"];
 type Discussions = NonNullable<DiscussionsPage["repository"]>["discussions"];
 type DiscussionNode = NonNullable<Discussions["nodes"][number]>;
 
@@ -1027,34 +1050,41 @@ const waitOf = (headers: Headers, now: number): number | null => {
     : null;
 };
 
-/** A bounded read's answer, or `Unanswered` thrown. */
-const answered = <T>(asked: Asked<T>): T => answeredBy("GitHub", asked);
-
 /** Why GitHub refused a request, in words for the project's ingress view. */
 const refusal = (
   refused: OctokitRefusal,
   path: string,
   connection: string,
   now: number
-): Stop => {
+): ProviderRefused => {
   const wait = waitOf(refused.headers, now);
   if (wait !== null && [403, 429].includes(refused.status)) {
-    return new Stop(
+    return refusedWith(
       `GitHub's rate limit: polls wait until ${new Date(wait).toISOString()}.`,
+      "rate",
       wait
     );
   }
   if (refused.status === 401) {
-    return new Stop(
-      `GitHub refused the sign-in of connection ${connection} (401): set its key again.`
+    return refusedWith(
+      `GitHub refused the sign-in of connection ${connection} (401): set its key again.`,
+      "sign-in"
     );
   }
   const words = messageOf(refused.data);
   const said = words === undefined ? "" : cutShort(words, 200);
-  return new Stop(
-    `GitHub answered ${refused.status} for ${path}${said ? `: ${said}` : ""}.`
+  return refusedWith(
+    `GitHub answered ${refused.status} for ${path}${said ? `: ${said}` : ""}.`,
+    refused.status === 403 || refused.status === 404 ? "scope" : "input"
   );
 };
+
+/** A request that failed short of GitHub's answer, in words. */
+const unreached = (error: unknown): ProviderRefused =>
+  refusedWith(
+    `GitHub could not be reached: ${error instanceof Error ? error.message : String(error)}`,
+    "unreachable"
+  );
 
 /** What one stream's pages hold in the window, and the newest time it took in. */
 interface Taken {
@@ -1069,13 +1099,10 @@ interface Taken {
  */
 const readPage = (
   stream: GitHubStream,
-  items: unknown,
+  items: readonly unknown[],
   edge: number,
   into: Taken
 ): boolean => {
-  if (!Array.isArray(items)) {
-    throw new Stop(`GitHub's ${stream} list was not a list.`);
-  }
   let past = false;
   for (const item of items) {
     const updated = movedAt(item);
@@ -1100,8 +1127,14 @@ interface StreamRead {
   now: number;
   octokit: Octokit;
   repo: string;
-  within: Within;
+  requestMs: number;
 }
+
+/** A next page named off the API's origin, refused before anything is sent there. */
+class OffOrigin extends Error {}
+
+/** What a page read answers for GitHub's 304. */
+const NOT_MODIFIED = "not modified";
 
 /**
  * One REST stream's pages as Octokit's iterator reads them from its mark,
@@ -1109,10 +1142,10 @@ interface StreamRead {
  * first, page after page until the window's edge, each page within the
  * hub's deadline, no redirect followed, and only on the API's own origin.
  */
-const pollList = async (
+const pollList = Effect.fnUntraced(function* (
   stream: Exclude<GitHubStream, "discussions">,
   read: StreamRead
-): Promise<Polled<GitHubStreamCursor>> => {
+) {
   const { octokit } = read;
   const { origin } = new URL(octokit.request.endpoint.DEFAULTS.baseUrl);
   const since = read.cursor?.since ?? read.now;
@@ -1122,13 +1155,13 @@ const pollList = async (
   // Octokit's own request with the auth it carries, each page sent with
   // the signal of the read it is in and on the API's own origin alone: a
   // next page named off it is refused before anything is sent there.
-  const request = octokit.request.defaults({
+  const paged = octokit.request.defaults({
     request: {
       redirect: "error",
       fetch: (to: string, init: RequestInit) => {
         const at = new URL(to, origin);
         if (at.origin !== origin) {
-          throw new Stop(
+          throw new OffOrigin(
             `GitHub named a next page off its API (${at.origin}), so the poll stopped there.`
           );
         }
@@ -1138,7 +1171,7 @@ const pollList = async (
   });
   const etag = read.cursor?.etag ?? null;
   const pages = octokit.paginate
-    .iterator(request, {
+    .iterator(paged, {
       method: "GET",
       url,
       ...query,
@@ -1146,52 +1179,56 @@ const pollList = async (
       // Cast kept, @octokit/plugin-paginate-rest 14.0.0 gap (held by @octokit/rest 22.0.1, latest): `iterator(request, parameters)` types them as `Parameters<R>[0]`, the route-string overload, though it reads endpoint options; no upstream issue exists.
     } as never)
     [Symbol.asyncIterator]();
-  /** One page off the iterator: its data and headers, none past the last, `not modified` for GitHub's 304. */
-  const next = async (): Promise<
-    { data: unknown; headers: Headers } | "not modified" | undefined
-  > => {
-    try {
-      const page = answered(
-        await read.within((each) => {
-          signal = each;
-          return pages.next();
-        })
-      );
-      return page.done || !page.value ? undefined : page.value;
-    } catch (error) {
-      // A next page off the API's origin, refused in `fetch`: Octokit
-      // throws it on as the cause of its own failure to reach GitHub.
-      if (error instanceof Error && error.cause instanceof Stop) {
-        throw error.cause;
+  /** One page off the iterator, within the hub's deadline: its data and headers, none past the last, {@link NOT_MODIFIED} for GitHub's 304. */
+  const next = () =>
+    askGitHub(
+      read.requestMs,
+      (each) => {
+        signal = each;
+        return pages.next().then(
+          (got) => (got.done || !got.value ? undefined : got.value),
+          (error: unknown): typeof NOT_MODIFIED => {
+            if (refusalOf(error)?.status === 304) {
+              return NOT_MODIFIED;
+            }
+            throw error;
+          }
+        );
+      },
+      (error) => {
+        // A next page off the API's origin, refused in `fetch`: Octokit
+        // throws it on as the cause of its own failure to reach GitHub.
+        if (error instanceof Error && error.cause instanceof OffOrigin) {
+          return refusedWith(error.cause.message);
+        }
+        const refused = refusalOf(error);
+        return refused
+          ? refusal(refused, url, read.connection, read.now)
+          : unreached(error);
       }
-      const refused = refusalOf(error);
-      if (refused?.status === 304) {
-        return "not modified";
-      }
-      throw refused ? refusal(refused, url, read.connection, read.now) : error;
-    }
-  };
-  const first = await next();
-  if (first === "not modified") {
-    return { kind: "unchanged" };
+    );
+  const first = yield* next();
+  if (first === NOT_MODIFIED) {
+    const unchanged: Polled<GitHubStreamCursor> = { kind: "unchanged" };
+    return unchanged;
   }
   const taken: Taken = {
     ingested: { revisions: [], events: [] },
     newest: edge,
   };
-  let resumeAt: number | null = null;
   let page = first;
   while (page) {
-    const past = readPage(stream, page.data, edge, taken);
-    resumeAt = waitOf(page.headers, read.now) ?? resumeAt;
-    if (past) {
+    if (!Array.isArray(page.data)) {
+      return yield* refusedWith(`GitHub's ${stream} list was not a list.`);
+    }
+    if (readPage(stream, page.data, edge, taken)) {
       break;
     }
-    const after = await next();
-    page = after === "not modified" ? undefined : after;
+    const after = yield* next();
+    page = after === NOT_MODIFIED ? undefined : after;
   }
   const tag = first?.headers.etag;
-  return {
+  const polled: Polled<GitHubStreamCursor> = {
     kind: "read",
     baseline: read.cursor === null,
     ingested: taken.ingested,
@@ -1200,7 +1237,15 @@ const pollList = async (
       since: Math.max(since, taken.newest),
     },
   };
-};
+  return polled;
+});
+
+/** One request to GitHub within the hub's deadline, its failure read by `refused`. */
+const askGitHub = <A>(
+  requestMs: number,
+  run: (signal: AbortSignal) => Promise<A>,
+  refused: (error: unknown) => ProviderRefused
+) => request("GitHub", requestMs, run, refused);
 
 /**
  * The repository's discussions, newest updated first, through GraphQL
@@ -1209,51 +1254,54 @@ const pollList = async (
  * redirect followed. Its cursor keeps only the newest time: a POST has no
  * ETag. A repository with discussions off answers none.
  */
-const pollDiscussions = async (
-  read: StreamRead
-): Promise<Polled<GitHubStreamCursor>> => {
+const pollDiscussions = Effect.fnUntraced(function* (read: StreamRead) {
   const { octokit } = read;
-  const ask = async <Answer extends GenericSchema>(
+  const ask = <S extends Schema.Decoder<unknown>>(
     query: string,
     variables: Record<string, unknown>,
-    answer: Answer
-  ): Promise<InferOutput<Answer>> => {
-    const asked = await read.within(async (signal) => {
-      try {
-        return await octokit.graphql(query, {
+    answer: S
+  ): Effect.Effect<S["Type"], ProviderFailure> =>
+    askGitHub(
+      read.requestMs,
+      (signal) =>
+        octokit.graphql(query, {
           ...variables,
           request: { redirect: "error", signal },
-        });
-      } catch (error) {
+        }),
+      (error) => {
         const refused = refusalOf(error);
         if (refused) {
-          throw refusal(refused, "discussions", read.connection, read.now);
+          return refusal(refused, "discussions", read.connection, read.now);
         }
         const said = graphqlErrorsOf(error)[0]?.message;
-        throw said
-          ? new Stop(`GitHub refused the discussions: ${cutShort(said, 200)}`)
-          : error;
+        return said
+          ? refusedWith(
+              `GitHub refused the discussions: ${cutShort(said, 200)}`
+            )
+          : unreached(error);
       }
-    });
-    const parsed = safeParse(answer, answered(asked));
-    if (!parsed.success) {
-      throw new Stop(
-        `GitHub's answer for the discussions was not the one asked for: ${summarize(parsed.issues)}`
-      );
-    }
-    return parsed.output;
-  };
+    ).pipe(
+      Effect.flatMap((data) =>
+        Schema.decodeUnknownEffect(answer)(data).pipe(
+          Effect.mapError((failure) =>
+            refusedWith(
+              `GitHub's answer for the discussions was not the one asked for: ${failure.message}`
+            )
+          )
+        )
+      )
+    );
   const [owner = "", name = ""] = read.repo.split("/");
   /** The nodes of a discussion's connection past its first page, and the first's with them. */
-  const follow = async (
+  const follow = Effect.fnUntraced(function* (
     first: Connection | null | undefined,
     number: unknown,
     field: "comments" | "labels"
-  ): Promise<unknown[]> => {
-    const nodes = [...(first?.nodes ?? [])];
+  ) {
+    const nodes: unknown[] = [...(first?.nodes ?? [])];
     let after = first?.pageInfo?.hasNextPage ? first.pageInfo.endCursor : null;
     while (after !== null) {
-      const more = await ask(
+      const more = yield* ask(
         DISCUSSION_MORE_QUERY,
         {
           owner,
@@ -1270,13 +1318,17 @@ const pollDiscussions = async (
       after = found?.pageInfo?.hasNextPage ? found.pageInfo.endCursor : null;
     }
     return nodes;
-  };
+  });
   /** A discussion with all its labels and comments, and its repository's name. */
-  const fill = async (node: DiscussionNode) => ({
-    ...node,
-    labels: { nodes: await follow(node.labels, node.number, "labels") },
-    comments: { nodes: await follow(node.comments, node.number, "comments") },
-    repo: read.repo,
+  const fill = Effect.fnUntraced(function* (node: DiscussionNode) {
+    return {
+      ...node,
+      labels: { nodes: yield* follow(node.labels, node.number, "labels") },
+      comments: {
+        nodes: yield* follow(node.comments, node.number, "comments"),
+      },
+      repo: read.repo,
+    };
   });
   const since = read.cursor?.since ?? read.now;
   const edge = since - OVERLAP_MS;
@@ -1286,7 +1338,7 @@ const pollDiscussions = async (
   };
   let after: string | null = null;
   for (;;) {
-    const asked: DiscussionsPage = await ask(
+    const asked: DiscussionsPage = yield* ask(
       DISCUSSIONS_QUERY,
       { owner, name, after },
       DiscussionsPageSchema
@@ -1295,7 +1347,7 @@ const pollDiscussions = async (
     const nodes: Record<string, unknown>[] = [];
     for (const node of page?.nodes ?? []) {
       if (node) {
-        nodes.push(await fill(node));
+        nodes.push(yield* fill(node));
       }
     }
     const past = readPage("discussions", nodes, edge, taken);
@@ -1308,52 +1360,46 @@ const pollDiscussions = async (
     }
     after = page.pageInfo.endCursor;
   }
-  return {
+  const polled: Polled<GitHubStreamCursor> = {
     kind: "read",
     baseline: read.cursor === null,
     ingested: taken.ingested,
     cursor: { etag: null, since: Math.max(since, taken.newest) },
   };
-};
+  return polled;
+});
 
 const isStream = (stream: string): stream is GitHubStream =>
   GITHUB_STREAMS.some((one) => one === stream);
 
 type GitHubIngest = Ingest<Octokit, GitHubStreamCursor>;
 
-/** A repository's watch read: one stream from its cursor. Never throws: a failure is its `stopped` problem. */
-const poll: GitHubIngest["poll"] = async (input) => {
+/** A repository's watch read: one stream from its cursor; GitHub's refusal in its words, or no answer, its failure. */
+const poll: GitHubIngest["poll"] = (input) => {
   const read: StreamRead = {
     connection: input.watch.connection,
     cursor: input.cursor,
     now: input.now,
     octokit: input.client,
     repo: input.watch.container,
-    within: input.within,
+    requestMs: input.requestMs,
   };
   const { stream } = input;
   if (stream.startsWith(BOARD_STREAM)) {
-    return await pollBoard({
+    return pollBoard({
       cursor: input.cursor && { ...input.cursor, etag: null },
       now: input.now,
       octokit: input.client,
       watch: input.watch,
-      within: input.within,
+      requestMs: input.requestMs,
     });
   }
   if (!isStream(stream)) {
-    return {
-      kind: "stopped",
-      problem: { words: `GitHub has no stream ${stream}.`, resumeAt: null },
-    };
+    return Effect.fail(refusedWith(`GitHub has no stream ${stream}.`));
   }
-  try {
-    return stream === "discussions"
-      ? await pollDiscussions(read)
-      : await pollList(stream, read);
-  } catch (error) {
-    return polledFailure("GitHub", error);
-  }
+  return stream === "discussions"
+    ? pollDiscussions(read)
+    : pollList(stream, read);
 };
 
 /**

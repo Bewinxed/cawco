@@ -1,6 +1,5 @@
 import { CONTINUATION_CANCELLED } from "@cawco/core/continuation";
-import type { ForgeWrite } from "@cawco/core/forge-post";
-import { readForgeAsk } from "@cawco/core/forge-post";
+import { isMachineWrite, readForgeAsk } from "@cawco/core/forge-post";
 import {
   effectiveImageChoice,
   GENERATE_IMAGE,
@@ -16,6 +15,7 @@ import type {
 import type { WorkInFlight } from "@cawco/core/session/controls";
 import { secondsOf } from "@cawco/core/time";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import { Effect, Result } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { Static } from "typebox";
 import { artifactTools } from "./artifacts/calls";
@@ -28,7 +28,6 @@ import type {
   ContinueRequest,
   PreparedContinuation,
 } from "./db/stored-types";
-import type { createForgePosts } from "./forge-posts";
 import type {
   ContinuationUnfound,
   ContinuationUnplaced,
@@ -47,6 +46,7 @@ import type { continueBody } from "./routes/session-bodies";
 import { unreachable } from "./unreachable";
 import { titleProblem } from "./work-items";
 import type { Unlanded } from "./workspaces";
+import { madeWords, type Writes } from "./writes";
 
 /** What the session calls act through (server.ts's hub context holds each). */
 export interface SessionCallsDeps {
@@ -80,7 +80,6 @@ export interface SessionCallsDeps {
     lastTurnAt: string | null;
     activityBound: boolean;
   };
-  readonly forgePosts: ReturnType<typeof createForgePosts>;
   readonly inFlightFor: (
     sourceId: string
   ) => Promise<{ work?: WorkInFlight | undefined } | { refusal: string }>;
@@ -109,6 +108,8 @@ export interface SessionCallsDeps {
     askedBy: ContinuationAsker,
     inFlight?: WorkInFlight | undefined
   ) => ContinuationRow;
+  /** The write door (writes.ts): a session's `forge_post` goes through it. */
+  readonly writes: Writes;
 }
 
 /** What `POST /api/followup-state` takes: the session or the workspace to read, and the message a Jev may weigh. */
@@ -346,102 +347,142 @@ export const outcomeCalls = ({
 export const mediaCalls = ({
   callAgent,
   db,
-  forgePosts,
   sessionWorkspace,
+  writes,
 }: Pick<
   SessionCallsDeps,
-  "callAgent" | "db" | "forgePosts" | "sessionWorkspace"
->) => ({
-  /**
-   * A session's `forge_post` (forge-posts.ts): what it says is the tool's
-   * answer; a write that did not go is a problem in its words.
-   */
-  forgePost: async (
-    id: string,
-    body: { repo?: string | undefined; write: unknown }
-  ) => {
-    const [row] = db.listedInstancesByIds([id]);
-    const write: ForgeWrite | undefined = readForgeAsk({
-      repo: "-",
-      write: body.write,
-    })?.write;
-    if (!(row && write)) {
-      return problem(row ? 400 : 404, {
+  "callAgent" | "db" | "sessionWorkspace" | "writes"
+>) => {
+  /** The repository a session posts to: the one it names, else its project's only one; refused in words when there is none to take. */
+  const repoFor = (projectId: string | null, named: string | undefined) => {
+    const links = (projectId ? db.project(projectId)?.links : undefined) ?? [];
+    const repo = named ?? (links.length === 1 ? links[0] : undefined);
+    return (
+      repo ??
+      problem(422, {
         code: "forge-post-refused",
-        detail: row
-          ? "forge_post takes one write."
-          : "Unknown calling session.",
-      });
-    }
-    const answer = await forgePosts.post(row, {
-      write,
-      ...(body.repo ? { repo: body.repo } : {}),
-    });
-    return answer.ok
-      ? answer.text
-      : problem(422, { code: "forge-post-refused", detail: answer.text });
-  },
+        detail:
+          links.length === 0
+            ? "cawco: nothing was posted: this session's project has no repository of its own, so name one with repo."
+            : `cawco: nothing was posted. This session's project has several repositories, so pass one as repo: ${links.join(", ")}.`,
+      })
+    );
+  };
+  /** The task a session's attempt is on, when it is its project's. */
+  const taskOf = (row: InstanceRow): string | null => {
+    const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+    return item?.projectId === (row.projectId ?? null)
+      ? (item?.taskId ?? null)
+      : null;
+  };
+  return {
+    /**
+     * A session's `forge_post`, through the write door (writes.ts): made on
+     * its machine with its own sign-in there, on the repository it names,
+     * else its project's only one, recorded for its project and its attempt's
+     * task. What it says is the tool's answer; a write that did not go is a
+     * problem in its words.
+     */
+    forgePost: async (
+      id: string,
+      body: { op: unknown; repo?: string | undefined }
+    ) => {
+      const [row] = db.listedInstancesByIds([id]);
+      const asked = readForgeAsk({ repo: "-", op: body.op })?.op;
+      const op = asked && isMachineWrite(asked) ? asked : undefined;
+      if (!(row && op)) {
+        return problem(row ? 400 : 404, {
+          code: "forge-post-refused",
+          detail: row
+            ? "forge_post takes one write."
+            : "Unknown calling session.",
+        });
+      }
+      const projectId = row.projectId ?? null;
+      const repo = repoFor(projectId, body.repo);
+      if (typeof repo !== "string") {
+        return repo;
+      }
+      const outcome = await Effect.runPromise(
+        Effect.result(
+          writes.post({
+            by: { session: row.id },
+            target: { machine: row.machineId, repo },
+            op,
+            projectId,
+            taskId: taskOf(row),
+          })
+        )
+      );
+      return Result.isSuccess(outcome)
+        ? madeWords(op, outcome.success)
+        : problem(422, {
+            code: "forge-post-refused",
+            detail: outcome.failure.words,
+          });
+    },
 
-  /**
-   * A session's `generate_image`, made on its machine with the sign-in
-   * there.
-   */
-  generateImage: async (id: string, body: ImageGenerationRequest) => {
-    const [row] = db.listedInstancesByIds([id]);
-    if (!row) {
-      return problem(404, {
-        code: "unknown-calling-session",
-        detail: "Unknown calling session.",
-      });
-    }
-    // The provider the call names wins; else the fleet's default,
-    // which with nothing set is ChatGPT on its own model.
-    const { provider: named, model, ...asked } = body;
-    const provider = named ? imageProviderOf(named) : undefined;
-    const chosen = effectiveImageChoice(
-      {
-        ...(provider ? { provider } : {}),
-        ...(model ? { model } : {}),
-      },
-      db.imageSettings()
-    );
-    const answer = await callAgent(
-      row.machineId,
-      GENERATE_IMAGE,
-      // Its boundary, when it runs in one: the output lands in its clone or
-      // $TMPDIR alone, and its references are read from those and its
-      // project's folder alone.
-      [
-        row.id,
-        row.cwd,
-        { ...asked, ...chosen },
-        sessionWorkspace(row) ?? null,
-        row.projectId ?? null,
-      ],
-      IMAGE_GENERATION_TIMEOUT_MS + 30_000
-    );
-    switch (answer.kind) {
-      case "unanswered":
-        return answer.reason === "dead"
-          ? awayProblem(
-              row.machineId,
-              "The session's machine is offline; image generation was not started."
-            )
-          : silentProblem(
-              `Image generation did not finish within ${secondsOf(answer.after)} s. Check the output path before retrying; do not submit a duplicate automatically.`
-            );
-      case "answered":
-        return answer.value.ok
-          ? answer.value.result
-          : problem(502, {
-              code: "image-not-generated",
-              detail: answer.value.error ?? "Image generation failed.",
-            });
-      default:
-        throw unreachable(answer);
-    }
-  },
-});
+    /**
+     * A session's `generate_image`, made on its machine with the sign-in
+     * there.
+     */
+    generateImage: async (id: string, body: ImageGenerationRequest) => {
+      const [row] = db.listedInstancesByIds([id]);
+      if (!row) {
+        return problem(404, {
+          code: "unknown-calling-session",
+          detail: "Unknown calling session.",
+        });
+      }
+      // The provider the call names wins; else the fleet's default,
+      // which with nothing set is ChatGPT on its own model.
+      const { provider: named, model, ...asked } = body;
+      const provider = named ? imageProviderOf(named) : undefined;
+      const chosen = effectiveImageChoice(
+        {
+          ...(provider ? { provider } : {}),
+          ...(model ? { model } : {}),
+        },
+        db.imageSettings()
+      );
+      const answer = await callAgent(
+        row.machineId,
+        GENERATE_IMAGE,
+        // Its boundary, when it runs in one: the output lands in its clone or
+        // $TMPDIR alone, and its references are read from those and its
+        // project's folder alone.
+        [
+          row.id,
+          row.cwd,
+          { ...asked, ...chosen },
+          sessionWorkspace(row) ?? null,
+          row.projectId ?? null,
+        ],
+        IMAGE_GENERATION_TIMEOUT_MS + 30_000
+      );
+      switch (answer.kind) {
+        case "unanswered":
+          return answer.reason === "dead"
+            ? awayProblem(
+                row.machineId,
+                "The session's machine is offline; image generation was not started."
+              )
+            : silentProblem(
+                `Image generation did not finish within ${secondsOf(answer.after)} s. Check the output path before retrying; do not submit a duplicate automatically.`
+              );
+        case "answered":
+          return answer.value.ok
+            ? answer.value.result
+            : problem(502, {
+                code: "image-not-generated",
+                detail: answer.value.error ?? "Image generation failed.",
+              });
+        default:
+          throw unreachable(answer);
+      }
+    },
+  };
+};
 
 /** A session naming itself. */
 export const titleCalls = ({ db }: Pick<SessionCallsDeps, "db">) => ({

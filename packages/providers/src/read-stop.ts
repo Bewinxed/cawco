@@ -1,54 +1,77 @@
 /**
- * How a provider's poll stops short, said once for every provider: a
- * {@link Stop} in the service's words (its rate limit's resume time with
- * it), or a request the service did not answer within the hub's deadline
- * ({@link Unanswered}), read back as the stream's `Polled` outcome by
- * {@link polledFailure}.
+ * How a provider's request fails, said once for every provider: refused in
+ * the service's words ({@link ProviderRefused}, with when its rate limit
+ * lets the next request go), or not answered within the hub's deadline
+ * ({@link ProviderUnanswered}); and {@link request}, one request to a
+ * service as an Effect that fails with one of them.
  */
-import type { Asked, Polled } from "./provider";
+import { Effect, Schema } from "effect";
 
-/** A read stopped short, in the words the project's views read. */
-export class Stop extends Error {
-  readonly resumeAt: number | null;
-  constructor(message: string, resumeAt: number | null = null) {
-    super(message);
-    this.resumeAt = resumeAt;
+/** What kind of refusal a service gave: what a hub reads it to stop (a whole sync for `sign-in` and `rate`, a write for any). */
+const REFUSAL_KINDS = [
+  "sign-in",
+  "scope",
+  "rate",
+  "unreachable",
+  "input",
+] as const;
+export type RefusalKind = (typeof REFUSAL_KINDS)[number];
+
+/**
+ * A service refused a request, or could not be reached for it: its words,
+ * with what the connection needs where it lacks it, and when its rate
+ * limit lets the next request go (ms; null when it holds nothing back).
+ */
+export class ProviderRefused extends Schema.TaggedError<ProviderRefused>()(
+  "ProviderRefused",
+  {
+    kind: Schema.Literals(REFUSAL_KINDS),
+    resumeAt: Schema.NullOr(Schema.Number),
+    words: Schema.String,
   }
-}
+) {}
 
-/** A request the service did not answer in time: the read ends there and moves nothing. */
-class Unanswered extends Error {
-  readonly after: number;
-  constructor(service: string, after: number) {
-    super(`${service} did not answer within ${after} ms`);
-    this.after = after;
+/** A request the service did not answer within the hub's deadline: nothing moves, and nothing is said of the watch. */
+export class ProviderUnanswered extends Schema.TaggedError<ProviderUnanswered>()(
+  "ProviderUnanswered",
+  {
+    /** How long it was given, ms. */
+    after: Schema.Number,
+    service: Schema.String,
   }
-}
+) {}
 
-/** A bounded read's answer, or {@link Unanswered} thrown. */
-export const answered = <T>(service: string, asked: Asked<T>): T => {
-  if (asked.kind === "unanswered") {
-    throw new Unanswered(service, asked.after);
-  }
-  return asked.value;
-};
+/** How a provider's request fails. */
+export type ProviderFailure = ProviderRefused | ProviderUnanswered;
 
-/** What a stream's read that threw comes to: unanswered, or stopped in the service's words. */
-export const polledFailure = (
+/**
+ * One request to `service`: `run` given the signal that aborts when the
+ * request is let go, its failure read by `refused`, and let go with
+ * {@link ProviderUnanswered} after `requestMs`.
+ */
+export const request = <A>(
   service: string,
-  error: unknown
-): Extract<Polled<never>, { kind: "stopped" | "unanswered" }> => {
-  if (error instanceof Unanswered) {
-    return { kind: "unanswered", after: error.after };
-  }
-  return {
-    kind: "stopped",
-    problem:
-      error instanceof Stop
-        ? { words: error.message, resumeAt: error.resumeAt }
-        : {
-            words: `${service} could not be reached: ${error instanceof Error ? error.message : String(error)}`,
-            resumeAt: null,
-          },
-  };
-};
+  requestMs: number,
+  run: (signal: AbortSignal) => Promise<A>,
+  refused: (error: unknown) => ProviderRefused
+): Effect.Effect<A, ProviderFailure> =>
+  Effect.tryPromise({ try: (signal) => run(signal), catch: refused }).pipe(
+    Effect.timeoutOrElse({
+      duration: requestMs,
+      orElse: () =>
+        Effect.fail(new ProviderUnanswered({ service, after: requestMs })),
+    })
+  );
+
+/** A refusal in `words`, of kind `input` unless said otherwise. */
+export const refusedWith = (
+  words: string,
+  kind: RefusalKind = "input",
+  resumeAt: number | null = null
+): ProviderRefused => new ProviderRefused({ kind, words, resumeAt });
+
+/** Words for any failure: a refusal's own, or how long the service was given. */
+export const failureWords = (failure: ProviderFailure): string =>
+  failure._tag === "ProviderRefused"
+    ? failure.words
+    : `${failure.service} did not answer within the ${failure.after} ms it was given.`;

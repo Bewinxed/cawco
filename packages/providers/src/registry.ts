@@ -101,3 +101,44 @@ const DIGITS = /^\d+$/u;
 /** An item's number: GitHub's, GitLab's and Gitea's; null where the service keys it by a name (Linear's `ENG-123`). */
 export const numberOf = (item: ItemRef): number | null =>
   DIGITS.test(item.key) ? Number(item.key) : null;
+
+const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//iu;
+/** git's scp-like form, `[user@]host:path`, no slash before the colon (git-scm.com/docs/git-clone, "GIT URLS"). */
+const SCP_LIKE = /^(?:[^@/\s]+@)?([^/:\s]+):(.+)$/u;
+const EDGE_SLASHES = /^\/+|\/+$/gu;
+const DOT_GIT = /\.git$/iu;
+
+/**
+ * Where a repository is, from its git URL or `host/path`: its host with its
+ * port, which is how gh, glab and tea name a self-hosted forge's login
+ * (`gitea.local:3000`), and its path, `.git` and edge slashes off.
+ * Undefined for what names no host and path.
+ */
+export const repoAt = (
+  raw: string
+): { host: string; path: string } | undefined => {
+  const text = raw.trim();
+  let host = "";
+  let path = "";
+  if (SCHEME.test(text)) {
+    const parsed = parsedUrl(text);
+    if (!parsed) {
+      return;
+    }
+    ({ host } = parsed);
+    path = decodeURIComponent(parsed.pathname);
+  } else {
+    const scp = SCP_LIKE.exec(text);
+    if (scp) {
+      [, host = "", path = ""] = scp;
+    } else {
+      const at = text.indexOf("/");
+      host = text.slice(0, at);
+      path = text.slice(at + 1);
+    }
+  }
+  path = path.replace(EDGE_SLASHES, "").replace(DOT_GIT, "");
+  return host && path.includes("/")
+    ? { host: host.toLowerCase(), path }
+    : undefined;
+};

@@ -1,10 +1,11 @@
 /**
- * The contract every forge adapter meets (docs/forge-adapters.md): the host's
- * sign-in, the writes a client makes, and the adapter that finds one and
- * makes the other. forge.ts holds the registry of adapters; each adapter
- * reads this file, so imports run one way.
+ * A forge's sign-in on this machine (docs/forge-adapters.md): where its CLI
+ * keeps the host's sign-in. The client a write is made with is the forge's
+ * provider's, made from that sign-in (forge.ts `clientWrites`). forge.ts
+ * holds the registry of logins; each login reads this file, so imports run
+ * one way.
  */
-import type { Forge, ForgeWrite } from "@cawco/core/forge-post";
+import type { Forge } from "@cawco/core/forge-post";
 
 /** The host's own sign-in on a forge's host, as that forge's CLI keeps it. */
 export interface ForgeSignIn {
@@ -18,42 +19,8 @@ export interface ForgeSignIn {
   readonly token: string;
 }
 
-/** What a forge made, or found already open. */
-export interface ForgeMade {
-  /** A pull or merge request that was open already for the same branches, or an issue a repeat commented on. */
-  readonly existing?: boolean;
-  readonly url: string;
-}
-
-/** One repository on one forge, signed in: the writes every forge has. */
-export interface ForgeClient {
-  /** The login it posts as. */
-  readonly account: () => Promise<string>;
-  readonly comment: (
-    write: Extract<ForgeWrite, { op: "comment" }>
-  ) => Promise<ForgeMade>;
-  readonly issue: (
-    write: Extract<ForgeWrite, { op: "issue" }>
-  ) => Promise<ForgeMade>;
-  /**
-   * The open issue whose body holds `marker`, by its number; none when no
-   * open issue does. `search` is a word of the marker the forge's issue
-   * search finds it by.
-   */
-  readonly markedIssue: (
-    marker: string,
-    search: string
-  ) => Promise<number | undefined>;
-  /** The open pull or merge request from `head` into `base`, or a new one. */
-  readonly pullRequest: (
-    write: Extract<ForgeWrite, { op: "pull_request" }>
-  ) => Promise<ForgeMade>;
-}
-
-/** One forge: where its CLI keeps the host's sign-in, and a client for one repository. */
-export interface ForgeAdapter {
-  /** A client for the repository at `path` (`owner/repo`, `group/sub/project`) on the sign-in's host. */
-  readonly client: (signIn: ForgeSignIn, path: string) => ForgeClient;
+/** One forge's CLI on this machine: the host's sign-in it keeps. */
+export interface ForgeLogin {
   readonly forge: Forge;
   /** The host's sign-in for `host`, or why it holds none it can use; undefined when this forge's CLI keeps nothing for it. */
   readonly signIn: (host: string) => Promise<ForgeSignIn | string | undefined>;

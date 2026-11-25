@@ -16,9 +16,9 @@
  * - **Publish**, on Approve: the place pushes its branch to the hub's own
  *   remote of its repository with its machine's credential (agent
  *   place-push.ts names which); the hub creates
- *   the repository through the connection with Octokit
- *   (`repos.createForAuthenticatedUser`, `POST /user/repos` on core
- *   github-api.ts's API version, private as asked) and pushes that
+ *   the repository through the write door with the connection (writes.ts,
+ *   GitHub's `repo.create`: `POST /user/repos`, private as asked), which
+ *   records it, and pushes that
  *   branch from that repository's bare one with the token in
  *   an `http.extraHeader` given through git's environment, never argv; the
  *   project then links it as that repository's published copy.
@@ -26,24 +26,23 @@
 
 import { readWithin } from "@cawco/core/bounded";
 import { type HubRepoKey, hubRepoSegment } from "@cawco/core/hub-repo";
-import { isRecord } from "@cawco/core/is-record";
 import type { ProjectSettingChange } from "@cawco/core/permission-presentation";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { CONTROL_PLACE_PUSH } from "@cawco/core/workspace/controls";
 import { startedPath } from "@cawco/core/workspace-needs";
+import { Effect, Result } from "effect";
 import { ElysiaStatus, problem } from "elysia";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type { PlaceRow, ProjectRow } from "./db/projects";
 import type { MachineCall } from "./machine-answers";
 import type { PlaceRepos } from "./place-repo";
+import type { Writes } from "./writes";
 
 /** GitHub's rule for a repository's name. */
 const REPO_NAME = /^[A-Za-z0-9._-]{1,100}$/u;
-/** How long one GitHub API call may take. Our choice. */
-const API_MS = 30_000;
 /** How long the hub's push to GitHub may take. Our choice. */
 const PUSH_MS = 10 * 60_000;
 
@@ -60,23 +59,9 @@ export interface RepoPublishDeps {
   >;
   readonly db: Pick<DbShape, "projectLinkPublishedFrom">;
   readonly places: Pick<PlaceRepos, "ensure">;
+  /** The write door: the repository is made through it, and recorded (writes.ts). */
+  readonly writes: Pick<Writes, "post">;
 }
-
-/**
- * GitHub's refusal of a create in words: its status and GitHub's own
- * message. Octokit throws it as a RequestError (@octokit/request-error): its
- * `status`, and the answer's `message` under `response.data`.
- */
-const refusalOf = (error: unknown): string => {
-  const failed = isRecord(error) ? error : {};
-  const { response } = failed;
-  const answer = isRecord(response) ? response.data : undefined;
-  const said = isRecord(answer) ? answer.message : undefined;
-  const status =
-    typeof failed.status === "number" ? failed.status : "no answer";
-  const message = typeof failed.message === "string" ? failed.message : "";
-  return `${status} ${typeof said === "string" ? said : message}`.trim();
-};
 
 /** A publish done: the repository made, `owner/name`, and the hub repository it is the copy of. */
 export interface Published {
@@ -92,6 +77,7 @@ export const createRepoPublish = ({
   connections,
   db,
   places,
+  writes,
 }: RepoPublishDeps) => {
   /** The checkout a publish reads and pushes: the one named, else the project's only one. */
   const placeOf = (project: ProjectRow, folder: string | undefined) => {
@@ -331,39 +317,40 @@ export const createRepoPublish = ({
     // The connection's token as it is now, taken before the repository is
     // made so a connection that holds none makes nothing on GitHub.
     const token = await connections.githubToken(change.connection);
-    const octokit = connections.githubClient(change.connection);
-    const asked = await readWithin(API_MS, async (signal) => {
-      try {
-        const { data } = await octokit.rest.repos.createForAuthenticatedUser({
-          name: change.name,
-          private: change.private,
-          auto_init: false,
-          request: { signal, redirect: "error" },
-        });
-        return { made: data };
-      } catch (error) {
-        return { refused: refusalOf(error) };
-      }
-    });
-    switch (asked.kind) {
-      case "answered":
-        break;
-      case "unanswered":
-        throw new Error(
-          `GitHub did not answer within ${secondsOf(asked.after)} s about creating ${change.name}, so it may or may not exist: look on GitHub before you retry.`
-        );
-      default:
-        unhandled("read", asked);
-    }
-    const { made, refused } = asked.value;
-    if (!made) {
-      throw new Error(`GitHub did not create ${change.name}: ${refused}`);
-    }
-    await pushFromHub(hub, pushed.branch, made.clone_url, token);
-    console.log(
-      `[repo-publish] ${project.name}: ${place.path}'s ${pushed.branch} at ${pushed.commit.slice(0, 9)} published to ${made.full_name}`
+    const created = await Effect.runPromise(
+      Effect.result(
+        writes.post({
+          by: "hub",
+          target: {
+            connection: change.connection,
+            provider: "github",
+            host: "github.com",
+            container: "",
+          },
+          op: { op: "repo.create", name: change.name, private: change.private },
+          projectId: project.id,
+        })
+      )
     );
-    const done: Published = { full: made.full_name, from: hub };
+    if (Result.isFailure(created)) {
+      const { failure } = created;
+      throw new Error(
+        failure.reason === "unanswered"
+          ? `GitHub did not answer about creating ${change.name}, so it may or may not exist: look on GitHub before you retry.`
+          : `GitHub did not create ${change.name}: ${failure.words}`
+      );
+    }
+    const made = created.success.repo;
+    if (!made) {
+      throw new Error(
+        `GitHub answered the create of ${change.name} without naming the repository.`
+      );
+    }
+    await pushFromHub(hub, pushed.branch, made.cloneUrl, token);
+    console.log(
+      `[repo-publish] ${project.name}: ${place.path}'s ${pushed.branch} at ${pushed.commit.slice(0, 9)} published to ${made.fullName}`
+    );
+    const done: Published = { full: made.fullName, from: hub };
     return done;
   };
 

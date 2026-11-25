@@ -12,7 +12,9 @@
  *   the state it held is asked of its provider for the events that move
  *   says (a reopen).
  * - **Events** next, each inserted once on (project, source, key): one
- *   whose key is there stores nothing. An event that is its revision's
+ *   whose key is there stores nothing. Each is marked `ours` when the write
+ *   ledger names it CawCo's own (db/writes.ts `originOf`), else `outside`.
+ *   An event that is its revision's
  *   change (a connector poll's record) is stored only when its revision
  *   wrote. Each names its watch and its item's mirror row.
  * - **A whole listing** (a connector poll's answer) drops the container's
@@ -52,6 +54,7 @@ import type { InboundEventRow } from "./ingress";
 import { externalItems, inboundEvents } from "./schema";
 import type { InboundVia } from "./stored-types";
 import type { Tx } from "./tx";
+import { originOf } from "./writes";
 
 /** What `routed_to` reads on an event held for the person on an item no task links (hub outsiders.ts). */
 export const HELD_OUTSIDER = "outsider";
@@ -219,7 +222,7 @@ const storeEvents = (
         projectId: input.projectId,
         watchId: input.watchId,
         itemId: item?.id ?? null,
-        origin: "outside",
+        origin: originOf(tx, event),
         taskId: null,
         payload: input.payloadOf(event),
         receivedAt: now,

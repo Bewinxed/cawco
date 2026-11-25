@@ -103,6 +103,7 @@ import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
 import { type UsageDb, usageDb } from "./usage";
 import { type UsagePeriodsDb, usagePeriodsDb } from "./usage-periods";
 import { closeWal, useWal } from "./wal";
+import { type WritesDb, writesDb } from "./writes";
 
 /** The store's own members and the stores it wires in. */
 interface HubStore {
@@ -228,6 +229,8 @@ interface HubStore {
   readonly turnUsage: TurnUsageDb;
   /** Each account's window periods, kept as readings and turns arrive (usage-periods.ts). */
   readonly usagePeriods: UsagePeriodsDb;
+  /** The write ledger: what CawCo wrote to an outside service (writes.ts). */
+  readonly writes: WritesDb;
 }
 
 export type DbShape = DataMigrationsDb &
@@ -412,6 +415,7 @@ const make = async (path: string): Promise<DbShape> => {
     connections: connectionsDb(db),
     ingress: ingressDb(db),
     intake: intakeDb(db),
+    writes: writesDb(db),
     relays: relaysDb(db),
     asks: asksDb(db),
     sshMachines: sshMachinesDb(db, hubId),

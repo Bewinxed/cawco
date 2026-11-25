@@ -14,17 +14,18 @@
  *   does not answer in time says so, and the item is read again later.
  */
 import type { Octokit } from "@octokit/rest";
+import { Effect } from "effect";
 import type {
   ItemRead,
   ItemRevision,
   Items,
   MirroredRef,
   MirrorState,
-  Within,
 } from "../provider";
+import { type ProviderFailure, refusedWith, request } from "../read-stop";
 import { githubActorOf } from "./actor";
 import { answerOf, refusalWords } from "./answer";
-import { pullState } from "./ingest";
+import { issueRevisionOf, pullState } from "./ingest";
 
 /** GitHub's answer to a conditional read of something unchanged. */
 const NOT_MODIFIED = 304;
@@ -105,95 +106,102 @@ const revisionOf = (
   ...(etag === undefined ? {} : { etag }),
 });
 
-/** One read's place: the item, its repository, the ETag its last read kept, and the request's signal. */
+/** One read's place: the item, its repository, the ETag its last read kept, and the hub's deadline on a request. */
 interface ReadAt {
   etag: string | null;
   item: MirroredRef;
   octokit: Octokit;
   owner: string;
   repo: string;
-  signal: AbortSignal;
+  requestMs: number;
 }
 
-const readIssue = async (at: ReadAt): Promise<ItemRead> => {
-  const { data } = await at.octokit.request(
-    "GET /repos/{owner}/{repo}/issues/{issue_number}",
-    {
+/** One request of a read, within the hub's deadline, GitHub's refusal in its words. */
+const ask = <A>(at: ReadAt, run: (signal: AbortSignal) => Promise<A>) =>
+  request("GitHub", at.requestMs, run, (error) => {
+    const said = refusalWords(error, `read ${at.item.ref}`, at.item.container);
+    return refusedWith(said.words, said.code, said.resumeAt);
+  });
+
+/**
+ * An issue, whole (its body, its state's token, who opened it and whether
+ * GitHub vouches for them, for the tracker sync); gone when GitHub answers
+ * it from another repository (it was transferred) or no issue at all.
+ */
+const readIssue = Effect.fnUntraced(function* (at: ReadAt) {
+  const { data } = yield* ask(at, (signal) =>
+    at.octokit.request("GET /repos/{owner}/{repo}/issues/{issue_number}", {
       owner: at.owner,
       repo: at.repo,
       issue_number: Number(at.item.key),
-      request: { signal: at.signal },
-    }
+      request: { signal },
+    })
   );
-  const closed = data.state === "closed";
-  const canceled = closed && data.state_reason === "not_planned";
-  let state: MirrorState = "open";
-  if (canceled) {
-    state = "canceled";
-  } else if (closed) {
-    state = "closed";
-  }
-  return {
-    kind: "read",
-    revision: revisionOf(at.item, {
-      externalId: data.node_id,
-      title: data.title,
-      state,
-      stateName: canceled ? "Closed as not planned" : "",
-      author: githubActorOf(data.user),
-      labels: labelNames(data.labels),
-      updatedAt: data.updated_at,
-    }),
-  };
-};
+  const here = data.repository_url
+    .toLowerCase()
+    .endsWith(`/${at.owner}/${at.repo}`.toLowerCase());
+  const revision = here ? issueRevisionOf(data, at.item) : undefined;
+  const read: ItemRead = revision ? { kind: "read", revision } : GONE;
+  return read;
+});
 
-const readPull = async (at: ReadAt): Promise<ItemRead> => {
-  try {
-    const { data, headers } = await at.octokit.request(
-      "GET /repos/{owner}/{repo}/pulls/{pull_number}",
-      {
+/** What a conditional read of something unchanged answers: GitHub's 304, read as such. */
+const UNCHANGED = "not modified";
+
+const readPull = Effect.fnUntraced(function* (at: ReadAt) {
+  const answer = yield* ask(at, (signal) =>
+    at.octokit
+      .request("GET /repos/{owner}/{repo}/pulls/{pull_number}", {
         owner: at.owner,
         repo: at.repo,
         pull_number: Number(at.item.key),
-        request: { signal: at.signal },
+        request: { signal },
         ...(at.etag ? { headers: { "if-none-match": at.etag } } : {}),
-      }
-    );
-    return {
-      kind: "read",
-      revision: revisionOf(
-        at.item,
-        {
-          externalId: data.node_id,
-          title: data.title,
-          state: pullState(data),
-          author: githubActorOf(data.user),
-          labels: labelNames(data.labels),
-          updatedAt: data.updated_at,
-        },
-        typeof headers.etag === "string" ? headers.etag : null
-      ),
-    };
-  } catch (error) {
-    if (at.etag && answerOf(error).status === NOT_MODIFIED) {
-      return { kind: "unchanged" };
-    }
-    throw error;
+      })
+      .catch((error: unknown): typeof UNCHANGED => {
+        if (at.etag && answerOf(error).status === NOT_MODIFIED) {
+          return UNCHANGED;
+        }
+        throw error;
+      })
+  );
+  if (answer === UNCHANGED) {
+    const read: ItemRead = { kind: "unchanged" };
+    return read;
   }
-};
+  const { data, headers } = answer;
+  const read: ItemRead = {
+    kind: "read",
+    revision: revisionOf(
+      at.item,
+      {
+        externalId: data.node_id,
+        title: data.title,
+        state: pullState(data),
+        author: githubActorOf(data.user),
+        labels: labelNames(data.labels),
+        updatedAt: data.updated_at,
+      },
+      typeof headers.etag === "string" ? headers.etag : null
+    ),
+  };
+  return read;
+});
 
-const readRun = async (at: ReadAt): Promise<ItemRead> => {
-  const { data: run } = await at.octokit.rest.actions.getWorkflowRun({
-    owner: at.owner,
-    repo: at.repo,
-    run_id: Number(at.item.key),
-    request: { signal: at.signal },
-  });
+const readRun = Effect.fnUntraced(function* (at: ReadAt) {
+  const { data: run } = yield* ask(at, (signal) =>
+    at.octokit.rest.actions.getWorkflowRun({
+      owner: at.owner,
+      repo: at.repo,
+      run_id: Number(at.item.key),
+      request: { signal },
+    })
+  );
   let state: MirrorState = "running";
   if (run.status === "completed") {
     state = GREEN_RUNS.has(run.conclusion ?? "") ? "green" : "red";
   }
-  return {
+  const read: ItemRead = {
     kind: "read",
     revision: revisionOf(at.item, {
       externalId: run.node_id,
@@ -205,20 +213,23 @@ const readRun = async (at: ReadAt): Promise<ItemRead> => {
       updatedAt: run.updated_at,
     }),
   };
-};
+  return read;
+});
 
-const readDiscussion = async (at: ReadAt): Promise<ItemRead> => {
-  const answer = await at.octokit.graphql<DiscussionRead>(DISCUSSION_QUERY, {
-    owner: at.owner,
-    name: at.repo,
-    number: Number(at.item.key),
-    request: { signal: at.signal },
-  });
+const readDiscussion = Effect.fnUntraced(function* (at: ReadAt) {
+  const answer = yield* ask(at, (signal) =>
+    at.octokit.graphql<DiscussionRead>(DISCUSSION_QUERY, {
+      owner: at.owner,
+      name: at.repo,
+      number: Number(at.item.key),
+      request: { signal },
+    })
+  );
   const found = answer.repository?.discussion;
   if (!found) {
-    return { kind: "gone" };
+    return GONE;
   }
-  return {
+  const read: ItemRead = {
     kind: "read",
     revision: revisionOf(at.item, {
       externalId: found.id,
@@ -241,42 +252,34 @@ const readDiscussion = async (at: ReadAt): Promise<ItemRead> => {
       updatedAt: found.updatedAt,
     }),
   };
-};
+  return read;
+});
+
+const GONE: ItemRead = { kind: "gone" };
 
 /** Each kind's read; a record is no GitHub item. */
-const READS: Record<MirroredRef["kind"], (at: ReadAt) => Promise<ItemRead>> = {
+const READS: Record<
+  MirroredRef["kind"],
+  (at: ReadAt) => Effect.Effect<ItemRead, ProviderFailure>
+> = {
   issue: readIssue,
   pr: readPull,
   run: readRun,
   discussion: readDiscussion,
-  record: () => Promise.resolve({ kind: "gone" }),
+  record: () => Effect.succeed(GONE),
 };
 
-/** One item read now, within the hub's deadline: its revision, nothing new, gone, or GitHub's words as its problem. */
-const readItem = async (
+/** One item read now, each request within the hub's deadline: its revision, nothing new, or gone; GitHub's refusal in its words, or no answer, its failure. */
+const readItem = (
   octokit: Octokit,
   item: MirroredRef,
   etag: string | null,
-  within: Within
-): Promise<ItemRead> => {
+  requestMs: number
+): Effect.Effect<ItemRead, ProviderFailure> => {
   const [owner, repo] = item.container.split("/");
-  if (!(owner && repo)) {
-    return { kind: "gone" };
-  }
-  try {
-    const asked = await within((signal) =>
-      READS[item.kind]({ etag, item, octokit, owner, repo, signal })
-    );
-    return asked.kind === "unanswered"
-      ? { kind: "unanswered", after: asked.after }
-      : asked.value;
-  } catch (error) {
-    const said = refusalWords(error, `read ${item.ref}`, item.container);
-    return {
-      kind: "stopped",
-      problem: { words: said.words, resumeAt: said.resumeAt },
-    };
-  }
+  return owner && repo
+    ? READS[item.kind]({ etag, item, octokit, owner, repo, requestMs })
+    : Effect.succeed(GONE);
 };
 
 /** GitHub's single-item reads. */

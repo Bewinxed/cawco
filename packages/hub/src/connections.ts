@@ -74,7 +74,6 @@ import {
   parseConnectionTool,
 } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
-import { GitHubOctokit } from "@cawco/core/github-api";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
@@ -82,7 +81,18 @@ import { areaWords } from "@cawco/core/words/areas";
 import { connectionReasons } from "@cawco/core/words/connection-reasons";
 import { connectionsWords } from "@cawco/core/words/connections";
 import { cutShort } from "@cawco/core/words/helpers";
-import { LinearClient } from "@linear/sdk";
+import {
+  type GitHubAppAuth,
+  type GitHubClient,
+  githubAnonymousClient,
+  githubAppClient,
+  githubAppJwtClient,
+  githubTokenClient,
+} from "@cawco/providers/github/client";
+import {
+  type LinearClientFor,
+  linearClientFor,
+} from "@cawco/providers/linear/client";
 import {
   auth,
   exchangeAuthorization,
@@ -114,8 +124,6 @@ import {
   McpError,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { createAppAuth, type StrategyOptions } from "@octokit/auth-app";
-import type { Octokit } from "@octokit/rest";
 import { Elysia, problem, t } from "elysia";
 import type { Static } from "typebox";
 import {
@@ -363,6 +371,12 @@ export interface ConnectionsDeps {
   readonly trash: (name: string) => number | undefined;
   /** The connections the delegate type a session runs as lists. */
   readonly typeConnections: (row: InstanceRow) => readonly string[];
+  /**
+   * A session's call of a tool its server does not mark read-only answered:
+   * what the answer names is recorded as the session's write (writes.ts
+   * `recordAnswer`), so it is CawCo's own when it comes back.
+   */
+  readonly wrote: (actor: InstanceRow, answer: string) => void;
 }
 
 const misfit = (message: string): never => {
@@ -443,11 +457,14 @@ const inputProblem = (input: ConnectionInput): string | undefined => {
   return input.transport === "stdio" ? stdioProblem(input) : httpProblem(input);
 };
 
-/**
- * A Linear client signed in as a connection, made for one request: its
- * signal, when given, goes with each fetch, so a request let go is aborted.
- */
-export type LinearClientFor = (signal?: AbortSignal) => LinearClient;
+/** A tool's answer as one text: its text parts and its structured content. */
+const answerText = (result: CallToolResult): string =>
+  [
+    ...result.content.map((part) => (part.type === "text" ? part.text : "")),
+    result.structuredContent === undefined
+      ? ""
+      : JSON.stringify(result.structuredContent),
+  ].join("\n");
 
 /** A Linear app's registration as the person gives it, for {@link Connections.setApp}. */
 export interface AppInput {
@@ -739,7 +756,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
    */
   const githubApps = new Map<
     string,
-    { auth: ReturnType<typeof createAppAuth>; made: string; octokit: Octokit }
+    { auth: GitHubAppAuth; made: string; octokit: GitHubClient }
   >();
 
   /** A GitHub App connection's Octokit and the app auth that signs its requests, as {@link githubApps} holds them. */
@@ -759,27 +776,16 @@ export const createConnections = (deps: ConnectionsDeps) => {
     if (held?.made === made) {
       return held;
     }
-    const strategy = {
+    // Its requests and `auth({ type: "installation" })` share the app
+    // auth's one installation-token cache (providers github/client.ts).
+    const signer = githubAppClient({
+      api: GITHUB_API,
       appId: app.appId,
       installationId: Number(app.installationId),
       privateKey: app.privateKey,
-    };
-    // The app's one auth: Octokit makes it through its `authStrategy`, with
-    // its own request, and signs its requests with it; it is kept here as
-    // made, because Octokit's own `auth` is typed `unknown`
-    // (@octokit/core: "TODO: type `octokit.auth` based on passed
-    // options.authStrategy"). Its requests and `auth({ type: "installation" })`
-    // share its one installation-token cache.
-    const signer: { auth?: ReturnType<typeof createAppAuth> } = {};
-    const octokit = new GitHubOctokit({
-      authStrategy: (options: StrategyOptions) => {
-        signer.auth = createAppAuth(options);
-        return signer.auth;
-      },
-      auth: strategy,
-      baseUrl: GITHUB_API,
       userAgent: "CawCo-hub",
     });
+    const { octokit } = signer;
     const appAuth =
       signer.auth ?? misfit(`${r.name}'s GitHub App auth wasn't made.`);
     const kept = { auth: appAuth, made, octokit };
@@ -790,7 +796,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
   const githubAppOctokit = (
     r: ConnectionRow,
     app: Extract<HeldApp, { service: "github" }>
-  ): Octokit => githubApp(r, app).octokit;
+  ): GitHubClient => githubApp(r, app).octokit;
 
   /** A token's refresh under way (a Linear app's, a code sign-in's), by row id: two callers share one. */
   const refreshing = new Map<string, Promise<string>>();
@@ -1778,7 +1784,11 @@ export const createConnections = (deps: ConnectionsDeps) => {
     console.info(
       `[connections] ${actor.id} calls ${parsed.connection}/${tool.name}`
     );
-    return await callConnection(parsed.connection, tool.name, args);
+    const result = await callConnection(parsed.connection, tool.name, args);
+    if (!(readsOnly(tool) || result.isError)) {
+      deps.wrote(actor, answerText(result));
+    }
+    return result;
   };
 
   /** Refuses an area the hub keeps none of. */
@@ -2188,10 +2198,10 @@ export const createConnections = (deps: ConnectionsDeps) => {
     };
     try {
       made = (
-        await new GitHubOctokit({
-          baseUrl: GITHUB_API,
-          userAgent: "CawCo-hub",
-        }).rest.apps.createFromManifest({ code })
+        await githubAnonymousClient(
+          GITHUB_API,
+          "CawCo-hub"
+        ).rest.apps.createFromManifest({ code })
       ).data;
     } catch (error) {
       setState(r, "needs-sign-in", connectionsWords.saidSignIn);
@@ -2258,10 +2268,10 @@ export const createConnections = (deps: ConnectionsDeps) => {
       );
     }
     try {
-      await new GitHubOctokit({
-        authStrategy: createAppAuth,
-        auth: { appId: app.appId, privateKey: app.privateKey },
-        baseUrl: GITHUB_API,
+      await githubAppJwtClient({
+        api: GITHUB_API,
+        appId: app.appId,
+        privateKey: app.privateKey,
         userAgent: "CawCo-hub",
       }).rest.apps.getInstallation({ installation_id: Number(installationId) });
     } catch {
@@ -2716,7 +2726,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
    * whose tokens it mints and renews itself. Refused in words for any other
    * sign-in: an MCP OAuth token is for GitHub's MCP server.
    */
-  const githubClient = (name: string): Octokit => {
+  const githubClient = (name: string): GitHubClient => {
     const r = row(name);
     if (appServiceOf(r.service) !== "github") {
       return misfit(`${name} is a ${r.service} connection, not a GitHub one.`);
@@ -2729,31 +2739,27 @@ export const createConnections = (deps: ConnectionsDeps) => {
     }
     if (r.auth === "gh" || r.auth === "device") {
       // Each request is signed with the token as it is then: a gh token
-      // read again once a minute old, a code sign-in's refreshed near its end.
-      const octokit = new GitHubOctokit({
-        baseUrl: GITHUB_API,
+      // read again once a minute old, a code sign-in's refreshed near its
+      // end. GitHub refused the token: a gh connection reads its machine again.
+      return githubTokenClient({
+        api: GITHUB_API,
         userAgent: "CawCo-hub",
-      });
-      octokit.hook.before("request", async (options) => {
-        const fresh = db.byId(r.id) ?? r;
-        const token =
-          r.auth === "gh" ? await ghToken(fresh) : await deviceAccess(fresh);
-        options.headers.authorization = `token ${token}`;
-      });
-      octokit.hook.error("request", (error) => {
-        // GitHub refused the token: a gh connection reads its machine again.
-        if ("status" in error && error.status === 401) {
+        token: async () => {
+          const fresh = db.byId(r.id) ?? r;
+          return r.auth === "gh"
+            ? await ghToken(fresh)
+            : await deviceAccess(fresh);
+        },
+        refused: () => {
           ghRead.delete(r.id);
-        }
-        throw error;
+        },
       });
-      return octokit;
     }
     if (r.auth === "bearer") {
-      return new GitHubOctokit({
-        auth: sealed.key ?? misfit(`${name} needs its key: ${NO_SECRET}.`),
-        baseUrl: GITHUB_API,
+      return githubTokenClient({
+        api: GITHUB_API,
         userAgent: "CawCo-hub",
+        token: sealed.key ?? misfit(`${name} needs its key: ${NO_SECRET}.`),
       });
     }
     return misfit(
@@ -2819,10 +2825,10 @@ export const createConnections = (deps: ConnectionsDeps) => {
     )) {
       return misfit(`${name} is no installed GitHub App.`);
     }
-    const { data } = await new GitHubOctokit({
-      authStrategy: createAppAuth,
-      auth: { appId: app.appId, privateKey: app.privateKey },
-      baseUrl: GITHUB_API,
+    const { data } = await githubAppJwtClient({
+      api: GITHUB_API,
+      appId: app.appId,
+      privateKey: app.privateKey,
       userAgent: "CawCo-hub",
     }).rest.apps.getInstallation({
       installation_id: Number(app.installationId),
@@ -2858,9 +2864,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
         `${name} signs in with ${r.auth}; a tracker reads Linear through a Linear app or a personal API key.`
       );
     }
-    // The client hands its options to each fetch, a request's signal with them.
-    return (signal) =>
-      new LinearClient({ ...signedIn, apiUrl, ...(signal ? { signal } : {}) });
+    return linearClientFor(signedIn, apiUrl);
   };
 
   /**

@@ -50,7 +50,7 @@
  * - **What syncs**, as Linear's GitHub sync does, less what CawCo keeps:
  *   "title, description, status, … labels, … comments"
  *   (linear.app/docs/github). Stages map onto states through their kinds
- *   (tracker-adapter.ts); with GitHub, a stage is open or closed. Comments
+ *   (`stateFor`, `stageFor` below); with GitHub, a stage is open or closed. Comments
  *   go once each way, from the link on, a CawCo comment saying who wrote it;
  *   one from the tracker is filed as data through links.ts (its
  *   author, source and URL), and an edit there rewrites it in place.
@@ -66,7 +66,7 @@
  *   takes it, waits there too. A project binds only with a `you` stage.
  *   claude-code-action likewise runs only for "users with write access to
  *   the repository" (its docs/security.md). Linear's Triage is a `you`
- *   stage's kind for the same reason (tracker-adapter.ts). A move made on
+ *   stage's kind for the same reason (`TYPE_KINDS` below). A move made on
  *   the tracker is the person's who made it there: it starts what a
  *   stage's `runs:` starts (dispatch.ts).
  * - **When: through the door.** The sync polls nothing of its own. The
@@ -117,9 +117,12 @@
  */
 
 import { detach } from "@cawco/core/detach";
+import type { ExternalActor, ExternalState } from "@cawco/core/external-items";
 import { isFleetProject } from "@cawco/core/fleet-project";
+import { outsideFences } from "@cawco/core/markdown-code";
 import type { OutsiderRule } from "@cawco/core/outsiders";
 import type { Stage, TaskSummary } from "@cawco/core/task-views";
+import { secondsOf } from "@cawco/core/time";
 import {
   type GithubProject,
   type GithubProjectsView,
@@ -131,11 +134,28 @@ import {
   type Tracker,
   type TrackerDirection,
   type TrackerSyncState,
+  type TrackerTarget,
   type TrackerView,
 } from "@cawco/core/trackers";
+import { unhandled } from "@cawco/core/unhandled";
+import type { StageKind } from "@cawco/core/views";
 import { connectionsWords } from "@cawco/core/words/connections";
-import type { BoardRead, ItemRevision } from "@cawco/providers/provider";
+import { githubProjects as listProjects } from "@cawco/providers/github/board";
+import type { GitHubClient } from "@cawco/providers/github/client";
+import { githubIssueState, githubSync } from "@cawco/providers/github/sync";
+import type { LinearClientFor } from "@cawco/providers/linear/client";
+import { linearSync } from "@cawco/providers/linear/sync";
+import type {
+  BoardItem,
+  BoardRead,
+  IssueState,
+  ItemRevision,
+  MadeComment,
+  StateType,
+} from "@cawco/providers/provider";
+import type { ProviderFailure } from "@cawco/providers/read-stop";
 import { itemOfUrl } from "@cawco/providers/registry";
+import { Effect } from "effect";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
 import type { ItemRow } from "./db/external-items";
@@ -153,32 +173,273 @@ import type { HubLifetimeShape } from "./lifetime";
 import type { AnyProblem } from "./refusal";
 
 import type { TaskActor, TaskPatch, Tasks, TaskView } from "./tasks";
-import {
-  deniesConnection,
-  externalStateOf,
-  heldByRate,
-  type Issue,
-  type IssuePatch,
-  type IssueState,
-  intoFile,
-  labelSet,
-  outOfFile,
-  stageFor,
-  stateFor,
-  stopsSync,
-  type TrackerAdapter,
-  type TrackerProblem,
-} from "./tracker-adapter";
-import { githubAdapter, githubTargets, issueStateOf } from "./tracker-github";
-import {
-  type GithubProjectStatus,
-  githubProjectStatus,
-  githubProjects,
-  type ProjectRead,
-  type StatusItem,
-  statusOptionsAdded,
-} from "./tracker-github-project";
-import { linearAdapter, linearTargets } from "./tracker-linear";
+import { WriteRefused, type Writes } from "./writes";
+
+/** An issue as the sync reads it. */
+export interface Issue {
+  /** Who opened it, as the source names them; null when it names no one. */
+  author: ExternalActor | null;
+  createdAt: number;
+  /** Its body, as the tracker holds it (markdown), trimmed. */
+  description: string;
+  /** The source's own id: GitHub's node id, Linear's uuid. */
+  id: string;
+  /** GitHub: its number; Linear: its id. */
+  key: string;
+  /** Its labels' names, sorted. */
+  labels: string[];
+  /** GitHub's #12; null on Linear. */
+  number: number | null;
+  /**
+   * Who opened it: their name, and, when the tracker does not vouch for
+   * them, who they are in words (GitHub: no owner, member or collaborator
+   * of the repository; Linear: an integration's, no member behind it).
+   * Their issue's task waits for a person before any agent takes it.
+   */
+  opener: { name: string; unvouched: string | null };
+  /** `#12`, `ENG-123`. */
+  ref: string;
+  state: IssueState;
+  title: string;
+  updatedAt: number;
+  url: string;
+}
+
+/** What a new issue is made of. */
+export interface IssueDraft {
+  description: string;
+  labels: string[];
+  state: IssueState;
+  title: string;
+}
+
+/** What a change to an issue sets; what it leaves out stays. */
+export type IssuePatch = Partial<IssueDraft>;
+
+/** A 400 the person reads, under the tracker's own `code`. */
+type Said<Code extends string> = ReturnType<
+  typeof problem<400, { code: Code; detail: string }>
+>;
+
+/**
+ * Why a tracker would not do what the sync asked, in its own words with
+ * what the person can do: a provider's refusal or the write door's, read
+ * at the sync's edge ({@link settle}); the code says what the sync reads
+ * of it:
+ *
+ * - `tracker-sign-in`: the connection's key or app was not taken.
+ * - `tracker-scope`: the connection reaches the service but may not do this.
+ * - `tracker-rate`: the service's rate limit holds calls back until
+ *   `resumeAt` (ms).
+ * - `tracker-unreachable`: no answer.
+ * - `tracker-input`: the tracker would not take what was sent.
+ */
+export type TrackerProblem =
+  | Said<"tracker-sign-in">
+  | Said<"tracker-scope">
+  | ReturnType<
+      typeof problem<
+        400,
+        { code: "tracker-rate"; detail: string; resumeAt: number }
+      >
+    >
+  | Said<"tracker-unreachable">
+  | Said<"tracker-input">;
+
+/** Whether the tracker's rate limit holds the calls back. */
+const heldByRate = (misfit: AnyProblem): boolean =>
+  misfit.response.code === "tracker-rate";
+
+/** Whether a problem stops a whole sync, rather than one task's part of it: a rate limit, or a sign-in the tracker did not take. */
+const stopsSync = (misfit: AnyProblem): boolean =>
+  heldByRate(misfit) || misfit.response.code === "tracker-sign-in";
+
+/** Whether the connection itself is what the tracker would not take: its sign-in or its scope. The binding says it. */
+const deniesConnection = (misfit: AnyProblem): boolean =>
+  misfit.response.code === "tracker-sign-in" ||
+  misfit.response.code === "tracker-scope";
+
+/** The categories a kind's stage puts its issue in, the first the tracker has. */
+const KIND_TYPES: Readonly<Record<StageKind, readonly StateType[]>> = {
+  todo: ["unstarted", "backlog", "triage"],
+  active: ["started", "unstarted"],
+  waiting: ["started", "unstarted"],
+  you: ["started", "unstarted"],
+  done: ["completed"],
+  dropped: ["canceled"],
+};
+
+/**
+ * The kind of stage a category puts its task in. Triage waits for you:
+ * Linear's issues there are "before they are added to your team's
+ * workflow" (linear.app/docs/triage), and a `todo` stage is the
+ * dispatcher's to start.
+ */
+const TYPE_KINDS: Readonly<Record<StateType, StageKind>> = {
+  triage: "you",
+  backlog: "todo",
+  unstarted: "todo",
+  started: "active",
+  completed: "done",
+  canceled: "dropped",
+};
+
+const same = (a: string, b: string): boolean =>
+  a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** The state a stage puts its issue in; undefined when the tracker has none for its kind. */
+const stateFor = (
+  stage: Pick<Stage, "kind" | "name">,
+  states: readonly IssueState[]
+): IssueState | undefined =>
+  states.find((state) => same(state.name, stage.name)) ??
+  KIND_TYPES[stage.kind]
+    .map((type) => states.find((state) => state.type === type))
+    .find((state) => state !== undefined);
+
+/**
+ * The stage an issue's state puts its task in: `current` when they agree
+ * (the state is the one `current` puts its issue in, or is named as it),
+ * else the stage named as the state, else the first stage of its category's
+ * kind; undefined when the project has none.
+ */
+const stageFor = (
+  state: IssueState,
+  current: Pick<Stage, "kind" | "name"> | undefined,
+  stages: readonly Stage[],
+  states: readonly IssueState[]
+): Pick<Stage, "kind" | "name"> | undefined => {
+  if (
+    current &&
+    (same(current.name, state.name) ||
+      stateFor(current, states)?.token === state.token)
+  ) {
+    return current;
+  }
+  return (
+    stages.find((stage) => same(stage.name, state.name)) ??
+    stages.find((stage) => stage.kind === TYPE_KINDS[state.type])
+  );
+};
+
+const HEADING = /^(#{2,})(?=\s|$)/u;
+
+/** Each heading line outside fenced code, its #s counted and changed by `change`. */
+const headings = (text: string, change: (level: number) => number): string =>
+  outsideFences(text, (line) => {
+    const found = HEADING.exec(line);
+    return found
+      ? `${"#".repeat(change(found[1].length))}${line.slice(found[1].length)}`
+      : line;
+  });
+
+/** Text from a tracker as a task file holds it: every heading below H1 `by` levels deeper. */
+export const intoFile = (text: string, by: 1 | 2): string =>
+  headings(text.replaceAll("\r\n", "\n").trim(), (level) => level + by);
+
+/** A task file's text as its tracker holds it: each heading `by` levels back up. */
+const outOfFile = (text: string, by: 1 | 2): string =>
+  headings(text.trim(), (level) => (level >= 2 + by ? level - by : level));
+
+/** An issue's state in the five words every source maps onto (core external-items.ts). */
+const externalStateOf = (state: IssueState): ExternalState => {
+  if (state.type === "completed") {
+    return "closed";
+  }
+  return state.type === "canceled" ? "canceled" : "open";
+};
+
+/** Labels as the sync compares them: each once, sorted. */
+const labelSet = (labels: readonly string[]): string[] =>
+  [...new Set(labels.map((label) => label.trim()).filter(Boolean))].sort();
+
+/** How long one request the sync sends may take. Our choice, as the poll's (clock.ts). */
+const REQUEST_MS = 30_000;
+
+/** A provider's failure, or the write door's refusal, as the tracker's problem. */
+const problemOf = (failure: ProviderFailure | WriteRefused): TrackerProblem => {
+  if (failure._tag === "ProviderUnanswered") {
+    return problem(400, {
+      code: "tracker-unreachable",
+      detail: `${failure.service} did not answer within ${secondsOf(failure.after)} s.`,
+    });
+  }
+  const kind =
+    failure._tag === "ProviderRefused" ? failure.kind : failure.reason;
+  switch (kind) {
+    case "rate":
+      return problem(400, {
+        code: "tracker-rate",
+        detail: failure.words,
+        resumeAt: failure.resumeAt ?? Date.now(),
+      });
+    case "sign-in":
+      return problem(400, { code: "tracker-sign-in", detail: failure.words });
+    case "scope":
+      return problem(400, { code: "tracker-scope", detail: failure.words });
+    case "unreachable":
+    case "unanswered":
+      return problem(400, {
+        code: "tracker-unreachable",
+        detail: failure.words,
+      });
+    case "input":
+    case "direction":
+    case "machine":
+      return problem(400, { code: "tracker-input", detail: failure.words });
+    default:
+      return unhandled("refusal", kind);
+  }
+};
+
+/** What a write answered, when it holds what was asked for; refused in words when it does not. */
+const answered = <A>(
+  value: A | undefined,
+  what: string
+): Effect.Effect<A, WriteRefused> =>
+  value === undefined
+    ? Effect.fail(
+        new WriteRefused({
+          reason: "input",
+          words: `The tracker's answer named no ${what}.`,
+          resumeAt: null,
+        })
+      )
+    : Effect.succeed(value);
+
+/** The promise edge of a provider's read or the write door's write: its answer, or its failure as the tracker's problem. */
+const settle = <A>(
+  effect: Effect.Effect<A, ProviderFailure | WriteRefused>
+): Promise<A | TrackerProblem> =>
+  Effect.runPromise(
+    Effect.match(effect, { onFailure: problemOf, onSuccess: (value) => value })
+  );
+
+/** A Project item as a sync reads it: its id, and the Status option it stands in (null: none). */
+type StatusItem = BoardItem;
+
+/** A Project as the sync reads it off its board's last read: its Status field, and each of the repository's issues on it by number. */
+interface ProjectRead {
+  /** Every item was read; false when the read stopped short, so an issue missing from `items` may be on it still. */
+  complete: boolean;
+  fieldId: string | null;
+  items: Map<string, StatusItem>;
+  options: { id: string; name: string }[];
+  title: string;
+  url: string;
+}
+
+/**
+ * The open Projects a GitHub connection reaches for a repository, for the
+ * binding's choice (providers github/board.ts `githubProjects`): those
+ * linked to it first, then the rest of its owner's. A connection that may
+ * not read them answers GitHub's words instead.
+ */
+const githubProjects = (
+  octokit: GitHubClient,
+  repo: string
+): Promise<GithubProjectsView | TrackerProblem> =>
+  settle(listProjects(octokit, REQUEST_MS, repo));
 
 /** How often a binding whose Status options were refused asks again on its own; Sync now asks at once. Our choice. */
 const RECHECK_MS = 10 * 60_000;
@@ -188,7 +449,7 @@ const SOON_MS = 500;
 const STATES_MS = 60_000;
 /** A task changed this close before its last sync is looked at again: commit times are whole seconds. */
 const CLOCK_MARGIN_MS = 2000;
-/** How far a description's headings go, and a comment's (tracker-adapter.ts). */
+/** How far a description's headings go, and a comment's ({@link intoFile}). */
 const DESCRIPTION_DEPTH = 1;
 const COMMENT_DEPTH = 2;
 
@@ -206,7 +467,10 @@ export interface TrackersDeps {
     readonly project: (
       id: string
     ) => { id: string; outsiders: OutsiderRule } | undefined;
-    readonly taskLinks: Pick<TaskLinksDb, "byItem" | "comments" | "putComment">;
+    readonly taskLinks: Pick<TaskLinksDb, "byItem">;
+    readonly writes: {
+      readonly carried: (projectId: string, taskId: string) => number[];
+    };
     readonly trackers: TrackersDb;
   };
   readonly lifetime: HubLifetimeShape;
@@ -228,6 +492,8 @@ export interface TrackersDeps {
   >;
   /** The project's turn (intake.ts `turn`): the door's subscribers and the sync's own runs, one at a time. */
   readonly turn: Intake["turn"];
+  /** The write door: every write the sync makes goes through it, as the watch's (writes.ts). */
+  readonly writes: Pick<Writes, "post">;
 }
 
 /** What a project binds to, as a person gives it. */
@@ -289,11 +555,6 @@ type Fields = Pick<TrackerSynced, "description" | "labels" | "title">;
 const FIELDS = ["title", "description", "labels"] as const;
 type Field = (typeof FIELDS)[number];
 
-/** A tracker problem the sync made itself rather than read off an adapter. */
-type Said<Code extends string> = ReturnType<
-  typeof problem<400, { code: Code; detail: string }>
->;
-
 /**
  * What stops a sync, passed up from each step as it came: the adapter's
  * problem, the sync's own, or one a project's tasks or stages answered.
@@ -321,33 +582,64 @@ type Stopped =
 /** One task's problem in a sync: the tracker's problem, or words of the hub's own. */
 type Problem = AnyProblem | string;
 
-/** What a sync reads of the tracker: its adapter less every write, which only {@link Outbound} holds. */
-type TrackerReads = Omit<TrackerAdapter, OutboundCall>;
-type OutboundCall = "comment" | "create" | "update";
-
-/**
- * Every write a sync makes to the tracker, made from the binding's
- * direction in one place (`outboundOf`); an inbound binding has none, so no
- * write is reachable from its sync.
- */
-interface Outbound {
-  /** Opens an issue for a task, changes an issue's fields and state, comments on one. */
-  issues: Pick<TrackerAdapter, OutboundCall>;
-  /** GitHub: adds to a Project's Status field an option for each of `stages` it lacks (tracker-github-project.ts). */
-  options: (
-    project: Pick<GithubProject, "title">,
-    fieldId: string,
-    stages: readonly string[]
-  ) => ReturnType<typeof statusOptionsAdded> | Promise<TrackerProblem>;
-  /** From when tasks filed and comments written go to the tracker, ms: when the binding turned `both`; 0 for one bound so. */
-  since: number;
-  /** GitHub: puts an issue's item in a Status option on the binding's Project; set once the sync has read the Project. */
-  status?: GithubProjectStatus["put"];
+/** What the sync reads of its tracker through the binding's connection (providers github/sync.ts, linear/sync.ts): a failure is the tracker's problem. */
+interface Reads {
+  describe: () => Promise<TrackerTarget | TrackerProblem>;
+  /** One issue of the target read now; null when it is gone from it. */
+  issue: (key: string) => Promise<ItemRevision | null | TrackerProblem>;
+  keyOf: (url: string) => Promise<string | undefined | TrackerProblem>;
+  states: () => Promise<IssueState[] | TrackerProblem>;
 }
 
-/** One project's sync: its binding, signed-in adapter, states, stages, and each task's problem. */
+/**
+ * Every write a sync makes to the tracker, each sent through the write door
+ * (writes.ts) as the watch's, which refuses any on a watch that does not
+ * sync both ways; an inbound binding has none (`writerOf`), so its sync
+ * asks the door for nothing.
+ */
+interface Outbound {
+  /** Comments on an issue, as `author` where the tracker lets the app say so; recorded with the task entry it carries. */
+  comment: (
+    key: string,
+    author: string,
+    body: string,
+    taskId: string,
+    entryAt: number
+  ) => Promise<MadeComment | TrackerProblem>;
+  /** Opens an issue for a task. */
+  create: (
+    draft: IssueDraft,
+    taskId: string
+  ) => Promise<ItemRevision | TrackerProblem>;
+  /** GitHub: adds to a Project's Status field an option for each of `stages` it lacks. */
+  options: (
+    project: Pick<GithubProject, "id" | "title">,
+    fieldId: string,
+    stages: readonly string[]
+  ) => Promise<
+    | { added: string[]; options: { id: string; name: string }[] }
+    | TrackerProblem
+  >;
+  /** From when tasks filed and comments written go to the tracker, ms: when the binding turned `both`; 0 for one bound so. */
+  since: number;
+  /** GitHub: puts an issue's item in a Status option on the binding's Project, added to it first when it is not on it. */
+  status: (
+    project: Pick<GithubProject, "id" | "title">,
+    key: string,
+    item: StatusItem | undefined,
+    fieldId: string,
+    optionId: string
+  ) => Promise<StatusItem | TrackerProblem>;
+  /** Changes an issue's fields and state. */
+  update: (
+    key: string,
+    patch: IssuePatch,
+    taskId: string
+  ) => Promise<ItemRevision | TrackerProblem>;
+}
+
+/** One project's sync: its binding, its reads, states, stages, and each task's problem. */
 interface Sync {
-  adapter: TrackerReads;
   binding: TrackerBindingRow;
   /** GitHub: the sync set a Status on the Project this run: the board it keeps is written back. */
   boardChanged?: boolean;
@@ -368,6 +660,8 @@ interface Sync {
   projectId: string;
   /** GitHub: the Project with the Status options this sync added, kept on the binding. */
   projectRead?: GithubProject;
+  /** What it reads of the tracker. */
+  reads: Reads;
   stages: Stage[];
   states: IssueState[];
   /** GitHub: the Status options this sync added to the Project. */
@@ -467,7 +761,7 @@ const stateOfRevision = (
     return known;
   }
   if (sync.binding.provider === "github") {
-    return issueStateOf(token);
+    return githubIssueState(token);
   }
   // A state the team made since its states were read: its category as the mirror reads it.
   return {
@@ -855,10 +1149,7 @@ const applyPush = async (round: Round): Promise<Stopped | undefined> => {
   if (!sync.out || Object.keys(push).length === 0) {
     return;
   }
-  const updated = await sync.out.issues.update(
-    { key: link.issueKey, ref: link.ref },
-    push
-  );
+  const updated = await sync.out.update(link.issueKey, push, link.taskId);
   if (updated instanceof ElysiaStatus) {
     if (heldByRate(updated)) {
       return updated;
@@ -866,7 +1157,7 @@ const applyPush = async (round: Round): Promise<Stopped | undefined> => {
     round.said.push(fail(sync, link.taskId, updated));
     return;
   }
-  round.issue = updated;
+  round.issue = issueOfRevision(sync, updated);
   round.remote = remoteFields(round.issue);
   for (const field of FIELDS) {
     if (push[field] !== undefined) {
@@ -1069,57 +1360,204 @@ export const createTrackers = (deps: TrackersDeps) => {
     }
   };
 
-  /** The binding's adapter, signed in by its connection; a sign-in that cannot be made, in words. */
-  const adapterOf = async (
-    binding: TrackerBindingRow
-  ): Promise<TrackerAdapter | TrackerProblem> => {
+  /** The binding's reads, through its connection's client; a sign-in that cannot be made, in words, at each read. */
+  const readsOf = (
+    binding: Pick<TrackerBindingRow, "connection" | "provider" | "target">
+  ): Reads => {
+    const { target } = binding;
     if (binding.provider === "github") {
-      const octokit = await signedIn(() =>
-        deps.connections.githubClient(binding.connection)
-      );
-      return octokit instanceof ElysiaStatus
-        ? octokit
-        : githubAdapter(octokit, binding.target);
+      const client = () =>
+        signedIn(() => deps.connections.githubClient(binding.connection));
+      const read =
+        <A>(
+          ask: (octokit: GitHubClient) => Effect.Effect<A, ProviderFailure>
+        ) =>
+        async () => {
+          const octokit = await client();
+          return octokit instanceof ElysiaStatus
+            ? octokit
+            : await settle(ask(octokit));
+        };
+      return {
+        describe: read((octokit) =>
+          githubSync.describe(octokit, target, REQUEST_MS)
+        ),
+        states: read((octokit) =>
+          githubSync.states(octokit, target, REQUEST_MS)
+        ),
+        issue: (key) =>
+          read((octokit) =>
+            githubSync.issue(octokit, target, key, REQUEST_MS)
+          )(),
+        keyOf: (url) =>
+          read((octokit) =>
+            githubSync.keyOf(octokit, target, url, REQUEST_MS)
+          )(),
+      };
     }
-    const linear = await signedIn(async () => ({
-      client: await deps.connections.linearClient(binding.connection),
-      asApp: deps.connections.get(binding.connection).auth === "app",
-    }));
-    return linear instanceof ElysiaStatus
-      ? linear
-      : linearAdapter(linear.client, binding.target, linear.asApp);
+    const client = () =>
+      signedIn(() => deps.connections.linearClient(binding.connection));
+    const read =
+      <A>(
+        ask: (linear: LinearClientFor) => Effect.Effect<A, ProviderFailure>
+      ) =>
+      async () => {
+        const linear = await client();
+        return linear instanceof ElysiaStatus
+          ? linear
+          : await settle(ask(linear));
+      };
+    return {
+      describe: read((linear) =>
+        linearSync.describe(linear, target, REQUEST_MS)
+      ),
+      states: read((linear) => linearSync.states(linear, target, REQUEST_MS)),
+      issue: (key) =>
+        read((linear) => linearSync.issue(linear, target, key, REQUEST_MS))(),
+      keyOf: (url) =>
+        read((linear) => linearSync.keyOf(linear, target, url, REQUEST_MS))(),
+    };
   };
 
   /**
-   * What a binding writes to the tracker: the one place its direction
-   * decides a write. An inbound binding has none, so its sync opens no
+   * What a binding writes to the tracker, each write through the write
+   * door as its watch's (writes.ts), which refuses any on a watch that does
+   * not sync both ways. An inbound binding has none, so its sync opens no
    * issue and sends no field, state, label, comment, Status or Status
    * option, and binding it adds no Status option.
    */
-  const outboundOf = (
+  const writerOf = (
     binding: Pick<
       TrackerBindingRow,
-      "connection" | "direction" | "directionAt"
-    >,
-    adapter: TrackerAdapter
+      | "connection"
+      | "direction"
+      | "directionAt"
+      | "projectId"
+      | "provider"
+      | "target"
+      | "watchId"
+    >
   ): Outbound | undefined => {
     if (binding.direction === "inbound") {
       return;
     }
+    const { projectId, watchId } = binding;
+    const by = { sync: watchId };
+    // A watch not made yet (a binding being made) is named by its connection, its direction the binding's.
+    const bound = db.trackers.binding(projectId)?.watchId === watchId;
+    const target = bound
+      ? { watch: watchId }
+      : {
+          connection: binding.connection,
+          provider: binding.provider,
+          host: binding.provider === "github" ? "github.com" : "linear.app",
+          container: binding.target,
+          sync: binding.direction,
+        };
     return {
-      issues: {
-        create: adapter.create,
-        update: adapter.update,
-        comment: adapter.comment,
-      },
-      options: async (project, fieldId, stages) => {
-        const octokit = await signedIn(() =>
-          deps.connections.githubClient(binding.connection)
-        );
-        return octokit instanceof ElysiaStatus
-          ? octokit
-          : await statusOptionsAdded(octokit, project, fieldId, stages);
-      },
+      create: (draft, taskId) =>
+        settle(
+          deps.writes
+            .post({
+              by,
+              target,
+              projectId,
+              taskId,
+              op: {
+                op: "issue.create",
+                title: draft.title,
+                body: draft.description,
+                labels: draft.labels,
+                stateToken: draft.state.token,
+              },
+            })
+            .pipe(Effect.flatMap((made) => answered(made.revision, "issue")))
+        ),
+      update: (key, patch, taskId) =>
+        settle(
+          deps.writes
+            .post({
+              by,
+              target,
+              projectId,
+              taskId,
+              op: {
+                op: "issue.update",
+                key,
+                ...(patch.title === undefined ? {} : { title: patch.title }),
+                ...(patch.description === undefined
+                  ? {}
+                  : { body: patch.description }),
+                ...(patch.labels === undefined ? {} : { labels: patch.labels }),
+                ...(patch.state === undefined
+                  ? {}
+                  : { stateToken: patch.state.token }),
+              },
+            })
+            .pipe(Effect.flatMap((made) => answered(made.revision, "issue")))
+        ),
+      comment: (key, author, body, taskId, entryAt) =>
+        settle(
+          deps.writes
+            .post({
+              by,
+              target,
+              projectId,
+              taskId,
+              entryAt,
+              op: {
+                op: "comment.create",
+                on: { kind: "issue", key },
+                body,
+                saidBy: author,
+              },
+            })
+            .pipe(Effect.flatMap((made) => answered(made.comment, "comment")))
+        ),
+      options: (project, fieldId, stages) =>
+        settle(
+          deps.writes
+            .post({
+              by,
+              target,
+              projectId,
+              op: {
+                op: "board.columns",
+                board: { id: project.id, field: fieldId, title: project.title },
+                names: stages,
+              },
+            })
+            .pipe(
+              Effect.flatMap((made) =>
+                answered(
+                  made.options && {
+                    added: made.added ?? [],
+                    options: made.options,
+                  },
+                  "Status options"
+                )
+              )
+            )
+        ),
+      status: (project, key, item, fieldId, optionId) =>
+        settle(
+          deps.writes
+            .post({
+              by,
+              target,
+              projectId,
+              op: {
+                op: "board.place",
+                board: { id: project.id, field: fieldId, title: project.title },
+                key,
+                boardItem: item?.itemId ?? null,
+                option: optionId,
+              },
+            })
+            .pipe(
+              Effect.flatMap((made) => answered(made.placed, "Project item"))
+            )
+        ),
       since: binding.directionAt?.getTime() ?? 0,
     };
   };
@@ -1250,6 +1688,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       return;
     }
     const item = await put(
+      onProject.project,
       link.issueKey,
       round.item,
       onProject.fieldId,
@@ -1277,16 +1716,17 @@ export const createTrackers = (deps: TrackersDeps) => {
     if (given) {
       return given;
     }
-    const issue = await sync.adapter.issue(link.issueKey);
-    if (issue instanceof ElysiaStatus) {
-      if (stopsSync(issue)) {
-        return issue;
+    const read = await sync.reads.issue(link.issueKey);
+    if (read instanceof ElysiaStatus) {
+      if (stopsSync(read)) {
+        return read;
       }
       db.trackers.updateLink(sync.projectId, link.taskId, {
-        problem: fail(sync, link.taskId, issue),
+        problem: fail(sync, link.taskId, read),
       });
       return null;
     }
+    const issue = read && issueOfRevision(sync, read);
     if (!issue) {
       db.trackers.updateLink(sync.projectId, link.taskId, {
         problem: fail(
@@ -1309,12 +1749,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       return;
     }
     const from = Math.max(link.linkedAt.getTime(), out.since);
-    const carried = new Set(
-      db.taskLinks
-        .comments(sync.projectId, link.taskId)
-        .filter((row) => row.direction === "out")
-        .map((row) => row.entryAt)
-    );
+    const carried = new Set(db.writes.carried(sync.projectId, link.taskId));
     const due = task.comments.filter(
       (comment) =>
         comment.via === null &&
@@ -1322,12 +1757,14 @@ export const createTrackers = (deps: TrackersDeps) => {
         !carried.has(comment.at) &&
         comment.author.mover !== "hub"
     );
-    const { provider } = sync.binding;
     for (const comment of due) {
-      const posted = await out.issues.comment(
-        { key: link.issueKey, ref: link.ref },
+      // Recorded by the write door with the entry it carries.
+      const posted = await out.comment(
+        link.issueKey,
         comment.author.name,
-        outOfFile(comment.text, COMMENT_DEPTH)
+        outOfFile(comment.text, COMMENT_DEPTH),
+        link.taskId,
+        comment.at
       );
       if (posted instanceof ElysiaStatus) {
         if (heldByRate(posted)) {
@@ -1336,26 +1773,6 @@ export const createTrackers = (deps: TrackersDeps) => {
         round.said.push(fail(sync, link.taskId, posted));
         return;
       }
-      db.taskLinks.putComment({
-        projectId: sync.projectId,
-        taskId: link.taskId,
-        source: provider,
-        externalId: posted.id,
-        url: posted.url,
-        direction: "out",
-        author: {
-          source: provider,
-          login: comment.author.name,
-          name: null,
-          avatarUrl: null,
-          url: null,
-          kind: "app",
-          memberId: null,
-        },
-        at: posted.createdAt,
-        editedAt: null,
-        entryAt: comment.at,
-      });
     }
   };
 
@@ -1490,14 +1907,15 @@ export const createTrackers = (deps: TrackersDeps) => {
     task: TaskView,
     named: string
   ): Promise<Stopped | undefined> => {
-    const key = await sync.adapter.keyOf(named);
+    const key = await sync.reads.keyOf(named);
     if (key instanceof ElysiaStatus) {
       return key;
     }
-    const issue = key ? await sync.adapter.issue(key) : null;
-    if (issue instanceof ElysiaStatus) {
-      return issue;
+    const read = key ? await sync.reads.issue(key) : null;
+    if (read instanceof ElysiaStatus) {
+      return read;
     }
+    const issue = read && issueOfRevision(sync, read);
     if (!issue) {
       return problem(400, {
         code: "tracker-issue-unseen",
@@ -1559,10 +1977,11 @@ export const createTrackers = (deps: TrackersDeps) => {
     const want = onProject
       ? statusOptionFor(task.stage, onProject.project)
       : null;
-    if (!(onProject && out.status) || want === null) {
+    if (!onProject || want === null) {
       return onProject ? { status: null } : {};
     }
     const item = await out.status(
+      onProject.project,
       issue.key,
       undefined,
       onProject.fieldId,
@@ -1596,15 +2015,19 @@ export const createTrackers = (deps: TrackersDeps) => {
       });
     }
     const fields = fileFields(task);
-    const issue = await out.issues.create({
-      title: fields.title,
-      description: outOfFile(fields.description, DESCRIPTION_DEPTH),
-      labels: fields.labels,
-      state,
-    });
-    if (issue instanceof ElysiaStatus) {
-      return issue;
+    const made = await out.create(
+      {
+        title: fields.title,
+        description: outOfFile(fields.description, DESCRIPTION_DEPTH),
+        labels: fields.labels,
+        state,
+      },
+      task.id
+    );
+    if (made instanceof ElysiaStatus) {
+      return made;
     }
+    const issue = issueOfRevision(sync, made);
     storeOwn(sync.projectId, [issue]);
     const remote = remoteFields(issue);
     const placed = await placeOnProject(sync, out, task, issue);
@@ -1778,12 +2201,9 @@ export const createTrackers = (deps: TrackersDeps) => {
   const openSync = async (
     binding: TrackerBindingRow
   ): Promise<Sync | Stopped> => {
-    const adapter = await adapterOf(binding);
-    if (adapter instanceof ElysiaStatus) {
-      return adapter;
-    }
+    const reads = readsOf(binding);
     const [states, stagesView] = await Promise.all([
-      statesOf(binding, adapter),
+      statesOf(binding, reads),
       tasks.stages(binding.projectId),
     ]);
     if (states instanceof ElysiaStatus) {
@@ -1806,9 +2226,9 @@ export const createTrackers = (deps: TrackersDeps) => {
       });
     }
     return {
-      adapter,
+      reads,
       binding,
-      out: outboundOf(binding, adapter),
+      out: writerOf(binding),
       hold,
       outsiders: db.project(binding.projectId)?.outsiders ?? "hold",
       projectId: binding.projectId,
@@ -1821,31 +2241,18 @@ export const createTrackers = (deps: TrackersDeps) => {
   /** The tracker's states, as read within {@link STATES_MS} or read now. */
   const statesOf = async (
     binding: TrackerBindingRow,
-    adapter: TrackerAdapter
+    reads: Reads
   ): Promise<IssueState[] | TrackerProblem> => {
     const key = `${binding.projectId}\0${binding.watchId}`;
     const kept = statesRead.get(key);
     if (kept && Date.now() - kept.at < STATES_MS) {
       return kept.states;
     }
-    const states = await adapter.states();
+    const states = await reads.states();
     if (!(states instanceof ElysiaStatus)) {
       statesRead.set(key, { at: Date.now(), states });
     }
     return states;
-  };
-
-  /** The Status client of a binding's Project, signed in by its connection. */
-  const statusClientOf = async (
-    binding: TrackerBindingRow,
-    project: GithubProject
-  ): Promise<GithubProjectStatus | TrackerProblem> => {
-    const octokit = await signedIn(() =>
-      deps.connections.githubClient(binding.connection)
-    );
-    return octokit instanceof ElysiaStatus
-      ? octokit
-      : githubProjectStatus(octokit, binding.target, project);
   };
 
   /**
@@ -1887,13 +2294,6 @@ export const createTrackers = (deps: TrackersDeps) => {
       url: project.url,
     };
     sync.onProject = { fieldId: project.fieldId, project, read };
-    if (sync.out) {
-      const client = await statusClientOf(binding, project);
-      if (client instanceof ElysiaStatus) {
-        return client;
-      }
-      sync.out.status = client.put;
-    }
     return await statusesOwed(sync, retry);
   };
 
@@ -2191,10 +2591,11 @@ export const createTrackers = (deps: TrackersDeps) => {
     row: ItemRow
   ): Promise<Issue | null | Stopped> => {
     const key = sync.binding.provider === "github" ? row.key : row.externalId;
-    const issue = key ? await sync.adapter.issue(key) : null;
-    if (issue instanceof ElysiaStatus) {
-      return stopsSync(issue) ? issue : null;
+    const read = key ? await sync.reads.issue(key) : null;
+    if (read instanceof ElysiaStatus) {
+      return stopsSync(read) ? read : null;
     }
+    const issue = read && issueOfRevision(sync, read);
     if (issue) {
       storeOwn(sync.projectId, [issue]);
     }
@@ -2493,11 +2894,8 @@ export const createTrackers = (deps: TrackersDeps) => {
     asked: BindInput["githubProject"],
     stages: readonly string[]
   ) => {
-    const adapter = await adapterOf(draft);
-    if (adapter instanceof ElysiaStatus) {
-      return adapter;
-    }
-    const out = outboundOf(draft, adapter);
+    const reads = readsOf(draft);
+    const out = writerOf(draft);
     // A GitHub App that may only read issues would be refused on every
     // sync that writes: it is refused here, with what to grant on GitHub.
     // An inbound binding only reads.
@@ -2515,7 +2913,7 @@ export const createTrackers = (deps: TrackersDeps) => {
         });
       }
     }
-    const target = await adapter.describe();
+    const target = await reads.describe();
     if (target instanceof ElysiaStatus) {
       return target;
     }
@@ -2648,16 +3046,17 @@ export const createTrackers = (deps: TrackersDeps) => {
       const octokit = await signedIn(() => deps.connections.githubClient(name));
       return octokit instanceof ElysiaStatus
         ? octokit
-        : githubTargets(octokit, connection.auth === "app", search);
+        : await settle(
+            githubSync.targets(octokit, REQUEST_MS, {
+              app: connection.auth === "app",
+              ...(search === undefined ? {} : { search }),
+            })
+          );
     }
     const client = await signedIn(() => deps.connections.linearClient(name));
-    if (client instanceof ElysiaStatus) {
-      return client;
-    }
-    const teams = await linearTargets(client);
-    return teams instanceof ElysiaStatus
-      ? teams
-      : { targets: teams, more: false };
+    return client instanceof ElysiaStatus
+      ? client
+      : await settle(linearSync.targets(client, REQUEST_MS, { app: false }));
   };
 
   lifetime.onClose(() => {

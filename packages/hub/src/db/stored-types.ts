@@ -897,8 +897,12 @@ export type RelayNameState = "open" | "pointed" | "skipped";
 /** How the stream relay's journey was closed (schema `stream_relay_journey.closed`). */
 export type RelayJourneyClosed = "later" | "done-for-now";
 
-/** Which way an external comment went (schema `external_comments.direction`): taken in, or posted out. */
-export type CommentDirection = "in" | "out";
+/**
+ * What a write CawCo made to an outside service did (schema
+ * `external_writes.kind`, writes.ts): made an issue or a pull request,
+ * posted a comment, changed an issue, or made a repository.
+ */
+export type ExternalWriteKind = "issue" | "pr" | "comment" | "update" | "repo";
 
 /** A task file's blocking edge: what it waits on (`waits_on`). */
 export type TaskEdgeKind = "waits_on";

@@ -6,7 +6,7 @@
  * The poll reads it as the watch's `board:<id>` stream (github/ingest.ts),
  * and the tracker sync reads its stages' Status off what the door hands it
  * (hub sync.ts). Setting a Status and adding options are writes, the
- * sync's own (hub tracker-github-project.ts).
+ * sync's own, through the hub's write door (github/writes.ts).
  *
  * - **Reading.** "Single select fields are returned as a
  *   `ProjectV2SingleSelectField` object and have an `options` field where
@@ -25,14 +25,14 @@
  *   every ten minutes, or at once on Sync now (its stream's mark dropped).
  */
 import type { Octokit } from "@octokit/rest";
-import { looseObject, nullish, number, safeParse, string } from "valibot";
-import type {
-  BoardItem,
-  BoardRead,
-  Polled,
-  WatchView,
-  Within,
-} from "../provider";
+import { Effect, Result, Schema } from "effect";
+import type { BoardItem, BoardRead, Polled, WatchView } from "../provider";
+import {
+  type ProviderFailure,
+  type ProviderRefused,
+  refusedWith,
+  request,
+} from "../read-stop";
 import { graphqlErrorsOf, type RefusalCode, refusalWords } from "./answer";
 
 /** The field whose options are the stages: GitHub's own default single-select (its docs' example answer: "Status" with "Todo", "In Progress", "Done"). */
@@ -72,15 +72,11 @@ export interface ProjectChoice {
 }
 
 /** Why GitHub would not answer a board's request, as the hub's problems read it: its kind, words and rate limit. */
-export interface BoardProblem {
+interface BoardProblem {
   code: RefusalCode;
   resumeAt: number | null;
   words: string;
 }
-
-/** What a board's request came to. */
-export type BoardAnswer<T> =
-  { kind: "answered"; value: T } | { kind: "problem"; problem: BoardProblem };
 
 const FIELD = `field(name: $field) {
   ... on ProjectV2SingleSelectField { id options { id name } }
@@ -150,7 +146,7 @@ type ItemNodes = NonNullable<
 >["nodes"];
 
 /** What GitHub's error says of `what`, in its words: the GraphQL error a token or app may not pass, or the HTTP one. */
-export const boardProblem = (
+const boardProblem = (
   error: unknown,
   what: string,
   on: string
@@ -174,37 +170,28 @@ export const boardProblem = (
   return refusalWords(error, what, on);
 };
 
-/** One GraphQL request within the hub's deadline: its data, or GitHub's problem in words. */
-const ask = async <T>(
+/** One GraphQL request within the hub's deadline: its data; GitHub's refusal in its words, or no answer, its failure. */
+export const boardAsk = <T>(
   octokit: Octokit,
-  within: Within,
+  requestMs: number,
   what: string,
   on: string,
   query: string,
   variables: Record<string, unknown>
-): Promise<BoardAnswer<T>> => {
-  try {
-    const asked = await within((signal) =>
+): Effect.Effect<T, ProviderFailure> =>
+  request(
+    "GitHub",
+    requestMs,
+    (signal) =>
       octokit.graphql<T>(query, {
         ...variables,
         request: { redirect: "error", signal },
-      })
-    );
-    if (asked.kind === "unanswered") {
-      return {
-        kind: "problem",
-        problem: {
-          code: "unreachable",
-          resumeAt: null,
-          words: `GitHub did not answer to ${what} on ${on} within the ${asked.after} ms the hub gives a request.`,
-        },
-      };
+      }),
+    (error) => {
+      const said = boardProblem(error, what, on);
+      return refusedWith(said.words, said.code, said.resumeAt);
     }
-    return { kind: "answered", value: asked.value };
-  } catch (error) {
-    return { kind: "problem", problem: boardProblem(error, what, on) };
-  }
-};
+  );
 
 const choiceOf = (raw: RawProject, linked: boolean): ProjectChoice => ({
   id: raw.id,
@@ -221,50 +208,54 @@ const choiceOf = (raw: RawProject, linked: boolean): ProjectChoice => ({
  * linked to it first, then the rest of its owner's. A connection that may
  * not read them answers GitHub's words as `refused`.
  */
-export const githubProjects = async (
+export const githubProjects = (
   octokit: Octokit,
-  within: Within,
+  requestMs: number,
   repo: string
-): Promise<
-  BoardAnswer<{ projects: ProjectChoice[]; refused: string | null }>
+): Effect.Effect<
+  { projects: ProjectChoice[]; refused: string | null },
+  ProviderFailure
 > => {
   const [owner = "", name = ""] = repo.split("/");
-  const data = await ask<{
+  return boardAsk<{
     repository: {
       owner: { projectsV2?: { nodes: (RawProject | null)[] } } | null;
       projectsV2: { nodes: (RawProject | null)[] };
     } | null;
-  }>(octokit, within, "read the Projects", owner, PROJECTS_QUERY, {
+  }>(octokit, requestMs, "read the Projects", owner, PROJECTS_QUERY, {
     owner,
     repo: name,
     field: STATUS_FIELD,
     first: PROJECTS_FIRST,
-  });
-  if (data.kind === "problem") {
-    return data.problem.code === "scope"
-      ? {
-          kind: "answered",
-          value: { projects: [], refused: data.problem.words },
-        }
-      : data;
-  }
-  const linked = (data.value.repository?.projectsV2.nodes ?? []).filter(
-    (one): one is RawProject => one !== null && !one.closed
+  }).pipe(
+    Effect.map((data) => {
+      const linked = (data.repository?.projectsV2.nodes ?? []).filter(
+        (one): one is RawProject => one !== null && !one.closed
+      );
+      const owned = (data.repository?.owner?.projectsV2?.nodes ?? []).filter(
+        (one): one is RawProject =>
+          one !== null &&
+          !one.closed &&
+          !linked.some((each) => each.id === one.id)
+      );
+      return {
+        refused: null,
+        projects: [
+          ...linked.map((one) => choiceOf(one, true)),
+          ...owned.map((one) => choiceOf(one, false)),
+        ],
+      };
+    }),
+    Effect.catchIf(
+      (failure) =>
+        failure._tag === "ProviderRefused" && failure.kind === "scope",
+      (failure) =>
+        Effect.succeed({
+          projects: [],
+          refused: failure._tag === "ProviderRefused" ? failure.words : null,
+        })
+    )
   );
-  const owned = (data.value.repository?.owner?.projectsV2?.nodes ?? []).filter(
-    (one): one is RawProject =>
-      one !== null && !one.closed && !linked.some((each) => each.id === one.id)
-  );
-  return {
-    kind: "answered",
-    value: {
-      refused: null,
-      projects: [
-        ...linked.map((one) => choiceOf(one, true)),
-        ...owned.map((one) => choiceOf(one, false)),
-      ],
-    },
-  };
 };
 
 /** The repository's issues among a page's items, each with its Status, put in `into` by number. */
@@ -290,79 +281,64 @@ const keepItems = (
 };
 
 /** A Project's Status field, and each of `repo`'s issues on it with its Status. */
-const readBoard = async (
+const readBoard = Effect.fnUntraced(function* (
   octokit: Octokit,
-  within: Within,
+  requestMs: number,
   repo: string,
   project: { id: string; number: number; title: string }
-): Promise<BoardAnswer<Extract<BoardRead, { kind: "read" }>>> => {
+) {
   const on = `the Project “${project.title}”`;
   const items: Record<string, BoardItem> = {};
-  const pageAt = async (after: string | null) => {
-    const data = await ask<ItemsAnswer>(
+  const pageAt = Effect.fnUntraced(function* (after: string | null) {
+    const { node } = yield* boardAsk<ItemsAnswer>(
       octokit,
-      within,
+      requestMs,
       "read the Status of its items",
       on,
       ITEMS_QUERY,
       { id: project.id, field: STATUS_FIELD, first: PER_PAGE, after }
     );
-    if (data.kind === "problem") {
-      return data;
-    }
-    const { node } = data.value;
     if (!node?.items) {
-      const gone: BoardAnswer<never> = {
-        kind: "problem",
-        problem: {
-          code: "scope",
-          resumeAt: null,
-          words: `GitHub answered no Project for “${project.title}”: deleted, or one the connection cannot see.`,
-        },
-      };
-      return gone;
+      return yield* refusedWith(
+        `GitHub answered no Project for “${project.title}”: deleted, or one the connection cannot see.`,
+        "scope"
+      );
     }
     keepItems(node.items.nodes, repo, items);
-    return {
-      kind: "answered" as const,
-      value: { node, next: node.items.pageInfo },
-    };
-  };
-  const first = await pageAt(null);
-  if (first.kind === "problem") {
-    return first;
-  }
-  let { next } = first.value;
+    return { node, next: node.items.pageInfo };
+  });
+  const first = yield* pageAt(null);
+  let { next } = first;
   for (let page = 2; page <= MAX_PAGES && next.hasNextPage; page += 1) {
-    const read = await pageAt(next.endCursor);
-    if (read.kind === "problem") {
-      return read;
-    }
-    ({ next } = read.value);
+    ({ next } = yield* pageAt(next.endCursor));
   }
-  const { node } = first.value;
-  return {
-    kind: "answered",
-    value: {
-      kind: "read",
-      id: project.id,
-      number: node.number ?? project.number,
-      title: node.title ?? project.title,
-      url: node.url ?? "",
-      fieldId: node.field?.id ?? null,
-      options: node.field?.options ?? [],
-      complete: !next.hasNextPage,
-      items,
-    },
+  const { node } = first;
+  const read: Extract<BoardRead, { kind: "read" }> = {
+    kind: "read",
+    id: project.id,
+    number: node.number ?? project.number,
+    title: node.title ?? project.title,
+    url: node.url ?? "",
+    fieldId: node.field?.id ?? null,
+    options: node.field?.options ?? [],
+    complete: !next.hasNextPage,
+    items,
   };
-};
+  return read;
+});
 
 /** The board part of a watch's settings, as the tracker sync keeps it (hub db watches): read off them, the rest let be. */
-const BoardSettingsSchema = looseObject({
-  githubProject: nullish(
-    looseObject({ id: string(), number: number(), title: string() })
+const BoardSettingsSchema = Schema.Struct({
+  githubProject: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        id: Schema.String,
+        number: Schema.Number,
+        title: Schema.String,
+      })
+    )
   ),
-  githubProjectReason: nullish(string()),
+  githubProjectReason: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 /** The Project a binding names, as its board's read needs it. */
@@ -379,11 +355,13 @@ const boardSettingsOf = (
   githubProject: BoundProject | null;
   githubProjectReason: string | null;
 } => {
-  const read = safeParse(BoardSettingsSchema, watch.settings);
+  const read = Schema.decodeUnknownResult(BoardSettingsSchema)(watch.settings);
   return {
-    githubProject: read.success ? (read.output.githubProject ?? null) : null,
-    githubProjectReason: read.success
-      ? (read.output.githubProjectReason ?? null)
+    githubProject: Result.isSuccess(read)
+      ? (read.success.githubProject ?? null)
+      : null,
+    githubProjectReason: Result.isSuccess(read)
+      ? (read.success.githubProjectReason ?? null)
       : null,
   };
 };
@@ -416,23 +394,23 @@ export const boardStreams = (watch: WatchView): string[] => {
  * connection was refused it, the Projects asked again every
  * {@link RECHECK_MS} (the one bound, else the first linked to the
  * repository). A refusal is the board's `refused`, said by the sync; a
- * rate limit stops the read.
+ * rate limit, or GitHub unreached, stops the read.
  */
-export const pollBoard = async (input: {
+export const pollBoard = (input: {
   cursor: BoardCursor | null;
   now: number;
   octokit: Octokit;
+  requestMs: number;
   watch: WatchView;
-  within: Within;
-}): Promise<Polled<BoardCursor>> => {
-  const { cursor, now, octokit, watch, within } = input;
+}): Effect.Effect<Polled<BoardCursor>, ProviderFailure> => {
+  const { cursor, now, octokit, watch, requestMs } = input;
   const { githubProject, githubProjectReason } = boardSettingsOf(watch);
   if (
     githubProjectReason &&
     cursor?.refusedAt !== undefined &&
     now - cursor.refusedAt < RECHECK_MS
   ) {
-    return { kind: "unchanged" };
+    return Effect.succeed({ kind: "unchanged" });
   }
   const read = (found: BoardRead): Polled<BoardCursor> => ({
     kind: "read",
@@ -444,40 +422,44 @@ export const pollBoard = async (input: {
       ...(found.kind === "refused" ? { refusedAt: now } : {}),
     },
   });
-  const stopped = (problem: BoardProblem): Polled<BoardCursor> =>
-    problem.code === "rate" || problem.code === "unreachable"
-      ? {
-          kind: "stopped",
-          problem: { words: problem.words, resumeAt: problem.resumeAt },
-        }
-      : read({ kind: "refused", words: problem.words });
-  let project: BoundProject | null = githubProject;
-  if (githubProjectReason) {
-    const listed = await githubProjects(octokit, within, watch.container);
-    if (listed.kind === "problem") {
-      return stopped(listed.problem);
+  const bound = Effect.fnUntraced(function* () {
+    let project: BoundProject | null = githubProject;
+    if (githubProjectReason) {
+      const listed = yield* githubProjects(octokit, requestMs, watch.container);
+      if (listed.refused) {
+        return read({ kind: "refused", words: listed.refused });
+      }
+      const found = githubProject
+        ? listed.projects.find((one) => one.id === githubProject.id)
+        : listed.projects.find((one) => one.linked);
+      if (!found) {
+        return read(
+          githubProject
+            ? {
+                kind: "refused",
+                words: `${watch.connection} reaches no open GitHub Project “${githubProject.title}” for ${watch.container}.`,
+              }
+            : { kind: "none" }
+        );
+      }
+      project = found;
     }
-    if (listed.value.refused) {
-      return read({ kind: "refused", words: listed.value.refused });
+    if (!project) {
+      const unchanged: Polled<BoardCursor> = { kind: "unchanged" };
+      return unchanged;
     }
-    const found = githubProject
-      ? listed.value.projects.find((one) => one.id === githubProject.id)
-      : listed.value.projects.find((one) => one.linked);
-    if (!found) {
-      return read(
-        githubProject
-          ? {
-              kind: "refused",
-              words: `${watch.connection} reaches no open GitHub Project “${githubProject.title}” for ${watch.container}.`,
-            }
-          : { kind: "none" }
-      );
-    }
-    project = found;
-  }
-  if (!project) {
-    return { kind: "unchanged" };
-  }
-  const board = await readBoard(octokit, within, watch.container, project);
-  return board.kind === "problem" ? stopped(board.problem) : read(board.value);
+    return read(yield* readBoard(octokit, requestMs, watch.container, project));
+  });
+  // A refusal of the board is the board's to say; a rate limit, or GitHub
+  // unreached, stops the read.
+  return bound().pipe(
+    Effect.catchIf(
+      (failure): failure is ProviderRefused =>
+        failure._tag === "ProviderRefused" &&
+        failure.kind !== "rate" &&
+        failure.kind !== "unreachable",
+      (refused) =>
+        Effect.succeed(read({ kind: "refused", words: refused.words }))
+    )
+  );
 };

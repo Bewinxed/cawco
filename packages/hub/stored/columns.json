@@ -5095,13 +5095,6 @@
       "url"
     ]
   },
-  "external_comments.direction": {
-    "type": "string",
-    "enum": [
-      "in",
-      "out"
-    ]
-  },
   "external_comments.source": {
     "type": "string",
     "enum": [
@@ -5226,6 +5219,25 @@
         "type": "string",
         "const": "red"
       }
+    ]
+  },
+  "external_writes.kind": {
+    "type": "string",
+    "enum": [
+      "issue",
+      "pr",
+      "comment",
+      "update",
+      "repo"
+    ]
+  },
+  "external_writes.provider": {
+    "type": "string",
+    "enum": [
+      "github",
+      "linear",
+      "gitlab",
+      "gitea"
     ]
   },
   "fleet_harness_config.kind": {

@@ -12,15 +12,6 @@ language js
 //   no project's integration;
 // - packages/hub/src/source-facts.ts: public facts of a repository, no
 //   project's integration.
-//
-// Still to move into their provider, each by the slice of the provider spec
-// that moves its path (its build order, steps 2 to 8); step 9 empties it:
-// - packages/agent/src/forges/gitlab.ts
-// - packages/core/src/github-api.ts
-// - packages/hub/src/connections.ts
-// - packages/hub/src/tracker-github-project.ts
-// - packages/hub/src/tracker-github.ts
-// - packages/hub/src/tracker-linear.ts
 or {
   `import $clause from $source` as $hit,
   `import $source` as $hit,
@@ -37,13 +28,7 @@ or {
   },
   $filename <: not or {
     includes "packages/core/src/binary-distribution.ts",
-    includes "packages/hub/src/source-facts.ts",
-    includes "packages/agent/src/forges/gitlab.ts",
-    includes "packages/core/src/github-api.ts",
-    includes "packages/hub/src/connections.ts",
-    includes "packages/hub/src/tracker-github-project.ts",
-    includes "packages/hub/src/tracker-github.ts",
-    includes "packages/hub/src/tracker-linear.ts"
+    includes "packages/hub/src/source-facts.ts"
   },
   register_diagnostic(span=$hit, message="An outside service's SDK (@octokit/*, @linear/sdk, @gitbeaker/rest) is imported in its provider's folder alone, packages/providers/src/<id>/, and never by a descriptor.ts there (scripts/lint/provider-sdks.grit).")
 }

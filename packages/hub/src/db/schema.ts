@@ -179,7 +179,6 @@ import {
   AttemptAskSchema,
   AuthorizationServerMetadataSchema,
   CacheTtlSchema,
-  CommentDirectionSchema,
   CompactionMoveBodySchema,
   ContinueRequestSchema,
   DelegateRequestKindSchema,
@@ -187,6 +186,7 @@ import {
   DesignFindingSchema,
   DesignOfferAnswerSchema,
   DesignProposalFileSchema,
+  ExternalWriteKindSchema,
   FolderMoveStateSchema,
   InboundOriginSchema,
   InboundViaSchema,
@@ -7035,12 +7035,12 @@ export const taskLinks = sqliteTable(
 );
 
 /**
- * A comment carried between a task and an outside source, both ways
- * (core external-items.ts `ExternalComment`): keyed by the source's own id,
- * so one comment is never filed twice, and an edit on the source rewrites
- * its entry in place. `in` was written on the source and added to the task
- * (its entry's heading names the source and this URL); `out` was written on
- * the task and posted to the source.
+ * A comment written on an outside source and carried onto a task (core
+ * external-items.ts `ExternalComment`, links.ts `fileComment`): keyed by
+ * the source's own id, so one comment is never filed twice, and an edit on
+ * the source rewrites its entry in place (its entry's heading names the
+ * source and this URL). A comment CawCo posted is the write ledger's
+ * ({@link externalWrites}).
  */
 export const externalComments = sqliteTable(
   "external_comments",
@@ -7051,13 +7051,12 @@ export const externalComments = sqliteTable(
     externalId: text("external_id").notNull(),
     taskId: text("task_id").notNull(),
     url: text("url").notNull(),
-    direction: storedEnum(CommentDirectionSchema)("direction").notNull(),
     author: storedJson(ExternalActorSchema)("author").notNull(),
     /** When it was written on the source, ms. */
     at: integer("at").notNull(),
     /** The source's last edit, ms; null when never. */
     editedAt: integer("edited_at"),
-    /** The task entry's heading time, ms: how an `out` row finds its entry. */
+    /** The task entry's heading time, ms. */
     entryAt: integer("entry_at").notNull(),
   },
   (table) => [
@@ -7065,6 +7064,67 @@ export const externalComments = sqliteTable(
       columns: [table.projectId, table.source, table.externalId],
     }),
     index("external_comments_task").on(table.projectId, table.taskId),
+  ]
+);
+
+/**
+ * What CawCo wrote to an outside service (provider spec §2.8, writes.ts):
+ * every write that makes or changes something, through the one write door,
+ * whoever made it (the tracker sync with its watch's connection, a
+ * session's `forge_post` or landing on its machine, usability feedback,
+ * `create_repo`). The door (intake.ts) reads it to know CawCo's own: an
+ * event on an item or comment named here is `ours` (db/intake.ts
+ * `originOf`), so a comment CawCo posted is never filed back as someone
+ * else's and wakes no one, and an issue a task's attempt opened is linked
+ * to that task, never filed as a second.
+ *
+ * - `kind`: `issue` or `pr`, an item it made (`key` its key); `comment`,
+ *   a comment it posted on item `key` (`comment_id` its own id); `update`,
+ *   an issue it changed, `version` the item's updated-at after (ms, as the
+ *   mirror's), so the close or label that change raised is known as CawCo's;
+ *   `repo`, a repository made (`key` its `owner/name`).
+ * - `by`: `sync:<watch id>`, `session:<session id>`, `work:<work item id>`
+ *   (a landing's pull request), or `hub` (usability feedback, `create_repo`).
+ * - `entry_at`: a comment the sync carried out from a task, its entry's
+ *   heading time, ms: what `carryOut` finds carried by.
+ */
+export const externalWrites = sqliteTable(
+  "external_writes",
+  {
+    id: text("id").primaryKey(),
+    /** The project it was written for; null for the hub's own (usability feedback). */
+    projectId: projectColumn("project_id").references(() => projects.id, {
+      onDelete: "cascade",
+    }),
+    provider: storedEnum(z.enum(PROVIDER_IDS))("provider").notNull(),
+    /** `github.com`, `linear.app`; empty for a repository made. */
+    host: text("host").notNull(),
+    /** `owner/repo` in lower case, the Linear workspace: as the mirror keys its items ({@link externalItems}). */
+    container: text("container").notNull(),
+    kind: storedEnum(ExternalWriteKindSchema)("kind").notNull(),
+    /** The item's key (`12`, `ENG-123`), or a repository's `owner/name`. */
+    key: text("key").notNull(),
+    /** A comment's own id on its service: GitHub's comment number, Linear's uuid. */
+    commentId: text("comment_id"),
+    url: text("url").notNull(),
+    by: text("by").notNull(),
+    /** The task it was written for (the session's attempt's, the sync's); null when none. */
+    taskId: text("task_id"),
+    entryAt: integer("entry_at"),
+    version: text("version"),
+    at: timestamp("at").notNull(),
+  },
+  (table) => [
+    index("external_writes_item").on(
+      table.provider,
+      table.host,
+      table.container,
+      table.key
+    ),
+    uniqueIndex("external_writes_comment")
+      .on(table.provider, table.commentId)
+      .where(sql`${table.commentId} is not null`),
+    index("external_writes_task").on(table.projectId, table.taskId),
   ]
 );
 

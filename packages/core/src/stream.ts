@@ -508,7 +508,7 @@ import type { TailnetServing } from "./tailnet-https";
  * 102: a project carries no `review` (who marks its tasks done is its Who
  *    decides' `done` kind, core decides.ts), a GitHub Project binding no
  *    `map` (each stage takes the Status option named as it, hub
- *    tracker-github-project.ts `statusOptionsAdded`), and binding a tracker
+ *    providers github/writes.ts `board.columns`), and binding a tracker
  *    can refuse with `tracker-github-statuses`. A page built for 101 reads
  *    them, so it reloads first.
  * 103: a decision page's writer carries no `heardBy`, and a page's Send,

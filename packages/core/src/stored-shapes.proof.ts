@@ -9,10 +9,17 @@ import type {
   PlaceKind as PlaceKindType,
 } from "@cawco/jsonl-parser";
 import type {
+  BoardAt as BoardAtType,
   ExternalActor as ExternalActorType,
   ExternalState as ExternalStateType,
+  ItemKey as ItemKeyType,
+  ItemRef as ItemRefType,
+  LinkKind as LinkKindType,
+  MadeComment as MadeCommentType,
   ProviderId as ProviderIdType,
   WatchSyncMode as WatchSyncModeType,
+  WriteMade as WriteMadeType,
+  WriteOp as WriteOpType,
 } from "@cawco/providers/provider";
 import type {
   AccountCheck as AccountCheckType,
@@ -201,7 +208,6 @@ import type {
 import type {
   ForgeAsk as ForgeAskType,
   ForgeVerdict as ForgeVerdictType,
-  ForgeWrite as ForgeWriteType,
 } from "./forge-post";
 import type {
   BrowserAskFrame as BrowserAskFrameType,
@@ -503,6 +509,7 @@ import type {
   BinaryUpdatePhaseOutput,
   BinaryUpdatePolicyOutput,
   BinaryUpdateStateOutput,
+  BoardAtOutput,
   BrowserAskedPageOutput,
   BrowserAskFrameOutput,
   BrowserFrameOutput,
@@ -620,7 +627,6 @@ import type {
   ForcedLayoutOutput,
   ForgeAskOutput,
   ForgeVerdictOutput,
-  ForgeWriteOutput,
   FormNameOutput,
   FormOutput,
   FrameCallOutput,
@@ -692,6 +698,8 @@ import type {
   InstanceStatusOutput,
   InteractionOutput,
   ItemEndOutput,
+  ItemKeyOutput,
+  ItemRefOutput,
   KeptMachineCapabilitiesOutput,
   KeptProcessOutput,
   LandsModeOutput,
@@ -702,6 +710,7 @@ import type {
   LayoutPlaceOutput,
   LayoutReadOutput,
   LimitWindowOutput,
+  LinkKindOutput,
   LinkModeOutput,
   MachineActivityOutput,
   MachineCapabilityOutput,
@@ -711,6 +720,7 @@ import type {
   MachinePathOutput,
   MachineProviderListsOutput,
   MachineStateOutput,
+  MadeCommentOutput,
   MayStartOutput,
   McpHttpServerConfigOutput,
   McpPlatformOutput,
@@ -930,6 +940,8 @@ import type {
   WorkspaceRefOutput,
   WorkspaceSavedOutput,
   WorkspaceToolOutput,
+  WriteMadeOutput,
+  WriteOpOutput,
 } from "./stored-shapes";
 import type {
   CommandAckStage as CommandAckStageType,
@@ -1219,8 +1231,14 @@ prove<
     Same<MachinePathOutput, MachinePathType>,
     Same<FolderMoveProgressFrameOutput, FolderMoveProgressFrameType>,
     Same<FolderRemovedOutput, FolderRemovedType>,
-    Same<ForgeWriteOutput, ForgeWriteType>,
+    Same<ItemKeyOutput, ItemKeyType>,
+    Same<BoardAtOutput, BoardAtType>,
+    Same<WriteOpOutput, WriteOpType>,
     Same<ForgeAskOutput, ForgeAskType>,
+    Same<MadeCommentOutput, MadeCommentType>,
+    Same<LinkKindOutput, LinkKindType>,
+    Same<ItemRefOutput, ItemRefType>,
+    Same<WriteMadeOutput, WriteMadeType>,
     Same<ForgeVerdictOutput, ForgeVerdictType>,
     Same<FsMediaOutput, FsMediaType>,
     Same<FsPayloadOutput, FsPayloadType>,

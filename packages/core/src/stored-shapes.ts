@@ -3,7 +3,7 @@
  * from the types CawCo stores as JSON: never edited by hand. Each schema's
  * output is proved to be its type exactly in stored-shapes.proof.ts beside it.
  */
-import { PROVIDER_IDS } from "@cawco/providers/provider";
+import { LINK_KINDS, PROVIDER_IDS } from "@cawco/providers/provider";
 import { z } from "zod";
 import type {
   AccountKind as AccountKindType,
@@ -2743,57 +2743,141 @@ const FolderRemovedShape = declared(
 export const FolderRemovedSchema = FolderRemovedShape;
 export type FolderRemovedOutput = z.output<typeof FolderRemovedShape>;
 
-const ForgeWriteShape = declared(
+const ItemKeyShape = declared(
+  z.object({ key: z.string(), kind: z.enum(["issue", "pr"]) }),
+  "ItemKey",
+  "packages/providers/src/provider.ts"
+);
+export type ItemKeyOutput = z.output<typeof ItemKeyShape>;
+
+const BoardAtShape = declared(
+  z.object({ field: z.string(), id: z.string(), title: z.string() }),
+  "BoardAt",
+  "packages/providers/src/provider.ts"
+);
+export type BoardAtOutput = z.output<typeof BoardAtShape>;
+
+const WriteOpShape = declared(
   z.union([
-    z.object({ body: z.string(), op: z.literal("issue"), title: z.string() }),
     z.object({
       body: z.string(),
-      marker: z.string(),
-      op: z.literal("issue_once"),
-      search: z.string(),
+      labels: z.array(z.string()).readonly().optional(),
+      op: z.literal("issue.create"),
+      stateToken: z.string().optional(),
       title: z.string(),
+    }),
+    z.object({
+      body: z.string().optional(),
+      key: z.string(),
+      labels: z.array(z.string()).readonly().optional(),
+      op: z.literal("issue.update"),
+      stateToken: z.string().optional(),
+      title: z.string().optional(),
+    }),
+    z.object({
+      body: z.string(),
+      on: ItemKeyShape,
+      op: z.literal("comment.create"),
+      saidBy: z.string().optional(),
     }),
     z.object({
       base: z.string(),
       body: z.string(),
       head: z.string(),
-      op: z.literal("pull_request"),
+      op: z.literal("change-request.open"),
       title: z.string(),
     }),
     z.object({
-      body: z.string(),
-      number: z.number(),
-      on: z.enum(["issue", "pull_request"]),
-      op: z.literal("comment"),
+      marker: z.string(),
+      op: z.literal("issue.find-marked"),
+      search: z.string(),
+    }),
+    z.object({
+      board: BoardAtShape,
+      boardItem: z.string().nullable(),
+      key: z.string(),
+      op: z.literal("board.place"),
+      option: z.string(),
+    }),
+    z.object({
+      board: BoardAtShape,
+      names: z.array(z.string()).readonly(),
+      op: z.literal("board.columns"),
+    }),
+    z.object({
+      name: z.string(),
+      op: z.literal("repo.create"),
+      private: z.boolean(),
     }),
   ]),
-  "ForgeWrite",
-  "packages/core/src/forge-post.ts"
+  "WriteOp",
+  "packages/providers/src/provider.ts"
 );
-export type ForgeWriteOutput = z.output<typeof ForgeWriteShape>;
+export type WriteOpOutput = z.output<typeof WriteOpShape>;
 
 const ForgeAskShape = declared(
-  z.object({ repo: z.string(), write: ForgeWriteShape }),
+  z.object({ op: WriteOpShape, repo: z.string() }),
   "ForgeAsk",
   "packages/core/src/forge-post.ts"
 );
 export const ForgeAskSchema = ForgeAskShape;
 export type ForgeAskOutput = z.output<typeof ForgeAskShape>;
 
-const PostMadeShape = declared(
-  z.object({
-    existing: z.boolean().optional(),
-    ok: z.boolean(),
-    said: z.string(),
-    url: z.string().optional(),
-  }),
-  "PostMade",
-  "packages/core/src/forge-post.ts"
+const MadeCommentShape = declared(
+  z.object({ at: z.number(), id: z.string(), url: z.string() }),
+  "MadeComment",
+  "packages/providers/src/provider.ts"
 );
+export type MadeCommentOutput = z.output<typeof MadeCommentShape>;
+
+const LinkKindShape = declared(
+  z.enum(LINK_KINDS),
+  "LinkKind",
+  "packages/providers/src/provider.ts"
+);
+export type LinkKindOutput = z.output<typeof LinkKindShape>;
+
+const UrlItemKindShape = declared(
+  z.union([LinkKindShape, z.literal("run")]),
+  "UrlItemKind",
+  "packages/providers/src/provider.ts"
+);
+
+const ItemRefShape = declared(
+  z.object({
+    container: z.string(),
+    host: z.string(),
+    key: z.string(),
+    kind: UrlItemKindShape,
+    provider: ProviderIdShape,
+    ref: z.string(),
+    url: z.string(),
+  }),
+  "ItemRef",
+  "packages/providers/src/provider.ts"
+);
+export type ItemRefOutput = z.output<typeof ItemRefShape>;
+
+const WriteMadeShape = declared(
+  z.object({
+    comment: MadeCommentShape.optional(),
+    existing: z.boolean().optional(),
+    item: ItemRefShape.nullable(),
+  }),
+  "WriteMade",
+  "packages/providers/src/provider.ts"
+);
+export type WriteMadeOutput = z.output<typeof WriteMadeShape>;
 
 const ForgeVerdictShape = declared(
   z.union([
-    z.object({ kind: z.literal("made"), made: PostMadeShape }),
+    z.object({
+      container: z.string(),
+      host: z.string(),
+      kind: z.literal("written"),
+      made: WriteMadeShape,
+      provider: ProviderIdShape,
+    }),
     z.object({ kind: z.literal("refused"), why: z.string() }),
   ]),
   "ForgeVerdict",

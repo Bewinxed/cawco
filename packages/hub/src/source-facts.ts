@@ -12,9 +12,9 @@ import type { SourceFacts } from "@cawco/core/asks";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hashFiles } from "@cawco/core/file-hash";
 import type { FleetMarketplace } from "@cawco/core/fleet";
-import { GitHubOctokit } from "@cawco/core/github-api";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { GitHubOctokit } from "@cawco/providers/github/client";
 import { z } from "zod";
 import {
   FOLDER_CHANGED,

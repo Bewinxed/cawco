@@ -524,7 +524,7 @@ empty-catch		packages/agent/src/checkout-exclude.ts	1
 empty-catch		packages/agent/src/first-session.ts	1
 empty-catch		packages/agent/src/fleet-mcp-listing.ts	1
 empty-catch		packages/agent/src/forges/cli-config.ts	1
-empty-catch		packages/agent/src/forges/gitea.ts	3
+empty-catch		packages/agent/src/forges/gitea-sign-in.ts	1
 empty-catch		packages/agent/src/git/lfs.ts	1
 empty-catch		packages/agent/src/harnesses/opencode.ts	2
 empty-catch		packages/agent/src/host-lfs.ts	1

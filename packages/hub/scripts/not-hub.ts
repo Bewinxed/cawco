@@ -73,6 +73,12 @@ export const NOT_HUB: { file: string; pattern: string; why: string }[] = [
     why: "Anthropic's usage endpoint on api.anthropic.com, the read Claude Code makes for a login's windows",
   },
   {
+    file: "packages/providers/src/github/client.ts",
+    pattern: "/api/v3",
+    why: "a GitHub Enterprise host's API base",
+  },
+  {
+    // Where the agent named it before its GitHub client moved to the provider: what an older build still calls.
     file: "packages/agent/src/forges/github.ts",
     pattern: "/api/v3",
     why: "a GitHub Enterprise host's API base",

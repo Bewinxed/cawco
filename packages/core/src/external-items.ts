@@ -78,8 +78,12 @@ export interface ExternalComment {
   /** When it was written on the source, ms epoch. */
   at: number;
   author: ExternalActor;
-  /** `in`: written on the source, added to the task; `out`: written on the task, posted to the source. */
-  direction: "in" | "out";
+  /**
+   * Written on the source and carried onto the task: every one is. What
+   * CawCo posts is the write ledger's (hub writes.ts); the field stays for
+   * the clients that read it.
+   */
+  direction: "in";
   /** The source's last edit of it, ms epoch; null when never edited. */
   editedAt: number | null;
   /** The source's own id for it: GitHub's comment number, Linear's uuid. */

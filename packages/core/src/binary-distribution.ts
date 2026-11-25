@@ -1,11 +1,11 @@
 /** Signed release discovery and immutable archive verification. */
 import { rename, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { GitHubOctokit } from "@cawco/providers/github/client";
 import type { Octokit } from "@octokit/rest";
 import type { BinaryUpdatePolicy } from "./binary-updates";
 import { readWithin } from "./bounded";
 import { makeFolder } from "./folders";
-import { GitHubOctokit } from "./github-api";
 import { refusalWords } from "./hub-refusal";
 import { type ReleaseManifest, verifyManifest } from "./release-manifest";
 import {

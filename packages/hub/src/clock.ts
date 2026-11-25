@@ -33,7 +33,6 @@
  *   it was and says so in the log.
  */
 
-import { readWithin } from "@cawco/core/bounded";
 import { readsGitHubApi } from "@cawco/core/connections";
 import { detach } from "@cawco/core/detach";
 import { secondsOf } from "@cawco/core/time";
@@ -49,18 +48,17 @@ import {
   type GitHubStreamCursor,
   githubIngest,
 } from "@cawco/providers/github/ingest";
+import type { LinearClientFor } from "@cawco/providers/linear/client";
 import {
-  type LinearClientFor,
   type LinearStreamCursor,
   linearIngest,
 } from "@cawco/providers/linear/ingest";
 import type {
   Ingest,
   ItemRevision,
-  ProviderProblem,
   WatchView,
-  Within,
 } from "@cawco/providers/provider";
+import { Effect, Result } from "effect";
 import { problem } from "elysia";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
@@ -86,7 +84,7 @@ const LOOK_MS = 5000;
 const REQUEST_MS = 30_000;
 
 /** The hub's deadline on one request a provider sends. */
-const within: Within = (read) => readWithin(REQUEST_MS, read);
+const requestMs = REQUEST_MS;
 
 const wordsOf = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -189,7 +187,7 @@ interface WatchPolled {
   /** The watch moved during the read: nothing was written. */
   dropped: boolean;
   landed: number;
-  problem: ProviderProblem | null;
+  problem: { resumeAt: number | null; words: string } | null;
   /** A request not answered in time, after this long, ms; null when every one was. */
   unanswered: number | null;
 }
@@ -261,14 +259,18 @@ export const createClock = ({
       unanswered: null,
     };
     for (const stream of reader.ingest.streams(view)) {
-      const polled = await reader.ingest.poll({
-        client,
-        watch: view,
-        stream,
-        cursor: reader.cursorOf(watch.cursors.get(stream)),
-        now: Date.now(),
-        within,
-      });
+      const outcome = await Effect.runPromise(
+        Effect.result(
+          reader.ingest.poll({
+            client,
+            watch: view,
+            stream,
+            cursor: reader.cursorOf(watch.cursors.get(stream)),
+            now: Date.now(),
+            requestMs,
+          })
+        )
+      );
       const now = store.polledWatch(watch.id);
       if (!(now && Bun.deepEquals(reader.ingest.readsBy(viewOf(now)), shape))) {
         console.log(
@@ -276,12 +278,16 @@ export const createClock = ({
         );
         return { ...out, dropped: true };
       }
-      if (polled.kind === "unanswered") {
-        return { ...out, unanswered: polled.after };
+      if (Result.isFailure(outcome)) {
+        const { failure } = outcome;
+        return failure._tag === "ProviderUnanswered"
+          ? { ...out, unanswered: failure.after }
+          : {
+              ...out,
+              problem: { words: failure.words, resumeAt: failure.resumeAt },
+            };
       }
-      if (polled.kind === "stopped") {
-        return { ...out, problem: polled.problem };
-      }
+      const polled = outcome.success;
       if (polled.kind === "unchanged") {
         store.keepStream(watch.id, stream, { kind: "unchanged" });
         continue;
@@ -411,7 +417,7 @@ export const createClock = ({
       // The connection could not sign in: its watches' reads said why, and the links are read on the next poll.
       return;
     }
-    await links.readLinks(projectId, client, within, (revisions) =>
+    await links.readLinks(projectId, client, requestMs, (revisions) =>
       storeReads(projectId, revisions)
     );
   };

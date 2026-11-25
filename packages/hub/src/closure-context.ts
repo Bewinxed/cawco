@@ -149,7 +149,6 @@ import type { FleetMcpChanges, RidingChanges } from "./fleet-mcp-changes";
 import type { FleetSync } from "./fleet-sync";
 import type { FleetWatch } from "./fleet-watch";
 import type { createFolderMoves } from "./folder-moves";
-import type { createForgePosts } from "./forge-posts";
 import type { HarnessConfigBody } from "./harness-config-body";
 import type { Caller, createHubAuth } from "./hub-auth";
 import type { hubRestarts } from "./hub-restart";
@@ -545,7 +544,6 @@ export interface ClosureContext {
   /** Moves of a project's folder, files and all (folder-moves.ts). */
   folderMoves: ReturnType<typeof createFolderMoves>;
   followupState: SessionCallsDeps["followupState"];
-  forgePosts: ReturnType<typeof createForgePosts>;
   forgetInstances: (ids: readonly string[]) => void;
   /** A move of a session was asked again: the one that didn't happen is no longer said (limit-moves.ts). */
   forgetMoveRefusal: (instanceId: string) => void;
@@ -1507,4 +1505,6 @@ export interface ClosureContext {
   workItems: ReturnType<typeof createWorkItems>;
   workspaceArchived: (workspace: WorkspaceRow) => void;
   workspaceRetire: { sweep: () => Promise<RetireSweep> };
+  /** The write door (writes.ts). */
+  writes: SessionCallsDeps["writes"];
 }

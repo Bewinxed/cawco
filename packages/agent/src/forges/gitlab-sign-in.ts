@@ -1,6 +1,5 @@
 /**
- * GitLab through @gitbeaker/rest, "A Typed GitLab SDK for Browsers, Node.js,
- * and Deno" (github.com/jdalrymple/gitbeaker), signed in as the host's glab:
+ * GitLab's sign-in on this machine: the host's glab,
  * its `config.yml` (`$GLAB_CONFIG_DIR`, else `<config home>/glab-cli`), the
  * host's `token` and where its API answers, `api_protocol` and `api_host`
  * ("`token`: Your GitLab access token … Scoped per host"; "`api_protocol`:
@@ -9,10 +8,9 @@
  * access tokens glab keeps (docs.gitlab.com/user/model_context_protocol/mcp_server).
  */
 import { join } from "node:path";
-import { Gitlab } from "@gitbeaker/rest";
 import { z } from "zod";
 import { configHome, readYamlConfig, sameHost } from "./cli-config";
-import type { ForgeAdapter, ForgeSignIn } from "./forge-adapter";
+import type { ForgeLogin, ForgeSignIn } from "./forge-adapter";
 
 /** glab's config dir, as glab finds it. */
 const glabConfigDir = (): string =>
@@ -36,7 +34,7 @@ const GlabConfig = z.object({
 const text = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() ? value.trim() : undefined;
 
-export const gitlabForge: ForgeAdapter = {
+export const gitlabLogin: ForgeLogin = {
   forge: "gitlab",
 
   async signIn(asked) {
@@ -66,59 +64,5 @@ export const gitlabForge: ForgeAdapter = {
       api: `${protocol}://${text(entry.api_host) ?? host}`,
     };
     return signIn;
-  },
-
-  client(signIn, path) {
-    const api = new Gitlab({ host: signIn.api, token: signIn.token });
-    const web = `${signIn.api}/${path}`;
-    return {
-      account: async () => (await api.Users.showCurrentUser()).username,
-      issue: async ({ title, body }) => {
-        const made = await api.Issues.create(path, title, {
-          description: body,
-        });
-        return { url: made.web_url };
-      },
-      markedIssue: async (marker, search) => {
-        const open = await api.Issues.all({
-          projectId: path,
-          state: "opened",
-          search,
-          in: "description",
-        });
-        return open.find((each) =>
-          (typeof each.description === "string"
-            ? each.description
-            : ""
-          ).includes(marker)
-        )?.iid;
-      },
-      pullRequest: async ({ base, head, title, body }) => {
-        const open = await api.MergeRequests.all({
-          projectId: path,
-          sourceBranch: head,
-          targetBranch: base,
-          state: "opened",
-        });
-        const [existing] = open;
-        if (existing) {
-          return { url: existing.web_url, existing: true };
-        }
-        const made = await api.MergeRequests.create(path, head, base, title, {
-          description: body,
-        });
-        return { url: made.web_url };
-      },
-      comment: async ({ on, number, body }) => {
-        // GitLab numbers issues and merge requests apart, each its own iid.
-        const note =
-          on === "issue"
-            ? await api.IssueNotes.create(path, number, body)
-            : await api.MergeRequestNotes.create(path, number, body);
-        return {
-          url: `${web}/-/${on === "issue" ? "issues" : "merge_requests"}/${number}#note_${note.id}`,
-        };
-      },
-    };
   },
 };

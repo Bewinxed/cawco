@@ -42,20 +42,27 @@ import type { WaitTarget } from "@cawco/core/wait-targets";
 import { externalItemWords } from "@cawco/core/words/external-items";
 import type { GitHubClient } from "@cawco/providers/github/ingest";
 import { githubItems } from "@cawco/providers/github/items";
-import type { ItemRevision, Within } from "@cawco/providers/provider";
+import type { ItemRead, ItemRevision } from "@cawco/providers/provider";
 import { PROVIDER_IDS } from "@cawco/providers/provider";
+import type { ProviderFailure } from "@cawco/providers/read-stop";
 import { linkOfUrl, numberOf } from "@cawco/providers/registry";
+import { Effect, Result } from "effect";
 import { ElysiaStatus } from "elysia";
 import type { ItemRow } from "./db/external-items";
 import type { ItemState } from "./db/stored-types";
-import type { LinkedItem, TaskLinksDb } from "./db/task-links";
+import type {
+  ExternalCommentRow,
+  LinkedItem,
+  TaskLinksDb,
+} from "./db/task-links";
+import type { WritesDb } from "./db/writes";
 import type { Arrived } from "./intake";
 import type { AnyProblem } from "./refusal";
+import { intoFile } from "./sync";
 import type { GitHubWaitState } from "./task-waits";
 import type { TaskActor, Tasks, TaskView } from "./tasks";
-import { intoFile } from "./tracker-adapter";
 
-/** How far a comment's headings go into a task file (tracker-adapter.ts). */
+/** How far a comment's headings go into a task file (sync.ts `intoFile`). */
 const COMMENT_DEPTH = 2;
 /** Links read from GitHub in one poll at most; the next poll reads on. Our choice. */
 const READS_PER_POLL = 20;
@@ -70,10 +77,11 @@ const COMMENTS: ReadonlySet<string> = new Set([
 export interface LinksDeps {
   readonly db: {
     readonly taskLinks: TaskLinksDb;
+    readonly writes: Pick<WritesDb, "comment" | "made">;
   };
   /** A link's state or title moved: the project's tasks look again, so a wait on it settles (tasks.ts `waitsMoved`). */
   readonly linksMoved: (projectId: string) => void;
-  readonly tasks: Pick<Tasks, "comment" | "editComment">;
+  readonly tasks: Pick<Tasks, "comment" | "editComment" | "get" | "update">;
 }
 
 /** What filing a comment did: added it, rewrote it, or nothing (it was carried already, or has no words). */
@@ -82,13 +90,44 @@ export type Filed =
   | { kind: "edited"; task: TaskView }
   | { kind: "none" };
 
-/** The hub's own actor carrying a comment from a source onto a task. */
-const carrierOf = (comment: ExternalComment, ref: string): TaskActor => ({
+/** The hub's own actor carrying a comment from a source onto a task: CawCo's own, when CawCo posted it (the write ledger says so). */
+const carrierOf = (
+  comment: ExternalComment,
+  ref: string,
+  ours = false
+): TaskActor => ({
   mover: "hub",
-  author: { name: externalItemWords.source[comment.source] },
-  reason: `a comment on ${ref}`,
+  author: { name: ours ? "CawCo" : externalItemWords.source[comment.source] },
+  reason: ours ? `CawCo's own comment on ${ref}` : `a comment on ${ref}`,
   ...(isOneOf(TRACKERS, comment.source) ? { tracker: comment.source } : {}),
 });
+
+/** A comment event as the comment it carries onto a task; undefined for an event that carries none. */
+const commentOf = (
+  event: Arrived["event"],
+  source: ExternalComment["source"]
+): ExternalComment | undefined =>
+  event.comment && event.url
+    ? {
+        source,
+        externalId: event.comment.id,
+        url: event.url,
+        author: event.author
+          ? {
+              source: event.author.source,
+              login: event.author.login,
+              name: event.author.name,
+              avatarUrl: event.author.avatarUrl,
+              url: event.author.url,
+              kind: event.author.kind,
+              memberId: event.author.memberId,
+            }
+          : actorNamed(source, event.actor ?? "someone"),
+        at: event.at,
+        editedAt: event.comment.editedAt,
+        direction: "in",
+      }
+    : undefined;
 
 /** An item's state as a wait on its pull request or run reads it (task-waits.ts `settled`). */
 const WAIT_STATES: Readonly<Record<ItemState, GitHubWaitState>> = {
@@ -111,12 +150,73 @@ const readAgain = (item: ItemRow): boolean =>
   (item.kind === "pr" && (item.state === "open" || item.state === "draft")) ||
   (item.kind === "run" && item.state !== "green");
 
+/** What a read of a linked item that brought no revision keeps on its mirror row: when it was read, or why it was not. */
+const readOutcome = (
+  item: ItemRow,
+  outcome: Result.Result<ItemRead, ProviderFailure>
+): { problem: string | null; readAt?: Date } => {
+  if (Result.isFailure(outcome)) {
+    const { failure } = outcome;
+    return {
+      problem:
+        failure._tag === "ProviderRefused"
+          ? failure.words
+          : `GitHub did not answer the read of ${item.ref} within ${secondsOf(failure.after)} s.`,
+    };
+  }
+  const read = outcome.success;
+  switch (read.kind) {
+    case "unchanged":
+    case "read":
+      return { readAt: new Date(), problem: null };
+    case "gone":
+      return {
+        problem: `${item.container} has no ${item.kind === "discussion" ? "discussion" : "item"} ${item.ref}.`,
+      };
+    default:
+      return unhandled("item read", read);
+  }
+};
+
 /** Each item the links name, once. */
 const itemsOf = (rows: LinkedItem[]): ItemRow[] => [
   ...new Map(rows.map(({ item }) => [item.id, item])).values(),
 ];
 
 export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
+  /** A comment filed before, edited on its source since (its `editedAt` past the one kept): its entry rewritten; nothing else. */
+  const rewrite = async (
+    projectId: string,
+    kept: ExternalCommentRow,
+    comment: ExternalComment,
+    text: string,
+    actor: TaskActor
+  ) => {
+    const none: Filed = { kind: "none" };
+    const edited =
+      comment.editedAt !== null &&
+      comment.editedAt > (kept.editedAt ?? kept.at);
+    if (!edited) {
+      return none;
+    }
+    const task = await tasks.editComment(
+      projectId,
+      kept.taskId,
+      kept.url,
+      text,
+      actor
+    );
+    if (task instanceof ElysiaStatus) {
+      return task;
+    }
+    db.taskLinks.updateComment(projectId, comment.source, comment.externalId, {
+      editedAt: comment.editedAt,
+      author: comment.author,
+    });
+    const rewritten: Filed = { kind: "edited", task };
+    return rewritten;
+  };
+
   /**
    * THE door for a comment from a source: filed once on `taskId`, under the
    * source's own id; an edit since (its `editedAt` past the one kept)
@@ -128,7 +228,8 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
     taskId: string,
     ref: string,
     comment: ExternalComment,
-    body: string
+    body: string,
+    ours = false
   ) => {
     const text = intoFile(body, COMMENT_DEPTH);
     const none: Filed = { kind: "none" };
@@ -140,33 +241,9 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
       comment.source,
       comment.externalId
     );
-    const actor = carrierOf(comment, ref);
+    const actor = carrierOf(comment, ref, ours);
     if (kept) {
-      const edited =
-        kept.direction === "in" &&
-        comment.editedAt !== null &&
-        comment.editedAt > (kept.editedAt ?? kept.at);
-      if (!edited) {
-        return none;
-      }
-      const task = await tasks.editComment(
-        projectId,
-        kept.taskId,
-        kept.url,
-        text,
-        actor
-      );
-      if (task instanceof ElysiaStatus) {
-        return task;
-      }
-      db.taskLinks.updateComment(
-        projectId,
-        comment.source,
-        comment.externalId,
-        { editedAt: comment.editedAt, author: comment.author }
-      );
-      const rewritten: Filed = { kind: "edited", task };
-      return rewritten;
+      return await rewrite(projectId, kept, comment, text, actor);
     }
     const task = await tasks.comment(
       projectId,
@@ -185,7 +262,6 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
       source: comment.source,
       externalId: comment.externalId,
       url: comment.url,
-      direction: "in",
       author: comment.author,
       at: comment.at,
       editedAt: comment.editedAt,
@@ -218,37 +294,69 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
     }
     const { item, link } = thread;
     const source = isOneOf(PROVIDER_IDS, item.provider) ? item.provider : null;
-    if (COMMENTS.has(event.kind) && event.comment && event.url && source) {
-      const filed = await fileComment(
-        row.projectId,
-        link.taskId,
-        item.ref,
-        {
-          source,
-          externalId: event.comment.id,
-          url: event.url,
-          author: event.author
-            ? {
-                source: event.author.source,
-                login: event.author.login,
-                name: event.author.name,
-                avatarUrl: event.author.avatarUrl,
-                url: event.author.url,
-                kind: event.author.kind,
-                memberId: event.author.memberId,
-              }
-            : actorNamed(source, event.actor ?? "someone"),
-          at: event.at,
-          editedAt: event.comment.editedAt,
-          direction: "in",
-        },
-        event.body ?? ""
-      );
-      if (filed instanceof ElysiaStatus) {
-        return filed;
-      }
+    const comment = source ? commentOf(event, source) : undefined;
+    if (!(comment && COMMENTS.has(event.kind))) {
+      return link.taskId;
     }
-    return link.taskId;
+    // A comment CawCo posted: one the sync carried out from this task is
+    // its entry already; any other (a session's, a repeat usability
+    // report) is filed as CawCo's own.
+    const posted = db.writes.comment(comment.source, comment.externalId);
+    if (posted?.by.startsWith("sync:") && posted.taskId === link.taskId) {
+      return link.taskId;
+    }
+    const filed = await fileComment(
+      row.projectId,
+      link.taskId,
+      item.ref,
+      comment,
+      event.body ?? "",
+      posted !== undefined
+    );
+    return filed instanceof ElysiaStatus ? filed : link.taskId;
+  };
+
+  /**
+   * An item CawCo made for one of this project's tasks (the write ledger
+   * says so: a session's issue from its attempt, a landing's pull request)
+   * that no task links yet: linked to that task, so no second task is filed
+   * for it and its events are about that task.
+   */
+  const adopt = async (projectId: string, item: ItemRow): Promise<void> => {
+    if (
+      !isOneOf(PROVIDER_IDS, item.provider) ||
+      item.url === null ||
+      db.taskLinks.byItem(projectId, { itemId: item.id }, "any").length > 0
+    ) {
+      return;
+    }
+    const made = db.writes.made({ ...item, provider: item.provider });
+    if (!(made?.taskId && made.projectId === projectId)) {
+      return;
+    }
+    const task = await tasks.get(projectId, made.taskId);
+    if (task instanceof ElysiaStatus) {
+      return;
+    }
+    const linked = await tasks.update(
+      projectId,
+      made.taskId,
+      { links: [...task.links.map((link) => link.url), item.url] },
+      {
+        mover: "hub",
+        author: { name: "CawCo" },
+        reason: `${item.ref}, which its attempt opened`,
+      }
+    );
+    if (linked instanceof ElysiaStatus) {
+      console.warn(
+        `[links] ${item.ref} was not linked to ${made.taskId}, which opened it: ${linked.response.detail}`
+      );
+      return;
+    }
+    console.log(
+      `[links] ${item.ref} linked to ${made.taskId}, which opened it`
+    );
   };
 
   /** The door moved these items' state or title: when a task or plan links one, the project's tasks look again. */
@@ -294,44 +402,21 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
   const readLinks = async (
     projectId: string,
     client: GitHubClient,
-    within: Within,
+    requestMs: number,
     store: (revisions: ItemRevision[]) => void
   ): Promise<void> => {
     const revisions: ItemRevision[] = [];
     let changed = false;
     for (const item of dueItems(projectId).slice(0, READS_PER_POLL)) {
-      const read = await githubItems.read(client, item, item.etag, within);
-      switch (read.kind) {
-        case "read":
-          revisions.push(read.revision);
-          break;
-        case "unchanged":
-          changed =
-            db.taskLinks.revise(item.id, {
-              readAt: new Date(),
-              problem: null,
-            }) || changed;
-          break;
-        case "gone":
-          changed =
-            db.taskLinks.revise(item.id, {
-              problem: `${item.container} has no ${item.kind === "discussion" ? "discussion" : "item"} ${item.ref}.`,
-            }) || changed;
-          break;
-        case "stopped":
-          changed =
-            db.taskLinks.revise(item.id, { problem: read.problem.words }) ||
-            changed;
-          break;
-        case "unanswered":
-          changed =
-            db.taskLinks.revise(item.id, {
-              problem: `GitHub did not answer the read of ${item.ref} within ${secondsOf(read.after)} s.`,
-            }) || changed;
-          break;
-        default:
-          unhandled("item read", read);
+      const outcome = await Effect.runPromise(
+        Effect.result(githubItems.read(client, item, item.etag, requestMs))
+      );
+      if (Result.isSuccess(outcome) && outcome.success.kind === "read") {
+        revisions.push(outcome.success.revision);
+        continue;
       }
+      changed =
+        db.taskLinks.revise(item.id, readOutcome(item, outcome)) || changed;
     }
     if (revisions.length > 0) {
       store(revisions);
@@ -415,7 +500,15 @@ export const createLinks = ({ db, linksMoved, tasks }: LinksDeps) => {
     ];
   };
 
-  return { fileComment, githubWait, linked, moved, onEvent, readLinks };
+  return {
+    adopt,
+    fileComment,
+    githubWait,
+    linked,
+    moved,
+    onEvent,
+    readLinks,
+  };
 };
 
 export type Links = ReturnType<typeof createLinks>;

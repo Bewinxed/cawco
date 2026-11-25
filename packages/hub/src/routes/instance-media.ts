@@ -6,24 +6,22 @@ import type { MachineReadsContext } from "../machine-reads";
 import { mediaCalls } from "../session-calls";
 
 export const instanceMediaRoutes = (
-  ctx: Pick<
-    HubContext,
-    "callAgent" | "db" | "forgePosts" | "sessionWorkspace"
-  > &
+  ctx: Pick<HubContext, "callAgent" | "db" | "sessionWorkspace" | "writes"> &
     MachineReadsContext
 ) => {
   const { forgePost, generateImage } = mediaCalls(ctx);
   return (
     new Elysia()
-      // A session's forge_post (forge-posts.ts): what it says is the
-      // tool's answer; a write that did not go is a refusal in its words.
+      // A session's forge_post, through the write door (writes.ts): what
+      // it says is the tool's answer; a write that did not go is a refusal
+      // in its words.
       .post(
         "/api/instances/:id/forge-post",
         {
           ...hidden,
           body: t.Object({
             repo: t.Optional(t.String({ minLength: 1 })),
-            write: t.Any(),
+            op: t.Any(),
           }),
         },
         ({ params, body, request, server }) => {

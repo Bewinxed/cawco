@@ -20,7 +20,9 @@
  *   moved raises none. On an issue the tracker sync took in, an opening
  *   (on the task the sync filed for it) and a comment raise one; a close,
  *   a reopen or a label, which the sync took into its task, none. An event
- *   the outsider rule held (outsiders.ts) goes to no route and raises none. While the project's triggers are off it is held on
+ *   the outsider rule held (outsiders.ts) goes to no route and raises none.
+ *   An event CawCo's own write caused (writes.ts, its `origin` `ours`)
+ *   goes to a route that matches it, and raises no trigger. While the project's triggers are off it is held on
  *   the project, and the session that starts when they are switched on
  *   reads it with the rest.
  * - **Data, never instructions.** An event reaches a model only inside a
@@ -500,6 +502,14 @@ export const createEventRoutes = ({
     }
     if (to !== TO_CONVERSATION) {
       toRoutine(row, to, routes);
+      return;
+    }
+    if (routing.ours) {
+      // CawCo's own write caused it (writes.ts): no one is woken by it.
+      store.setEvent(row.id, { handledAt: new Date() });
+      console.log(
+        `[routing] ${row.source} ${row.deliveryKey}: CawCo's own write caused it, so no trigger`
+      );
       return;
     }
     if (routing.lifecycle) {

@@ -168,7 +168,7 @@ const ORCHESTRATORS_ONLY: ReadonlySet<string> = new Set(ORCHESTRATOR_TASKS);
 const DELEGATE_SESSION = [
   "generate_image",
   // An issue, a pull or merge request or a comment on any forge, as its
-  // machine's sign-in there (forge-posts.ts): what gh did inside a workspace.
+  // machine's sign-in there (writes.ts): what gh did inside a workspace.
   "forge_post",
   "list_delegate_types",
   "list_sessions",

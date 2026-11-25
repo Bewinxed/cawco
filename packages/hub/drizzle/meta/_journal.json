@@ -3375,6 +3375,13 @@
       "when": 1795596184757,
       "tag": "0489_sync_subscribes",
       "breakpoints": true
+    },
+    {
+      "idx": 490,
+      "version": "6",
+      "when": 1795602149751,
+      "tag": "0490_external_writes",
+      "breakpoints": true
     }
   ]
 }

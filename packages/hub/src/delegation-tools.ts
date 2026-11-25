@@ -5,7 +5,7 @@ import {
   spawningToolAllowed,
   startsAny,
 } from "@cawco/core/delegate-types";
-import type { ForgeWrite } from "@cawco/core/forge-post";
+import type { MachineWriteOp } from "@cawco/core/forge-post";
 import {
   descriptorOf,
   HARNESSES,
@@ -185,16 +185,23 @@ const forgeWriteOf = (asked: {
   number?: number;
   on?: (typeof FORGE_POST_ON)[number];
   title?: string;
-}): ForgeWrite => {
+}): MachineWriteOp => {
   const { kind, body, title, head, base, number } = asked;
   if (kind === "issue" && title) {
-    return { op: "issue", title, body };
+    return { op: "issue.create", title, body };
   }
   if (kind === "pull_request" && title && head && base) {
-    return { op: "pull_request", title, body, head, base };
+    return { op: "change-request.open", title, body, head, base };
   }
   if (kind === "comment" && number && body.trim()) {
-    return { op: "comment", body, number, on: asked.on ?? "issue" };
+    return {
+      op: "comment.create",
+      body,
+      on: {
+        kind: asked.on === "pull_request" ? "pr" : "issue",
+        key: String(number),
+      },
+    };
   }
   throw new Error(
     {
@@ -542,7 +549,7 @@ export function handoffTools(view: ToolView) {
           .describe("What number names; default issue."),
       },
       ({ kind, repo, title, body, head, base, number, on }, _format, bound) => {
-        const write = forgeWriteOf({
+        const op = forgeWriteOf({
           kind,
           body: body ?? "",
           ...(title ? { title } : {}),
@@ -552,7 +559,7 @@ export function handoffTools(view: ToolView) {
           ...(on ? { on } : {}),
         });
         return bound.actions.forgePost({
-          write,
+          op,
           ...(repo ? { repo } : {}),
         });
       },

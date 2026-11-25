@@ -4,14 +4,8 @@
  * (@octokit/request-error `RequestError`: its `status` and `response`), and
  * that is read back as an answer here. A failure to reach GitHub is thrown.
  */
-import {
-  array,
-  type InferOutput,
-  object,
-  optional,
-  safeParse,
-  string,
-} from "valibot";
+import { Result, Schema } from "effect";
+import type { RefusalKind } from "../read-stop";
 
 /** Whether `value` is a JSON object (not null, not an array). */
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -50,11 +44,11 @@ export const messageOf = (data: unknown): string | undefined =>
   isRecord(data) && typeof data.message === "string" ? data.message : undefined;
 
 /** A GraphQL answer's errors, as @octokit/graphql throws them (`GraphqlResponseError.errors`). */
-const GraphqlFailureSchema = object({
-  errors: array(
-    object({
-      message: optional(string()),
-      type: optional(string()),
+const GraphqlFailureSchema = Schema.Struct({
+  errors: Schema.Array(
+    Schema.Struct({
+      message: Schema.optional(Schema.String),
+      type: Schema.optional(Schema.String),
     })
   ),
 });
@@ -62,9 +56,9 @@ const GraphqlFailureSchema = object({
 /** The errors a GraphQL answer carried, as `error` holds them; none when it is no such answer. */
 export const graphqlErrorsOf = (
   error: unknown
-): InferOutput<typeof GraphqlFailureSchema>["errors"] => {
-  const read = safeParse(GraphqlFailureSchema, error);
-  return read.success ? read.output.errors : [];
+): (typeof GraphqlFailureSchema)["Type"]["errors"] => {
+  const read = Schema.decodeUnknownResult(GraphqlFailureSchema)(error);
+  return Result.isSuccess(read) ? read.success.errors : [];
 };
 
 /** GitHub's answer to `call`: what it gave, or the refusal Octokit threw for it. */
@@ -122,9 +116,8 @@ const rateLimited = (
   return retry > 0 ? now + retry * 1000 : reset * 1000 || now;
 };
 
-/** What kind of refusal {@link refusalWords} found: the hub's problem codes end in it. */
-export type RefusalCode =
-  "unreachable" | "sign-in" | "rate" | "scope" | "input";
+/** What kind of refusal {@link refusalWords} found. */
+export type RefusalCode = RefusalKind;
 
 /**
  * What GitHub's error says of `what` on `repo`, in its words and with what

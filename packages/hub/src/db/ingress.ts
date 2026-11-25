@@ -116,7 +116,7 @@ export interface IngressDb extends PolledWatchesDb {
     id: string,
     patch: Pick<
       Partial<InboundEventRow>,
-      "routedTo" | "routeId" | "handledAt" | "taskId" | "processedAt"
+      "routedTo" | "routeId" | "handledAt" | "taskId" | "processedAt" | "origin"
     >
   ) => void;
   /**

@@ -26,12 +26,12 @@
  *   limit stops the read until its reset; any other stops it in words.
  */
 import {
-  type LinearClient,
   LinearError,
   LinearErrorType,
   parseLinearError,
   RatelimitedLinearError,
 } from "@linear/sdk";
+import { Effect } from "effect";
 import type {
   ExternalActor,
   Ingest,
@@ -40,15 +40,18 @@ import type {
   MirroredRef,
   MirrorState,
   OutsideActor,
+  Polled,
   SourceEvent,
   WatchView,
-  Within,
 } from "../provider";
-import { answered, polledFailure, Stop } from "../read-stop";
+import {
+  type ProviderFailure,
+  type ProviderRefused,
+  refusedWith,
+  request,
+} from "../read-stop";
 import { itemOfUrl } from "../registry";
-
-/** A Linear client for one request, made with its signal (the hub's connections.ts `linearClient`). */
-export type LinearClientFor = (signal?: AbortSignal) => LinearClient;
+import type { LinearClientFor } from "./client";
 
 /** Where one stream's read stands: the newest change it took in, ms. */
 export interface LinearStreamCursor {
@@ -138,13 +141,17 @@ interface RawComment {
   user?: { name: string } | null;
 }
 
-/** Why Linear refused a request, in its words. */
-const stopOf = (error: unknown, what: string, now: number): Stop => {
+/** Why Linear refused a request, in its words, as the refusal its type is. */
+const linearRefused = (
+  error: unknown,
+  what: string,
+  now: number = Date.now()
+): ProviderRefused => {
   const parsed =
     error instanceof LinearError
       ? error
       : parseLinearError(error instanceof Error ? error : undefined);
-  const said = parsed.errors?.[0]?.message ?? parsed.message;
+  const said = cutShort(parsed.errors?.[0]?.message ?? parsed.message, 300);
   switch (parsed.type) {
     case LinearErrorType.Ratelimited: {
       const reset =
@@ -153,21 +160,30 @@ const stopOf = (error: unknown, what: string, now: number): Stop => {
             (parsed.retryAfter ? now + parsed.retryAfter * 1000 : null))
           : null;
       const resumeAt = reset ?? now + 60_000;
-      return new Stop(
-        `Linear's rate limit holds polls back until ${new Date(resumeAt).toISOString()}.`,
+      return refusedWith(
+        `Linear's rate limit holds requests back until ${new Date(resumeAt).toISOString()}.`,
+        "rate",
         resumeAt
       );
     }
     case LinearErrorType.AuthenticationError:
-      return new Stop(`Linear refused the connection's sign-in (${said}).`);
-    case LinearErrorType.BootstrapError:
-    case LinearErrorType.FeatureNotAccessible:
+      return refusedWith(
+        `Linear refused the connection's sign-in (${said}).`,
+        "sign-in"
+      );
     case LinearErrorType.Forbidden:
+    case LinearErrorType.FeatureNotAccessible:
+      return refusedWith(`Linear refused to ${what}: ${said}`, "scope");
+    case LinearErrorType.NetworkError:
+      return refusedWith(
+        `Linear could not be reached to ${what}: ${said}`,
+        "unreachable"
+      );
+    case LinearErrorType.BootstrapError:
     case LinearErrorType.GraphqlError:
     case LinearErrorType.InternalError:
     case LinearErrorType.InvalidInput:
     case LinearErrorType.LockTimeout:
-    case LinearErrorType.NetworkError:
     case LinearErrorType.Other:
     case LinearErrorType.Unknown:
     case LinearErrorType.UsageLimitExceeded:
@@ -175,32 +191,37 @@ const stopOf = (error: unknown, what: string, now: number): Stop => {
     case undefined:
       break;
   }
-  return new Stop(`Linear would not ${what}: ${said}`);
+  return refusedWith(`Linear would not ${what}: ${said}`);
 };
 
-/** One request within the hub's deadline: its data, else `Stop` or `Unanswered` thrown. */
-const ask = async <T>(
+/** `text` kept to `max` characters, closing in "…" where it was cut. */
+const cutShort = (text: string, max: number): string =>
+  text.length > max ? `${text.slice(0, max)}…` : text;
+
+/** One GraphQL request to Linear within the hub's deadline: its data; Linear's refusal in its words, or no answer, its failure. */
+export const linearAsk = <T>(
   client: LinearClientFor,
-  within: Within,
+  requestMs: number,
   what: string,
   query: string,
-  variables: Record<string, unknown>,
-  now: number
-): Promise<T> => {
-  const asked = await within((signal) =>
-    client(signal).client.rawRequest<T, Record<string, unknown>>(
-      query,
-      variables
+  variables: Record<string, unknown>
+): Effect.Effect<T, ProviderFailure> =>
+  request(
+    "Linear",
+    requestMs,
+    (signal) =>
+      client(signal).client.rawRequest<T, Record<string, unknown>>(
+        query,
+        variables
+      ),
+    (error) => linearRefused(error, what)
+  ).pipe(
+    Effect.flatMap(({ data }) =>
+      data
+        ? Effect.succeed(data)
+        : Effect.fail(refusedWith(`Linear answered nothing to ${what}.`))
     )
-  ).catch((error: unknown) => {
-    throw stopOf(error, what, now);
-  });
-  const { data } = answered("Linear", asked);
-  if (!data) {
-    throw new Stop(`Linear answered nothing to ${what}.`);
-  }
-  return data;
-};
+  );
 
 const ms = (iso: string): number => Date.parse(iso);
 
@@ -308,6 +329,11 @@ const issueRead = (raw: LinearRawIssue): Ingested => {
   return { revisions: [revision], events };
 };
 
+/** One issue as Linear answers it, as its revision; undefined for one whose URL names no Linear issue. */
+export const linearIssueRevision = (
+  raw: LinearRawIssue
+): ItemRevision | undefined => issueRead(raw).revisions[0];
+
 /** A comment on one of the team's issues, as a `comment.created` on its issue. */
 const commentRead = (raw: RawComment): SourceEvent[] => {
   const ref = raw.issue ? refOf(raw.issue.url) : undefined;
@@ -340,52 +366,51 @@ const commentRead = (raw: RawComment): SourceEvent[] => {
 /** The parts of a poll a stream's read takes. */
 interface StreamRead {
   client: LinearClientFor;
-  now: number;
+  requestMs: number;
   since: number;
   team: string;
-  within: Within;
 }
 
 /** Every page of a list after `since`, each node read by `take`; the newest `updatedAt` it saw. */
-const readPages = async <Raw extends { updatedAt: string }>(
+const readPages = Effect.fnUntraced(function* <
+  Raw extends { updatedAt: string },
+>(
   read: StreamRead,
   what: string,
   query: string,
   field: "comments" | "issues",
-  take: (raw: Raw) => Promise<void> | void
-): Promise<number> => {
+  take: (raw: Raw) => Effect.Effect<void, ProviderFailure>
+) {
   const since = new Date(Math.max(0, read.since - OVERLAP_MS)).toISOString();
   let newest = read.since;
   let after: string | null = null;
   for (;;) {
-    const data: Record<string, LinearPage<Raw>> = await ask(
-      read.client,
-      read.within,
-      what,
-      query,
-      { team: read.team, since, after },
-      read.now
-    );
-    const listed = data[field];
+    const data: Record<string, LinearPage<Raw> | undefined> = yield* linearAsk<
+      Record<string, LinearPage<Raw> | undefined>
+    >(read.client, read.requestMs, what, query, {
+      team: read.team,
+      since,
+      after,
+    });
+    const listed: LinearPage<Raw> | undefined = data[field];
     if (!listed) {
-      throw new Stop(`Linear answered no ${field} to ${what}.`);
+      return yield* refusedWith(`Linear answered no ${field} to ${what}.`);
     }
     for (const raw of listed.nodes) {
       newest = Math.max(newest, ms(raw.updatedAt));
-      await take(raw);
+      yield* take(raw);
     }
     if (!(listed.pageInfo.hasNextPage && listed.pageInfo.endCursor)) {
       return newest;
     }
     after = listed.pageInfo.endCursor;
   }
-};
+});
 
 /** An issue with all its labels: those past the first page read on. */
-const whole = async (
-  read: StreamRead,
-  raw: LinearRawIssue
-): Promise<LinearRawIssue> => {
+export const wholeIssue = Effect.fnUntraced(function* <
+  Raw extends LinearRawIssue,
+>(client: LinearClientFor, requestMs: number, raw: Raw) {
   const { labels } = raw;
   if (!labels?.pageInfo.hasNextPage) {
     return raw;
@@ -393,80 +418,76 @@ const whole = async (
   const nodes = [...labels.nodes];
   let after = labels.pageInfo.endCursor ?? null;
   while (after) {
-    const more: { issue: { labels: LinearPage<{ name: string }> } | null } =
-      await ask(
-        read.client,
-        read.within,
-        `read the labels of ${raw.identifier}`,
-        ISSUE_LABELS_QUERY,
-        { id: raw.id, after },
-        read.now
-      );
+    const more = yield* linearAsk<{
+      issue: { labels: LinearPage<{ name: string }> } | null;
+    }>(
+      client,
+      requestMs,
+      `read the labels of ${raw.identifier}`,
+      ISSUE_LABELS_QUERY,
+      { id: raw.id, after }
+    );
     const page = more.issue?.labels;
     nodes.push(...(page?.nodes ?? []));
     after = page?.pageInfo.hasNextPage
       ? (page.pageInfo.endCursor ?? null)
       : null;
   }
-  return { ...raw, labels: { nodes, pageInfo: { hasNextPage: false } } };
-};
+  const filled: Raw = {
+    ...raw,
+    labels: { nodes, pageInfo: { hasNextPage: false } },
+  };
+  return filled;
+});
 
 type LinearIngest = Ingest<LinearClientFor, LinearStreamCursor>;
 
-/** One stream of a team's watch read from its cursor. Never throws: a failure is its `stopped` problem. */
-const poll: LinearIngest["poll"] = async (input) => {
+/** One stream of a team's watch read from its cursor; Linear's refusal in its words, or no answer, its failure. */
+const poll: LinearIngest["poll"] = (input) => {
   const read: StreamRead = {
     client: input.client,
-    now: input.now,
     since: input.cursor?.since ?? input.now,
     team: input.watch.container,
-    within: input.within,
+    requestMs: input.requestMs,
   };
   const ingested: Ingested = { revisions: [], events: [] };
-  try {
-    let newest: number;
-    switch (input.stream) {
-      case "issues":
-        newest = await readPages<LinearRawIssue>(
-          read,
-          "list the team's issues",
-          ISSUES_QUERY,
-          "issues",
-          async (raw) => {
-            const one = issueRead(await whole(read, raw));
-            ingested.revisions.push(...one.revisions);
-            ingested.events.push(...one.events);
-          }
-        );
-        break;
-      case "comments":
-        newest = await readPages<RawComment>(
-          read,
-          "list the team's comments",
-          COMMENTS_QUERY,
-          "comments",
-          (raw) => {
+  const polled = (newest: number): Polled<LinearStreamCursor> => ({
+    kind: "read",
+    baseline: input.cursor === null,
+    ingested,
+    cursor: { since: newest },
+  });
+  switch (input.stream) {
+    case "issues":
+      return readPages<LinearRawIssue>(
+        read,
+        "list the team's issues",
+        ISSUES_QUERY,
+        "issues",
+        (raw) =>
+          wholeIssue(read.client, read.requestMs, raw).pipe(
+            Effect.flatMap((full) =>
+              Effect.sync(() => {
+                const one = issueRead(full);
+                ingested.revisions.push(...one.revisions);
+                ingested.events.push(...one.events);
+              })
+            )
+          )
+      ).pipe(Effect.map(polled));
+    case "comments":
+      return readPages<RawComment>(
+        read,
+        "list the team's comments",
+        COMMENTS_QUERY,
+        "comments",
+        (raw) =>
+          Effect.sync(() => {
             ingested.events.push(...commentRead(raw));
-          }
-        );
-        break;
-      default:
-        return {
-          kind: "stopped",
-          problem: {
-            words: `Linear has no stream ${input.stream}.`,
-            resumeAt: null,
-          },
-        };
-    }
-    return {
-      kind: "read",
-      baseline: input.cursor === null,
-      ingested,
-      cursor: { since: newest },
-    };
-  } catch (error) {
-    return polledFailure("Linear", error);
+          })
+      ).pipe(Effect.map(polled));
+    default:
+      return Effect.fail(refusedWith(`Linear has no stream ${input.stream}.`));
   }
 };
 

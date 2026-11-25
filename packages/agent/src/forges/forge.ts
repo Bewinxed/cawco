@@ -1,94 +1,50 @@
 /**
- * Forges, on the machine (docs/forge-adapters.md): every forge CawCo posts to
- * plugs in through one {@link ForgeAdapter}, which finds the host's own
- * sign-in where that forge's CLI keeps it and makes an issue, a pull or merge
- * request, or a comment through the forge's own library or MCP server
- * (github.ts on Octokit, gitlab.ts on @gitbeaker/rest, gitea.ts on the
- * official gitea-mcp).
- *
- * {@link forgePost}: an agent's write (the hub's `forge_post`, sent here as
- * `CONTROL_FORGE_POST`), or a landing's pull request: the repository's forge
- * and sign-in found by its host, then made once with that sign-in.
+ * Writes made on this machine with its own sign-in (docs/forge-adapters.md,
+ * provider spec §2.8 D4): the hub's write door sends one
+ * (`CONTROL_FORGE_POST`: a session's `forge_post`, a landing's pull or
+ * merge request, usability feedback), and {@link forgePost} finds the forge
+ * the repository's host is on and the host's sign-in there ({@link forgeOn},
+ * each forge's CLI asked), makes that forge's provider's client from the
+ * sign-in (GitHub's Octokit, GitLab's @gitbeaker/rest, Gitea's gitea-mcp)
+ * and runs its provider's `writes.run`: the same writes the hub makes with
+ * a connection. It answers what the write made, which the door records.
  *
  * The credential is read on the host, used here, and never sent anywhere but
  * its forge.
  */
-import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   FORGE_NAMES,
   type Forge,
   type ForgeAsk,
   type ForgeVerdict,
-  type ForgeWrite,
 } from "@cawco/core/forge-post";
-import { secondsOf } from "@cawco/core/time";
-import { unhandled } from "@cawco/core/unhandled";
-import { changeRequestWords } from "@cawco/core/words/forge";
-import type {
-  ForgeAdapter,
-  ForgeClient,
-  ForgeMade,
-  ForgeSignIn,
-} from "./forge-adapter";
-import { giteaForge } from "./gitea";
-import { githubForge } from "./github";
-import { gitlabForge } from "./gitlab";
+import { giteaWrites } from "@cawco/providers/gitea/writes";
+import { githubTokenClient } from "@cawco/providers/github/client";
+import { githubWrites } from "@cawco/providers/github/writes";
+import { gitlabClient } from "@cawco/providers/gitlab/client";
+import { gitlabWrites } from "@cawco/providers/gitlab/writes";
+import type { WriteMade } from "@cawco/providers/provider";
+import {
+  failureWords,
+  type ProviderFailure,
+  ProviderUnanswered,
+} from "@cawco/providers/read-stop";
+import { repoAt } from "@cawco/providers/registry";
+import { Effect, Result } from "effect";
+import type { ForgeLogin, ForgeSignIn } from "./forge-adapter";
+import { giteaCaller, giteaLogin } from "./gitea-sign-in";
+import { githubLogin } from "./github-sign-in";
+import { gitlabLogin } from "./gitlab-sign-in";
 
-/** Every forge. A host is the forge whose CLI alone signs in to it ({@link forgeOn}). */
-const FORGE_ADAPTERS: readonly ForgeAdapter[] = [
-  githubForge,
-  gitlabForge,
-  giteaForge,
+/** Every forge's login. A host is the forge whose CLI alone signs in to it ({@link forgeOn}). */
+const FORGE_LOGINS: readonly ForgeLogin[] = [
+  githubLogin,
+  gitlabLogin,
+  giteaLogin,
 ];
 
-/** How long one forge call may take. Our choice. */
+/** How long one write may take here, all its requests together. Our choice. */
 const CALL_MS = 60_000;
-
-/** `host/path` split at its host. */
-const hostAndPath = (repo: string): { host: string; path: string } => {
-  const at = repo.indexOf("/");
-  return { host: repo.slice(0, at), path: repo.slice(at + 1) };
-};
-
-const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//iu;
-/** git's scp-like form, `[user@]host:path`, no slash before the colon (git-scm.com/docs/git-clone, "GIT URLS"). */
-const SCP_LIKE = /^(?:[^@/\s]+@)?([^/:\s]+):(.+)$/u;
-const EDGE_SLASHES = /^\/+|\/+$/gu;
-const DOT_GIT = /\.git$/iu;
-
-/**
- * Where a repository is, from its git URL or `host/path`: its host with its
- * port, which is how gh, glab and tea name a self-hosted forge's login
- * (`gitea.local:3000`), and its path, `.git` and edge slashes off. Undefined
- * for what names no host and path.
- */
-const forgeLocation = (
-  raw: string
-): { host: string; path: string } | undefined => {
-  const text = raw.trim();
-  let host = "";
-  let path = "";
-  if (SCHEME.test(text)) {
-    try {
-      const { host: at, pathname } = new URL(text);
-      host = at;
-      path = decodeURIComponent(pathname);
-    } catch {
-      return;
-    }
-  } else {
-    const scp = SCP_LIKE.exec(text);
-    if (scp) {
-      [, host = "", path = ""] = scp;
-    } else {
-      ({ host, path } = hostAndPath(text));
-    }
-  }
-  path = path.replace(EDGE_SLASHES, "").replace(DOT_GIT, "");
-  return host && path.includes("/")
-    ? { host: host.toLowerCase(), path }
-    : undefined;
-};
 
 /** Each forge's CLI, as the person signs it in. */
 const CLI_OF: Record<Forge, string> = {
@@ -107,24 +63,24 @@ const CLI_OF: Record<Forge, string> = {
  */
 const forgeOn = async (
   host: string
-): Promise<{ adapter: ForgeAdapter; signIn: ForgeSignIn } | string> => {
+): Promise<{ forge: Forge; signIn: ForgeSignIn } | string> => {
   const found = await Promise.all(
-    FORGE_ADAPTERS.map(async (adapter) => ({
-      adapter,
-      signIn: await adapter.signIn(host),
+    FORGE_LOGINS.map(async (login) => ({
+      forge: login.forge,
+      signIn: await login.signIn(host),
     }))
   );
   const logins = found.filter(
-    (each): each is { adapter: ForgeAdapter; signIn: ForgeSignIn | string } =>
+    (each): each is { forge: Forge; signIn: ForgeSignIn | string } =>
       each.signIn !== undefined
   );
   const [only] = logins;
   if (logins.length > 1) {
     const named = logins
-      .map(({ adapter, signIn }) =>
+      .map(({ forge, signIn }) =>
         typeof signIn === "object"
-          ? `${FORGE_NAMES[adapter.forge]} through ${CLI_OF[adapter.forge]} at ${signIn.host}`
-          : `${FORGE_NAMES[adapter.forge]} through ${CLI_OF[adapter.forge]}`
+          ? `${FORGE_NAMES[forge]} through ${CLI_OF[forge]} at ${signIn.host}`
+          : `${FORGE_NAMES[forge]} through ${CLI_OF[forge]}`
       )
       .join(", ");
     const example =
@@ -137,100 +93,54 @@ const forgeOn = async (
     return `this machine has no sign-in on ${host}: neither gh, glab nor tea is signed in there (gh auth login --hostname ${host}, glab auth login --hostname ${host}, or tea login add --url https://${host}).`;
   }
   return typeof only.signIn === "object"
-    ? { adapter: only.adapter, signIn: only.signIn }
+    ? { forge: only.forge, signIn: only.signIn }
     : only.signIn;
 };
 
-/** A call within {@link CALL_MS}: its answer, or its failure in words. */
-const within = async <T>(
-  what: string,
-  run: () => Promise<T>
-): Promise<{ ok: true; value: T } | { ok: false; said: string }> => {
-  let read: Bounded<T>;
-  try {
-    read = await readWithin(CALL_MS, () => run());
-  } catch (error) {
-    return {
-      ok: false,
-      said: `${what} failed: ${error instanceof Error ? error.message : String(error)}`,
-    };
+/** One write through the forge's provider, its client made from the host's sign-in. */
+const written = (
+  forge: Forge,
+  signIn: ForgeSignIn,
+  path: string,
+  op: ForgeAsk["op"]
+): Effect.Effect<WriteMade, ProviderFailure> => {
+  switch (forge) {
+    case "github":
+      return githubWrites.run(
+        githubTokenClient({
+          api: signIn.api,
+          token: signIn.token,
+          userAgent: "CawCo",
+          ...(signIn.socket ? { socket: signIn.socket } : {}),
+        }),
+        path,
+        op
+      );
+    case "gitlab":
+      return gitlabWrites.run(
+        gitlabClient({ api: signIn.api, token: signIn.token }),
+        path,
+        op
+      );
+    case "gitea":
+      return giteaWrites.run({ call: giteaCaller(signIn) }, path, op);
   }
-  return read.kind === "answered"
-    ? { ok: true, value: read.value }
-    : {
-        ok: false,
-        said: `${what} did not answer within ${secondsOf(read.after)} s, so it may or may not be there.`,
-      };
 };
+
+/** What a made write hands back: no revision, which the hub reads off the item itself. */
+const madeOf = (made: WriteMade): WriteMade => ({
+  item: made.item,
+  ...(made.comment ? { comment: made.comment } : {}),
+  ...(made.existing === undefined ? {} : { existing: made.existing }),
+});
 
 /**
- * An issue once: a comment on the open issue whose body holds the write's
- * marker, else a new issue. Two writes of one marker at one moment would
- * both open one: the hub sends one marker's writes one at a time (hub
- * usability-feedback.ts `byFingerprint`).
- */
-const issueOnce = async (
-  client: ForgeClient,
-  one: Extract<ForgeWrite, { op: "issue_once" }>
-): Promise<ForgeMade> => {
-  const open = await client.markedIssue(one.marker, one.search);
-  if (open === undefined) {
-    return client.issue({ op: "issue", title: one.title, body: one.body });
-  }
-  const made = await client.comment({
-    op: "comment",
-    on: "issue",
-    number: open,
-    body: one.body,
-  });
-  return { ...made, existing: true };
-};
-
-/** One write through `client`. */
-const write = (client: ForgeClient, one: ForgeWrite): Promise<ForgeMade> => {
-  switch (one.op) {
-    case "issue":
-      return client.issue(one);
-    case "issue_once":
-      return issueOnce(client, one);
-    case "pull_request":
-      return client.pullRequest(one);
-    case "comment":
-      return client.comment(one);
-    default:
-      unhandled("forge write", one);
-  }
-};
-
-/** What a made write says. */
-const madeWords = (forge: Forge, one: ForgeWrite, made: ForgeMade): string => {
-  const name = FORGE_NAMES[forge];
-  if (one.op === "pull_request") {
-    const kind = changeRequestWords(forge);
-    return made.existing
-      ? `${name} has a ${kind} open from ${one.head} into ${one.base} already: ${made.url}`
-      : `${name} opened the ${kind}: ${made.url}`;
-  }
-  switch (one.op) {
-    case "issue":
-      return `${name} opened the issue: ${made.url}`;
-    case "issue_once":
-      return made.existing
-        ? `${name} took the comment on the issue already open: ${made.url}`
-        : `${name} opened the issue: ${made.url}`;
-    case "comment":
-      return `${name} took the comment: ${made.url}`;
-    default:
-      unhandled("forge write", one);
-  }
-};
-
-/**
- * An agent's write: the repository's forge and the host's sign-in there
- * found by its host, then made once with that sign-in.
+ * A write the hub's write door sent: the repository's forge and the host's
+ * sign-in there found by its host, then made once with that sign-in,
+ * within {@link CALL_MS}.
  */
 export const forgePost = async (ask: ForgeAsk): Promise<ForgeVerdict> => {
-  const at = forgeLocation(ask.repo);
+  const at = repoAt(ask.repo);
   if (!at) {
     return {
       kind: "refused",
@@ -241,20 +151,32 @@ export const forgePost = async (ask: ForgeAsk): Promise<ForgeVerdict> => {
   if (typeof found === "string") {
     return { kind: "refused", why: `cawco: nothing was posted: ${found}` };
   }
-  const { adapter, signIn } = found;
-  const { forge } = adapter;
-  const made = await within(`${FORGE_NAMES[forge]} on ${signIn.host}`, () =>
-    write(adapter.client(signIn, at.path), ask.write)
+  const { forge, signIn } = found;
+  const what = `${FORGE_NAMES[forge]} on ${signIn.host}`;
+  const outcome = await Effect.runPromise(
+    Effect.result(
+      written(forge, signIn, at.path, ask.op).pipe(
+        Effect.timeoutOrElse({
+          duration: CALL_MS,
+          orElse: () =>
+            Effect.fail(
+              new ProviderUnanswered({ service: what, after: CALL_MS })
+            ),
+        })
+      )
+    )
   );
+  if (Result.isFailure(outcome)) {
+    return {
+      kind: "refused",
+      why: `${what} failed: ${failureWords(outcome.failure)}`,
+    };
+  }
   return {
-    kind: "made",
-    made: made.ok
-      ? {
-          ok: true,
-          said: madeWords(forge, ask.write, made.value),
-          url: made.value.url,
-          ...(made.value.existing ? { existing: true } : {}),
-        }
-      : { ok: false, said: made.said },
+    kind: "written",
+    provider: forge,
+    host: signIn.host,
+    container: at.path.toLowerCase(),
+    made: madeOf(outcome.success),
   };
 };

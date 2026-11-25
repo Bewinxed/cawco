@@ -1,3 +1,6 @@
+import type { Effect } from "effect";
+import type { ProviderFailure } from "./read-stop";
+
 /**
  * One provider per outside service (GitHub, Linear, GitLab, Gitea, and the
  * generic `connection` provider for a connector poll's records): what each
@@ -223,22 +226,6 @@ export interface Ingested {
   whole?: { container: string };
 }
 
-/** A read's problem in the service's words; `resumeAt` when its rate limit says to wait. */
-export interface ProviderProblem {
-  resumeAt: number | null;
-  words: string;
-}
-
-/** A read the hub bounds in time: answered, or let go after `after` ms (the hub's core `Bounded`). */
-export type Asked<T> =
-  | { kind: "answered"; value: T }
-  | { after: number; kind: "unanswered"; reason: "timeout" | "dead" };
-
-/** The hub's deadline on one request: the request gets the signal that aborts when its time is up. */
-export type Within = <T>(
-  read: (signal: AbortSignal) => Promise<T>
-) => Promise<Asked<T>>;
-
 /** Whether a watch's container is synced with its project's tasks: `off` only reads it; `inbound` and `both` are a tracker's directions. */
 export type WatchSyncMode = "off" | "inbound" | "both";
 
@@ -256,23 +243,21 @@ export interface WatchView {
   sync: WatchSyncMode;
 }
 
-/** What one stream's read came to. */
+/** What one stream's read came to; a refusal or no answer is its failure. */
 export type Polled<Cursor> =
   /** `baseline`: a first read, whose events are stored as already handled. */
   | { baseline: boolean; cursor: Cursor; ingested: Ingested; kind: "read" }
-  | { kind: "unchanged" }
-  | { kind: "stopped"; problem: ProviderProblem }
-  /** A request the service did not answer in time: nothing moves, and nothing is said of the watch. */
-  | { after: number; kind: "unanswered" };
+  | { kind: "unchanged" };
 
 /** One stream read from its cursor. Stores nothing: the hub keeps `cursor` once `ingested` is stored. */
 interface PollInput<Client, Cursor> {
   client: Client;
   cursor: Cursor | null;
   now: number;
+  /** The hub's deadline on one request, ms. */
+  requestMs: number;
   stream: string;
   watch: WatchView;
-  within: Within;
 }
 
 /** How a provider's watches are polled. */
@@ -284,30 +269,226 @@ export interface Ingest<Client, Cursor> {
    * no list carries (a reopen): asked by the door for each revision it writes.
    */
   moved?: (revision: ItemRevision, held: MirrorState | null) => SourceEvent[];
-  poll: (input: PollInput<Client, Cursor>) => Promise<Polled<Cursor>>;
+  poll: (
+    input: PollInput<Client, Cursor>
+  ) => Effect.Effect<Polled<Cursor>, ProviderFailure>;
   /** What of a watch a read depends on: a read during which this moved is dropped. */
   readsBy: (watch: WatchView) => unknown;
   /** The streams a watch polls, in order. */
   streams: (watch: WatchView) => readonly string[];
 }
 
-/** What one read of one item came to: its revision, nothing new (a 304), gone, or the service's problem. */
+/** What one read of one item came to: its revision, nothing new (a 304), or gone; a refusal or no answer is its failure. */
 export type ItemRead =
   | { kind: "read"; revision: ItemRevision }
   | { kind: "unchanged" }
-  | { kind: "gone" }
-  | { kind: "stopped"; problem: ProviderProblem }
-  /** The service did not answer within the hub's deadline, after this long, ms. */
-  | { after: number; kind: "unanswered" };
+  | { kind: "gone" };
 
-/** Single-item reads: a link's item, read now. */
+/** Single-item reads: a link's item, or a tracker's issue, read now. */
 export interface Items<Client> {
   kinds: readonly ItemKind[];
-  /** One item, read conditionally with `etag` where the service has ETags. */
+  /** One item, read conditionally with `etag` where the service has ETags, each request within `requestMs`. */
   read: (
     client: Client,
     item: MirroredRef,
     etag: string | null,
-    within: Within
-  ) => Promise<ItemRead>;
+    requestMs: number
+  ) => Effect.Effect<ItemRead, ProviderFailure>;
+}
+
+// --- sync ---------------------------------------------------------------------
+
+/** Linear's six categories, which GitHub's states take too ("statuses belong to fixed categories: triage, backlog, unstarted, started, completed, canceled", linear.app/docs/configuring-workflows). */
+export type StateType =
+  "triage" | "backlog" | "unstarted" | "started" | "completed" | "canceled";
+
+/** One state an issue can be in on its tracker. */
+export interface IssueState {
+  name: string;
+  /** What names it to the tracker: `open`, `closed:completed`, a Linear state's id. */
+  token: string;
+  type: StateType;
+}
+
+/** A container a tracker binds to, as its choice lists it. */
+export interface SyncTarget {
+  /** GitHub: `owner/repo`; Linear: the team's id. */
+  id: string;
+  /** `owner/repo`, or `ENG · Engineering`. */
+  name: string;
+  /** GitHub: the repository as a repository picker draws it (hub core `GhRepo`). */
+  repo?: {
+    description: string | null;
+    isPrivate: boolean;
+    nameWithOwner: string;
+    owner: { avatarUrl: string; kind: "user" | "org"; login: string };
+    sshUrl: string;
+    updatedAt: string;
+    url: string;
+  };
+  url: string;
+}
+
+/**
+ * What the tracker sync (hub sync.ts) reads of a container besides what
+ * the door brings it (provider spec §2.3 `Sync`): the containers a
+ * connection reaches, one described, its issues' states, one issue now,
+ * and the key a URL's issue goes by there. Its writes are `writes.run`'s.
+ */
+export interface Sync<Client> {
+  describe: (
+    client: Client,
+    container: string,
+    requestMs: number
+  ) => Effect.Effect<SyncTarget, ProviderFailure>;
+  /** One issue of the container read now; null when it is gone from it (deleted, moved, or no issue). */
+  issue: (
+    client: Client,
+    container: string,
+    key: string,
+    requestMs: number
+  ) => Effect.Effect<ItemRevision | null, ProviderFailure>;
+  /** The key of the issue a URL names on the container; undefined when it names none there. */
+  keyOf: (
+    client: Client,
+    container: string,
+    url: string,
+    requestMs: number
+  ) => Effect.Effect<string | undefined, ProviderFailure>;
+  /** Every state the container's issues can be in, in the tracker's own order. */
+  states: (
+    client: Client,
+    container: string,
+    requestMs: number
+  ) => Effect.Effect<IssueState[], ProviderFailure>;
+  /** The containers a connection reaches (`app`: it is an app's installation); `more` when a search would find more. */
+  targets: (
+    client: Client,
+    requestMs: number,
+    asked: { app: boolean; search?: string }
+  ) => Effect.Effect<{ more: boolean; targets: SyncTarget[] }, ProviderFailure>;
+}
+
+// --- writes -----------------------------------------------------------------
+
+/** An issue or a pull or merge request a write names on its container, by the key the service's API takes. */
+export interface ItemKey {
+  key: string;
+  kind: "issue" | "pr";
+}
+
+/** A board a write names: its id, its column field's, and its title for sentences. */
+export interface BoardAt {
+  field: string;
+  id: string;
+  title: string;
+}
+
+/**
+ * One write to a container (provider spec §2.3 `WriteOp`), made by its
+ * provider's `writes.run` and sent only through the hub's write door (hub
+ * writes.ts). An issue names its state by the service's own token (an
+ * issue's `stateToken`); a comment says who said it (`saidBy`) where the
+ * service lets the app say so, else in its words.
+ */
+export type WriteOp =
+  | {
+      body: string;
+      labels?: readonly string[];
+      op: "issue.create";
+      stateToken?: string;
+      title: string;
+    }
+  | {
+      body?: string;
+      key: string;
+      labels?: readonly string[];
+      op: "issue.update";
+      stateToken?: string;
+      title?: string;
+    }
+  | { body: string; on: ItemKey; op: "comment.create"; saidBy?: string }
+  | {
+      base: string;
+      body: string;
+      head: string;
+      op: "change-request.open";
+      title: string;
+    }
+  /** The open issue whose body holds `marker`; `search` is a word of it the service's issue search finds it by. */
+  | { marker: string; op: "issue.find-marked"; search: string }
+  /** Issue `key` put in column `option` of a board: added to it first when it is not on it (`boardItem` null). */
+  | {
+      board: BoardAt;
+      boardItem: string | null;
+      key: string;
+      op: "board.place";
+      option: string;
+    }
+  /** The board's columns with one added for each of `names` it has none named as; none removed or renamed. */
+  | { board: BoardAt; names: readonly string[]; op: "board.columns" }
+  | { name: string; op: "repo.create"; private: boolean };
+
+export type WriteOpName = WriteOp["op"];
+
+/** A comment a write made: its own id, its URL, and when it was written, ms. */
+export interface MadeComment {
+  at: number;
+  id: string;
+  url: string;
+}
+
+/**
+ * What every write answers, as the write door records it: the item it
+ * made, changed or found (null: none), the comment it made, and whether
+ * what it was asked for was there already (an open change request for the
+ * same branches).
+ */
+export interface WriteMade {
+  comment?: MadeComment;
+  existing?: boolean;
+  item: ItemRef | null;
+}
+
+/** What each write answers. */
+export interface WrittenOf {
+  "board.columns": WriteMade & {
+    /** The names it added: none when every one had a column. */
+    added: string[];
+    options: { id: string; name: string }[];
+  };
+  "board.place": WriteMade & { placed: BoardItem };
+  "change-request.open": WriteMade & { existing: boolean; item: ItemRef };
+  "comment.create": WriteMade & { comment: MadeComment; item: ItemRef };
+  "issue.create": WriteMade & { item: ItemRef; revision: ItemRevision };
+  "issue.find-marked": WriteMade;
+  "issue.update": WriteMade & { item: ItemRef; revision: ItemRevision };
+  "repo.create": WriteMade & {
+    repo: { cloneUrl: string; fullName: string; url: string };
+  };
+}
+
+export type Written = WrittenOf[WriteOpName];
+
+/** Each write a provider makes, by its op. */
+export type WriteHandlers<Client> = {
+  readonly [N in WriteOpName]?: (
+    client: Client,
+    container: string,
+    op: Extract<WriteOp, { op: N }>
+  ) => Effect.Effect<WrittenOf[N], ProviderFailure>;
+};
+
+/** A provider's writes (provider spec §2.3). */
+export interface Writes<Client> {
+  /** Each op's own write, typed by its op: what the hub's sync calls by name. */
+  handlers: WriteHandlers<Client>;
+  /** The ops it has; any other is refused in words. */
+  ops: readonly WriteOpName[];
+  /** One write to `container`, through `client`, whichever op it is. */
+  run: (
+    client: Client,
+    container: string,
+    op: WriteOp
+  ) => Effect.Effect<Written, ProviderFailure>;
 }

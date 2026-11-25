@@ -54,11 +54,17 @@ export const runtimeCommit =
  * item and a machine's report names no `hub-only` or `marketplace-unlinked`
  * cause (core fleet.ts `FAULT_CAUSES`); an epoch-8 hub sends the item, which
  * an epoch-9 agent does not know and throws on, and an epoch-8 agent may
- * report either cause, which an epoch-9 hub does not keep. A hub sends a
- * launch only to an agent whose range holds its own, and a joined machine
- * installs only a build whose range overlaps its hub's.
+ * report either cause, which an epoch-9 hub does not keep. Epoch 10: a
+ * write a machine makes with its own sign-in (`CONTROL_FORGE_POST`, core
+ * forge-post.ts) takes `{ repo, op }`, a provider's `WriteOp`, and answers
+ * `written` with its provider, host, container and what it made, which the
+ * hub's write door records (hub writes.ts); an epoch-9 agent refuses the op
+ * as no write it knows, and an epoch-9 hub sends a `write` and reads a
+ * `made`, which an epoch-10 agent refuses. A hub sends a launch only to an
+ * agent whose range holds its own, and a joined machine installs only a
+ * build whose range overlaps its hub's.
  */
-export const protocolRange = { min: 9, max: 9 } as const;
+export const protocolRange = { min: 10, max: 10 } as const;
 /**
  * The folder every build's runtime folder sits in, one per build by its
  * version, beside the binary root's `versions/` (binary-installation.ts

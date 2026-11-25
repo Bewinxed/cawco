@@ -2,7 +2,7 @@
  * Someone GitHub names, as an outside item carries them, and whether GitHub
  * vouches for them on the repository.
  */
-import { type InferOutput, nullish, object, string } from "valibot";
+import { Schema } from "effect";
 import type { ExternalActor, OutsideActor } from "../provider";
 
 /**
@@ -20,13 +20,13 @@ const VOUCHED: ReadonlySet<string> = new Set([
 ]);
 
 /** Someone as GitHub's REST answers name them. */
-export const RawUserSchema = object({
-  avatar_url: nullish(string()),
-  html_url: nullish(string()),
-  login: nullish(string()),
-  type: nullish(string()),
+export const RawUserSchema = Schema.Struct({
+  avatar_url: Schema.optional(Schema.NullOr(Schema.String)),
+  html_url: Schema.optional(Schema.NullOr(Schema.String)),
+  login: Schema.optional(Schema.NullOr(Schema.String)),
+  type: Schema.optional(Schema.NullOr(Schema.String)),
 });
-export type RawUser = InferOutput<typeof RawUserSchema>;
+export type RawUser = (typeof RawUserSchema)["Type"];
 
 /** Someone GitHub names, as an external item carries them; null when it names no one. */
 export const githubActorOf = (
