@@ -76,6 +76,9 @@
     // A model's API is called through the AI SDK alone: no vendor SDK, no
     // hand-rolled request to an inference path.
     "./scripts/lint/model-calls.grit",
+    // An outside service's SDK is imported in its provider's folder alone
+    // (@cawco/providers), never by its pure descriptor.
+    "./scripts/lint/provider-sdks.grit",
     // A script a workspace runs alone (the judge, its server, the log shim)
     // imports Node's built-ins and the script beside it alone.
     "./scripts/lint/standalone-scripts.grit",
@@ -350,7 +353,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,providers,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -394,7 +397,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,providers,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -424,7 +427,10 @@
       // Core stands under every other package, so it imports none of them.
       // jsonl-parser is a published leaf that imports no workspace package,
       // and the transcript index's author words are its own: core's wire
-      // type is an Extract of them (find.ts), so the two cannot drift. The
+      // type is an Extract of them (find.ts), so the two cannot drift.
+      // providers is the other leaf: each outside service's descriptor, which
+      // core's own URL readers (wait-targets.ts) and source names
+      // (external-items.ts) read, so it stands under core. The
       // house tokens are declared once, in the dashboard's theme.css
       // (Tailwind's @theme): core theme-css.ts reads that file as text, the
       // one source every page CawCo serves outside the dashboard takes them
@@ -446,7 +452,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,providers,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -461,13 +467,41 @@
                       "!@cawco/core",
                       "!@cawco/core/**",
                       "!@cawco/jsonl-parser",
+                      "!@cawco/providers/**",
                     ],
-                    "message": "@cawco/core imports no other package; what it needs moves into core.",
+                    "message": "@cawco/core imports no other package but the two leaves under it (jsonl-parser, providers); what it needs moves into core.",
                   },
                 ],
                 "paths": {
                   "@cawco/core": "Core has no index: import the module that owns the name, like @cawco/core/stage.",
                 },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      // providers stands under core (see core's override above), so it
+      // imports no workspace package: what a provider needs of core moves
+      // into providers.
+      "includes": ["packages/providers/**", "!**/*.jsonc"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@cawco/**",
+                      "**/packages/*/src/**",
+                      "**/apps/*/**",
+                    ],
+                    "message": "@cawco/providers imports no workspace package; what it needs moves into providers.",
+                  },
+                ],
               },
             },
           },
@@ -495,7 +529,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,providers,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -731,7 +765,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,providers,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -781,7 +815,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,providers,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -896,7 +930,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,providers,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -942,7 +976,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,providers,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -997,7 +1031,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,providers,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",

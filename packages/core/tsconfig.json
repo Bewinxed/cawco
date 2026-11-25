@@ -14,5 +14,5 @@
   // scripts/ imports the repository's scripts/fmt.ts, outside this rootDir:
   // its own project (scripts/tsconfig.json).
   "exclude": ["node_modules", "dist", "scripts"],
-  "references": [{ "path": "../jsonl-parser" }]
+  "references": [{ "path": "../jsonl-parser" }, { "path": "../providers" }]
 }

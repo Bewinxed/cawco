@@ -42797,7 +42797,7 @@
             "type": "string"
           },
           "source": {
-            "$ref": "#/components/schemas/ExternalSource"
+            "$ref": "#/components/schemas/ProviderId"
           },
           "url": {
             "description": "Their page on the source; null when it gave none.",
@@ -42842,7 +42842,7 @@
             "type": "string"
           },
           "source": {
-            "$ref": "#/components/schemas/ExternalSource"
+            "$ref": "#/components/schemas/ProviderId"
           },
           "url": {
             "description": "Where it reads on the source: the item's URL with the comment's anchor.",
@@ -42865,14 +42865,6 @@
           "out"
         ]
       },
-      "ExternalKind": {
-        "type": "string",
-        "enum": [
-          "discussion",
-          "issue",
-          "pr"
-        ]
-      },
       "ExternalRef": {
         "description": "One external item a task links, as the board draws it.",
         "type": "object",
@@ -42890,7 +42882,7 @@
             "type": "string"
           },
           "kind": {
-            "$ref": "#/components/schemas/ExternalKind"
+            "$ref": "#/components/schemas/LinkKind"
           },
           "labels": {
             "type": "array",
@@ -42914,7 +42906,7 @@
             "type": "string"
           },
           "source": {
-            "$ref": "#/components/schemas/ExternalSource"
+            "$ref": "#/components/schemas/ProviderId"
           },
           "state": {
             "$ref": "#/components/schemas/ExternalRefState",
@@ -42960,13 +42952,6 @@
           "draft",
           "merged",
           "open"
-        ]
-      },
-      "ExternalSource": {
-        "type": "string",
-        "enum": [
-          "github",
-          "linear"
         ]
       },
       "FeedbackConsent": {
@@ -49693,6 +49678,14 @@
           "kind",
           "percent",
           "severity"
+        ]
+      },
+      "LinkKind": {
+        "type": "string",
+        "enum": [
+          "discussion",
+          "issue",
+          "pr"
         ]
       },
       "LinkMode": {
@@ -57460,6 +57453,15 @@
           "yours"
         ]
       },
+      "ProviderId": {
+        "type": "string",
+        "enum": [
+          "gitea",
+          "github",
+          "gitlab",
+          "linear"
+        ]
+      },
       "ProviderSigninChallenge": {
         "description": "A provider sign-in begun: a device code to enter on any device, where, and\nuntil when (`expiresAt` from the provider's own device-code expiry); or,\nfor a provider with no device code, a link to authorise at, after which\nthe person pastes the code or redirect URL it ends on.",
         "anyOf": [
@@ -63584,7 +63586,7 @@
         "type": "object",
         "properties": {
           "kind": {
-            "$ref": "#/components/schemas/ExternalKind"
+            "$ref": "#/components/schemas/LinkKind"
           },
           "mode": {
             "$ref": "#/components/schemas/LinkMode"
@@ -63594,7 +63596,7 @@
             "type": "string"
           },
           "source": {
-            "$ref": "#/components/schemas/ExternalSource"
+            "$ref": "#/components/schemas/ProviderId"
           },
           "state": {
             "$ref": "#/components/schemas/ExternalRefState",

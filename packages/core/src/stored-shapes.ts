@@ -3,6 +3,7 @@
  * from the types CawCo stores as JSON: never edited by hand. Each schema's
  * output is proved to be its type exactly in stored-shapes.proof.ts beside it.
  */
+import { PROVIDER_IDS } from "@cawco/providers/provider";
 import { z } from "zod";
 import type {
   AccountKind as AccountKindType,
@@ -25,7 +26,6 @@ import type {
   ExternalState as ExternalStateType,
   LinkMode as LinkModeType,
 } from "./external-items";
-import { EXTERNAL_SOURCES } from "./external-items";
 import type {
   FleetRefreshOutcome as FleetRefreshOutcomeType,
   McpPlatform as McpPlatformType,
@@ -2019,12 +2019,12 @@ export const EnvelopeShape = declared(
 );
 export type EnvelopeOutput = z.output<typeof EnvelopeShape>;
 
-const ExternalSourceShape = declared(
-  z.enum(EXTERNAL_SOURCES),
-  "ExternalSource",
-  "packages/core/src/external-items.ts"
+const ProviderIdShape = declared(
+  z.enum(PROVIDER_IDS),
+  "ProviderId",
+  "packages/providers/src/provider.ts"
 );
-export type ExternalSourceOutput = z.output<typeof ExternalSourceShape>;
+export type ProviderIdOutput = z.output<typeof ProviderIdShape>;
 
 const ExternalActorShape = declared(
   z.object({
@@ -2033,7 +2033,7 @@ const ExternalActorShape = declared(
     login: z.string(),
     memberId: z.string().nullable(),
     name: z.string().nullable(),
-    source: ExternalSourceShape,
+    source: ProviderIdShape,
     url: z.string().nullable(),
   }),
   "ExternalActor",

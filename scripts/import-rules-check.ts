@@ -68,6 +68,7 @@ const ACYCLIC: ReadonlySet<string> = new Set([
   "@cawco/icons",
   "@cawco/jsonl-parser",
   "@cawco/preview",
+  "@cawco/providers",
   "@cawco/sessiond",
   "cawco",
   "cawco-site",

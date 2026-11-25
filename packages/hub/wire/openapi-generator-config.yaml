@@ -83,9 +83,7 @@ typeOverrides:
     Exclude: OpenEnums.Exclude
     ExternalActorKind: OpenEnums.ExternalActorKind
     ExternalCommentDirection: OpenEnums.ExternalCommentDirection
-    ExternalKind: OpenEnums.ExternalKind
     ExternalRefState: OpenEnums.ExternalRefState
-    ExternalSource: OpenEnums.ExternalSource
     FindConversationOutcome: OpenEnums.FindConversationOutcome
     FindConversationRole: OpenEnums.FindConversationRole
     FindField: OpenEnums.FindField
@@ -136,6 +134,7 @@ typeOverrides:
     IssueTracker: OpenEnums.IssueTracker
     KeepAliveTtl: OpenEnums.KeepAliveTtl
     LandsMode: OpenEnums.LandsMode
+    LinkKind: OpenEnums.LinkKind
     LinkMode: OpenEnums.LinkMode
     LocalNameState: OpenEnums.LocalNameState
     MachineCapabilityId: OpenEnums.MachineCapabilityId
@@ -182,6 +181,7 @@ typeOverrides:
     ProjectOfferReason: OpenEnums.ProjectOfferReason
     ProjectStopFrameOutcome: OpenEnums.ProjectStopFrameOutcome
     PropKind: OpenEnums.PropKind
+    ProviderId: OpenEnums.ProviderId
     QuestionClosedAs: OpenEnums.QuestionClosedAs
     QueueSlot: OpenEnums.QueueSlot
     RebalanceNoticeHow: OpenEnums.RebalanceNoticeHow

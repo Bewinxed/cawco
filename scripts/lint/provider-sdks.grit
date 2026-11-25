@@ -1,0 +1,53 @@
+language js
+
+// An outside service's SDK is its provider's alone (@cawco/providers, one
+// folder per service: docs in packages/providers/src/provider.ts). GitHub's
+// (`@octokit/*`), Linear's (`@linear/sdk`) and GitLab's (`@gitbeaker/rest`)
+// are imported only under `packages/providers/src/<id>/`, and never by a
+// `descriptor.ts` there: a descriptor is pure, so the dashboard imports it.
+// A type import counts: it ties the importer to the SDK's shapes.
+//
+// Allowed by file, each with its reason, never by an inline suppression:
+// - packages/core/src/binary-distribution.ts: CawCo's own release lookups,
+//   no project's integration;
+// - packages/hub/src/source-facts.ts: public facts of a repository, no
+//   project's integration.
+//
+// Still to move into their provider, each by the slice of the provider spec
+// that moves its path (its build order, steps 2 to 8); step 9 empties it:
+// - packages/agent/src/forges/gitlab.ts
+// - packages/core/src/github-api.ts
+// - packages/hub/src/connections.ts
+// - packages/hub/src/external-items.ts
+// - packages/hub/src/github.ts
+// - packages/hub/src/tracker-github-project.ts
+// - packages/hub/src/tracker-github.ts
+// - packages/hub/src/tracker-linear.ts
+or {
+  `import $clause from $source` as $hit,
+  `import $source` as $hit,
+  `export { $names } from $source` as $hit,
+  `export * from $source` as $hit,
+  `export * as $_ from $source` as $hit,
+  `import($source)` as $hit,
+  `require($source)` as $hit
+} where {
+  $source <: r"[\"'](?:@octokit/[^\"']+|@linear/sdk|@gitbeaker/rest)(?:/[^\"']*)?[\"']",
+  not and {
+    $filename <: r".*packages/providers/src/[a-z]+/[^/]+",
+    $filename <: not includes "/descriptor.ts"
+  },
+  $filename <: not or {
+    includes "packages/core/src/binary-distribution.ts",
+    includes "packages/hub/src/source-facts.ts",
+    includes "packages/agent/src/forges/gitlab.ts",
+    includes "packages/core/src/github-api.ts",
+    includes "packages/hub/src/connections.ts",
+    includes "packages/hub/src/external-items.ts",
+    includes "packages/hub/src/github.ts",
+    includes "packages/hub/src/tracker-github-project.ts",
+    includes "packages/hub/src/tracker-github.ts",
+    includes "packages/hub/src/tracker-linear.ts"
+  },
+  register_diagnostic(span=$hit, message="An outside service's SDK (@octokit/*, @linear/sdk, @gitbeaker/rest) is imported in its provider's folder alone, packages/providers/src/<id>/, and never by a descriptor.ts there (scripts/lint/provider-sdks.grit).")
+}

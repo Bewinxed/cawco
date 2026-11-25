@@ -53,9 +53,7 @@ import type {
 } from "@cawco/core/deliverables";
 import type {
   ExternalActor as ExternalActorType,
-  ExternalKind as ExternalKindType,
   ExternalRef as ExternalRefType,
-  ExternalSource as ExternalSourceType,
   ExternalState as ExternalStateType,
   LinkMode as LinkModeType,
   TaskLinkSummary as TaskLinkSummaryType,
@@ -182,6 +180,10 @@ import type {
 import type { WaitKind as WaitKindType } from "@cawco/core/wait-targets";
 import type { WorkItemState as WorkItemStateType } from "@cawco/core/work-items";
 import type {
+  LinkKind as LinkKindType,
+  ProviderId as ProviderIdType,
+} from "@cawco/providers/provider";
+import type {
   AccountFields as AccountFieldsType,
   DelegateTypeFields as DelegateTypeFieldsType,
   HookFields as HookFieldsType,
@@ -281,9 +283,7 @@ import type {
   EmbedShapeOutput,
   EndKindOutput,
   ExternalActorOutput,
-  ExternalKindOutput,
   ExternalRefOutput,
-  ExternalSourceOutput,
   ExternalStateOutput,
   FileAttachmentOutput,
   FleetHookOutput,
@@ -311,6 +311,7 @@ import type {
   KeptStateOutput,
   KeptStepOutput,
   KeptUpdatesOutput,
+  LinkKindOutput,
   LinkModeOutput,
   ListedBrowserOutput,
   MayStartOutput,
@@ -345,6 +346,7 @@ import type {
   PreviewFrameOutput,
   PreviewSourceOutput,
   PreviewUnavailableOutput,
+  ProviderIdOutput,
   RailLayoutOutput,
   RefusalOutput,
   RestoreHeldRowOutput,
@@ -627,9 +629,9 @@ prove<
     Same<TaskHistoryActorOutput, TaskHistoryActorType>,
     Same<TaskTimesOutput, TaskTimesType>,
     Same<StageKindOutput, StageKindType>,
-    Same<ExternalSourceOutput, ExternalSourceType>,
+    Same<ProviderIdOutput, ProviderIdType>,
     Same<ExternalActorOutput, ExternalActorType>,
-    Same<ExternalKindOutput, ExternalKindType>,
+    Same<LinkKindOutput, LinkKindType>,
     Same<LinkModeOutput, LinkModeType>,
     Same<ExternalStateOutput, ExternalStateType>,
     Same<ExternalRefOutput, ExternalRefType>,

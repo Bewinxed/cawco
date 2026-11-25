@@ -5,5 +5,8 @@
     "tsBuildInfoFile": "../../../../../.tsbuild/packages/agent/src/stage-host/canvas.tsbuildinfo"
   },
   "include": ["."],
-  "references": [{ "path": "../../../../core" }]
+  "references": [
+    { "path": "../../../../core" },
+    { "path": "../../../../providers" }
+  ]
 }

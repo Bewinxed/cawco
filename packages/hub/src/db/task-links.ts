@@ -14,16 +14,15 @@
  * same way (db session-plans.ts `syncPlanLinks`), so the pull request is
  * read, and its wait settles, as a task's does.
  */
-import {
-  type ExternalComment,
-  type ExternalKind,
-  type ExternalRef,
-  type ExternalSource,
-  type LinkMode,
-  refOfUrl,
-  type TaskLinkSummary,
+import type {
+  ExternalComment,
+  ExternalRef,
+  LinkMode,
+  TaskLinkSummary,
 } from "@cawco/core/external-items";
 import { waitTarget } from "@cawco/core/wait-targets";
+import type { LinkKind, ProviderId } from "@cawco/providers/provider";
+import { linkOfUrl, numberOf } from "@cawco/providers/registry";
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { externalComments, projectTasks, taskLinks } from "./schema";
@@ -52,11 +51,11 @@ export type ItemKey =
   | {
       /** `owner/repo` on GitHub: a project may link items of more than one repository. */
       container?: string;
-      kind?: ExternalKind;
+      kind?: LinkKind;
       number: number;
-      source: ExternalSource;
+      source: ProviderId;
     }
-  | { externalId: string; source: ExternalSource };
+  | { externalId: string; source: ProviderId };
 
 /** A row as the board draws it: the record first, then the file's order. */
 export const refOf = (row: TaskLinkRow): ExternalRef => ({
@@ -135,7 +134,7 @@ export const syncTaskLinks = (
       .run();
   }
   for (const { url, record } of wanted) {
-    const item = refOfUrl(url);
+    const item = linkOfUrl(url);
     if (!item) {
       continue;
     }
@@ -174,9 +173,9 @@ export const syncTaskLinks = (
         projectId,
         taskId,
         url,
-        source: item.source,
+        source: item.provider,
         kind: item.kind,
-        number: item.number,
+        number: numberOf(item),
         ref: item.ref,
         mode,
       })
@@ -203,7 +202,7 @@ export interface TaskLinksDb {
   /** One carried comment by the source's id; undefined while it was never carried. */
   readonly comment: (
     projectId: string,
-    source: ExternalSource,
+    source: ProviderId,
     externalId: string
   ) => ExternalCommentRow | undefined;
   /** A task's carried comments, either way. */
@@ -225,10 +224,10 @@ export interface TaskLinksDb {
     taskId: string
   ) => TaskLinkRow | undefined;
   /** The links of a source the hub has not read yet, or whose last read stopped short. */
-  readonly unread: (projectId: string, source: ExternalSource) => TaskLinkRow[];
+  readonly unread: (projectId: string, source: ProviderId) => TaskLinkRow[];
   readonly updateComment: (
     projectId: string,
-    source: ExternalSource,
+    source: ProviderId,
     externalId: string,
     patch: Partial<Pick<ExternalCommentRow, "author" | "editedAt" | "url">>
   ) => void;
@@ -282,7 +281,7 @@ export const taskLinksDb = (db: BunSQLiteDatabase): TaskLinksDb => {
       const container = "container" in item ? item.container : undefined;
       return container
         ? rows.filter(
-            (row) => refOfUrl(row.url)?.container === container.toLowerCase()
+            (row) => linkOfUrl(row.url)?.container === container.toLowerCase()
           )
         : rows;
     },

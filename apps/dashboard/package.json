@@ -26,6 +26,7 @@
     "@atlaskit/pragmatic-drag-and-drop-hitbox": "^3.0.0",
     "@cawco/core": "workspace:*",
     "@cawco/icons": "workspace:*",
+    "@cawco/providers": "workspace:*",
     "@dagrejs/dagre": "3.1.3",
     "@elysia/eden": "2.0.0-rc.1",
     "@event-calendar/core": "5.16.0",

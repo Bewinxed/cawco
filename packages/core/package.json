@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@cawco/jsonl-parser": "workspace:*",
+    "@cawco/providers": "workspace:*",
     "@octokit/rest": "22.0.1",
     "@openuidev/lang-core": "1.0.1",
     "fontkit": "2.0.4",

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  // A library: its checked declarations go to .tsbuild, and every project
+  // that references it reads those instead of re-checking this source. It
+  // stands under core and imports no workspace package.
+  "compilerOptions": {
+    "types": ["bun"],
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "outDir": "../../.tsbuild/packages/providers"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}

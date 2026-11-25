@@ -8,7 +8,12 @@
  */
 export const externalItemWords = {
   /** Each source by its name. */
-  source: { github: "GitHub", linear: "Linear" },
+  source: {
+    github: "GitHub",
+    linear: "Linear",
+    gitlab: "GitLab",
+    gitea: "Gitea",
+  },
   /** Each kind as a sentence names it. */
   kind: { issue: "issue", pr: "pull request", discussion: "discussion" },
   /** Each state as a row says it, when the source gave none of its own. */

@@ -8,7 +8,7 @@
  *   `links:` the rest), and the hub's `task_links` keeps what the source
  *   holds of it (title, state, author, labels), read again whenever it
  *   changes. A URL names its source, kind and number by itself
- *   ({@link refOfUrl}), so a hub rebuilt from the files alone knows every
+ *   (@cawco/providers registry.ts `itemOfUrl`), so a hub rebuilt from the files alone knows every
  *   link.
  * - **The comment** is one `## Comments` entry whose heading names its
  *   source and URL (`### bewinxed · github · <url> · <time>`, hub
@@ -16,11 +16,7 @@
  *   own id, so it is filed once and an edit rewrites it in place.
  */
 
-export const EXTERNAL_SOURCES = ["github", "linear"] as const;
-export type ExternalSource = (typeof EXTERNAL_SOURCES)[number];
-
-export const EXTERNAL_KINDS = ["issue", "pr", "discussion"] as const;
-export type ExternalKind = (typeof EXTERNAL_KINDS)[number];
+import type { LinkKind, ProviderId } from "@cawco/providers/provider";
 
 /** The source's state in five words every source maps onto; `stateName` keeps its own. */
 export type ExternalState = "open" | "draft" | "merged" | "closed" | "canceled";
@@ -43,7 +39,7 @@ export interface ExternalActor {
   memberId: string | null;
   /** Their display name, when the source gives one apart from the login. */
   name: string | null;
-  source: ExternalSource;
+  source: ProviderId;
   /** Their page on the source; null when it gave none. */
   url: string | null;
 }
@@ -60,7 +56,7 @@ export interface ExternalRef {
   baselineUnread?: true;
   /** The source's own id: GitHub's node id, Linear's uuid; empty until the item was read. */
   id: string;
-  kind: ExternalKind;
+  kind: LinkKind;
   labels: string[];
   mode: LinkMode;
   /** GitHub's #12; null on Linear. */
@@ -69,7 +65,7 @@ export interface ExternalRef {
   problem: string | null;
   /** `#12`, `ENG-123`. */
   ref: string;
-  source: ExternalSource;
+  source: ProviderId;
   /** Its state as the source last said it; null until the item was read. */
   state: ExternalState | null;
   /** The source's own word: "Open", "Closed", "In Progress"; empty until read. */
@@ -100,86 +96,14 @@ export interface ExternalComment {
   editedAt: number | null;
   /** The source's own id for it: GitHub's comment number, Linear's uuid. */
   externalId: string;
-  source: ExternalSource;
+  source: ProviderId;
   /** Where it reads on the source: the item's URL with the comment's anchor. */
   url: string;
 }
 
-/** What a URL names on its source, read from the URL alone. */
-export interface ItemOfUrl {
-  /** Where it lives, lower case: `owner/repo` on GitHub, the workspace on Linear. */
-  container: string;
-  kind: ExternalKind;
-  number: number | null;
-  ref: string;
-  source: ExternalSource;
-  /** The item's URL, without a comment's anchor or a trailing path. */
-  url: string;
-}
-
-const GITHUB_ITEM =
-  /^https?:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/(issues|pull|discussions)\/(\d{1,9})(?:[/?#].*)?$/iu;
-const LINEAR_ITEM =
-  /^https?:\/\/linear\.app\/([\w-]+)\/issue\/([A-Za-z0-9]+-\d{1,9})(?:[/?#].*)?$/iu;
-const GITHUB_COMMENT = /#(?:issuecomment|discussioncomment)-(\d{1,20})$/u;
-const LINEAR_COMMENT = /#comment-([0-9a-f-]{8,64})$/iu;
-
-const GITHUB_KINDS: Readonly<Record<string, ExternalKind>> = {
-  issues: "issue",
-  pull: "pr",
-  discussions: "discussion",
-};
-
-/**
- * The one parser of an external item's URL: a GitHub issue, pull request
- * or discussion, or a Linear issue, with or without a comment's anchor;
- * undefined for any other URL.
- */
-export const refOfUrl = (url: string): ItemOfUrl | undefined => {
-  const written = url.trim();
-  const github = GITHUB_ITEM.exec(written);
-  if (github) {
-    const [, owner, repo, segment, digits] = github;
-    const number = Number(digits);
-    return {
-      source: "github",
-      kind: GITHUB_KINDS[segment.toLowerCase()] ?? "issue",
-      number,
-      ref: `#${number}`,
-      container: `${owner}/${repo}`.toLowerCase(),
-      url: `https://github.com/${owner}/${repo}/${segment.toLowerCase()}/${number}`,
-    };
-  }
-  const linear = LINEAR_ITEM.exec(written);
-  if (linear) {
-    const [, workspace, identifier] = linear;
-    const ref = identifier.toUpperCase();
-    return {
-      source: "linear",
-      kind: "issue",
-      number: null,
-      ref,
-      container: workspace.toLowerCase(),
-      url: `https://linear.app/${workspace}/issue/${ref}`,
-    };
-  }
-};
-
-/** A comment's own id on its source, read off its URL's anchor; undefined when the URL names no comment. */
-export const commentIdOfUrl = (url: string): string | undefined => {
-  const item = refOfUrl(url);
-  if (!item) {
-    return;
-  }
-  const anchor = (
-    item.source === "github" ? GITHUB_COMMENT : LINEAR_COMMENT
-  ).exec(url.trim());
-  return anchor?.[1];
-};
-
 /** Someone a source names by login alone: a person, nothing else known yet. */
 export const actorNamed = (
-  source: ExternalSource,
+  source: ProviderId,
   login: string
 ): ExternalActor => ({
   source,
@@ -190,9 +114,3 @@ export const actorNamed = (
   kind: "person",
   memberId: null,
 });
-
-const SOURCES: ReadonlySet<string> = new Set(EXTERNAL_SOURCES);
-
-/** Whether a word names a source: a comment heading's second slot is one, or a mover. */
-export const isExternalSource = (word: string): word is ExternalSource =>
-  SOURCES.has(word);

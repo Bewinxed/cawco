@@ -17,6 +17,7 @@
     { "path": "../packages/auth" },
     { "path": "../packages/cli" },
     { "path": "../packages/core" },
+    { "path": "../packages/providers" },
     { "path": "../packages/hub" },
     { "path": "../packages/jsonl-parser" },
     { "path": "../packages/sessiond" }

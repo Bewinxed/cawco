@@ -35,15 +35,16 @@
  */
 import {
   actorNamed,
-  commentIdOfUrl,
   type ExternalActor,
   type ExternalComment,
-  type ExternalKind,
   type ExternalState,
-  refOfUrl,
 } from "@cawco/core/external-items";
+import { isOneOf } from "@cawco/core/one-of";
+import { TRACKERS } from "@cawco/core/trackers";
 import type { WaitTarget } from "@cawco/core/wait-targets";
 import { externalItemWords } from "@cawco/core/words/external-items";
+import type { LinkKind } from "@cawco/providers/provider";
+import { commentOfUrl, linkOfUrl, numberOf } from "@cawco/providers/registry";
 import type { Octokit } from "@octokit/rest";
 import { ElysiaStatus } from "elysia";
 import type { TaskLinkRow, TaskLinksDb } from "./db/task-links";
@@ -65,7 +66,7 @@ const HASH = /^#/u;
 const NOT_MODIFIED = 304;
 
 /** The item each event about one names, by the event's kind. */
-const EVENT_ITEMS: Readonly<Record<string, ExternalKind>> = {
+const EVENT_ITEMS: Readonly<Record<string, LinkKind>> = {
   "issue.opened": "issue",
   "issue.closed": "issue",
   "issue.labeled": "issue",
@@ -76,7 +77,7 @@ const EVENT_ITEMS: Readonly<Record<string, ExternalKind>> = {
 };
 
 /** The item each comment event is written on, by the event's kind. */
-const COMMENT_ITEMS: Readonly<Record<string, ExternalKind>> = {
+const COMMENT_ITEMS: Readonly<Record<string, LinkKind>> = {
   "comment.created": "issue",
   "discussion_comment.created": "discussion",
 };
@@ -109,7 +110,7 @@ const carrierOf = (comment: ExternalComment, ref: string): TaskActor => ({
   mover: "hub",
   author: { name: externalItemWords.source[comment.source] },
   reason: `a comment on ${ref}`,
-  tracker: comment.source,
+  ...(isOneOf(TRACKERS, comment.source) ? { tracker: comment.source } : {}),
 });
 
 /** A state in our word for it, the source having none of its own. */
@@ -264,7 +265,7 @@ const readPull = async (
 /** An item read once from GitHub: an issue or a pull request through REST (a pull request with its ETag), a discussion through GraphQL. */
 const readItem = async (
   octokit: Octokit,
-  kind: ExternalKind,
+  kind: LinkKind,
   owner: string,
   repo: string,
   number: number,
@@ -333,15 +334,16 @@ const readRows = async (
   rows: TaskLinkRow[]
 ): Promise<ItemRead | undefined> => {
   const [first] = rows;
-  const item = first ? refOfUrl(first.url) : undefined;
+  const item = first ? linkOfUrl(first.url) : undefined;
+  const number = item && numberOf(item);
   const [owner, name] = (item?.container ?? "").split("/");
-  if (!(first && item?.number && owner && name)) {
+  if (!(first && item && number && owner && name)) {
     return;
   }
   const etag = rows.every((row) => row.etag === first.etag) ? first.etag : null;
   try {
     return {
-      ...(await readItem(octokit, item.kind, owner, name, item.number, etag)),
+      ...(await readItem(octokit, item.kind, owner, name, number, etag)),
       syncedAt: new Date(),
       problem: null,
     };
@@ -453,7 +455,7 @@ export const createExternalItems = ({
   const applyItemEvent = (
     projectId: string,
     event: InboundEvent & { number: number },
-    kind: ExternalKind,
+    kind: LinkKind,
     repo: string
   ): boolean => {
     const rows = db.taskLinks.byItem(
@@ -492,12 +494,12 @@ export const createExternalItems = ({
   const fileEventComment = async (
     projectId: string,
     event: InboundEvent & { number: number; url: string },
-    kind: ExternalKind,
+    kind: LinkKind,
     repo: string
   ) => {
-    const item = refOfUrl(event.url);
+    const item = linkOfUrl(event.url);
     const externalId =
-      commentIdOfUrl(event.url) ?? COMMENT_KEY.exec(event.key)?.[1];
+      commentOfUrl(event.url) ?? COMMENT_KEY.exec(event.key)?.[1];
     if (item?.kind !== kind || !externalId) {
       return;
     }
@@ -587,7 +589,7 @@ export const createExternalItems = ({
       );
     const items = new Map<string, Map<string, TaskLinkRow>>();
     for (const row of [...unread, ...open]) {
-      const key = refOfUrl(row.url)?.url.toLowerCase();
+      const key = linkOfUrl(row.url)?.url.toLowerCase();
       if (key) {
         const rows = items.get(key) ?? new Map<string, TaskLinkRow>();
         rows.set(`${row.taskId} ${row.url}`, row);
@@ -656,9 +658,9 @@ export const createExternalItems = ({
     link: string,
     repos: readonly string[]
   ): string[] | string => {
-    const item = refOfUrl(link);
-    const number = item ? item.number : Number(link.replace(HASH, ""));
-    if (item?.source === "linear") {
+    const item = linkOfUrl(link);
+    const number = item ? numberOf(item) : Number(link.replace(HASH, ""));
+    if (item?.provider === "linear") {
       return [
         ...new Set(
           db.taskLinks

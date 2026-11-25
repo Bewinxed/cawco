@@ -33,6 +33,7 @@ import type { ExternalActor } from "@cawco/core/external-items";
 import { isRecord } from "@cawco/core/is-record";
 import type { TrackerTarget } from "@cawco/core/trackers";
 import { cutShort } from "@cawco/core/words/helpers";
+import { linkOfUrl } from "@cawco/providers/registry";
 import type { Octokit } from "@octokit/rest";
 import { ElysiaStatus, problem } from "elysia";
 import {
@@ -90,8 +91,6 @@ const DUPLICATE: IssueState = {
 const STATES: readonly IssueState[] = [OPEN, COMPLETED, NOT_PLANNED];
 
 const ISSUE_PATH = /\/repos\/[^/]+\/[^/]+\/issues\/(\d+)$/u;
-const ISSUE_URL =
-  /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)\/?$/iu;
 const OWNER_REPO = /^([A-Za-z0-9-]{1,39})\/([A-Za-z0-9._-]{1,100})$/u;
 
 const ISSUES_ROUTE = "GET /repos/{owner}/{repo}/issues";
@@ -552,10 +551,12 @@ export const githubAdapter = (
       }),
 
     keyOf: (url) => {
-      const found = ISSUE_URL.exec(url.trim());
+      const item = linkOfUrl(url);
       return Promise.resolve(
-        found && `${found[1]}/${found[2]}`.toLowerCase() === repo.toLowerCase()
-          ? found[3]
+        item?.provider === "github" &&
+          item.kind === "issue" &&
+          item.container === repo.toLowerCase()
+          ? item.key
           : undefined
       );
     },

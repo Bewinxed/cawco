@@ -15,5 +15,8 @@
     "types": ["@cloudflare/workers-types", "node"]
   },
   "include": ["src/**/*"],
-  "references": [{ "path": "../../packages/core" }]
+  "references": [
+    { "path": "../../packages/core" },
+    { "path": "../../packages/providers" }
+  ]
 }

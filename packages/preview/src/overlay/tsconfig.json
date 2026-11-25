@@ -9,5 +9,5 @@
     "outDir": "../../../../.tsbuild/packages/preview/src/overlay"
   },
   "include": ["."],
-  "references": [{ "path": "../../../core" }]
+  "references": [{ "path": "../../../core" }, { "path": "../../../providers" }]
 }

@@ -116,3 +116,9 @@ resolve-when-used/packages/agent/src/planted.ts:2:23 resolve-when-used
 resolve-when-used/packages/agent/src/planted.ts:6:38 resolve-when-used
 resolve-when-used/packages/agent/src/planted.ts:7:21 resolve-when-used
 resolve-when-used/packages/agent/src/planted.ts:8:25 resolve-when-used
+provider-sdks/apps/dashboard/src/planted.ts:2:1 provider-sdks
+provider-sdks/packages/hub/src/planted.ts:3:1 provider-sdks
+provider-sdks/packages/hub/src/planted.ts:4:1 provider-sdks
+provider-sdks/packages/hub/src/planted.ts:5:1 provider-sdks
+provider-sdks/packages/hub/src/planted.ts:6:28 provider-sdks
+provider-sdks/packages/providers/src/linear/descriptor.ts:2:1 provider-sdks

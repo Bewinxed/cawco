@@ -8,6 +8,7 @@ import type {
   DocAuthor as DocAuthorType,
   PlaceKind as PlaceKindType,
 } from "@cawco/jsonl-parser";
+import type { ProviderId as ProviderIdType } from "@cawco/providers/provider";
 import type {
   AccountCheck as AccountCheckType,
   AccountIdentity as AccountIdentityType,
@@ -130,7 +131,6 @@ import type {
 } from "./deliverables";
 import type {
   ExternalActor as ExternalActorType,
-  ExternalSource as ExternalSourceType,
   ExternalState as ExternalStateType,
   LinkMode as LinkModeType,
 } from "./external-items";
@@ -565,7 +565,6 @@ import type {
   EndedTaskOutput,
   EnvelopeOutput,
   ExternalActorOutput,
-  ExternalSourceOutput,
   ExternalStateOutput,
   ExtractedOutput,
   FaultCauseOutput,
@@ -796,6 +795,7 @@ import type {
   PropKindOutput,
   PropMetaOutput,
   ProviderAccountReadingOutput,
+  ProviderIdOutput,
   ProviderSigninChallengeOutput,
   ProviderSigninResultOutput,
   RefusalReachOutput,
@@ -1165,7 +1165,7 @@ prove<
     Same<DeviceKindOutput, DeviceKindType>,
     Same<VerbOutput, VerbType>,
     Same<EnvelopeOutput, EnvelopeType>,
-    Same<ExternalSourceOutput, ExternalSourceType>,
+    Same<ProviderIdOutput, ProviderIdType>,
     Same<ExternalActorOutput, ExternalActorType>,
     Same<ExternalStateOutput, ExternalStateType>,
     Same<FiledRecordsOutput, FiledRecordsType>,

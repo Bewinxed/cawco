@@ -33,6 +33,7 @@ const INPUT_DIRS = [
   "packages/design-tokens",
   "packages/preview",
   "packages/jsonl-parser/src",
+  "packages/providers/src",
   "packages/hub",
   "packages/agent/src",
   "patches",

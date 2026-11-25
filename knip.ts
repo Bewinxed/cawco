@@ -411,6 +411,10 @@ export default {
       // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
       includeEntryExports: true,
     },
+    "packages/providers": {
+      // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
+      includeEntryExports: true,
+    },
     site: {
       entry: [
         // site/DEPLOY.md

@@ -8,7 +8,6 @@ import { ACCOUNT_HUES } from "@cawco/core/accounts/kinds";
 import { ARTIFACT_KINDS } from "@cawco/core/artifact-kinds";
 import { IMAGE_MEDIA_TYPES } from "@cawco/core/attachments";
 import { SESSION_ROLES } from "@cawco/core/delegate-types";
-import { EXTERNAL_KINDS, EXTERNAL_SOURCES } from "@cawco/core/external-items";
 import { MEMORY_ROLES } from "@cawco/core/fleet";
 import { HARNESSES } from "@cawco/core/harness/kinds";
 import { WIRE_PERMISSION_MODES } from "@cawco/core/harness/modes";
@@ -31,6 +30,7 @@ import { HARNESS_BLOCK_TYPES } from "@cawco/core/session-messages";
 import { STAGE_TOOLCHAINS } from "@cawco/core/stage";
 import { STAGE_KINDS, TASK_MOVERS } from "@cawco/core/views";
 import { WORK_ITEM_STATES } from "@cawco/core/work-items";
+import { LINK_KINDS, PROVIDER_IDS } from "@cawco/providers/provider";
 import { z } from "zod";
 
 const AtPlanLimitShape = z.enum(["price", "move", "extra-usage"]);
@@ -1606,8 +1606,8 @@ export type TaskTimesOutput = z.output<typeof TaskTimesShape>;
 const StageKindShape = z.enum(STAGE_KINDS);
 export type StageKindOutput = z.output<typeof StageKindShape>;
 
-const ExternalSourceShape = z.enum(EXTERNAL_SOURCES);
-export type ExternalSourceOutput = z.output<typeof ExternalSourceShape>;
+const ProviderIdShape = z.enum(PROVIDER_IDS);
+export type ProviderIdOutput = z.output<typeof ProviderIdShape>;
 
 const ExternalActorShape = z.object({
   avatarUrl: z.string().nullable(),
@@ -1615,13 +1615,13 @@ const ExternalActorShape = z.object({
   login: z.string(),
   memberId: z.string().nullable(),
   name: z.string().nullable(),
-  source: ExternalSourceShape,
+  source: ProviderIdShape,
   url: z.string().nullable(),
 });
 export type ExternalActorOutput = z.output<typeof ExternalActorShape>;
 
-const ExternalKindShape = z.enum(EXTERNAL_KINDS);
-export type ExternalKindOutput = z.output<typeof ExternalKindShape>;
+const LinkKindShape = z.enum(LINK_KINDS);
+export type LinkKindOutput = z.output<typeof LinkKindShape>;
 
 const LinkModeShape = z.enum(["record", "closes", "refs", "related"]);
 export type LinkModeOutput = z.output<typeof LinkModeShape>;
@@ -1639,13 +1639,13 @@ const ExternalRefShape = z.object({
   author: ExternalActorShape.nullable(),
   baselineUnread: z.literal(true).optional(),
   id: z.string(),
-  kind: ExternalKindShape,
+  kind: LinkKindShape,
   labels: z.array(z.string()),
   mode: LinkModeShape,
   number: z.number().nullable(),
   problem: z.string().nullable(),
   ref: z.string(),
-  source: ExternalSourceShape,
+  source: ProviderIdShape,
   state: ExternalStateShape.nullable(),
   stateName: z.string(),
   syncedAt: z.number().nullable(),

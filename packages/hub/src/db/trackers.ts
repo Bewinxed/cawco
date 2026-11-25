@@ -1,4 +1,5 @@
-import type { IssueTracker } from "@cawco/core/trackers";
+import { isOneOf } from "@cawco/core/one-of";
+import { type IssueTracker, TRACKERS } from "@cawco/core/trackers";
 import { and, count, eq, inArray } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
@@ -208,25 +209,32 @@ export interface TrackersDb {
   ) => void;
 }
 
-/** The agreement, its labels and its record link, as one row. */
+/** The agreement, its labels and its record link, as one row; none when the record is no tracker's issue. */
 const joined = (
   agreed: TrackerLinkColumns,
   labels: string[],
   record: TaskLinkRow
-): TrackerLinkRow => ({
-  projectId: agreed.projectId,
-  taskId: agreed.taskId,
-  linkedAt: agreed.linkedAt,
-  unvouched: agreed.unvouched,
-  baseline: baselineOf(agreed, labels),
-  provider: record.source,
-  issueKey:
-    record.source === "github" ? String(record.number) : record.externalId,
-  ref: record.ref,
-  url: record.url,
-  problem: record.problem,
-  syncedAt: record.syncedAt,
-});
+): TrackerLinkRow[] =>
+  isOneOf(TRACKERS, record.source)
+    ? [
+        {
+          projectId: agreed.projectId,
+          taskId: agreed.taskId,
+          linkedAt: agreed.linkedAt,
+          unvouched: agreed.unvouched,
+          baseline: baselineOf(agreed, labels),
+          provider: record.source,
+          issueKey:
+            record.source === "github"
+              ? String(record.number)
+              : record.externalId,
+          ref: record.ref,
+          url: record.url,
+          problem: record.problem,
+          syncedAt: record.syncedAt,
+        },
+      ]
+    : [];
 
 export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
   const forget = (
@@ -310,7 +318,7 @@ export const trackersDb = (db: BunSQLiteDatabase): TrackersDb => {
       projectId,
       rows.map((row) => row.agreed.taskId)
     );
-    return rows.map((row) =>
+    return rows.flatMap((row) =>
       joined(row.agreed, labels.get(row.agreed.taskId) ?? [], row.record)
     );
   };

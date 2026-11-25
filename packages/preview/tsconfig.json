@@ -10,5 +10,5 @@
   },
   "include": ["**/*"],
   "exclude": ["node_modules", "dist", "src/overlay"],
-  "references": [{ "path": "../core" }]
+  "references": [{ "path": "../core" }, { "path": "../providers" }]
 }

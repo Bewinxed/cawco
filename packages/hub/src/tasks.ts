@@ -64,11 +64,10 @@ import { join } from "node:path";
 import type { EndedBy } from "@cawco/core/accounts";
 import type { AttemptResult, ResultArtifact } from "@cawco/core/deliverables";
 import { detach } from "@cawco/core/detach";
-import {
-  type ExternalComment,
-  type ExternalRef,
-  refOfUrl,
-  type TaskLinkSummary,
+import type {
+  ExternalComment,
+  ExternalRef,
+  TaskLinkSummary,
 } from "@cawco/core/external-items";
 import { PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
@@ -111,6 +110,7 @@ import { externalItemWords } from "@cawco/core/words/external-items";
 import { judgedWords } from "@cawco/core/words/judged";
 import { taskLinkWords } from "@cawco/core/words/task-links";
 import { workWords } from "@cawco/core/words/work";
+import { linkOfUrl } from "@cawco/providers/registry";
 import AsyncLock from "async-lock";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { WorkItemAttempt } from "./db/project-work";
@@ -1004,13 +1004,13 @@ const items = (what: string, list: string[]) => {
   return [...kept];
 };
 
-/** External items' URLs a caller gave, each one a source's item (core `refOfUrl`); refused in words when one is not. */
+/** External items' URLs a caller gave, each one a source's item (@cawco/providers registry.ts `linkOfUrl`); refused in words when one is not. */
 const linksOf = (links: string[]) => {
   const urls = items("links", links);
   const unknown =
     urls instanceof ElysiaStatus
       ? undefined
-      : urls.find((url) => !refOfUrl(url));
+      : urls.find((url) => !linkOfUrl(url));
   return unknown === undefined
     ? urls
     : problem(400, {
@@ -1036,7 +1036,7 @@ const fileLinksOf = (
       .filter((handle) => waitTarget(handle)?.kind === "pr")
       .map((url) => ({ url, mode: "related" as const })),
   ].flatMap(({ url, mode }) => {
-    const item = refOfUrl(url);
+    const item = linkOfUrl(url);
     const key = item?.url.toLowerCase();
     if (!(item && key) || named.has(key)) {
       return [];
@@ -1044,7 +1044,7 @@ const fileLinksOf = (
     named.add(key);
     return [
       {
-        source: item.source,
+        source: item.provider,
         kind: item.kind,
         ref: item.ref,
         state: null,
@@ -6429,7 +6429,7 @@ export const createTasks = (store: TaskStore) => {
             detail: `${file.id} holds no comment carried from ${url}.`,
           });
         }
-        const source = refOfUrl(url)?.source;
+        const source = linkOfUrl(url)?.provider;
         return await writeBack(projectId, file, actor, {
           what: `comment edited${source ? ` on ${externalItemWords.source[source]}` : ""}`,
           change: CHANGES.commentEdited,

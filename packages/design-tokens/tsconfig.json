@@ -10,5 +10,5 @@
   },
   "include": ["**/*", "schemas/**/*.json"],
   "exclude": ["node_modules", "dist"],
-  "references": [{ "path": "../core" }]
+  "references": [{ "path": "../core" }, { "path": "../providers" }]
 }

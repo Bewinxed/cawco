@@ -32,12 +32,9 @@
    * row's hover fills: a host lines its words up with its column by
    * setting it that far out (TaskPane).
    */
-  import {
-    type ExternalRef,
-    type LinkMode,
-    refOfUrl,
-  } from "@cawco/core/external-items";
+  import type { ExternalRef, LinkMode } from "@cawco/core/external-items";
   import { externalItemWords as words } from "@cawco/core/words/external-items";
+  import { linkOfUrl } from "@cawco/providers/registry";
   import MessageBody from "#lib/cawco/MessageBody.svelte";
   import type { TaskComment } from "#lib/cawco/project-tasks.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
@@ -77,7 +74,7 @@
 
   /** An item by its URL as its source names it, so a comment's anchor and a link's casing never part them. */
   const itemOf = (url: string): string =>
-    (refOfUrl(url)?.url ?? url).toLowerCase();
+    (linkOfUrl(url)?.url ?? url).toLowerCase();
 
   /** Each item's carried comments, newest first. */
   const carried = $derived.by(() => {
@@ -130,7 +127,7 @@
 
   /** Where it lives: `owner/repo`, the Linear workspace. */
   const placeOf = (link: ExternalRef): string =>
-    refOfUrl(link.url)?.container ?? "";
+    linkOfUrl(link.url)?.container ?? "";
 
   const nameOf = (link: ExternalRef): string =>
     words.linkName(

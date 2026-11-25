@@ -87,13 +87,7 @@
  * Every other byte is the file as it was, so a hand edit survives the next
  * write through the API, and the parser reads whatever a hand wrote.
  */
-import {
-  actorNamed,
-  commentIdOfUrl,
-  type ExternalComment,
-  isExternalSource,
-  refOfUrl,
-} from "@cawco/core/external-items";
+import { actorNamed, type ExternalComment } from "@cawco/core/external-items";
 import { type FrontMatterLine, frontMatterBlock } from "@cawco/core/fleet";
 import { type OfferedMode, PERMISSION_MODES } from "@cawco/core/harness/modes";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
@@ -104,6 +98,7 @@ import { ROUTINE_TARGETS, type RoutineTarget } from "@cawco/core/routine-kinds";
 import { TASK_EDGES } from "@cawco/core/task-edges";
 import { TASK_MOVERS, type TaskMover } from "@cawco/core/views";
 import { waitHandle, waitTarget } from "@cawco/core/wait-targets";
+import { commentOfUrl, linkOfUrl } from "@cawco/providers/registry";
 import type { WorkBudget } from "./db/stored-types";
 
 /** The front matter fields a task file knows, in the order a new file writes them. */
@@ -675,14 +670,14 @@ const readWaits = (line: FrontMatterLine, problems: string[]): string[] => {
   return [...new Set(kept)];
 };
 
-/** `links:`, each an external item's URL (core `refOfUrl`); what names none goes to `problems`. */
+/** `links:`, each an external item's URL (@cawco/providers registry.ts `linkOfUrl`); what names none goes to `problems`. */
 const readLinks = (line: FrontMatterLine, problems: string[]): string[] => {
   problems.push(
     ...listUnread("links", line, '["https://github.com/acme/app/pull/418"]')
   );
   const kept: string[] = [];
   for (const item of listOf(line) ?? []) {
-    if (refOfUrl(item)) {
+    if (linkOfUrl(item)) {
       kept.push(item.trim());
     } else {
       problems.push(
@@ -1133,13 +1128,14 @@ const viaOf = (
   url: string,
   at: number
 ): ExternalComment | null => {
-  const externalId = commentIdOfUrl(url);
-  return isExternalSource(slot) && externalId
+  const source = linkOfUrl(url)?.provider;
+  const externalId = commentOfUrl(url);
+  return source === slot && externalId
     ? {
-        source: slot,
+        source,
         externalId,
         url,
-        author: actorNamed(slot, name),
+        author: actorNamed(source, name),
         at,
         editedAt: null,
         direction: "in",

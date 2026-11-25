@@ -29,6 +29,7 @@ import { readWithin } from "@cawco/core/bounded";
 import type { ExternalActor } from "@cawco/core/external-items";
 import type { TrackerTarget } from "@cawco/core/trackers";
 import { cutShort } from "@cawco/core/words/helpers";
+import { linkOfUrl } from "@cawco/providers/registry";
 import {
   LinearError,
   LinearErrorType,
@@ -57,8 +58,6 @@ const REQUEST_MS = 30_000;
 const OVERLAP_MS = 2 * 60_000;
 /** Linear's default page; a connection's complexity stays low. */
 const PER_PAGE = 50;
-const ISSUE_URL =
-  /^https:\/\/linear\.app\/[^/]+\/issue\/([A-Z0-9]+-\d+)(?:\/|$)/iu;
 
 /**
  * One request within {@link REQUEST_MS}, through a client made for it with
@@ -553,13 +552,13 @@ export const linearAdapter = (
     },
 
     keyOf: async (url) => {
-      const identifier = ISSUE_URL.exec(url.trim())?.[1];
-      if (!identifier) {
+      const item = linkOfUrl(url);
+      if (item?.provider !== "linear") {
         return;
       }
       const read = await ask<{
         issue: (RawIssue & { team: { id: string } }) | null;
-      }>(`read ${identifier}`, ISSUE_QUERY, { id: identifier });
+      }>(`read ${item.key}`, ISSUE_QUERY, { id: item.key });
       if (read instanceof ElysiaStatus) {
         return read;
       }

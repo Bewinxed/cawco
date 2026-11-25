@@ -59,6 +59,7 @@ const HUB_SRC = join(HUB, "src/");
 const HUB_DB = join(HUB_SRC, "db/");
 const CORE_SRC = join(ROOT, "packages/core/src/");
 const JSONL_PARSER_SRC = join(ROOT, "packages/jsonl-parser/src/");
+const PROVIDERS_SRC = join(ROOT, "packages/providers/src/");
 const SDK =
   /node_modules\/@modelcontextprotocol\/sdk\/dist\/esm\/(.+)\.d\.ts$/u;
 const NODE_MODULES = "/node_modules/";
@@ -455,6 +456,11 @@ const specifierOf = (file: string, out: string): string => {
   // by its package's one entry, which exports its types.
   if (file.startsWith(JSONL_PARSER_SRC)) {
     return "@cawco/jsonl-parser";
+  }
+  // The providers' ids and link kinds (core external-items.ts reads them):
+  // by the package's subpath, as every importer does.
+  if (file.startsWith(PROVIDERS_SRC)) {
+    return `@cawco/providers/${file.slice(PROVIDERS_SRC.length).replace(TS_FILE, "")}`;
   }
   const path = relative(dirname(out), file).replace(TS_FILE, "");
   return path.startsWith(".") ? path : `./${path}`;

@@ -26,7 +26,6 @@ import {
 import { CAW_POSE_IDS, HEARS } from "@cawco/core/decides";
 import { SESSION_ROLES } from "@cawco/core/delegate-types";
 import { everyOf } from "@cawco/core/every-of";
-import { EXTERNAL_KINDS, EXTERNAL_SOURCES } from "@cawco/core/external-items";
 import { MEMORY_ROLES } from "@cawco/core/fleet";
 import {
   EFFORT_LEVELS,
@@ -156,6 +155,7 @@ import { USAGE_HARNESSES } from "@cawco/core/usage/types";
 import { STAGES_TEMPLATES } from "@cawco/core/views";
 import { WORK_ITEM_STATES } from "@cawco/core/work-items";
 import type { WorkspaceHolding } from "@cawco/core/workspace/controls";
+import { LINK_KINDS, PROVIDER_IDS } from "@cawco/providers/provider";
 import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
@@ -6982,8 +6982,8 @@ export const taskLinks = sqliteTable(
     taskId: text("task_id").notNull(),
     /** As the task file or plan step writes it. */
     url: text("url").notNull(),
-    source: storedEnum(z.enum(EXTERNAL_SOURCES))("source").notNull(),
-    kind: storedEnum(z.enum(EXTERNAL_KINDS))("kind").notNull(),
+    source: storedEnum(z.enum(PROVIDER_IDS))("source").notNull(),
+    kind: storedEnum(z.enum(LINK_KINDS))("kind").notNull(),
     /** GitHub's node id, Linear's uuid; empty until the item was read. */
     externalId: text("external_id").notNull().default(""),
     /** GitHub's #12; null on Linear. */
@@ -7037,7 +7037,7 @@ export const externalComments = sqliteTable(
   "external_comments",
   {
     projectId: projectKey(),
-    source: storedEnum(z.enum(EXTERNAL_SOURCES))("source").notNull(),
+    source: storedEnum(z.enum(PROVIDER_IDS))("source").notNull(),
     /** GitHub's comment number, Linear's uuid. */
     externalId: text("external_id").notNull(),
     taskId: text("task_id").notNull(),

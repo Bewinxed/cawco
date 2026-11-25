@@ -25,7 +25,7 @@
  * A kept card's artifact and a kept session are whole ids, so `<uuid>#<card>`
  * and `<dir>#<uuid>` never read as each other.
  */
-import { refOfUrl } from "./external-items";
+import { itemOfUrl, numberOf } from "@cawco/providers/registry";
 
 export type WaitKind =
   "task" | "card" | "pin" | "pr" | "run" | "session" | "time";
@@ -53,33 +53,26 @@ const SESSION = new RegExp(`^([^#\\s]*)#(${UUID})$`, "iu");
 const PIN = new RegExp(`^(${UUID})/(\\d{1,6})$`, "iu");
 const TIME =
   /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:?\d{2})?)?$/iu;
-const RUN =
-  /^https?:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/actions\/runs\/(\d{1,15})(?:[/?#].*)?$/iu;
 
 /** A pull request or an Actions run on GitHub, by its URL; undefined for any other. */
 export const githubTarget = (
   url: string
 ): Extract<WaitTarget, { kind: "pr" | "run" }> | undefined => {
-  const written = url.trim();
-  const item = refOfUrl(written);
-  if (item?.source === "github" && item.kind === "pr" && item.number !== null) {
+  const item = itemOfUrl(url);
+  if (item?.provider !== "github") {
+    return;
+  }
+  const number = numberOf(item);
+  if (item.kind === "pr" && number !== null) {
     return {
       kind: "pr",
       repo: item.container,
-      number: item.number,
-      url: `https://github.com/${item.container}/pull/${item.number}`,
+      number,
+      url: `https://github.com/${item.container}/pull/${number}`,
     };
   }
-  const run = RUN.exec(written);
-  if (run) {
-    const [, owned, id] = run;
-    const repo = owned.toLowerCase();
-    return {
-      kind: "run",
-      repo,
-      id,
-      url: `https://github.com/${repo}/actions/runs/${id}`,
-    };
+  if (item.kind === "run") {
+    return { kind: "run", repo: item.container, id: item.key, url: item.url };
   }
 };
 

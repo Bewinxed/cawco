@@ -5080,7 +5080,9 @@
         "type": "string",
         "enum": [
           "github",
-          "linear"
+          "linear",
+          "gitlab",
+          "gitea"
         ]
       },
       "url": {
@@ -5111,7 +5113,9 @@
     "type": "string",
     "enum": [
       "github",
-      "linear"
+      "linear",
+      "gitlab",
+      "gitea"
     ]
   },
   "fleet_harness_config.kind": {
@@ -13831,7 +13835,9 @@
         "type": "string",
         "enum": [
           "github",
-          "linear"
+          "linear",
+          "gitlab",
+          "gitea"
         ]
       },
       "url": {
@@ -13878,7 +13884,9 @@
     "type": "string",
     "enum": [
       "github",
-      "linear"
+      "linear",
+      "gitlab",
+      "gitea"
     ]
   },
   "task_links.state": {

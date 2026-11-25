@@ -12,6 +12,7 @@
   "exclude": ["node_modules", "dist"],
   "references": [
     { "path": "../core" },
+    { "path": "../providers" },
     { "path": "../auth" },
     { "path": "../design-tokens" },
     { "path": "../preview" }

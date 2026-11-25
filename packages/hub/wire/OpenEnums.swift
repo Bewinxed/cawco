@@ -3180,47 +3180,6 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/ExternalKind`.
-    public enum ExternalKind: OpenEnum {
-        case discussion
-        case issue
-        case pr
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "discussion": self = .discussion
-            case "issue": self = .issue
-            case "pr": self = .pr
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .discussion: "discussion"
-            case .issue: "issue"
-            case .pr: "pr"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.discussion, .issue, .pr]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
     /// `#/components/schemas/ExternalRefState`.
     public enum ExternalRefState: OpenEnum {
         case canceled
@@ -3258,44 +3217,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.canceled, .closed, .draft, .merged, .open]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/ExternalSource`.
-    public enum ExternalSource: OpenEnum {
-        case github
-        case linear
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "github": self = .github
-            case "linear": self = .linear
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .github: "github"
-            case .linear: "linear"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.github, .linear]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -5611,6 +5532,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/LinkKind`.
+    public enum LinkKind: OpenEnum {
+        case discussion
+        case issue
+        case pr
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "discussion": self = .discussion
+            case "issue": self = .issue
+            case "pr": self = .pr
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .discussion: "discussion"
+            case .issue: "issue"
+            case .pr: "pr"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.discussion, .issue, .pr]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/LinkMode`.
     public enum LinkMode: OpenEnum {
         case closes
@@ -7778,6 +7740,50 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.array, .boolean, ._enum, .function, .number, .object, .other, .slot, .string, .tokenColor, .tokenFont, .tokenSize]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/ProviderId`.
+    public enum ProviderId: OpenEnum {
+        case gitea
+        case github
+        case gitlab
+        case linear
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "gitea": self = .gitea
+            case "github": self = .github
+            case "gitlab": self = .gitlab
+            case "linear": self = .linear
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .gitea: "gitea"
+            case .github: "github"
+            case .gitlab: "gitlab"
+            case .linear: "linear"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.gitea, .github, .gitlab, .linear]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

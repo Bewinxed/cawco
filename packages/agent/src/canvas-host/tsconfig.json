@@ -9,6 +9,7 @@
   "include": ["."],
   "references": [
     { "path": "../../../core" },
+    { "path": "../../../providers" },
     { "path": "../../../preview/src/overlay" }
   ]
 }

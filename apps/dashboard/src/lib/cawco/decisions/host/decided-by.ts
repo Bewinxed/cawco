@@ -2,8 +2,7 @@
  * Who decided a card, on its card (core decides.ts `decidedByLine`): the
  * sources DecidedBy lists under the line.
  */
-const GITHUB_ISSUE =
-  /^https:\/\/github\.com\/([^/]+\/[^/]+)\/(?:issues|pull)\/(\d+)/u;
+import { linkOfUrl } from "@cawco/providers/registry";
 
 /**
  * A source as the card shows it (`settle` takes links or repository paths):
@@ -25,11 +24,14 @@ export const sourceShown = (
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     return { href: null, label: source };
   }
-  const issue = GITHUB_ISSUE.exec(source);
+  const item = linkOfUrl(source);
+  // The repository as the link writes it: the item's own container is lower case.
+  const repo = parsed.pathname.split("/").slice(1, 3).join("/");
   return {
     href: source,
-    label: issue
-      ? `${issue[1]} #${issue[2]}`
-      : `${parsed.host}${parsed.pathname === "/" ? "" : parsed.pathname}`,
+    label:
+      item?.provider === "github" && item.kind !== "discussion"
+        ? `${repo} ${item.ref}`
+        : `${parsed.host}${parsed.pathname === "/" ? "" : parsed.pathname}`,
   };
 };

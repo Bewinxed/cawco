@@ -10,6 +10,7 @@
   "include": ["*.ts", "scripts/**/*.ts", "vite/**/*.ts"],
   "references": [
     { "path": "../../packages/core" },
+    { "path": "../../packages/providers" },
     { "path": "../../packages/hub" }
   ]
 }

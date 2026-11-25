@@ -15,6 +15,7 @@
     { "path": "../agent" },
     { "path": "../auth" },
     { "path": "../core" },
+    { "path": "../providers" },
     { "path": "../hub" },
     { "path": "../jsonl-parser" },
     { "path": "../sessiond" }
