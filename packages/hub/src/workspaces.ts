@@ -46,6 +46,7 @@ import {
   type WorkspaceUnlanded,
   type WorkspaceWorkEnd,
 } from "@cawco/core/workspace/controls";
+import AsyncLock from "async-lock";
 import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
@@ -1395,7 +1396,7 @@ export const createWorkspaces = ({
   ): Promise<{ outcome: Settled; workspace: WorkspaceRow }[]> => {
     const done: { outcome: Settled; workspace: WorkspaceRow }[] = [];
     for (const left of db.archivedWorkspacesAt(machineId, [...clones])) {
-      if (workspaceTurns.has(left.id) || recutting.has(left.id)) {
+      if (workspaceTurns.isBusy(left.id) || recutting.has(left.id)) {
         continue;
       }
       const outcome = await inWorkspaceTurn(
@@ -1603,10 +1604,8 @@ export const createWorkspaces = ({
     );
     return { kind: "retired", carry: null };
   };
-  /** The last step queued in each workspace's turn ({@link inWorkspaceTurn}); it only resolves. */
-  const workspaceTurns = new Map<string, Promise<void>>();
   /**
-   * Runs `work` in workspace `id`'s turn: after every step queued before it,
+   * Each workspace's turn: a step runs after every step queued before it,
    * before any queued after. A step is anything that closes the workspace's
    * boundary on its machine or reads its clone through it: its settle, its
    * archive, the bundle a `from` cut takes of it, a read of what it holds
@@ -1614,23 +1613,11 @@ export const createWorkspaces = ({
    * a boundary that the workspace's settle was closing, and failed. A step
    * never takes its own workspace's turn again.
    */
-  const inWorkspaceTurn = async <T>(
-    id: string,
-    work: () => Promise<T>
-  ): Promise<T> => {
-    const before = workspaceTurns.get(id);
-    const { promise: mine, resolve } = Promise.withResolvers<void>();
-    workspaceTurns.set(id, mine);
-    try {
-      await before;
-      return await work();
-    } finally {
-      resolve();
-      if (workspaceTurns.get(id) === mine) {
-        workspaceTurns.delete(id);
-      }
-    }
-  };
+  const workspaceTurns = new AsyncLock({
+    maxPending: Number.POSITIVE_INFINITY,
+  });
+  const inWorkspaceTurn = <T>(id: string, work: () => Promise<T>): Promise<T> =>
+    workspaceTurns.acquire(id, work);
   /** Workspaces whose turn now runs work going on in them ({@link goOnIn}): its own send waits on no settle. */
   const goingOn = new Set<string>();
   /**
@@ -1640,7 +1627,7 @@ export const createWorkspaces = ({
    * meanwhile waits for that turn ({@link retiredFor}).
    */
   const turnMayRetire = (id: string): boolean =>
-    workspaceTurns.has(id) && !goingOn.has(id);
+    workspaceTurns.isBusy(id) && !goingOn.has(id);
   /**
    * Session `instanceId`'s workspace `workspaceId` cut again in its turn,
    * after whatever runs there, if it is retired by then ({@link recut}):
@@ -1702,7 +1689,11 @@ export const createWorkspaces = ({
     if (queued !== undefined) {
       return queued;
     }
+    // The turn may begin before inWorkspaceTurn returns, when nothing runs
+    // in it: then the settle has begun and is no longer queued to share.
+    let begun = false;
     const run = inWorkspaceTurn(id, () => {
+      begun = true;
       settleQueued.delete(id);
       return settle(id, clones);
     }).catch((error: unknown): Settled => {
@@ -1710,7 +1701,9 @@ export const createWorkspaces = ({
       console.warn(`[workspaces] ${id}: its settle failed: ${reason}`);
       return { kind: "failed", reason };
     });
-    settleQueued.set(id, run);
+    if (!begun) {
+      settleQueued.set(id, run);
+    }
     return run;
   };
   /** {@link settleNow}, off the caller's step. */
@@ -1762,7 +1755,7 @@ export const createWorkspaces = ({
     // Something runs in its turn now, or its last settle failed and its
     // wait is not over: a later look settles it.
     const passedOver = (workspace: WorkspaceRow): boolean =>
-      workspaceTurns.has(workspace.id) ||
+      workspaceTurns.isBusy(workspace.id) ||
       recutting.has(workspace.id) ||
       (!asked && (settleFailures.get(workspace.id)?.retryAt ?? 0) > Date.now());
     for (const workspace of db.activeWorkspacesOn(machineId)) {

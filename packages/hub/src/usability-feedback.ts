@@ -43,10 +43,10 @@ import {
   usabilityFeedbackWords as words,
 } from "@cawco/core/words/usability-feedback";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import AsyncLock from "async-lock";
 import { problem } from "elysia";
 import { z } from "zod";
 import type { ForgeCall } from "./forge-posts";
-import { keyedTurns } from "./keyed-turns";
 import { awayProblem } from "./machine-answers";
 import { defineTool, refusalCode, withoutRefusalCode } from "./mcp-tool";
 
@@ -156,7 +156,7 @@ export const createUsabilityFeedback = (deps: UsabilityFeedbackDeps) => {
    * only once the filing before it has ended, so reports of one problem that
    * arrive together find the issue the first one opened.
    */
-  const byFingerprint = keyedTurns("feedback");
+  const byFingerprint = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
 
   /** Runs `change`, and says so when it turned feedback on or off. */
   const moving = (change: () => void): void => {
@@ -228,7 +228,7 @@ export const createUsabilityFeedback = (deps: UsabilityFeedbackDeps) => {
       report.tool,
       refusalIdentity(report.got, heard)
     );
-    const called = await byFingerprint(fingerprint, () =>
+    const called = await byFingerprint.acquire(fingerprint, () =>
       deps.forge(sender, {
         repo: deps.repo,
         write: {

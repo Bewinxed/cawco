@@ -500,7 +500,7 @@ catch-drops-reason	empty	packages/hub/src/project-stops.ts	1
 catch-drops-reason	empty	packages/hub/src/tailnet-door.ts	1
 catch-drops-reason	empty	packages/sessiond/src/cgroup.ts	2
 catch-drops-reason	empty	packages/sessiond/src/server.ts	1
-catch-drops-reason	noop	packages/hub/src/project-folder.ts	8
+catch-drops-reason	noop	packages/hub/src/project-folder.ts	7
 empty-catch		apps/dashboard/serve.js	1
 empty-catch		apps/dashboard/src/lib/cawco/blocks/arrangement.svelte.ts	1
 empty-catch		apps/dashboard/src/lib/cawco/config/connection-form.ts	1

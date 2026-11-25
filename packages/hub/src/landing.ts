@@ -51,8 +51,8 @@
  */
 
 import type { CommandResult } from "@cawco/core/commands/controls";
-import { detach } from "@cawco/core/detach";
 import { shellQuote } from "@cawco/core/shell-quote";
+import AsyncLock from "async-lock";
 import { CommandStopped, WouldWait } from "./machine-pause";
 
 /**
@@ -194,7 +194,7 @@ const turnWords = (branch: string, ahead: LandingTurn[]): string =>
  * push.
  */
 export function landingQueue(): LandingQueue {
-  const tails = new Map<string, Promise<void>>();
+  const turns = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
   /** Per key: the landing running now and those waiting behind it, in order. */
   const lines = new Map<
     string,
@@ -225,7 +225,7 @@ export function landingQueue(): LandingQueue {
     if (queued) {
       sayWaits(key);
     }
-    const result = (tails.get(key) ?? Promise.resolve()).then(async () => {
+    return turns.acquire(key, async () => {
       line.waiting = line.waiting.filter((each) => each !== turn);
       line.running = turn;
       if (queued) {
@@ -236,24 +236,12 @@ export function landingQueue(): LandingQueue {
         return await run();
       } finally {
         line.running = undefined;
-      }
-    });
-    const tail = result.then(
-      () => undefined,
-      () => undefined
-    );
-    tails.set(key, tail);
-    // Cleanup only; the caller awaits `result`.
-    detach(
-      tail.then(() => {
-        if (tails.get(key) === tail) {
-          tails.delete(key);
+        // The line is let go once nothing waits behind this landing.
+        if (line.waiting.length === 0) {
           lines.delete(key);
         }
-      }),
-      "landing queue"
-    );
-    return result;
+      }
+    });
   };
 }
 

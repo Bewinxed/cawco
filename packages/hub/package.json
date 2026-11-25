@@ -61,6 +61,7 @@
     "@tailwindcss/postcss": "4.3.5",
     "ai": "7.0.173",
     "ajv": "^8.20.0",
+    "async-lock": "1.5.0",
     "browserslist": "4.29.3",
     "bun-plugin-svelte": "0.0.6",
     "cronstrue": "3.32.0",
@@ -86,6 +87,7 @@
   },
   "devDependencies": {
     "@elysia/openapi": "2.0.0-rc.1",
+    "@types/async-lock": "1.4.2",
     "@types/bun": "^1.4.3",
     "drizzle-kit": "^0.31.11",
     "typescript": "npm:@typescript/typescript6@^6.0.2",

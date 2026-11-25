@@ -43,6 +43,7 @@ import {
   type WorkspaceRef,
 } from "@cawco/core/workspace/controls";
 import { byWorkspaceIdKind, workspaceIdKindOf } from "@cawco/core/workspace-id";
+import AsyncLock from "async-lock";
 import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactServiceDeps } from "./artifacts/deps";
 import { designFolderOf } from "./artifacts/design-folder";
@@ -111,20 +112,9 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
    * it already read is not repeated. Each artifact's events settle one after
    * another.
    */
-  const artifactEventsInFlight = new Map<string, Promise<unknown>>();
-  const artifactInOrder = <T>(
-    key: string,
-    run: () => Promise<T>
-  ): Promise<T> => {
-    const before = artifactEventsInFlight.get(key) ?? Promise.resolve();
-    const next = before.catch(() => undefined).then(run);
-    artifactEventsInFlight.set(key, next);
-    return next.finally(() => {
-      if (artifactEventsInFlight.get(key) === next) {
-        artifactEventsInFlight.delete(key);
-      }
-    });
-  };
+  const artifactEvents = new AsyncLock({
+    maxPending: Number.POSITIVE_INFINITY,
+  });
   /** The base64 pictures a held send's envelope carries, in order. */
   const picturesOf = (
     whole: Pick<HubEnvelope<"send">, "payload"> | null
@@ -349,7 +339,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       ask: artifact.ask,
       next: next?.id,
     });
-    await artifactInOrder(`${artifact.id}:handed`, () => {
+    await artifactEvents.acquire(`${artifact.id}:handed`, () => {
       if (!wokenBy(parent, maker)) {
         recordUndelivered(parent, text, [], artifactToolWords.handedUnwoken);
         return Promise.resolve();
@@ -383,7 +373,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     artifact: ArtifactRow,
     { since }: { since: number }
   ): Promise<string | undefined> =>
-    artifactInOrder(`${artifact.id}:picks`, async () => {
+    artifactEvents.acquire(`${artifact.id}:picks`, async () => {
       const { withdrawn, replaces } = await withdrawArtifactEvents(
         instance,
         artifact,
@@ -434,7 +424,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     artifact,
     delivery
   ) =>
-    artifactInOrder(`${artifact.id}:marks`, () => {
+    artifactEvents.acquire(`${artifact.id}:marks`, () => {
       const taker = takerOf(instance, artifact);
       switch (taker.to) {
         case "writer":

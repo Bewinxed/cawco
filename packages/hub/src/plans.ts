@@ -36,7 +36,6 @@
  * and the deltas after it never cross.
  */
 import type { ArtifactNeed } from "@cawco/core/artifact-needs";
-import { detach } from "@cawco/core/detach";
 import {
   type KeptStep,
   type OrphanedComments,
@@ -57,6 +56,7 @@ import { artifactLink, stepLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import { waitArtifact, waitTarget } from "@cawco/core/wait-targets";
 import { planWords } from "@cawco/core/words/plan";
+import AsyncLock from "async-lock";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { createPatch } from "rfc6902";
 import type { DbShape } from "./db";
@@ -710,25 +710,7 @@ export const createPlans = (deps: PlansDeps) => {
   /** The plan each session's followers last heard, by instance. */
   const held = new Map<string, Held>();
   /** Each session's queue: every read and send for it runs in turn. */
-  const queues = new Map<string, Promise<unknown>>();
-
-  const inTurn = <T>(
-    instanceId: string,
-    work: () => Promise<T>
-  ): Promise<T> => {
-    const next = (queues.get(instanceId) ?? Promise.resolve()).then(work, work);
-    const tail = next.catch(() => undefined);
-    queues.set(instanceId, tail);
-    detach(
-      tail.then(() => {
-        if (queues.get(instanceId) === tail) {
-          queues.delete(instanceId);
-        }
-      }),
-      "plan queue cleanup"
-    );
-    return next;
-  };
+  const turns = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
 
   const rowOf = (instanceId: string) => planSessionOf(db, instanceId);
 
@@ -908,7 +890,7 @@ export const createPlans = (deps: PlansDeps) => {
   };
 
   const settle = (instanceId: string) =>
-    inTurn(instanceId, async () => {
+    turns.acquire(instanceId, async () => {
       const row = rowOf(instanceId);
       if (row instanceof ElysiaStatus) {
         return row;
@@ -986,35 +968,37 @@ export const createPlans = (deps: PlansDeps) => {
       instanceId: string,
       send: (message: PlanSnapshot) => void
     ): void {
-      inTurn(instanceId, async () => {
-        const known = held.get(instanceId);
-        if (known) {
-          send(snapshotOf(instanceId, known));
-          return;
-        }
-        const row = rowOf(instanceId);
-        if (row instanceof ElysiaStatus) {
-          return row;
-        }
-        const plan = await compute(row);
-        if (plan instanceof ElysiaStatus) {
-          return plan;
-        }
-        const first = { plan, rev: 1 };
-        held.set(instanceId, first);
-        send(snapshotOf(instanceId, first));
-      }).then(
-        (refused) => {
-          if (refused) {
-            unread(instanceId, refused.response.detail);
+      turns
+        .acquire(instanceId, async () => {
+          const known = held.get(instanceId);
+          if (known) {
+            send(snapshotOf(instanceId, known));
+            return;
           }
-        },
-        (error: unknown) =>
-          unread(
-            instanceId,
-            error instanceof Error ? error.message : String(error)
-          )
-      );
+          const row = rowOf(instanceId);
+          if (row instanceof ElysiaStatus) {
+            return row;
+          }
+          const plan = await compute(row);
+          if (plan instanceof ElysiaStatus) {
+            return plan;
+          }
+          const first = { plan, rev: 1 };
+          held.set(instanceId, first);
+          send(snapshotOf(instanceId, first));
+        })
+        .then(
+          (refused) => {
+            if (refused) {
+              unread(instanceId, refused.response.detail);
+            }
+          },
+          (error: unknown) =>
+            unread(
+              instanceId,
+              error instanceof Error ? error.message : String(error)
+            )
+        );
     },
 
     /**

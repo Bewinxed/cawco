@@ -25,6 +25,7 @@ import {
 import { clockWords, dayWords } from "@cawco/core/words/account-lines";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { configurePage } from "@cawco/core/words/configure";
+import AsyncLock from "async-lock";
 import type { KeptOff } from "./account-marks";
 import { type Admission, usdWords } from "./admission";
 import { stoppedByCawOff } from "./caw-own";
@@ -1814,8 +1815,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   const providerOf = (accountId: string | null | undefined): string =>
     (accountId ? db.accounts.get(accountId)?.provider : undefined) ?? "";
 
-  /** Each provider's decisions, as one chain: the next starts once the one before it ended. */
-  const chains = new Map<string, Promise<void>>();
+  /** Each provider's decisions, one at a time: the next starts once the one before it ended. */
+  const chains = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
 
   /**
    * Runs `work` once every decision of `provider` before it has ended, so
@@ -1826,20 +1827,10 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     provider: string,
     what: string,
     work: () => Promise<void>
-  ): Promise<void> => {
-    const before = chains.get(provider) ?? Promise.resolve();
-    const run = before.then(work).catch((error: unknown) => {
+  ): Promise<void> =>
+    chains.acquire(provider, work).catch((error: unknown) => {
       console.error(`[at-limit] ${what} failed: ${messageOf(error)}`);
     });
-    chains.set(provider, run);
-    // The chain's tail is let go once nothing waits behind it.
-    run.finally(() => {
-      if (chains.get(provider) === run) {
-        chains.delete(provider);
-      }
-    });
-    return run;
-  };
 
   /**
    * One look at every hold of `provider`, one decision each in admission
@@ -1897,6 +1888,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       return queued.look;
     }
     const entry = { accountsMoved, look: Promise.resolve() };
+    // Queued before its turn is asked for: a turn nothing holds begins at
+    // once, and takes it off the queue as it begins.
+    looksQueued.set(provider, entry);
     entry.look = serially(
       provider,
       `the look at the holds (${why})`,
@@ -1906,7 +1900,6 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         plan();
       }
     );
-    looksQueued.set(provider, entry);
     return entry.look;
   };
 

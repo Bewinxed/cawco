@@ -43,6 +43,7 @@ import {
 import type { InstanceRow } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
+import AsyncLock from "async-lock";
 import { Elysia, ElysiaStatus, t } from "elysia";
 import type { DbShape } from "./db";
 import type { PlanChangeRow } from "./db/session-plans";
@@ -127,7 +128,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   /** One quiet window per receiver: its timer, re-armed by each waking change. */
   const quiet = new Map<string, HubTimer>();
   /** Each receiver's deliveries, one at a time and in order. */
-  const queues = new Map<string, Promise<unknown>>();
+  const turns = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
 
   const rowOf = (instanceId: string) => planSessionOf(db, instanceId);
 
@@ -359,8 +360,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   ): Promise<void> => {
     const logged = (said: string) =>
       console.warn(`[plan-changes] ${key}: ${said}`);
-    const next = (queues.get(key) ?? Promise.resolve()).then(work, work);
-    const tail = next.then(
+    return turns.acquire(key, work).then(
       (refused) => {
         if (refused) {
           logged(refused.response.detail);
@@ -369,16 +369,6 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
       (error: unknown) =>
         logged(error instanceof Error ? error.message : String(error))
     );
-    queues.set(key, tail);
-    detach(
-      tail.then(() => {
-        if (queues.get(key) === tail) {
-          queues.delete(key);
-        }
-      }),
-      "plan changes queue cleanup"
-    );
-    return tail;
   };
 
   /**

@@ -53,6 +53,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { memoryRunWords } from "@cawco/core/words/memory-run";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { resolveReal } from "@cawco/core/workspace-judge";
+import AsyncLock from "async-lock";
 import { Elysia, ElysiaStatus, problem, t, type UnwrapSchema } from "elysia";
 import { type AnyProblem, isProblem } from "./refusal";
 
@@ -595,27 +596,11 @@ const commit = async (
 // --- one project at a time ---------------------------------------------------
 
 /**
- * A queue per key: the function it answers runs `work` once every earlier
- * turn on the same key has settled. The folder takes one for its commits; a
- * caller that reads a file, changes it and writes it back (the task files)
- * takes its own, around those writes.
+ * Each project's commits, one at a time once every earlier one has settled,
+ * so commits never interleave. A caller that reads a file, changes it and
+ * writes it back (the task files) takes its own lock around those writes.
  */
-export const turnTaker = () => {
-  const turns = new Map<string, Promise<void>>();
-  return <T>(key: string, work: () => Promise<T>): Promise<T> => {
-    const turn = (turns.get(key) ?? Promise.resolve()).then(work);
-    const tail: Promise<void> = turn.then(noop, noop).then(() => {
-      if (turns.get(key) === tail) {
-        turns.delete(key);
-      }
-    });
-    turns.set(key, tail);
-    return turn;
-  };
-};
-
-/** Runs `work` once every earlier turn on the same project has settled, so commits never interleave. */
-const inTurn = turnTaker();
+const projectTurns = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
 /** Projects whose folder this process has seen made, so a read skips the check. */
 const ready = new Set<string>();
 /** Projects whose folder went to the trash since the hub started: never made again until it comes back. */
@@ -709,7 +694,9 @@ const forReading = async (projectId: string) => {
     return root;
   }
   if (!ready.has(projectId)) {
-    const prepared = await inTurn(projectId, () => prepare(projectId, root));
+    const prepared = await projectTurns.acquire(projectId, () =>
+      prepare(projectId, root)
+    );
     if (prepared instanceof ElysiaStatus) {
       return prepared;
     }
@@ -1274,7 +1261,7 @@ const inFolderTurn = <T>(
   root: string,
   work: () => Promise<T>
 ) =>
-  inTurn(projectId, async () => {
+  projectTurns.acquire(projectId, async () => {
     const prepared = await prepare(projectId, root);
     return prepared instanceof ElysiaStatus ? prepared : await work();
   });
@@ -2553,16 +2540,19 @@ export const trashProjectFolder = async (projectId: string, entry: string) => {
   if (root instanceof ElysiaStatus) {
     return root;
   }
-  return await inTurn(projectId, async (): Promise<string | undefined> => {
-    letGo(projectId);
-    if (!(await exists(root))) {
-      return;
+  return await projectTurns.acquire(
+    projectId,
+    async (): Promise<string | undefined> => {
+      letGo(projectId);
+      if (!(await exists(root))) {
+        return;
+      }
+      await makeFolder(PROJECT_TRASH_DIR);
+      const target = join(PROJECT_TRASH_DIR, entry);
+      await rename(root, target);
+      return target;
     }
-    await makeFolder(PROJECT_TRASH_DIR);
-    const target = join(PROJECT_TRASH_DIR, entry);
-    await rename(root, target);
-    return target;
-  });
+  );
 };
 
 /**
@@ -2574,7 +2564,7 @@ export const deleteProjectFolder = async (projectId: string) => {
   if (root instanceof ElysiaStatus) {
     return root;
   }
-  return await inTurn(projectId, async () => {
+  return await projectTurns.acquire(projectId, async () => {
     letGo(projectId);
     if (!(await exists(root))) {
       return false;
@@ -2599,7 +2589,7 @@ export const untrashProjectFolder = async (
   if (root instanceof ElysiaStatus) {
     return root;
   }
-  return await inTurn(projectId, async () => {
+  return await projectTurns.acquire(projectId, async () => {
     if (entry === null) {
       forgotten.delete(projectId);
       return;

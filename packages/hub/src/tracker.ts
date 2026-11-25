@@ -117,6 +117,7 @@ import {
   type TrackerView,
 } from "@cawco/core/trackers";
 import { connectionsWords } from "@cawco/core/words/connections";
+import AsyncLock from "async-lock";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
 import type { ItemKey, TaskLinkRow, TaskLinksDb } from "./db/task-links";
@@ -130,7 +131,6 @@ import type {
 } from "./db/trackers";
 import type { ExternalItems } from "./external-items";
 import type { HubLifetimeShape } from "./lifetime";
-import { turnTaker } from "./project-folder";
 import type { AnyProblem } from "./refusal";
 
 import type { TaskActor, TaskPatch, Tasks, TaskView } from "./tasks";
@@ -930,7 +930,7 @@ const stateAfter = (
 
 export const createTrackers = (deps: TrackersDeps) => {
   const { db, tasks, lifetime } = deps;
-  const inTurn = turnTaker();
+  const syncTurns = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
   /** A sync asked for soon, by project. */
   const soon = new Map<string, ReturnType<HubLifetimeShape["after"]>>();
   /** When each project's refused GitHub Projects were last asked (binding asks too), ms. */
@@ -2173,7 +2173,7 @@ export const createTrackers = (deps: TrackersDeps) => {
    * written to answer stops the sync in the error's words.
    */
   const syncProject = (projectId: string, retry = false): Promise<void> =>
-    inTurn(projectId, async () => {
+    syncTurns.acquire(projectId, async () => {
       const binding = db.trackers.binding(projectId);
       if (
         !binding ||
@@ -2282,7 +2282,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       return unfit;
     }
     if (input.tracker === "cawco") {
-      await inTurn(projectId, () => {
+      await syncTurns.acquire(projectId, () => {
         db.trackers.unbind(projectId);
         return Promise.resolve();
       });
@@ -2359,7 +2359,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       asked.direction === "both" &&
       kept.directionAt !== undefined &&
       kept.directionAt !== was?.directionAt;
-    await inTurn(projectId, async () => {
+    await syncTurns.acquire(projectId, async () => {
       db.trackers.bind({
         ...draft,
         target: target.id,

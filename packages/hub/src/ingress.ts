@@ -72,6 +72,7 @@ import { configurePage } from "@cawco/core/words/configure";
 import { cutShort } from "@cawco/core/words/helpers";
 import { routineToolWords } from "@cawco/core/words/routines";
 import { taskLinkWords } from "@cawco/core/words/task-links";
+import AsyncLock from "async-lock";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { RE2JS } from "re2js";
 import { z } from "zod";
@@ -1439,7 +1440,7 @@ export const createIngress = ({
   };
 
   /** Edits of one poll under way, by its id: one at a time each. */
-  const editing = new Map<string, Promise<unknown>>();
+  const editing = new AsyncLock({ maxPending: Number.POSITIVE_INFINITY });
 
   /**
    * An edit of a poll, made from the row as the edit before it left it: its
@@ -1450,18 +1451,7 @@ export const createIngress = ({
     id: string,
     patch: Partial<Omit<ConnectorPollInput, "connection" | "tool">>,
     by: IngressActor
-  ) => {
-    const before = editing.get(id) ?? Promise.resolve();
-    const edit = before
-      .catch(() => undefined)
-      .then(() => editPoll(id, patch, by));
-    editing.set(id, edit);
-    return edit.finally(() => {
-      if (editing.get(id) === edit) {
-        editing.delete(id);
-      }
-    });
-  };
+  ) => editing.acquire(id, () => editPoll(id, patch, by));
 
   const editPoll = async (
     id: string,
