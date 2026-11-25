@@ -485,7 +485,6 @@ function anchored(placement: () => Placement): Attachment<HTMLElement> {
       move: (at: AnchorSpot) => void;
       within: Element;
     } | null = null;
-    let frame = 0;
     let wasOpen = false;
     /** The side it took at its last placing. */
     let took: LayerSide | null = null;
@@ -565,57 +564,100 @@ function anchored(placement: () => Placement): Attachment<HTMLElement> {
     };
 
     /**
-     * Read once the browser has placed it: where it stands of its anchor,
-     * written on the surface; and, entering, the surface let go of its
-     * closed look into its open one from there.
+     * A placing to read: at an open (`entering`), or at a new anchor while
+     * open. Read inside a delivery (frameObserver), on the layout the frame
+     * has just done, and written after every site has read: read in a frame
+     * callback, each layer laid the page out ahead of the frame's own
+     * layout, between the writes of every other layer opening with it.
      */
-    const measure = (entering: boolean) => {
-      frame = 0;
+    let due: { entering: boolean } | null = null;
+
+    /** The placing read again in the next frame's delivery, once what was just written is laid out. */
+    const readAgain = () => sized.readNext();
+
+    /**
+     * Where the browser placed it, read: where it stands of its anchor,
+     * and, entering, the surface let go of its closed look into its open
+     * one from there. A placing that must first write what the browser
+     * places it by (its anchor's size, its fallbacks, its shift) writes
+     * that and is read again on the next frame's layout.
+     */
+    const measure = (): (() => void) | undefined => {
+      const job = due;
+      if (!job) {
+        return;
+      }
       const place = untrack(placement);
       const surface = surfaceOf(layer);
-      // Its trigger may name it only once the open has flushed.
-      seek();
-      if (!(anchor && surface)) {
-        delete layer.dataset.placing;
-        return;
+      if (!anchor) {
+        // Its trigger may name it only once the open has flushed.
+        return () => {
+          seek();
+          if (anchor && surface) {
+            readAgain();
+          } else {
+            due = null;
+            delete layer.dataset.placing;
+          }
+        };
+      }
+      if (!surface) {
+        due = null;
+        return () => {
+          delete layer.dataset.placing;
+        };
       }
       const wanted = place.side ?? "bottom";
       const at = anchor.getBoundingClientRect();
+      const set: Record<string, string> = {
+        "--kit-anchor-width": `${at.width}px`,
+        "--kit-anchor-height": `${at.height}px`,
+      };
       if (place.below) {
         // Where neither side holds it, it hangs on the anchor's side of the
         // screen with more room: read here, at the open.
         const above = at.top + at.height / 2 > innerHeight / 2;
-        layer.style.setProperty(
-          "position-try-fallbacks",
-          placeStyle({ ...place, above })["position-try-fallbacks"]
-        );
+        set["position-try-fallbacks"] = placeStyle({ ...place, above })[
+          "position-try-fallbacks"
+        ];
       }
-      layer.style.setProperty("--kit-anchor-width", `${at.width}px`);
-      layer.style.setProperty("--kit-anchor-height", `${at.height}px`);
       // Where anchors stand as laid out, the layer moves by its anchor's
       // transform: measured here, at the open, never on a frame of its own.
       const [shift] = transformShifts(
         [{ anchor, name, point: facing[wanted] }],
         () => document.body
       );
-      const by = shiftTranslate(shift);
-      if (layer.style.translate !== by) {
-        layer.style.translate = by;
+      set.translate = shiftTranslate(shift);
+      const unset = Object.entries(set).filter(
+        ([property, value]) => layer.style.getPropertyValue(property) !== value
+      );
+      if (unset.length > 0) {
+        return () => {
+          for (const [property, value] of unset) {
+            layer.style.setProperty(property, value);
+          }
+          readAgain();
+        };
       }
+      due = null;
       const box = layer.getBoundingClientRect();
       const side = sideOf(box, at, wanted);
-      took = side;
-      surface.dataset.side = side;
-      surface.dataset.align = alignOf(box, at, side);
-      meetAt(surface, meetOf(box, at, side));
-      if (entering) {
-        // Its closed look takes the side before it opens from it.
-        getComputedStyle(surface).getPropertyValue("translate");
-        delete layer.dataset.placing;
-      }
-      layer.dispatchEvent(
-        new CustomEvent<Placed>(PLACED, { detail: { box, side } })
-      );
+      const align = alignOf(box, at, side);
+      const meet = meetOf(box, at, side);
+      return () => {
+        took = side;
+        surface.dataset.side = side;
+        surface.dataset.align = align;
+        meetAt(surface, meet);
+        if (job.entering) {
+          // Its closed look takes the side before it opens from it.
+          getComputedStyle(surface).getPropertyValue("translate");
+          delete layer.dataset.placing;
+        }
+        layer.dispatchEvent(
+          new CustomEvent<Placed>(PLACED, { detail: { box, side } })
+        );
+      };
     };
 
     const ask = (entering: boolean) => {
@@ -626,8 +668,10 @@ function anchored(placement: () => Placement): Attachment<HTMLElement> {
         // pointer that opened it, which then pressed outside it).
         seek();
       }
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => measure(entering));
+      due = { entering: entering || !!due?.entering };
+      if (!sized.readInFrame()) {
+        sized.readNext();
+      }
     };
 
     // Its place and its margins, as the site says them now.
@@ -663,11 +707,15 @@ function anchored(placement: () => Placement): Attachment<HTMLElement> {
       }
       wasOpen = open;
     };
-    // Its size changing while it stands open (a tooltip's words gliding to
-    // the next item's, a list filtering): where it meets its anchor is read
-    // again, on the layout that frame has just done; its side stays.
+    // Its placing read at an open (`measure`); and its size changing while
+    // it stands open (a tooltip's words gliding to the next item's, a list
+    // filtering): where it meets its anchor is read again, on the layout
+    // that frame has just done; its side stays.
     const sized = frameObserver(null, {
       inside: () => {
+        if (due) {
+          return measure();
+        }
         const surface = surfaceOf(layer);
         if (!(wasOpen && took && anchor && surface)) {
           return;
@@ -695,7 +743,6 @@ function anchored(placement: () => Placement): Attachment<HTMLElement> {
     }
 
     return () => {
-      cancelAnimationFrame(frame);
       sized.disconnect();
       states.disconnect();
       if (anchor) {

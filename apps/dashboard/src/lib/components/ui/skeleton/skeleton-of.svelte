@@ -26,7 +26,7 @@
    */
   import type { Snippet } from "svelte";
   import { untrack } from "svelte";
-  import { frameObserver, frameSize } from "#lib/platform/frame-observer.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
   import {
     draw,
     type Item,
@@ -98,17 +98,28 @@
    * content stands, the box may take the content's own width (a
    * shrink-to-fit parent), and the fading bones keep the drawing they had.
    * Read as the box is sized while it waits, never at the hand-over, when
-   * the content is already laid out.
+   * the content is already laid out; and inside a delivery, from its first
+   * report on, since nothing is drawn from it while it waits: read as it
+   * mounted, each skeleton laid the page out in the flush that mounted it.
    */
   let waited = $state<number | undefined>(undefined);
-  const keepWidth = frameSize(
-    (node: HTMLElement) => node.getBoundingClientRect().width,
-    (width) => {
-      if (untrack(() => loading)) {
-        waited = width;
+  const keepWidth = (node: HTMLElement) => {
+    let width: number | undefined;
+    const sized = frameObserver(
+      () => {
+        if (width !== undefined && untrack(() => loading)) {
+          waited = width;
+        }
+      },
+      {
+        read: () => {
+          ({ width } = node.getBoundingClientRect());
+        },
       }
-    }
-  );
+    );
+    sized.observe(node);
+    return () => sized.disconnect();
+  };
   const held = $derived(
     loading || waited === undefined ? undefined : `${waited}px`
   );

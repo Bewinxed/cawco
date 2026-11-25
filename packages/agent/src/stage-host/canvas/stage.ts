@@ -1456,15 +1456,10 @@ export function bootStage(page: Page): Mode {
   /* --- What the panel's split sizes the stage by --------------------------- */
 
   /**
-   * The drawing measured: its own width where it stands narrower than the
-   * width it was laid out at (its root's box, or what overflows it), kept
-   * per states file and width picked and only ever widened, so a reach
-   * never narrows the stage under him; and told the panel when it changed.
-   */
-  /**
    * The drawing's own width where it stands narrower than `width`, kept
    * by `key` (its states file and the width picked) and only ever widened;
-   * null where it fills the width.
+   * null where it fills the width. Read inside a delivery of
+   * {@link layoutRead}, on the layout that frame has just done.
    */
   function fitAt(key: string, width: number): number | null {
     const own = ownRoot(drawing);
@@ -1482,13 +1477,24 @@ export function bootStage(page: Page): Mode {
     return fitOf.get(key) ?? null;
   }
 
+  /** The key a drawing's own width is kept by: its states file and the width picked. */
+  const fitKey = (on: Live) =>
+    `${on.section.file}@${view.widths?.[0] ?? "own"}`;
+
+  /**
+   * The drawing laid out at the width the panel's room or his pick gives
+   * it, narrowed to its own width where that is known (`fitOf`), and
+   * scaled to stand whole; then measured in the next delivery of
+   * {@link layoutRead}. Writes only: measured here, after its writes, each
+   * call laid the page out twice (its own width read before them, its
+   * height after), with every frame of the drawing in it.
+   */
   function laid(): void {
     if (!live || frame.hidden) {
       return;
     }
     const width = roomWidth(live.story);
-    const key = `${live.section.file}@${view.widths?.[0] ?? "own"}`;
-    const fit = fitAt(key, width);
+    const fit = fitOf.get(fitKey(live)) ?? null;
     const drawn = fit === null ? width : Math.min(width, fit);
     drawnWidth = drawn;
     frame.style.setProperty("--frame-w", `${drawn}px`);
@@ -1498,6 +1504,43 @@ export function bootStage(page: Page): Mode {
       STAGE_GUTTER_VAR,
       `${gutterBeside(drawn * scale)}px`
     );
+    layoutSoon();
+  }
+
+  /** The drawing's words and controls brought into view in the next delivery of {@link layoutRead} (`inkInView`). */
+  let inkDue = false;
+  /** A frame callback is asked for that lays the drawing out again at the own width a read found. */
+  let relayFrame = 0;
+
+  /** The drawing's layout read in the next delivery of {@link layoutRead}, whatever resized. */
+  function layoutSoon(): void {
+    layoutRead.unobserve(drawing);
+    layoutRead.observe(drawing);
+  }
+
+  /**
+   * What {@link laid} wrote, read on the layout the delivery reports: the
+   * drawing's own width (laid out again in the next frame where it is
+   * narrower than the width written), its height, told the panel when it
+   * changed, and its words brought into view where asked.
+   */
+  function readLaid(): void {
+    if (!live || frame.hidden) {
+      inkDue = false;
+      return;
+    }
+    const width = roomWidth(live.story);
+    const fit = fitAt(fitKey(live), width);
+    const drawn = fit === null ? width : Math.min(width, fit);
+    if (drawn !== drawnWidth) {
+      // Written in the next frame's callbacks, which that frame lays out and
+      // delivers again: written here, inside the delivery, the drawing's
+      // resize would be held back to the frame after.
+      cancelAnimationFrame(relayFrame);
+      relayFrame = requestAnimationFrame(() => laid());
+      return;
+    }
+    const scale = scaleOf(drawn);
     const laidOut: StageLaid = {
       need: Math.ceil(
         drawn * scale + 2 * tokenPx(GUTTER) + windowWidth() - windowRoom()
@@ -1510,6 +1553,10 @@ export function bootStage(page: Page): Mode {
     if (said !== laidSaid) {
       laidSaid = said;
       tell(STAGE_LAID, laidOut);
+    }
+    if (inkDue) {
+      inkDue = false;
+      scrollInkIntoView();
     }
     reread();
     guidesSoon();
@@ -1598,6 +1645,12 @@ export function bootStage(page: Page): Mode {
    * of the view, else from its start.
    */
   function inkInView(): void {
+    inkDue = true;
+    layoutSoon();
+  }
+
+  /** {@link inkInView}'s read and scroll, inside a delivery of {@link layoutRead}. */
+  function scrollInkIntoView(): void {
     const ink = live && !frame.hidden ? inkOf(drawing) : null;
     // The window's own width: what the drawing reads as `innerWidth` is the frame's (viewport.ts).
     const across = windowRoom();
@@ -2184,9 +2237,22 @@ export function bootStage(page: Page): Mode {
     guidesNow();
   }
 
-  // A measuring page lays out for no panel: the drawing's own resizes are its component's work alone.
+  /**
+   * The drawing's layout read in the delivery of the frame that lays it
+   * out (`readLaid`): its own width, its height, and where its words stand.
+   * Observed anew (`layoutSoon`) so a delivery comes whatever resized; at
+   * rest the drawing's own resizes deliver too, except on a measuring page,
+   * which lays out for no panel: there the drawing's resizes are its
+   * component's work alone.
+   */
+  const layoutRead = new ResizeObserver(() => {
+    if (page.measuring) {
+      layoutRead.unobserve(drawing);
+    }
+    readLaid();
+  });
   if (!page.measuring) {
-    new ResizeObserver(() => laid()).observe(drawing);
+    layoutRead.observe(drawing);
   }
   addEventListener("resize", () => relay());
   // Each layer the drawing opens collides with the drawing, as with the app's window at its width.

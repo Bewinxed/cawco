@@ -10,7 +10,7 @@ import { getContext, hasContext, setContext } from "svelte";
 const LEVEL = Symbol("surface-level");
 
 /** The level of the surface this component stands in; the page is 0. */
-function surfaceLevel(): number {
+export function surfaceLevel(): number {
   return hasContext(LEVEL) ? getContext<number>(LEVEL) : 0;
 }
 

@@ -203,13 +203,19 @@ export function segmentedLens(
     runs = [];
   };
 
-  const place = (animate: boolean) => {
+  /**
+   * Where the lens goes, read on the layout a delivery has just done: the
+   * picked segment's box, and where the lens is drawn if it is gliding.
+   * Answered by its write, so no read here lays the page out.
+   */
+  const place = (animate: boolean): (() => void) | undefined => {
     const on = group.querySelector<HTMLElement>(picked);
     if (!on) {
-      stop();
-      lens.style.opacity = "0";
-      last = undefined;
-      return;
+      return () => {
+        stop();
+        lens.style.opacity = "0";
+        last = undefined;
+      };
     }
     const next = boxOf(on);
     // A resize while it glides (the group taking a new segment's width)
@@ -224,14 +230,19 @@ export function segmentedLens(
       return;
     }
     const from = moving ? drawn(lens) : last;
-    stop();
-    lens.style.opacity = "1";
-    write(lens, next);
-    if ((animate || moving) && moved && from && motion.matches) {
-      runs = glide(lens, from, next);
-    }
-    last = next;
+    return () => {
+      stop();
+      lens.style.opacity = "1";
+      write(lens, next);
+      if ((animate || moving) && moved && from && motion.matches) {
+        runs = glide(lens, from, next);
+      }
+      last = next;
+    };
   };
+
+  /** A pick turned: the lens glides to it, read in the next delivery. */
+  let gliding = false;
 
   /** Every segment on the row at `y`, a drag's landing places. */
   const row = (y: number) =>
@@ -311,7 +322,7 @@ export function segmentedLens(
       landing.click();
       landing.focus({ preventScroll: true });
     } else {
-      place(true);
+      placeSoon();
     }
     if (event.type === "pointerup") {
       swallow = true;
@@ -336,13 +347,29 @@ export function segmentedLens(
     }
   };
 
-  place(false);
+  // Every place is read inside a delivery, on the layout the frame has just
+  // done (frameObserver): its first, as the group mounts, a resize, and a
+  // pick asked for (`placeSoon`). Read as it mounted, each group laid the
+  // page out between the writes of the mount's flush.
+  const sizes = frameObserver(null, {
+    inside: () => {
+      const animate = gliding;
+      gliding = false;
+      return drag?.moved ? undefined : place(animate);
+    },
+  });
+  const placeSoon = () => {
+    gliding = true;
+    if (!sizes.readInFrame()) {
+      sizes.readNext();
+    }
+  };
   // The pick turning, or the segments put in another order (the owner
   // strip's pick from "+N" taking a place on its line): the lens follows
   // the picked one to wherever it now stands. A drag holds it meanwhile.
   const changes = new MutationObserver(() => {
     if (!drag?.moved) {
-      place(true);
+      placeSoon();
     }
   });
   changes.observe(group, {
@@ -350,13 +377,6 @@ export function segmentedLens(
     childList: true,
     attributes: true,
     attributeFilter: ["data-state"],
-  });
-  // Placed above, and a resize in the next frame (frameObserver): the
-  // lens's own size is written from it.
-  const sizes = frameObserver(() => {
-    if (!drag?.moved) {
-      place(false);
-    }
   });
   sizes.observe(group);
   group.addEventListener("pointerdown", press);

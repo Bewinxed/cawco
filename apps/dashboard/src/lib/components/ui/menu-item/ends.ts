@@ -18,7 +18,14 @@
  * first row, a separator and a second group are read as the list renders
  * them: the heading keeps the first row off the edge, the separator does
  * not. The marks follow what is added, removed, hidden or opened.
+ *
+ * What is drawn is read inside a delivery (frameObserver), on the layout the
+ * frame has just done, and the marks are written after every site has read:
+ * read as the list mounted, or in the microtask after a change, each list
+ * laid the page out between the writes of the flush that mounted it.
  */
+import { frameObserver } from "#lib/platform/frame-observer.js";
+
 const ROW = "[data-menu-item]";
 const CONTAINER = "data-menu-ends";
 const FIRST = "data-menu-first";
@@ -61,7 +68,8 @@ function atEdge(row: Element, container: Element, side: "start" | "end") {
   return true;
 }
 
-function mark(container: HTMLElement) {
+/** Which rows end the list, read: the marks' write. */
+function marksOf(container: HTMLElement): () => void {
   const rows = Array.from(container.querySelectorAll(ROW)).filter(
     (row) => row.parentElement?.closest(`[${CONTAINER}]`) === container
   );
@@ -70,17 +78,35 @@ function mark(container: HTMLElement) {
   const last = shown.at(-1);
   const firstAtEdge = first && atEdge(first, container, "start");
   const lastAtEdge = last && atEdge(last, container, "end");
-  for (const row of rows) {
-    row.toggleAttribute(FIRST, row === first && Boolean(firstAtEdge));
-    row.toggleAttribute(LAST, row === last && Boolean(lastAtEdge));
-  }
+  return () => {
+    for (const row of rows) {
+      row.toggleAttribute(FIRST, row === first && Boolean(firstAtEdge));
+      row.toggleAttribute(LAST, row === last && Boolean(lastAtEdge));
+    }
+  };
 }
 
-/** Marks `container`'s end rows now and as it changes; returns the stop. */
+/** Marks `container`'s end rows as it mounts and as it changes; returns the stop. */
 export function markMenuEnds(container: HTMLElement): () => void {
   container.setAttribute(CONTAINER, "");
-  mark(container);
-  const observer = new MutationObserver(() => mark(container));
+  /** A change since the marks were last read: its first report, or a mutation. */
+  let changed = true;
+  const sizes = frameObserver(null, {
+    inside: () => {
+      if (!changed) {
+        return;
+      }
+      changed = false;
+      return marksOf(container);
+    },
+  });
+  sizes.observe(container);
+  const observer = new MutationObserver(() => {
+    changed = true;
+    if (!sizes.readInFrame()) {
+      sizes.readNext();
+    }
+  });
   observer.observe(container, {
     subtree: true,
     childList: true,
@@ -89,6 +115,7 @@ export function markMenuEnds(container: HTMLElement): () => void {
   });
   return () => {
     observer.disconnect();
+    sizes.disconnect();
     container.removeAttribute(CONTAINER);
   };
 }
